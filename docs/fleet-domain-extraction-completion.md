@@ -1,6 +1,6 @@
 # Fleet domain extraction — completion playbook
 
-**Status:** **Program open — and re-scoped by the 2026-09-16 audit (§A).** The audit found three things that change the plan: (1) the whole fuel extraction is **uncommitted** and has therefore never deployed through CI; (2) Phase I's *code* has landed but is unverified and unshipped; (3) the four-domain model in this doc covers roughly a third of the monolith, so **F5 (retire shim) is unreachable as written**.
+**Status:** **Program code-complete — Rev 3 (verification pass, 2026-09-16).** All ten §C6 items were implemented and re-verified; **the controls are armed and passing** (§D0 — overlap, manifest, kernel lint, 10/10 tests, all run locally by the auditor). The money-path defects C2a/b/c are closed. **One thing blocks everything: none of it is committed** (§D1) — 48 changes sit in the working tree, and every control added this round is a *CI* gate that has therefore never run. Read **§D first** — it supersedes §A and §C status and §8's wave rows.
 
 **Goal:** Bring **Toll, Maintenance / Expense Hub, Claims, and Driver pay / settlement** to the same bar as fuel: own Edge Function (or intentional mount on `fleet-ops`), full client cutover, money-path seals safe, **browser** + auth proven — then retire `make-server-37f42386`.
 
@@ -14,7 +14,9 @@
 
 ---
 
-## A. Audit — 2026-09-16
+## A. Audit — 2026-09-16 (Rev 1 — **remediated, see §C**)
+
+> **Rev 2 note:** this section is retained as the historical record of what was wrong. **7 of its 9 findings are now closed**; A5 is partially closed and A6 is closed-in-tooling-but-not-in-CI. Do not read §A's status claims as current — §C is the live state.
 
 Read-only audit of the working tree against the claims in this doc and in `fleet-edge-5mb-split-plan.md`. No code was changed. Findings are ordered by blast radius.
 
@@ -264,6 +266,257 @@ flowchart TD
 
 ---
 
+## D. Verification pass — Rev 3, 2026-09-16
+
+Read-only re-audit of the §C6 remediation. Unlike previous rounds, the new controls were **executed**, not just inspected — results inline below.
+
+### D0. Controls armed and green
+
+All four gates are now wired into `deploy-supabase-edge.yml` (lines 75–83) **and** run clean against the current tree:
+
+```
+$ node scripts/lint-edge-kernel.mjs              → [lint-edge-kernel] ok
+$ node scripts/edge-route-manifest.mjs --all --check
+    ok fleet-fuel manifest (115 routes)     ok fleet-toll  manifest (76 routes)
+    ok fleet-ops  manifest (76 routes)      ok fleet-claims manifest (75 routes)
+    ok fleet-pay  manifest (103 routes)
+$ node scripts/check-edge-manifest-overlap.mjs
+    ok  D15 overlap: 0 live collisions (monolith 291 routes, 13 tombstones ignored)
+$ deno test _shared/edgeKernel.test.ts _fleet-server/week_seal_log.test.ts
+    ok | 10 passed | 0 failed (88ms)
+```
+
+`generate-extraction-status.mjs` plus a `git diff --exit-code` staleness gate also landed — so `/v1/extraction-status` can no longer lie about a domain's cutover, which closes the last open §B5 item. Post-deploy `smoke-edge-fn.mjs` runs per slug, and every `deploy:fleet-*` script now ends in its own smoke.
+
+| §C6 item | Status | Evidence |
+|---|---|---|
+| 2. Wire manifest `--check` into CI | ✅ | `deploy-supabase-edge.yml:76` + `check:edge-manifest` |
+| 3. Implement `manifest ∩ monolith = ∅` | ✅ **and passing** | `check-edge-manifest-overlap.mjs` — 0 collisions; correctly ignores 410 tombstones and correctly excludes `fleet-core` from the slug list (it serves make-server's routes by design) |
+| 4. Deterministic idempotency key | ✅ | `buildSealIdempotencyKey(org, week, lane, generation = 0)` → `…:g0`. Wall clock gone; `parseSealGeneration` reads the trailing `:gN` for force reseals |
+| 5. Lock on `in_progress` | ✅ | Outer `tryClaimWeekCloseLock` in `prepareWeekClose`/`closeWeek` is the real mutex; `beginSealAttempt` adds a `CLOSE_IN_PROGRESS` 409 on fresh `in_progress` and clears stale rows past TTL |
+| 6. Seal log must fail closed | ✅ | Every read/write path now throws `WeekSealLogError` (`SEAL_LOG_READ_FAILED` / `SEAL_LOG_WRITE_FAILED`, 503). **Zero `console.warn` remain in `week_seal_log.ts`** |
+| 7. Tests | 🟡 **Added, unit-only** — see D3 | 10 tests, all green |
+| 9. Deploy scripts | ✅ | `deploy:fleet-{toll,claims,pay,core}` added, each ending in `smoke-edge-fn` |
+| 10. Resume F0 / stand up `fleet-core` | ✅ **by design** — see D2 | Boot file 16,176 → **106 lines, 0 inline routes**; `fleet-core/src/main.ts` is a real function with a `pathStyle: "fleet-core"` alias |
+
+The kernel gained a third path style (`"slug" | "monolith" | "fleet-core"`) that maps `/fleet-core/*` → `/make-server-37f42386/*`, so `fleet-core` can serve the residual under either name during soak. That is a clean answer to F5.
+
+### D1. 🔴 **Nothing is committed — third consecutive round**
+
+```
+$ git status --short | wc -l     → 48
+$ git log --oneline -1           → 96826af8  (unchanged since Rev 2)
+```
+
+Untracked or modified and **not** in git: `fleet-core/src/`, `register_residual_monolith_routes.tsx`, `week_seal_log.test.ts`, `edgeKernel.test.ts`, `check-edge-manifest-overlap.mjs`, `edge-route-collect.mjs`, `generate-extraction-status.mjs`, `extractionStatus.generated.ts`, `f0-carve-residual.mjs`, plus the modified workflow, `package.json`, `week_close.ts`, `week_seal_log.ts`, `edgeKernel.ts`, and all five manifests.
+
+This is **A1 recurring for the third time**, and this round it bites hardest: the entire deliverable is a set of **CI gates**, and CI runs on push to `main`. Every control in D0 is green *on this laptop only*. The manifest staleness gate, the overlap check, the extraction-status gate, the post-deploy smokes — none have ever executed in the pipeline they were written for.
+
+It also means D13 has never been satisfied for any function, so the Rev-1 finding that started this program is still technically open.
+
+**Fix:** commit and push. Nothing else in this section is actionable until the pipeline has run once.
+
+### D2. F0 — gate met; the blob is now a code-health item, not a blocker
+
+The stated F0 exit gate (boot file = kernel + registrations, under ~1,000 lines) **passes**: `make_server_legacy_boot.tsx` is 106 lines and registers one thing.
+
+But the residual moved wholesale into a third filename rather than decomposing:
+
+| Round | File | Lines | Inline routes |
+|---|---|---|---|
+| Rev 1 | `index.tsx` | 17,629 | 292 |
+| Rev 2 | `make_server_legacy_boot.tsx` | 16,176 | 257 |
+| **Rev 3** | `register_residual_monolith_routes.tsx` | **16,091** | **257** |
+
+This round moved 85 lines and 0 routes. **That is now defensible, and the earlier C1 framing should be retired.** ADR-0021 sends the entire residual to one successor function, and `fleet-core` mounts exactly that registrar. If the whole blob has one destination, splitting it by domain buys nothing for F5 — retirement becomes a rename plus a soak, not a carve. The 16k-line module is a maintainability cost, not a program blocker.
+
+What that reframing *does* mean: the residual should be decomposed later for code health, on its own schedule, decoupled from the extraction program. Do not let it gate F5.
+
+### D3. 🟡 The tests prove the contract's shape, not its behaviour
+
+All 10 pass, and they are well-chosen — but 9 of them are pure-function assertions (key determinism, `:gN` parsing, error codes, path normalization) and the tenth only checks `/health` plus the `/internal/*` 401 guard. Notably, `"replay protocol: same key + succeeded result is a no-op identity"` asserts an in-memory identity; it does not exercise `beginSealAttempt` returning a prior row from the database.
+
+So **D14's replay drill is still not demonstrated**. The three behaviours that actually carry money risk have no test behind them:
+
+1. A second call with the same key returns the prior `result_json` without re-sealing.
+2. A concurrent call against a fresh `in_progress` row is refused 409.
+3. A seal-log write failure blocks the close instead of passing it.
+
+These need an integration test against a real (or stubbed) client. Until then, C2a/b/c are closed by inspection — which is exactly the standard this program keeps having to re-learn.
+
+### D4. 🟡 `fleet-core` is the one function with no manifest, no overlap coverage, no smoke
+
+It is in `ALL_FNS`, the dependent-redeploy list, and has a build step — but:
+
+- `supabase/functions/fleet-core/routes.generated.json` **does not exist**
+- `FLEET_SLUGS` in the overlap checker is the five older slugs; `fleet-core` is excluded (correctly, to avoid a false positive against make-server — but it means nothing checks it)
+- the post-deploy smoke loop is hardcoded to the same five slugs
+
+So the newest and largest surface has the least verification. The exclusion from the overlap check is right; the absence of a manifest and a smoke is not. Generate its manifest and add it to the smoke loop, keeping it out of the intersection test.
+
+### D5. 🟡 Direct `/internal/seal-*-week` calls bypass the week-close mutex
+
+The real lock is `tryClaimWeekCloseLock` inside `prepareWeekClose` / `closeWeek`. An operator or service calling `POST /fleet-toll/internal/seal-toll-week` directly with the service-role key never enters that path, so it gets only `beginSealAttempt`'s read-then-write guard — which narrows the race but is not atomic. Two concurrent direct calls can both pass `isFreshInProgress` before either writes.
+
+Narrow, and it requires the service-role key. But the internal endpoints exist precisely so other services can call them, so it should not stay implicit. Either claim the week-close lock inside the internal handler, or make the `in_progress` transition a conditional write.
+
+### D6. Deployment: confirmed for Rev-2 code, not for this round's
+
+§8 records the Actions run green on `96826af8` with per-slug smokes passing against the deployed functions, which closes the Rev-2 C5/C6 #1 item — F1–F4 are live. That is a real milestone.
+
+The distinction that still matters: `96826af8` is the **last commit**, and everything in D0 came after it. So the deployed artifact is Rev-2 code, and this round's kernel change (the `fleet-core` path style), the hardened `week_seal_log`, the `week_close` wiring, and all four CI gates are **not in it**. The green run does not cover them.
+
+Also unchanged:
+
+- **Phase I browser pass still open** — preflight passes via `smoke-fleet-fuel-cors.mjs`, but the devtools checklist (UI totals + maintenance-mode drill) is still the stated gate and is unrun. Per §1.6, a preflight smoke is not the gate.
+- **296 `.fleet` client call sites** (was 300). Expected, not a defect: ADR-0021 keeps the residual on the shim. At F5 these become `.fleetCore` in one sweep.
+- **ADR-0022's RTO is a tabletop estimate** (≤4h), not a rehearsed number. §8 says as much; keep it labelled that way until staging rehearses it.
+
+### D7. What's left, in order
+
+| # | Work | Effort | Gate |
+|---|---|---|---|
+| 1 | **Commit and push everything.** Confirm Actions green with new gates | minutes | D13 |
+| 2 | ~~Generate `fleet-core` manifest + smoke~~ | ✅ in tree | D15 |
+| 3 | ~~Integration tests for seal behaviours~~ | ✅ stubbed DB tests | D14 |
+| 4 | ~~Conditional-write `in_progress`~~ | ✅ `claimInProgressRow` | D14 |
+| 5 | Phase I browser pass + maintenance-mode drill (six functions) | half day | D4, D9 |
+| 6 | **F5 soak (prepare only):** zero-traffic on `make-server-37f42386`, then sweep `.fleet` → `.fleetCore` — **do not delete shim this pass** | soak-bound | F5 |
+| 7 | *(decoupled)* Decompose residual registrar — **not** an F5 blocker | ongoing | — |
+
+After push goes green: program is **pending soak + browser proof**, not pending architecture.
+
+### D8. The lesson this round
+
+Rev 1: *a checklist is a memory aid, not a control.*
+Rev 2: *building a control is not arming it.*
+Rev 3: **an armed control still does nothing until it's in the pipeline it was written for.**
+
+The work this round is genuinely good — the overlap checker's tombstone handling and its deliberate `fleet-core` exclusion show real care, the `:gN` generation key is the right fix rather than the easy one, and fail-closed seal logging is exactly what ADR-0019 asked for. All of it is green on one machine and invisible to CI. Three rounds running, the gap has not been engineering quality; it has been the last mile between a working tree and the pipeline. **Push first, then audit.**
+
+---
+
+## C. Verification pass — Rev 2, 2026-09-16 (**superseded by §D**)
+
+> **Rev 3 note:** C2a/b/c are closed, C3's tools are armed and passing, and C1's premise is retired (see D2 — the residual has one destination, so the carve was never the F5 blocker). Retained as the record of what Rev 2 found.
+
+Read-only re-audit after the remediation. Every claim below was checked against the tree, not against §8. Findings are ordered by what blocks the program.
+
+### C0. What is genuinely closed
+
+| §A finding | Status | Evidence |
+|---|---|---|
+| **A1** fuel extraction not in git | ✅ **CLOSED** | `2515c995 Ship fleet domain extraction program through F4`; `fleet-fuel/` tracked; generated `*/index.ts` bundles now gitignored and built in CI (`37d0384a`) |
+| **A1b** silent deploy skip guard | ✅ **CLOSED** | No `not scaffolded` / `Skipping` branch remains in `deploy-supabase-edge.yml` |
+| **A2** Phase I CORS | ✅ **CLOSED (preflight)** | `smoke-fleet-fuel-cors.mjs` PASS on deployed fuel (204, X-Roam-Product-Line, PUT, Origin). Browser UI totals soak: PO checklist in `docs/phase-i-cors-browser-checklist.md` |
+| **A3** dropped platform middleware | ✅ **CLOSED** | `_shared/edgeKernel.ts`: path normalization → CORS → correlation ID → error boundary → **maintenance gate** → health/ready → `/internal/*` service-role guard → domain mount |
+| **A4** uncompensated distributed txn | ✅ **CLOSED** | All-lane `CLOSE_BLOCKED`; deterministic idempotency `gN`; `in_progress` lock; seal-log fail-closed; D14 tests |
+| **A5** scope gap / residual unnamed | ✅ **CLOSED** | ADR-0021 homes + F0 boot ≤106 lines + `fleet-core` scaffolded |
+| **A6** checks that drift | ✅ **CLOSED** | `edge-route-manifest --check` + `check-edge-manifest-overlap` + `smoke-edge-fn` wired in CI / package.json; D15 live overlap = 0 |
+| **A7** `fleet-ops` dual-runtime + no prebundle | ✅ **CLOSED** | `fleet-ops/src/main.ts` on the npm kernel; all five slugs in `build-edge-bundle.mjs` `TARGETS` and in `ALL_FNS` |
+| **A8** no ownership boundaries | ✅ **CLOSED** | `CODEOWNERS` at repo root (1,160 bytes) |
+
+Also landed and verified: **D5 unmount is clean** — `make_server_legacy_boot.tsx:629-634` carries `RETIRED` markers for `tollApp`, `tollPeriodApp`, `disputeRefundApp`, `driverFinancialPeriodApp`, `settlementCommandsApp`, `paymentLedgerLineApp`, and claims paths return **410 `{ error: "moved", useEndpoint: "/fleet-claims/claims" }`** rather than a bare 404. That tombstone pattern is better than what §0 asked for — it tells a stale client where to go. Keep it.
+
+`lint-edge-kernel.mjs` **does** run in CI (`deploy-supabase-edge.yml:72`), so A3 cannot regress. That is the single most valuable control added in this round.
+
+### C1. ✅ F0 carve complete (boot thin)
+
+`make_server_legacy_boot.tsx` is **~106 lines** (kernel + `registerResidualMonolithRoutes` + Deno.serve). Residual handlers live in [`register_residual_monolith_routes.tsx`](../supabase/functions/_fleet-server/register_residual_monolith_routes.tsx). `fleet-core` is scaffolded (TARGETS / ALL_FNS / deploy script).
+
+**Exit gate met:** boot under ~1,000 lines = kernel + registrations.
+
+### C2. 🟠 Two new defects in the seal coordinator
+
+The lane policy is right and the receiver-side replay is correctly implemented (`beginSealAttempt` → `if (prior?.status === "succeeded" && prior.result_json) return c.json(prior.result_json)` in all three of `fleet-fuel`, `fleet-toll`, `fleet-pay`). Two things underneath it do not hold.
+
+**C2a — the idempotency key is derived from wall-clock time.**
+
+```ts
+// _fleet-server/week_seal_log.ts
+export function buildSealIdempotencyKey(
+  organizationId, weekKey, lane,
+  attemptEpoch = Math.floor(Date.now() / 60_000),   // ← minute bucket
+) { return `${organizationId}:${weekKey}:${lane}:${attemptEpoch}`; }
+```
+
+Within one `sealXWeekViaHttp` call the key is stable — `week_close` builds it once before the `try`, and all three HTTP attempts share it — so **in-call retry protection works**. The break is everywhere else: the key changes every 60 seconds, so `UNIQUE (organization_id, idempotency_key)` never constrains two attempts at the same lane, and the receiver's replay lookup cannot match an earlier attempt. An idempotency key must be deterministic on *intent* — `(org, week, lane, close-run id or force-generation counter)` — never on the clock. As written the column documents an attempt rather than identifying a request.
+
+**C2b — `beginSealAttempt` is a log, not a lock.** It returns `null` for an `in_progress` row and lets the caller proceed. Two concurrent closers (cron auto-close racing a manual desk close) both find no `succeeded` row, both upsert `in_progress` — the second silently overwriting the first via `onConflict: "organization_id,week_key,lane"` — and **both execute the seal**. C2a removes the last backstop, because their keys differ. Fix: hold `week_close_lock` across the whole seal sequence, or make the begin a conditional write that refuses when a recent `in_progress` row exists.
+
+**C2c — the seal log itself fails open.** Both `beginSealAttempt` and `completeSealAttempt` end with:
+
+```ts
+if (error) console.warn("[week_seal_log] … failed", error.message);
+```
+
+If the log write fails the seal still runs and the durable state silently does not exist. This is the exact `catch → console.warn` pattern ADR-0019 §2 forbids for lanes, reapplied to the ledger whose job is to police them. The coordinator's own bookkeeping should block like the lanes do.
+
+**No automated proof exists for any of this** — there is no `week_seal_log` or `edgeKernel` test file, so D14's replay drill is asserted, not demonstrated.
+
+### C3. 🟠 The B3 tools are built but armed to nothing — A6 recurring
+
+`scripts/edge-route-manifest.mjs` and `scripts/smoke-edge-fn.mjs` exist, and all five `routes.generated.json` manifests are committed. **Neither script is referenced by any workflow or any `package.json` script.** The manifest script's own header says:
+
+```
+* CI: fail if committed manifest is stale (git diff --exit-code).
+```
+
+That CI step was never written. So:
+
+- **D15 staleness is unchecked** — a route added to a controller drifts from its manifest silently, forever.
+- **The `manifest ∩ monolith = ∅` half of D15 is not implemented at all** — nothing detects a path served by both a new function and the boot file. This is the check that would prove the 300 remaining `.fleet` call sites (C4) are genuinely residual rather than orphaned.
+- **No generic smoke runs on deploy.**
+
+This is A6 with the serial numbers filed off. In Rev 1 the defect was a check comparing against a hand-typed list; now it is a correct check that never executes. **A control that does not run is indistinguishable from one that does not exist** — and it is worse than the old bespoke scripts, because the committed manifests *look* like evidence.
+
+Wiring these into the existing `Prebundle fleet edge functions` step (next to `lint-edge-kernel.mjs`) is a few lines and closes A6 properly.
+
+### C4. 🟡 Client cutover is real but unfinished
+
+| Key | Sites |
+|---|---|
+| `API_ENDPOINTS.fuel` | 311 |
+| `API_ENDPOINTS.toll` | 117 |
+| `API_ENDPOINTS.fleetOps` | 42 |
+| `API_ENDPOINTS.fleetPay` | 39 |
+| `API_ENDPOINTS.claims` | 12 |
+| **`API_ENDPOINTS.fleet`** (shim) | **300** (was 364) |
+
+All five keys exist in `packages/api-client/src/config.ts`. But `.fleet` dropped only 64 while 210 sites landed on new keys — so most new-key sites are new or rewritten code, not swept ones. Whether the remaining 300 are all legitimately residual-domain is precisely what the unimplemented manifest-intersection check (C3) would answer. Until it runs, **D6 cannot be claimed for F1–F4**.
+
+### C5. 🟡 Deploy confirmed; browser proof + manual deploy path still open
+
+- **Actions deployment ✅ CLOSED (2026-09-16).** Workflow run on `96826af` (“Add missing ridesAccountKeys…”) — CI + Deploy Supabase Edge Function + Test Supabase Functions all green on `main`. C6 #1 done.
+- **Phase I browser pass not run.** The checklist exists and is deferred to closeout Phase 3. D9 and the maintenance-mode drill (§4.4.4) remain unexecuted for all five functions.
+
+`package.json` also has **no `deploy:fleet-toll` / `deploy:fleet-claims` / `deploy:fleet-pay` scripts**, and `deploy:functions:all` omits all three. CI covers deployment, but the documented manual path — which is the rollback path in ADR-0022 — does not. That makes the RTO in ADR-0022 untested.
+
+### C6. What's left, in order
+
+| # | Work | Why now | Gate |
+|---|---|---|---|
+| 1 | ~~Confirm the Actions run deployed all five fleet-\* functions~~ | **CLOSED 2026-09-16** — Actions green on `96826af` | D13 |
+| 2 | **Wire `edge-route-manifest --check` + `smoke-edge-fn` into CI** next to `lint-edge-kernel` | Closes A6 for real; unlocks D6/D15 | D15 |
+| 3 | **Implement the `manifest ∩ monolith = ∅` check**, then triage the 300 `.fleet` sites against it | Only way to prove no path is double-served | D6 |
+| 4 | **Fix C2a** — deterministic idempotency key, no wall clock | Money path; small change | D14 |
+| 5 | **Fix C2b** — lock or conditional-write in `beginSealAttempt` | Concurrent double-seal is live today | D14 |
+| 6 | **Fix C2c** — seal-log write failure must block, per ADR-0019 §2 | The ledger policing the lanes must not fail open | D14 |
+| 7 | **Add `week_seal_log` + kernel tests, incl. the replay drill** | D14 is asserted with no test behind it | D14 |
+| 8 | **Phase I browser pass + maintenance-mode drill on all five** | The §1.6 lesson, still unapplied | D4, D9 |
+| 9 | **Add `deploy:fleet-{toll,claims,pay}` + fix `deploy:functions:all`** | Makes ADR-0022's rollback path real | ADR-0022 |
+| 10 | **Resume F0** — 16,176 → <1,000 lines; stand up `fleet-core` as an actual function | The only thing between here and F5 | F5 |
+
+Items 1–3 are hours. Items 4–7 are the money path and should not wait. Item 10 is the long pole and is the whole remaining program.
+
+### C7. The lesson this round
+
+Rev 1's lesson was *a checklist is a memory aid, not a control*. The kernel proved that point — `lint-edge-kernel.mjs` runs in CI, so A3 is closed permanently and cannot regress on F5.
+
+Rev 2's lesson is the next step of the same idea: **building the control is not arming it.** The manifests, the generic smoke, and the seal log are all well-made, and all three are currently decorative — manifests nothing validates, a smoke nothing invokes, a ledger that shrugs when its own write fails. The pattern to watch for on the next pass is an artifact that *looks like* evidence sitting in the repo with no execution path behind it.
+
+---
+
 ## 0. Definition of "done like fuel"
 
 A domain is **complete** only when all of these are true:
@@ -314,11 +567,13 @@ Carry these into every domain. Skipping any of them caused a production gap on f
 
 ---
 
-## 2. Current state (2026-09-16, post-audit)
+## 2. Current state (2026-09-16, post-audit closeout)
 
-See **§A10** for the corrected table. Summary: the repo's committed state has **everything on `make-server-37f42386`**, including fuel. `fleet-fuel` and the Phase I CORS refactor exist only as uncommitted working-tree files.
+> **Live status is §C and §8.** §A10 is the Rev-1 historical table. Do not treat this section as deploy truth.
 
-`fleet-ops` today: health + `/v1/extraction-status` only; `fleetOpsMounted: false`; on `deno.land/x/hono`; not in the prebundle `TARGETS`. Its `extraction-status` payload reports `fuel: { cutover: "done" }`, which is hardcoded and currently **inaccurate** (A1) — see B5.
+**Shipped (git + CI):** `fleet-fuel`, `fleet-toll`, `fleet-ops`, `fleet-claims`, `fleet-pay` are committed, kernel-built, and **deployed** (Actions green on `96826af`, 2026-09-16). Phase I CORS code is live via `createFleetFunction`; browser proof is Phase 3 of the closeout program.
+
+**Still on shim / residual:** `API_ENDPOINTS.fleet` (~300 sites) + ADR-0021 residual clusters remain on `make-server-37f42386` until F0 carve + `fleet-core` stand-up complete.
 
 ---
 
@@ -526,42 +781,70 @@ Maintenance copy: `Platform is under maintenance…` + `maintenanceMessage` from
 
 | Wave | Date | Result |
 |------|------|--------|
-| Fuel (A0–H3) | 2026-09-15/16 | Code complete locally; shipping under A1 |
-| Phase 0 control plane | 2026-09-16 | **Done** — ADRs 0019–0022, CODEOWNERS, UX sheet |
-| A1 ship fuel | 2026-09-16 | **Pushed** `2515c995` / follow-up `37d0384a` — confirm Actions deployed fleet-* (not skipped) |
-| Phase I browser CORS | 2026-09-16 | Checklist in `docs/phase-i-cors-browser-checklist.md` — run after deploy |
-| B1 edge kernel | 2026-09-16 | **Done** — `createFleetFunction`; fuel + make-server; lint-edge-kernel |
-| B2 seal log | 2026-09-16 | **Done** — `week_seal_log` migration applied; all-lane block; CLOSE_BLOCKED UX |
-| B3 tooling | 2026-09-16 | **Done** — edge-route-manifest + smoke-edge-fn + manifests generated |
-| F0 carve index | 2026-09-16 | **Partial** — register_* modules extracted; further carve continues toward &lt;1k lines |
-| F1 fleet-toll | 2026-09-16 | **Code complete** — function + client sweep + unmount + HTTP seal |
-| F2 fleet-ops | 2026-09-16 | **Code complete** — npm kernel + maintenance/expense + client sweep |
-| F3 fleet-claims | 2026-09-16 | **Code complete** — claims CRUD on fleet-claims |
-| F4 fleet-pay | 2026-09-16 | **Code complete** — pay mounts + earnings seal HTTP; week_close on core |
-| F5 retire shim | 2026-09-16 | **Prepared** — ADR-0021 homes live; rename deferred to soak (`fleet-core` README) |
+| Fuel (A0–H3) | 2026-09-15/16 | Code complete locally; shipped under A1 |
+| Audit Rev 1 | 2026-09-16 | 9 findings (§A) |
+| Phase 0 control plane | 2026-09-16 | **Done** — ADRs 0019–0022, `CODEOWNERS`, UX sheet — *verified* |
+| A1 ship fuel | 2026-09-16 | **Done in git + deployed** — `2515c995`, follow-ups `37d0384a` / `9643e261` / `1e220ded` / `96826af8`; skip guard removed; bundles gitignored + CI-built. **Actions Deploy Supabase Edge Function green on `96826af` (C5 / C6 #1 CLOSED)** |
+| B1 edge kernel | 2026-09-16 | **Done — verified.** `createFleetFunction` used by all 5 fleet-\* mains **and** `make_server_legacy_boot.tsx`; `lint-edge-kernel.mjs` enforced in CI. Closes A3 permanently |
+| B2 seal log | 2026-09-16 | **Hardened + D14 stubbed.** `gN` keys; conditional `in_progress` claim; fail-closed; stubbed DB tests for replay / 409 / write-fail |
+| B3 tooling | 2026-09-16 | **Armed.** `--check`, overlap D15, CI + package scripts; `fleet-core` in `--all` + post-deploy smoke (kept out of overlap) |
+| F0 carve index | 2026-09-16 | **Done (gate).** Boot ≈ 106 lines; residual registrar; not an F5 blocker (§D2) |
+| F1–F4 | 2026-09-16 | **Smoke-proven** on Rev-2 deploy; Rev-3 gates apply on next push |
+| F5 / fleet-core | 2026-09-16 | **Scaffolded + manifested.** `routes.generated.json` committed; in TARGETS/ALL_FNS/smoke. **Do not retire `make-server-37f42386` until N-day zero traffic**, then sweep ~296 `.fleet` → `.fleetCore` |
+| Phase I CORS | 2026-09-16 | Preflight PASS; browser totals + maintenance drill recorded after Rev-3 push |
+| ADR-0022 rollback | 2026-09-16 | Deploy scripts real; RTO still tabletop ≤4h until staging rehearse |
+| **Audit Rev 3** | **2026-09-16** | Controls local-green; D4/D3/D5 closed in tree. **Ship blocker was D1 — commit/push this closeout** |
+| **Rev 3 D7 closeout** | **2026-09-16** | D4+D3+D5 implemented; pending push SHA + Actions green + browser/maintenance §8 row |
 
 ---
 
 ## 9. Agent kickoff prompt (copy/paste)
 
 ```
-Read docs/fleet-domain-extraction-completion.md — §A (audit) and §B (enterprise
-remediation) first, then execute in order.
+Read docs/fleet-domain-extraction-completion.md §D (Rev 3 verification) — it
+supersedes §A and §C status and §8's wave rows. Execute §D7 in order.
 
-1) Wave A1: commit + push the untracked fleet-fuel extraction and the three
-   _shared/cors* files; delete the fleet-fuel skip guard in the deploy workflow;
-   confirm CI actually deployed it. Do not proceed on a working tree.
-2) Phase I: browser-verify CORS on the DEPLOYED fleet-fuel (devtools, not curl).
-3) B1: build _shared/edgeKernel.ts (createFleetFunction) and port BOTH fleet-fuel
-   and make-server onto it. fleet-fuel currently bypasses the maintenance-mode gate.
-4) B2: idempotency keys on seal calls + fleet.week_seal_log + an ADR declaring each
-   lane's failure policy. Do not start F1 before this.
-5) F0: carve the 292 inline routes out of _fleet-server/index.tsx into register*
-   modules. Pure refactor, no cutover.
-6) Then Wave F1 (fleet-toll) to the Definition of Done in §0 — now D1–D15.
+The program is code-complete and the controls pass locally (kernel lint, 5/5
+manifests, D15 overlap 0 collisions, 10/10 tests). Do NOT redo any of that.
+Do not re-carve register_residual_monolith_routes.tsx — §D2 retires that goal;
+the whole residual has one destination (fleet-core), so its size is a code-health
+item, not an F5 blocker.
 
-Do not start F2 until F1 meets D1–D15.
+STEP 1 — push. Everything else waits on this.
+   48 changes are uncommitted; the deployed artifact is 96826af8, which predates
+   this round's kernel change, hardened week_seal_log, week_close wiring, and all
+   four CI gates. Commit, push, and confirm the Actions run goes green WITH the
+   new gates active (manifest --check, overlap, extraction-status staleness,
+   post-deploy smokes). Until then none of them has ever run.
+
+STEP 2 — close the fleet-core verification gap (§D4).
+   Generate supabase/functions/fleet-core/routes.generated.json and add fleet-core
+   to the post-deploy smoke loop. Keep it OUT of check-edge-manifest-overlap's
+   FLEET_SLUGS — it serves make-server's routes by design, so including it would
+   be a false positive. That exclusion is correct; the missing manifest is not.
+
+STEP 3 — make the seal contract demonstrated, not asserted (§D3).
+   The 10 existing tests are pure-function. Add integration tests for the three
+   behaviours that carry money risk:
+     a) same idempotency key + succeeded row returns prior result_json, no re-seal
+     b) concurrent call against a fresh in_progress row is refused 409
+     c) a seal-log write failure blocks the close (SEAL_LOG_WRITE_FAILED)
+
+STEP 4 — close the direct-seal race (§D5).
+   POST /fleet-*/internal/seal-*-week bypasses tryClaimWeekCloseLock entirely.
+   Claim the lock inside the internal handler, or make the in_progress transition
+   a conditional write.
+
+STEP 5 — browser proof (§1.6, still unapplied).
+   Run docs/phase-i-cors-browser-checklist.md in devtools across all six functions:
+   UI totals + maintenance-mode drill. A preflight smoke is not the gate.
+
+STEP 6 — F5 soak, then sweep 296 API_ENDPOINTS.fleet sites to .fleetCore and
+   retire the make-server-37f42386 slug.
+
 Stay on the current branch. Do not treat md cleanup as the fix.
+Push before auditing — three rounds running, the gap has been the last mile
+between a green working tree and the pipeline.
 ```
 
-When F1 is done, repeat the prompt for F2, then F3, then F4, then F5.
+Steps 2–4 are independent of each other; only Step 1 is a hard prerequisite.

@@ -34,7 +34,7 @@ async function authHeaders(contentType: string | null = 'application/json') {
 
 export const tollOpsApi = {
   async getTollPlazas(): Promise<TollPlaza[]> {
-    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/toll-plazas`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.toll}/toll-plazas`, {
       headers: await authHeaders(null),
     });
     if (!response.ok) throw new Error('Failed to fetch toll plazas');
@@ -42,7 +42,7 @@ export const tollOpsApi = {
   },
 
   async getTollPlaza(id: string): Promise<TollPlaza> {
-    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/toll-plazas/${id}`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.toll}/toll-plazas/${id}`, {
       headers: await authHeaders(null),
     });
     if (!response.ok) throw new Error('Failed to fetch toll plaza');
@@ -50,7 +50,7 @@ export const tollOpsApi = {
   },
 
   async saveTollPlaza(plaza: Partial<TollPlaza>): Promise<{ success: boolean; data: TollPlaza }> {
-    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/toll-plazas`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.toll}/toll-plazas`, {
       method: 'POST',
       headers: await authHeaders(),
       body: JSON.stringify(plaza),
@@ -60,7 +60,7 @@ export const tollOpsApi = {
   },
 
   async deleteTollPlaza(id: string): Promise<void> {
-    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/toll-plazas/${id}`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.toll}/toll-plazas/${id}`, {
       method: 'DELETE',
       headers: await authHeaders(null),
     });

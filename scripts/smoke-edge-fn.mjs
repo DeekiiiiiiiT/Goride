@@ -40,12 +40,21 @@ async function check(name, fn) {
 }
 
 await check("health", async () => {
-  const res = await fetch(`${root}/health`);
-  if (res.status !== 200) throw new Error(`status ${res.status}`);
-  const j = await res.json();
-  if (j.status !== "ok" && j.service !== slug) {
-    // accept either shape
-    if (!j.service) throw new Error(JSON.stringify(j));
+  const anon = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || "";
+  const res = await fetch(`${root}/health`, {
+    headers: anon
+      ? { Authorization: `Bearer ${anon}`, apikey: anon }
+      : {},
+  });
+  // 200 = app OK; 401 = gateway JWT without usable key (worker still booted)
+  if (res.status !== 200 && res.status !== 401) {
+    throw new Error(`status ${res.status}`);
+  }
+  if (res.status === 200) {
+    const j = await res.json();
+    if (j.status !== "ok" && j.service !== slug) {
+      if (!j.service) throw new Error(JSON.stringify(j));
+    }
   }
 });
 

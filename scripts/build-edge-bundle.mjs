@@ -55,6 +55,10 @@ const TARGETS = {
     entry: path.join(ROOT, "supabase/functions/fleet-pay/src/main.ts"),
     outfile: path.join(ROOT, "supabase/functions/fleet-pay/index.ts"),
   },
+  "fleet-core": {
+    entry: path.join(ROOT, "supabase/functions/fleet-core/src/main.ts"),
+    outfile: path.join(ROOT, "supabase/functions/fleet-core/index.ts"),
+  },
 };
 
 async function buildOne(name) {

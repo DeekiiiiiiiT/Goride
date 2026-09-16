@@ -1,84 +1,104 @@
 /**
  * Emit routes.generated.json for an edge function slug by grepping its entry + mounted controllers.
- * Usage: node scripts/edge-route-manifest.mjs <slug>
- * CI: fail if committed manifest is stale (git diff --exit-code).
+ * Usage:
+ *   node scripts/edge-route-manifest.mjs <slug>
+ *   node scripts/edge-route-manifest.mjs <slug> --check
+ *   node scripts/edge-route-manifest.mjs --all [--check]
+ *
+ * --check: regenerate in memory and fail if committed manifest drifts (D15).
  */
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { collectRoutesFromEntry } from "./edge-route-collect.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "..");
 
-const slug = process.argv[2];
-if (!slug) {
-  console.error("Usage: node scripts/edge-route-manifest.mjs <slug>");
-  process.exit(1);
-}
-
-const entryCandidates = [
-  path.join(ROOT, "supabase/functions", slug, "src", "main.ts"),
-  path.join(ROOT, "supabase/functions", slug, "index.ts"),
+const FLEET_SLUGS = [
+  "fleet-fuel",
+  "fleet-toll",
+  "fleet-ops",
+  "fleet-claims",
+  "fleet-pay",
+  "fleet-core",
 ];
-const entry = entryCandidates.find((p) => fs.existsSync(p));
-if (!entry) {
-  console.error(`No entry for ${slug}`);
+
+const args = process.argv.slice(2);
+const checkMode = args.includes("--check");
+const allMode = args.includes("--all");
+const slugArg = args.find((a) => !a.startsWith("--"));
+
+function findEntry(slug) {
+  const entryCandidates = [
+    path.join(ROOT, "supabase/functions", slug, "src", "main.ts"),
+    path.join(ROOT, "supabase/functions", slug, "index.ts"),
+  ];
+  return entryCandidates.find((p) => fs.existsSync(p)) ?? null;
+}
+
+function buildPayload(slug, routes) {
+  return {
+    slug,
+    generatedAt: new Date().toISOString(),
+    routeCount: routes.length,
+    routes,
+  };
+}
+
+/** Compare route sets only (ignore generatedAt drift). */
+function routesEqual(a, b) {
+  if (!a || !b) return false;
+  if (!Array.isArray(a.routes) || !Array.isArray(b.routes)) return false;
+  if (a.routes.length !== b.routes.length) return false;
+  for (let i = 0; i < a.routes.length; i++) {
+    if (a.routes[i] !== b.routes[i]) return false;
+  }
+  return true;
+}
+
+function processSlug(slug) {
+  const entry = findEntry(slug);
+  if (!entry) {
+    console.error(`No entry for ${slug}`);
+    return 1;
+  }
+  const routes = collectRoutesFromEntry(entry, slug);
+  const outPath = path.join(ROOT, "supabase/functions", slug, "routes.generated.json");
+  const payload = buildPayload(slug, routes);
+
+  if (checkMode) {
+    if (!fs.existsSync(outPath)) {
+      console.error(`FAIL ${slug}: missing committed manifest ${outPath}`);
+      return 1;
+    }
+    const committed = JSON.parse(fs.readFileSync(outPath, "utf8"));
+    if (!routesEqual(committed, payload)) {
+      console.error(
+        `FAIL ${slug}: routes.generated.json is stale (committed ${committed.routeCount}, actual ${payload.routeCount}). Re-run without --check and commit.`,
+      );
+      return 1;
+    }
+    console.log(`ok  ${slug} manifest (${routes.length} routes)`);
+    return 0;
+  }
+
+  fs.mkdirSync(path.dirname(outPath), { recursive: true });
+  fs.writeFileSync(outPath, JSON.stringify(payload, null, 2) + "\n");
+  console.log(`Wrote ${outPath} (${routes.length} routes)`);
+  return 0;
+}
+
+const slugs = allMode ? FLEET_SLUGS : slugArg ? [slugArg] : null;
+if (!slugs) {
+  console.error(
+    "Usage: node scripts/edge-route-manifest.mjs <slug|--all> [--check]",
+  );
   process.exit(1);
 }
 
-const ROUTE_RE =
-  /\.(get|post|put|patch|delete|all)\(\s*[`"']([^`"']+)[`"']/gi;
-const IMPORT_RE =
-  /from\s+["'](\.\.?\/[^"']+)["']/g;
-
-const visited = new Set();
-const routes = new Set();
-
-function resolveImport(fromFile, spec) {
-  const base = path.resolve(path.dirname(fromFile), spec);
-  for (const ext of ["", ".ts", ".tsx", "/index.ts", "/index.tsx"]) {
-    const p = base + ext;
-    if (fs.existsSync(p) && fs.statSync(p).isFile()) return p;
-  }
-  return null;
+let exitCode = 0;
+for (const slug of slugs) {
+  exitCode = Math.max(exitCode, processSlug(slug));
 }
-
-function walk(file, depth = 0) {
-  if (depth > 8 || visited.has(file)) return;
-  visited.add(file);
-  let src;
-  try {
-    src = fs.readFileSync(file, "utf8");
-  } catch {
-    return;
-  }
-  for (const m of src.matchAll(ROUTE_RE)) {
-    routes.add(`${m[1].toUpperCase()} ${m[2]}`);
-  }
-  // Follow relative imports into _fleet-server for this slug's graph only
-  for (const m of src.matchAll(IMPORT_RE)) {
-    const resolved = resolveImport(file, m[1]);
-    if (!resolved) continue;
-    if (
-      resolved.includes(`${path.sep}_fleet-server${path.sep}`) ||
-      resolved.includes(`${path.sep}${slug}${path.sep}`) ||
-      resolved.includes(`${path.sep}_shared${path.sep}`)
-    ) {
-      walk(resolved, depth + 1);
-    }
-  }
-}
-
-walk(entry);
-
-const outDir = path.join(ROOT, "supabase/functions", slug);
-fs.mkdirSync(outDir, { recursive: true });
-const outPath = path.join(outDir, "routes.generated.json");
-const payload = {
-  slug,
-  generatedAt: new Date().toISOString(),
-  routeCount: routes.size,
-  routes: [...routes].sort(),
-};
-fs.writeFileSync(outPath, JSON.stringify(payload, null, 2) + "\n");
-console.log(`Wrote ${outPath} (${routes.size} routes)`);
+process.exit(exitCode);

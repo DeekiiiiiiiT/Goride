@@ -14,6 +14,7 @@
 /supabase/functions/fleet-ops/ @deeki
 /supabase/functions/fleet-claims/ @deeki
 /supabase/functions/fleet-pay/ @deeki
+/supabase/functions/fleet-core/ @deeki
 /supabase/functions/make-server-37f42386/ @deeki
 /supabase/functions/_fleet-server/ @deeki
 
@@ -27,5 +28,9 @@
 /scripts/build-edge-bundle.mjs @deeki
 /scripts/lint-edge-kernel.mjs @deeki
 /scripts/edge-route-manifest.mjs @deeki
+/scripts/edge-route-collect.mjs @deeki
+/scripts/check-edge-manifest-overlap.mjs @deeki
+/scripts/generate-extraction-status.mjs @deeki
 /scripts/smoke-edge-fn.mjs @deeki
 /scripts/smoke-fleet-fuel-*.mjs @deeki
+/scripts/f0-carve-residual.mjs @deeki

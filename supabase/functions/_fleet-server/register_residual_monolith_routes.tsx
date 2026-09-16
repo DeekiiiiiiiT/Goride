@@ -1,0 +1,16091 @@
+/**
+ * F0 carve — full residual monolith body (helpers, nested registrars, inline routes).
+ * Behavior unchanged. Boot file is kernel + this registrar + Deno.serve only.
+ */
+import type { Hono } from "npm:hono@4.3.11";
+import type { Context, Next } from "npm:hono@4.3.11";
+import { streamText } from "npm:hono@4.3.11/streaming";
+import { createClient } from "npm:@supabase/supabase-js@2";
+import { fromKvStore } from "./fleet_sql_bridge.ts";
+import { fleetSelect } from "./fleet_select.ts";
+import { countBy, listByBatch, queryFleet, fleetDb, fleetTable, rowToKvValue } from "./repos/baseRepo.ts";
+import OpenAI from "npm:openai";
+import { GoogleGenerativeAI } from "npm:@google/generative-ai";
+import * as kv from "./kv_store.tsx";
+import * as cache from "./cache.ts";
+import { trackedProviderCall, logProviderCall, checkProviderGuards, ProviderBlockedError } from "./api_usage_logger.ts";
+import * as memCache from "./memory_cache.ts";
+import { generatePerformanceReport } from "./performance-metrics.tsx";
+import { pMap } from "./concurrency.ts";
+import { findMatchingStationSmart } from "./geo_matcher.ts";
+import * as fuelLogic from "./fuel_logic.ts";
+import { recalculateVehicleFuelEntries } from "./fuel_cycle_stamp.ts";
+import { Buffer } from "node:buffer";
+import {
+  requireAuth,
+  requirePermission,
+  requirePlatformStaff,
+  hasPermission,
+  hasPlatformStaffAccess,
+  hasPlatformOwnerAccess,
+  isPlatformStaffFromAuthUser,
+  isPlatformOwnerFromAuthUser,
+  type RbacUser,
+} from "./rbac_middleware.ts";
+import { logAdminAction, getAuditLogs, getAuditLogsByActor } from "./audit_log.ts";
+import { 
+  stampOrg, 
+  stampRecord,
+  filterByOrg, 
+  filterByOrgStrict, 
+  filterByOrgSafe,
+  filterByOrgAndProduct,
+  belongsToOrg, 
+  belongsToOrgStrict,
+  belongsToOrgSafe,
+  getOrgId, 
+  isLegacyOrgPlaceholder,
+  type FilterStats,
+} from "./org_scope.ts";
+import { loadTollPlazaStats, attachPlazaStats } from "./toll_plaza_stats.ts";
+import { assertExpectedUpdatedAt, stripConcurrencyToken } from "./optimistic_concurrency.ts";
+import {
+  resolveProductLine,
+  inferProductLineFromUser,
+  assertFleetOwnerProductLine,
+  isEnabledBusinessType,
+  isProductLine,
+  ALL_BUSINESS_TYPES,
+  type ProductLine,
+} from "./product_line.ts";
+import {
+  resolveSettingsSegment,
+  getPlatformSettingsCached,
+  invalidatePlatformSettingsCache,
+  getSegmentSettingsSummary,
+  getLatestSettingsUpdatedAt,
+  platformSettingsKvKey,
+  LEGACY_PLATFORM_SETTINGS_KEY,
+  segmentToProductLine,
+  verifySettingsAccess,
+  type SettingsSegment,
+} from "./platform_settings.ts";
+import { requireProductAdmin } from "./product_admin_guard.ts";
+import {
+  effectiveSectionAccess,
+  parseSectionOverrides,
+  resolveEnterpriseSeatRole,
+  type EnterpriseSectionOverrides,
+} from "../_shared/enterpriseSeat.ts";
+import {
+  appendCanonicalLedgerEvents,
+  deleteAllCanonicalLedgerBySourceType,
+  deleteCanonicalLedgerBySource,
+  deleteCanonicalLedgerBySourceFromDate,
+  deleteCanonicalLedgerByBatchId,
+  countCanonicalLedgerByBatchId,
+  importFileHashAlreadyPosted,
+} from "./ledger_canonical.ts";
+import { isUnifiedTollSettlementEnabled } from "./driver_toll_charge.ts";
+import { upsertClaim, deleteClaim, executeClaimDateBackfill } from "./claim_service.ts";
+import { addToTollDisposition, emptyTollDisposition, roundTollDisposition } from "./driver_toll_disposition.ts";
+import {
+  appendCanonicalFuelExpenseIfEligible,
+  appendCanonicalTripFaresIfEligible,
+  appendCanonicalTripFaresIfEligibleWithStats,
+  buildCanonicalTripFareEventsFromTrip,
+  appendCanonicalWalletCreditIfEligible,
+  appendCanonicalFuelReimbursementIfEligible,
+  appendCanonicalTollReimbursementIfEligible,
+  buildCanonicalFuelExpenseEvent,
+  buildCanonicalWalletCreditEvent,
+  buildCanonicalFuelReimbursementEvent,
+  buildCanonicalTollReimbursementEvent,
+  buildCanonicalTollEventFromTollLedger,
+  appendCanonicalFixedExpenseIfEligible,
+  buildCanonicalFixedExpenseEvents,
+  appendCanonicalGenericTransactionIfEligible,
+  buildCanonicalGenericTransactionEvent,
+  type TollLedgerLike,
+} from "./canonical_from_ops.ts";
+import {
+  aggregateCanonicalEventsToLedgerDriverOverview,
+} from "./ledger_money_aggregate.ts";
+import {
+  fetchAllLedgerEventValuesForDrivers,
+} from "./ledger_driver_events.ts";
+import {
+  findSignedWeeksTouchedByEvents,
+  listDriverFinancialPeriods,
+} from "./driver_financial_periods.ts";
+import {
+  isSettlementDeskCategory,
+  mayMutateTransactionOrg,
+} from "./settlement_desk_security.ts";
+import { parseCatalogMonthFromUnknown } from "../../../packages/types/src/catalogMonthParse.ts";
+import { VEHICLE_CATALOG_WRITABLE_KEYS, VEHICLE_CATALOG_BULK_MAX_ROWS } from "../../../packages/types/src/vehicleCatalogCsvImport.ts";
+import {
+  enrichRecordWithDriverVehicle,
+  syncDriverRecordFromVehicleAssignment,
+  applyDriverAssignmentChangeOnVehicle,
+  enforceExclusiveCurrentDriverAssignment,
+} from "./driver_vehicle_assignment.ts";
+import {
+  projectOdometerReading,
+  projectFromCheckIn,
+  projectFromFuelEntry,
+  projectFromMaintenanceLog,
+  getCurrentOdometer,
+  listOdometerLedger,
+  voidOdometerReading,
+  backfillOdometerLedger,
+  odometerLedgerHealth,
+  refreshVehicleOdometerCache,
+} from "./odometer_ledger.ts";
+import { syncLinkedExpenseTransaction } from "./fuel_transaction_sync.ts";
+import { resolveFuelPaymentSource } from "./fuel_payment_source.ts";
+import { ensureFuelEntryForApprovedTx } from "./fuel_posted_guarantee.ts";
+import {
+  buildFuelTxCascadePlan,
+  collectRelatedTxIdsForEntry,
+  resolveParentFuelEntry,
+} from "./fuel_tx_cascade.ts";
+import { normalizeAdminCashFuelTransaction } from "./fuel_transaction_normalize.ts";
+import auditApp from "./audit_controller.tsx";
+import safetyApp from "./safety_controller.tsx";
+import syncApp from "./sync_controller.tsx";
+// RETIRED: tollApp / tollPeriodApp live on fleet-toll (ADR-0021 F1)
+import {
+  saveTollLedgerEntry,
+  getTollLedgerEntry,
+  getAllTollLedgerEntries,
+  transactionToTollLedgerServer,
+  isTollCategory as isTollCategoryServer,
+  updateTollLedgerEntry,
+  deleteTollLedgerEntry,
+  buildTollLedgerFullBackupPayload,
+  executeTollLedgerRepairDates,
+  executeTollResetForReconciliation,
+  computeAndPersistTollMatchOnIngest,
+  reconsiderTollsForNewTrips,
+  invalidateStaleTollMatchesForTrip,
+  voidTollLedgerEntryHandler,
+  applyTagIdentityBackfill,
+} from "./toll_controller.tsx";
+import { replayFleetTripsWithRoutes } from "./fleet_trip_toll_replay.ts";
+import { resolveDriverFromFleetRecords, collectDriverAliasIds } from "./driver_identity.ts";
+// RETIRED: disputeRefundApp / driverFinancialPeriodApp / settlementCommandsApp / paymentLedgerLineApp → fleet-pay (F4)
+import weekCloseApp from "./week_close_controller.tsx";
+import apiCenterApp from "./api_command_center.tsx";
+import { getFleetTimezone, naiveToUtc, fleetCalendarDay, toFleetCalendarDay } from "./timezone_helper.tsx";
+import { periodAnchorFor, periodEndForAnchor } from "./financial_ledger.ts";
+import * as unverifiedVendor from './unverified_vendor_controller.tsx';
+import { suggestStationMatches } from './vendor_matcher.ts';
+import { checkRateLimit, recordFailedAttempt, clearRateLimit, getClientIp, getRateLimitStats } from './rate_limiter.ts';
+// RETIRED: registerMaintenanceRoutes → fleet-ops (ADR-0021 F2)
+import { registerFleetMigrateRoutes } from "./fleet_migrate_routes.ts";
+import {
+  registerEvidenceRoutes,
+  applyEvidenceResolution,
+  cleanupEphemeralPathsOnDelete,
+} from "./evidence_routes.ts";
+import { registerFleetAdminStorageRoutes } from "./fleet_admin_storage_routes.ts";
+import { registerFleetAdminMaintenanceLedgerRoutes } from "./fleet_admin_maintenance_ledger_routes.ts";
+import { registerEnterpriseAdminRoutes } from "./enterprise_admin_routes.ts";
+import { registerEnterpriseIntakeAdminRoutes } from "./enterprise_intake_admin_routes.ts";
+import { registerWorkforceInviteRoutes } from "./workforce_invite_routes.ts";
+import { registerCourierRoamTagRoutes } from "./courier_roam_tag_routes.ts";
+import { registerFleetTagRoutes } from "./fleet_tag_routes.ts";
+import { registerFleetModuleCheckoutRoutes } from "./fleet_module_checkout.ts";
+import {
+  clearCourierFleetMembership,
+  healOrgCourierRoster,
+  linkCourierToFleet,
+  linkDriverToFleet,
+  unlinkCourierFromFleet,
+  upsertDriverProfileFromServer as upsertDriverProfileOnServer,
+} from "./workforce_link.ts";
+import { registerCourierWorkforceRoutes } from "./courier_workforce_routes.ts";
+import { reconcileRushTripProjection } from "./rush_trip_recon.ts";
+import {
+  backfillRushOrdersToFleet,
+  runDailyRushTripRecon,
+} from "./rush_projection_helpers.ts";
+import { registerRushSettlementRoutes } from "./rush_settlement_routes.ts";
+import { ensureCustomerOrganization } from "./ensure_customer_org.ts";
+import {
+  buildEphemeralStoragePath,
+  EPHEMERAL_EVIDENCE_BUCKET,
+  extractEvidenceUrlsFromRecord,
+  isEvidenceTtlEnabled,
+  registerEvidenceFile,
+  collectStoragePathsFromRecord,
+  markEvidenceFilesDeleted,
+  type EvidenceType,
+} from "./evidence_storage.ts";
+import { ensureBucket } from "./storage_buckets.ts";
+import { detectFileMagicBytes, extForMime, IMAGE_AND_PDF_MIMES } from "./file_magic.ts";
+import { registerPendingVehicleCatalogRoutes } from "./pending_vehicle_catalog_routes.ts";
+import { registerPartSourcingRoutes } from "./part_sourcing_routes.ts";
+// RETIRED: registerExpenseHubRoutes → fleet-ops (ADR-0021 F2)
+import { registerDriversRosterRoutes } from "./drivers_roster.ts";
+import { registerDriversComplianceRoutes } from "./drivers_compliance.ts";
+import { registerDriversNotesRoutes } from "./drivers_notes.ts";
+import { registerDriversReconciliationRoutes } from "./drivers_reconciliation.ts";
+import { registerDriversAuditRoutes } from "./drivers_audit.ts";
+import { registerDriversSavedViewsRoutes } from "./drivers_saved_views.ts";
+import { registerDriverOperationalPeriodRoutes } from "./driver_operational_periods.ts";
+import { registerPlatformVendorRoutes } from "./platform_vendor_routes.ts";
+import { registerUberFleetRoutes } from "./uber_fleet_routes.ts";
+import {
+  registerLedgerEnsureRoutes,
+  tripHasMoneyForLedgerProjection,
+} from "./ledger_ensure_routes.ts";
+import { registerLedgerDriverOverviewRoutes } from "./ledger_driver_overview_routes.ts";
+import { registerLedgerDiagnosticRoutes } from "./ledger_diagnostic_routes.ts";
+import { registerLedgerDriverEarningsHistoryRoutes } from "./ledger_driver_earnings_history_routes.ts";
+import { registerLedgerIndriveWalletRoutes } from "./ledger_indrive_wallet_routes.ts";
+import { registerLedgerWalletRoutes } from "./ledger_wallet_routes.ts";
+import { registerOrgBillingRoutes } from "./org_billing_routes.ts";
+import { registerLedgerDriversFleetSummaryRoutes } from "./ledger_drivers_fleet_summary_routes.ts";
+import {
+  registerLedgerQuerySummaryRoutes,
+  expandStatementSummaryDriverIds,
+} from "./ledger_query_summary_routes.ts";
+import { registerLedgerEntriesRoutes } from "./ledger_entries_routes.ts";
+import { registerPlatformStatusRoutes } from "./register_platform_status_routes.ts";
+import { registerSeedTestRoutes } from "./register_seed_test_routes.ts";
+import { registerAiVisionRoutes } from "./register_ai_vision_routes.ts";
+import { registerTankStatusRoutes } from "./register_tank_status_routes.ts";
+import { registerFuelAuditRoutes } from "./register_fuel_audit_routes.ts";
+import { registerAdminOpsRoutes } from "./register_admin_ops_routes.ts";
+import { registerPublicHealthRoutes } from "./register_public_health_routes.ts";
+import { registerMapsPlacesRoutes } from "./register_maps_places_routes.ts";
+import { registerFuelScenarioRoutes } from "./register_fuel_scenario_routes.ts";
+import { registerEarningsPolicyRoutes } from "./register_earnings_policy_routes.ts";
+import { registerFleetBankRoutes } from "./register_fleet_bank_routes.ts";
+import {
+  provisionFleetOwner,
+  enableDriverForFleetOwner,
+  isFleetOwnerProvisioned,
+  userCanAccessFleetPortal,
+  userCanAccessDriverPortal,
+} from "./fleet_owner_provision.ts";
+import { resolveCatalogIdForKvVehicle } from "./vehicle_catalog_resolve.ts";
+import {
+  applyCatalogGateOnCreate,
+  isEnforcementEnabled as catalogGateEnforcementEnabled,
+  loadVehicleForGate,
+  rbacUserCanBypassCatalogGate,
+  requireCatalogMatched,
+} from "./vehicle_catalog_gate.ts";
+import {
+  supersedePendingRequestsForVehicle,
+  upsertPendingFromKvVehicle,
+} from "./vehicle_catalog_pending_queries.ts";
+import {
+  catalogRowForApi,
+  insertRowForLegacyDb,
+  isLegacyVehicleCatalogYearNotNullError,
+  isPostgrestVehicleCatalogSchemaCacheError,
+  listVehicleCatalogWithFallback,
+  mergeCatalogTrimIntoTrimSeriesInPlace,
+  parseMissingColumnFromVehicleCatalogDbError,
+  patchRowForLegacyDb,
+  shouldStripVehicleCatalogInsertPayloadOnRetry,
+  stripVehicleCatalogOptionalMigrationColumns,
+  VEHICLE_CATALOG_SUPABASE_SELECT,
+} from "./vehicle_catalog_schema_fallback.ts";
+import {
+  countCatalogDependencies,
+  countCatalogDependenciesForIds,
+  dependenciesBlockDelete,
+  invalidateCatalogExistenceCache,
+  listCatalogOrphanVehicles,
+  stampCatalogProvenance,
+} from "./vehicle_catalog_enterprise.ts";
+
+// Wave 5: Fail-fast env validation at startup (after all imports — never between import lines)
+assertRequiredEnv();
+
+// ---------------------------------------------------------------------------
+// Future-Date Guardrail
+// ---------------------------------------------------------------------------
+// Jamaica uses DD/MM/YYYY exclusively. The AI is told to parse dates as
+// DD/MM/YYYY and output ISO strings. This post-processing step catches any
+// date the AI produced that is still in the future (relative to the server
+// clock) — the most common cause is the AI getting the year wrong.
+//
+// Strategy:
+//   1. Parse the ISO date string the AI returned.
+//   2. If the date is in the future (> today + 1 day buffer):
+//      a. Roll back the year by 1 (most likely AI error).
+//      b. If still future, flag it for manual review.
+//   NOTE: We do NOT swap day/month — Jamaica is always DD/MM/YYYY, so the
+//         AI's DD/MM interpretation is correct. Swapping would break it.
+// ---------------------------------------------------------------------------
+function correctFutureDates(transactions: any[]): any[] {
+  const now = new Date();
+  const tomorrow = new Date(now);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  tomorrow.setHours(23, 59, 59, 999);
+
+  return transactions.map(tx => {
+    if (!tx.date) return tx;
+    try {
+      const d = new Date(tx.date);
+      if (isNaN(d.getTime())) return tx;
+      if (d <= tomorrow) return tx; // Date is in the past or today — fine
+
+      // --- Future date detected ---
+      console.log(`[FutureDateFix] Detected future date: ${tx.date}`);
+
+      // Attempt 1: Roll back one year (AI likely got the year wrong)
+      const rolledBack = new Date(d);
+      rolledBack.setFullYear(rolledBack.getFullYear() - 1);
+      if (rolledBack <= tomorrow) {
+        const corrected = rolledBack.toISOString().split('T')[0];
+        console.log(`[FutureDateFix] Rolled back year -> corrected to ${corrected}`);
+        return { ...tx, date: corrected, _dateCorrected: 'year_rollback', _originalDate: tx.date };
+      }
+
+      // Attempt 2: If still future even after rollback, just flag it
+      console.log(`[FutureDateFix] Could not auto-correct ${tx.date}, flagging`);
+      return { ...tx, _dateCorrected: 'unfixable_future', _originalDate: tx.date };
+    } catch {
+      return tx;
+    }
+  });
+}
+
+// Kernel-owned middleware (ADR-0020): path normalize, CORS, request id, error boundary, maintenance.
+// serve:false — Deno.serve remains at file end with existing onError handler.
+
+export function registerResidualMonolithRoutes(app: Hono) {
+
+  const supabase = createClient(
+    Deno.env.get("SUPABASE_URL")!,
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+  );
+
+  /** Keeps Postgres `driver_profiles` aligned with KV + auth (service role bypasses RLS). */
+  async function upsertDriverProfileFromServer(opts: {
+    userId: string;
+    mode: "fleet" | "independent";
+    fleetId?: string | null;
+    displayName?: string | null;
+    status?: string;
+    onboardingComplete?: boolean;
+    markFleetJoined?: boolean;
+  }) {
+    await upsertDriverProfileOnServer(supabase, opts);
+  }
+
+  /**
+   * Fully detach a driver from an organization across all three stores
+   * (auth metadata, fleet KV, driver_profiles) and release any assigned vehicle.
+   * Fixes the "zombie membership" bug where only auth metadata was cleared.
+   */
+  async function detachDriverFromOrg(driverId: string): Promise<void> {
+    // 1) Auth metadata
+    const { data: authData } = await supabase.auth.admin.getUserById(driverId);
+    const meta = authData?.user?.user_metadata || {};
+    if (meta.organizationId) {
+      await supabase.auth.admin.updateUserById(driverId, {
+        user_metadata: { ...meta, organizationId: null },
+      });
+    }
+
+    // 2) Fleet KV: clear org + mirrored vehicle assignment on the driver record
+    const driverKv = await kv.get(`driver:${driverId}`);
+    if (driverKv && typeof driverKv === "object") {
+      await kv.set(`driver:${driverId}`, {
+        ...driverKv,
+        organizationId: null,
+        assignedVehicleId: null,
+        assignedVehiclePlate: null,
+        assignedVehicleName: null,
+        vehicle: null,
+      });
+    }
+
+    // 3) Release vehicles that still point at this driver (assignment SSOT)
+    try {
+      const { data: vehicleRows } = await fromKvStore()
+        .select("key, value")
+        .like("key", "vehicle:%")
+        .eq("value->>currentDriverId", driverId);
+      if (vehicleRows?.length) {
+        const { applyDriverAssignmentChangeOnVehicle } = await import("./driver_vehicle_assignment.ts");
+        for (const row of vehicleRows) {
+          const vehicle = row.value as Record<string, unknown>;
+          const updated = applyDriverAssignmentChangeOnVehicle(vehicle, {
+            ...vehicle,
+            currentDriverId: null,
+            currentDriverName: null,
+          });
+          await kv.set(String(row.key), updated);
+        }
+      }
+    } catch (e) {
+      console.warn(`[DetachDriver] vehicle release failed for ${driverId}:`, e);
+    }
+
+    // 4) driver_profiles: back to independent, fleet link cleared. Direct update
+    //    (not upsert) so display_name/onboarding state are preserved.
+    const { error: profErr } = await supabase
+      .from("driver_profiles")
+      .update({ mode: "independent", fleet_id: null, fleet_joined_at: null, updated_at: new Date().toISOString() })
+      .eq("user_id", driverId);
+    if (profErr) console.warn("[DetachDriver] driver_profiles update failed:", profErr.message);
+
+    // 5) courier_profiles: same detach for rush couriers on this account
+    await clearCourierFleetMembership(supabase, driverId);
+
+    invalidateDriverCache();
+  }
+
+  function getProvisionDeps() {
+    return {
+      supabase,
+      upsertDriverProfile: upsertDriverProfileFromServer,
+      invalidateCustomerCache,
+    };
+  }
+
+  registerFleetMigrateRoutes(app);
+  registerEvidenceRoutes(app, supabase, kv, requireAuth, requirePermission);
+  registerFleetAdminStorageRoutes(app, supabase, kv);
+  registerFleetAdminMaintenanceLedgerRoutes(app, supabase, kv);
+  registerPendingVehicleCatalogRoutes(app, supabase);
+  registerPartSourcingRoutes(app, supabase);
+  registerUberFleetRoutes(app);
+  // RETIRED: registerMaintenanceRoutes(app, supabase); — live on fleet-ops
+  // RETIRED: registerExpenseHubRoutes(app); — live on fleet-ops
+  registerDriversRosterRoutes(app);
+  registerDriversComplianceRoutes(app);
+  registerDriversNotesRoutes(app);
+  registerDriversReconciliationRoutes(app);
+  registerDriversAuditRoutes(app);
+  registerDriversSavedViewsRoutes(app);
+  registerDriverOperationalPeriodRoutes(app);
+  registerLedgerEnsureRoutes(app);
+  registerLedgerDriverOverviewRoutes(app);
+  registerLedgerDiagnosticRoutes(app);
+  registerLedgerDriverEarningsHistoryRoutes(app);
+  registerLedgerIndriveWalletRoutes(app);
+  registerLedgerDriversFleetSummaryRoutes(app);
+  registerLedgerQuerySummaryRoutes(app);
+  registerLedgerWalletRoutes(app);
+  registerOrgBillingRoutes(app);
+  registerLedgerEntriesRoutes(app);
+  registerPlatformStatusRoutes(app);
+  registerSeedTestRoutes(app);
+  registerAiVisionRoutes(app);
+  registerTankStatusRoutes(app);
+  registerFuelAuditRoutes(app);
+  registerAdminOpsRoutes(app);
+  registerPublicHealthRoutes(app);
+  registerMapsPlacesRoutes(app);
+  registerFuelScenarioRoutes(app);
+  registerEarningsPolicyRoutes(app);
+  registerFleetBankRoutes(app);
+
+  // ─── Toll Ledger Primary Write Helper (Phase 6) ──────────────────────────
+  // Tolls are now written ONLY to toll_ledger:* (single source of truth).
+  // The transaction:* store is no longer used for toll data.
+  // ───────────────────────────────────────────────────────────────────────
+  async function writeTollToLedger(transaction: any, c: Context): Promise<void> {
+    if (!isTollCategoryServer(transaction.category)) return;
+
+    const drivers = await loadDriverCache();
+    const normalized = resolveDriverFromFleetRecords(
+      { driverId: transaction.driverId, driverName: transaction.driverName },
+      drivers,
+    );
+    if (normalized.resolved) {
+      transaction.driverId = normalized.canonicalId;
+      transaction.driverName = normalized.driverName;
+    }
+
+    const tollRecord = stampOrg(transactionToTollLedgerServer(transaction), c);
+    const saved = await saveTollLedgerEntry(tollRecord, c);
+    if (!saved) return;
+
+    console.log(`[TollLedger] Saved toll_ledger:${tollRecord.id}`);
+    // Canonical append is inside saveTollLedgerEntry (idempotent).
+    // MOI-3: compute+persist a match-on-ingest suggestion (no-ops unless the
+    // matchOnIngestEnabled flag is on; never throws — failures here must never
+    // break toll creation itself).
+    await computeAndPersistTollMatchOnIngest(tollRecord);
+  }
+
+  // ─── Driver ID Resolution ─────────────────────────────────────────────
+  // Resolves any driver identifier (Roam UUID, Uber UUID, InDrive UUID,
+  // or display name) to the canonical Roam UUID. Uses an in-memory cache
+  // that's refreshed every 5 minutes.
+  // ───────────────────────────────────────────────────────────────────────
+  let _driverCacheTimestamp = 0;
+  let _driverCache: any[] = [];
+  const DRIVER_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+  async function loadDriverCache(): Promise<any[]> {
+      const now = Date.now();
+      if (_driverCache.length > 0 && (now - _driverCacheTimestamp) < DRIVER_CACHE_TTL) {
+          return _driverCache;
+      }
+      try {
+          const { data } = await fromKvStore()
+              .select("value")
+              .like("key", "driver:%");
+          _driverCache = (data || []).map((d: any) => d.value).filter(Boolean);
+          _driverCacheTimestamp = now;
+          console.log(`[DriverCache] Loaded ${_driverCache.length} drivers`);
+      } catch (e) {
+          console.error("[DriverCache] Failed to load:", e);
+      }
+      return _driverCache;
+  }
+
+  interface ResolvedDriver {
+      canonicalId: string;
+      driverName: string;
+      resolved: boolean;
+  }
+
+  async function resolveCanonicalDriverId(input: string): Promise<ResolvedDriver> {
+      if (!input || !input.trim()) {
+          return { canonicalId: 'unknown', driverName: 'Unknown', resolved: false };
+      }
+
+      const trimmed = input.trim();
+      const drivers = await loadDriverCache();
+      const resolved = resolveDriverFromFleetRecords(
+        { driverId: trimmed, driverName: trimmed },
+        drivers,
+      );
+
+      if (resolved.resolved) {
+          return { canonicalId: resolved.canonicalId, driverName: resolved.driverName, resolved: true };
+      }
+
+      console.log(`[DriverResolve] Could not resolve "${trimmed}" to a canonical ID`);
+      return { canonicalId: trimmed, driverName: trimmed, resolved: false };
+  }
+
+  function invalidateDriverCache() {
+      _driverCacheTimestamp = 0;
+      _driverCache = [];
+  }
+
+  /** Canonical trip status for KV so ledger rules and GET filters agree (avoids completed vs Completed gaps). */
+  function normalizeTripStatusForStorage(status: unknown): string {
+    const s = String(status ?? "").trim().toLowerCase();
+    if (!s) return "Completed";
+    if (s.includes("cancel") || s.includes("fail")) return "Cancelled";
+    if (s.includes("complet") || s === "complete") return "Completed";
+    if (s.includes("process")) return "Processing";
+    const raw = String(status ?? "").trim();
+    return raw || "Completed";
+  }
+
+  function isUberPlatform(platform: unknown): boolean {
+    const p = String(platform ?? "").trim().toLowerCase();
+    return p === "uber" || p.startsWith("uber ");
+  }
+
+  /**
+   * Admin-created fuel (SubmitExpenseModal, Fuel Log) with a positive odometer should appear
+   * on the Pending tab, not Log Review. Driver cash submissions use type Manual_Entry.
+   */
+  function isAdminManualFuelWithProvidedOdometer(transaction: any): boolean {
+    const odo = Number(transaction?.odometer);
+    if (!Number.isFinite(odo) || odo <= 0) return false;
+    const m = transaction?.metadata || {};
+    const entrySrc = m.entrySource || transaction?.entrySource;
+    if (entrySrc === "admin-manual" || entrySrc === "bulk-import") return true;
+    const src = m.source;
+    if (src === "Manual" || src === "Bulk Manual" || src === "Fuel Log" || src === "Bulk Log") {
+      return true;
+    }
+    if (
+      transaction?.type === "Fuel_Manual_Entry" &&
+      (m.portal_type === "Manual_Entry" || m.isManual === true)
+    ) {
+      return true;
+    }
+    return false;
+  }
+
+  // tripHasMoneyForLedgerProjection — imported from ledger_ensure_routes.ts (A-7)
+
+  // Error boundary + maintenance gate: owned by createFleetFunction (ADR-0020).
+
+
+  app.route("/", auditApp);
+  app.route("/", safetyApp);
+  app.route("/", syncApp);
+  // RETIRED: app.route("/", tollApp); — live on fleet-toll
+  // RETIRED: app.route("/", tollPeriodApp); — live on fleet-toll
+  // RETIRED: app.route("/", disputeRefundApp); — live on fleet-pay
+  // RETIRED: app.route("/", driverFinancialPeriodApp); — live on fleet-pay
+  // RETIRED: app.route("/", settlementCommandsApp); — live on fleet-pay
+  // RETIRED: app.route("/", paymentLedgerLineApp); — live on fleet-pay
+  app.route("/", weekCloseApp); // conductor stays on core until F5
+  app.route("/", apiCenterApp);
+
+
+  // ---------------------------------------------------------------------------
+  // Dashboard Init - Multi-Layer Caching Helper
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Fetch dashboard data with 3-layer caching:
+   * Layer 1: Memory cache (hot path - <5ms, 1min TTL)
+   * Layer 2: KV cache (warm path - ~100ms, 3min TTL)  
+   * Layer 3: Database queries (cold path - ~1-3s)
+   * 
+   * Note: Shorter TTLs than customer cache because dashboard data changes frequently
+   */
+  async function fetchDashboardDataWithCache(): Promise<any> {
+    const cacheKey = "dashboard:init:data";
+    
+    // Layer 1: Memory cache (hot path - <5ms, 1min TTL)
+    const memCached = memCache.dashboardCache.get(cacheKey);
+    if (memCached !== null) {
+      console.log("[DashboardInit] Served from memory cache");
+      return memCached;
+    }
+    
+    // Layer 2: KV cache (warm path - ~100ms, 3min TTL)
+    const kvCached = await cache.getCache(cacheKey);
+    if (kvCached !== null) {
+      console.log("[DashboardInit] Served from KV cache, warming memory");
+      memCache.dashboardCache.set(cacheKey, kvCached, 60 * 1000); // 1min in memory
+      return kvCached;
+    }
+    
+    // Layer 3: Database queries (cold path - ~1-3s)
+    console.log("[DashboardInit] Cache miss, fetching from database");
+
+    // Fleet-local "today" (America/Jamaica) — avoid UTC midnight skew that inflated earnings
+    const fleetTz = await getFleetTimezone();
+    const todayLocal = toFleetCalendarDay(new Date(), fleetTz);
+    const todayEndISO = naiveToUtc(`${todayLocal}T23:59:59.999`, fleetTz).toISOString();
+    // Wide fetch window: date-only strings + overnight UTC trips still resolve via fleetCalendarDay
+    const windowStartISO = naiveToUtc(
+      `${fleetCalendarDay(new Date(Date.now() - 36 * 3600_000).toISOString(), fleetTz) || todayLocal}T00:00:00`,
+      fleetTz,
+    ).toISOString();
+
+    // Run all queries in parallel — native filtered fleet table reads
+    const [tripStatsRows, activeDrivers, tripsPage, driverMetricsPage, vehicleMetricsPage] = await Promise.all([
+      cache.withRetry(async () => {
+        const res = await queryFleet("trips", {
+          dateFrom: windowStartISO.slice(0, 10),
+          order: { col: "date", ascending: false },
+          limit: 2000,
+        });
+        return (res.data as any[]).map((t) => ({
+          amount: t?.amount,
+          driverId: t?.driverId,
+          status: t?.status,
+          date: t?.date,
+          requestTime: t?.requestTime,
+        }));
+      }),
+      cache.withRetry(async () => {
+        const res = await queryFleet("drivers", {
+          eq: { status: "active" },
+          limit: 500,
+        });
+        return res.data as any[];
+      }),
+      cache.withRetry(async () => {
+        const res = await queryFleet("trips", {
+          order: { col: "date", ascending: false },
+          limit: 200,
+        });
+        return (res.data as any[]).map((value) => ({ value }));
+      }),
+      cache.withRetry(async () => {
+        const res = await queryFleet("driver_metrics", { limit: 100 });
+        return (res.data as any[]).map((value) => ({ value }));
+      }),
+      cache.withRetry(async () => {
+        const res = await queryFleet("vehicle_metrics", { limit: 100 });
+        return (res.data as any[]).map((value) => ({ value }));
+      }),
+    ]);
+
+    // ── Build stats ──
+    const todayTrips = tripStatsRows || [];
+    let revenueToday = 0;
+    let tripsTodayCount = 0;
+    const activeDriverIds = new Set<string>();
+    todayTrips.forEach((t: any) => {
+      const driverId = String(t.driverId || "");
+      // Drop seed/stress-test junk that was inflating Today's Earnings
+      if (!driverId || driverId.startsWith("test-")) return;
+      if (String(t.status || "") !== "Completed") return;
+      const day = fleetCalendarDay(String(t.date || t.requestTime || ""), fleetTz);
+      if (day !== todayLocal) return;
+      revenueToday += (Number(t.amount) || 0);
+      tripsTodayCount += 1;
+      activeDriverIds.add(driverId);
+    });
+    const activeDriverCount = (activeDrivers || []).length;
+    const finalActiveDrivers = activeDriverCount;
+    const efficiency = finalActiveDrivers > 0 ? Math.round((activeDriverIds.size / finalActiveDrivers) * 100) : 0;
+
+    const stats = {
+      date: new Date().toISOString(),
+      activeDrivers: finalActiveDrivers,
+      trips: tripsTodayCount,
+      revenue: revenueToday,
+      efficiency,
+    };
+
+    // ── Build trips ──
+    const tripsRaw = tripsPage || [];
+    const trips = tripsRaw.map((d: any) => {
+      const val = d.value || d;
+      const { route, stops, ...lightweight } = val;
+      void route;
+      void stops;
+      const sanitized: Record<string, any> = {};
+      for (const [k, v2] of Object.entries(lightweight)) {
+        sanitized[k] = typeof v2 === 'string' ? v2.replace(/[\x00-\x1F\x7F]/g, ' ') : v2;
+      }
+      if (sanitized.platform === 'GoRide') sanitized.platform = 'Roam';
+      return sanitized;
+    }).filter((t: any) => {
+      const driverId = String(t.driverId || "");
+      return driverId && !driverId.startsWith("test-");
+    });
+
+    // ── Build driver metrics ──
+    const BANNED_UUID = "73dfc14d-3798-4a00-8d86-b2a3eb632f54";
+    const driverMetrics = (driverMetricsPage || [])
+      .map((d: any) => d.value)
+      .filter((m: any) => m && m.driverId !== BANNED_UUID && m.id !== BANNED_UUID);
+
+    // ── Build vehicle metrics ──
+    const vehicleMetrics = (vehicleMetricsPage || []).map((d: any) => d.value).filter(Boolean);
+
+    // Build final result
+    const result = { stats, trips, driverMetrics, vehicleMetrics };
+    
+    // Store in both caches
+    await cache.setCache(cacheKey, result, 3 * 60); // 3min in KV
+    memCache.dashboardCache.set(cacheKey, result, 60 * 1000); // 1min in memory
+    
+    console.log(`[DashboardInit] Cached dashboard data (${trips.length} trips, ${driverMetrics.length} drivers, ${vehicleMetrics.length} vehicles)`);
+    return result;
+  }
+
+  /**
+   * Invalidate dashboard cache when data changes (trips, drivers, vehicles)
+   */
+  async function invalidateDashboardCache(): Promise<void> {
+    const cacheKey = "dashboard:init:data";
+    memCache.dashboardCache.invalidate(cacheKey);
+    await cache.setCache(cacheKey, null, 0); // Expire KV cache
+    console.log("[DashboardInit] Cache invalidated");
+  }
+
+  // ── Dashboard Init Endpoint ───────────────────────────────────────────
+  // Aggregates stats + trips + driverMetrics + vehicleMetrics into a single
+  // response so the frontend only makes ONE request on dashboard load.
+  app.get("/make-server-37f42386/dashboard/init", requireAuth(), async (c) => {
+    try {
+      // Check for force refresh parameter
+      const forceRefresh = c.req.query("refresh") === "true";
+      if (forceRefresh) {
+        console.log("[DashboardInit] Force refresh requested");
+        await invalidateDashboardCache();
+      }
+
+      // Fetch with multi-layer caching
+      const data = await fetchDashboardDataWithCache();
+
+      // Manual stringify for safety
+      let jsonStr: string;
+      try {
+        jsonStr = JSON.stringify(data);
+      } catch (serErr: any) {
+        console.error("JSON serialization error in /dashboard/init:", serErr);
+        return c.json({ error: "Failed to serialize dashboard/init response" }, 500);
+      }
+      return new Response(jsonStr, { headers: { "Content-Type": "application/json" } });
+    } catch (e: any) {
+      console.error("Error in /dashboard/init:", e);
+      return c.json({ error: e.message || "Internal Server Error" }, 500);
+    }
+  });
+
+  // Dashboard Stats Endpoint (Aggregated) - Optimized; org-scoped (Evidence Bridge Phase 0)
+  app.get("/make-server-37f42386/dashboard/stats", requireAuth(), async (c) => {
+    try {
+      const fleetTz = await getFleetTimezone();
+      const todayLocal = toFleetCalendarDay(new Date(), fleetTz);
+
+      const [tripRes, driverRes] = await Promise.all([
+        queryFleet("trips", { dateFrom: todayLocal, dateTo: todayLocal, limit: 5000 }),
+        queryFleet("drivers", { eq: { status: "active" }, limit: 500 }),
+      ]);
+      const tripData = (tripRes.data as any[]).map((t) => ({
+        amount: t?.amount,
+        driverId: t?.driverId,
+        status: t?.status,
+        date: t?.date,
+        requestTime: t?.requestTime,
+        organizationId: t?.organizationId,
+      }));
+      const driverData = driverRes.data as any[];
+
+      const trips = filterByOrg(tripData as Record<string, unknown>[], c, { endpoint: "/dashboard/stats" });
+      const activeDriversScoped = filterByOrg(
+        driverData as Record<string, unknown>[],
+        c,
+        { endpoint: "/dashboard/stats/drivers" },
+      );
+      const activeDriverCount = activeDriversScoped.length;
+      
+      let revenueToday = 0;
+      let tripsTodayCount = 0;
+      const activeDriverIds = new Set();
+
+      trips.forEach((t: any) => {
+          const driverId = String(t.driverId || "");
+          if (!driverId || driverId.startsWith("test-")) return;
+          if (String(t.status || "") !== "Completed") return;
+          const day = fleetCalendarDay(String(t.date || t.requestTime || ""), fleetTz);
+          if (day !== todayLocal) return;
+          revenueToday += (Number(t.amount) || 0);
+          tripsTodayCount += 1;
+          activeDriverIds.add(driverId);
+      });
+
+      const activeDrivers = activeDriverIds.size > 0 ? activeDriverIds.size : activeDriverCount;
+      const finalActiveDrivers = activeDriverCount;
+      const efficiency = finalActiveDrivers > 0 ? Math.round((activeDrivers / finalActiveDrivers) * 100) : 0;
+
+      return c.json({
+          date: new Date().toISOString(),
+          activeDrivers: finalActiveDrivers,
+          trips: tripsTodayCount,
+          revenue: revenueToday,
+          efficiency: efficiency
+      });
+    } catch (e: any) {
+      console.error("Error fetching dashboard stats:", e);
+      return c.json({ error: e.message || "Internal Server Error" }, 500);
+    }
+  });
+
+  // Trips endpoints
+  // Trips Search Endpoint (GIN Index)
+  // Phase 2: Add auth and strict org filtering
+  app.post("/make-server-37f42386/trips/search", requireAuth({ requireOrg: true }), async (c) => {
+    const requestId = crypto.randomUUID();
+    c.header("X-Request-Id", requestId);
+    const t0 = Date.now();
+    try {
+      let { 
+          driverId, driverName, driverIds, startDate, endDate, status, limit, offset,
+          platform, tripType, vehicleId, anchorPeriodId, organizationId, serviceLine,
+          sortKey, sortDir, cursorDate, cursorId,
+      } = await c.req.json();
+      
+      // Query JSONB value directly — F-20: estimated count on deep OFFSET pages
+      const deepOffset = Number(offset || 0) >= 5000;
+      let query = fromKvStore()
+          .select("value", { count: deepOffset ? "estimated" : "exact" })
+          .like("key", "trip:%");
+
+      // Organization + domain filters (R-02 shared builder)
+      const rbacOrgId = getOrgId(c);
+      const effectiveOrgId = organizationId || rbacOrgId;
+      const useStrict = await isFeatureEnabled(FEATURE_FLAGS.STRICT_ORG_FILTER, effectiveOrgId);
+      const { applyTripFilters } = await import("./trip_search_filters.ts");
+      const applied = applyTripFilters(query, {
+          driverId, driverName, driverIds, startDate, endDate, status,
+          platform, vehicleId, anchorPeriodId, serviceLine,
+      }, { effectiveOrgId, useStrict });
+      if (applied.empty) {
+          return c.json({ data: [], page: 1, limit: limit || 50, total: 0, request_id: requestId });
+      }
+      query = applied.query;
+      startDate = applied.startDate;
+      endDate = applied.endDate;
+
+      if (tripType === 'manual' || tripType === 'platform') {
+          // isManual is payload-only — filter after unwrap below
+      }
+
+      // Server sort whitelist (F-03 / N-03) + id DESC tiebreaker (F-04)
+      const { resolveTripSort } = await import("./trip_sort.ts");
+      const { appliedKey, sqlCol: primarySort, ascending } = resolveTripSort(sortKey, sortDir);
+      query = query.order(primarySort, { ascending }).order("id", { ascending: false });
+
+      // Optional keyset (F-04): when cursor provided, skip OFFSET deep scan
+      if (cursorDate && cursorId && !ascending) {
+        query = query.or(
+          `value->>date.lt.${String(cursorDate).slice(0, 10)},and(value->>date.eq.${String(cursorDate).slice(0, 10)},id.lt.${cursorId})`,
+        );
+      }
+
+      const from = (cursorDate && cursorId) ? 0 : (offset || 0);
+      // Cap at 1000 per request (PostgREST max row limit)
+      const effectiveLimit = Math.min(limit || 50, 1000);
+      // Over-fetch when tripType needs payload filter so page stays full after in-memory filter
+      const fetchLimit = (tripType === 'manual' || tripType === 'platform')
+        ? Math.min(effectiveLimit * 3, 1000)
+        : effectiveLimit;
+      const to = from + fetchLimit - 1;
+      
+      query = query.range(from, to);
+
+      const { data, error, count } = await query;
+
+      if (error) {
+          console.error("Search query error:", error);
+          throw error;
+      }
+
+      // Phase 8.4 / F-20: whitelist projection (keep UI scalars only — not blacklist strip)
+      const { projectTripListValue } = await import("./trip_list_projection.ts");
+      let trips = (data || []).map((d: any) => projectTripListValue(d.value || {}));
+
+      if (tripType === 'manual') {
+        trips = trips.filter((t: any) => t?.isManual === true || t?.isManual === 'true');
+      } else if (tripType === 'platform') {
+        trips = trips.filter((t: any) => !(t?.isManual === true || t?.isManual === 'true'));
+      }
+      trips = trips.slice(0, effectiveLimit);
+
+      console.log(JSON.stringify({
+        request_id: requestId,
+        endpoint: "trips/search",
+        org_id: effectiveOrgId,
+        row_count: trips.length,
+        total_count: count || 0,
+        db_ms: Date.now() - t0,
+        sort_key: appliedKey,
+        sort_dir: ascending ? "asc" : "desc",
+      }));
+
+      return c.json({
+          data: trips,
+          page: Math.floor(from / effectiveLimit) + 1,
+          limit: effectiveLimit,
+          total: count || 0,
+          request_id: requestId,
+          sortKey: appliedKey,
+          sortDir: ascending ? "asc" : "desc",
+          countExact: !deepOffset,
+      });
+
+    } catch (e: any) {
+      console.error("Error searching trips:", e);
+      return c.json({ error: e.message || "Internal Server Error", request_id: requestId }, 500);
+    }
+  });
+
+  // Full filtered-set CSV export (F-08) — cap 10k; same filters as /trips/search
+  app.post("/make-server-37f42386/trips/export", requireAuth({ requireOrg: true }), async (c) => {
+    const requestId = crypto.randomUUID();
+    c.header("X-Request-Id", requestId);
+    try {
+      const body = await c.req.json();
+      const EXPORT_CAP = 10_000;
+      const searchRes = await (async () => {
+        // Reuse search handler logic via internal fetch-shaped call: build same query
+        const {
+          driverId, driverName, startDate, endDate, status,
+          platform, tripType, vehicleId, anchorPeriodId, organizationId, serviceLine,
+          sortKey, sortDir,
+        } = body;
+        let query = fromKvStore().select("value", { count: "exact" }).like("key", "trip:%");
+        const rbacOrgId = getOrgId(c);
+        const effectiveOrgId = organizationId || rbacOrgId;
+        const useStrict = await isFeatureEnabled(FEATURE_FLAGS.STRICT_ORG_FILTER, effectiveOrgId);
+        const { applyTripFilters } = await import("./trip_search_filters.ts");
+        const applied = applyTripFilters(query, {
+          driverId, driverName, startDate, endDate, status,
+          platform, vehicleId, anchorPeriodId, serviceLine,
+        }, { effectiveOrgId, useStrict });
+        if (applied.empty) {
+          return { data: [], error: null, count: 0 };
+        }
+        query = applied.query;
+        const { resolveTripSort } = await import("./trip_sort.ts");
+        const { sqlCol, ascending } = resolveTripSort(sortKey, sortDir);
+        query = query.order(sqlCol, { ascending }).order("id", { ascending: false });
+        query = query.range(0, EXPORT_CAP - 1);
+        return await query;
+      })();
+      if (searchRes.error) throw searchRes.error;
+      // F-20: same heavy-blob strip as /trips/search (route/polyline/gps/evidence)
+      let trips = (searchRes.data || []).map((d: any) => {
+        const v = d.value || {};
+        const {
+          route, stops, intermediateStops, rawPayload, evidence,
+          polyline, gpsTrace, gpsPoints, trackPoints, path, coordinates,
+          ...lightweight
+        } = v;
+        if (lightweight.platform === "GoRide") lightweight.platform = "Roam";
+        return lightweight;
+      });
+      if (body.tripType === "manual") {
+        trips = trips.filter((t: any) => t?.isManual === true || t?.isManual === "true");
+      } else if (body.tripType === "platform") {
+        trips = trips.filter((t: any) => !(t?.isManual === true || t?.isManual === "true"));
+      }
+      const esc = (val: unknown) => {
+        let s = String(val ?? "");
+        const isPlainNumber = /^-?\d+(\.\d+)?([eE][+-]?\d+)?$/.test(s);
+        if (!isPlainNumber && /^[=+\-@\t\r]/.test(s)) s = `'${s}`;
+        if (/[",\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+        return s;
+      };
+      const header = ["id", "date", "driverName", "platform", "status", "amount", "netToDriver", "distance"].join(",");
+      const lines = trips.map((t: any) =>
+        [
+          t.id,
+          t.date,
+          t.driverName || t.driverId || "",
+          t.platform,
+          t.status,
+          t.amount ?? "",
+          t.netToDriver ?? t.indriveNetIncome ?? "",
+          t.distance ?? "",
+        ].map(esc).join(",")
+      );
+      const csv = `\uFEFF${[header, ...lines].join("\r\n")}`;
+      c.header("Content-Type", "text/csv; charset=utf-8");
+      c.header("Content-Disposition", `attachment; filename="trip_ledger_filtered_export.csv"`);
+      return c.body(csv);
+    } catch (e: any) {
+      console.error("Error exporting trips:", e);
+      return c.json({ error: e.message || "Internal Server Error", request_id: requestId }, 500);
+    }
+  });
+
+  // Trip Stats Endpoint (Aggregated)
+  // Phase 2: Add auth and strict org filtering
+  app.post("/make-server-37f42386/trips/stats", requireAuth({ requireOrg: true }), async (c) => {
+    try {
+      const filters = await c.req.json();
+      let { 
+          driverId, startDate, endDate, status,
+          platform, tripType, vehicleId, anchorPeriodId, organizationId, serviceLine,
+          driverName,
+      } = filters;
+      
+      // Organization scoping: use feature-flag controlled strict filtering
+      const rbacOrgId = getOrgId(c);
+      const effectiveOrgId = organizationId || rbacOrgId;
+      const useStrict = await isFeatureEnabled(FEATURE_FLAGS.STRICT_ORG_FILTER, effectiveOrgId);
+      
+      // Strict mode with no org context: return zeros
+      if (useStrict && !effectiveOrgId) {
+          return c.json({
+              totalTrips: 0, completed: 0, cancelled: 0,
+              totalEarnings: 0, totalCashCollected: 0, avgEarnings: 0, avgDuration: 0,
+              sumAmount: 0, sumNet: 0,
+          });
+      }
+
+      // 1. Check Cache (include orgId in cache key for isolation)
+      // v2: post-cutover stats that page past PostgREST 1000-row cap + correct value unwrap
+      const version = await cache.getCacheVersion("stats");
+      const cacheKey = await cache.generateKey(`stats:v3:${version}:org:${effectiveOrgId || 'none'}:strict:${useStrict}`, filters);
+      const cachedStats = await cache.getCache(cacheKey);
+
+      if (cachedStats) {
+          c.header("X-Cache", "HIT");
+          return c.json(cachedStats);
+      }
+
+      const { applyTripFilters } = await import("./trip_search_filters.ts");
+      let statsStart = startDate;
+      let statsEnd = endDate;
+      if (status === 'Processing') {
+        statsStart = undefined;
+        statsEnd = undefined;
+      }
+
+      const buildStatsQuery = (pageOffset: number, pageLimit: number) => {
+        let query = fromKvStore()
+            .select("value")
+            .like("key", "trip:%");
+
+        const applied = applyTripFilters(query, {
+          driverId, driverName, startDate: statsStart, endDate: statsEnd, status,
+          platform, vehicleId, anchorPeriodId, serviceLine,
+        }, { effectiveOrgId, useStrict });
+        query = applied.query;
+
+        return query.range(pageOffset, pageOffset + pageLimit - 1);
+      };
+
+      // Page past PostgREST max_rows (1000) — never treat a single page as the full set
+      const PAGE = 1000;
+      const MAX_ROWS = 100_000;
+      let offset = 0;
+      let totalTrips = 0;
+      let completed = 0;
+      let cancelled = 0;
+      let totalEarnings = 0;
+      let totalCashCollected = 0;
+      let durationSum = 0;
+      let durationCount = 0;
+      let sumAmount = 0;
+      let sumNet = 0;
+      let netKnownCount = 0;
+      let netUnknownCount = 0;
+      let distanceSum = 0;
+      let distanceCount = 0;
+      let completedAmountSum = 0;
+
+      const matchesTripType = (t: any) => {
+        if (tripType === 'manual') return t?.isManual === true || t?.isManual === 'true';
+        if (tripType === 'platform') return !(t?.isManual === true || t?.isManual === 'true');
+        return true;
+      };
+
+      const resolveNet = (t: any): number | null => {
+        if (t?.netToDriver != null && Number.isFinite(Number(t.netToDriver))) return Number(t.netToDriver);
+        if (t?.indriveNetIncome != null && Number.isFinite(Number(t.indriveNetIncome))) {
+          return Number(t.indriveNetIncome);
+        }
+        const platformName = String(t?.platform || "").toLowerCase();
+        if (platformName === "indrive" || platformName === "in drive") {
+          const fee = t?.indriveServiceFee != null ? Number(t.indriveServiceFee) : null;
+          const gross =
+            t?.grossEarnings != null
+              ? Number(t.grossEarnings)
+              : t?.amount != null
+                ? Number(t.amount)
+                : null;
+          if (fee != null && Number.isFinite(fee) && gross != null && Number.isFinite(gross)) {
+            return gross - fee;
+          }
+        }
+        return null;
+      };
+
+      for (;;) {
+        const { data, error } = await buildStatsQuery(offset, PAGE);
+        if (error) {
+            console.error("Stats query error:", error);
+            throw error;
+        }
+        const page = (data || []).map((d: any) => d?.value ?? d);
+        if (page.length === 0) break;
+
+        for (const t of page) {
+          if (!matchesTripType(t)) continue;
+          totalTrips += 1;
+          if (t.status === 'Completed') completed += 1;
+          else if (t.status === 'Cancelled') cancelled += 1;
+
+          const amount = Number(t.amount) || 0;
+          sumAmount += amount;
+          if (t.status === 'Completed') completedAmountSum += amount;
+          const net = resolveNet(t);
+          if (net != null) {
+            sumNet += net;
+            netKnownCount += 1;
+          } else {
+            netUnknownCount += 1;
+          }
+
+          const effectiveEarnings = net != null ? net : amount;
+          totalEarnings += effectiveEarnings;
+          totalCashCollected += Number(t.cashCollected) || 0;
+
+          if (t.duration && Number(t.duration) > 0) {
+            durationSum += Number(t.duration);
+            durationCount += 1;
+          }
+          if (t.distance != null && Number(t.distance) > 0) {
+            distanceSum += Number(t.distance);
+            distanceCount += 1;
+          }
+        }
+
+        if (page.length < PAGE) break;
+        offset += PAGE;
+        if (offset >= MAX_ROWS) {
+          console.warn(`[trips/stats] hit MAX_ROWS=${MAX_ROWS}; stats may be truncated`);
+          break;
+        }
+      }
+
+      const avgEarnings = completed > 0 ? totalEarnings / completed : 0;
+      const avgDuration = durationCount > 0 ? durationSum / durationCount : 0;
+      const avgAmount = completed > 0 ? completedAmountSum / completed : 0;
+      // Prefer completed-only amount average
+      const avgDistance = distanceCount > 0 ? distanceSum / distanceCount : 0;
+      const completionRate = totalTrips > 0 ? (completed / totalTrips) * 100 : 0;
+
+      const result = {
+          totalTrips,
+          completed,
+          cancelled,
+          totalEarnings,
+          totalCashCollected,
+          avgEarnings,
+          avgDuration,
+          avgAmount,
+          avgDistance,
+          completionRate,
+          sumAmount,
+          sumNet,
+          netKnownCount,
+          netUnknownCount,
+          distanceCount,
+      };
+
+      // 2. Set Cache (TTL 300 seconds = 5 minutes)
+      await cache.setCache(cacheKey, result, 300);
+      
+      c.header("X-Cache", "MISS");
+      return c.json(result);
+
+    } catch (e: any) {
+      console.error("Error fetching trip stats:", e);
+      return c.json({ error: e.message || "Internal Server Error" }, 500);
+    }
+  });
+
+  app.post(
+    "/make-server-37f42386/internal/trips/project",
+    requireCatalogMatched({
+      label: "POST /internal/trips/project",
+      vehicleId: (_c, body) => {
+        if (!Array.isArray(body)) return null;
+        const ids = new Set<string>();
+        for (const t of body) {
+          if (t && typeof t === "object") {
+            const id = (t as { vehicleId?: unknown }).vehicleId;
+            if (typeof id === "string" && id.trim() && id !== "unknown") ids.add(id.trim());
+          }
+        }
+        return Array.from(ids);
+      },
+    }),
+    handleTripsImport,
+  );
+
+  app.post(
+    "/make-server-37f42386/trips",
+    requireAuth({ requireOrg: true }),
+    requireCatalogMatched({
+      label: "POST /trips",
+      vehicleId: (_c, body) => {
+        if (!Array.isArray(body)) return null;
+        const ids = new Set<string>();
+        for (const t of body) {
+          if (t && typeof t === "object") {
+            const id = (t as { vehicleId?: unknown }).vehicleId;
+            if (typeof id === "string" && id.trim() && id !== "unknown") ids.add(id.trim());
+          }
+        }
+        return Array.from(ids);
+      },
+    }),
+    handleTripsImport,
+  );
+
+  async function handleTripsImport(c: any) {
+    try {
+      const trips = (c.get("__cachedRequestBody") as unknown) ?? (await c.req.json());
+      if (!Array.isArray(trips)) {
+        return c.json({ error: "Expected array of trips" }, 400);
+      }
+
+      const isRushProjection = trips.some(
+        (t: { platform?: unknown }) => String(t?.platform ?? "") === "Roam Rush",
+      );
+      const isInternalProjection = c.req.path.includes("/internal/trips/project");
+
+      if (isRushProjection && !isInternalProjection) {
+        return c.json({ error: "Rush projection must use POST /internal/trips/project" }, 403);
+      }
+
+      if (isInternalProjection) {
+        const auth = (c.req.header("Authorization") ?? "").replace(/^Bearer\s+/i, "").trim();
+        const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+        if (!serviceKey || auth !== serviceKey) {
+          return c.json({ error: "Forbidden" }, 403);
+        }
+      } else if (isRushProjection) {
+        return c.json({ error: "Rush projection requires internal route" }, 403);
+      }
+      
+      // Validation and processing
+      const processedTrips = trips.map((trip: any) => {
+          if (trip.isManual) {
+              // Validation for manual trips
+              if (!trip.driverId) throw new Error(`Manual trip ${trip.id || 'unknown'} must have a driverId`);
+              if (typeof trip.amount !== 'number') throw new Error(`Manual trip ${trip.id || 'unknown'} must have a numeric amount`);
+              
+              // Enforce consistency for manual entries
+              return {
+                  ...trip,
+                  batchId: 'manual_entry',
+                  status: trip.status || 'Completed',
+                  // Ensure critical financial fields are present
+                  netPayout: trip.netPayout ?? trip.amount,
+                  fareBreakdown: trip.fareBreakdown || {
+                      baseFare: trip.amount,
+                      tips: 0,
+                      waitTime: 0,
+                      surge: 0,
+                      airportFees: 0,
+                      timeAtStop: 0,
+                      taxes: 0
+                  }
+              };
+          }
+          return trip;
+      });
+
+      for (const trip of processedTrips) {
+        trip.status = normalizeTripStatusForStorage(trip.status);
+      }
+      
+      // ── Normalize driverId to canonical Roam UUID ──────────────────────
+      // Resolves platform-specific UUIDs (Uber, InDrive) and display names
+      // to the canonical Roam UUID so all queries by Roam ID find every trip.
+      for (const trip of processedTrips) {
+          try {
+              const resolved = await resolveCanonicalDriverId(trip.driverId || '');
+              if (resolved.resolved) {
+                  trip.driverId = resolved.canonicalId;
+                  // Backfill driverName if missing
+                  if (!trip.driverName) {
+                      trip.driverName = resolved.driverName;
+                  }
+              }
+          } catch (resolveErr) {
+              // Resolution failure should NOT break trip import
+              console.warn(`[TripNormalize] Failed to resolve driverId for trip ${trip.id}:`, resolveErr);
+          }
+      }
+
+      // Resolve organization scope for writes.
+      // Priority:
+      // 1) Auth-scoped org from request context
+      // 2) Trip.organizationId (Rush projection / service-role)
+      // 3) Driver record org (for legacy/anon import flows)
+      let writeOrgId: string | null = getOrgId(c);
+      if (!writeOrgId && isRushProjection) {
+        for (const trip of trips) {
+          const candidate = typeof trip?.organizationId === "string" ? trip.organizationId.trim() : "";
+          if (candidate) {
+            writeOrgId = candidate;
+            break;
+          }
+        }
+      }
+      if (!writeOrgId) {
+        for (const trip of processedTrips) {
+          const did = String(trip?.driverId || '').trim();
+          if (!did) continue;
+          try {
+            const driverRecord = await kv.get(`driver:${did}`);
+            const candidate = typeof driverRecord?.organizationId === 'string' ? driverRecord.organizationId.trim() : '';
+            if (candidate) {
+              writeOrgId = candidate;
+              break;
+            }
+          } catch {
+            // Ignore lookup failures; we'll continue without org stamping.
+          }
+        }
+      }
+
+      // V22: public POST /trips must not accept arbitrary organizationId from body.
+      if (!isInternalProjection && writeOrgId) {
+        const { assertTripOrgScopeMatches } = await import("./trips_org_scope.ts");
+        const scopeCheck = assertTripOrgScopeMatches(processedTrips, writeOrgId);
+        if (!scopeCheck.ok) {
+          return c.json({ error: scopeCheck.error }, scopeCheck.status);
+        }
+        for (const trip of processedTrips) {
+          trip.organizationId = writeOrgId;
+        }
+      }
+
+      // Phase 4: Resolve product line for stamping on writes
+      const productLineHeader = c.req.header("X-Roam-Product-Line")?.trim().toLowerCase();
+      const origin = c.req.header("Origin")?.toLowerCase() || "";
+      const referer = c.req.header("Referer")?.toLowerCase() || "";
+      const hostHint = origin || referer;
+      let writeProductLine: string = "fleet"; // default
+      if (productLineHeader === "fleet" || productLineHeader === "enterprise") {
+        writeProductLine = productLineHeader;
+      } else if (hostHint.includes("roamenterprise")) {
+        writeProductLine = "enterprise";
+      } else if (hostHint.includes("roamfleet")) {
+        writeProductLine = "fleet";
+      }
+
+      // Phase 4: Updated stamp function includes both organizationId and productLine
+      const stampWriteOrg = <T extends Record<string, any>>(record: T): T => {
+        const stamped: Record<string, any> = { ...record };
+        if (writeOrgId) stamped.organizationId = writeOrgId;
+        stamped.productLine = writeProductLine;
+        stamped.updatedAt = new Date().toISOString();
+        return stamped as T;
+      };
+
+      // Create keys for each trip
+      // Assuming each trip has a unique 'id' field
+      const keys = processedTrips.map((t: any) => `trip:${t.id}`);
+
+      // Preserve Toll Recon ops fields across Uber/CSV re-import (cash_wash etc.).
+      // Wholesale overwrite previously wiped Spend to $0 while reimbursed stayed.
+      const { mergeTripForImport } = await import("./trip_import_merge.ts");
+      const existingTrips = await kv.mget(keys);
+      const mergedTrips = processedTrips.map((t: any, i: number) =>
+        mergeTripForImport(t as Record<string, unknown>, existingTrips[i] as Record<string, unknown> | null),
+      );
+      for (let i = 0; i < processedTrips.length; i++) {
+        processedTrips[i] = mergedTrips[i];
+      }
+
+      // Store using mset
+      await kv.mset(keys, processedTrips.map((t: any) => stampWriteOrg(t)));
+
+      // Canonical money events (`ledger_event:*`) from trips (Uber / Roam / InDrive).
+      try {
+        const tripIdsForLedger = processedTrips.map((t: any) => String(t?.id || "").trim()).filter(Boolean);
+        if (tripIdsForLedger.length > 0) {
+          await deleteCanonicalLedgerBySource("trip", tripIdsForLedger);
+        }
+        await appendCanonicalTripFaresIfEligible(processedTrips as Record<string, unknown>[], c);
+      } catch (canonErr) {
+        console.error("[CanonicalOps] trip fare append after trip save failed:", canonErr);
+      }
+
+      // Phase 4 fleet detection: post-trip replay of saved Trip.route through
+      // the shared segment geofence matcher (no live GPS stream for fleet).
+      try {
+        let fallbackRadiusM = 100;
+        let cooldownMs = 5 * 60 * 1000;
+        try {
+          const { data: ds } = await supabase
+            .from("rides_dispatch_settings")
+            .select("toll_geofence_radius_m, toll_round_trip_cooldown_ms")
+            .eq("id", 1)
+            .maybeSingle();
+          if (ds) {
+            const r = Number((ds as any).toll_geofence_radius_m);
+            const c = Number((ds as any).toll_round_trip_cooldown_ms);
+            if (Number.isFinite(r) && r > 0) fallbackRadiusM = Math.min(500, Math.max(50, r));
+            if (Number.isFinite(c) && c >= 0) cooldownMs = Math.min(3_600_000, c);
+          }
+        } catch {
+          /* settings optional — keep defaults */
+        }
+
+        const replayTrips = processedTrips.map((t: any) => ({
+          id: String(t.id || ""),
+          driverId: t.driverId ?? null,
+          driverName: t.driverName ?? null,
+          vehicleId: t.vehicleId ?? null,
+          vehiclePlate: t.vehiclePlate ?? null,
+          route: t.route,
+          organizationId: t.organizationId ?? writeOrgId,
+          date: t.date ?? t.completed_at ?? null,
+          isLiveRecorded: t.isLiveRecorded === true,
+        }));
+
+        const replay = await replayFleetTripsWithRoutes({
+          db: supabase,
+          trips: replayTrips,
+          saveTollUsage: async (entry) => saveTollLedgerEntry(entry as any),
+          fallbackRadiusM,
+          cooldownMs,
+        });
+
+        // Stamp tollDetection coverage onto saved trips (honest UI for imports).
+        const byId = new Map(replay.results.map((r) => [r.tripId, r]));
+        const stampKeys: string[] = [];
+        const stampVals: any[] = [];
+        for (const t of processedTrips) {
+          const id = String(t?.id || "").trim();
+          if (!id) continue;
+          const r = byId.get(id);
+          const pts = Array.isArray(t.route) ? t.route.length : 0;
+          let tollDetection: Record<string, unknown>;
+          if (pts < 2 || r?.reason === "no_route_polyline") {
+            tollDetection = {
+              status: "not_applicable",
+              crossingCount: 0,
+              reason: "no_route_polyline",
+            };
+          } else if (!r) {
+            tollDetection = { status: "eligible", crossingCount: 0 };
+          } else if (r.hits.length > 0) {
+            tollDetection = {
+              status: "detected",
+              crossingCount: r.hits.length,
+              written: r.written,
+            };
+          } else {
+            tollDetection = {
+              status: "no_plazas",
+              crossingCount: 0,
+              reason: r.reason,
+            };
+          }
+          stampKeys.push(`trip:${id}`);
+          stampVals.push(stampWriteOrg({ ...t, tollDetection }));
+        }
+        if (stampKeys.length > 0) {
+          await kv.mset(stampKeys, stampVals);
+        }
+
+        if (replay.tripsScanned > 0) {
+          console.log(
+            `[FleetTollReplay] POST /trips: tripsScanned=${replay.tripsScanned} crossingsWritten=${replay.crossingsWritten}`,
+          );
+        }
+      } catch (replayErr) {
+        console.warn("[FleetTollReplay] POST /trips failed (non-fatal):", replayErr);
+      }
+
+      // MOI-4: reverse re-match — finds tolls uploaded before this trip existed
+      // and persists match fields + workflowStage when matchOnIngestEnabled is on.
+      // Never throws; no-ops unless the flag is enabled.
+      try {
+        const rematchResult = await reconsiderTollsForNewTrips(processedTrips, { persist: true });
+        console.log(
+          `[MatchOnIngest] reconsiderTollsForNewTrips (POST /trips): scanned=${rematchResult.scanned} wouldUpdate=${rematchResult.wouldUpdate} wouldFlag=${rematchResult.wouldFlag}`,
+        );
+      } catch (rematchErr) {
+        console.warn("[MatchOnIngest] reconsiderTollsForNewTrips (POST /trips) failed:", rematchErr);
+      }
+
+      // MOI-4 (edit case): if any of these trips already had a toll pointing
+      // at them and this re-sync moved the trip's date/time, re-validate and
+      // clear/flag stale suggestions when matchOnIngestEnabled is on.
+      try {
+        for (const trip of processedTrips) {
+          if (trip?.id) {
+            await invalidateStaleTollMatchesForTrip(String(trip.id), { persist: true, currentTrip: trip });
+          }
+        }
+      } catch (invalidateErr) {
+        console.warn("[MatchOnIngest] invalidateStaleTollMatchesForTrip (POST /trips) failed:", invalidateErr);
+      }
+
+      // Invalidate stats cache since data has changed
+      await cache.invalidateCacheVersion("stats");
+      await cache.invalidateCacheVersion("performance");
+
+      // Invalidate dashboard cache (new trips affect dashboard data)
+      await invalidateDashboardCache();
+
+      return c.json({ success: true, count: processedTrips.length });
+    } catch (e: any) {
+      console.error("Error saving trips:", e);
+      return c.json({ error: e.message || "Internal Server Error" }, 500);
+    }
+  }
+
+  // Trips GET — native fleet_trips only (KV fallback removed after cutover)
+  app.get("/make-server-37f42386/trips", requireAuth({ requireOrg: true }), async (c) => {
+    try {
+      const limitParam = c.req.query("limit");
+      const offsetParam = c.req.query("offset");
+      const rawLimit = limitParam ? parseInt(limitParam) : 50;
+      const limit = Math.min(rawLimit, 500);
+      const offset = offsetParam ? parseInt(offsetParam) : 0;
+
+      const orgId = getOrgId(c);
+      const res = await queryFleet("trips", {
+        org: orgId || undefined,
+        order: { col: "date", ascending: false },
+        limit,
+        offset,
+      });
+      if (res.error) throw res.error;
+      const tripsScoped = await filterByOrgSafe(res.data as Record<string, unknown>[], c, { endpoint: '/trips' });
+      const trips = tripsScoped.map((val: any) => {
+        const { route, intermediateStops, stops, ...rest } = val || {};
+        void route; void intermediateStops; void stops;
+        if (rest.platform === 'GoRide') rest.platform = 'Roam';
+        return rest;
+      });
+      return c.json(trips);
+    } catch (e: any) {
+      console.error("Error fetching trips:", e);
+      return c.json({ error: e.message || "Internal Server Error" }, 500);
+    }
+  });
+
+  app.delete("/make-server-37f42386/trips", requireAuth(), requirePermission('transactions.edit'), async (c) => {
+    try {
+      // Direct delete using Supabase client to avoid pagination limits and round-trips
+      // This fixes the issue where only the first 1000 records were being deleted
+      const prefixes = ["trip:", "batch:", "driver_metric:", "vehicle_metric:", "transaction:"];
+      const counts: Record<string, number> = {};
+
+      for (const prefix of prefixes) {
+          const { count, error } = await fromKvStore()
+              .delete({ count: 'exact' })
+              .like("key", `${prefix}%`);
+              
+          if (error) {
+              console.error(`Error deleting prefix ${prefix}:`, error);
+              throw error;
+          }
+          counts[prefix] = count || 0;
+      }
+
+      // Canonical ledger: trip + transaction rows (trips + transaction:* wiped above)
+      try {
+        await deleteAllCanonicalLedgerBySourceType("trip");
+        await deleteAllCanonicalLedgerBySourceType("transaction");
+      } catch (ledgerErr: any) {
+        console.warn("[DELETE /trips] Ledger cleanup failed (non-fatal):", ledgerErr?.message);
+      }
+      
+      // Invalidate stats cache since data has changed
+      await cache.invalidateCacheVersion("stats");
+      await cache.invalidateCacheVersion("performance");
+      
+      return c.json({ 
+          success: true, 
+          deletedTrips: counts["trip:"] || 0,
+          deletedBatches: counts["batch:"] || 0,
+          deletedDriverMetrics: counts["driver_metric:"] || 0,
+          deletedVehicleMetrics: counts["vehicle_metric:"] || 0,
+          deletedTransactions: counts["transaction:"] || 0
+      });
+    } catch (e: any) {
+      console.error("Error clearing data:", e);
+      return c.json({ error: e.message || "Internal Server Error" }, 500);
+    }
+  });
+
+  app.delete("/make-server-37f42386/trips/:id", requireAuth(), requirePermission('transactions.edit'), async (c) => {
+    const id = c.req.param("id");
+    try {
+      await kv.del(`trip:${id}`);
+      try {
+        await deleteCanonicalLedgerBySource("trip", [id]);
+      } catch (ledgerErr: any) {
+        console.warn(`[DELETE /trips/:id] Ledger cleanup failed (non-fatal) trip=${id}:`, ledgerErr?.message);
+      }
+
+      // MOI-4: clear/flag any toll whose match suggestion pointed at this now-
+      // deleted trip when matchOnIngestEnabled is on.
+      try {
+        await invalidateStaleTollMatchesForTrip(id, { persist: true, currentTrip: undefined });
+      } catch (invalidateErr) {
+        console.warn(`[MatchOnIngest] invalidateStaleTollMatchesForTrip (DELETE /trips/:id) failed:`, invalidateErr);
+      }
+
+      // Invalidate stats cache since data has changed
+      await cache.invalidateCacheVersion("stats");
+      await cache.invalidateCacheVersion("performance");
+
+      return c.json({ success: true });
+    } catch (e: any) {
+      console.error(`Error deleting trip ${id}:`, e);
+      return c.json({ error: e.message || "Internal Server Error" }, 500);
+    }
+  });
+
+  // Driver Metrics Endpoints
+  app.post("/make-server-37f42386/driver-metrics", async (c) => {
+    try {
+      const metrics = await c.req.json();
+      if (!Array.isArray(metrics)) {
+        return c.json({ error: "Expected array of metrics" }, 400);
+      }
+      const keys = metrics.map((m: any) => `driver_metric:${m.id}`);
+      await kv.mset(keys, metrics);
+      
+      // Invalidate dashboard cache (driver metrics affect dashboard)
+      await invalidateDashboardCache();
+      
+      return c.json({ success: true, count: metrics.length });
+    } catch (e: any) {
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  app.get("/make-server-37f42386/driver-metrics", requireAuth(), async (c) => {
+      try {
+          const limitParam = c.req.query("limit");
+          const offsetParam = c.req.query("offset");
+          const limit = limitParam ? parseInt(limitParam) : 100;
+          const offset = offsetParam ? parseInt(offsetParam) : 0;
+
+          const { shouldReadTable, listByOrg } = await import("./repos/baseRepo.ts");
+          if (shouldReadTable("driver_metrics")) {
+            const orgId = getOrgId(c);
+            const all = await listByOrg("driver_metrics", orgId, { limit: offset + limit });
+            return c.json(all.slice(offset, offset + limit));
+          }
+
+          const { data, error } = await fromKvStore()
+              .select("value")
+              .like("key", "driver_metric:%")
+              .range(offset, offset + limit - 1);
+
+          if (error) throw error;
+          
+          const metrics = data?.map((d: any) => d.value) || [];
+
+          // ACTION 2: The "Exorcism" (Auto-Cleanup)
+          const BANNED_UUID = "73dfc14d-3798-4a00-8d86-b2a3eb632f54";
+          const ghostIndex = metrics.findIndex((m: any) => (m.driverId === BANNED_UUID || m.id === BANNED_UUID));
+
+          if (ghostIndex !== -1) {
+              console.log(`[Exorcism] Deleting Ghost Driver Metric: ${BANNED_UUID}`);
+              await kv.del(`driver_metric:${BANNED_UUID}`);
+              metrics.splice(ghostIndex, 1);
+          }
+
+          return c.json(filterByOrg(metrics, c));
+      } catch(e: any) {
+          return c.json({ error: e.message }, 500);
+      }
+  });
+
+  // Vehicle Metrics Endpoints
+  // No catalog gate here — mirrors POST /driver-metrics. Metrics are import/rollup
+  // writes; operational vehicle mutations are gated on vehicle/trip routes instead.
+  app.post(
+    "/make-server-37f42386/vehicle-metrics",
+    async (c) => {
+    try {
+      const metrics = await c.req.json();
+      if (!Array.isArray(metrics)) {
+        return c.json({ error: "Expected array of metrics" }, 400);
+      }
+      const keys = metrics.map((m: any) => `vehicle_metric:${m.id}`);
+      await kv.mset(keys, metrics);
+      
+      // Invalidate dashboard cache (vehicle metrics affect dashboard)
+      await invalidateDashboardCache();
+      
+      return c.json({ success: true, count: metrics.length });
+    } catch (e: any) {
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  app.get("/make-server-37f42386/vehicle-metrics", requireAuth(), async (c) => {
+      try {
+          const limitParam = c.req.query("limit");
+          const offsetParam = c.req.query("offset");
+          const limit = limitParam ? parseInt(limitParam) : 100;
+          const offset = offsetParam ? parseInt(offsetParam) : 0;
+
+          const { shouldReadTable, listByOrg } = await import("./repos/baseRepo.ts");
+          if (shouldReadTable("vehicle_metrics")) {
+            const orgId = getOrgId(c);
+            const all = await listByOrg("vehicle_metrics", orgId, { limit: offset + limit });
+            return c.json(all.slice(offset, offset + limit));
+          }
+
+          const { data, error } = await fromKvStore()
+              .select("value")
+              .like("key", "vehicle_metric:%")
+              .range(offset, offset + limit - 1);
+
+          if (error) throw error;
+          
+          const metrics = filterByOrg(data?.map((d: any) => d.value) || [], c);
+          return c.json(metrics);
+      } catch(e: any) {
+          return c.json({ error: e.message }, 500);
+      }
+  });
+
+  // Vehicles Endpoints
+  // Phase 2/3: Use requireOrg and filterByOrgSafe for data isolation
+  app.get("/make-server-37f42386/vehicles", requireAuth({ requireOrg: true }), async (c) => {
+    try {
+      const limitParam = c.req.query("limit");
+      const offsetParam = c.req.query("offset");
+      const limit = limitParam ? parseInt(limitParam) : 500;
+      const offset = offsetParam ? parseInt(offsetParam) : 0;
+
+      const { shouldReadTable, listByOrg } = await import("./repos/baseRepo.ts");
+      if (shouldReadTable("vehicles")) {
+        const orgId = getOrgId(c);
+        const all = await listByOrg("vehicles", orgId, { limit: offset + limit });
+        const page = all.slice(offset, offset + limit);
+        const vehicles = await filterByOrgSafe(page, c, { endpoint: '/vehicles' });
+        return c.json(vehicles);
+      }
+
+      const { data, error } = await fromKvStore()
+          .select("value")
+          .like("key", "vehicle:%")
+          .range(offset, offset + limit - 1);
+
+      if (error) throw error;
+      
+      const vehiclesRaw = data?.map((d: any) => d.value) || [];
+      const vehicles = await filterByOrgSafe(vehiclesRaw, c, { endpoint: '/vehicles' });
+      return c.json(vehicles);
+    } catch (e: any) {
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  app.post("/make-server-37f42386/vehicles", requireAuth(), requirePermission('vehicles.create'), async (c) => {
+    try {
+      let vehicle = await c.req.json();
+      if (!vehicle.id) {
+        return c.json({ error: "Vehicle ID (License Plate) is required" }, 400);
+      }
+      const previous = await loadVehicleForGate(String(vehicle.id));
+      // Update path: refuse overwrite of another org's vehicle
+      if (previous && !belongsToOrg(previous as Record<string, unknown>, c)) {
+        return c.json({ error: "Forbidden" }, 403);
+      }
+      vehicle = stampOrg(vehicle, c);
+      // Normalize platform tags (legacy / missing → rideshare)
+      {
+        const raw = (vehicle as { serviceLines?: unknown; service_lines?: unknown }).serviceLines
+          ?? (vehicle as { service_lines?: unknown }).service_lines;
+        const lines = Array.isArray(raw)
+          ? raw.filter((l: unknown) => l === "rideshare" || l === "rush_delivery")
+          : [];
+        (vehicle as { serviceLines: string[] }).serviceLines = lines.length
+          ? [...new Set(lines as string[])]
+          : ["rideshare"];
+      }
+      const orgId = (vehicle as { organizationId?: string }).organizationId ?? null;
+      const rbacUser = c.get('rbacUser') as RbacUser | undefined;
+      const canBypass = rbacUserCanBypassCatalogGate(rbacUser);
+
+      const catalogId = await resolveCatalogIdForKvVehicle(supabase, vehicle as Record<string, unknown>);
+
+      // Enforce the catalog gate on create / update: if no catalog match, force
+      // the vehicle into Inactive + 'pending_catalog' and reject any payload
+      // that tried to set it Active/Maintenance or assign a driver / toll /
+      // fuel scenario. In warn-only mode (ENFORCE_VEHICLE_CATALOG_GATE=warn)
+      // we still stamp catalogStatus + force Inactive but do NOT 422.
+      const gated = applyCatalogGateOnCreate(vehicle as Record<string, unknown>, catalogId, previous);
+      const enforce = catalogGateEnforcementEnabled();
+      if (gated.rejected) {
+        if (!canBypass && enforce) {
+          return c.json(
+            {
+              error: gated.rejected.message,
+              code: gated.rejected.code,
+              vehicleId: vehicle.id,
+            },
+            422,
+          );
+        }
+        console.warn(`[catalog-gate] POST /vehicles warn-only: ${gated.rejected.message} (vehicle=${vehicle.id})`);
+      }
+      vehicle = gated.vehicle;
+
+      // Shared-car fuel attribution: close/open driverAssignmentHistory when assignee changes
+      vehicle = applyDriverAssignmentChangeOnVehicle(
+        previous as Record<string, unknown> | null | undefined,
+        vehicle as Record<string, unknown>,
+      );
+
+      await kv.set(`vehicle:${vehicle.id}`, vehicle);
+
+      try {
+        // One driver ↔ one vehicle — release duplicates before mirroring driver cache
+        await enforceExclusiveCurrentDriverAssignment(
+          vehicle as Record<string, unknown>,
+          previous as Record<string, unknown> | null | undefined,
+        );
+        await syncDriverRecordFromVehicleAssignment(vehicle as Record<string, unknown>);
+      } catch (assignSyncErr: unknown) {
+        console.warn(
+          "[vehicles] driver assignment mirror/backfill failed (non-fatal):",
+          assignSyncErr instanceof Error ? assignSyncErr.message : assignSyncErr,
+        );
+      }
+
+      // Auto-bootstrap maintenance schedules when catalog is first matched
+      let maintenanceBootstrap: unknown = undefined;
+      if (orgId && catalogId) {
+        const prevCatalog = previous && typeof (previous as { vehicle_catalog_id?: string }).vehicle_catalog_id === "string"
+          ? String((previous as { vehicle_catalog_id: string }).vehicle_catalog_id).trim()
+          : "";
+        const newlyMatched = !prevCatalog || prevCatalog !== catalogId;
+        if (newlyMatched) {
+          try {
+            const { data: existingSch } = await supabase
+              .from("vehicle_maintenance_schedule")
+              .select("id")
+              .eq("organization_id", orgId)
+              .eq("vehicle_id", String(vehicle.id))
+              .limit(1);
+            if (!existingSch?.length) {
+              const { executeMaintenanceBootstrap } = await import("./maintenance_bootstrap_core.ts");
+              const odo = Number(
+                (vehicle as { odometer?: number; currentOdometer?: number }).odometer
+                  ?? (vehicle as { currentOdometer?: number }).currentOdometer
+                  ?? 0,
+              );
+              maintenanceBootstrap = await executeMaintenanceBootstrap({
+                supabase,
+                organizationId: orgId,
+                vehicleId: String(vehicle.id),
+                currentOdo: Number.isFinite(odo) ? odo : 0,
+                catalogId,
+              });
+            }
+          } catch (bootErr: unknown) {
+            console.warn(
+              "[vehicles] auto maintenance bootstrap failed (non-fatal):",
+              bootErr instanceof Error ? bootErr.message : bootErr,
+            );
+          }
+        }
+      }
+
+      if (orgId) {
+        try {
+          if (catalogId) {
+            await supersedePendingRequestsForVehicle(supabase, orgId, String(vehicle.id));
+          } else {
+            await upsertPendingFromKvVehicle(supabase, {
+              organizationId: orgId,
+              fleetVehicleId: String(vehicle.id),
+              vehicle: vehicle as Record<string, unknown>,
+              source: "manual",
+            });
+          }
+        } catch (pendErr: unknown) {
+          console.error("[vehicles] pending catalog queue:", pendErr);
+        }
+      }
+
+      return c.json({
+        success: true,
+        data: vehicle,
+        catalogMatched: !!catalogId,
+        catalogStatus: (vehicle as { catalogStatus?: string }).catalogStatus ?? (catalogId ? "matched" : "pending_catalog"),
+        maintenanceBootstrap,
+      });
+    } catch (e: any) {
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  /** One-time / maintenance: mirror vehicle.currentDriverId → driver record + backfill fuel rows. */
+  app.post(
+    "/make-server-37f42386/admin/backfill-fuel-vehicle-assignments",
+    requireAuth(),
+    requirePermission("fuel.edit_entry"),
+    async (c) => {
+      try {
+        const vehicles = (await kv.getByPrefix("vehicle:")) || [];
+        let driversSynced = 0;
+
+        for (const vehicle of vehicles) {
+          if (!vehicle?.currentDriverId || !vehicle?.id) continue;
+          await syncDriverRecordFromVehicleAssignment(vehicle as Record<string, unknown>);
+          driversSynced++;
+        }
+
+        return c.json({
+          success: true,
+          driversSynced,
+          message:
+            "Driver assignment mirrors and fuel record backfills completed for all assigned vehicles.",
+        });
+      } catch (e: any) {
+        return c.json({ error: e.message }, 500);
+      }
+    },
+  );
+
+  app.delete("/make-server-37f42386/vehicles/:id", requireAuth(), requirePermission('vehicles.delete'), async (c) => {
+    const id = c.req.param("id");
+    try {
+      await kv.del(`vehicle:${id}`);
+      return c.json({ success: true });
+    } catch (e: any) {
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  // Drivers Endpoints
+  // Phase 2: Use requireOrg to ensure organization context for data isolation
+  app.get("/make-server-37f42386/drivers", requireAuth({ requireOrg: true }), async (c) => {
+    try {
+      const limitParam = c.req.query("limit");
+      const offsetParam = c.req.query("offset");
+      const limit = limitParam ? parseInt(limitParam) : 500;
+      const offset = offsetParam ? parseInt(offsetParam) : 0;
+
+      let driversRaw: any[] = [];
+      const { shouldReadTable, listByOrg } = await import("./repos/baseRepo.ts");
+      if (shouldReadTable("drivers")) {
+        const orgId = getOrgId(c);
+        const all = await listByOrg("drivers", orgId, { limit: offset + limit });
+        driversRaw = all.slice(offset, offset + limit);
+      } else {
+        const { data, error } = await fromKvStore()
+            .select("value")
+            .like("key", "driver:%")
+            .range(offset, offset + limit - 1);
+        if (error) throw error;
+        driversRaw = data?.map((d: any) => d.value) || [];
+      }
+
+      // Phase 3: Use filterByOrgSafe for feature-flag controlled filtering
+      let drivers = await filterByOrgSafe(driversRaw, c, { endpoint: '/drivers' });
+
+      // Heal: fleet-linked couriers missing from roster / rush_delivery serviceLines
+      const healOrgId = getOrgId(c);
+      if (healOrgId) {
+        try {
+          drivers = await healOrgCourierRoster(
+            { supabase, kv, invalidateDriverCache },
+            healOrgId,
+            drivers as Array<Record<string, unknown>>,
+          );
+        } catch (healErr: unknown) {
+          const msg = healErr instanceof Error ? healErr.message : String(healErr);
+          console.warn(`[drivers] courier roster heal skipped: ${msg}`);
+        }
+      }
+
+      // ACTION 2: The "Exorcism" (Auto-Cleanup)
+      const BANNED_UUID = "73dfc14d-3798-4a00-8d86-b2a3eb632f54";
+      const ghostIndex = drivers.findIndex((d: any) => d.id === BANNED_UUID);
+
+      if (ghostIndex !== -1) {
+          console.log(`[Exorcism] Deleting Ghost Driver: ${BANNED_UUID}`);
+          await kv.del(`driver:${BANNED_UUID}`);
+          drivers.splice(ghostIndex, 1);
+      }
+
+      // Sanitize control chars in string fields to prevent JSON parse errors
+      const sanitizedDrivers = drivers.map((d: any) => {
+        if (!d || typeof d !== 'object') return d;
+        const s: Record<string, any> = {};
+        for (const [k, val] of Object.entries(d)) {
+          s[k] = typeof val === 'string' ? val.replace(/[\x00-\x1F\x7F]/g, ' ') : val;
+        }
+        return s;
+      });
+      let jsonStr: string;
+      try { jsonStr = JSON.stringify(sanitizedDrivers); } catch (serErr: any) { console.error("JSON serialization error in /drivers:", serErr); return c.json({ error: "Failed to serialize drivers" }, 500); }
+      return new Response(jsonStr, { headers: { "Content-Type": "application/json" } });
+    } catch (e: any) {
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  // Phase 2: Use requireOrg for data isolation
+  app.post("/make-server-37f42386/drivers", requireAuth({ requireOrg: true }), requirePermission('drivers.create'), async (c) => {
+    try {
+      const body = await c.req.json();
+      // Extract password to prevent saving it to KV, and use it for Auth creation
+      const { password, ...driver } = body;
+      
+      let authUserId = null;
+      const orgId = getOrgId(c);
+
+      // If password provided, create Supabase Auth User
+      if (password && driver.email) {
+           const { data, error } = await supabase.auth.admin.createUser({
+              email: driver.email,
+              password: password,
+              user_metadata: {
+                  name: driver.name || '',
+              },
+              app_metadata: {
+                  role: 'driver',
+                  organizationId: orgId || undefined,
+              },
+              email_confirm: true
+           });
+
+           if (error) {
+               console.error("Auth Create Error:", error);
+               if (error.message?.includes('already been registered') || error.message?.includes('already exists')) {
+                 return c.json({ error: `A user with email ${driver.email} already exists. Use "Claim Driver" to link them to your organization.` }, 409);
+               }
+               return c.json({ error: `Failed to create user account: ${error.message}` }, 400);
+           }
+           authUserId = data.user.id;
+           console.log(`[Drivers] Created auth account for driver ${driver.email} in org ${orgId}`);
+      }
+
+      // Use Auth ID if created, otherwise fallback to provided ID or random
+      const finalId = authUserId || driver.id || crypto.randomUUID();
+      
+      const newDriver = {
+          ...driver,
+          id: finalId,
+          driverId: driver.driverId || finalId, // Allow distinct legacy ID
+      };
+
+      // Phase 4: Use stampRecord to include productLine for data isolation
+      await kv.set(`driver:${finalId}`, stampRecord(newDriver, c));
+      invalidateDriverCache();
+      {
+        const display =
+          (typeof newDriver.name === "string" && newDriver.name) ||
+          (typeof newDriver.driverName === "string" && newDriver.driverName) ||
+          (typeof driver.email === "string" && driver.email) ||
+          null;
+        const st = typeof newDriver.status === "string" ? newDriver.status : "active";
+        await upsertDriverProfileFromServer({
+          userId: finalId,
+          mode: orgId ? "fleet" : "independent",
+          fleetId: orgId ?? null,
+          displayName: display,
+          status: st,
+          onboardingComplete: false,
+          markFleetJoined: !!orgId,
+        });
+      }
+      return c.json({ success: true, data: newDriver });
+    } catch (e: any) {
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  // Transactions Endpoints
+  // Transactions GET Endpoint - Optimized
+  // Phase 2/3: Use requireOrg and filterByOrgSafe for data isolation
+  app.get("/make-server-37f42386/transactions", requireAuth({ requireOrg: true }), async (c) => {
+    try {
+      const driverIdsParam = c.req.query("driverIds");
+      const driverIdParam = c.req.query("driverId");
+      const limitParam = c.req.query("limit");
+      const offsetParam = c.req.query("offset");
+      const offset = offsetParam ? parseInt(offsetParam) : 0;
+      let startDate = (c.req.query("startDate") || "").slice(0, 10);
+      let endDate = (c.req.query("endDate") || "").slice(0, 10);
+      if (startDate && !/^\d{4}-\d{2}-\d{2}$/.test(startDate)) startDate = "";
+      if (endDate && !/^\d{4}-\d{2}-\d{2}$/.test(endDate)) endDate = "";
+
+      const rawDriverIds = new Set<string>();
+      if (driverIdParam) rawDriverIds.add(driverIdParam.trim());
+      if (driverIdsParam) {
+          driverIdsParam.split(',').forEach(id => {
+              if (id.trim()) rawDriverIds.add(id.trim());
+          });
+      }
+
+      // Roam + linked Uber/InDrive + lowercase — same as ledger driver-overview
+      const idsToFilter = new Set<string>();
+      for (const rawId of rawDriverIds) {
+        for (const variant of await expandStatementSummaryDriverIds(rawId)) {
+          idsToFilter.add(variant);
+        }
+      }
+
+      const isDriverScoped = idsToFilter.size > 0;
+      const isSettlementDesk = c.req.query("desk") === "settlements";
+
+      // Unscoped list reads must be dated — all-time dumps are the egress leak.
+      // Settlement desk always sends the Week from/to range so Done/Awaiting are not
+      // silently clamped to the current Monday–Sunday.
+      if (!isDriverScoped && !startDate) {
+        const tz = await getFleetTimezone();
+        startDate = await periodAnchorFor(new Date(), tz);
+        if (!endDate) endDate = periodEndForAnchor(startDate);
+      }
+
+      const TX_UNSCOPED_MAX = 500;
+      const TX_DRIVER_MAX = 5000;
+      const TX_SETTLEMENT_MAX = 5000;
+      const parsedLimit = limitParam ? parseInt(limitParam, 10) : NaN;
+      const requested = Number.isFinite(parsedLimit) && parsedLimit > 0
+        ? parsedLimit
+        : (isDriverScoped || isSettlementDesk ? 5000 : 100);
+      const cap = isSettlementDesk ? TX_SETTLEMENT_MAX : (isDriverScoped ? TX_DRIVER_MAX : TX_UNSCOPED_MAX);
+      const limit = Math.min(requested, cap);
+
+      const SETTLEMENT_KV_OR =
+        "value->>type.eq.Payment_Received,value->>type.eq.Payout,value->>type.eq.Cash_Write_Off,value->>category.eq.Cash Collection,value->>category.eq.Driver Payouts,value->>category.eq.Cash Write Off";
+
+      const { shouldReadTable, queryFleet } = await import("./repos/baseRepo.ts");
+      if (shouldReadTable("transactions")) {
+        const orgId = getOrgId(c);
+        const filters: import("./repos/baseRepo.ts").FleetQueryFilter[] = [];
+        if (isDriverScoped) {
+          filters.push({ op: "in", col: "driver_id", value: Array.from(idsToFilter) });
+        }
+        if (isSettlementDesk) {
+          filters.push({
+            op: "or",
+            value:
+              'type.in.(Payment_Received,Payout,Cash_Write_Off),category.in.("Cash Collection","Driver Payouts","Cash Write Off")',
+          });
+        }
+        // S1-10: do NOT filter SQL on metadata->>workPeriodStart — that column path is not on
+        // fleet.transactions (payload lives in payload_json). Fetch by posting date, then
+        // post-filter by settlement week tag in JS below.
+        const res = await queryFleet("transactions", {
+          org: orgId || undefined,
+          dateFrom: startDate || undefined,
+          dateTo: endDate || undefined,
+          filters,
+          order: { col: "date", ascending: false },
+          limit: isSettlementDesk ? Math.min(limit * 3, 5000) : limit,
+          offset: isSettlementDesk ? 0 : offset,
+        });
+        if (res.error) throw res.error;
+        let scoped = await filterByOrgSafe(res.data as Record<string, unknown>[], c, { endpoint: '/transactions' });
+        if (isSettlementDesk && (startDate || endDate)) {
+          scoped = scoped.filter((t: Record<string, unknown>) => {
+            const meta = (t.metadata ?? (t as any).payload_json?.metadata) as
+              | Record<string, unknown>
+              | undefined;
+            const wps = String(meta?.workPeriodStart || "").slice(0, 10);
+            // Prefer week tag; fall back to posting date so untagged rows still appear.
+            const axis = /^\d{4}-\d{2}-\d{2}$/.test(wps)
+              ? wps
+              : String(t.date || "").slice(0, 10);
+            if (startDate && axis && axis < startDate) return false;
+            if (endDate && axis && axis > endDate) return false;
+            return true;
+          });
+          if (offset > 0) scoped = scoped.slice(offset);
+          if (scoped.length > limit) scoped = scoped.slice(0, limit);
+        }
+        return c.json(scoped);
+      }
+
+      let query = fromKvStore()
+          .select("value")
+          .like("key", "transaction:%");
+
+      if (isDriverScoped) {
+          const orConditions = Array.from(idsToFilter)
+              .map(id => `value->>driverId.eq.${id}`)
+              .join(',');
+          query = query.or(orConditions);
+      }
+      if (isSettlementDesk) {
+          query = query.or(SETTLEMENT_KV_OR);
+      }
+      // S1-10: KV path — filter by posting date in SQL (indexed), refine by workPeriodStart in JS.
+      // Nested `value->metadata->>workPeriodStart` filters are fragile on PostgREST and dropped rows.
+      if (startDate) query = query.gte("value->>date", startDate);
+      if (endDate) query = query.lte("value->>date", `${endDate}T23:59:59.999`);
+
+      const { data, error } = await query
+          .order("value->>date", { ascending: false })
+          .range(offset, offset + limit - 1);
+
+      if (error) throw error;
+
+      // Phase 8.4: Strip heavy metadata if exists
+      let transactions = (data || []).map((d: any) => {
+          const v = d.value || {};
+          // Only strip if it looks like it contains base64 or heavy binary metadata
+          if (v.metadata?.receiptBase64) {
+              delete v.metadata.receiptBase64;
+          }
+          return v;
+      });
+
+      if (isSettlementDesk && (startDate || endDate)) {
+        // Prefer settlement-week tag when present; keep date-axis rows as fallback.
+        const weekFiltered = transactions.filter((t: any) => {
+          const wps = String(t?.metadata?.workPeriodStart || "").slice(0, 10);
+          if (!/^\d{4}-\d{2}-\d{2}$/.test(wps)) return true;
+          if (startDate && wps < startDate) return false;
+          if (endDate && wps > endDate) return false;
+          return true;
+        });
+        // Also include late-posted payments whose week tag is in range but date was outside
+        // the first query — recovered below only when desk needs it; for now keep weekFiltered.
+        transactions = weekFiltered;
+      }
+
+      // Driver-scoped wallet queries must include pre-org-backfill cash logs (strict org filter hides them).
+      let filtered = isDriverScoped
+        ? filterByOrg(transactions, c, { endpoint: '/transactions' })
+        : await filterByOrgSafe(transactions, c, { endpoint: '/transactions' });
+
+      // Recovery pass: find legacy cash rows (strict org filter or ID casing may hide them).
+      if (isDriverScoped && offset === 0) {
+        const idSet = idsToFilter;
+        const havePayment = filtered.some((t: any) => {
+          const cat = String(t?.category || "");
+          const type = String(t?.type || "");
+          return (cat === "Cash Collection" || type === "Payment_Received") && Number(t?.amount) > 0;
+        });
+        if (!havePayment || filtered.length < 10) {
+          const RECOVERY_PAGE = 1000;
+          const RECOVERY_MAX = 20000;
+          const recovered: any[] = [];
+          let recOffset = 0;
+          while (recOffset < RECOVERY_MAX) {
+            const { data: cashRows, error: cashErr } = await fromKvStore()
+              .select("value")
+              .like("key", "transaction:%")
+              .or("value->>category.eq.Cash Collection,value->>type.eq.Payment_Received")
+              .order("value->>date", { ascending: false })
+              .range(recOffset, recOffset + RECOVERY_PAGE - 1);
+            if (cashErr) break;
+            const page = (cashRows || []).map((d: any) => d.value).filter(Boolean);
+            for (const tx of page) {
+              const txDriverId = String(tx.driverId || "").trim();
+              if (!txDriverId || !idSet.has(txDriverId)) continue;
+              recovered.push(tx);
+            }
+            if (page.length < RECOVERY_PAGE) break;
+            recOffset += RECOVERY_PAGE;
+          }
+          if (recovered.length > 0) {
+            const merged = filterByOrg([...filtered, ...recovered], c, { endpoint: '/transactions/cash-recovery' });
+            const byId = new Map<string, any>();
+            for (const tx of merged) {
+              if (tx?.id) byId.set(String(tx.id), tx);
+            }
+            filtered = Array.from(byId.values()).sort(
+              (a, b) => new Date(String(b.date || 0)).getTime() - new Date(String(a.date || 0)).getTime(),
+            );
+          }
+        }
+      }
+
+      return c.json(filtered);
+    } catch (e: any) {
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  /** Numbers from mixed metadata shapes (station Evidence inbox). */
+  function evidenceReadMetaNum(v: unknown): number | undefined {
+      const n = typeof v === "number" ? v : typeof v === "string" ? parseFloat(v) : NaN;
+      return Number.isFinite(n) ? n : undefined;
+  }
+
+  function extractTxCoordsForEvidence(metadata: Record<string, unknown> | undefined): {
+      lat: number;
+      lng: number;
+      accuracy?: number;
+  } | null {
+      if (!metadata || typeof metadata !== "object") return null;
+      const lm = (metadata.locationMetadata || metadata.location) as Record<string, unknown> | undefined;
+      const gf = metadata.geofenceMetadata as Record<string, unknown> | undefined;
+      const lat =
+          evidenceReadMetaNum(lm?.lat) ??
+          evidenceReadMetaNum(gf?.lat) ??
+          evidenceReadMetaNum(metadata.lat);
+      const lng =
+          evidenceReadMetaNum(lm?.lng) ??
+          evidenceReadMetaNum(gf?.lng) ??
+          evidenceReadMetaNum(metadata.lng);
+      if (lat == null || lng == null) return null;
+      const accuracy =
+          evidenceReadMetaNum(lm?.accuracy) ??
+          evidenceReadMetaNum(gf?.accuracy) ??
+          evidenceReadMetaNum(metadata.accuracy);
+      return {
+          lat,
+          lng,
+          ...(accuracy != null ? { accuracy } : {}),
+      };
+  }
+
+  function mapStationGateEvidenceDto(t: Record<string, unknown>) {
+      const m = (t.metadata as Record<string, unknown>) || {};
+      const coords = extractTxCoordsForEvidence(m);
+      return {
+          id: t.id,
+          date: t.date,
+          time: t.time,
+          driverName: t.driverName,
+          driverId: t.driverId,
+          amount: t.amount,
+          vendor: t.vendor,
+          description: t.description,
+          holdReason: typeof m.holdReason === "string" ? m.holdReason : undefined,
+          gateReason: typeof m.gateReason === "string" ? m.gateReason : undefined,
+          locationStatus: typeof m.locationStatus === "string" ? m.locationStatus : undefined,
+          learntLocationId: typeof m.learntLocationId === "string" ? m.learntLocationId : undefined,
+          hasGps: coords != null,
+          lat: coords?.lat,
+          lng: coords?.lng,
+          accuracy: coords?.accuracy,
+      };
+  }
+
+  // Station Database — Evidence inbox: Pending fuel txs with station gate hold (read-only list).
+  app.get("/make-server-37f42386/admin/station-gate-evidence", requireAuth(), async (c) => {
+      try {
+          const limitParam = c.req.query("limit");
+          const limit = Math.min(Math.max(parseInt(limitParam || "5000", 10) || 5000, 1), 10000);
+
+          const { data, error } = await fromKvStore()
+              .select("value")
+              .like("key", "transaction:%")
+              .order("value->>date", { ascending: false })
+              .range(0, limit - 1);
+
+          if (error) throw error;
+
+          const transactions = (data || []).map((d: any) => {
+              const v = d.value || {};
+              if (v.metadata?.receiptBase64) {
+                  const metadata = { ...v.metadata };
+                  delete metadata.receiptBase64;
+                  return { ...v, metadata };
+              }
+              return v;
+          });
+
+          const scoped = filterByOrg(transactions, c);
+
+          const isFuel = (t: any) => t?.category === "Fuel" || t?.category === "Fuel Reimbursement";
+          const gateHold = (meta: any) => meta?.stationGateHold === true || meta?.stationGateHold === "true";
+
+          const gateHeld = scoped.filter(
+              (t: any) => t && isFuel(t) && t.status === "Pending" && gateHold(t.metadata),
+          );
+
+          const dto = gateHeld.map((t: any) => mapStationGateEvidenceDto(t));
+
+          return c.json(dto);
+      } catch (e: any) {
+          return c.json({ error: e.message }, 500);
+      }
+  });
+
+  /** Settlement Week anchors a cash-payment-like tx feeds (workPeriodStart tag = Cash Returned SSOT). */
+  function cashTxWeekAnchors(tx: unknown): { driverId: string; anchors: string[] } | null {
+    if (!tx || typeof tx !== "object") return null;
+    const rec = tx as Record<string, any>;
+    const driverId = String(rec.driverId || "").trim();
+    if (!driverId) return null;
+    const cat = String(rec.category || "");
+    const type = String(rec.type || "");
+    const isCashPaymentLike =
+      cat === "Cash Collection" ||
+      type === "Payment_Received" ||
+      cat === "Float Issue" ||
+      cat === "Adjustment" ||
+      cat === "Cash Write Off" ||
+      type === "Cash_Write_Off" ||
+      cat === "Driver Payouts" ||
+      type === "Payout";
+    if (!isCashPaymentLike) return null;
+    const anchors: string[] = [];
+    const wps = String(rec?.metadata?.workPeriodStart || "").slice(0, 10);
+    if (/^\d{4}-\d{2}-\d{2}$/.test(wps)) anchors.push(wps);
+    return { driverId, anchors };
+  }
+
+  /**
+   * After Log Cash / Reverse / Write-off: patch cash fields only on existing weeks.
+   * Full rebuild here was rewriting passenger cash / fuel and making Driver owes jump.
+   * Also purges orphan settlement mirrors (Undo used to leave them, so Fleet owes never moved).
+   */
+  async function rebuildFinancialPeriodsForCashTx(next: unknown, previous: unknown): Promise<void> {
+    try {
+      const targets = new Map<string, Set<string>>();
+      const driverIds = new Set<string>();
+      for (const t of [next, previous]) {
+        if (t && typeof t === "object") {
+          const did = String((t as Record<string, unknown>).driverId || "").trim();
+          if (did) driverIds.add(did);
+        }
+        const info = cashTxWeekAnchors(t);
+        if (!info) continue;
+        driverIds.add(info.driverId);
+        if (info.anchors.length === 0) continue;
+        const set = targets.get(info.driverId) || new Set<string>();
+        for (const a of info.anchors) set.add(a);
+        targets.set(info.driverId, set);
+      }
+
+      const { purgeOrphanSettlementMirrorsForDriver } = await import("./settlement_transactions.ts");
+      for (const driverId of driverIds) {
+        const { periodAnchors, purgedCount } = await purgeOrphanSettlementMirrorsForDriver(driverId);
+        if (purgedCount > 0 || periodAnchors.length > 0) {
+          const set = targets.get(driverId) || new Set<string>();
+          for (const a of periodAnchors) set.add(a);
+          targets.set(driverId, set);
+        }
+      }
+
+      if (targets.size === 0) return;
+      const { syncPeriodCashFromTransactions } = await import("./driver_financial_periods.ts");
+      for (const [driverId, anchors] of targets) {
+        for (const anchor of anchors) {
+          const mode = await syncPeriodCashFromTransactions(driverId, anchor);
+          console.log(
+            `[transactions] Cash-synced financial period driver=${driverId} week=${anchor} mode=${mode}`,
+          );
+        }
+      }
+    } catch (e: any) {
+      console.warn("[transactions] financial period cash sync failed (non-fatal):", e?.message || e);
+    }
+  }
+
+
+  /**
+   * Play Store / driver portal expense categories. Drivers have ROLE_PERMISSIONS.driver = []
+   * (no fleet RBAC). Blanket requirePermission(transactions.edit) on POST /transactions
+   * caused 403 Forbidden after receipt upload succeeded — same class of bug as the
+   * Aug fuel-entries gate. Allow only these self-expense categories for role=driver.
+   */
+  const DRIVER_SELF_EXPENSE_CATEGORIES = new Set([
+    "Fuel",
+    "Fuel Reimbursement",
+    "Maintenance",
+    "Tolls",
+    "Other Expenses",
+  ]);
+
+  async function driverMayPostSelfExpense(
+    rbacUser: RbacUser,
+    transaction: Record<string, unknown>,
+    previous: Record<string, unknown> | null | undefined,
+  ): Promise<boolean> {
+    if (rbacUser.resolvedRole !== "driver") return false;
+    const category = String(transaction.category || "").trim();
+    if (!DRIVER_SELF_EXPENSE_CATEGORIES.has(category)) return false;
+    const type = String(transaction.type || "Expense").trim();
+    if (type !== "Expense") return false;
+
+    const aliases = new Set<string>([rbacUser.userId]);
+    try {
+      const driverRec = await kv.get(`driver:${rbacUser.userId}`);
+      if (driverRec && typeof driverRec === "object") {
+        for (const id of collectDriverAliasIds(driverRec as Record<string, unknown>)) {
+          aliases.add(id);
+        }
+      }
+    } catch {
+      /* auth user id alone is enough for most fleet drivers */
+    }
+
+    const txDriverId = String(transaction.driverId || "").trim();
+    if (!txDriverId || !aliases.has(txDriverId)) return false;
+
+    if (previous && typeof previous === "object") {
+      const prevDriver = String(previous.driverId || "").trim();
+      if (prevDriver && !aliases.has(prevDriver)) return false;
+      const prevCat = String(previous.category || "").trim();
+      if (prevCat && !DRIVER_SELF_EXPENSE_CATEGORIES.has(prevCat)) return false;
+    }
+    return true;
+  }
+
+  app.post("/make-server-37f42386/transactions", requireAuth({ requireOrg: true }), async (c) => {
+    try {
+      const transaction = await c.req.json();
+      if (!transaction.id) {
+          transaction.id = crypto.randomUUID();
+      }
+      const previousTransaction = await kv.get(`transaction:${transaction.id}`);
+      if (!transaction.timestamp) {
+          transaction.timestamp = new Date().toISOString();
+      }
+
+      // Drivers submit Fuel/expenses from the Play Store app; fleet staff use transactions.edit.
+      // Do not use blanket requirePermission — drivers intentionally have an empty permission list.
+      {
+        const rbacUser = c.get("rbacUser") as RbacUser | undefined;
+        if (!rbacUser) {
+          return c.json({ error: "Unauthorized: No user context" }, 401);
+        }
+        const canFleetEdit = hasPermission(rbacUser.resolvedRole, "transactions.edit");
+        const isDriverSelfExpense = await driverMayPostSelfExpense(
+          rbacUser,
+          transaction as Record<string, unknown>,
+          previousTransaction as Record<string, unknown> | null | undefined,
+        );
+        if (!canFleetEdit && !isDriverSelfExpense) {
+          console.log(
+            `[RBAC] FORBIDDEN: User ${rbacUser.userId} (role=${rbacUser.resolvedRole}) POST /transactions denied (not fleet editor / not self-expense)`,
+          );
+          return c.json(
+            {
+              error: "Forbidden",
+              message: 'You do not have the "transactions.edit" permission.',
+              required: "transactions.edit",
+              currentRole: rbacUser.resolvedRole,
+            },
+            403,
+          );
+        }
+      }
+
+      // Admin manual cash fuel: book as Expense debit (not positive Fuel_Manual_Entry credit).
+      if (normalizeAdminCashFuelTransaction(transaction)) {
+          console.log(
+              `[FuelLedger] Normalized admin cash fuel tx ${transaction.id} → Expense ${transaction.amount}`,
+          );
+      }
+
+      // Future-Date Guard: flag transactions with dates beyond today
+      if (transaction.date) {
+          const txDate = new Date(transaction.date);
+          const tomorrow = new Date();
+          tomorrow.setDate(tomorrow.getDate() + 1);
+          tomorrow.setHours(23, 59, 59, 999);
+          if (!isNaN(txDate.getTime()) && txDate > tomorrow) {
+              console.log(`[FutureDateGuard] Transaction ${transaction.id} has future date: ${transaction.date}`);
+              if (!transaction.metadata) transaction.metadata = {};
+              transaction.metadata._futureDateWarning = true;
+              transaction.metadata._originalDate = transaction.date;
+          }
+      }
+
+      // S1-1: settlement desk posts must require transactions.edit (was JWT-only).
+      if (isSettlementDeskCategory(transaction.category)) {
+          const rbacUser = c.get("rbacUser") as RbacUser | undefined;
+          if (!rbacUser || !hasPermission(rbacUser.resolvedRole, "transactions.edit")) {
+              return c.json(
+                  {
+                      error: "Forbidden",
+                      message:
+                          'Posting settlement desk transactions (collect / pay / write-off) requires the "transactions.edit" permission.',
+                      required: "transactions.edit",
+                  },
+                  403,
+              );
+          }
+      }
+
+      // ── InDrive Wallet Credit (Phase 3) — fleet top-up to driver InDrive digital wallet
+      // Ledger: wallet_credit inflow; platform InDrive; see generateTransactionLedgerEntry.
+      // Phase 8: same permission as other transaction writes (Phase 1.5 ADR: transactions.edit).
+      const INDRIVE_WALLET_CATEGORY = "InDrive Wallet Credit";
+      if (transaction.category === INDRIVE_WALLET_CATEGORY) {
+          const rbacUser = c.get("rbacUser") as RbacUser | undefined;
+          if (!rbacUser || !hasPermission(rbacUser.resolvedRole, "transactions.edit")) {
+              return c.json(
+                  {
+                      error: "Forbidden",
+                      message:
+                          'Logging InDrive wallet loads requires the "transactions.edit" permission (same as editing transactions).',
+                      required: "transactions.edit",
+                  },
+                  403
+              );
+          }
+          const amt = Number(transaction.amount);
+          if (!Number.isFinite(amt) || amt <= 0) {
+              return c.json({ error: "InDrive Wallet Credit requires a positive, finite amount" }, 400);
+          }
+          if (!transaction.driverId || String(transaction.driverId).trim() === "") {
+              return c.json({ error: "InDrive Wallet Credit requires driverId" }, 400);
+          }
+          if (transaction.type === "Expense" || transaction.type === "Payout") {
+              return c.json(
+                  {
+                      error:
+                          "InDrive Wallet Credit cannot use type Expense or Payout — use Adjustment so the ledger records an inflow",
+                  },
+                  400
+              );
+          }
+          if (transaction.type && transaction.type !== "Adjustment") {
+              return c.json(
+                  { error: "InDrive Wallet Credit must use type Adjustment" },
+                  400
+              );
+          }
+          if (!transaction.type) transaction.type = "Adjustment";
+          if (transaction.platform && transaction.platform !== "InDrive") {
+              return c.json({ error: "InDrive Wallet Credit requires platform InDrive" }, 400);
+          }
+          transaction.platform = "InDrive";
+          if (!transaction.description?.trim()) {
+              transaction.description = "Fleet load — InDrive digital wallet";
+          }
+          if (!transaction.status) transaction.status = "Completed";
+          if (transaction.isReconciled === undefined || transaction.isReconciled === null) {
+              transaction.isReconciled = true;
+          }
+          if (!transaction.paymentMethod) transaction.paymentMethod = "Digital Wallet";
+      }
+
+      const genericTransactionPreview = buildCanonicalGenericTransactionEvent(transaction);
+      const isCashRetag = Boolean(transaction?.metadata?.cashRetag);
+      if (genericTransactionPreview || isCashRetag) {
+        const rbacUser = c.get("rbacUser") as RbacUser | undefined;
+        if (!rbacUser || !hasPermission(rbacUser.resolvedRole, "transactions.edit")) {
+          return c.json(
+            {
+              error: "Forbidden",
+              message: 'Posting business expenses/income or applying cash retags requires the "transactions.edit" permission.',
+              required: "transactions.edit",
+            },
+            403,
+          );
+        }
+      }
+
+      const txOrgId = getOrgId(c) || transaction.organizationId;
+      const isFuelCategoryTx =
+        transaction.category === "Fuel" || transaction.category === "Fuel Reimbursement";
+      if (isFuelCategoryTx && transaction.driverId) {
+        const withVehicle = await enrichRecordWithDriverVehicle(transaction, txOrgId);
+        Object.assign(transaction, withVehicle);
+      }
+
+      // Auto-Approve Logic for AI Verified Fuel
+      const isFuel = transaction.category === 'Fuel' || transaction.category === 'Fuel Reimbursement';
+      const isAiVerified = transaction.metadata?.odometerMethod === 'ai_verified';
+
+      // Hoisted for cross-block access: GPS matching populates these, fuel_entry block reads them
+      let smartMatchedStation: any = null;
+      let smartMatchConfidence = 'none';
+      let smartMatchDistance: number = Infinity;
+      let allStationsCache: any[] = [];
+
+      if (isFuel) {
+          // --- GEOLOCATION MATCHING (Smart Ambiguity-Aware — replaces dual 150m calls) ---
+          const locationMetadata = transaction.metadata?.locationMetadata;
+          if (locationMetadata?.lat && locationMetadata?.lng) {
+              try {
+                  // Fetch all stations from KV (single load, reused below)
+                  const stationsRaw = await kv.getByPrefix("station:");
+                  allStationsCache = stationsRaw || [];
+
+                  // Single smart match against ALL stations at 600m with ambiguity detection
+                  const smartResult = findMatchingStationSmart(
+                      locationMetadata.lat,
+                      locationMetadata.lng,
+                      allStationsCache,
+                      600,
+                      locationMetadata.accuracy || 0
+                  );
+
+                  smartMatchConfidence = smartResult.confidence;
+                  smartMatchDistance = smartResult.distance;
+
+                  if (smartResult.station && (smartResult.confidence === 'high' || smartResult.confidence === 'medium')) {
+                      const matched = smartResult.station as any;
+
+                      if (matched.status === 'verified') {
+                          // Verified station match — full linkage
+                          smartMatchedStation = matched;
+                          transaction.metadata.matchedStationId = matched.id;
+                          transaction.metadata.locationStatus = 'verified';
+                          transaction.metadata.verificationMethod = 'gps_smart_matching';
+                          transaction.metadata.matchDistance = smartResult.distance;
+                          transaction.metadata.matchConfidence = smartResult.confidence;
+                          console.log(`[SmartGeoMatch] Matched Verified station: "${matched.name}" (${matched.id}) at ${smartResult.distance}m [${smartResult.confidence}]`);
+                      } else {
+                          // Unverified station — record the suggested match for admin review,
+                          // but do NOT promote the station or mark the entry as verified.
+                          // Admin must manually approve stations before they become verified.
+                          transaction.metadata.suggestedStationId = matched.id;
+                          transaction.metadata.suggestedStationName = matched.name;
+                          transaction.metadata.locationStatus = 'unverified';
+                          transaction.metadata.verificationMethod = 'gps_matched_unverified_station';
+                          transaction.metadata.matchDistance = smartResult.distance;
+                          transaction.metadata.matchConfidence = smartResult.confidence;
+
+                          // Update visit stats on the unverified station (for admin reference when reviewing)
+                          matched.stats = {
+                              ...(matched.stats || {}),
+                              totalVisits: ((matched.stats?.totalVisits) || 0) + 1,
+                              lastUpdated: new Date().toISOString()
+                          };
+                          await kv.set(`station:${matched.id}`, stampOrg(matched, c));
+
+                          console.log(`[SmartGeoMatch] GPS matched Unverified station "${matched.name}" (${matched.id}) at ${smartResult.distance}m — NOT promoting, awaiting admin approval.`);
+                      }
+                  } else if (smartResult.confidence === 'ambiguous') {
+                      // GPS is near multiple stations — flag for management review, do NOT guess
+                      if (!transaction.metadata) transaction.metadata = {};
+                      transaction.metadata.locationStatus = 'review_required';
+                      transaction.metadata.verificationMethod = 'gps_ambiguous';
+                      transaction.metadata.ambiguityReason = smartResult.ambiguityReason;
+                      transaction.metadata.matchConfidence = 'ambiguous';
+                      transaction.metadata.matchDistance = smartResult.distance;
+                      console.log(`[SmartGeoMatch] Ambiguous match — flagged for review. ${smartResult.ambiguityReason}`);
+                  } else {
+                      // No match at all — create Learnt Location (preserved from original)
+                      if (!transaction.metadata) transaction.metadata = {};
+                      transaction.metadata.locationStatus = 'unverified';
+
+                      let learntId = transaction.metadata.learntLocationId as string | undefined;
+                      if (!learntId) {
+                          learntId = crypto.randomUUID();
+                          const learntLocation = {
+                              id: learntId,
+                              name: transaction.vendor || transaction.description || 'Unknown Station',
+                              parentCompany: transaction.metadata?.parentCompany,
+                              location: {
+                                  lat: locationMetadata.lat,
+                                  lng: locationMetadata.lng,
+                                  accuracy: locationMetadata.accuracy
+                              },
+                              timestamp: new Date().toISOString(),
+                              transactionId: transaction.id,
+                              status: 'learnt'
+                          };
+                          await kv.set(`learnt_location:${learntId}`, stampOrg(learntLocation, c));
+                          console.log(`[SmartGeoMatch] No station match — created Learnt Location: ${learntId}`);
+                      } else {
+                          console.log(`[SmartGeoMatch] Reusing Learnt Location ${learntId} for transaction ${transaction.id} (no duplicate create)`);
+                      }
+                      transaction.metadata.learntLocationId = learntId;
+                  }
+                  // No automatic merchant attach — Dominion Silent Attach is manual-only.
+              } catch (err) {
+                  console.error("Geolocation Smart Matching Error:", err);
+              }
+          }
+
+          // Manual Station Pick: If the form pre-selected a verified station (no GPS needed),
+          // set locationStatus so the blue shield badge appears in FuelLogTable.
+          if (!transaction.metadata?.locationStatus && (transaction.matchedStationId || transaction.metadata?.matchedStationId)) {
+              if (!transaction.metadata) transaction.metadata = {};
+              transaction.metadata.locationStatus = 'verified';
+              transaction.metadata.verificationMethod = 'manual_station_picker';
+              transaction.metadata.matchedStationId = transaction.matchedStationId || transaction.metadata.matchedStationId;
+              console.log(`[ManualStationPick] Verified station linked via form picker: ${transaction.metadata.matchedStationId}`);
+          }
+
+          // --- CUMULATIVE LITERS & INTEGRITY LOGIC (Phase 1 & 2) ---
+          const vehicleId = transaction.vehicleId;
+          const volume = Number(transaction.quantity) || Number(transaction.metadata?.fuelVolume) || 0;
+          
+          if (vehicleId) {
+              // Fetch vehicle for tank capacity
+              const vehicle = await kv.get(`vehicle:${vehicleId}`);
+              const tankCapacity = fuelLogic.resolveTankCapacity(vehicle);
+
+              // Fetch last transactions to calculate cumulative
+              const { data: lastTxData } = await fromKvStore()
+                  .select("value")
+                  .like("key", "transaction:%")
+                  .eq("value->>vehicleId", vehicleId)
+                  .order("value->>date", { ascending: false })
+                  .limit(10);
+              
+              const lastTransactions = (lastTxData || []).map((d: any) => d.value);
+              
+              // Find the last "Anchor" (Full Tank or Soft Anchor)
+              let cumulative = volume;
+              let lastAnchorOdo = 0;
+              let lastAnchorTx = null;
+              
+              for (const tx of lastTransactions) {
+                  // Check for various anchor types
+                  if (tx.metadata?.isFullTank || tx.metadata?.isAnchor || tx.metadata?.isSoftAnchor) {
+                      lastAnchorOdo = Number(tx.odometer) || 0;
+                      lastAnchorTx = tx;
+                      break;
+                  }
+                  cumulative += (Number(tx.quantity) || Number(tx.metadata?.fuelVolume) || 0);
+              }
+
+              // Calculate distance since last anchor
+              const currentOdo = Number(transaction.odometer) || 0;
+              const distanceSinceAnchor = (currentOdo > 0 && lastAnchorOdo > 0) ? (currentOdo - lastAnchorOdo) : 0;
+
+              transaction.metadata = {
+                  ...transaction.metadata,
+                  cumulativeLitersAtEntry: Number(cumulative.toFixed(2)),
+                  tankCapacityAtEntry: tankCapacity,
+                  distanceSinceAnchor: distanceSinceAnchor,
+                  integrityStatus: 'valid'
+              };
+
+              // Rule 1: Tank Overflow (Physical Impossibility Check)
+              // We only flag this if a SINGLE transaction exceeds the tank capacity + buffer.
+              // Previously, this checked cumulative volume, which was incorrect as it flagged legitimate
+              // multiple partial fills as an overflow.
+              const singleTxOverflow = (Number(transaction.quantity) || 0) > (tankCapacity * 1.10);
+              
+              if (tankCapacity > 0 && singleTxOverflow) {
+                  transaction.metadata.integrityStatus = 'critical';
+                  transaction.metadata.anomalyReason = 'Tank Overflow: Single transaction exceeds tank capacity';
+              }
+
+              // Step 2.3: Capacity full close (98% spine — classifyAnchor + cycleId)
+              const prevCum = Math.max(0, cumulative - volume);
+              const cyclePeers: any[] = [];
+              for (const tx of lastTransactions) {
+                  const m = tx.metadata || {};
+                  if (m.isSoftAnchor || m.isAnchor || m.isCapacityClose || m.isFullTank) break;
+                  cyclePeers.push(tx);
+              }
+              const openCycleId = fuelLogic.resolveCycleIdForOpenCycle(
+                  cyclePeers.map((t: any) => ({ metadata: t.metadata })),
+              );
+
+              const anchor = fuelLogic.classifyAnchor({
+                  prevCumulative: prevCum,
+                  volume,
+                  tankCapacity,
+                  entryType: transaction.type || transaction.metadata?.entryType,
+                  paymentSource: transaction.paymentSource || transaction.metadata?.paymentSource,
+              });
+
+              transaction.metadata.cycleId = openCycleId;
+              delete transaction.metadata.isHardAnchor;
+              if (anchor.isCapacityClose || anchor.isSoft) {
+                  transaction.metadata.isSoftAnchor = true;
+                  transaction.metadata.isCapacityClose = true;
+                  transaction.metadata.isFullTank = true; // derived capacity full
+                  transaction.metadata.isAnchor = true;
+                  transaction.metadata.volumeContributed = Number(anchor.volumeContributed.toFixed(2));
+                  transaction.metadata.excessVolume = anchor.excessVolume > 0 ? Number(anchor.excessVolume.toFixed(2)) : undefined;
+                  transaction.metadata.softAnchorNote = `Capacity full: cumulative reached ${Math.round(fuelLogic.SOFT_ANCHOR_THRESHOLD * 100)}% of tank; spillover ${transaction.metadata.excessVolume || 0}L.`;
+              } else {
+                  transaction.metadata.isSoftAnchor = false;
+                  transaction.metadata.isCapacityClose = false;
+                  transaction.metadata.isFullTank = false;
+                  transaction.metadata.isAnchor = false;
+              }
+
+              // --- Phase 3: Fuel Economy & Velocity Algorithms ---
+              
+              // Step 3.1: Real-time Economy Calculation (L/100km)
+              // We only calculate this when we hit an anchor (Full Tank or Soft Anchor) 
+              // because we need a complete window to be accurate.
+              if (transaction.metadata.isAnchor && distanceSinceAnchor > 0) {
+                  const consumption = (cumulative / distanceSinceAnchor) * 100;
+                  transaction.metadata.calculatedEconomy = Number(consumption.toFixed(2));
+                  
+                  // Compare against baseline (Toyota Roomy ~6.5L/100km)
+                  const baseline = Number(vehicle?.fuelSettings?.efficiencyCity) || 6.5; 
+                  if (consumption > (baseline * 1.25)) {
+                      transaction.metadata.integrityStatus = 'warning';
+                      transaction.metadata.anomalyReason = (transaction.metadata.anomalyReason || '') + ' High Fuel Consumption Detected;';
+                  }
+              }
+
+              // Step 3.3: Fragmented Purchase Detection
+              // Flag small purchases (< 5L) which are often used to mask larger theft
+              if (volume > 0 && volume < 5) {
+                  transaction.metadata.integrityStatus = transaction.metadata.integrityStatus === 'valid' ? 'warning' : transaction.metadata.integrityStatus;
+                  transaction.metadata.anomalyReason = (transaction.metadata.anomalyReason || '') + ' Fragmented Purchase (<5L);';
+              }
+
+              // Check for high frequency (more than 2 entries in 24h)
+              const entriesLast24h = lastTransactions.filter(tx => {
+                  const txDate = new Date(tx.date);
+                  const now = new Date();
+                  return (now.getTime() - txDate.getTime()) < (24 * 60 * 60 * 1000);
+              }).length;
+
+              if (entriesLast24h >= 2) {
+                  transaction.metadata.integrityStatus = transaction.metadata.integrityStatus === 'valid' ? 'warning' : transaction.metadata.integrityStatus;
+                  transaction.metadata.anomalyReason = (transaction.metadata.anomalyReason || '') + ' High Transaction Frequency;';
+              }
+
+              // Step 3.2: Fuel Velocity Check ($ spend per km)
+              // Look at total spend vs distance over the last 10 entries
+              if (lastTransactions.length >= 3) {
+                  const totalSpendInWindow = lastTransactions.reduce((sum, tx) => sum + Math.abs(Number(tx.amount) || 0), Math.abs(Number(transaction.amount) || 0));
+                  const minOdo = Math.min(...lastTransactions.map(tx => Number(tx.odometer)).filter(o => o > 0));
+                  const totalDistInWindow = (currentOdo > 0 && minOdo > 0) ? (currentOdo - minOdo) : 0;
+                  
+                  if (totalDistInWindow > 50) { // Only calculate if we have significant distance
+                      const velocity = totalSpendInWindow / totalDistInWindow;
+                      transaction.metadata.fuelVelocity = Number(velocity.toFixed(3));
+                      
+                      // Flag if spend rate is > $0.25/km (approx based on typical fleet benchmarks)
+                      if (velocity > 0.25) {
+                          transaction.metadata.integrityStatus = transaction.metadata.integrityStatus === 'valid' ? 'warning' : transaction.metadata.integrityStatus;
+                          transaction.metadata.anomalyReason = (transaction.metadata.anomalyReason || '') + ' High Fuel Velocity ($/km);';
+                      }
+                  }
+              }
+          }
+      }
+
+      if (isFuel && transaction.status === 'Pending') {
+          // STATION VERIFICATION GATE: ALL fuel logs must pass station verification.
+          // If the station is not verified, hold the transaction for admin review
+          // via Learnt Locations tab — regardless of odometer method (AI or manual).
+          const locationStatus = transaction.metadata?.locationStatus;
+          if (locationStatus !== 'verified') {
+              transaction.status = 'Pending';
+              transaction.metadata = {
+                  ...transaction.metadata,
+                  stationGateHold: true,
+                  holdReason: 'Unverified station — awaiting admin review from Learnt Locations',
+                  holdTimestamp: new Date().toISOString(),
+                  decisionReason: 'HOLD_STATION',
+                  // Ensure needsLogReview is set for non-AI odometer methods (belt-and-suspenders)
+                  needsLogReview: (!isAiVerified) ? true : (transaction.metadata?.needsLogReview || undefined),
+              };
+              console.log(`[StationGate] Transaction ${transaction.id} held — station locationStatus="${locationStatus || 'none'}", skipping auto-approval and fuel entry creation.`);
+              
+              // Phase 6: Toll transactions write ONLY to toll_ledger, not transaction:*
+              if (isTollCategoryServer(transaction.category)) {
+                  await writeTollToLedger(transaction, c);
+                  return c.json({ success: true, transaction, held: true, reason: 'station_unverified' });
+              }
+              
+              await kv.set(`transaction:${transaction.id}`, stampOrg(transaction, c));
+              return c.json({ success: true, transaction, held: true, reason: 'station_unverified' });
+          }
+
+          // Station is verified — but only auto-approve + create fuel entry if AI-verified.
+          // Manual/non-AI entries with a verified station pass the gate but stay Pending for admin.
+          if (!isAiVerified) {
+              const adminOdoSkipLogReview = isAdminManualFuelWithProvidedOdometer(transaction);
+              if (adminOdoSkipLogReview) {
+                  const nextMeta = { ...transaction.metadata };
+                  delete nextMeta.needsLogReview;
+                  delete nextMeta.logReviewReason;
+                  transaction.metadata = nextMeta;
+                  console.log(
+                      `[StationGate] Transaction ${transaction.id} admin manual with odometer — Pending (skipping Log Review). odometerMethod="${transaction.metadata?.odometerMethod || "none"}"`,
+                  );
+              } else {
+                  console.log(`[StationGate] Transaction ${transaction.id} passed station gate (verified) but odometerMethod="${transaction.metadata?.odometerMethod || 'none'}" — staying Pending for admin review.`);
+                  // Server-side safety: ensure needsLogReview is set for non-AI odometer methods
+                  transaction.metadata = {
+                      ...transaction.metadata,
+                      needsLogReview: true,
+                      decisionReason: 'REVIEW_ODO',
+                      logReviewReason: transaction.metadata?.logReviewReason
+                          || (transaction.metadata?.odometerMethod === 'photo_review'
+                              ? 'AI scan failed — odometer photo pending admin review'
+                              : 'Manual odometer override — pending admin verification'),
+                  };
+              }
+              // Phase 6: Toll transactions write ONLY to toll_ledger, not transaction:*
+              if (isTollCategoryServer(transaction.category)) {
+                  await writeTollToLedger(transaction, c);
+                  return c.json({ success: true, data: transaction });
+              }
+              
+              await kv.set(`transaction:${transaction.id}`, stampOrg(transaction, c));
+              return c.json({ success: true, data: transaction });
+          }
+
+          // Posted guarantee: never Approve without a linked fuel_entry
+          const autoResult = await ensureFuelEntryForApprovedTx(transaction, {
+              source: 'Fuel Log',
+              stationName: smartMatchedStation?.name,
+              matchedStation: smartMatchedStation,
+              decisionReason: 'AUTO_AI_STATION',
+              stamp: (rec) => stampOrg(rec, c),
+              afterPersist: async (fe) => {
+                  await appendCanonicalFuelExpenseIfEligible(fe, c);
+              },
+          });
+
+          if (autoResult.blockedNoVehicle) {
+              transaction.status = 'Pending';
+              transaction.isReconciled = false;
+              transaction.metadata = {
+                  ...transaction.metadata,
+                  decisionReason: 'BLOCKED_NO_VEHICLE',
+                  needsLogReview: true,
+                  logReviewReason: 'Cannot post fuel log — vehicle not assigned. Assign a vehicle then approve.',
+              };
+              console.warn(
+                  `[FuelEntry] BLOCKED_NO_VEHICLE for transaction ${transaction.id} — staying Pending`,
+              );
+          } else {
+              transaction.status = 'Approved';
+              transaction.isReconciled = true;
+              transaction.metadata = {
+                  ...transaction.metadata,
+                  approvedAt: new Date().toISOString(),
+                  approvalReason: 'Auto-approved via AI Odometer Scan',
+                  notes: (transaction.metadata?.notes || '') + ' [AI Verified]',
+                  decisionReason: 'AUTO_AI_STATION',
+              };
+          }
+      }
+
+      // Phase 6: Toll transactions write ONLY to toll_ledger, not transaction:*
+      if (isTollCategoryServer(transaction.category)) {
+          await writeTollToLedger(transaction, c);
+          return c.json({ success: true, data: transaction });
+      }
+      
+      await kv.set(`transaction:${transaction.id}`, stampOrg(transaction, c));
+
+      // ── Canonical ledger for wallet + generic business transactions ──
+      // Rebuild only these categories on edit; specialized Fuel/Toll writers keep
+      // their existing source rows untouched.
+      const previousGeneric = previousTransaction && typeof previousTransaction === "object"
+        ? buildCanonicalGenericTransactionEvent(previousTransaction as Record<string, unknown>)
+        : null;
+      const nextGeneric = genericTransactionPreview;
+      const previousWasWallet =
+        previousTransaction && typeof previousTransaction === "object"
+          ? (previousTransaction as Record<string, unknown>).category === "InDrive Wallet Credit"
+          : false;
+      const nextIsWallet = transaction.category === "InDrive Wallet Credit";
+      if (previousGeneric || nextGeneric || previousWasWallet || nextIsWallet) {
+        await deleteCanonicalLedgerBySource("transaction", [String(transaction.id)]);
+      }
+      if (nextIsWallet) {
+          await appendCanonicalWalletCreditIfEligible(transaction, c);
+      } else if (nextGeneric) {
+          await appendCanonicalGenericTransactionIfEligible(transaction, c);
+      }
+
+      // ── Settlement projection sync (Cash Wallet "Cash still owed" SSOT) ──
+      // driver_financial_periods.cash_returned only changes on rebuild; without this,
+      // Log Cash / edits / verifies never move the projected week. Rebuild the tagged
+      // Settlement Week anchors (new + previous when retagged). Non-fatal on error.
+      await rebuildFinancialPeriodsForCashTx(transaction, previousTransaction);
+
+      // Mirror cleared Log Cash / Driver Payout into settlement_movements so Done
+      // never loses cash history when the Collect command ledger also has rows.
+      try {
+        const { syncSettlementMovementFromCashTx } = await import("./settlement_cash_mirror.ts");
+        const orgId = getOrgId(c) || String(transaction.organizationId || transaction.orgId || "") || null;
+        await syncSettlementMovementFromCashTx(transaction, orgId);
+        if (previousTransaction && typeof previousTransaction === "object") {
+          await syncSettlementMovementFromCashTx(previousTransaction, orgId);
+        }
+      } catch (mirrorErr) {
+        console.warn("[transactions] settlement_movements mirror failed (non-fatal)", mirrorErr);
+      }
+
+      return c.json({ success: true, data: transaction });
+    } catch (e: any) {
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  /** True when a KV `transaction:*` row may be deleted by users who have fuel.delete_entry but not transactions.edit. */
+  function transactionDeletableWithFuelDeletePermission(tx: unknown): boolean {
+    if (tx == null) return true;
+    if (typeof tx !== "object") return false;
+    const rec = tx as Record<string, unknown>;
+    const id = typeof rec.id === "string" ? rec.id : "";
+    if (id.startsWith("fuel-credit-")) return true;
+    const cat = typeof rec.category === "string" ? rec.category.toLowerCase() : "";
+    if (cat.includes("fuel")) return true;
+    if (cat.includes("reimbursement")) return true;
+    return false;
+  }
+
+  async function requireDeleteTransactionPermission(c: Context, next: Next) {
+    const user = c.get("rbacUser") as RbacUser | undefined;
+    if (!user) {
+      return c.json({ error: "Unauthorized: No user context" }, 401);
+    }
+    if (hasPermission(user.resolvedRole, "transactions.edit")) {
+      return next();
+    }
+    if (!hasPermission(user.resolvedRole, "fuel.delete_entry")) {
+      return c.json(
+        {
+          error: "Forbidden",
+          message:
+            'Deleting transactions requires "transactions.edit", or "fuel.delete_entry" for fuel reimbursement rows.',
+          required: "transactions.edit",
+          currentRole: user.resolvedRole,
+        },
+        403,
+      );
+    }
+    const id = c.req.param("id");
+    const tx = await kv.get(`transaction:${id}`);
+    if (!transactionDeletableWithFuelDeletePermission(tx)) {
+      return c.json(
+        {
+          error: "Forbidden",
+          message:
+            "This transaction is not a fuel reimbursement class record; use a role with transactions.edit to delete it.",
+          currentRole: user.resolvedRole,
+        },
+        403,
+      );
+    }
+    return next();
+  }
+
+  app.delete("/make-server-37f42386/transactions/:id", requireAuth({ requireOrg: true }), requireDeleteTransactionPermission, async (c) => {
+    const id = c.req.param("id");
+    try {
+      const callerOrgId = getOrgId(c);
+      const cascadeParam = (c.req.query("cascade") || "").toLowerCase();
+      const cascade = cascadeParam !== "false" && cascadeParam !== "0";
+
+      // Phase 6: Check toll_ledger first (tolls are now stored there, not in transaction:*)
+      const tollEntry = await getTollLedgerEntry(id);
+      if (tollEntry) {
+        // S1-2b: org ownership before mutating another tenant's money row.
+        if (!mayMutateTransactionOrg(tollEntry.organizationId, callerOrgId)) {
+          return c.json({ error: "Not found" }, 404);
+        }
+        await deleteTollLedgerEntry(id);
+        console.log(`[TollLedger] Deleted toll_ledger:${id}`);
+        return c.json({ success: true, deletedTransactionIds: [id] });
+      }
+
+      const tx = await kv.get(`transaction:${id}`);
+      if (!tx || typeof tx !== "object") {
+        return c.json({ error: "Not found" }, 404);
+      }
+      const primaryTx = tx as Record<string, unknown>;
+      // S1-2b: cross-tenant IDOR guard — never delete another org's transaction by id.
+      if (!mayMutateTransactionOrg(primaryTx.organizationId, callerOrgId)) {
+        return c.json({ error: "Not found" }, 404);
+      }
+
+      const deletedTransactionIds: string[] = [];
+      let deletedFuelEntryId: string | undefined;
+
+      const deleteOneTxRow = async (rowId: string, row: unknown) => {
+        if (isEvidenceTtlEnabled() && row) {
+          const urls = extractEvidenceUrlsFromRecord(row);
+          await cleanupEphemeralPathsOnDelete(supabase, urls);
+        }
+        await kv.del(`transaction:${rowId}`);
+        try {
+          await deleteCanonicalLedgerBySource("transaction", [rowId]);
+        } catch (ledgerErr: any) {
+          console.warn(
+            `[DELETE /transactions/:id] Ledger cleanup failed (non-fatal) tx=${rowId}:`,
+            ledgerErr?.message,
+          );
+        }
+        if (row) {
+          await rebuildFinancialPeriodsForCashTx(row, null);
+        }
+        deletedTransactionIds.push(rowId);
+      };
+
+      // R8: fuel-class deletes cascade to linked fill + wallet credit by default.
+      if (cascade && transactionDeletableWithFuelDeletePermission(primaryTx)) {
+        const parentEntry = await resolveParentFuelEntry(kv, primaryTx);
+        let relatedTxIds: string[] = [];
+        if (parentEntry) {
+          const driverId =
+            typeof parentEntry.driverId === "string" ? parentEntry.driverId.trim() : "";
+          const dayRaw = String(parentEntry.date || primaryTx.date || "");
+          const day = dayRaw.includes("T") ? dayRaw.split("T")[0] : dayRaw.slice(0, 10);
+          try {
+            let q = fromKvStore()
+              .select("value")
+              .like("key", "transaction:%")
+              .limit(500);
+            if (callerOrgId) {
+              q = q.eq("value->>organizationId", callerOrgId);
+            }
+            if (driverId) {
+              q = q.eq("value->>driverId", driverId);
+            }
+            if (day && /^\d{4}-\d{2}-\d{2}$/.test(day)) {
+              q = q.gte("value->>date", day).lte("value->>date", `${day}\uffff`);
+            }
+            const { data } = await q;
+            const candidates = (data || [])
+              .map((d: { value?: unknown }) => d?.value)
+              .filter((v: unknown): v is Record<string, unknown> => !!v && typeof v === "object");
+            relatedTxIds = collectRelatedTxIdsForEntry(parentEntry, candidates);
+          } catch (scanErr: any) {
+            console.warn(
+              `[DELETE /transactions/:id] Related-tx scan failed (non-fatal) tx=${id}:`,
+              scanErr?.message,
+            );
+            relatedTxIds = [];
+          }
+        }
+
+        const plan = buildFuelTxCascadePlan({
+          primaryId: id,
+          parentEntry,
+          relatedTxIds,
+        });
+
+        // Delete related ledger rows first (primary included); then fuel_entry.
+        for (const tid of plan.transactionIds) {
+          if (tid === id) {
+            await deleteOneTxRow(id, primaryTx);
+            continue;
+          }
+          const other = await kv.get(`transaction:${tid}`);
+          if (!other || typeof other !== "object") continue;
+          const otherRec = other as Record<string, unknown>;
+          if (!mayMutateTransactionOrg(otherRec.organizationId, callerOrgId)) continue;
+          await deleteOneTxRow(tid, otherRec);
+        }
+
+        if (plan.fuelEntryId) {
+          const entryKey = `fuel_entry:${plan.fuelEntryId}`;
+          const entryRow = await kv.get(entryKey);
+          if (entryRow && typeof entryRow === "object") {
+            if (mayMutateTransactionOrg((entryRow as Record<string, unknown>).organizationId, callerOrgId)) {
+              await kv.del(entryKey);
+              try {
+                await deleteCanonicalLedgerBySource("transaction", [plan.fuelEntryId]);
+              } catch (le: any) {
+                console.warn(
+                  `[DELETE /transactions/:id] Fuel entry ledger cleanup failed (non-fatal) entry=${plan.fuelEntryId}:`,
+                  le?.message,
+                );
+              }
+              deletedFuelEntryId = plan.fuelEntryId;
+            }
+          }
+        }
+
+        return c.json({
+          success: true,
+          deletedTransactionIds,
+          deletedFuelEntryId: deletedFuelEntryId ?? null,
+          cascaded: true,
+        });
+      }
+
+      await deleteOneTxRow(id, primaryTx);
+      return c.json({
+        success: true,
+        deletedTransactionIds,
+        deletedFuelEntryId: null,
+        cascaded: false,
+      });
+    } catch (e: any) {
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  /** Bulk-delete canonical ledger rows by source (used by Data Center trip bulk delete). */
+  app.post(
+    "/make-server-37f42386/ledger/delete-by-source",
+    requireAuth(),
+    requirePermission("transactions.edit"),
+    async (c) => {
+      try {
+        const body = await c.req.json().catch(() => ({}));
+        const sourceType = typeof body?.sourceType === "string" ? body.sourceType.trim() : "";
+        const sourceIds = Array.isArray(body?.sourceIds)
+          ? body.sourceIds.map((x: unknown) => String(x).trim()).filter(Boolean)
+          : [];
+        if (!sourceType || sourceIds.length === 0) {
+          return c.json({ error: "sourceType and non-empty sourceIds[] required" }, 400);
+        }
+        const result = await deleteCanonicalLedgerBySource(sourceType, sourceIds);
+        return c.json({ success: true, ...result });
+      } catch (e: any) {
+        return c.json({ error: e.message }, 500);
+      }
+    },
+  );
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // WRITE-TIME LEDGER ENDPOINTS
+  // ═══════════════════════════════════════════════════════════════════════
+
+  const VALID_LEDGER_EVENT_TYPES = new Set([
+    'fare_earning', 'tip', 'prior_period_adjustment', 'surge_bonus', 'fuel_expense', 'fuel_reimbursement',
+    'toll_charge', 'toll_refund', 'maintenance', 'insurance', 'driver_payout',
+    'promotion', 'refund_expense',
+    'cash_collection', 'platform_fee', 'wallet_credit', 'wallet_debit',
+    'cancelled_trip_loss', 'adjustment', 'other',
+  ]);
+  const VALID_LEDGER_DIRECTIONS = new Set(['inflow', 'outflow']);
+
+  // GET /ledger registered via registerLedgerQuerySummaryRoutes(app)
+  // GET /ledger/count registered via registerLedgerQuerySummaryRoutes(app)
+
+  /** Whether a canonical ledger row's source record still exists in KV. */
+  async function canonicalLedgerSourceStillExists(sourceType: string, sourceId: string): Promise<boolean> {
+    const sid = String(sourceId).trim();
+    if (!sid) return false;
+    switch (sourceType) {
+      case "trip":
+        return !!(await kv.get(`trip:${sid}`));
+      case "import_batch":
+        return !!(await kv.get(`batch:${sid}`));
+      case "transaction": {
+        if (await kv.get(`transaction:${sid}`)) return true;
+        if (await kv.get(`fuel_entry:${sid}`)) return true;
+        const toll = await getTollLedgerEntry(sid);
+        return !!toll;
+      }
+      case "adjustment":
+      case "reconciliation":
+      case "statement":
+        return true;
+      default:
+        return true;
+    }
+  }
+
+  // ─── GET /admin/ledger-source-orphan-audit — RETIRED ─────
+  app.get(
+    "/make-server-37f42386/admin/ledger-source-orphan-audit",
+    requireAuth(),
+    requirePermission("data.backfill"),
+    async (c) => c.json({ error: "Retired: ledger_event KV orphan audit removed. SSOT is ledger.entries.", retired: true }, 410),
+  );
+
+  // ─── POST /admin/ledger-source-orphan-cleanup — RETIRED ─────
+  app.post(
+    "/make-server-37f42386/admin/ledger-source-orphan-cleanup",
+    requireAuth(),
+    requirePermission("data.backfill"),
+    async (c) => c.json({ error: "Retired: ledger_event KV orphan cleanup removed. SSOT is ledger.entries.", retired: true }, 410),
+  );
+
+  // ─── POST /ledger/purge-legacy-all — Delete all `ledger:%` KV rows (one-time cleanup) ─────
+  app.post("/make-server-37f42386/ledger/purge-legacy-all", requireAuth(), requirePermission("data.backfill"), async (c) => {
+    try {
+      const body = await c.req.json().catch(() => ({}));
+      const dryRun = body?.dryRun === true;
+      if (!dryRun && body?.confirm !== "DELETE_ALL_LEGACY_LEDGER_KV") {
+        return c.json(
+          {
+            error:
+              'Send { "dryRun": true } to count keys only, or { "confirm": "DELETE_ALL_LEGACY_LEDGER_KV" } to delete all legacy ledger:% rows.',
+          },
+          400,
+        );
+      }
+
+      const PAGE = 1000;
+      const BATCH = 500;
+      let legacyKeysFound = 0;
+      let deletedCount = 0;
+
+      if (dryRun) {
+        let offset = 0;
+        while (true) {
+          const { data: page, error } = await fromKvStore()
+            .select("key")
+            .like("key", "ledger:%")
+            .range(offset, offset + PAGE - 1);
+          if (error) throw error;
+          if (!page?.length) break;
+          legacyKeysFound += page.length;
+          if (page.length < PAGE) break;
+          offset += PAGE;
+        }
+      } else {
+        while (true) {
+          const { data: page, error } = await fromKvStore()
+            .select("key")
+            .like("key", "ledger:%")
+            .range(0, PAGE - 1);
+          if (error) throw error;
+          if (!page?.length) break;
+
+          legacyKeysFound += page.length;
+          const keys = page.map((r: { key: string }) => r.key);
+          for (let i = 0; i < keys.length; i += BATCH) {
+            const batch = keys.slice(i, i + BATCH);
+            const { error: delErr } = await fromKvStore().delete().in("key", batch);
+            if (delErr) {
+              console.error("[PurgeLegacyAll] batch delete error:", delErr);
+            } else {
+              deletedCount += batch.length;
+            }
+          }
+        }
+      }
+
+      console.log(`[PurgeLegacyAll] dryRun=${dryRun} legacyKeysFound=${legacyKeysFound} deletedCount=${deletedCount}`);
+      return c.json({
+        success: true,
+        dryRun,
+        legacyKeysFound,
+        deletedCount: dryRun ? 0 : deletedCount,
+      });
+    } catch (e: any) {
+      console.error(`[PurgeLegacyAll] Error: ${e.message}`);
+      return c.json({ error: e.message || String(e) }, 500);
+    }
+  });
+
+  // ─── POST /maintenance/strip-uber-payment-driver-metrics — RETIRED ─────
+  app.post(
+    "/make-server-37f42386/maintenance/strip-uber-payment-driver-metrics",
+    requireAuth(),
+    requirePermission("data.backfill"),
+    async (c) => c.json({ error: "Retired: strip-uber-payment-driver-metrics mutated ledger_event KV.", retired: true }, 410),
+  );
+
+  // GET /ledger/summary registered via registerLedgerQuerySummaryRoutes(app)
+
+  // GET /ledger/statement-summary (+ helpers) registered via registerLedgerQuerySummaryRoutes(app)
+
+  // GET /ledger/driver-overview registered via registerLedgerDriverOverviewRoutes(app)
+
+  // ledger diagnostic routes registered via registerLedgerDiagnosticRoutes(app)
+
+
+  // GET /ledger/driver-indrive-wallet + /ledger/indrive-wallet/fleet registered via registerLedgerIndriveWalletRoutes(app)
+  // GET /ledger/wallet-snapshot registered via registerLedgerWalletRoutes(app)
+
+  // ─── POST /ledger — RETIRED: Use POST /ledger/canonical-events/append instead ───────────────────
+  app.post("/make-server-37f42386/ledger", requireAuth(), async (c) => {
+    return c.json(
+      { error: "This endpoint is retired. Use POST /ledger/canonical-events/append for canonical ledger writes." },
+      410,
+    );
+  });
+
+  // ─── POST /ledger/canonical-events/append — Phase 2 canonical SSOT events (idempotent) ──
+  app.post(
+    "/make-server-37f42386/ledger/canonical-events/append",
+    requireAuth(),
+    requirePermission("transactions.edit"),
+    async (c) => {
+      try {
+        const body = await c.req.json();
+        const events = body?.events;
+        const confirmSignedWeek = body?.confirmSignedWeek === true;
+        const confirmDuplicateFile = body?.confirmDuplicateFile === true;
+        const rbacUser = c.get("rbacUser") as RbacUser | undefined;
+        const importerUserId =
+          (rbacUser as any)?.userId || (rbacUser as any)?.email || undefined;
+        const enriched = Array.isArray(events)
+          ? events.map((e: any) => ({
+              ...e,
+              importerUserId: e?.importerUserId ?? importerUserId,
+            }))
+          : [];
+        if (!confirmDuplicateFile && enriched.length > 0) {
+          const hashes = [
+            ...new Set(
+              enriched
+                .map((e: { sourceFileHash?: string; metadata?: { sourceFileHash?: string } }) =>
+                  String(e?.sourceFileHash || e?.metadata?.sourceFileHash || "").trim(),
+                )
+                .filter((h: string) => h.length >= 8),
+            ),
+          ];
+          const batchId = String(enriched[0]?.batchId || "").trim();
+          for (const hash of hashes) {
+            if (await importFileHashAlreadyPosted(hash, batchId)) {
+              return c.json(
+                {
+                  error: "DUPLICATE_FILE_HASH",
+                  message:
+                    "This CSV file was already imported. Re-importing would post a second copy of the same money. Confirm only if you intend a visible restatement.",
+                  sourceFileHash: hash,
+                },
+                409,
+              );
+            }
+          }
+        }
+        if (!confirmSignedWeek && enriched.length > 0) {
+          const signed = await findSignedWeeksTouchedByEvents(enriched);
+          if (signed.length > 0) {
+            return c.json(
+              {
+                error: "SIGNED_WEEK",
+                message:
+                  "This import would change an already-signed week. Confirm to post a visible adjustment.",
+                signedWeeks: signed,
+              },
+              409,
+            );
+          }
+        }
+        const result = await appendCanonicalLedgerEvents(enriched, c);
+        if (result.inserted > 0) {
+          try {
+            await cache.invalidateCacheVersion("stats");
+            await cache.invalidateCacheVersion("performance");
+            await invalidateDashboardCache();
+          } catch (invErr) {
+            console.warn("[CanonicalLedger] cache invalidate (non-fatal):", invErr);
+          }
+        }
+        return c.json(result);
+      } catch (e: any) {
+        console.error("[CanonicalLedger] append route error:", e);
+        return c.json({ error: e.message || "Canonical ledger append failed" }, 500);
+      }
+    },
+  );
+
+  // ─── GET /ledger/canonical-events — List canonical events (org-scoped) ────────────────
+  // BF SSOT: ledger.entries (Phase E retired live ledger_event:* KV — no KV fallback).
+  app.get("/make-server-37f42386/ledger/canonical-events", requireAuth(), async (c) => {
+    try {
+      const driverId = c.req.query("driverId");
+      const startDate = c.req.query("startDate");
+      const endDate = c.req.query("endDate");
+      // Comma-separated event types, e.g. payout_bank,payout_cash — keeps Settlement from paging fare noise.
+      const eventTypesParam = c.req.query("eventTypes");
+      const limitParam = c.req.query("limit");
+      const offsetParam = c.req.query("offset");
+      const limit = Math.min(Math.max(limitParam ? parseInt(limitParam, 10) : 50, 1), 500);
+      const offset = Math.max(offsetParam ? parseInt(offsetParam, 10) : 0, 0);
+      const eventTypes = eventTypesParam
+        ? String(eventTypesParam)
+            .split(",")
+            .map((s) => s.trim())
+            .filter(Boolean)
+        : [];
+
+      const {
+        listAllUnifiedCanonicalEvents,
+        dedupeOrgBankCanonicalEvents,
+      } = await import("../_shared/unifiedLedger/queries.ts");
+
+      const primaryDriverId = driverId
+        ? String(driverId)
+            .split(",")
+            .map((s) => s.trim())
+            .filter(Boolean)[0]
+        : undefined;
+
+      const all = dedupeOrgBankCanonicalEvents(
+        await listAllUnifiedCanonicalEvents({
+          products: ["roam_driver", "roam_fleet"],
+          entryTypes: eventTypes.length > 0 ? eventTypes : undefined,
+          driverId: primaryDriverId,
+          from: startDate ? `${startDate}T00:00:00.000Z` : undefined,
+          to: endDate ? `${endDate}T23:59:59.999Z` : undefined,
+          maxRows: Math.min(Math.max(offset + limit + 200, 1000), 50_000),
+        }),
+      );
+      const filtered = filterByOrg(all, c);
+      const pageRows = filtered.slice(offset, offset + limit);
+      return c.json({
+        data: pageRows,
+        page: Math.floor(offset / limit) + 1,
+        limit,
+        hasMore: offset + limit < filtered.length,
+        meta: { source: "ledger.entries" as const },
+      });
+    } catch (e: any) {
+      console.log(`[CanonicalLedger GET] Error: ${e.message}`);
+      return c.json({ error: `Canonical ledger query failed: ${e.message}` }, 500);
+    }
+  });
+
+  // ─── GET /ledger/canonical-batch-audit/:batchId — Phase 7 live recount ───────────────
+  app.get(
+    "/make-server-37f42386/ledger/canonical-batch-audit/:batchId",
+    requireAuth(),
+    async (c) => {
+      const batchId = c.req.param("batchId");
+      if (!batchId?.trim()) {
+        return c.json({ error: "batchId required" }, 400);
+      }
+      try {
+        const batchRow = await kv.get(`batch:${batchId}`);
+        if (!batchRow || typeof batchRow !== "object") {
+          return c.json({ error: "Batch not found" }, 404);
+        }
+        if (!belongsToOrg(batchRow as Record<string, unknown>, c)) {
+          return c.json({ error: "Forbidden" }, 403);
+        }
+
+        const { listAllUnifiedCanonicalEvents } = await import("../_shared/unifiedLedger/queries.ts");
+        const allRows = await listAllUnifiedCanonicalEvents({
+          products: ["roam_driver", "roam_fleet"],
+          maxRows: 200_000,
+        });
+        const values = allRows.filter((v) => String(v.batchId || "") === batchId);
+        const scoped = filterByOrg(values, c);
+        const byDriver: Record<string, number> = {};
+        const byEventType: Record<string, number> = {};
+        for (const v of scoped) {
+          const d = typeof v.driverId === "string" && v.driverId.trim() ? v.driverId.trim() : "unknown";
+          const t = typeof v.eventType === "string" && v.eventType.trim() ? v.eventType.trim() : "unknown";
+          byDriver[d] = (byDriver[d] || 0) + 1;
+          byEventType[t] = (byEventType[t] || 0) + 1;
+        }
+        return c.json({
+          success: true,
+          data: {
+            batchId,
+            total: scoped.length,
+            byDriver,
+            byEventType,
+          },
+        });
+      } catch (e: any) {
+        console.error("[CanonicalBatchAudit] Error:", e);
+        return c.json({ error: e.message || "Canonical batch audit failed" }, 500);
+      }
+    },
+  );
+
+  // ─── POST /ledger/batch — RETIRED: Use POST /ledger/canonical-events/append instead ────────────
+  app.post("/make-server-37f42386/ledger/batch", requireAuth(), async (c) => {
+    return c.json(
+      { error: "This endpoint is retired. Use POST /ledger/canonical-events/append for canonical ledger writes." },
+      410,
+    );
+  });
+
+  // ─── PATCH /ledger/:id — RETIRED: Legacy ledger updates no longer supported ─────────
+  app.patch("/make-server-37f42386/ledger/:id", requireAuth(), async (c) => {
+    return c.json({ error: "This endpoint is retired. Legacy ledger:% data is no longer used." }, 410);
+  });
+
+  // ─── DELETE /ledger/:id — RETIRED: Legacy ledger deletes no longer supported ──────────────
+  app.delete("/make-server-37f42386/ledger/:id", requireAuth(), async (c) => {
+    return c.json({ error: "This endpoint is retired. Legacy ledger:% data is no longer used." }, 410);
+  });
+
+  // ─── POST /ledger/backfill — RETIRED: Use POST /ledger/canonical-backfill instead ──────
+  // Toll ledger utilities (backup, date repair) still work via query params.
+  app.post("/make-server-37f42386/ledger/backfill", requireAuth(), requirePermission('data.backfill'), async (c) => {
+      try {
+          // ── Toll ledger: backup + date repair (still supported) ──
+          if (c.req.query("tollLedgerBackup") === "1") {
+              const backup = await buildTollLedgerFullBackupPayload();
+              return c.json(backup);
+          }
+          if (c.req.query("tollLedgerDateRepair") === "1") {
+              const repairDryRun = c.req.query("repairDryRun") !== "false";
+              const batchSize = Math.min(Number(c.req.query("repairBatchSize")) || 200, 500);
+              const results = await executeTollLedgerRepairDates({ dryRun: repairDryRun, batchSize });
+              return c.json({ success: true, results });
+          }
+
+          // Main legacy backfill is retired — use POST /ledger/canonical-backfill
+          return c.json(
+              {
+                  error: "Legacy ledger backfill is retired. Use POST /ledger/canonical-backfill instead.",
+                  hint: "Toll ledger backup/repair still works via ?tollLedgerBackup=1 or ?tollLedgerDateRepair=1",
+              },
+              410,
+          );
+      } catch (e: any) {
+          console.error('[Ledger Backfill] Error:', e);
+          return c.json({ error: e.message }, 500);
+      }
+  });
+
+  // ─── Toll ledger backup + date repair (aliases on main router) ───────────────
+  // Same behavior as toll_controller routes under /toll-reconciliation/toll-ledger/*.
+  // Exposed here under /ledger/* next to backfill so admin tools share one URL family.
+  app.get("/make-server-37f42386/ledger/toll-ledger-backup", requireAuth(), requirePermission('data.backfill'), async (c) => {
+    try {
+      const backup = await buildTollLedgerFullBackupPayload();
+      const filename = `toll_ledger_backup_${new Date().toISOString().split("T")[0]}.json`;
+      c.header("Content-Type", "application/json");
+      c.header("Content-Disposition", `attachment; filename="${filename}"`);
+      return c.json(backup);
+    } catch (e: any) {
+      console.log(`[TollLedgerBackup] Error (ledger alias): ${e.message}`);
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  app.post("/make-server-37f42386/toll-ledger/:id/void", requireAuth(), requirePermission('toll.manage'), voidTollLedgerEntryHandler);
+
+  app.post("/make-server-37f42386/ledger/toll-ledger-repair-dates", requireAuth(), requirePermission('data.backfill'), async (c) => {
+    try {
+      const body = await c.req.json().catch(() => ({}));
+      const results = await executeTollLedgerRepairDates(body);
+      return c.json({ success: true, results });
+    } catch (e: any) {
+      console.log(`[TollLedgerRepairDates] Error (alias): ${e.message}`);
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  // Debug endpoint (helps confirm the deployed bundle includes the route).
+  // Call: GET /functions/v1/make-server-37f42386/toll-reconciliation/reset-for-reconciliation-debug
+  app.get("/make-server-37f42386/toll-reconciliation/reset-for-reconciliation-debug", requireAuth(), async (c) => {
+    return c.json({
+      ok: true,
+      route: "reset-for-reconciliation-debug",
+      now: new Date().toISOString(),
+    });
+  });
+
+  // Toll reset for reconciliation — registered on main router (same URL as toll_controller)
+  // so production always matches; nested app.route("/", tollApp) was returning 404 for some deploys.
+  app.post("/make-server-37f42386/toll-reconciliation/reset-for-reconciliation", requireAuth({ strict: true }), requirePermission('toll.manage'), async (c) => {
+    try {
+      const body = await c.req.json().catch(() => ({}));
+      const result = await executeTollResetForReconciliation(body.transactionId);
+      return c.json(result);
+    } catch (e: any) {
+      const status =
+        typeof e.status === "number" && e.status >= 400 && e.status < 600
+          ? e.status
+          : 500;
+      console.log(`[TollReset] Error (main router): ${e.message}`);
+      return c.json({ error: e.message }, status);
+    }
+  });
+
+  app.post("/make-server-37f42386/toll-reconciliation/reset-period", requireAuth({ strict: true }), requirePermission('toll.manage'), async (c) => {
+    try {
+      const body = await c.req.json().catch(() => ({}));
+      const { executePeriodReconciliationReset } = await import("./period_reset.ts");
+      const result = await executePeriodReconciliationReset(
+        {
+          startDate: body.startDate,
+          endDate: body.endDate,
+          driverIds: Array.isArray(body.driverIds) ? body.driverIds : undefined,
+          dryRun: body.dryRun === true,
+          confirmationLabel: String(body.confirmationLabel || ""),
+        },
+        c,
+      );
+      return c.json({ success: true, ...result });
+    } catch (e: any) {
+      const status =
+        typeof e.status === "number" && e.status >= 400 && e.status < 600
+          ? e.status
+          : 500;
+      console.log(`[PeriodReset] Error (main router): ${e.message}`);
+      return c.json({ error: e.message }, status);
+    }
+  });
+
+  // ─── POST /ledger/repair-driver-ids — RETIRED ──────
+  app.post("/make-server-37f42386/ledger/repair-driver-ids", requireAuth(), requirePermission('data.backfill'), async (c) => {
+    return c.json({ error: "Retired: repair-driver-ids mutated ledger_event KV.", retired: true }, 410);
+  });
+
+  // ─── POST /ledger/repair-driver — RETIRED: Use POST /ledger/canonical-backfill instead ──────
+  app.post("/make-server-37f42386/ledger/repair-driver", requireAuth(), async (c) => {
+      return c.json(
+          { error: "This endpoint is retired. Use POST /ledger/canonical-backfill to populate canonical ledger events." },
+          410,
+      );
+  });
+
+  // ensure-from-trip-ids (+ /import) registered via registerLedgerEnsureRoutes(app) — see ledger_ensure_routes.ts
+
+  // ─── GET /diagnostic/unresolvable-driver-map — RETIRED ──
+  app.get("/make-server-37f42386/diagnostic/unresolvable-driver-map", requireAuth(), async (c) => {
+    return c.json({ error: "Retired: unresolvable-driver-map scanned ledger_event KV.", retired: true }, 410);
+  });
+
+  // aggregateFleetSummaryFromLedgerLikeEntries moved to ledger_drivers_fleet_summary_routes.ts
+
+  // GET /ledger/driver-earnings-history registered via registerLedgerDriverEarningsHistoryRoutes(app)
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // END OF LEDGER ENDPOINTS
+  // ═══════════════════════════════════════════════════════════════════════
+
+  // Claims Endpoints — see the consolidated GET/POST/DELETE block further below
+  // (search "Claims Endpoints (consolidated)"). A duplicate, more primitive copy
+  // of these three routes used to live here; since Hono dispatches to the FIRST
+  // registered handler for an identical method+path (neither handler here nor
+  // there ever called next()), this earlier copy was silently SHADOWING the
+  // more feature-complete block below for every real request — meaning the
+  // later block's org-scoped driverId filter (GET) and driver-toll-charge
+  // auto-create logic (POST) never actually executed. Removed as a correctness
+  // fix, not a behavior change: the surviving block already contains a superset
+  // of this one's behavior (see filterByOrg/requireAuth parity check performed
+  // before removal).
+
+  // Expense Management Endpoints (Phase 5)
+  app.post("/make-server-37f42386/scan-receipt", async (c) => {
+    try {
+      const body = await c.req.parseBody();
+      const file = body['file'];
+      
+      // Deno multipart may yield Blob (not File) — accept both
+      if (!file || (!(file instanceof File) && !(file instanceof Blob))) {
+          return c.json({ error: "File upload required" }, 400);
+      }
+
+      const apiKey = Deno.env.get("OPENAI_API_KEY");
+      if (!apiKey) return c.json({ error: "OpenAI API Key not configured" }, 503);
+
+      const openai = new OpenAI({ apiKey });
+
+      const blob = file as Blob;
+      const arrayBuffer = await blob.arrayBuffer();
+      const base64Data = Buffer.from(arrayBuffer).toString('base64');
+      const mimeType = (file as File).type || blob.type || "image/jpeg";
+      const dataUrl = `data:${mimeType};base64,${base64Data}`;
+
+      const prompt = `
+        You are an OCR assistant for a driver expense portal. 
+        Parse the receipt or invoice image. It might be a general receipt, fuel receipt, or toll receipt.
+        This is from Jamaica. Jamaica EXCLUSIVELY uses DD/MM/YYYY date format. NEVER interpret dates as MM/DD/YYYY.
+        
+        Current Date Context: ${new Date().toISOString().split('T')[0]}
+        
+        Return a valid JSON object with these EXACT fields:
+        - type (string): "Fuel", "Toll", "Maintenance", or "Other"
+        - merchant (string): Name of the merchant or agency (e.g. "Highway 2000", "Total Gas")
+        - amount (number): Total amount paid (number only)
+        - date (string): Date in YYYY-MM-DD format. The receipt uses DD/MM/YYYY. The FIRST number is ALWAYS the day, the SECOND is ALWAYS the month. Example: "01/12/2025" on the receipt = 1st December 2025 = output "2025-12-01". NEVER swap day and month.
+        - time (string): Time in HH:MM format (24h)
+        - receiptNumber (string): Invoice, ticket, or reference number
+        - plaza (string): Plaza name (for tolls)
+        - lane (string): Lane number (for tolls)
+        - vehicleClass (string): Vehicle class (for tolls)
+        - collector (string): Collector name/ID
+        - notes (string): Brief description
+        
+        If specific fields are missing, return null. 
+        Output only valid JSON. Do not use markdown code blocks.
+      `;
+
+      const response = await trackedProviderCall({
+          provider: "openai",
+          service: "vision",
+          route: "/make-server-37f42386/scan-receipt",
+          model: "gpt-4o",
+          run: () => openai.chat.completions.create({
+              model: "gpt-4o",
+              messages: [
+                  {
+                      role: "user",
+                      content: [
+                          { type: "text", text: prompt },
+                          { type: "image_url", image_url: { url: dataUrl } }
+                      ]
+                  }
+              ],
+              response_format: { type: "json_object" }
+          }, { signal: AbortSignal.timeout(40000) }),
+          extractUsage: (r: any) => ({
+              inputTokens: r?.usage?.prompt_tokens,
+              outputTokens: r?.usage?.completion_tokens,
+              requestId: r?.id,
+          }),
+      });
+
+      const text = response.choices[0].message.content || "{}";
+      const data = JSON.parse(text);
+
+      // Post-processing: catch and correct any future dates the AI missed
+      const [corrected] = correctFutureDates([data]);
+      return c.json({ success: true, data: corrected });
+
+    } catch (e: any) {
+      console.error("Scan Receipt Error:", e);
+      if (e instanceof ProviderBlockedError) return c.json({ error: e.message, code: e.code }, e.httpStatus);
+      if (e?.name === "TimeoutError" || e?.name === "AbortError") {
+        return c.json({ error: "Receipt scan timed out. Please try again." }, 504);
+      }
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  app.post("/make-server-37f42386/scan-odometer", async (c) => {
+    try {
+      const body = await c.req.parseBody();
+      const file = body['file'];
+      
+      if (!file || !(file instanceof File)) {
+          return c.json({ error: "File upload required" }, 400);
+      }
+
+      const apiKey = Deno.env.get("OPENAI_API_KEY");
+      if (!apiKey) return c.json({ error: "OpenAI API Key not configured" }, 503);
+
+      const openai = new OpenAI({ apiKey });
+
+      const arrayBuffer = await file.arrayBuffer();
+      const base64Data = Buffer.from(arrayBuffer).toString('base64');
+      const dataUrl = `data:${file.type};base64,${base64Data}`;
+
+      const prompt = `
+        You are an AI assistant for a vehicle fleet.
+        Analyze this image of a vehicle dashboard to find the Odometer reading.
+        Return a valid JSON object with these fields:
+        - reading (number | null): The odometer value (e.g. 15043). Do not include decimals unless it is clearly part of the main odometer. Ignore trip meters (which are usually smaller or resetable).
+        - unit (string): "km" or "mi" if visible, otherwise default to "km"
+        - confidence (string): "high", "medium", or "low"
+
+        If you cannot clearly see an odometer, set reading to null.
+        Output only valid JSON.
+      `;
+
+      const response = await trackedProviderCall({
+          provider: "openai",
+          service: "vision",
+          route: "/make-server-37f42386/scan-odometer",
+          model: "gpt-4o",
+          run: () => openai.chat.completions.create({
+              model: "gpt-4o",
+              messages: [
+                  {
+                      role: "user",
+                      content: [
+                          { type: "text", text: prompt },
+                          { type: "image_url", image_url: { url: dataUrl } }
+                      ]
+                  }
+              ],
+              response_format: { type: "json_object" }
+          }),
+          extractUsage: (r: any) => ({
+              inputTokens: r?.usage?.prompt_tokens,
+              outputTokens: r?.usage?.completion_tokens,
+              requestId: r?.id,
+          }),
+      });
+
+      const text = response.choices[0].message.content || "{}";
+      const data = JSON.parse(text);
+
+      return c.json({ success: true, data });
+
+    } catch (e: any) {
+      console.error("Scan Odometer Error:", e);
+      if (e instanceof ProviderBlockedError) return c.json({ error: e.message, code: e.code }, e.httpStatus);
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  app.post("/make-server-37f42386/expenses/approve", requireAuth(), requirePermission('fuel.approve'), async (c) => {
+    try {
+      const body = await c.req.json();
+      const { id, notes, odometerReading, matchedStationId: adminMatchedStationId, stationLocation: adminStationLocation } = body;
+      if (!id) return c.json({ error: "Transaction ID is required" }, 400);
+
+      const tx = await kv.get(`transaction:${id}`);
+      if (!tx) return c.json({ error: "Transaction not found" }, 404);
+
+      const stationGateHeld =
+        tx.metadata?.stationGateHold === true || tx.metadata?.stationGateHold === "true";
+      if (stationGateHeld) {
+        return c.json(
+          {
+            error:
+              "This expense is waiting for station verification. It cannot be approved until the fuel stop is verified in the station database.",
+          },
+          409
+        );
+      }
+
+      /** Admin Review Queue: optional verified station (same workflow as manual log entry). */
+      let adminResolvedStation: any = null;
+      const rawAdminStation = adminMatchedStationId != null ? String(adminMatchedStationId).trim() : "";
+      if (rawAdminStation) {
+          const st = await kv.get(`station:${rawAdminStation}`);
+          if (st && st.status === "verified") {
+              adminResolvedStation = st;
+              tx.matchedStationId = st.id;
+              tx.vendor = st.name;
+              tx.metadata = {
+                  ...tx.metadata,
+                  matchedStationId: st.id,
+                  locationStatus: "verified",
+                  verificationMethod: "admin_approval_station",
+                  stationLocation:
+                      (typeof adminStationLocation === "string" && adminStationLocation.trim()) ||
+                      st.address ||
+                      tx.metadata?.stationLocation,
+                  stationGateHold: false,
+                  holdReason: undefined,
+                  holdTimestamp: undefined,
+              };
+              console.log(`[ApproveHandler] Admin linked verified station "${st.name}" (${st.id}) for transaction ${id}`);
+          } else {
+              console.warn(`[ApproveHandler] Ignoring matchedStationId "${rawAdminStation}" — not found or not verified`);
+          }
+      }
+
+      // If admin provides an odometer reading (Log Review flow), apply it
+      if (odometerReading !== undefined && odometerReading !== null) {
+          const odoVal = Number(odometerReading);
+          if (!isNaN(odoVal) && odoVal > 0) {
+              tx.odometer = odoVal;
+              console.log(`[ApproveHandler] Admin provided odometer reading: ${odoVal} km for transaction ${id}`);
+          }
+      }
+
+      const withVehicle = await enrichRecordWithDriverVehicle(
+        tx,
+        getOrgId(c) || tx.organizationId,
+      );
+      Object.assign(tx, withVehicle);
+
+      // Fuel Posted guarantee: create fuel_entry before committing Approved (or 422 if blocked)
+      if (tx.category === 'Fuel' || tx.category === 'Fuel Reimbursement') {
+          // Pre-set fields that ensureFuelEntry reads for quantity/vendor
+          if (odometerReading !== undefined && odometerReading !== null) {
+              const odoVal = Number(odometerReading);
+              if (!isNaN(odoVal) && odoVal > 0) tx.odometer = odoVal;
+          }
+
+          const approveResult = await ensureFuelEntryForApprovedTx(tx, {
+              source: 'Manual Approval',
+              stationName: adminResolvedStation?.name,
+              matchedStation: adminResolvedStation,
+              decisionReason: 'ADMIN_APPROVED',
+              stamp: (rec) => stampOrg(rec, c),
+          });
+
+          if (approveResult.blockedNoVehicle) {
+              return c.json(
+                  {
+                      error:
+                          'Cannot approve: vehicle is not assigned. Assign a vehicle to this driver, then approve again.',
+                      code: 'BLOCKED_NO_VEHICLE',
+                  },
+                  422,
+              );
+          }
+          if (!approveResult.fuelEntry) {
+              return c.json(
+                  {
+                      error:
+                          'Cannot approve: fill-up could not be posted to Transaction Logs. Try again or contact support.',
+                      code: 'FUEL_ENTRY_MISSING',
+                  },
+                  500,
+              );
+          }
+
+          tx.status = 'Approved';
+          tx.isReconciled = true;
+          tx.metadata = {
+              ...tx.metadata,
+              approvedAt: new Date().toISOString(),
+              notes: notes || tx.metadata?.notes,
+              needsLogReview: undefined,
+              logReviewCompleted: tx.metadata?.needsLogReview ? true : undefined,
+              logReviewCompletedAt: tx.metadata?.needsLogReview ? new Date().toISOString() : undefined,
+              adminOdometerReading:
+                  odometerReading !== undefined && odometerReading !== null
+                      ? Number(odometerReading)
+                      : undefined,
+              stationGateHold: false,
+              holdReason: undefined,
+              holdTimestamp: undefined,
+              decisionReason: 'ADMIN_APPROVED',
+          };
+      } else {
+          tx.status = 'Approved';
+          tx.isReconciled = true;
+          tx.metadata = {
+              ...tx.metadata,
+              approvedAt: new Date().toISOString(),
+              notes: notes || tx.metadata?.notes,
+              needsLogReview: undefined,
+              logReviewCompleted: tx.metadata?.needsLogReview ? true : undefined,
+              logReviewCompletedAt: tx.metadata?.needsLogReview ? new Date().toISOString() : undefined,
+              adminOdometerReading:
+                  odometerReading !== undefined && odometerReading !== null
+                      ? Number(odometerReading)
+                      : undefined,
+              stationGateHold: false,
+              holdReason: undefined,
+              holdTimestamp: undefined,
+          };
+      }
+
+      // (fuel_entry create moved into ensureFuelEntryForApprovedTx above)
+
+      // Fuel wallet money posts only at Finalize (commitWeeklyStatement) — not on approve.
+      if ((tx.category === 'Fuel' || tx.category === 'Fuel Reimbursement') && tx.status === 'Approved') {
+          console.log(`[FuelCredit] Skipped approve-time wallet credit for ${id} (Finalize-only settlement)`);
+      }
+
+      // Phase 4b: Auto-create Cash Wallet credit for approved Toll reimbursements (Manual Resolve: WriteOff/Business)
+      const isTollCash = tx.paymentMethod === 'Cash' || !!tx.receiptUrl;
+
+      if (isTollCategoryServer(tx.category) && tx.status === 'Approved' && isTollCash) {
+          if (!tx.driverId || tx.driverId === 'fleet') {
+              console.log(`[TollCredit] Skipping wallet credit: driverId is '${tx.driverId}' (fleet-absorbed, no driver to credit) for transaction ${id}`);
+          } else {
+              const tollCreditId = `toll-credit-${id}`;
+              const existingTollCredit = await kv.get(`transaction:${tollCreditId}`);
+
+              if (!existingTollCredit) {
+                  const tollWalletCredit = {
+                      id: tollCreditId,
+                      driverId: tx.driverId,
+                      driverName: tx.driverName || '',
+                      vehicleId: tx.vehicleId,
+                      date: new Date().toISOString().split('T')[0],
+                      time: new Date().toISOString().split('T')[1].substring(0, 8),
+                      type: 'Payment_Received',
+                      category: 'Toll Reimbursement Credit',
+                      description: `Toll Reimbursement Credit: ${tx.description || tx.vendor || tx.merchant || 'Toll Charge'}`,
+                      amount: Math.abs(Number(tx.amount) || 0),
+                      paymentMethod: 'Cash',
+                      status: 'Completed',
+                      isReconciled: true,
+                      referenceNumber: tx.id,
+                      metadata: {
+                          tollCreditSourceId: tx.id,
+                          source: 'toll_reimbursement_approval',
+                          automated: true,
+                          approvedAt: new Date().toISOString(),
+                          originalAmount: tx.amount,
+                          originalCategory: tx.category,
+                          resolutionNotes: tx.metadata?.notes
+                      }
+                  };
+
+                  await kv.set(`transaction:${tollCreditId}`, stampOrg(tollWalletCredit, c));
+                  await appendCanonicalTollReimbursementIfEligible(tollWalletCredit, c);
+                  console.log(`[TollCredit] Created wallet credit ${tollCreditId} for driver ${tx.driverId}, amount: ${tollWalletCredit.amount}`);
+              } else {
+                  console.log(`[TollCredit] Wallet credit already exists for ${id}, skipping (idempotent)`);
+              }
+          }
+      }
+
+      await kv.set(`transaction:${id}`, stampOrg(tx, c));
+      const resolvedAt = new Date();
+      const deleteAfter = await applyEvidenceResolution(supabase, "transaction", id, resolvedAt);
+      if (deleteAfter) {
+        tx.metadata = { ...tx.metadata, evidenceDeleteAfter: deleteAfter };
+        await kv.set(`transaction:${id}`, stampOrg(tx, c));
+      }
+      return c.json({ success: true, data: tx });
+    } catch (e: any) {
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  app.post("/make-server-37f42386/expenses/reject", requireAuth(), requirePermission('fuel.reject'), async (c) => {
+    try {
+      const { id, reason } = await c.req.json();
+      if (!id) return c.json({ error: "Transaction ID is required" }, 400);
+
+      const tx = await kv.get(`transaction:${id}`);
+      if (!tx) return c.json({ error: "Transaction not found" }, 404);
+
+      const stationGateHeldReject =
+        tx.metadata?.stationGateHold === true || tx.metadata?.stationGateHold === "true";
+      if (stationGateHeldReject) {
+        return c.json(
+          {
+            error:
+              "This expense is waiting for station verification. Reject is disabled until the fuel stop is verified or released by the station workflow.",
+          },
+          409
+        );
+      }
+
+      tx.status = 'Rejected';
+      const resolvedAt = new Date();
+      const deleteAfter = await applyEvidenceResolution(supabase, "transaction", id, resolvedAt);
+      tx.metadata = { 
+          ...tx.metadata, 
+          rejectedAt: resolvedAt.toISOString(), 
+          rejectionReason: reason,
+          ...(deleteAfter ? { evidenceDeleteAfter: deleteAfter } : {}),
+      };
+
+      await kv.set(`transaction:${id}`, stampOrg(tx, c));
+
+      // Clean up wallet credit if this was previously approved (fuel or toll)
+      const fuelCreditKey = `transaction:fuel-credit-${id}`;
+      const existingFuelCredit = await kv.get(fuelCreditKey);
+      if (existingFuelCredit) {
+          const fcId = typeof (existingFuelCredit as { id?: string }).id === "string"
+            ? String((existingFuelCredit as { id?: string }).id)
+            : "";
+          await kv.del(fuelCreditKey);
+          if (fcId) {
+            try {
+              await deleteCanonicalLedgerBySource("transaction", [fcId]);
+            } catch (e: any) {
+              console.warn(`[expenses/reject] Ledger cleanup fuel credit failed:`, e?.message);
+            }
+          }
+          console.log(`[FuelCredit] Removed wallet credit for rejected reimbursement: ${id}`);
+      }
+
+      const tollCreditKey = `transaction:toll-credit-${id}`;
+      const existingTollCredit = await kv.get(tollCreditKey);
+      if (existingTollCredit) {
+          const tcId = typeof (existingTollCredit as { id?: string }).id === "string"
+            ? String((existingTollCredit as { id?: string }).id)
+            : "";
+          await kv.del(tollCreditKey);
+          if (tcId) {
+            try {
+              await deleteCanonicalLedgerBySource("transaction", [tcId]);
+            } catch (e: any) {
+              console.warn(`[expenses/reject] Ledger cleanup toll credit failed:`, e?.message);
+            }
+          }
+          console.log(`[TollCredit] Removed wallet credit for rejected toll: ${id}`);
+      }
+
+      return c.json({ success: true, data: tx });
+    } catch (e: any) {
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  // Phase 9: Backfill wallet credits for existing approved fuel reimbursements
+  app.post("/make-server-37f42386/fuel/backfill-wallet-credits", requireAuth(), requirePermission('data.backfill'), async (c) => {
+    try {
+      console.log('[FuelCredit Backfill] Starting backfill of historical approved fuel reimbursements...');
+
+      // Fetch all transactions
+      const allTransactions = await kv.getByPrefix('transaction:');
+      
+      // Filter for approved fuel reimbursements that are NOT already wallet credits themselves
+      const approvedFuelReimbursements = allTransactions.filter((tx: any) =>
+        tx &&
+        tx.id &&
+        (tx.category === 'Fuel' || tx.category === 'Fuel Reimbursement') &&
+        tx.category !== 'Fuel Reimbursement Credit' &&
+        tx.status === 'Approved' &&
+        tx.driverId
+      );
+
+      console.log(`[FuelCredit Backfill] Found ${approvedFuelReimbursements.length} approved fuel reimbursements with driverId`);
+
+      let created = 0;
+      let skipped = 0;
+
+      for (const tx of approvedFuelReimbursements) {
+        // Phase 5 parity: Skip wallet credits for Gas Card/Petty Cash entries (matching approve handler guard)
+        const paymentSource = tx.metadata?.paymentSource || 'driver_cash';
+        if (paymentSource !== 'driver_cash') {
+          console.log(`[FuelCredit Backfill] Skipping ${tx.id}: payment source is '${paymentSource}' (not driver_cash)`);
+          skipped++;
+          continue;
+        }
+
+        const creditId = `fuel-credit-${tx.id}`;
+        const existingCredit = await kv.get(`transaction:${creditId}`);
+
+        if (existingCredit) {
+          skipped++;
+          continue;
+        }
+
+        const walletCredit = {
+          id: creditId,
+          driverId: tx.driverId,
+          driverName: tx.driverName || '',
+          vehicleId: tx.vehicleId,
+          date: tx.metadata?.approvedAt ? tx.metadata.approvedAt.split('T')[0] : (tx.date || new Date().toISOString().split('T')[0]),
+          time: tx.metadata?.approvedAt ? tx.metadata.approvedAt.split('T')[1]?.substring(0, 8) || '00:00:00' : (tx.time || '00:00:00'),
+          type: 'Payment_Received',
+          category: 'Fuel Reimbursement Credit',
+          description: `Fuel Reimbursement Credit: ${tx.vendor || tx.description || tx.merchant || 'Fuel Purchase'}`,
+          amount: Math.abs(Number(tx.amount) || Number(tx.metadata?.totalCost) || 0),
+          paymentMethod: 'Cash',
+          status: 'Completed',
+          isReconciled: true,
+          referenceNumber: tx.id,
+          metadata: {
+            fuelCreditSourceId: tx.id,
+            source: 'fuel_reimbursement_backfill',
+            automated: true,
+            approvedAt: tx.metadata?.approvedAt || new Date().toISOString(),
+            originalAmount: tx.amount,
+            originalCategory: tx.category
+          }
+        };
+
+        await kv.set(`transaction:${creditId}`, stampOrg(walletCredit, c));
+        console.log(`[FuelCredit Backfill] Created wallet credit ${creditId} for driver ${tx.driverId}, amount: ${walletCredit.amount}`);
+        created++;
+      }
+
+      console.log(`[FuelCredit Backfill] Complete. Created: ${created}, Skipped (already exist): ${skipped}`);
+      return c.json({ success: true, created, skipped, total: approvedFuelReimbursements.length });
+    } catch (e: any) {
+      console.log(`[FuelCredit Backfill] Error: ${e.message}`);
+      return c.json({ error: `Backfill failed: ${e.message}` }, 500);
+    }
+  });
+
+  // Phase C: Backfill paymentSource for RideShare Cash entries and remove orphaned wallet credits
+  app.post("/make-server-37f42386/fuel/backfill-rideshare-payment-source", requireAuth(), requirePermission('data.backfill'), async (c) => {
+    try {
+      console.log('[Backfill RideShare] Starting paymentSource backfill scan...');
+
+      const allTransactions = await kv.getByPrefix('transaction:');
+
+      // Find approved fuel transactions that should be rideshare_cash (match 'Cash' or 'RideShare Cash')
+      const targets = allTransactions.filter((tx: any) =>
+        tx &&
+        tx.id &&
+        (tx.category === 'Fuel' || tx.category === 'Fuel Reimbursement') &&
+        tx.category !== 'Fuel Reimbursement Credit' &&
+        tx.status === 'Approved' &&
+        (tx.paymentMethod === 'Cash' || tx.paymentMethod === 'RideShare Cash') &&
+        tx.metadata?.paymentSource !== 'rideshare_cash'
+      );
+
+      console.log(`[Backfill RideShare] Found ${targets.length} entries to fix`);
+
+      let fixed = 0;
+      let creditsDeleted = 0;
+      const errors: string[] = [];
+
+      for (const tx of targets) {
+        try {
+          // Step 1: Fix paymentMethod and set metadata.paymentSource = 'rideshare_cash'
+          tx.paymentMethod = 'RideShare Cash';
+          tx.metadata = {
+            ...(tx.metadata || {}),
+            paymentSource: 'rideshare_cash',
+            backfilledAt: new Date().toISOString(),
+            backfillReason: 'rideshare_cash_fix'
+          };
+          await kv.set(`transaction:${tx.id}`, stampOrg(tx, c));
+
+          // Step 2: Delete orphaned fuel-credit if it exists
+          const creditKey = `transaction:fuel-credit-${tx.id}`;
+          const existingCredit = await kv.get(creditKey);
+          if (existingCredit) {
+            await kv.del(creditKey);
+            creditsDeleted++;
+            console.log(`[Backfill RideShare] Deleted orphaned credit fuel-credit-${tx.id}`);
+          }
+
+          fixed++;
+          console.log(`[Backfill RideShare] Fixed transaction ${tx.id}: set paymentSource=rideshare_cash, credit deleted=${!!existingCredit}`);
+        } catch (entryErr: any) {
+          const msg = `Error fixing ${tx.id}: ${entryErr.message}`;
+          console.log(`[Backfill RideShare] ${msg}`);
+          errors.push(msg);
+        }
+      }
+
+      console.log(`[Backfill RideShare] Complete. Fixed: ${fixed}, Credits deleted: ${creditsDeleted}, Errors: ${errors.length}`);
+      return c.json({ success: true, fixed, creditsDeleted, errors, totalScanned: allTransactions.length, totalTargeted: targets.length });
+    } catch (e: any) {
+      console.log(`[Backfill RideShare] Fatal error: ${e.message}`);
+      return c.json({ error: `Backfill failed: ${e.message}` }, 500);
+    }
+  });
+
+  // ─── POST /ledger/canonical-backfill — Backfill canonical ledger events from existing data ─────
+  // Populates ledger_event:* for: trips, fuel_entries, toll_ledger, wallet credits (InDrive, fuel reimbursement, toll reimbursement)
+  // Idempotent: uses idempotencyKey to skip duplicates.
+  // Supports body: dryRun + comma-separated types including fixed_expenses,generic_transactions.
+  app.post("/make-server-37f42386/ledger/canonical-backfill", requireAuth(), requirePermission('data.backfill'), async (c) => {
+    const startMs = Date.now();
+    try {
+      const body = await c.req.json().catch(() => ({}));
+      const dryRun = body?.dryRun === true;
+      const typesParam = typeof body?.types === 'string' ? body.types : '';
+      const allowedTypes = new Set(typesParam ? typesParam.split(',').map((t: string) => t.trim().toLowerCase()) : [
+        'trips', 'fuel', 'tolls', 'indrive', 'fuel_reimburse', 'toll_reimburse',
+        'fixed_expenses', 'generic_transactions'
+      ]);
+
+      console.log(`[CanonicalBackfill] Starting dryRun=${dryRun} types=${[...allowedTypes].join(',')}`);
+
+      const stats = {
+        trips: { scanned: 0, eligible: 0, appended: 0, skipped: 0, errors: 0 },
+        fuel: { scanned: 0, eligible: 0, appended: 0, skipped: 0, errors: 0 },
+        tolls: { scanned: 0, eligible: 0, appended: 0, skipped: 0, errors: 0 },
+        indrive: { scanned: 0, eligible: 0, appended: 0, skipped: 0, errors: 0 },
+        fuel_reimburse: { scanned: 0, eligible: 0, appended: 0, skipped: 0, errors: 0 },
+        toll_reimburse: { scanned: 0, eligible: 0, appended: 0, skipped: 0, errors: 0 },
+        fixed_expenses: { scanned: 0, eligible: 0, appended: 0, skipped: 0, errors: 0 },
+        generic_transactions: { scanned: 0, eligible: 0, appended: 0, skipped: 0, errors: 0 },
+      };
+
+      // 1. Trips → fare_earning for all platforms (Uber included; payment_line is raw grain only)
+      if (allowedTypes.has('trips')) {
+        console.log('[CanonicalBackfill] Processing trips...');
+        const allTrips = await kv.getByPrefix('trip:');
+        stats.trips.scanned = allTrips.length;
+
+        const batch: Record<string, unknown>[] = [];
+        for (const trip of allTrips) {
+          if (!trip?.id) continue;
+          const evs = buildCanonicalTripFareEventsFromTrip(trip as Record<string, unknown>);
+          if (evs.length > 0) {
+            stats.trips.eligible++;
+            batch.push(...evs);
+          }
+        }
+
+        if (!dryRun && batch.length > 0) {
+          const CHUNK = 200;
+          for (let i = 0; i < batch.length; i += CHUNK) {
+            const slice = batch.slice(i, i + CHUNK);
+            try {
+              const r = await appendCanonicalLedgerEvents(slice, c);
+              stats.trips.appended += r.inserted;
+              stats.trips.skipped += r.skipped;
+            } catch (e: any) {
+              stats.trips.errors++;
+              console.error('[CanonicalBackfill] trips append error:', e?.message);
+            }
+          }
+        } else if (dryRun) {
+          stats.trips.appended = batch.length;
+        }
+        console.log(`[CanonicalBackfill] Trips: scanned=${stats.trips.scanned} eligible=${stats.trips.eligible} appended=${stats.trips.appended}`);
+      }
+
+      // 2. Fuel entries → fuel_expense
+      if (allowedTypes.has('fuel')) {
+        console.log('[CanonicalBackfill] Processing fuel entries...');
+        const allFuel = await kv.getByPrefix('fuel_entry:');
+        stats.fuel.scanned = allFuel.length;
+
+        const batch: Record<string, unknown>[] = [];
+        for (const entry of allFuel) {
+          if (!entry?.id) continue;
+          const ev = buildCanonicalFuelExpenseEvent(entry as Record<string, unknown>);
+          if (ev) {
+            stats.fuel.eligible++;
+            batch.push(ev);
+          }
+        }
+
+        if (!dryRun && batch.length > 0) {
+          const CHUNK = 200;
+          for (let i = 0; i < batch.length; i += CHUNK) {
+            const slice = batch.slice(i, i + CHUNK);
+            try {
+              const r = await appendCanonicalLedgerEvents(slice, c);
+              stats.fuel.appended += r.inserted;
+              stats.fuel.skipped += r.skipped;
+            } catch (e: any) {
+              stats.fuel.errors++;
+              console.error('[CanonicalBackfill] fuel append error:', e?.message);
+            }
+          }
+        } else if (dryRun) {
+          stats.fuel.appended = batch.length;
+        }
+        console.log(`[CanonicalBackfill] Fuel: scanned=${stats.fuel.scanned} eligible=${stats.fuel.eligible} appended=${stats.fuel.appended}`);
+      }
+
+      // 3. Toll ledger → toll_charge / toll_refund
+      if (allowedTypes.has('tolls')) {
+        console.log('[CanonicalBackfill] Processing toll ledger...');
+        const allTolls = await kv.getByPrefix('toll_ledger:');
+        stats.tolls.scanned = allTolls.length;
+
+        const batch: Record<string, unknown>[] = [];
+        for (const entry of allTolls) {
+          if (!entry?.id) continue;
+          const ev = buildCanonicalTollEventFromTollLedger(entry as TollLedgerLike);
+          if (ev) {
+            stats.tolls.eligible++;
+            batch.push(ev);
+          }
+        }
+
+        if (!dryRun && batch.length > 0) {
+          const CHUNK = 200;
+          for (let i = 0; i < batch.length; i += CHUNK) {
+            const slice = batch.slice(i, i + CHUNK);
+            try {
+              const r = await appendCanonicalLedgerEvents(slice, c);
+              stats.tolls.appended += r.inserted;
+              stats.tolls.skipped += r.skipped;
+            } catch (e: any) {
+              stats.tolls.errors++;
+              console.error('[CanonicalBackfill] tolls append error:', e?.message);
+            }
+          }
+        } else if (dryRun) {
+          stats.tolls.appended = batch.length;
+        }
+        console.log(`[CanonicalBackfill] Tolls: scanned=${stats.tolls.scanned} eligible=${stats.tolls.eligible} appended=${stats.tolls.appended}`);
+      }
+
+      // 4-6. Transaction-based wallet credits
+      const allTransactions = (
+        allowedTypes.has('indrive') ||
+        allowedTypes.has('fuel_reimburse') ||
+        allowedTypes.has('toll_reimburse') ||
+        allowedTypes.has('generic_transactions')
+      )
+        ? filterByOrg(await kv.getByPrefix('transaction:'), c)
+        : [];
+
+      // 4. InDrive Wallet Credit → wallet_credit
+      if (allowedTypes.has('indrive')) {
+        console.log('[CanonicalBackfill] Processing InDrive Wallet Credits...');
+        const indriveTx = allTransactions.filter((tx: any) => tx?.category === 'InDrive Wallet Credit');
+        stats.indrive.scanned = indriveTx.length;
+
+        const batch: Record<string, unknown>[] = [];
+        for (const tx of indriveTx) {
+          if (!tx?.id) continue;
+          const ev = buildCanonicalWalletCreditEvent(tx as Record<string, unknown>);
+          if (ev) {
+            stats.indrive.eligible++;
+            batch.push(ev);
+          }
+        }
+
+        if (!dryRun && batch.length > 0) {
+          const CHUNK = 200;
+          for (let i = 0; i < batch.length; i += CHUNK) {
+            const slice = batch.slice(i, i + CHUNK);
+            try {
+              const r = await appendCanonicalLedgerEvents(slice, c);
+              stats.indrive.appended += r.inserted;
+              stats.indrive.skipped += r.skipped;
+            } catch (e: any) {
+              stats.indrive.errors++;
+              console.error('[CanonicalBackfill] indrive append error:', e?.message);
+            }
+          }
+        } else if (dryRun) {
+          stats.indrive.appended = batch.length;
+        }
+        console.log(`[CanonicalBackfill] InDrive: scanned=${stats.indrive.scanned} eligible=${stats.indrive.eligible} appended=${stats.indrive.appended}`);
+      }
+
+      // 5. Fuel Reimbursement Credit → fuel_reimbursement
+      if (allowedTypes.has('fuel_reimburse')) {
+        console.log('[CanonicalBackfill] Processing Fuel Reimbursement Credits...');
+        const fuelCreditTx = allTransactions.filter((tx: any) => tx?.category === 'Fuel Reimbursement Credit');
+        stats.fuel_reimburse.scanned = fuelCreditTx.length;
+
+        const batch: Record<string, unknown>[] = [];
+        for (const tx of fuelCreditTx) {
+          if (!tx?.id) continue;
+          const ev = buildCanonicalFuelReimbursementEvent(tx as Record<string, unknown>);
+          if (ev) {
+            stats.fuel_reimburse.eligible++;
+            batch.push(ev);
+          }
+        }
+
+        if (!dryRun && batch.length > 0) {
+          const CHUNK = 200;
+          for (let i = 0; i < batch.length; i += CHUNK) {
+            const slice = batch.slice(i, i + CHUNK);
+            try {
+              const r = await appendCanonicalLedgerEvents(slice, c);
+              stats.fuel_reimburse.appended += r.inserted;
+              stats.fuel_reimburse.skipped += r.skipped;
+            } catch (e: any) {
+              stats.fuel_reimburse.errors++;
+              console.error('[CanonicalBackfill] fuel_reimburse append error:', e?.message);
+            }
+          }
+        } else if (dryRun) {
+          stats.fuel_reimburse.appended = batch.length;
+        }
+        console.log(`[CanonicalBackfill] Fuel Reimburse: scanned=${stats.fuel_reimburse.scanned} eligible=${stats.fuel_reimburse.eligible} appended=${stats.fuel_reimburse.appended}`);
+      }
+
+      // 6. Toll Reimbursement Credit → adjustment
+      if (allowedTypes.has('toll_reimburse')) {
+        console.log('[CanonicalBackfill] Processing Toll Reimbursement Credits...');
+        const tollCreditTx = allTransactions.filter((tx: any) => tx?.category === 'Toll Reimbursement Credit');
+        stats.toll_reimburse.scanned = tollCreditTx.length;
+
+        const batch: Record<string, unknown>[] = [];
+        for (const tx of tollCreditTx) {
+          if (!tx?.id) continue;
+          const ev = buildCanonicalTollReimbursementEvent(tx as Record<string, unknown>);
+          if (ev) {
+            stats.toll_reimburse.eligible++;
+            batch.push(ev);
+          }
+        }
+
+        if (!dryRun && batch.length > 0) {
+          const CHUNK = 200;
+          for (let i = 0; i < batch.length; i += CHUNK) {
+            const slice = batch.slice(i, i + CHUNK);
+            try {
+              const r = await appendCanonicalLedgerEvents(slice, c);
+              stats.toll_reimburse.appended += r.inserted;
+              stats.toll_reimburse.skipped += r.skipped;
+            } catch (e: any) {
+              stats.toll_reimburse.errors++;
+              console.error('[CanonicalBackfill] toll_reimburse append error:', e?.message);
+            }
+          }
+        } else if (dryRun) {
+          stats.toll_reimburse.appended = batch.length;
+        }
+        console.log(`[CanonicalBackfill] Toll Reimburse: scanned=${stats.toll_reimburse.scanned} eligible=${stats.toll_reimburse.eligible} appended=${stats.toll_reimburse.appended}`);
+      }
+
+      // 7. Fixed expense rules → dated fixed_expense occurrences.
+      if (allowedTypes.has('fixed_expenses')) {
+        console.log('[CanonicalBackfill] Processing fixed expense rules...');
+        const configs = filterByOrg(await kv.getByPrefix('fixed_expense:'), c);
+        stats.fixed_expenses.scanned = configs.length;
+        const horizon = new Date();
+        horizon.setUTCFullYear(horizon.getUTCFullYear() + 5);
+        const horizonYmd = horizon.toISOString().slice(0, 10);
+        const batch: Record<string, unknown>[] = [];
+        for (const config of configs) {
+          if (!config?.id || !config?.startDate) continue;
+          const events = buildCanonicalFixedExpenseEvents(
+            config as any,
+            String(config.startDate),
+            horizonYmd,
+          );
+          if (events.length) {
+            stats.fixed_expenses.eligible++;
+            batch.push(...events);
+          }
+        }
+        if (dryRun) {
+          stats.fixed_expenses.appended = batch.length;
+        } else {
+          for (let i = 0; i < batch.length; i += 200) {
+            try {
+              const result = await appendCanonicalLedgerEvents(batch.slice(i, i + 200), c);
+              stats.fixed_expenses.appended += result.inserted;
+              stats.fixed_expenses.skipped += result.skipped;
+              stats.fixed_expenses.errors += result.failed;
+            } catch (e: any) {
+              stats.fixed_expenses.errors++;
+              console.error('[CanonicalBackfill] fixed expenses append error:', e?.message);
+            }
+          }
+        }
+      }
+
+      // 8. Posted generic transactions → operating expense / maintenance / other income.
+      if (allowedTypes.has('generic_transactions')) {
+        console.log('[CanonicalBackfill] Processing generic transactions...');
+        stats.generic_transactions.scanned = allTransactions.length;
+        const batch: Record<string, unknown>[] = [];
+        for (const tx of allTransactions) {
+          const event = buildCanonicalGenericTransactionEvent(tx as Record<string, unknown>);
+          if (!event) continue;
+          stats.generic_transactions.eligible++;
+          batch.push(event);
+        }
+        if (dryRun) {
+          stats.generic_transactions.appended = batch.length;
+        } else {
+          for (let i = 0; i < batch.length; i += 200) {
+            try {
+              const result = await appendCanonicalLedgerEvents(batch.slice(i, i + 200), c);
+              stats.generic_transactions.appended += result.inserted;
+              stats.generic_transactions.skipped += result.skipped;
+              stats.generic_transactions.errors += result.failed;
+            } catch (e: any) {
+              stats.generic_transactions.errors++;
+              console.error('[CanonicalBackfill] generic transactions append error:', e?.message);
+            }
+          }
+        }
+      }
+
+      const durationMs = Date.now() - startMs;
+      console.log(`[CanonicalBackfill] Complete in ${durationMs}ms dryRun=${dryRun}`);
+
+      return c.json({
+        success: true,
+        dryRun,
+        stats,
+        durationMs,
+      });
+    } catch (e: any) {
+      console.error('[CanonicalBackfill] Fatal error:', e?.message || e);
+      return c.json({ error: `Canonical backfill failed: ${e?.message || 'unknown error'}` }, 500);
+    }
+  });
+
+  // ─── POST /ledger/rebuild-trip-fare-ledger — Remove + rewrite trip fare_earning/tip/promotion ──
+  // Scoped by org when the user has organizationId. dryRun previews eligible count only.
+  // Scopes: 'indrive', 'uber', 'non_uber', 'all'
+  app.post(
+    "/make-server-37f42386/ledger/rebuild-trip-fare-ledger",
+    requireAuth(),
+    requirePermission("data.backfill"),
+    async (c) => {
+      const t0 = Date.now();
+      try {
+        const body = await c.req.json().catch(() => ({}));
+        const dryRun = body?.dryRun === true;
+        const scopeRaw = typeof body?.scope === "string" ? body.scope.trim().toLowerCase() : "indrive";
+        
+        // Normalize scope
+        let scope: 'indrive' | 'uber' | 'non_uber' | 'all';
+        if (scopeRaw === 'all') scope = 'all';
+        else if (scopeRaw === 'uber') scope = 'uber';
+        else if (scopeRaw === 'non_uber' || scopeRaw === 'nonuber') scope = 'non_uber';
+        else scope = 'indrive';
+
+        const allTrips = ((await kv.getByPrefix("trip:")) as any[]).filter((t) => t?.id);
+        const scoped = filterByOrg(allTrips, c);
+
+        const passesScope = (trip: any) => {
+          const platformLc = String(trip?.platform ?? "").trim().toLowerCase();
+          const isUber = isUberPlatform(trip?.platform);
+          
+          if (scope === "indrive") return platformLc === "indrive";
+          if (scope === "uber") return isUber;
+          if (scope === "non_uber") return !isUber;
+          return true; // 'all'
+        };
+
+        const eligible: any[] = [];
+        for (const trip of scoped) {
+          if (!passesScope(trip)) continue;
+          if (!tripHasMoneyForLedgerProjection(trip)) continue;
+          const evs = buildCanonicalTripFareEventsFromTrip(trip as Record<string, unknown>);
+          if (evs.length === 0) continue;
+          eligible.push(trip);
+        }
+
+        if (dryRun) {
+          return c.json({
+            success: true,
+            dryRun: true,
+            scope,
+            stats: {
+              scannedTotal: allTrips.length,
+              afterOrgFilter: scoped.length,
+              eligible: eligible.length,
+              sampleTripIds: eligible.slice(0, 20).map((t: any) => String(t.id)),
+            },
+            durationMs: Date.now() - t0,
+          });
+        }
+
+        const CHUNK = 100;
+        let chunksProcessed = 0;
+        let ledgerRowsDeleted = 0;
+        let idemKeysDeleted = 0;
+        let ledgerInserted = 0;
+        let ledgerSkipped = 0;
+        let ledgerFailed = 0;
+        let errors = 0;
+
+        for (let i = 0; i < eligible.length; i += CHUNK) {
+          const chunk = eligible.slice(i, i + CHUNK);
+          const ids = chunk.map((t: any) => String(t.id).trim()).filter(Boolean);
+          try {
+            const del = await deleteCanonicalLedgerBySource("trip", ids);
+            ledgerRowsDeleted += del.deleted;
+            idemKeysDeleted += del.idemDeleted;
+          } catch (e: any) {
+            errors++;
+            console.error("[RebuildTripFareLedger] delete failed:", e?.message);
+            continue;
+          }
+          try {
+            const app = await appendCanonicalTripFaresIfEligibleWithStats(chunk as Record<string, unknown>[], c);
+            ledgerInserted += app.inserted;
+            ledgerSkipped += app.skipped;
+            ledgerFailed += app.failed;
+          } catch (e: any) {
+            errors++;
+            console.error("[RebuildTripFareLedger] append failed:", e?.message);
+          }
+          chunksProcessed++;
+        }
+
+        console.log(
+          `[RebuildTripFareLedger] scope=${scope} eligible=${eligible.length} deleted=${ledgerRowsDeleted} inserted=${ledgerInserted} skipped=${ledgerSkipped} failed=${ledgerFailed} errors=${errors} (${Date.now() - t0}ms)`,
+        );
+
+        return c.json({
+          success: true,
+          dryRun: false,
+          scope,
+          stats: {
+            eligible: eligible.length,
+            chunksProcessed,
+            ledgerRowsDeleted,
+            idemKeysDeleted,
+            ledgerInserted,
+            ledgerSkipped,
+            ledgerFailed,
+            errors,
+          },
+          durationMs: Date.now() - t0,
+        });
+      } catch (e: any) {
+        console.error("[RebuildTripFareLedger] Fatal:", e);
+        return c.json({ error: e?.message || "rebuild-trip-fare-ledger failed" }, 500);
+      }
+    },
+  );
+
+  // Maintenance logs: Postgres-backed — see maintenance_routes.ts
+
+
+  // Storage Upload Endpoint
+  app.post("/make-server-37f42386/upload", async (c) => {
+    try {
+      const body = await c.req.parseBody();
+      const file = body['file'];
+      
+      // Deno multipart may yield Blob (not File) — accept both
+      if (!file || (!(file instanceof File) && !(file instanceof Blob))) {
+        return c.json({ error: "No file uploaded" }, 400);
+      }
+
+      const blob = file as Blob;
+
+      // Server-side size check with clear error message
+      const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
+      if (blob.size > MAX_FILE_SIZE) {
+        console.log(`Upload rejected: file is ${(blob.size / 1024 / 1024).toFixed(2)}MB, exceeds ${MAX_FILE_SIZE / 1024 / 1024}MB limit`);
+        return c.json({ 
+          error: `File too large (${(blob.size / 1024 / 1024).toFixed(1)}MB). Maximum allowed size is 5MB. Please compress or resize the image before uploading.` 
+        }, 413);
+      }
+
+      const retentionClass = String(body['retentionClass'] || 'permanent');
+      const evidenceType = body['evidenceType'] ? String(body['evidenceType']) : '';
+      const sourceType = body['sourceType'] ? String(body['sourceType']) : '';
+      const sourceId = body['sourceId'] ? String(body['sourceId']) : '';
+      const formOrgId = body['orgId'] ? String(body['orgId']).trim() : '';
+      const parentStatus = body['parentStatus'] ? String(body['parentStatus']) : 'Pending';
+
+      const useEphemeral =
+        isEvidenceTtlEnabled() &&
+        retentionClass === 'ephemeral' &&
+        evidenceType &&
+        sourceType &&
+        sourceId;
+
+      // /upload bypasses requireAuth middleware — resolve org from form or JWT for ephemeral
+      let resolvedOrgId = formOrgId || getOrgId(c) || '';
+      if (useEphemeral && !resolvedOrgId) {
+        const token = c.req.header('Authorization')?.replace(/^Bearer\s+/i, '');
+        if (token) {
+          const { data: authData } = await supabase.auth.getUser(token);
+          const user = authData?.user;
+          if (user) {
+            const appMeta = (user.app_metadata || {}) as Record<string, unknown>;
+            const fromApp = appMeta.organizationId;
+            if (typeof fromApp === 'string' && fromApp.trim()) {
+              resolvedOrgId = fromApp.trim();
+            } else {
+              const role = typeof appMeta.role === 'string' ? appMeta.role : '';
+              const roles = Array.isArray(appMeta.roles) ? appMeta.roles.map(String) : [];
+              if (role === 'fleet_owner' || roles.includes('fleet_owner') || role === 'admin') {
+                resolvedOrgId = user.id;
+              }
+            }
+          }
+        }
+      }
+      if (useEphemeral && (!resolvedOrgId || resolvedOrgId === 'unknown')) {
+        return c.json({
+          error: 'orgId required for ephemeral evidence uploads',
+          message: 'Pass orgId or sign in with an organization-scoped session.',
+        }, 400);
+      }
+
+      const bucketName = useEphemeral ? EPHEMERAL_EVIDENCE_BUCKET : "make-37f42386-docs";
+      await ensureBucket(
+        supabase,
+        useEphemeral ? "ephemeral-evidence" : "make-37f42386-docs",
+      );
+
+      const buffer = new Uint8Array(await blob.arrayBuffer());
+      const detected = detectFileMagicBytes(buffer);
+      if (!detected || !IMAGE_AND_PDF_MIMES.has(detected)) {
+        return c.json({ error: "File content does not match an allowed type" }, 400);
+      }
+      const fileExt = extForMime(detected);
+      const filePath = useEphemeral
+        ? buildEphemeralStoragePath(resolvedOrgId, evidenceType as EvidenceType, fileExt)
+        : `driver-docs/${crypto.randomUUID()}.${fileExt}`;
+
+      const { error } = await supabase.storage
+          .from(bucketName)
+          .upload(filePath, buffer, {
+              contentType: detected,
+              upsert: false
+          });
+
+      if (error) throw error;
+
+      const { data: signedData } = await supabase.storage
+          .from(bucketName)
+          .createSignedUrl(filePath, 60 * 60 * 24 * 365);
+
+      const signedUrl = signedData?.signedUrl;
+
+      if (useEphemeral && signedUrl) {
+        await registerEvidenceFile(supabase, {
+          bucketId: bucketName,
+          storagePath: filePath,
+          evidenceType: evidenceType as EvidenceType,
+          sourceType: sourceType as "transaction" | "fuel_entry" | "maintenance_log",
+          sourceId,
+          orgId: resolvedOrgId,
+          publicUrl: signedUrl,
+          parentStatus,
+          retentionClass: 'ephemeral',
+          fileSizeBytes: buffer.byteLength,
+          contentType: detected,
+        });
+      }
+
+      return c.json({ url: signedUrl });
+    } catch (e: any) {
+      console.error("Upload error:", e);
+      const status = e.statusCode === '413' || e.status === 413 ? 413 : 500;
+      const message = status === 413 
+        ? 'File exceeds maximum allowed size. Please compress or resize the image.'
+        : e.message || 'Upload failed';
+      return c.json({ error: message }, status);
+    }
+  });
+
+  // AI Document Parsing Endpoint
+  app.post("/make-server-37f42386/parse-document", async (c) => {
+    try {
+      const body = await c.req.parseBody();
+      const file = body['file'];
+      const backFile = body['backFile'];
+      const type = body['type'] as string;
+
+      if (!file || !(file instanceof File)) return c.json({ error: "No file provided" }, 400);
+
+      const apiKey = Deno.env.get("OPENAI_API_KEY");
+      if (!apiKey) return c.json({ error: "OpenAI API Key not configured" }, 503);
+
+      const openai = new OpenAI({ apiKey });
+
+      let prompt = `Extract information from this ${type} document into valid JSON. Return ONLY the raw JSON object. Do not use markdown formatting (no \`\`\`json). Use ISO 8601 format (YYYY-MM-DD) for all dates.`;
+      
+      if (type === 'license') {
+          prompt += `
+          For 'license', extract the following fields into a JSON object with these EXACT keys:
+          - firstName, lastName, middleName
+          - licenseNumber (Driver's License No. or TRN), expirationDate (YYYY-MM-DD), dateOfBirth (YYYY-MM-DD)
+          - address, state, countryCode
+          - class, sex (M or F)
+          - licenseToDrive (Extract the EXACT FULL TEXT under "LICENCE TO DRIVE" or "LICENSE TO DRIVE". e.g. "M/CARS & TRUCKS...". Do NOT abbreviate to "Class C" or similar codes. Copy the text exactly as it appears. If multiple lines, join with a space.)
+          - originalIssueDate (Look for "ORIGINAL DATE OF ISSUE" - YYYY-MM-DD)
+          - collectorate (Look for "COLLECTORATE" label, typically under the TRN or near the top. e.g. "011 SPANISH TOWN")
+          - controlNumber (Look for "CONTROL NO.". The value is a long numeric string (e.g. 0110149740). It might be below the label. Extract ALL digits. Ignore '#' prefix.), nationality
+          
+          Ensure dateOfBirth is used instead of dob.
+
+          CRITICAL PARSING RULE FOR JAMAICAN LICENSES:
+          - The section under "NAME" is structured as:
+            Line 1: LAST NAME (Surname)
+            Line 2: FIRST NAME + MIDDLE NAMES
+          - Example:
+            NAME
+            THOMAS           -> lastName: "THOMAS"
+            SADIKI ABAYOMI   -> firstName: "SADIKI", middleName: "ABAYOMI"
+          - Do NOT assign Line 1 to firstName. Line 1 is ALWAYS the Last Name.
+          `;
+      } else if (type === 'vehicle_registration') {
+          prompt += `
+          For 'vehicle_registration' (extract strictly):
+          - plate (License Plate No), vin (Chassis No)
+          - mvid (Motor Vehicle ID), laNumber (Licence Authority No), controlNumber
+          - make, model, year
+          - expirationDate (YYYY-MM-DD), issueDate (YYYY-MM-DD)
+          `;
+      } else if (type === 'fitness_certificate') {
+          prompt += `
+          For 'fitness_certificate':
+          - make, model, year, color
+          - bodyType, engineNumber, ccRating, chassisNo
+          - issueDate (YYYY-MM-DD), expirationDate (YYYY-MM-DD)
+          `;
+      }
+
+      const arrayBuffer = await file.arrayBuffer();
+      const base64Data = Buffer.from(arrayBuffer).toString('base64');
+      const dataUrl = `data:${file.type};base64,${base64Data}`;
+
+      const contentPayload: any[] = [
+          { type: "text", text: prompt },
+          { type: "image_url", image_url: { url: dataUrl } }
+      ];
+
+      if (backFile && backFile instanceof File) {
+           const backBuffer = await backFile.arrayBuffer();
+           const backBase64 = Buffer.from(backBuffer).toString('base64');
+           const backUrl = `data:${backFile.type};base64,${backBase64}`;
+           contentPayload.push({ type: "text", text: "The following image is the BACK of the document. Use it to extract licenseToDrive, originalIssueDate, controlNumber, and nationality." });
+           contentPayload.push({ type: "image_url", image_url: { url: backUrl } });
+      }
+
+      const response = await trackedProviderCall({
+          provider: "openai",
+          service: "vision",
+          route: "/make-server-37f42386/parse-document",
+          model: "gpt-4o",
+          run: () => openai.chat.completions.create({
+              model: "gpt-4o",
+              messages: [
+                  {
+                      role: "user",
+                      content: contentPayload
+                  }
+              ],
+              response_format: { type: "json_object" }
+          }),
+          extractUsage: (r: any) => ({
+              inputTokens: r?.usage?.prompt_tokens,
+              outputTokens: r?.usage?.completion_tokens,
+              requestId: r?.id,
+          }),
+      });
+      
+      const text = response.choices[0].message.content || "{}";
+      return c.json({ success: true, data: JSON.parse(text) });
+
+    } catch (e: any) {
+      if (e instanceof ProviderBlockedError) return c.json({ error: e.message, code: e.code }, e.httpStatus);
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+
+  // RETIRED: fuel-cards / fuel-entries CRUD lives in fuel_controller.tsx (mounted first).
+  // Do not re-add shadowed handlers here — they never ran and confuse ownership reviews.
+
+  // Mileage Adjustments Endpoints
+  app.get("/make-server-37f42386/mileage-adjustments", requireAuth(), async (c) => {
+    try {
+      const { data, error } = await fromKvStore()
+          .select("value")
+          .like("key", "fuel_adjustment:%")
+          .order("value->>week", { ascending: false });
+
+      if (error) throw error;
+      const adjustments = data?.map((d: any) => d.value) || [];
+      return c.json(filterByOrg(adjustments, c));
+    } catch (e: any) {
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  app.post("/make-server-37f42386/mileage-adjustments", requireAuth(), requirePermission('vehicles.edit'), async (c) => {
+    try {
+      const adj = await c.req.json();
+      if (!adj.id) {
+          adj.id = crypto.randomUUID();
+      }
+      await kv.set(`fuel_adjustment:${adj.id}`, stampOrg(adj, c));
+      return c.json({ success: true, data: adj });
+    } catch (e: any) {
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  app.delete("/make-server-37f42386/mileage-adjustments/:id", requireAuth(), requirePermission('vehicles.edit'), async (c) => {
+    const id = c.req.param("id");
+    try {
+      await kv.del(`fuel_adjustment:${id}`);
+      return c.json({ success: true });
+    } catch (e: any) {
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  app.post("/make-server-37f42386/generate-vehicle-image", async (c) => {
+    try {
+      const { make, model, year, color, bodyType, licensePlate } = await c.req.json();
+      
+      // Switch to Gemini/Imagen as requested
+      const apiKey = Deno.env.get("GEMINI_API_KEY");
+      if (!apiKey) {
+          return c.json({ error: "Gemini API Key not configured" }, 503);
+      }
+
+      // Update prompt for better vehicle accuracy
+      const prompt = `Professional studio photography of a ${year} ${color} ${make} ${model} ${bodyType}, automotive photoshoot style. 
+      The car is positioned on a clean, seamless white background with soft reflections on the floor. 
+      Front 3/4 angle view, high resolution, 8k, photorealistic, sharp focus. 
+      Ensure the design matches the specific production year ${year}. No license plates.`;
+
+      let imageB64 = null;
+      let lastError = null;
+
+      try {
+          // Using Imagen 4.0 (Production Standard 2026) as requested
+          // Endpoint: Google Generative Language API (Gemini API)
+          const data: any = await trackedProviderCall({
+              provider: "gemini",
+              service: "image",
+              route: "/make-server-37f42386/generate-vehicle-image",
+              model: "imagen-4.0-generate-001",
+              images: 1,
+              run: async () => {
+                  const response = await fetch(
+                      `https://generativelanguage.googleapis.com/v1beta/models/imagen-4.0-generate-001:predict?key=${apiKey}`,
+                      {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({
+                              instances: [{ prompt: prompt }],
+                              parameters: {
+                                  sampleCount: 1,
+                                  aspectRatio: "1:1"
+                              }
+                          })
+                      }
+                  );
+                  if (!response.ok) {
+                      const errorText = await response.text();
+                      throw new Error(`Google Imagen API Error: ${response.status} - ${errorText}`);
+                  }
+                  return await response.json();
+              },
+              extractUsage: () => ({ images: 1 }),
+          });
+
+          // Handle Imagen response structure
+          // The API returns { predictions: [ { bytesBase64Encoded: "..." } ] }
+          if (data.predictions && data.predictions[0]) {
+               const prediction = data.predictions[0];
+               imageB64 = prediction.bytesBase64Encoded || prediction;
+          }
+
+          if (!imageB64) {
+              throw new Error("No image data received from Gemini/Imagen");
+          }
+
+      } catch (e: any) {
+          if (e instanceof ProviderBlockedError) return c.json({ error: e.message, code: e.code }, e.httpStatus);
+          lastError = e.message;
+          console.error("Gemini Imagen Failed:", e);
+      }
+
+      if (!imageB64) {
+           return c.json({ 
+               error: `Image Generation failed: ${lastError}` 
+           }, 500);
+      }
+      
+      // Convert Base64 to Buffer for Upload
+      const buffer = Buffer.from(imageB64, 'base64');
+      const bucketName = `make-37f42386-vehicles`;
+      await ensureBucket(supabase, "make-37f42386-vehicles");
+
+      const fileName = `${licensePlate || crypto.randomUUID()}.png`;
+
+      const { error: uploadError } = await supabase.storage
+          .from(bucketName)
+          .upload(fileName, buffer, { 
+              contentType: 'image/png', 
+              upsert: true 
+          });
+
+      if (uploadError) throw uploadError;
+
+      // Generate Signed URL (valid for 1 year)
+      const { data: signedUrlData, error: signError } = await supabase.storage
+          .from(bucketName)
+          .createSignedUrl(fileName, 31536000); 
+
+      if (signError) throw signError;
+
+      return c.json({ url: signedUrlData.signedUrl });
+
+    } catch (e: any) {
+      console.error("Image Generation Error:", e);
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  // Toll Tag Endpoints
+  app.get("/make-server-37f42386/toll-tags", requireAuth(), async (c) => {
+    try {
+      const { data, error } = await fromKvStore()
+          .select("value")
+          .like("key", "toll_tag:%");
+
+      if (error) throw error;
+      const tags = data?.map((d: any) => d.value) || [];
+      return c.json(filterByOrg(tags, c));
+    } catch (e: any) {
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  app.post(
+    "/make-server-37f42386/toll-tags",
+    requireAuth(),
+    requirePermission('toll.manage'),
+    requireCatalogMatched({
+      label: "POST /toll-tags",
+      vehicleId: (_c, body) => {
+        if (!body || typeof body !== "object") return null;
+        const id = (body as { assignedVehicleId?: unknown }).assignedVehicleId;
+        // Only gate when the tag is being bound to a specific vehicle.
+        return typeof id === "string" && id.trim() ? id.trim() : null;
+      },
+    }),
+    async (c) => {
+    try {
+      const tag = (c.get("__cachedRequestBody") as Record<string, unknown> | null) ?? (await c.req.json());
+      if (!tag.id) {
+          tag.id = crypto.randomUUID();
+      }
+      if (!tag.createdAt) {
+          tag.createdAt = new Date().toISOString();
+      }
+
+      const existing = tag.id ? await kv.get(`toll_tag:${tag.id}`) as Record<string, unknown> | null : null;
+      try {
+        assertExpectedUpdatedAt(existing, tag.expectedUpdatedAt);
+      } catch (e: any) {
+        if (e?.name === 'StaleWriteError') {
+          return c.json({ error: e.message, reason: 'stale_write', current: existing }, 409);
+        }
+        throw e;
+      }
+
+      const toSave = stripConcurrencyToken(tag as Record<string, unknown>);
+      toSave.updatedAt = new Date().toISOString();
+
+      // Key structure: toll_tag:{id}
+      await kv.set(`toll_tag:${toSave.id}`, stampOrg(toSave, c));
+      return c.json({ success: true, data: toSave });
+    } catch (e: any) {
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  app.delete("/make-server-37f42386/toll-tags/:id", requireAuth(), requirePermission('toll.manage'), async (c) => {
+    const id = c.req.param("id");
+    try {
+      await kv.del(`toll_tag:${id}`);
+      return c.json({ success: true });
+    } catch (e: any) {
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  // Atomic assign: vehicle + tag updated together; rollback vehicle if tag write fails
+  app.post(
+    "/make-server-37f42386/toll-tags/assign",
+    requireAuth(),
+    requirePermission('toll.manage'),
+    requireCatalogMatched({
+      label: "POST /toll-tags/assign",
+      vehicleId: (_c, body) => {
+        if (!body || typeof body !== "object") return null;
+        const id = (body as { vehicleId?: unknown }).vehicleId;
+        return typeof id === "string" && id.trim() ? id.trim() : null;
+      },
+    }),
+    async (c) => {
+      try {
+        const body = (c.get("__cachedRequestBody") as Record<string, unknown> | null) ?? (await c.req.json());
+        const tagId = typeof body?.tagId === "string" ? body.tagId.trim() : "";
+        const vehicleId = typeof body?.vehicleId === "string" ? body.vehicleId.trim() : "";
+        if (!tagId || !vehicleId) {
+          return c.json({ error: "tagId and vehicleId are required" }, 400);
+        }
+
+        const tag = await kv.get(`toll_tag:${tagId}`) as Record<string, unknown> | null;
+        if (!tag) return c.json({ error: "Toll tag not found" }, 404);
+        if (!belongsToOrg(tag, c)) return c.json({ error: "Toll tag not found" }, 404);
+
+        const vehicle = await kv.get(`vehicle:${vehicleId}`) as Record<string, unknown> | null;
+        if (!vehicle) return c.json({ error: "Vehicle not found" }, 404);
+        if (!belongsToOrg(vehicle, c)) return c.json({ error: "Vehicle not found" }, 404);
+
+        const previousVehicle = { ...vehicle };
+        const now = new Date().toISOString();
+        const plate = String(vehicle.licensePlate || vehicle.id || "");
+        const previousTagVehicleId =
+          typeof tag.assignedVehicleId === "string" && tag.assignedVehicleId !== vehicleId
+            ? tag.assignedVehicleId
+            : null;
+
+        // If this vehicle already has a different tag, close that tag's open assignment.
+        const occupyingTagUuid =
+          typeof vehicle.tollTagUuid === "string" && vehicle.tollTagUuid !== tagId
+            ? vehicle.tollTagUuid
+            : null;
+        if (occupyingTagUuid) {
+          const occupying = await kv.get(`toll_tag:${occupyingTagUuid}`) as Record<string, unknown> | null;
+          if (occupying && belongsToOrg(occupying, c)) {
+            const occHistory = Array.isArray(occupying.assignmentHistory)
+              ? (occupying.assignmentHistory as any[]).map((entry: any) =>
+                  entry.vehicleId === vehicleId && !entry.unassignedAt
+                    ? { ...entry, unassignedAt: now }
+                    : entry
+                )
+              : [];
+            const clearedOcc = stampOrg({
+              ...occupying,
+              assignedVehicleId: undefined,
+              assignedVehicleName: undefined,
+              assignmentHistory: occHistory,
+              updatedAt: now,
+            }, c);
+            delete (clearedOcc as any).assignedVehicleId;
+            delete (clearedOcc as any).assignedVehicleName;
+            await kv.set(`toll_tag:${occupyingTagUuid}`, clearedOcc);
+          }
+        }
+
+        // Tag moving off another vehicle — clear that vehicle and close history window.
+        if (previousTagVehicleId) {
+          const prevVeh = await kv.get(`vehicle:${previousTagVehicleId}`) as Record<string, unknown> | null;
+          if (prevVeh && belongsToOrg(prevVeh, c)) {
+            const clearedPrev = stampOrg({
+              ...prevVeh,
+              tollTagId: null,
+              tollTagUuid: null,
+              tollTagProvider: null,
+            }, c);
+            delete (clearedPrev as any).tollTagId;
+            delete (clearedPrev as any).tollTagUuid;
+            delete (clearedPrev as any).tollTagProvider;
+            await kv.set(`vehicle:${previousTagVehicleId}`, clearedPrev);
+          }
+        }
+
+        const updatedVehicle = stampOrg({
+          ...vehicle,
+          tollTagId: tag.tagNumber,
+          tollTagUuid: tag.id,
+          tollTagProvider: tag.provider,
+        }, c);
+
+        await kv.set(`vehicle:${vehicleId}`, updatedVehicle);
+
+        let history = Array.isArray(tag.assignmentHistory) ? [...(tag.assignmentHistory as any[])] : [];
+        // Close any open windows for this tag before opening the new assignment.
+        history = history.map((entry: any) =>
+          !entry.unassignedAt ? { ...entry, unassignedAt: now } : entry
+        );
+        history.push({
+          vehicleId,
+          vehicleName: plate,
+          assignedAt: now,
+        });
+
+        const updatedTag = stampOrg({
+          ...tag,
+          assignedVehicleId: vehicleId,
+          assignedVehicleName: plate,
+          assignmentHistory: history,
+          updatedAt: now,
+        }, c);
+
+        try {
+          await kv.set(`toll_tag:${tagId}`, updatedTag);
+        } catch (tagErr) {
+          // Restore vehicle if tag write fails after vehicle was already updated
+          await kv.set(`vehicle:${vehicleId}`, stampOrg(previousVehicle, c));
+          throw tagErr;
+        }
+
+        // Link past tolls to this tag from assignment windows — no manual Sync button.
+        void applyTagIdentityBackfill().catch((err) => {
+          console.log(`[TagBackfill] auto after assign failed: ${err?.message || err}`);
+        });
+
+        return c.json({ success: true, data: updatedTag });
+      } catch (e: any) {
+        return c.json({ error: e.message }, 500);
+      }
+    },
+  );
+
+  // Atomic unassign: clear vehicle then tag; restore vehicle if tag write fails
+  app.post(
+    "/make-server-37f42386/toll-tags/unassign",
+    requireAuth(),
+    requirePermission('toll.manage'),
+    async (c) => {
+      try {
+        const body = await c.req.json().catch(() => ({}));
+        const tagId = typeof body?.tagId === "string" ? body.tagId.trim() : "";
+        if (!tagId) return c.json({ error: "tagId is required" }, 400);
+
+        const tag = await kv.get(`toll_tag:${tagId}`) as Record<string, unknown> | null;
+        if (!tag) return c.json({ error: "Toll tag not found" }, 404);
+        if (!belongsToOrg(tag, c)) return c.json({ error: "Toll tag not found" }, 404);
+
+        const now = new Date().toISOString();
+        let previousVehicle: Record<string, unknown> | null = null;
+        let vehicleId: string | null = null;
+
+        const assignedVehicleId = typeof tag.assignedVehicleId === "string" ? tag.assignedVehicleId : null;
+        if (assignedVehicleId) {
+          vehicleId = assignedVehicleId;
+          const vehicle = await kv.get(`vehicle:${assignedVehicleId}`) as Record<string, unknown> | null;
+          if (vehicle && belongsToOrg(vehicle, c)) {
+            previousVehicle = { ...vehicle };
+            const clearedVehicle = stampOrg({
+              ...vehicle,
+              tollTagId: null,
+              tollTagUuid: null,
+              tollTagProvider: null,
+            }, c);
+            // Drop null toll fields so clients treat as unassigned
+            delete (clearedVehicle as any).tollTagId;
+            delete (clearedVehicle as any).tollTagUuid;
+            delete (clearedVehicle as any).tollTagProvider;
+            await kv.set(`vehicle:${assignedVehicleId}`, clearedVehicle);
+          }
+        }
+
+        const history = Array.isArray(tag.assignmentHistory)
+          ? (tag.assignmentHistory as any[]).map((entry: any) =>
+              entry.vehicleId === tag.assignedVehicleId && !entry.unassignedAt
+                ? { ...entry, unassignedAt: now }
+                : entry
+            )
+          : [];
+
+        const updatedTag = stampOrg({
+          ...tag,
+          assignedVehicleId: undefined,
+          assignedVehicleName: undefined,
+          assignmentHistory: history,
+          updatedAt: now,
+        }, c);
+        delete (updatedTag as any).assignedVehicleId;
+        delete (updatedTag as any).assignedVehicleName;
+
+        try {
+          await kv.set(`toll_tag:${tagId}`, updatedTag);
+        } catch (tagErr) {
+          if (previousVehicle && vehicleId) {
+            await kv.set(`vehicle:${vehicleId}`, stampOrg(previousVehicle, c));
+          }
+          throw tagErr;
+        }
+
+        void applyTagIdentityBackfill().catch((err) => {
+          console.log(`[TagBackfill] auto after unassign failed: ${err?.message || err}`);
+        });
+
+        return c.json({ success: true, data: updatedTag });
+      } catch (e: any) {
+        return c.json({ error: e.message }, 500);
+      }
+    },
+  );
+
+  // =========================================================================
+  // Toll Plaza Endpoints (Phase 2 — Toll Database CRUD)
+  // KV key pattern: toll_plaza:{id}
+  // =========================================================================
+
+  // Step 2.1 — GET all toll plazas
+  app.get("/make-server-37f42386/toll-plazas", requireAuth(), async (c) => {
+    try {
+      const { data, error } = await fromKvStore()
+          .select("value")
+          .like("key", "toll_plaza:%");
+
+      if (error) throw error;
+      const plazas = data?.map((d: any) => d.value) || [];
+      const scoped = filterByOrg(plazas, c);
+      const stats = await loadTollPlazaStats(getOrgId(c));
+      const withStats = attachPlazaStats(scoped, stats);
+      console.log(`[TollPlaza] GET /toll-plazas — returning ${withStats.length} plazas (${stats.size} with traffic)`);
+      return c.json(withStats);
+    } catch (e: any) {
+      console.log(`[TollPlaza] ERROR GET /toll-plazas: ${e.message}`);
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  // Step 2.4 — GET single toll plaza by ID
+  app.get("/make-server-37f42386/toll-plazas/:id", requireAuth(), async (c) => {
+    const id = c.req.param("id");
+    try {
+      const plaza = await kv.get(`toll_plaza:${id}`);
+      if (!plaza) {
+        console.log(`[TollPlaza] GET /toll-plazas/${id} — not found`);
+        return c.json({ error: "Toll plaza not found" }, 404);
+      }
+      if (!belongsToOrg(plaza, c)) {
+        return c.json({ error: "Toll plaza not found" }, 404);
+      }
+      const stats = await loadTollPlazaStats(getOrgId(c));
+      const [withStats] = attachPlazaStats([plaza as any], stats);
+      console.log(`[TollPlaza] GET /toll-plazas/${id} — found: ${(plaza as any).name}`);
+      return c.json(withStats);
+    } catch (e: any) {
+      console.log(`[TollPlaza] ERROR GET /toll-plazas/${id}: ${e.message}`);
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  // Step 2.2 — POST create or update a toll plaza
+  app.post("/make-server-37f42386/toll-plazas", requireAuth(), requirePermission('toll.manage'), async (c) => {
+    try {
+      const plaza = await c.req.json();
+
+      if (!plaza.id) {
+        plaza.id = crypto.randomUUID();
+      }
+      if (!plaza.createdAt) {
+        plaza.createdAt = new Date().toISOString();
+      }
+      plaza.updatedAt = new Date().toISOString();
+
+      // Stats are derived from fleet.v_toll_plaza_stats at read time — never stored.
+      delete plaza.stats;
+
+      await kv.set(`toll_plaza:${plaza.id}`, stampOrg(plaza, c));
+
+      const stats = await loadTollPlazaStats(getOrgId(c));
+      const [saved] = attachPlazaStats([plaza], stats);
+      console.log(`[TollPlaza] POST /toll-plazas — saved plaza "${plaza.name}" (${plaza.id})`);
+      return c.json({ success: true, data: saved });
+    } catch (e: any) {
+      console.log(`[TollPlaza] ERROR POST /toll-plazas: ${e.message}`);
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  // Step 2.3 — DELETE a toll plaza by ID
+  app.delete("/make-server-37f42386/toll-plazas/:id", requireAuth(), requirePermission('toll.manage'), async (c) => {
+    const id = c.req.param("id");
+    try {
+      await kv.del(`toll_plaza:${id}`);
+      console.log(`[TollPlaza] DELETE /toll-plazas/${id} — deleted`);
+      return c.json({ success: true });
+    } catch (e: any) {
+      console.log(`[TollPlaza] ERROR DELETE /toll-plazas/${id}: ${e.message}`);
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  // Batch Management Endpoints — native fleet_* SQL (no full-prefix memory load)
+  app.get("/make-server-37f42386/batches", requireAuth(), async (c) => {
+    try {
+      const batchRes = await queryFleet("import_batches", {
+        order: { col: "upload_date", ascending: false },
+        limit: 500,
+      });
+      if (batchRes.error) throw batchRes.error;
+      const batches = batchRes.data as Record<string, unknown>[];
+
+      // Enrich: platform + actual trip date span via indexed batch_id (limit 1 each)
+      const enriched = await Promise.all(batches.map(async (batch: any) => {
+        try {
+          const batchId = String(batch.id || "");
+          const [minRes, maxRes] = await Promise.all([
+            queryFleet("trips", {
+              eq: { batch_id: batchId },
+              order: { col: "date", ascending: true },
+              limit: 1,
+            }),
+            queryFleet("trips", {
+              eq: { batch_id: batchId },
+              order: { col: "date", ascending: false },
+              limit: 1,
+            }),
+          ]);
+          const minTrip = minRes.data?.[0] as any;
+          const maxTrip = maxRes.data?.[0] as any;
+          const toYmd = (v: unknown) => {
+            if (typeof v !== "string") return null;
+            const s = v.trim().slice(0, 10);
+            return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : null;
+          };
+          const dataPeriodStart = toYmd(minTrip?.date) || batch.dataPeriodStart || null;
+          const dataPeriodEnd = toYmd(maxTrip?.date) || batch.dataPeriodEnd || null;
+          const platform = minTrip?.platform || maxTrip?.platform || null;
+          return {
+            ...batch,
+            platform,
+            ...(dataPeriodStart ? { dataPeriodStart } : {}),
+            ...(dataPeriodEnd ? { dataPeriodEnd } : {}),
+          };
+        } catch {
+          return { ...batch, platform: null };
+        }
+      }));
+
+      return c.json(filterByOrg(enriched, c));
+    } catch (e: any) {
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  app.post("/make-server-37f42386/batches", requireAuth(), requirePermission('data.import'), async (c) => {
+    try {
+      const rbacUser = c.get('rbacUser') as { userId?: string; email?: string } | undefined;
+      const batch = await c.req.json();
+      if (!batch.id) {
+          batch.id = crypto.randomUUID();
+      }
+      // Default to processing so failed mid-import commits never look completed
+      if (!batch.status) batch.status = "processing";
+      await kv.set(`batch:${batch.id}`, stampOrg(batch, c));
+      await logAdminAction({
+        actorId: rbacUser?.userId || "unknown",
+        actorName: rbacUser?.email || "Admin",
+        action: "create_import_batch",
+        targetId: String(batch.id),
+        targetEmail: "N/A",
+        details: `status=${batch.status} records=${batch.recordCount ?? 0} type=${batch.type || "unknown"}`,
+      });
+      return c.json({ success: true, data: batch });
+    } catch (e: any) {
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  /** Phase 7 — merge audit / canonical-append stats into an existing batch (org-scoped). */
+  app.patch("/make-server-37f42386/batches/:id", requireAuth(), async (c) => {
+    const id = c.req.param("id");
+    const ALLOWED = new Set([
+      "canonicalEventsInserted",
+      "canonicalEventsSkipped",
+      "canonicalEventsFailed",
+      "canonicalAppendCompletedAt",
+      "periodStart",
+      "periodEnd",
+      "uploadedBy",
+      "processedBy",
+      "contentFingerprint",
+      "status",
+      "paymentLedgerLinesImported",
+      "paymentLedgerLinesSkipped",
+      "usesPaymentLineSsot",
+    ]);
+    try {
+      const existing = await kv.get(`batch:${id}`);
+      if (!existing || typeof existing !== "object") {
+        return c.json({ error: "Batch not found" }, 404);
+      }
+      if (!belongsToOrg(existing as Record<string, unknown>, c)) {
+        return c.json({ error: "Forbidden" }, 403);
+      }
+      const patch = await c.req.json();
+      if (!patch || typeof patch !== "object") {
+        return c.json({ error: "Invalid body" }, 400);
+      }
+      const merged: Record<string, unknown> = { ...(existing as Record<string, unknown>) };
+      for (const [k, v] of Object.entries(patch as Record<string, unknown>)) {
+        if (!ALLOWED.has(k)) continue;
+        merged[k] = v;
+      }
+      await kv.set(`batch:${id}`, merged);
+      if (patch.status === "completed" || patch.status === "error") {
+        const rbacUser = c.get('rbacUser') as { userId?: string; email?: string } | undefined;
+        await logAdminAction({
+          actorId: rbacUser?.userId || "unknown",
+          actorName: rbacUser?.email || "Admin",
+          action: patch.status === "completed" ? "complete_import_batch" : "fail_import_batch",
+          targetId: id,
+          targetEmail: "N/A",
+          details: `status=${patch.status}`,
+        });
+      }
+      return c.json({ success: true, data: merged });
+    } catch (e: any) {
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  app.delete("/make-server-37f42386/batches/:id", requireAuth(), requirePermission('data.backfill'), async (c) => {
+    const batchId = c.req.param("id");
+    const rbacUser = c.get('rbacUser') as { userId?: string; email?: string } | undefined;
+    try {
+      console.log(`[Batch delete] Starting cascade delete for batch ${batchId}`);
+
+      // ── 0. Canonical money rows in ledger.entries for this batch
+      let deletedCanonicalLedger = 0;
+      let deletedCanonicalIdem = 0;
+      const driverIdsFromCanonical = new Set<string>();
+      try {
+        const previewTrips = await listByBatch("trips", batchId);
+        for (const v of previewTrips as Record<string, unknown>[]) {
+          if (v?.driverId) driverIdsFromCanonical.add(String(v.driverId).trim());
+        }
+        const delRes = await deleteCanonicalLedgerByBatchId(batchId);
+        deletedCanonicalLedger = delRes.deleted;
+        deletedCanonicalIdem = delRes.idemDeleted;
+        console.log(
+          `[Batch delete] Removed ${deletedCanonicalLedger} ledger.entries for batch (unified)`,
+        );
+      } catch (canonicalErr: any) {
+        console.warn("[Batch delete] Canonical ledger cleanup failed (non-fatal):", canonicalErr?.message);
+      }
+
+      // ── 0b. Dispute refunds (still on KV — unmapped)
+      let deletedDisputeRefundKeys = 0;
+      let deletedDisputeRefundDedupKeys = 0;
+      try {
+        const allDr = await kv.getByPrefix("dispute-refund:");
+        const mainRows = allDr.filter((v: any) => String(v?.batchId || "") === batchId);
+        if (mainRows.length > 0) {
+          const keysToDel = mainRows.map((v: any) => `dispute-refund:${v.id || v.supportCaseId}`);
+          // Prefer keys discovered via prefix scan of live KV keys
+          const keyed = await fromKvStore()
+            .select("key, value")
+            .like("key", "dispute-refund:%")
+            .eq("value->>batchId", batchId);
+          const rows = (keyed.data || []) as Array<{ key: string; value: any }>;
+          const filtered = rows.filter((r) =>
+            r.key.startsWith("dispute-refund:") && !r.key.startsWith("dispute-refund-dedup")
+          );
+          const delKeys = filtered.map((r) => r.key);
+          for (let i = 0; i < delKeys.length; i += 100) {
+            await kv.mdel(delKeys.slice(i, i + 100));
+          }
+          deletedDisputeRefundKeys = delKeys.length;
+          const dedupIds = new Set<string>();
+          for (const row of filtered) {
+            const sid = row.value?.supportCaseId;
+            if (typeof sid === "string" && sid.trim()) dedupIds.add(sid.trim());
+          }
+          for (const sid of dedupIds) {
+            try {
+              await kv.del(`dispute-refund-dedup:${sid}`);
+              deletedDisputeRefundDedupKeys++;
+            } catch { /* non-fatal */ }
+          }
+        }
+        console.log(
+          `[Batch delete] Removed ${deletedDisputeRefundKeys} dispute-refund record(s), ${deletedDisputeRefundDedupKeys} dedup key(s)`,
+        );
+      } catch (drErr: any) {
+        console.warn("[Batch delete] Dispute refund cleanup failed (non-fatal):", drErr?.message);
+      }
+
+      // ── 0c. Payment ledger lines (native batch_id index)
+      let deletedPaymentLedgerLines = 0;
+      let deletedPaymentLedgerDedupKeys = 0;
+      try {
+        const pllRows = await listByBatch("payment_ledger_lines", batchId, { withKeys: true }) as Array<{ key: string; value: any }>;
+        if (pllRows.length > 0) {
+          const keysToDel = pllRows.map((r) => r.key);
+          for (let i = 0; i < keysToDel.length; i += 100) {
+            await kv.mdel(keysToDel.slice(i, i + 100));
+          }
+          deletedPaymentLedgerLines = keysToDel.length;
+          for (const row of pllRows) {
+            const idem = row.value?.idempotencyKey;
+            if (typeof idem === "string" && idem.trim()) {
+              try {
+                await kv.del(`payment_ledger_line-dedup:${idem.trim()}`);
+                deletedPaymentLedgerDedupKeys++;
+              } catch { /* non-fatal */ }
+            }
+          }
+        }
+        console.log(
+          `[Batch delete] Removed ${deletedPaymentLedgerLines} payment_ledger_line(s), ${deletedPaymentLedgerDedupKeys} dedup key(s)`,
+        );
+      } catch (pllErr: any) {
+        console.warn("[Batch delete] Payment ledger line cleanup failed (non-fatal):", pllErr?.message);
+      }
+
+      // ── 0d. Driver period snapshots (native batch_id)
+      let deletedDriverPeriodSnapshots = 0;
+      try {
+        const snapRows = await listByBatch("driver_period_snapshots", batchId, { withKeys: true }) as Array<{ key: string }>;
+        const snapKeys = snapRows.map((r) => r.key);
+        if (snapKeys.length > 0) {
+          for (let i = 0; i < snapKeys.length; i += 100) {
+            await kv.mdel(snapKeys.slice(i, i + 100));
+          }
+          deletedDriverPeriodSnapshots = snapKeys.length;
+        }
+        console.log(`[Batch delete] Removed ${deletedDriverPeriodSnapshots} driver_period_snapshot key(s)`);
+      } catch (snapErr: any) {
+        console.warn("[Batch delete] Driver period snapshot cleanup failed (non-fatal):", snapErr?.message);
+      }
+
+      // ── 1. Trips in this batch (indexed batch_id)
+      const tripRows = await listByBatch("trips", batchId, { withKeys: true }) as Array<{ key: string; value: any }>;
+      const tripKeys = tripRows.map((d) => d.key);
+      const tripIds: string[] = [];
+      const driverIdSet = new Set<string>();
+      const vehicleIdSet = new Set<string>();
+      const uberDriverIdsFromDeletedTrips = new Set<string>();
+      for (const row of tripRows) {
+        const v = row.value as { id?: string; driverId?: string; vehicleId?: string; platform?: string } | null;
+        if (!v) continue;
+        tripIds.push(v.id || row.key.replace("trip:", ""));
+        if (v.driverId) driverIdSet.add(v.driverId);
+        if (v.vehicleId) vehicleIdSet.add(v.vehicleId);
+        const plat = String(v.platform || "").toLowerCase();
+        if (v.driverId && (plat === "uber" || plat.includes("uber"))) {
+          uberDriverIdsFromDeletedTrips.add(String(v.driverId).trim());
+        }
+      }
+      for (const d of driverIdsFromCanonical) {
+        if (d) driverIdSet.add(d);
+      }
+      const stripUberPaymentMetricsFor = new Set<string>();
+      for (const d of driverIdsFromCanonical) if (d) stripUberPaymentMetricsFor.add(d);
+      for (const d of uberDriverIdsFromDeletedTrips) if (d) stripUberPaymentMetricsFor.add(d);
+
+      console.log(`[Batch delete] Found ${tripKeys.length} trips, ${driverIdSet.size} drivers (${driverIdsFromCanonical.size} from canonical events), ${vehicleIdSet.size} vehicles`);
+
+      if (tripKeys.length > 0) {
+        for (let i = 0; i < tripKeys.length; i += 100) {
+          await kv.mdel(tripKeys.slice(i, i + 100));
+        }
+      }
+
+      // ── 2. Transactions in this batch
+      const txRows = await listByBatch("transactions", batchId, { withKeys: true }) as Array<{ key: string }>;
+      const txKeys = txRows.map((d) => d.key);
+      if (txKeys.length > 0) {
+        for (let i = 0; i < txKeys.length; i += 100) {
+          await kv.mdel(txKeys.slice(i, i + 100));
+        }
+      }
+      console.log(`[Batch delete] Deleted ${tripKeys.length} trips, ${txKeys.length} transactions`);
+
+      // ── 3. Smart driver_metric cleanup
+      const collectDriverMetricKeysForDriver = async (targetDriverId: string): Promise<string[]> => {
+        const raw = String(targetDriverId || "").trim();
+        if (!raw) return [];
+        const variants = Array.from(
+          new Set([raw, raw.toLowerCase(), raw.toUpperCase()].filter((v) => v.length > 0)),
+        );
+        const seen = new Set<string>();
+        const out: string[] = [];
+        for (const vid of variants) {
+          const res = await queryFleet("driver_metrics", {
+            eq: { driver_id: vid },
+            withKeys: true,
+            limit: 5000,
+            order: { col: "legacy_kv_id", ascending: true },
+          });
+          for (const row of (res.data || []) as Array<{ key: string }>) {
+            if (row.key && !seen.has(row.key)) {
+              seen.add(row.key);
+              out.push(row.key);
+            }
+          }
+        }
+        const legacy = `driver_metric:${raw}`;
+        if (!seen.has(legacy)) {
+          seen.add(legacy);
+          out.push(legacy);
+        }
+        return out;
+      };
+
+      let deletedDriverMetrics = 0;
+      let skippedDriverMetrics = 0;
+      for (const driverId of driverIdSet) {
+        try {
+          const otherTrips = await countBy("trips", {
+            filters: [
+              { op: "eq", col: "driver_id", value: driverId },
+              { op: "neq", col: "batch_id", value: batchId },
+            ],
+          });
+          if (otherTrips === 0) {
+            const dmKeys = await collectDriverMetricKeysForDriver(driverId);
+            if (dmKeys.length > 0) {
+              for (let i = 0; i < dmKeys.length; i += 100) {
+                await kv.mdel(dmKeys.slice(i, i + 100));
+              }
+              deletedDriverMetrics += dmKeys.length;
+              console.log(
+                `[Batch delete] Removed ${dmKeys.length} driver_metric key(s) for driver ${driverId}`,
+              );
+            }
+          } else {
+            skippedDriverMetrics++;
+          }
+        } catch (err: any) {
+          console.log(`[Batch delete] Driver metric check error for ${driverId}: ${err.message} — skipping (safe)`);
+          skippedDriverMetrics++;
+        }
+      }
+      console.log(`[Batch delete] Driver metrics: ${deletedDriverMetrics} KV rows deleted, ${skippedDriverMetrics} drivers skipped (still have trips elsewhere)`);
+
+      // ── 3b. Uber payment CSV metrics
+      let deletedUberPaymentMetrics = 0;
+      for (const driverId of stripUberPaymentMetricsFor) {
+        try {
+          const dmKeys = await collectDriverMetricKeysForDriver(driverId);
+          const uberPaymentKeys: string[] = [];
+          const dd = String(driverId || "").trim().toLowerCase();
+          for (const key of dmKeys) {
+            const m = (await kv.get(key)) as { id?: string; driverId?: string } | null;
+            const mid = m?.id != null ? String(m.id) : "";
+            if (!mid.startsWith("dm-pay-") && !mid.startsWith("dm-ptx-")) continue;
+            const md = String(m?.driverId || "").trim().toLowerCase();
+            if (md && dd && md === dd) uberPaymentKeys.push(key);
+          }
+          if (uberPaymentKeys.length > 0) {
+            for (let i = 0; i < uberPaymentKeys.length; i += 100) {
+              await kv.mdel(uberPaymentKeys.slice(i, i + 100));
+            }
+            deletedUberPaymentMetrics += uberPaymentKeys.length;
+          }
+        } catch (ubErr: any) {
+          console.warn(`[Batch delete] Uber payment metric cleanup for ${driverId}:`, ubErr?.message);
+        }
+      }
+      console.log(
+        `[Batch delete] Uber payment metrics (dm-pay/dm-ptx): ${deletedUberPaymentMetrics} KV rows removed`,
+      );
+
+      // ── 4. Smart vehicle_metric cleanup
+      let deletedVehicleMetrics = 0;
+      let skippedVehicleMetrics = 0;
+      for (const vehicleId of vehicleIdSet) {
+        try {
+          const otherTrips = await countBy("trips", {
+            filters: [
+              { op: "eq", col: "vehicle_id", value: vehicleId },
+              { op: "neq", col: "batch_id", value: batchId },
+            ],
+          });
+          if (otherTrips === 0) {
+            await kv.del(`vehicle_metric:${vehicleId}`);
+            deletedVehicleMetrics++;
+          } else {
+            skippedVehicleMetrics++;
+          }
+        } catch (err: any) {
+          console.log(`[Batch delete] Vehicle metric check error for ${vehicleId}: ${err.message} — skipping (safe)`);
+          skippedVehicleMetrics++;
+        }
+      }
+      console.log(`[Batch delete] Vehicle metrics: ${deletedVehicleMetrics} deleted, ${skippedVehicleMetrics} shared/skipped`);
+
+      // ── 5. Ghost Data Cleanup (head counts — no full load)
+      const remainingTrips = await countBy("trips");
+      const remainingTx = await countBy("transactions");
+      if (remainingTrips === 0 && remainingTx === 0) {
+        console.log("[Batch delete] No source data remaining. Running ghost metrics cleanup...");
+        for (const domain of ["driver_metrics", "vehicle_metrics"] as const) {
+          const res = await queryFleet(domain, { withKeys: true, limit: 5000, order: { col: "legacy_kv_id", ascending: true } });
+          const keys = (res.data as Array<{ key: string }>).map((d) => d.key);
+          for (let i = 0; i < keys.length; i += 100) await kv.mdel(keys.slice(i, i + 100));
+        }
+        // organization_metric remains on KV (unmapped)
+        const orgMetrics = await fromKvStore().select("key").like("key", "organization_metric:%");
+        const orgKeys = ((orgMetrics.data || []) as Array<{ key: string }>).map((d) => d.key);
+        for (let i = 0; i < orgKeys.length; i += 100) await kv.mdel(orgKeys.slice(i, i + 100));
+      }
+
+      // ── 6. Delete the batch record itself
+      await kv.del(`batch:${batchId}`);
+
+      await cache.invalidateCacheVersion("stats");
+      await cache.invalidateCacheVersion("performance");
+
+      console.log(`[Batch delete] Cascade complete for batch ${batchId}`);
+
+      await logAdminAction({
+        actorId: rbacUser?.userId || "unknown",
+        actorName: rbacUser?.email || "Admin",
+        action: "cascade_delete_batch",
+        targetId: batchId,
+        targetEmail: "N/A",
+        details: `trips=${tripKeys.length} tx=${txKeys.length} ledger=${deletedCanonicalLedger} paymentLines=${deletedPaymentLedgerLines} snapshots=${deletedDriverPeriodSnapshots} disputes=${deletedDisputeRefundKeys}`,
+      });
+
+      return c.json({
+        success: true,
+        deletedTrips: tripKeys.length,
+        deletedTransactions: txKeys.length,
+        deletedLedgerEntries: deletedCanonicalLedger,
+        deletedCanonicalIdem,
+        deletedDriverMetrics,
+        skippedDriverMetrics,
+        deletedUberPaymentMetrics,
+        deletedDisputeRefundKeys,
+        deletedDisputeRefundDedupKeys,
+        deletedPaymentLedgerLines,
+        deletedPaymentLedgerDedupKeys,
+        deletedDriverPeriodSnapshots,
+        deletedVehicleMetrics,
+        skippedVehicleMetrics,
+        deletedBatch: batchId
+      });
+    } catch (e: any) {
+      console.error(`[Batch delete] Cascade error for batch ${batchId}:`, e);
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  // ---------------------------------------------------------------------------
+  // Batch Delete Preview — native indexed counts (no full-prefix memory load)
+  // ---------------------------------------------------------------------------
+  app.get("/make-server-37f42386/batches/:id/delete-preview", requireAuth(), requirePermission('data.backfill'), async (c) => {
+    const batchId = c.req.param("id");
+    try {
+      const batchRecord = await kv.get(`batch:${batchId}`);
+      if (!batchRecord) {
+        return c.json({ error: `Batch ${batchId} not found` }, 404);
+      }
+
+      const tripRows = await listByBatch("trips", batchId) as Record<string, unknown>[];
+      const tripCount = tripRows.length;
+      const driverIdSet = new Set<string>();
+      const vehicleIdSet = new Set<string>();
+      for (const v of tripRows) {
+        if (v?.driverId) driverIdSet.add(String(v.driverId));
+        if (v?.vehicleId) vehicleIdSet.add(String(v.vehicleId));
+      }
+
+      const transactionCount = await countBy("transactions", { eq: { batch_id: batchId } });
+
+      let ledgerCount = 0;
+      try {
+        ledgerCount = await countCanonicalLedgerByBatchId(batchId);
+      } catch (e: any) {
+        console.log(`Batch delete-preview ledger.entries count error: ${e?.message}`);
+      }
+
+      const driverMetrics = { affected: driverIdSet.size, safeToDelete: 0, shared: 0, details: [] as any[] };
+      for (const driverId of driverIdSet) {
+        try {
+          const other = await countBy("trips", {
+            filters: [
+              { op: "eq", col: "driver_id", value: driverId },
+              { op: "neq", col: "batch_id", value: batchId },
+            ],
+          });
+          if (other > 0) {
+            driverMetrics.shared++;
+            driverMetrics.details.push({ driverId, status: "shared", otherTrips: other });
+          } else {
+            driverMetrics.safeToDelete++;
+            driverMetrics.details.push({ driverId, status: "safeToDelete" });
+          }
+        } catch {
+          driverMetrics.shared++;
+          driverMetrics.details.push({ driverId, status: "shared", reason: "query error — kept safe" });
+        }
+      }
+
+      const vehicleMetrics = { affected: vehicleIdSet.size, safeToDelete: 0, shared: 0, details: [] as any[] };
+      for (const vehicleId of vehicleIdSet) {
+        try {
+          const other = await countBy("trips", {
+            filters: [
+              { op: "eq", col: "vehicle_id", value: vehicleId },
+              { op: "neq", col: "batch_id", value: batchId },
+            ],
+          });
+          if (other > 0) {
+            vehicleMetrics.shared++;
+            vehicleMetrics.details.push({ vehicleId, status: "shared", otherTrips: other });
+          } else {
+            vehicleMetrics.safeToDelete++;
+            vehicleMetrics.details.push({ vehicleId, status: "safeToDelete" });
+          }
+        } catch {
+          vehicleMetrics.shared++;
+          vehicleMetrics.details.push({ vehicleId, status: "shared", reason: "query error — kept safe" });
+        }
+      }
+
+      // dispute-refund remains on KV (unmapped)
+      const drPreview = await fromKvStore()
+        .select("key")
+        .like("key", "dispute-refund:%")
+        .eq("value->>batchId", batchId);
+      const disputeRefundCount = ((drPreview.data || []) as Array<{ key: string }>).filter(
+        (r) => r.key.startsWith("dispute-refund:") && !r.key.startsWith("dispute-refund-dedup"),
+      ).length;
+
+      console.log(
+        `[Batch delete-preview] Batch ${batchId}: ${tripCount} trips, ${transactionCount} txns, ${ledgerCount} ledger_event rows, ${disputeRefundCount} dispute refunds, ${driverMetrics.safeToDelete}/${driverMetrics.affected} driver metrics deletable, ${vehicleMetrics.safeToDelete}/${vehicleMetrics.affected} vehicle metrics deletable`,
+      );
+
+      return c.json({
+        batch: batchRecord,
+        trips: tripCount,
+        transactions: transactionCount,
+        ledgerEntries: ledgerCount,
+        disputeRefunds: disputeRefundCount,
+        driverMetrics,
+        vehicleMetrics,
+      });
+    } catch (e: any) {
+      console.error(`Batch delete-preview error for ${batchId}:`, e);
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  // Admin: Preview Data Reset Endpoint - Optimized
+  app.post("/make-server-37f42386/preview-reset", requireAuth(), requirePermission('data.backfill'), async (c) => {
+    try {
+      const { type, startDate, endDate, targets, driverId } = await c.req.json();
+      
+      if (!type || !startDate || !endDate || !targets) {
+          return c.json({ error: "Missing required parameters" }, 400);
+      }
+      
+      const start = new Date(startDate).toISOString();
+      const end = new Date(endDate).toISOString();
+      
+      const items: any[] = [];
+
+      if (type === 'upload') {
+          const { data: batchData } = await fromKvStore()
+              .select("value")
+              .like("key", "batch:%")
+              .gte("value->>uploadDate", start)
+              .lte("value->>uploadDate", end);
+
+          const targetBatches = batchData?.map((d: any) => d.value) || [];
+          const batchIds = targetBatches.map((b: any) => b.id);
+          
+          if (batchIds.length > 0) {
+              // Fetch trips and txs for these batches using native Supabase filters
+              if (targets.includes('trips')) {
+                  let query = fromKvStore()
+                      .select("value->id, value->platform, value->distance, value->amount, value->driverName, value->batchId, value->date, value->requestTimestamp")
+                      .like("key", "trip:%")
+                      .in("value->>batchId", batchIds);
+                  
+                  if (driverId) query = query.eq("value->>driverId", driverId);
+                  
+                  const { data: trips } = await query;
+                  (trips || []).forEach((t: any) => {
+                      items.push({
+                          id: t.id,
+                          key: `trip:${t.id}`,
+                          type: 'Trip',
+                          date: t.date || t.requestTimestamp,
+                          description: `${t.platform} - ${t.distance || 0}km`,
+                          amount: t.amount,
+                          driverName: t.driverName || 'Unknown',
+                          batchId: t.batchId
+                      });
+                  });
+              }
+
+              if (targets.includes('transactions')) {
+                  let query = fromKvStore()
+                      .select("value->id, value->description, value->amount, value->driverName, value->batchId, value->date, value->timestamp, value->receiptUrl")
+                      .like("key", "transaction:%")
+                      .in("value->>batchId", batchIds);
+                  
+                  if (driverId) query = query.eq("value->>driverId", driverId);
+                  
+                  const { data: txs } = await query;
+                  (txs || []).forEach((t: any) => {
+                      items.push({
+                          id: t.id,
+                          key: `transaction:${t.id}`,
+                          type: 'Transaction',
+                          date: t.date || t.timestamp,
+                          description: t.description || 'Toll/Expense',
+                          amount: t.amount,
+                          driverName: t.driverName || 'Unknown',
+                          batchId: t.batchId,
+                          receiptUrl: t.receiptUrl
+                      });
+                  });
+              }
+          }
+      } else {
+          // Record Date mode - Direct query by date
+          if (targets.includes('trips')) {
+              let query = fromKvStore()
+                  .select("value->id, value->platform, value->distance, value->amount, value->driverName, value->date, value->requestTimestamp")
+                  .like("key", "trip:%")
+                  .or(`value->>date.gte.${start},value->>requestTime.gte.${start}`)
+                  .or(`value->>date.lte.${end},value->>requestTime.lte.${end}`);
+              
+              if (driverId) query = query.eq("value->>driverId", driverId);
+              
+              const { data: trips } = await query;
+              (trips || []).forEach((t: any) => {
+                  items.push({
+                      id: t.id,
+                      key: `trip:${t.id}`,
+                      type: 'Trip',
+                      date: t.date || t.requestTimestamp,
+                      description: `${t.platform} - ${t.distance || 0}km`,
+                      amount: t.amount,
+                      driverName: t.driverName || 'Unknown'
+                  });
+              });
+          }
+          
+          if (targets.includes('transactions')) {
+              let query = fromKvStore()
+                  .select("value->id, value->description, value->amount, value->driverName, value->date, value->timestamp, value->receiptUrl")
+                  .like("key", "transaction:%")
+                  .gte("value->>date", start)
+                  .lte("value->>date", end);
+              
+              if (driverId) query = query.eq("value->>driverId", driverId);
+              
+              const { data: txs } = await query;
+              (txs || []).forEach((t: any) => {
+                  items.push({
+                      id: t.id,
+                      key: `transaction:${t.id}`,
+                      type: 'Transaction',
+                      date: t.date || t.timestamp,
+                      description: t.description || 'Toll/Expense',
+                      amount: t.amount,
+                      driverName: t.driverName || 'Unknown',
+                      receiptUrl: t.receiptUrl
+                  });
+              });
+          }
+      }
+
+      return c.json({ success: true, items });
+
+    } catch (e: any) {
+      console.error("Preview reset error:", e);
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  // Admin: Reset Data By Date Endpoint - Optimized
+  app.post("/make-server-37f42386/reset-by-date", requireAuth(), requirePermission('data.backfill'), async (c) => {
+    try {
+      const { type, startDate, endDate, targets, driverId, preview, keys } = await c.req.json();
+      
+      // Mode 1: Direct Deletion by Keys
+      if (keys && Array.isArray(keys) && keys.length > 0) {
+          const filesByBucket = new Map<string, string[]>();
+          const chunkSize = 100;
+          
+          for (let i = 0; i < keys.length; i += chunkSize) {
+              const chunkKeys = keys.slice(i, i + chunkSize);
+              const chunkValues = await kv.mget(chunkKeys);
+              
+              (chunkValues || []).forEach((item: any) => {
+                  if (!item) return;
+                  for (const { bucket, path } of collectStoragePathsFromRecord(item)) {
+                      if (!path) return;
+                      if (!filesByBucket.has(bucket)) filesByBucket.set(bucket, []);
+                      filesByBucket.get(bucket)!.push(path);
+                  }
+              });
+              
+              await kv.mdel(chunkKeys);
+          }
+
+          let filesDeletedCount = 0;
+          const fileChunkSize = 50;
+          for (const [bucketName, paths] of filesByBucket) {
+              for (let i = 0; i < paths.length; i += fileChunkSize) {
+                  const chunk = paths.slice(i, i + fileChunkSize);
+                  await supabase.storage.from(bucketName).remove(chunk);
+                  filesDeletedCount += chunk.length;
+              }
+          }
+
+          const rbacUser = c.get('rbacUser') as { userId?: string; email?: string } | undefined;
+          await logAdminAction({
+            actorId: rbacUser?.userId || "unknown",
+            actorName: rbacUser?.email || "Admin",
+            action: "reset_by_date",
+            targetId: "keys",
+            targetEmail: "N/A",
+            details: `deletedKeys=${keys.length} filesDeleted=${filesDeletedCount}`,
+          });
+          
+          return c.json({ success: true, deletedCount: keys.length, filesDeletedCount });
+      }
+
+      // Mode 2: Search (Preview or Bulk Delete)
+      if (!type || !startDate || !endDate || !targets) {
+          return c.json({ error: "Missing required parameters" }, 400);
+      }
+      
+      const start = new Date(startDate).toISOString();
+      const end = new Date(endDate).toISOString();
+      
+      const candidates: { key: string, data: any, type: 'trip' | 'transaction' | 'fuel_entry' }[] = [];
+
+      if (type === 'upload') {
+          const { data: batchData } = await fromKvStore()
+              .select("value")
+              .like("key", "batch:%")
+              .gte("value->>uploadDate", start)
+              .lte("value->>uploadDate", end);
+
+          const batchIds = batchData?.map((d: any) => d.value.id) || [];
+          
+          if (batchIds.length > 0) {
+              // Trips
+              if (targets.includes('trips')) {
+                  let query = fromKvStore().select("key, value->id, value->date, value->requestTimestamp, value->platform, value->pickupLocation, value->dropoffLocation, value->amount, value->driverId, value->driverName").like("key", "trip:%").in("value->>batchId", batchIds);
+                  if (driverId) query = query.eq("value->>driverId", driverId);
+                  const { data } = await query;
+                  (data || []).forEach((d: any) => candidates.push({ key: d.key, data: d, type: 'trip' }));
+              }
+              // Fuel Entries
+              if (targets.includes('fuel')) {
+                  let query = fromKvStore().select("key, value->id, value->date, value->amount, value->driverId, value->driverName, value->category, value->description, value->receiptUrl, value->invoiceUrl").like("key", "fuel_entry:%").in("value->>batchId", batchIds);
+                  if (driverId) query = query.eq("value->>driverId", driverId);
+                  const { data } = await query;
+                  (data || []).forEach((d: any) => candidates.push({ key: d.key, data: d, type: 'fuel_entry' }));
+              }
+              // Transactions (Tolls/Other)
+              if (targets.includes('transactions') || targets.includes('tolls')) {
+                  let query = fromKvStore().select("key, value->id, value->date, value->timestamp, value->amount, value->driverId, value->driverName, value->category, value->description, value->receiptUrl, value->invoiceUrl").like("key", "transaction:%").in("value->>batchId", batchIds);
+                  if (driverId) query = query.eq("value->>driverId", driverId);
+                  const { data } = await query;
+                  (data || []).forEach((d: any) => {
+                      const isToll = d.category?.includes('Toll') || d.description?.toLowerCase().includes('toll');
+                      if (targets.includes('transactions') || (targets.includes('tolls') && isToll)) {
+                          candidates.push({ key: d.key, data: d, type: 'transaction' });
+                      }
+                  });
+              }
+          }
+      } else {
+          // Record Date mode
+          if (targets.includes('trips')) {
+              let query = fromKvStore().select("key, value->id, value->date, value->requestTimestamp, value->platform, value->pickupLocation, value->dropoffLocation, value->amount, value->driverId, value->driverName").like("key", "trip:%")
+                  .or(`value->>date.gte.${start},value->>requestTime.gte.${start}`)
+                  .or(`value->>date.lte.${end},value->>requestTime.lte.${end}`);
+              if (driverId) query = query.eq("value->>driverId", driverId);
+              const { data } = await query;
+              (data || []).forEach((d: any) => candidates.push({ key: d.key, data: d, type: 'trip' }));
+          }
+          
+          if (targets.includes('transactions') || targets.includes('tolls') || targets.includes('fuel')) {
+              let query = fromKvStore().select("key, value->id, value->date, value->timestamp, value->amount, value->driverId, value->driverName, value->category, value->description, value->receiptUrl, value->invoiceUrl").like("key", "transaction:%")
+                  .gte("value->>date", start).lte("value->>date", end);
+              if (driverId) query = query.eq("value->>driverId", driverId);
+              const { data } = await query;
+              (data || []).forEach((d: any) => {
+                  const isToll = d.category?.includes('Toll') || d.description?.toLowerCase().includes('toll');
+                  const isFuel = d.category === 'Fuel' || d.description?.toLowerCase().includes('fuel');
+                  if (targets.includes('transactions') || (targets.includes('tolls') && isToll) || (targets.includes('fuel') && isFuel)) {
+                      candidates.push({ key: d.key, data: d, type: 'transaction' });
+                  }
+              });
+          }
+
+          if (targets.includes('fuel')) {
+              let query = fromKvStore().select("key, value->id, value->date, value->amount, value->driverId, value->driverName, value->category, value->description, value->receiptUrl, value->invoiceUrl").like("key", "fuel_entry:%")
+                  .gte("value->>date", start).lte("value->>date", end);
+              if (driverId) query = query.eq("value->>driverId", driverId);
+              const { data } = await query;
+              (data || []).forEach((d: any) => candidates.push({ key: d.key, data: d, type: 'fuel_entry' }));
+          }
+      }
+
+      if (preview) {
+          return c.json({
+              success: true,
+              items: candidates.map(c => ({
+                  id: c.data.id,
+                  key: c.key,
+                  type: c.type === 'trip' ? 'Trip' : (c.type === 'fuel_entry' ? 'Fuel Log' : (c.data.category || 'Transaction')),
+                  date: c.data.date || c.data.requestTimestamp || c.data.timestamp || c.data.uploadDate,
+                  description: c.type === 'trip' 
+                      ? `Trip: ${c.data.pickupLocation || 'Unknown'} -> ${c.data.dropoffLocation || 'Unknown'}` 
+                      : (c.data.description || c.data.category || 'Item'),
+                  amount: c.data.amount,
+                  driverId: c.data.driverId,
+                  driverName: c.data.driverName,
+                  receiptUrl: c.data.receiptUrl || c.data.invoiceUrl
+              }))
+          });
+      }
+
+      // Execute Deletion
+      const keysToDelete = candidates.map(c => c.key);
+      const filesToDelete: string[] = [];
+      candidates.forEach(c => {
+          const url = c.data.receiptUrl || c.data.invoiceUrl;
+          if (url && typeof url === 'string' && url.includes('make-37f42386-docs')) {
+               const parts = url.split('make-37f42386-docs/');
+               if (parts.length > 1) filesToDelete.push(parts[1].split('?')[0]);
+          }
+      });
+
+      if (keysToDelete.length > 0) {
+          for (let i = 0; i < keysToDelete.length; i += 100) await kv.mdel(keysToDelete.slice(i, i + 100));
+      }
+
+      if (filesToDelete.length > 0) {
+          const bucketName = "make-37f42386-docs";
+          for (let i = 0; i < filesToDelete.length; i += 50) await supabase.storage.from(bucketName).remove(filesToDelete.slice(i, i + 50));
+      }
+
+      return c.json({ success: true, deletedCount: keysToDelete.length, filesDeletedCount: filesToDelete.length });
+
+    } catch (e: any) {
+      console.error("Reset by date error:", e);
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  // AI CSV Mapping Endpoint
+  app.post("/make-server-37f42386/ai/map-csv", async (c) => {
+    try {
+      const { headers, sample, targetFields } = await c.req.json();
+      
+      if (!headers || !sample) {
+        return c.json({ error: "Headers and sample data required" }, 400);
+      }
+
+      const apiKey = Deno.env.get("OPENAI_API_KEY");
+      if (!apiKey) {
+        return c.json({ error: "AI Service not configured" }, 503);
+      }
+
+      const openai = new OpenAI({ apiKey });
+
+      const prompt = `
+        You are an expert data analyst. 
+        I have a CSV file with the following headers: ${JSON.stringify(headers)}.
+        Here is a sample of the first 3 rows: ${JSON.stringify(sample.slice(0, 3))}.
+        
+        Please map the CSV headers to the following target system fields:
+        ${JSON.stringify(targetFields)}
+
+        Rules:
+        1. Analyze the sample data to understand the content of each column (e.g. identify dates, currency, IDs).
+        2. Return a JSON object where keys are the CSV Header Name and values are the Target Field Key.
+        3. Only include mappings you are confident about.
+        4. If a column doesn't match any target field, omit it.
+        5. For "driverName", if it's split into "First Name" and "Last Name", map BOTH to "driverName".
+        6. For "date", map columns that look like dates or timestamps.
+        
+        Example Output:
+        {
+          "Ride Date": "date",
+          "Total Fare": "amount",
+          "Driver First Name": "driverName", 
+          "Driver Last Name": "driverName"
+        }
+      `;
+
+      const response = await trackedProviderCall({
+        provider: "openai",
+        service: "chat",
+        route: "/make-server-37f42386/ai/map-csv",
+        model: "gpt-4o",
+        run: () => openai.chat.completions.create({
+          model: "gpt-4o",
+          messages: [
+            { role: "system", content: "You are a JSON mapping assistant." },
+            { role: "user", content: prompt }
+          ],
+          response_format: { type: "json_object" },
+          temperature: 0
+        }),
+        extractUsage: (r: any) => ({
+          inputTokens: r?.usage?.prompt_tokens,
+          outputTokens: r?.usage?.completion_tokens,
+          requestId: r?.id,
+        }),
+      });
+
+      const content = response.choices[0].message.content;
+      const mapping = JSON.parse(content || "{}");
+
+      return c.json({ success: true, mapping });
+    } catch (e: any) {
+      console.error("AI Mapping Error:", e);
+      if (e instanceof ProviderBlockedError) return c.json({ error: e.message, code: e.code }, e.httpStatus);
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  // Integration Settings Endpoints (never return token secrets or client secrets)
+  app.get("/make-server-37f42386/settings/integrations", requireAuth(), async (c) => {
+    try {
+      const integrations = await kv.getByPrefix("integration:");
+      const safe = (integrations || [])
+        .filter((row: any) => {
+          if (!row || typeof row !== "object") return false;
+          // Token stores have access_token; integration cards have an id.
+          if (row.access_token) return false;
+          if (!row.id) return false;
+          return true;
+        })
+        .map((row: any) => {
+          const { credentials, ...rest } = row;
+          return rest;
+        });
+      return c.json(filterByOrg(safe, c));
+    } catch (e: any) {
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  app.post("/make-server-37f42386/settings/integrations", requireAuth(), requirePermission('settings.edit'), async (c) => {
+    try {
+      const integration = await c.req.json();
+      if (!integration.id) {
+          return c.json({ error: "Integration ID is required" }, 400);
+      }
+      // Uber Fleet credentials must live in Deno env — reject browser secret posts.
+      if (integration.id === "uber") {
+        const { credentials: _drop, ...safe } = integration;
+        await kv.set(`integration:uber`, stampOrg({ ...safe, id: "uber", credentials: undefined }, c));
+        return c.json({
+          success: true,
+          data: { ...safe, credentials: undefined },
+          warning: "Uber secrets must be set as UBER_CLIENT_ID / UBER_CLIENT_SECRET. Use POST /uber/connect.",
+        });
+      }
+      await kv.set(`integration:${integration.id}`, stampOrg(integration, c));
+      return c.json({ success: true, data: integration });
+    } catch (e: any) {
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  // Uber Vehicles/Fleet routes registered via registerUberFleetRoutes(app)
+
+  // Budget Management Endpoints
+  app.get("/make-server-37f42386/budgets", requireAuth(), async (c) => {
+    try {
+      const budgets = await kv.getByPrefix("budget:");
+      return c.json(filterByOrg(budgets || [], c));
+    } catch (e: any) {
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  app.post("/make-server-37f42386/budgets", requireAuth(), requirePermission('settings.edit'), async (c) => {
+    try {
+      const budget = await c.req.json();
+      if (!budget.id) {
+          budget.id = crypto.randomUUID();
+      }
+      await kv.set(`budget:${budget.id}`, stampOrg(budget, c));
+      return c.json({ success: true, data: budget });
+    } catch (e: any) {
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  // General Preferences Endpoints — org-scoped with preferences:general fallback
+  app.get("/make-server-37f42386/settings/preferences", async (c) => {
+    try {
+      const { loadPreferencesForRequest } = await import("./fuel_org_preferences.ts");
+      const preferences = await loadPreferencesForRequest(c);
+      // Normalize legacy est-jam → America/Jamaica; currency locked to jmd for Fleet Jamaica
+      const tz = String(preferences.timezone || "");
+      return c.json({
+        ...preferences,
+        currency: "jmd",
+        timezone: tz === "America/Jamaica" || tz === "est-jam" || !tz ? "America/Jamaica" : "America/Jamaica",
+      });
+    } catch (e: any) {
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  app.post("/make-server-37f42386/settings/preferences", requireAuth(), requirePermission('settings.edit'), async (c) => {
+    try {
+      const { savePreferencesForRequest } = await import("./fuel_org_preferences.ts");
+      const body = await c.req.json();
+      const preferences = await savePreferencesForRequest(
+        c,
+        body && typeof body === "object" ? body : {},
+      );
+      const timezone = "America/Jamaica";
+
+      // Keep platform settings in sync so getFleetTimezone / money defaults cannot drift
+      try {
+        const fleetKey = platformSettingsKvKey("fleet");
+        const existing = ((await kv.get(fleetKey)) || (await kv.get(LEGACY_PLATFORM_SETTINGS_KEY)) || {}) as Record<string, unknown>;
+        await kv.set(fleetKey, {
+          ...existing,
+          fleetTimezone: timezone,
+          defaultCurrency: "JMD",
+        });
+        const legacy = ((await kv.get(LEGACY_PLATFORM_SETTINGS_KEY)) || {}) as Record<string, unknown>;
+        await kv.set(LEGACY_PLATFORM_SETTINGS_KEY, {
+          ...legacy,
+          fleetTimezone: timezone,
+          defaultCurrency: "JMD",
+        });
+      } catch (syncErr) {
+        console.warn("[settings/preferences] fleetTimezone sync failed:", syncErr);
+      }
+
+      return c.json({ success: true, data: preferences });
+    } catch (e: any) {
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  // ── Toll Info Endpoints (date-versioned rate card) ───────────────────────
+  // The rate card drives reconciliation expected cost, driver charges and Rides
+  // fares, so reads are authenticated and writes need `toll.manage` — the same
+  // gate /toll-plazas uses.
+  app.get("/make-server-37f42386/toll-info", requireAuth(), async (c) => {
+    try {
+      const { loadTollRateStore } = await import("./toll_rate_schedule.ts");
+      const store = await loadTollRateStore();
+      // Back-compat: clients that expect a flat schedule get `current`,
+      // plus versions for history UI.
+      return c.json({
+        ...store.current,
+        current: store.current,
+        versions: store.versions,
+      });
+    } catch (e: any) {
+      console.log(`[toll-info GET] Error: ${e.message}`);
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  app.post("/make-server-37f42386/toll-info", requireAuth(), requirePermission('toll.manage'), async (c) => {
+    try {
+      const { publishTollRates, loadTollRateStore, saveTollRateStore, migrateToVersionedStore } =
+        await import("./toll_rate_schedule.ts");
+      const body = await c.req.json();
+      /** Attribution comes from the session, never the body — a forgeable publisher makes the version history worthless. */
+      const rbacUser = c.get('rbacUser') as { userId: string; email: string } | undefined;
+      const publisher = rbacUser?.email || rbacUser?.userId || 'unknown';
+      // Explicit republish of a full store (rare)
+      if (body?.current && Array.isArray(body?.versions) && body?.__replaceStore === true) {
+        const store = migrateToVersionedStore(body);
+        await saveTollRateStore(store);
+        return c.json({ success: true, store });
+      }
+      // Default: Edit Rates → new immutable version effective from date forward
+      const { store, published } = await publishTollRates({
+        effectiveDate: body.effectiveDate,
+        effectiveFrom: body.effectiveFrom || body.effectiveDate,
+        operator: body.operator,
+        currency: body.currency,
+        plazas: body.plazas || [],
+        vehicleClasses: body.vehicleClasses || [],
+        routeRateGroups: body.routeRateGroups || [],
+        createdBy: publisher,
+      });
+      return c.json({
+        success: true,
+        published,
+        store,
+        current: store.current,
+        versions: store.versions,
+      });
+    } catch (e: any) {
+      // A rejected publish is the caller's mistake, not a server fault — say which.
+      if (e?.name === 'TollRatePublishError') {
+        console.log(`[toll-info POST] Rejected (${e.reason}): ${e.message}`);
+        return c.json({ error: e.message, reason: e.reason }, 400);
+      }
+      console.log(`[toll-info POST] Error: ${e.message}`);
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  /**
+   * Dry-run a rate card against unsettled tolls.
+   *
+   * POST because the draft card is the payload, but it writes nothing — the whole
+   * point is to answer "how much money does this move" before the publish that
+   * cannot be undone.
+   */
+  app.post(
+    "/make-server-37f42386/toll-info/impact-preview",
+    requireAuth(),
+    requirePermission('toll.manage'),
+    async (c) => {
+      try {
+        const { previewTollRateImpact, loadTollRateStore, toIsoDateKey } =
+          await import("./toll_rate_schedule.ts");
+        const body = await c.req.json();
+        const store = await loadTollRateStore();
+        const effectiveFrom = toIsoDateKey(body.effectiveFrom || body.effectiveDate);
+        const impact = await previewTollRateImpact({
+          ...store.current,
+          id: 'draft',
+          effectiveFrom,
+          effectiveDate: body.effectiveDate || store.current.effectiveDate,
+          operator: body.operator ?? store.current.operator,
+          currency: body.currency ?? store.current.currency,
+          plazas: body.plazas || [],
+          vehicleClasses: body.vehicleClasses || store.current.vehicleClasses,
+          routeRateGroups: body.routeRateGroups || [],
+        });
+        return c.json({ success: true, impact, effectiveFrom });
+      } catch (e: any) {
+        console.log(`[toll-info impact-preview] Error: ${e.message}`);
+        return c.json({ error: e.message }, 500);
+      }
+    },
+  );
+
+  /** Resolve official rate for plaza + class + date (reconciliation / rides). */
+  app.get("/make-server-37f42386/toll-info/rate", requireAuth(), async (c) => {
+    try {
+      const { lookupOfficialRate } = await import("./toll_rate_schedule.ts");
+      const plazaId = c.req.query("plazaId") || undefined;
+      const plazaName = c.req.query("plazaName") || undefined;
+      const classId = c.req.query("classId") || c.req.query("tollClassId") || "class1";
+      const asOf = c.req.query("asOf") || undefined;
+      const paymentMethod = (c.req.query("paymentMethod") as "withTag" | "withoutTag") || "withTag";
+      const fromPlazaName = c.req.query("fromPlazaName") || undefined;
+      const toPlazaName = c.req.query("toPlazaName") || undefined;
+      const rate = await lookupOfficialRate({
+        plazaId,
+        plazaName,
+        classId,
+        asOf,
+        paymentMethod,
+        fromPlazaName,
+        toPlazaName,
+      });
+      return c.json({ success: true, rate });
+    } catch (e: any) {
+      console.log(`[toll-info/rate GET] Error: ${e.message}`);
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  app.get("/make-server-37f42386/toll-info/versions", requireAuth(), async (c) => {
+    try {
+      const { loadTollRateStore } = await import("./toll_rate_schedule.ts");
+      const store = await loadTollRateStore();
+      return c.json({
+        success: true,
+        current: store.current,
+        versions: store.versions,
+      });
+    } catch (e: any) {
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  // Fixed Expenses Endpoints
+  app.get("/make-server-37f42386/fixed-expenses/:vehicleId", requireAuth(), async (c) => {
+    try {
+      const vehicleId = c.req.param("vehicleId");
+      // Key pattern: fixed_expense:{vehicleId}:{expenseId}
+      const expenses = await kv.getByPrefix(`fixed_expense:${vehicleId}:`);
+      return c.json(filterByOrg(expenses || [], c));
+    } catch (e: any) {
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  app.post("/make-server-37f42386/fixed-expenses", requireAuth(), requirePermission('vehicles.edit'), async (c) => {
+    try {
+      const expense = await c.req.json();
+      if (!expense.vehicleId) {
+          return c.json({ error: "Vehicle ID is required" }, 400);
+      }
+      if (!expense.id) {
+          expense.id = crypto.randomUUID();
+      }
+      const amount = Number(expense.amount);
+      if (!Number.isFinite(amount) || amount <= 0) {
+          return c.json({ error: "Amount must be a positive number" }, 400);
+      }
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(String(expense.startDate || ""))) {
+          return c.json({ error: "Start date must be YYYY-MM-DD" }, 400);
+      }
+      if (
+        expense.endDate &&
+        (!/^\d{4}-\d{2}-\d{2}$/.test(String(expense.endDate)) ||
+          String(expense.endDate) < String(expense.startDate))
+      ) {
+          return c.json({ error: "End date must be YYYY-MM-DD and not precede start date" }, 400);
+      }
+      const frequency = String(expense.frequency || "").trim().toLowerCase();
+      if (!["daily", "weekly", "monthly", "quarterly", "annually", "yearly", "one_time", "one-time"].includes(frequency)) {
+          return c.json({ error: "Unsupported expense frequency" }, 400);
+      }
+      if (!String(expense.name || "").trim() || !String(expense.category || "").trim()) {
+          return c.json({ error: "Name and category are required" }, 400);
+      }
+      if (!expense.createdAt) {
+          expense.createdAt = new Date().toISOString();
+      }
+      expense.amount = amount;
+      if (expense.isActive == null) expense.isActive = true;
+      expense.updatedAt = new Date().toISOString();
+
+      const key = `fixed_expense:${expense.vehicleId}:${expense.id}`;
+      await kv.set(key, stampOrg(expense, c));
+
+      // A rule edit replaces its generated ledger schedule. We post through a
+      // rolling five-year horizon; rerunning the idempotent backfill extends it.
+      await deleteCanonicalLedgerBySource("financial_event", [String(expense.id)]);
+      const horizon = new Date();
+      horizon.setUTCFullYear(horizon.getUTCFullYear() + 5);
+      const horizonYmd = horizon.toISOString().slice(0, 10);
+      const ledger = await appendCanonicalFixedExpenseIfEligible(
+        expense,
+        String(expense.startDate),
+        horizonYmd,
+        c,
+      );
+      return c.json({ success: true, data: expense, ledger });
+    } catch (e: any) {
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  app.delete("/make-server-37f42386/fixed-expenses/:vehicleId/:id", requireAuth(), requirePermission('vehicles.edit'), async (c) => {
+    const vehicleId = String(c.req.param("vehicleId") || "").trim();
+    const id = String(c.req.param("id") || "").trim();
+    if (!vehicleId || !id) return c.json({ error: "Vehicle ID and expense ID are required" }, 400);
+    try {
+      const key = `fixed_expense:${vehicleId}:${id}`;
+      await kv.del(key);
+      // Keep incurred history; remove today/future scheduled occurrences.
+      const tomorrow = new Date();
+      tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
+      const futureFromYmd = tomorrow.toISOString().slice(0, 10);
+      const ledger = await deleteCanonicalLedgerBySourceFromDate(
+        "financial_event",
+        [id],
+        futureFromYmd,
+      );
+      return c.json({ success: true, ledger });
+    } catch (e: any) {
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  // AI Fleet Analysis Endpoint
+  app.post("/make-server-37f42386/analyze-fleet", async (c) => {
+    try {
+      const { payload } = await c.req.json();
+      if (!payload) return c.json({ error: "No payload provided" }, 400);
+
+      const apiKey = Deno.env.get("GEMINI_API_KEY");
+      if (!apiKey) return c.json({ error: "Gemini API Key not configured" }, 503);
+
+      const genAI = new GoogleGenerativeAI(apiKey);
+      // Model selection moved to execution block for fallback support
+
+      const prompt = `
+        You are an expert Fleet Management Data Analyst AI.
+        I have uploaded multiple CSV files representing my fleet's activity (Trips, Payments, Driver Performance, Vehicle Stats).
+        
+        Your goal is to cross-reference these files and output a SINGLE JSON object that populates my database.
+        
+        ### RULES & LOGIC
+        
+        1. **Driver Identification**:
+           - Group data by Driver Name or UUID. 
+           - A driver might appear in multiple files (e.g., "Trip Logs" and "Payment Logs"). Merge them.
+        
+        2. **Financial Logic (CRITICAL)**:
+           - **Cash Collected**: This is money the driver holds physically. Sum the "Cash Collected" column from Payment files.
+           - **Phantom Trip Detection**: If a trip has Status="Cancelled" BUT Cash Collected > 0, this is a FRAUD INDICATOR. Add to 'insights.phantomTrips'.
+           - **Net Outstanding**: Cash Collected minus any "Cash Deposit" entries found.
+        
+        3. **Vehicle Logic**:
+           - Group earnings by "Vehicle Plate" or "License Plate".
+           - If a vehicle appears in "Fuel Logs", subtract that cost from its earnings to estimate ROI.
+        
+        4. **Performance Targets**:
+           - High Performance: Acceptance > 85%, Cancellation < 5%.
+           - Critical Warning: Cancellation > 10% or Acceptance < 60%.
+        
+        ### OUTPUT SCHEMA (Strict JSON)
+        
+        {
+          "metadata": {
+            "periodStart": "ISO Date (earliest found)",
+            "periodEnd": "ISO Date (latest found)",
+            "filesProcessed": Number
+          },
+          "drivers": [
+            {
+              "driverId": "String (UUID or Name Hash)",
+              "driverName": "String",
+              "periodStart": "ISO Date",
+              "periodEnd": "ISO Date",
+              "totalEarnings": Number,
+              "cashCollected": Number,
+              "netEarnings": Number,
+              "acceptanceRate": Number (0.0-1.0),
+              "cancellationRate": Number (0.0-1.0),
+              "completionRate": Number (0.0-1.0),
+              "onlineHours": Number,
+              "tripsCompleted": Number,
+              "ratingLast500": Number,
+              "score": Number (0-100),
+              "tier": "String (Bronze/Silver/Gold/Platinum)",
+              "recommendation": "String (Advice for manager)"
+            }
+          ],
+          "vehicles": [
+            {
+              "plateNumber": "String",
+              "totalEarnings": Number,
+              "onlineHours": Number,
+              "totalTrips": Number,
+              "utilizationRate": Number (0-100),
+              "roiScore": Number (0-100),
+              "maintenanceStatus": "String (Good/Due Soon/Critical)"
+            }
+          ],
+          "financials": {
+            "totalEarnings": Number,
+            "netFare": Number,
+            "totalCashExposure": Number,
+            "fleetProfitMargin": Number
+          },
+          "insights": {
+            "alerts": ["String"],
+            "trends": ["String"],
+            "recommendations": ["String"],
+            "phantomTrips": [ { "tripId": "String", "driver": "String", "amount": Number } ]
+          }
+        }
+
+        ### DATA INPUT
+        ${payload}
+      `;
+
+      // Robust fallback strategy for model selection
+      // Updated 2026-03-11: Use current Gemini model names (old -exp/-latest suffixes are deprecated/404)
+      const modelCandidates = ["gemini-2.0-flash", "gemini-2.0-flash-lite", "gemini-1.5-flash"];
+      let result = null;
+      let lastError = null;
+
+      for (const modelName of modelCandidates) {
+          try {
+              console.log(`Attempting analysis with model: ${modelName}`);
+              const model = genAI.getGenerativeModel({ model: modelName });
+              result = await trackedProviderCall({
+                  provider: "gemini",
+                  service: "text",
+                  route: "/make-server-37f42386/analyze-fleet",
+                  model: modelName,
+                  run: () => model.generateContent(prompt),
+                  extractUsage: (r: any) => ({
+                      inputTokens: r?.response?.usageMetadata?.promptTokenCount,
+                      outputTokens: r?.response?.usageMetadata?.candidatesTokenCount,
+                  }),
+              });
+              if (result) break;
+          } catch (e: any) {
+              if (e instanceof ProviderBlockedError) return c.json({ error: e.message, code: e.code }, e.httpStatus);
+              console.warn(`Model ${modelName} failed:`, e.message);
+              lastError = e;
+          }
+      }
+
+      let text = "";
+      if (!result) {
+          console.warn("All Gemini models failed. Attempting fallback to OpenAI GPT-4o...");
+          const openaiKey = Deno.env.get("OPENAI_API_KEY");
+          if (openaiKey) {
+              try {
+                  const openai = new OpenAI({ apiKey: openaiKey });
+                  const completion = await trackedProviderCall({
+                      provider: "openai",
+                      service: "chat",
+                      route: "/make-server-37f42386/analyze-fleet",
+                      model: "gpt-4o",
+                      run: () => openai.chat.completions.create({
+                          model: "gpt-4o",
+                          messages: [
+                              { role: "system", content: "You are an expert Fleet Management Data Analyst AI." },
+                              { role: "user", content: prompt }
+                          ],
+                          response_format: { type: "json_object" }
+                      }),
+                      extractUsage: (r: any) => ({
+                          inputTokens: r?.usage?.prompt_tokens,
+                          outputTokens: r?.usage?.completion_tokens,
+                          requestId: r?.id,
+                      }),
+                  });
+                  text = completion.choices[0].message.content || "{}";
+                  console.log("OpenAI Fallback Successful");
+              } catch (openaiError: any) {
+                   if (openaiError instanceof ProviderBlockedError) return c.json({ error: openaiError.message, code: openaiError.code }, openaiError.httpStatus);
+                   console.error("OpenAI Fallback Failed:", openaiError);
+                   throw new Error(`Both Gemini and OpenAI failed. Gemini Error: ${lastError?.message}`);
+              }
+          } else {
+               throw new Error(`All Gemini models failed and OPENAI_API_KEY is missing. Last Gemini Error: ${lastError?.message}`);
+          }
+      } else {
+          const response = await result.response;
+          text = response.text();
+      }
+      
+      // Enhanced JSON Extraction and Cleaning
+      let jsonStr = text.trim();
+      
+      // 1. Try to extract from Markdown code blocks first
+      const codeBlockMatch = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+      if (codeBlockMatch) {
+          jsonStr = codeBlockMatch[1].trim();
+      } else {
+          // 2. Fallback: Find the first '{' and last '}'
+          const firstOpen = text.indexOf('{');
+          const lastClose = text.lastIndexOf('}');
+          if (firstOpen !== -1 && lastClose !== -1 && lastClose > firstOpen) {
+              jsonStr = text.substring(firstOpen, lastClose + 1);
+          }
+      }
+      
+      let data;
+      try {
+          data = JSON.parse(jsonStr);
+      } catch(parseError) {
+          console.warn("Initial JSON parse failed. Attempting to repair common errors...");
+          try {
+              // 3. Simple Repair: Remove trailing commas in arrays/objects
+              // Note: This is a basic regex and won't catch everything, but fixes the most common AI error
+              const fixedJson = jsonStr.replace(/,\s*([\]}])/g, '$1');
+              data = JSON.parse(fixedJson);
+              console.log("JSON successfully repaired.");
+          } catch (repairError) {
+               console.error("JSON Parse Error:", parseError);
+               console.log("Raw Text:", text);
+               
+               // 4. Ultimate Fallback: Return raw text wrapped in a simple structure so the user sees something
+               // This prevents the "500 Internal Server Error" crash and allows the frontend to show the raw analysis
+               console.warn("Returning raw text as fallback due to parse failure.");
+               return c.json({ 
+                   success: true, 
+                   warning: "AI output was not valid JSON. Showing raw analysis.",
+                   data: {
+                       metadata: { filesProcessed: 1 },
+                       drivers: [],
+                       vehicles: [],
+                       financials: { totalEarnings: 0, netFare: 0, totalCashExposure: 0, fleetProfitMargin: 0 },
+                       insights: { 
+                           alerts: ["Analysis generated but format was invalid."], 
+                           recommendations: [text], // Put the raw text here so the user can read it
+                           phantomTrips: [] 
+                       }
+                   }
+               });
+          }
+      }
+
+      return c.json({ success: true, data });
+    } catch (e: any) {
+      console.error("Analysis Error:", e);
+      // Detect quota / rate-limit errors and return a user-friendly message
+      const isQuota = e?.status === 429 || e?.code === "insufficient_quota" || /quota|rate.?limit/i.test(e?.message || "");
+      if (isQuota) {
+        return c.json({ error: "AI service temporarily unavailable — your API quota may be exhausted. Please check your OpenAI billing dashboard and try again in a few minutes.", userFriendly: true }, 503);
+      }
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  // Fleet Sync Endpoint (Mega-JSON Persistence)
+  app.post("/make-server-37f42386/fleet/sync", async (c) => {
+    try {
+      const { drivers, vehicles, financials, trips, metadata, insights } = await c.req.json();
+
+      const operations = [];
+
+      // 1. Driver Metrics
+      if (Array.isArray(drivers) && drivers.length > 0) {
+          // Deduplicate drivers by driverId to avoid "ON CONFLICT DO UPDATE command cannot affect row a second time"
+          const uniqueDrivers = Array.from(new Map(drivers.map(d => [d.driverId, d])).values());
+          const driverKeys = uniqueDrivers.map((d: any) => `driver_metric:${d.driverId}`);
+          operations.push(kv.mset(driverKeys, uniqueDrivers));
+      }
+
+      // 2. Vehicle Metrics
+      if (Array.isArray(vehicles) && vehicles.length > 0) {
+          // Deduplicate vehicles by plateNumber or vehicleId
+          const uniqueVehicles = Array.from(new Map(vehicles.map(v => [v.plateNumber || v.vehicleId, v])).values());
+          const vehicleKeys = uniqueVehicles.map((v: any) => `vehicle_metric:${v.plateNumber || v.vehicleId}`);
+          operations.push(kv.mset(vehicleKeys, uniqueVehicles));
+      }
+
+      // 3. Trips
+      if (Array.isArray(trips) && trips.length > 0) {
+          // Deduplicate trips by id
+          const uniqueTrips = Array.from(new Map(trips.map(t => [t.id, t])).values());
+
+          for (const trip of uniqueTrips) {
+              trip.status = normalizeTripStatusForStorage(trip.status);
+          }
+
+          // ── Normalize driverId to canonical Roam UUID (mirrors POST /trips) ──
+          for (const trip of uniqueTrips) {
+              try {
+                  const resolved = await resolveCanonicalDriverId(trip.driverId || '');
+                  if (resolved.resolved) {
+                      trip.driverId = resolved.canonicalId;
+                      if (!trip.driverName) {
+                          trip.driverName = resolved.driverName;
+                      }
+                  }
+              } catch (resolveErr) {
+                  console.warn(`[FleetSync] Failed to resolve driverId for trip ${trip.id}:`, resolveErr);
+              }
+          }
+
+          // Resolve organization scope for writes (same strategy as POST /trips).
+          let writeOrgId: string | null = getOrgId(c);
+          if (!writeOrgId) {
+              for (const trip of uniqueTrips) {
+                  const did = String(trip?.driverId || '').trim();
+                  if (!did) continue;
+                  try {
+                      const driverRecord = await kv.get(`driver:${did}`);
+                      const candidate = typeof driverRecord?.organizationId === 'string' ? driverRecord.organizationId.trim() : '';
+                      if (candidate) {
+                          writeOrgId = candidate;
+                          break;
+                      }
+                  } catch {
+                      // Ignore lookup failures; we can continue without stamping.
+                  }
+              }
+          }
+          const stampWriteOrg = <T extends Record<string, any>>(record: T): T =>
+              writeOrgId ? ({ ...record, organizationId: writeOrgId } as T) : record;
+
+          const tripKeys = uniqueTrips.map((t: any) => `trip:${t.id}`);
+          const tripValues = uniqueTrips.map((t: any) => stampWriteOrg(t));
+
+          // Match POST /trips: await trip KV write BEFORE ledger. Queueing trip mset in
+          // Promise.all runs it concurrently with the ledger loop and can race / lose writes.
+          await kv.mset(tripKeys, tripValues);
+
+          try {
+              const tripIdsForLedger = uniqueTrips.map((t: any) => String(t?.id || "").trim()).filter(Boolean);
+              if (tripIdsForLedger.length > 0) {
+                await deleteCanonicalLedgerBySource("trip", tripIdsForLedger);
+              }
+              await appendCanonicalTripFaresIfEligible(uniqueTrips as Record<string, unknown>[], c);
+          } catch (canonErr) {
+              console.error("[FleetSync] Canonical trip fare append failed:", canonErr);
+          }
+
+          // MOI-4: reverse re-match (same as POST /trips). Persists when
+          // matchOnIngestEnabled is on; never throws.
+          try {
+              const rematchResult = await reconsiderTollsForNewTrips(uniqueTrips, { persist: true });
+              console.log(
+                  `[MatchOnIngest] reconsiderTollsForNewTrips (fleet/sync): scanned=${rematchResult.scanned} wouldUpdate=${rematchResult.wouldUpdate} wouldFlag=${rematchResult.wouldFlag}`,
+              );
+          } catch (rematchErr) {
+              console.warn("[MatchOnIngest] reconsiderTollsForNewTrips (fleet/sync) failed:", rematchErr);
+          }
+
+          // MOI-4 (edit case): same stale-match re-validation as POST /trips.
+          try {
+              for (const trip of uniqueTrips) {
+                  if (trip?.id) {
+                      await invalidateStaleTollMatchesForTrip(String(trip.id), { persist: true, currentTrip: trip });
+                  }
+              }
+          } catch (invalidateErr) {
+              console.warn("[MatchOnIngest] invalidateStaleTollMatchesForTrip (fleet/sync) failed:", invalidateErr);
+          }
+      }
+
+      // 4. Financials (Singleton)
+      if (financials) {
+          operations.push(kv.set("organization_metrics:current", financials));
+      }
+
+      // 5. Metadata & Insights
+      if (metadata) {
+          operations.push(kv.set("import_metadata:current", metadata));
+      }
+      if (insights) {
+          operations.push(kv.set("import_insights:current", insights));
+      }
+
+      await Promise.all(operations);
+
+      // Invalidate stats cache since data has changed
+      await cache.invalidateCacheVersion("stats");
+      await cache.invalidateCacheVersion("performance");
+      
+      // Invalidate dashboard cache (fleet sync affects trips, drivers, vehicles)
+      await invalidateDashboardCache();
+
+      return c.json({ 
+          success: true, 
+          stats: {
+              drivers: drivers?.length || 0,
+              vehicles: vehicles?.length || 0,
+              trips: trips?.length || 0
+          }
+      });
+
+    } catch (e: any) {
+        console.error("Fleet Sync Error:", e);
+        return c.json({ error: e.message }, 500);
+    }
+  });
+
+  // Financials Endpoint
+  app.get("/make-server-37f42386/financials", requireAuth(), async (c) => {
+      try {
+          const orgId = getOrgId(c);
+          const key = orgId ? `organization_metrics:${orgId}` : "organization_metrics:current";
+          const data = await kv.get(key) || await kv.get("organization_metrics:current");
+          return c.json(data || {});
+      } catch(e: any) {
+          return c.json({ error: e.message }, 500);
+      }
+  });
+
+  app.post("/make-server-37f42386/financials", async (c) => {
+      try {
+          const data = await c.req.json();
+          await kv.set("organization_metrics:current", data);
+          return c.json({ success: true, data });
+      } catch(e: any) {
+          return c.json({ error: e.message }, 500);
+      }
+  });
+
+  // Parse Invoice Endpoint
+  app.post("/make-server-37f42386/parse-invoice", async (c) => {
+      try {
+          const body = await c.req.parseBody();
+          const file = body['file'];
+
+          if (!file || !(file instanceof File)) {
+              return c.json({ error: "No file uploaded" }, 400);
+          }
+
+          const apiKey = Deno.env.get("GEMINI_API_KEY");
+          if (!apiKey) return c.json({ error: "Gemini API Key not configured" }, 500);
+
+          const genAI = new GoogleGenerativeAI(apiKey);
+          
+          // Robust model selection
+          const modelCandidates = ["gemini-1.5-flash-latest", "gemini-1.5-flash", "gemini-1.5-pro", "gemini-2.0-flash-exp"];
+          
+          const arrayBuffer = await file.arrayBuffer();
+          const base64Data = Buffer.from(arrayBuffer).toString('base64');
+          const mimeType = file.type;
+
+          const prompt = `Analyze this vehicle service invoice or receipt. This is from Jamaica, which EXCLUSIVELY uses DD/MM/YYYY date format. Extract the following information in strict JSON format:
+          - date (YYYY-MM-DD. The receipt uses DD/MM/YYYY. The FIRST number is the day, SECOND is the month. Example: "01/12/2025" = 1st Dec 2025 = "2025-12-01".)
+          - type (Choose the best fit: 'oil', 'tires', 'brake', 'inspection', 'repair', 'maintenance' (for multi-service visits), or 'other')
+          - cost (number, total numeric amount. Ignore currency symbols like JMD or $)
+          - odometer (number, if present)
+          - notes (Create a clean, detailed summary. List every service performed and part replaced. Include customer complaints if visible (e.g. 'Customer reported soft brakes'). Format as a readable string.)
+          
+          If a field is missing, use null. Return ONLY the JSON object, no markdown code blocks.`;
+
+          let result = null;
+          let lastError = null;
+
+          for (const modelName of modelCandidates) {
+              try {
+                  console.log(`Attempting invoice analysis with model: ${modelName}`);
+                  const model = genAI.getGenerativeModel({ model: modelName });
+                  result = await trackedProviderCall({
+                      provider: "gemini",
+                      service: "vision",
+                      route: "/make-server-37f42386/parse-invoice",
+                      model: modelName,
+                      run: () => model.generateContent([
+                          prompt,
+                          {
+                              inlineData: {
+                                  data: base64Data,
+                                  mimeType: mimeType
+                              }
+                          }
+                      ]),
+                      extractUsage: (r: any) => ({
+                          inputTokens: r?.response?.usageMetadata?.promptTokenCount,
+                          outputTokens: r?.response?.usageMetadata?.candidatesTokenCount,
+                      }),
+                  });
+                  if (result) break;
+              } catch (e: any) {
+                  if (e instanceof ProviderBlockedError) return c.json({ error: e.message, code: e.code }, e.httpStatus);
+                  console.warn(`Model ${modelName} failed:`, e.message);
+                  lastError = e;
+              }
+          }
+
+          if (!result) {
+               throw new Error(`All Gemini models failed. Last Error: ${lastError?.message}`);
+          }
+
+          const response = result.response;
+          const text = response.text();
+          
+          // Clean markdown code blocks if present
+          const jsonStr = text.replace(/```json/g, '').replace(/```/g, '').trim();
+          
+          let data;
+          try {
+              data = JSON.parse(jsonStr);
+          } catch (e) {
+              console.error("Failed to parse JSON from Gemini:", text);
+              return c.json({ error: "Failed to parse invoice data" }, 500);
+          }
+
+          return c.json({ success: true, data });
+
+      } catch (e: any) {
+          console.error("Error parsing invoice:", e);
+          return c.json({ error: e.message }, 500);
+      }
+  });
+
+  // Parse Inspection Endpoint
+  app.post("/make-server-37f42386/parse-inspection", async (c) => {
+      try {
+          const body = await c.req.parseBody();
+          const file = body['file'];
+
+          if (!file || !(file instanceof File)) {
+              return c.json({ error: "No file uploaded" }, 400);
+          }
+
+          const apiKey = Deno.env.get("GEMINI_API_KEY");
+          if (!apiKey) return c.json({ error: "Gemini API Key not configured" }, 500);
+
+          const genAI = new GoogleGenerativeAI(apiKey);
+          
+          // Robust model selection
+          const modelCandidates = ["gemini-1.5-flash-latest", "gemini-1.5-flash", "gemini-1.5-pro", "gemini-2.0-flash-exp"];
+          
+          const arrayBuffer = await file.arrayBuffer();
+          const base64Data = Buffer.from(arrayBuffer).toString('base64');
+          const mimeType = file.type;
+
+          const checklistItems = [
+              "Replace Engine Oil & Filter",
+              "Replace Air Filter",
+              "Replace Cabin Filter",
+              "Replace Spark Plugs",
+              "Replace Brake Pads (Front)",
+              "Replace Brake Pads (Rear)",
+              "Resurface/Replace Rotors",
+              "Flush Brake Fluid",
+              "Flush Coolant",
+              "Transmission Service",
+              "Wheel Alignment",
+              "Rotate/Balance Tires",
+              "Replace Tires",
+              "Replace Wipers",
+              "Replace Battery",
+              "Suspension Repair",
+              "Steering System Repair",
+              "Exhaust System Repair",
+              "AC Service",
+              "Matching/Calibration",
+              "Throttle Body Cleaning"
+          ];
+
+          const prompt = `Analyze this vehicle inspection report (or mechanic's checklist). Extract the following information in strict JSON format:
+          - issues: array of strings. Identify all items marked as 'Failed', 'Needs Attention', 'Repair Needed', 'Bad', 'Replace', or general negative findings. 
+            IMPORTANT: Try to map each issue to one of the following exact categories if it matches closely:
+            ${JSON.stringify(checklistItems)}
+            If an issue does not match any of these, use a concise, descriptive string (e.g. "Leaking Radiator").
+          - notes: string. A comprehensive summary of the inspection findings. Include specific measurements (e.g. "Front Brake Pads: 3mm", "Tire Tread: 4/32") if visible. Include mechanic recommendations.
+          
+          Return ONLY the JSON object, no markdown code blocks.`;
+
+          let result = null;
+          let lastError = null;
+
+          for (const modelName of modelCandidates) {
+              try {
+                  console.log(`Attempting inspection analysis with model: ${modelName}`);
+                  const model = genAI.getGenerativeModel({ model: modelName });
+                  result = await trackedProviderCall({
+                      provider: "gemini",
+                      service: "vision",
+                      route: "/make-server-37f42386/parse-inspection",
+                      model: modelName,
+                      run: () => model.generateContent([
+                          prompt,
+                          {
+                              inlineData: {
+                                  data: base64Data,
+                                  mimeType: mimeType
+                              }
+                          }
+                      ]),
+                      extractUsage: (r: any) => ({
+                          inputTokens: r?.response?.usageMetadata?.promptTokenCount,
+                          outputTokens: r?.response?.usageMetadata?.candidatesTokenCount,
+                      }),
+                  });
+                  if (result) break;
+              } catch (e: any) {
+                  if (e instanceof ProviderBlockedError) return c.json({ error: e.message, code: e.code }, e.httpStatus);
+                  console.warn(`Model ${modelName} failed:`, e.message);
+                  lastError = e;
+              }
+          }
+
+          if (!result) {
+               throw new Error(`All Gemini models failed. Last Error: ${lastError?.message}`);
+          }
+
+          const response = result.response;
+          const text = response.text();
+          
+          // Clean markdown code blocks if present
+          const jsonStr = text.replace(/```json/g, '').replace(/```/g, '').trim();
+          
+          let data;
+          try {
+              data = JSON.parse(jsonStr);
+          } catch (e) {
+              console.error("Failed to parse JSON from Gemini:", text);
+              return c.json({ error: "Failed to parse inspection data" }, 500);
+          }
+
+          return c.json({ success: true, data });
+
+      } catch (e: any) {
+          console.error("Error parsing inspection:", e);
+          return c.json({ error: e.message }, 500);
+      }
+  });
+
+  // Canonical odometer ledger endpoints
+  app.get("/make-server-37f42386/odometer/current/:vehicleId", requireAuth(), async (c) => {
+    try {
+      const vehicleId = c.req.param("vehicleId");
+      const current = await getCurrentOdometer(vehicleId);
+      return c.json(current);
+    } catch (e: any) {
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  app.get("/make-server-37f42386/odometer/ledger/:vehicleId", requireAuth(), async (c) => {
+    try {
+      const vehicleId = c.req.param("vehicleId");
+      const result = await listOdometerLedger(vehicleId, {
+        source: c.req.query("source") || null,
+        from: c.req.query("from") || null,
+        to: c.req.query("to") || null,
+        includeVoided: c.req.query("includeVoided") === "true",
+        anomaliesOnly: c.req.query("anomaliesOnly") === "true",
+        limit: parseInt(c.req.query("limit") || "500", 10),
+        offset: parseInt(c.req.query("offset") || "0", 10),
+      });
+      return c.json(result);
+    } catch (e: any) {
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  app.post("/make-server-37f42386/odometer/backfill", requireAuth({ requireOrg: true }), async (c) => {
+    try {
+      const body = await c.req.json().catch(() => ({}));
+      const stats = await backfillOdometerLedger({
+        dryRun: !!body?.dryRun,
+        organizationId: body?.organizationId || getOrgId(c),
+      });
+      return c.json({ success: true, stats });
+    } catch (e: any) {
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  app.get("/make-server-37f42386/odometer/health", requireAuth({ requireOrg: true }), async (c) => {
+    try {
+      const health = await odometerLedgerHealth(getOrgId(c));
+      return c.json(health);
+    } catch (e: any) {
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  // Odometer History — thin alias to ledger (compat for one release)
+  app.get("/make-server-37f42386/odometer-history/:vehicleId", requireAuth(), async (c) => {
+    try {
+      const vehicleId = c.req.param("vehicleId");
+      const { data } = await listOdometerLedger(vehicleId, { limit: 5000, offset: 0 });
+      return c.json(filterByOrg(data, c));
+    } catch (e: any) {
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  app.post("/make-server-37f42386/odometer-history", requireAuth(), async (c) => {
+    try {
+      const reading = await c.req.json();
+      if (!reading.vehicleId) return c.json({ error: "Vehicle ID required" }, 400);
+      const stamped = stampOrg(reading, c);
+      if (!stamped.id) stamped.id = crypto.randomUUID();
+      if (!stamped.createdAt) stamped.createdAt = new Date().toISOString();
+
+      const sourceRaw = String(stamped.source || "").toLowerCase();
+      const ledgerSource =
+        sourceRaw.includes("import") ? "import"
+        : sourceRaw.includes("correction") ? "correction"
+        : "manual";
+
+      const projected = await projectOdometerReading({
+        organizationId: stamped.organizationId || getOrgId(c),
+        vehicleId: stamped.vehicleId,
+        reading: Number(stamped.value ?? stamped.reading ?? stamped.odometer),
+        source: ledgerSource as any,
+        referenceId: String(stamped.referenceId || stamped.id),
+        referenceType: ledgerSource === "import" ? "import_batch" : ledgerSource === "correction" ? "correction" : "manual",
+        recordedAt: stamped.createdAt || stamped.date,
+        readingDate: stamped.date,
+        driverId: stamped.driverId || null,
+        isHard: stamped.type !== "Calculated",
+        isVerified: !!(stamped.isVerified || stamped.isManagerVerified || stamped.verified),
+        notes: stamped.notes || null,
+        imageUrl: stamped.imageUrl || null,
+        payloadExtra: stamped,
+      });
+
+      return c.json({ success: true, data: projected });
+    } catch (e: any) {
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  // AI Toll CSV Parsing
+  app.post("/make-server-37f42386/ai/parse-toll-csv", async (c) => {
+    try {
+      const today = new Date().toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
+      const { csvContent } = await c.req.json();
+      if (!csvContent) {
+          return c.json({ error: "No CSV content provided" }, 400);
+      }
+
+      const apiKey = Deno.env.get("OPENAI_API_KEY");
+      if (!apiKey) {
+        return c.json({ error: "AI Service not configured" }, 503);
+      }
+
+      const openai = new OpenAI({ apiKey });
+
+      const prompt = `
+        You are an expert data parser.
+        Parse the following toll transaction data into a JSON array.
+        
+        The input is likely a CSV, TSV, or copy-pasted table.
+        This data is from Jamaica. Jamaica EXCLUSIVELY uses DD/MM/YYYY date format.
+
+        Current Date Context: ${today}
+        
+        Output JSON Schema:
+        {
+          "transactions": [
+              {
+              "date": "ISO Date String (YYYY-MM-DD)",
+              "tagId": "Tag ID or Serial Number (String) or empty",
+              "location": "Plaza Name (String)",
+              "laneId": "Lane ID (String) or empty",
+              "amount": Number (Negative for deduction, Positive for Top-up),
+              "type": "Usage" | "Top-up" | "Refund"
+              }
+          ]
+        }
+        
+        Rules:
+        1. DATE FORMAT — NON-NEGOTIABLE: This is Jamaican data. ALL dates are DD/MM/YYYY (Day/Month/Year). NEVER interpret as MM/DD/YYYY.
+           - "01/05/2024" = 1st May 2024 → output "2024-05-01"
+           - "10/04/2025" = 10th April 2025 → output "2025-04-10"
+           - "23/10/2025" = 23rd October 2025 → output "2025-10-23"
+           - "01/12/2025" = 1st December 2025 → output "2025-12-01"
+           - The FIRST number is ALWAYS the day. The SECOND number is ALWAYS the month.
+        2. FUTURE DATE CHECK: The Current Date is ${today}.
+           - Do NOT output any date that is in the future relative to the Current Date.
+           - If the resulting date would be in the future, subtract 1 from the year.
+        3. If amount is like "JMD -275.00", parse as -275.00.
+        4. If amount is negative, type is "Usage". If positive, type is usually "Top-up" (unless it's a refund).
+        5. Ignore header rows or irrelevant lines.
+        6. Extract the Tag ID or Serial Number if present in the first few columns.
+        7. Return ONLY the valid JSON object with the "transactions" key.
+        
+        Input Data:
+        ${csvContent.substring(0, 15000)}
+      `;
+
+      const response = await trackedProviderCall({
+        provider: "openai",
+        service: "chat",
+        route: "/make-server-37f42386/ai/parse-toll-csv",
+        model: "gpt-4o",
+        run: () => openai.chat.completions.create({
+          model: "gpt-4o",
+          messages: [
+            { role: "system", content: "You are a JSON parsing assistant." },
+            { role: "user", content: prompt }
+          ],
+          response_format: { type: "json_object" },
+          temperature: 0
+        }),
+        extractUsage: (r: any) => ({
+          inputTokens: r?.usage?.prompt_tokens,
+          outputTokens: r?.usage?.completion_tokens,
+          requestId: r?.id,
+        }),
+      });
+
+      const content = response.choices[0].message.content;
+      const result = JSON.parse(content || "{}");
+      
+      // Post-processing: catch and correct any future dates the AI missed
+      const corrected = correctFutureDates(result.transactions || []);
+      
+      return c.json({ success: true, data: corrected });
+    } catch (e: any) {
+      console.error("AI Toll Parse Error:", e);
+      if (e instanceof ProviderBlockedError) return c.json({ error: e.message, code: e.code }, e.httpStatus);
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  // AI Toll Image Parsing
+  app.post("/make-server-37f42386/ai/parse-toll-image", async (c) => {
+    try {
+      const today = new Date().toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
+      const body = await c.req.parseBody();
+      const file = body['file'];
+
+      if (!file || !(file instanceof File)) {
+        return c.json({ error: "No file provided" }, 400);
+      }
+
+      const apiKey = Deno.env.get("OPENAI_API_KEY");
+      if (!apiKey) {
+        return c.json({ error: "AI Service not configured" }, 503);
+      }
+
+      const openai = new OpenAI({ apiKey });
+
+      // Convert file to base64
+      const arrayBuffer = await file.arrayBuffer();
+      const base64Image = `data:${file.type};base64,${Buffer.from(arrayBuffer).toString('base64')}`;
+
+      const prompt = `
+        You are an expert data parser.
+        Analyze the provided image of a toll transaction history or top-up history.
+        Extract the transaction data into a JSON array.
+        This data is from Jamaica. Jamaica EXCLUSIVELY uses DD/MM/YYYY date format.
+
+        Current Date Context: ${today}
+
+        Output JSON Schema:
+        {
+          "transactions": [
+              {
+              "date": "ISO Date String (YYYY-MM-DD)",
+              "tagId": "Tag ID or Serial Number (String) or empty",
+              "location": "Plaza Name (String) or empty if not visible",
+              "laneId": "Lane ID (String) or empty",
+              "amount": Number (Negative for deduction, Positive for Top-up),
+              "type": "Usage" | "Top-up" | "Refund",
+              "status": "Success" | "Failure" | "Pending",
+              "discount": Number (0 if none),
+              "paymentAfterDiscount": Number (equal to amount if none)
+              }
+          ]
+        }
+
+        Rules:
+        1. DATE FORMAT — NON-NEGOTIABLE: This is Jamaican data. ALL dates are DD/MM/YYYY (Day/Month/Year). NEVER interpret as MM/DD/YYYY.
+           - "01/05/2024" = 1st May 2024 → output "2024-05-01"
+           - "10/04/2025" = 10th April 2025 → output "2025-04-10"
+           - "23/10/2025" = 23rd October 2025 → output "2025-10-23"
+           - "01/12/2025" = 1st December 2025 → output "2025-12-01"
+           - The FIRST number is ALWAYS the day. The SECOND number is ALWAYS the month.
+        2. FUTURE DATE CHECK: The Current Date is ${today}.
+           - Do NOT output any date that is in the future relative to the Current Date.
+           - If the resulting date would be in the future, subtract 1 from the year.
+        3. Identify "Payment" or "Top Up Amount" columns.
+        4. If the row indicates "Failure" or "Failed", ignore it or mark status as Failure.
+        5. If "Top Up Amount" is present (e.g. "JMD 2,000.00"), it is a positive amount (Top-up).
+        6. If "Usage" or toll charges are shown, they are negative amounts.
+        7. Extract Tag ID (e.g. "212100286450") if visible in the header or rows.
+        8. Return ONLY the valid JSON object with the "transactions" key.
+        9. If multiple amounts are shown (e.g. "Payment After Discount" and "Topup Amount"), use the "Topup Amount" for the main 'amount' field.
+        10. Extract "Discount / Bonus" if present.
+        11. Extract "Payment After Discount / Bonus" if present.
+      `;
+
+      const response = await trackedProviderCall({
+        provider: "openai",
+        service: "vision",
+        route: "/make-server-37f42386/ai/parse-toll-image",
+        model: "gpt-4o",
+        run: () => openai.chat.completions.create({
+          model: "gpt-4o",
+          messages: [
+            {
+              role: "system",
+              content: "You are a JSON parsing assistant."
+            },
+            {
+              role: "user",
+              content: [
+                 { type: "text", text: prompt },
+                 { type: "image_url", image_url: { url: base64Image } }
+              ]
+            }
+          ],
+          response_format: { type: "json_object" },
+          temperature: 0
+        }),
+        extractUsage: (r: any) => ({
+          inputTokens: r?.usage?.prompt_tokens,
+          outputTokens: r?.usage?.completion_tokens,
+          requestId: r?.id,
+        }),
+      });
+
+      const content = response.choices[0].message.content;
+      const result = JSON.parse(content || "{}");
+      
+      // Post-processing: catch and correct any future dates the AI missed
+      const corrected = correctFutureDates(result.transactions || []);
+      
+      return c.json({ success: true, data: corrected });
+
+    } catch (e: any) {
+      console.error("AI Toll Image Parse Error:", e);
+      if (e instanceof ProviderBlockedError) return c.json({ error: e.message, code: e.code }, e.httpStatus);
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  app.delete("/make-server-37f42386/odometer-history/:id", requireAuth(), async (c) => {
+      const id = c.req.param("id");
+      const vehicleId = c.req.query("vehicleId");
+      const source = c.req.query("source");
+      const reason = c.req.query("reason") || "Deleted from odometer history UI";
+
+      if (!vehicleId) return c.json({ error: "vehicleId query param required" }, 400);
+
+      try {
+          // Soft-void ledger row (never hard-delete mileage history)
+          await voidOdometerReading({ id }, reason);
+
+          const rawId = id.replace(/^(fuel_|checkin_|service_)/, "");
+          const ledgerSource =
+            source === "fuel" ? "fuel"
+            : source === "checkin" ? "checkin"
+            : source === "service" ? "service"
+            : source === "manual" || source === "import" ? "manual"
+            : null;
+
+          if (ledgerSource && rawId) {
+            await voidOdometerReading(
+              { vehicleId, source: ledgerSource, referenceId: rawId },
+              reason,
+            );
+          }
+
+          return c.json({ success: true });
+      } catch(e: any) {
+          console.log(`[DELETE odometer-history] Error: ${e.message}`);
+          return c.json({ error: e.message }, 500);
+      }
+  });
+
+  // Update generic anchor (Fuel, Check-in, etc)
+  app.patch("/make-server-37f42386/anchors/:id", async (c) => {
+      const id = c.req.param("id");
+      const { date, value, type, vehicleId } = await c.req.json();
+      let key = "";
+      
+      // Determine key prefix based on type
+      // Note: MasterLogTimeline 'source' maps to these types
+      if (type === 'Fuel Log' || type === 'fuel_entry') {
+          key = `fuel_entry:${id}`;
+      } else if (type === 'Check-in' || type === 'checkin' || type === 'Weekly Check-in') {
+           key = `checkin:${id}`;
+      } else if (type === 'Service Log' || type === 'maintenance_log') {
+           if (!vehicleId) return c.json({ error: "Vehicle ID required for Service Logs" }, 400);
+           key = `maintenance_log:${vehicleId}:${id}`;
+      } else {
+           // Fallback for generic odometer readings
+           // Attempt to find the key format. Usually `odometer_reading:{vehicleId}:{id}`
+           if (vehicleId) {
+               key = `odometer_reading:${vehicleId}:${id}`;
+           } else {
+               // Try legacy or simple format?
+               // Since we can't easily guess, we might fail here for Manual entries if vehicleId is missing
+               return c.json({ error: "Vehicle ID required for Manual entries" }, 400);
+           }
+      }
+
+      try {
+          const entry = await kv.get(key);
+          if (!entry) return c.json({ error: "Entry not found" }, 404);
+
+          // Update fields
+          if (date) entry.date = date;
+          if (value) {
+              const numVal = Number(value);
+              // Update all potential fields for odometer to be safe
+              if (entry.odometer !== undefined) entry.odometer = numVal;
+              if (entry.value !== undefined) entry.value = numVal;
+              if (entry.mileage !== undefined) entry.mileage = numVal; // Service logs often use mileage
+          }
+          
+          await kv.set(key, stampOrg(entry, c));
+
+          // Optional: Update associated Transaction if it exists (for Fuel Logs)
+          if (entry.transactionId) {
+              const txKey = `transaction:${entry.transactionId}`;
+              const tx = await kv.get(txKey);
+              if (tx) {
+                  if (date) tx.date = date.split('T')[0]; // Transactions use YYYY-MM-DD
+                  // We don't update time on transaction usually, or complex to parse
+                  // Also, odometer is sometimes on transaction
+                  if (value && tx.odometer !== undefined) tx.odometer = Number(value);
+                  await kv.set(txKey, stampOrg(tx, c));
+              }
+          }
+
+          return c.json({ success: true, data: entry });
+      } catch (e: any) {
+          return c.json({ error: e.message }, 500);
+      }
+  });
+
+  // Claims Endpoints — RETIRED → fleet-claims (see supabase/functions/fleet-claims)
+  app.get("/make-server-37f42386/claims", requireAuth(), (c) =>
+    c.json({ error: "moved", message: "Claims live on fleet-claims", useEndpoint: "/fleet-claims/claims" }, 410),
+  );
+  app.post("/make-server-37f42386/claims", (c) =>
+    c.json({ error: "moved", message: "Claims live on fleet-claims" }, 410),
+  );
+  app.delete("/make-server-37f42386/claims/:id", (c) =>
+    c.json({ error: "moved", message: "Claims live on fleet-claims" }, 410),
+  );
+  app.get("/make-server-37f42386/claims/date-backfill/status", requireAuth(), (c) =>
+    c.json({ error: "moved", message: "Claims live on fleet-claims" }, 410),
+  );
+  app.post("/make-server-37f42386/claims/date-backfill", requireAuth(), (c) =>
+    c.json({ error: "moved", message: "Claims live on fleet-claims" }, 410),
+  );
+
+  // Admin: List Users (org-scoped) — still on core
+  app.get("/make-server-37f42386/users", requireAuth(), async (c) => {
+    try {
+      const rbacUser = c.get('rbacUser') as any;
+      const { data: { users }, error } = await supabase.auth.admin.listUsers();
+      
+      if (error) throw error;
+      
+      // Filter users by organizationId for data isolation
+      const orgId = getOrgId(c);
+
+      // Determine who we should show based on context
+      const orgUsers = (users || []).filter((u: any) => {
+        const uOrgId = u.user_metadata?.organizationId;
+        const uRole = u.user_metadata?.role || '';
+        
+        // Always hide platform-level users from anyone who isn't a platform role themselves
+        const platformRoles = ['superadmin', 'platform_owner', 'platform_support', 'platform_analyst'];
+        const isPlatformUser = platformRoles.includes(uRole);
+        const isRequestersPlatform = rbacUser?.resolvedRole && platformRoles.includes(rbacUser.resolvedRole);
+
+        // If requester is NOT a platform user, they can NEVER see platform users
+        if (isPlatformUser && !isRequestersPlatform) return false;
+
+        // If we have an orgId (legit customer session), only show users in that org
+        if (orgId) {
+          return uOrgId === orgId || u.id === orgId;
+        }
+
+        // If no orgId (anon passthrough), they should see NOTHING
+        if (rbacUser?.userId === '_anon_passthrough') return false;
+
+        // Platform users with no orgId (seeing everyone)
+        if (isRequestersPlatform) return true;
+
+        return false;
+      });
+      
+      // Transform to TeamMember format
+      const members = orgUsers.map((u: any) => ({
+          id: u.id,
+          name: u.user_metadata?.name || 'Unknown',
+          email: u.email || '',
+          role: u.user_metadata?.role || 'driver',
+          status: 'active', 
+          lastActive: u.last_sign_in_at ? new Date(u.last_sign_in_at).toLocaleDateString() : 'Never',
+          avatarUrl: u.user_metadata?.avatarUrl
+      }));
+      
+      return c.json(members);
+    } catch (e: any) {
+      console.error("List Users Error:", e);
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  // Public: Signup (Fleet Manager or Driver registration from LoginPage)
+  // Phase 8: Proper organizationId assignment & error handling
+  app.post("/make-server-37f42386/signup", async (c) => {
+    try {
+      const productLine = resolveProductLine(c);
+      const { email, password, name, role, businessType: rawBusinessType } = await c.req.json();
+
+      // Rate limit: check by IP
+      const clientIp = getClientIp(c);
+      const ipCheck = await checkRateLimit(clientIp, 'signup');
+      if (!ipCheck.allowed) {
+        console.log(`[Signup] Rate limit exceeded for IP ${clientIp}`);
+        return c.json({
+          error: `Too many signup attempts. Please try again in ${Math.ceil(ipCheck.retryAfterSec / 60)} minutes.`,
+          retryAfterSec: ipCheck.retryAfterSec,
+        }, 429);
+      }
+
+      // Step 8.2: Validate required fields
+      if (!email || !password || !name) {
+        return c.json({ error: "Email, password, and name are required" }, 400);
+      }
+
+      const normalizedRole = role || 'admin';
+      if (!['admin', 'driver'].includes(normalizedRole)) {
+        return c.json({ error: "Invalid role. Must be 'admin' or 'driver'" }, 400);
+      }
+
+      let businessType = rawBusinessType as string | undefined;
+      if (normalizedRole === 'admin') {
+        if (productLine === 'fleet') {
+          businessType = 'rideshare';
+        } else if (!businessType) {
+          return c.json({ error: "businessType is required for enterprise signup" }, 400);
+        } else {
+          const platformSettingsBt = await getPlatformSettingsCached('enterprise');
+          if (!isEnabledBusinessType(platformSettingsBt, businessType)) {
+            return c.json({ error: `Business type "${businessType}" is not enabled for new registrations` }, 403);
+          }
+        }
+      }
+
+      // Phase 5: Password policy validation
+      try {
+        const platformSettings5 = await getPlatformSettingsCached(productLine);
+        const sp = platformSettings5.securityPolicies || {};
+        const pwErrors: string[] = [];
+        if (sp.minPasswordLength && password.length < sp.minPasswordLength) {
+          pwErrors.push(`Must be at least ${sp.minPasswordLength} characters`);
+        }
+        if (sp.requireUppercase && !/[A-Z]/.test(password)) {
+          pwErrors.push('Must contain an uppercase letter');
+        }
+        if (sp.requireNumber && !/[0-9]/.test(password)) {
+          pwErrors.push('Must contain a number');
+        }
+        if (sp.requireSpecialChar && !/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password)) {
+          pwErrors.push('Must contain a special character');
+        }
+        if (pwErrors.length > 0) {
+          return c.json({ error: `Password does not meet requirements: ${pwErrors.join('. ')}` }, 400);
+        }
+      } catch (e: any) {
+        console.log(`[Signup] Failed to check password policy (failing open): ${e.message}`);
+      }
+
+      // Phase 4: Registration mode enforcement
+      try {
+        const platformSettings = await getPlatformSettingsCached(productLine);
+        const regMode = platformSettings.registrationMode || 'open';
+
+        if (regMode === 'invite_only') {
+          return c.json({ error: "Registration is currently disabled. Please contact your platform administrator." }, 403);
+        }
+
+        if (regMode === 'domain_restricted') {
+          const emailDomain = email.split('@')[1]?.toLowerCase();
+          const allowedDomains = (platformSettings.allowedDomains || []).map((d: string) => d.toLowerCase());
+          if (!emailDomain || !allowedDomains.includes(emailDomain)) {
+            return c.json({ error: `Registration is restricted to approved domains (${allowedDomains.map((d: string) => '@' + d).join(', ')}). Contact your platform administrator.` }, 403);
+          }
+        }
+      } catch (regErr: any) {
+        // Fail-open: if we can't read settings, allow registration
+        console.log(`[Signup] Failed to check registration mode (failing open): ${regErr.message}`);
+      }
+
+      // Step 8.1: display name in user_metadata; auth fields in app_metadata only
+      const userMetadata: Record<string, any> = { name };
+      const appMetadata: Record<string, any> = { role: normalizedRole };
+      if (normalizedRole === 'admin' && businessType) {
+        appMetadata.businessType = businessType;
+        appMetadata.productLine = productLine;
+      }
+
+      // Phase 4: If requireApproval is enabled, mark new accounts as pending
+      try {
+        const platformSettings = await getPlatformSettingsCached(productLine);
+        if (platformSettings.requireApproval === true && normalizedRole === 'admin') {
+          appMetadata.accountStatus = 'pending_approval';
+        }
+      } catch (e: any) {
+        console.log(`[Signup] Failed to check requireApproval (non-fatal): ${e.message}`);
+      }
+
+      const { data, error } = await supabase.auth.admin.createUser({
+        email,
+        password,
+        user_metadata: userMetadata,
+        app_metadata: appMetadata,
+        email_confirm: true,
+      });
+
+      if (error) {
+        await recordFailedAttempt(clientIp, 'signup');
+        // Step 8.2: Friendly error for duplicate email
+        if (error.message?.includes('already been registered') || error.message?.includes('already exists')) {
+          return c.json({ error: "An account with this email already exists" }, 409);
+        }
+        throw error;
+      }
+
+      const userId = data.user.id;
+
+      // Step 8.1: For admin/fleet_owner — full provision (org, product line, dual driver role on fleet)
+      if (normalizedRole === 'admin') {
+        const prov = await provisionFleetOwner(getProvisionDeps(), userId, {
+          name,
+          alsoDrive: productLine === 'fleet',
+          productLine,
+        });
+        if (!prov.ok) {
+          console.warn(`[Signup] provisionFleetOwner failed for ${email}:`, prov.error);
+          return c.json({ error: prov.error }, prov.status ?? 500);
+        }
+      }
+
+      // Step 8.1: For drivers, create a driver profile (unlinked — no organizationId)
+      if (normalizedRole === 'driver') {
+        const driverProfile = {
+          id: userId,
+          driverId: userId,
+          driverName: name || email.split('@')[0],
+          email,
+          status: 'active',
+          createdAt: new Date().toISOString(),
+          acceptanceRate: 0,
+          cancellationRate: 0,
+          completionRate: 0,
+          ratingLast500: 5.0,
+          totalEarnings: 0,
+          // organizationId intentionally omitted — driver is unlinked until claimed (Phase 10)
+        };
+        await kv.set(`driver:${userId}`, driverProfile);
+        console.log(`[Signup] Driver ${email}: created unlinked driver profile ${userId}`);
+        await upsertDriverProfileFromServer({
+          userId,
+          mode: "independent",
+          fleetId: null,
+          displayName: name || email.split("@")[0],
+          status: "active",
+          onboardingComplete: false,
+          markFleetJoined: false,
+        });
+      }
+
+      // Fleet owner email signup: return session so client can enter dashboard immediately
+      if (normalizedRole === 'admin' && productLine === 'fleet') {
+        try {
+          const { createClient: createAnonClient } = await import("npm:@supabase/supabase-js@2");
+          const anonClient = createAnonClient(
+            Deno.env.get("SUPABASE_URL")!,
+            Deno.env.get("SUPABASE_ANON_KEY")!,
+          );
+          const { data: signIn, error: signInErr } = await anonClient.auth.signInWithPassword({ email, password });
+          if (!signInErr && signIn?.session) {
+            return c.json({
+              success: true,
+              access_token: signIn.session.access_token,
+              refresh_token: signIn.session.refresh_token,
+              user: {
+                id: signIn.user.id,
+                email: signIn.user.email,
+                name: signIn.user.user_metadata?.name,
+                role: 'admin',
+              },
+            });
+          }
+        } catch (sessErr: any) {
+          console.warn(`[Signup] Post-signup session (non-fatal): ${sessErr.message}`);
+        }
+      }
+
+      return c.json({ success: true, data });
+    } catch (e: any) {
+      console.error("[Signup] Error:", e);
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  // Admin: Invite User (Phase 8: now sets organizationId from inviting user)
+  app.post("/make-server-37f42386/invite-user", requireAuth(), requirePermission('users.invite'), async (c) => {
+    try {
+      const { email, password, name, role } = await c.req.json();
+      
+      if (!email || !password) {
+        return c.json({ error: "Email and password are required" }, 400);
+      }
+
+      const inviterOrgId = getOrgId(c);
+      const inviterUserId = (c.get('rbacUser') as any)?.userId || null;
+      const assignedRole = role || 'driver';
+      
+      const { data, error } = await supabase.auth.admin.createUser({
+        email,
+        password,
+        user_metadata: {
+          name: name || '',
+        },
+        app_metadata: {
+          role: assignedRole,
+          organizationId: inviterOrgId || undefined,
+          invitedBy: inviterUserId || undefined,
+          invitedAt: new Date().toISOString(),
+        },
+        email_confirm: true
+      });
+      
+      if (error) {
+        if (error.message?.includes('already been registered') || error.message?.includes('already exists')) {
+          return c.json({ error: "An account with this email already exists" }, 409);
+        }
+        throw error;
+      }
+
+      console.log(`[InviteUser] ${email} invited as ${assignedRole} into org ${inviterOrgId} by ${inviterUserId}`);
+      
+      // Also create a driver profile if role is driver
+      if ((assignedRole === 'driver') && data.user) {
+          const driverId = data.user.id;
+          const driverProfile = {
+              id: driverId,
+              driverId: driverId,
+              driverName: name || email.split('@')[0],
+              email,
+              status: 'active',
+              createdAt: new Date().toISOString(),
+              acceptanceRate: 0,
+              cancellationRate: 0,
+              completionRate: 0,
+              ratingLast500: 5.0,
+              totalEarnings: 0,
+          };
+          // stampOrg will set organizationId from the inviting user's context
+          await kv.set(`driver:${driverId}`, stampOrg(driverProfile, c));
+          await upsertDriverProfileFromServer({
+            userId: driverId,
+            mode: "fleet",
+            fleetId: inviterOrgId ?? null,
+            displayName: name || email.split("@")[0],
+            status: "active",
+            onboardingComplete: false,
+            markFleetJoined: !!inviterOrgId,
+          });
+      }
+
+      return c.json({ success: true, data });
+    } catch (e: any) {
+      console.error("[InviteUser] Error:", e);
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  // ─── Phase 9: Team Invitation System ─────────────────────────────────────────
+
+  // Step 9.1: POST /team/invite — Invite team member with auto-generated temp password
+  const TEAM_ROLES = [
+    'fleet_manager',
+    'fleet_accountant',
+    'fleet_viewer',
+    'enterprise_dispatcher',
+    'enterprise_customs',
+    'enterprise_warehouse',
+    'enterprise_finance',
+    'enterprise_viewer',
+  ] as const;
+
+  function authMetaOrgId(u: { app_metadata?: Record<string, unknown>; user_metadata?: Record<string, unknown> }): string | undefined {
+    const app = u.app_metadata?.organizationId;
+    const user = u.user_metadata?.organizationId;
+    if (typeof app === 'string' && app.trim()) return app.trim();
+    if (typeof user === 'string' && user.trim()) return user.trim();
+    return undefined;
+  }
+
+  function authMetaRole(u: { app_metadata?: Record<string, unknown>; user_metadata?: Record<string, unknown> }): string {
+    const app = u.app_metadata?.role;
+    const user = u.user_metadata?.role;
+    if (typeof app === 'string' && app.trim()) return app.trim();
+    if (typeof user === 'string' && user.trim()) return user.trim();
+    return '';
+  }
+
+  /** JWT org, or owned org from X-Roam-Organization-Id (Enterprise owners often lack JWT org). */
+  async function resolveTeamOrgId(c: Context, rbacUser: any): Promise<string | null> {
+    const fromJwt = getOrgId(c);
+    if (fromJwt) return fromJwt;
+    const headerOrg = c.req.header("X-Roam-Organization-Id")?.trim();
+    if (!headerOrg || !rbacUser?.userId) return null;
+    const { data: org } = await supabase
+      .from("organizations")
+      .select("id, owner_id")
+      .eq("id", headerOrg)
+      .maybeSingle();
+    if (org && String(org.owner_id) === String(rbacUser.userId)) {
+      return headerOrg;
+    }
+    return null;
+  }
+
+  app.post("/make-server-37f42386/team/invite", requireAuth(), requirePermission('users.invite'), async (c) => {
+    try {
+      const body = await c.req.json();
+      const { email, name, role } = body;
+      const sectionOverrides = parseSectionOverrides(body.sectionOverrides);
+
+      if (!email || !name) {
+        return c.json({ error: "Email and name are required" }, 400);
+      }
+      if (!TEAM_ROLES.includes(role)) {
+        return c.json({ error: `Invalid team role. Must be one of: ${TEAM_ROLES.join(', ')}` }, 400);
+      }
+
+      const rbacUser = c.get('rbacUser') as any;
+      const orgId = await resolveTeamOrgId(c, rbacUser);
+      if (!orgId) {
+        return c.json({ error: "Organization context required" }, 400);
+      }
+      const inviterUserId = rbacUser?.userId || null;
+
+      // Generate a random temporary password (12 chars)
+      const tempPassword = Array.from(crypto.getRandomValues(new Uint8Array(9)))
+        .map((b: number) => b.toString(36).padStart(2, '0'))
+        .join('')
+        .slice(0, 12);
+
+      const inviteMeta = {
+        name,
+        role,
+        organizationId: orgId || undefined,
+        productLine: 'enterprise',
+        invitedBy: inviterUserId || undefined,
+        invitedAt: new Date().toISOString(),
+        sectionOverrides,
+      };
+
+      const appMetaInvite = {
+        role,
+        organizationId: orgId || undefined,
+        productLine: 'enterprise',
+        invitedBy: inviterUserId || undefined,
+        invitedAt: inviteMeta.invitedAt,
+        sectionOverrides,
+      };
+
+      // Write org/role to both app_metadata (JWT source of truth) and user_metadata (list UI fallback)
+      const { data, error } = await supabase.auth.admin.createUser({
+        email,
+        password: tempPassword,
+        user_metadata: inviteMeta,
+        app_metadata: appMetaInvite,
+        email_confirm: true,
+      });
+
+      if (error) {
+        const isDuplicate =
+          error.message?.includes('already been registered') ||
+          error.message?.includes('already exists');
+        if (!isDuplicate) throw error;
+
+        // Shared Auth across Roam products — adopt passenger/fleet-less logins into this Enterprise org
+        const { data: listData, error: listErr } = await supabase.auth.admin.listUsers({
+          perPage: 1000,
+        });
+        if (listErr) throw listErr;
+        const existing = (listData?.users || []).find(
+          (u: { email?: string }) => u.email?.toLowerCase() === String(email).toLowerCase(),
+        );
+        if (!existing) {
+          return c.json({
+            error: "An account with this email already exists, but it could not be located for invite.",
+          }, 409);
+        }
+
+        const existingOrg = authMetaOrgId(existing);
+        const existingRole = authMetaRole(existing);
+        const platformRoles = ['superadmin', 'platform_owner', 'platform_support', 'platform_analyst'];
+        if (platformRoles.includes(existingRole)) {
+          return c.json({ error: "This email belongs to a platform account and cannot be invited." }, 409);
+        }
+        if (existingOrg && existingOrg !== orgId) {
+          return c.json({
+            error: "This email is already linked to another company on Roam. Use a different work email.",
+          }, 409);
+        }
+        if (existingOrg === orgId && TEAM_ROLES.includes(existingRole as typeof TEAM_ROLES[number])) {
+          return c.json({
+            error: "This person is already on your team. Change their role from the list below.",
+          }, 409);
+        }
+
+        const { data: updated, error: updateErr } = await supabase.auth.admin.updateUserById(
+          existing.id,
+          {
+            password: tempPassword,
+            user_metadata: { ...(existing.user_metadata || {}), ...inviteMeta },
+            app_metadata: { ...(existing.app_metadata || {}), ...appMetaInvite },
+            email_confirm: true,
+          },
+        );
+        if (updateErr) throw updateErr;
+
+        console.log(
+          `[Team] Adopted existing auth user ${email} as ${role} into org ${orgId} by ${inviterUserId}`,
+        );
+
+        return c.json({
+          success: true,
+          adopted: true,
+          userId: updated.user.id,
+          temporaryPassword: tempPassword,
+          message: `Added ${name} as ${role} (existing Roam login linked). Share the temporary password with them securely.`,
+        });
+      }
+
+      console.log(`[Team] Invited ${email} as ${role} into org ${orgId} by ${inviterUserId}`);
+
+      return c.json({
+        success: true,
+        userId: data.user.id,
+        temporaryPassword: tempPassword,
+        message: `Invited ${name} as ${role}. Share the temporary password with them securely.`,
+      });
+    } catch (e: any) {
+      console.error("[Team Invite] Error:", e);
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  // Step 9.2: GET /team/members — List team members in same org
+  app.get("/make-server-37f42386/team/members", requireAuth(), async (c) => {
+    try {
+      const rbacUser = c.get('rbacUser') as any;
+      const orgId = await resolveTeamOrgId(c, rbacUser);
+      const { data: { users }, error } = await supabase.auth.admin.listUsers({ perPage: 1000 });
+      if (error) throw error;
+
+      const platformRoles = ['superadmin', 'platform_owner', 'platform_support', 'platform_analyst'];
+      const isRequestersPlatform = platformRoles.includes(rbacUser?.resolvedRole) ||
+        platformRoles.includes(rbacUser?.rawRole);
+
+      // Org owner may only live on organizations.owner_id (not as a "seat" with organizationId)
+      let ownerId: string | null = null;
+      if (orgId) {
+        const { data: org } = await supabase
+          .from("organizations")
+          .select("owner_id")
+          .eq("id", orgId)
+          .maybeSingle();
+        ownerId = org?.owner_id ? String(org.owner_id) : null;
+      }
+
+      const orgUsers = (users || []).filter((u: any) => {
+        const uOrgId = authMetaOrgId(u);
+        const uRole = authMetaRole(u);
+        const isPlatformUser = platformRoles.includes(uRole);
+
+        if (isPlatformUser && !isRequestersPlatform) return false;
+
+        if (orgId) {
+          if (uOrgId === orgId) return true;
+          if (ownerId && u.id === ownerId) return true;
+          return false;
+        }
+
+        if (rbacUser?.userId === '_anon_passthrough') return false;
+        if (isRequestersPlatform) return true;
+        return false;
+      });
+
+      const members = orgUsers.map((u: any) => {
+        const rawRole = authMetaRole(u) || 'enterprise_viewer';
+        const isOwner = Boolean(ownerId && u.id === ownerId);
+        // Owner always displays/acts as fleet_owner in Team Management. Do not stamp
+        // enterprise_owner onto `role` — fleet UI falls that unknown key back to Fleet Viewer.
+        let role = isOwner ? 'fleet_owner' : rawRole;
+        const seatRole = resolveEnterpriseSeatRole(isOwner ? 'enterprise_owner' : role);
+        const sectionOverrides = parseSectionOverrides(
+          u.app_metadata?.sectionOverrides ?? u.user_metadata?.sectionOverrides,
+        );
+        const effectiveSections = effectiveSectionAccess(seatRole, sectionOverrides);
+        return {
+          id: u.id,
+          name: u.user_metadata?.name || u.email || 'Unknown',
+          email: u.email || '',
+          role,
+          status: 'active',
+          lastActive: u.last_sign_in_at ? new Date(u.last_sign_in_at).toLocaleDateString() : 'Never',
+          invitedBy: u.app_metadata?.invitedBy || u.user_metadata?.invitedBy || null,
+          invitedAt: u.app_metadata?.invitedAt || u.user_metadata?.invitedAt || null,
+          isOwner,
+          sectionOverrides,
+          effectiveSections,
+          accessCustomized: Object.keys(sectionOverrides).length > 0,
+        };
+      });
+
+      return c.json(members);
+    } catch (e: any) {
+      console.error("[Team Members] Error:", e);
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  // Step 9.3: PUT /team/members/:id/role — Update team member role + section overrides
+  app.put("/make-server-37f42386/team/members/:id/role", requireAuth(), requirePermission('users.edit_role'), async (c) => {
+    try {
+      const targetId = c.req.param("id");
+      const body = await c.req.json();
+      const { role: newRole } = body;
+      const hasOverridesField = Object.prototype.hasOwnProperty.call(body, 'sectionOverrides');
+      const sectionOverrides: EnterpriseSectionOverrides = hasOverridesField
+        ? parseSectionOverrides(body.sectionOverrides)
+        : {};
+      const rbacUser = c.get('rbacUser') as any;
+      const orgId = await resolveTeamOrgId(c, rbacUser);
+
+      if (!TEAM_ROLES.includes(newRole)) {
+        return c.json({ error: "Invalid role. Cannot promote to owner." }, 400);
+      }
+
+      const { data: { user: targetUser }, error: fetchErr } = await supabase.auth.admin.getUserById(targetId);
+      if (fetchErr || !targetUser) {
+        return c.json({ error: "User not found" }, 404);
+      }
+
+      // CRITICAL: Never allow role changes on platform-level users from any customer portal
+      const currentRole = authMetaRole(targetUser);
+      const protectedPlatformRoles = ['superadmin', 'platform_owner', 'platform_support', 'platform_analyst'];
+      if (protectedPlatformRoles.includes(currentRole)) {
+        return c.json({ error: "This user cannot be modified" }, 403);
+      }
+
+      const targetOrgId = authMetaOrgId(targetUser);
+      if (!targetOrgId) {
+        return c.json({ error: "This user does not belong to your organization" }, 403);
+      }
+
+      if (orgId && targetOrgId !== orgId) {
+        return c.json({ error: "Cannot modify users from another organization" }, 403);
+      }
+
+      if (currentRole === 'admin' || currentRole === 'fleet_owner' || currentRole === 'enterprise_owner') {
+        return c.json({ error: "Cannot change the organization owner's role" }, 403);
+      }
+
+      if (orgId) {
+        const { data: org } = await supabase.from("organizations").select("owner_id").eq("id", orgId).maybeSingle();
+        if (org?.owner_id && targetId === String(org.owner_id)) {
+          return c.json({ error: "Cannot change the organization owner's role" }, 403);
+        }
+      }
+
+      // When sectionOverrides is sent, replace stored overrides (even if {}); omit field → keep existing
+      const nextAppMeta = {
+        ...targetUser.app_metadata,
+        role: newRole,
+        ...(hasOverridesField ? { sectionOverrides } : {}),
+      };
+      const nextUserMeta = {
+        ...targetUser.user_metadata,
+        role: newRole,
+        ...(hasOverridesField ? { sectionOverrides } : {}),
+      };
+
+      const { error } = await supabase.auth.admin.updateUserById(targetId, {
+        user_metadata: nextUserMeta,
+        app_metadata: nextAppMeta,
+      });
+      if (error) throw error;
+
+      console.log(`[Team] Access updated: ${targetId} → ${newRole} by org ${orgId}`);
+      return c.json({
+        success: true,
+        message: `Access updated. Teammate may need to sign out and back in to refresh their menu.`,
+      });
+    } catch (e: any) {
+      console.error("[Team Role Update] Error:", e);
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  // Step 9.4: DELETE /team/members/:id — Remove team member
+  app.delete("/make-server-37f42386/team/members/:id", requireAuth(), requirePermission('users.remove'), async (c) => {
+    try {
+      const targetId = c.req.param("id");
+      const rbacUser = c.get('rbacUser') as any;
+      const orgId = await resolveTeamOrgId(c, rbacUser);
+
+      const { data: { user: targetUser }, error: fetchErr } = await supabase.auth.admin.getUserById(targetId);
+      if (fetchErr || !targetUser) {
+        return c.json({ error: "User not found" }, 404);
+      }
+
+      // CRITICAL: Never allow deletion of platform-level users from any customer portal
+      const targetRole = authMetaRole(targetUser);
+      const protectedPlatformRoles = ['superadmin', 'platform_owner', 'platform_support', 'platform_analyst'];
+      if (protectedPlatformRoles.includes(targetRole)) {
+        return c.json({ error: "This user cannot be removed" }, 403);
+      }
+
+      const targetOrgId = authMetaOrgId(targetUser);
+      if (orgId) {
+        const { data: org } = await supabase.from("organizations").select("owner_id").eq("id", orgId).maybeSingle();
+        if (org?.owner_id && targetId === String(org.owner_id)) {
+          return c.json({ error: "Cannot remove the organization owner" }, 403);
+        }
+      }
+
+      if (!targetOrgId) {
+        return c.json({ error: "This user does not belong to your organization" }, 403);
+      }
+
+      if (orgId && targetOrgId !== orgId) {
+        return c.json({ error: "Cannot remove users from another organization" }, 403);
+      }
+
+      if (targetRole === 'admin' || targetRole === 'fleet_owner' || targetRole === 'enterprise_owner') {
+        return c.json({ error: "Cannot remove the organization owner" }, 403);
+      }
+
+      const { error } = await supabase.auth.admin.deleteUser(targetId);
+      if (error) throw error;
+
+      console.log(`[Team] Removed user ${targetId} from org ${orgId}`);
+      return c.json({ success: true, message: "Team member removed" });
+    } catch (e: any) {
+      console.error("[Team Remove] Error:", e);
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  // ─── Phase 10: Driver-Organization Linking ───────────────────────────────────
+
+  // Phase 11: Platform team invite endpoint
+  const PLATFORM_ROLES = ['platform_support', 'platform_analyst'] as const;
+
+  app.post("/make-server-37f42386/admin/team/invite", requireAuth(), async (c) => {
+    try {
+      // Only platform_owner (superadmin) can invite platform staff
+      const rbacUser = c.get('rbacUser') as any;
+      const callerRole = rbacUser?.resolvedRole || rbacUser?.role;
+      if (callerRole !== 'platform_owner' && callerRole !== 'superadmin') {
+        return c.json({ error: "Only the platform owner can invite platform staff" }, 403);
+      }
+
+      const { email, name, role } = await c.req.json();
+      if (!email || !name) {
+        return c.json({ error: "Email and name are required" }, 400);
+      }
+      if (!PLATFORM_ROLES.includes(role)) {
+        return c.json({ error: `Invalid platform role. Must be one of: ${PLATFORM_ROLES.join(', ')}` }, 400);
+      }
+
+      const tempPassword = Array.from(crypto.getRandomValues(new Uint8Array(9)))
+        .map((b: number) => b.toString(36).padStart(2, '0'))
+        .join('')
+        .slice(0, 12);
+
+      const { data, error } = await supabase.auth.admin.createUser({
+        email,
+        password: tempPassword,
+        user_metadata: {
+          name,
+        },
+        app_metadata: {
+          role,
+          roles: [role],
+        },
+        email_confirm: true,
+      });
+
+      if (error) {
+        if (error.message?.includes('already been registered') || error.message?.includes('already exists')) {
+          return c.json({ error: "An account with this email already exists" }, 409);
+        }
+        throw error;
+      }
+
+      console.log(`[Platform Team] Invited ${email} as ${role}`);
+      await logAdminAction({ actorId: rbacUser?.id, actorName: rbacUser?.name || 'Admin', action: 'invite_platform_staff', targetId: data.user.id, targetEmail: email, details: `Role: ${role}` });
+      return c.json({
+        success: true,
+        userId: data.user.id,
+        temporaryPassword: tempPassword,
+        message: `Invited ${name} as ${role}. Share the temporary password securely.`,
+      });
+    } catch (e: any) {
+      console.error("[Platform Team Invite] Error:", e);
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  // ---------------------------------------------------------------------------
+  // Phase 2: Create Customer Account from Admin
+  // ---------------------------------------------------------------------------
+  app.post("/make-server-37f42386/admin/create-customer", requireAuth(), async (c) => {
+    try {
+      const rbacUser = c.get('rbacUser') as any;
+      const callerRole = rbacUser?.resolvedRole || rbacUser?.role || rbacUser?.rawRole;
+      const productLine = resolveProductLine(c);
+      const canCreate =
+        callerRole === 'platform_owner' ||
+        callerRole === 'superadmin' ||
+        (productLine === 'enterprise' &&
+          (callerRole === 'enterprise_admin' || rbacUser?.rawRole === 'enterprise_admin'));
+      if (!canCreate) {
+        return c.json({ error: "Only the platform owner or enterprise admin can create customer accounts" }, 403);
+      }
+
+      const { email, name, businessType } = await c.req.json();
+      if (!email || !name || !businessType) {
+        return c.json({ error: "email, name, and businessType are all required" }, 400);
+      }
+
+      const allowedTypes = [...ALL_BUSINESS_TYPES];
+      if (!allowedTypes.includes(businessType)) {
+        return c.json({ error: `Invalid businessType. Must be one of: ${allowedTypes.join(', ')}` }, 400);
+      }
+
+      if (productLine === 'fleet' && businessType !== 'rideshare') {
+        return c.json({ error: "Roam Fleet only supports rideshare business type" }, 400);
+      }
+
+      const entSettings = await getPlatformSettingsCached('enterprise');
+      if (productLine === 'enterprise' && !isEnabledBusinessType(entSettings, businessType)) {
+        return c.json({ error: `Business type "${businessType}" is not enabled` }, 403);
+      }
+
+      // Generate temporary password
+      const tempPassword = Array.from(crypto.getRandomValues(new Uint8Array(9)))
+        .map((b: number) => b.toString(36).padStart(2, '0'))
+        .join('')
+        .slice(0, 12);
+
+      const resolvedLine = productLine === 'fleet' ? 'fleet' : 'enterprise';
+
+      // Create the user — mirror role/productLine on user_metadata for admin list filters
+      // and app_metadata for org trigger / JWT claims.
+      const { data, error } = await supabase.auth.admin.createUser({
+        email,
+        password: tempPassword,
+        user_metadata: {
+          name,
+          role: 'admin',
+          businessType,
+          productLine: resolvedLine,
+        },
+        app_metadata: {
+          role: 'admin',
+          businessType,
+          productLine: resolvedLine,
+        },
+        email_confirm: true,
+      });
+
+      if (error) {
+        if (error.message?.includes('already been registered') || error.message?.includes('already exists')) {
+          return c.json({ error: "An account with this email already exists" }, 409);
+        }
+        throw error;
+      }
+
+      // Set organizationId on app + user metadata (trigger may already have set it)
+      const userId = data.user.id;
+      const { error: updateErr } = await supabase.auth.admin.updateUserById(userId, {
+        app_metadata: {
+          ...(data.user.app_metadata || {}),
+          organizationId: userId,
+          productLine: resolvedLine,
+          role: 'admin',
+          businessType,
+        },
+        user_metadata: {
+          ...(data.user.user_metadata || {}),
+          name,
+          role: 'admin',
+          businessType,
+          productLine: resolvedLine,
+          organizationId: userId,
+        },
+      });
+      if (updateErr) {
+        console.error(`[Create Customer] Failed to set organizationId for ${userId}:`, updateErr);
+        // Non-fatal: the account was still created, just missing organizationId
+      }
+
+      await ensureCustomerOrganization(supabase, {
+        userId,
+        email,
+        name,
+        businessType,
+        productLine: resolvedLine,
+      });
+
+      console.log(`[Create Customer] Created ${email} as fleet owner (${businessType})`);
+      await logAdminAction({ actorId: rbacUser?.id, actorName: rbacUser?.name || 'Admin', action: 'create_customer', targetId: userId, targetEmail: email, details: `Business type: ${businessType}` });
+      return c.json({
+        success: true,
+        userId,
+        temporaryPassword: tempPassword,
+        message: `Customer account created for ${name}. Share the temporary password securely.`,
+      });
+    } catch (e: any) {
+      console.error("[Create Customer] Error:", e);
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  // ---------------------------------------------------------------------------
+  // Phase 3: Driver Accounts — Server Endpoints
+  // ---------------------------------------------------------------------------
+
+  // GET /admin/drivers — List all driver accounts across all fleets
+  app.get("/make-server-37f42386/admin/drivers", requireAuth(), async (c) => {
+    try {
+      const rbacUser = c.get('rbacUser') as any;
+      const callerRole = rbacUser?.resolvedRole || rbacUser?.role;
+      if (callerRole !== 'platform_owner' && callerRole !== 'superadmin' && callerRole !== 'platform_support') {
+        return c.json({ error: "Only platform owner or support can view drivers" }, 403);
+      }
+
+      const { data, error } = await supabase.auth.admin.listUsers({ perPage: 1000 });
+      if (error) throw new Error(`Auth API error: ${error.message}`);
+
+      const allUsers = data?.users || [];
+
+      // Build org name lookup from fleet owners (role === 'admin' or 'superadmin' with businessType)
+      const orgNameMap: Record<string, string> = {};
+      for (const u of allUsers) {
+        const meta = u.user_metadata || {};
+        if (meta.role === 'admin' || (meta.role === 'superadmin' && meta.businessType)) {
+          orgNameMap[u.id] = meta.name || u.email || 'Unknown Fleet';
+        }
+      }
+
+      // Filter to drivers only
+      const drivers = allUsers
+        .filter((u: any) => u.user_metadata?.role === 'driver')
+        .map((u: any) => {
+          const meta = u.user_metadata || {};
+          const orgId = meta.organizationId || null;
+          const isLinked = !!orgId;
+          return {
+            id: u.id,
+            email: u.email || "",
+            name: meta.name || "",
+            organizationId: orgId,
+            organizationName: isLinked ? (orgNameMap[orgId] || 'Unknown Fleet') : null,
+            createdAt: u.created_at || null,
+            lastSignIn: u.last_sign_in_at || null,
+            status: u.last_sign_in_at
+              ? (Date.now() - new Date(u.last_sign_in_at).getTime() < 30 * 24 * 60 * 60 * 1000 ? "active" : "inactive")
+              : "inactive",
+            isSuspended: !!u.banned_until && new Date(u.banned_until) > new Date(),
+            isLinked,
+          };
+        });
+
+      console.log(`[Admin Drivers] Returned ${drivers.length} drivers`);
+      return c.json({ drivers });
+    } catch (e: any) {
+      console.error("[Admin Drivers List] Error:", e);
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  // POST /admin/drivers/:id/unlink — Remove a driver's organization link
+  app.post("/make-server-37f42386/admin/drivers/:id/unlink", requireAuth(), async (c) => {
+    try {
+      const rbacUser = c.get('rbacUser') as any;
+      const callerRole = rbacUser?.resolvedRole || rbacUser?.role;
+      if (callerRole !== 'platform_owner' && callerRole !== 'superadmin') {
+        return c.json({ error: "Only the platform owner can unlink drivers" }, 403);
+      }
+
+      const driverId = c.req.param('id');
+      const { data: { user }, error: getUserErr } = await supabase.auth.admin.getUserById(driverId);
+      if (getUserErr || !user) return c.json({ error: "User not found" }, 404);
+
+      if (user.user_metadata?.role !== 'driver') {
+        return c.json({ error: "This user is not a driver" }, 400);
+      }
+
+      if (!user.user_metadata?.organizationId) {
+        return c.json({ error: "Driver is already unlinked" }, 400);
+      }
+
+      // Clear auth + KV + driver_profiles + vehicle assignment (not just auth metadata)
+      await detachDriverFromOrg(driverId);
+
+      console.log(`[Admin Drivers] Unlinked driver ${user.email} from org ${user.user_metadata.organizationId}`);
+      await logAdminAction({ actorId: rbacUser?.id, actorName: rbacUser?.name || 'Admin', action: 'unlink_driver', targetId: driverId, targetEmail: user.email || '', details: `From org: ${user.user_metadata.organizationId}` });
+      return c.json({ success: true, message: "Driver unlinked from organization" });
+    } catch (e: any) {
+      console.error("[Admin Drivers Unlink] Error:", e);
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  // POST /admin/drivers/:id/link — Assign a driver to an organization
+  app.post("/make-server-37f42386/admin/drivers/:id/link", requireAuth(), async (c) => {
+    try {
+      const rbacUser = c.get('rbacUser') as any;
+      const callerRole = rbacUser?.resolvedRole || rbacUser?.role;
+      if (callerRole !== 'platform_owner' && callerRole !== 'superadmin') {
+        return c.json({ error: "Only the platform owner can link drivers" }, 403);
+      }
+
+      const driverId = c.req.param('id');
+      const { organizationId } = await c.req.json();
+      if (!organizationId) return c.json({ error: "organizationId is required" }, 400);
+
+      // Get the driver
+      const { data: { user: driver }, error: getDriverErr } = await supabase.auth.admin.getUserById(driverId);
+      if (getDriverErr || !driver) return c.json({ error: "Driver not found" }, 404);
+
+      if (driver.user_metadata?.role !== 'driver') {
+        return c.json({ error: "This user is not a driver" }, 400);
+      }
+
+      if (driver.user_metadata?.organizationId) {
+        return c.json({ error: "Driver is already linked to an organization. Unlink them first." }, 409);
+      }
+
+      // Verify the target organization exists (fleet owner)
+      const { data: { user: orgOwner }, error: getOrgErr } = await supabase.auth.admin.getUserById(organizationId);
+      if (getOrgErr || !orgOwner) return c.json({ error: "Target organization not found" }, 404);
+
+      const orgRole = orgOwner.user_metadata?.role;
+      if (orgRole !== 'admin' && orgRole !== 'superadmin') {
+        return c.json({ error: "Target organization ID does not belong to a fleet owner" }, 400);
+      }
+
+      const { error: updateErr } = await supabase.auth.admin.updateUserById(driverId, {
+        user_metadata: { ...driver.user_metadata, organizationId }
+      });
+      if (updateErr) throw updateErr;
+
+      const orgName = orgOwner.user_metadata?.name || orgOwner.email || organizationId;
+      console.log(`[Admin Drivers] Linked driver ${driver.email} to org ${orgName} (${organizationId})`);
+      await logAdminAction({ actorId: rbacUser?.id, actorName: rbacUser?.name || 'Admin', action: 'link_driver', targetId: driverId, targetEmail: driver.email || '', details: `To org: ${orgName}` });
+      return c.json({ success: true, message: `Driver linked to ${orgName}` });
+    } catch (e: any) {
+      console.error("[Admin Drivers Link] Error:", e);
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  // ---------------------------------------------------------------------------
+  // Phase 5: Team Members — All Fleet Sub-Roles
+  // ---------------------------------------------------------------------------
+
+  const FLEET_SUB_ROLES = ['fleet_manager', 'fleet_accountant', 'fleet_viewer', 'manager', 'viewer'];
+  const CANONICAL_FLEET_SUB_ROLES = ['fleet_manager', 'fleet_accountant', 'fleet_viewer'];
+  function canonicalizeRole(role: string): string {
+    if (role === 'manager') return 'fleet_manager';
+    if (role === 'viewer') return 'fleet_viewer';
+    return role;
+  }
+
+  // GET /admin/team-members — List fleet sub-role users (optional ?productLine=fleet|enterprise)
+  app.get("/make-server-37f42386/admin/team-members", requireAuth(), async (c) => {
+    try {
+      const rbacUser = c.get('rbacUser') as RbacUser;
+      if (!hasPlatformStaffAccess(rbacUser)) {
+        return c.json({ error: "Only platform owner or support can view team members" }, 403);
+      }
+
+      const productLineParam = c.req.query("productLine");
+      const productLineFilter = isProductLine(productLineParam) ? productLineParam : null;
+      const includeUnassigned = c.req.query("includeUnassigned") === "true";
+
+      const { data, error } = await supabase.auth.admin.listUsers({ perPage: 1000 });
+      if (error) throw new Error(`Auth API error: ${error.message}`);
+
+      const allUsers = data?.users || [];
+
+      const orgNameMap: Record<string, string> = {};
+      const orgProductLineMap: Record<string, ProductLine> = {};
+      for (const u of allUsers) {
+        const meta = u.user_metadata || {};
+        if (meta.role === 'admin' || (meta.role === 'superadmin' && meta.businessType)) {
+          orgNameMap[u.id] = meta.name || u.email || 'Unknown Fleet';
+          orgProductLineMap[u.id] = inferProductLineFromUser(meta as Record<string, unknown>);
+        }
+      }
+
+      let members = allUsers
+        .filter((u: any) => FLEET_SUB_ROLES.includes(u.user_metadata?.role))
+        .map((u: any) => {
+          const meta = u.user_metadata || {};
+          const orgId = meta.organizationId || null;
+          const orgLine = orgId ? orgProductLineMap[orgId] : null;
+          return {
+            id: u.id,
+            email: u.email || "",
+            name: meta.name || "",
+            role: canonicalizeRole(meta.role),
+            organizationId: orgId,
+            organizationName: orgId ? (orgNameMap[orgId] || 'Unknown Fleet') : null,
+            productLine: orgLine,
+            createdAt: u.created_at || null,
+            lastSignIn: u.last_sign_in_at || null,
+            status: u.last_sign_in_at
+              ? (Date.now() - new Date(u.last_sign_in_at).getTime() < 30 * 24 * 60 * 60 * 1000 ? "active" : "inactive")
+              : "inactive",
+            isSuspended: !!u.banned_until && new Date(u.banned_until) > new Date(),
+          };
+        });
+
+      if (productLineFilter) {
+        members = members.filter((m: { organizationId: string | null; productLine: ProductLine | null }) => {
+          if (!m.organizationId) return includeUnassigned;
+          return m.productLine === productLineFilter;
+        });
+      }
+
+      console.log(`[Admin Team Members] Returned ${members.length} team members`);
+      return c.json({ members });
+    } catch (e: any) {
+      console.error("[Admin Team Members List] Error:", e);
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  // PUT /admin/team-members/:id/role — Change a fleet sub-role user's role
+  app.put("/make-server-37f42386/admin/team-members/:id/role", requireAuth(), async (c) => {
+    try {
+      const rbacUser = c.get('rbacUser') as any;
+      const callerRole = rbacUser?.resolvedRole || rbacUser?.role;
+      if (callerRole !== 'platform_owner' && callerRole !== 'superadmin') {
+        return c.json({ error: "Only the platform owner can change team member roles" }, 403);
+      }
+
+      const userId = c.req.param('id');
+      const { role } = await c.req.json();
+      if (!role || !CANONICAL_FLEET_SUB_ROLES.includes(role)) {
+        return c.json({ error: `Invalid role. Must be one of: ${CANONICAL_FLEET_SUB_ROLES.join(', ')}` }, 400);
+      }
+
+      const { data: { user }, error: getUserErr } = await supabase.auth.admin.getUserById(userId);
+      if (getUserErr || !user) return c.json({ error: "User not found" }, 404);
+
+      const currentRole = user.user_metadata?.role;
+      if (!FLEET_SUB_ROLES.includes(currentRole)) {
+        return c.json({ error: "This user is not a fleet sub-role member. Cannot change their role here." }, 400);
+      }
+
+      const { error: updateErr } = await supabase.auth.admin.updateUserById(userId, {
+        user_metadata: { ...user.user_metadata, role }
+      });
+      if (updateErr) throw updateErr;
+
+      console.log(`[Admin Team Members] Changed role for ${user.email} from ${currentRole} to ${role}`);
+      await logAdminAction({ actorId: rbacUser?.id, actorName: rbacUser?.name || 'Admin', action: 'change_team_role', targetId: userId, targetEmail: user.email || '', details: `From ${currentRole} to ${role}` });
+      return c.json({ success: true, message: `Role changed to ${role}` });
+    } catch (e: any) {
+      console.error("[Admin Team Members Change Role] Error:", e);
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  // DELETE /admin/team-members/:id — Remove a fleet sub-role user entirely
+  app.delete("/make-server-37f42386/admin/team-members/:id", requireAuth(), async (c) => {
+    try {
+      const rbacUser = c.get('rbacUser') as any;
+      const callerRole = rbacUser?.resolvedRole || rbacUser?.role;
+      if (callerRole !== 'platform_owner' && callerRole !== 'superadmin') {
+        return c.json({ error: "Only the platform owner can remove team members" }, 403);
+      }
+
+      const userId = c.req.param('id');
+      const { data: { user }, error: getUserErr } = await supabase.auth.admin.getUserById(userId);
+      if (getUserErr || !user) return c.json({ error: "User not found" }, 404);
+
+      const currentRole = user.user_metadata?.role;
+      if (!FLEET_SUB_ROLES.includes(currentRole)) {
+        return c.json({ error: "This user is not a fleet sub-role member. Cannot delete them here." }, 400);
+      }
+
+      const { error: deleteErr } = await supabase.auth.admin.deleteUser(userId);
+      if (deleteErr) throw deleteErr;
+
+      console.log(`[Admin Team Members] Deleted user ${user.email} (role: ${currentRole})`);
+      await logAdminAction({ actorId: rbacUser?.id, actorName: rbacUser?.name || 'Admin', action: 'remove_team_member', targetId: userId, targetEmail: user.email || '' });
+      return c.json({ success: true, message: "Team member removed" });
+    } catch (e: any) {
+      console.error("[Admin Team Members Delete] Error:", e);
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  // ---------------------------------------------------------------------------
+  // Phase 8: Audit Log — GET endpoint
+  // ---------------------------------------------------------------------------
+
+  // GET /admin/audit-log — Retrieve admin activity log
+  app.get("/make-server-37f42386/admin/audit-log", requireAuth(), async (c) => {
+    try {
+      const rbacUser = c.get('rbacUser') as any;
+      const callerRole = rbacUser?.resolvedRole || rbacUser?.role;
+      if (callerRole !== 'platform_owner' && callerRole !== 'superadmin') {
+        return c.json({ error: "Only the platform owner can view the audit log" }, 403);
+      }
+
+      const url = new URL(c.req.url);
+      const limitParam = url.searchParams.get('limit');
+      const actorParam = url.searchParams.get('actor');
+      const limit = limitParam ? parseInt(limitParam, 10) : 200;
+
+      let entries;
+      if (actorParam) {
+        entries = await getAuditLogsByActor(actorParam, limit);
+      } else {
+        entries = await getAuditLogs(limit);
+      }
+
+      return c.json({ entries });
+    } catch (e: any) {
+      console.error("[Admin Audit Log] Error:", e);
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  // ---------------------------------------------------------------------------
+  // Phase 7: Direct Password Set
+  // ---------------------------------------------------------------------------
+
+  // POST /admin/set-password — Directly set a user's password
+  app.post("/make-server-37f42386/admin/set-password", requireAuth(), async (c) => {
+    try {
+      const rbacUser = c.get('rbacUser') as any;
+      const callerRole = rbacUser?.resolvedRole || rbacUser?.role;
+      if (callerRole !== 'platform_owner' && callerRole !== 'superadmin') {
+        return c.json({ error: "Only the platform owner can set passwords directly" }, 403);
+      }
+
+      const { userId, password } = await c.req.json();
+      if (!userId || !password) {
+        return c.json({ error: "userId and password are required" }, 400);
+      }
+      if (password.length < 8) {
+        return c.json({ error: "Password must be at least 8 characters" }, 400);
+      }
+
+      const { data: { user }, error: getUserErr } = await supabase.auth.admin.getUserById(userId);
+      if (getUserErr || !user) return c.json({ error: "User not found" }, 404);
+
+      const { error: updateErr } = await supabase.auth.admin.updateUserById(userId, { password });
+      if (updateErr) throw updateErr;
+
+      console.log(`[Admin Set Password] Password set for ${user.email} by platform owner`);
+      await logAdminAction({ actorId: rbacUser?.id, actorName: rbacUser?.name || 'Admin', action: 'set_password', targetId: userId, targetEmail: user.email || '' });
+      return c.json({ success: true, message: "Password updated successfully" });
+    } catch (e: any) {
+      console.error("[Admin Set Password] Error:", e);
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  // ---------------------------------------------------------------------------
+  // Phase 6: Organization Detail — Drill-Down Summary
+  // ---------------------------------------------------------------------------
+
+  // GET /admin/organizations/:orgId/summary
+  app.get("/make-server-37f42386/admin/organizations/:orgId/summary", requireAuth(), async (c) => {
+    try {
+      const rbacUser = c.get('rbacUser') as any;
+      const callerRole = rbacUser?.resolvedRole || rbacUser?.role;
+      if (callerRole !== 'platform_owner' && callerRole !== 'superadmin' && callerRole !== 'platform_support') {
+        return c.json({ error: "Only platform owner or support can view org details" }, 403);
+      }
+
+      const orgId = c.req.param('orgId');
+
+      // Get the org owner
+      const { data: { user: owner }, error: ownerErr } = await supabase.auth.admin.getUserById(orgId);
+      if (ownerErr || !owner) return c.json({ error: "Organization owner not found" }, 404);
+
+      const ownerMeta = owner.user_metadata || {};
+      const ownerData = {
+        id: owner.id,
+        name: ownerMeta.name || '',
+        email: owner.email || '',
+        businessType: ownerMeta.businessType || 'rideshare',
+        createdAt: owner.created_at || null,
+        lastSignIn: owner.last_sign_in_at || null,
+        status: owner.last_sign_in_at
+          ? (Date.now() - new Date(owner.last_sign_in_at).getTime() < 30 * 24 * 60 * 60 * 1000 ? 'active' : 'inactive')
+          : 'inactive',
+        isSuspended: !!owner.banned_until && new Date(owner.banned_until) > new Date(),
+      };
+
+      // Get all users to find team members and drivers for this org
+      const { data: usersData } = await supabase.auth.admin.listUsers({ perPage: 1000 });
+      const allUsers = usersData?.users || [];
+
+      const teamMembers: any[] = [];
+      const drivers: any[] = [];
+
+      for (const u of allUsers) {
+        const meta = u.user_metadata || {};
+        if (meta.organizationId !== orgId) continue;
+
+        const userInfo = {
+          id: u.id,
+          name: meta.name || '',
+          email: u.email || '',
+          role: canonicalizeRole(meta.role || ''),
+          lastSignIn: u.last_sign_in_at || null,
+          status: u.last_sign_in_at
+            ? (Date.now() - new Date(u.last_sign_in_at).getTime() < 30 * 24 * 60 * 60 * 1000 ? 'active' : 'inactive')
+            : 'inactive',
+          isSuspended: !!u.banned_until && new Date(u.banned_until) > new Date(),
+        };
+
+        if (FLEET_SUB_ROLES.includes(meta.role)) {
+          teamMembers.push(userInfo);
+        } else if (meta.role === 'driver') {
+          drivers.push({ ...userInfo, isLinked: true });
+        }
+      }
+
+      // Count KV data for this org
+      const [vehicles, fuelEntries, kvDrivers] = await Promise.all([
+        kv.getByPrefix("vehicle:"),
+        kv.getByPrefix("fuel_entry:"),
+        kv.getByPrefix("driver:"),
+      ]);
+
+      const vehicleCount = (vehicles || []).filter((v: any) => v?.organizationId === orgId).length;
+      const fuelCount = (fuelEntries || []).filter((f: any) => f?.organizationId === orgId).length;
+      const kvDriverCount = (kvDrivers || []).filter((d: any) => d?.organizationId === orgId).length;
+
+      const stats = {
+        teamMembers: teamMembers.length,
+        drivers: Math.max(drivers.length, kvDriverCount),
+        vehicles: vehicleCount,
+        trips: 0,
+        fuelEntries: fuelCount,
+        tollEntries: 0,
+      };
+
+      const { data: orgRow } = await supabase
+        .from("organizations")
+        .select("service_lines, business_type, enabled_modules")
+        .eq("id", orgId)
+        .maybeSingle();
+
+      const serviceLines = (orgRow?.service_lines as string[] | null) ?? ["rideshare"];
+      const orgBusinessType = (orgRow?.business_type as string | null) ?? ownerData.businessType;
+      const enabledModules = orgRow?.enabled_modules as Record<string, boolean> | null;
+      const rushModules: Record<string, boolean> = {};
+      for (const k of ["rush_couriers", "rush_deliveries", "rush_courier_settlements", "rush_supply_health", "rush_merchant_link"]) {
+        rushModules[k] = enabledModules?.[k] === true;
+      }
+
+      console.log(`[Admin Org Detail] Org ${orgId}: ${teamMembers.length} team, ${stats.drivers} drivers, ${vehicleCount} vehicles, ${fuelCount} fuel`);
+      return c.json({
+        owner: { ...ownerData, businessType: orgBusinessType },
+        stats,
+        teamMembers,
+        drivers,
+        serviceLines,
+        businessType: orgBusinessType,
+        rushModules,
+      });
+    } catch (e: any) {
+      console.error("[Admin Org Detail] Error:", e);
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  // PATCH /admin/organizations/:orgId/service-lines — platform owner sets fleet org service lines
+  app.patch("/make-server-37f42386/admin/organizations/:orgId/service-lines", requireAuth(), async (c) => {
+    try {
+      const rbacUser = c.get("rbacUser") as RbacUser;
+      const { canEditOrgServiceLines, parseServiceLinesInput, applyOrgServiceLines } = await import("./rush_rollout_admin.ts");
+      if (!canEditOrgServiceLines(rbacUser)) {
+        return c.json({ error: "Forbidden — platform owner required" }, 403);
+      }
+
+      const orgId = c.req.param("orgId");
+      const body = await c.req.json();
+      const lines = parseServiceLinesInput(body?.serviceLines);
+      if (!lines) return c.json({ error: "serviceLines required" }, 400);
+
+      const result = await applyOrgServiceLines(supabase, orgId, lines);
+
+      await logAdminAction({
+        actorId: rbacUser.userId,
+        actorName: rbacUser.email || "Platform Admin",
+        action: "update_org_service_lines",
+        targetId: orgId,
+        targetEmail: "",
+        details: `Set service lines: ${lines.join(", ")}`,
+      });
+
+      return c.json(result);
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.error("[Admin Org Service Lines] PATCH error:", msg);
+      return c.json({ error: msg }, 500);
+    }
+  });
+
+  // GET /admin/organizations/:orgId/rush-rollout — consolidated Rush rollout status for Dominion
+  app.get("/make-server-37f42386/admin/organizations/:orgId/rush-rollout", requireAuth(), async (c) => {
+    try {
+      const rbacUser = c.get("rbacUser") as RbacUser;
+      const { canViewPlatformOrgAdmin, buildRushRolloutStatusWithOrg } = await import("./rush_rollout_admin.ts");
+      if (!canViewPlatformOrgAdmin(rbacUser)) {
+        return c.json({ error: "Forbidden — platform staff required" }, 403);
+      }
+
+      const orgId = c.req.param("orgId");
+      const status = await buildRushRolloutStatusWithOrg(supabase, orgId);
+      return c.json(status);
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.error("[Admin Rush Rollout] GET error:", msg);
+      return c.json({ error: msg }, 500);
+    }
+  });
+
+  // ---------------------------------------------------------------------------
+  // Phase 1: Platform Team Management Endpoints
+  // ---------------------------------------------------------------------------
+
+  // GET /admin/platform-team — List all platform staff (owner, support, analyst)
+  app.get("/make-server-37f42386/admin/platform-team", requireAuth(), async (c) => {
+    try {
+      const rbacUser = c.get('rbacUser') as any;
+      const callerRole = rbacUser?.resolvedRole || rbacUser?.role;
+      if (callerRole !== 'platform_owner' && callerRole !== 'superadmin') {
+        return c.json({ error: "Only the platform owner can view platform team" }, 403);
+      }
+
+      const { data, error } = await supabase.auth.admin.listUsers({ perPage: 1000 });
+      if (error) throw new Error(`Auth API error: ${error.message}`);
+
+      const platformRoles = ['platform_owner', 'platform_support', 'platform_analyst', 'superadmin'];
+      const members = (data?.users || [])
+        .filter((u: any) => platformRoles.includes(u.user_metadata?.role))
+        .map((u: any) => ({
+          id: u.id,
+          email: u.email || "",
+          name: u.user_metadata?.name || "",
+          role: u.user_metadata?.role === 'superadmin' ? 'platform_owner' : u.user_metadata?.role,
+          createdAt: u.created_at || null,
+          lastSignIn: u.last_sign_in_at || null,
+          status: u.last_sign_in_at
+            ? (Date.now() - new Date(u.last_sign_in_at).getTime() < 30 * 24 * 60 * 60 * 1000 ? "active" : "inactive")
+            : "inactive",
+          isSuspended: !!u.banned_until && new Date(u.banned_until) > new Date(),
+        }));
+
+      console.log(`[Platform Team] Returned ${members.length} platform members`);
+      return c.json({ members });
+    } catch (e: any) {
+      console.error("[Platform Team List] Error:", e);
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  // PUT /admin/platform-team/:id/role — Change a platform staff member's role
+  app.put("/make-server-37f42386/admin/platform-team/:id/role", requireAuth(), async (c) => {
+    try {
+      const rbacUser = c.get('rbacUser') as any;
+      const callerRole = rbacUser?.resolvedRole || rbacUser?.role;
+      if (callerRole !== 'platform_owner' && callerRole !== 'superadmin') {
+        return c.json({ error: "Only the platform owner can change platform roles" }, 403);
+      }
+
+      const targetId = c.req.param('id');
+      const { role } = await c.req.json();
+
+      // Validate new role
+      const allowedRoles = ['platform_support', 'platform_analyst'];
+      if (!allowedRoles.includes(role)) {
+        return c.json({ error: `Invalid role. Must be one of: ${allowedRoles.join(', ')}` }, 400);
+      }
+
+      // Prevent changing your own role
+      const callerId = rbacUser?.id;
+      if (callerId === targetId) {
+        return c.json({ error: "You cannot change your own role" }, 400);
+      }
+
+      // Get the target user
+      const { data: { user: targetUser }, error: getUserErr } = await supabase.auth.admin.getUserById(targetId);
+      if (getUserErr || !targetUser) {
+        return c.json({ error: "User not found" }, 404);
+      }
+
+      // Prevent changing the platform_owner's role
+      const targetRole = targetUser.user_metadata?.role;
+      if (targetRole === 'platform_owner' || targetRole === 'superadmin') {
+        return c.json({ error: "Cannot change the platform owner's role" }, 403);
+      }
+
+      // Verify target is a platform user
+      const platformSubRoles = ['platform_support', 'platform_analyst'];
+      if (!platformSubRoles.includes(targetRole)) {
+        return c.json({ error: "This user is not a platform staff member" }, 400);
+      }
+
+      const oldRole = targetRole;
+      const { error: updateErr } = await supabase.auth.admin.updateUserById(targetId, {
+        user_metadata: { ...targetUser.user_metadata, role }
+      });
+      if (updateErr) throw updateErr;
+
+      console.log(`[Platform Team] Changed role for ${targetUser.email}: ${oldRole} → ${role}`);
+      await logAdminAction({ actorId: rbacUser?.id, actorName: rbacUser?.name || 'Admin', action: 'change_platform_role', targetId: targetId, targetEmail: targetUser.email || '', details: `From ${oldRole} to ${role}` });
+      return c.json({ success: true, message: `Role changed from ${oldRole} to ${role}` });
+    } catch (e: any) {
+      console.error("[Platform Team Role Change] Error:", e);
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  // DELETE /admin/platform-team/:id — Remove a platform staff member
+  app.delete("/make-server-37f42386/admin/platform-team/:id", requireAuth(), async (c) => {
+    try {
+      const rbacUser = c.get('rbacUser') as any;
+      const callerRole = rbacUser?.resolvedRole || rbacUser?.role;
+      if (callerRole !== 'platform_owner' && callerRole !== 'superadmin') {
+        return c.json({ error: "Only the platform owner can remove platform staff" }, 403);
+      }
+
+      const targetId = c.req.param('id');
+
+      // Prevent deleting yourself
+      const callerId = rbacUser?.id;
+      if (callerId === targetId) {
+        return c.json({ error: "You cannot remove yourself" }, 400);
+      }
+
+      // Get the target user
+      const { data: { user: targetUser }, error: getUserErr } = await supabase.auth.admin.getUserById(targetId);
+      if (getUserErr || !targetUser) {
+        return c.json({ error: "User not found" }, 404);
+      }
+
+      // Prevent deleting the platform_owner
+      const targetRole = targetUser.user_metadata?.role;
+      if (targetRole === 'platform_owner' || targetRole === 'superadmin') {
+        return c.json({ error: "Cannot remove the platform owner" }, 403);
+      }
+
+      // Verify target is a platform user
+      const deletableRoles = ['platform_support', 'platform_analyst'];
+      if (!deletableRoles.includes(targetRole)) {
+        return c.json({ error: "This user is not a platform staff member" }, 400);
+      }
+
+      const { error: deleteErr } = await supabase.auth.admin.deleteUser(targetId);
+      if (deleteErr) throw deleteErr;
+
+      console.log(`[Platform Team] Removed ${targetUser.email} (was ${targetRole})`);
+      await logAdminAction({ actorId: rbacUser?.id, actorName: rbacUser?.name || 'Admin', action: 'remove_platform_staff', targetId: targetId, targetEmail: targetUser.email || '' });
+      return c.json({ success: true, message: `Removed ${targetUser.email} from platform team` });
+    } catch (e: any) {
+      console.error("[Platform Team Remove] Error:", e);
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  // ONE-TIME RECOVERY: Recreate the platform owner (superadmin) account
+  // This endpoint does NOT require auth since the account was deleted.
+  // It is protected by a one-time secret and will refuse to create duplicates.
+  app.post("/make-server-37f42386/recover-platform-owner", async (c) => {
+    try {
+      const { email, password, name, recoverySecret } = await c.req.json();
+
+      // Protect with a hardcoded one-time secret
+      if (recoverySecret !== 'ROAMFLEET-RECOVER-2026-EMERGENCY') {
+        return c.json({ error: "Invalid recovery secret" }, 403);
+      }
+
+      if (!email || !password) {
+        return c.json({ error: "Email and password are required" }, 400);
+      }
+
+      // Check if a platform_owner already exists to prevent abuse
+      const { data: { users: allUsers } } = await supabase.auth.admin.listUsers({ perPage: 1000 });
+      const existingOwner = (allUsers || []).find((u: any) =>
+        u.user_metadata?.role === 'platform_owner' || u.user_metadata?.role === 'superadmin'
+      );
+      if (existingOwner) {
+        return c.json({ error: `A platform owner already exists: ${existingOwner.email}. Recovery not needed.` }, 409);
+      }
+
+      const { data, error } = await supabase.auth.admin.createUser({
+        email,
+        password,
+        user_metadata: {
+          name: name || 'Platform Owner',
+          role: 'platform_owner',
+        },
+        email_confirm: true,
+      });
+
+      if (error) throw error;
+
+      console.log(`[RECOVERY] Platform owner account recreated: ${email}, id: ${data.user.id}`);
+      return c.json({
+        success: true,
+        message: `Platform owner account recreated successfully. You can now log in at /admin.`,
+        userId: data.user.id,
+      });
+    } catch (e: any) {
+      console.error("[RECOVERY] Error:", e);
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  // Step 10.5: POST /team/claim-driver — Claim an unlinked driver by email
+  app.post("/make-server-37f42386/team/claim-driver", requireAuth(), requirePermission('drivers.create'), async (c) => {
+    try {
+      const { driverEmail } = await c.req.json();
+      if (!driverEmail) {
+        return c.json({ error: "driverEmail is required" }, 400);
+      }
+
+      const orgId = getOrgId(c);
+      if (!orgId) {
+        return c.json({ error: "Cannot claim driver: no organization context" }, 400);
+      }
+
+      // Find user by email in Supabase Auth
+      const { data: { users }, error: listErr } = await supabase.auth.admin.listUsers({ perPage: 1000 });
+      if (listErr) throw listErr;
+
+      const targetUser = (users || []).find((u: any) => u.email?.toLowerCase() === driverEmail.toLowerCase());
+      if (!targetUser) {
+        return c.json({ error: `No account found for ${driverEmail}` }, 404);
+      }
+
+      const meta = targetUser.user_metadata || {};
+
+      // Verify their role is driver
+      if (meta.role !== 'driver') {
+        return c.json({ error: `This user is a ${meta.role || 'unknown'}, not a driver. Only drivers can be claimed.` }, 400);
+      }
+
+      // Verify they have no organizationId (not already claimed)
+      if (meta.organizationId) {
+        return c.json({ error: "This driver is already linked to an organization" }, 409);
+      }
+
+      // Update their user_metadata with the fleet owner's orgId
+      const { error: updateErr } = await supabase.auth.admin.updateUserById(targetUser.id, {
+        user_metadata: { ...meta, organizationId: orgId },
+      });
+      if (updateErr) throw updateErr;
+
+      // Also update the driver's KV profile to have organizationId
+      const driverProfile = await kv.get(`driver:${targetUser.id}`);
+      if (driverProfile) {
+        await kv.set(`driver:${targetUser.id}`, { ...driverProfile, organizationId: orgId });
+        console.log(`[ClaimDriver] Updated KV profile for driver ${targetUser.id} with org ${orgId}`);
+      } else {
+        // Driver has auth account but no KV profile — create one
+        const newProfile = {
+          id: targetUser.id,
+          driverId: targetUser.id,
+          driverName: meta.name || driverEmail.split('@')[0],
+          email: driverEmail,
+          status: 'active',
+          createdAt: new Date().toISOString(),
+          acceptanceRate: 0,
+          cancellationRate: 0,
+          completionRate: 0,
+          ratingLast500: 5.0,
+          totalEarnings: 0,
+          organizationId: orgId,
+        };
+        await kv.set(`driver:${targetUser.id}`, newProfile);
+        console.log(`[ClaimDriver] Created KV profile for driver ${targetUser.id} in org ${orgId}`);
+      }
+
+      await upsertDriverProfileFromServer({
+        userId: targetUser.id,
+        mode: "fleet",
+        fleetId: orgId,
+        displayName: (meta.name as string) || driverEmail.split("@")[0],
+        status: "active",
+        onboardingComplete: false,
+        markFleetJoined: true,
+      });
+      invalidateDriverCache();
+
+      console.log(`[ClaimDriver] Driver ${driverEmail} (${targetUser.id}) claimed by org ${orgId}`);
+      return c.json({ success: true, driverId: targetUser.id, message: `Driver ${driverEmail} has been linked to your organization` });
+    } catch (e: any) {
+      console.error("[ClaimDriver] Error:", e);
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  // POST /team/drivers/:id/remove — Fleet owner removes a driver from their own fleet.
+  // Clears auth metadata, KV org, driver_profiles fleet link, and releases the vehicle.
+  app.post("/make-server-37f42386/team/drivers/:id/remove", requireAuth(), requirePermission('drivers.delete'), async (c) => {
+    try {
+      const orgId = getOrgId(c);
+      if (!orgId) return c.json({ error: "No organization context" }, 400);
+
+      const driverId = c.req.param('id');
+      const { data: { user }, error: getUserErr } = await supabase.auth.admin.getUserById(driverId);
+      if (getUserErr || !user) return c.json({ error: "Driver not found" }, 404);
+
+      // Scope check across membership stores — owner can only remove their own people
+      const metaOrg = typeof user.user_metadata?.organizationId === 'string' ? user.user_metadata.organizationId : '';
+      const { data: prof } = await supabase.from("driver_profiles").select("fleet_id").eq("user_id", driverId).maybeSingle();
+      const profOrg = prof?.fleet_id ? String(prof.fleet_id) : '';
+      const { data: courierProf } = await supabase.schema("delivery")
+        .from("courier_profiles")
+        .select("fleet_id")
+        .eq("user_id", driverId)
+        .maybeSingle();
+      const courierOrg = courierProf?.fleet_id ? String(courierProf.fleet_id) : '';
+      if (metaOrg !== orgId && profOrg !== orgId && courierOrg !== orgId) {
+        return c.json({ error: "This driver is not part of your fleet" }, 403);
+      }
+
+      await detachDriverFromOrg(driverId);
+
+      const rbacUser = c.get('rbacUser') as any;
+      await logAdminAction({
+        actorId: rbacUser?.id,
+        actorName: rbacUser?.name || 'Fleet Owner',
+        action: 'remove_driver_from_fleet',
+        targetId: driverId,
+        targetEmail: user.email || '',
+        details: `Removed from org: ${orgId}`,
+      });
+      return c.json({ success: true, message: "Driver removed from your fleet" });
+    } catch (e: any) {
+      console.error("[Team Drivers Remove] Error:", e);
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  // Driver app: legacy self-serve link by org UUID (deprecated — use workforce invite codes).
+  app.post("/make-server-37f42386/driver/join-fleet", requireAuth(), async (c) => {
+    try {
+      const rbacUser = c.get("rbacUser") as RbacUser | undefined;
+      if (!rbacUser || rbacUser.userId === "_anon_passthrough") {
+        return c.json({ error: "Unauthorized" }, 401);
+      }
+      if (rbacUser.resolvedRole !== "driver") {
+        return c.json({ error: "Only driver accounts can join a fleet from this endpoint" }, 403);
+      }
+
+      const legacyEnabled = await isFeatureEnabled(FEATURE_FLAGS.LEGACY_DRIVER_JOIN, null);
+      const body = await c.req.json();
+      const fleetId = typeof body?.fleetId === "string" ? body.fleetId.trim() : "";
+      console.log("[JoinFleet] legacy call", {
+        userId: rbacUser.userId,
+        fleetId,
+        legacyEnabled,
+        at: new Date().toISOString(),
+      });
+
+      if (!legacyEnabled) {
+        return c.json({ error: "This join method is no longer available. Use your fleet invite code." }, 403);
+      }
+
+      if (!fleetId) return c.json({ error: "fleetId is required" }, 400);
+
+      try {
+        const result = await linkDriverToFleet(
+          {
+            supabase,
+            kv,
+            upsertDriverProfile: upsertDriverProfileFromServer,
+            invalidateDriverCache,
+          },
+          rbacUser.userId,
+          fleetId,
+        );
+        c.header("Deprecation", "true");
+        return c.json({ success: true, alreadyMember: result.alreadyMember ?? false });
+      } catch (e: unknown) {
+        const err = e as Error & { status?: number };
+        if (err.status === 409) return c.json({ error: err.message }, 409);
+        if (err.message === "Fleet not found") return c.json({ error: err.message }, 404);
+        throw e;
+      }
+    } catch (e: any) {
+      console.error("[JoinFleet] Error:", e);
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  // Update User Password — self only, or platform_owner/superadmin for others
+  app.post("/make-server-37f42386/update-password", requireAuth(), async (c) => {
+    try {
+      const rbacUser = c.get("rbacUser") as {
+        userId?: string;
+        resolvedRole?: string;
+        rawRole?: string;
+      } | null;
+      const { userId, password } = await c.req.json();
+
+      if (!userId || !password) {
+        return c.json({ error: "User ID and new password are required" }, 400);
+      }
+      if (typeof password !== "string" || password.length < 8) {
+        return c.json({ error: "Password must be at least 8 characters" }, 400);
+      }
+
+      const callerId = rbacUser?.userId;
+      const isSelf = !!callerId && callerId === userId;
+      const isPlatformOwner =
+        rbacUser?.resolvedRole === "platform_owner" ||
+        rbacUser?.rawRole === "superadmin" ||
+        rbacUser?.rawRole === "platform_owner";
+      if (!isSelf && !isPlatformOwner) {
+        return c.json({ error: "Forbidden: can only change your own password" }, 403);
+      }
+
+      const { error } = await supabase.auth.admin.updateUserById(userId, { password });
+      if (error) throw error;
+
+      return c.json({ success: true });
+    } catch (e: any) {
+      console.error("Update Password Error:", e);
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  // Admin: Update User Details (name, role, businessType) — role goes to app_metadata only
+  app.post("/make-server-37f42386/update-user", requireAuth(), requirePermission('users.edit_role'), async (c) => {
+    try {
+      const { userId, name, role, businessType } = await c.req.json();
+
+      if (!userId) {
+        return c.json({ error: "User ID is required" }, 400);
+      }
+
+      const { data: existing, error: getErr } = await supabase.auth.admin.getUserById(userId);
+      if (getErr || !existing?.user) {
+        return c.json({ error: "User not found" }, 404);
+      }
+
+      const userMetaUpdates: Record<string, unknown> = {
+        ...(existing.user.user_metadata || {}),
+      };
+      if (name !== undefined) userMetaUpdates.name = name;
+      if (businessType !== undefined) userMetaUpdates.businessType = businessType;
+      // Never store authz role in user_metadata
+      delete userMetaUpdates.role;
+      delete userMetaUpdates.organizationId;
+
+      const appMetaUpdates: Record<string, unknown> = {
+        ...(existing.user.app_metadata || {}),
+      };
+      if (role !== undefined) {
+        appMetaUpdates.role = role;
+        const prevRoles = Array.isArray(appMetaUpdates.roles)
+          ? (appMetaUpdates.roles as unknown[]).filter((r): r is string => typeof r === "string")
+          : [];
+        const nextRoles = new Set(prevRoles);
+        nextRoles.add(String(role));
+        appMetaUpdates.roles = Array.from(nextRoles);
+      }
+
+      if (name === undefined && role === undefined && businessType === undefined) {
+        return c.json({ error: "No fields to update" }, 400);
+      }
+
+      const { data, error } = await supabase.auth.admin.updateUserById(userId, {
+        user_metadata: userMetaUpdates,
+        app_metadata: appMetaUpdates,
+      });
+
+      if (error) throw error;
+
+      console.log(`User updated: ${userId} — role=${role ?? "(unchanged)"}`);
+
+      if (role === "admin" || data.user?.app_metadata?.role === "admin") {
+        await invalidateCustomerCache();
+      }
+
+      return c.json({ success: true, user: data.user });
+    } catch (e: any) {
+      console.error("Update User Error:", e);
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  // Admin: Delete User (Driver)
+  app.post("/make-server-37f42386/delete-user", requireAuth(), requirePermission('users.remove'), async (c) => {
+    try {
+      const { userId } = await c.req.json();
+      
+      if (!userId) {
+        return c.json({ error: "User ID is required" }, 400);
+      }
+      
+      // 1. Get user info before deletion (to check role)
+      const { data: userData } = await supabase.auth.admin.getUserById(userId);
+      const isAdmin = userData?.user?.user_metadata?.role === 'admin';
+      
+      // 2. Delete from Auth (Attempt)
+      const { error } = await supabase.auth.admin.deleteUser(userId);
+      if (error) {
+          console.warn(`Auth delete failed for ${userId} (ignoring):`, error.message);
+      }
+      
+      // 3. Delete from KV Store
+      await kv.del(`driver:${userId}`);
+      
+      // 4. Invalidate customer cache if deleting an admin user
+      if (isAdmin) {
+        await invalidateCustomerCache();
+      }
+      
+      return c.json({ success: true });
+    } catch (e: any) {
+      console.error("Delete User Error:", e);
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  // Fuel Dispute Endpoints
+  app.get("/make-server-37f42386/fuel-disputes", requireAuth(), async (c) => {
+    try {
+      const { data, error } = await fromKvStore()
+          .select("value")
+          .like("key", "fuel_dispute:%")
+          .order("value->>createdAt", { ascending: false });
+
+      if (error) throw error;
+      const disputes = filterByOrg(data?.map((d: any) => d.value) || [], c);
+      return c.json(disputes);
+    } catch (e: any) {
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  app.post("/make-server-37f42386/fuel-disputes", async (c) => {
+    try {
+      const dispute = await c.req.json();
+      if (!dispute.id) {
+          dispute.id = crypto.randomUUID();
+      }
+      if (!dispute.createdAt) {
+          dispute.createdAt = new Date().toISOString();
+      }
+      await kv.set(`fuel_dispute:${dispute.id}`, stampOrg(dispute, c));
+      return c.json({ success: true, data: dispute });
+    } catch (e: any) {
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  app.delete("/make-server-37f42386/fuel-disputes/:id", async (c) => {
+    const id = c.req.param("id");
+    try {
+      await kv.del(`fuel_dispute:${id}`);
+      return c.json({ success: true });
+    } catch (e: any) {
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  // Equipment Endpoints
+  app.get("/make-server-37f42386/equipment/:vehicleId", requireAuth(), async (c) => {
+    try {
+      const vehicleId = c.req.param("vehicleId");
+      // Get all equipment items for this vehicle. We assume keys are formatted as equipment:{vehicleId}:{itemId}
+      const items = await kv.getByPrefix(`equipment:${vehicleId}:`);
+      return c.json(filterByOrg(items || [], c));
+    } catch (e: any) {
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  app.post(
+    "/make-server-37f42386/equipment",
+    requireAuth(),
+    requirePermission('vehicles.edit'),
+    requireCatalogMatched({
+      label: "POST /equipment",
+      vehicleId: (_c, body) => {
+        if (!body || typeof body !== "object") return null;
+        const id = (body as { vehicleId?: unknown }).vehicleId;
+        return typeof id === "string" && id.trim() ? id.trim() : null;
+      },
+    }),
+    async (c) => {
+    try {
+      const item = (c.get("__cachedRequestBody") as Record<string, unknown> | null) ?? (await c.req.json());
+      if (!item.id) {
+          item.id = crypto.randomUUID();
+      }
+      if (!item.vehicleId) {
+          return c.json({ error: "Vehicle ID is required" }, 400);
+      }
+      if (!item.updatedAt) {
+          item.updatedAt = new Date().toISOString();
+      }
+      
+      // Key structure: equipment:{vehicleId}:{itemId}
+      await kv.set(`equipment:${item.vehicleId}:${item.id}`, stampOrg(item, c));
+      return c.json({ success: true, data: item });
+    } catch (e: any) {
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  app.delete("/make-server-37f42386/equipment/:vehicleId/:id", requireAuth(), requirePermission('vehicles.edit'), async (c) => {
+    const vehicleId = c.req.param("vehicleId");
+    const id = c.req.param("id");
+    try {
+      await kv.del(`equipment:${vehicleId}:${id}`);
+      return c.json({ success: true });
+    } catch (e: any) {
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  // Map Match Endpoint (OSRM Proxy)
+  app.post("/make-server-37f42386/map-match", async (c) => {
+    try {
+      const { points } = await c.req.json();
+      if (!Array.isArray(points) || points.length === 0) {
+        return c.json({ error: "Points array is required" }, 400);
+      }
+
+      // Filter valid points with timestamps and sort them
+      const rawPoints = points
+          .filter((p: any) => {
+              const lat = Number(p.lat);
+              const lon = Number(p.lon);
+              const ts = Number(p.timestamp);
+              return p && 
+                     !isNaN(lat) && lat !== 0 && 
+                     !isNaN(lon) && lon !== 0 && 
+                     !isNaN(ts) && ts > 0;
+          })
+          .sort((a: any, b: any) => Number(a.timestamp) - Number(b.timestamp));
+
+      // Deduplicate to ensure strictly increasing timestamps (seconds) for OSRM
+      const uniquePoints: any[] = [];
+      let lastSec = -1;
+      for (const p of rawPoints) {
+          const sec = Math.floor(Number(p.timestamp) / 1000);
+          if (sec > lastSec) {
+              uniquePoints.push(p);
+              lastSec = sec;
+          }
+      }
+
+      if (uniquePoints.length < 2) {
+        // Not enough points for a route, return success with empty/null data to avoid crashing frontend
+        return c.json({ success: true, data: { totalDistance: 0, totalDuration: 0, confidence: 0, snappedRoute: [] } });
+      }
+
+      // Chunking Logic (60 points per chunk to be safe within 100 limit and URL length)
+      const CHUNK_SIZE = 60;
+      const chunks = [];
+      
+      // Create chunks with 1 point overlap
+      for (let i = 0; i < uniquePoints.length - 1; i += (CHUNK_SIZE - 1)) {
+          const chunk = uniquePoints.slice(i, Math.min(i + CHUNK_SIZE, uniquePoints.length));
+          if (chunk.length >= 2) {
+              chunks.push(chunk);
+          }
+      }
+      
+      const responses = await Promise.all(chunks.map(async (chunk) => {
+          // Format: lon,lat;lon,lat
+          const coords = chunk.map((p: any) => `${Number(p.lon)},${Number(p.lat)}`).join(';');
+          const timestamps = chunk.map((p: any) => Math.floor(Number(p.timestamp) / 1000)).join(';');
+          // Increase radius to 60m to be more forgiving of GPS drift
+          const radiuses = chunk.map(() => "60").join(';');
+          
+          // Using public OSRM server. 
+          // fallback to 'router.project-osrm.org' but ideally this should be configurable
+          const url = `https://router.project-osrm.org/match/v1/driving/${coords}?timestamps=${timestamps}&radiuses=${radiuses}&overview=full&geometries=geojson&steps=false&annotations=true`;
+          
+          try {
+              const res = await fetch(url);
+              if (!res.ok) {
+                  const text = await res.text();
+                  console.log(`OSRM Failed (${res.status}): ${text.substring(0, 100)}... URL length: ${url.length}`);
+                  // Return null instead of throwing to allow partial results
+                  return null;
+              }
+              return res.json();
+          } catch (fetchErr) {
+              console.error("OSRM Fetch Error:", fetchErr);
+              return null;
+          }
+      }));
+
+      // Result Stitching
+      let totalDistance = 0;
+      let totalDuration = 0;
+      const stitchedCoordinates: any[] = [];
+      let confidenceSum = 0;
+      let validResponses = 0;
+      
+      responses.forEach((res, index) => {
+          if (!res || res.code !== 'Ok' || !res.matchings || res.matchings.length === 0) return;
+          
+          const match = res.matchings[0]; // Take best match
+          
+          totalDistance += match.distance;
+          totalDuration += match.duration;
+          confidenceSum += match.confidence;
+          validResponses++;
+
+          // Geometry Stitching
+          if (match.geometry && match.geometry.coordinates) {
+               const coords = match.geometry.coordinates;
+               // If this is not the first chunk, remove the first coordinate to avoid duplicate vertex at join
+               if (index > 0 && stitchedCoordinates.length > 0) {
+                   stitchedCoordinates.push(...coords.slice(1));
+               } else {
+                   stitchedCoordinates.push(...coords);
+               }
+          }
+      });
+
+      const confidence = validResponses > 0 ? confidenceSum / validResponses : 0;
+
+      return c.json({
+          success: true,
+          data: {
+              snappedRoute: stitchedCoordinates.map((c: any) => ({ lat: c[1], lon: c[0] })), // GeoJSON is [lon, lat]
+              totalDistance, // Meters
+              totalDuration, // Seconds
+              confidence
+          }
+      });
+
+    } catch (e: any) {
+      console.error("Map Matching Error:", e);
+      return c.json({ success: false, error: e.message });
+    }
+  });
+
+  // Performance Report Endpoint - Optimized with Streaming (Phase 6) & Caching (Phase 7)
+  app.get("/make-server-37f42386/performance-report", requireAuth(), async (c) => {
+      const startDate = c.req.query("startDate");
+      const endDate = c.req.query("endDate");
+      const dailyRideTarget = parseInt(c.req.query("dailyRideTarget") || "10");
+      const dailyEarningsTarget = parseInt(c.req.query("dailyEarningsTarget") || "0");
+      const summaryOnly = c.req.query("summaryOnly") === "true";
+      const limit = parseInt(c.req.query("limit") || "100");
+      const offset = parseInt(c.req.query("offset") || "0");
+      
+      if (!startDate || !endDate) {
+          return c.json({ error: "startDate and endDate are required" }, 400);
+      }
+
+      // Phase 7.1: Caching Strategy
+      try {
+          const cacheParams = { startDate, endDate, dailyRideTarget, dailyEarningsTarget, summaryOnly, limit, offset };
+          const version = await cache.getCacheVersion("performance");
+          const cacheKey = await cache.generateKey(`performance:${version}`, cacheParams);
+          
+          const cachedData = await cache.getCache(cacheKey);
+          if (cachedData) {
+              c.header("X-Cache", "HIT");
+              return c.json(cachedData);
+          }
+          
+          c.header("X-Cache", "MISS");
+
+          return streamText(c, async (stream) => {
+              // Helper for safe streaming to handle Broken Pipe
+              const safeWrite = async (content: string): Promise<boolean> => {
+                  try {
+                      await stream.write(content);
+                      return true;
+                  } catch (writeErr: any) {
+                      if (writeErr.message.includes("broken pipe") || 
+                          writeErr.name === "EPIPE" || 
+                          writeErr.name === "Http" || 
+                          writeErr.name === "BadResource") {
+                          console.warn(`Stream Client disconnected (${writeErr.name}) - Stopping stream`);
+                          return false;
+                      }
+                      // Log unexpected errors but still return false to stop the loop safely
+                      console.error("Unexpected stream write error:", writeErr);
+                      return false;
+                  }
+              };
+
+              try {
+                  // Buffer for caching
+                  const cachedReports: any[] = [];
+
+                  // 1. Get total count of drivers first (for pagination metadata)
+                  const { count: totalDrivers, error: countError } = await fromKvStore()
+                      .select("key", { count: 'exact', head: true })
+                      .like("key", "driver:%");
+
+                  if (countError) throw countError;
+
+                  // Log Start
+                  const reqStart = Date.now();
+                  console.log(`[Performance Report] Starting processing for offset ${offset}, limit ${limit}`);
+
+                  // Start JSON response
+                  if (!await safeWrite(`{"data": [`)) return;
+
+                  // 2. Fetch Drivers for the requested page
+                  // We still fetch the full page of drivers requested (e.g., 100)
+                  let { data: driverData, error: driverError } = await fromKvStore()
+                      .select("value->id, value->name, value->driverId, value->uberDriverId, value->inDriveDriverId")
+                      .like("key", "driver:%")
+                      .range(offset, offset + limit - 1);
+
+                  if (driverError) throw driverError;
+
+                  let driversPage = (driverData as any) || [];
+                  // Free raw driver response
+                  (driverData as any) = null;
+
+                  let firstItem = true;
+
+                  // 3. Process drivers in chunks (Throttled via pMap)
+                  const CHUNK_SIZE = 10; 
+                  let driverChunks = [];
+                  for (let i = 0; i < driversPage.length; i += CHUNK_SIZE) {
+                      driverChunks.push(driversPage.slice(i, i + CHUNK_SIZE));
+                  }
+                  // Free driversPage as it is now chunked
+                  (driversPage as any) = null;
+
+                  // Circuit Breaker State
+                  let failureCount = 0;
+                  const MAX_FAILURES = 3;
+
+                  // Define the processor for a single chunk
+                  const processChunk = async (driverChunk: any[], chunkIndex: number) => {
+                      // Circuit Breaker Check
+                      if (failureCount >= MAX_FAILURES) {
+                          console.warn("Circuit Breaker Open: Skipping chunk due to previous failures");
+                          return;
+                      }
+
+                      const driverIds = new Set<string>();
+                      driverChunk.forEach((d: any) => {
+                          if (d.id) driverIds.add(d.id);
+                          if (d.driverId) driverIds.add(d.driverId);
+                          if (d.uberDriverId) driverIds.add(d.uberDriverId);
+                          if (d.inDriveDriverId) driverIds.add(d.inDriveDriverId);
+                      });
+
+                      if (driverIds.size === 0) return;
+
+                      const chunkStart = Date.now();
+
+                      // Fetch raw trips
+                      let { data: tripData, error: tripError } = await fromKvStore()
+                          .select("value->id, value->amount, value->date, value->driverId, value->status")
+                          .like("key", "trip:%")
+                          .in("value->>driverId", Array.from(driverIds))
+                          .or(`value->>date.gte.${startDate},value->>requestTime.gte.${startDate}`)
+                          .or(`value->>date.lte.${endDate},value->>requestTime.lte.${endDate}`);
+
+                      if (tripError) {
+                          console.error(`[Chunk Error] Failed to fetch trips. Drivers: ${driverIds.size}`, tripError);
+                          failureCount++; // Increment failure count
+                          return;
+                      }
+                      
+                      const tripCount = (tripData as any)?.length || 0;
+
+                      // Aggregate immediately
+                      const report = generatePerformanceReport(
+                          (tripData as any) || [], 
+                          driverChunk, 
+                          startDate, 
+                          endDate,
+                          { dailyRideTarget, dailyEarningsTarget },
+                          summaryOnly
+                      );
+                      
+                      // Explicitly free heavy trip data to prevent OOM
+                      (tripData as any) = null;
+
+                      console.log(`[Chunk] Processed ${driverIds.size} drivers. Trips: ${tripCount}. Duration: ${Date.now() - chunkStart}ms`);
+
+                      // Stream items INDIVIDUALLY to reduce memory pressure
+                      for (const reportItem of report) {
+                          let prefix = "";
+                          if (!firstItem) {
+                              prefix = ",";
+                          }
+                          const itemStr = prefix + JSON.stringify(reportItem);
+                          
+                          // CRITICAL FIX: Check if write succeeded
+                          const success = await safeWrite(itemStr);
+                          if (!success) {
+                              console.warn(`[Chunk] Stream broken during write. Aborting processing.`);
+                              throw new Error("StreamAborted");
+                          }
+                          
+                          firstItem = false;
+                      }
+
+                      // Add to cache buffer
+                      cachedReports.push(...report);
+                  };
+
+                  // Execute with concurrency limit of 1 (Serial)
+                  // specific error handling for StreamAborted to exit cleanly
+                  try {
+                      await pMap(driverChunks, processChunk, { concurrency: 1 });
+                  } catch (err: any) {
+                      if (err.message === "StreamAborted") {
+                          console.warn("Processing halted due to client disconnection.");
+                          return; // Exit function cleanly, do not try to write footer
+                      }
+                      throw err; // Re-throw real errors
+                  }
+
+                  // End JSON response
+                  const resultMetadata = { total: totalDrivers || 0, limit, offset };
+                  if (!await safeWrite(`], "total": ${totalDrivers || 0}, "limit": ${limit}, "offset": ${offset}}`)) return;
+                  
+                  console.log(`[Performance Report] Completed in ${Date.now() - reqStart}ms`);
+
+                  // 7. Save to Cache (Async) - Step 7.3: Increase TTL for summary data
+                  const ttl = summaryOnly ? 600 : 300; // 10 mins for summary, 5 mins for details
+                  const finalResponse = {
+                      data: cachedReports,
+                      ...resultMetadata
+                  };
+                  
+                  // We don't await this to keep the response fast, but Deno Deploy might kill background tasks?
+                  // Better to await it or use specific background pattern.
+                  await cache.setCache(cacheKey, finalResponse, ttl);
+
+              } catch (e: any) {
+                  console.error("Stream Error:", e);
+                  // If we already started the stream, we can't change the status code.
+                  try {
+                      await safeWrite(`]}`); // Try to close valid JSON even if empty
+                  } catch (innerErr) {
+                      // Ignore failure to write the closing bracket if connection is dead
+                  }
+              }
+          });
+      } catch (e: any) {
+          console.error("Cache Error:", e);
+          return c.json({ error: "Internal Server Error" }, 500);
+      }
+  });
+
+  // Scan Receipt Endpoint (OpenAI)
+  app.post("/make-server-37f42386/scan-receipt", async (c) => {
+      try {
+          const body = await c.req.parseBody();
+          const file = body['file'];
+
+          if (!file || !(file instanceof File)) {
+              return c.json({ error: "No file uploaded" }, 400);
+          }
+
+          const apiKey = Deno.env.get("OPENAI_API_KEY");
+          if (!apiKey) return c.json({ error: "OpenAI API Key not configured" }, 500);
+
+          const openai = new OpenAI({ apiKey });
+          
+          const arrayBuffer = await file.arrayBuffer();
+          const base64Image = `data:${file.type};base64,${Buffer.from(arrayBuffer).toString('base64')}`;
+
+          const prompt = `Analyze this receipt image. It is a Jamaican receipt.
+          Jamaica EXCLUSIVELY uses DD/MM/YYYY date format. NEVER interpret dates as MM/DD/YYYY.
+          
+          Extract the following details in JSON format:
+          - merchant (string, name of the store/service. For tolls, use the Highway name e.g. Highway 2000, East-West, North-South)
+          - date (YYYY-MM-DD. The receipt date is in DD/MM/YYYY format. The FIRST number is ALWAYS the day, the SECOND is ALWAYS the month. Example: "01/12/2025" on the receipt = 1st December 2025 = output "2025-12-01".)
+          - time (HH:MM:SS, 24-hour format. Look for the time of transaction.)
+          - amount (number, total amount. Remove currency symbols.)
+          - type (string, one of: 'Fuel', 'Service', 'Toll', 'Other'. Infer from context. If it mentions tolls, highway, plaza, etc. use 'Toll'.)
+          - notes (string, brief description of items)
+          
+          If it is a Toll receipt, specifically extract these additional fields if present:
+          - plaza (string, e.g. Portmore East, Spanish Town, Angels, Vineyards)
+          - lane (string, e.g. K15, M01)
+          - vehicleClass (string, e.g. 1, 2)
+          - receiptNumber (string, the Ticket No or No)
+          - collector (string, e.g. 613893)
+
+          Return ONLY the JSON object, no markdown.`;
+
+          const response = await trackedProviderCall({
+              provider: "openai",
+              service: "vision",
+              route: "/make-server-37f42386/scan-receipt (dup)",
+              model: "gpt-4o",
+              run: () => openai.chat.completions.create({
+                  model: "gpt-4o",
+                  messages: [
+                      { role: "system", content: "You are a receipt scanning assistant that outputs strict JSON." },
+                      {
+                        role: "user",
+                        content: [
+                            { type: "text", text: prompt },
+                            { type: "image_url", image_url: { url: base64Image } }
+                        ]
+                      }
+                  ],
+                  response_format: { type: "json_object" },
+                  temperature: 0
+              }),
+              extractUsage: (r: any) => ({
+                  inputTokens: r?.usage?.prompt_tokens,
+                  outputTokens: r?.usage?.completion_tokens,
+                  requestId: r?.id,
+              }),
+          });
+
+          const content = response.choices[0].message.content;
+          const data = JSON.parse(content || "{}");
+
+          return c.json({ success: true, data });
+
+      } catch (e: any) {
+          console.error("Receipt Scan Error:", e);
+          if (e instanceof ProviderBlockedError) return c.json({ error: e.message, code: e.code }, e.httpStatus);
+          return c.json({ error: e.message }, 500);
+      }
+  });
+
+  /** Alias: historical `/toll-ledger` guess → native fleet_toll_ledger list. */
+  app.get("/make-server-37f42386/toll-ledger", requireAuth(), async (c) => {
+    try {
+      const orgId = getOrgId(c);
+      const res = await queryFleet("toll_ledger", {
+        org: orgId || undefined,
+        order: { col: "date", ascending: false },
+        limit: 5000,
+      });
+      if (res.error) throw res.error;
+      return c.json(filterByOrg(res.data as Record<string, unknown>[], c));
+    } catch (e: any) {
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  // Fleet Equipment Endpoints
+  /** Alias: UI/docs historically guessed `/equipment` — same payload as all-equipment list. */
+  app.get("/make-server-37f42386/equipment", requireAuth(), async (c) => {
+    try {
+      const res = await queryFleet("equipment", { limit: 5000 });
+      if (res.error) throw res.error;
+      return c.json(filterByOrg(res.data as Record<string, unknown>[], c));
+    } catch (e: any) {
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  app.get("/make-server-37f42386/fleet/equipment/all", requireAuth(), async (c) => {
+      try {
+          const res = await queryFleet("equipment", { limit: 5000 });
+          if (res.error) throw res.error;
+          const equipment = filterByOrg(res.data as Record<string, unknown>[], c);
+          return c.json(equipment);
+      } catch(e: any) {
+          return c.json({ error: e.message }, 500);
+      }
+  });
+
+  app.post(
+    "/make-server-37f42386/fleet/equipment/bulk",
+    requireAuth(),
+    requirePermission('vehicles.edit'),
+    requireCatalogMatched({
+      label: "POST /fleet/equipment/bulk",
+      vehicleId: (_c, body) => {
+        if (!Array.isArray(body)) return null;
+        const ids = new Set<string>();
+        for (const item of body) {
+          if (item && typeof item === "object") {
+            const id = (item as { vehicleId?: unknown }).vehicleId;
+            if (typeof id === "string" && id.trim()) ids.add(id.trim());
+          }
+        }
+        return Array.from(ids);
+      },
+    }),
+    async (c) => {
+      try {
+          const items = (c.get("__cachedRequestBody") as unknown) ?? (await c.req.json());
+          if (!Array.isArray(items)) {
+              return c.json({ error: "Expected array of items" }, 400);
+          }
+
+          // Count inventory draws per inventoryId (1 unit per assigned equipment row)
+          const drawByInventoryId = new Map<string, number>();
+          for (const item of items) {
+            if (!item || typeof item !== "object") continue;
+            const invId = (item as { inventoryId?: unknown }).inventoryId;
+            if (typeof invId === "string" && invId.trim()) {
+              const id = invId.trim();
+              drawByInventoryId.set(id, (drawByInventoryId.get(id) || 0) + 1);
+            }
+          }
+
+          const updatedInventory: Record<string, unknown>[] = [];
+          for (const [invId, draw] of drawByInventoryId) {
+            const stock = await kv.get(`inventory:${invId}`);
+            if (!stock || typeof stock !== "object") {
+              return c.json({ error: `Inventory item not found: ${invId}` }, 404);
+            }
+            if (!belongsToOrg(stock as Record<string, unknown>, c)) {
+              return c.json({ error: "Forbidden", inventoryId: invId }, 403);
+            }
+            const qty = Number((stock as { quantity?: unknown }).quantity) || 0;
+            if (qty < draw) {
+              const name = String((stock as { name?: unknown }).name || invId);
+              return c.json({
+                error: `Insufficient stock for "${name}": need ${draw}, have ${qty}`,
+                inventoryId: invId,
+                available: qty,
+                requested: draw,
+              }, 409);
+            }
+            const next = stampOrg({
+              ...(stock as Record<string, unknown>),
+              quantity: qty - draw,
+              updatedAt: new Date().toISOString(),
+            }, c);
+            await kv.set(`inventory:${invId}`, next);
+            updatedInventory.push(next);
+          }
+
+          const stampedItems = items.map((item: any) => stampOrg(
+            { ...item, id: item.id || crypto.randomUUID() },
+            c,
+          ));
+          const keys = stampedItems.map((item: any) => `equipment:${item.vehicleId}:${item.id}`);
+          await kv.mset(keys, stampedItems);
+
+          return c.json({
+            success: true,
+            count: stampedItems.length,
+            inventory: updatedInventory,
+          });
+      } catch(e: any) {
+          return c.json({ error: e.message }, 500);
+      }
+  });
+
+  // Inventory Endpoints
+  app.get("/make-server-37f42386/inventory", requireAuth(), async (c) => {
+      try {
+          const { data, error } = await fromKvStore()
+              .select("value")
+              .like("key", "inventory:%");
+
+          if (error) throw error;
+          const inventory = filterByOrg(data?.map((d: any) => d.value) || [], c);
+          return c.json(inventory);
+      } catch(e: any) {
+          return c.json({ error: e.message }, 500);
+      }
+  });
+
+  app.post(
+    "/make-server-37f42386/inventory",
+    requireAuth(),
+    requirePermission("vehicles.edit"),
+    async (c) => {
+      try {
+          const item = await c.req.json();
+          if (!item.id) item.id = crypto.randomUUID();
+          // Cross-tenant: refuse overwrite of another org's row
+          const existing = await kv.get(`inventory:${item.id}`);
+          if (existing && !belongsToOrg(existing as Record<string, unknown>, c)) {
+            return c.json({ error: "Forbidden" }, 403);
+          }
+          const stamped = stampOrg(item, c);
+          await kv.set(`inventory:${item.id}`, stamped);
+          return c.json({ success: true, data: stamped });
+      } catch(e: any) {
+          return c.json({ error: e.message }, 500);
+      }
+  });
+
+  app.post(
+    "/make-server-37f42386/inventory/bulk",
+    requireAuth(),
+    requirePermission("vehicles.edit"),
+    async (c) => {
+      try {
+          const items = await c.req.json();
+          if (!Array.isArray(items)) return c.json({ error: "Expected array" }, 400);
+
+          const stampedItems: Record<string, unknown>[] = [];
+          const keys: string[] = [];
+          for (const raw of items) {
+            if (!raw || typeof raw !== "object") {
+              return c.json({ error: "Each item must be an object" }, 400);
+            }
+            const item = { ...(raw as Record<string, unknown>) };
+            if (!item.id || typeof item.id !== "string") {
+              item.id = crypto.randomUUID();
+            }
+            // Client-controlled keys: validate no other-org overwrite
+            const existing = await kv.get(`inventory:${item.id}`);
+            if (existing && !belongsToOrg(existing as Record<string, unknown>, c)) {
+              return c.json({ error: "Forbidden", id: item.id }, 403);
+            }
+            const stamped = stampOrg(item, c);
+            keys.push(`inventory:${stamped.id}`);
+            stampedItems.push(stamped);
+          }
+          await kv.mset(keys, stampedItems);
+          return c.json({ success: true, count: stampedItems.length, data: stampedItems });
+      } catch(e: any) {
+          return c.json({ error: e.message }, 500);
+      }
+  });
+
+  app.delete(
+    "/make-server-37f42386/inventory/:id",
+    requireAuth(),
+    requirePermission("vehicles.edit"),
+    async (c) => {
+      try {
+          const id = c.req.param("id");
+          const existing = await kv.get(`inventory:${id}`);
+          if (!existing) return c.json({ error: "Not found" }, 404);
+          if (!belongsToOrg(existing as Record<string, unknown>, c)) {
+            return c.json({ error: "Forbidden" }, 403);
+          }
+          await kv.del(`inventory:${id}`);
+          return c.json({ success: true });
+      } catch(e: any) {
+          return c.json({ error: e.message }, 500);
+      }
+  });
+
+  // Templates Endpoints
+  app.get("/make-server-37f42386/templates", requireAuth(), async (c) => {
+      try {
+          const templates = await kv.getByPrefix("template:equipment:");
+          return c.json(filterByOrg(templates || [], c));
+      } catch(e: any) {
+          return c.json({ error: e.message }, 500);
+      }
+  });
+
+  app.post("/make-server-37f42386/templates", async (c) => {
+      try {
+          const t = await c.req.json();
+          if (!t.id) t.id = crypto.randomUUID();
+          await kv.set(`template:equipment:${t.id}`, stampOrg(t, c));
+          return c.json({ success: true, data: t });
+      } catch(e: any) {
+          return c.json({ error: e.message }, 500);
+      }
+  });
+
+
+  // Weekly Check-Ins Endpoints - Optimized
+  app.get("/make-server-37f42386/check-ins", requireAuth(), async (c) => {
+    try {
+      const driverId = c.req.query("driverId");
+      const weekStart = c.req.query("weekStart");
+      const vehicleId = c.req.query("vehicleId");
+      const limit = Math.min(parseInt(c.req.query("limit") || "2000", 10) || 2000, 5000);
+      const offset = Math.max(parseInt(c.req.query("offset") || "0", 10) || 0, 0);
+
+      // Prefer first-class columns (promoted); fall back to payload paths for legacy rows
+      let q = fleetDb().from(fleetTable("checkins")).select("*");
+      if (vehicleId) q = q.eq("vehicle_id", vehicleId);
+      if (driverId) q = q.or(`driver_id.eq.${driverId},payload_json->>driverId.eq.${driverId}`);
+      if (weekStart) q = q.or(`week_start.eq.${weekStart},payload_json->>weekStart.eq.${weekStart}`);
+
+      const orgId = getOrgId(c);
+      if (orgId) {
+        q = q.or(
+          `organization_id.eq.${orgId},organization_id.is.null,organization_id.eq.roam-default-org`,
+        );
+      }
+
+      const { data, error } = await q
+        .order("updated_at", { ascending: false })
+        .range(offset, offset + limit - 1);
+
+      if (error) throw error;
+      const checkIns = filterByOrg((data || []).map((row) => rowToKvValue(row as Record<string, unknown>)), c);
+      return c.json(checkIns);
+    } catch (e: any) {
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  app.post("/make-server-37f42386/check-ins", async (c) => {
+    try {
+      let checkIn = await c.req.json();
+      if (!checkIn.driverId || !checkIn.weekStart || !checkIn.odometer) {
+          return c.json({ error: "Missing required fields" }, 400);
+      }
+
+      // Validation for Manual Override
+      if (checkIn.method === 'manual_override' && !checkIn.manualReadingReason) {
+          return c.json({ error: "Reason required for manual override" }, 400);
+      }
+
+      // Client often sends vehicleId "unknown" when assignedVehicleId isn't hydrated yet.
+      // Resolve from driver ↔ vehicle assignment so odometer history stays vehicle-scoped.
+      if (!checkIn.vehicleId || checkIn.vehicleId === "unknown") {
+        delete checkIn.vehicleId;
+        checkIn = await enrichRecordWithDriverVehicle(checkIn, getOrgId(c));
+      }
+      if (!checkIn.vehicleId || checkIn.vehicleId === "unknown") {
+        return c.json({
+          error: "No vehicle assigned to this driver — assign a vehicle before weekly check-in",
+        }, 400);
+      }
+      
+      // Key: checkin:{id}
+      const key = `checkin:${checkIn.id}`;
+      
+      // Log manual overrides for review
+      if (checkIn.method === 'manual_override') {
+          console.warn(`[Alert] Manual Odometer Override by Driver ${checkIn.driverId}: ${checkIn.odometer}km. Reason: ${checkIn.manualReadingReason}`);
+          // In a real system, we might create a 'notification' object here for the fleet manager
+      }
+
+      await kv.set(key, stampOrg({ ...checkIn, timestamp: checkIn.timestamp || new Date().toISOString() }, c));
+
+      try {
+        await projectFromCheckIn(
+          { ...checkIn, timestamp: checkIn.timestamp || new Date().toISOString() },
+          getOrgId(c),
+        );
+      } catch (projErr) {
+        console.error("[check-ins] odometer ledger projection failed:", projErr);
+      }
+      
+      return c.json({ success: true, data: checkIn });
+    } catch (e: any) {
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  app.post("/make-server-37f42386/check-ins/review", async (c) => {
+    try {
+      const { checkInId, status, managerNotes } = await c.req.json();
+      
+      if (!checkInId || !status) {
+          return c.json({ error: "Missing checkInId or status" }, 400);
+      }
+
+      const key = `checkin:${checkInId}`;
+      const checkIn = await kv.get(key);
+      
+      if (!checkIn) {
+          return c.json({ error: "Check-in not found" }, 404);
+      }
+
+      // Update status
+      checkIn.reviewStatus = status; // 'approved' | 'rejected'
+      checkIn.verified = (status === 'approved');
+      checkIn.managerNotes = managerNotes;
+      checkIn.reviewedAt = new Date().toISOString();
+
+      await kv.set(key, stampOrg(checkIn, c));
+      return c.json({ success: true, data: checkIn });
+    } catch (e: any) {
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  app.delete("/make-server-37f42386/check-ins/:id", async (c) => {
+    const id = c.req.param("id");
+    try {
+      await kv.del(`checkin:${id}`);
+      return c.json({ success: true });
+    } catch (e: any) {
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  // RETIRED duplicate: DELETE /fuel-entries/:id — use fleet-fuel / fuel_controller.tsx
+  // Fuel HTTP surface lives on fleet-fuel (see docs/fleet-edge-5mb-split-plan.md).
+
+  // ---------------------------------------------------------------------------
+  // Admin Diagnostic: Scan for entries corrupted by the type-overwrite bug
+  // ---------------------------------------------------------------------------
+  app.get("/make-server-37f42386/admin/scan-corrupted-types", async (c) => {
+    try {
+      const { data, error } = await fromKvStore()
+        .select("key, value")
+        .like("key", "fuel_entry:%");
+
+      if (error) throw error;
+
+      const suspects: any[] = [];
+      for (const row of (data || [])) {
+        const entry = row.value;
+        if (!entry) continue;
+
+        // Only look at entries whose type is NOT Reimbursement
+        if (entry.type === 'Reimbursement') continue;
+
+        const signals: string[] = [];
+
+        // Signal 1: paymentSource says RideShare_Cash but type isn't Reimbursement
+        if (entry.paymentSource === 'RideShare_Cash') {
+          signals.push('paymentSource is RideShare_Cash');
+        }
+
+        // Signal 2: has anchorPeriodId (was part of anchor cycle tracking)
+        if (entry.anchorPeriodId) {
+          signals.push(`anchorPeriodId: ${entry.anchorPeriodId}`);
+        }
+
+        // Signal 3: entryMode is Anchor but type is Manual
+        if (entry.entryMode === 'Anchor' && (entry.type === 'Fuel_Manual_Entry' || entry.type === 'Manual_Entry')) {
+          signals.push(`entryMode is Anchor but type is ${entry.type}`);
+        }
+
+        // Signal 4: metadata contains cycle or anchor references
+        if (entry.metadata?.cycleId) {
+          signals.push(`metadata.cycleId: ${entry.metadata.cycleId}`);
+        }
+        if (entry.metadata?.portal_type === 'Reimbursement') {
+          signals.push('metadata.portal_type is Reimbursement');
+        }
+
+        // Signal 5: has a linked transactionId (manual entries that went through settlement)
+        if (entry.transactionId && (entry.type === 'Fuel_Manual_Entry' || entry.type === 'Manual_Entry')) {
+          signals.push(`has transactionId: ${entry.transactionId}`);
+        }
+
+        if (signals.length > 0) {
+          suspects.push({
+            key: row.key,
+            id: entry.id,
+            date: entry.date,
+            time: entry.time,
+            location: entry.location || entry.vendor || '(no station)',
+            amount: entry.amount,
+            odometer: entry.odometer,
+            currentType: entry.type,
+            paymentSource: entry.paymentSource,
+            entryMode: entry.entryMode,
+            driverId: entry.driverId,
+            vehicleId: entry.vehicleId,
+            signals
+          });
+        }
+      }
+
+      // Sort by date descending for easy review
+      suspects.sort((a: any, b: any) => (b.date || '').localeCompare(a.date || ''));
+
+      return c.json({
+        totalEntriesScanned: (data || []).length,
+        suspectsFound: suspects.length,
+        suspects
+      });
+    } catch (e: any) {
+      console.log(`Error in scan-corrupted-types: ${e.message}`);
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  // Admin Diagnostic: Fix corrupted types — PATCH selected entries back to Reimbursement
+  app.post("/make-server-37f42386/admin/fix-corrupted-types", async (c) => {
+    try {
+      const body = await c.req.json();
+      const entryIds: string[] = body.entryIds;
+
+      if (!entryIds || !Array.isArray(entryIds) || entryIds.length === 0) {
+        return c.json({ error: 'entryIds array is required' }, 400);
+      }
+
+      const results: any[] = [];
+
+      for (const entryId of entryIds) {
+        const kvKey = `fuel_entry:${entryId}`;
+        const { data, error: fetchErr } = await fromKvStore()
+          .select("value")
+          .eq("key", kvKey)
+          .single();
+
+        if (fetchErr || !data) {
+          results.push({ id: entryId, status: 'not_found', error: fetchErr?.message });
+          continue;
+        }
+
+        const entry = data.value;
+        const oldType = entry.type;
+
+        entry.type = 'Reimbursement';
+
+        if (!entry.metadata) entry.metadata = {};
+        entry.metadata.typeCorrectedAt = new Date().toISOString();
+        entry.metadata.typeCorrectedFrom = oldType;
+        entry.metadata.typeCorrectionReason = 'type-overwrite bug fix (admin diagnostic)';
+
+        const { error: updateErr } = await fromKvStore()
+          .update({ value: entry })
+          .eq("key", kvKey);
+
+        if (updateErr) {
+          results.push({ id: entryId, status: 'error', error: updateErr.message });
+        } else {
+          results.push({ id: entryId, status: 'fixed', oldType, newType: 'Reimbursement' });
+        }
+      }
+
+      return c.json({
+        totalRequested: entryIds.length,
+        results
+      });
+    } catch (e: any) {
+      console.log(`Error in fix-corrupted-types: ${e.message}`);
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  // ---------------------------------------------------------------------------
+  // Admin Diagnostic: Scan for entries with stale integrityStatus flags
+  // ---------------------------------------------------------------------------
+  app.get("/make-server-37f42386/admin/scan-anomaly-flags", async (c) => {
+    try {
+      const { data, error } = await fromKvStore()
+        .select("key, value")
+        .like("key", "fuel_entry:%");
+
+      if (error) throw error;
+
+      const allEntries = (data || []).map((row: any) => row.value).filter(Boolean);
+      const byVehicle: Record<string, any[]> = {};
+      for (const e of allEntries) {
+        const vid = e.vehicleId || 'unknown';
+        if (!byVehicle[vid]) byVehicle[vid] = [];
+        byVehicle[vid].push(e);
+      }
+      for (const vid of Object.keys(byVehicle)) {
+        byVehicle[vid].sort((a: any, b: any) => {
+          const dc = (a.date || '').localeCompare(b.date || '');
+          if (dc !== 0) return dc;
+          return (a.odometer || 0) - (b.odometer || 0);
+        });
+      }
+
+      const flagged: any[] = [];
+      for (const row of (data || [])) {
+        const entry = row.value;
+        if (!entry) continue;
+
+        const integrityStatus = entry.metadata?.integrityStatus;
+        if (integrityStatus !== 'critical' && integrityStatus !== 'warning') continue;
+
+        let prevOdometer: number | null = null;
+        let prevDate: string | null = null;
+        const vid = entry.vehicleId || 'unknown';
+        const timeline = byVehicle[vid] || [];
+        const idx = timeline.findIndex((e: any) => e.id === entry.id);
+        if (idx > 0) {
+          prevOdometer = timeline[idx - 1].odometer ?? null;
+          prevDate = timeline[idx - 1].date ?? null;
+        }
+
+        flagged.push({
+          key: row.key,
+          id: entry.id,
+          date: entry.date,
+          time: entry.time,
+          location: entry.location || entry.vendor || '(no station)',
+          amount: entry.amount,
+          liters: entry.liters,
+          odometer: entry.odometer,
+          prevOdometer,
+          prevDate,
+          type: entry.type,
+          paymentSource: entry.paymentSource,
+          entryMode: entry.entryMode,
+          driverId: entry.driverId,
+          vehicleId: entry.vehicleId,
+          integrityStatus,
+          anomalyReason: entry.metadata?.anomalyReason || '(no reason recorded)',
+          auditStatus: entry.auditStatus || entry.metadata?.auditStatus || 'Unknown',
+          isFlagged: entry.isFlagged,
+          cycleId: entry.metadata?.cycleId,
+        });
+      }
+
+      flagged.sort((a: any, b: any) => (b.date || '').localeCompare(a.date || ''));
+
+      return c.json({
+        totalEntriesScanned: (data || []).length,
+        flaggedCount: flagged.length,
+        flagged
+      });
+    } catch (e: any) {
+      console.log(`Error in scan-anomaly-flags: ${e.message}`);
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  // Admin Diagnostic: Clear anomaly flags — PATCH selected entries to valid/Clear
+  app.post("/make-server-37f42386/admin/fix-anomaly-flags", async (c) => {
+    try {
+      const body = await c.req.json();
+      const entryIds: string[] = body.entryIds;
+
+      if (!entryIds || !Array.isArray(entryIds) || entryIds.length === 0) {
+        return c.json({ error: 'entryIds array is required' }, 400);
+      }
+
+      const results: any[] = [];
+
+      for (const entryId of entryIds) {
+        const kvKey = `fuel_entry:${entryId}`;
+        const { data, error: fetchErr } = await fromKvStore()
+          .select("value")
+          .eq("key", kvKey)
+          .single();
+
+        if (fetchErr || !data) {
+          results.push({ id: entryId, status: 'not_found', error: fetchErr?.message });
+          continue;
+        }
+
+        const entry = data.value;
+        const oldStatus = entry.metadata?.integrityStatus;
+        const oldReason = entry.metadata?.anomalyReason;
+        const oldAudit = entry.auditStatus;
+
+        if (!entry.metadata) entry.metadata = {};
+        entry.metadata.integrityStatus = 'valid';
+        entry.metadata.anomalyReason = undefined;
+        entry.metadata.auditStatus = 'Clear';
+        entry.isFlagged = false;
+        entry.auditStatus = 'Clear';
+
+        entry.metadata.anomalyClearedAt = new Date().toISOString();
+        entry.metadata.anomalyClearedFrom = { integrityStatus: oldStatus, anomalyReason: oldReason, auditStatus: oldAudit };
+        entry.metadata.anomalyClearReason = 'admin anomaly scanner — false positive cleared';
+
+        const { error: updateErr } = await fromKvStore()
+          .update({ value: entry })
+          .eq("key", kvKey);
+
+        if (updateErr) {
+          results.push({ id: entryId, status: 'error', error: updateErr.message });
+        } else {
+          results.push({ id: entryId, status: 'fixed', oldStatus, oldReason });
+        }
+      }
+
+      return c.json({
+        totalRequested: entryIds.length,
+        results
+      });
+    } catch (e: any) {
+      console.log(`Error in fix-anomaly-flags: ${e.message}`);
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  // POST /admin/backfill-app-metadata-roles — copy role/org from user_metadata → app_metadata (once)
+  // Does NOT promote privileged user_metadata when app_metadata already has a different role.
+  app.post(
+    "/make-server-37f42386/admin/backfill-app-metadata-roles",
+    requireAuth(),
+    requirePermission("data.backfill"),
+    async (c) => {
+      try {
+        const body = await c.req.json().catch(() => ({}));
+        const dryRun = body?.dryRun !== false;
+        const privileged = new Set([
+          "platform_owner",
+          "platform_support",
+          "platform_analyst",
+          "superadmin",
+          "admin",
+          "fleet_owner",
+        ]);
+
+        let page = 1;
+        const perPage = 200;
+        let copied = 0;
+        let skipped = 0;
+        const mismatches: Array<{ id: string; email?: string; userRole: string; appRole: string }> = [];
+
+        for (;;) {
+          const { data, error } = await supabase.auth.admin.listUsers({ page, perPage });
+          if (error) throw error;
+          const users = data?.users || [];
+          if (users.length === 0) break;
+
+          for (const u of users) {
+            const appMeta = (u.app_metadata || {}) as Record<string, unknown>;
+            const userMeta = (u.user_metadata || {}) as Record<string, unknown>;
+            const appRole = typeof appMeta.role === "string" ? appMeta.role.trim() : "";
+            const userRole = typeof userMeta.role === "string" ? userMeta.role.trim() : "";
+            const appOrg =
+              typeof appMeta.organizationId === "string" ? appMeta.organizationId.trim() : "";
+            const userOrg =
+              typeof userMeta.organizationId === "string" ? userMeta.organizationId.trim() : "";
+
+            if (userRole && appRole && userRole !== appRole && privileged.has(userRole)) {
+              mismatches.push({
+                id: u.id,
+                email: u.email,
+                userRole,
+                appRole,
+              });
+            }
+
+            const needRole = !appRole && !!userRole;
+            const needOrg = !appOrg && !!userOrg;
+            if (!needRole && !needOrg) {
+              skipped++;
+              continue;
+            }
+
+            // Never copy privileged user_metadata over empty app when mismatch logged elsewhere —
+            // only copy when app role is empty (legitimate legacy users).
+            if (needRole && privileged.has(userRole) && appRole && appRole !== userRole) {
+              skipped++;
+              continue;
+            }
+
+            copied++;
+            if (dryRun) continue;
+
+            const nextApp: Record<string, unknown> = { ...appMeta };
+            if (needRole) {
+              nextApp.role = userRole;
+              const roles = Array.isArray(nextApp.roles)
+                ? (nextApp.roles as unknown[]).filter((r): r is string => typeof r === "string")
+                : [];
+              if (!roles.includes(userRole)) roles.push(userRole);
+              nextApp.roles = roles;
+            }
+            if (needOrg) nextApp.organizationId = userOrg;
+
+            const { error: updErr } = await supabase.auth.admin.updateUserById(u.id, {
+              app_metadata: nextApp,
+            });
+            if (updErr) {
+              console.warn(`[app-meta-backfill] ${u.id}: ${updErr.message}`);
+            }
+          }
+
+          if (users.length < perPage) break;
+          page++;
+        }
+
+        return c.json({
+          success: true,
+          dryRun,
+          copied,
+          skipped,
+          privilegedMismatches: mismatches,
+          message: dryRun
+            ? "Dry run complete. Set dryRun:false to apply."
+            : "Backfill applied.",
+        });
+      } catch (e: any) {
+        console.error("[app-meta-backfill]", e);
+        return c.json({ error: e.message }, 500);
+      }
+    },
+  );
+
+  // ---------------------------------------------------------------------------
+  // Super Admin — Seed & Check Endpoints
+  // ---------------------------------------------------------------------------
+
+  // POST /backfill-org-ids — One-time migration: stamp organizationId on all KV records
+  // Protected by data.backfill permission (platform_owner / fleet_owner only)
+  // Safe to run multiple times (idempotent).
+  app.post("/make-server-37f42386/backfill-org-ids", requireAuth(), requirePermission('data.backfill'), async (c) => {
+    try {
+      const { organizationId } = await c.req.json();
+      if (!organizationId) {
+        return c.json({ error: "organizationId is required in the request body" }, 400);
+      }
+
+      // Prefixes of all fleet-scoped data (not config, not admin)
+      const DATA_PREFIXES = [
+        "driver:", "vehicle:", "trip:", "transaction:", "ledger:",
+        "fuel_entry:", "fuel-card:", "toll-tag:", "toll-plaza:",
+        "maintenance-log:", "fixed-expense:", "equipment:",
+        "mileage-adjustment:", "budget:", "expense:",
+        "error-log:", "import-history:",
+      ];
+
+      let totalUpdated = 0;
+      let totalSkipped = 0;
+
+      for (const prefix of DATA_PREFIXES) {
+        const records = await kv.getByPrefix(prefix);
+        if (!records || records.length === 0) continue;
+
+        for (const row of records) {
+          const val = row.value;
+          if (!val || typeof val !== 'object') {
+            totalSkipped++;
+            continue;
+          }
+          // Skip records that already have an organizationId
+          if ((val as any).organizationId) {
+            totalSkipped++;
+            continue;
+          }
+          // Stamp and save
+          const updated = { ...(val as any), organizationId };
+          await kv.set(row.key, updated);
+          totalUpdated++;
+        }
+      }
+
+      console.log(`[backfill-org-ids] Done. Updated: ${totalUpdated}, Skipped: ${totalSkipped}`);
+      return c.json({ success: true, updated: totalUpdated, skipped: totalSkipped });
+    } catch (err: any) {
+      console.log(`[backfill-org-ids] Error: ${err.message}`);
+      return c.json({ error: `Backfill failed: ${err.message}` }, 500);
+    }
+  });
+
+  // POST /admin-seed — One-time creation of the super admin account
+  // Self-locking: refuses to create a second superadmin if one already exists
+  app.post("/make-server-37f42386/admin-seed", async (c) => {
+    try {
+      const { email, password, name } = await c.req.json();
+
+      if (!email || !password) {
+        return c.json({ error: "Email and password are required for admin seed" }, 400);
+      }
+
+      // Check if a superadmin already exists (self-locking)
+      const existing = await kv.get("platform:superadmin_created");
+      if (existing && (existing as any).created === true) {
+        return c.json({ error: "Super admin account already exists. This endpoint can only be used once." }, 400);
+      }
+
+      // Create the superadmin user via Supabase Auth
+      const { data, error } = await supabase.auth.admin.createUser({
+        email,
+        password,
+        user_metadata: {
+          name: name || "Super Admin",
+          role: "superadmin",
+        },
+        // Automatically confirm the email since an email server hasn't been configured.
+        email_confirm: true,
+      });
+
+      if (error) {
+        console.log(`Admin seed error: ${error.message}`);
+        // If the user already exists in Supabase Auth, recover gracefully:
+        // look them up, set the KV lock, and return success (idempotent).
+        if (error.message?.includes('already been registered')) {
+          console.log(`Super admin email already registered — recovering by setting KV lock`);
+          try {
+            const { data: listData } = await supabase.auth.admin.listUsers({ perPage: 1000 });
+            const existingUser = listData?.users?.find(
+              (u: any) => u.email === email && u.user_metadata?.role === 'superadmin'
+            );
+            if (existingUser) {
+              // Update password to match the submitted form so auto sign-in works
+              await supabase.auth.admin.updateUserById(existingUser.id, { password });
+              await kv.set("platform:superadmin_created", {
+                created: true,
+                userId: existingUser.id,
+                email,
+                createdAt: existingUser.created_at || new Date().toISOString(),
+              });
+              console.log(`KV lock restored for existing super admin: ${email} (${existingUser.id})`);
+              return c.json({ success: true, userId: existingUser.id, recovered: true });
+            }
+            // If the email exists but isn't a superadmin, promote them
+            const anyUser = listData?.users?.find((u: any) => u.email === email);
+            if (anyUser) {
+              await supabase.auth.admin.updateUserById(anyUser.id, {
+                password,
+                user_metadata: { ...anyUser.user_metadata, role: 'superadmin', name: name || anyUser.user_metadata?.name || 'Super Admin' },
+              });
+              await kv.set("platform:superadmin_created", {
+                created: true,
+                userId: anyUser.id,
+                email,
+                createdAt: new Date().toISOString(),
+              });
+              console.log(`Existing user promoted to super admin: ${email} (${anyUser.id})`);
+              return c.json({ success: true, userId: anyUser.id, recovered: true, promoted: true });
+            }
+          } catch (recoverErr: any) {
+            console.log(`Recovery attempt failed: ${recoverErr.message}`);
+          }
+        }
+        throw error;
+      }
+
+      // Lock the endpoint — persist the superadmin record
+      await kv.set("platform:superadmin_created", {
+        created: true,
+        userId: data.user.id,
+        email,
+        createdAt: new Date().toISOString(),
+      });
+
+      console.log(`Super admin created successfully: ${email} (${data.user.id})`);
+      return c.json({ success: true, userId: data.user.id });
+    } catch (e: any) {
+      console.log(`Admin seed fatal error: ${e.message}`);
+      return c.json({ error: `Failed to create super admin: ${e.message}` }, 500);
+    }
+  });
+
+  // ---------------------------------------------------------------------------
+  // POST /fleet-login — Server-side Fleet Manager login with rate limiting
+  // Rejects driver accounts. Returns session tokens.
+  // ---------------------------------------------------------------------------
+  app.post("/make-server-37f42386/fleet-login", async (c) => {
+    try {
+      const { email, password } = await c.req.json();
+      if (!email || !password) {
+        return c.json({ error: "Email and password are required" }, 400);
+      }
+
+      // Rate limit: check by IP and email
+      const clientIp = getClientIp(c);
+      const ipCheck = await checkRateLimit(clientIp, 'fleet');
+      const emailCheck = await checkRateLimit(email.toLowerCase(), 'fleet');
+      if (!ipCheck.allowed || !emailCheck.allowed) {
+        const retryAfterSec = Math.max(ipCheck.retryAfterSec, emailCheck.retryAfterSec);
+        console.log(`[FleetLogin] Rate limit exceeded for IP ${clientIp} / email ${email}`);
+        return c.json({
+          error: `Too many login attempts. Please try again in ${Math.ceil(retryAfterSec / 60)} minutes.`,
+          retryAfterSec,
+        }, 429);
+      }
+
+      const { createClient: createAnonClient } = await import("npm:@supabase/supabase-js@2");
+      const anonUrl = Deno.env.get("SUPABASE_URL")!;
+      const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+      const anonClient = createAnonClient(anonUrl, anonKey);
+
+      const { data, error: signInError } = await anonClient.auth.signInWithPassword({ email, password });
+
+      if (signInError) {
+        await recordFailedAttempt(clientIp, 'fleet');
+        await recordFailedAttempt(email.toLowerCase(), 'fleet');
+        console.log(`[FleetLogin] Failed for ${email}: ${signInError.message}`);
+        const remaining = await checkRateLimit(email.toLowerCase(), 'fleet');
+        return c.json({
+          error: "Invalid email or password.",
+          attemptsRemaining: remaining.remaining,
+        }, 401);
+      }
+
+      // Fleet portal: admin / fleet_owner (app_metadata.roles or legacy user_metadata.role)
+      if (!userCanAccessFleetPortal(data.user)) {
+        await anonClient.auth.signOut();
+        await recordFailedAttempt(clientIp, 'fleet');
+        await recordFailedAttempt(email.toLowerCase(), 'fleet');
+        const userRole = data?.user?.user_metadata?.role;
+        console.log(`[FleetLogin] Non-fleet account ${email} (role: ${userRole}) rejected from fleet portal`);
+        return c.json({
+          error: "Invalid email or password.",
+        }, 401);
+      }
+
+      const userRole = data?.user?.user_metadata?.role ?? 'admin';
+
+      const loginProductLine = resolveProductLine(c);
+      const ownerProductLine = inferProductLineFromUser(data.user?.user_metadata as Record<string, unknown>);
+      if (!assertFleetOwnerProductLine(data.user?.user_metadata as Record<string, unknown>, loginProductLine)) {
+        await anonClient.auth.signOut();
+        await recordFailedAttempt(clientIp, 'fleet');
+        await recordFailedAttempt(email.toLowerCase(), 'fleet');
+        console.log(`[FleetLogin] Product line mismatch ${email}: user=${ownerProductLine} portal=${loginProductLine}`);
+        return c.json({
+          error: loginProductLine === 'fleet'
+            ? "This account is registered on Roam Enterprise. Sign in at roamenterprise.co"
+            : "This account is registered on Roam Fleet. Sign in at roamfleet.co",
+          wrongProductLine: true,
+          expectedProductLine: ownerProductLine,
+        }, 403);
+      }
+
+      if (!data?.session) {
+        return c.json({ error: "Sign-in succeeded but no session was returned" }, 500);
+      }
+
+      // Success — clear rate limits
+      await clearRateLimit(clientIp, 'fleet');
+      await clearRateLimit(email.toLowerCase(), 'fleet');
+      console.log(`[FleetLogin] Success: ${email} (role: ${userRole})`);
+      return c.json({
+        success: true,
+        access_token: data.session.access_token,
+        refresh_token: data.session.refresh_token,
+        user: {
+          id: data.user.id,
+          email: data.user.email,
+          name: data.user.user_metadata?.name,
+          role: userRole,
+        },
+      });
+    } catch (e: any) {
+      console.error("[FleetLogin] Error:", e);
+      return c.json({ error: e.message || "Login failed" }, 500);
+    }
+  });
+
+  // ---------------------------------------------------------------------------
+  // POST /fleet-owner/provision — OAuth / phone fleet owner setup (authenticated)
+  // ---------------------------------------------------------------------------
+  app.post("/make-server-37f42386/fleet-owner/provision", requireAuth(), async (c) => {
+    try {
+      const rbacUser = c.get("rbacUser") as RbacUser | undefined;
+      if (!rbacUser || rbacUser.userId === "_anon_passthrough") {
+        return c.json({ error: "Unauthorized" }, 401);
+      }
+
+      const productLine = resolveProductLine(c);
+      if (productLine !== "fleet") {
+        return c.json({ error: "Fleet owner provisioning is only available on Roam Fleet." }, 403);
+      }
+
+      try {
+        const platformSettings = await getPlatformSettingsCached(productLine);
+        const regMode = platformSettings.registrationMode || "open";
+        if (regMode === "invite_only") {
+          return c.json({
+            error: "Registration is currently disabled. Please contact your platform administrator.",
+          }, 403);
+        }
+        if (regMode === "domain_restricted") {
+          const emailDomain = rbacUser.email.split("@")[1]?.toLowerCase();
+          const allowedDomains = (platformSettings.allowedDomains || []).map((d: string) => d.toLowerCase());
+          if (!emailDomain || !allowedDomains.includes(emailDomain)) {
+            return c.json({
+              error: `Registration is restricted to approved domains (${allowedDomains.map((d: string) => "@" + d).join(", ")}).`,
+            }, 403);
+          }
+        }
+      } catch (regErr: any) {
+        console.log(`[FleetOwnerProvision] registration mode check failed open: ${regErr.message}`);
+      }
+
+      const body = await c.req.json().catch(() => ({}));
+      const name = typeof body?.name === "string" ? body.name.trim() : undefined;
+      const companyName = typeof body?.companyName === "string" ? body.companyName.trim() : undefined;
+      const alsoDrive = body?.alsoDrive !== false;
+      const serviceLines = Array.isArray(body?.serviceLines)
+        ? body.serviceLines.filter((s: unknown) => s === "rideshare" || s === "rush_delivery")
+        : ["rideshare"];
+      const enabledModules =
+        body?.enabledModules && typeof body.enabledModules === "object"
+          ? body.enabledModules as Record<string, boolean>
+          : undefined;
+
+      const result = await provisionFleetOwner(getProvisionDeps(), rbacUser.userId, {
+        name,
+        companyName,
+        alsoDrive,
+        productLine: "fleet",
+        serviceLines: serviceLines.length ? serviceLines : ["rideshare"],
+        enabledModules,
+      });
+
+      if (!result.ok) {
+        return c.json({ error: result.error }, result.status ?? 500);
+      }
+
+      return c.json({
+        success: true,
+        alreadyProvisioned: result.alreadyProvisioned,
+        organizationId: result.organizationId,
+      });
+    } catch (e: any) {
+      console.error("[FleetOwnerProvision] Error:", e);
+      return c.json({ error: e.message || "Provisioning failed" }, 500);
+    }
+  });
+
+  // ---------------------------------------------------------------------------
+  // POST /fleet-owner/enable-driver — Fleet-only owner adds driver capability
+  // ---------------------------------------------------------------------------
+  app.post("/make-server-37f42386/fleet-owner/enable-driver", requireAuth(), async (c) => {
+    try {
+      const rbacUser = c.get("rbacUser") as RbacUser | undefined;
+      if (!rbacUser || rbacUser.userId === "_anon_passthrough") {
+        return c.json({ error: "Unauthorized" }, 401);
+      }
+
+      const result = await enableDriverForFleetOwner(getProvisionDeps(), rbacUser.userId);
+      if (!result.ok) {
+        return c.json({ error: result.error }, result.status ?? 500);
+      }
+
+      return c.json({ success: true, alreadyEnabled: result.alreadyEnabled });
+    } catch (e: any) {
+      console.error("[FleetOwnerEnableDriver] Error:", e);
+      return c.json({ error: e.message || "Failed to enable driver access" }, 500);
+    }
+  });
+
+  // ---------------------------------------------------------------------------
+  // GET /fleet-owner/status — Whether current user is provisioned as fleet owner
+  // ---------------------------------------------------------------------------
+  app.get("/make-server-37f42386/fleet-owner/status", requireAuth(), async (c) => {
+    try {
+      const rbacUser = c.get("rbacUser") as RbacUser | undefined;
+      if (!rbacUser || rbacUser.userId === "_anon_passthrough") {
+        return c.json({ provisioned: false }, 200);
+      }
+
+      const { data: authData, error } = await supabase.auth.admin.getUserById(rbacUser.userId);
+      if (error || !authData?.user) {
+        return c.json({ provisioned: false }, 200);
+      }
+
+      return c.json({
+        provisioned: isFleetOwnerProvisioned(authData.user),
+        organizationId: authData.user.user_metadata?.organizationId ?? null,
+        canDrive: userCanAccessDriverPortal(authData.user),
+      });
+    } catch (e: any) {
+      console.error("[FleetOwnerStatus] Error:", e);
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  // ---------------------------------------------------------------------------
+  // POST /driver-login — Server-side Driver login with rate limiting
+  // Rejects non-driver accounts. Returns session tokens.
+  // ---------------------------------------------------------------------------
+  app.post("/make-server-37f42386/driver-login", async (c) => {
+    try {
+      const { email, password } = await c.req.json();
+      if (!email || !password) {
+        return c.json({ error: "Email and password are required" }, 400);
+      }
+
+      // Rate limit: check by IP and email
+      const clientIp = getClientIp(c);
+      const ipCheck = await checkRateLimit(clientIp, 'driver');
+      const emailCheck = await checkRateLimit(email.toLowerCase(), 'driver');
+      if (!ipCheck.allowed || !emailCheck.allowed) {
+        const retryAfterSec = Math.max(ipCheck.retryAfterSec, emailCheck.retryAfterSec);
+        console.log(`[DriverLogin] Rate limit exceeded for IP ${clientIp} / email ${email}`);
+        return c.json({
+          error: `Too many login attempts. Please try again in ${Math.ceil(retryAfterSec / 60)} minutes.`,
+          retryAfterSec,
+        }, 429);
+      }
+
+      const { createClient: createAnonClient } = await import("npm:@supabase/supabase-js@2");
+      const anonUrl = Deno.env.get("SUPABASE_URL")!;
+      const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+      const anonClient = createAnonClient(anonUrl, anonKey);
+
+      const { data, error: signInError } = await anonClient.auth.signInWithPassword({ email, password });
+
+      if (signInError) {
+        await recordFailedAttempt(clientIp, 'driver');
+        await recordFailedAttempt(email.toLowerCase(), 'driver');
+        console.log(`[DriverLogin] Failed for ${email}: ${signInError.message}`);
+        const remaining = await checkRateLimit(email.toLowerCase(), 'driver');
+        return c.json({
+          error: "Invalid email or password.",
+          attemptsRemaining: remaining.remaining,
+        }, 401);
+      }
+
+      // Driver portal: driver role in JWT roles[] or legacy metadata (dual identity: admin+driver)
+      if (!userCanAccessDriverPortal(data.user)) {
+        await anonClient.auth.signOut();
+        await recordFailedAttempt(clientIp, 'driver');
+        await recordFailedAttempt(email.toLowerCase(), 'driver');
+        const userRole = data?.user?.user_metadata?.role;
+        console.log(`[DriverLogin] Non-driver account ${email} (role: ${userRole}) rejected from driver portal`);
+        return c.json({
+          error: "Invalid email or password.",
+        }, 401);
+      }
+
+      const userRole = data?.user?.user_metadata?.role ?? 'driver';
+
+      if (!data?.session) {
+        return c.json({ error: "Sign-in succeeded but no session was returned" }, 500);
+      }
+
+      // Success — clear rate limits
+      await clearRateLimit(clientIp, 'driver');
+      await clearRateLimit(email.toLowerCase(), 'driver');
+      console.log(`[DriverLogin] Success: ${email}`);
+      return c.json({
+        success: true,
+        access_token: data.session.access_token,
+        refresh_token: data.session.refresh_token,
+        user: {
+          id: data.user.id,
+          email: data.user.email,
+          name: data.user.user_metadata?.name,
+          role: userRole,
+        },
+      });
+    } catch (e: any) {
+      console.error("[DriverLogin] Error:", e);
+      return c.json({ error: e.message || "Login failed" }, 500);
+    }
+  });
+
+  // POST /admin-login — Server-side admin login (whitelist: superadmin + platform roles only)
+  // Auto-recovery removed in Phase 4 — wrong password simply fails, no password overwrite.
+  // Returns session tokens so the frontend can call supabase.auth.setSession()
+  app.post("/make-server-37f42386/admin-login", async (c) => {
+    try {
+      const { email, password } = await c.req.json();
+      if (!email || !password) {
+        return c.json({ error: "Email and password are required" }, 400);
+      }
+
+      // Rate limit: check by IP and email
+      const clientIp = getClientIp(c);
+      const ipCheck = await checkRateLimit(clientIp, 'admin');
+      const emailCheck = await checkRateLimit(email.toLowerCase(), 'admin');
+      if (!ipCheck.allowed || !emailCheck.allowed) {
+        const retryAfterSec = Math.max(ipCheck.retryAfterSec, emailCheck.retryAfterSec);
+        console.log(`[AdminLogin] Rate limit exceeded for IP ${clientIp} / email ${email}`);
+        return c.json({
+          error: `Too many login attempts. Account temporarily locked. Try again in ${Math.ceil(retryAfterSec / 60)} minutes.`,
+          retryAfterSec,
+        }, 429);
+      }
+
+      const { createClient: createAnonClient } = await import("npm:@supabase/supabase-js@2");
+      const anonUrl = Deno.env.get("SUPABASE_URL")!;
+      const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+      const anonClient = createAnonClient(anonUrl, anonKey);
+
+      let signInResult = await anonClient.auth.signInWithPassword({ email, password });
+      let { data, error: signInError } = signInResult;
+
+      if (signInError) {
+        // Auto-recovery removed (Phase 4): wrong password = fail. No password overwrite, no role promotion.
+        console.log(`[AdminLogin] Login failed for ${email}: ${signInError.message}`);
+        await recordFailedAttempt(clientIp, 'admin');
+        await recordFailedAttempt(email.toLowerCase(), 'admin');
+        return c.json({ error: "Incorrect credentials" }, 401);
+      }
+
+      if (!data?.session) {
+        return c.json({ error: "Sign-in succeeded but no session was returned" }, 500);
+      }
+
+      let role = data.user?.user_metadata?.role;
+      if (role !== "superadmin") {
+        // Role metadata missing — check KV to see if this email IS the registered superadmin
+        console.log(`User ${email} signed in but role is '${role}', not superadmin — checking KV record`);
+        const kvRecord = await kv.get("platform:superadmin_created") as any;
+        if (kvRecord?.email === email) {
+          // This IS the superadmin — promote their metadata so future logins work immediately
+          console.log(`KV confirms ${email} is the superadmin — promoting user_metadata`);
+          await supabase.auth.admin.updateUserById(data.user.id, {
+            user_metadata: { ...data.user.user_metadata, role: 'superadmin' },
+          });
+          role = "superadmin";
+
+          // IMPORTANT: Re-authenticate to get a FRESH session with the new role in the JWT
+          const fresh = await anonClient.auth.signInWithPassword({ email, password });
+          if (fresh.data?.session) {
+            data = fresh.data;
+            console.log(`Fresh session obtained for promoted superadmin: ${email}`);
+          }
+        } else {
+          console.log(`User ${email} is not the registered superadmin (KV email: ${kvRecord?.email || 'none'})`);
+          await anonClient.auth.signOut();
+          await recordFailedAttempt(clientIp, 'admin');
+          await recordFailedAttempt(email.toLowerCase(), 'admin');
+          // Same copy as wrong password — do not disclose role / portal mismatch
+          return c.json({ error: "Incorrect credentials" }, 401);
+        }
+      }
+
+      // Success — clear rate limit counters
+      await clearRateLimit(clientIp, 'admin');
+      await clearRateLimit(email.toLowerCase(), 'admin');
+      console.log(`Admin login successful: ${email}`);
+      return c.json({
+        success: true,
+        access_token: data.session.access_token,
+        refresh_token: data.session.refresh_token,
+        user: {
+          id: data.user.id,
+          email: data.user.email,
+          name: data.user.user_metadata?.name,
+          role: data.user.user_metadata?.role,
+        },
+      });
+    } catch (e: any) {
+      console.error("Admin login error:", e);
+      return c.json({ error: e.message || "Login failed" }, 500);
+    }
+  });
+
+  // GET /rate-limit-stats — Rate limiter monitoring (superadmin only)
+  app.get("/make-server-37f42386/rate-limit-stats", requireAuth(), async (c) => {
+    try {
+      const user = (c as any).user;
+      const role = user?.user_metadata?.role;
+      if (role !== 'superadmin') {
+        return c.json({ error: "Superadmin access required" }, 403);
+      }
+      return c.json(getRateLimitStats());
+    } catch (e: any) {
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  // GET /admin-check — Check whether a superadmin has been set up
+  // Used by the /admin frontend to decide whether to show Setup vs Login
+  app.get("/make-server-37f42386/admin-check", async (c) => {
+    try {
+      const existing = await kv.get("platform:superadmin_created");
+      if (existing && (existing as any).created === true) {
+        return c.json({ exists: true });
+      }
+
+      // Heal: KV lock may be missing after env reset / migration, but Auth still has a platform admin.
+      // Prefer login over forcing a second "Initial Setup" when a superadmin already exists.
+      try {
+        const { data } = await supabase.auth.admin.listUsers({ perPage: 1000 });
+        const platformAdmin = data?.users?.find((u: any) => {
+          const role = u.user_metadata?.role;
+          return role === 'superadmin' || role === 'platform_owner';
+        });
+        if (platformAdmin) {
+          await kv.set("platform:superadmin_created", {
+            created: true,
+            userId: platformAdmin.id,
+            email: platformAdmin.email,
+            createdAt: platformAdmin.created_at || new Date().toISOString(),
+            healedAt: new Date().toISOString(),
+            healedFrom: 'admin-check',
+          });
+          console.log(`[admin-check] Healed KV lock from Auth user ${platformAdmin.email} (${platformAdmin.id})`);
+          return c.json({ exists: true, healed: true });
+        }
+      } catch (healErr: any) {
+        console.log(`[admin-check] Auth heal failed: ${healErr.message}`);
+      }
+
+      return c.json({ exists: false });
+    } catch (e: any) {
+      console.log(`Admin check error: ${e.message}`);
+      // Prefer login UI on hard failure so operators are not blocked behind setup
+      return c.json({ exists: true, degraded: true });
+    }
+  });
+
+  // GET /admin-stats — Summary counts for the admin dashboard cards (platform staff only)
+  app.get("/make-server-37f42386/admin-stats", requireAuth({ strict: true }), requirePlatformStaff(), async (c) => {
+    try {
+      let customerCount = 0;
+      let enterpriseCustomerCount = 0;
+      let fleetCustomerCount = 0;
+      let driverCount = 0;
+      let linkedDriverCount = 0;
+      let unlinkedDriverCount = 0;
+      let teamMemberCount = 0;
+      let enterpriseTeamMemberCount = 0;
+      let fleetTeamMemberCount = 0;
+      let platformStaffCount = 0;
+      let riderCount = 0;
+
+      try {
+        const { data } = await supabase.auth.admin.listUsers({ perPage: 1000 });
+        if (data?.users) {
+          const orgProductLineMap: Record<string, ProductLine> = {};
+          for (const u of data.users) {
+            const meta = u.user_metadata || {};
+            if (meta.role === 'admin' || (meta.role === 'superadmin' && meta.businessType)) {
+              orgProductLineMap[u.id] = inferProductLineFromUser(meta as Record<string, unknown>);
+            }
+          }
+
+          for (const u of data.users) {
+            const role = u.user_metadata?.role;
+            if (role === 'admin') {
+              customerCount++;
+              const line = inferProductLineFromUser(u.user_metadata as Record<string, unknown>);
+              if (line === 'enterprise') enterpriseCustomerCount++;
+              else fleetCustomerCount++;
+            } else if (role === 'driver') {
+              driverCount++;
+              if (u.user_metadata?.organizationId) linkedDriverCount++;
+            } else if (FLEET_SUB_ROLES.includes(role)) {
+              teamMemberCount++;
+              const orgId = u.user_metadata?.organizationId;
+              const orgLine = orgId ? orgProductLineMap[orgId] : null;
+              if (orgLine === 'enterprise') enterpriseTeamMemberCount++;
+              else if (orgLine === 'fleet') fleetTeamMemberCount++;
+            } else if (role === 'platform_support' || role === 'platform_analyst' || role === 'platform_owner' || role === 'superadmin') {
+              platformStaffCount++;
+            }
+          }
+          unlinkedDriverCount = driverCount - linkedDriverCount;
+        }
+      } catch (e: any) {
+        console.log(`admin-stats: failed to count users: ${e.message}`);
+      }
+
+      try {
+        const ridesDb = createClient(
+          Deno.env.get("SUPABASE_URL") || "",
+          Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "",
+          { db: { schema: "rides" } },
+        );
+        const { count } = await ridesDb.from("rider_profiles").select("user_id", { count: "exact", head: true });
+        riderCount = count ?? 0;
+      } catch (e: any) {
+        console.log(`admin-stats: failed to count riders: ${e.message}`);
+      }
+
+      let fuelStationCount = 0;
+      try {
+        const stations = await kv.getByPrefix("station:");
+        fuelStationCount = stations?.length || 0;
+      } catch (e: any) {
+        console.log(`admin-stats: failed to count fuel stations: ${e.message}`);
+      }
+
+      let tollStationCount = 0;
+      try {
+        const tolls = await kv.getByPrefix("toll_plaza:");
+        tollStationCount = tolls?.length || 0;
+      } catch (e: any) {
+        console.log(`admin-stats: failed to count toll stations: ${e.message}`);
+      }
+
+      let merchantPending = 0;
+      try {
+        const { count } = await supabase
+          .from("merchants")
+          .select("id", { count: "exact", head: true })
+          .eq("verification_status", "pending");
+        merchantPending = count ?? 0;
+      } catch (e: any) {
+        console.log(`admin-stats: failed to count pending merchants: ${e.message}`);
+      }
+
+      const totalUserCount = customerCount + driverCount + teamMemberCount + platformStaffCount + 1;
+      return c.json({
+        customerCount,
+        enterprise: { customerCount: enterpriseCustomerCount, teamMemberCount: enterpriseTeamMemberCount },
+        fleet: { customerCount: fleetCustomerCount, teamMemberCount: fleetTeamMemberCount },
+        fuelStationCount,
+        tollStationCount,
+        driverCount,
+        linkedDriverCount,
+        unlinkedDriverCount,
+        teamMemberCount,
+        platformStaffCount,
+        riderCount,
+        merchantPending,
+        totalUserCount,
+      });
+    } catch (e: any) {
+      console.log(`admin-stats error: ${e.message}`);
+      return c.json({
+        customerCount: 0,
+        enterprise: { customerCount: 0, teamMemberCount: 0 },
+        fleet: { customerCount: 0, teamMemberCount: 0 },
+        fuelStationCount: 0,
+        tollStationCount: 0,
+        driverCount: 0,
+        linkedDriverCount: 0,
+        unlinkedDriverCount: 0,
+        teamMemberCount: 0,
+        platformStaffCount: 0,
+        riderCount: 0,
+        merchantPending: 0,
+        totalUserCount: 0,
+      });
+    }
+  });
+
+  // ---------------------------------------------------------------------------
+  // Vehicle catalog (motor vehicles master DB) — platform owner / support
+  // ---------------------------------------------------------------------------
+
+  // VEHICLE_CATALOG_WRITABLE_KEYS imported from packages/types (SSOT with pending approve + CSV parity).
+
+  function parseCatalogProductionEndYear(raw: unknown): number | null {
+    if (raw === undefined || raw === null || raw === "") return null;
+    const n = Number(raw);
+    if (!Number.isFinite(n) || n < 1900 || n > 2100) return null;
+    return n;
+  }
+
+  function assertCatalogProductionSpan(start: number, end: number | null): string | null {
+    if (end != null && end < start) return "production_end_year must be >= production_start_year";
+    return null;
+  }
+
+  const MAX_ENGINE_TYPE_LEN = 200;
+
+  function validateEngineType(raw: unknown): string | null {
+    if (raw === undefined || raw === null || raw === "") return null;
+    const s = String(raw).trim();
+    if (s.length > MAX_ENGINE_TYPE_LEN) {
+      return `engine_type must be at most ${MAX_ENGINE_TYPE_LEN} characters`;
+    }
+    return null;
+  }
+
+  function parseOptionalProductionMonth(
+    raw: unknown,
+    label: string,
+  ): { ok: true; value: number | null } | { ok: false; error: string } {
+    return parseCatalogMonthFromUnknown(raw, label);
+  }
+
+  function assertVehicleCatalogAccess(c: any) {
+    const rbacUser = c.get("rbacUser") as any;
+    const callerRole = rbacUser?.resolvedRole || rbacUser?.role;
+    if (callerRole !== "platform_owner" && callerRole !== "superadmin" && callerRole !== "platform_support") {
+      return c.json({ error: "Only platform owner or support can manage the vehicle catalog" }, 403);
+    }
+    return null;
+  }
+
+  function vehicleCatalogActorId(c: any): string | null {
+    const rbacUser = c.get("rbacUser") as { userId?: string; id?: string } | undefined;
+    const id = String(rbacUser?.userId ?? rbacUser?.id ?? "").trim();
+    return id || null;
+  }
+
+  async function assertCatalogWriteRateLimit(c: any) {
+    const clientIp = getClientIp(c);
+    const userId = vehicleCatalogActorId(c) || "unknown";
+    const rateLimitKey = `catalog:${clientIp}:${userId}`;
+    const rateCheck = await checkRateLimit(rateLimitKey, "catalog_write");
+    if (!rateCheck.allowed) {
+      return c.json(
+        {
+          error: "rate_limit_exceeded",
+          message: `Too many catalog writes. Please wait ${rateCheck.retryAfterSec} seconds.`,
+          retryAfter: rateCheck.retryAfterSec,
+        },
+        429,
+      );
+    }
+    return null;
+  }
+
+  function pickVehicleCatalogRow(raw: Record<string, unknown>, partial: boolean): Record<string, unknown> {
+    const out: Record<string, unknown> = {};
+    for (const k of VEHICLE_CATALOG_WRITABLE_KEYS) {
+      if (!(k in raw)) continue;
+      const v = raw[k];
+      if (v === undefined) continue;
+      if (partial) {
+        if (v === "") continue;
+        out[k] = v;
+      } else {
+        /** Omit nulls on create so PostgREST does not require columns that are absent on older DBs. */
+        if (v === null) continue;
+        if (v === "" && k !== "make" && k !== "model") continue;
+        out[k] = v;
+      }
+    }
+    // Never trust client-supplied actor stamps; edge overwrites after pick.
+    delete out.created_by;
+    delete out.updated_by;
+    return out;
+  }
+
+  // GET /admin/vehicle-catalog
+  app.get("/make-server-37f42386/admin/vehicle-catalog", requireAuth(), async (c) => {
+    const denied = assertVehicleCatalogAccess(c);
+    if (denied) return denied;
+    try {
+      const { items, total } = await listVehicleCatalogWithFallback(supabase);
+      return c.json({ items, total });
+    } catch (e: any) {
+      console.error("[vehicle-catalog] list:", e);
+      return c.json({ error: e.message || "Failed to list vehicle catalog" }, 500);
+    }
+  });
+
+  /** Bulk-delete every row in motor vehicle catalog (maintenance templates CASCADE). */
+  const VEHICLE_CATALOG_PURGE_CONFIRM = "DELETE ALL";
+  /** Must match client `VEHICLE_CATALOG_UNDO_BATCH_CONFIRM_PHRASE` — required when force-undoing a batch. */
+  const VEHICLE_CATALOG_UNDO_BATCH_CONFIRM = "UNDO BATCH";
+
+  // POST /admin/vehicle-catalog/purge — must be registered before POST /admin/vehicle-catalog (create)
+  app.post("/make-server-37f42386/admin/vehicle-catalog/purge", requireAuth(), async (c) => {
+    const denied = assertVehicleCatalogAccess(c);
+    if (denied) return denied;
+    const limited = await assertCatalogWriteRateLimit(c);
+    if (limited) return limited;
+    try {
+      const body = (await c.req.json().catch(() => ({}))) as { confirm?: string };
+      if (String(body.confirm ?? "").trim() !== VEHICLE_CATALOG_PURGE_CONFIRM) {
+        return c.json(
+          { error: `Confirmation required: send JSON { "confirm": "${VEHICLE_CATALOG_PURGE_CONFIRM}" }` },
+          400,
+        );
+      }
+      const CHUNK = 500;
+      let deleted = 0;
+      for (;;) {
+        const { data: batch, error: qErr } = await supabase.from("vehicle_catalog").select("id").limit(CHUNK);
+        if (qErr) throw qErr;
+        if (!batch?.length) break;
+        const ids = (batch as { id: string }[]).map((r) => r.id);
+        const { error: dErr } = await supabase.from("vehicle_catalog").delete().in("id", ids);
+        if (dErr) throw dErr;
+        deleted += ids.length;
+        if (batch.length < CHUNK) break;
+      }
+      invalidateCatalogExistenceCache();
+      return c.json({ deleted });
+    } catch (e: any) {
+      console.error("[vehicle-catalog] purge:", e);
+      return c.json({ error: e.message || "Failed to purge vehicle catalog" }, 500);
+    }
+  });
+
+  // GET /admin/vehicle-catalog/orphans — before :id routes
+  app.get("/make-server-37f42386/admin/vehicle-catalog/orphans", requireAuth(), async (c) => {
+    const denied = assertVehicleCatalogAccess(c);
+    if (denied) return denied;
+    try {
+      const items = await listCatalogOrphanVehicles(supabase);
+      return c.json({ items, total: items.length });
+    } catch (e: any) {
+      console.error("[vehicle-catalog] orphans:", e);
+      return c.json({ error: e.message || "Failed to list catalog orphans" }, 500);
+    }
+  });
+
+  // POST /admin/vehicle-catalog/bulk
+  app.post("/make-server-37f42386/admin/vehicle-catalog/bulk", requireAuth(), async (c) => {
+    const denied = assertVehicleCatalogAccess(c);
+    if (denied) return denied;
+    const limited = await assertCatalogWriteRateLimit(c);
+    if (limited) return limited;
+    try {
+      const body = (await c.req.json()) as {
+        import_batch_id?: string;
+        rows?: Array<{ rowIndex?: number; id?: string; payload?: Record<string, unknown> }>;
+      };
+      const importBatchId = String(body.import_batch_id ?? "").trim();
+      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(importBatchId)) {
+        return c.json({ error: "import_batch_id must be a UUID" }, 400);
+      }
+      const rows = Array.isArray(body.rows) ? body.rows : [];
+      if (rows.length === 0) return c.json({ error: "rows required" }, 400);
+      if (rows.length > VEHICLE_CATALOG_BULK_MAX_ROWS) {
+        return c.json({ error: `Max ${VEHICLE_CATALOG_BULK_MAX_ROWS} rows per bulk request` }, 400);
+      }
+
+      const actorId = vehicleCatalogActorId(c);
+      const results: Array<{
+        rowIndex: number;
+        ok: boolean;
+        id?: string;
+        action?: "created" | "updated";
+        error?: string;
+        item?: Record<string, unknown>;
+      }> = [];
+
+      for (const entry of rows) {
+        const rowIndex = Number(entry.rowIndex ?? 0);
+        const payload = (entry.payload && typeof entry.payload === "object" ? entry.payload : {}) as Record<
+          string,
+          unknown
+        >;
+        const existingId = typeof entry.id === "string" ? entry.id.trim() : "";
+        try {
+          if (existingId) {
+            const make = payload.make !== undefined ? String(payload.make ?? "").trim() : undefined;
+            const model = payload.model !== undefined ? String(payload.model ?? "").trim() : undefined;
+            const row = pickVehicleCatalogRow(
+              {
+                ...payload,
+                ...(make !== undefined ? { make } : {}),
+                ...(model !== undefined ? { model } : {}),
+              },
+              true,
+            );
+            stampCatalogProvenance(row, {
+              userId: actorId,
+              source: "csv_import",
+              importBatchId,
+              isCreate: false,
+            });
+            row.updated_at = new Date().toISOString();
+            let upd = await supabase
+              .from("vehicle_catalog")
+              .update(row)
+              .eq("id", existingId)
+              .select(VEHICLE_CATALOG_SUPABASE_SELECT)
+              .single();
+            if (upd.error && shouldStripVehicleCatalogInsertPayloadOnRetry(upd.error)) {
+              const trimmed = stripVehicleCatalogOptionalMigrationColumns(row);
+              trimmed.updated_at = row.updated_at;
+              stampCatalogProvenance(trimmed, {
+                userId: actorId,
+                source: "csv_import",
+                importBatchId,
+                isCreate: false,
+              });
+              upd = await supabase
+                .from("vehicle_catalog")
+                .update(trimmed)
+                .eq("id", existingId)
+                .select(VEHICLE_CATALOG_SUPABASE_SELECT)
+                .single();
+            }
+            if (upd.error) throw upd.error;
+            if (!upd.data) throw new Error("Not found");
+            invalidateCatalogExistenceCache(existingId);
+            results.push({
+              rowIndex,
+              ok: true,
+              id: existingId,
+              action: "updated",
+              item: catalogRowForApi(upd.data as Record<string, unknown>),
+            });
+          } else {
+            const make = String(payload.make ?? "").trim();
+            const model = String(payload.model ?? "").trim();
+            const startNum = Number(payload.production_start_year);
+            let endNum: number | null = null;
+            if (
+              payload.production_end_year !== undefined &&
+              payload.production_end_year !== null &&
+              payload.production_end_year !== ""
+            ) {
+              const e = Number(payload.production_end_year);
+              if (!Number.isFinite(e) || e < 1900 || e > 2100) {
+                throw new Error("production_end_year must be between 1900 and 2100, or omitted for ongoing");
+              }
+              endNum = e;
+            }
+            if (!make || !model || !Number.isFinite(startNum) || startNum < 1900 || startNum > 2100) {
+              throw new Error("make, model, and production_start_year are required");
+            }
+            const spanErr = assertCatalogProductionSpan(startNum, endNum);
+            if (spanErr) throw new Error(spanErr);
+            const row = pickVehicleCatalogRow(
+              {
+                ...payload,
+                make,
+                model,
+                production_start_year: startNum,
+                production_end_year: endNum,
+              },
+              false,
+            );
+            stampCatalogProvenance(row, {
+              userId: actorId,
+              source: "csv_import",
+              importBatchId,
+              isCreate: true,
+            });
+            row.updated_at = new Date().toISOString();
+            let ins = await supabase
+              .from("vehicle_catalog")
+              .insert(row)
+              .select(VEHICLE_CATALOG_SUPABASE_SELECT)
+              .single();
+            if (ins.error && shouldStripVehicleCatalogInsertPayloadOnRetry(ins.error)) {
+              const trimmed = stripVehicleCatalogOptionalMigrationColumns(row);
+              trimmed.updated_at = row.updated_at;
+              stampCatalogProvenance(trimmed, {
+                userId: actorId,
+                source: "csv_import",
+                importBatchId,
+                isCreate: true,
+              });
+              ins = await supabase
+                .from("vehicle_catalog")
+                .insert(trimmed)
+                .select(VEHICLE_CATALOG_SUPABASE_SELECT)
+                .single();
+            }
+            if (ins.error) throw ins.error;
+            const id = String((ins.data as { id: string }).id);
+            invalidateCatalogExistenceCache(id);
+            results.push({
+              rowIndex,
+              ok: true,
+              id,
+              action: "created",
+              item: catalogRowForApi((ins.data ?? {}) as Record<string, unknown>),
+            });
+          }
+        } catch (err: unknown) {
+          results.push({
+            rowIndex,
+            ok: false,
+            error: err instanceof Error ? err.message : String(err),
+          });
+        }
+      }
+
+      return c.json({
+        import_batch_id: importBatchId,
+        results,
+        created: results.filter((r) => r.ok && r.action === "created").length,
+        updated: results.filter((r) => r.ok && r.action === "updated").length,
+        failed: results.filter((r) => !r.ok).length,
+      });
+    } catch (e: any) {
+      console.error("[vehicle-catalog] bulk:", e);
+      return c.json({ error: e.message || "Failed to bulk upsert vehicle catalog" }, 500);
+    }
+  });
+
+  // POST /admin/vehicle-catalog/undo-batch
+  app.post("/make-server-37f42386/admin/vehicle-catalog/undo-batch", requireAuth(), async (c) => {
+    const denied = assertVehicleCatalogAccess(c);
+    if (denied) return denied;
+    const limited = await assertCatalogWriteRateLimit(c);
+    if (limited) return limited;
+    try {
+      const body = (await c.req.json().catch(() => ({}))) as {
+        import_batch_id?: string;
+        force?: boolean;
+        confirm?: string;
+      };
+      const importBatchId = String(body.import_batch_id ?? "").trim();
+      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(importBatchId)) {
+        return c.json({ error: "import_batch_id must be a UUID" }, 400);
+      }
+      if (body.force === true) {
+        if (String(body.confirm ?? "").trim() !== VEHICLE_CATALOG_UNDO_BATCH_CONFIRM) {
+          return c.json(
+            { error: `Confirmation required: send JSON { "confirm": "${VEHICLE_CATALOG_UNDO_BATCH_CONFIRM}" }` },
+            400,
+          );
+        }
+      }
+      const { data: batchRows, error: qErr } = await supabase
+        .from("vehicle_catalog")
+        .select("id")
+        .eq("import_batch_id", importBatchId);
+      if (qErr) throw qErr;
+      const ids = (batchRows || []).map((r: { id: string }) => r.id);
+      if (ids.length === 0) {
+        return c.json({ deleted: 0, import_batch_id: importBatchId, dependencies: null });
+      }
+      const deps = await countCatalogDependenciesForIds(supabase, ids);
+      if (dependenciesBlockDelete(deps) && body.force !== true) {
+        return c.json(
+          {
+            error: "Batch has dependents; pass force:true to delete anyway",
+            code: "CATALOG_HAS_DEPENDENTS",
+            dependencies: deps,
+            rowCount: ids.length,
+          },
+          409,
+        );
+      }
+      const { error: dErr } = await supabase.from("vehicle_catalog").delete().eq("import_batch_id", importBatchId);
+      if (dErr) throw dErr;
+      invalidateCatalogExistenceCache();
+      return c.json({ deleted: ids.length, import_batch_id: importBatchId, dependencies: deps });
+    } catch (e: any) {
+      console.error("[vehicle-catalog] undo-batch:", e);
+      return c.json({ error: e.message || "Failed to undo import batch" }, 500);
+    }
+  });
+
+  // GET /admin/vehicle-catalog/:id/dependencies
+  app.get("/make-server-37f42386/admin/vehicle-catalog/:id/dependencies", requireAuth(), async (c) => {
+    const denied = assertVehicleCatalogAccess(c);
+    if (denied) return denied;
+    try {
+      const id = c.req.param("id");
+      const dependencies = await countCatalogDependencies(supabase, id);
+      return c.json({ id, dependencies });
+    } catch (e: any) {
+      console.error("[vehicle-catalog] dependencies:", e);
+      return c.json({ error: e.message || "Failed to load dependencies" }, 500);
+    }
+  });
+
+  // POST /admin/vehicle-catalog
+  app.post("/make-server-37f42386/admin/vehicle-catalog", requireAuth(), async (c) => {
+    const denied = assertVehicleCatalogAccess(c);
+    if (denied) return denied;
+    const limited = await assertCatalogWriteRateLimit(c);
+    if (limited) return limited;
+    try {
+      const body = (await c.req.json()) as Record<string, unknown>;
+      const make = String(body.make ?? "").trim();
+      const model = String(body.model ?? "").trim();
+      const startNum = Number(body.production_start_year);
+      let endNum: number | null = null;
+      if (body.production_end_year !== undefined && body.production_end_year !== null && body.production_end_year !== "") {
+        const e = Number(body.production_end_year);
+        if (!Number.isFinite(e) || e < 1900 || e > 2100) {
+          return c.json({ error: "production_end_year must be between 1900 and 2100, or omitted for ongoing" }, 400);
+        }
+        endNum = e;
+      }
+      if (
+        !make ||
+        !model ||
+        body.production_start_year === undefined ||
+        body.production_start_year === null ||
+        body.production_start_year === ""
+      ) {
+        return c.json({ error: "make, model, and production_start_year are required" }, 400);
+      }
+      if (!Number.isFinite(startNum) || startNum < 1900 || startNum > 2100) {
+        return c.json({ error: "production_start_year must be between 1900 and 2100" }, 400);
+      }
+      const spanErr = assertCatalogProductionSpan(startNum, endNum);
+      if (spanErr) return c.json({ error: spanErr }, 400);
+      const psm = parseOptionalProductionMonth(body.production_start_month, "production_start_month");
+      if (!psm.ok) return c.json({ error: psm.error }, 400);
+      const pem = parseOptionalProductionMonth(body.production_end_month, "production_end_month");
+      if (!pem.ok) return c.json({ error: pem.error }, 400);
+      if (endNum == null && pem.value != null) {
+        return c.json({ error: "production_end_month must be empty when production is ongoing" }, 400);
+      }
+      const eiErr = validateEngineType(body.engine_type);
+      if (eiErr) return c.json({ error: eiErr }, 400);
+      const row = pickVehicleCatalogRow(
+        {
+          ...body,
+          make,
+          model,
+          production_start_year: startNum,
+          production_end_year: endNum,
+          production_start_month: psm.value,
+          production_end_month: pem.value,
+        },
+        false,
+      );
+      if (row.engine_type !== undefined && row.engine_type !== null && row.engine_type !== "") {
+        row.engine_type = String(row.engine_type).trim();
+      }
+      if (
+        row.chassis_code != null &&
+        row.chassis_code !== "" &&
+        (row.generation_code == null || row.generation_code === "")
+      ) {
+        row.generation_code = row.chassis_code;
+      }
+      stampCatalogProvenance(row, {
+        userId: vehicleCatalogActorId(c),
+        source: "manual",
+        isCreate: true,
+      });
+      row.updated_at = new Date().toISOString();
+      /**
+       * Prefer PostgREST insert first so **new columns** (fuel economy, etc.) are applied whenever the
+       * DB + schema cache include them. An older `edge_insert_vehicle_catalog_row` RPC on the project may
+       * omit newer columns but still return success — that made NOTIFY useless because RPC ran first.
+       * Keep RPC as fallback when insert fails (legacy `year`, stale cache, missing RPC-handled paths).
+       */
+      let ins = await supabase.from("vehicle_catalog").insert(row).select(VEHICLE_CATALOG_SUPABASE_SELECT).single();
+
+      /** Legacy DB: `year NOT NULL` only — map production_start_year → year. */
+      if (ins.error && isLegacyVehicleCatalogYearNotNullError(ins.error)) {
+        const legacyRow = insertRowForLegacyDb(stripVehicleCatalogOptionalMigrationColumns(row));
+        legacyRow.updated_at = row.updated_at;
+        ins = await supabase.from("vehicle_catalog").insert(legacyRow).select("*").single();
+      } else if (ins.error && isPostgrestVehicleCatalogSchemaCacheError(ins.error)) {
+        const rpc = await supabase.rpc("edge_insert_vehicle_catalog_row", { p: row });
+        if (!rpc.error && rpc.data != null) {
+          ins = { data: rpc.data as Record<string, unknown>, error: null };
+        }
+      } else if (ins.error) {
+        const rpcIns = await supabase.rpc("edge_insert_vehicle_catalog_row", { p: row });
+        if (!rpcIns.error && rpcIns.data != null) {
+          ins = { data: rpcIns.data as Record<string, unknown>, error: null };
+        }
+      }
+      if (!ins.error) {
+        /* success */
+      } else {
+        /** Drop only columns the DB reports missing — never for PGRST schema-cache-only errors. */
+        let candidate: Record<string, unknown> = { ...row };
+        for (
+          let i = 0;
+          ins.error && shouldStripVehicleCatalogInsertPayloadOnRetry(ins.error) && i < 48;
+          i++
+        ) {
+          const missing = parseMissingColumnFromVehicleCatalogDbError(ins.error);
+          if (!missing || !(missing in candidate)) break;
+          if (missing === "catalog_trim") mergeCatalogTrimIntoTrimSeriesInPlace(candidate);
+          delete candidate[missing];
+          candidate.updated_at = row.updated_at;
+          ins = await supabase.from("vehicle_catalog").insert(candidate).select(VEHICLE_CATALOG_SUPABASE_SELECT).single();
+        }
+        if (ins.error && shouldStripVehicleCatalogInsertPayloadOnRetry(ins.error)) {
+          const trimmed = stripVehicleCatalogOptionalMigrationColumns(candidate);
+          trimmed.updated_at = row.updated_at;
+          ins = await supabase.from("vehicle_catalog").insert(trimmed).select(VEHICLE_CATALOG_SUPABASE_SELECT).single();
+        }
+        if (ins.error && shouldStripVehicleCatalogInsertPayloadOnRetry(ins.error)) {
+          const legacyRow = insertRowForLegacyDb(stripVehicleCatalogOptionalMigrationColumns(candidate));
+          legacyRow.updated_at = row.updated_at;
+          ins = await supabase.from("vehicle_catalog").insert(legacyRow).select("*").single();
+        }
+      }
+
+      if (ins.error) throw ins.error;
+      const item = catalogRowForApi((ins.data ?? {}) as Record<string, unknown>);
+      const newId = String((ins.data as { id?: string })?.id ?? "");
+      if (newId) invalidateCatalogExistenceCache(newId);
+      return c.json({ item });
+    } catch (e: any) {
+      console.error("[vehicle-catalog] create:", e);
+      return c.json({ error: e.message || "Failed to create vehicle catalog entry" }, 500);
+    }
+  });
+
+  // PATCH /admin/vehicle-catalog/:id
+  app.patch("/make-server-37f42386/admin/vehicle-catalog/:id", requireAuth(), async (c) => {
+    const denied = assertVehicleCatalogAccess(c);
+    if (denied) return denied;
+    const limited = await assertCatalogWriteRateLimit(c);
+    if (limited) return limited;
+    try {
+      const id = c.req.param("id");
+      const body = (await c.req.json()) as Record<string, unknown>;
+      const expectedUpdatedAt =
+        body.expected_updated_at ?? body.expectedUpdatedAt ?? body.updated_at ?? null;
+      if (expectedUpdatedAt != null && expectedUpdatedAt !== "") {
+        const { data: existing, error: exErr } = await supabase
+          .from("vehicle_catalog")
+          .select("updated_at")
+          .eq("id", id)
+          .maybeSingle();
+        if (exErr) throw exErr;
+        if (!existing) return c.json({ error: "Not found" }, 404);
+        if (String(existing.updated_at) !== String(expectedUpdatedAt)) {
+          return c.json(
+            {
+              error: "Record was updated elsewhere — refresh and try again",
+              code: "STALE_WRITE",
+            },
+            409,
+          );
+        }
+      }
+      if (body.production_end_year === "") body.production_end_year = null;
+      if (body.engine_type === "") body.engine_type = null;
+      if (body.production_end_year === null || body.production_end_year === undefined) {
+        if (body.production_end_month === "" || body.production_end_month === undefined) {
+          body.production_end_month = null;
+        }
+      }
+      const row = pickVehicleCatalogRow(body, true);
+      if (row.production_start_year !== undefined) {
+        const y = Number(row.production_start_year);
+        if (!Number.isFinite(y) || y < 1900 || y > 2100) {
+          return c.json({ error: "production_start_year must be between 1900 and 2100" }, 400);
+        }
+        row.production_start_year = y;
+      }
+      if (row.production_end_year !== undefined) {
+        if (row.production_end_year === null) {
+          row.production_end_year = null;
+        } else {
+          const e = parseCatalogProductionEndYear(row.production_end_year);
+          if (e === null) {
+            return c.json({ error: "production_end_year must be between 1900 and 2100, or empty for ongoing" }, 400);
+          }
+          row.production_end_year = e;
+        }
+      }
+      const startForCheck =
+        row.production_start_year !== undefined
+          ? Number(row.production_start_year)
+          : undefined;
+      const endForCheck =
+        row.production_end_year === undefined
+          ? undefined
+          : row.production_end_year === null
+            ? null
+            : Number(row.production_end_year);
+      if (startForCheck !== undefined && endForCheck !== undefined) {
+        const spanErr = assertCatalogProductionSpan(startForCheck, endForCheck);
+        if (spanErr) return c.json({ error: spanErr }, 400);
+      }
+      if (row.production_start_month !== undefined && row.production_start_month !== null) {
+        const p = parseOptionalProductionMonth(row.production_start_month, "production_start_month");
+        if (!p.ok) return c.json({ error: p.error }, 400);
+        row.production_start_month = p.value;
+      }
+      if (row.production_end_month !== undefined && row.production_end_month !== null) {
+        const p = parseOptionalProductionMonth(row.production_end_month, "production_end_month");
+        if (!p.ok) return c.json({ error: p.error }, 400);
+        row.production_end_month = p.value;
+      }
+      if (endForCheck === null && row.production_end_month !== undefined && row.production_end_month !== null) {
+        return c.json({ error: "production_end_month must be empty when production is ongoing" }, 400);
+      }
+      if (body.engine_type !== undefined) {
+        const eiErr = validateEngineType(body.engine_type);
+        if (eiErr) return c.json({ error: eiErr }, 400);
+      }
+      if (row.engine_type !== undefined && row.engine_type !== null && row.engine_type !== "") {
+        row.engine_type = String(row.engine_type).trim();
+      }
+      if (row.engine_code !== undefined && row.engine_code !== null) {
+        row.engine_code = String(row.engine_code).trim() || null;
+      }
+      if (row.make !== undefined) row.make = String(row.make).trim();
+      if (row.model !== undefined) row.model = String(row.model).trim();
+      stampCatalogProvenance(row, {
+        userId: vehicleCatalogActorId(c),
+        isCreate: false,
+      });
+      row.updated_at = new Date().toISOString();
+      const keys = Object.keys(row).filter((k) => k !== "updated_at" && k !== "updated_by");
+      if (keys.length === 0) {
+        return c.json({ error: "No fields to update" }, 400);
+      }
+      let upd = await supabase.from("vehicle_catalog").update(row).eq("id", id).select(VEHICLE_CATALOG_SUPABASE_SELECT).single();
+      let patchCandidate: Record<string, unknown> = { ...row };
+      for (let i = 0; upd.error && shouldStripVehicleCatalogInsertPayloadOnRetry(upd.error) && i < 48; i++) {
+        const missing = parseMissingColumnFromVehicleCatalogDbError(upd.error);
+        if (!missing || !(missing in patchCandidate)) break;
+        if (missing === "catalog_trim") mergeCatalogTrimIntoTrimSeriesInPlace(patchCandidate);
+        delete patchCandidate[missing];
+        patchCandidate.updated_at = row.updated_at;
+        upd = await supabase.from("vehicle_catalog").update(patchCandidate).eq("id", id).select(VEHICLE_CATALOG_SUPABASE_SELECT).single();
+      }
+      if (upd.error && shouldStripVehicleCatalogInsertPayloadOnRetry(upd.error)) {
+        const trimmed = stripVehicleCatalogOptionalMigrationColumns(patchCandidate);
+        trimmed.updated_at = row.updated_at;
+        upd = await supabase.from("vehicle_catalog").update(trimmed).eq("id", id).select(VEHICLE_CATALOG_SUPABASE_SELECT).single();
+      }
+      if (upd.error && shouldStripVehicleCatalogInsertPayloadOnRetry(upd.error)) {
+        const legacyRow = patchRowForLegacyDb(stripVehicleCatalogOptionalMigrationColumns(patchCandidate));
+        legacyRow.updated_at = row.updated_at;
+        upd = await supabase.from("vehicle_catalog").update(legacyRow).eq("id", id).select("*").single();
+      }
+      if (upd.error) throw upd.error;
+      if (!upd.data) return c.json({ error: "Not found" }, 404);
+      invalidateCatalogExistenceCache(id);
+      return c.json({ item: catalogRowForApi(upd.data as Record<string, unknown>) });
+    } catch (e: any) {
+      console.error("[vehicle-catalog] patch:", e);
+      return c.json({ error: e.message || "Failed to update vehicle catalog entry" }, 500);
+    }
+  });
+
+  // DELETE /admin/vehicle-catalog/:id
+  app.delete("/make-server-37f42386/admin/vehicle-catalog/:id", requireAuth(), async (c) => {
+    const denied = assertVehicleCatalogAccess(c);
+    if (denied) return denied;
+    const limited = await assertCatalogWriteRateLimit(c);
+    if (limited) return limited;
+    try {
+      const id = c.req.param("id");
+      const force = c.req.query("force") === "true";
+      const dependencies = await countCatalogDependencies(supabase, id);
+      if (dependenciesBlockDelete(dependencies) && !force) {
+        return c.json(
+          {
+            error: "Catalog row has dependents; pass force=true to delete anyway",
+            code: "CATALOG_HAS_DEPENDENTS",
+            dependencies,
+          },
+          409,
+        );
+      }
+      const { data, error } = await supabase.from("vehicle_catalog").delete().eq("id", id).select("id");
+      if (error) throw error;
+      if (!data?.length) return c.json({ error: "Not found" }, 404);
+      invalidateCatalogExistenceCache(id);
+      return c.json({ success: true, dependencies });
+    } catch (e: any) {
+      console.error("[vehicle-catalog] delete:", e);
+      return c.json({ error: e.message || "Failed to delete vehicle catalog entry" }, 500);
+    }
+  });
+
+  // GET /admin/vehicle-catalog-gate/audit
+  // Returns the most recent catalog gate denials/warnings for platform review.
+  app.get("/make-server-37f42386/admin/vehicle-catalog-gate/audit", requireAuth(), async (c) => {
+    const denied = assertVehicleCatalogAccess(c);
+    if (denied) return denied;
+    try {
+      const limitRaw = parseInt(c.req.query("limit") ?? "100", 10);
+      const limit = Number.isFinite(limitRaw) ? Math.min(Math.max(limitRaw, 1), 1000) : 100;
+      const events = await kv.getByPrefix("audit:catalog-gate:");
+      const sorted = (events || [])
+        .filter((e: unknown) => !!e && typeof e === "object")
+        .sort((a: any, b: any) => {
+          const ta = a?.timestamp ? new Date(a.timestamp).getTime() : 0;
+          const tb = b?.timestamp ? new Date(b.timestamp).getTime() : 0;
+          return tb - ta;
+        })
+        .slice(0, limit);
+      return c.json({ items: sorted, count: sorted.length });
+    } catch (e: any) {
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  // POST /admin/vehicle-catalog-gate/backfill
+  // One-time / re-runnable migration: walk every vehicle:* KV row and set
+  // `catalogStatus = vehicle_catalog_id ? 'matched' : 'pending_catalog'`.
+  // Forces `status = 'Inactive'` for any currently Active/Maintenance vehicle
+  // that does not have a catalog match. Pass { dryRun: true } to preview.
+  app.post("/make-server-37f42386/admin/vehicle-catalog-gate/backfill", requireAuth(), async (c) => {
+    const denied = assertVehicleCatalogAccess(c);
+    if (denied) return denied;
+    const limited = await assertCatalogWriteRateLimit(c);
+    if (limited) return limited;
+    try {
+      const body = await c.req.json().catch(() => ({})) as { dryRun?: boolean };
+      const dryRun = body.dryRun === true;
+      const rows = await kv.getByPrefix("vehicle:");
+
+      let scanned = 0;
+      let stampedMatched = 0;
+      let stampedPending = 0;
+      let parkedForcedInactive = 0;
+      const samples: Array<{ id: string; before: { status?: string; catalogStatus?: string; vehicle_catalog_id?: string }; after: { status: string; catalogStatus: string } }> = [];
+
+      for (const v of rows ?? []) {
+        if (!v || typeof v !== "object") continue;
+        const vehicle = v as Record<string, unknown>;
+        const id = String(vehicle.id ?? "");
+        if (!id) continue;
+        scanned += 1;
+
+        const catalogId = typeof vehicle.vehicle_catalog_id === "string" ? vehicle.vehicle_catalog_id.trim() : "";
+        const desiredCatalogStatus: "matched" | "pending_catalog" = catalogId ? "matched" : "pending_catalog";
+        const currentCatalogStatus = typeof vehicle.catalogStatus === "string" ? vehicle.catalogStatus : undefined;
+        const currentStatus = typeof vehicle.status === "string" ? vehicle.status : undefined;
+
+        let nextStatus = currentStatus ?? "Inactive";
+        if (desiredCatalogStatus !== "matched" && nextStatus !== "Inactive" && nextStatus !== "Decommissioned") {
+          nextStatus = "Inactive";
+          parkedForcedInactive += 1;
+        }
+
+        if (currentCatalogStatus === desiredCatalogStatus && currentStatus === nextStatus) continue;
+
+        if (desiredCatalogStatus === "matched") stampedMatched += 1;
+        else stampedPending += 1;
+
+        if (samples.length < 25) {
+          samples.push({
+            id,
+            before: {
+              status: currentStatus,
+              catalogStatus: currentCatalogStatus,
+              vehicle_catalog_id: catalogId || undefined,
+            },
+            after: { status: nextStatus, catalogStatus: desiredCatalogStatus },
+          });
+        }
+
+        if (!dryRun) {
+          await kv.set(`vehicle:${id}`, {
+            ...vehicle,
+            status: nextStatus,
+            catalogStatus: desiredCatalogStatus,
+          });
+        }
+      }
+
+      return c.json({
+        success: true,
+        dryRun,
+        scanned,
+        stampedMatched,
+        stampedPending,
+        parkedForcedInactive,
+        samples,
+      });
+    } catch (e: any) {
+      console.error("[catalog-gate backfill]", e);
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  // ---------------------------------------------------------------------------
+  // Admin Customers - Multi-Layer Caching Helper
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Fleet customers = org owners (Fleet Owner), not drivers / staff invites.
+   * Role may live in user_metadata.role, app_metadata.role, or app_metadata.roles[].
+   */
+  function isFleetCustomerOwnerUser(u: {
+    user_metadata?: Record<string, unknown>;
+    app_metadata?: Record<string, unknown>;
+  }): boolean {
+    const userMeta = (u.user_metadata || {}) as Record<string, unknown>;
+    const appMeta = (u.app_metadata || {}) as Record<string, unknown>;
+    const roles: string[] = [];
+    if (typeof userMeta.role === "string" && userMeta.role.trim()) roles.push(userMeta.role.trim());
+    if (typeof appMeta.role === "string" && appMeta.role.trim()) roles.push(appMeta.role.trim());
+    if (Array.isArray(appMeta.roles)) {
+      for (const r of appMeta.roles) {
+        if (typeof r === "string" && r.trim()) roles.push(r.trim());
+      }
+    }
+    return roles.includes("admin") || roles.includes("fleet_owner");
+  }
+
+  /**
+   * Fetch customers with 3-layer caching:
+   * Layer 1: Memory cache (hot path - <5ms)
+   * Layer 2: KV cache (warm path - ~50ms, 5min TTL)
+   * Layer 3: Auth API (cold path - ~500-2000ms)
+   */
+  async function fetchCustomersWithCache(productLineFilter?: ProductLine): Promise<any[]> {
+    const cacheKey = productLineFilter
+      ? `admin:customers:list:${productLineFilter}`
+      : "admin:customers:list";
+    
+    // Layer 1: Memory cache (hot path - <5ms)
+    const memCached = memCache.customerCache.get(cacheKey);
+    if (memCached !== null && Array.isArray(memCached) && memCached.length > 0) {
+      console.log("[AdminCustomers] Served from memory cache");
+      return memCached;
+    }
+    
+    // Layer 2: KV cache (warm path - ~50ms, 5min TTL) — never trust empty arrays (stale miss)
+    const kvCached = await cache.getCache(cacheKey);
+    if (kvCached !== null && Array.isArray(kvCached) && kvCached.length > 0) {
+      console.log("[AdminCustomers] Served from KV cache, warming memory");
+      memCache.customerCache.set(cacheKey, kvCached, 2 * 60 * 1000); // 2min in memory
+      return kvCached;
+    }
+    
+    // Layer 3: Auth API (cold path — paginate so owners are never dropped)
+    console.log("[AdminCustomers] Cache miss, fetching from Auth API");
+    const allUsers: any[] = [];
+    let page = 1;
+    const perPage = 200;
+    for (;;) {
+      const { data, error } = await cache.withRetry(() =>
+        supabase.auth.admin.listUsers({ page, perPage }),
+      );
+      if (error) throw new Error(`Auth API error: ${error.message}`);
+      const batch = data?.users || [];
+      allUsers.push(...batch);
+      if (batch.length < perPage) break;
+      page += 1;
+      if (page > 50) break; // safety cap
+    }
+
+    // Fleet Owners / org admins only (not drivers sitting on the same org)
+    let customers = allUsers.filter((u: any) => isFleetCustomerOwnerUser(u));
+
+    if (productLineFilter) {
+      customers = customers.filter((u: any) => {
+        const merged = { ...(u.app_metadata || {}), ...(u.user_metadata || {}) };
+        return inferProductLineFromUser(merged) === productLineFilter;
+      });
+    }
+
+    customers = customers.map((u: any) => {
+      const meta = { ...(u.app_metadata || {}), ...(u.user_metadata || {}) };
+      const organizationId =
+        (typeof meta.organizationId === "string" && meta.organizationId) ||
+        (typeof meta.organization_id === "string" && meta.organization_id) ||
+        u.id;
+      const metaLines = Array.isArray(meta.serviceLines)
+        ? meta.serviceLines.filter((l: unknown) => l === "rideshare" || l === "rush_delivery")
+        : Array.isArray(meta.service_lines)
+        ? meta.service_lines.filter((l: unknown) => l === "rideshare" || l === "rush_delivery")
+        : [];
+      return {
+        id: u.id,
+        email: u.email || "",
+        name: u.user_metadata?.name || u.user_metadata?.full_name || "",
+        businessType: u.user_metadata?.businessType || "rideshare",
+        productLine: inferProductLineFromUser(meta),
+        organizationId,
+        serviceLines: metaLines.length ? metaLines : ["rideshare"],
+        accountStatus: u.user_metadata?.accountStatus || null,
+        createdAt: u.created_at || null,
+        lastSignIn: u.last_sign_in_at || null,
+        status: u.last_sign_in_at
+          ? (Date.now() - new Date(u.last_sign_in_at).getTime() < 30 * 24 * 60 * 60 * 1000
+            ? "active"
+            : "inactive")
+          : "inactive",
+        isSuspended: !!u.banned_until && new Date(u.banned_until) > new Date(),
+      };
+    });
+
+    // Prefer organizations.service_lines as source of truth when rows exist
+    try {
+      const orgIds = [...new Set(customers.map((c: any) => c.organizationId).filter(Boolean))];
+      if (orgIds.length > 0) {
+        const { data: orgs } = await supabase
+          .from("organizations")
+          .select("id, service_lines")
+          .in("id", orgIds);
+        const byId = new Map(
+          (orgs || []).map((o: { id: string; service_lines?: string[] | null }) => [o.id, o]),
+        );
+        customers = customers.map((c: any) => {
+          const org = byId.get(c.organizationId);
+          const lines = Array.isArray(org?.service_lines)
+            ? org!.service_lines!.filter((l) => l === "rideshare" || l === "rush_delivery")
+            : [];
+          return lines.length ? { ...c, serviceLines: lines } : c;
+        });
+      }
+    } catch (enrichErr: unknown) {
+      const msg = enrichErr instanceof Error ? enrichErr.message : String(enrichErr);
+      console.warn(`[AdminCustomers] service_lines enrich skipped: ${msg}`);
+    }
+    
+    // Store in both caches (skip caching empty — avoids sticky blank UI after transient auth blips)
+    if (customers.length > 0) {
+      await cache.setCache(cacheKey, customers, 5 * 60); // 5min in KV
+      memCache.customerCache.set(cacheKey, customers, 2 * 60 * 1000); // 2min in memory
+    }
+    
+    console.log(`[AdminCustomers] Cached ${customers.length} customers`);
+    return customers;
+  }
+
+  /**
+   * Invalidate customer cache when data changes
+   */
+  async function invalidateCustomerCache(): Promise<void> {
+    for (const key of ["admin:customers:list", "admin:customers:list:fleet", "admin:customers:list:enterprise"]) {
+      memCache.customerCache.invalidate(key);
+      await cache.setCache(key, null, 0);
+    }
+    console.log("[AdminCustomers] Cache invalidated");
+  }
+
+  registerEnterpriseAdminRoutes(app, {
+    fetchCustomersWithCache,
+    invalidateCustomerCache,
+    logAdminAction,
+    FLEET_SUB_ROLES,
+    canonicalizeRole,
+  });
+  registerEnterpriseIntakeAdminRoutes(app);
+
+  registerWorkforceInviteRoutes(app, {
+    supabase,
+    requireAuth,
+    getOrgId,
+    linkDriverToFleet: (userId, fleetId) =>
+      linkDriverToFleet(
+        {
+          supabase,
+          kv,
+          upsertDriverProfile: upsertDriverProfileFromServer,
+          invalidateDriverCache,
+        },
+        userId,
+        fleetId,
+      ),
+    linkCourierToFleet: (userId, fleetId) =>
+      linkCourierToFleet(
+        {
+          supabase,
+          kv,
+          invalidateDriverCache,
+        },
+        userId,
+        fleetId,
+      ),
+  });
+
+  registerCourierRoamTagRoutes(app, {
+    supabase,
+    requireAuth,
+  });
+
+  registerFleetTagRoutes(app, {
+    supabase,
+    requireAuth,
+    getOrgId,
+    linkDriverToFleet: (userId, fleetId) =>
+      linkDriverToFleet(
+        {
+          supabase,
+          kv,
+          upsertDriverProfile: upsertDriverProfileFromServer,
+          invalidateDriverCache,
+        },
+        userId,
+        fleetId,
+      ),
+    linkCourierToFleet: (userId, fleetId) =>
+      linkCourierToFleet(
+        {
+          supabase,
+          kv,
+          invalidateDriverCache,
+        },
+        userId,
+        fleetId,
+      ),
+  });
+
+  registerCourierWorkforceRoutes(app, {
+    supabase,
+    requireAuth,
+    unlinkCourierFromFleet: (userId) =>
+      unlinkCourierFromFleet(
+        { supabase, kv, invalidateDriverCache },
+        userId,
+      ),
+  });
+
+  registerFleetModuleCheckoutRoutes(app, {
+    supabase,
+    requireAuth,
+    getOrgId,
+  });
+
+  app.get("/make-server-37f42386/rush/trip-recon", requireAuth(), async (c) => {
+    try {
+      const orgId = getOrgId(c);
+      if (!orgId) return c.json({ error: "Organization required" }, 403);
+      const since = c.req.query("since") || new Date(Date.now() - 7 * 86400000).toISOString();
+      const result = await reconcileRushTripProjection(supabase, orgId, since);
+      return c.json(result);
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      return c.json({ error: msg }, 500);
+    }
+  });
+
+  app.post("/make-server-37f42386/rush/backfill-trips", requireAuth(), async (c) => {
+    try {
+      const orgId = getOrgId(c);
+      if (!orgId) return c.json({ error: "Organization required" }, 403);
+      const body = await c.req.json().catch(() => ({}));
+      const since = body?.since || new Date(Date.now() - 30 * 86400000).toISOString();
+      const result = await backfillRushOrdersToFleet(supabase, orgId, since);
+      return c.json(result);
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      return c.json({ error: msg }, 500);
+    }
+  });
+
+  /** Cron/service: daily recon across all Rush pilot orgs. */
+  app.post("/make-server-37f42386/rush/trip-recon/cron", async (c) => {
+    const cronSecret = Deno.env.get("CRON_SECRET");
+    const auth = c.req.header("Authorization") ?? "";
+    if (!cronSecret) {
+      return c.json({ error: "CRON_SECRET not configured" }, 503);
+    }
+    if (auth !== `Bearer ${cronSecret}`) {
+      return c.json({ error: "Unauthorized" }, 401);
+    }
+    try {
+      const results = await runDailyRushTripRecon(supabase);
+      return c.json({ checked: results.length, results });
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      return c.json({ error: msg }, 500);
+    }
+  });
+
+  registerRushSettlementRoutes(app, { supabase, requireAuth, getOrgId });
+
+  // Fleet owners cannot self-serve service lines — Roam staff use fleet-admin / Dominion.
+  app.patch("/make-server-37f42386/org/service-lines", requireAuth(), async (c) => {
+    return c.json(
+      {
+        error: "Service lines are managed by Roam. Contact support or use the admin portal.",
+        code: "SERVICE_LINES_ADMIN_ONLY",
+      },
+      403,
+    );
+  });
+
+  import {
+    DEFAULT_ENTERPRISE_MODULES,
+    resolveEffectiveModules,
+    rushModuleOverridesForServiceLines,
+    RUSH_MODULE_KEYS,
+  } from "./enterprise_modules.ts";
+
+  // GET /enterprise/me/modules — tenant effective feature modules
+  app.get("/make-server-37f42386/enterprise/me/modules", requireAuth(), async (c) => {
+    try {
+      const rbacUser = c.get("rbacUser") as RbacUser;
+      let orgId = rbacUser.organizationId;
+      if (!orgId && (rbacUser.resolvedRole === "fleet_owner" || rbacUser.rawRole === "admin")) {
+        orgId = rbacUser.userId;
+      }
+      if (!orgId) {
+        return c.json({ error: "No organization on session" }, 403);
+      }
+
+      const { data: org, error } = await supabase
+        .from("organizations")
+        .select("id, product_line, enabled_modules, service_lines")
+        .eq("id", orgId)
+        .maybeSingle();
+      if (error) throw error;
+      if (!org) {
+        return c.json({ error: "Organization not found" }, 404);
+      }
+
+      const settings = await getPlatformSettingsCached(
+        org.product_line === "fleet" ? "fleet" : "enterprise",
+      );
+      const productLineModules = {
+        ...DEFAULT_ENTERPRISE_MODULES,
+        ...((settings?.enabledModules as Record<string, boolean>) || {}),
+      };
+      const orgOverrides = rushModuleOverridesForServiceLines(
+        (org.service_lines as string[] | null) ?? ["rideshare"],
+        (org.enabled_modules as Record<string, boolean> | null) || null,
+      );
+      let effectiveModules = resolveEffectiveModules(productLineModules, orgOverrides);
+
+      const rushUiOn = await isFeatureEnabled(FEATURE_FLAGS.RUSH_UI, orgId);
+      if (!rushUiOn) {
+        for (const key of RUSH_MODULE_KEYS) {
+          effectiveModules[key] = false;
+        }
+      }
+
+      return c.json({
+        orgId,
+        productLine: org.product_line,
+        serviceLines: org.service_lines ?? ["rideshare"],
+        orgOverrides,
+        effectiveModules,
+      });
+    } catch (e: any) {
+      console.error("[enterprise/me/modules]", e);
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // FEATURE FLAGS ADMIN ENDPOINTS (Phase 0 of Fleet Data Isolation)
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  import {
+    isFeatureEnabled,
+    setFeatureFlag,
+    getFeatureFlag,
+    getAllFeatureFlags,
+    enableFlagForOrg,
+    disableFlagForOrg,
+    getFeatureFlagStats,
+    getAllFeatureFlagStats,
+    initializeDefaultFlags,
+    emergencyDisableAll,
+    FEATURE_FLAGS,
+  } from "./feature_flags.ts";
+
+  // GET /admin/feature-flags — List all feature flags and their status
+  app.get("/make-server-37f42386/admin/feature-flags", requireAuth(), async (c) => {
+    try {
+      const rbacUser = c.get('rbacUser') as RbacUser;
+      if (!hasPlatformStaffAccess(rbacUser) && rbacUser.resolvedRole !== 'fleet_owner') {
+        return c.json({ error: "Forbidden — platform or fleet owner role required" }, 403);
+      }
+
+      const flags = await getAllFeatureFlags();
+      const stats = await getAllFeatureFlagStats();
+
+      return c.json({
+        flags,
+        stats,
+        knownFlags: FEATURE_FLAGS,
+      });
+    } catch (e: any) {
+      console.error("[FeatureFlags] GET error:", e);
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  // GET /admin/feature-flags/:name — Get a specific feature flag
+  app.get("/make-server-37f42386/admin/feature-flags/:name", requireAuth(), async (c) => {
+    try {
+      const rbacUser = c.get('rbacUser') as RbacUser;
+      if (!hasPlatformStaffAccess(rbacUser) && rbacUser.resolvedRole !== 'fleet_owner') {
+        return c.json({ error: "Forbidden — platform or fleet owner role required" }, 403);
+      }
+
+      const flagName = c.req.param("name");
+      const flag = await getFeatureFlag(flagName);
+      const stats = await getFeatureFlagStats(flagName);
+
+      if (!flag) {
+        return c.json({ error: `Feature flag '${flagName}' not found` }, 404);
+      }
+
+      return c.json({ flag, stats });
+    } catch (e: any) {
+      console.error("[FeatureFlags] GET single error:", e);
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  // POST /admin/feature-flags/:name — Update a feature flag
+  app.post("/make-server-37f42386/admin/feature-flags/:name", requireAuth(), async (c) => {
+    try {
+      const rbacUser = c.get('rbacUser') as RbacUser;
+      const flagName = c.req.param("name");
+      const { canMutateFeatureFlag } = await import("./rush_rollout_admin.ts");
+      const auth = canMutateFeatureFlag(rbacUser, flagName);
+      if (!auth.allowed) {
+        return c.json({ error: auth.reason || "Forbidden" }, 403);
+      }
+
+      const body = await c.req.json();
+      const { enabled, enabledForOrgs, disabledForOrgs, description } = body;
+
+      if (typeof enabled !== "boolean") {
+        return c.json({ error: "enabled (boolean) is required" }, 400);
+      }
+
+      await setFeatureFlag(flagName, enabled, {
+        enabledForOrgs,
+        disabledForOrgs,
+        description,
+        updatedBy: rbacUser.email || rbacUser.userId,
+      });
+
+      await logAdminAction({
+        actorId: rbacUser.userId,
+        actorName: rbacUser.email || "Platform Admin",
+        action: "update_feature_flag",
+        targetId: flagName,
+        targetEmail: "",
+        details: `Set ${flagName} to ${enabled}`,
+      });
+
+      const updated = await getFeatureFlag(flagName);
+      return c.json({ success: true, flag: updated });
+    } catch (e: any) {
+      console.error("[FeatureFlags] POST error:", e);
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  // POST /admin/feature-flags/:name/enable-for-org — Enable flag for specific org
+  app.post("/make-server-37f42386/admin/feature-flags/:name/enable-for-org", requireAuth(), async (c) => {
+    try {
+      const rbacUser = c.get('rbacUser') as RbacUser;
+      const flagName = c.req.param("name");
+      const { orgId } = await c.req.json();
+
+      if (!orgId) {
+        return c.json({ error: "orgId is required" }, 400);
+      }
+
+      const { canMutateFeatureFlag } = await import("./rush_rollout_admin.ts");
+      const auth = canMutateFeatureFlag(rbacUser, flagName, orgId);
+      if (!auth.allowed) {
+        return c.json({ error: auth.reason || "Forbidden" }, 403);
+      }
+
+      await enableFlagForOrg(flagName, orgId, rbacUser.email || rbacUser.userId);
+
+      await logAdminAction({
+        actorId: rbacUser.userId,
+        actorName: rbacUser.email || "Platform Admin",
+        action: "enable_feature_flag_for_org",
+        targetId: `${flagName}:${orgId}`,
+        targetEmail: "",
+        details: `Enabled ${flagName} for org ${orgId}`,
+      });
+
+      return c.json({ success: true });
+    } catch (e: any) {
+      console.error("[FeatureFlags] enable-for-org error:", e);
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  // POST /admin/feature-flags/:name/disable-for-org — Disable flag for specific org
+  app.post("/make-server-37f42386/admin/feature-flags/:name/disable-for-org", requireAuth(), async (c) => {
+    try {
+      const rbacUser = c.get('rbacUser') as RbacUser;
+      const flagName = c.req.param("name");
+      const { orgId } = await c.req.json();
+
+      if (!orgId) {
+        return c.json({ error: "orgId is required" }, 400);
+      }
+
+      const { canMutateFeatureFlag } = await import("./rush_rollout_admin.ts");
+      const auth = canMutateFeatureFlag(rbacUser, flagName, orgId);
+      if (!auth.allowed) {
+        return c.json({ error: auth.reason || "Forbidden" }, 403);
+      }
+
+      await disableFlagForOrg(flagName, orgId, rbacUser.email || rbacUser.userId);
+
+      await logAdminAction({
+        actorId: rbacUser.userId,
+        actorName: rbacUser.email || "Platform Admin",
+        action: "disable_feature_flag_for_org",
+        targetId: `${flagName}:${orgId}`,
+        targetEmail: "",
+        details: `Disabled ${flagName} for org ${orgId}`,
+      });
+
+      return c.json({ success: true });
+    } catch (e: any) {
+      console.error("[FeatureFlags] disable-for-org error:", e);
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  // POST /admin/feature-flags/initialize — Initialize default flags (one-time setup)
+  // NOTE: Also allows fleet_owner (admin) for initial setup by product owner
+  // Uses strict: false to skip feature flag check during initialization (chicken-egg problem)
+  app.post("/make-server-37f42386/admin/feature-flags/initialize", requireAuth({ strict: false }), async (c) => {
+    try {
+      const rbacUser = c.get('rbacUser') as RbacUser;
+      if (!rbacUser || (rbacUser.userId === '_anon_passthrough')) {
+        return c.json({ error: "Unauthorized — valid user session required" }, 401);
+      }
+      if (!hasPlatformOwnerAccess(rbacUser) && rbacUser.resolvedRole !== 'fleet_owner') {
+        return c.json({ error: "Forbidden — platform owner or fleet owner required" }, 403);
+      }
+
+      await initializeDefaultFlags();
+
+      await logAdminAction({
+        actorId: rbacUser.userId,
+        actorName: rbacUser.email || "Platform Admin",
+        action: "initialize_feature_flags",
+        targetId: "all",
+        targetEmail: "",
+        details: "Initialized default feature flags",
+      }).catch(() => {}); // Don't fail init if audit logging fails
+
+      const flags = await getAllFeatureFlags();
+      return c.json({ success: true, flags });
+    } catch (e: any) {
+      console.error("[FeatureFlags] initialize error:", e);
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  // POST /admin/feature-flags/emergency-disable — EMERGENCY: Disable all strict flags
+  app.post("/make-server-37f42386/admin/feature-flags/emergency-disable", requireAuth(), async (c) => {
+    try {
+      const rbacUser = c.get('rbacUser') as RbacUser;
+      if (!hasPlatformOwnerAccess(rbacUser) && rbacUser.resolvedRole !== 'fleet_owner') {
+        return c.json({ error: "Forbidden — platform owner or fleet owner required" }, 403);
+      }
+
+      console.warn(`[FeatureFlags] EMERGENCY DISABLE triggered by ${rbacUser.email || rbacUser.userId}`);
+
+      await emergencyDisableAll(rbacUser.email || rbacUser.userId);
+
+      await logAdminAction({
+        actorId: rbacUser.userId,
+        actorName: rbacUser.email || "Platform Admin",
+        action: "emergency_disable_feature_flags",
+        targetId: "all",
+        targetEmail: "",
+        details: "EMERGENCY: Disabled all strict feature flags",
+      });
+
+      const flags = await getAllFeatureFlags();
+      return c.json({ success: true, message: "All strict feature flags have been disabled", flags });
+    } catch (e: any) {
+      console.error("[FeatureFlags] emergency-disable error:", e);
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  // GET /admin/feature-flags/check — Check if a flag is enabled for the current context
+  app.get("/make-server-37f42386/admin/feature-flags/check", requireAuth(), async (c) => {
+    try {
+      const flagName = c.req.query("flag");
+      const orgId = c.req.query("orgId") || getOrgId(c);
+
+      if (!flagName) {
+        return c.json({ error: "flag query parameter is required" }, 400);
+      }
+
+      const isEnabled = await isFeatureEnabled(flagName, orgId);
+      const flag = await getFeatureFlag(flagName);
+
+      return c.json({
+        flag: flagName,
+        orgId,
+        isEnabled,
+        config: flag,
+      });
+    } catch (e: any) {
+      console.error("[FeatureFlags] check error:", e);
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // PHASE 6: Organization Backfill Endpoints
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  // POST /admin/organizations/backfill — Create organizations for existing fleet owners
+  app.post("/make-server-37f42386/admin/organizations/backfill", requireAuth({ strict: false }), async (c) => {
+    try {
+      const rbacUser = c.get('rbacUser') as RbacUser;
+      if (!hasPlatformOwnerAccess(rbacUser) && rbacUser.resolvedRole !== 'fleet_owner') {
+        return c.json({ error: "Forbidden — platform owner or fleet owner required" }, 403);
+      }
+
+      const body = await c.req.json().catch(() => ({}));
+      const dryRun = body.dryRun === true;
+      const productLineFilter = body.productLine; // Optional: 'fleet' or 'enterprise'
+
+      console.log(`[OrgBackfill] Starting ${dryRun ? 'DRY RUN' : 'LIVE'} backfill for product line: ${productLineFilter || 'all'}`);
+
+      // Get all fleet owners (users with admin role and no organization record yet)
+      const { data: users, error: usersError } = await supabase.auth.admin.listUsers({
+        perPage: 1000,
+      });
+
+      if (usersError) {
+        throw new Error(`Failed to list users: ${usersError.message}`);
+      }
+
+      const fleetOwners = (users.users || []).filter(u => {
+        const appRole = u.app_metadata?.role;
+        const userRole = u.user_metadata?.role;
+        const isAdmin = appRole === 'admin' || appRole === 'fleet_owner' || userRole === 'admin' || userRole === 'fleet_owner';
+        
+        if (!isAdmin) return false;
+        
+        // Filter by product line if specified
+        if (productLineFilter) {
+          const userProductLine = u.user_metadata?.productLine || 
+            (u.user_metadata?.businessType === 'rideshare' ? 'fleet' : 'enterprise');
+          return userProductLine === productLineFilter;
+        }
+        
+        return true;
+      });
+
+      console.log(`[OrgBackfill] Found ${fleetOwners.length} fleet owners to process`);
+
+      const results = {
+        processed: 0,
+        created: 0,
+        skipped: 0,
+        errors: [] as string[],
+        details: [] as any[],
+      };
+
+      for (const user of fleetOwners) {
+        results.processed++;
+
+        // Check if organization already exists
+        const { data: existingOrg } = await supabase
+          .from('organizations')
+          .select('id, name')
+          .eq('owner_id', user.id)
+          .maybeSingle();
+
+        if (existingOrg) {
+          results.skipped++;
+          results.details.push({
+            userId: user.id,
+            email: user.email,
+            status: 'skipped',
+            reason: `Organization already exists: ${existingOrg.name}`,
+          });
+          continue;
+        }
+
+        // Determine organization details
+        const productLine = user.user_metadata?.productLine || 
+          (user.user_metadata?.businessType === 'rideshare' ? 'fleet' : 'enterprise');
+        const orgName = user.user_metadata?.fleetName || 
+          user.user_metadata?.companyName ||
+          `${user.email?.split('@')[0]}'s Fleet`;
+        const businessType = user.user_metadata?.businessType || 'rideshare';
+
+        if (dryRun) {
+          results.created++;
+          results.details.push({
+            userId: user.id,
+            email: user.email,
+            status: 'would_create',
+            orgName,
+            productLine,
+            businessType,
+          });
+          continue;
+        }
+
+        // Create the organization
+        const { data: newOrg, error: createError } = await supabase
+          .from('organizations')
+          .insert({
+            id: user.id, // Use user ID as org ID for legacy compatibility
+            owner_id: user.id,
+            name: orgName,
+            product_line: productLine,
+            business_type: businessType,
+            contact_email: user.email,
+            status: 'active',
+          })
+          .select()
+          .single();
+
+        if (createError) {
+          results.errors.push(`User ${user.id}: ${createError.message}`);
+          results.details.push({
+            userId: user.id,
+            email: user.email,
+            status: 'error',
+            error: createError.message,
+          });
+          continue;
+        }
+
+        // Update user metadata with organizationId
+        await supabase.auth.admin.updateUserById(user.id, {
+          user_metadata: {
+            ...user.user_metadata,
+            organizationId: user.id,
+          },
+        });
+
+        results.created++;
+        results.details.push({
+          userId: user.id,
+          email: user.email,
+          status: 'created',
+          orgId: newOrg?.id,
+          orgName,
+          productLine,
+        });
+      }
+
+      await logAdminAction({
+        actorId: rbacUser.userId,
+        actorName: rbacUser.email || "Platform Admin",
+        action: "organization_backfill",
+        targetId: "batch",
+        targetEmail: "",
+        details: `Backfill ${dryRun ? '(DRY RUN)' : ''}: ${results.created} created, ${results.skipped} skipped, ${results.errors.length} errors`,
+      });
+
+      console.log(`[OrgBackfill] Complete: ${results.created} created, ${results.skipped} skipped, ${results.errors.length} errors`);
+
+      return c.json({
+        success: true,
+        dryRun,
+        summary: {
+          processed: results.processed,
+          created: results.created,
+          skipped: results.skipped,
+          errors: results.errors.length,
+        },
+        details: results.details,
+        errors: results.errors,
+      });
+    } catch (e: any) {
+      console.error("[OrgBackfill] Error:", e);
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  // POST /admin/kv/backfill-org-ids — Backfill organizationId on KV records
+  app.post("/make-server-37f42386/admin/kv/backfill-org-ids", requireAuth({ strict: false }), async (c) => {
+    try {
+      const rbacUser = c.get('rbacUser') as RbacUser;
+      if (!hasPlatformOwnerAccess(rbacUser) && rbacUser.resolvedRole !== 'fleet_owner') {
+        return c.json({ error: "Forbidden — platform owner or fleet owner required" }, 403);
+      }
+
+      const body = await c.req.json().catch(() => ({}));
+      const dryRun = body.dryRun === true;
+      const recordType = body.recordType; // 'driver', 'trip', 'transaction', or 'all'
+      const limit = Math.min(body.limit || 1000, 5000);
+
+      console.log(`[KVBackfill] Starting ${dryRun ? 'DRY RUN' : 'LIVE'} backfill for ${recordType || 'all'} records (limit: ${limit})`);
+
+      const prefixes = recordType === 'all' || !recordType
+        ? ['driver:', 'trip:', 'transaction:']
+        : [`${recordType}:`];
+
+      const results = {
+        processed: 0,
+        updated: 0,
+        skipped: 0,
+        errors: [] as string[],
+      };
+
+      for (const prefix of prefixes) {
+        // Get records without organizationId OR with legacy placeholder
+        const { data: records, error } = await fromKvStore()
+          .select('key, value')
+          .like('key', `${prefix}%`)
+          .or('value->organizationId.is.null,value->>organizationId.eq.roam-default-org')
+          .limit(limit);
+
+        if (error) {
+          results.errors.push(`Failed to fetch ${prefix} records: ${error.message}`);
+          continue;
+        }
+
+        console.log(`[KVBackfill] Found ${records?.length || 0} ${prefix} records without organizationId or with legacy placeholder`);
+
+        for (const record of records || []) {
+          results.processed++;
+          const value = record.value as Record<string, any>;
+          
+          // Try to find organizationId from driver record
+          let orgId: string | null = null;
+          
+          if (prefix === 'driver:') {
+            // For drivers, look up the user's organizationId
+            const driverId = record.key.replace('driver:', '');
+            const { data: user } = await supabase.auth.admin.getUserById(driverId);
+            if (user?.user?.user_metadata?.organizationId) {
+              orgId = user.user.user_metadata.organizationId;
+            }
+          } else if (prefix === 'trip:' || prefix === 'transaction:') {
+            // For trips/transactions, look up the driver's organizationId
+            const driverId = value.driverId;
+            if (driverId) {
+              const driverRecord = await kv.get(`driver:${driverId}`);
+              if (driverRecord?.organizationId) {
+                orgId = driverRecord.organizationId;
+              }
+            }
+          }
+
+          if (!orgId) {
+            results.skipped++;
+            continue;
+          }
+
+          if (dryRun) {
+            results.updated++;
+            continue;
+          }
+
+          // Update the record with organizationId
+          const updatedValue = { ...value, organizationId: orgId };
+          await kv.set(record.key, updatedValue);
+          results.updated++;
+        }
+      }
+
+      await logAdminAction({
+        actorId: rbacUser.userId,
+        actorName: rbacUser.email || "Platform Admin",
+        action: "kv_org_id_backfill",
+        targetId: recordType || "all",
+        targetEmail: "",
+        details: `Backfill ${dryRun ? '(DRY RUN)' : ''}: ${results.updated} updated, ${results.skipped} skipped`,
+      });
+
+      console.log(`[KVBackfill] Complete: ${results.updated} updated, ${results.skipped} skipped, ${results.errors.length} errors`);
+
+      return c.json({
+        success: true,
+        dryRun,
+        summary: {
+          processed: results.processed,
+          updated: results.updated,
+          skipped: results.skipped,
+          errors: results.errors.length,
+        },
+        errors: results.errors,
+      });
+    } catch (e: any) {
+      console.error("[KVBackfill] Error:", e);
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  // POST /admin/kv/backfill-product-line — Backfill productLine on KV records
+  app.post("/make-server-37f42386/admin/kv/backfill-product-line", requireAuth({ strict: false }), async (c) => {
+    try {
+      const rbacUser = c.get('rbacUser') as RbacUser;
+      if (!hasPlatformOwnerAccess(rbacUser) && rbacUser.resolvedRole !== 'fleet_owner') {
+        return c.json({ error: "Forbidden — platform owner or fleet owner required" }, 403);
+      }
+
+      const body = await c.req.json().catch(() => ({}));
+      const dryRun = body.dryRun === true;
+      const recordType = body.recordType; // 'driver', 'trip', 'transaction', or 'all'
+      const limit = Math.min(body.limit || 1000, 5000);
+
+      console.log(`[ProductLineBackfill] Starting ${dryRun ? 'DRY RUN' : 'LIVE'} backfill for ${recordType || 'all'} records (limit: ${limit})`);
+
+      const prefixes = recordType === 'all' || !recordType
+        ? ['driver:', 'trip:', 'transaction:']
+        : [`${recordType}:`];
+
+      const results = {
+        processed: 0,
+        updated: 0,
+        skipped: 0,
+        errors: [] as string[],
+      };
+
+      for (const prefix of prefixes) {
+        // Get records without productLine
+        const { data: records, error } = await fromKvStore()
+          .select('key, value')
+          .like('key', `${prefix}%`)
+          .is('value->productLine', null)
+          .limit(limit);
+
+        if (error) {
+          results.errors.push(`Failed to fetch ${prefix} records: ${error.message}`);
+          continue;
+        }
+
+        console.log(`[ProductLineBackfill] Found ${records?.length || 0} ${prefix} records without productLine`);
+
+        for (const record of records || []) {
+          results.processed++;
+          const value = record.value as Record<string, any>;
+          
+          // Try to find productLine from organization or user
+          let productLine: string = 'fleet'; // Default to fleet
+          
+          const orgId = value.organizationId;
+          if (orgId) {
+            // Look up organization's product line
+            const { data: org } = await supabase
+              .from('organizations')
+              .select('product_line')
+              .eq('id', orgId)
+              .maybeSingle();
+            
+            if (org?.product_line) {
+              productLine = org.product_line;
+            }
+          }
+
+          if (dryRun) {
+            results.updated++;
+            continue;
+          }
+
+          // Update the record with productLine
+          const updatedValue = { ...value, productLine };
+          await kv.set(record.key, updatedValue);
+          results.updated++;
+        }
+      }
+
+      await logAdminAction({
+        actorId: rbacUser.userId,
+        actorName: rbacUser.email || "Platform Admin",
+        action: "kv_product_line_backfill",
+        targetId: recordType || "all",
+        targetEmail: "",
+        details: `Backfill ${dryRun ? '(DRY RUN)' : ''}: ${results.updated} updated, ${results.skipped} skipped`,
+      });
+
+      console.log(`[ProductLineBackfill] Complete: ${results.updated} updated, ${results.skipped} skipped, ${results.errors.length} errors`);
+
+      return c.json({
+        success: true,
+        dryRun,
+        summary: {
+          processed: results.processed,
+          updated: results.updated,
+          skipped: results.skipped,
+          errors: results.errors.length,
+        },
+        errors: results.errors,
+      });
+    } catch (e: any) {
+      console.error("[ProductLineBackfill] Error:", e);
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // END PHASE 6: Organization Backfill Endpoints
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  // GET /admin/feature-flags/check duplicate removed (see above)
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // END FEATURE FLAGS ADMIN ENDPOINTS
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  // GET /admin/customers — List fleet manager accounts (?productLine=fleet|enterprise, default enterprise)
+  app.get("/make-server-37f42386/admin/customers", requireAuth(), async (c) => {
+    try {
+      const rbacUser = c.get('rbacUser') as RbacUser;
+      if (!hasPlatformStaffAccess(rbacUser)) {
+        return c.json({ error: "Forbidden — platform role required" }, 403);
+      }
+
+      const productLineParam = c.req.query("productLine");
+      const productLine: ProductLine = isProductLine(productLineParam) ? productLineParam : "enterprise";
+
+      const forceRefresh = c.req.query("refresh") === "true";
+      if (forceRefresh) {
+        console.log("[AdminCustomers] Force refresh requested");
+        await invalidateCustomerCache();
+      }
+
+      const customers = await fetchCustomersWithCache(productLine);
+      return c.json({ customers, productLine });
+    } catch (e: any) {
+      console.log(`admin/customers error: ${e.message}`);
+      return c.json({ error: `Server error: ${e.message}` }, 500);
+    }
+  });
+
+  // ---------------------------------------------------------------------------
+  // Fleet product admin (roamfleet.co/admin) — rideshare fleet owner ops
+  // ---------------------------------------------------------------------------
+
+  app.get("/make-server-37f42386/fleet-admin/customers", async (c) => {
+    try {
+      const auth = await requireProductAdmin(c, "fleet");
+      if (auth instanceof Response) return auth;
+
+      const forceRefresh = c.req.query("refresh") === "true";
+      if (forceRefresh) await invalidateCustomerCache();
+
+      const customers = await fetchCustomersWithCache("fleet");
+      return c.json({ customers });
+    } catch (e: any) {
+      console.log(`fleet-admin/customers error: ${e.message}`);
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  /** Product admin (roamfleet.co/admin) sets org service lines — same write path as Dominion. */
+  app.patch("/make-server-37f42386/fleet-admin/organizations/:orgId/service-lines", async (c) => {
+    try {
+      const auth = await requireProductAdmin(c, "fleet");
+      if (auth instanceof Response) return auth;
+
+      const orgId = c.req.param("orgId");
+      if (!orgId) return c.json({ error: "orgId required" }, 400);
+
+      const body = await c.req.json();
+      const { parseServiceLinesInput, applyOrgServiceLines } = await import("./rush_rollout_admin.ts");
+      const lines = parseServiceLinesInput(body?.serviceLines);
+      if (!lines) return c.json({ error: "serviceLines required" }, 400);
+
+      const { data: before } = await supabase
+        .from("organizations")
+        .select("service_lines")
+        .eq("id", orgId)
+        .maybeSingle();
+
+      const result = await applyOrgServiceLines(supabase, orgId, lines);
+      await invalidateCustomerCache();
+
+      await logAdminAction({
+        actorId: auth.id,
+        actorName: auth.email,
+        action: "fleet_admin_update_org_service_lines",
+        targetId: orgId,
+        targetEmail: "",
+        details: `Before: ${JSON.stringify(before?.service_lines ?? [])}; After: ${lines.join(", ")}`,
+      });
+
+      return c.json({
+        serviceLines: result.serviceLines,
+        businessType: result.businessType,
+        enabledModules: result.enabledModules,
+      });
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.error("[FleetAdmin Org Service Lines] PATCH error:", msg);
+      return c.json({ error: msg }, 500);
+    }
+  });
+
+  app.post("/make-server-37f42386/fleet-admin/customers/:userId/approve", async (c) => {
+    try {
+      const auth = await requireProductAdmin(c, "fleet");
+      if (auth instanceof Response) return auth;
+
+      const userId = c.req.param("userId");
+      const { data: target, error: getErr } = await supabase.auth.admin.getUserById(userId);
+      if (getErr || !target.user) {
+        return c.json({ error: "User not found" }, 404);
+      }
+      if (target.user.user_metadata?.role !== "admin") {
+        return c.json({ error: "Not a fleet manager account" }, 400);
+      }
+      if (inferProductLineFromUser(target.user.user_metadata) !== "fleet") {
+        return c.json({ error: "User is not a Roam Fleet customer" }, 400);
+      }
+
+      const meta = { ...(target.user.user_metadata || {}) };
+      delete meta.accountStatus;
+      const { error: updErr } = await supabase.auth.admin.updateUserById(userId, {
+        user_metadata: meta,
+      });
+      if (updErr) throw updErr;
+
+      await invalidateCustomerCache();
+      await logAdminAction({
+        actorId: auth.id,
+        actorName: auth.email,
+        action: "approve_fleet_customer",
+        targetId: userId,
+        targetEmail: target.user.email || "",
+        details: "Cleared pending_approval",
+      });
+
+      return c.json({ success: true });
+    } catch (e: any) {
+      console.log(`fleet-admin/approve error: ${e.message}`);
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  // ---------------------------------------------------------------------------
+  // Fleet Admin Lifecycle Actions: Suspend
+  // ---------------------------------------------------------------------------
+
+  app.post("/make-server-37f42386/fleet-admin/customers/:userId/suspend", async (c) => {
+    try {
+      const auth = await requireProductAdmin(c, "fleet");
+      if (auth instanceof Response) return auth;
+
+      const userId = c.req.param("userId");
+      const body = await c.req.json().catch(() => ({})) as { reason?: string };
+      const reason = typeof body.reason === "string" ? body.reason.trim() : "";
+      if (!reason) {
+        return c.json({ error: "reason_required", message: "Suspension reason is required" }, 400);
+      }
+
+      const { data: target, error: getErr } = await supabase.auth.admin.getUserById(userId);
+      if (getErr || !target.user) {
+        return c.json({ error: "User not found" }, 404);
+      }
+      if (inferProductLineFromUser(target.user.user_metadata) !== "fleet") {
+        return c.json({ error: "User is not a Roam Fleet customer" }, 400);
+      }
+
+      const meta = { ...(target.user.user_metadata || {}), accountStatus: "suspended" };
+      const { error: updErr } = await supabase.auth.admin.updateUserById(userId, {
+        user_metadata: meta,
+        ban_duration: "8760h",
+      });
+      if (updErr) throw updErr;
+
+      await invalidateCustomerCache();
+      await logAdminAction({
+        actorId: auth.id,
+        actorName: auth.email,
+        action: "suspend_fleet_customer",
+        targetId: userId,
+        targetEmail: target.user.email || "",
+        details: reason,
+      });
+
+      return c.json({ success: true, status: "suspended" });
+    } catch (e: any) {
+      console.log(`fleet-admin/suspend error: ${e.message}`);
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  // ---------------------------------------------------------------------------
+  // Fleet Admin Lifecycle Actions: Reactivate
+  // ---------------------------------------------------------------------------
+
+  app.post("/make-server-37f42386/fleet-admin/customers/:userId/reactivate", async (c) => {
+    try {
+      const auth = await requireProductAdmin(c, "fleet");
+      if (auth instanceof Response) return auth;
+
+      const userId = c.req.param("userId");
+      const { data: target, error: getErr } = await supabase.auth.admin.getUserById(userId);
+      if (getErr || !target.user) {
+        return c.json({ error: "User not found" }, 404);
+      }
+      if (inferProductLineFromUser(target.user.user_metadata) !== "fleet") {
+        return c.json({ error: "User is not a Roam Fleet customer" }, 400);
+      }
+
+      const meta = { ...(target.user.user_metadata || {}) };
+      delete meta.accountStatus;
+      const { error: updErr } = await supabase.auth.admin.updateUserById(userId, {
+        user_metadata: meta,
+        ban_duration: "none",
+      });
+      if (updErr) throw updErr;
+
+      await invalidateCustomerCache();
+      await logAdminAction({
+        actorId: auth.id,
+        actorName: auth.email,
+        action: "reactivate_fleet_customer",
+        targetId: userId,
+        targetEmail: target.user.email || "",
+        details: "Account reactivated",
+      });
+
+      return c.json({ success: true, status: "active" });
+    } catch (e: any) {
+      console.log(`fleet-admin/reactivate error: ${e.message}`);
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  // ---------------------------------------------------------------------------
+  // Fleet Admin Lifecycle Actions: Sign Out All Devices
+  // ---------------------------------------------------------------------------
+
+  app.post("/make-server-37f42386/fleet-admin/customers/:userId/sign-out", async (c) => {
+    try {
+      const auth = await requireProductAdmin(c, "fleet");
+      if (auth instanceof Response) return auth;
+
+      const userId = c.req.param("userId");
+      const { data: target, error: getErr } = await supabase.auth.admin.getUserById(userId);
+      if (getErr || !target.user) {
+        return c.json({ error: "User not found" }, 404);
+      }
+
+      const { error } = await supabase.auth.admin.signOut(userId, "global");
+      if (error) throw error;
+
+      await logAdminAction({
+        actorId: auth.id,
+        actorName: auth.email,
+        action: "sign_out_fleet_customer",
+        targetId: userId,
+        targetEmail: target.user.email || "",
+        details: "All sessions terminated",
+      });
+
+      return c.json({ success: true });
+    } catch (e: any) {
+      console.log(`fleet-admin/sign-out error: ${e.message}`);
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  // ---------------------------------------------------------------------------
+  // Fleet Admin Lifecycle Actions: Delete (removes fleet access, keeps auth)
+  // ---------------------------------------------------------------------------
+
+  app.delete("/make-server-37f42386/fleet-admin/customers/:userId", async (c) => {
+    try {
+      const auth = await requireProductAdmin(c, "fleet");
+      if (auth instanceof Response) return auth;
+
+      // Product or platform admins can delete fleet customer access
+      const FLEET_DELETE_ROLES = new Set(["platform_owner", "superadmin", "fleet_admin"]);
+      if (!FLEET_DELETE_ROLES.has(auth.role) && !auth.isPlatformRole) {
+        return c.json({ error: "forbidden", message: "platform_owner, superadmin, or fleet_admin required for delete" }, 403);
+      }
+
+      const userId = c.req.param("userId");
+      const { data: target, error: getErr } = await supabase.auth.admin.getUserById(userId);
+      if (getErr || !target.user) {
+        return c.json({ error: "User not found" }, 404);
+      }
+      if (inferProductLineFromUser(target.user.user_metadata) !== "fleet") {
+        return c.json({ error: "User is not a Roam Fleet customer" }, 400);
+      }
+
+      // Clear fleet-related metadata (role, productLine, businessType)
+      const meta = { ...(target.user.user_metadata || {}) };
+      delete meta.role;
+      delete meta.productLine;
+      delete meta.businessType;
+      delete meta.companyName;
+      delete meta.accountStatus;
+
+      const { error: updErr } = await supabase.auth.admin.updateUserById(userId, {
+        user_metadata: meta,
+      });
+      if (updErr) throw updErr;
+
+      // Sign out from all devices
+      await supabase.auth.admin.signOut(userId, "global");
+
+      await invalidateCustomerCache();
+      await logAdminAction({
+        actorId: auth.id,
+        actorName: auth.email,
+        action: "delete_fleet_customer",
+        targetId: userId,
+        targetEmail: target.user.email || "",
+        details: "Fleet access removed",
+      });
+
+      return c.json({ success: true, message: "Fleet access removed. User can re-apply as a new customer." });
+    } catch (e: any) {
+      console.log(`fleet-admin/delete error: ${e.message}`);
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  // POST /admin/migrate-product-lines — one-time backfill (superadmin)
+  app.post("/make-server-37f42386/admin/migrate-product-lines", async (c) => {
+    try {
+      const auth = await verifySuperadmin(c);
+      if (auth instanceof Response) return auth;
+
+      let page = 1;
+      let migrated = 0;
+      let skipped = 0;
+      const perPage = 100;
+
+      while (true) {
+        const { data: { users }, error } = await supabase.auth.admin.listUsers({ page, perPage });
+        if (error) throw error;
+        if (!users?.length) break;
+
+        for (const u of users) {
+          if (u.user_metadata?.role !== "admin") continue;
+          if (u.user_metadata?.productLine && isProductLine(u.user_metadata.productLine)) {
+            skipped++;
+            continue;
+          }
+          const bt = u.user_metadata?.businessType || "rideshare";
+          const productLine: ProductLine = bt === "rideshare" ? "fleet" : "enterprise";
+          await supabase.auth.admin.updateUserById(u.id, {
+            user_metadata: { ...u.user_metadata, productLine },
+          });
+          migrated++;
+        }
+
+        if (users.length < perPage) break;
+        page++;
+      }
+
+      await invalidateCustomerCache();
+      return c.json({ success: true, migrated, skipped });
+    } catch (e: any) {
+      console.log(`migrate-product-lines error: ${e.message}`);
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  // POST /admin/migrate-platform-settings — copy legacy key to fleet + enterprise (idempotent)
+  app.post("/make-server-37f42386/admin/migrate-platform-settings", async (c) => {
+    try {
+      const auth = await verifySuperadmin(c);
+      if (auth instanceof Response) return auth;
+
+      const legacy = await kv.get(LEGACY_PLATFORM_SETTINGS_KEY);
+      if (!legacy) {
+        return c.json({ error: "No legacy platform:settings found" }, 404);
+      }
+
+      const fleetSettings = {
+        ...legacy,
+        platformName: legacy.platformName?.includes("Enterprise") ? "Roam Fleet" : (legacy.platformName || "Roam Fleet"),
+        enabledBusinessTypes: {
+          rideshare: true,
+          delivery: false,
+          taxi: false,
+          trucking: false,
+          shipping: false,
+        },
+        updatedAt: new Date().toISOString(),
+      };
+
+      const enterpriseSettings = {
+        ...legacy,
+        platformName: "Roam Enterprise",
+        enabledBusinessTypes: legacy.enabledBusinessTypes || {
+          rideshare: true,
+          delivery: true,
+          taxi: true,
+          trucking: true,
+          shipping: true,
+        },
+        updatedAt: new Date().toISOString(),
+      };
+
+      await kv.set(platformSettingsKvKey("fleet"), fleetSettings);
+      await kv.set(platformSettingsKvKey("enterprise"), enterpriseSettings);
+      invalidatePlatformSettingsCache("fleet");
+      invalidatePlatformSettingsCache("enterprise");
+
+      return c.json({ success: true });
+    } catch (e: any) {
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  // POST /admin/reset-password — Generate password recovery link (superadmin only)
+  app.post("/make-server-37f42386/admin/reset-password", async (c) => {
+    try {
+      const accessToken = c.req.header("Authorization")?.split(" ")[1];
+      const { data: { user: reqUser }, error: authErr } = await supabase.auth.getUser(accessToken);
+      if (authErr || !reqUser) {
+        console.log(`admin/reset-password auth error: ${authErr?.message || "no user"}`);
+        return c.json({ error: "Unauthorized" }, 401);
+      }
+      if (!isPlatformStaffFromAuthUser(reqUser)) {
+        console.log(`admin/reset-password forbidden: user ${reqUser.id} lacks platform staff access`);
+        return c.json({ error: "Forbidden — platform role required" }, 403);
+      }
+
+      const { email, redirectTo } = await c.req.json();
+      if (!email) {
+        return c.json({ error: "Email is required" }, 400);
+      }
+
+      const recoveryRedirect =
+        typeof redirectTo === "string" && redirectTo.length > 0
+          ? redirectTo
+          : "https://roamdominion.co/reset-password";
+
+      const { data, error } = await supabase.auth.admin.generateLink({
+        type: "recovery",
+        email,
+        options: { redirectTo: recoveryRedirect },
+      });
+      if (error) throw error;
+
+      console.log(`Password reset link generated for ${email}`);
+      await logAdminAction({ actorId: reqUser.id, actorName: reqUser.user_metadata?.name || 'Admin', action: 'reset_password', targetId: '', targetEmail: email });
+      return c.json({ success: true, message: `Password reset link generated for ${email}` });
+    } catch (e: any) {
+      console.error("admin/reset-password error:", e);
+      return c.json({ error: e.message || "Failed to generate reset link" }, 500);
+    }
+  });
+
+  // POST /admin/force-logout — Terminate all sessions for a user (superadmin only)
+  app.post("/make-server-37f42386/admin/force-logout", async (c) => {
+    try {
+      const accessToken = c.req.header("Authorization")?.split(" ")[1];
+      const { data: { user: reqUser }, error: authErr } = await supabase.auth.getUser(accessToken);
+      if (authErr || !reqUser) {
+        console.log(`admin/force-logout auth error: ${authErr?.message || "no user"}`);
+        return c.json({ error: "Unauthorized" }, 401);
+      }
+      if (!isPlatformStaffFromAuthUser(reqUser)) {
+        console.log(`admin/force-logout forbidden: user ${reqUser.id} lacks platform staff access`);
+        return c.json({ error: "Forbidden — platform role required" }, 403);
+      }
+
+      const { userId } = await c.req.json();
+      if (!userId) {
+        return c.json({ error: "userId is required" }, 400);
+      }
+
+      const { error } = await supabase.auth.admin.signOut(userId);
+      if (error) throw error;
+
+      console.log(`All sessions terminated for user ${userId}`);
+      await logAdminAction({ actorId: reqUser.id, actorName: reqUser.user_metadata?.name || 'Admin', action: 'force_logout', targetId: userId, targetEmail: '' });
+      return c.json({ success: true, message: `All sessions terminated for user ${userId}` });
+    } catch (e: any) {
+      console.error("admin/force-logout error:", e);
+      return c.json({ error: e.message || "Failed to force logout" }, 500);
+    }
+  });
+
+  // POST /admin/toggle-suspend — Ban or unban a user (superadmin only)
+  app.post("/make-server-37f42386/admin/toggle-suspend", async (c) => {
+    try {
+      const accessToken = c.req.header("Authorization")?.split(" ")[1];
+      const { data: { user: reqUser }, error: authErr } = await supabase.auth.getUser(accessToken);
+      if (authErr || !reqUser) {
+        console.log(`admin/toggle-suspend auth error: ${authErr?.message || "no user"}`);
+        return c.json({ error: "Unauthorized" }, 401);
+      }
+      if (!isPlatformStaffFromAuthUser(reqUser)) {
+        console.log(`admin/toggle-suspend forbidden: user ${reqUser.id} lacks platform staff access`);
+        return c.json({ error: "Forbidden — platform role required" }, 403);
+      }
+
+      const { userId, suspend } = await c.req.json();
+      if (!userId || typeof suspend !== "boolean") {
+        return c.json({ error: "userId (string) and suspend (boolean) are required" }, 400);
+      }
+
+      const ban_duration = suspend ? "876000h" : "none";
+      const { data, error } = await supabase.auth.admin.updateUserById(userId, { ban_duration });
+      if (error) throw error;
+
+      const action = suspend ? "suspended" : "reactivated";
+      console.log(`User ${userId} has been ${action}`);
+      await logAdminAction({ actorId: reqUser.id, actorName: reqUser.user_metadata?.name || 'Admin', action: suspend ? 'suspend_user' : 'reactivate_user', targetId: userId, targetEmail: data?.user?.email || '' });
+      return c.json({ success: true, message: `User ${userId} has been ${action}` });
+    } catch (e: any) {
+      console.error("admin/toggle-suspend error:", e);
+      return c.json({ error: e.message || "Failed to toggle suspend" }, 500);
+    }
+  });
+
+  // ---------------------------------------------------------------------------
+  // DELETE /admin/users/:userId/full-delete — Full platform-wide user deletion (superadmin only)
+  // This deletes the user from ALL products and removes them from auth.users entirely.
+  // ---------------------------------------------------------------------------
+
+  app.delete("/make-server-37f42386/admin/users/:userId/full-delete", async (c) => {
+    try {
+      const accessToken = c.req.header("Authorization")?.split(" ")[1];
+      const { data: { user: reqUser }, error: authErr } = await supabase.auth.getUser(accessToken);
+      if (authErr || !reqUser) {
+        console.log(`admin/full-delete auth error: ${authErr?.message || "no user"}`);
+        return c.json({ error: "Unauthorized" }, 401);
+      }
+      if (!isPlatformOwnerFromAuthUser(reqUser)) {
+        console.log(`admin/full-delete forbidden: user ${reqUser.id} lacks platform owner access`);
+        return c.json({ error: "Forbidden — platform owner only" }, 403);
+      }
+
+      const userId = c.req.param("userId");
+      if (!userId) {
+        return c.json({ error: "userId is required" }, 400);
+      }
+
+      // Get user info before deleting
+      const { data: targetUser, error: getUserErr } = await supabase.auth.admin.getUserById(userId);
+      if (getUserErr || !targetUser?.user) {
+        return c.json({ error: "User not found" }, 404);
+      }
+      const targetEmail = targetUser.user.email || "";
+
+      // Track what was cleaned up
+      const cleanedUp: string[] = [];
+
+      // 1. Delete driver_profiles row (if exists)
+      const { error: driverErr, count: driverCount } = await supabase
+        .from("driver_profiles")
+        .delete({ count: "exact" })
+        .eq("user_id", userId);
+      if (!driverErr && driverCount && driverCount > 0) {
+        cleanedUp.push("driver_profiles");
+      }
+
+      // 2. Delete rider_profiles row (if exists) - in rides schema
+      try {
+        const ridesDb = createClient(
+          Deno.env.get("SUPABASE_URL") || "",
+          Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "",
+          { db: { schema: "rides" } }
+        );
+        const { error: riderErr, count: riderCount } = await ridesDb
+          .from("rider_profiles")
+          .delete({ count: "exact" })
+          .eq("user_id", userId);
+        if (!riderErr && riderCount && riderCount > 0) {
+          cleanedUp.push("rider_profiles");
+        }
+      } catch (e) {
+        console.log(`Failed to delete rider_profiles (may not exist): ${e}`);
+      }
+
+      // 3. Force sign out from all devices
+      await supabase.auth.admin.signOut(userId, "global");
+      cleanedUp.push("sessions");
+
+      // 4. Delete from auth.users
+      const { error: deleteAuthErr } = await supabase.auth.admin.deleteUser(userId);
+      if (deleteAuthErr) {
+        console.error(`Failed to delete auth.users record: ${deleteAuthErr.message}`);
+        return c.json({ 
+          error: "partial_delete", 
+          message: `Cleaned up profiles but failed to delete auth record: ${deleteAuthErr.message}`,
+          cleaned_up: cleanedUp,
+        }, 500);
+      }
+      cleanedUp.push("auth.users");
+
+      // 5. Log the action
+      await logAdminAction({
+        actorId: reqUser.id,
+        actorName: reqUser.user_metadata?.name || "Admin",
+        action: "full_delete_user",
+        targetId: userId,
+        targetEmail,
+        details: `Cleaned up: ${cleanedUp.join(", ")}`,
+      });
+
+      console.log(`User ${userId} (${targetEmail}) fully deleted. Cleaned up: ${cleanedUp.join(", ")}`);
+      return c.json({
+        success: true,
+        message: `User ${targetEmail} has been permanently deleted from all Roam products`,
+        cleaned_up: cleanedUp,
+      });
+    } catch (e: any) {
+      console.error("admin/full-delete error:", e);
+      return c.json({ error: e.message || "Failed to delete user" }, 500);
+    }
+  });
+
+  // Helper: build cross-product status payload for a user
+  async function buildCrossProductStatus(userId: string, user: {
+    email?: string | null;
+    phone?: string | null;
+    created_at?: string;
+    last_sign_in_at?: string | null;
+    banned_until?: string | null;
+    email_confirmed_at?: string | null;
+    user_metadata?: Record<string, unknown>;
+  }) {
+    const crossProductStatus: Record<string, unknown> = {
+      user_id: userId,
+      email: user.email,
+      phone: user.phone,
+      name: user.user_metadata?.name || null,
+      created_at: user.created_at,
+      last_sign_in_at: user.last_sign_in_at,
+      auth_status: {
+        banned_until: user.banned_until,
+        is_banned: !!user.banned_until && new Date(user.banned_until) > new Date(),
+        email_confirmed_at: user.email_confirmed_at,
+      },
+      products: {},
+    };
+
+    const products: Record<string, unknown> = {};
+
+    const { data: driverProfile } = await supabase
+      .from("driver_profiles")
+      .select("id, status, mode, onboarding_complete, suspended_at, deactivated_at, created_at")
+      .eq("user_id", userId)
+      .maybeSingle();
+
+    if (driverProfile) {
+      products.driver = {
+        exists: true,
+        profile_id: driverProfile.id,
+        status: driverProfile.status,
+        mode: driverProfile.mode,
+        onboarding_complete: driverProfile.onboarding_complete,
+        suspended_at: driverProfile.suspended_at,
+        deactivated_at: driverProfile.deactivated_at,
+        created_at: driverProfile.created_at,
+      };
+    } else {
+      products.driver = { exists: false };
+    }
+
+    try {
+      const ridesDb = createClient(
+        Deno.env.get("SUPABASE_URL") || "",
+        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "",
+        { db: { schema: "rides" } },
+      );
+      const { data: riderProfile } = await ridesDb
+        .from("rider_profiles")
+        .select("user_id, display_name, account_status, suspended_at, suspended_reason, created_at")
+        .eq("user_id", userId)
+        .maybeSingle();
+
+      if (riderProfile) {
+        products.rider = {
+          exists: true,
+          display_name: riderProfile.display_name,
+          account_status: riderProfile.account_status,
+          suspended_at: riderProfile.suspended_at,
+          suspended_reason: riderProfile.suspended_reason,
+          created_at: riderProfile.created_at,
+        };
+      } else {
+        products.rider = { exists: false };
+      }
+    } catch {
+      products.rider = { exists: false, error: "Could not check rides schema" };
+    }
+
+    const userMeta = user.user_metadata || {};
+    if (userMeta.role === "admin") {
+      const line = inferProductLineFromUser(userMeta);
+      products.fleet = {
+        exists: true,
+        role: "fleet_manager",
+        company_name: userMeta.companyName || userMeta.name,
+        business_type: userMeta.businessType,
+        product_line: line,
+        account_status: userMeta.accountStatus || "active",
+      };
+    } else if (FLEET_SUB_ROLES.includes(String(userMeta.role))) {
+      products.fleet = {
+        exists: true,
+        role: canonicalizeRole(String(userMeta.role)),
+        organization_id: userMeta.organizationId || null,
+        account_status: user.banned_until ? "suspended" : "active",
+      };
+    } else {
+      products.fleet = { exists: false };
+    }
+
+    crossProductStatus.products = products;
+    return crossProductStatus;
+  }
+
+  // GET /admin/users/lookup — Find user by email and return cross-product summary
+  app.get("/make-server-37f42386/admin/users/lookup", requireAuth(), async (c) => {
+    try {
+      const rbacUser = c.get("rbacUser") as RbacUser;
+      if (!hasPlatformStaffAccess(rbacUser)) {
+        return c.json({ error: "Forbidden — platform role required" }, 403);
+      }
+
+      const email = c.req.query("email")?.trim().toLowerCase();
+      if (!email) {
+        return c.json({ error: "email query parameter is required" }, 400);
+      }
+
+      const { data, error } = await supabase.auth.admin.listUsers({ perPage: 1000 });
+      if (error) throw error;
+
+      const match = (data?.users || []).find((u) => u.email?.toLowerCase() === email);
+      if (!match) {
+        return c.json({ error: "User not found" }, 404);
+      }
+
+      const status = await buildCrossProductStatus(match.id, match);
+      return c.json(status);
+    } catch (e: any) {
+      console.error("admin/users/lookup error:", e);
+      return c.json({ error: e.message || "Lookup failed" }, 500);
+    }
+  });
+
+  // GET /admin/users/:userId/cross-product-status — View user status across all products
+  app.get("/make-server-37f42386/admin/users/:userId/cross-product-status", requireAuth(), async (c) => {
+    try {
+      const rbacUser = c.get("rbacUser") as RbacUser;
+      if (!hasPlatformStaffAccess(rbacUser)) {
+        return c.json({ error: "Forbidden — platform role required" }, 403);
+      }
+
+      const userId = c.req.param("userId");
+      if (!userId) {
+        return c.json({ error: "userId is required" }, 400);
+      }
+
+      const { data: targetUser, error: getUserErr } = await supabase.auth.admin.getUserById(userId);
+      if (getUserErr || !targetUser?.user) {
+        return c.json({ error: "User not found" }, 404);
+      }
+
+      const crossProductStatus = await buildCrossProductStatus(userId, targetUser.user);
+      return c.json(crossProductStatus);
+    } catch (e: any) {
+      console.error("admin/cross-product-status error:", e);
+      return c.json({ error: e.message || "Failed to fetch cross-product status" }, 500);
+    }
+  });
+
+  // ---------------------------------------------------------------------------
+  // Admin Fuel Station CRUD (superadmin-only)
+  // Operates on the same `station:` KV data the fleet fuel system uses.
+  // ---------------------------------------------------------------------------
+
+  // Helper: verify superadmin from Authorization header
+  async function verifySuperadmin(c: any): Promise<{ userId: string; email: string; name: string } | Response> {
+    const accessToken = c.req.header("Authorization")?.split(" ")[1];
+    let reqUser: any = null;
+    let error: any = null;
+    try {
+      const result = await cache.withRetry(async () => {
+        const r = await supabase.auth.getUser(accessToken);
+        if (r.error) throw r.error;
+        return r.data.user;
+      });
+      reqUser = result;
+    } catch (e: any) {
+      error = e;
+    }
+    if (error || !reqUser) {
+      return c.json({ error: "Unauthorized" }, 401);
+    }
+    if (!isPlatformStaffFromAuthUser(reqUser)) {
+      return c.json({ error: "Forbidden — platform role required" }, 403);
+    }
+    return {
+      userId: reqUser.id,
+      email: reqUser.email || '',
+      name: reqUser.user_metadata?.name || reqUser.email || 'Unknown',
+    };
+  }
+
+  // Platform Jamaica vendor + category catalog (Super Admin + fleet request)
+  registerPlatformVendorRoutes(app, verifySuperadmin);
+
+  // ---------------------------------------------------------------------------
+  // Cache Health & Performance Endpoints
+  // ---------------------------------------------------------------------------
+
+  // GET /admin/cache-stats — Cache performance metrics (Superadmin only)
+  app.get("/make-server-37f42386/admin/cache-stats", async (c) => {
+    try {
+      const accessToken = c.req.header("Authorization")?.split(" ")[1];
+      const { data: { user }, error } = await supabase.auth.getUser(accessToken);
+      if (error || !user || !isPlatformStaffFromAuthUser(user)) {
+        return c.json({ error: "Unauthorized" }, 401);
+      }
+
+      return c.json({
+        parentCompanies: memCache.parentCompanyCache.getStats(),
+        customers: memCache.customerCache.getStats(),
+        dashboard: memCache.dashboardCache.getStats(),
+        dashboardStats: memCache.dashboardStatsCache.getStats(),
+        timestamp: new Date().toISOString(),
+      });
+    } catch (e: any) {
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  // GET /admin/fuel-stations — list all fuel stations
+  app.get("/make-server-37f42386/admin/fuel-stations", async (c) => {
+    try {
+      const auth = await verifySuperadmin(c);
+      if (auth instanceof Response) return auth;
+
+      const stations = await kv.getByPrefix("station:");
+      return c.json({ stations: stations || [] });
+    } catch (e: any) {
+      console.log(`admin/fuel-stations GET error: ${e.message}`);
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  // POST /admin/fuel-stations — add a new fuel station
+  app.post("/make-server-37f42386/admin/fuel-stations", async (c) => {
+    try {
+      const auth = await verifySuperadmin(c);
+      if (auth instanceof Response) return auth;
+
+      const station = await c.req.json();
+      if (!station.id) station.id = crypto.randomUUID();
+      if (!station.name) return c.json({ error: "Station name is required" }, 400);
+
+      // Ensure required fields have defaults
+      station.status = station.status || "verified";
+      station.brand = station.brand || "";
+      station.address = station.address || "";
+      station.location = station.location || { lat: 0, lng: 0 };
+      station.stats = station.stats || { totalVisits: 0, lastVisited: null };
+      station.amenities = station.amenities || [];
+      station.dataSource = station.dataSource || "manual";
+      station.contactInfo = station.contactInfo || {};
+      station.createdAt = station.createdAt || new Date().toISOString();
+
+      await kv.set(`station:${station.id}`, stampOrg(station, c));
+      return c.json({ success: true, data: station });
+    } catch (e: any) {
+      console.log(`admin/fuel-stations POST error: ${e.message}`);
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  // PUT /admin/fuel-stations/:id — update a fuel station
+  app.put("/make-server-37f42386/admin/fuel-stations/:id", async (c) => {
+    try {
+      const auth = await verifySuperadmin(c);
+      if (auth instanceof Response) return auth;
+
+      const id = c.req.param("id");
+      const updates = await c.req.json();
+      const existing = await kv.get(`station:${id}`);
+      if (!existing) return c.json({ error: "Station not found" }, 404);
+
+      const merged = { ...existing, ...updates, id };
+      await kv.set(`station:${id}`, stampOrg(merged, c));
+      return c.json({ success: true, data: merged });
+    } catch (e: any) {
+      console.log(`admin/fuel-stations PUT error: ${e.message}`);
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  // DELETE /admin/fuel-stations/:id — delete a fuel station
+  app.delete("/make-server-37f42386/admin/fuel-stations/:id", async (c) => {
+    try {
+      const auth = await verifySuperadmin(c);
+      if (auth instanceof Response) return auth;
+
+      const id = c.req.param("id");
+      const existing = await kv.get(`station:${id}`);
+      if (!existing) return c.json({ error: "Station not found" }, 404);
+
+      await kv.del(`station:${id}`);
+      return c.json({ success: true });
+    } catch (e: any) {
+      console.log(`admin/fuel-stations DELETE error: ${e.message}`);
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  // ---------------------------------------------------------------------------
+  // Admin Toll Plaza CRUD (superadmin-only)
+  // Operates on the same `toll_plaza:` KV data the fleet toll system uses.
+  // ---------------------------------------------------------------------------
+
+  // GET /admin/toll-stations — list all toll plazas
+  app.get("/make-server-37f42386/admin/toll-stations", async (c) => {
+    try {
+      const auth = await verifySuperadmin(c);
+      if (auth instanceof Response) return auth;
+
+      const plazas = await kv.getByPrefix("toll_plaza:");
+      // Superadmin sees every org, so load stats unscoped.
+      const stats = await loadTollPlazaStats(null);
+      return c.json({ plazas: attachPlazaStats((plazas || []) as any[], stats) });
+    } catch (e: any) {
+      console.log(`admin/toll-stations GET error: ${e.message}`);
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  // POST /admin/toll-stations — add a new toll plaza
+  app.post("/make-server-37f42386/admin/toll-stations", async (c) => {
+    try {
+      const auth = await verifySuperadmin(c);
+      if (auth instanceof Response) return auth;
+
+      const plaza = await c.req.json();
+      if (!plaza.id) plaza.id = crypto.randomUUID();
+      if (!plaza.name) return c.json({ error: "Plaza name is required" }, 400);
+
+      plaza.status = plaza.status || "verified";
+      plaza.highway = plaza.highway || "";
+      plaza.direction = plaza.direction || "Both";
+      plaza.operator = plaza.operator || "";
+      plaza.location = plaza.location || { lat: 0, lng: 0 };
+      plaza.dataSource = plaza.dataSource || "manual";
+      // Stats are derived from fleet.v_toll_plaza_stats at read time — never stored.
+      delete plaza.stats;
+      plaza.createdAt = plaza.createdAt || new Date().toISOString();
+      plaza.updatedAt = new Date().toISOString();
+
+      await kv.set(`toll_plaza:${plaza.id}`, stampOrg(plaza, c));
+
+      const stats = await loadTollPlazaStats(getOrgId(c));
+      const [saved] = attachPlazaStats([plaza], stats);
+      return c.json({ success: true, data: saved });
+    } catch (e: any) {
+      console.log(`admin/toll-stations POST error: ${e.message}`);
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  // PUT /admin/toll-stations/:id — update a toll plaza
+  app.put("/make-server-37f42386/admin/toll-stations/:id", async (c) => {
+    try {
+      const auth = await verifySuperadmin(c);
+      if (auth instanceof Response) return auth;
+
+      const id = c.req.param("id");
+      const updates = await c.req.json();
+      const existing = await kv.get(`toll_plaza:${id}`);
+      if (!existing) return c.json({ error: "Toll plaza not found" }, 404);
+
+      const merged = { ...existing, ...updates, id, updatedAt: new Date().toISOString() };
+      await kv.set(`toll_plaza:${id}`, stampOrg(merged, c));
+      return c.json({ success: true, data: merged });
+    } catch (e: any) {
+      console.log(`admin/toll-stations PUT error: ${e.message}`);
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  // DELETE /admin/toll-stations/:id — delete a toll plaza
+  app.delete("/make-server-37f42386/admin/toll-stations/:id", async (c) => {
+    try {
+      const auth = await verifySuperadmin(c);
+      if (auth instanceof Response) return auth;
+
+      const id = c.req.param("id");
+      const existing = await kv.get(`toll_plaza:${id}`);
+      if (!existing) return c.json({ error: "Toll plaza not found" }, 404);
+
+      await kv.del(`toll_plaza:${id}`);
+      return c.json({ success: true });
+    } catch (e: any) {
+      console.log(`admin/toll-stations DELETE error: ${e.message}`);
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  // ---------------------------------------------------------------------------
+  // Admin Platform Settings (superadmin-only)
+  // Segment keys: platform:settings:{fleet|enterprise|...}. Legacy platform:settings is Fleet-only.
+  // ---------------------------------------------------------------------------
+
+  // GET /admin/platform-settings
+  app.get("/make-server-37f42386/admin/platform-settings", async (c) => {
+    try {
+      const auth = await verifySettingsAccess(c);
+      if (auth instanceof Response) return auth;
+
+      const segment = resolveSettingsSegment(c);
+      const settings = await getPlatformSettingsCached(segment);
+      const productLine = segmentToProductLine(segment);
+      return c.json({ settings: settings || null, segment, productLine });
+    } catch (e: any) {
+      console.log(`admin/platform-settings GET error: ${e.message}`);
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  // GET /admin/platform-settings/segments — diagnostic summary (superadmin)
+  app.get("/make-server-37f42386/admin/platform-settings/segments", async (c) => {
+    try {
+      const auth = await verifySuperadmin(c);
+      if (auth instanceof Response) return auth;
+
+      const segments = await getSegmentSettingsSummary();
+      return c.json({ segments });
+    } catch (e: any) {
+      console.log(`admin/platform-settings/segments GET error: ${e.message}`);
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  // GET /admin/export-data — Phase 7: Full platform data export
+  app.get("/make-server-37f42386/admin/export-data", async (c) => {
+    try {
+      const auth = await verifySuperadmin(c);
+      const prefixes = ['platform:', 'customer:', 'driver:', 'fuel:', 'toll:', 'audit:', 'station:', 'team:', 'user:', 'vehicle:', 'trip:', 'login_attempts:', 'invitation:', 'org:'];
+      const sections: Record<string, any[]> = {};
+      let totalEntries = 0;
+      for (const prefix of prefixes) {
+        try {
+          const entries = await kv.getByPrefix(prefix);
+          if (entries && entries.length > 0) {
+            const sectionName = prefix.replace(':', '');
+            sections[sectionName] = entries;
+            totalEntries += entries.length;
+          }
+        } catch (e: any) {
+          console.log(`[Export] Error reading prefix ${prefix}: ${e.message}`);
+        }
+      }
+      try {
+        await logAdminAction({ actorId: auth.userId, actorName: auth.name || auth.email, action: 'export_platform_data', targetId: 'platform', targetEmail: 'N/A', details: `Exported ${totalEntries} entries across ${Object.keys(sections).length} sections` });
+      } catch (e: any) {
+        console.log(`[Export] Audit log failed (non-fatal): ${e.message}`);
+      }
+      return c.json({ exportDate: new Date().toISOString(), totalEntries, sections });
+    } catch (e: any) {
+      console.log(`export-data error: ${e.message}`);
+      return c.json({ error: e.message }, e.status || 500);
+    }
+  });
+
+  // GET /admin/system-health — Phase 7: System health check
+  app.get("/make-server-37f42386/admin/system-health", async (c) => {
+    try {
+      const auth = await verifySuperadmin(c);
+      let dbStatus = 'healthy';
+      let lastSettingsUpdate: string | null = null;
+      let kvRowCount = 0;
+      try {
+        lastSettingsUpdate = await getLatestSettingsUpdatedAt();
+      } catch (e: any) {
+        dbStatus = 'error';
+        console.log(`[HealthCheck] DB connectivity error: ${e.message}`);
+      }
+      const prefixes = ['platform:', 'customer:', 'driver:', 'fuel:', 'toll:', 'audit:', 'station:', 'team:', 'user:', 'vehicle:', 'trip:'];
+      for (const prefix of prefixes) {
+        try {
+          const entries = await kv.getByPrefix(prefix);
+          kvRowCount += entries?.length || 0;
+        } catch {}
+      }
+      return c.json({ dbStatus, kvRowCount, lastSettingsUpdate, serverTime: new Date().toISOString() });
+    } catch (e: any) {
+      console.log(`system-health error: ${e.message}`);
+      return c.json({ error: e.message }, e.status || 500);
+    }
+  });
+
+  // POST /admin/terminate-all-sessions — Phase 5: Emergency session termination
+  app.post("/make-server-37f42386/admin/terminate-all-sessions", async (c) => {
+    try {
+      const auth = await verifySuperadmin(c);
+      // List all users and sign them out
+      let count = 0;
+      let page = 1;
+      const perPage = 100;
+      while (true) {
+        const { data: { users }, error } = await supabase.auth.admin.listUsers({ page, perPage });
+        if (error) throw error;
+        if (!users || users.length === 0) break;
+        for (const u of users) {
+          try {
+            await supabase.auth.admin.signOut(u.id, 'global');
+            count++;
+          } catch (e: any) {
+            console.log(`[TerminateAll] Failed to sign out user ${u.id}: ${e.message}`);
+          }
+        }
+        if (users.length < perPage) break;
+        page++;
+      }
+      // Audit log
+      try {
+        await logAdminAction({ actorId: auth.userId, actorName: auth.name || auth.email, action: 'terminate_all_sessions', targetId: 'platform', targetEmail: 'N/A', details: `Signed out ${count} users` });
+      } catch (e: any) {
+        console.log(`[TerminateAll] Audit log failed (non-fatal): ${e.message}`);
+      }
+      return c.json({ success: true, count });
+    } catch (e: any) {
+      console.log(`terminate-all-sessions error: ${e.message}`);
+      return c.json({ error: e.message }, e.status || 500);
+    }
+  });
+
+  // PUT /admin/platform-settings
+  app.put("/make-server-37f42386/admin/platform-settings", async (c) => {
+    try {
+      const auth = await verifySettingsAccess(c);
+      if (auth instanceof Response) return auth;
+
+      const segment = resolveSettingsSegment(c);
+      const settingsKey = platformSettingsKvKey(segment);
+
+      // Read old settings BEFORE overwriting so we can diff for audit
+      const oldSettings = await kv.get(settingsKey);
+
+      const settings = await c.req.json();
+      if (segment === "dash" && settings.platformFeeRate != null) {
+        const rate = Number(settings.platformFeeRate);
+        if (!Number.isFinite(rate) || rate < 0 || rate > 1) {
+          return c.json({ error: "platformFeeRate must be between 0 and 1" }, 400);
+        }
+        settings.platformFeeRate = rate;
+      }
+      // GCT rates live in Accounting engine — strip any legacy tax blob on global save
+      if (segment === "global" && "tax" in settings) {
+        delete settings.tax;
+      }
+      settings.updatedAt = new Date().toISOString();
+      // Writes go to segment keys only — LEGACY_PLATFORM_SETTINGS_KEY is read-only (dual-read fallback).
+      await kv.set(settingsKey, settings);
+
+      // Immediately invalidate cached settings so maintenance mode propagates instantly
+      invalidatePlatformSettingsCache(segment);
+
+      // Build a human-readable diff for the audit log
+      let details = "Initial settings configuration";
+      if (oldSettings && typeof oldSettings === "object") {
+        const changes: string[] = [];
+        const fieldsToCheck = [
+          "platformName", "defaultCurrency", "fleetTimezone", "platformVersion", "maintenanceMode", "maintenanceMessage", "registrationMode", "requireApproval", "welcomeEmailMessage", "platformFeeRate",
+        ];
+        for (const field of fieldsToCheck) {
+          const oldVal = (oldSettings as any)[field];
+          const newVal = settings[field];
+          if (JSON.stringify(oldVal) !== JSON.stringify(newVal)) {
+            changes.push(`${field}: '${oldVal}' → '${newVal}'`);
+          }
+        }
+        // Diff enabledBusinessTypes
+        const oldBt = (oldSettings as any).enabledBusinessTypes || {};
+        const newBt = settings.enabledBusinessTypes || {};
+        const allBtKeys = new Set([...Object.keys(oldBt), ...Object.keys(newBt)]);
+        for (const k of allBtKeys) {
+          if (oldBt[k] !== newBt[k]) {
+            changes.push(`enabledBusinessTypes.${k}: ${oldBt[k]} → ${newBt[k]}`);
+          }
+        }
+        // Diff announcement
+        const oldAnn = JSON.stringify((oldSettings as any).announcement || {});
+        const newAnn = JSON.stringify(settings.announcement || {});
+        if (oldAnn !== newAnn) {
+          const oa = (oldSettings as any).announcement || {};
+          const na = settings.announcement || {};
+          if (oa.enabled !== na.enabled) changes.push(`announcement.enabled: ${oa.enabled} → ${na.enabled}`);
+          if (oa.type !== na.type) changes.push(`announcement.type: ${oa.type} → ${na.type}`);
+          if (oa.message !== na.message) changes.push(`announcement.message changed`);
+          if (oa.dismissible !== na.dismissible) changes.push(`announcement.dismissible: ${oa.dismissible} → ${na.dismissible}`);
+        }
+        // Diff securityPolicies
+        const oldSec = (oldSettings as any).securityPolicies || {};
+        const newSec = settings.securityPolicies || {};
+        const allSecKeys = new Set([...Object.keys(oldSec), ...Object.keys(newSec)]);
+        for (const k of allSecKeys) {
+          if (JSON.stringify(oldSec[k]) !== JSON.stringify(newSec[k])) {
+            changes.push(`securityPolicies.${k}: ${oldSec[k]} → ${newSec[k]}`);
+          }
+        }
+        // Diff allowedDomains
+        const oldDomains = JSON.stringify((oldSettings as any).allowedDomains || []);
+        const newDomains = JSON.stringify(settings.allowedDomains || []);
+        if (oldDomains !== newDomains) {
+          changes.push(`allowedDomains: ${oldDomains} → ${newDomains}`);
+        }
+        // Diff enabledModules
+        const oldMod = (oldSettings as any).enabledModules || {};
+        const newMod = settings.enabledModules || {};
+        const allModKeys = new Set([...Object.keys(oldMod), ...Object.keys(newMod)]);
+        for (const k of allModKeys) {
+          if (oldMod[k] !== newMod[k]) {
+            changes.push(`enabledModules.${k}: ${oldMod[k]} → ${newMod[k]}`);
+          }
+        }
+        details = changes.length > 0 ? changes.join(", ") : "No changes detected (re-saved)";
+      }
+
+      // Fire-and-forget audit log — never let it break the save
+      logAdminAction({
+        actorId: auth.userId,
+        actorName: auth.name,
+        action: "update_platform_settings",
+        targetId: "platform",
+        targetEmail: "N/A",
+        details,
+      }).catch((e: any) => console.log(`Audit log failed for platform-settings: ${e.message}`));
+
+      return c.json({ success: true, data: settings });
+    } catch (e: any) {
+      console.log(`admin/platform-settings PUT error: ${e.message}`);
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  // ---------------------------------------------------------------------------
+  // Ledger Column Configuration (Super Admin Portal)
+  // ---------------------------------------------------------------------------
+  // Per-business-type configuration for which ledgers are enabled and column settings.
+  // Stored as `ledger_config:{businessType}` in KV.
+  // ---------------------------------------------------------------------------
+
+  const VALID_BUSINESS_TYPES = [...ALL_BUSINESS_TYPES];
+  const VALID_LEDGER_TYPES = ['main', 'trip', 'fuel', 'toll'];
+
+  // GET /admin/ledger-config/:businessType — Get ledger config for a business type
+  app.get("/make-server-37f42386/admin/ledger-config/:businessType", async (c) => {
+    try {
+      const auth = await verifySuperadmin(c);
+      if (auth instanceof Response) return auth;
+
+      const businessType = c.req.param("businessType");
+      if (!VALID_BUSINESS_TYPES.includes(businessType)) {
+        return c.json({ error: `Invalid business type: ${businessType}` }, 400);
+      }
+
+      const config = await kv.get(`ledger_config:${businessType}`);
+      if (!config) {
+        // Return default config if none exists — keys must match ALL_COLUMNS in each ledger table
+        return c.json({
+          businessType,
+          enabledLedgers: ['trip', 'fuel', 'toll'],
+          columns: {
+            main: [
+              { key: 'date', label: 'Date', visible: true },
+              { key: 'type', label: 'Type', visible: true },
+              { key: 'amount', label: 'Amount', visible: true },
+              { key: 'description', label: 'Description', visible: true },
+              { key: 'reference', label: 'Reference', visible: true },
+            ],
+            trip: [
+              { key: 'id', label: 'ID', visible: true },
+              { key: 'date', label: 'Date/Time', visible: true },
+              { key: 'tripDate', label: 'Date', visible: true },
+              { key: 'tripTime', label: 'Time', visible: true },
+              { key: 'driver', label: 'Driver', visible: true },
+              { key: 'vehicle', label: 'Vehicle', visible: true },
+              { key: 'platform', label: 'Platform', visible: true },
+              { key: 'status', label: 'Status', visible: true },
+              { key: 'distance', label: 'Distance', visible: true },
+              { key: 'duration', label: 'Duration', visible: true },
+              { key: 'amount', label: 'Amount', visible: true },
+              { key: 'netIncome', label: 'Net Income', visible: true },
+              { key: 'paymentMethod', label: 'Payment', visible: true },
+              { key: 'cashCollected', label: 'Cash Collected', visible: true },
+              { key: 'tips', label: 'Tips', visible: true },
+              { key: 'surge', label: 'Surge', visible: true },
+              { key: 'tolls', label: 'Tolls', visible: true },
+              { key: 'serviceFee', label: 'Service Fee', visible: true },
+              { key: 'pickup', label: 'Pickup', visible: true },
+              { key: 'dropoff', label: 'Dropoff', visible: true },
+              { key: 'serviceCategory', label: 'Service Category', visible: true },
+              { key: 'batchSource', label: 'Batch Source', visible: true },
+              { key: 'efficiencyScore', label: 'Efficiency', visible: true },
+              { key: 'requestTime', label: 'Request Time', visible: true },
+              { key: 'dropoffTime', label: 'Dropoff Time', visible: true },
+              { key: 'serviceType', label: 'Service Type', visible: true },
+              { key: 'grossEarnings', label: 'Gross Earnings', visible: true },
+              { key: 'netPayout', label: 'Net Payout', visible: true },
+              { key: 'baseFare', label: 'Base Fare', visible: true },
+              { key: 'waitTime', label: 'Wait Time Fee', visible: true },
+              { key: 'airportFees', label: 'Airport Fees', visible: true },
+              { key: 'timeAtStop', label: 'Time at Stop', visible: true },
+              { key: 'taxes', label: 'Taxes', visible: true },
+              { key: 'indriveServiceFeePercent', label: 'InDrive Fee %', visible: true },
+              { key: 'indriveNetIncome', label: 'InDrive Net Income', visible: true },
+              { key: 'indriveBalanceDeduction', label: 'Balance Deduction', visible: true },
+              { key: 'pickupArea', label: 'Pickup Area', visible: true },
+              { key: 'dropoffArea', label: 'Dropoff Area', visible: true },
+              { key: 'speed', label: 'Speed', visible: true },
+              { key: 'earningsPerKm', label: 'Earnings/km', visible: true },
+              { key: 'earningsPerMin', label: 'Earnings/min', visible: true },
+              { key: 'tripRating', label: 'Trip Rating', visible: true },
+              { key: 'dayOfWeek', label: 'Day of Week', visible: true },
+              { key: 'anchorPeriod', label: 'Anchor Period', visible: true },
+              { key: 'routeId', label: 'Route ID', visible: true },
+              { key: 'notes', label: 'Notes', visible: true },
+            ],
+            fuel: [
+              { key: 'id', label: 'ID', visible: true },
+              { key: 'date', label: 'Date', visible: true },
+              { key: 'vehicleId', label: 'Vehicle', visible: true },
+              { key: 'driverId', label: 'Driver', visible: true },
+              { key: 'amount', label: 'Amount', visible: true },
+              { key: 'liters', label: 'Liters', visible: true },
+              { key: 'pricePerLiter', label: 'Price/Liter', visible: true },
+              { key: 'odometer', label: 'Odometer', visible: true },
+              { key: 'location', label: 'Location', visible: true },
+              { key: 'paymentSource', label: 'Payment Source', visible: true },
+              { key: 'entryMode', label: 'Entry Mode', visible: false },
+              { key: 'type', label: 'Type', visible: false },
+              { key: 'auditStatus', label: 'Audit Status', visible: false },
+            ],
+            toll: [
+              { key: 'id', label: 'ID', visible: true },
+              { key: 'date', label: 'Date', visible: true },
+              { key: 'vehiclePlate', label: 'Vehicle', visible: true },
+              { key: 'driverName', label: 'Driver', visible: true },
+              { key: 'plaza', label: 'Plaza', visible: true },
+              { key: 'amount', label: 'Amount', visible: true },
+              { key: 'type', label: 'Type', visible: true },
+              { key: 'reconciliationStatus', label: 'Reconciliation', visible: true },
+              { key: 'status', label: 'Status', visible: false },
+              { key: 'paymentMethod', label: 'Payment Method', visible: false },
+              { key: 'matchedTripId', label: 'Matched Trip', visible: false },
+            ],
+          },
+        });
+      }
+
+      return c.json(config);
+    } catch (e: any) {
+      console.log(`admin/ledger-config GET error: ${e.message}`);
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  // PUT /admin/ledger-config/:businessType — Save ledger config for a business type
+  app.put("/make-server-37f42386/admin/ledger-config/:businessType", async (c) => {
+    try {
+      const auth = await verifySuperadmin(c);
+      if (auth instanceof Response) return auth;
+
+      const businessType = c.req.param("businessType");
+      if (!VALID_BUSINESS_TYPES.includes(businessType)) {
+        return c.json({ error: `Invalid business type: ${businessType}` }, 400);
+      }
+
+      const body = await c.req.json();
+
+      // Validate enabledLedgers
+      if (body.enabledLedgers && !Array.isArray(body.enabledLedgers)) {
+        return c.json({ error: 'enabledLedgers must be an array' }, 400);
+      }
+      const enabledLedgers = (body.enabledLedgers || []).filter((l: string) => VALID_LEDGER_TYPES.includes(l));
+
+      // Validate columns
+      const columns = body.columns || {};
+      for (const ledgerType of VALID_LEDGER_TYPES) {
+        if (columns[ledgerType] && !Array.isArray(columns[ledgerType])) {
+          return c.json({ error: `columns.${ledgerType} must be an array` }, 400);
+        }
+      }
+
+      const config = {
+        businessType,
+        enabledLedgers,
+        columns,
+        updatedAt: new Date().toISOString(),
+        updatedBy: auth.userId,
+      };
+
+      await kv.set(`ledger_config:${businessType}`, config);
+
+      // Audit log
+      logAdminAction({
+        actorId: auth.userId,
+        actorName: auth.name,
+        action: "update_ledger_config",
+        targetId: businessType,
+        targetEmail: "N/A",
+        details: `Updated ledger config for ${businessType}: enabled ledgers = ${enabledLedgers.join(', ')}`,
+      }).catch((e: any) => console.log(`Audit log failed for ledger-config: ${e.message}`));
+
+      return c.json({ success: true, data: config });
+    } catch (e: any) {
+      console.log(`admin/ledger-config PUT error: ${e.message}`);
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  // ---------------------------------------------------------------------------
+  // Bulk Delete — Preview
+  // ---------------------------------------------------------------------------
+  // Generic endpoint: fetch items by KV key prefix with optional filters,
+  // returning lean preview rows for the DeleteFlowModal.
+  // ---------------------------------------------------------------------------
+  app.post("/make-server-37f42386/bulk-delete-preview", requireAuth(), requirePermission('data.backfill'), async (c) => {
+    try {
+      const { prefix, startDate, endDate, dateField, driverId, platform, fields } = await c.req.json();
+
+      if (!prefix || typeof prefix !== "string") {
+        return c.json({ error: "Missing required 'prefix' parameter" }, 400);
+      }
+
+      const SAFETY_LIMIT = 50000;
+      const PAGE_SIZE = 1000;
+      const dateFld = dateField || "date";
+      const requestedFields = Array.isArray(fields) && fields.length > 0 ? fields : null;
+
+      // Paginate through all matching records to avoid the 1,000-row PostgREST cap
+      let rows: any[] = [];
+      let offset = 0;
+      while (offset < SAFETY_LIMIT) {
+        let query = fromKvStore()
+          .select("key, value")
+          .like("key", `${prefix}%`)
+          .range(offset, offset + PAGE_SIZE - 1);
+
+        // Server-side date filtering via JSON field extraction
+        if (startDate) {
+          query = query.gte(`value->>${dateFld}`, startDate);
+        }
+        if (endDate) {
+          query = query.lte(`value->>${dateFld}`, endDate);
+        }
+
+        // Server-side driverId filtering
+        if (driverId) {
+          query = query.eq("value->>driverId", driverId);
+        }
+
+        const { data, error } = await query;
+        if (error) {
+          console.log(`bulk-delete-preview query error at offset ${offset}: ${error.message}`);
+          return c.json({ error: `Database query failed: ${error.message}` }, 500);
+        }
+
+        const page = data || [];
+        rows = rows.concat(page);
+
+        // If we got fewer than PAGE_SIZE rows, we've reached the end
+        if (page.length < PAGE_SIZE) break;
+        offset += PAGE_SIZE;
+      }
+
+      console.log(`bulk-delete-preview: fetched ${rows.length} total rows for prefix "${prefix}"`);
+
+      // Client-side platform filtering (case-insensitive)
+      if (platform) {
+        const plat = platform.toLowerCase();
+        rows = rows.filter((r: any) => {
+          const val = r.value;
+          if (!val) return false;
+          const p = (val.platform || "").toLowerCase();
+          return p === plat || p.includes(plat);
+        });
+      }
+
+      // Map to lean preview items
+      const items = rows.map((r: any) => {
+        const val = r.value || {};
+        const item: Record<string, any> = { key: r.key };
+        if (requestedFields) {
+          for (const f of requestedFields) {
+            item[f] = val[f] ?? null;
+          }
+        } else {
+          Object.assign(item, val);
+        }
+        return item;
+      });
+
+      return c.json({ items, totalCount: items.length });
+    } catch (e: any) {
+      console.log(`bulk-delete-preview error: ${e.message}`);
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  // ---------------------------------------------------------------------------
+  // Bulk Delete — Execute
+  // ---------------------------------------------------------------------------
+  // Accepts an array of KV keys and deletes them in chunks.
+  // Optionally cleans up Supabase Storage files referenced by the values.
+  // ---------------------------------------------------------------------------
+  app.post("/make-server-37f42386/bulk-delete-execute", requireAuth(), requirePermission('data.backfill'), async (c) => {
+    try {
+      const { keys, cleanupStorage } = await c.req.json();
+
+      if (!Array.isArray(keys) || keys.length === 0) {
+        return c.json({ error: "Missing or empty 'keys' array" }, 400);
+      }
+      if (keys.length > 5000) {
+        return c.json({ error: "Too many items (max 5000). Please use narrower filters." }, 400);
+      }
+
+      const CHUNK_SIZE = 100;
+      const FILE_CHUNK_SIZE = 50;
+      const filesByBucket = new Map<string, string[]>();
+
+      // Reverse toll_usage events before wiping toll_ledger / transaction keys.
+      try {
+        const { tollSourceIdsFromKeys, reverseTollUsageEventsForSourceIds } = await import(
+          "./toll_financial_reset.ts"
+        );
+        const tollIds = tollSourceIdsFromKeys(
+          keys.filter(
+            (k: string) =>
+              String(k).startsWith("toll_ledger:") || String(k).startsWith("transaction:"),
+          ),
+        );
+        if (tollIds.length > 0) {
+          const rev = await reverseTollUsageEventsForSourceIds(tollIds, "toll_ledger_deleted");
+          if (rev.errors.length) {
+            console.warn(
+              `bulk-delete-execute: toll_usage reverse warnings: ${rev.errors.join("; ")}`,
+            );
+          }
+          console.log(
+            `bulk-delete-execute: reversed ${rev.eventsReversed} toll_usage event(s) for ${tollIds.length} source id(s)`,
+          );
+        }
+      } catch (revErr: any) {
+        console.warn(
+          `bulk-delete-execute: toll_usage reverse failed (continuing delete): ${revErr?.message || revErr}`,
+        );
+      }
+
+      for (let i = 0; i < keys.length; i += CHUNK_SIZE) {
+        const chunk = keys.slice(i, i + CHUNK_SIZE);
+
+        // If cleanupStorage requested, fetch values first to find file references
+        if (cleanupStorage) {
+          try {
+            const values = await kv.mget(chunk);
+            (values || []).forEach((item: any) => {
+              if (!item) return;
+              for (const { bucket, path } of collectStoragePathsFromRecord(item)) {
+                if (path) {
+                  if (!filesByBucket.has(bucket)) filesByBucket.set(bucket, []);
+                  filesByBucket.get(bucket)!.push(path);
+                }
+              }
+            });
+          } catch (fetchErr: any) {
+            console.log(`bulk-delete-execute: storage scan warning (non-fatal): ${fetchErr.message}`);
+          }
+        }
+
+        // Delete the KV entries
+        await kv.mdel(chunk);
+      }
+
+      // Cleanup storage files if any were found
+      let filesDeletedCount = 0;
+      const allPaths: string[] = [];
+      for (const [, paths] of filesByBucket) {
+        allPaths.push(...paths);
+      }
+      for (const [bucket, paths] of filesByBucket) {
+        for (let i = 0; i < paths.length; i += FILE_CHUNK_SIZE) {
+          const fileChunk = paths.slice(i, i + FILE_CHUNK_SIZE);
+          try {
+            await supabase.storage.from(bucket).remove(fileChunk);
+            filesDeletedCount += fileChunk.length;
+          } catch (storageErr: any) {
+            console.log(`bulk-delete-execute: storage cleanup warning (non-fatal): ${storageErr.message}`);
+          }
+        }
+      }
+      if (cleanupStorage && allPaths.length) {
+        try {
+          await markEvidenceFilesDeleted(supabase, allPaths);
+        } catch (evErr: any) {
+          console.log(`bulk-delete-execute: evidence_files update warning (non-fatal): ${evErr?.message}`);
+        }
+      }
+
+      console.log(`bulk-delete-execute: deleted ${keys.length} keys, ${filesDeletedCount} storage files`);
+      const rbacUser = c.get('rbacUser') as { userId?: string; email?: string } | undefined;
+      await logAdminAction({
+        actorId: rbacUser?.userId || "unknown",
+        actorName: rbacUser?.email || "Admin",
+        action: "bulk_delete_execute",
+        targetId: "bulk",
+        targetEmail: "N/A",
+        details: `deletedKeys=${keys.length} filesDeleted=${filesDeletedCount}`,
+      });
+      return c.json({ success: true, deletedCount: keys.length, filesDeletedCount });
+    } catch (e: any) {
+      console.log(`bulk-delete-execute error: ${e.message}`);
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  // GET /ledger/drivers-summary + /ledger/fleet-summary registered via registerLedgerDriversFleetSummaryRoutes(app)
+
+
+  // ---------------------------------------------------------------------------
+  // UNVERIFIED VENDOR MANAGEMENT
+  // Phase 1 - Enterprise Vendor Verification System
+  // ---------------------------------------------------------------------------
+
+  // GET /unverified-vendors - Fetch all unverified vendors
+  app.get("/make-server-37f42386/unverified-vendors", requireAuth(), async (c) => {
+      try {
+          const status = c.req.query("status") as 'pending' | 'resolved' | undefined;
+          
+          console.log(`[UnverifiedVendors] Fetching vendors (status: ${status || 'all'})`);
+          
+          const vendors = await unverifiedVendor.getUnverifiedVendors(status);
+          
+          // Enrich all transactions with driver and vehicle names
+          const allTransactions = vendors.flatMap((v: any) => v.transactions || []);
+          const driverIds = [...new Set(allTransactions.map((t: any) => t.driverId).filter(Boolean))];
+          const vehicleIds = [...new Set(allTransactions.map((t: any) => t.vehicleId).filter(Boolean))];
+          
+          // Fetch driver and vehicle details
+          const drivers = driverIds.length > 0 ? await kv.mget(driverIds.map((id: string) => `driver:${id}`)) : [];
+          const vehicles = vehicleIds.length > 0 ? await kv.mget(vehicleIds.map((id: string) => `vehicle:${id}`)) : [];
+          
+          const driverMap = new Map(drivers.filter(Boolean).map((d: any) => [d.id, d]));
+          const vehicleMap = new Map(vehicles.filter(Boolean).map((v: any) => [v.id, v]));
+          
+          // Enrich vendors with transaction details
+          const enrichedVendors = vendors.map((vendor: any) => ({
+              ...vendor,
+              transactions: (vendor.transactions || []).map((tx: any) => {
+                  const driver = tx.driverId ? driverMap.get(tx.driverId) : null;
+                  const vehicle = tx.vehicleId ? vehicleMap.get(tx.vehicleId) : null;
+                  
+                  return {
+                      ...tx,
+                      driverName: driver?.name || null,
+                      vehicleName: vehicle?.licensePlate || vehicle?.name || null,
+                  };
+              })
+          }));
+          
+          // Calculate summary statistics
+          const summary = {
+              total: enrichedVendors.length,
+              pending: enrichedVendors.filter((v: any) => v.status === 'pending').length,
+              resolved: enrichedVendors.filter((v: any) => v.status === 'resolved').length,
+              totalAmountAtRisk: enrichedVendors
+                  .filter((v: any) => v.status === 'pending')
+                  .reduce((sum: number, v: any) => sum + (v.metadata?.totalAmount || 0), 0)
+          };
+          
+          console.log(`[UnverifiedVendors] Returning ${enrichedVendors.length} vendors, ${summary.pending} pending`);
+          
+          return c.json({
+              vendors: filterByOrg(enrichedVendors, c),
+              summary
+          });
+      } catch (error: any) {
+          console.error('[UnverifiedVendors] Error fetching vendors:', error);
+          return c.json({ 
+              error: `Failed to fetch unverified vendors: ${error.message}` 
+          }, 500);
+      }
+  });
+
+  // GET /unverified-vendors/:id - Fetch single vendor with details
+  app.get("/make-server-37f42386/unverified-vendors/:id", requireAuth(), async (c) => {
+      try {
+          const vendorId = c.req.param("id");
+          
+          if (!vendorId) {
+              return c.json({ error: 'Vendor ID is required' }, 400);
+          }
+          
+          console.log(`[UnverifiedVendors] Fetching vendor details: ${vendorId}`);
+          
+          // Fetch vendor
+          const vendor = await unverifiedVendor.getUnverifiedVendorById(vendorId);
+          
+          if (!vendor) {
+              return c.json({ error: 'Vendor not found' }, 404);
+          }
+          if (!belongsToOrg(vendor, c)) {
+              return c.json({ error: 'Vendor not found' }, 404);
+          }
+          
+          // Fetch linked transactions (already included in vendor object from getUnverifiedVendorById)
+          const transactions = vendor.transactions || [];
+          
+          // Extract unique drivers and vehicles
+          const driverIds = [...new Set(transactions.map((t: any) => t.driverId).filter(Boolean))];
+          const vehicleIds = [...new Set(transactions.map((t: any) => t.vehicleId).filter(Boolean))];
+          
+          // Fetch driver details
+          const drivers = await kv.mget(driverIds.map((id: string) => `driver:${id}`));
+          const validDrivers = drivers.filter((d: any) => d !== null);
+          
+          // Fetch vehicle details
+          const vehicles = await kv.mget(vehicleIds.map((id: string) => `vehicle:${id}`));
+          const validVehicles = vehicles.filter((v: any) => v !== null);
+          
+          // Create lookup maps for enrichment
+          const driverMap = new Map(validDrivers.map((d: any) => [d.id, d]));
+          const vehicleMap = new Map(validVehicles.map((v: any) => [v.id, v]));
+          
+          // Enrich transactions with driver and vehicle names
+          const enrichedTransactions = transactions.map((tx: any) => {
+              const driver = tx.driverId ? driverMap.get(tx.driverId) : null;
+              const vehicle = tx.vehicleId ? vehicleMap.get(tx.vehicleId) : null;
+              
+              return {
+                  ...tx,
+                  driverName: driver?.name || null,
+                  vehicleName: vehicle?.licensePlate || vehicle?.name || null,
+              };
+          });
+          
+          // Fetch all verified stations for matching
+          const allStations = await kv.getByPrefix('station:');
+          const verifiedStations = allStations.filter((s: any) => s.status === 'verified');
+          
+          // Suggest matching stations
+          const suggestedMatches = suggestStationMatches(
+              vendor.name,
+              verifiedStations,
+              0.5, // 50% minimum confidence
+              5    // Top 5 matches
+          ).map((match: any) => ({
+              stationId: match.station.id,
+              stationName: match.station.name,
+              brand: match.station.brand,
+              address: match.station.address,
+              confidence: Math.round(match.similarity * 100) / 100,
+              reason: match.reason
+          }));
+          
+          console.log(`[UnverifiedVendors] Returning vendor ${vendorId} with ${enrichedTransactions.length} transactions, ${suggestedMatches.length} suggested matches`);
+          
+          return c.json({
+              vendor,
+              transactions: enrichedTransactions,
+              drivers: validDrivers,
+              vehicles: validVehicles,
+              suggestedMatches
+          });
+      } catch (error: any) {
+          console.error(`[UnverifiedVendors] Error fetching vendor details:`, error);
+          return c.json({ 
+              error: `Failed to fetch vendor details: ${error.message}` 
+          }, 500);
+      }
+  });
+
+  // POST /unverified-vendors - Create unverified vendor from transaction
+  app.post("/make-server-37f42386/unverified-vendors", async (c) => {
+      try {
+          const body = await c.req.json();
+          const { transactionId, vendorName, sourceType } = body;
+          
+          if (!transactionId || !vendorName) {
+              return c.json({ 
+                  error: 'Transaction ID and vendor name are required' 
+              }, 400);
+          }
+          
+          if (!['no_gps', 'unmatched_name', 'manual_entry'].includes(sourceType)) {
+              return c.json({ 
+                  error: 'Invalid sourceType. Must be: no_gps, unmatched_name, or manual_entry' 
+              }, 400);
+          }
+          
+          console.log(`[UnverifiedVendors] Creating vendor "${vendorName}" for transaction ${transactionId}`);
+          
+          const vendor = await unverifiedVendor.createOrUpdateUnverifiedVendor(
+              transactionId,
+              vendorName,
+              sourceType
+          );
+          
+          console.log(`[UnverifiedVendors] Vendor created/updated: ${vendor.id}`);
+          
+          return c.json({
+              success: true,
+              vendor
+          });
+      } catch (error: any) {
+          console.error('[UnverifiedVendors] Error creating vendor:', error);
+          return c.json({ 
+              error: `Failed to create vendor: ${error.message}` 
+          }, 500);
+      }
+  });
+
+  // POST /unverified-vendors/bulk - Bulk create vendors from multiple transactions
+  app.post("/make-server-37f42386/unverified-vendors/bulk", async (c) => {
+      try {
+          const body = await c.req.json();
+          const { transactions } = body;
+          
+          if (!Array.isArray(transactions) || transactions.length === 0) {
+              return c.json({ 
+                  error: 'Transactions array is required and must not be empty' 
+              }, 400);
+          }
+          
+          // Validate each transaction
+          for (const tx of transactions) {
+              if (!tx.id || !tx.vendor) {
+                  return c.json({ 
+                      error: 'Each transaction must have id and vendor fields' 
+                  }, 400);
+              }
+              if (!['no_gps', 'unmatched_name', 'manual_entry'].includes(tx.sourceType)) {
+                  return c.json({ 
+                      error: `Invalid sourceType for transaction ${tx.id}` 
+                  }, 400);
+              }
+          }
+          
+          console.log(`[UnverifiedVendors] Bulk creating vendors for ${transactions.length} transactions`);
+          
+          const vendors = await unverifiedVendor.bulkCreateUnverifiedVendors(transactions);
+          
+          console.log(`[UnverifiedVendors] Bulk creation complete: ${vendors.length} unique vendors`);
+          
+          return c.json({
+              success: true,
+              vendors,
+              summary: {
+                  processedTransactions: transactions.length,
+                  uniqueVendors: vendors.length
+              }
+          });
+      } catch (error: any) {
+          console.error('[UnverifiedVendors] Error in bulk creation:', error);
+          return c.json({ 
+              error: `Bulk vendor creation failed: ${error.message}` 
+          }, 500);
+      }
+  });
+
+  // PUT /unverified-vendors/:id/resolve - Resolve vendor to existing station
+  app.put("/make-server-37f42386/unverified-vendors/:id/resolve", async (c) => {
+      try {
+          const vendorId = c.req.param("id");
+          const body = await c.req.json();
+          const { stationId, resolvedBy } = body;
+          
+          if (!vendorId) {
+              return c.json({ error: 'Vendor ID is required' }, 400);
+          }
+          
+          if (!stationId || !resolvedBy) {
+              return c.json({ 
+                  error: 'Station ID and resolvedBy are required' 
+              }, 400);
+          }
+          
+          console.log(`[UnverifiedVendors] Resolving vendor ${vendorId} to station ${stationId}`);
+          
+          const result = await unverifiedVendor.resolveVendorToStation(
+              vendorId,
+              stationId,
+              resolvedBy
+          );
+          
+          console.log(`[UnverifiedVendors] Resolution complete: ${result.summary.transactionsUpdated} transactions updated`);
+          
+          return c.json({
+              success: true,
+              ...result
+          });
+      } catch (error: any) {
+          console.error('[UnverifiedVendors] Error resolving vendor:', error);
+          return c.json({ 
+              error: `Failed to resolve vendor: ${error.message}` 
+          }, 500);
+      }
+  });
+
+  // POST /unverified-vendors/:id/create-station - Create new station from vendor
+  app.post("/make-server-37f42386/unverified-vendors/:id/create-station", async (c) => {
+      try {
+          const vendorId = c.req.param("id");
+          const body = await c.req.json();
+          const { stationData, resolvedBy } = body;
+          
+          if (!vendorId) {
+              return c.json({ error: 'Vendor ID is required' }, 400);
+          }
+          
+          if (!stationData || !stationData.name) {
+              return c.json({ 
+                  error: 'Station data with name is required' 
+              }, 400);
+          }
+          
+          if (!resolvedBy) {
+              return c.json({ 
+                  error: 'resolvedBy is required' 
+              }, 400);
+          }
+          
+          console.log(`[UnverifiedVendors] Creating new station from vendor ${vendorId}: "${stationData.name}"`);
+          
+          const result = await unverifiedVendor.createStationFromVendor(
+              vendorId,
+              stationData,
+              resolvedBy
+          );
+          
+          console.log(`[UnverifiedVendors] New station created: ${result.station.id}, ${result.summary.transactionsUpdated} transactions updated`);
+          
+          return c.json({
+              success: true,
+              ...result
+          });
+      } catch (error: any) {
+          console.error('[UnverifiedVendors] Error creating station:', error);
+          return c.json({ 
+              error: `Failed to create station: ${error.message}` 
+          }, 500);
+      }
+  });
+
+  // DELETE /unverified-vendors/:id - Reject/dismiss vendor
+  app.delete("/make-server-37f42386/unverified-vendors/:id", async (c) => {
+      try {
+          const vendorId = c.req.param("id");
+          const body = await c.req.json();
+          const { rejectedBy, reason, action = 'flag' } = body;
+          
+          if (!vendorId) {
+              return c.json({ error: 'Vendor ID is required' }, 400);
+          }
+          
+          if (!rejectedBy || !reason) {
+              return c.json({ 
+                  error: 'rejectedBy and reason are required' 
+              }, 400);
+          }
+          
+          if (!['flag', 'dismiss'].includes(action)) {
+              return c.json({ 
+                  error: 'action must be "flag" or "dismiss"' 
+              }, 400);
+          }
+          
+          console.log(`[UnverifiedVendors] Rejecting vendor ${vendorId}: ${reason}`);
+
+          // rejectVendor(vendorId, reason, rejectedBy) — action flag/dismiss is logged on the vendor record via reason.
+          const vendor = await unverifiedVendor.rejectVendor(vendorId, `${action}: ${reason}`, rejectedBy);
+          const transactionsAffected = Array.isArray(vendor?.transactionIds) ? vendor.transactionIds.length : 0;
+
+          console.log(`[UnverifiedVendors] Vendor rejected: ${transactionsAffected} transactions ${action}ed`);
+
+          return c.json({
+              success: true,
+              vendor,
+              summary: { transactionsAffected, action },
+          });
+      } catch (error: any) {
+          console.error('[UnverifiedVendors] Error rejecting vendor:', error);
+          return c.json({ 
+              error: `Failed to reject vendor: ${error.message}` 
+          }, 500);
+      }
+  });
+
+  // ---------------------------------------------------------------------------
+  // TRANSACTION-LEVEL RESOLUTION (Individual Transaction Handling)
+  // ---------------------------------------------------------------------------
+
+  // PUT /unverified-vendors/:vendorId/transactions/:txId/resolve - Resolve single transaction to station
+  app.put("/make-server-37f42386/unverified-vendors/:vendorId/transactions/:txId/resolve", async (c) => {
+      try {
+          const vendorId = c.req.param("vendorId");
+          const txId = c.req.param("txId");
+          const body = await c.req.json();
+          const { stationId } = body;
+          
+          if (!vendorId || !txId || !stationId) {
+              return c.json({ error: 'vendorId, txId, and stationId are required' }, 400);
+          }
+          
+          console.log(`[Transaction] Resolving transaction ${txId} to station ${stationId}`);
+          
+          // Get vendor
+          const vendor = await kv.get(`unverified_vendor:${vendorId}`);
+          if (!vendor) {
+              return c.json({ error: 'Vendor not found' }, 404);
+          }
+          
+          // Get station
+          const station = await kv.get(`station:${stationId}`);
+          if (!station) {
+              return c.json({ error: 'Station not found' }, 404);
+          }
+          
+          // Get transaction
+          const transaction = await kv.get(`transaction:${txId}`);
+          if (!transaction) {
+              return c.json({ error: 'Transaction not found' }, 404);
+          }
+          
+          // Update transaction with station info & release gate-hold
+          const now = new Date().toISOString();
+          transaction.location = station.name;
+          transaction.vendor = station.name;
+          transaction.stationId = stationId;
+          transaction.unverifiedVendorResolved = true;
+          transaction.resolvedAt = now;
+          transaction.metadata = transaction.metadata || {};
+          transaction.metadata.stationGateHold = false;
+          transaction.metadata.matchedStationId = stationId;
+          transaction.metadata.vendorVerificationStatus = 'verified';
+          transaction.metadata.vendorMatchedAt = now;
+          transaction.metadata.locationStatus = 'verified';
+          transaction.metadata.verificationMethod = 'admin_vendor_resolution';
+          transaction.metadata.gateReason = undefined;
+          await kv.set(`transaction:${txId}`, stampOrg(transaction, c));
+          
+          // Move transaction from pending to resolved list on vendor
+          vendor.transactionIds = vendor.transactionIds.filter((id: string) => id !== txId);
+          vendor.resolvedTransactionIds = vendor.resolvedTransactionIds || [];
+          if (!vendor.resolvedTransactionIds.includes(txId)) {
+              vendor.resolvedTransactionIds.push(txId);
+          }
+          vendor.metadata = vendor.metadata || {};
+          vendor.metadata.transactionCount = vendor.transactionIds.length;
+          vendor.metadata.totalAmount = 0;
+          
+          // Recalculate vendor total amount from remaining transactions
+          if (vendor.transactionIds.length > 0) {
+              const remainingTxs = await kv.mget(vendor.transactionIds.map((id: string) => `transaction:${id}`));
+              vendor.metadata.totalAmount = remainingTxs
+                  .filter(Boolean)
+                  .reduce((sum: number, tx: any) => sum + Math.abs(tx.amount || 0), 0);
+          }
+          
+          // If vendor has no more transactions, mark it as resolved
+          if (vendor.transactionIds.length === 0) {
+              vendor.status = 'resolved';
+              vendor.resolvedAt = new Date().toISOString();
+              vendor.autoResolved = true;
+          }
+          
+          await kv.set(`unverified_vendor:${vendorId}`, stampOrg(vendor, c));
+          
+          console.log(`[Transaction] Resolved transaction ${txId}, vendor has ${vendor.transactionIds.length} transactions remaining`);
+          
+          return c.json({
+              success: true,
+              transaction,
+              vendor,
+              remainingTransactions: vendor.transactionIds.length
+          });
+      } catch (error: any) {
+          console.error('[Transaction] Error resolving transaction:', error);
+          return c.json({ error: `Failed to resolve transaction: ${error.message}` }, 500);
+      }
+  });
+
+  // POST /unverified-vendors/repair-resolved - One-time repair for transactions resolved before resolvedTransactionIds tracking
+  app.post("/make-server-37f42386/unverified-vendors/repair-resolved", async (c) => {
+      try {
+          console.log('[Repair] Scanning for orphaned resolved transactions...');
+          const allTransactions = await kv.getByPrefix('transaction:');
+          const allVendors = await kv.getByPrefix('unverified_vendor:');
+          
+          let repaired = 0;
+          
+          for (const tx of allTransactions) {
+              if (!tx || !tx.unverifiedVendorResolved) continue;
+              
+              // Check if this tx is tracked in any vendor's resolvedTransactionIds
+              const isTracked = allVendors.some((v: any) => 
+                  (v.resolvedTransactionIds || []).includes(tx.id) ||
+                  (v.transactionIds || []).includes(tx.id)
+              );
+              
+              if (!isTracked) {
+                  // Fix stationGateHold if still true
+                  if (tx.metadata?.stationGateHold) {
+                      tx.metadata.stationGateHold = false;
+                      tx.metadata.locationStatus = 'verified';
+                      tx.metadata.verificationMethod = 'admin_vendor_resolution';
+                      tx.metadata.gateReason = undefined;
+                      await kv.set(`transaction:${tx.id}`, stampOrg(tx, c));
+                  }
+                  
+                  // Find the vendor this tx belonged to and add to resolvedTransactionIds
+                  for (const vendor of allVendors) {
+                      // Match by vendor name or metadata
+                      const txVendor = tx.metadata?.unverifiedVendorId || tx.vendor;
+                      if (vendor.id === tx.metadata?.unverifiedVendorId || 
+                          (vendor.name && tx.metadata?.originalVendor && vendor.name.toLowerCase() === tx.metadata.originalVendor.toLowerCase())) {
+                          vendor.resolvedTransactionIds = vendor.resolvedTransactionIds || [];
+                          if (!vendor.resolvedTransactionIds.includes(tx.id)) {
+                              vendor.resolvedTransactionIds.push(tx.id);
+                              await kv.set(`unverified_vendor:${vendor.id}`, stampOrg(vendor, c));
+                          }
+                          break;
+                      }
+                  }
+                  repaired++;
+                  console.log(`[Repair] Fixed orphaned resolved transaction: ${tx.id}`);
+              }
+          }
+          
+          return c.json({ success: true, repaired, message: `Repaired ${repaired} orphaned resolved transactions` });
+      } catch (error: any) {
+          console.error('[Repair] Error:', error);
+          return c.json({ error: `Repair failed: ${error.message}` }, 500);
+      }
+  });
+
+  // POST /unverified-vendors/:vendorId/transactions/:txId/create-station - Create station from single transaction
+  app.post("/make-server-37f42386/unverified-vendors/:vendorId/transactions/:txId/create-station", async (c) => {
+      try {
+          const vendorId = c.req.param("vendorId");
+          const txId = c.req.param("txId");
+          const body = await c.req.json();
+          const { name, brand, address, city, state } = body;
+          
+          if (!vendorId || !txId || !name) {
+              return c.json({ error: 'vendorId, txId, and station name are required' }, 400);
+          }
+          
+          console.log(`[Transaction] Creating station "${name}" for transaction ${txId}`);
+          
+          // Get vendor
+          const vendor = await kv.get(`unverified_vendor:${vendorId}`);
+          if (!vendor) {
+              return c.json({ error: 'Vendor not found' }, 404);
+          }
+          
+          // Get transaction
+          const transaction = await kv.get(`transaction:${txId}`);
+          if (!transaction) {
+              return c.json({ error: 'Transaction not found' }, 404);
+          }
+          
+          // Create new station
+          const now = new Date().toISOString();
+          const stationId = `station_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+          const newStation = {
+              id: stationId,
+              name: name.trim(),
+              brand: brand?.trim() || name.trim(),
+              address: address?.trim() || 'Address to be updated',
+              city: city?.trim() || '',
+              state: state?.trim() || '',
+              status: 'verified',
+              source: 'unverified_vendor_resolution',
+              createdAt: now,
+              createdFrom: {
+                  vendorId,
+                  transactionId: txId,
+                  originalName: vendor.name
+              }
+          };
+          
+          await kv.set(`station:${stationId}`, stampOrg(newStation, c));
+          
+          // Update transaction & release gate-hold
+          transaction.location = newStation.name;
+          transaction.vendor = newStation.name;
+          transaction.stationId = stationId;
+          transaction.unverifiedVendorResolved = true;
+          transaction.resolvedAt = now;
+          transaction.metadata = transaction.metadata || {};
+          transaction.metadata.stationGateHold = false;
+          transaction.metadata.matchedStationId = stationId;
+          transaction.metadata.vendorVerificationStatus = 'verified';
+          transaction.metadata.vendorMatchedAt = now;
+          transaction.metadata.locationStatus = 'verified';
+          transaction.metadata.verificationMethod = 'admin_vendor_resolution';
+          transaction.metadata.gateReason = undefined;
+          await kv.set(`transaction:${txId}`, stampOrg(transaction, c));
+          
+          // Move transaction from pending to resolved list on vendor
+          vendor.transactionIds = vendor.transactionIds.filter((id: string) => id !== txId);
+          vendor.resolvedTransactionIds = vendor.resolvedTransactionIds || [];
+          if (!vendor.resolvedTransactionIds.includes(txId)) {
+              vendor.resolvedTransactionIds.push(txId);
+          }
+          vendor.metadata = vendor.metadata || {};
+          vendor.metadata.transactionCount = vendor.transactionIds.length;
+          vendor.metadata.totalAmount = 0;
+          
+          // Recalculate vendor total amount
+          if (vendor.transactionIds.length > 0) {
+              const remainingTxs = await kv.mget(vendor.transactionIds.map((id: string) => `transaction:${id}`));
+              vendor.metadata.totalAmount = remainingTxs
+                  .filter(Boolean)
+                  .reduce((sum: number, tx: any) => sum + Math.abs(tx.amount || 0), 0);
+          }
+          
+          // If vendor has no more transactions, mark it as resolved
+          if (vendor.transactionIds.length === 0) {
+              vendor.status = 'resolved';
+              vendor.resolvedAt = now;
+              vendor.autoResolved = true;
+          }
+          
+          await kv.set(`unverified_vendor:${vendorId}`, stampOrg(vendor, c));
+          
+          console.log(`[Transaction] Created station ${stationId}, vendor has ${vendor.transactionIds.length} transactions remaining`);
+          
+          return c.json({
+              success: true,
+              station: newStation,
+              transaction,
+              vendor,
+              remainingTransactions: vendor.transactionIds.length
+          });
+      } catch (error: any) {
+          console.error('[Transaction] Error creating station:', error);
+          return c.json({ error: `Failed to create station: ${error.message}` }, 500);
+      }
+  });
+
+  // DELETE /unverified-vendors/:vendorId/transactions/:txId - Reject single transaction
+  app.delete("/make-server-37f42386/unverified-vendors/:vendorId/transactions/:txId", async (c) => {
+      try {
+          const vendorId = c.req.param("vendorId");
+          const txId = c.req.param("txId");
+          const body = await c.req.json();
+          const { reason } = body;
+          
+          if (!vendorId || !txId || !reason) {
+              return c.json({ error: 'vendorId, txId, and rejection reason are required' }, 400);
+          }
+          
+          console.log(`[Transaction] Rejecting transaction ${txId}: ${reason}`);
+          
+          // Get vendor
+          const vendor = await kv.get(`unverified_vendor:${vendorId}`);
+          if (!vendor) {
+              return c.json({ error: 'Vendor not found' }, 404);
+          }
+          
+          // Get transaction
+          const transaction = await kv.get(`transaction:${txId}`);
+          if (!transaction) {
+              return c.json({ error: 'Transaction not found' }, 404);
+          }
+          
+          // Flag transaction as rejected
+          const now = new Date().toISOString();
+          transaction.rejectedFromVendor = true;
+          transaction.rejectedAt = now;
+          transaction.rejectionReason = reason;
+          transaction.requiresReview = true;
+          await kv.set(`transaction:${txId}`, stampOrg(transaction, c));
+          
+          // Move transaction from pending to rejected list on vendor
+          vendor.transactionIds = vendor.transactionIds.filter((id: string) => id !== txId);
+          vendor.rejectedTransactionIds = vendor.rejectedTransactionIds || [];
+          if (!vendor.rejectedTransactionIds.includes(txId)) {
+              vendor.rejectedTransactionIds.push(txId);
+          }
+          vendor.metadata = vendor.metadata || {};
+          vendor.metadata.transactionCount = vendor.transactionIds.length;
+          vendor.metadata.totalAmount = 0;
+          
+          // Recalculate vendor total amount
+          if (vendor.transactionIds.length > 0) {
+              const remainingTxs = await kv.mget(vendor.transactionIds.map((id: string) => `transaction:${id}`));
+              vendor.metadata.totalAmount = remainingTxs
+                  .filter(Boolean)
+                  .reduce((sum: number, tx: any) => sum + Math.abs(tx.amount || 0), 0);
+          }
+          
+          // If vendor has no more transactions, mark it as resolved
+          if (vendor.transactionIds.length === 0) {
+              vendor.status = 'resolved';
+              vendor.resolvedAt = now;
+              vendor.autoResolved = true;
+          }
+          
+          await kv.set(`unverified_vendor:${vendorId}`, stampOrg(vendor, c));
+          
+          console.log(`[Transaction] Rejected transaction ${txId}, vendor has ${vendor.transactionIds.length} transactions remaining`);
+          
+          return c.json({
+              success: true,
+              transaction,
+              vendor,
+              remainingTransactions: vendor.transactionIds.length
+          });
+      } catch (error: any) {
+          console.error('[Transaction] Error rejecting transaction:', error);
+          return c.json({ error: `Failed to reject transaction: ${error.message}` }, 500);
+      }
+  });
+
+  // POST /migrate-legacy-vendors - Phase 8: Scan for orphaned transactions (individual review mode)
+  app.post("/make-server-37f42386/migrate-legacy-vendors", async (c) => {
+      try {
+          const body = await c.req.json();
+          const { dryRun = true } = body;
+          
+          console.log(`[Migration] Scanning for orphaned transactions`);
+          
+          const result = await unverifiedVendor.migrateLegacyVendors(dryRun);
+          
+          console.log(`[Migration] Scan complete: ${result.preview.reviewQueueCount} transactions need review`);
+          
+          return c.json({
+              success: true,
+              ...result
+          });
+      } catch (error: any) {
+          console.error('[Migration] Error during migration scan:', error);
+          return c.json({ 
+              error: `Migration scan failed: ${error.message}` 
+          }, 500);
+      }
+  });
+
+  // POST /process-migration-transaction - Phase 8: Process individual orphaned transaction
+  app.post("/make-server-37f42386/process-migration-transaction", async (c) => {
+      try {
+          const body = await c.req.json();
+          const { transactionId, action, data } = body;
+          
+          if (!transactionId || !action) {
+              return c.json({ 
+                  error: 'Transaction ID and action are required' 
+              }, 400);
+          }
+          
+          console.log(`[Migration] Processing transaction ${transactionId} with action: ${action}`);
+          
+          const result = await unverifiedVendor.processMigrationTransaction(
+              transactionId,
+              action,
+              data
+          );
+          
+          console.log(`[Migration] Transaction processed successfully: ${result.message}`);
+          
+          return c.json({
+              success: true,
+              ...result
+          });
+      } catch (error: any) {
+          console.error('[Migration] Error processing transaction:', error);
+          return c.json({ 
+              error: `Failed to process transaction: ${error.message}` 
+          }, 500);
+      }
+  });
+
+  // GET /stations/search - Search verified stations by name or address
+  app.get("/make-server-37f42386/stations/search", requireAuth(), async (c) => {
+      try {
+          const query = c.req.query("q");
+          
+          if (!query) {
+              return c.json({ 
+                  error: 'Search query parameter "q" is required' 
+              }, 400);
+          }
+          
+          console.log(`[Stations] Searching for: "${query}"`);
+          
+          // Fetch all stations with "verified" status
+          const allStations = await kv.getByPrefix('station:');
+          
+          const verifiedStations = allStations
+              .filter((s: any) => s.status === 'verified')
+              .map((s: any) => ({
+                  id: s.id,
+                  name: s.name,
+                  brand: s.brand,
+                  address: s.address,
+                  location: s.location,
+                  plusCode: s.plusCode
+              }));
+          
+          // Simple fuzzy search by name or address
+          const lowerQuery = query.toLowerCase();
+          const matches = verifiedStations.filter((s: any) => 
+              s.name.toLowerCase().includes(lowerQuery) ||
+              s.address?.toLowerCase().includes(lowerQuery) ||
+              s.brand?.toLowerCase().includes(lowerQuery)
+          );
+          
+          console.log(`[Stations] Found ${matches.length} matches for "${query}"`);
+          
+          return c.json({
+              stations: matches.slice(0, 20) // Limit to 20 results
+          });
+      } catch (error: any) {
+          console.error('[Stations] Search error:', error);
+          return c.json({ 
+              error: `Station search failed: ${error.message}` 
+          }, 500);
+      }
+  });
+
+  // ---------------------------------------------------------------------------
+}

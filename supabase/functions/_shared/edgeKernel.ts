@@ -8,7 +8,7 @@ import { Hono } from "npm:hono@4.3.11";
 import type { Context, Next } from "npm:hono@4.3.11";
 import { applyCorsNpm } from "./corsAllowlistNpm.ts";
 
-export type FleetPathStyle = "slug" | "monolith";
+export type FleetPathStyle = "slug" | "monolith" | "fleet-core";
 
 export type CreateFleetFunctionOpts = {
   /** Edge function slug, e.g. fleet-fuel or make-server-37f42386 */
@@ -16,6 +16,7 @@ export type CreateFleetFunctionOpts = {
   /**
    * slug: basePath(`/${slug}`) + strip /functions/v1/{slug}
    * monolith: legacy make-server path rewrites (admin/ledger prefixes)
+   * fleet-core: map /fleet-core/* → /make-server-37f42386/* then monolith rules
    */
   pathStyle?: FleetPathStyle;
   /** Mounted domain controller (extracted functions) */
@@ -77,6 +78,17 @@ export function normalizeSlugPathname(slug: string, pathname: string): string {
   return pathname;
 }
 
+/** fleet-core alias: accept /fleet-core/* as the make-server residual paths. */
+export function normalizeFleetCorePathname(pathname: string): string {
+  if (pathname.startsWith("/functions/v1/fleet-core")) {
+    pathname = pathname.slice("/functions/v1".length) || "/fleet-core";
+  }
+  if (pathname === "/fleet-core" || pathname.startsWith("/fleet-core/")) {
+    pathname = `/make-server-37f42386${pathname.slice("/fleet-core".length)}`;
+  }
+  return normalizeMonolithPathname(pathname);
+}
+
 function maintenanceExempt(path: string): boolean {
   return (
     path.includes("/admin/") ||
@@ -108,7 +120,9 @@ export function createFleetFunction(opts: CreateFleetFunctionOpts): Hono {
     const fixed =
       pathStyle === "monolith"
         ? normalizeMonolithPathname(url.pathname)
-        : normalizeSlugPathname(slug, url.pathname);
+        : pathStyle === "fleet-core"
+          ? normalizeFleetCorePathname(url.pathname)
+          : normalizeSlugPathname(slug, url.pathname);
     if (fixed !== url.pathname) {
       url.pathname = fixed;
       return app.fetch(new Request(url.toString(), c.req.raw));

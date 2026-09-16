@@ -85,3 +85,4 @@ supabase/functions/fleet-toll/index.ts
 supabase/functions/fleet-ops/index.ts
 supabase/functions/fleet-claims/index.ts
 supabase/functions/fleet-pay/index.ts
+supabase/functions/fleet-core/index.ts

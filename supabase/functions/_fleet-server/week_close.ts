@@ -38,6 +38,8 @@ import {
   beginSealAttempt,
   buildSealIdempotencyKey,
   completeSealAttempt,
+  resolveSealGeneration,
+  WeekSealLogError,
 } from "./week_seal_log.ts";
 import { compareDriverWeekStatementsToEngines } from "./statement_engine_probe.ts";
 import { upsertFinanceReconDrifts, countOpenFinanceReconDrifts } from "./finance_recon_drift.ts";
@@ -898,7 +900,13 @@ async function ensureCloseLaneStatements(
   const sealCorrelationId = crypto.randomUUID();
 
   if (fuelNeedsSeal || (anyOpenDriver && fuelLaneMissing) || forceFuel) {
-    const idem = buildSealIdempotencyKey(orgId, week, "fuel");
+    const fuelGen = await resolveSealGeneration({
+      organizationId: orgId,
+      weekKey: week,
+      lane: "fuel",
+      force: forceFuel,
+    });
+    const idem = buildSealIdempotencyKey(orgId, week, "fuel", fuelGen);
     try {
       await beginSealAttempt({
         organizationId: orgId,
@@ -927,17 +935,24 @@ async function ensureCloseLaneStatements(
       });
       didSeal = true;
     } catch (e) {
+      if (e instanceof WeekSealLogError && e.code === "CLOSE_IN_PROGRESS") {
+        throw new WeekCloseError(e.code, e.message, e.status, e.details);
+      }
       const msg = e instanceof Error ? e.message : String(e);
       console.error("[week_close] fuel auto-seal failed — blocking close", week, msg);
-      await completeSealAttempt({
-        organizationId: orgId,
-        weekKey: week,
-        lane: "fuel",
-        idempotencyKey: idem,
-        correlationId: sealCorrelationId,
-        status: "failed",
-        lastError: msg,
-      }).catch(() => {});
+      try {
+        await completeSealAttempt({
+          organizationId: orgId,
+          weekKey: week,
+          lane: "fuel",
+          idempotencyKey: idem,
+          correlationId: sealCorrelationId,
+          status: "failed",
+          lastError: msg,
+        });
+      } catch (logErr) {
+        console.error("[week_close] fuel seal-log complete failed", logErr);
+      }
       throw new WeekCloseError(
         "CLOSE_BLOCKED",
         `Fuel week seal via fleet-fuel failed after retries: ${msg}`,
@@ -953,7 +968,14 @@ async function ensureCloseLaneStatements(
     forceToll ||
     (anyOpenDriver && tollLaneMissing)
   ) {
-    const idem = buildSealIdempotencyKey(orgId, week, "toll");
+    const tollForce = Boolean(tollStaleZeroNa || forceToll);
+    const tollGen = await resolveSealGeneration({
+      organizationId: orgId,
+      weekKey: week,
+      lane: "toll",
+      force: tollForce,
+    });
+    const idem = buildSealIdempotencyKey(orgId, week, "toll", tollGen);
     const useTollHttp = Deno.env.get("FLEET_TOLL_SEAL_HTTP") !== "false";
     try {
       await beginSealAttempt({
@@ -968,7 +990,7 @@ async function ensureCloseLaneStatements(
           organizationId: orgId,
           weekKey: week,
           actorId,
-          force: Boolean(tollStaleZeroNa || forceToll),
+          force: tollForce,
           asOf,
           idempotencyKey: idem,
           correlationId: sealCorrelationId,
@@ -978,7 +1000,7 @@ async function ensureCloseLaneStatements(
           organizationId: orgId,
           weekKey: week,
           actorId,
-          force: Boolean(tollStaleZeroNa || forceToll),
+          force: tollForce,
           asOf,
         });
       }
@@ -993,17 +1015,24 @@ async function ensureCloseLaneStatements(
       });
       didSeal = true;
     } catch (e) {
+      if (e instanceof WeekSealLogError && e.code === "CLOSE_IN_PROGRESS") {
+        throw new WeekCloseError(e.code, e.message, e.status, e.details);
+      }
       const msg = e instanceof Error ? e.message : String(e);
       console.error("[week_close] toll auto-seal failed — blocking close", week, msg);
-      await completeSealAttempt({
-        organizationId: orgId,
-        weekKey: week,
-        lane: "toll",
-        idempotencyKey: idem,
-        correlationId: sealCorrelationId,
-        status: "failed",
-        lastError: msg,
-      }).catch(() => {});
+      try {
+        await completeSealAttempt({
+          organizationId: orgId,
+          weekKey: week,
+          lane: "toll",
+          idempotencyKey: idem,
+          correlationId: sealCorrelationId,
+          status: "failed",
+          lastError: msg,
+        });
+      } catch (logErr) {
+        console.error("[week_close] toll seal-log complete failed", logErr);
+      }
       throw new WeekCloseError(
         "CLOSE_BLOCKED",
         `Toll week seal failed: ${msg}`,
@@ -1014,7 +1043,13 @@ async function ensureCloseLaneStatements(
   }
 
   if (earningsNeedsSeal || (anyOpenDriver && earningsLaneMissing) || forceEarnings) {
-    const idem = buildSealIdempotencyKey(orgId, week, "earnings");
+    const earningsGen = await resolveSealGeneration({
+      organizationId: orgId,
+      weekKey: week,
+      lane: "earnings",
+      force: forceEarnings,
+    });
+    const idem = buildSealIdempotencyKey(orgId, week, "earnings", earningsGen);
     const useEarningsHttp = Deno.env.get("FLEET_EARNINGS_SEAL_HTTP") !== "false";
     try {
       await beginSealAttempt({
@@ -1054,17 +1089,24 @@ async function ensureCloseLaneStatements(
       });
       didSeal = true;
     } catch (e) {
+      if (e instanceof WeekSealLogError && e.code === "CLOSE_IN_PROGRESS") {
+        throw new WeekCloseError(e.code, e.message, e.status, e.details);
+      }
       const msg = e instanceof Error ? e.message : String(e);
       console.error("[week_close] earnings auto-seal failed — blocking close", week, msg);
-      await completeSealAttempt({
-        organizationId: orgId,
-        weekKey: week,
-        lane: "earnings",
-        idempotencyKey: idem,
-        correlationId: sealCorrelationId,
-        status: "failed",
-        lastError: msg,
-      }).catch(() => {});
+      try {
+        await completeSealAttempt({
+          organizationId: orgId,
+          weekKey: week,
+          lane: "earnings",
+          idempotencyKey: idem,
+          correlationId: sealCorrelationId,
+          status: "failed",
+          lastError: msg,
+        });
+      } catch (logErr) {
+        console.error("[week_close] earnings seal-log complete failed", logErr);
+      }
       throw new WeekCloseError(
         "CLOSE_BLOCKED",
         `Earnings week seal failed: ${msg}`,
