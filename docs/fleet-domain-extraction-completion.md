@@ -1,12 +1,13 @@
 # Fleet domain extraction — completion playbook
 
-**Status:** **Program code-complete — Rev 3 (verification pass, 2026-09-16).** All ten §C6 items were implemented and re-verified; **the controls are armed and passing** (§D0 — overlap, manifest, kernel lint, 10/10 tests, all run locally by the auditor). The money-path defects C2a/b/c are closed. **One thing blocks everything: none of it is committed** (§D1) — 48 changes sit in the working tree, and every control added this round is a *CI* gate that has therefore never run. Read **§D first** — it supersedes §A and §C status and §8's wave rows.
+**Status:** **Program pending soak — Rev 3 D7 closeout shipped (2026-09-16).** Controls are armed in CI and green on `a6722fb4` (Deploy + Test + CI). Money-path defects C2a/b/c closed; D14 stubbed; `fleet-core` smoke-proven. **F5 is prepare-only:** keep `make-server-37f42386` until N-day zero traffic, then one sweep `.fleet` → `.fleetCore`. Residual decompose is decoupled (not an F5 blocker).
 
-**Goal:** Bring **Toll, Maintenance / Expense Hub, Claims, and Driver pay / settlement** to the same bar as fuel: own Edge Function (or intentional mount on `fleet-ops`), full client cutover, money-path seals safe, **browser** + auth proven — then retire `make-server-37f42386`.
+**Goal:** Bring **Toll, Maintenance / Expense Hub, Claims, and Driver pay / settlement** to the same bar as fuel: own Edge Function (or intentional mount on `fleet-ops`), full client cutover, money-path seals safe, **browser** + auth proven — then, after soak, retire `make-server-37f42386`.
 
 **Audience:** Agent / eng executing "finish the strangler — everything off the monolith like fuel."
 
 **Related:** [`docs/fleet-edge-5mb-split-plan.md`](./fleet-edge-5mb-split-plan.md) (fuel + 5 MB lessons), [`docs/fleet-monolith-extraction.md`](./fleet-monolith-extraction.md), [`docs/FLEET_DOMAIN_ROUTE_MAP.md`](./FLEET_DOMAIN_ROUTE_MAP.md)
+
 
 > **Plain English:** The size emergency is over. What remains is architecture: each money/ops domain should fail and deploy on its own. Do domains **one at a time**, in the order below. Copy the fuel checklist every time — do not invent a lighter process.
 >
@@ -368,7 +369,7 @@ The distinction that still matters: `96826af8` is the **last commit**, and every
 
 Also unchanged:
 
-- **Phase I browser pass still open** — preflight passes via `smoke-fleet-fuel-cors.mjs`, but the devtools checklist (UI totals + maintenance-mode drill) is still the stated gate and is unrun. Per §1.6, a preflight smoke is not the gate.
+- **Phase I authenticated UI totals** — preflight PASS; maintenance drill **done** (§8). Logged-in Fuel Entries `X-Total-Count` still needs a PO browser session.
 - **296 `.fleet` client call sites** (was 300). Expected, not a defect: ADR-0021 keeps the residual on the shim. At F5 these become `.fleetCore` in one sweep.
 - **ADR-0022's RTO is a tabletop estimate** (≤4h), not a rehearsed number. §8 says as much; keep it labelled that way until staging rehearses it.
 
@@ -376,15 +377,15 @@ Also unchanged:
 
 | # | Work | Effort | Gate |
 |---|---|---|---|
-| 1 | **Commit and push everything.** Confirm Actions green with new gates | minutes | D13 |
-| 2 | ~~Generate `fleet-core` manifest + smoke~~ | ✅ in tree | D15 |
+| 1 | ~~Commit and push; Actions green with new gates~~ | ✅ `a6722fb4` | D13 |
+| 2 | ~~Generate `fleet-core` manifest + smoke~~ | ✅ | D15 |
 | 3 | ~~Integration tests for seal behaviours~~ | ✅ stubbed DB tests | D14 |
 | 4 | ~~Conditional-write `in_progress`~~ | ✅ `claimInProgressRow` | D14 |
-| 5 | Phase I browser pass + maintenance-mode drill (six functions) | half day | D4, D9 |
+| 5 | ~~Maintenance-mode drill (six functions)~~; optional logged-in CORS totals | ✅ drill in §8 | D4, D9 |
 | 6 | **F5 soak (prepare only):** zero-traffic on `make-server-37f42386`, then sweep `.fleet` → `.fleetCore` — **do not delete shim this pass** | soak-bound | F5 |
 | 7 | *(decoupled)* Decompose residual registrar — **not** an F5 blocker | ongoing | — |
 
-After push goes green: program is **pending soak + browser proof**, not pending architecture.
+Program is **pending F5 soak** (prepare path documented). Architecture and CI gates are closed.
 
 ### D8. The lesson this round
 
@@ -789,62 +790,35 @@ Maintenance copy: `Platform is under maintenance…` + `maintenanceMessage` from
 | B2 seal log | 2026-09-16 | **Hardened + D14 stubbed.** `gN` keys; conditional `in_progress` claim; fail-closed; stubbed DB tests for replay / 409 / write-fail |
 | B3 tooling | 2026-09-16 | **Armed.** `--check`, overlap D15, CI + package scripts; `fleet-core` in `--all` + post-deploy smoke (kept out of overlap) |
 | F0 carve index | 2026-09-16 | **Done (gate).** Boot ≈ 106 lines; residual registrar; not an F5 blocker (§D2) |
-| F1–F4 | 2026-09-16 | **Smoke-proven** on Rev-2 deploy; Rev-3 gates apply on next push |
-| F5 / fleet-core | 2026-09-16 | **Scaffolded + manifested.** `routes.generated.json` committed; in TARGETS/ALL_FNS/smoke. **Do not retire `make-server-37f42386` until N-day zero traffic**, then sweep ~296 `.fleet` → `.fleetCore` |
-| Phase I CORS | 2026-09-16 | Preflight PASS; browser totals + maintenance drill recorded after Rev-3 push |
+| F1–F4 | 2026-09-16 | **Smoke-proven** on Rev-3 deploy `a6722fb4` (six slugs) |
+| F5 / fleet-core | 2026-09-16 | **Scaffolded + manifested + smoke green.** **Prepare-only:** do **not** delete/retire `make-server-37f42386` this pass. Pending soak = N-day zero traffic on the shim, then one sweep ~296 `API_ENDPOINTS.fleet` → `.fleetCore` |
+| Phase I CORS | 2026-09-16 | **Preflight PASS** (`smoke-fleet-fuel-cors.mjs`: 204, X-Roam-Product-Line, PUT, Origin). Authenticated `X-Total-Count` UI totals still need a logged-in browser pass (`docs/phase-i-cors-browser-checklist.md`) when PO has a session |
 | ADR-0022 rollback | 2026-09-16 | Deploy scripts real; RTO still tabletop ≤4h until staging rehearse |
-| **Audit Rev 3** | **2026-09-16** | Controls local-green; D4/D3/D5 closed in tree. **Ship blocker was D1 — commit/push this closeout** |
-| **Rev 3 D7 closeout** | **2026-09-16** | D4+D3+D5 implemented; pending push SHA + Actions green + browser/maintenance §8 row |
+| **Audit Rev 3** | **2026-09-16** | Controls local-green; D4/D3/D5 closed |
+| **Rev 3 D7 closeout** | **2026-09-16** | **Shipped.** Closeout + health/toll-scan fix + residual `assertRequiredEnv` import. **SHA `a6722fb4`** — Actions Deploy + Test + CI **green** (new gates: lint-edge-kernel, manifest `--check`, overlap, extraction-status, post-deploy smokes). Hotfix restored make-server/fleet-core after F0 bare-call crash |
+| **D9 maintenance drill** | **2026-09-16** | Flipped `platform:settings:fleet` (+ legacy) `maintenanceMode=true`; all six slugs returned **503** maintenance payload on business paths; `/health` stayed **200**; restored to `false` |
 
 ---
 
 ## 9. Agent kickoff prompt (copy/paste)
 
 ```
-Read docs/fleet-domain-extraction-completion.md §D (Rev 3 verification) — it
-supersedes §A and §C status and §8's wave rows. Execute §D7 in order.
+Read docs/fleet-domain-extraction-completion.md §8 — Rev 3 D7 closeout is SHIPPED
+on a6722fb4 (Deploy/Test/CI green). Do NOT re-run D3/D4/D5 or re-carve the residual.
 
-The program is code-complete and the controls pass locally (kernel lint, 5/5
-manifests, D15 overlap 0 collisions, 10/10 tests). Do NOT redo any of that.
-Do not re-carve register_residual_monolith_routes.tsx — §D2 retires that goal;
-the whole residual has one destination (fleet-core), so its size is a code-health
-item, not an F5 blocker.
+Program status: pending F5 soak only. Keep make-server-37f42386 live.
 
-STEP 1 — push. Everything else waits on this.
-   48 changes are uncommitted; the deployed artifact is 96826af8, which predates
-   this round's kernel change, hardened week_seal_log, week_close wiring, and all
-   four CI gates. Commit, push, and confirm the Actions run goes green WITH the
-   new gates active (manifest --check, overlap, extraction-status staleness,
-   post-deploy smokes). Until then none of them has ever run.
+F5 prepare path (do not execute retirement this pass):
+  1. Confirm N consecutive days of zero traffic on make-server-37f42386
+     (gateway/logs — not assumed).
+  2. One client sweep: API_ENDPOINTS.fleet → API_ENDPOINTS.fleetCore (~296 sites).
+  3. Only then retire/rename the shim slug (ADR-0022 rollback ready).
 
-STEP 2 — close the fleet-core verification gap (§D4).
-   Generate supabase/functions/fleet-core/routes.generated.json and add fleet-core
-   to the post-deploy smoke loop. Keep it OUT of check-edge-manifest-overlap's
-   FLEET_SLUGS — it serves make-server's routes by design, so including it would
-   be a false positive. That exclusion is correct; the missing manifest is not.
-
-STEP 3 — make the seal contract demonstrated, not asserted (§D3).
-   The 10 existing tests are pure-function. Add integration tests for the three
-   behaviours that carry money risk:
-     a) same idempotency key + succeeded row returns prior result_json, no re-seal
-     b) concurrent call against a fresh in_progress row is refused 409
-     c) a seal-log write failure blocks the close (SEAL_LOG_WRITE_FAILED)
-
-STEP 4 — close the direct-seal race (§D5).
-   POST /fleet-*/internal/seal-*-week bypasses tryClaimWeekCloseLock entirely.
-   Claim the lock inside the internal handler, or make the in_progress transition
-   a conditional write.
-
-STEP 5 — browser proof (§1.6, still unapplied).
-   Run docs/phase-i-cors-browser-checklist.md in devtools across all six functions:
-   UI totals + maintenance-mode drill. A preflight smoke is not the gate.
-
-STEP 6 — F5 soak, then sweep 296 API_ENDPOINTS.fleet sites to .fleetCore and
-   retire the make-server-37f42386 slug.
+Optional leftover: logged-in browser pass for Fuel Entries X-Total-Count
+(docs/phase-i-cors-browser-checklist.md) — preflight + maintenance drill already
+recorded in §8.
 
 Stay on the current branch. Do not treat md cleanup as the fix.
-Push before auditing — three rounds running, the gap has been the last mile
-between a green working tree and the pipeline.
 ```
 
-Steps 2–4 are independent of each other; only Step 1 is a hard prerequisite.
+F5 soak is the only program gate left; residual decompose stays decoupled.
