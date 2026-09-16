@@ -18,7 +18,7 @@ import { fetchWithRetry } from './api';
 import { API_ENDPOINTS } from './apiConfig';
 import type { CloseBlocker, FuelLaneMetrics, TollLaneMetrics } from '../utils/weekCloseBlockers';
 
-const BASE = `${API_ENDPOINTS.fleet}/settlements/week-close`;
+const BASE = `${API_ENDPOINTS.fleetCore}/settlements/week-close`;
 
 export type WeekClosePreview = {
   weekKey: string;

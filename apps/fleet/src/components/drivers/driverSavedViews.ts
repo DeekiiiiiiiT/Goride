@@ -42,7 +42,7 @@ export function loadDriverSavedViews(): DriverSavedView[] {
 
 async function putServerViews(views: DriverSavedView[]): Promise<DriverSavedView[] | null> {
   try {
-    const response = await fetch(`${API_ENDPOINTS.fleet}/drivers/saved-views`, {
+    const response = await fetch(`${API_ENDPOINTS.fleetCore}/drivers/saved-views`, {
       method: 'PUT',
       headers: await requireAuthHeaders(),
       body: JSON.stringify({ views }),
@@ -60,7 +60,7 @@ async function putServerViews(views: DriverSavedView[]): Promise<DriverSavedView
 /** Load from API first; on failure use localStorage. */
 export async function fetchDriverSavedViews(): Promise<DriverSavedView[]> {
   try {
-    const response = await fetch(`${API_ENDPOINTS.fleet}/drivers/saved-views`, {
+    const response = await fetch(`${API_ENDPOINTS.fleetCore}/drivers/saved-views`, {
       headers: await requireAuthHeaders(null),
     });
     if (response.ok) {

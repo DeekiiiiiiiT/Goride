@@ -36,7 +36,7 @@ export async function fetchEnterpriseModules(
 
   inflight = (async () => {
     try {
-      const res = await fetch(`${API_ENDPOINTS.fleet}/enterprise/me/modules`, {
+      const res = await fetch(`${API_ENDPOINTS.fleetCore}/enterprise/me/modules`, {
         headers: {
           ...withProductLineHeaders(),
           Authorization: `Bearer ${token}`,

@@ -14,7 +14,7 @@ export interface EquipmentTemplate {
 
 export const templateService = {
   async getTemplates(): Promise<EquipmentTemplate[]> {
-    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/templates`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/templates`, {
       headers: await requireAuthHeaders(null)
     });
     if (!response.ok) throw new Error("Failed to fetch templates");
@@ -22,7 +22,7 @@ export const templateService = {
   },
 
   async saveTemplate(template: EquipmentTemplate): Promise<EquipmentTemplate> {
-    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/templates`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/templates`, {
       method: 'POST',
       headers: await requireAuthHeaders(),
       body: JSON.stringify(template)

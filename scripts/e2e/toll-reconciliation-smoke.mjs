@@ -55,9 +55,9 @@ for (const [k, v] of Object.entries({ SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY: S
   if (!v) { console.error(`✗ Missing required env: ${k}`); process.exit(2); }
 }
 
-const FN_BASE = `${SUPABASE_URL}/functions/v1/make-server-37f42386/toll-reconciliation`;
-const DISPUTE_BASE = `${SUPABASE_URL}/functions/v1/make-server-37f42386/dispute-refunds`;
-const CLAIMS_BASE = `${SUPABASE_URL}/functions/v1/make-server-37f42386/claims`;
+const FN_BASE = `${SUPABASE_URL}/functions/v1/fleet-core/toll-reconciliation`;
+const DISPUTE_BASE = `${SUPABASE_URL}/functions/v1/fleet-core/dispute-refunds`;
+const CLAIMS_BASE = `${SUPABASE_URL}/functions/v1/fleet-claims/claims`;
 const KV = 'kv_store_37f42386';
 
 const sb = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, { auth: { persistSession: false } });

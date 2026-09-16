@@ -14,7 +14,7 @@ async function authHeaders(contentType: string | null = 'application/json'): Pro
 
 export const inventoryService = {
   async getInventory(): Promise<InventoryItem[]> {
-    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/inventory`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/inventory`, {
       headers: await authHeaders(null)
     });
     if (!response.ok) throw new Error("Failed to fetch inventory");
@@ -22,7 +22,7 @@ export const inventoryService = {
   },
 
   async saveStock(item: InventoryItem): Promise<InventoryItem> {
-    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/inventory`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/inventory`, {
       method: 'POST',
       headers: await authHeaders(),
       body: JSON.stringify(item)
@@ -33,7 +33,7 @@ export const inventoryService = {
   },
 
   async bulkUpdateStock(items: InventoryItem[]): Promise<void> {
-    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/inventory/bulk`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/inventory/bulk`, {
       method: 'POST',
       headers: await authHeaders(),
       body: JSON.stringify(items)
@@ -42,7 +42,7 @@ export const inventoryService = {
   },
 
   async deleteStock(itemId: string): Promise<void> {
-    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/inventory/${encodeURIComponent(itemId)}`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/inventory/${encodeURIComponent(itemId)}`, {
       method: 'DELETE',
       headers: await authHeaders(null),
     });

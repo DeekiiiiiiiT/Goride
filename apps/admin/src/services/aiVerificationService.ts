@@ -18,7 +18,7 @@ export const aiVerificationService = {
      * Sends a receipt image to the AI for processing.
      */
     async processReceipt(imageBase64: string): Promise<AIReceiptResult> {
-        const response = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-37f42386/ai/process-fuel-receipt`, {
+        const response = await fetch(`https://${projectId}.supabase.co/functions/v1/fleet-core/ai/process-fuel-receipt`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -49,7 +49,7 @@ export const aiVerificationService = {
         correction?: number;
         message: string;
     }> {
-        const response = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-37f42386/ai/verify-odometer`, {
+        const response = await fetch(`https://${projectId}.supabase.co/functions/v1/fleet-core/ai/verify-odometer`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',

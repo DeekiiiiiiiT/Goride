@@ -13,7 +13,7 @@ export function SyncCenter() {
     const fetchAudit = async () => {
         setLoading(true);
         try {
-            const res = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-37f42386/sync/audit-trail`, {
+            const res = await fetch(`https://${projectId}.supabase.co/functions/v1/fleet-core/sync/audit-trail`, {
                 headers: await requireAuthHeaders(null)
             });
             const json = await res.json();

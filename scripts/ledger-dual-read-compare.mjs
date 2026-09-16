@@ -38,7 +38,7 @@ const maxDelta = Number(process.env.LEDGER_COMPARE_MAX_DELTA ?? 5);
 const maxPct = Number(process.env.LEDGER_COMPARE_MAX_PCT ?? 1);
 
 function fnUrl(path) {
-  return `${String(base).replace(/\/$/, "")}/functions/v1/make-server-37f42386${path}`;
+  return `${String(base).replace(/\/$/, "")}/functions/v1/fleet-core${path}`;
 }
 
 async function postJson(path, body) {

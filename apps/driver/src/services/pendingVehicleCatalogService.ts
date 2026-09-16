@@ -91,7 +91,7 @@ export async function fetchVehicleCatalogFacets(
   sp.set("level", params.level);
   if (params.make) sp.set("make", params.make);
   if (params.model) sp.set("model", params.model);
-  const res = await fetch(`${API_ENDPOINTS.fleet}/vehicle-catalog-facets?${sp.toString()}`, {
+  const res = await fetch(`${API_ENDPOINTS.fleetCore}/vehicle-catalog-facets?${sp.toString()}`, {
     headers: edgeHeaders(accessToken),
   });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -104,7 +104,7 @@ export async function listVehicleCatalogMatchesWithCount(
 ): Promise<VehicleCatalogMatchResponse> {
   const sp = buildVehicleCatalogMatchSearchParams(params);
   const res = await fetch(
-    `${API_ENDPOINTS.fleet}/vehicle-catalog-matches?${sp.toString()}`,
+    `${API_ENDPOINTS.fleetCore}/vehicle-catalog-matches?${sp.toString()}`,
     { headers: edgeHeaders(accessToken) },
   );
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -120,7 +120,7 @@ export async function getFleetVehicleCatalog(
   accessToken: string,
   catalogId: string,
 ): Promise<VehicleCatalogRecord> {
-  const res = await fetch(`${API_ENDPOINTS.fleet}/fleet/vehicle-catalog/${encodeURIComponent(catalogId)}`, {
+  const res = await fetch(`${API_ENDPOINTS.fleetCore}/fleet/vehicle-catalog/${encodeURIComponent(catalogId)}`, {
     headers: edgeHeaders(accessToken),
   });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -152,7 +152,7 @@ export async function listMyPendingCatalogRequests(
 ): Promise<{ items: VehicleCatalogPendingRequest[] }> {
   const sp = new URLSearchParams();
   if (opts?.fleet_vehicle_id) sp.set("fleet_vehicle_id", opts.fleet_vehicle_id);
-  const res = await fetch(`${API_ENDPOINTS.fleet}/vehicle-catalog-pending/my?${sp.toString()}`, {
+  const res = await fetch(`${API_ENDPOINTS.fleetCore}/vehicle-catalog-pending/my?${sp.toString()}`, {
     headers: edgeHeaders(accessToken),
   });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);

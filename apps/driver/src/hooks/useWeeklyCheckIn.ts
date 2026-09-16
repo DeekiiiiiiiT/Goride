@@ -55,7 +55,7 @@ export function useWeeklyCheckIn(driverId: string | undefined) {
       const authToken = session?.access_token ?? publicAnonKey;
 
       const response = await fetchWithDeadline(
-        `https://${projectId}.supabase.co/functions/v1/make-server-37f42386/check-ins?driverId=${driverId}&weekStart=${weekStart}`,
+        `https://${projectId}.supabase.co/functions/v1/fleet-core/check-ins?driverId=${driverId}&weekStart=${weekStart}`,
         {
           headers: {
             Authorization: `Bearer ${authToken}`,
@@ -141,7 +141,7 @@ export function useWeeklyCheckIn(driverId: string | undefined) {
     } as any;
 
     const res = await fetchWithDeadline(
-      `https://${projectId}.supabase.co/functions/v1/make-server-37f42386/check-ins`,
+      `https://${projectId}.supabase.co/functions/v1/fleet-core/check-ins`,
       {
         method: 'POST',
         headers: {

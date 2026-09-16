@@ -57,7 +57,7 @@ if (weeks.length === 0) {
   process.exit(1);
 }
 
-const base = `${url}/functions/v1/make-server-37f42386/settlements/week-close`;
+const base = `${url}/functions/v1/fleet-core/settlements/week-close`;
 
 async function syncWeek(weekKey) {
   const endpoints = [`${base}/sync`, `${base}/prepare`];

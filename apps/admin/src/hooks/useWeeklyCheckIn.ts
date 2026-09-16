@@ -27,7 +27,7 @@ export function useWeeklyCheckIn(driverId: string | undefined) {
             const weekStart = getWeekStart();
             
             // Fetch check-ins
-            const response = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-37f42386/check-ins?driverId=${driverId}&weekStart=${weekStart}`, {
+            const response = await fetch(`https://${projectId}.supabase.co/functions/v1/fleet-core/check-ins?driverId=${driverId}&weekStart=${weekStart}`, {
                 headers: {
                     'Authorization': `Bearer ${publicAnonKey}`
                 }
@@ -68,7 +68,7 @@ export function useWeeklyCheckIn(driverId: string | undefined) {
              const formData = new FormData();
              const compressed = await compressImage(photo, OCR_COMPRESS_OPTS);
              formData.append('file', compressed);
-             const uploadRes = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-37f42386/upload`, {
+             const uploadRes = await fetch(`https://${projectId}.supabase.co/functions/v1/fleet-core/upload`, {
                  method: 'POST',
                  headers: { 'Authorization': `Bearer ${publicAnonKey}` },
                  body: formData
@@ -97,7 +97,7 @@ export function useWeeklyCheckIn(driverId: string | undefined) {
             isVerified: reviewStatus === 'auto_approved' || reviewStatus === 'approved'
         } as any;
 
-        await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-37f42386/check-ins`, {
+        await fetch(`https://${projectId}.supabase.co/functions/v1/fleet-core/check-ins`, {
             method: 'POST',
             headers: {
                 'Authorization': `Bearer ${publicAnonKey}`,

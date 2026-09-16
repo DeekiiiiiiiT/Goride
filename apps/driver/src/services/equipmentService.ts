@@ -5,7 +5,7 @@ import { API_ENDPOINTS } from './apiConfig';
 
 export const equipmentService = {
   async getEquipment(vehicleId: string): Promise<EquipmentItem[]> {
-    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/equipment/${vehicleId}`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/equipment/${vehicleId}`, {
       headers: { 'Authorization': `Bearer ${publicAnonKey}` }
     });
     if (!response.ok) throw new Error("Failed to fetch equipment");
@@ -13,7 +13,7 @@ export const equipmentService = {
   },
 
   async saveEquipment(item: EquipmentItem): Promise<EquipmentItem> {
-    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/equipment`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/equipment`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -27,7 +27,7 @@ export const equipmentService = {
   },
 
   async deleteEquipment(vehicleId: string, itemId: string): Promise<void> {
-    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/equipment/${vehicleId}/${itemId}`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/equipment/${vehicleId}/${itemId}`, {
       method: 'DELETE',
       headers: { 'Authorization': `Bearer ${publicAnonKey}` }
     });
@@ -35,7 +35,7 @@ export const equipmentService = {
   },
 
   async getAllEquipment(): Promise<EquipmentItem[]> {
-    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/fleet/equipment/all`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/fleet/equipment/all`, {
       headers: { 'Authorization': `Bearer ${publicAnonKey}` }
     });
     if (!response.ok) throw new Error("Failed to fetch all equipment");
@@ -43,7 +43,7 @@ export const equipmentService = {
   },
 
   async bulkAssignEquipment(items: EquipmentItem[]): Promise<void> {
-    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/fleet/equipment/bulk`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/fleet/equipment/bulk`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

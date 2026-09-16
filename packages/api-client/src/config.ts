@@ -4,26 +4,24 @@ const BASE_URL = getSupabaseFunctionsBaseUrl();
 
 /**
  * API Endpoints for all Roam services.
- * 
- * Legacy services (fleet, financial, fuel, ai, admin) currently point to the
- * monolithic make-server. These will be gradually migrated to dedicated services.
- * 
- * New services (catalog, identity, delivery, payments, notifications) are ready
- * for the bounded-context architecture.
+ *
+ * Residual fleet surface lives on fleet-core (ADR-0021 / F5).
+ * Extracted domains use dedicated edge functions.
  */
 export const API_ENDPOINTS = {
-  // Legacy monolith (core residual until F5)
-  fleet: `${BASE_URL}/make-server-37f42386`,
-  financial: `${BASE_URL}/make-server-37f42386`,
+  // Residual (successor to make-server-37f42386)
+  fleetCore: `${BASE_URL}/fleet-core`,
+  fleet: `${BASE_URL}/fleet-core`,
+  financial: `${BASE_URL}/fleet-core`,
   // Extracted domains (fleet domain extraction program)
   fuel: `${BASE_URL}/fleet-fuel`,
   toll: `${BASE_URL}/fleet-toll`,
   fleetOps: `${BASE_URL}/fleet-ops`,
   claims: `${BASE_URL}/fleet-claims`,
   fleetPay: `${BASE_URL}/fleet-pay`,
-  ai: `${BASE_URL}/make-server-37f42386`,
-  admin: `${BASE_URL}/make-server-37f42386`,
-  
+  ai: `${BASE_URL}/fleet-core`,
+  admin: `${BASE_URL}/fleet-core`,
+
   // New bounded services
   catalog: `${BASE_URL}/platform-catalog`,
   identity: `${BASE_URL}/identity`,

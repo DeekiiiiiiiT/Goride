@@ -142,7 +142,7 @@ export const settlementService = {
     const [vehicles, drivers, scenariosResponse] = await Promise.all([
       api.getVehicles(),
       api.getDrivers().catch(() => []),
-      fetchWithRetry(`${API_ENDPOINTS.fuel}/scenarios`, {
+      fetchWithRetry(`${API_ENDPOINTS.fleetCore}/scenarios`, {
         headers: await requireAuthHeaders(null),
       }),
     ]);

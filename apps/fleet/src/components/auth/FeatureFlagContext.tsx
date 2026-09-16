@@ -69,7 +69,7 @@ export function FeatureFlagProvider({ children }: { children: React.ReactNode })
 
   const fetchPreLoginShell = useCallback(async () => {
     try {
-      const res = await fetch(`${API_ENDPOINTS.fleet}/platform-feature-flags`, {
+      const res = await fetch(`${API_ENDPOINTS.fleetCore}/platform-feature-flags`, {
         headers: withProductLineHeaders(),
       });
       if (res.ok) {

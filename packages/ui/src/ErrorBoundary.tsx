@@ -30,7 +30,7 @@ export class ErrorBoundary extends Component<Props, State> {
     
     // Phase 8.2: Log error to forensic audit trail
     try {
-        const response = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-37f42386/system/log-error`, {
+        const response = await fetch(`https://${projectId}.supabase.co/functions/v1/fleet-core/system/log-error`, {
             method: 'POST',
             headers: { 
                 'Content-Type': 'application/json',

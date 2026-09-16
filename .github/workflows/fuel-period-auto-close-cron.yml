@@ -35,7 +35,7 @@ jobs:
             exit 1
           fi
           RESP="$(curl -sS -w "\nHTTP_CODE:%{http_code}\n" -X POST \
-            "${SUPABASE_URL}/functions/v1/make-server-37f42386/fuel/periods/auto-close?orgId=all" \
+            "${SUPABASE_URL}/functions/v1/fleet-fuel/fuel/periods/auto-close?orgId=all" \
             -H "Authorization: Bearer ${SERVICE_KEY}" \
             -H "apikey: ${SERVICE_KEY}" \
             -H "Content-Type: application/json" \

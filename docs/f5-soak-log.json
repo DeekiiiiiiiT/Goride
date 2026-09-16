@@ -1,0 +1,26 @@
+{
+  "updatedAt": "2026-09-16T13:55:00.000Z",
+  "note": "Source of truth for F5 N=7 consecutive green days. Append via: pnpm check:shim-traffic:log. §8 mirrors this file.",
+  "days": [
+    {
+      "date": "2026-09-16",
+      "nonHealth": 4368,
+      "health": 45,
+      "ok": false,
+      "windowHours": 24,
+      "note": "Post-F1 SQL filter rebaseline (pathname like %make-server-37f42386%). Agrees with prior ~4400 Day-0 — filter validated. Expected red until client ship.",
+      "topOffenders": [
+        { "path": "/functions/v1/make-server-37f42386/stations", "requests": 1147 },
+        { "path": "/functions/v1/make-server-37f42386/platform-status", "requests": 537 },
+        { "path": "/functions/v1/make-server-37f42386/transactions", "requests": 340 },
+        { "path": "/functions/v1/make-server-37f42386/enterprise/me/modules", "requests": 226 },
+        { "path": "/functions/v1/make-server-37f42386/fuel-entries", "requests": 196 },
+        { "path": "/functions/v1/make-server-37f42386/drivers", "requests": 157 },
+        { "path": "/functions/v1/make-server-37f42386/vehicles", "requests": 144 },
+        { "path": "/functions/v1/make-server-37f42386/fleet-timezone", "requests": 122 },
+        { "path": "/functions/v1/make-server-37f42386/fuel/periods/recompute", "requests": 105 },
+        { "path": "/functions/v1/make-server-37f42386/fuel-disputes", "requests": 99 }
+      ]
+    }
+  ]
+}

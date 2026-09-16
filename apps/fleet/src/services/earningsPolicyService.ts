@@ -39,7 +39,7 @@ export const earningsPolicyService = {
 
     policiesInflight = (async () => {
       try {
-        const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/earnings-policies`, {
+        const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/earnings-policies`, {
           headers: await requireAuthHeaders(null),
         });
         if (!response.ok) throw new Error('Failed to fetch earnings policies');
@@ -60,7 +60,7 @@ export const earningsPolicyService = {
   async saveEarningsPolicy(policy: EarningsPolicy): Promise<EarningsPolicy> {
     // Persist assignment-normalized shape (no legacy driverIds as source of truth)
     const toSave = normalizePolicyVersions(policy);
-    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/earnings-policies`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/earnings-policies`, {
       method: 'POST',
       headers: await requireAuthHeaders(),
       body: JSON.stringify(toSave)
@@ -76,7 +76,7 @@ export const earningsPolicyService = {
   },
 
   async deleteEarningsPolicy(id: string): Promise<void> {
-    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/earnings-policies/${id}`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/earnings-policies/${id}`, {
       method: 'DELETE',
       headers: await requireAuthHeaders(null)
     });

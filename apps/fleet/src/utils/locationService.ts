@@ -105,7 +105,7 @@ export const loadGoogleMapsApi = async (): Promise<void> => {
 
       // Prefer session JWT when logged in; anon is allowed for this public bootstrap endpoint.
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-37f42386/maps-config`,
+        `https://${projectId}.supabase.co/functions/v1/fleet-core/maps-config`,
         { headers: await getHeaders(null, { allowAnon: true }) },
       );
       
@@ -249,7 +249,7 @@ export const searchAddress = async (query: string): Promise<AddressResult[]> => 
 
   try {
     const response = await fetch(
-      `https://${projectId}.supabase.co/functions/v1/make-server-37f42386/places/autocomplete?q=${encodeURIComponent(query)}`,
+      `https://${projectId}.supabase.co/functions/v1/fleet-core/places/autocomplete?q=${encodeURIComponent(query)}`,
       { headers: await getHeaders(null, { allowAnon: true }) },
     );
     if (!response.ok) {
@@ -285,7 +285,7 @@ export const getPlaceDetails = async (placeId: string): Promise<{ lat: number; l
 
   try {
     const response = await fetch(
-      `https://${projectId}.supabase.co/functions/v1/make-server-37f42386/places/${encodeURIComponent(placeId)}/details`,
+      `https://${projectId}.supabase.co/functions/v1/fleet-core/places/${encodeURIComponent(placeId)}/details`,
       { headers: await getHeaders(null, { allowAnon: true }) },
     );
     if (!response.ok) {

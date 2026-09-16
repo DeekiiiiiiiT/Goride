@@ -49,7 +49,7 @@ export async function loadGoogleMapsApi(): Promise<void> {
           headers = {};
         }
 
-        const response = await fetch(`${API_ENDPOINTS.fuel}/maps-config`, { headers });
+        const response = await fetch(`${API_ENDPOINTS.fleetCore}/maps-config`, { headers });
         if (!response.ok) {
           throw new Error(`Server configuration error: ${response.status}`);
         }

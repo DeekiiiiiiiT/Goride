@@ -30,7 +30,7 @@ const base = process.env.SUPABASE_URL;
 const orgId = process.env.ORG_ID;
 
 if (token && base) {
-  const url = `${base.replace(/\/$/, "")}/functions/v1/make-server-37f42386/trips/search`;
+  const url = `${base.replace(/\/$/, "")}/functions/v1/fleet-core/trips/search`;
   const headers = {
     Authorization: `Bearer ${token}`,
     apikey: process.env.SUPABASE_ANON_KEY || "",

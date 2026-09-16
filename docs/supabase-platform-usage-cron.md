@@ -4,7 +4,7 @@ Keeps Dominion API Command Center → **Supabase Platform** gauges fresh without
 
 ## Endpoint
 
-`POST /functions/v1/make-server-37f42386/api-center/supabase/sync-cron`
+`POST /functions/v1/fleet-core/api-center/supabase/sync-cron`
 
 Headers (one of):
 
@@ -20,7 +20,7 @@ Example (external scheduler / GitHub Action / cron job):
 
 ```bash
 curl -sS -X POST \
-  "https://<project-ref>.supabase.co/functions/v1/make-server-37f42386/api-center/supabase/sync-cron" \
+  "https://<project-ref>.supabase.co/functions/v1/fleet-core/api-center/supabase/sync-cron" \
   -H "X-Fleet-Cron-Secret: $FLEET_CRON_SECRET"
 ```
 

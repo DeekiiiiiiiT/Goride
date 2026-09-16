@@ -11,7 +11,7 @@ export function useSafetyMetrics() {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const baseUrl = `https://${projectId}.supabase.co/functions/v1/make-server-37f42386`;
+      const baseUrl = `https://${projectId}.supabase.co/functions/v1/fleet-core`;
       const headers = await requireAuthHeaders();
 
       const [effRes, fatRes] = await Promise.all([

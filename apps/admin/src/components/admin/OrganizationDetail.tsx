@@ -204,7 +204,7 @@ export function OrganizationDetail({ orgId, onBack }: Props) {
     queryKey: ['adminRushRollout', orgId],
     queryFn: () =>
       fetchRushRollout(
-        { apiBaseUrl: API_ENDPOINTS.fleet, accessToken: accessToken! },
+        { apiBaseUrl: API_ENDPOINTS.fleetCore, accessToken: accessToken! },
         orgId,
       ),
     staleTime: 30 * 1000,
@@ -216,7 +216,7 @@ export function OrganizationDetail({ orgId, onBack }: Props) {
     queryClient.invalidateQueries({ queryKey: ['adminOrgDetail', orgId] });
   };
 
-  const apiConfig = { apiBaseUrl: API_ENDPOINTS.fleet, accessToken: accessToken ?? '' };
+  const apiConfig = { apiBaseUrl: API_ENDPOINTS.fleetCore, accessToken: accessToken ?? '' };
   const serviceLines = rushRollout?.serviceLines ?? data?.serviceLines ?? ['rideshare'];
   const rushModules = rushRollout?.rushModulesEffective ?? data?.rushModules ?? {};
 

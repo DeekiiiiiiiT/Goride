@@ -3,14 +3,15 @@ import { getSupabaseFunctionsBaseUrl } from '@roam/api-client';
 const BASE_URL = getSupabaseFunctionsBaseUrl();
 
 export const API_ENDPOINTS = {
-  fleet: `${BASE_URL}/make-server-37f42386`,
-  financial: `${BASE_URL}/make-server-37f42386`,
+  fleetCore: `${BASE_URL}/fleet-core`,
+  fleet: `${BASE_URL}/fleet-core`,
+  financial: `${BASE_URL}/fleet-core`,
   fuel: `${BASE_URL}/fleet-fuel`,
   toll: `${BASE_URL}/fleet-toll`,
   fleetOps: `${BASE_URL}/fleet-ops`,
   claims: `${BASE_URL}/fleet-claims`,
   fleetPay: `${BASE_URL}/fleet-pay`,
-  ai: `${BASE_URL}/make-server-37f42386`,
-  admin: `${BASE_URL}/make-server-37f42386`,
+  ai: `${BASE_URL}/fleet-core`,
+  admin: `${BASE_URL}/fleet-core`,
   delivery: `${BASE_URL}/delivery`,
 };

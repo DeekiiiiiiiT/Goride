@@ -28,7 +28,7 @@ const { projectId: fromFile, publicAnonKey: keyFromFile } = readInfoFromRepo();
 const projectId = process.env.SUPABASE_PROJECT_REF || fromFile;
 const publicAnonKey = process.env.SUPABASE_ANON_KEY || keyFromFile;
 
-const url = `https://${projectId}.supabase.co/functions/v1/make-server-37f42386/ledger/count`;
+const url = `https://${projectId}.supabase.co/functions/v1/fleet-core/ledger/count`;
 
 async function main() {
   const res = await fetch(url, {

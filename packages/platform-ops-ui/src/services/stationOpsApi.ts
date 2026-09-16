@@ -253,7 +253,7 @@ export const stationOpsApi = {
 
   async searchStations(query: string): Promise<{ stations: unknown[] }> {
     const response = await fetchWithRetry(
-      `${API_ENDPOINTS.fuel}/stations/search?q=${encodeURIComponent(query)}`,
+      `${API_ENDPOINTS.fleetCore}/stations/search?q=${encodeURIComponent(query)}`,
       { headers: await authHeaders(null) },
     );
     if (!response.ok) {
@@ -264,7 +264,7 @@ export const stationOpsApi = {
   },
 
   async scanLegacyTransactions() {
-    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/migrate-legacy-vendors`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/migrate-legacy-vendors`, {
       method: 'POST',
       headers: await authHeaders(),
       body: JSON.stringify({ dryRun: true }),
@@ -286,7 +286,7 @@ export const stationOpsApi = {
       reason?: string;
     },
   ) {
-    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/process-migration-transaction`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/process-migration-transaction`, {
       method: 'POST',
       headers: await authHeaders(),
       body: JSON.stringify({ transactionId, action, data }),
@@ -303,7 +303,7 @@ export const stationOpsApi = {
     const limit = opts?.limit ?? 500;
     const offset = opts?.offset ?? 0;
     const qs = new URLSearchParams({ limit: String(limit), offset: String(offset) });
-    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/vehicles?${qs}`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/vehicles?${qs}`, {
       headers: await authHeaders(null),
     });
     if (!response.ok) throw new Error('Failed to fetch vehicles');

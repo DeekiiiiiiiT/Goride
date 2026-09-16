@@ -11,7 +11,7 @@ export const UBER_FLEET_PORTAL = {
   /** Dev fallback — must also be registered in Uber Setup if you test locally. */
   redirectUriLocalHint: 'http://localhost:5173/uber-callback',
   webhookUrl:
-    'https://csfllzzastacofsvcdsc.supabase.co/functions/v1/make-server-37f42386/uber/webhook',
+    'https://csfllzzastacofsvcdsc.supabase.co/functions/v1/fleet-core/uber/webhook',
   docsUrl: 'https://developer.uber.com/docs/vehicles/getting-started',
   /**
    * Full Client Credentials scope set to replace period CSV imports + vehicle ops.

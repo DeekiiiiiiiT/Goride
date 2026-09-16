@@ -70,7 +70,7 @@ import { DatePickerWithRange } from '../ui/date-range-picker';
 import { PeriodWeekDropdown } from '../ui/PeriodWeekDropdown';
 import { generateWeekOptionsForDateRange, ENTIRE_PERIOD_OPTION_ID } from '../../utils/periodWeekOptions';
 
-const API_BASE = `https://${projectId}.supabase.co/functions/v1/make-server-37f42386`;
+const API_BASE = `https://${projectId}.supabase.co/functions/v1/fleet-core`;
 
 interface KmLTrackingProps {
   vehicle: any;

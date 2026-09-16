@@ -377,7 +377,7 @@ export const fuelService = {
 
   // --- Fuel Scenarios ---
   async getFuelScenarios(): Promise<FuelScenario[]> {
-    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/scenarios`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/scenarios`, {
       headers: { 'Authorization': `Bearer ${publicAnonKey}` }
     });
     if (!response.ok) throw new Error("Failed to fetch fuel scenarios");
@@ -385,7 +385,7 @@ export const fuelService = {
   },
 
   async saveFuelScenario(scenario: FuelScenario): Promise<FuelScenario> {
-    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/scenarios`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/scenarios`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -399,7 +399,7 @@ export const fuelService = {
   },
 
   async deleteFuelScenario(id: string): Promise<void> {
-    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/scenarios/${id}`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/scenarios/${id}`, {
       method: 'DELETE',
       headers: { 'Authorization': `Bearer ${publicAnonKey}` }
     });

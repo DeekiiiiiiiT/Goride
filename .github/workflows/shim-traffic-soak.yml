@@ -1,0 +1,38 @@
+name: Shim traffic soak (F5)
+
+# Daily N=7 soak gate: fail if make-server-37f42386 has non-health traffic.
+# Requires repo secret ROAM_MGMT_PAT (Supabase Management API token).
+# Uploads docs/f5-soak-log.json as an artifact; commit the log after green/red runs.
+
+on:
+  schedule:
+    - cron: "0 13 * * *" # ~08:00 Jamaica
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: check-shim-traffic (24h + append log)
+        env:
+          ROAM_MGMT_PAT: ${{ secrets.ROAM_MGMT_PAT }}
+          ROAM_PROJECT_REF: csfllzzastacofsvcdsc
+        run: |
+          set +e
+          node scripts/check-shim-traffic.mjs --hours 24 --append-log
+          STATUS=$?
+          set -e
+          echo "check_exit=$STATUS" >> "$GITHUB_OUTPUT"
+          exit $STATUS
+        id: traffic
+      - name: Upload soak log artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: f5-soak-log
+          path: docs/f5-soak-log.json
+          if-no-files-found: warn

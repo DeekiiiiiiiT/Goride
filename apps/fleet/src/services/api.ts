@@ -127,7 +127,7 @@ export async function throwIfCatalogGateBlocked(response: Response, fallbackMess
 export const api = {
   async getOdometerHistory(vehicleId: string): Promise<OdometerReading[]> {
     // Phase 1: Use JWT for proper org scoping
-    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/odometer-history/${vehicleId}`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/odometer-history/${vehicleId}`, {
       headers: await getHeaders(null, { requireAuth: true })
     });
     if (!response.ok) throw new Error("Failed to fetch odometer history");
@@ -142,7 +142,7 @@ export const api = {
     vehicleId: string;
     isVerified: boolean;
   }> {
-    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/odometer/current/${encodeURIComponent(vehicleId)}`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/odometer/current/${encodeURIComponent(vehicleId)}`, {
       headers: await getHeaders(null, { requireAuth: true }),
     });
     if (!response.ok) throw new Error("Failed to fetch current odometer");
@@ -171,7 +171,7 @@ export const api = {
     if (filters.offset != null) params.set("offset", String(filters.offset));
     const qs = params.toString();
     const response = await fetchWithRetry(
-      `${API_ENDPOINTS.fleet}/odometer/ledger/${encodeURIComponent(vehicleId)}${qs ? `?${qs}` : ""}`,
+      `${API_ENDPOINTS.fleetCore}/odometer/ledger/${encodeURIComponent(vehicleId)}${qs ? `?${qs}` : ""}`,
       { headers: await getHeaders(null, { requireAuth: true }) },
     );
     if (!response.ok) throw new Error("Failed to fetch odometer ledger");
@@ -180,7 +180,7 @@ export const api = {
 
   async addOdometerReading(reading: Partial<OdometerReading>) {
     // Phase 1: Use JWT for proper org scoping
-    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/odometer-history`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/odometer-history`, {
       method: 'POST',
       headers: await getHeaders(),
       body: JSON.stringify(reading)
@@ -193,7 +193,7 @@ export const api = {
     const params = new URLSearchParams({ vehicleId });
     if (source) params.set('source', source);
     // Phase 1: Use JWT for proper org scoping
-    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/odometer-history/${id}?${params.toString()}`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/odometer-history/${id}?${params.toString()}`, {
       method: 'DELETE',
       headers: await getHeaders(null)
     });
@@ -203,7 +203,7 @@ export const api = {
 
   async updateAnchor(id: string, payload: { date?: string, value?: number, type: string, vehicleId: string }) {
     // Phase 1: Use JWT for proper org scoping
-    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/anchors/${id}`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/anchors/${id}`, {
       method: 'PATCH',
       headers: await getHeaders(),
       body: JSON.stringify(payload)
@@ -213,7 +213,7 @@ export const api = {
   },
 
   async getBatches(): Promise<ImportBatch[]> {
-    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/batches`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/batches`, {
       headers: await requireAuthHeaders(null)
     });
     if (!response.ok) throw new Error("Failed to fetch batches");
@@ -221,7 +221,7 @@ export const api = {
   },
 
   async createBatch(batch: ImportBatch) {
-    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/batches`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/batches`, {
       method: 'POST',
       headers: await requireAuthHeaders(),
       body: JSON.stringify(batch)
@@ -254,7 +254,7 @@ export const api = {
       }
     >,
   ): Promise<{ success: boolean; data: ImportBatch }> {
-    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/batches/${id}`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/batches/${id}`, {
       method: 'PATCH',
       headers: await getHeaders(),
       body: JSON.stringify(patch),
@@ -293,7 +293,7 @@ export const api = {
     driverMetrics: { affected: number; safeToDelete: number; shared: number; details: any[] };
     vehicleMetrics: { affected: number; safeToDelete: number; shared: number; details: any[] };
   }> {
-    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/batches/${id}/delete-preview`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/batches/${id}/delete-preview`, {
       headers: await requireAuthHeaders(null)
     });
     if (!response.ok) {
@@ -305,7 +305,7 @@ export const api = {
 
   async deleteBatch(id: string) {
     // Phase 1: Use JWT for proper org scoping
-    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/batches/${id}`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/batches/${id}`, {
       method: 'DELETE',
       headers: await getHeaders(null)
     });
@@ -315,7 +315,7 @@ export const api = {
 
   async saveTrips(trips: Trip[]) {
     // Phase 1: Use JWT for proper org scoping
-    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/trips`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/trips`, {
       method: 'POST',
       headers: await getHeaders(),
       body: JSON.stringify(trips),
@@ -339,7 +339,7 @@ export const api = {
 
   async deleteTrip(id: string) {
     // Phase 1: Use JWT for proper org scoping
-    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/trips/${id}`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/trips/${id}`, {
       method: 'DELETE',
       headers: await getHeaders(null)
     });
@@ -349,7 +349,7 @@ export const api = {
 
   async saveDriverMetrics(metrics: DriverMetrics[]) {
       // Phase 1: Use JWT for proper org scoping
-      const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/driver-metrics`, {
+      const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/driver-metrics`, {
         method: 'POST',
         headers: await getHeaders(),
         body: JSON.stringify(metrics),
@@ -360,7 +360,7 @@ export const api = {
 
   async saveVehicleMetrics(metrics: VehicleMetrics[]) {
       // Phase 1: Use JWT for proper org scoping
-      const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/vehicle-metrics`, {
+      const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/vehicle-metrics`, {
         method: 'POST',
         headers: await getHeaders(),
         body: JSON.stringify(metrics),
@@ -374,7 +374,7 @@ export const api = {
 
   async getVehicleMetrics(): Promise<VehicleMetrics[]> {
     // Phase 1: Use JWT for proper org scoping
-    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/vehicle-metrics`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/vehicle-metrics`, {
         headers: await getHeaders(null, { requireAuth: true })
     });
     if (!response.ok) throw new Error("Failed to fetch vehicle metrics");
@@ -384,7 +384,7 @@ export const api = {
 
   async getDriverMetrics(): Promise<DriverMetrics[]> {
     // Phase 1: Use JWT for proper org scoping
-    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/driver-metrics`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/driver-metrics`, {
         headers: await getHeaders(null, { requireAuth: true })
     });
     if (!response.ok) throw new Error("Failed to fetch driver metrics");
@@ -394,7 +394,7 @@ export const api = {
 
   async getTripsFiltered(params: TripFilterParams): Promise<PaginatedTripResponse> {
     // Phase 1: Use JWT for proper org scoping
-    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/trips/search`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/trips/search`, {
         method: 'POST',
         headers: await getHeaders(),
         body: JSON.stringify(params)
@@ -409,7 +409,7 @@ export const api = {
 
   /** F-08: server CSV for current filters (capped). */
   async exportTripsFiltered(params: TripFilterParams): Promise<Blob> {
-    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/trips/export`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/trips/export`, {
       method: 'POST',
       headers: await getHeaders(),
       body: JSON.stringify(params),
@@ -423,7 +423,7 @@ export const api = {
 
   async getTripStats(params: TripFilterParams): Promise<any> {
     // Phase 1: Use JWT for proper org scoping
-    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/trips/stats`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/trips/stats`, {
         method: 'POST',
         headers: await getHeaders(),
         body: JSON.stringify(params)
@@ -441,7 +441,7 @@ export const api = {
     const limit = options?.limit ?? 200;
     const offset = options?.offset ?? 0;
     
-    let url = `${API_ENDPOINTS.fleet}/trips?limit=${limit}&offset=${offset}`;
+    let url = `${API_ENDPOINTS.fleetCore}/trips?limit=${limit}&offset=${offset}`;
     if (options?.serviceLine === 'rideshare' || options?.serviceLine === 'rush_delivery') {
       url += `&serviceLine=${options.serviceLine}`;
     }
@@ -467,7 +467,7 @@ export const api = {
 
   async getUnifiedVehicleLogs(vehicleId: string) {
     // Phase 1: Use JWT for proper org scoping
-    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/vehicles/${vehicleId}/unified-logs`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/vehicles/${vehicleId}/unified-logs`, {
         headers: await getHeaders(null, { requireAuth: true })
     });
     if (!response.ok) throw new Error("Failed to fetch unified logs");
@@ -476,7 +476,7 @@ export const api = {
 
   async clearAllData() {
     // Phase 1: Use JWT for proper org scoping
-    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/trips`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/trips`, {
       method: 'DELETE',
       headers: await getHeaders(null)
     });
@@ -548,7 +548,7 @@ export const api = {
 
   /** Uber Vehicles/Fleet — server secrets + client-credentials connect (never send Client Secret from browser). */
   async getUberFleetStatus() {
-    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/uber/status`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/uber/status`, {
       headers: await requireAuthHeaders(null),
     });
     if (!response.ok) {
@@ -559,7 +559,7 @@ export const api = {
   },
 
   async connectUberFleet() {
-    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/uber/connect`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/uber/connect`, {
       method: 'POST',
       headers: await requireAuthHeaders(),
     });
@@ -574,7 +574,7 @@ export const api = {
   },
 
   async disconnectUberFleet() {
-    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/uber/disconnect`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/uber/disconnect`, {
       method: 'POST',
       headers: await requireAuthHeaders(),
     });
@@ -584,7 +584,7 @@ export const api = {
   },
 
   async syncUberFleet() {
-    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/uber/sync`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/uber/sync`, {
       method: 'POST',
       headers: await requireAuthHeaders(),
     });
@@ -617,7 +617,7 @@ export const api = {
   },
 
   async getVehicleTankStatus(vehicleId: string) {
-    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/vehicles/${vehicleId}/tank-status`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/vehicles/${vehicleId}/tank-status`, {
         headers: await requireAuthHeaders(null)
     });
     if (!response.ok) throw new Error("Failed to fetch tank status");
@@ -757,7 +757,7 @@ export const api = {
   },
 
   async resolveFuelAnomaly(transactionId: string, status: 'resolved' | 'disputed' | 'rejected', note: string) {
-    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/admin/fuel-audit/resolve`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/admin/fuel-audit/resolve`, {
         method: 'POST',
         headers: await requireAuthHeaders(),
         body: JSON.stringify({ transactionId, status, note })
@@ -773,7 +773,7 @@ export const api = {
       limit: String(limit),
       offset: String(offset),
     });
-    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/vehicles?${qs}`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/vehicles?${qs}`, {
         headers: await getHeaders(null),
     });
     if (!response.ok) throw new Error("Failed to fetch vehicles");
@@ -811,7 +811,7 @@ export const api = {
   },
 
   async saveVehicle(vehicle: any) {
-    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/vehicles`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/vehicles`, {
         method: 'POST',
         headers: await getHeaders(),
         body: JSON.stringify(vehicle)
@@ -829,7 +829,7 @@ export const api = {
   },
 
   async deleteVehicle(id: string) {
-    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/vehicles/${id}`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/vehicles/${id}`, {
         method: 'DELETE',
         headers: await getHeaders(null),
     });
@@ -852,7 +852,7 @@ export const api = {
 
   async getDrivers() {
     // Phase 1: Use JWT for proper org scoping
-    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/drivers`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/drivers`, {
         headers: await getHeaders(null, { requireAuth: true })
     });
     if (!response.ok) throw new Error("Failed to fetch drivers");
@@ -899,7 +899,7 @@ export const api = {
       durationMs?: number;
     };
   }> {
-    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/drivers/roster`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/drivers/roster`, {
       headers: await getHeaders(null, { requireAuth: true }),
     });
     if (!response.ok) {
@@ -915,7 +915,7 @@ export const api = {
   },
 
   async getDriverCompliance(driverId: string) {
-    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/drivers/${encodeURIComponent(driverId)}/compliance`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/drivers/${encodeURIComponent(driverId)}/compliance`, {
       headers: await requireAuthHeaders(null),
     });
     if (!response.ok) {
@@ -944,7 +944,7 @@ export const api = {
 
   async verifyDriverDocument(driverId: string, documentId: string, status: 'Verified' | 'Rejected' = 'Verified') {
     const response = await fetchWithRetry(
-      `${API_ENDPOINTS.fleet}/drivers/${encodeURIComponent(driverId)}/compliance/verify`,
+      `${API_ENDPOINTS.fleetCore}/drivers/${encodeURIComponent(driverId)}/compliance/verify`,
       {
         method: 'POST',
         headers: await requireAuthHeaders(),
@@ -961,7 +961,7 @@ export const api = {
   async getDriverReconciliation(driverId: string, from: string, to: string) {
     const qs = new URLSearchParams({ from, to });
     const response = await fetchWithRetry(
-      `${API_ENDPOINTS.fleet}/drivers/${encodeURIComponent(driverId)}/reconciliation?${qs}`,
+      `${API_ENDPOINTS.fleetCore}/drivers/${encodeURIComponent(driverId)}/reconciliation?${qs}`,
       { headers: await requireAuthHeaders(null) },
     );
     if (!response.ok) {
@@ -977,7 +977,7 @@ export const api = {
     if (to) qs.set('to', to);
     const q = qs.toString();
     const response = await fetchWithRetry(
-      `${API_ENDPOINTS.fleet}/drivers/${encodeURIComponent(driverId)}/operational-periods${q ? `?${q}` : ''}`,
+      `${API_ENDPOINTS.fleetCore}/drivers/${encodeURIComponent(driverId)}/operational-periods${q ? `?${q}` : ''}`,
       { headers: await requireAuthHeaders(null) },
     );
     if (!response.ok) {
@@ -1004,7 +1004,7 @@ export const api = {
 
   async rebuildDriverOperationalPeriods(driverId: string, from?: string, to?: string) {
     const response = await fetchWithRetry(
-      `${API_ENDPOINTS.fleet}/drivers/${encodeURIComponent(driverId)}/operational-periods/rebuild`,
+      `${API_ENDPOINTS.fleetCore}/drivers/${encodeURIComponent(driverId)}/operational-periods/rebuild`,
       {
         method: 'POST',
         headers: await requireAuthHeaders(),
@@ -1020,7 +1020,7 @@ export const api = {
 
   async rebuildOrgOperationalPeriods(from?: string, to?: string) {
     const response = await fetchWithRetry(
-      `${API_ENDPOINTS.fleet}/drivers/operational-periods/rebuild-org`,
+      `${API_ENDPOINTS.fleetCore}/drivers/operational-periods/rebuild-org`,
       {
         method: 'POST',
         headers: await requireAuthHeaders(),
@@ -1042,7 +1042,7 @@ export const api = {
   async getFleetOperationalRollup(from: string, to: string) {
     const qs = new URLSearchParams({ from, to });
     const response = await fetchWithRetry(
-      `${API_ENDPOINTS.fleet}/drivers/operational-rollup?${qs}`,
+      `${API_ENDPOINTS.fleetCore}/drivers/operational-rollup?${qs}`,
       { headers: await requireAuthHeaders(null) },
     );
     if (!response.ok) {
@@ -1066,7 +1066,7 @@ export const api = {
 
   async getDriverAudit(driverId: string) {
     const response = await fetchWithRetry(
-      `${API_ENDPOINTS.fleet}/drivers/${encodeURIComponent(driverId)}/audit`,
+      `${API_ENDPOINTS.fleetCore}/drivers/${encodeURIComponent(driverId)}/audit`,
       { headers: await requireAuthHeaders(null) },
     );
     if (!response.ok) {
@@ -1087,7 +1087,7 @@ export const api = {
     },
   ) {
     const response = await fetchWithRetry(
-      `${API_ENDPOINTS.fleet}/drivers/${encodeURIComponent(driverId)}/audit`,
+      `${API_ENDPOINTS.fleetCore}/drivers/${encodeURIComponent(driverId)}/audit`,
       {
         method: 'POST',
         headers: await requireAuthHeaders(),
@@ -1102,7 +1102,7 @@ export const api = {
   },
 
   async getDriverNotes(driverId: string) {
-    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/drivers/${encodeURIComponent(driverId)}/notes`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/drivers/${encodeURIComponent(driverId)}/notes`, {
       headers: await requireAuthHeaders(null),
     });
     if (!response.ok) {
@@ -1128,7 +1128,7 @@ export const api = {
     followUpDate?: string,
     assignedTo?: string,
   ) {
-    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/drivers/${encodeURIComponent(driverId)}/notes`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/drivers/${encodeURIComponent(driverId)}/notes`, {
       method: 'POST',
       headers: await requireAuthHeaders(),
       body: JSON.stringify({
@@ -1146,7 +1146,7 @@ export const api = {
 
   async saveDriver(driver: any) {
     // Phase 1: Use JWT for proper org scoping
-    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/drivers`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/drivers`, {
         method: 'POST',
         headers: await getHeaders(),
         body: JSON.stringify(driver)
@@ -1338,7 +1338,7 @@ export const api = {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 60000);
     try {
-      const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/upload`, {
+      const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/upload`, {
           method: 'POST',
           headers: await requireAuthHeaders(null),
           body: formData,
@@ -1454,7 +1454,7 @@ export const api = {
   },
 
   async generateVehicleImage(vehicleData: { make: string, model: string, year: string, color: string, bodyType: string, licensePlate?: string }) {
-    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/generate-vehicle-image`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/generate-vehicle-image`, {
       method: 'POST',
       headers: await requireAuthHeaders(),
       body: JSON.stringify(vehicleData)
@@ -1491,7 +1491,7 @@ export const api = {
   },
 
   async updateOrgServiceLines(serviceLines: Array<'rideshare' | 'rush_delivery'>) {
-    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/org/service-lines`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/org/service-lines`, {
       method: 'PATCH',
       headers: await requireAuthHeaders(),
       body: JSON.stringify({ serviceLines }),
@@ -1504,7 +1504,7 @@ export const api = {
   },
 
   async getRushCourierCashBalances() {
-    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/rush/courier-cash-balances`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/rush/courier-cash-balances`, {
       headers: await requireAuthHeaders(null),
     });
     if (!response.ok) throw new Error('Failed to fetch courier cash balances');
@@ -1513,7 +1513,7 @@ export const api = {
 
   async getRushDeliverySettlementSummary(since?: string) {
     const qs = since ? `?since=${encodeURIComponent(since)}` : '';
-    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/rush/delivery-settlement-summary${qs}`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/rush/delivery-settlement-summary${qs}`, {
       headers: await requireAuthHeaders(null),
     });
     if (!response.ok) throw new Error('Failed to fetch delivery settlement summary');
@@ -1522,7 +1522,7 @@ export const api = {
 
   async getRushTripRecon(since?: string) {
     const qs = since ? `?since=${encodeURIComponent(since)}` : '';
-    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/rush/trip-recon${qs}`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/rush/trip-recon${qs}`, {
       headers: await requireAuthHeaders(null),
     });
     if (!response.ok) throw new Error('Failed to run trip recon');
@@ -1534,7 +1534,7 @@ export const api = {
     invitedEmail?: string;
     invitedPhone?: string;
   }) {
-    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/workforce/invites`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/workforce/invites`, {
       method: 'POST',
       headers: await requireAuthHeaders(),
       body: JSON.stringify(payload),
@@ -1550,7 +1550,7 @@ export const api = {
     roamTag: string;
     serviceLine?: 'rush_delivery';
   }) {
-    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/workforce/invites/by-roam-tag`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/workforce/invites/by-roam-tag`, {
       method: 'POST',
       headers: await requireAuthHeaders(),
       body: JSON.stringify({
@@ -1566,7 +1566,7 @@ export const api = {
   },
 
   async getWorkforceInvites() {
-    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/workforce/invites`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/workforce/invites`, {
       headers: await requireAuthHeaders(null),
     });
     if (!response.ok) throw new Error('Failed to fetch workforce invites');
@@ -1575,7 +1575,7 @@ export const api = {
 
   async cancelWorkforceInvite(inviteId: string) {
     const response = await fetchWithRetry(
-      `${API_ENDPOINTS.fleet}/workforce/invites/${encodeURIComponent(inviteId)}/cancel`,
+      `${API_ENDPOINTS.fleetCore}/workforce/invites/${encodeURIComponent(inviteId)}/cancel`,
       {
         method: 'POST',
         headers: await requireAuthHeaders(),
@@ -1590,7 +1590,7 @@ export const api = {
 
   // ── Fleet Tag + join requests ──────────────────────────────────────────
   async getFleetTag() {
-    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/fleet-tag/me`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/fleet-tag/me`, {
       headers: await requireAuthHeaders(null),
     });
     if (!response.ok) {
@@ -1606,7 +1606,7 @@ export const api = {
   },
 
   async ensureFleetTag() {
-    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/fleet-tag/me`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/fleet-tag/me`, {
       method: 'POST',
       headers: await requireAuthHeaders(),
       body: JSON.stringify({}),
@@ -1624,7 +1624,7 @@ export const api = {
   },
 
   async updateFleetTag(fleetTag: string) {
-    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/fleet-tag/me`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/fleet-tag/me`, {
       method: 'PATCH',
       headers: await requireAuthHeaders(),
       body: JSON.stringify({ fleetTag }),
@@ -1643,7 +1643,7 @@ export const api = {
 
   async getJoinRequests(status?: 'pending' | 'approved' | 'denied') {
     const qs = status ? `?status=${status}` : '';
-    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/workforce/join-requests${qs}`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/workforce/join-requests${qs}`, {
       headers: await requireAuthHeaders(null),
     });
     if (!response.ok) {
@@ -1667,7 +1667,7 @@ export const api = {
   },
 
   async approveJoinRequest(id: string) {
-    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/workforce/join-requests/${id}/approve`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/workforce/join-requests/${id}/approve`, {
       method: 'POST',
       headers: await requireAuthHeaders(),
       body: JSON.stringify({}),
@@ -1680,7 +1680,7 @@ export const api = {
   },
 
   async denyJoinRequest(id: string) {
-    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/workforce/join-requests/${id}/deny`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/workforce/join-requests/${id}/deny`, {
       method: 'POST',
       headers: await requireAuthHeaders(),
       body: JSON.stringify({}),
@@ -1771,7 +1771,7 @@ export const api = {
       metadata?: any,
       insights?: any 
   }) {
-      const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/fleet/sync`, {
+      const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/fleet/sync`, {
           method: 'POST',
           headers: await requireAuthHeaders(),
           body: JSON.stringify(state)
@@ -1785,7 +1785,7 @@ export const api = {
   },
 
   async getDashboardStats() {
-    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/dashboard/stats`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/dashboard/stats`, {
         headers: await requireAuthHeaders(null)
     });
     if (!response.ok) throw new Error("Failed to fetch dashboard stats");
@@ -1794,7 +1794,7 @@ export const api = {
 
   /** Fix 2: Aggregated init — stats + trips + driverMetrics + vehicleMetrics in one call */
   async getDashboardInit(): Promise<{ stats: any; trips: any[]; driverMetrics: any[]; vehicleMetrics: any[] }> {
-    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/dashboard/init`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/dashboard/init`, {
         headers: await requireAuthHeaders(null)
     });
     if (!response.ok) throw new Error("Failed to fetch dashboard init bundle");
@@ -2489,7 +2489,7 @@ export const api = {
   async getCompatibleParts(vehicleId: string, categoryId?: string) {
       const q = categoryId ? `?category_id=${encodeURIComponent(categoryId)}` : "";
       const response = await fetchWithRetry(
-        `${API_ENDPOINTS.fleet}/vehicles/${encodeURIComponent(vehicleId)}/compatible-parts${q}`,
+        `${API_ENDPOINTS.fleetCore}/vehicles/${encodeURIComponent(vehicleId)}/compatible-parts${q}`,
         { headers: await getHeaders(null) },
       );
       if (!response.ok) {
@@ -2500,7 +2500,7 @@ export const api = {
   },
 
   async requestPartsSourcing(vehicleId: string, needText: string) {
-      const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/parts-sourcing-requests`, {
+      const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/parts-sourcing-requests`, {
         method: "POST",
         headers: await getHeaders(),
         body: JSON.stringify({ vehicleId, needText }),
@@ -2870,7 +2870,7 @@ export const api = {
   },
 
   async getCheckIns(weekStart?: string) {
-    let url = `${API_ENDPOINTS.fleet}/check-ins`;
+    let url = `${API_ENDPOINTS.fleetCore}/check-ins`;
     if (weekStart) {
         url += `?weekStart=${weekStart}`;
     }
@@ -2896,7 +2896,7 @@ export const api = {
     source?: string;
     managerNotes?: string;
   }) {
-    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/check-ins`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/check-ins`, {
       method: 'POST',
       headers: await requireAuthHeaders(),
       body: JSON.stringify(payload),
@@ -4473,7 +4473,7 @@ export const api = {
 
   async getCheckInsByVehicle(vehicleId: string): Promise<any[]> {
     const response = await fetchWithRetry(
-      `${API_ENDPOINTS.fleet}/check-ins?vehicleId=${encodeURIComponent(vehicleId)}&limit=5000`,
+      `${API_ENDPOINTS.fleetCore}/check-ins?vehicleId=${encodeURIComponent(vehicleId)}&limit=5000`,
       {
         headers: await requireAuthHeaders(null)
       }
@@ -4537,7 +4537,7 @@ export const api = {
   },
 
   async deleteCheckIn(id: string) {
-    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/check-ins/${id}`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/check-ins/${id}`, {
         method: 'DELETE',
         headers: await requireAuthHeaders(null)
     });
@@ -4575,7 +4575,7 @@ export const api = {
   },
 
   async getForensicErrorLogs() {
-    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/system/audit-trail`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/system/audit-trail`, {
         headers: await requireAuthHeaders(null)
     });
     if (!response.ok) throw new Error("Failed to fetch forensic logs");
@@ -4583,7 +4583,7 @@ export const api = {
   },
 
   async signAuditReport(reportData: any) {
-    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/audit/sign-report`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/audit/sign-report`, {
         method: 'POST',
         headers: await requireAuthHeaders(),
         body: JSON.stringify({ reportData, reportType: 'forensic-audit' })
@@ -4593,7 +4593,7 @@ export const api = {
   },
 
   async getAuditConfig() {
-    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/audit-config`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/audit-config`, {
         headers: await requireAuthHeaders(null)
     });
     if (!response.ok) throw new Error("Failed to fetch audit config");
@@ -4601,7 +4601,7 @@ export const api = {
   },
 
   async saveAuditConfig(config: Record<string, any>) {
-    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/audit-config`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/audit-config`, {
         method: 'POST',
         headers: await requireAuthHeaders(),
         body: JSON.stringify(config)
@@ -5868,7 +5868,7 @@ export const api = {
 
   async getEvidenceStorageSummary(): Promise<import('@roam/types/evidence').EvidenceStorageSummary> {
     const headers = await getHeaders(null);
-    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/admin/evidence-storage/summary`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/admin/evidence-storage/summary`, {
       headers,
     });
     if (!response.ok) {
@@ -5887,7 +5887,7 @@ export const api = {
     orphans: string[];
   }> {
     const headers = await getHeaders('application/json');
-    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/admin/evidence-storage/audit-legacy`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/admin/evidence-storage/audit-legacy`, {
       method: 'POST',
       headers,
       body: JSON.stringify({}),
@@ -5905,7 +5905,7 @@ export const api = {
     pathsProcessed: number;
   }> {
     const headers = await getHeaders('application/json');
-    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/admin/evidence-storage/purge-legacy`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/admin/evidence-storage/purge-legacy`, {
       method: 'POST',
       headers,
       body: JSON.stringify(payload ?? { orphanOnly: true }),
@@ -6235,7 +6235,7 @@ export const api = {
       forceDeleted: 0,
     };
     for (let i = 0; i < ids.length; i += SLICE) {
-      const url = `${API_ENDPOINTS.fleet}/ledger/ensure-from-trip-ids`;
+      const url = `${API_ENDPOINTS.fleetCore}/ledger/ensure-from-trip-ids`;
       const response = await fetchWithRetry(url, {
         method: 'POST',
         headers: await requireAuthHeaders(),
@@ -6446,8 +6446,8 @@ export const api = {
     };
   }> {
     const url = status 
-      ? `${API_ENDPOINTS.fleet}/unverified-vendors?status=${status}`
-      : `${API_ENDPOINTS.fleet}/unverified-vendors`;
+      ? `${API_ENDPOINTS.fleetCore}/unverified-vendors?status=${status}`
+      : `${API_ENDPOINTS.fleetCore}/unverified-vendors`;
     
     const response = await fetchWithRetry(url, {
       headers: await requireAuthHeaders(null)
@@ -6469,7 +6469,7 @@ export const api = {
     suggestedMatches: any[];
   }> {
     const response = await fetchWithRetry(
-      `${API_ENDPOINTS.fleet}/unverified-vendors/${vendorId}`,
+      `${API_ENDPOINTS.fleetCore}/unverified-vendors/${vendorId}`,
       {
         headers: await requireAuthHeaders(null)
       }
@@ -6489,7 +6489,7 @@ export const api = {
     sourceType: 'no_gps' | 'unmatched_name' | 'manual_entry';
   }): Promise<{ success: boolean; vendor: any }> {
     const response = await fetchWithRetry(
-      `${API_ENDPOINTS.fleet}/unverified-vendors`,
+      `${API_ENDPOINTS.fleetCore}/unverified-vendors`,
       {
         method: 'POST',
         headers: await requireAuthHeaders(),
@@ -6518,7 +6518,7 @@ export const api = {
     };
   }> {
     const response = await fetchWithRetry(
-      `${API_ENDPOINTS.fleet}/unverified-vendors/bulk`,
+      `${API_ENDPOINTS.fleetCore}/unverified-vendors/bulk`,
       {
         method: 'POST',
         headers: await requireAuthHeaders(),
@@ -6550,7 +6550,7 @@ export const api = {
     };
   }> {
     const response = await fetchWithRetry(
-      `${API_ENDPOINTS.fleet}/unverified-vendors/${vendorId}/resolve`,
+      `${API_ENDPOINTS.fleetCore}/unverified-vendors/${vendorId}/resolve`,
       {
         method: 'PUT',
         headers: await requireAuthHeaders(),
@@ -6588,7 +6588,7 @@ export const api = {
     };
   }> {
     const response = await fetchWithRetry(
-      `${API_ENDPOINTS.fleet}/unverified-vendors/${vendorId}/create-station`,
+      `${API_ENDPOINTS.fleetCore}/unverified-vendors/${vendorId}/create-station`,
       {
         method: 'POST',
         headers: await requireAuthHeaders(),
@@ -6620,7 +6620,7 @@ export const api = {
     };
   }> {
     const response = await fetchWithRetry(
-      `${API_ENDPOINTS.fleet}/unverified-vendors/${vendorId}`,
+      `${API_ENDPOINTS.fleetCore}/unverified-vendors/${vendorId}`,
       {
         method: 'DELETE',
         headers: await requireAuthHeaders(),
@@ -6651,7 +6651,7 @@ export const api = {
     remainingTransactions: number;
   }> {
     const response = await fetchWithRetry(
-      `${API_ENDPOINTS.fleet}/unverified-vendors/${vendorId}/transactions/${transactionId}/resolve`,
+      `${API_ENDPOINTS.fleetCore}/unverified-vendors/${vendorId}/transactions/${transactionId}/resolve`,
       {
         method: 'PUT',
         headers: await requireAuthHeaders(),
@@ -6685,7 +6685,7 @@ export const api = {
     remainingTransactions: number;
   }> {
     const response = await fetchWithRetry(
-      `${API_ENDPOINTS.fleet}/unverified-vendors/${vendorId}/transactions/${transactionId}/create-station`,
+      `${API_ENDPOINTS.fleetCore}/unverified-vendors/${vendorId}/transactions/${transactionId}/create-station`,
       {
         method: 'POST',
         headers: await requireAuthHeaders(),
@@ -6712,7 +6712,7 @@ export const api = {
     remainingTransactions: number;
   }> {
     const response = await fetchWithRetry(
-      `${API_ENDPOINTS.fleet}/unverified-vendors/${vendorId}/transactions/${transactionId}`,
+      `${API_ENDPOINTS.fleetCore}/unverified-vendors/${vendorId}/transactions/${transactionId}`,
       {
         method: 'DELETE',
         headers: await requireAuthHeaders(),
@@ -6758,7 +6758,7 @@ export const api = {
     message: string;
   }> {
     const response = await fetchWithRetry(
-      `${API_ENDPOINTS.fleet}/migrate-legacy-vendors`,
+      `${API_ENDPOINTS.fleetCore}/migrate-legacy-vendors`,
       {
         method: 'POST',
         headers: await requireAuthHeaders(),
@@ -6793,7 +6793,7 @@ export const api = {
     transaction?: any;
   }> {
     const response = await fetchWithRetry(
-      `${API_ENDPOINTS.fleet}/process-migration-transaction`,
+      `${API_ENDPOINTS.fleetCore}/process-migration-transaction`,
       {
         method: 'POST',
         headers: await requireAuthHeaders(),
@@ -6817,7 +6817,7 @@ export const api = {
 export async function fetchFleetTimezone(): Promise<string> {
   try {
     const res = await fetch(
-      `https://${projectId}.supabase.co/functions/v1/make-server-37f42386/fleet-timezone`,
+      `https://${projectId}.supabase.co/functions/v1/fleet-core/fleet-timezone`,
       {
         headers: await requireAuthHeaders(null),
       },

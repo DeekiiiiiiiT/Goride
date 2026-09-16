@@ -482,7 +482,7 @@ function AppContent() {
   }>({ active: false, message: '', platformName: 'Roam Fleet', checked: false });
 
   useEffect(() => {
-    fetch(`${API_ENDPOINTS.fleet}/platform-status`, { headers: withProductLineHeaders() })
+    fetch(`${API_ENDPOINTS.fleetCore}/platform-status`, { headers: withProductLineHeaders() })
       .then(res => res.json())
       .then(data => {
         setMaintenanceStatus({

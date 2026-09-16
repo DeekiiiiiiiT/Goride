@@ -1,6 +1,8 @@
 # Fleet domain extraction — completion playbook
 
-**Status:** **Program pending soak — Rev 3 D7 closeout shipped (2026-09-16).** Controls are armed in CI and green on `a6722fb4` (Deploy + Test + CI). Money-path defects C2a/b/c closed; D14 stubbed; `fleet-core` smoke-proven. **F5 is prepare-only:** keep `make-server-37f42386` until N-day zero traffic, then one sweep `.fleet` → `.fleetCore`. Residual decompose is decoupled (not an F5 blocker).
+**Status:** **F5 closeout — Rev 5 gates hardening in progress (2026-09-16).** F1 SQL shim filter + F2/F3 retire/`f5-soak-log.json` landed. Client cutover is in tree (`API_ENDPOINTS.fleet` = 0). **Do not retire `make-server-37f42386` until soak log shows 7 consecutive greens.**
+
+Day 0 post-F1 rebaseline: **4368 non-health / 45 health** (≈ prior ~4400 — filter validated). Daily: `pnpm check:shim-traffic:log`.
 
 **Goal:** Bring **Toll, Maintenance / Expense Hub, Claims, and Driver pay / settlement** to the same bar as fuel: own Edge Function (or intentional mount on `fleet-ops`), full client cutover, money-path seals safe, **browser** + auth proven — then, after soak, retire `make-server-37f42386`.
 
@@ -267,7 +269,254 @@ flowchart TD
 
 ---
 
-## D. Verification pass — Rev 3, 2026-09-16
+## F. Verification pass — Rev 5, 2026-09-16 (**current**)
+
+Read-only re-audit of the §E6 closeout. Gates executed, scripts read, instrument test-run.
+
+### F0. All six §E6 items landed; gates still green
+
+```
+$ node scripts/lint-edge-kernel.mjs           → ok
+$ node scripts/edge-route-manifest --all --check → 6/6 current (core 567)
+$ node scripts/check-edge-manifest-overlap.mjs
+    ok  D15 overlap: 0 live collisions (monolith 291 routes, 13 tombstones ignored)
+    note D15: fleet-core excluded (intentional dual-serve with make-server-37f42386 during soak)
+$ generate-extraction-status + git diff        → CURRENT
+$ deno test edgeKernel + week_seal_log         → 13 passed | 0 failed
+```
+
+| §E6 item | Status | Evidence |
+|---|---|---|
+| 1. Shim-traffic instrument + define `N` | ✅ built, **N = 7**, 🔴 one defect (F1) | `check-shim-traffic.mjs`, `pnpm check:shim-traffic`, daily workflow, Day-0 baseline recorded |
+| 2. Six-slug browser checklist | ✅ **CLOSED** | Rewritten as a six-row table with the UX-contract screens; stale "Optional: flip maintenance mode" step removed and explicitly marked already-done |
+| 3. Authenticated browser pass | 🟡 PO-owned, table ready to fill | §8 D9 table |
+| 4. ADR-0022 rehearsal | ✅ **CLOSED, and honestly scoped** | Code remount+revert **14 ms**; `fleet-toll` redeploy **~6.1 s** + smoke green; §8 states plainly that full RTO is dominated by the untimed client app ship and keeps ≤4h as a planning ceiling |
+| 5. Overlap exception line | ✅ **CLOSED** | Verified in live output above |
+| 6. Sweep + retire tooling | ✅ ahead of schedule | 296 sites → `.fleetCore`; `f5-cutover-fleet-core.mjs`, `f5-retire-shim.mjs`, `f5-adr0022-remount-rehearsal.mjs` |
+
+**A correction to my own §E: the sweep ordering in §E5/step-4 was wrong.** I said "sweep after soak." That is backwards — the shim cannot reach zero traffic until clients stop calling it, so the cutover must *precede* the soak. This round did it in the right order, and went further by aliasing the legacy keys (`fleet`, `financial`, `ai`, `admin`) to `/fleet-core` so even an unswept straggler lands on the successor. `API_ENDPOINTS.fleet` now has **0** call sites.
+
+The Day-0 baseline (~4,400 non-health hits / 24 h, labelled "expected red, pre-client-ship") is exactly the right way to open a soak: measure before claiming.
+
+### F1. 🔴 The soak instrument can report a false green — and it gets likelier as the soak succeeds
+
+`check-shim-traffic.mjs` queries **all** edge-function paths, truncates, and only then filters for the shim:
+
+```js
+const sql = `
+  select log_attributes['request.pathname'] as path, count() as requests
+  from logs
+  where source = 'function_edge_logs'
+  group by path
+  order by requests desc
+  limit 100                     // ← applied across EVERY function's paths
+`;
+…
+function mergeCounts(into, rows) {
+  for (const r of rows || []) {
+    if (!p || !isShimPath(p)) continue;   // ← shim filter runs client-side, after the cut
+```
+
+There is no shim predicate in the SQL. The project serves well over a thousand distinct edge paths — `fleet-core` alone manifests 567, plus fuel 115, toll 76, ops 76, claims 75, pay 103, and everything outside fleet (delivery, rides, driver, payments, …). A top-100-by-volume list is dominated by high-traffic paths from other functions.
+
+**The failure mode is silently optimistic, and it sharpens as the soak progresses.** Today, at ~4,400 hits/24 h, shim paths rank high and the numbers are real — which is why the Day-0 baseline looks credible. As clients migrate and shim traffic falls to a trickle, those paths slide *below* the top-100 cut and the script reports `non-health: 0` → `ok` → exit 0. The instrument becomes least trustworthy at precisely the moment its answer triggers an irreversible action.
+
+**Fix (one line):** filter server-side so the limit applies to shim paths only —
+
+```sql
+where source = 'function_edge_logs'
+  and log_attributes['request.pathname'] like '%make-server-37f42386%'
+```
+
+Keep the client-side `isShimPath` as a belt-and-braces check. Re-run the Day-0 baseline afterwards; the number should not move much now, and that agreement is itself the validation.
+
+### F2. 🟠 `f5:retire-shim`'s guard is 24 h, but the pass rule is 7 days
+
+The stated rule (§8): *"7 consecutive calendar days with 0 non-health hits."* The script that performs the irreversible step checks one day:
+
+```js
+// scripts/f5-retire-shim.mjs:26-27
+console.log("Precheck: check-shim-traffic --hours 24");
+const st = run("node", ["scripts/check-shim-traffic.mjs", "--hours", "24"]);
+```
+
+So `pnpm f5:retire-shim` will proceed after a **single** clean day — six days short of the gate it is supposed to enforce. Combined with F1, retirement could be authorized by one query that was truncated into returning zero.
+
+**Fix:** make the precheck `--days 7`. Better still, have it read the §8 soak table (or the workflow's run history) so "7 *consecutive*" is actually verified rather than inferred from one long window — see F3.
+
+This matters more than the other findings because it guards the one step in this program that cannot be undone.
+
+### F3. 🟡 Nothing aggregates "7 consecutive" — the rule has no memory
+
+`.github/workflows/shim-traffic-soak.yml` runs `--hours 24` daily at 13:00 UTC. Each run is independent and stateless: a red Tuesday followed by six green days is indistinguishable from seven green days unless a human reads the run history and the §8 table is filled in by hand.
+
+`--days 7` is not the same test either — it is one 7×24 h aggregate, which would pass if six days were clean and the seventh had traffic averaged away… actually no: any non-health hit in the window fails it, so `--days 7` is *stricter*. That makes it a good precheck for F2. But it still does not prove the hits were *recent* vs. at the window's start.
+
+Cheapest fix that matches the stated rule: have the daily workflow append its result to a committed `docs/f5-soak-log.md` (or a small JSON), and have `f5-retire-shim` require 7 consecutive green entries. Otherwise the rule lives only in prose and the §8 table is trusted hand-entry.
+
+### F4. 🔴 83 uncommitted changes — and this time it includes the live-traffic change
+
+```
+$ git log --oneline -1   → 16d5897b  (unchanged since Rev 4)
+$ git status --short | wc -l → 83
+```
+
+Uncommitted: `check-shim-traffic.mjs`, `shim-traffic-soak.yml`, all three `f5-*.mjs` scripts, the overlap-checker note, the rewritten browser checklist, `package.json` scripts — **and the client cutover itself** (`packages/api-client/src/config.ts` plus the app `apiConfig`s that moved 296 sites to `.fleetCore`).
+
+Previous rounds left infrastructure uncommitted. This round leaves **the change that actually moves production traffic off the shim**. Consequences:
+
+- The soak **cannot start**. Its own status line says so: *"Ship fleet/admin/driver builds so live traffic leaves the old slug."* Those builds cannot ship from an uncommitted tree, so Day 1 cannot begin.
+- The daily soak workflow has never run — it isn't on `main`.
+- Day 0's ~4,400 hits will not fall, and every day the baseline is re-measured it will look identically red, which reads as "soak not progressing" rather than "soak not started."
+
+This is the fourth occurrence in five rounds. The work is consistently good and consistently stranded one `git push` from being real.
+
+### F5. What's left
+
+| # | Work | Blocking? |
+|---|---|---|
+| 1 | **Fix the SQL filter in `check-shim-traffic.mjs`** (F1) — one line, before anything relies on a green | **Yes — correctness of the gate** |
+| 2 | **Change `f5-retire-shim` precheck to `--days 7`** (F2) | **Yes — guards the irreversible step** |
+| 3 | **Commit and push everything**, then ship fleet/admin/driver builds (F4) | **Yes — the soak cannot start** |
+| 4 | Re-baseline after the fix; start the clock on the first clean 24 h | Gates F5 |
+| 5 | Persist daily soak results so "7 consecutive" is machine-checked (F3) | No — but closes the last hand-entry |
+| 6 | PO: authenticated browser pass on six slugs; fill the §8 D9 table | Gates D9 |
+| 7 | At 7 green days: `pnpm f5:retire-shim` → commit → CI deploy | Soak-bound |
+| 8 | *Optional:* staging window for a full app-ship RTO (§8 keeps ≤4h as ceiling) | No |
+
+Items 1–3 are hours. After them the program is genuinely just waiting on the clock.
+
+### F6. The lesson this round
+
+Rev 1: *a checklist is a memory aid, not a control.*
+Rev 2: *building a control is not arming it.*
+Rev 3: *an armed control does nothing until it's in the pipeline it was written for.*
+Rev 4: *the last gate is the one nobody instruments.*
+Rev 5: **an instrument that can only fail optimistically is worse than none — it converts "we didn't check" into "we checked and it was clean."**
+
+F1 is the sharpest version of this program's recurring theme. The instrument was built quickly and well, produces a credible Day-0 number, and will keep producing credible numbers right up until the moment it silently starts returning zero for the wrong reason. The Day-0 baseline is genuinely good practice and is what makes the fix verifiable: re-run it after adding the SQL predicate, and if the number barely moves, the instrument is sound.
+
+---
+
+## E. Verification pass — Rev 4, 2026-09-16 (**superseded by §F**)
+
+Read-only re-audit of the §D7 closeout. Controls were **executed**, not inspected.
+
+### E0. The engineering program is closed
+
+```
+$ git log --oneline -5
+  16d5897b Record Rev 3 D7 closeout SHA and F5 prepare-only soak path.
+  a6722fb4 Fix residual assertRequiredEnv import so prebundled make-server boots.
+  dfdca7df Fix fleet-core health smoke and toll auth scan after F0 carve.
+  96f046cc Fix fleet-core prebundle: hoist mid-function imports…
+  34b4cd0d Ship Rev 3 fleet extraction closeout: arm CI gates and harden week seals.
+
+$ node scripts/lint-edge-kernel.mjs                  → [lint-edge-kernel] ok
+$ node scripts/edge-route-manifest.mjs --all --check  → 6/6 current
+    fuel 115 · toll 76 · ops 76 · claims 75 · pay 103 · core 567
+$ node scripts/check-edge-manifest-overlap.mjs
+    ok  D15 overlap: 0 live collisions (monolith 291 routes, 13 tombstones ignored)
+$ node scripts/generate-extraction-status.mjs + git diff --exit-code
+    extraction-status: CURRENT
+$ deno test edgeKernel.test.ts week_seal_log.test.ts  → 13 passed | 0 failed
+```
+
+| §D7 item | Status | Evidence |
+|---|---|---|
+| 1. Commit and push | ✅ **CLOSED** | 5 commits; working tree down to 17 unrelated leftovers (`g1-*.mjs`, `pin-fleet-hono.mjs`, two unrelated edits). **The three-round pattern is broken** |
+| 2. `fleet-core` manifest + smoke | ✅ | `routes.generated.json` (567 routes); in **both** smoke loops (workflow:67, :214); still correctly **excluded** from overlap `FLEET_SLUGS` |
+| 3. Integration tests for the seal contract | ✅ **CLOSED** | 84 → 338 lines. The three behaviours I named are now tested by name: *replays succeeded row with same key (D14)*, *refuses fresh in_progress with CLOSE_IN_PROGRESS 409*, *fail-closed on read error*, *completeSealAttempt fail-closed on write error*, plus *conditional claim: zero-row update throws CLOSE_IN_PROGRESS* |
+| 4. Close the direct-seal race | ✅ **CLOSED — better than specified** | See below |
+| 5. Browser pass | 🟡 **Open, and the checklist is too narrow** (E2) | |
+| 6. F5 soak | 🟠 **Unmeasurable as defined** (E1) | |
+| 7. Residual decompose | — decoupled by design (§D2) | |
+
+**On item 4:** I offered two options — claim the week-close lock in the handler, or a conditional write. The implementation took the second and did it properly, as a real compare-and-swap in `claimInProgressRow`:
+
+```ts
+if (!laneRow) {                       // no row → INSERT; PK/unique conflict ⇒ 409
+  const { error } = await sb.from("week_seal_log").insert(row);
+  if (/duplicate|unique|conflict/i.test(error?.message ?? "")) throw CLOSE_IN_PROGRESS;
+}
+// existing row → filtered UPDATE … WHERE status != 'in_progress' OR updated_at < staleBefore
+  .or(`status.neq.in_progress,updated_at.lt.${staleBefore}`).select("organization_id");
+if (!data?.length) throw CLOSE_IN_PROGRESS;   // 0 rows claimed ⇒ someone else holds it
+```
+
+This is the better of the two options: it guards **every** caller, including direct `POST /fleet-*/internal/seal-*-week` traffic that never enters `prepareWeekClose`, which is exactly the D5 gap. `SEAL_IN_PROGRESS_TTL_MS` is pinned to 120 s to match the week-close lock.
+
+Nothing in the architecture, the money path, or the CI gates is open. What follows is operational.
+
+### E1. 🟠 The soak has no instrument — this is the only real blocker
+
+F5 is now the single remaining program gate, and §8 defines it as:
+
+> zero-traffic soak … keep `make-server-37f42386` until **N-day zero traffic**
+
+Neither half of that is actionable:
+
+- **Nothing measures shim traffic.** There is no script, query, or dashboard for it. `scripts/` contains `ledger-soak-check.mjs` and `remittance_concurrency_soak.sql`, both unrelated. ADR-0022 says nothing about how zero traffic is observed.
+- **`N` is undefined** — it appears literally as "N-day" in the status line, §8, and the kickoff prompt.
+
+So the program's last gate cannot be opened, failed, or even started. This is the same shape as every previous round's finding — a control that reads as rigorous and cannot execute — except now it is the *only* thing left.
+
+**What to build (small):** a `scripts/check-shim-traffic.mjs` that queries Supabase edge logs for `make-server-37f42386` invocations over a window and exits non-zero if any are non-health. Then set `N` to a real number (7 days spanning two week-closes is the natural choice, since week close is the heaviest residual path) and record the daily counts in §8. Until that exists, "pending soak" means "parked".
+
+### E2. 🟡 The maintenance drill is done; the authenticated browser pass is still fuel-only
+
+**Credit first:** §8 records the D9 maintenance drill as executed across **all six slugs** — `maintenanceMode=true` returned the 503 payload on business paths while `/health` stayed 200, then restored. That is the direct descendant of **A3**, run properly and at full breadth. D12 is satisfied.
+
+What remains is the *authenticated* half — `X-Total-Count` totals and console-clean CORS from a logged-in session. `smoke-fleet-fuel-cors.mjs` proves preflight on fuel (204, `X-Roam-Product-Line`, `PUT`, `Origin`), but `docs/phase-i-cors-browser-checklist.md` is 709 bytes and every step names **Fuel Entries**. §8's own **UX soak contract** table lists five domains with specific screens — toll tags/plazas/ledger, maintenance summary/logs/expense hub, claims list/detail, settlement desk/periods/statements — and there are six deployed functions, each a separate origin with its own CORS response and its own list headers.
+
+Fuel passing proves fuel.
+
+Two small fixes: expand the checklist from a fuel script into a **six-row table** (slug → screen → totals header → result), and drop its now-stale step 6, which still reads *"Optional: flip platform maintenance mode"* for fuel alone — that drill is done and recorded at wider scope, so leaving an optional fuel-only version invites someone to re-run the narrow one and call it covered.
+
+### E3. 🟡 Two live front doors to the residual during soak — by design, but say so
+
+Both `make-server-37f42386` and `fleet-core` are in `ALL_FNS`, and both mount `registerResidualMonolithRoutes`. That is what soak means and it is functionally safe — same registrar, same database, no divergence possible.
+
+But it means **D15's "no path served twice" guarantee is deliberately suspended for this pair**, which is why `check-edge-manifest-overlap.mjs` excludes `fleet-core` from `FLEET_SLUGS`. That exclusion is correct. The risk is only that a future reader takes `ok D15 overlap: 0 live collisions` as proof that nothing is double-served. Add a line to the checker's success output naming the intentional exception, so the green result states its own scope.
+
+### E4. 🟡 ADR-0022 step 3 is an unmet commitment
+
+The ADR requires:
+
+> 3. **Rehearse once after F1 (toll):** time remount + client revert on staging/prod-like; **record actual minutes** in §8.
+
+§8 still carries a tabletop estimate ("≤ 4h … rehearse when scheduling allows"). F1 shipped. The rehearsal is owed, and it is the only way the ≤4h RTO becomes a number rather than a hope — which matters because ADR-0022 item 4 explicitly trades away a runtime endpoint resolver on the strength of that RTO.
+
+### E5. Deferred correctly
+
+- **`API_ENDPOINTS.fleetCore` does not exist yet** and the 296 `.fleet` sites are untouched. Right call — the sweep belongs after soak, in one change. When it lands, re-run D6 and D15: `fleet-core` moves into `FLEET_SLUGS` at the moment `make-server` is retired, and the exception in E3 disappears with it.
+- **Residual decompose** stays decoupled per §D2.
+
+### E6. What's left
+
+| # | Work | Owner | Blocking? |
+|---|---|---|---|
+| 1 | **Build shim-traffic measurement; define `N`** (E1) | eng | **Yes — the only blocker** |
+| 2 | Expand browser checklist from a fuel script to a six-slug table; drop the stale optional step 6 (E2) | eng | Gates D9 |
+| 3 | Run the authenticated browser pass (totals + console) on all six; record in §8 | PO | Gates D9 |
+| 4 | Rehearse the ADR-0022 remount; record actual minutes (E4) | eng | No — but owed |
+| 5 | Add the intentional-exception line to the overlap checker's output (E3) | eng | No |
+| 6 | *After soak:* add `fleetCore` key, sweep 296 sites, retire shim, re-run D6/D15 | eng | Soak-bound |
+
+Items 1–3 are the path to done. Everything else is hygiene or soak-bound.
+
+### E7. The lesson this round
+
+Rev 1: *a checklist is a memory aid, not a control.*
+Rev 2: *building a control is not arming it.*
+Rev 3: *an armed control does nothing until it's in the pipeline it was written for.*
+Rev 4: **the last gate is the one nobody instruments.**
+
+Four rounds in, every finding has been the same species: something that reads as rigorous but cannot execute. The engineering is now genuinely finished and the fixes this round were good — the CAS claim in `claimInProgressRow` is better than what was asked for, and the seal tests finally demonstrate behaviour instead of asserting shape. The program's remaining risk has moved entirely out of the code and into an ops gate defined with an undefined variable. **Define `N`, measure the shim, and this is done.**
+
+---
+
+## D. Verification pass — Rev 3, 2026-09-16 (**superseded by §E**)
 
 Read-only re-audit of the §C6 remediation. Unlike previous rounds, the new controls were **executed**, not just inspected — results inline below.
 
@@ -791,34 +1040,90 @@ Maintenance copy: `Platform is under maintenance…` + `maintenanceMessage` from
 | B3 tooling | 2026-09-16 | **Armed.** `--check`, overlap D15, CI + package scripts; `fleet-core` in `--all` + post-deploy smoke (kept out of overlap) |
 | F0 carve index | 2026-09-16 | **Done (gate).** Boot ≈ 106 lines; residual registrar; not an F5 blocker (§D2) |
 | F1–F4 | 2026-09-16 | **Smoke-proven** on Rev-3 deploy `a6722fb4` (six slugs) |
-| F5 / fleet-core | 2026-09-16 | **Scaffolded + manifested + smoke green.** **Prepare-only:** do **not** delete/retire `make-server-37f42386` this pass. Pending soak = N-day zero traffic on the shim, then one sweep ~296 `API_ENDPOINTS.fleet` → `.fleetCore` |
-| Phase I CORS | 2026-09-16 | **Preflight PASS** (`smoke-fleet-fuel-cors.mjs`: 204, X-Roam-Product-Line, PUT, Origin). Authenticated `X-Total-Count` UI totals still need a logged-in browser pass (`docs/phase-i-cors-browser-checklist.md`) when PO has a session |
-| ADR-0022 rollback | 2026-09-16 | Deploy scripts real; RTO still tabletop ≤4h until staging rehearse |
+| F5 / fleet-core | 2026-09-16 | **Pre-soak cutover DONE in tree.** `fleetCore` key added; ~296 `.fleet` → `.fleetCore`; `financial`/`admin`/`ai` (+ driver residual) → `fleet-core`; hardcoded client URLs + fuel auto-close cron + ops scripts retargeted. `make-server` **kept deployed** as cold control. |
+| Phase I CORS | 2026-09-16 | **Preflight PASS all six** via `smoke-edge-fn` (health + CORS OPTIONS). Fuel CORS script PASS. Authenticated `X-Total-Count` UI totals: **PO session still required** — six-row checklist in `docs/phase-i-cors-browser-checklist.md` |
+| ADR-0022 rollback | 2026-09-16 | **Rehearsal timed:** code remount+revert **14 ms**; single-domain edge redeploy (`fleet-toll`) **~6.1 s** + smoke green. Full RTO still dominated by **client app ship** (not timed this pass) — keep ≤4h as planning ceiling until a staging app-release window records wall-clock |
 | **Audit Rev 3** | **2026-09-16** | Controls local-green; D4/D3/D5 closed |
 | **Rev 3 D7 closeout** | **2026-09-16** | **Shipped.** Closeout + health/toll-scan fix + residual `assertRequiredEnv` import. **SHA `a6722fb4`** — Actions Deploy + Test + CI **green** (new gates: lint-edge-kernel, manifest `--check`, overlap, extraction-status, post-deploy smokes). Hotfix restored make-server/fleet-core after F0 bare-call crash |
 | **D9 maintenance drill** | **2026-09-16** | Flipped `platform:settings:fleet` (+ legacy) `maintenanceMode=true`; all six slugs returned **503** maintenance payload on business paths; `/health` stayed **200**; restored to `false` |
+| **Audit Rev 4 (verification)** | **2026-09-16** | **Engineering program CLOSED.** Remaining work operational (§E). |
+| **F5 closeout P0–P3** | **2026-09-16** | **Done.** `scripts/check-shim-traffic.mjs` + `pnpm check:shim-traffic`; N=**7**; overlap success line names dual-door; CORS checklist six rows; client cutover + straggler scripts/cron. Retirement: `pnpm f5:retire-shim` (blocked until soak green). |
+| **Audit Rev 5 (verification)** | **2026-09-16** | **All six §E6 items verified landed**; gates re-run green (6/6 manifests, D15 0 + exception note, extraction-status current, 13/13 tests). Client cutover confirmed: `.fleet` → **0** sites, 296 on `.fleetCore`, legacy keys aliased. ADR-0022 rehearsal timed and honestly scoped. **3 open (§F):** 🔴 `check-shim-traffic` SQL lacks a shim predicate so `limit 100` truncates low-volume shim paths — **false-green risk that worsens as the soak succeeds** (F1); 🟠 `f5-retire-shim` prechecks `--hours 24` against a 7-day rule (F2); 🔴 83 uncommitted incl. the client cutover, so the soak cannot start (F4). Also 🟡 nothing machine-checks "7 *consecutive*" (F3). **Auditor's correction:** my §E "sweep after soak" ordering was wrong — cutover must precede soak, and this round did it right |
+
+### F5 soak (N = 7)
+
+**Source of truth:** [`docs/f5-soak-log.json`](./f5-soak-log.json). §8 table mirrors it.
+**Pass rule:** 7 consecutive calendar days with `ok: true` in the soak log **and** `check-shim-traffic --days 7` exit 0. Ignore only paths ending in `/health` or `/ready`.
+**Commands:** `pnpm check:shim-traffic` · `pnpm check:shim-traffic:log` (append today’s row). Auth: `ROAM_MGMT_PAT`. Workflow: `.github/workflows/shim-traffic-soak.yml` (uploads log artifact).
+**Retire guard:** `pnpm f5:retire-shim` requires `--days 7` traffic clear **plus** 7 consecutive `ok` rows ending today/yesterday UTC.
+
+| Day | Date (UTC) | Non-health | Health | Top offenders (abbrev) | Notes |
+|-----|------------|------------|--------|------------------------|-------|
+| 0 (post-F1 rebaseline) | 2026-09-16 | **4368** | 45 | stations, platform-status, transactions, enterprise/me/modules, fuel-entries, … | SQL shim predicate validated (≈ prior ~4400). Expected red until client ship. |
+| 1 | | | | | Start clock only after one clean 24h post client ship |
+| 2 | | | | | |
+| 3 | | | | | |
+| 4 | | | | | |
+| 5 | | | | | |
+| 6 | | | | | |
+| 7 | | | | | Then `pnpm f5:retire-shim` |
+
+### D9 browser checklist (six slugs)
+
+| Slug | Screen | Totals | Eng preflight | Authenticated UI |
+|------|--------|--------|---------------|------------------|
+| fleet-fuel | Fuel Entries | X-Total-Count | PASS (`smoke-edge-fn` + `smoke-fleet-fuel-cors`) | **PO pending** |
+| fleet-toll | Tags / plazas / ledger | X-Total-Count | PASS | **PO pending** |
+| fleet-ops | Maintenance / expense hub | as used | PASS | **PO pending** |
+| fleet-claims | Claims list | as used | PASS | **PO pending** |
+| fleet-pay | Settlement desk | as used | PASS | **PO pending** |
+| fleet-core | Residual (drivers/trips/ledger) | as used | PASS | **PO pending** |
 
 ---
 
 ## 9. Agent kickoff prompt (copy/paste)
 
 ```
-Read docs/fleet-domain-extraction-completion.md §8 — Rev 3 D7 closeout is SHIPPED
-on a6722fb4 (Deploy/Test/CI green). Do NOT re-run D3/D4/D5 or re-carve the residual.
+Read docs/fleet-domain-extraction-completion.md §F (Rev 5) — it supersedes §E.
 
-Program status: pending F5 soak only. Keep make-server-37f42386 live.
+Engineering is closed and all gates are green. Cutover to fleet-core is done in the
+working tree (API_ENDPOINTS.fleet = 0 sites). Do NOT redo any of that, and do NOT
+re-sweep clients — that ordering is correct as-is.
 
-F5 prepare path (do not execute retirement this pass):
-  1. Confirm N consecutive days of zero traffic on make-server-37f42386
-     (gateway/logs — not assumed).
-  2. One client sweep: API_ENDPOINTS.fleet → API_ENDPOINTS.fleetCore (~296 sites).
-  3. Only then retire/rename the shim slug (ADR-0022 rollback ready).
+Three fixes BEFORE any soak result can be trusted. Do them in this order.
 
-Optional leftover: logged-in browser pass for Fuel Entries X-Total-Count
-(docs/phase-i-cors-browser-checklist.md) — preflight + maintenance drill already
-recorded in §8.
+1) FIX THE INSTRUMENT (§F1). scripts/check-shim-traffic.mjs queries every edge path,
+   applies `limit 100`, and only then filters for make-server-37f42386 client-side.
+   Low-volume shim traffic falls below the cut and the script prints
+   "non-health: 0 / ok" and exits 0. It is least trustworthy exactly when its answer
+   authorizes retirement. Add the predicate to the SQL:
+       where source = 'function_edge_logs'
+         and log_attributes['request.pathname'] like '%make-server-37f42386%'
+   Keep the client-side isShimPath check. Then RE-RUN the Day-0 baseline: if the
+   number barely moves from ~4,400, the instrument is validated.
 
-Stay on the current branch. Do not treat md cleanup as the fix.
+2) FIX THE RETIREMENT GUARD (§F2). scripts/f5-retire-shim.mjs prechecks
+   `check-shim-traffic --hours 24` while the stated rule is 7 consecutive days.
+   It would authorize the one irreversible step in this program after a single clean
+   day. Change the precheck to --days 7.
+
+3) COMMIT AND PUSH, then ship fleet/admin/driver builds (§F4). 83 changes are
+   uncommitted — including the client cutover itself, so live traffic has NOT left
+   the shim and the soak cannot start. Day 0 will keep reading red until this ships.
+   This is the fourth round in five that ended one push short.
+
+THEN:
+4. Re-baseline; start the clock on the first clean 24h. Append daily results to the
+   §8 soak table.
+5. Persist daily results (docs/f5-soak-log.md or JSON) so "7 CONSECUTIVE" is
+   machine-checked rather than hand-entered — the workflow is stateless today (§F3).
+6. PO: authenticated browser pass on six slugs; fill the §8 D9 table.
+7. At 7 green days: pnpm f5:retire-shim && commit && CI deploy.
+8. Optional: staging window for a full app-ship RTO (code drill already timed:
+   14ms remount, ~6.1s redeploy; ≤4h stays the planning ceiling).
+
+Stay on the current branch.
+A gate that can only fail optimistically is worse than no gate.
 ```
 
-F5 soak is the only program gate left; residual decompose stays decoupled.
+Steps 1–3 are hours. After them, the program is waiting on the clock.

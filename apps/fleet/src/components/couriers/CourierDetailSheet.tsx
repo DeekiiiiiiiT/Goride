@@ -49,7 +49,7 @@ export function CourierDetailSheet({
 
   const removeMutation = useMutation({
     mutationFn: async (courierId: string) => {
-      const response = await fetch(`${API_ENDPOINTS.fleet}/team/drivers/${courierId}/remove`, {
+      const response = await fetch(`${API_ENDPOINTS.fleetCore}/team/drivers/${courierId}/remove`, {
         method: 'POST',
         headers: await requireAuthHeaders(null),
       });

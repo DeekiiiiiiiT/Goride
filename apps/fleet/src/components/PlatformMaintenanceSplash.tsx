@@ -20,7 +20,7 @@ export function PlatformMaintenanceSplash({
   const checkStatus = useCallback(async () => {
     setChecking(true);
     try {
-      const res = await fetch(`${API_ENDPOINTS.fleet}/platform-status`);
+      const res = await fetch(`${API_ENDPOINTS.fleetCore}/platform-status`);
       const data = await res.json();
       if (!data.maintenanceMode) {
         onStatusChange?.();

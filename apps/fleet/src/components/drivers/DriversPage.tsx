@@ -448,7 +448,7 @@ export function DriversPage({
     
     setIsDeleting(true);
     try {
-      const response = await fetch(`${API_ENDPOINTS.fleet}/drivers/${driverToDelete}`, {
+      const response = await fetch(`${API_ENDPOINTS.fleetCore}/drivers/${driverToDelete}`, {
         method: 'DELETE',
         headers: await requireAuthHeaders(null)
       });
@@ -476,7 +476,7 @@ export function DriversPage({
     if (!driverToRemove) return;
     setIsRemoving(true);
     try {
-      const response = await fetch(`${API_ENDPOINTS.fleet}/team/drivers/${driverToRemove}/remove`, {
+      const response = await fetch(`${API_ENDPOINTS.fleetCore}/team/drivers/${driverToRemove}/remove`, {
         method: 'POST',
         headers: await requireAuthHeaders(null),
       });

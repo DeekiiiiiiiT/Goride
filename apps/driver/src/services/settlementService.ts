@@ -23,7 +23,7 @@ export const settlementService = {
         // 1. Fetch dependencies
         const [vehicles, scenariosResponse] = await Promise.all([
             api.getVehicles(),
-            fetchWithRetry(`${API_ENDPOINTS.fuel}/scenarios`, {
+            fetchWithRetry(`${API_ENDPOINTS.fleetCore}/scenarios`, {
                 headers: { 'Authorization': `Bearer ${publicAnonKey}` }
             })
         ]);

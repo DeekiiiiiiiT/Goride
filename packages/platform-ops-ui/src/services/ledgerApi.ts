@@ -109,7 +109,7 @@ async function authHeaders(contentType: string | null = 'application/json') {
 
 export const ledgerApi = {
   async getTripsFiltered(params: TripFilterParams): Promise<PaginatedTripResponse> {
-    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/trips/search`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/trips/search`, {
       method: 'POST',
       headers: await authHeaders(),
       body: JSON.stringify(params),
@@ -121,7 +121,7 @@ export const ledgerApi = {
   },
 
   async exportTripsFiltered(params: TripFilterParams): Promise<Blob> {
-    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/trips/export`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/trips/export`, {
       method: 'POST',
       headers: await authHeaders(),
       body: JSON.stringify(params),
@@ -146,7 +146,7 @@ export const ledgerApi = {
     distanceCount?: number;
     [key: string]: unknown;
   }> {
-    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/trips/stats`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/trips/stats`, {
       method: 'POST',
       headers: await authHeaders(),
       body: JSON.stringify(params),
@@ -191,7 +191,7 @@ export const ledgerApi = {
     qs.set('limit', String(params?.limit ?? 500));
     qs.set('offset', String(params?.offset ?? 0));
     const response = await fetchWithRetry(
-      `${API_ENDPOINTS.financial}/toll-reconciliation/ledger?${qs.toString()}`,
+      `${API_ENDPOINTS.toll}/toll-reconciliation/ledger?${qs.toString()}`,
       { headers: await authHeaders(null) },
     );
     if (!response.ok) {
@@ -223,7 +223,7 @@ export const ledgerApi = {
     if (params?.to) qs.set('to', params.to);
     if (params?.platform) qs.set('platform', params.platform);
     const response = await fetchWithRetry(
-      `${API_ENDPOINTS.financial}/payment-ledger-lines?${qs.toString()}`,
+      `${API_ENDPOINTS.fleetPay}/payment-ledger-lines?${qs.toString()}`,
       { headers: await authHeaders(null) },
     );
     if (!response.ok) {

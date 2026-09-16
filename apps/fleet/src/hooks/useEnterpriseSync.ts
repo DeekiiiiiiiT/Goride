@@ -10,7 +10,7 @@ export function useEnterpriseSync() {
   const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'error'>('idle');
   const [activeLocks, setActiveLocks] = useState<any[]>([]);
 
-  const baseUrl = `https://${projectId}.supabase.co/functions/v1/make-server-37f42386`;
+  const baseUrl = `https://${projectId}.supabase.co/functions/v1/fleet-core`;
 
   const loadPreferences = useCallback(async () => {
     if (!user) return;

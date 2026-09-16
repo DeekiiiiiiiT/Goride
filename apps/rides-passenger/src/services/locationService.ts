@@ -87,7 +87,7 @@ export const loadGoogleMapsApi = async (): Promise<void> => {
         }
 
         const response = await fetch(
-          `https://${projectId}.supabase.co/functions/v1/make-server-37f42386/maps-config-rides`,
+          `https://${projectId}.supabase.co/functions/v1/fleet-core/maps-config-rides`,
           { headers: { Authorization: `Bearer ${publicAnonKey}` } },
         );
         if (!response.ok) {

@@ -9,7 +9,7 @@ export function useAdminCheckIn() {
     const reviewCheckIn = async (checkInId: string, status: 'approved' | 'rejected', notes?: string) => {
         setIsReviewing(true);
         try {
-            const response = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-37f42386/check-ins/review`, {
+            const response = await fetch(`https://${projectId}.supabase.co/functions/v1/fleet-core/check-ins/review`, {
                 method: 'POST',
                 headers: await requireAuthHeaders(),
                 body: JSON.stringify({ checkInId, status, managerNotes: notes })

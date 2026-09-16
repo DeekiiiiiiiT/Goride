@@ -33,7 +33,7 @@ export class ErrorBoundary extends Component<Props, State> {
 
     try {
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-37f42386/system/log-error`,
+        `https://${projectId}.supabase.co/functions/v1/fleet-core/system/log-error`,
         {
           method: 'POST',
           headers: {

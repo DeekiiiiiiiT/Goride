@@ -139,6 +139,11 @@ if (overlaps.length) {
   console.log(
     `ok  D15 overlap: 0 live collisions (monolith ${monoRoutes.size} routes, ${tombs.size} tombstones ignored)`,
   );
+  // Intentional soak dual-door: fleet-core mounts the same residual registrar as
+  // make-server-37f42386, so it is excluded from FLEET_SLUGS until the shim is retired.
+  console.log(
+    `note D15: fleet-core excluded (intentional dual-serve with make-server-37f42386 during soak)`,
+  );
 }
 
 process.exit(failed);
