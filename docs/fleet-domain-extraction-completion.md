@@ -528,8 +528,8 @@ Maintenance copy: `Platform is under maintenance…` + `maintenanceMessage` from
 |------|------|--------|
 | Fuel (A0–H3) | 2026-09-15/16 | Code complete locally; shipping under A1 |
 | Phase 0 control plane | 2026-09-16 | **Done** — ADRs 0019–0022, CODEOWNERS, UX sheet |
-| A1 ship fuel | 2026-09-16 | **Code ready** — skip guard removed; commit/push/CI required for D13 |
-| Phase I browser CORS | 2026-09-16 | **Checklist ready** — run DevTools on deployed fleet-fuel after A1 |
+| A1 ship fuel | 2026-09-16 | **Pushed** `2515c995` / follow-up `37d0384a` — confirm Actions deployed fleet-* (not skipped) |
+| Phase I browser CORS | 2026-09-16 | Checklist in `docs/phase-i-cors-browser-checklist.md` — run after deploy |
 | B1 edge kernel | 2026-09-16 | **Done** — `createFleetFunction`; fuel + make-server; lint-edge-kernel |
 | B2 seal log | 2026-09-16 | **Done** — `week_seal_log` migration applied; all-lane block; CLOSE_BLOCKED UX |
 | B3 tooling | 2026-09-16 | **Done** — edge-route-manifest + smoke-edge-fn + manifests generated |
