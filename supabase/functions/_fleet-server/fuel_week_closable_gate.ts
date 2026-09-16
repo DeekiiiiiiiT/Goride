@@ -353,7 +353,7 @@ export async function buildFuelWeekClosableInputForPeriod(
 
   // R-3: stop-to-stop conservation — authoritative at HTTP close.
   const { entries: weekEntries } = await loadWeekClosableKvBundle(orgId, weekStart, weekEnd);
-  const opsLiters = filterFuelOpsLogEntries(weekEntries as FuelEntry[])
+  const opsLiters = filterFuelOpsLogEntries(weekEntries as unknown as FuelEntry[])
     .filter((e) => isEntryInInclusiveYmdRange(e.date, weekStart, weekEnd))
     .reduce((s, e) => s + fuelOpsLiters(e), 0);
   const s2s = evaluateStopToStopFromSnapshots({

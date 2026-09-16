@@ -122,6 +122,8 @@ export type BuiltWeekSnapshot = {
     blendedRatio: number;
     appliedFuelRule?: WeekSnapFuelRule | null;
     brain?: Record<string, unknown> | null;
+    /** F-1: tank-window timing carved before residual. */
+    windowTimingCost?: number;
   };
 };
 

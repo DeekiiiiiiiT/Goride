@@ -1343,7 +1343,7 @@ export function registerFuelPeriodRoutes(app: Hono) {
           }
         }
         // Always audit in shadow/enforce so clean weeks still prove authoritySource (N-19).
-        const stopToStopSummary = snapshots.map((snap) => {
+        const stopToStopSummary = snapshots.map((snap: unknown) => {
           const snapObj = (snap && typeof snap === "object" ? snap : {}) as Record<string, unknown>;
           const meta = (snapObj.metadata && typeof snapObj.metadata === "object"
             ? snapObj.metadata
