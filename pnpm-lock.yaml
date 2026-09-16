@@ -11,6 +11,9 @@ importers:
       '@playwright/test':
         specifier: ^1.62.1
         version: 1.62.1
+      esbuild:
+        specifier: 0.25.12
+        version: 0.25.12
       sharp:
         specifier: ^0.35.3
         version: 0.35.3(@types/node@20.19.40)

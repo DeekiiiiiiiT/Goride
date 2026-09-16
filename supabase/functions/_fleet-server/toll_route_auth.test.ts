@@ -9,9 +9,10 @@ import { assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
  * could publish pricing or wipe a reconciliation. This test is what stops that
  * from coming back, and what forces a new toll route to declare its guards.
  *
- * Reading the source is deliberate: importing index.tsx boots the whole server
- * and needs a live database, so the registration site is the cheapest honest
- * assertion available.
+ * Reading the source is deliberate: importing the boot module starts the whole
+ * server and needs a live database, so the registration site is the cheapest
+ * honest assertion available. Wave F0 moved the monolith body to
+ * make_server_legacy_boot.tsx (thin index.tsx only re-exports).
  */
 
 const REGISTRATION_RE = /app\.(get|post|put|patch|delete)\(/g;
@@ -29,8 +30,9 @@ interface Route {
 }
 
 async function tollRoutes(): Promise<Route[]> {
-  const source = await Deno.readTextFile(new URL("./index.tsx", import.meta.url));
-
+  const source = await Deno.readTextFile(
+    new URL("./make_server_legacy_boot.tsx", import.meta.url),
+  );
   const starts: Array<{ index: number; method: string }> = [];
   for (const m of source.matchAll(REGISTRATION_RE)) {
     starts.push({ index: m.index!, method: m[1] });
