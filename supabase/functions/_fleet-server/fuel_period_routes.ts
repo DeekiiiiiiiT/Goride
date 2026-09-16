@@ -2,8 +2,8 @@
  * Server-owned Consumption Reconciliation periods — SQL read model + finalize jobs.
  * Finalize job persists finalized_report snapshots + ledger (cursor-resumable).
  */
-import type { Context } from "npm:hono";
-import type { Hono } from "npm:hono";
+import type { Context } from "npm:hono@4.3.11";
+import type { Hono } from "npm:hono@4.3.11";
 import { requirePermission } from "./rbac_middleware.ts";
 import { getOrgId } from "./org_scope.ts";
 import * as kv from "./kv_store.tsx";
@@ -40,7 +40,9 @@ import {
   serverFuelStepCountsForPeriod,
 } from "./fuel_week_closable_gate.ts";
 
-const BASE = "/make-server-37f42386";
+import { FUEL_HTTP_PREFIX } from "./fuel_http_prefix.ts";
+
+const BASE = FUEL_HTTP_PREFIX;
 const CRON_SECRET = () => Deno.env.get("FLEET_CRON_SECRET") || Deno.env.get("CRON_SECRET") || "";
 
 async function assertNoUnapprovedFuelTxInWindow(

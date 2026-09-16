@@ -14,6 +14,11 @@ on:
       - "supabase/functions/**"
       - "supabase/config.toml"
       - ".github/workflows/deploy-supabase-edge.yml"
+      - "scripts/build-edge-bundle.mjs"
+      - "packages/fuel-core/**"
+      - "packages/finance-core/**"
+      - "packages/types/**"
+      - "packages/toll-core/**"
   workflow_dispatch:
     inputs:
       deploy_all:
@@ -44,6 +49,28 @@ jobs:
           sudo tar -xzf /tmp/supabase.tar.gz -C /usr/local/bin
           supabase --version
 
+      - name: Setup Node + pnpm
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install pnpm
+        run: npm install -g pnpm@11.1.0
+
+      - name: Install workspace deps (esbuild for edge prebundle)
+        run: pnpm install --frozen-lockfile
+
+      - name: Prebundle fleet edge functions
+        run: |
+          set -euo pipefail
+          node scripts/build-edge-bundle.mjs --all
+          for slug in fleet-fuel fleet-toll fleet-ops fleet-claims fleet-pay; do
+            if [ -f "supabase/functions/$slug/src/main.ts" ]; then
+              node scripts/build-edge-bundle.mjs "$slug"
+            fi
+          done
+          node scripts/lint-edge-kernel.mjs
+
       - name: Deploy changed Edge Functions
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
@@ -58,6 +85,11 @@ jobs:
 
           ALL_FNS=(
             make-server-37f42386
+            fleet-fuel
+            fleet-toll
+            fleet-ops
+            fleet-claims
+            fleet-pay
             delivery
             merchant-push
             notifications
@@ -74,7 +106,6 @@ jobs:
             identity
             evidence-cleanup
             petrojam-prices
-            fleet-ops
             platform-catalog
             before-user-created
             custom-access-token
@@ -84,15 +115,11 @@ jobs:
             fn="$1"
             max=4
             n=0
-            # make-server exceeds --use-api 5MB cap; Docker bundler allows ~20MB.
-            use_api_flag="--use-api"
-            if [ "$fn" = "make-server-37f42386" ]; then
-              use_api_flag=""
-            fi
+            # All functions use --use-api (fleet monolith is prebundled under 5 MB).
             while [ "$n" -lt "$max" ]; do
               n=$((n+1))
-              echo ">>> Deploying ${fn} (attempt ${n}/${max}, flags: ${use_api_flag:-docker})..."
-              if supabase functions deploy "$fn" $use_api_flag --project-ref "$SUPABASE_PROJECT_REF"; then
+              echo ">>> Deploying ${fn} (attempt ${n}/${max}, --use-api)..."
+              if supabase functions deploy "$fn" --use-api --project-ref "$SUPABASE_PROJECT_REF"; then
                 echo ">>> ${fn} OK"
                 return 0
               fi
@@ -121,8 +148,8 @@ jobs:
 
           if [ "$DEPLOY_ALL" = "true" ]; then
             should_all=true
-          elif echo "$CHANGED_FILES" | grep -qE '^supabase/functions/_shared/|^supabase/config\.toml|^\.github/workflows/deploy-supabase-edge\.yml'; then
-            # Shared helpers / config / workflow itself → full redeploy
+          elif echo "$CHANGED_FILES" | grep -qE '^supabase/functions/_shared/|^supabase/config\.toml|^\.github/workflows/deploy-supabase-edge\.yml|^scripts/build-edge-bundle\.mjs'; then
+            # Shared helpers / config / workflow / bundler → full redeploy
             should_all=true
           fi
 
@@ -137,7 +164,7 @@ jobs:
             done
             # Fleet monolith tree feeds these entrypoints
             if echo "$CHANGED_FILES" | grep -q '^supabase/functions/_fleet-server/'; then
-              for dep in make-server-37f42386 evidence-cleanup fleet-ops; do
+              for dep in make-server-37f42386 fleet-fuel fleet-toll fleet-ops fleet-claims fleet-pay evidence-cleanup; do
                 already=false
                 for f in "${FNS[@]+"${FNS[@]}"}"; do
                   [ "$f" = "$dep" ] && already=true && break
@@ -156,5 +183,10 @@ jobs:
 
           echo ">>> Functions to deploy: ${FNS[*]}"
           for fn in "${FNS[@]}"; do
+            # Fail closed: every function in FNS must have a deployable entry
+            if [ ! -f "supabase/functions/$fn/index.ts" ] && [ ! -f "supabase/functions/$fn/src/main.ts" ]; then
+              echo ">>> ERROR: $fn is queued to deploy but has no index.ts or src/main.ts"
+              exit 1
+            fi
             deploy_with_retry "$fn" || exit 1
           done

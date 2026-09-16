@@ -2,7 +2,8 @@
  * Expense Hub routes — additive domain for Business Finance.
  * Preserves legacy /fixed-expenses; Hub bulk rules project FixedExpenseConfig rows.
  */
-import type { Context } from "npm:hono";
+import type { Context } from "npm:hono@4.3.11";
+import { OPS_HTTP_PREFIX } from "./ops_http_prefix.ts";
 import * as kv from "./kv_store.tsx";
 import { requireAuth, requirePermission } from "./rbac_middleware.ts";
 import { filterByOrg, stampOrg, getOrgId } from "./org_scope.ts";
@@ -50,7 +51,7 @@ import {
   requestPlatformVendor,
 } from "./platform_vendor_routes.ts";
 
-const PREFIX = "/make-server-37f42386/expense-hub";
+const PREFIX = `${OPS_HTTP_PREFIX}/expense-hub`;
 
 function nowIso() {
   return new Date().toISOString();

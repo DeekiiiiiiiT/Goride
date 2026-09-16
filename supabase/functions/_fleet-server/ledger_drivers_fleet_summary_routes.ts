@@ -1,7 +1,7 @@
 /**
  * Drivers + fleet ledger summary routes — peeled from index.tsx / behavior unchanged
  */
-import type { Hono } from "npm:hono";
+import type { Hono } from "npm:hono@4.3.11";
 import { requireAuth } from "./rbac_middleware.ts";
 import { fetchCanonicalLedgerEventsInPeriod } from "./ledger_driver_events.ts";
 

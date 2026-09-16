@@ -5,7 +5,7 @@
  * Returns a stable error shape and logs the real error server-side.
  */
 
-import type { Context } from "npm:hono";
+import type { Context } from "npm:hono@4.3.11";
 
 interface SafeErrorResponse {
   error: "internal_error";

@@ -31,7 +31,7 @@
  *   GET /toll-reconciliation/periods?driverId= – per-period step counts
  */
 
-import { Hono, type Context } from "npm:hono";
+import { Hono, type Context } from "npm:hono@4.3.11";
 import { startOfWeek, endOfWeek, format } from "npm:date-fns";
 import { getFleetTimezone } from "./timezone_helper.tsx";
 import { requireAuth, requirePermission, type RbacUser } from "./rbac_middleware.ts";
@@ -82,7 +82,9 @@ const app = new Hono();
 // Auth gate: every route in this controller requires a valid user JWT (Wave 1B).
 app.use("*", requireAuth({ strict: true }));
 
-const BASE = "/make-server-37f42386/toll-reconciliation";
+import { TOLL_HTTP_PREFIX } from "./toll_http_prefix.ts";
+
+const BASE = `${TOLL_HTTP_PREFIX}/toll-reconciliation`;
 
 /** Default landing lookback — last N Monday–Sunday weeks including the current week. */
 const PERIODS_LOOKBACK_WEEKS = 26;
@@ -695,7 +697,7 @@ app.get(`${BASE}/periods`, requirePermission('toll.view'), async (c) => {
 // ─── POST /toll/periods/:weekKey/seal ───────────────────────────────────────
 // Seal a toll week: publish immutable toll week_statements per active driver so
 // Close Week's invariants have an independent toll lane (Close Program Pass 2).
-app.post(`/make-server-37f42386/toll/periods/:weekKey/seal`, requirePermission("toll.manage"), async (c: Context) => {
+app.post(`${TOLL_HTTP_PREFIX}/toll/periods/:weekKey/seal`, requirePermission("toll.manage"), async (c: Context) => {
   try {
     const orgId = getOrgId(c);
     if (!orgId) return c.json({ error: "ORG_REQUIRED" }, 400);
@@ -779,7 +781,7 @@ app.post(`/make-server-37f42386/toll/periods/:weekKey/seal`, requirePermission("
 // Reverse active toll_usage events whose source_id no longer resolves to a live
 // toll_ledger row (toll tag inflation audit). Optional driverId scopes the sweep.
 app.post(
-  `/make-server-37f42386/toll/periods/:weekKey/repair-orphan-events`,
+  `${TOLL_HTTP_PREFIX}/toll/periods/:weekKey/repair-orphan-events`,
   requirePermission("toll.manage"),
   async (c: Context) => {
     try {
@@ -871,7 +873,7 @@ app.post(
 // Audit §10: dry-run (default) lists active toll_usage on quarantined/voided/
 // amount-mismatched ledger rows. POST ?apply=1 (or body.apply) reverses them.
 app.get(
-  `/make-server-37f42386/toll/periods/:weekKey/ineligible-usage-report`,
+  `${TOLL_HTTP_PREFIX}/toll/periods/:weekKey/ineligible-usage-report`,
   requirePermission("toll.manage"),
   async (c: Context) => {
     try {
@@ -902,7 +904,7 @@ app.get(
 );
 
 app.post(
-  `/make-server-37f42386/toll/periods/:weekKey/ineligible-usage-report`,
+  `${TOLL_HTTP_PREFIX}/toll/periods/:weekKey/ineligible-usage-report`,
   requirePermission("toll.manage"),
   async (c: Context) => {
     try {

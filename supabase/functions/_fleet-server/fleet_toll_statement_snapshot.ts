@@ -14,7 +14,7 @@ import {
   isReconcilableTollExpense,
   loadAllByPrefix,
 } from "./toll_controller.tsx";
-import type { Context } from "npm:hono";
+import type { Context } from "npm:hono@4.3.11";
 
 function round2(n: number): number {
   return Math.round(n * 100) / 100;

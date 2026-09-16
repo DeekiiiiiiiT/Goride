@@ -30,7 +30,7 @@ export const RESTATEMENT_QUEUE_QUERY_KEY = ['week-statement-restatements'] as co
 
 export async function listWeekStatementRestatements(): Promise<RestatementRow[]> {
   const response = await fetchWithRetry(
-    `${API_ENDPOINTS.financial}/settlements/week-close/restatements?pageSize=100`,
+    `${API_ENDPOINTS.fleetPay}/settlements/week-close/restatements?pageSize=100`,
     { headers: await requireAuthHeaders(null) },
   );
   if (!response.ok) {

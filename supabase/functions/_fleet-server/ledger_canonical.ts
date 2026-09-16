@@ -2,7 +2,7 @@
  * Canonical money events — SSOT is ledger.entries (via fleetDualWriteCanonicalEvent).
  * Idempotency resolves against ledger.entries / source_receipts (KV money store retired).
  */
-import type { Context } from "npm:hono";
+import type { Context } from "npm:hono@4.3.11";
 import { createClient } from "jsr:@supabase/supabase-js@2.49.8";
 import { stampOrg } from "./org_scope.ts";
 import { isKnownPlatform, normalizePlatform } from "../../../packages/finance-core/src/normalizePlatform.ts";

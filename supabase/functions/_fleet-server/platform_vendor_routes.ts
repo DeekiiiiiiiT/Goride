@@ -2,8 +2,8 @@
  * Platform-global Jamaica vendor + expense category catalog.
  * Super Admin owns verified masters (like station:); fleets read + request pending.
  */
-import type { Context } from "npm:hono";
-import type { Hono } from "npm:hono";
+import type { Context } from "npm:hono@4.3.11";
+import type { Hono } from "npm:hono@4.3.11";
 import * as kv from "./kv_store.tsx";
 import { requireAuth, requirePermission } from "./rbac_middleware.ts";
 import { getOrgId } from "./org_scope.ts";

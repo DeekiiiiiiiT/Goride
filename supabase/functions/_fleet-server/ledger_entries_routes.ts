@@ -2,7 +2,7 @@
  * Unified ledger read-model routes (Phase 4).
  * Behind FEATURE_FLAGS.LEDGER_READ_MODEL or env LEDGER_READ_MODEL=1.
  */
-import type { Hono } from "npm:hono";
+import type { Hono } from "npm:hono@4.3.11";
 import { requireAuth } from "./rbac_middleware.ts";
 import { getOrgId } from "./org_scope.ts";
 import { getServiceClient } from "./service_client.ts";

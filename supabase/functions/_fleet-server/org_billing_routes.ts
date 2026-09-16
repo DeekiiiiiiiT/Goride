@@ -2,7 +2,7 @@
  * Org billing — Payment methods (WiPay-ready cards) + Payout bank accounts.
  * v1: persist masked details only; live charge/deposit later.
  */
-import type { Context, Hono } from "npm:hono";
+import type { Context, Hono } from "npm:hono@4.3.11";
 import * as kv from "./kv_store.tsx";
 import { requireAuth, requirePermission, type RbacUser } from "./rbac_middleware.ts";
 import { filterByOrg, getOrgId, stampOrg, belongsToOrg } from "./org_scope.ts";

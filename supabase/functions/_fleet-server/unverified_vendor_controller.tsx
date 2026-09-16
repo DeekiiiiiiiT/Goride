@@ -78,6 +78,22 @@ export async function getUnverifiedVendorById(vendorId: string): Promise<any> {
  * @param sourceType - How was this created: 'no_gps' | 'unmatched_name' | 'manual_entry'
  * @returns Created or updated vendor
  */
+/** Bulk create/update — used by POST /unverified-vendors/bulk. Dedupes by returned vendor id. */
+export async function bulkCreateUnverifiedVendors(
+  transactions: Array<{
+    id: string;
+    vendor: string;
+    sourceType: 'no_gps' | 'unmatched_name' | 'manual_entry';
+  }>,
+): Promise<any[]> {
+  const byId = new Map<string, any>();
+  for (const tx of transactions) {
+    const vendor = await createOrUpdateUnverifiedVendor(tx.id, tx.vendor, tx.sourceType);
+    byId.set(vendor.id, vendor);
+  }
+  return [...byId.values()];
+}
+
 export async function createOrUpdateUnverifiedVendor(
   transactionId: string,
   vendorName: string,

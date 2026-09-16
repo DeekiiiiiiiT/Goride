@@ -2,7 +2,7 @@
  * GET /ledger/driver-overview — Aggregated financials for Driver Detail.
  * Extracted from index.tsx (Phase D shell collapse). Behavior unchanged.
  */
-import type { Hono } from "npm:hono";
+import type { Hono } from "npm:hono@4.3.11";
 import * as kv from "./kv_store.tsx";
 import { requireAuth } from "./rbac_middleware.ts";
 import { belongsToOrg, getOrgId } from "./org_scope.ts";

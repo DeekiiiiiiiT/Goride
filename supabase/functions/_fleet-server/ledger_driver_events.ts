@@ -5,7 +5,7 @@
  * P-2: roster / drivers-summary prefer SQL GROUP BY (periods or fare_earning)
  * instead of folding up to 100k mapped event rows in JS.
  */
-import type { Context } from "npm:hono";
+import type { Context } from "npm:hono@4.3.11";
 import { filterByOrg, getOrgId } from "./org_scope.ts";
 import { getServiceClient } from "./service_client.ts";
 

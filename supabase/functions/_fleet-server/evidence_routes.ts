@@ -1,7 +1,7 @@
 /**
  * Evidence storage admin + cleanup routes.
  */
-import type { Context } from "npm:hono";
+import type { Context } from "npm:hono@4.3.11";
 import {
   EPHEMERAL_EVIDENCE_BUCKET,
   LEGACY_DOCS_BUCKET,

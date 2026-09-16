@@ -20,7 +20,7 @@
  * - Platform roles still bypass filtering
  */
 
-import type { Context } from "npm:hono";
+import type { Context } from "npm:hono@4.3.11";
 import type { RbacUser, Role } from "./rbac_middleware.ts";
 import { PLATFORM_RESOLVED_ROLES } from "./rbac_middleware.ts";
 import * as filterStatsCache from "./memory_cache.ts";

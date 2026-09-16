@@ -1,7 +1,7 @@
 /**
  * Fleet Rush module checkout — WiPay commercial entitlement.
  */
-import type { Hono } from "npm:hono";
+import type { Hono } from "npm:hono@4.3.11";
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import type { RbacUser } from "./rbac_middleware.ts";
 import {

@@ -1,0 +1,31 @@
+# Fleet edge domains — extraction program (ADR 0020 / 0021)
+# Owners are placeholders until team handles are assigned; keep paths for review routing.
+
+# Platform kernel + CORS
+/supabase/functions/_shared/edgeKernel.ts @deeki
+/supabase/functions/_shared/corsDefaults.ts @deeki
+/supabase/functions/_shared/corsOrigins.ts @deeki
+/supabase/functions/_shared/corsAllowlistNpm.ts @deeki
+/supabase/functions/_shared/corsAllowlist.ts @deeki
+
+# Extracted / planned domain functions
+/supabase/functions/fleet-fuel/ @deeki
+/supabase/functions/fleet-toll/ @deeki
+/supabase/functions/fleet-ops/ @deeki
+/supabase/functions/fleet-claims/ @deeki
+/supabase/functions/fleet-pay/ @deeki
+/supabase/functions/make-server-37f42386/ @deeki
+/supabase/functions/_fleet-server/ @deeki
+
+# Domain packages
+/packages/fuel-core/ @deeki
+/packages/toll-core/ @deeki
+/packages/api-client/ @deeki
+
+# Deploy + edge tooling
+/.github/workflows/deploy-supabase-edge.yml @deeki
+/scripts/build-edge-bundle.mjs @deeki
+/scripts/lint-edge-kernel.mjs @deeki
+/scripts/edge-route-manifest.mjs @deeki
+/scripts/smoke-edge-fn.mjs @deeki
+/scripts/smoke-fleet-fuel-*.mjs @deeki

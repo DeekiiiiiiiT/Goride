@@ -2,7 +2,7 @@
  * Build canonical ledger_event payloads for runtime writes (trips, fuel, toll).
  * Import/CSV flows use buildCanonicalImportEvents + append separately.
  */
-import type { Context } from "npm:hono";
+import type { Context } from "npm:hono@4.3.11";
 import { appendCanonicalLedgerEvents, canonicalEventExistsByIdemKey } from "./ledger_canonical.ts";
 import type { FixedExpenseConfig } from "../../../packages/types/src/expenses.ts";
 import { buildFixedExpenseOccurrences } from "../../../packages/finance-core/src/fixedExpenseOccurrences.ts";

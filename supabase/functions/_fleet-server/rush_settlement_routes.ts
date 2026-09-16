@@ -1,8 +1,8 @@
 /**
  * Rush settlement read-only routes (COD balances, delivery trip summary).
  */
-import type { Hono } from "npm:hono";
-import type { Context } from "npm:hono";
+import type { Hono } from "npm:hono@4.3.11";
+import type { Context } from "npm:hono@4.3.11";
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { isFeatureEnabled, FEATURE_FLAGS } from "./feature_flags.ts";
 import { getOrgId } from "./org_scope.ts";
@@ -19,7 +19,7 @@ export function registerRushSettlementRoutes(
 ) {
   const { supabase, requireAuth } = deps;
   const resolveOrgId = deps.getOrgId ?? getOrgId;
-  const BASE = "/make-server-37f42386";
+  const BASE = "";
 
   /** Read-only COD / cash owed to Roam for fleet couriers. */
   app.get(`${BASE}/rush/courier-cash-balances`, requireAuth() as never, async (c) => {

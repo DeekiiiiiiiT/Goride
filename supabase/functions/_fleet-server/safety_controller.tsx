@@ -1,4 +1,4 @@
-import { Hono } from "npm:hono";
+import { Hono } from "npm:hono@4.3.11";
 import * as kv from "./kv_store.tsx";
 import { fromKvStore } from "./fleet_sql_bridge.ts";
 import { requireAuth, requirePermission, type RbacUser } from "./rbac_middleware.ts";

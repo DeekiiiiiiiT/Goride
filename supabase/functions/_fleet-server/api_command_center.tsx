@@ -12,8 +12,8 @@
  * by `requireAuth()` + an inline platform-role check.
  */
 
-import { Hono } from "npm:hono";
-import type { Context, Next } from "npm:hono";
+import { Hono } from "npm:hono@4.3.11";
+import type { Context, Next } from "npm:hono@4.3.11";
 import * as kv from "./kv_store.tsx";
 import { requireAuth, type RbacUser } from "./rbac_middleware.ts";
 import { logAdminAction } from "./audit_log.ts";

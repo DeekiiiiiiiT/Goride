@@ -4,7 +4,7 @@
  * GET /drivers/saved-views
  * PUT /drivers/saved-views  { views: DriverSavedView[] }
  */
-import type { Context, Hono } from "npm:hono";
+import type { Context, Hono } from "npm:hono@4.3.11";
 import * as kv from "./kv_store.tsx";
 import { requireAuth, requirePermission } from "./rbac_middleware.ts";
 import { getOrgId } from "./org_scope.ts";

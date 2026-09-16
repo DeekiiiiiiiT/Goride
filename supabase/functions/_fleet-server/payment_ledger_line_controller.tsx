@@ -7,18 +7,19 @@
  *   payment_ledger_line-dedup:{idempotencyKey}
  *   driver_period_snapshot:{driverId}:{batchId}
  */
-import { Hono } from "npm:hono";
+import { Hono } from "npm:hono@4.3.11";
 import * as kv from "./kv_store.tsx";
 import { requireAuth, requirePermission, type RbacUser } from "./rbac_middleware.ts";
 import { getServiceClientWithSchema } from "./service_client.ts";
 import { safeErrorResponse } from "./safe_error.ts";
+import { PAY_HTTP_PREFIX } from "./pay_http_prefix.ts";
 
 const app = new Hono();
 
 // Auth gate: every route in this controller requires a valid user JWT (Wave 1B).
 app.use("*", requireAuth({ strict: true }));
 
-const BASE = "/make-server-37f42386/payment-ledger-lines";
+const BASE = `${PAY_HTTP_PREFIX}/payment-ledger-lines`;
 
 // Wave 5: Use shared service client factory for rides schema
 function ridesDb() {

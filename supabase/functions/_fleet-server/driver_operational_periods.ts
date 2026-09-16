@@ -2,7 +2,7 @@
  * driver_operational_periods — weekly ops read model (trips/rates/distance).
  * Money stays on driver_financial_periods; settlements desk stays on money periods.
  */
-import type { Context, Hono } from "npm:hono";
+import type { Context, Hono } from "npm:hono@4.3.11";
 import {
   requireAuth,
   hasPermission,

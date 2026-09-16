@@ -1,5 +1,5 @@
 /** Pending vehicle catalog queue - admin approval routes. */
-import type { Context } from "npm:hono";
+import type { Context } from "npm:hono@4.3.11";
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import * as kv from "./kv_store.tsx";
 import { requireAuth, requirePermission, assertPlatformStaffResponse } from "./rbac_middleware.ts";

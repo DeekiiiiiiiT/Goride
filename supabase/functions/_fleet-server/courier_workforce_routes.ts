@@ -1,7 +1,7 @@
 /**
  * Courier self-serve workforce membership: me + leave fleet.
  */
-import type { Hono } from "npm:hono";
+import type { Hono } from "npm:hono@4.3.11";
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import type { RbacUser } from "./rbac_middleware.ts";
 import type { UnlinkCourierResult } from "./workforce_link.ts";

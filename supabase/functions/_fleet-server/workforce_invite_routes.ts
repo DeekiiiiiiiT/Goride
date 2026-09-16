@@ -2,7 +2,7 @@
  * Fleet workforce invites — drivers and couriers.
  * Supports invite codes + courier Roam Tag targeted invites (in-app Accept/Decline).
  */
-import type { Hono } from "npm:hono";
+import type { Hono } from "npm:hono@4.3.11";
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import type { RbacUser } from "./rbac_middleware.ts";
 import { isFeatureEnabled, FEATURE_FLAGS } from "./feature_flags.ts";

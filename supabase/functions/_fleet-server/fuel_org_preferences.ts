@@ -1,7 +1,7 @@
 /**
  * Org-scoped general preferences with legacy preferences:general fallback.
  */
-import type { Context } from "npm:hono";
+import type { Context } from "npm:hono@4.3.11";
 import * as kv from "./kv_store.tsx";
 import { getOrgId, stampOrg } from "./org_scope.ts";
 

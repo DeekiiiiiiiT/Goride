@@ -2,7 +2,7 @@
  * Roam Fleet product-admin — Maintenance schedule ledger APIs (roamfleet.co/admin).
  * Cross-customer ops view of service truth (not finance). requireProductAdmin only.
  */
-import type { Context } from "npm:hono";
+import type { Context } from "npm:hono@4.3.11";
 import { requireProductAdmin } from "./product_admin_guard.ts";
 import { analyzeComponentRowStatus } from "./maintenance_service_ledger_core.ts";
 

@@ -1,7 +1,7 @@
 /**
  * Uber Vehicles/Fleet API routes — connect (client credentials), sync vehicles/drivers, webhook.
  */
-import type { Context } from "npm:hono";
+import type { Context } from "npm:hono@4.3.11";
 import * as kv from "./kv_store.tsx";
 import { requireAuth, requirePermission } from "./rbac_middleware.ts";
 import { stampOrg } from "./org_scope.ts";

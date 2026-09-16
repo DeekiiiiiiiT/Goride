@@ -10,7 +10,7 @@
  * second tenant exists; unit tests prove the SQL/filter predicate isolates orgs.
  */
 import { AsyncLocalStorage } from "node:async_hooks";
-import type { Context } from "npm:hono";
+import type { Context } from "npm:hono@4.3.11";
 import type { FleetQueryFilter } from "./repos/baseRepo.ts";
 import { getOrgId } from "./org_scope.ts";
 

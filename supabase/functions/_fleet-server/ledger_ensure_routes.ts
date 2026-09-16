@@ -2,7 +2,7 @@
  * POST /ledger/ensure-from-trip-ids (+ /import) — idempotent canonical fare backfill.
  * Extracted from index.tsx for a lighter split (A-7).
  */
-import type { Context, Hono, Next } from "npm:hono";
+import type { Context, Hono, Next } from "npm:hono@4.3.11";
 import * as kv from "./kv_store.tsx";
 import {
   requireAuth,

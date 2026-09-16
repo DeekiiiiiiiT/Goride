@@ -13,7 +13,7 @@
  */
 
 import { createClient } from "npm:@supabase/supabase-js@2";
-import type { Context, Next } from "npm:hono";
+import type { Context, Next } from "npm:hono@4.3.11";
 
 // ---------------------------------------------------------------------------
 // 1. Types
@@ -380,6 +380,7 @@ export function requireAuth(options?: RequireAuthOptions) {
       path.includes("/platform-status") ||
       path.includes("/platform-feature-flags") ||
       path.includes("/health") ||
+      path.includes("/internal/seal-fuel-week") ||
       // Public Maps JS bootstrap (browser key only)
       path.includes("/maps-config") ||
       // Server Places proxy — Fleet address fields (key stays server-side)

@@ -12,7 +12,7 @@
  * logging, RBAC bypass and the feature-flag rollout switch.
  */
 
-import type { Context, Next } from "npm:hono";
+import type { Context, Next } from "npm:hono@4.3.11";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import * as kv from "./kv_store.tsx";
 import {

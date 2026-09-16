@@ -2,7 +2,7 @@
  * Enterprise product-admin customer/team APIs (roamenterprise.co/admin).
  * Gated with requireProductAdmin("enterprise").
  */
-import type { Hono } from "https://deno.land/x/hono@v4.3.11/mod.ts";
+import type { Hono } from "npm:hono@4.3.11";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { requireProductAdmin } from "./product_admin_guard.ts";
 import {

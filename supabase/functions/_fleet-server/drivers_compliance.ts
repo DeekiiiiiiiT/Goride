@@ -3,7 +3,7 @@
  * GET  /drivers/:id/compliance
  * POST /drivers/:id/compliance/verify
  */
-import type { Context, Hono } from "npm:hono";
+import type { Context, Hono } from "npm:hono@4.3.11";
 import * as kv from "./kv_store.tsx";
 import { requireAuth, requirePermission } from "./rbac_middleware.ts";
 import { filterByOrgSafe, getOrgId, stampOrg } from "./org_scope.ts";

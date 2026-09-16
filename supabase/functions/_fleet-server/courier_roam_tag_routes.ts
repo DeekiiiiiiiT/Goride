@@ -2,7 +2,7 @@
  * Courier-only Roam Tags — ensure / me / claim / lookup.
  * Separate namespace from passenger rides.roam_passenger_tags.
  */
-import type { Hono } from "npm:hono";
+import type { Hono } from "npm:hono@4.3.11";
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import type { RbacUser } from "./rbac_middleware.ts";
 

@@ -2,7 +2,7 @@
  * Remaining ledger diagnostics — peeled from index.tsx (L-2 / A-7).
  * Behavior unchanged.
  */
-import type { Hono } from "npm:hono";
+import type { Hono } from "npm:hono@4.3.11";
 import * as kv from "./kv_store.tsx";
 import { requireAuth } from "./rbac_middleware.ts";
 import { filterByOrg, getOrgId, isLegacyOrgPlaceholder } from "./org_scope.ts";

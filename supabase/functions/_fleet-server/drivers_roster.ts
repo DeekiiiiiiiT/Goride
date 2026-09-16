@@ -3,7 +3,7 @@
  * Reuses SQL fare / period earnings aggregates (same buckets as /ledger/drivers-summary)
  * and SQL trip status counts — no full trip JSON payloads (N-3).
  */
-import type { Context, Hono } from "npm:hono";
+import type { Context, Hono } from "npm:hono@4.3.11";
 import * as kv from "./kv_store.tsx";
 import { fromKvStore } from "./fleet_sql_bridge.ts";
 import { requireAuth } from "./rbac_middleware.ts";

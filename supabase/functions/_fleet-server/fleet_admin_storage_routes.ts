@@ -2,7 +2,7 @@
  * Roam Fleet product-admin Storage Center APIs (roamfleet.co/admin).
  * Not for customer fleet managers — requireProductAdmin only.
  */
-import type { Context } from "npm:hono";
+import type { Context } from "npm:hono@4.3.11";
 import {
   EPHEMERAL_EVIDENCE_BUCKET,
   LEGACY_DOCS_BUCKET,

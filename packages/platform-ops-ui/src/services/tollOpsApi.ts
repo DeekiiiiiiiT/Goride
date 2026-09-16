@@ -34,7 +34,7 @@ async function authHeaders(contentType: string | null = 'application/json') {
 
 export const tollOpsApi = {
   async getTollPlazas(): Promise<TollPlaza[]> {
-    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/toll-plazas`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/toll-plazas`, {
       headers: await authHeaders(null),
     });
     if (!response.ok) throw new Error('Failed to fetch toll plazas');
@@ -42,7 +42,7 @@ export const tollOpsApi = {
   },
 
   async getTollPlaza(id: string): Promise<TollPlaza> {
-    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/toll-plazas/${id}`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/toll-plazas/${id}`, {
       headers: await authHeaders(null),
     });
     if (!response.ok) throw new Error('Failed to fetch toll plaza');
@@ -50,7 +50,7 @@ export const tollOpsApi = {
   },
 
   async saveTollPlaza(plaza: Partial<TollPlaza>): Promise<{ success: boolean; data: TollPlaza }> {
-    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/toll-plazas`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/toll-plazas`, {
       method: 'POST',
       headers: await authHeaders(),
       body: JSON.stringify(plaza),
@@ -60,7 +60,7 @@ export const tollOpsApi = {
   },
 
   async deleteTollPlaza(id: string): Promise<void> {
-    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/toll-plazas/${id}`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/toll-plazas/${id}`, {
       method: 'DELETE',
       headers: await authHeaders(null),
     });
@@ -68,7 +68,7 @@ export const tollOpsApi = {
   },
 
   async getTollInfo() {
-    const response = await fetchWithRetry(`${API_ENDPOINTS.admin}/toll-info`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.toll}/toll-info`, {
       headers: await authHeaders(null),
     });
     if (!response.ok) throw new Error('Failed to fetch toll info');
@@ -76,7 +76,7 @@ export const tollOpsApi = {
   },
 
   async saveTollInfo(schedule: unknown) {
-    const response = await fetchWithRetry(`${API_ENDPOINTS.admin}/toll-info`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.toll}/toll-info`, {
       method: 'POST',
       headers: await authHeaders(),
       body: JSON.stringify(schedule),
@@ -89,7 +89,7 @@ export const tollOpsApi = {
   },
 
   async previewTollRateImpact(draft: unknown) {
-    const response = await fetchWithRetry(`${API_ENDPOINTS.admin}/toll-info/impact-preview`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.toll}/toll-info/impact-preview`, {
       method: 'POST',
       headers: await authHeaders(),
       body: JSON.stringify(draft),
@@ -103,7 +103,7 @@ export const tollOpsApi = {
 
   async getTollPlazaBackfillStatus() {
     const response = await fetchWithRetry(
-      `${API_ENDPOINTS.financial}/toll-reconciliation/toll-ledger/plaza-backfill/status`,
+      `${API_ENDPOINTS.toll}/toll-reconciliation/toll-ledger/plaza-backfill/status`,
       { headers: await authHeaders(null) },
     );
     if (!response.ok) throw new Error('Failed to load plaza attribution status');
@@ -112,7 +112,7 @@ export const tollOpsApi = {
 
   async runTollPlazaBackfill(dryRun: boolean) {
     const response = await fetchWithRetry(
-      `${API_ENDPOINTS.financial}/toll-reconciliation/toll-ledger/plaza-backfill`,
+      `${API_ENDPOINTS.toll}/toll-reconciliation/toll-ledger/plaza-backfill`,
       {
         method: 'POST',
         headers: await authHeaders(),

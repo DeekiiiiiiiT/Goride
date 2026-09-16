@@ -1,7 +1,7 @@
 /**
  * Ledger query/summary read routes — peeled from index.tsx / behavior unchanged
  */
-import type { Hono } from "npm:hono";
+import type { Hono } from "npm:hono@4.3.11";
 import * as kv from "./kv_store.tsx";
 import { requireAuth } from "./rbac_middleware.ts";
 import { filterByOrg, getOrgId } from "./org_scope.ts";

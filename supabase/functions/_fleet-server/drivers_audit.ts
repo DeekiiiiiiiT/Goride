@@ -2,7 +2,7 @@
  * Append-only ops audit events for driver money / compliance mutations.
  * Stored as KV `driver_audit:{driverId}:{iso}` for Phase 6 enterprise trail.
  */
-import type { Context, Hono } from "npm:hono";
+import type { Context, Hono } from "npm:hono@4.3.11";
 import * as kv from "./kv_store.tsx";
 import { requireAuth, requirePermission, hasPermission, type RbacUser } from "./rbac_middleware.ts";
 import { getOrgId, stampOrg } from "./org_scope.ts";

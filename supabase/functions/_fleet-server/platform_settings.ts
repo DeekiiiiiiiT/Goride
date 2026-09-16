@@ -2,7 +2,7 @@
  * Platform settings resolution — dual-read from segment KV + legacy fallback.
  * Keep in sync with @roam/platform-settings package defaults.
  */
-import type { Context } from "npm:hono";
+import type { Context } from "npm:hono@4.3.11";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import * as kv from "./kv_store.tsx";
 import * as memCache from "./memory_cache.ts";

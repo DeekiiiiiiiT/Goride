@@ -1,5 +1,5 @@
-import { Hono } from "npm:hono";
-import type { Context } from "npm:hono";
+import { Hono } from "npm:hono@4.3.11";
+import type { Context } from "npm:hono@4.3.11";
 import {
   requireAuth,
   requirePermission,
@@ -91,6 +91,9 @@ import {
 
 const app = new Hono();
 
+/** fleet-fuel (and any standalone mount) — register before auth gate. */
+app.get("/health", (c) => c.json({ service: "fleet-fuel", status: "ok" }));
+
 // Auth gate: every route in this controller requires a valid user JWT (Wave 1B).
 app.use("*", requireAuth({ strict: true }));
 
@@ -168,12 +171,14 @@ function narrowPlatformOrg<T extends Record<string, unknown>>(records: T[], c: C
   return records.filter((r) => String(r.organizationId || "") === q);
 }
 
+import { FUEL_HTTP_PREFIX } from "./fuel_http_prefix.ts";
+
 const supabase = createClient(
   Deno.env.get("SUPABASE_URL")!,
   Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
 );
 
-const BASE_PATH = "/make-server-37f42386";
+const BASE_PATH = FUEL_HTTP_PREFIX;
 
 const FUEL_LIST_DEFAULT_LIMIT = 500;
 const FUEL_LIST_MAX_LIMIT = 1500;

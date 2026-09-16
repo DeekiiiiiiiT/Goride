@@ -1,7 +1,7 @@
 /**
  * Canonical odometer (km) for maintenance — reads ledger MAX(hard, not voided).
  */
-import type { Context } from "npm:hono";
+import type { Context } from "npm:hono@4.3.11";
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import {
   canonicalOdometerFromMaps,

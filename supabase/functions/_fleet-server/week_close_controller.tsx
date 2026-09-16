@@ -14,12 +14,12 @@
  * C-3: optional idempotencyKey replays a completed result; org-week lock returns
  * 409 CLOSE_IN_PROGRESS. H-1: skipPrepare skips seal/rebuild when client synced.
  */
-import { Hono, type Context } from "npm:hono";
+import { Hono, type Context } from "npm:hono@4.3.11";
 import { requireAuth, requirePermission, type RbacUser } from "./rbac_middleware.ts";
 import { getOrgId } from "./org_scope.ts";
 import { safeErrorResponse } from "./safe_error.ts";
 import { closeWeek, previewWeekClose, prepareWeekClose, reopenWeek, retryFreezeWeek, listClosedWeeks, listOpenWeeks, acknowledgeCashSourceMismatch, WeekCloseError } from "./week_close.ts";
-import { sealFuelWeek } from "./fuel_week_seal.ts";
+import { sealFuelWeekViaHttp } from "./fuel_seal_http.ts";
 import {
   listPendingRestatements,
   requestRestatement,
@@ -333,7 +333,7 @@ app.post(`${BASE}/seal-fuel`, requirePermission("transactions.edit"), async (c) 
     if (!WEEK_RE.test(weekKey)) {
       return c.json({ error: "weekKey (YYYY-MM-DD) is required" }, 400);
     }
-    const result = await sealFuelWeek({
+    const result = await sealFuelWeekViaHttp({
       organizationId: org,
       weekKey,
       actorId: user.userId,

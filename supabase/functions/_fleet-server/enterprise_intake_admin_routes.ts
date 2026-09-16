@@ -2,7 +2,7 @@
  * Enterprise Admin: freight-forwarder + courier company catalogs + claim queue.
  * Gated with requireProductAdmin("enterprise").
  */
-import type { Hono } from "https://deno.land/x/hono@v4.3.11/mod.ts";
+import type { Hono } from "npm:hono@4.3.11";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { requireProductAdmin, type ProductAdminUser } from "./product_admin_guard.ts";
 

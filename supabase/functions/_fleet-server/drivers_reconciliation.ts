@@ -4,7 +4,7 @@
  *
  * Both sides use the same {from,to} calendar window — never two different ranges.
  */
-import type { Context, Hono } from "npm:hono";
+import type { Context, Hono } from "npm:hono@4.3.11";
 import { requireAuth } from "./rbac_middleware.ts";
 import { getOrgId } from "./org_scope.ts";
 import * as kv from "./kv_store.tsx";

@@ -2,7 +2,7 @@
  * Maintenance schedule API (Postgres) — templates, per-vehicle schedule, records.
  * Registered from index.tsx with service-role Supabase client.
  */
-import type { Context } from "npm:hono";
+import type { Context } from "npm:hono@4.3.11";
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import * as kv from "./kv_store.tsx";
 import { fromKvStore } from "./fleet_sql_bridge.ts";
@@ -417,7 +417,7 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
   // Super Admin — templates CRUD
   // -------------------------------------------------------------------------
   route.get(
-    "/make-server-37f42386/admin/vehicle-catalog/:catalogId/maintenance-templates",
+    "/admin/vehicle-catalog/:catalogId/maintenance-templates",
     requireAuth(),
     async (c) => {
       const denied = assertVehicleCatalogPlatformAccess(c);
@@ -445,7 +445,7 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
   );
 
   route.post(
-    "/make-server-37f42386/admin/vehicle-catalog/:catalogId/maintenance-templates",
+    "/admin/vehicle-catalog/:catalogId/maintenance-templates",
     requireAuth(),
     async (c) => {
       const denied = assertVehicleCatalogPlatformAccess(c);
@@ -509,7 +509,7 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
   );
 
   route.patch(
-    "/make-server-37f42386/admin/maintenance-templates/:id",
+    "/admin/maintenance-templates/:id",
     requireAuth(),
     async (c) => {
       const denied = assertVehicleCatalogPlatformAccess(c);
@@ -593,7 +593,7 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
   );
 
   route.delete(
-    "/make-server-37f42386/admin/maintenance-templates/:id",
+    "/admin/maintenance-templates/:id",
     requireAuth(),
     async (c) => {
       const denied = assertVehicleCatalogPlatformAccess(c);
@@ -633,7 +633,7 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
   );
 
   route.get(
-    "/make-server-37f42386/admin/maintenance-templates/global",
+    "/admin/maintenance-templates/global",
     requireAuth(),
     async (c) => {
       const denied = assertVehicleCatalogPlatformAccess(c);
@@ -657,7 +657,7 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
   );
 
   route.post(
-    "/make-server-37f42386/admin/maintenance-templates/global",
+    "/admin/maintenance-templates/global",
     requireAuth(),
     async (c) => {
       const denied = assertVehicleCatalogPlatformAccess(c);
@@ -720,7 +720,7 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
   // Super Admin — service categories + package membership
   // -------------------------------------------------------------------------
   route.get(
-    "/make-server-37f42386/admin/maintenance-categories",
+    "/admin/maintenance-categories",
     requireAuth(),
     async (c) => {
       const denied = assertVehicleCatalogPlatformAccess(c);
@@ -743,7 +743,7 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
   );
 
   route.post(
-    "/make-server-37f42386/admin/maintenance-categories",
+    "/admin/maintenance-categories",
     requireAuth(),
     async (c) => {
       const denied = assertVehicleCatalogPlatformAccess(c);
@@ -799,7 +799,7 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
   );
 
   route.patch(
-    "/make-server-37f42386/admin/maintenance-categories/:id",
+    "/admin/maintenance-categories/:id",
     requireAuth(),
     async (c) => {
       const denied = assertVehicleCatalogPlatformAccess(c);
@@ -884,7 +884,7 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
   );
 
   route.delete(
-    "/make-server-37f42386/admin/maintenance-categories/:id",
+    "/admin/maintenance-categories/:id",
     requireAuth(),
     async (c) => {
       const denied = assertVehicleCatalogPlatformAccess(c);
@@ -902,7 +902,7 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
   );
 
   route.get(
-    "/make-server-37f42386/admin/maintenance-templates/:id/categories",
+    "/admin/maintenance-templates/:id/categories",
     requireAuth(),
     async (c) => {
       const denied = assertVehicleCatalogPlatformAccess(c);
@@ -924,7 +924,7 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
   );
 
   route.put(
-    "/make-server-37f42386/admin/maintenance-templates/:id/categories",
+    "/admin/maintenance-templates/:id/categories",
     requireAuth(),
     async (c) => {
       const denied = assertVehicleCatalogPlatformAccess(c);
@@ -965,7 +965,7 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
   );
 
   route.get(
-    "/make-server-37f42386/maintenance-categories",
+    "/maintenance-categories",
     requireAuth(),
     async (c) => {
       try {
@@ -986,7 +986,7 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
   );
 
   route.get(
-    "/make-server-37f42386/maintenance-categories/quick-jobs",
+    "/maintenance-categories/quick-jobs",
     requireAuth(),
     async (c) => {
       try {
@@ -1006,7 +1006,7 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
   );
 
   route.get(
-    "/make-server-37f42386/maintenance-categories/systems/:systemId/components",
+    "/maintenance-categories/systems/:systemId/components",
     requireAuth(),
     async (c) => {
       try {
@@ -1029,7 +1029,7 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
 
   // One-shot KV → Postgres migration (platform)
   route.post(
-    "/make-server-37f42386/admin/migrate-maintenance-from-kv",
+    "/admin/migrate-maintenance-from-kv",
     requireAuth(),
     async (c) => {
       const denied = assertVehicleCatalogPlatformAccess(c);
@@ -1105,7 +1105,7 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
   // Tenant — schedule
   // -------------------------------------------------------------------------
   route.get(
-    "/make-server-37f42386/maintenance-schedule/:vehicleId",
+    "/maintenance-schedule/:vehicleId",
     requireAuth(),
     async (c) => {
       try {
@@ -1208,7 +1208,7 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
   );
 
   route.post(
-    "/make-server-37f42386/maintenance-schedule/:vehicleId/bootstrap",
+    "/maintenance-schedule/:vehicleId/bootstrap",
     requireAuth(),
     requirePermission("vehicles.edit"),
     async (c) => {
@@ -1265,7 +1265,7 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
   // Tenant — records (replaces KV maintenance_log)
   // -------------------------------------------------------------------------
   route.get(
-    "/make-server-37f42386/maintenance-logs/:vehicleId",
+    "/maintenance-logs/:vehicleId",
     requireAuth(),
     async (c) => {
       try {
@@ -1310,7 +1310,7 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
   );
 
   route.get(
-    "/make-server-37f42386/maintenance-logs",
+    "/maintenance-logs",
     requireAuth(),
     async (c) => {
       try {
@@ -1332,7 +1332,7 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
   );
 
   route.post(
-    "/make-server-37f42386/maintenance-logs",
+    "/maintenance-logs",
     requireAuth(),
     requirePermission("vehicles.edit"),
     requireCatalogMatched({
@@ -1550,7 +1550,7 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
   );
 
   route.patch(
-    "/make-server-37f42386/maintenance-logs/:vehicleId/:id",
+    "/maintenance-logs/:vehicleId/:id",
     requireAuth(),
     requirePermission("vehicles.edit"),
     async (c) => {
@@ -1740,7 +1740,7 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
   );
 
   route.delete(
-    "/make-server-37f42386/maintenance-logs/:vehicleId/:id",
+    "/maintenance-logs/:vehicleId/:id",
     requireAuth(),
     requirePermission("vehicles.edit"),
     async (c) => {
@@ -1782,7 +1782,7 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
   // Driver service requests → maintenance_records (status Requested, no ledger)
   // -------------------------------------------------------------------------
   route.post(
-    "/make-server-37f42386/maintenance-requests",
+    "/maintenance-requests",
     requireAuth({ requireOrg: true }),
     async (c) => {
       try {
@@ -1917,7 +1917,7 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
   );
 
   route.get(
-    "/make-server-37f42386/maintenance-requests",
+    "/maintenance-requests",
     requireAuth(),
     requirePermission("vehicles.edit"),
     async (c) => {
@@ -1943,7 +1943,7 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
 
   /** Bootstrap merged templates for every org vehicle that has no schedule rows yet (catalog match required). */
   route.post(
-    "/make-server-37f42386/maintenance-fleet-bootstrap",
+    "/maintenance-fleet-bootstrap",
     requireAuth(),
     requirePermission("vehicles.edit"),
     async (c) => {
@@ -2044,7 +2044,7 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
 
   // Fleet summary for Maintenance hub (all vehicles in org with odometer + status)
   route.get(
-    "/make-server-37f42386/maintenance-fleet-summary",
+    "/maintenance-fleet-summary",
     requireAuth(),
     async (c) => {
       try {
@@ -2243,7 +2243,7 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
   // Service ledger + outstanding (ops truth, not finance)
   // -------------------------------------------------------------------------
   route.get(
-    "/make-server-37f42386/maintenance-service-ledger",
+    "/maintenance-service-ledger",
     requireAuth(),
     async (c) => {
       try {
@@ -2288,7 +2288,7 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
   );
 
   route.get(
-    "/make-server-37f42386/maintenance-outstanding/:vehicleId",
+    "/maintenance-outstanding/:vehicleId",
     requireAuth(),
     async (c) => {
       try {
@@ -2343,7 +2343,7 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
   );
 
   route.get(
-    "/make-server-37f42386/maintenance-package-checklist/:vehicleId/:templateId",
+    "/maintenance-package-checklist/:vehicleId/:templateId",
     requireAuth(),
     async (c) => {
       try {
@@ -2374,7 +2374,7 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
   );
 
   route.post(
-    "/make-server-37f42386/maintenance-service-ledger/backfill",
+    "/maintenance-service-ledger/backfill",
     requireAuth(),
     async (c) => {
       try {
@@ -2396,7 +2396,7 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
   // Tenant — work orders (job cards)
   // -------------------------------------------------------------------------
   route.get(
-    "/make-server-37f42386/maintenance-work-orders",
+    "/maintenance-work-orders",
     requireAuth(),
     async (c) => {
       try {
@@ -2420,7 +2420,7 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
   );
 
   route.get(
-    "/make-server-37f42386/maintenance-work-orders/:id",
+    "/maintenance-work-orders/:id",
     requireAuth(),
     async (c) => {
       try {
@@ -2456,7 +2456,7 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
   );
 
   route.post(
-    "/make-server-37f42386/maintenance-work-orders",
+    "/maintenance-work-orders",
     requireAuth(),
     requirePermission("vehicles.edit"),
     async (c) => {
@@ -2537,7 +2537,7 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
   );
 
   route.patch(
-    "/make-server-37f42386/maintenance-work-orders/:id",
+    "/maintenance-work-orders/:id",
     requireAuth(),
     requirePermission("vehicles.edit"),
     async (c) => {
@@ -2649,7 +2649,7 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
   );
 
   route.post(
-    "/make-server-37f42386/maintenance-work-orders/:id/complete",
+    "/maintenance-work-orders/:id/complete",
     requireAuth(),
     requirePermission("vehicles.edit"),
     async (c) => {
@@ -2855,7 +2855,7 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
   // Tenant — digital vehicle inspection (DVI)
   // -------------------------------------------------------------------------
   route.get(
-    "/make-server-37f42386/maintenance-inspection-templates",
+    "/maintenance-inspection-templates",
     requireAuth(),
     async (c) => {
       try {
@@ -2894,7 +2894,7 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
   );
 
   route.post(
-    "/make-server-37f42386/maintenance-inspection-findings",
+    "/maintenance-inspection-findings",
     requireAuth(),
     requirePermission("vehicles.edit"),
     async (c) => {
@@ -2993,7 +2993,7 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
   );
 
   route.patch(
-    "/make-server-37f42386/maintenance-inspection-findings/:id",
+    "/maintenance-inspection-findings/:id",
     requireAuth(),
     requirePermission("vehicles.edit"),
     async (c) => {
@@ -3069,7 +3069,7 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
    * Authorize with X-Fleet-Cron-Secret or X-Rides-Cron-Secret.
    */
   route.post(
-    "/make-server-37f42386/maintenance/overdue-digest",
+    "/maintenance/overdue-digest",
     async (c) => {
       try {
         const secret = Deno.env.get("FLEET_CRON_SECRET") || Deno.env.get("RIDES_CRON_SECRET");

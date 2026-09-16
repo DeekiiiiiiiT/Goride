@@ -612,6 +612,18 @@ export function CloseWeekPage({
         toast.error('Statements sealed — calendar freeze did not apply. Use Retry freeze.');
       } else if (e instanceof WeekCloseApiError && e.code === 'CLOSE_IN_PROGRESS') {
         toast.message('Close already in progress — wait a moment and try again.');
+      } else if (
+        e instanceof WeekCloseApiError &&
+        (e.code === 'CLOSE_BLOCKED' || e.code === 'FUEL_SEAL_FAILED')
+      ) {
+        const lane =
+          e.details && typeof e.details === 'object' && 'lane' in e.details
+            ? String((e.details as { lane?: string }).lane || '')
+            : '';
+        const laneLabel = lane ? ` (${lane} seal)` : '';
+        toast.error(
+          `Week close blocked${laneLabel}: ${e.message || 'A required week seal failed. Fix the lane and retry.'}`,
+        );
       } else if (e instanceof WeekCloseApiError && e.code === 'CUSTODY_NO_OPEN_TARGET') {
         toast.error(
           e.message ||

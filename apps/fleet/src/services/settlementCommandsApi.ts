@@ -11,7 +11,7 @@ import type {
   SettlementQueueRow,
 } from '../hooks/useSettlementQueue';
 
-const BASE = `${API_ENDPOINTS.financial}/settlements`;
+const BASE = `${API_ENDPOINTS.fleetPay}/settlements`;
 
 /** Thrown by settlement command POSTs so callers can distinguish business vs cutover. */
 export class SettlementCommandApiError extends Error {

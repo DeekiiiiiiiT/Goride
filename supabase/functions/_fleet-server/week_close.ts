@@ -30,8 +30,15 @@ import {
   WEEK_STATEMENT_ENGINE_VERSION,
 } from "./week_statements.ts";
 import { sealTollWeek } from "./toll_week_seal.ts";
-import { sealFuelWeek } from "./fuel_week_seal.ts";
+import { sealFuelWeekViaHttp } from "./fuel_seal_http.ts";
+import { sealTollWeekViaHttp } from "./toll_seal_http.ts";
 import { sealEarningsWeek } from "./earnings_week_seal.ts";
+import { sealEarningsWeekViaHttp } from "./earnings_seal_http.ts";
+import {
+  beginSealAttempt,
+  buildSealIdempotencyKey,
+  completeSealAttempt,
+} from "./week_seal_log.ts";
 import { compareDriverWeekStatementsToEngines } from "./statement_engine_probe.ts";
 import { upsertFinanceReconDrifts, countOpenFinanceReconDrifts } from "./finance_recon_drift.ts";
 import { weekPnlTieSides } from "./business_week_pnl.ts";
@@ -887,18 +894,56 @@ async function ensureCloseLaneStatements(
 
   // Missing/draft → seal. Force flags → closed→closed reseal (engine drift).
   // Never pass allowRestatementDraft from Close sync (draft-over-closed blocked).
+  // ADR-0019: all lanes block on hard failure; HTTP seals carry Idempotency-Key.
+  const sealCorrelationId = crypto.randomUUID();
+
   if (fuelNeedsSeal || (anyOpenDriver && fuelLaneMissing) || forceFuel) {
+    const idem = buildSealIdempotencyKey(orgId, week, "fuel");
     try {
-      await sealFuelWeek({
+      await beginSealAttempt({
+        organizationId: orgId,
+        weekKey: week,
+        lane: "fuel",
+        idempotencyKey: idem,
+        correlationId: sealCorrelationId,
+      });
+      await sealFuelWeekViaHttp({
         organizationId: orgId,
         weekKey: week,
         actorId,
         force: forceFuel,
         asOf,
+        idempotencyKey: idem,
+        correlationId: sealCorrelationId,
+      });
+      await completeSealAttempt({
+        organizationId: orgId,
+        weekKey: week,
+        lane: "fuel",
+        idempotencyKey: idem,
+        correlationId: sealCorrelationId,
+        status: "succeeded",
+        resultJson: { ok: true },
       });
       didSeal = true;
     } catch (e) {
-      console.warn("[week_close] fuel auto-seal failed (non-fatal)", week, e);
+      const msg = e instanceof Error ? e.message : String(e);
+      console.error("[week_close] fuel auto-seal failed — blocking close", week, msg);
+      await completeSealAttempt({
+        organizationId: orgId,
+        weekKey: week,
+        lane: "fuel",
+        idempotencyKey: idem,
+        correlationId: sealCorrelationId,
+        status: "failed",
+        lastError: msg,
+      }).catch(() => {});
+      throw new WeekCloseError(
+        "CLOSE_BLOCKED",
+        `Fuel week seal via fleet-fuel failed after retries: ${msg}`,
+        503,
+        { week, lane: "fuel", cause: msg },
+      );
     }
   }
 
@@ -908,32 +953,124 @@ async function ensureCloseLaneStatements(
     forceToll ||
     (anyOpenDriver && tollLaneMissing)
   ) {
+    const idem = buildSealIdempotencyKey(orgId, week, "toll");
+    const useTollHttp = Deno.env.get("FLEET_TOLL_SEAL_HTTP") !== "false";
     try {
-      await sealTollWeek({
+      await beginSealAttempt({
         organizationId: orgId,
         weekKey: week,
-        actorId,
-        force: Boolean(tollStaleZeroNa || forceToll),
-        asOf,
+        lane: "toll",
+        idempotencyKey: idem,
+        correlationId: sealCorrelationId,
+      });
+      if (useTollHttp) {
+        await sealTollWeekViaHttp({
+          organizationId: orgId,
+          weekKey: week,
+          actorId,
+          force: Boolean(tollStaleZeroNa || forceToll),
+          asOf,
+          idempotencyKey: idem,
+          correlationId: sealCorrelationId,
+        });
+      } else {
+        await sealTollWeek({
+          organizationId: orgId,
+          weekKey: week,
+          actorId,
+          force: Boolean(tollStaleZeroNa || forceToll),
+          asOf,
+        });
+      }
+      await completeSealAttempt({
+        organizationId: orgId,
+        weekKey: week,
+        lane: "toll",
+        idempotencyKey: idem,
+        correlationId: sealCorrelationId,
+        status: "succeeded",
+        resultJson: { ok: true, transport: useTollHttp ? "http" : "in-process" },
       });
       didSeal = true;
     } catch (e) {
-      console.warn("[week_close] toll auto-seal failed (non-fatal)", week, e);
+      const msg = e instanceof Error ? e.message : String(e);
+      console.error("[week_close] toll auto-seal failed — blocking close", week, msg);
+      await completeSealAttempt({
+        organizationId: orgId,
+        weekKey: week,
+        lane: "toll",
+        idempotencyKey: idem,
+        correlationId: sealCorrelationId,
+        status: "failed",
+        lastError: msg,
+      }).catch(() => {});
+      throw new WeekCloseError(
+        "CLOSE_BLOCKED",
+        `Toll week seal failed: ${msg}`,
+        503,
+        { week, lane: "toll", cause: msg },
+      );
     }
   }
 
   if (earningsNeedsSeal || (anyOpenDriver && earningsLaneMissing) || forceEarnings) {
+    const idem = buildSealIdempotencyKey(orgId, week, "earnings");
+    const useEarningsHttp = Deno.env.get("FLEET_EARNINGS_SEAL_HTTP") !== "false";
     try {
-      await sealEarningsWeek({
+      await beginSealAttempt({
         organizationId: orgId,
         weekKey: week,
-        actorId,
-        force: forceEarnings,
-        asOf,
+        lane: "earnings",
+        idempotencyKey: idem,
+        correlationId: sealCorrelationId,
+      });
+      if (useEarningsHttp) {
+        await sealEarningsWeekViaHttp({
+          organizationId: orgId,
+          weekKey: week,
+          actorId,
+          force: forceEarnings,
+          asOf,
+          idempotencyKey: idem,
+          correlationId: sealCorrelationId,
+        });
+      } else {
+        await sealEarningsWeek({
+          organizationId: orgId,
+          weekKey: week,
+          actorId,
+          force: forceEarnings,
+          asOf,
+        });
+      }
+      await completeSealAttempt({
+        organizationId: orgId,
+        weekKey: week,
+        lane: "earnings",
+        idempotencyKey: idem,
+        correlationId: sealCorrelationId,
+        status: "succeeded",
+        resultJson: { ok: true, transport: useEarningsHttp ? "http" : "in-process" },
       });
       didSeal = true;
     } catch (e) {
-      console.warn("[week_close] earnings auto-seal failed (non-fatal)", week, e);
+      const msg = e instanceof Error ? e.message : String(e);
+      console.error("[week_close] earnings auto-seal failed — blocking close", week, msg);
+      await completeSealAttempt({
+        organizationId: orgId,
+        weekKey: week,
+        lane: "earnings",
+        idempotencyKey: idem,
+        correlationId: sealCorrelationId,
+        status: "failed",
+        lastError: msg,
+      }).catch(() => {});
+      throw new WeekCloseError(
+        "CLOSE_BLOCKED",
+        `Earnings week seal failed: ${msg}`,
+        503,
+        { week, lane: "earnings", cause: msg },
+      );
     }
   }
 

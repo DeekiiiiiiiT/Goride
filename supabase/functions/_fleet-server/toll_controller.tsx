@@ -16,7 +16,7 @@
  *   POST /toll-reconciliation/reset-for-reconciliation – pending + clear trip/match (re-queue for Unmatched)
  */
 
-import { Hono, type Context } from "npm:hono";
+import { Hono, type Context } from "npm:hono@4.3.11";
 import * as kv from "./kv_store.tsx";
 import { requireAuth, requirePermission, type RbacUser, PLATFORM_RESOLVED_ROLES } from "./rbac_middleware.ts";
 import { stampOrg, filterByOrg, belongsToOrg, getOrgId } from "./org_scope.ts";
@@ -156,7 +156,9 @@ app.use("*", async (c, next) => {
 // Wave 5: Use shared service client
 const supabase = getServiceClient();
 
-const BASE = "/make-server-37f42386/toll-reconciliation";
+import { TOLL_HTTP_PREFIX } from "./toll_http_prefix.ts";
+
+const BASE = `${TOLL_HTTP_PREFIX}/toll-reconciliation`;
 
 // ─── Shared Helpers ────────────────────────────────────────────────────
 
@@ -4245,7 +4247,7 @@ export async function voidTollLedgerEntryHandler(c: Context) {
 
 app.post(`${BASE}/toll-ledger/:id/void`, requirePermission('toll.manage'), voidTollLedgerEntryHandler);
 // Canonical product path (not under /toll-reconciliation prefix)
-app.post(`/make-server-37f42386/toll-ledger/:id/void`, requirePermission('toll.manage'), voidTollLedgerEntryHandler);
+app.post(`${TOLL_HTTP_PREFIX}/toll-ledger/:id/void`, requirePermission('toll.manage'), voidTollLedgerEntryHandler);
 
 /**
  * Repairs toll_ledger.date values by comparing against legacy transaction:${id} when present.

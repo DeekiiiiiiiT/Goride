@@ -10,7 +10,7 @@
  * driver_financial_periods is defence-in-depth for direct PostgREST only.
  * Live tenant isolation is the organizationId threaded into every list/mutate.
  */
-import { Hono, type Context, type Next } from "npm:hono";
+import { Hono, type Context, type Next } from "npm:hono@4.3.11";
 import * as kv from "./kv_store.tsx";
 import {
   requireAuth,
@@ -59,7 +59,9 @@ function requiresApproval(amount: number, threshold = SETTLEMENT_APPROVAL_THRESH
 const app = new Hono();
 app.use("*", requireAuth({ strict: true }));
 
-const BASE = "/make-server-37f42386/settlements";
+import { PAY_HTTP_PREFIX } from "./pay_http_prefix.ts";
+
+const BASE = `${PAY_HTTP_PREFIX}/settlements`;
 const sb = getServiceClient;
 
 /** settlements.* OR transactions.edit until desk roles are fully wired. */

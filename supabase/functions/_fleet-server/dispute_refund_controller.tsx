@@ -18,7 +18,7 @@
  *   POST   /dispute-refunds/repair-settlements – Seed trip credits + reproject matched claims
  */
 
-import { Hono } from "npm:hono";
+import { Hono } from "npm:hono@4.3.11";
 import * as kv from "./kv_store.tsx";
 import { requireAuth, requirePermission, type RbacUser } from "./rbac_middleware.ts";
 import { getServiceClient } from "./service_client.ts";
@@ -79,7 +79,9 @@ app.use("*", requireAuth({ strict: true }));
 // Wave 5: Use shared service client
 const supabase = getServiceClient();
 
-const BASE = "/make-server-37f42386/dispute-refunds";
+import { PAY_HTTP_PREFIX } from "./pay_http_prefix.ts";
+
+const BASE = `${PAY_HTTP_PREFIX}/dispute-refunds`;
 
 /**
  * Resolve a stored date value to its calendar day (yyyy-MM-dd) in the fleet

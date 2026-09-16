@@ -1,7 +1,7 @@
 /**
  * Generic KV→fleet.* migrate + parity admin routes for all domains.
  */
-import type { Context, Hono } from "npm:hono";
+import type { Context, Hono } from "npm:hono@4.3.11";
 import { FLEET_DOMAINS } from "./fleet_domains.ts";
 import { fleetDb, countTable, fleetTable } from "./repos/baseRepo.ts";
 import type { FleetDomain } from "./fleet_table_flags.ts";

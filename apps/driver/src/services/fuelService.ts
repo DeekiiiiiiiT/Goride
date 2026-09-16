@@ -153,7 +153,7 @@ export const fuelService = {
 
   // --- Fuel Scenarios ---
   async getFuelScenarios(): Promise<FuelScenario[]> {
-    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/scenarios`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/scenarios`, {
       headers: await authHeaders(null),
     });
     if (!response.ok) throw new Error("Failed to fetch fuel scenarios");
@@ -161,7 +161,7 @@ export const fuelService = {
   },
 
   async saveFuelScenario(scenario: FuelScenario): Promise<FuelScenario> {
-    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/scenarios`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/scenarios`, {
       method: 'POST',
       headers: await authHeaders(),
       body: JSON.stringify(scenario)
@@ -172,7 +172,7 @@ export const fuelService = {
   },
 
   async deleteFuelScenario(id: string): Promise<void> {
-    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/scenarios/${id}`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/scenarios/${id}`, {
       method: 'DELETE',
       headers: await authHeaders(null),
     });

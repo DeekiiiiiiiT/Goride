@@ -1,7 +1,7 @@
 /**
  * Product line scoping — Roam Fleet (rideshare) vs Roam Enterprise (multi-vertical).
  */
-import type { Context } from "npm:hono";
+import type { Context } from "npm:hono@4.3.11";
 
 export type ProductLine = "fleet" | "enterprise";
 

@@ -15,7 +15,7 @@
  *   POST /driver-financial-periods/backfill { driverId?, dryRun? }
  *   GET  /driver-financial-periods/health
  */
-import { Hono } from "npm:hono";
+import { Hono } from "npm:hono@4.3.11";
 import * as kv from "./kv_store.tsx";
 import { requireAuth, requirePermission, hasPermission, type RbacUser } from "./rbac_middleware.ts";
 import { getServiceClient } from "./service_client.ts";
@@ -58,7 +58,9 @@ app.use("*", async (c, next) => {
   return auth(c, next);
 });
 
-const BASE = "/make-server-37f42386/driver-financial-periods";
+import { PAY_HTTP_PREFIX } from "./pay_http_prefix.ts";
+
+const BASE = `${PAY_HTTP_PREFIX}/driver-financial-periods`;
 
 // Wave 5: Use shared service client instead of ad-hoc createClient
 const sb = getServiceClient;
