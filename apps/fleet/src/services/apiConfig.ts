@@ -2,6 +2,7 @@ import { getSupabaseFunctionsBaseUrl } from '@roam/api-client';
 
 const BASE_URL = getSupabaseFunctionsBaseUrl();
 
+/** Residual fleet traffic uses fleet-core (F5 cutover). */
 export const API_ENDPOINTS = {
   fleetCore: `${BASE_URL}/fleet-core`,
   fleet: `${BASE_URL}/fleet-core`,
