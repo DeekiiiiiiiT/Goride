@@ -77,3 +77,11 @@ apps/dash-merchant/ios/App/App.xcworkspace/xcuserdata/
 **/.DS_Store
 .vercel
 .env*
+
+# Fleet edge prebundle outputs (scripts/build-edge-bundle.mjs)
+supabase/functions/make-server-37f42386/index.ts
+supabase/functions/fleet-fuel/index.ts
+supabase/functions/fleet-toll/index.ts
+supabase/functions/fleet-ops/index.ts
+supabase/functions/fleet-claims/index.ts
+supabase/functions/fleet-pay/index.ts
