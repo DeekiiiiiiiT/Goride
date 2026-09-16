@@ -4036,6 +4036,27 @@ app.post(`${BASE_PATH}/fuel-entries`, async (c: Context) => {
       entry.metadata = { ...(entry.metadata || {}), paymentSource: paySrc.meta };
     }
 
+    // N-18: persist fill usageCategory for Phase 4 server_entries authority.
+    {
+      const raw = String(entry.usageCategory || entry.metadata?.usageCategory || "").trim().toLowerCase();
+      let usage =
+        raw.includes("company") ? "company" :
+        raw.includes("deadhead") ? "deadhead" :
+        raw.includes("personal") ? "personal" :
+        raw.includes("ride") || raw === "rideshare" ? "ride" :
+        "";
+      if (!usage) {
+        const pay = String(entry.paymentSource || "");
+        if (pay === "Personal") usage = "personal";
+        else if (pay === "Petty_Cash") usage = "company";
+        else if (pay === "Gas_Card" || pay === "RideShare_Cash") usage = "ride";
+      }
+      if (usage) {
+        entry.usageCategory = usage;
+        entry.metadata = { ...(entry.metadata || {}), usageCategory: usage };
+      }
+    }
+
     if (entry.driverId || entry.vehicleId) {
         const enriched = await enrichRecordWithDriverVehicle(
             entry,

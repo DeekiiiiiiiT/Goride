@@ -14,6 +14,8 @@ export type ComputeFuelWeekInput = {
   companyUsageCost: number;
   deadheadCost: number;
   personalUsageCost: number;
+  /** F-1: tank-window timing carved before residual. */
+  windowTimingCost?: number;
   rule?: FuelCoverageRule | null;
   driverId?: string;
   vehicleId?: string;
@@ -61,6 +63,7 @@ export function computeFuelWeek(input: ComputeFuelWeekInput): WeekCalc {
     companyUsageCost: Number(input.companyUsageCost) || 0,
     deadheadCost: Number(input.deadheadCost) || 0,
     personalUsageCost: Number(input.personalUsageCost) || 0,
+    windowTimingCost: Number(input.windowTimingCost) || 0,
     rule: input.rule,
   });
   const absorbed = applyPersonalAllowanceAbsorb(

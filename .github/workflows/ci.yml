@@ -139,6 +139,11 @@ jobs:
           supabase/functions/delivery/remittance/concurrency.test.ts
           supabase/functions/delivery/remittance/trialBalanceResidual.test.ts
           supabase/functions/delivery/remittance/pauseRoutes.test.ts
+          supabase/functions/delivery/remittance/pauseThresholdSeed.test.ts
+          supabase/functions/delivery/remittance/writeOffRemittance.test.ts
+          supabase/functions/delivery/remittance/reverseWriteOff.test.ts
+          supabase/functions/delivery/remittance/reseedSeededThresholds.test.ts
+          supabase/functions/delivery/remittance/needsThresholdSeed.test.ts
 
       - name: Typecheck fleet Rush spine
         env:

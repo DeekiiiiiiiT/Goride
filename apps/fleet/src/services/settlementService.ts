@@ -432,44 +432,12 @@ export const settlementService = {
   },
 
   /**
-   * Processes a gap deduction for unlogged mileage.
+   * @deprecated Stop-to-stop Charge Gap is disabled (audit 2026-09-15 C-2/C-3/C-4).
+   * Money must post via server recommend→approve with window driver resolution.
+   * Kept as a no-op so any stale UI caller cannot write Gap_Deduction rows.
    */
-  async processGapDeduction(bucket: OdometerBucket): Promise<FinancialTransaction | null> {
-    if (!bucket.deductionRecommendation || bucket.deductionRecommendation <= 0) {
-      return null;
-    }
-
-    // Identify the driver (this is tricky as multiple drivers might have used the car)
-    // For simplicity, we assign to the driver of the CLOSING anchor, or the first trip driver.
-    // In a real system, you might split it.
-    const vehicles = await api.getVehicles();
-    const vehicle = vehicles.find(v => v.id === bucket.vehicleId);
-    
-    // Fallback driverId
-    const driverId = vehicle?.assignedDriverId || "fleet_general";
-
-    const deductionTx: Partial<FinancialTransaction> = {
-      id: crypto.randomUUID(),
-      date: bucket.endDate.split('T')[0],
-      time: bucket.endDate.includes('T') ? bucket.endDate.split('T')[1].substring(0, 8) : undefined,
-      driverId: driverId,
-      vehicleId: bucket.vehicleId,
-      type: 'Expense',
-      category: 'Fuel',
-      description: `Mileage Leakage Deduction: ${bucket.unaccountedDistance}km unlogged`,
-      amount: -Math.abs(bucket.deductionRecommendation), // NEGATIVE amount to charge the ledger
-      paymentMethod: 'Cash',
-      status: 'Approved',
-      isReconciled: true,
-      metadata: {
-        bucketId: bucket.id,
-        gapDistance: bucket.unaccountedDistance,
-        deductionReason: bucket.deductionReason,
-        automated: true,
-        transactionType: 'Gap_Deduction'
-      }
-    };
-
-    return await api.saveTransaction(deductionTx);
+  async processGapDeduction(_bucket: OdometerBucket): Promise<FinancialTransaction | null> {
+    console.log('[SettlementService] processGapDeduction skipped — stop-to-stop charges disabled pending rebuild');
+    return null;
   }
 };

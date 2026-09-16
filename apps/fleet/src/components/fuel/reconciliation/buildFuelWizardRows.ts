@@ -3,6 +3,7 @@
  */
 import { FUEL_SPEND_EPS } from '../../../utils/fuelMoneyEpsilon';
 import { formatFuelMoney } from '../../../utils/formatFuelMoney';
+import { fuelFillSettlementStatus } from '../../../utils/fuelReconGlossary';
 import { pickScenarioForDriverMembership, resolveDriverVersionForWeek } from '../../../utils/fuelPolicyVersion';
 import { sumPaidByDriverForReport } from '../../../utils/fuelPaidByDriver';
 import { UNASSIGNED_FUEL_DRIVER_ID } from '../../../types/fuel';
@@ -160,7 +161,7 @@ export function buildSettlementRows(input: {
         driverShare: r.driverShare,
         netPay: cashFromEarnings - r.driverShare,
         pending: r.pendingCount || 0,
-        status: periodLocked ? 'Locked' : (r.pendingCount || 0) > 0 ? 'Pending' : 'Draft',
+        status: fuelFillSettlementStatus(periodLocked, r.pendingCount || 0),
       };
     });
 }
@@ -225,6 +226,8 @@ export type MoneyStripTotals = {
   company: number;
   driver: number;
   leakage: number;
+  /** F-1: tank-window timing (not leakage). */
+  windowTiming: number;
 };
 
 export function buildMoneyStrip(input: {
@@ -250,6 +253,7 @@ export function buildMoneyStrip(input: {
   let company = 0;
   let driver = 0;
   let leakage = 0;
+  let windowTiming = 0;
   for (const r of liveReports) {
     gasCard += sumGasCard(fuelEntries, r, vehicles, paidByDriverCtx);
     cashFromEarnings += sumPaidByDriver(fuelEntries, r, vehicles, paidByDriverCtx);
@@ -257,6 +261,7 @@ export function buildMoneyStrip(input: {
     company += Number(r.companyShare) || 0;
     driver += Number(r.driverShare) || 0;
     leakage += Number(r.miscellaneousCost) || 0;
+    windowTiming += Number((r as { windowTimingCost?: number }).windowTimingCost) || 0;
   }
-  return { totalSpend, gasCard, cashFromEarnings, company, driver, leakage };
+  return { totalSpend, gasCard, cashFromEarnings, company, driver, leakage, windowTiming };
 }

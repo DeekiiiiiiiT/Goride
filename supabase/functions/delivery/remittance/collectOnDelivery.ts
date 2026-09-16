@@ -8,14 +8,29 @@ import {
   computeCodTrialBalance,
 } from "../../_shared/dashPricing.ts";
 import { classifyRemittanceError, parkException } from "./exceptions.ts";
-import { postRemittanceCollected, toMinor } from "./remittanceLedger.ts";
+import { postRemittanceCollected, getRemittanceAccount, toMinor } from "./remittanceLedger.ts";
 import { toMinor as toMinorMoney } from "./money.ts";
+import { resolvePricingLayers } from "../pricingLayers.ts";
+import { needsThresholdSeed } from "./needsThresholdSeed.ts";
 
 // deno-lint-ignore no-explicit-any
 type Sb = { schema: (s: string) => any; from: (t: string) => any };
 
 function deliveryDb(sb: Sb) {
   return typeof sb.schema === "function" ? sb.schema("delivery") : sb;
+}
+
+/** Platform Default COD pause → minor units for new remittance accounts (AB-1). */
+export async function resolveCodPauseThresholdMinor(sb: Sb): Promise<number> {
+  try {
+    // Global only — town/parish layers do not set remittance pause.
+    const layered = await resolvePricingLayers(deliveryDb(sb), {});
+    const jmd = Number(layered.rules.cod?.pauseThresholdJmd ?? 10000);
+    if (!Number.isFinite(jmd) || jmd <= 0) return 1000000;
+    return Math.round(jmd * 100);
+  } catch {
+    return 1000000;
+  }
 }
 
 function isCashOrder(order: Record<string, unknown>): boolean {
@@ -125,6 +140,12 @@ export async function collectOnDelivery(
       merchantDueJmd: split.merchantDueJmd,
     });
 
+    const acct = await getRemittanceAccount(sb, courierId);
+    let pauseThresholdMinor: number | undefined;
+    if (needsThresholdSeed(acct)) {
+      pauseThresholdMinor = await resolveCodPauseThresholdMinor(sb);
+    }
+
     await postRemittanceCollected(sb, {
       courierId,
       orderId,
@@ -133,6 +154,7 @@ export async function collectOnDelivery(
       merchantDueMinor,
       courierRetainedMinor,
       metadata: remitMinor <= 0 ? { non_positive_remittance: true } : {},
+      ...(pauseThresholdMinor != null ? { pauseThresholdMinor } : {}),
     });
     return { ok: true };
   } catch (err) {
@@ -148,4 +170,5 @@ export {
   legacyWriteEnabled,
   isCashOrder,
   toMinor,
+  needsThresholdSeed,
 };

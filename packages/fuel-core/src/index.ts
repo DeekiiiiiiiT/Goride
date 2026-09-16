@@ -57,6 +57,8 @@ export {
 export {
   assembleLeftoverWeekMoney,
   computeMiscellaneousCost,
+  computeWindowTimingCost,
+  computeWindowTimingLiters,
   getCategoryCoverageSplit,
   getCompanyCoveragePercent,
   splitAllCategoryCosts,
@@ -81,14 +83,21 @@ export {
 
 export {
   FUEL_MISC_MAX_RATIO,
+  FUEL_MISC_MAX_ABS_JMD,
   isOverExplainedFuelWeek,
   isFuelMiscWithinGate,
   floorMiscForSplit,
   classifyFuelMiscResidual,
   isOverExplainedResidual,
   isUnderExplainedResidual,
+  listOverExplainedResidualRows,
+  listUnderExplainedResidualRows,
+  residualFlagsFromSpendRows,
+  residualSpendRowsFromSnapshots,
   type FlooredMiscSplit,
   type FuelMiscResidualKind,
+  type FuelResidualSpendRow,
+  type FuelResidualBlockerRow,
 } from './fuelFinalizeGate.ts';
 
 export {
@@ -178,8 +187,36 @@ export {
 export {
   toEntryYmd,
   isEntryInInclusiveYmdRange,
+  isEntryInHalfOpenYmdRange,
   entriesInFuelWeek,
 } from './fuelWeekRange.ts';
+
+export {
+  evaluateStopToStopConservation,
+  stopToStopIsReconciled,
+  sumBucketLiters,
+  sumBucketDistanceKm,
+  chainSpanKm,
+  gpsVsOdoWithinTolerance,
+  stopToStopClosableFlagsFromConservation,
+  evaluateStopToStopFromSnapshots,
+  STOP_TO_STOP_VOLUME_TOLERANCE_PCT,
+  STOP_TO_STOP_GPS_TOLERANCE_PCT,
+  STOP_TO_STOP_GPS_TOLERANCE_KM,
+  type StopToStopConservationResult,
+} from './stopToStopConservation.ts';
+
+export { calculateOdometerBuckets as calculateOdometerBucketsEngine } from './odometerBucketEngine.ts';
+
+export {
+  GAP_DEDUCTION_TX_TYPE,
+  STOP_TO_STOP_ENGINE_VERSION,
+  gapChargeIdempotencyKey,
+  driversInBucketWindow,
+  resolveGapChargeDriver,
+  buildGapDeductionTransaction,
+  type GapChargeRecommendation,
+} from './stopToStopGapCharge.ts';
 
 export { getTotalTripRideshareKm, sumTripRideshareKm } from './tripRideshareKm.ts';
 export { getTripGrossRevenue } from './tripGrossRevenue.ts';
@@ -204,10 +241,27 @@ export {
   filterFuelOpsLogEntries,
   fuelOpsLiters,
   fuelOpsSpendAmount,
+  fuelOpsCashAmount,
   isFuelOpsLogEntry,
   isGasCardFuelEntry,
+  isOutOfPocketFuelEntry,
   countsInGasCardSpend,
+  countsInFuelLogSpend,
 } from './fuelOpsEligibility.ts';
+
+export {
+  normalizeFuelPaymentSourceEnum,
+  resolveFuelPaymentSource,
+  isCashStyleFuelPaymentSource,
+  fuelPaymentSourceDisplayLabel,
+  fuelPaymentSourceToMeta,
+  isGasCardFuelEntry as isGasCardFuelEntryFromPayment,
+  isOutOfPocketFuelEntry as isOutOfPocketFuelEntryFromPayment,
+  fuelPaymentPartitionKind,
+  resolveEntryPaymentRaw,
+  type FuelPaymentSourceEnum,
+  type FuelPaymentSourceMeta,
+} from './fuelPaymentSource.ts';
 
 export {
   UNASSIGNED_FUEL_DRIVER_ID,
@@ -220,4 +274,6 @@ export {
   type FuelCalcVehicle,
   type PersonalAllowanceTierConfig,
   type QuotaConfig,
+  type OdometerBucket,
+  type OdometerBucketAnchor,
 } from './fuelTypes.ts';

@@ -54,6 +54,7 @@ import { PumpNumbersConfirm } from './expenses/PumpNumbersConfirm';
 import { OdometerScanner } from './common/OdometerScanner';
 import { fuelService } from '../../services/fuelService';
 import { findActiveFuelCardForSession } from '../../utils/fuelCardMatch';
+import { buildGasCardOdometerAnchor } from '../../utils/buildGasCardOdometerAnchor';
 import type { FuelCard } from '../../types/fuel';
 
 interface ExpenseLoggerProps {
@@ -537,32 +538,22 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
           { id: user?.id, name: user?.user_metadata?.name, email: user?.email },
         );
 
-        await fuelService.saveFuelEntry({
-          id: entryId,
-          date: isValid(date) ? format(date, 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd'),
-          time: time ? `${time}:00` : format(new Date(), 'HH:mm:ss'),
-          cardId: assignedGasCard.id,
-          vehicleId: resolvedVehicleId,
-          driverId: canonicalDriverId || user?.id,
-          amount: 0,
-          odometer: fuelEntry.odometerReading,
-          odometerImageUrl: odometerProofUrl || undefined,
-          type: 'Manual_Entry',
-          entryMode: 'Anchor',
-          paymentSource: 'Gas_Card',
-          entrySource: 'driver-portal',
-          reconciliationStatus: 'Pending',
-          metadata: {
-            awaitingCardStatement: true,
+        await fuelService.saveFuelEntry(
+          buildGasCardOdometerAnchor({
+            id: entryId,
+            date: isValid(date) ? format(date, 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd'),
+            time: time ? `${time}:00` : format(new Date(), 'HH:mm:ss'),
+            cardId: assignedGasCard.id,
+            vehicleId: resolvedVehicleId,
+            driverId: canonicalDriverId || user?.id,
+            odometer: fuelEntry.odometerReading,
+            odometerImageUrl: odometerProofUrl || undefined,
+            entrySource: 'driver-portal',
             odometerMethod: fuelEntry.odometerMethod,
-            odometerProofUrl: odometerProofUrl || undefined,
             locationMetadata: fuelEntry.locationMetadata,
             parentCompany: fuelEntry.parentCompany,
-            paymentSource: 'company_card',
-            countsInFuelSpend: false,
-            countsInFuelVolume: false,
-          },
-        } as any);
+          }) as any,
+        );
 
         if (submitTimedOut) return;
         toast.success('Gas Card odometer logged — waiting for Roam Fuels statement');

@@ -63,7 +63,7 @@ export function FuelGapAttribution({
     parts.push(`≈ ${km} km at rolling efficiency`);
   }
   if (parts.length === 0) {
-    parts.push('Review stop-to-stop gaps or accept on this device');
+    parts.push('Review stop-to-stop gaps or disposition on this step (persists for the org)');
   }
 
   return (

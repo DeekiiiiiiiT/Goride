@@ -27,6 +27,9 @@ export interface FuelEntry {
   entryMode: 'Anchor' | 'Floating';
   paymentSource: 'RideShare_Cash' | 'Gas_Card' | 'Personal' | 'Petty_Cash';
 
+  /** N-18: fill usage for Phase 4 server category authority. */
+  usageCategory?: string;
+
   entrySource?: 'driver-portal' | 'admin-manual' | 'admin-edit' | 'bulk-import' | 'fuel-card';
 
   isFlagged?: boolean;

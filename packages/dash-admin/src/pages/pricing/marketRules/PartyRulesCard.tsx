@@ -11,6 +11,7 @@ export function PartyRulesCard({
   onView,
   onEdit,
   canWrite,
+  includeCodPause = false,
 }: {
   party: PricingParty;
   layer: PricingLayerResponse | null;
@@ -18,9 +19,11 @@ export function PartyRulesCard({
   onView: () => void;
   onEdit: () => void;
   canWrite: boolean;
+  /** Platform Default only — town/parish do not set remittance pause. */
+  includeCodPause?: boolean;
 }) {
   const meta = PARTY_META[party];
-  const metrics = partyPreviewMetrics(party, layer, tiers);
+  const metrics = partyPreviewMetrics(party, layer, tiers, { includeCodPause });
 
   return (
     <div

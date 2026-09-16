@@ -17,17 +17,28 @@ export async function signInFleet(page: Page) {
     throw new Error('E2E_FLEET_EMAIL and E2E_FLEET_PASSWORD are required');
   }
   await page.goto('/');
-  const email = page.getByRole('textbox', { name: /email/i }).or(page.locator('input[type="email"]'));
-  const password = page
-    .getByRole('textbox', { name: /password/i })
-    .or(page.locator('input[type="password"]'));
+
+  // Already authenticated (session cookie / localStorage).
+  const loginHeading = page.getByRole('heading', { name: /Welcome back/i });
+  if (!(await loginHeading.isVisible().catch(() => false))) {
+    await expect(
+      page.getByRole('navigation').or(page.getByText(/Week Reconciliation|Driver Settlements|Vehicles/i)).first(),
+    ).toBeVisible({ timeout: 60_000 });
+    return;
+  }
+
+  const email = page.getByRole('textbox', { name: /^Email$/i }).or(page.locator('input[type="email"]'));
+  const password = page.locator('input[type="password"]');
   await email.first().fill(FLEET_E2E_EMAIL);
   await password.first().fill(FLEET_E2E_PASSWORD);
-  await page.getByRole('button', { name: /sign in|log in/i }).first().click();
-  await expect(page.locator('body')).toBeVisible({ timeout: 30_000 });
-  // Sidebar / shell after auth
+  await page.getByRole('button', { name: /Sign In as Manager/i }).click();
+
+  // Do NOT match marketing copy ("fuel efficiency") — wait for login to leave.
+  await expect(loginHeading).toBeHidden({ timeout: 60_000 });
   await expect(
-    page.getByText(/Consumption Reconciliation|Dashboard|Fuel/i).first(),
+    page
+      .getByText(/Week Reconciliation|Driver Settlements|Consumption Reconciliation|Card Inventory/i)
+      .first(),
   ).toBeVisible({ timeout: 60_000 });
 }
 

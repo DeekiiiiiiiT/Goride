@@ -104,6 +104,7 @@ type MaterializeSnapMoneyOk = {
   snapCount: number;
   totalSpend: number;
   gasCardSpend: number;
+  driverSpend: number;
   companyShare: number;
   driverShare: number;
   unexplained: number;
@@ -119,6 +120,7 @@ async function aggregateMaterializeMoneyFromSnaps(
   let snapCount = 0;
   let totalSpend = 0;
   let gasCardSpend = 0;
+  let driverSpend = 0;
   let companyShare = 0;
   let driverShare = 0;
   let unexplained = 0;
@@ -128,9 +130,17 @@ async function aggregateMaterializeMoneyFromSnaps(
     const snapOrg = String(s.orgId || s.org_id || s.organizationId || "");
     if (snapOrg && snapOrg !== orgId) continue;
     snapCount += 1;
-    const gas = Number(s.totalGasCardCost) || Number(s.gasCardSpend) || Number(s.driverSpend) || 0;
-    totalSpend += gas;
-    gasCardSpend += gas;
+    const total = Number(s.totalGasCardCost) || 0;
+    const gas = Number(s.gasCardSpend);
+    const cash = Number(s.driverSpend);
+    totalSpend += total > 0 ? total : (Number.isFinite(gas) ? gas : 0) + (Number.isFinite(cash) ? cash : 0);
+    // F-10: preserve cash split — never force all money onto gas card.
+    if (Number.isFinite(gas) || Number.isFinite(cash)) {
+      gasCardSpend += Number.isFinite(gas) ? gas : 0;
+      driverSpend += Number.isFinite(cash) ? cash : 0;
+    } else {
+      gasCardSpend += total;
+    }
     companyShare += Number(s.companyShare) || 0;
     driverShare += Number(s.driverShare) || 0;
     unexplained += Number(s.miscellaneousCost) || 0;
@@ -142,6 +152,7 @@ async function aggregateMaterializeMoneyFromSnaps(
     snapCount,
     totalSpend,
     gasCardSpend,
+    driverSpend,
     companyShare,
     driverShare,
     unexplained,
@@ -807,7 +818,7 @@ export function registerFuelPeriodRoutes(app: Hono) {
     return c.json(mapPeriod(row));
   });
 
-  /** Stage 6: week bundle — period + counts + provenance shell for wizard renderer. */
+  /** Stage 6 / P-9: week bundle — period + counts + step notes + provenance (read-only; not money SoT). */
   app.get(`${BASE}/fuel/weeks/:weekStart/bundle`, requirePermission("fuel.view"), async (c: Context) => {
     const orgId = getOrgId(c);
     if (!orgId) return c.json({ error: "org required" }, 400);
@@ -823,6 +834,47 @@ export function registerFuelPeriodRoutes(app: Hono) {
       unknown
     >;
     const countsEvaluated = Object.keys(counts).length > 0;
+    let stepNotes: Array<{ step: string; note: string; at: string }> = [];
+    let secondApproveActorIds: string[] = [];
+    if (period?.id) {
+      const sb = getServiceClient();
+      const { data: audit } = await sb
+        .from("fuel_period_audit")
+        .select("action,at,actor_id,payload")
+        .eq("period_id", String(period.id))
+        .eq("org_id", orgId)
+        .order("at", { ascending: true });
+      for (const a of audit || []) {
+        const action = String((a as any).action || "");
+        if (action === "second_approve") {
+          const actor = String((a as any).actor_id || "");
+          if (actor) secondApproveActorIds.push(actor);
+          continue;
+        }
+        if (action !== "step") continue;
+        const payload =
+          (a as any).payload && typeof (a as any).payload === "object"
+            ? ((a as any).payload as Record<string, unknown>)
+            : {};
+        const note = String(payload.note || "").trim();
+        if (!note) continue;
+        stepNotes.push({
+          step: String(payload.step || "").trim() || "step",
+          note,
+          at: String((a as any).at || ""),
+        });
+      }
+    }
+    const snapshotSummaries = snaps.map((s: any) => ({
+      driverId: s.driverId ? String(s.driverId) : null,
+      vehicleId: s.vehicleId ? String(s.vehicleId) : null,
+      totalGasCardCost: Number(s.totalGasCardCost) || 0,
+      companyShare: Number(s.companyShare) || 0,
+      driverShare: Number(s.driverShare) || 0,
+      miscellaneousCost: Number(s.miscellaneousCost) || 0,
+      // Preview only — finalize still uses gated client build until enforce is trusted.
+      moneyCommitted: Boolean(s.moneyCommitted),
+    }));
     return c.json({
       weekStart,
       weekEnd,
@@ -830,10 +882,13 @@ export function registerFuelPeriodRoutes(app: Hono) {
       counts,
       countsEvaluated,
       snapshotCount: snaps.length,
+      snapshotSummaries,
+      stepNotes,
+      secondApproveActorIds,
       provenance: {
         source: "fuel_week_bundle",
         generatedAt: new Date().toISOString(),
-        note: "Reports/blockers still client-computed until FUEL_SERVER_ENGINE=enforce + full loaders",
+        note: "Read-only hydrate for wizard chrome. Reports/blockers/money still client-computed until FUEL_SERVER_ENGINE=enforce + full loaders",
       },
     });
   });
@@ -1061,7 +1116,10 @@ export function registerFuelPeriodRoutes(app: Hono) {
         gas_card_spend: snapMoney.ok
           ? snapMoney.gasCardSpend
           : Number(body.gasCardSpend) || 0,
-        cash_from_earnings: Number(body.cashFromEarnings) || 0,
+        // F-10: prefer snap cash split; fall back to client body.
+        cash_from_earnings: snapMoney.ok
+          ? snapMoney.driverSpend
+          : Number(body.cashFromEarnings) || 0,
         company_share: snapMoney.ok
           ? snapMoney.companyShare
           : Number(body.companyShare) || 0,
@@ -1073,6 +1131,8 @@ export function registerFuelPeriodRoutes(app: Hono) {
           : Number(body.unexplained) || 0,
         vehicle_count: Number(body.vehicleCount) || 0,
         driver_count: Number(body.driverCount) || 0,
+        // F-5: persist client degraded signal for server auto-close gate.
+        degraded_inputs: Boolean(body.degradedInputs),
         computed_at: now,
         computed_from_hash: snapMoney.ok
           ? `server:materialize:snaps:${snapMoney.snapCount}`
@@ -1182,8 +1242,18 @@ export function registerFuelPeriodRoutes(app: Hono) {
           loadServerTaggedFuelEntriesForWeek,
         } = await import("./fuel_week_category_loader.ts");
         const { upsertFinanceReconDrifts } = await import("./finance_recon_drift.ts");
-        const mismatches: Array<{ driverId: string; deltas: { field: string; delta: number }[] }> =
-          [];
+        type EngineAuthoritySource =
+          | "server_entries"
+          | "trip_agg"
+          | "tagged_snap_entries"
+          | "snap_category_costs";
+        const mismatches: Array<{
+          driverId: string;
+          authoritySource: EngineAuthoritySource;
+          deltas: { field: string; delta: number }[];
+        }> = [];
+        // N-19: soak must prove which ladder tier produced each comparison.
+        const authoritySourceByDriver: Record<string, EngineAuthoritySource> = {};
         const weekKey = ymd(period.week_start);
         const weekEnd = ymd(period.week_end) || weekKey;
         const serverTaggedEntries = await loadServerTaggedFuelEntriesForWeek(
@@ -1193,10 +1263,12 @@ export function registerFuelPeriodRoutes(app: Hono) {
         );
         for (const snap of snapshots) {
           const snapObj = (snap && typeof snap === "object" ? snap : {}) as Record<string, unknown>;
-          const { authority: cats, snapCats } = resolveEngineCategoryCosts(
+          const { authority: cats, snapCats, authoritySource } = resolveEngineCategoryCosts(
             snapObj,
             serverTaggedEntries,
           );
+          const driverId = String(snapObj.driverId || "");
+          if (driverId) authoritySourceByDriver[driverId] = authoritySource;
           const hasCats =
             cats.rideShareCost + cats.companyUsageCost + cats.deadheadCost + cats.personalUsageCost >
               0.009 ||
@@ -1236,9 +1308,8 @@ export function registerFuelPeriodRoutes(app: Hono) {
             ...diffWeekCalc(clientCalc, recomputed),
             ...materialCategoryCostDeltas(snapCats, cats),
           ];
-          const driverId = String(snapObj.driverId || "");
           if (deltas.length) {
-            mismatches.push({ driverId, deltas });
+            mismatches.push({ driverId, authoritySource, deltas });
             const engineDrifts = deltas
               .filter((d) => d.field === "driverShare" || d.field === "companyShare")
               .map((d) => {
@@ -1271,15 +1342,38 @@ export function registerFuelPeriodRoutes(app: Hono) {
             }
           }
         }
+        // Always audit in shadow/enforce so clean weeks still prove authoritySource (N-19).
+        const stopToStopSummary = snapshots.map((snap) => {
+          const snapObj = (snap && typeof snap === "object" ? snap : {}) as Record<string, unknown>;
+          const meta = (snapObj.metadata && typeof snapObj.metadata === "object"
+            ? snapObj.metadata
+            : {}) as Record<string, unknown>;
+          const buckets = Array.isArray(snapObj.odometerBuckets)
+            ? snapObj.odometerBuckets
+            : [];
+          return {
+            driverId: String(snapObj.driverId || ""),
+            bucketCount: buckets.length,
+            engineVersion: meta.stopToStopEngineVersion || null,
+            frozenAt: meta.stopToStopFrozenAt || null,
+          };
+        });
+        const engineDiffPayload = {
+          mode: engineMode,
+          mismatches,
+          authoritySourceByDriver,
+          reviewedHash: body.reviewedHash || null,
+          stopToStop: stopToStopSummary,
+        };
+        await insertAudit(
+          orgId,
+          periodId,
+          "fuel_engine_diff",
+          engineDiffPayload,
+          actorId(c),
+        );
         if (mismatches.length) {
           console.warn("[fuel_period] FUEL_SERVER_ENGINE diff", engineMode, mismatches);
-          await insertAudit(
-            orgId,
-            periodId,
-            "fuel_engine_diff",
-            { mode: engineMode, mismatches, reviewedHash: body.reviewedHash || null },
-            actorId(c),
-          );
           if (engineMode === "enforce") {
             const force =
               c.req.header("X-Fuel-Force-Client-Money") === "1" &&
@@ -1297,6 +1391,7 @@ export function registerFuelPeriodRoutes(app: Hono) {
               {
                 forceReason: String(body.forceReason || "").trim(),
                 mismatches,
+                authoritySourceByDriver,
                 mode: engineMode,
               },
               actorId(c),
@@ -1503,6 +1598,146 @@ export function registerFuelPeriodRoutes(app: Hono) {
       if (error) return c.json({ error: error.message }, 500);
       await insertAudit(orgId, periodId, "leakage_review", { note, disposition }, actor);
       return c.json({ ok: true, leakageReviewedAt: now, disposition });
+    },
+  );
+
+  // Stop-to-stop gap charge — recommend (no money) / approve (Pending ledger, idempotent).
+  app.post(
+    `${BASE}/fuel/periods/:id/gap-charges/recommend`,
+    requirePermission("fuel.edit_entry"),
+    async (c: Context) => {
+      const orgId = getOrgId(c);
+      if (!orgId) return c.json({ error: "org required" }, 400);
+      const periodId = periodIdParam(c);
+      if (!periodId) return c.json({ error: "period id required" }, 400);
+      const body = await c.req.json().catch(() => ({}));
+      const {
+        buildRecommendPayload,
+        gapChargeKvKey,
+      } = await import("./stop_to_stop_gap_charge_http.ts");
+      const { stampOrg } = await import("./org_scope.ts");
+      const vehicleId = String(body.vehicleId || "").trim();
+      if (!vehicleId) return c.json({ error: "vehicleId required" }, 400);
+      // N-5: never trust client-supplied assignment history for driver resolution.
+      const vehicleRaw = await kv.get(`vehicle:${vehicleId}`);
+      if (!vehicleRaw || typeof vehicleRaw !== "object") {
+        return c.json({ error: "vehicle_not_found" }, 404);
+      }
+      const vehicle = stampOrg(vehicleRaw as Record<string, unknown>, c);
+      const rec = buildRecommendPayload({
+        orgId,
+        periodId,
+        snapshotId: body.snapshotId ? String(body.snapshotId) : undefined,
+        bucketId: String(body.bucketId || ""),
+        vehicleId,
+        amount: Number(body.amount) || 0,
+        overLoggedKm: Number(body.overLoggedKm) || 0,
+        reason: String(body.reason || "Over-logged distance"),
+        confidenceTier: String(body.confidenceTier || "indeterminate"),
+        startYmd: String(body.startYmd || "").split("T")[0],
+        endYmd: String(body.endYmd || "").split("T")[0],
+        vehicle: vehicle as any,
+      });
+      if (!rec.bucketId || !rec.vehicleId) {
+        return c.json({ error: "bucketId and vehicleId required" }, 400);
+      }
+      if (rec.status === "blocked") {
+        return c.json({ recommendation: rec }, 409);
+      }
+      await kv.set(gapChargeKvKey(orgId, periodId, rec.bucketId), rec);
+      await insertAudit(orgId, periodId, "gap_charge_recommend", {
+        bucketId: rec.bucketId,
+        amount: rec.amount,
+        driverId: rec.resolvedDriverId,
+      }, actorId(c));
+      return c.json({ recommendation: rec });
+    },
+  );
+
+  app.post(
+    `${BASE}/fuel/periods/:id/gap-charges/approve`,
+    requirePermission("fuel.second_approve"),
+    async (c: Context) => {
+      const orgId = getOrgId(c);
+      if (!orgId) return c.json({ error: "org required" }, 400);
+      const periodId = periodIdParam(c);
+      if (!periodId) return c.json({ error: "period id required" }, 400);
+      const body = await c.req.json().catch(() => ({}));
+      const bucketId = String(body.bucketId || "");
+      if (!bucketId) return c.json({ error: "bucketId required" }, 400);
+      const {
+        buildApproveTransaction,
+        gapChargeKvKey,
+        gapChargeIdempotencyKey,
+      } = await import("./stop_to_stop_gap_charge_http.ts");
+      const { stampOrgRequired } = await import("./org_scope.ts");
+      const key = gapChargeKvKey(orgId, periodId, bucketId);
+      const rec = (await kv.get(key)) as any;
+      if (!rec || !rec.resolvedDriverId) {
+        return c.json({ error: "recommendation_missing_or_blocked" }, 404);
+      }
+      if (String(rec.confidenceTier) !== "exact") {
+        return c.json({ error: "confidence_not_exact" }, 422);
+      }
+      const idem = gapChargeIdempotencyKey(orgId, bucketId);
+      // Idempotent: if already approved and ledger row exists, reuse.
+      if (rec.transactionId) {
+        const existing = await kv.get(`transaction:${rec.transactionId}`);
+        if (existing && typeof existing === "object") {
+          return c.json({
+            recommendation: rec,
+            transactionId: rec.transactionId,
+            transaction: existing,
+            idempotencyKey: idem,
+            reused: true,
+          });
+        }
+      }
+      const tx = buildApproveTransaction({
+        recommendation: rec,
+        driverId: String(rec.resolvedDriverId),
+      });
+      const txId = String(tx.id);
+      let stamped: Record<string, unknown>;
+      try {
+        stamped = stampOrgRequired(
+          {
+            ...tx,
+            timestamp: new Date().toISOString(),
+          } as Record<string, unknown>,
+          c,
+        );
+      } catch (e: any) {
+        return c.json({ error: e?.message || "org_stamp_failed" }, 400);
+      }
+      // N-4: write Pending ledger row before marking recommendation approved.
+      await kv.set(`transaction:${txId}`, stamped);
+      const persisted = await kv.get(`transaction:${txId}`);
+      if (!persisted || typeof persisted !== "object") {
+        return c.json({ error: "ledger_write_failed" }, 500);
+      }
+      const updated = {
+        ...rec,
+        status: "approved",
+        transactionId: txId,
+        approvedAt: new Date().toISOString(),
+        approvedBy: actorId(c),
+      };
+      await kv.set(key, updated);
+      await insertAudit(orgId, periodId, "gap_charge_approve", {
+        bucketId,
+        transactionId: txId,
+        idempotencyKey: idem,
+        amount: rec.amount,
+        driverId: rec.resolvedDriverId,
+      }, actorId(c));
+      return c.json({
+        recommendation: updated,
+        transaction: persisted,
+        transactionId: txId,
+        idempotencyKey: idem,
+        note: "Ledger status Pending — dispute via FuelDispute",
+      });
     },
   );
 

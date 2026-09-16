@@ -13,7 +13,12 @@ export type FuelWeekClosableBlocker = {
     | 'counts_unevaluated'
     | 'degraded_inputs'
     | 'missing_category_costs'
-    | 'unresolved_coverage_rule';
+    | 'unresolved_coverage_rule'
+    | 'stop_to_stop_volume'
+    | 'stop_to_stop_distance'
+    | 'stop_to_stop_attribution'
+    | 'stop_to_stop_chain'
+    | 'stop_to_stop_trips_truncated';
   message: string;
 };
 
@@ -30,6 +35,12 @@ export type EvaluateFuelWeekClosableInput = {
   degradedInputs?: boolean;
   missingCategoryCosts?: boolean;
   unresolvedCoverageRule?: boolean;
+  /** Stop-to-stop conservation (optional — set when buckets computed at close). */
+  stopToStopVolumeFailed?: boolean;
+  stopToStopDistanceFailed?: boolean;
+  stopToStopAttributionFailed?: boolean;
+  stopToStopChainFailed?: boolean;
+  stopToStopTripsTruncated?: boolean;
 };
 
 export function evaluateFuelWeekClosable(
@@ -88,6 +99,36 @@ export function evaluateFuelWeekClosable(
     blockers.push({
       code: 'unresolved_coverage_rule',
       message: 'Coverage rule unresolved or unknown',
+    });
+  }
+  if (input.stopToStopVolumeFailed) {
+    blockers.push({
+      code: 'stop_to_stop_volume',
+      message: 'Stop-to-stop volume conservation failed (bucket litres ≠ week ops litres)',
+    });
+  }
+  if (input.stopToStopDistanceFailed) {
+    blockers.push({
+      code: 'stop_to_stop_distance',
+      message: 'Stop-to-stop distance conservation failed',
+    });
+  }
+  if (input.stopToStopAttributionFailed) {
+    blockers.push({
+      code: 'stop_to_stop_attribution',
+      message: 'Stop-to-stop attribution does not close',
+    });
+  }
+  if (input.stopToStopChainFailed) {
+    blockers.push({
+      code: 'stop_to_stop_chain',
+      message: 'Stop-to-stop odometer chain has anomalies',
+    });
+  }
+  if (input.stopToStopTripsTruncated) {
+    blockers.push({
+      code: 'stop_to_stop_trips_truncated',
+      message: 'Stop-to-stop trip fetch truncated — refuse close',
     });
   }
   return blockers;

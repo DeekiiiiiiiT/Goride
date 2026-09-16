@@ -15,6 +15,7 @@ import {
 } from '../../../utils/fuelPeriodGating';
 import { evaluateFuelFinalizeGating } from '../../../utils/fuelFinalizeGating';
 import { evaluateFuelWeekClosableClient } from '../../../utils/fuelWeekClosableGate';
+import { stopToStopClosableFlagsFromReports } from '../../../utils/stopToStopClosableFlags';
 import { FUEL_SPEND_EPS } from '../../../utils/fuelMoneyEpsilon';
 import { sumGasCardSpendForReport, sumPaidByDriverForReport } from '../../../utils/fuelPaidByDriver';
 import { isEntryInInclusiveYmdRange } from '../../../utils/fuelWeekPeriod';
@@ -242,6 +243,12 @@ export function useFuelWizardDerived(input: {
         openDisputesInWeek: openDisputes.length > 0,
         totalSpend: periodTotalSpend,
         unexplained: periodUnexplained,
+        ...stopToStopClosableFlagsFromReports({
+          reports: liveReports,
+          fuelEntries,
+          weekStartYmd: periodStart,
+          weekEndYmd: periodEnd,
+        }),
       }),
     [
       gateResult,
@@ -254,6 +261,9 @@ export function useFuelWizardDerived(input: {
       openDisputes.length,
       periodTotalSpend,
       periodUnexplained,
+      fuelEntries,
+      periodStart,
+      periodEnd,
     ],
   );
 

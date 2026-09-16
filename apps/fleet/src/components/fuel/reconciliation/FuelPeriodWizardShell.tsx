@@ -7,6 +7,7 @@ import { Button } from '../../ui/button';
 import { Badge } from '../../ui/badge';
 import type { FuelReconciliationPeriod } from '../../../utils/fuelPeriodStatus';
 import type { FuelStepId } from '../../../utils/fuelPeriodGating';
+import { fuelPeriodLockBadge } from '../../../utils/fuelReconGlossary';
 
 export function FuelPeriodWizardHeader({
   period,
@@ -36,7 +37,7 @@ export function FuelPeriodWizardHeader({
             variant={periodLocked ? 'secondary' : 'outline'}
             className="uppercase tracking-wider"
           >
-            {periodLocked ? 'Locked' : 'Draft'}
+            {fuelPeriodLockBadge(periodLocked)}
           </Badge>
         </div>
       </div>

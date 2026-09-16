@@ -33,7 +33,7 @@ const period: FuelReconciliationPeriod = {
 };
 
 describe('FuelPeriodWizard shell chrome', () => {
-  it('shows Draft badge and Continue CTA', async () => {
+  it('shows Open badge and Continue CTA', async () => {
     const user = userEvent.setup();
     const onContinue = vi.fn();
     render(
@@ -54,7 +54,7 @@ describe('FuelPeriodWizard shell chrome', () => {
       </>,
     );
     expect(screen.getByText('Jul 6 – Jul 12')).toBeTruthy();
-    expect(screen.getByText(/draft/i)).toBeTruthy();
+    expect(screen.getByText(/^Open$/i)).toBeTruthy();
     expect(screen.getByText('Data quality')).toBeTruthy();
     await user.click(screen.getByRole('button', { name: /^Continue$/i }));
     expect(onContinue).toHaveBeenCalled();

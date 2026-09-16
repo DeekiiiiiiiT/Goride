@@ -8,6 +8,36 @@ import {
   getCategoryCoverageSplit,
   type FuelCoverageRule,
 } from './fuelCoverageSplit.ts';
+import {
+  isGasCardFuelEntry,
+  isOutOfPocketFuelEntry,
+} from './fuelPaymentSource.ts';
+
+function entryCountsInSpend(e: WeekSnapEntry): boolean {
+  if (e.countsInFuelSpend === false) return false;
+  const meta = e.metadata as Record<string, unknown> | undefined;
+  if (meta?.jaaRowKind === 'fee' || meta?.jaaRowKind === 'declined') return false;
+  if (meta?.awaitingCardStatement) return false;
+  if (meta?.countsInFuelSpend === false) return false;
+  return (Number(e.amount) || 0) > 0;
+}
+
+/** F-10: partition settleable entries into gas card vs driver cash. */
+export function partitionWeekSnapSpend(entries: WeekSnapEntry[]): {
+  gasCardSpend: number;
+  driverSpend: number;
+} {
+  let gasCardSpend = 0;
+  let driverSpend = 0;
+  for (const e of entries) {
+    if (!entryCountsInSpend(e)) continue;
+    const amt = Number(e.amount) || 0;
+    if (isOutOfPocketFuelEntry(e)) driverSpend += amt;
+    else if (isGasCardFuelEntry(e)) gasCardSpend += amt;
+    else gasCardSpend += amt; // unclassified settleable → gas (conservative)
+  }
+  return { gasCardSpend, driverSpend };
+}
 
 export type WeekSnapFuelRule = {
   coverageType?: string;
@@ -28,6 +58,12 @@ export type WeekSnapEntry = {
   vehicleId: string;
   /** Prefer metadata ratio when already stamped by browser calc. */
   driverShareRatio?: number | null;
+  /** F-10 / F-6: payment partition fields for gas vs cash freeze. */
+  paymentSource?: string | null;
+  type?: string;
+  metadata?: unknown;
+  /** When false, excluded from spend tiles (countsInFuelSpend). */
+  countsInFuelSpend?: boolean;
 };
 
 export type WeekSnapCategoryCosts = {
@@ -46,6 +82,11 @@ export type WeekSnapDriverContext = {
   categoryCosts?: WeekSnapCategoryCosts | null;
   /** Explicit residual when categories omitted (must not silently wipe). */
   miscellaneousCost?: number | null;
+  /** F-1: tank-window timing carved before residual. */
+  windowTimingCost?: number | null;
+  /** F-10: optional precomputed payment split (client finalize). */
+  gasCardSpend?: number | null;
+  driverSpend?: number | null;
 };
 
 export type BuiltWeekSnapshot = {
@@ -162,6 +203,7 @@ export function assembleWeekSnapshotsFromCalcInput(input: {
         companyUsageCost: Number(ctx.categoryCosts.companyUsageCost) || 0,
         deadheadCost: Number(ctx.categoryCosts.deadheadCost) || 0,
         personalUsageCost: Number(ctx.categoryCosts.personalUsageCost) || 0,
+        windowTimingCost: Number(ctx.windowTimingCost) || 0,
         rule: rule as FuelCoverageRule | null,
       });
       companyShare = money.companyShare;
@@ -217,6 +259,17 @@ export function assembleWeekSnapshotsFromCalcInput(input: {
     const vehicleId = ctx.vehicleId || vehicleIds[0] || '';
     const blendedRatio = totalGasCardCost > 0 ? driverShare / totalGasCardCost : 0;
 
+    // F-10: prefer explicit ctx split; else partition from entry payment fields.
+    const partitioned = partitionWeekSnapSpend(entries);
+    const gasCardSpend =
+      ctx.gasCardSpend != null && Number.isFinite(Number(ctx.gasCardSpend))
+        ? Number(ctx.gasCardSpend)
+        : partitioned.gasCardSpend;
+    const driverSpend =
+      ctx.driverSpend != null && Number.isFinite(Number(ctx.driverSpend))
+        ? Number(ctx.driverSpend)
+        : partitioned.driverSpend;
+
     snapshots.push({
       weekStart,
       weekEnd,
@@ -224,8 +277,8 @@ export function assembleWeekSnapshotsFromCalcInput(input: {
       vehicleId,
       vehicleIds,
       totalGasCardCost,
-      gasCardSpend: totalGasCardCost,
-      driverSpend: 0,
+      gasCardSpend,
+      driverSpend,
       companyShare,
       driverShare,
       miscellaneousCost,
@@ -234,7 +287,7 @@ export function assembleWeekSnapshotsFromCalcInput(input: {
       finalizedAt: new Date().toISOString(),
       postedDriverShare: driverShare,
       postedCompanyShare: companyShare,
-      netPay: 0 - driverShare,
+      netPay: driverSpend - driverShare,
       fuelCycles: [],
       orgId,
       org_id: orgId,
@@ -250,6 +303,7 @@ export function assembleWeekSnapshotsFromCalcInput(input: {
         blendedRatio,
         appliedFuelRule: rule,
         brain: brainByDriver?.get(driverId) || null,
+        windowTimingCost: Number(ctx.windowTimingCost) || 0,
       },
     });
   }
@@ -307,6 +361,9 @@ export function assembleWeekSnapshotsFromRawEntries(input: {
     vehicleId: string;
     reconciliationStatus?: string;
     driverShareRatio?: number | null;
+    paymentSource?: string | null;
+    type?: string;
+    metadata?: unknown;
   }>;
   /** Per-driver fuel rule; omit / null → 50% company default. */
   fuelRuleByDriver?: Map<string, WeekSnapFuelRule | null>;
@@ -334,6 +391,9 @@ export function assembleWeekSnapshotsFromRawEntries(input: {
       driverId: e.driverId || driverId,
       vehicleId: String(e.vehicleId || ''),
       driverShareRatio: e.driverShareRatio,
+      paymentSource: e.paymentSource,
+      type: e.type,
+      metadata: e.metadata,
     }));
     entriesByDriver.set(driverId, snapEntries);
     const vehicleIds = [...new Set(snapEntries.map((e) => e.vehicleId).filter(Boolean))];

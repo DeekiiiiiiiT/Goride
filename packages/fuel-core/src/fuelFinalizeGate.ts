@@ -7,10 +7,15 @@
  *
  * C-7: negative misc (over-explained) and positive misc (under-explained) are
  * opposite problems — never conflate them in product copy or hard-blocks.
+ *
+ * F-9: residual must pass BOTH the ratio band and an absolute JMD ceiling.
  */
 
 /** Misc may not exceed this fraction of total spend before a week is gated. */
 export const FUEL_MISC_MAX_RATIO = 0.25;
+
+/** Absolute JMD ceiling — high-spend weeks cannot free-pass large residuals. */
+export const FUEL_MISC_MAX_ABS_JMD = 5000;
 
 function num(v: unknown): number {
   const n = Number(v);
@@ -22,11 +27,13 @@ export type FuelMiscResidualKind = 'ok' | 'over_explained' | 'under_explained';
 /**
  * Classify residual sign + magnitude. over = modelled costs exceed spend;
  * under = spend not fully explained by categories.
+ * F-9: ok only when |misc| ≤ ratio×spend AND |misc| ≤ absCap.
  */
 export function classifyFuelMiscResidual(
   totalSpend: number,
   miscellaneousCost: number,
   ratio: number = FUEL_MISC_MAX_RATIO,
+  absCap: number = FUEL_MISC_MAX_ABS_JMD,
 ): FuelMiscResidualKind {
   const spend = num(totalSpend);
   const misc = num(miscellaneousCost);
@@ -34,26 +41,30 @@ export function classifyFuelMiscResidual(
     if (misc === 0) return 'ok';
     return misc < 0 ? 'over_explained' : 'under_explained';
   }
-  if (Math.abs(misc) <= ratio * spend) return 'ok';
+  const withinRatio = Math.abs(misc) <= ratio * spend;
+  const withinAbs = Math.abs(misc) <= absCap;
+  if (withinRatio && withinAbs) return 'ok';
   return misc < 0 ? 'over_explained' : 'under_explained';
 }
 
-/** Negative residual beyond ratio — modelling artefact; hard block. */
+/** Negative residual beyond gate — modelling artefact; hard block. */
 export function isOverExplainedResidual(
   totalSpend: number,
   miscellaneousCost: number,
   ratio: number = FUEL_MISC_MAX_RATIO,
+  absCap: number = FUEL_MISC_MAX_ABS_JMD,
 ): boolean {
-  return classifyFuelMiscResidual(totalSpend, miscellaneousCost, ratio) === 'over_explained';
+  return classifyFuelMiscResidual(totalSpend, miscellaneousCost, ratio, absCap) === 'over_explained';
 }
 
-/** Positive residual beyond ratio — possibly real cash loss; reviewable. */
+/** Positive residual beyond gate — possibly real cash loss; reviewable. */
 export function isUnderExplainedResidual(
   totalSpend: number,
   miscellaneousCost: number,
   ratio: number = FUEL_MISC_MAX_RATIO,
+  absCap: number = FUEL_MISC_MAX_ABS_JMD,
 ): boolean {
-  return classifyFuelMiscResidual(totalSpend, miscellaneousCost, ratio) === 'under_explained';
+  return classifyFuelMiscResidual(totalSpend, miscellaneousCost, ratio, absCap) === 'under_explained';
 }
 
 /**
@@ -64,8 +75,9 @@ export function isOverExplainedFuelWeek(
   totalSpend: number,
   miscellaneousCost: number,
   ratio: number = FUEL_MISC_MAX_RATIO,
+  absCap: number = FUEL_MISC_MAX_ABS_JMD,
 ): boolean {
-  return classifyFuelMiscResidual(totalSpend, miscellaneousCost, ratio) !== 'ok';
+  return classifyFuelMiscResidual(totalSpend, miscellaneousCost, ratio, absCap) !== 'ok';
 }
 
 /**
@@ -76,8 +88,9 @@ export function isFuelMiscWithinGate(
   totalSpend: number,
   miscellaneousCost: number,
   ratio: number = FUEL_MISC_MAX_RATIO,
+  absCap: number = FUEL_MISC_MAX_ABS_JMD,
 ): boolean {
-  return !isOverExplainedFuelWeek(totalSpend, miscellaneousCost, ratio);
+  return !isOverExplainedFuelWeek(totalSpend, miscellaneousCost, ratio, absCap);
 }
 
 export type FlooredMiscSplit = {
@@ -99,4 +112,79 @@ export function floorMiscForSplit(miscellaneousCost: number): FlooredMiscSplit {
     miscForSplit: Math.max(0, misc),
     overExplainedCost: misc < 0 ? -misc : 0,
   };
+}
+
+/** Minimal row shape for per-report residual classification (F-4). */
+export type FuelResidualSpendRow = {
+  totalSpend: number;
+  miscellaneousCost: number;
+  vehicleId?: string;
+  driverId?: string;
+};
+
+export type FuelResidualBlockerRow = FuelResidualSpendRow & {
+  pctOfSpend: number | null;
+  kind: 'over_explained' | 'under_explained';
+};
+
+function toBlockerRow(
+  row: FuelResidualSpendRow,
+  kind: 'over_explained' | 'under_explained',
+): FuelResidualBlockerRow {
+  const spend = num(row.totalSpend);
+  const misc = num(row.miscellaneousCost);
+  return {
+    totalSpend: spend,
+    miscellaneousCost: misc,
+    vehicleId: row.vehicleId,
+    driverId: row.driverId,
+    pctOfSpend: spend > 0 ? Math.round((Math.abs(misc) / spend) * 100) : null,
+    kind,
+  };
+}
+
+/** Per-row over-explained residuals — never finalize these. */
+export function listOverExplainedResidualRows(
+  rows: FuelResidualSpendRow[],
+): FuelResidualBlockerRow[] {
+  return rows
+    .filter((r) => isOverExplainedResidual(r.totalSpend, r.miscellaneousCost))
+    .map((r) => toBlockerRow(r, 'over_explained'));
+}
+
+/** Per-row under-explained residuals — reviewable with leakage acceptance. */
+export function listUnderExplainedResidualRows(
+  rows: FuelResidualSpendRow[],
+): FuelResidualBlockerRow[] {
+  return rows
+    .filter((r) => isUnderExplainedResidual(r.totalSpend, r.miscellaneousCost))
+    .map((r) => toBlockerRow(r, 'under_explained'));
+}
+
+/**
+ * F-4: flags from snapshot/report rows so opposite residuals cannot cancel
+ * in a week aggregate.
+ */
+export function residualFlagsFromSpendRows(rows: FuelResidualSpendRow[]): {
+  anyOverExplained: boolean;
+  anyUnderExplained: boolean;
+} {
+  return {
+    anyOverExplained: listOverExplainedResidualRows(rows).length > 0,
+    anyUnderExplained: listUnderExplainedResidualRows(rows).length > 0,
+  };
+}
+
+/** Map finalized snaps / reports into residual spend rows. */
+export function residualSpendRowsFromSnapshots(
+  snaps: Array<Record<string, unknown> | null | undefined>,
+): FuelResidualSpendRow[] {
+  return (snaps || [])
+    .filter((s): s is Record<string, unknown> => !!s && typeof s === 'object')
+    .map((s) => ({
+      totalSpend: num(s.totalGasCardCost ?? s.totalSpend),
+      miscellaneousCost: num(s.miscellaneousCost),
+      vehicleId: s.vehicleId != null ? String(s.vehicleId) : undefined,
+      driverId: s.driverId != null ? String(s.driverId) : undefined,
+    }));
 }

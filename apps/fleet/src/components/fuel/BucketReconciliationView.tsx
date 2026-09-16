@@ -18,10 +18,9 @@ import {
     ArrowRight,
     Gauge,
     History,
-    Banknote,
     Loader2,
-    RotateCcw,
     ScanLine,
+    Banknote,
 } from "lucide-react";
 import { format } from "date-fns";
 import { DateRange } from "react-day-picker";
@@ -41,13 +40,23 @@ import { Vehicle } from '../../types/vehicle';
 import { Trip, FinancialTransaction } from '../../types/data';
 import { FuelEntry, MileageAdjustment, OdometerBucket } from '../../types/fuel';
 import { FuelCalculationService, FALLBACK_EFFICIENCY_KM_L } from '../../services/fuelCalculationService';
-import { settlementService } from '../../services/settlementService';
+import { recommendGapCharge } from '../../services/stopToStopGapChargeService';
 import { odometerService } from '../../services/odometerService';
 import { MasterLogTimeline } from '../vehicles/odometer/MasterLogTimeline';
 import { bucketClosesInFuelWeek, toEntryYmd } from '../../utils/fuelWeekPeriod';
 import { ymdToLocalDate } from '../../utils/timezoneDisplay';
 import { getVehicleWeekFuelKpis } from '../../utils/fuelAnalyticsAggregates';
 import { formatFuelMoney } from '../../utils/formatFuelMoney';
+import {
+  evaluateStopToStopConservation,
+  stopToStopIsReconciled,
+  sumBucketDistanceKm,
+  chainSpanKm,
+} from '@roam/fuel-core';
+import { useAuth } from '../auth/AuthContext';
+
+/** Charge Gap on — Pending Gap_Deduction, window driver, idempotent id. */
+export const STOP_TO_STOP_CHARGES_ENABLED = true;
 
 /** Calendar day label without UTC date-only shift (yyyy-MM-dd must not parse as UTC midnight). */
 function formatBucketDay(value: string): string {
@@ -55,6 +64,16 @@ function formatBucketDay(value: string): string {
     const d = ymdToLocalDate(ymd);
     if (Number.isNaN(d.getTime())) return '';
     return format(d, 'MMM d');
+}
+
+function boundaryLabel(source?: OdometerBucket['closingBoundarySource']): string {
+    switch (source) {
+        case 'fuel': return 'Fill';
+        case 'checkin': return 'Check-in';
+        case 'service': return 'Service';
+        case 'manual': return 'Manual';
+        default: return 'Boundary';
+    }
 }
 
 interface BucketReconciliationViewProps {
@@ -70,6 +89,14 @@ interface BucketReconciliationViewProps {
     periodLocked?: boolean;
 }
 
+type UnifiedAnchor = {
+    id: string;
+    date: string;
+    odometer: number;
+    referenceId?: string;
+    source?: string;
+};
+
 export function BucketReconciliationView({ 
     vehicle, 
     trips, 
@@ -80,10 +107,11 @@ export function BucketReconciliationView({
     onRefresh,
     periodLocked = false,
 }: BucketReconciliationViewProps) {
+    const { organizationId } = useAuth();
     const [isPosting, setIsPosting] = React.useState<string | null>(null);
-    const [unifiedAnchors, setUnifiedAnchors] = React.useState<{ id: string; date: string; odometer: number }[] | null>(null);
+    const [unifiedAnchors, setUnifiedAnchors] = React.useState<UnifiedAnchor[] | null>(null);
     const [bucketTrips, setBucketTrips] = React.useState<Trip[] | null>(null);
-    // Explain-gap Timeline: one bucket window, or the recon week's calendar dates (not overlapping-bucket span)
+    const [tripsTruncated, setTripsTruncated] = React.useState(false);
     const [timelineScope, setTimelineScope] = React.useState<{
         from: string;
         to: string;
@@ -119,43 +147,47 @@ export function BucketReconciliationView({
     React.useEffect(() => {
         const loadAnchors = async () => {
             try {
-                const history = await odometerService.getUnifiedHistory(vehicle.id);
-                // Filter to verified anchors only and map to minimal shape
-                const anchors = history
+                const history = await odometerService.getLedger(vehicle.id, { limit: 5000 });
+                const anchors: UnifiedAnchor[] = history.data
                     .filter(h => h.isVerified && h.isAnchorPoint)
-                    .map(h => ({ id: h.id, date: h.date, odometer: h.value }));
+                    .map(h => ({
+                        id: h.id,
+                        date: toEntryYmd(h.date),
+                        odometer: h.value,
+                        referenceId: h.referenceId,
+                        source: h.source,
+                    }));
                 setUnifiedAnchors(anchors);
 
-                // Fetch trips for the FULL anchor date range, not just the week
                 if (anchors.length >= 2) {
                     const sorted = [...anchors].sort((a, b) => a.date.localeCompare(b.date));
                     const startDate = sorted[0].date;
                     const endDate = sorted[sorted.length - 1].date;
+                    const tripLimit = 5000;
                     try {
                         const response = await api.getTripsFiltered({
                             startDate,
                             endDate,
-                            limit: 5000
+                            vehicleId: vehicle.id,
+                            limit: tripLimit,
                         });
-                        // Filter to this vehicle only
-                        const vehicleTrips = (response.data || []).filter(t => t.vehicleId === vehicle.id);
+                        const vehicleTrips = response.data || [];
                         setBucketTrips(vehicleTrips);
+                        setTripsTruncated((response.total ?? vehicleTrips.length) > tripLimit || vehicleTrips.length >= tripLimit);
                     } catch (tripErr) {
                         console.error("Failed to fetch trips for bucket date range:", tripErr);
-                        // Fall back to the parent-provided trips
                         setBucketTrips(null);
+                        setTripsTruncated(false);
                     }
                 }
             } catch (err) {
                 console.error("Failed to load unified anchors for bucket view:", err);
-                // Fall back to fuel-entry-only anchors (null means "use default")
                 setUnifiedAnchors(null);
             }
         };
         loadAnchors();
     }, [vehicle.id]);
     
-    // Use locally-fetched trips (full anchor range) if available, otherwise fall back to parent trips
     const effectiveTrips = bucketTrips ?? trips;
 
     const buckets = useMemo(() => {
@@ -167,7 +199,6 @@ export function BucketReconciliationView({
             unifiedAnchors || undefined
         );
 
-        // Check for existing deductions
         return rawBuckets.map(bucket => {
             const deductionTx = transactions.find(tx => 
                 tx.metadata?.bucketId === bucket.id && 
@@ -181,7 +212,6 @@ export function BucketReconciliationView({
         });
     }, [vehicle, fuelEntries, effectiveTrips, adjustments, transactions, unifiedAnchors]);
 
-    // Only buckets whose closing fill is in the selected week. Full history is still used to build the chain.
     const filteredBuckets = useMemo(() => {
         if (!periodYmd) return buckets;
         return buckets.filter((bucket) =>
@@ -233,31 +263,72 @@ export function BucketReconciliationView({
         };
     }, [fuelEntries, vehicle, periodYmd]);
 
+    const conservation = useMemo(() => {
+        // R-2: independent reference is first→last chain span — never sum of bucket distances.
+        return evaluateStopToStopConservation({
+            buckets: filteredBuckets,
+            weekOpsLiters: periodStats.liters,
+            chainDistanceKm: chainSpanKm(filteredBuckets),
+        });
+    }, [filteredBuckets, periodStats.liters]);
+
+    const panelReconciled = stopToStopIsReconciled(conservation) && !tripsTruncated;
+
+    const tableModeledKmL = useMemo(() => {
+        const dist = sumBucketDistanceKm(filteredBuckets);
+        const expected = filteredBuckets.reduce((s, b) => s + (b.expectedFuelLiters || 0), 0);
+        return expected > 0 ? Number((dist / expected).toFixed(2)) : 0;
+    }, [filteredBuckets]);
+
     const handlePostDeduction = async (bucket: OdometerBucket) => {
+        if (!STOP_TO_STOP_CHARGES_ENABLED) {
+            toast.error('Stop-to-stop charges are disabled');
+            return;
+        }
+        if (!panelReconciled) {
+            toast.error('Panel not reconciled — fix litres/distance before charging');
+            return;
+        }
+        if (bucket.confidenceTier !== 'exact') {
+            toast.error('Only exact-tier buckets can be charged');
+            return;
+        }
+        if (!organizationId) {
+            toast.error('Organization required to post a charge');
+            return;
+        }
         setIsPosting(bucket.id);
         try {
-            await settlementService.processGapDeduction(bucket);
-            toast.success("Deduction posted to driver ledger");
+            const periodId = periodYmd
+                ? `week_${periodYmd.from}_${periodYmd.to}`
+                : 'adhoc';
+            const result = await recommendGapCharge({
+                orgId: organizationId,
+                periodId,
+                weekStart: periodYmd?.from,
+                weekEnd: periodYmd?.to,
+                bucket,
+            });
+            if (result.status === 'blocked') {
+                toast.error(result.blockReason || 'Charge blocked');
+                return;
+            }
+            if (result.needsSecondApprove) {
+                toast.message(
+                    'Gap charge recommended — a second approver must post the Pending charge.',
+                );
+                if (onRefresh) onRefresh();
+                return;
+            }
+            toast.success(
+                result.transactionId
+                    ? `Gap charge saved (Pending) for driver ${result.resolvedDriverId || '—'}`
+                    : 'Gap charge recorded',
+            );
             if (onRefresh) onRefresh();
         } catch (e) {
             console.error(e);
             toast.error("Failed to post deduction");
-        } finally {
-            setIsPosting(null);
-        }
-    };
-
-    const handleRevertDeduction = async (bucket: OdometerBucket) => {
-        if (!bucket.deductionTransactionId) return;
-        
-        setIsPosting(bucket.id);
-        try {
-            await api.deleteTransaction(bucket.deductionTransactionId);
-            toast.success("Deduction reverted");
-            if (onRefresh) onRefresh();
-        } catch (e) {
-            console.error(e);
-            toast.error("Failed to revert deduction");
         } finally {
             setIsPosting(null);
         }
@@ -298,6 +369,39 @@ export function BucketReconciliationView({
 
     return (
         <div className="space-y-6">
+            {!panelReconciled && (
+                <div className="flex items-start gap-3 p-4 bg-amber-50 rounded-lg border border-amber-200">
+                    <AlertTriangle className="h-5 w-5 text-amber-600 mt-0.5 shrink-0" />
+                    <div className="text-sm text-amber-950">
+                        <p className="font-semibold">Panel not reconciled — do not use for decisions or charges</p>
+                        <ul className="list-disc list-inside mt-1 space-y-0.5 opacity-90">
+                            {conservation.messages.map((m) => (
+                                <li key={m}>{m}</li>
+                            ))}
+                            {tripsTruncated && (
+                                <li>Trip fetch may be truncated — treat rows as indeterminate.</li>
+                            )}
+                        </ul>
+                    </div>
+                </div>
+            )}
+
+            <div className="rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm">
+                <p className="font-semibold text-slate-800 mb-1">Reconciling totals (this week’s buckets)</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-slate-600">
+                    <div>
+                        Litres: buckets {conservation.bucketLiters.toFixed(1)} L vs week ops {conservation.weekOpsLiters.toFixed(1)} L
+                        <span className={Math.abs(conservation.volumeDeltaLiters) > 0.5 ? ' text-red-600 font-medium' : ' text-emerald-700'}>
+                            {' '}(Δ {conservation.volumeDeltaLiters > 0 ? '+' : ''}{conservation.volumeDeltaLiters.toFixed(1)} L)
+                        </span>
+                    </div>
+                    <div>
+                        Distance: buckets {conservation.bucketDistanceKm.toLocaleString()} km
+                        {' '}· week card {periodStats.distanceKm.toLocaleString()} km
+                    </div>
+                </div>
+            </div>
+
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <Card className="bg-slate-50/50">
                     <CardContent className="pt-6">
@@ -311,16 +415,18 @@ export function BucketReconciliationView({
                         </p>
                         <p className="text-xs mt-1">
                             {periodStats.source === 'period' ? (
-                                <span className="text-emerald-600 font-medium">● From {periodStats.fillCount} ops fill{periodStats.fillCount !== 1 ? 's' : ''} in this week</span>
+                                <span className="text-emerald-600 font-medium">● Card: odo span ÷ all ops litres this week</span>
                             ) : periodStats.source === 'configured' ? (
                                 <span className="text-amber-600 font-medium">● Vehicle baseline (no ops fills this week)</span>
                             ) : (
                                 <span className="text-red-600 font-medium">● System default (no config or fills this week)</span>
                             )}
                         </p>
-                        <p className="text-xs text-slate-500 mt-0.5">
-                            Same as Fuel Analytics: odo span ÷ all ops litres this week.
-                        </p>
+                        {tableModeledKmL > 0 && (
+                            <p className="text-xs text-slate-500 mt-0.5">
+                                Table modeled burn uses {tableModeledKmL} km/L (fill-to-fill, excludes first fill) — not the same as the card.
+                            </p>
+                        )}
                     </CardContent>
                 </Card>
 
@@ -361,7 +467,7 @@ export function BucketReconciliationView({
                         <div>
                             <CardTitle className="text-lg">Stop-to-Stop Buckets</CardTitle>
                             <CardDescription>
-                                Fills that closed in this week only. Next week’s fills are not included.
+                                Fill-to-fill windows only. Charge Gap posts Pending over-log deductions on exact-tier rows when the panel reconciles.
                             </CardDescription>
                         </div>
                         {weekTimelineRange && (
@@ -384,7 +490,7 @@ export function BucketReconciliationView({
                             <TableRow className="bg-slate-50/50">
                                 <TableHead className="w-[180px]">Odometer Range</TableHead>
                                 <TableHead className="w-[120px]">Distance</TableHead>
-                                <TableHead>Fuel Usage (Actual vs Expected)</TableHead>
+                                <TableHead>Fuel Usage (Actual vs Modeled)</TableHead>
                                 <TableHead className="text-right">Variance</TableHead>
                                 <TableHead className="text-right">Attribution (km)</TableHead>
                                 <TableHead className="w-[120px] text-right">Deduction</TableHead>
@@ -393,7 +499,13 @@ export function BucketReconciliationView({
                             </TableRow>
                         </TableHeader>
                         <TableBody>
-                            {filteredBuckets.map((bucket, idx) => (
+                            {filteredBuckets.map((bucket) => {
+                                const indeterminate = bucket.confidenceTier === 'indeterminate' || tripsTruncated;
+                                const progressPct =
+                                    bucket.expectedFuelLiters > 0
+                                        ? Math.min(100, (bucket.actualFuelLiters / bucket.expectedFuelLiters) * 50)
+                                        : 0;
+                                return (
                                 <TableRow key={bucket.id} className={bucket.status === 'Anomaly' ? "bg-amber-50/30" : ""}>
                                     <TableCell>
                                         <div className="flex flex-col">
@@ -403,11 +515,16 @@ export function BucketReconciliationView({
                                                 <span>{bucket.endOdometer.toLocaleString()}</span>
                                             </div>
                                             <span className="text-[10px] text-slate-500 uppercase mt-0.5">
-                                                Fill {formatBucketDay(bucket.endDate)}
+                                                {boundaryLabel(bucket.closingBoundarySource)} {formatBucketDay(bucket.endDate)}
                                                 {toEntryYmd(bucket.startDate) !== toEntryYmd(bucket.endDate)
                                                     ? ` · from ${formatBucketDay(bucket.startDate)}`
                                                     : ''}
                                             </span>
+                                            {bucket.confidenceTier && (
+                                                <Badge variant="outline" className="w-fit mt-1 text-[9px] uppercase">
+                                                    {bucket.confidenceTier}
+                                                </Badge>
+                                            )}
                                         </div>
                                     </TableCell>
                                     <TableCell>
@@ -427,22 +544,30 @@ export function BucketReconciliationView({
                                             <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden flex">
                                                 <div 
                                                     className={`h-full ${bucket.variancePercent > 0 ? 'bg-amber-500' : 'bg-emerald-500'}`} 
-                                                    style={{ width: `${Math.min(100, (bucket.actualFuelLiters / bucket.expectedFuelLiters) * 50)}%` }}
+                                                    style={{ width: `${progressPct}%` }}
                                                 />
                                             </div>
                                         </div>
                                     </TableCell>
                                     <TableCell className="text-right">
-                                        <div className={`text-sm font-bold ${getVarianceColor(bucket.variancePercent)}`}>
-                                            {bucket.variancePercent > 0 ? '+' : ''}{bucket.variancePercent.toFixed(1)}%
-                                        </div>
-                                        <div className="text-[10px] text-slate-400">
-                                            {bucket.varianceLiters > 0 ? '+' : ''}{bucket.varianceLiters.toFixed(1)} L
-                                        </div>
+                                        {indeterminate ? (
+                                            <div className="text-xs text-slate-500 max-w-[120px] ml-auto">
+                                                {bucket.confidenceReason || 'Indeterminate — no variance'}
+                                            </div>
+                                        ) : (
+                                            <>
+                                                <div className={`text-sm font-bold ${getVarianceColor(bucket.variancePercent)}`}>
+                                                    {bucket.variancePercent > 0 ? '+' : ''}{bucket.variancePercent.toFixed(1)}%
+                                                </div>
+                                                <div className="text-[10px] text-slate-400">
+                                                    {bucket.varianceLiters > 0 ? '+' : ''}{bucket.varianceLiters.toFixed(1)} L
+                                                </div>
+                                            </>
+                                        )}
                                     </TableCell>
                                     <TableCell className="text-right">
                                         <div className="flex flex-col items-end gap-1">
-                                            <div className="flex gap-1.5">
+                                            <div className="flex gap-1.5 flex-wrap justify-end">
                                                 <TooltipProvider>
                                                     <Tooltip>
                                                         <TooltipTrigger asChild>
@@ -460,20 +585,32 @@ export function BucketReconciliationView({
                                                                 P: {typeof bucket.personalDistance === 'number' ? bucket.personalDistance.toFixed(2) : bucket.personalDistance}
                                                             </div>
                                                         </TooltipTrigger>
-                                                        <TooltipContent>Personal Distance</TooltipContent>
+                                                        <TooltipContent>Evidenced Personal only</TooltipContent>
                                                     </Tooltip>
                                                 </TooltipProvider>
+                                                {(bucket.unexplainedDistance || 0) > 0 && (
+                                                    <TooltipProvider>
+                                                        <Tooltip>
+                                                            <TooltipTrigger asChild>
+                                                                <div className="flex items-center gap-0.5 text-[10px] px-1 bg-slate-100 text-slate-700 rounded border border-slate-200">
+                                                                    U: {bucket.unexplainedDistance!.toFixed(2)}
+                                                                </div>
+                                                            </TooltipTrigger>
+                                                            <TooltipContent>Unexplained (non-chargeable)</TooltipContent>
+                                                        </Tooltip>
+                                                    </TooltipProvider>
+                                                )}
                                             </div>
                                             {bucket.unaccountedDistance > 0 && (
                                                 <TooltipProvider>
                                                     <Tooltip>
                                                         <TooltipTrigger asChild>
                                                             <div className="flex items-center gap-0.5 text-[10px] px-1 bg-red-50 text-red-700 rounded border border-red-200 font-bold">
-                                                                GAP: {bucket.unaccountedDistance.toLocaleString()}
+                                                                OVER-LOG: {bucket.unaccountedDistance.toLocaleString()}
                                                             </div>
                                                         </TooltipTrigger>
                                                         <TooltipContent>
-                                                            Unaccounted Distance (Odometer Jump)
+                                                            Trip/adjustment km exceed odometer movement (over-logged)
                                                         </TooltipContent>
                                                     </Tooltip>
                                                 </TooltipProvider>
@@ -481,86 +618,66 @@ export function BucketReconciliationView({
                                         </div>
                                     </TableCell>
                                     <TableCell className="text-right">
-                                        {bucket.deductionRecommendation ? (
-                                            <div className="flex flex-col items-end gap-1">
+                                        <div className="flex flex-col items-end gap-1">
+                                            {bucket.isDeductionPosted ? (
+                                                <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-emerald-50 text-emerald-700 border-emerald-100 uppercase font-bold">
+                                                    Posted
+                                                </Badge>
+                                            ) : bucket.deductionRecommendation ? (
                                                 <div className="text-sm font-bold text-red-600">
                                                     {formatCurrency(bucket.deductionRecommendation)}
                                                 </div>
-                                                {bucket.isDeductionPosted ? (
-                                                    <div className="flex items-center gap-1">
-                                                        <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-emerald-50 text-emerald-700 border-emerald-100 uppercase font-bold">
-                                                            Posted
-                                                        </Badge>
-                                                        {!periodLocked && (
-                                                        <TooltipProvider>
-                                                            <Tooltip>
-                                                                <TooltipTrigger asChild>
-                                                                    <button 
-                                                                        onClick={() => handleRevertDeduction(bucket)}
-                                                                        disabled={isPosting === bucket.id}
-                                                                        className="text-slate-400 hover:text-red-600 transition-colors p-0.5 rounded-full hover:bg-red-50"
-                                                                    >
-                                                                        {isPosting === bucket.id ? (
-                                                                            <Loader2 className="h-3 w-3 animate-spin" />
-                                                                        ) : (
-                                                                            <RotateCcw className="h-3 w-3" />
-                                                                        )}
-                                                                    </button>
-                                                                </TooltipTrigger>
-                                                                <TooltipContent>Revert (Undo) Deduction</TooltipContent>
-                                                            </Tooltip>
-                                                        </TooltipProvider>
-                                                        )}
-                                                        {periodLocked && (
-                                                          <span className="text-[10px] text-slate-400">Locked</span>
-                                                        )}
-                                                    </div>
-                                                ) : periodLocked ? (
-                                                    <span className="text-[10px] text-slate-400">Read-only</span>
-                                                ) : (
-                                                    <Button 
-                                                        size="sm" 
-                                                        variant="ghost" 
-                                                        className="h-6 px-1.5 text-[10px] text-red-600 hover:text-red-700 hover:bg-red-50 flex items-center gap-1"
-                                                        onClick={() => handlePostDeduction(bucket)}
-                                                        disabled={isPosting === bucket.id}
-                                                    >
-                                                        {isPosting === bucket.id ? (
-                                                            <Loader2 className="h-3 w-3 animate-spin" />
-                                                        ) : (
+                                            ) : (
+                                                <span className="text-xs text-slate-400">No recommendation</span>
+                                            )}
+                                            {STOP_TO_STOP_CHARGES_ENABLED &&
+                                            !periodLocked &&
+                                            !bucket.isDeductionPosted &&
+                                            bucket.deductionRecommendation &&
+                                            bucket.confidenceTier === 'exact' &&
+                                            panelReconciled ? (
+                                                <Button 
+                                                    size="sm" 
+                                                    variant="ghost" 
+                                                    className="h-6 px-1.5 text-[10px] text-red-600 hover:text-red-700 hover:bg-red-50 flex items-center gap-1"
+                                                    onClick={() => handlePostDeduction(bucket)}
+                                                    disabled={isPosting === bucket.id || indeterminate}
+                                                >
+                                                    {isPosting === bucket.id ? (
+                                                        <Loader2 className="h-3 w-3 animate-spin" />
+                                                    ) : (
+                                                        <>
                                                             <Banknote className="h-3 w-3" />
-                                                        )}
-                                                        Charge Gap
-                                                    </Button>
-                                                )}
-                                            </div>
-                                        ) : (
-                                            <span className="text-xs text-slate-400">No Leakage</span>
-                                        )}
+                                                            Charge Gap
+                                                        </>
+                                                    )}
+                                                </Button>
+                                            ) : null}
+                                        </div>
                                     </TableCell>
                                     <TableCell className="text-center">
-                                        {bucket.status === 'Complete' ? (
-                                            Math.abs(bucket.variancePercent) > 20 ? (
-                                                <TooltipProvider>
-                                                    <Tooltip>
-                                                        <TooltipTrigger asChild>
-                                                            <div className="flex flex-col items-center cursor-help">
-                                                                <CheckCircle2 className="h-5 w-5 text-emerald-500 mx-auto" />
-                                                                <span className="text-[9px] text-slate-400 mt-0.5">Variance info</span>
-                                                            </div>
-                                                        </TooltipTrigger>
-                                                        <TooltipContent className="max-w-[200px]">
-                                                            <p className="text-xs">Fuel variance is informational for top-ups. Flags only for GAP or tank overflow.</p>
-                                                        </TooltipContent>
-                                                    </Tooltip>
-                                                </TooltipProvider>
-                                            ) : (
-                                                <CheckCircle2 className="h-5 w-5 text-emerald-500 mx-auto" />
-                                            )
+                                        {indeterminate ? (
+                                            <div className="flex flex-col items-center">
+                                                <AlertTriangle className="h-5 w-5 text-amber-500" />
+                                                <span className="text-[10px] font-bold text-amber-600 uppercase mt-0.5">
+                                                    Indet.
+                                                </span>
+                                            </div>
+                                        ) : bucket.status === 'Complete' ? (
+                                            <CheckCircle2 className="h-5 w-5 text-emerald-500 mx-auto" />
+                                        ) : bucket.status === 'Partial' ? (
+                                            <div className="flex flex-col items-center">
+                                                <Badge variant="outline" className="text-[9px] uppercase text-slate-600 border-slate-300">
+                                                    Top-up
+                                                </Badge>
+                                                <span className="text-[9px] text-slate-400 mt-0.5">Partial</span>
+                                            </div>
                                         ) : (
                                             <div className="flex flex-col items-center">
                                                 <AlertTriangle className="h-5 w-5 text-amber-500" />
-                                                <span className="text-[10px] font-bold text-amber-600 uppercase mt-0.5">Flagged</span>
+                                                <span className="text-[10px] font-bold text-amber-600 uppercase mt-0.5">
+                                                    Flagged
+                                                </span>
                                             </div>
                                         )}
                                     </TableCell>
@@ -577,7 +694,8 @@ export function BucketReconciliationView({
                                         </Button>
                                     </TableCell>
                                 </TableRow>
-                            ))}
+                                );
+                            })}
                         </TableBody>
                     </Table>
                 </CardContent>
@@ -588,12 +706,11 @@ export function BucketReconciliationView({
                 <div className="text-sm text-blue-800">
                     <p className="font-semibold">How to read this data:</p>
                     <ul className="list-disc list-inside mt-1 space-y-1 opacity-90">
-                        <li>Each row represents the travel between two consecutive fuel station visits.</li>
-                        <li><strong>GAP</strong> highlights distance traveled that was NOT logged as a Trip or Adjustment.</li>
-                        <li><strong>Variance</strong> compares the fuel added at the end of the bucket against what the vehicle <em>should</em> have used based on its profile (info only for top-ups).</li>
-                        <li><strong>Flagged</strong> means GAP or tank overflow — not normal top-up variance.</li>
-                        <li><strong>Explain gap</strong> opens the Unified Timeline for that stop-to-stop window (anchors, trips, personal km).</li>
-                        <li>Cards, table, and week timeline all use this week’s fills only.</li>
+                        <li>Each row is travel between two consecutive <em>fuel fills</em> (check-ins do not split rows).</li>
+                        <li><strong>OVER-LOG</strong> means logged trip/adjustment km exceed odometer movement — not “unlogged km”.</li>
+                        <li><strong>U (Unexplained)</strong> is odometer km without evidenced category — diagnostic only, not chargeable.</li>
+                        <li><strong>Modeled Exp</strong> is circular fill-to-fill burn — use reconciling totals as the real control.</li>
+                        <li><strong>Charge Gap</strong> posts a Pending driver deduction (window-assigned driver, one charge per bucket). Exact-tier + reconciled panel only.</li>
                     </ul>
                 </div>
             </div>

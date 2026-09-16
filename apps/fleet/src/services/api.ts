@@ -4783,6 +4783,77 @@ export const api = {
     return response.json();
   },
 
+  async recommendFuelGapCharge(args: {
+    periodId: string;
+    snapshotId?: string;
+    bucketId: string;
+    vehicleId: string;
+    amount: number;
+    overLoggedKm: number;
+    reason: string;
+    confidenceTier: string;
+    startYmd: string;
+    endYmd: string;
+  }) {
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.fuel}/fuel/periods/${encodeURIComponent(args.periodId)}/gap-charges/recommend`,
+      {
+        method: 'POST',
+        headers: await requireAuthHeaders(),
+        body: JSON.stringify({
+          snapshotId: args.snapshotId,
+          bucketId: args.bucketId,
+          vehicleId: args.vehicleId,
+          amount: args.amount,
+          overLoggedKm: args.overLoggedKm,
+          reason: args.reason,
+          confidenceTier: args.confidenceTier,
+          startYmd: args.startYmd,
+          endYmd: args.endYmd,
+        }),
+      },
+    );
+    const body = await response.json().catch(() => ({}));
+    if (response.status === 409) {
+      return body as { recommendation: Record<string, unknown> };
+    }
+    if (!response.ok) {
+      const err = new Error(
+        (body as { error?: string })?.error || 'Gap charge recommend failed',
+      ) as Error & { status?: number; body?: unknown };
+      err.status = response.status;
+      err.body = body;
+      throw err;
+    }
+    return body as { recommendation: Record<string, unknown> };
+  },
+
+  async approveFuelGapCharge(args: { periodId: string; bucketId: string }) {
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.fuel}/fuel/periods/${encodeURIComponent(args.periodId)}/gap-charges/approve`,
+      {
+        method: 'POST',
+        headers: await requireAuthHeaders(),
+        body: JSON.stringify({ bucketId: args.bucketId }),
+      },
+    );
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const err = new Error(
+        (body as { error?: string })?.error || 'Gap charge approve failed',
+      ) as Error & { status?: number; body?: unknown };
+      err.status = response.status;
+      err.body = body;
+      throw err;
+    }
+    return body as {
+      recommendation: Record<string, unknown>;
+      transactionId?: string;
+      transaction?: { id?: string };
+      reused?: boolean;
+    };
+  },
+
   async getFuelPeriodEvidencePack(periodId: string) {
     const response = await fetchWithRetry(
       `${API_ENDPOINTS.fuel}/fuel/periods/${encodeURIComponent(periodId)}/evidence-pack`,
@@ -4793,6 +4864,30 @@ export const api = {
       throw new Error(errText || 'Evidence pack failed');
     }
     return response.json();
+  },
+
+  /** P-9: read-only week hydrate (period, step notes, snapshot summaries) — not money SoT. */
+  async getFuelWeekBundle(weekStart: string) {
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.fuel}/fuel/weeks/${encodeURIComponent(weekStart)}/bundle`,
+      { headers: await requireAuthHeaders(null) },
+    );
+    if (!response.ok) {
+      const errText = await response.text().catch(() => '');
+      throw new Error(errText || 'Fuel week bundle failed');
+    }
+    return response.json() as Promise<{
+      weekStart: string;
+      weekEnd: string;
+      period: Record<string, unknown> | null;
+      counts: Record<string, unknown>;
+      countsEvaluated: boolean;
+      snapshotCount: number;
+      snapshotSummaries?: Array<Record<string, unknown>>;
+      stepNotes?: Array<{ step: string; note: string; at: string }>;
+      secondApproveActorIds?: string[];
+      provenance?: { source?: string; generatedAt?: string; note?: string };
+    }>;
   },
 
   async enqueueFuelPeriodReopen(args: {
@@ -4877,6 +4972,8 @@ export const api = {
     driverCount?: number;
     computedFromHash?: string;
     counts?: Record<string, { actionable: number; informational: number }>;
+    /** F-5: money-bearing inputs timed out / missing. */
+    degradedInputs?: boolean;
   }) {
     const response = await fetchWithRetry(
       `${API_ENDPOINTS.fuel}/fuel/periods/${encodeURIComponent(args.periodId)}/materialize`,

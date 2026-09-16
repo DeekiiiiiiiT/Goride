@@ -3,9 +3,16 @@
  */
 import * as kv from "./kv_store.tsx";
 import { listUnapprovedFuelTxInWindow } from "../../../packages/fuel-core/src/fuelReviewQueue.ts";
-import { classifyFuelMiscResidual } from "../../../packages/fuel-core/src/fuelFinalizeGate.ts";
+import { classifyFuelMiscResidual, residualFlagsFromSpendRows, residualSpendRowsFromSnapshots } from "../../../packages/fuel-core/src/fuelFinalizeGate.ts";
 import { coverageRuleIsResolved } from "../../../packages/fuel-core/src/fuelCoverageSplit.ts";
 import type { EvaluateFuelWeekClosableInput } from "../../../packages/fuel-core/src/evaluateFuelWeekClosable.ts";
+import { evaluateStopToStopFromSnapshots } from "../../../packages/fuel-core/src/stopToStopConservation.ts";
+import {
+  filterFuelOpsLogEntries,
+  fuelOpsLiters,
+} from "../../../packages/fuel-core/src/fuelOpsEligibility.ts";
+import { isEntryInInclusiveYmdRange } from "../../../packages/fuel-core/src/fuelWeekRange.ts";
+import type { FuelEntry } from "../../../packages/fuel-core/src/fuelTypes.ts";
 
 function ymd(v: unknown): string {
   return String(v || "").split("T")[0];
@@ -321,6 +328,8 @@ export async function buildFuelWeekClosableInputForPeriod(
   const leakageReviewed = Boolean(period.leakage_reviewed_at);
 
   const snaps = (snapshots || []).filter(Boolean) as Record<string, unknown>[];
+  // F-4: per-snapshot residual — opposite driver errors must not cancel in the aggregate.
+  const snapResidual = residualFlagsFromSpendRows(residualSpendRowsFromSnapshots(snaps));
   const spendPositive = snaps.some(
     (s) => (Number(s.totalGasCardCost) || Number(s.totalSpend) || 0) > 0.009,
   );
@@ -330,16 +339,56 @@ export async function buildFuelWeekClosableInputForPeriod(
   const unresolvedCoverageRule =
     snaps.length > 0 && snapshotsHaveUnresolvedCoverageRule(snaps);
 
+  // F-5: client hydrate may stamp degraded_inputs; missing category costs also degrade auto-close.
+  const meta =
+    period.metadata && typeof period.metadata === "object"
+      ? (period.metadata as Record<string, unknown>)
+      : {};
+  const degradedFromPeriod =
+    period.degraded_inputs === true ||
+    period.degradedInputs === true ||
+    meta.degradedInputs === true ||
+    meta.degraded_inputs === true;
+  const degradedInputs = degradedFromPeriod || Boolean(missingCategoryCosts);
+
+  // R-3: stop-to-stop conservation — authoritative at HTTP close.
+  const { entries: weekEntries } = await loadWeekClosableKvBundle(orgId, weekStart, weekEnd);
+  const opsLiters = filterFuelOpsLogEntries(weekEntries as FuelEntry[])
+    .filter((e) => isEntryInInclusiveYmdRange(e.date, weekStart, weekEnd))
+    .reduce((s, e) => s + fuelOpsLiters(e), 0);
+  const s2s = evaluateStopToStopFromSnapshots({
+    snapshots: snaps.map((s) => ({
+      odometerBuckets: Array.isArray(s.odometerBuckets)
+        ? (s.odometerBuckets as import("../../../packages/fuel-core/src/fuelTypes.ts").OdometerBucket[])
+        : [],
+      totalGasCardCost: Number(s.totalGasCardCost) || 0,
+    })),
+    weekOpsLiters: opsLiters,
+  });
+  // Only enforce stop-to-stop blockers when at least one snap carries buckets
+  // (pre-remediation weeks have none — avoid blocking historical reopens blindly).
+  const hasFrozenBuckets = snaps.some((s) => Array.isArray(s.odometerBuckets) && s.odometerBuckets.length > 0);
+
   return {
     countsUnevaluated,
-    overExplained: residualKind === "over_explained",
-    underExplainedUnreviewed: residualKind === "under_explained" && !leakageReviewed,
+    overExplained: snapResidual.anyOverExplained || residualKind === "over_explained",
+    underExplainedUnreviewed:
+      (snapResidual.anyUnderExplained || residualKind === "under_explained") && !leakageReviewed,
     hasUnacknowledgedExceptionFills: hasUnackedExceptions,
     hasOpenDisputes,
     hasUnapprovedFuelTx: unapprovedFuel,
     missingCategoryCosts,
     unresolvedCoverageRule,
-    degradedInputs: false,
+    degradedInputs,
+    ...(hasFrozenBuckets
+      ? {
+          stopToStopVolumeFailed: s2s.stopToStopVolumeFailed,
+          stopToStopDistanceFailed: s2s.stopToStopDistanceFailed,
+          stopToStopAttributionFailed: s2s.stopToStopAttributionFailed,
+          stopToStopChainFailed: s2s.stopToStopChainFailed,
+          stopToStopTripsTruncated: s2s.stopToStopTripsTruncated,
+        }
+      : {}),
   };
 }
 

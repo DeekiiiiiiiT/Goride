@@ -43,11 +43,11 @@ import { useFuelWizardKeyboard } from './useFuelWizardKeyboard';
 import {
   applyLocalLeakageReview,
   downloadWizardEvidencePack,
+  loadWizardStepNotes,
   materializeWizardPeriodCounts,
   persistLeakageReviewToServer,
   persistWizardStep,
   recordWizardSecondApproval,
-  refreshSecondApproveActors,
   settlementPreviewStepIndex,
 } from './useFuelWizardActions';
 import {
@@ -327,11 +327,12 @@ function FuelPeriodWizardInner({
       setServerPeriodId,
       strip,
       vehicleCount: vehicleSnaps.length,
+      degradedInputs: hasDegradedInputs,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [period.id, periodLocked, weekReports.loading, weekIsEmpty, strip.totalSpend, strip.leakage]);
 
-  // H8/H9 + NEW-6: server period is SoT for leakage review, step resume, second approval
+  // H8/H9 + NEW-6 + P-9: week bundle is SoT for chrome (period, step notes, second approve).
   useEffect(() => {
     let cancelled = false;
     void (async () => {
@@ -345,11 +346,52 @@ function FuelPeriodWizardInner({
             resolveFuelDualApprovalUiMode((prefs as any)?.fuelDualApprovalUiMode),
           );
         }
-        const rows = await api.listFuelReconciliationPeriods({
-          from: period.startDate,
-          to: period.startDate,
-        });
-        const hit = rows.find((r) => String(r.weekStart).split('T')[0] === period.startDate);
+
+        let hit: {
+          id?: string;
+          leakageReviewedAt?: string | null;
+          leakageReviewedBy?: string | null;
+          leakageReviewedNote?: string | null;
+          currentStep?: string | null;
+        } | null = null;
+        let notes: Array<{ step: string; note: string; at: string }> = [];
+        let actors: string[] = [];
+
+        try {
+          const bundle = await api.getFuelWeekBundle(period.startDate);
+          if (cancelled) return;
+          const p = bundle.period as Record<string, unknown> | null;
+          if (p?.id) {
+            hit = {
+              id: String(p.id),
+              leakageReviewedAt: (p.leakageReviewedAt as string) || null,
+              leakageReviewedBy: (p.leakageReviewedBy as string) || null,
+              leakageReviewedNote: (p.leakageReviewedNote as string) || null,
+              currentStep: (p.currentStep as string) || null,
+            };
+            notes = Array.isArray(bundle.stepNotes) ? bundle.stepNotes : [];
+            actors = Array.isArray(bundle.secondApproveActorIds)
+              ? bundle.secondApproveActorIds.map(String).filter(Boolean)
+              : [];
+          }
+        } catch {
+          /* fall through to list + evidence pack */
+        }
+
+        if (!hit?.id) {
+          const rows = await api.listFuelReconciliationPeriods({
+            from: period.startDate,
+            to: period.startDate,
+          });
+          const row = rows.find((r) => String(r.weekStart).split('T')[0] === period.startDate);
+          if (cancelled || !row?.id) return;
+          hit = row;
+          const loaded = await loadWizardStepNotes(row.id);
+          if (cancelled) return;
+          notes = loaded.notes;
+          actors = loaded.actors;
+        }
+
         if (cancelled || !hit?.id) return;
         setServerPeriodId(hit.id);
 
@@ -378,9 +420,22 @@ function FuelPeriodWizardInner({
           setProgressIndex(Math.max(0, FUEL_STEP_ORDER.indexOf(step)));
         }
 
-        const actors = await refreshSecondApproveActors(hit.id);
-        if (cancelled) return;
         setSecondApproveActors(actors);
+        // U-10: seed durable notes from bundle/audit; draft for restored step if present.
+        setStepNotes(notes);
+        const restoredStep =
+          !periodLocked &&
+          !initialStepId &&
+          hit.currentStep &&
+          FUEL_STEP_ORDER.includes(hit.currentStep as FuelStepId)
+            ? (hit.currentStep as FuelStepId)
+            : initialStepId && FUEL_STEP_ORDER.includes(initialStepId)
+              ? initialStepId
+              : null;
+        if (restoredStep) {
+          const latestForDraft = [...notes].reverse().find((n) => n.step === restoredStep);
+          if (latestForDraft?.note) setStepNoteDraft(latestForDraft.note);
+        }
         if (hit.leakageReviewedAt) {
           setLeakageReviewed(true);
           setLeakageReviewMeta({
@@ -824,6 +879,7 @@ function FuelPeriodWizardInner({
         company={strip.company}
         driver={strip.driver}
         leakage={strip.leakage}
+        windowTiming={strip.windowTiming}
         priorMedian={priorMedian}
       />
 
@@ -847,7 +903,7 @@ function FuelPeriodWizardInner({
         {gateLiveMessage}
       </div>
 
-      <label className="block space-y-1">
+      <label className={`block space-y-1 ${activeStepId === 'leakage-gap' ? 'hidden' : ''}`}>
         <span className="text-xs font-medium text-slate-500">Step note (optional)</span>
         <textarea
           className="min-h-[64px] w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
@@ -936,8 +992,14 @@ function FuelPeriodWizardInner({
             adjustments={adjustments}
             dateRange={dateRange}
             onRefresh={onRefresh}
+            transactions={transactions}
             leakageDisposition={leakageDisposition}
             onLeakageDispositionChange={setLeakageDisposition}
+            acceptNote={stepNoteDraft}
+            onAcceptNoteChange={setStepNoteDraft}
+            onAcceptNoteBlur={() =>
+              persistStep(activeStepId, stepNoteDraft.trim() || undefined)
+            }
           />
         )}
 

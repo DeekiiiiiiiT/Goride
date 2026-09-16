@@ -90,18 +90,26 @@ describe('getCategoryCoverageSplit', () => {
     });
   });
 
-  it('Fixed_Amount single-category: rideShare/misc capped by allowance alone', () => {
+  it('Fixed_Amount: misc is fully company; personal is driver (F-8)', () => {
     const rule = percentageRule({ coverageType: 'Fixed_Amount', coverageValue: 30 });
-    expect(FuelCalculationService.getCategoryCoverageSplit('misc', 100, rule)).toEqual({ company: 30, driver: 70 });
-    expect(FuelCalculationService.getCategoryCoverageSplit('misc', 20, rule)).toEqual({ company: 20, driver: 0 });
-    expect(FuelCalculationService.getCategoryCoverageSplit('personal', 50, rule)).toEqual({ company: 0, driver: 50 });
+    expect(FuelCalculationService.getCategoryCoverageSplit('misc', 100, rule)).toEqual({
+      company: 100,
+      driver: 0,
+    });
+    expect(FuelCalculationService.getCategoryCoverageSplit('misc', 20, rule)).toEqual({
+      company: 20,
+      driver: 0,
+    });
+    expect(FuelCalculationService.getCategoryCoverageSplit('personal', 50, rule)).toEqual({
+      company: 0,
+      driver: 50,
+    });
   });
 
   it.each([
     ['rideShare', 'rideShareCoverage'],
     ['companyUsage', 'companyUsageCoverage'],
     ['personal', 'personalCoverage'],
-    ['misc', 'miscCoverage'],
   ] as const)('%s falls back to coverageValue when %s is unset', (category) => {
     const rule = percentageRule({ coverageValue: 70 }); // no granular fields set
     const r = FuelCalculationService.getCategoryCoverageSplit(category, 100, rule);
@@ -109,11 +117,17 @@ describe('getCategoryCoverageSplit', () => {
     expect(r.driver).toBeCloseTo(30, 10);
   });
 
+  it('misc is always company on Percentage (F-8 — ignores miscCoverage)', () => {
+    const rule = percentageRule({ coverageValue: 70, miscCoverage: 20 });
+    const r = FuelCalculationService.getCategoryCoverageSplit('misc', 100, rule);
+    expect(r.company).toBe(100);
+    expect(r.driver).toBe(0);
+  });
+
   it.each([
     ['rideShare', 'rideShareCoverage'],
     ['companyUsage', 'companyUsageCoverage'],
     ['personal', 'personalCoverage'],
-    ['misc', 'miscCoverage'],
   ] as const)('%s uses its own explicit %s override when set', (category, field) => {
     const rule = percentageRule({ coverageValue: 70, [field]: 20 } as Partial<FuelRule>);
     const r = FuelCalculationService.getCategoryCoverageSplit(category, 100, rule);

@@ -29,6 +29,21 @@ export function isEntryInInclusiveYmdRange(
   return d >= startYmd && d <= endYmd;
 }
 
+/**
+ * Half-open [startYmd, endYmd) — buckets partition without double-counting boundary days.
+ * Closing-day floating events belong to the next bucket (closing fill joins separately).
+ */
+export function isEntryInHalfOpenYmdRange(
+  entryDate: string | Date | undefined | null,
+  startYmd: string,
+  endYmd: string,
+): boolean {
+  if (!startYmd || !endYmd) return true;
+  const d = toEntryYmd(entryDate);
+  if (!d) return false;
+  return d >= startYmd && d < endYmd;
+}
+
 /** Filter any dated items into an inclusive fuel week using calendar YMD. */
 export function entriesInFuelWeek<T extends { date?: string | null }>(
   items: T[],

@@ -285,6 +285,7 @@ export function processJaaRawFuelData(
       type: 'Card_Transaction',
       entryMode: 'Floating',
       paymentSource: 'Gas_Card',
+      usageCategory: 'ride',
       entrySource: 'fuel-card',
       reconciliationStatus: isApprovedFuel ? 'Pending' : 'Archived',
       metadata: {

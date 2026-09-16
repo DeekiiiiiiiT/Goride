@@ -49,7 +49,7 @@ function StepStatusCell({
         if (disabled) return;
         onOpenStep(stepId);
       }}
-      className={`flex min-h-11 min-w-0 items-center gap-2 rounded-lg border px-2.5 py-2 text-left transition-colors ${
+      className={`flex min-h-11 min-w-0 items-center gap-2 rounded-lg border px-2.5 py-2 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 focus-visible:ring-offset-1 ${
         disabled
           ? 'cursor-not-allowed opacity-60'
           : 'hover:ring-2 hover:ring-indigo-200'

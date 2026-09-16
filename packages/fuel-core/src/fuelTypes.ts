@@ -53,6 +53,11 @@ export interface FuelEntry {
   type: 'Card_Transaction' | 'Manual_Entry' | 'Fuel_Manual_Entry' | 'Reimbursement';
   entryMode: 'Anchor' | 'Floating';
   paymentSource: 'RideShare_Cash' | 'Gas_Card' | 'Personal' | 'Petty_Cash';
+  /**
+   * N-18: fill usage for Phase 4 server category authority
+   * (`ride` | `company` | `deadhead` | `personal`).
+   */
+  usageCategory?: string;
   entrySource?: 'driver-portal' | 'admin-manual' | 'admin-edit' | 'bulk-import' | 'fuel-card';
   isFlagged?: boolean;
   isVerified?: boolean;
@@ -108,21 +113,45 @@ export interface OdometerBucket {
   actualFuelCost: number;
   associatedReceipts: string[];
   closingEntryId?: string;
+  /** Ledger/source kind of the closing boundary (Fill / Check-in / Service). */
+  closingBoundarySource?: 'fuel' | 'checkin' | 'service' | 'manual' | 'unknown';
   totalTripDistance: number;
   tripsCount: number;
   expectedFuelLiters: number;
   varianceLiters: number;
   variancePercent: number;
   rideShareDistance: number;
+  /** Evidenced Personal adjustments only — never residual. */
   personalDistance: number;
   companyMiscDistance: number;
+  /**
+   * Over-logged distance: category evidence exceeds odometer movement (N-6).
+   * Not "unlogged km" — UI must label as over-logged.
+   */
   unaccountedDistance: number;
+  /** Odometer km not explained by RS + company + evidenced personal. Non-chargeable. */
+  unexplainedDistance?: number;
+  /** Check-in/service waypoints inside this fill window (never boundaries). */
+  waypointCount?: number;
+  /** exact | partial | indeterminate — chargeable only when exact. */
+  confidenceTier?: 'exact' | 'partial' | 'indeterminate';
+  confidenceReason?: string;
+  chainAnomaly?: boolean;
   deductionRecommendation?: number;
   deductionReason?: string;
   isDeductionPosted?: boolean;
   deductionTransactionId?: string;
   status: 'Complete' | 'Partial' | 'Anomaly';
 }
+
+/** External ledger anchors for stop-to-stop (must carry referenceId for fuel joins). */
+export type OdometerBucketAnchor = {
+  id: string;
+  date: string;
+  odometer: number;
+  referenceId?: string;
+  source?: 'fuel' | 'checkin' | 'service' | 'manual' | string;
+};
 
 export interface FuelCycle {
   id: string;
@@ -203,6 +232,8 @@ export interface WeeklyFuelReport {
   deadheadDistance: number;
   deadheadCost: number;
   miscellaneousCost: number;
+  /** F-1: first-fill + no-odo litres × price — timing, not leakage. */
+  windowTimingCost?: number;
   companyShare: number;
   driverShare: number;
   status: 'Draft' | 'Finalized';

@@ -136,4 +136,36 @@ describe('weekSnapshotEngine', () => {
     expect(snaps[0].driverShare).toBeCloseTo(200 + 200, 5); // 400
     expect(snaps[0].companyShare).toBeCloseTo(600, 5);
   });
+
+  it('F-10: partitions gas vs cash from paymentSource on entries', () => {
+    const snaps = assembleWeekSnapshotsFromRawEntries({
+      weekStart: '2026-08-17',
+      weekEnd: '2026-08-23',
+      orgId: 'org1',
+      entries: [
+        {
+          id: 'e1',
+          amount: 6500,
+          date: '2026-08-18',
+          driverId: 'd1',
+          vehicleId: 'v1',
+          paymentSource: 'Gas_Card',
+          type: 'Card_Transaction',
+        },
+        {
+          id: 'e2',
+          amount: 23800,
+          date: '2026-08-19',
+          driverId: 'd1',
+          vehicleId: 'v1',
+          paymentSource: 'Cash',
+          type: 'Manual_Entry',
+        },
+      ],
+      fuelRuleByDriver: new Map([['d1', { coverageType: 'Full' }]]),
+    });
+    expect(snaps[0].gasCardSpend).toBe(6500);
+    expect(snaps[0].driverSpend).toBe(23800);
+    expect(snaps[0].netPay).toBe(23800 - snaps[0].driverShare);
+  });
 });

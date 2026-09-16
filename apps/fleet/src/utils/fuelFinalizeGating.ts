@@ -12,10 +12,11 @@ import type { FinancialTransaction } from '../types/data';
 import { isSameFuelStatement, reportWeekYmdBounds, toEntryYmd } from './fuelWeekPeriod';
 import { FUEL_MONEY_EPS } from './fuelMoneyEpsilon';
 import {
-  isOverExplainedResidual,
-  isUnderExplainedResidual,
+  listOverExplainedResidualRows,
+  listUnderExplainedResidualRows,
   listUnapprovedFuelTxInWindow,
   type FuelUnapprovedTxBlocker,
+  type FuelResidualBlockerRow,
 } from '@roam/fuel-core';
 import {
   fuelPaymentSourceDisplayLabel,
@@ -52,16 +53,8 @@ export type FuelExceptionBlocker = {
   reason: string;
 };
 
-/** One over-explained week — negative misc; HARD finalize blocker (C-7). */
-export type FuelOverExplainedBlocker = {
-  vehicleId: string;
-  driverId?: string;
-  totalSpend: number;
-  miscellaneousCost: number;
-  /** |misc| as a whole-number percent of spend (null when spend ≤ 0). */
-  pctOfSpend: number | null;
-  kind: 'over_explained' | 'under_explained';
-};
+/** One over/under-explained week residual — from fuel-core SoT (F-4). */
+export type FuelOverExplainedBlocker = FuelResidualBlockerRow;
 
 export type FuelFinalizeGateResult = {
   reFinalizeWarnings: FuelReFinalizeWarning[];
@@ -85,40 +78,28 @@ export type FuelFinalizeGateResult = {
 export function listOverExplainedBlockers(
   reports: WeeklyFuelReport[],
 ): FuelOverExplainedBlocker[] {
-  return reports
-    .filter((r) => isOverExplainedResidual(r.totalGasCardCost, r.miscellaneousCost))
-    .map((r) => {
-      const spend = Number(r.totalGasCardCost) || 0;
-      const misc = Number(r.miscellaneousCost) || 0;
-      return {
-        vehicleId: r.vehicleId,
-        driverId: r.driverId,
-        totalSpend: spend,
-        miscellaneousCost: misc,
-        pctOfSpend: spend > 0 ? Math.round((Math.abs(misc) / spend) * 100) : null,
-        kind: 'over_explained' as const,
-      };
-    });
+  return listOverExplainedResidualRows(
+    reports.map((r) => ({
+      totalSpend: Number(r.totalGasCardCost) || 0,
+      miscellaneousCost: Number(r.miscellaneousCost) || 0,
+      vehicleId: r.vehicleId,
+      driverId: r.driverId,
+    })),
+  );
 }
 
 /** Under-explained (positive misc) — reviewable with typed leakage acceptance. */
 export function listUnderExplainedBlockers(
   reports: WeeklyFuelReport[],
 ): FuelOverExplainedBlocker[] {
-  return reports
-    .filter((r) => isUnderExplainedResidual(r.totalGasCardCost, r.miscellaneousCost))
-    .map((r) => {
-      const spend = Number(r.totalGasCardCost) || 0;
-      const misc = Number(r.miscellaneousCost) || 0;
-      return {
-        vehicleId: r.vehicleId,
-        driverId: r.driverId,
-        totalSpend: spend,
-        miscellaneousCost: misc,
-        pctOfSpend: spend > 0 ? Math.round((Math.abs(misc) / spend) * 100) : null,
-        kind: 'under_explained' as const,
-      };
-    });
+  return listUnderExplainedResidualRows(
+    reports.map((r) => ({
+      totalSpend: Number(r.totalGasCardCost) || 0,
+      miscellaneousCost: Number(r.miscellaneousCost) || 0,
+      vehicleId: r.vehicleId,
+      driverId: r.driverId,
+    })),
+  );
 }
 
 export function findDisputeForReport(

@@ -24,7 +24,6 @@ import {
   updatePricingTier,
   previewPricing,
   fetchPricingAudit,
-  fetchCodBalances,
   grantRushPass,
   revokeRushPass,
   listRushPassMemberships,
@@ -82,7 +81,7 @@ const DEFAULT_PIN = { lat: '18.015', lng: '-76.955', label: 'Spanish Town (defau
 const DEFAULT_DROPOFF = DEFAULT_PIN;
 const DASH_ADMIN_BASENAME = '/admin';
 
-type TabId = 'overview' | 'market' | 'tiers' | 'rush-pass' | 'simulator' | 'cod' | 'audit';
+type TabId = 'overview' | 'market' | 'tiers' | 'rush-pass' | 'simulator' | 'audit';
 type RulesScope = 'global' | 'parish' | 'market';
 
 const TABS: { id: TabId; label: string }[] = [
@@ -91,7 +90,6 @@ const TABS: { id: TabId; label: string }[] = [
   { id: 'tiers', label: 'Merchant Tiers' },
   { id: 'rush-pass', label: 'Rush Pass' },
   { id: 'simulator', label: 'Simulator' },
-  { id: 'cod', label: 'COD Ledger' },
   { id: 'audit', label: 'Audit Log' },
 ];
 
@@ -264,9 +262,6 @@ export function PricingHubPage() {
     overrideApplied: boolean;
   } | null>(null);
 
-  // COD
-  const [codBalances, setCodBalances] = useState<Array<Record<string, unknown>>>([]);
-
   // Audit
   const [auditEntries, setAuditEntries] = useState<Array<Record<string, unknown>>>([]);
   /** Pricing Overview — parish overlay (active towns only). */
@@ -358,11 +353,6 @@ export function PricingHubPage() {
   ]);
 
   useEffect(() => {
-    if (tab === 'cod') {
-      void fetchCodBalances(session.access_token)
-        .then((r) => setCodBalances(r.balances ?? []))
-        .catch(console.error);
-    }
     if (tab === 'audit') {
       void fetchPricingAudit(session.access_token, selectedMarketId || undefined)
         .then((r) => setAuditEntries(r.entries ?? []))
@@ -667,6 +657,7 @@ export function PricingHubPage() {
           layer={layerData}
           tiers={tiers}
           canWrite={canWrite}
+          includeCodPause={scope === 'global'}
           onView={() => openPartyRulesView(party, scope, entityId)}
           onEdit={() => openPartyRulesEdit(party, scope, entityId)}
         />
@@ -685,7 +676,9 @@ export function PricingHubPage() {
         <>
           <ProvenanceChips party={selectedParty} layer={layerData} />
           {selectedParty === 'customer' && <CustomerRulesReadonly rules={seed} />}
-          {selectedParty === 'rider' && <RiderRulesReadonly rules={seed} />}
+          {selectedParty === 'rider' && (
+            <RiderRulesReadonly rules={seed} scopeLabel={scopeLabel} />
+          )}
           {selectedParty === 'platform' && <PlatformRulesReadonly rules={seed} />}
           {selectedParty === 'partner' && (
             <PartnerRulesPanel tiers={tiers} onGoToTiers={() => setTab('tiers')} />
@@ -1066,6 +1059,20 @@ export function PricingHubPage() {
 
       {tab === 'overview' && (
         <div className="space-y-6">
+          <div className="rounded-xl border border-amber-800/40 bg-amber-950/20 px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="text-sm text-amber-100 font-medium">COD remittance</p>
+              <p className="text-xs text-slate-400 mt-0.5">
+                Courier cash owed to Roam is managed on the Remittance Desk — not here.
+              </p>
+            </div>
+            <Link
+              to="/remittance"
+              className="inline-flex px-3 py-1.5 rounded-lg bg-amber-600 text-white text-sm font-medium"
+            >
+              Open Remittance Desk
+            </Link>
+          </div>
           {revenue && (
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-4">
@@ -2287,70 +2294,6 @@ export function PricingHubPage() {
         </div>
       )}
 
-      {tab === 'cod' && (
-        <div className="space-y-6">
-          <div className="rounded-xl border border-slate-800 overflow-hidden">
-            <table className="w-full text-sm">
-              <thead className="bg-slate-900 text-slate-400">
-                <tr>
-                  <th className="text-left p-3">Courier</th>
-                  <th className="text-right p-3">Balance</th>
-                  <th className="text-right p-3">Threshold</th>
-                  <th className="text-center p-3">Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {codBalances.length === 0 ? (
-                  <tr>
-                    <td colSpan={4} className="p-4 text-center text-slate-500 text-sm">
-                      No courier balances yet. Cash orders now enter{' '}
-                      <code className="text-slate-400">pending_collection</code> at checkout;
-                      balances appear after delivery. Historical orders were backfilled on deploy.
-                    </td>
-                  </tr>
-                ) : (
-                  codBalances.map((b) => (
-                    <tr key={String(b.courier_id)} className="border-t border-slate-800">
-                      <td className="p-3 text-slate-300 font-mono text-xs">
-                        {String(b.courier_id).slice(0, 8)}…
-                      </td>
-                      <td className="p-3 text-right text-white">
-                        {formatJmd(Number(b.balance_jmd ?? 0))}
-                      </td>
-                      <td className="p-3 text-right text-slate-400">
-                        {formatJmd(Number(b.pause_threshold_jmd ?? 10000))}
-                      </td>
-                      <td className="p-3 text-center">
-                        {b.is_paused ? (
-                          <span className="text-red-400">Paused</span>
-                        ) : (
-                          <span className="text-emerald-400">Active</span>
-                        )}
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-
-          {canWrite && (
-            <div className="rounded-lg border border-slate-700 bg-slate-950/60 p-4 space-y-2 max-w-xl">
-              <p className="text-sm text-slate-300">
-                Settle COD remittance from the Remittance Desk — search by courier, confirm live
-                balance, and get a receipt. UUID paste settle is retired.
-              </p>
-              <Link
-                to="/remittance"
-                className="inline-flex px-4 py-2 rounded-lg bg-amber-600 text-white text-sm font-medium"
-              >
-                Open Remittance Desk
-              </Link>
-            </div>
-          )}
-        </div>
-      )}
-
       {tab === 'audit' && (
         <div className="space-y-2 max-h-96 overflow-y-auto">
           {auditEntries.length === 0 ? (
@@ -2442,8 +2385,16 @@ function RulesCardPreview({ rules }: { rules: PricingRulesPayload }) {
   );
 }
 
-function RulesReadonlyBody({ rules }: { rules: PricingRulesPayload }) {
+function RulesReadonlyBody({
+  rules,
+  scopeLabel = 'default',
+}: {
+  rules: PricingRulesPayload;
+  scopeLabel?: string;
+}) {
   const b = rulesPreviewBits(rules);
+  const isDefault =
+    scopeLabel === 'default' || scopeLabel.toLowerCase().includes('default');
   const rows: Array<{ label: string; value: string }> = [
     { label: 'Included km', value: String(b.includedKm) },
     { label: 'Per extra km', value: formatJmd(b.perKm) },
@@ -2464,10 +2415,14 @@ function RulesReadonlyBody({ rules }: { rules: PricingRulesPayload }) {
       value: `${Math.round((rules.card_processing_fee_percent ?? 0.045) * 1000) / 10}%`,
     },
     { label: 'Courier base pay', value: formatJmd(b.courierBase) },
-    {
-      label: 'COD pause threshold',
-      value: formatJmd(rules.cod?.pause_threshold_jmd ?? 10000),
-    },
+    ...(isDefault
+      ? [
+          {
+            label: 'Default COD pause (applies to couriers still on Default)',
+            value: formatJmd(rules.cod?.pause_threshold_jmd ?? 10000),
+          },
+        ]
+      : []),
   ];
   return (
     <dl className="rounded-xl border border-slate-800 divide-y divide-slate-800">
@@ -2601,14 +2556,16 @@ function RulesEditForm({
           onChange={(v) => setRules((r) => ({ ...r, courier_base_pay_jmd: v }))}
           disabled={!canWrite}
         />
-        <Field
-          label="COD pause threshold (JMD)"
-          value={rules.cod?.pause_threshold_jmd ?? 10000}
-          onChange={(v) =>
-            setRules((r) => ({ ...r, cod: { ...r.cod, pause_threshold_jmd: v } }))
-          }
-          disabled={!canWrite}
-        />
+        {(scopeLabel === 'default' || scopeLabel.toLowerCase().includes('default')) && (
+          <Field
+            label="Default COD pause (applies to couriers still on Default) (JMD)"
+            value={rules.cod?.pause_threshold_jmd ?? 10000}
+            onChange={(v) =>
+              setRules((r) => ({ ...r, cod: { ...r.cod, pause_threshold_jmd: v } }))
+            }
+            disabled={!canWrite}
+          />
+        )}
       </div>
     </div>
   );

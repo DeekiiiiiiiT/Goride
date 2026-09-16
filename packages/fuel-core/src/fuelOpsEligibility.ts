@@ -4,19 +4,19 @@
  */
 import { isJaaStatementLedgerRow } from '../../roam-shared/src/fuel/jaaStatementLedger.ts';
 import type { FuelEntry } from './fuelTypes.ts';
+import {
+  isGasCardFuelEntry as isGasCardFuelEntryCore,
+  isOutOfPocketFuelEntry as isOutOfPocketFuelEntryCore,
+} from './fuelPaymentSource.ts';
 
-/** Company / fleet gas-card charges (not driver cash). Explicit paymentSource wins over type. */
+/** Company / fleet gas-card charges — F-6 normalize-then-partition (fuelPaymentSource). */
 export function isGasCardFuelEntry(entry: FuelEntry): boolean {
-  if (entry.paymentSource === 'Gas_Card') return true;
-  if (
-    entry.paymentSource === 'RideShare_Cash' ||
-    entry.paymentSource === 'Personal' ||
-    entry.paymentSource === 'Petty_Cash'
-  ) {
-    return false;
-  }
-  if (entry.type === 'Card_Transaction') return true;
-  return false;
+  return isGasCardFuelEntryCore(entry);
+}
+
+/** Driver cash at the pump — F-6 partition peer of isGasCardFuelEntry. */
+export function isOutOfPocketFuelEntry(entry: FuelEntry): boolean {
+  return isOutOfPocketFuelEntryCore(entry);
 }
 
 /** Approved JAA fuel spend only — excludes fees, declines, and $0 awaiting-statement anchors. */
@@ -40,6 +40,13 @@ export function countsInFuelLogSpend(entry: FuelEntry): boolean {
   return true;
 }
 
+/** Driver out-of-pocket amount that counts toward Cash tile (F-6c). */
+export function fuelOpsCashAmount(entry: FuelEntry): number {
+  if (!isFuelOpsLogEntry(entry) || !countsInFuelLogSpend(entry)) return 0;
+  if (!isOutOfPocketFuelEntry(entry)) return 0;
+  return Number(entry.amount) || 0;
+}
+
 /** Driver/admin/portal fills only — not JAA/CSV statement ledger (Card Inventory). */
 export function isFuelOpsLogEntry(entry: FuelEntry): boolean {
   return !isJaaStatementLedgerRow(entry);
@@ -55,8 +62,16 @@ export function fuelOpsSpendAmount(entry: FuelEntry): number {
   return Number(entry.amount) || 0;
 }
 
-/** Litres for ops analytics — statement ledger litres are excluded (avoids matched-pair double count). */
+/**
+ * Litres for ops analytics / JMD/L — same eligibility as spend (F-3).
+ * Statement ledger litres excluded; fee/declined/awaiting rows do not dilute price.
+ */
 export function fuelOpsLiters(entry: FuelEntry): number {
-  if (!isFuelOpsLogEntry(entry)) return 0;
+  if (!isFuelOpsLogEntry(entry) || !countsInFuelLogSpend(entry)) return 0;
   return Number(entry.liters) || 0;
+}
+
+/** @deprecated Alias — use fuelOpsLiters (now spend-eligible). */
+export function fuelOpsPriceLiters(entry: FuelEntry): number {
+  return fuelOpsLiters(entry);
 }

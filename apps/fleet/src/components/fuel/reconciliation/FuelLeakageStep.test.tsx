@@ -14,6 +14,7 @@ describe('FuelLeakageStep render', () => {
     render(
       <FuelLeakageStep
         leakage={100}
+        totalSpend={1000}
         leakageRows={[
           {
             id: 'v1',
@@ -39,6 +40,10 @@ describe('FuelLeakageStep render', () => {
         adjustments={[]}
         dateRange={undefined}
         onRefresh={() => undefined}
+        leakageDisposition="accepted_variance"
+        onLeakageDispositionChange={() => undefined}
+        acceptNote=""
+        onAcceptNoteChange={() => undefined}
       />,
     );
 

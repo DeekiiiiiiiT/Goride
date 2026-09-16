@@ -11,8 +11,8 @@ export const RIDER_RULE_TIPS = {
     'Extra pay for each whole kilometer of the trip (after the road-distance multiplier is applied).',
   minPay:
     'Floor for courier earnings on a trip. If base + distance is lower, we top them up to this amount.',
-  codPause:
-    'If a courier is holding this much unpaid COD cash (or more), they are paused from taking new jobs until they settle.',
+  codPauseDefault:
+    'Saving Default updates remittance pause for couriers still on Default. Desk Save threshold locks a custom override.',
   roadMultiplier:
     'Turns straight-line map distance into an estimated road distance (e.g. 1.4×). Used for delivery fee and courier distance pay.',
   tipProcessing:
@@ -110,15 +110,17 @@ export function RiderRulesForm({
           onChange={(v) => setRules((r) => ({ ...r, courier_min_pay_jmd: v }))}
           disabled={!canWrite}
         />
-        <Field
-          label="COD pause threshold (JMD)"
-          tip={RIDER_RULE_TIPS.codPause}
-          value={rules.cod?.pause_threshold_jmd ?? 10000}
-          onChange={(v) =>
-            setRules((r) => ({ ...r, cod: { ...r.cod, pause_threshold_jmd: v } }))
-          }
-          disabled={!canWrite}
-        />
+        {scopeLabel === 'default' && (
+          <Field
+            label="Default COD pause (applies to couriers still on Default) (JMD)"
+            tip={RIDER_RULE_TIPS.codPauseDefault}
+            value={rules.cod?.pause_threshold_jmd ?? 10000}
+            onChange={(v) =>
+              setRules((r) => ({ ...r, cod: { ...r.cod, pause_threshold_jmd: v } }))
+            }
+            disabled={!canWrite}
+          />
+        )}
         <Field
           label="Road distance multiplier (×)"
           tip={RIDER_RULE_TIPS.roadMultiplier}
@@ -157,7 +159,13 @@ export function RiderRulesForm({
   );
 }
 
-export function RiderRulesReadonly({ rules }: { rules: PricingRulesPayload }) {
+export function RiderRulesReadonly({
+  rules,
+  scopeLabel = 'default',
+}: {
+  rules: PricingRulesPayload;
+  scopeLabel?: string;
+}) {
   const rows = [
     {
       label: 'Courier base pay',
@@ -174,11 +182,15 @@ export function RiderRulesReadonly({ rules }: { rules: PricingRulesPayload }) {
       tip: RIDER_RULE_TIPS.minPay,
       value: formatJmd(rules.courier_min_pay_jmd ?? 350),
     },
-    {
-      label: 'COD pause threshold',
-      tip: RIDER_RULE_TIPS.codPause,
-      value: formatJmd(rules.cod?.pause_threshold_jmd ?? 10000),
-    },
+    ...(scopeLabel === 'default'
+      ? [
+          {
+            label: 'Default COD pause (applies to couriers still on Default)',
+            tip: RIDER_RULE_TIPS.codPauseDefault,
+            value: formatJmd(rules.cod?.pause_threshold_jmd ?? 10000),
+          },
+        ]
+      : []),
     {
       label: 'Road distance multiplier',
       tip: RIDER_RULE_TIPS.roadMultiplier,

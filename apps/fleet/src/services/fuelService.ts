@@ -6,6 +6,7 @@ import { API_ENDPOINTS } from './apiConfig';
 import { settlementService } from './settlementService';
 import { throwIfCatalogGateBlocked } from './api';
 import { currentFuelListWindow } from '../utils/fuelWeekPeriod';
+import { resolveFuelUsageCategory } from '../utils/fuelUsageCategory';
 
 async function fetchWithRetry(url: string, options: RequestInit = {}, retries = 3, backoff = 500): Promise<Response> {
   try {
@@ -241,6 +242,9 @@ export const fuelService = {
     if (!entry.reconciliationStatus) {
         entry.reconciliationStatus = 'Pending';
     }
+    // N-18: stamp usageCategory so Phase 4 server_entries can become authority.
+    const usageCategory = resolveFuelUsageCategory(entry);
+    if (usageCategory) entry.usageCategory = usageCategory;
 
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/fuel-entries`, {
       method: 'POST',
@@ -257,7 +261,17 @@ export const fuelService = {
     // If the server gate-held the entry (no GPS + no manual station override),
     // return the original entry with gateHeld flag so the UI can handle it
     if (result.gateHeld) {
-      return { ...entry, gateHeld: true, learntLocationId: result.learntLocationId } as FuelEntry;
+      return { ...entry, gateHeld: true, learntLocationId: result.learntLocationId } as FuelEntry & {
+        gateHeld?: boolean;
+        learntLocationId?: string;
+      };
+    }
+    // Soft-dedup reuses an existing row — callers must not toast "created"
+    if (result.softDuplicateOf) {
+      return {
+        ...(result.data || result),
+        softDuplicateOf: String(result.softDuplicateOf),
+      } as FuelEntry & { softDuplicateOf?: string };
     }
     return result.data || result;
   },

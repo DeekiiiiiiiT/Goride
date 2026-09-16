@@ -154,6 +154,7 @@ export function partyPreviewMetrics(
   party: PricingParty,
   layer: PricingLayerResponse | null,
   tiers: MerchantTierRow[],
+  opts?: { includeCodPause?: boolean },
 ): Array<{ label: string; value: string }> {
   const seed = partyFormSeed(party, layer);
   if (party === 'customer') {
@@ -172,20 +173,23 @@ export function partyPreviewMetrics(
     ];
   }
   if (party === 'rider') {
-    return [
+    const metrics: Array<{ label: string; value: string }> = [
       {
         label: 'Courier base pay',
         value: formatJmd(seed.courier_base_pay_jmd ?? 250),
       },
-      {
-        label: 'COD pause',
-        value: formatJmd(seed.cod?.pause_threshold_jmd ?? 10000),
-      },
-      {
-        label: 'Road mult',
-        value: `${seed.road_distance_multiplier ?? 1.4}×`,
-      },
     ];
+    if (opts?.includeCodPause) {
+      metrics.push({
+        label: 'Default COD pause (couriers still on Default)',
+        value: formatJmd(seed.cod?.pause_threshold_jmd ?? 10000),
+      });
+    }
+    metrics.push({
+      label: 'Road mult',
+      value: `${seed.road_distance_multiplier ?? 1.4}×`,
+    });
+    return metrics;
   }
   if (party === 'platform') {
     return [

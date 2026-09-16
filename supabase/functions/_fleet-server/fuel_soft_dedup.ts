@@ -1,11 +1,20 @@
 /**
  * Soft-dedup for fuel_entries.
  * 1) Re-submits of the same fill (same vehicle + odometer + same day within a short window)
- * 2) Gas-card statement rows should never create odometer anchors (they have no real odo)
+ * 2) Gas-card *statement* CSV rows should never create odometer anchors (they have no real odo)
+ *
+ * IMPORTANT: Real Gas Card fills (driver portal / Known fill / admin-manual) are NOT CSV rows.
+ * Treating paymentSource === Gas_Card as "CSV" caused Known fills to silently collapse onto a
+ * nearby RideShare Cash fill at the same odometer (same pump stop, two payment methods).
  */
 import { queryFleet } from "./repos/baseRepo.ts";
 
 const SOFT_DUP_WINDOW_MS = 15 * 60 * 1000; // 15 minutes — matches "same fill, multiple times"
+
+function entryMeta(entry: Record<string, unknown>): Record<string, unknown> {
+  const m = entry.metadata;
+  return m && typeof m === "object" ? (m as Record<string, unknown>) : {};
+}
 
 function entryClockMs(entry: Record<string, unknown>): number {
   const dateRaw = String(entry.date || entry.recordedAt || "").trim();
@@ -42,29 +51,81 @@ function ymd(isoOrDate: string | null | undefined): string | null {
   return s.slice(0, 10);
 }
 
-function isGasCardCsv(entry: Record<string, unknown>): boolean {
-  const meta = (entry.metadata && typeof entry.metadata === "object"
-    ? entry.metadata as Record<string, unknown>
-    : {}) as Record<string, unknown>;
-  const importSrc = String(meta.importSource || entry.metadata?.importSource || "");
-  const entrySource = String(
-    meta.entrySource || entry.entrySource || (entry as any).source || "",
-  ).toLowerCase();
-  return (
+/** Issuer statement / CSV import only — never real odometer anchors. */
+export function isGasCardCsvFuelEntry(entry: Record<string, unknown>): boolean {
+  const meta = entryMeta(entry);
+  const importSrc = String(meta.importSource || "");
+  if (
     importSrc === "jaa_raw" ||
     importSrc === "fuel_statement" ||
-    importSrc === "jaa_statement_details" ||
-    entrySource.includes("fuel-card") ||
-    String(entry.paymentSource || meta.paymentSource || "").toLowerCase() === "gas_card"
+    importSrc === "jaa_statement_details"
+  ) {
+    return true;
+  }
+  const entrySource = String(
+    meta.entrySource || entry.entrySource || (entry as { source?: unknown }).source || "",
+  ).toLowerCase();
+  // Statement ledger rows stamped as fuel-card (not admin-manual / driver-portal)
+  if (entrySource === "fuel-card" && (meta.jaaReceiptNumber || meta.jaaImportId || meta.jaaRowKind)) {
+    return true;
+  }
+  return false;
+}
+
+/** Normalize payment labels so Gas_Card / company_card / gas card compare equal. */
+export function normalizeFuelPaymentKey(raw: unknown): string {
+  const s = String(raw || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, "_");
+  if (!s) return "";
+  if (s === "gas_card" || s === "company_card" || s === "card" || s === "gascard") return "gas_card";
+  if (s === "rideshare_cash" || s === "rideshare" || s === "ride_share_cash") return "rideshare_cash";
+  if (s === "personal" || s === "driver_cash" || s === "cash") return "personal";
+  if (s === "petty_cash" || s === "other") return "petty_cash";
+  return s;
+}
+
+function paymentKeyOf(entry: Record<string, unknown>): string {
+  const meta = entryMeta(entry);
+  return normalizeFuelPaymentKey(
+    entry.paymentSource ||
+      (entry as { payment_source?: unknown }).payment_source ||
+      meta.paymentSource,
   );
 }
 
 /**
- * Prefer keeping a real odometer fuel fill over a gas-card CSV row that only
- * carries a station/vendor name (issuer mileage is never a Roam odometer).
+ * Pure pair check (no DB) — used by findSoftDuplicateFuelEntry + unit tests.
+ * Returns true when candidate should reuse `row` instead of inserting.
  */
-export function isGasCardCsvFuelEntry(entry: Record<string, unknown>): boolean {
-  return isGasCardCsv(entry);
+export function isSoftDuplicatePair(
+  candidate: Record<string, unknown>,
+  row: Record<string, unknown>,
+  windowMs: number = SOFT_DUP_WINDOW_MS,
+): boolean {
+  if (!sameOdometer(candidate.odometer, row.odometer)) return false;
+  if (ymd(String(candidate.date || "")) !== ymd(String(row.date || ""))) return false;
+
+  const candClock = entryClockMs(candidate);
+  const rowClock = entryClockMs(row);
+  if (!candClock || !rowClock || Math.abs(rowClock - candClock) > windowMs) return false;
+
+  // Dual payment at the same pump (cash + card) must stay as two ledger rows.
+  const candPay = paymentKeyOf(candidate);
+  const rowPay = paymentKeyOf(row);
+  if (candPay && rowPay && candPay !== rowPay) return false;
+
+  const candidateIsCsv = isGasCardCsvFuelEntry(candidate);
+  const rowIsCsv = isGasCardCsvFuelEntry(row);
+
+  // CSV statement re-submit against a real fill → reuse the real fill
+  if (candidateIsCsv && !rowIsCsv) return true;
+  // Real fill against CSV noise → do not treat CSV as the keeper (caller continues)
+  if (!candidateIsCsv && rowIsCsv) return false;
+
+  // Same soft window + odo + vehicle + day (+ same payment family)
+  return true;
 }
 
 /**
@@ -80,7 +141,7 @@ export async function findSoftDuplicateFuelEntry(
   const odo = Number(entry.odometer);
   if (!vehicleId || !Number.isFinite(odo) || odo <= 0) return null;
 
-  const day = ymd(entry.date);
+  const day = ymd(entry.date as string);
   if (!day) return null;
 
   const clock = entryClockMs(entry);
@@ -98,40 +159,9 @@ export async function findSoftDuplicateFuelEntry(
   });
   if (res.error) throw res.error;
 
-  const candidateIsCsv = isGasCardCsv(entry);
   for (const row of res.data as Record<string, unknown>[]) {
     if (String(row.id) === String(excludeId || entry.id)) continue;
-    if (!sameOdometer(row.odometer, odo)) continue;
-    if (ymd(row.date) !== day) continue;
-    const rowClock = entryClockMs(row);
-    if (!rowClock || Math.abs(rowClock - clock) > SOFT_DUP_WINDOW_MS) continue;
-
-    // Prefer a non-CSV row when both are gas card CSV re-submits — keep first real fill
-    const rowIsCsv = isGasCardCsv(row);
-    if (candidateIsCsv && !rowIsCsv) {
-      // Candidate is pure CSV; keep the real fill (row)
-      return row;
-    }
-    if (!candidateIsCsv && rowIsCsv) {
-      // Prefer the real fill over CSV noise
-      continue;
-    }
-
-    // Prefer payment-source match so dual payment methods (cash vs card) stay separate
-    const candPay = String(
-      entry.paymentSource
-      || (entry.metadata as any)?.paymentSource
-      || "",
-    ).toLowerCase();
-    const rowPay = String(
-      row.paymentSource
-      || (row.metadata as any)?.paymentSource
-      || "",
-    ).toLowerCase();
-    if (candPay && rowPay && candPay !== rowPay) continue;
-
-    // Same soft window + odo + vehicle + day is a soft-dup
-    return row;
+    if (isSoftDuplicatePair(entry, row)) return row;
   }
   return null;
 }

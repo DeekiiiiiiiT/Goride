@@ -11,6 +11,7 @@ import { resolveActiveFuelPolicyForDriverWeek } from '../utils/fuelPolicyVersion
 import { toSlimFuelCycles } from '../utils/slimFuelCycles';
 import { isEntryInInclusiveYmdRange, reportWeekYmdBounds } from '../utils/fuelWeekPeriod';
 import { freezeReportMoneyThroughAssembler, categoryCostsFromReport } from '../utils/fuelFinalizeWeekSnapAdapter';
+import { resolveFuelUsageCategory } from '../utils/fuelUsageCategory';
 import {
   sumPaidByDriverForReport,
   sumGasCardSpendForReport,
@@ -26,6 +27,7 @@ import {
   evaluateFuelWeekClosableClient,
   fuelWeekClosableBlockerMessage,
 } from '../utils/fuelWeekClosableGate';
+import { stopToStopClosableFlagsFromReports } from '../utils/stopToStopClosableFlags';
 import { evaluateFuelFinalizeGating } from '../utils/fuelFinalizeGating';
 import type {
   FuelCard,
@@ -172,6 +174,12 @@ export async function finalizeFuelWeekReports(
     openDisputesInWeek,
     totalSpend: deps.totalSpend,
     unexplained: deps.unexplained,
+    ...stopToStopClosableFlagsFromReports({
+      reports,
+      fuelEntries,
+      weekStartYmd,
+      weekEndYmd,
+    }),
   });
   if (closableBlockers.length > 0) {
     const first = closableBlockers[0];
@@ -307,6 +315,8 @@ export async function finalizeFuelWeekReports(
         postedDriverShare: frozen.postedDriverShare,
         postedCompanyShare: frozen.postedCompanyShare,
         fuelCycles: toSlimFuelCycles(report.fuelCycles),
+        // Freeze stop-to-stop buckets at close for replay (audit M-4).
+        odometerBuckets: report.odometerBuckets || [],
         // C-1: emit categoryCosts + fuelRule so FUEL_SERVER_ENGINE can compare.
         categoryCosts: cats,
         fuelRule: appliedFuelRule || null,
@@ -318,12 +328,19 @@ export async function finalizeFuelWeekReports(
           tripCategoryAgg: cats,
           personalAllowanceEarnedCost: frozen.personalAllowanceEarnedCost,
           fuelRule: appliedFuelRule || null,
+          stopToStopEngineVersion: 's2s-v1',
+          stopToStopBucketCount: (report.odometerBuckets || []).length,
+          stopToStopFrozenAt: new Date().toISOString(),
+          // H-8: finalize now loads verified ledger anchors (same as Stop-to-Stop panel).
+          stopToStopAnchorMode: 'ledger',
           settledEntries: (relevantEntries.length ? relevantEntries : weekEntries).map((e) => ({
             id: e.id,
             amount: e.amount,
             date: String(e.date || '').split('T')[0],
             driverId: e.driverId || report.driverId,
             vehicleId: e.vehicleId || report.vehicleId,
+            // N-18: mirror fill tag so server ladder can prefer tagged snap entries.
+            usageCategory: resolveFuelUsageCategory(e) || e.usageCategory || null,
           })),
           blendedRatio: frozen.blendedRatio,
           freezeBuiltBy: frozen.built.metadata.builtBy,

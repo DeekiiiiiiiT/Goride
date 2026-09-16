@@ -35,29 +35,32 @@ function bucket(
       amount: 2000,
       type: 'Card_Transaction',
       paymentSource: 'Gas_Card',
+      metadata: { isHardAnchor: true, isFullTank: true },
     },
   ] as any[];
   return FuelCalculationService.calculateOdometerBuckets(vehicle, entries, trips, adjustments)[0];
 }
 
 describe('N-6 odometer bucket gap semantics', () => {
-  it('inferred personal fills bucket; unaccounted ~0', () => {
+  it('unexplained fills residual; personal is evidenced-only; over-log ~0', () => {
     const b = bucket(1000, 1100, []);
     expect(b.rideShareDistance).toBe(0);
-    expect(b.personalDistance).toBe(100);
+    expect(b.personalDistance).toBe(0);
+    expect(b.unexplainedDistance).toBe(100);
     expect(b.unaccountedDistance).toBe(0);
     expect(b.status).toBe('Complete');
   });
 
-  it('logged personal is evidence; inferred shrinks; unaccounted still ~0', () => {
+  it('logged personal is evidence; unexplained shrinks; over-log still ~0', () => {
     const b = bucket(1000, 1100, [], [
       { id: 'a1', vehicleId: 'v1', date: '2026-01-01', type: 'Personal', distance: 30 } as MileageAdjustment,
     ]);
-    expect(b.personalDistance).toBe(70);
+    expect(b.personalDistance).toBe(30);
+    expect(b.unexplainedDistance).toBe(70);
     expect(b.unaccountedDistance).toBe(0);
   });
 
-  it('over-explained logged categories yield true unaccounted gap (not inferred personal)', () => {
+  it('over-explained logged categories yield true over-log gap (not inferred personal)', () => {
     const b = bucket(1000, 1100, [], [
       { id: 'a1', vehicleId: 'v1', date: '2026-01-01', type: 'Personal', distance: 60 } as MileageAdjustment,
       {
@@ -68,7 +71,8 @@ describe('N-6 odometer bucket gap semantics', () => {
         distance: 50,
       } as MileageAdjustment,
     ]);
-    expect(b.personalDistance).toBe(0);
+    expect(b.personalDistance).toBe(60);
+    expect(b.unexplainedDistance).toBe(0);
     expect(b.unaccountedDistance).toBe(10);
   });
 });

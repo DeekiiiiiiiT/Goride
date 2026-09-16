@@ -16,7 +16,9 @@ import { resolveDeadheadHintForBrain, DEFAULT_INDUSTRY_FALLBACK_PCT } from '../u
 import { sumTripRideshareKm } from '../utils/tripRideshareKm';
 import { mapPool } from './fuelMapPool';
 import { buildPersonalAllowanceReconContext } from './buildPersonalAllowanceReconContext';
-import { isEntryInInclusiveYmdRange } from './fuelWeekPeriod';
+import { isEntryInInclusiveYmdRange, toEntryYmd } from './fuelWeekPeriod';
+import { odometerService } from '../services/odometerService';
+import type { OdometerBucketAnchor } from '@roam/fuel-core';
 import {
   evaluateFuelFinalizeGating,
   type FuelFinalizeGateResult,
@@ -289,6 +291,30 @@ export async function buildFuelWeekReportsForFinalize(
   const brainByDriverVehicle = brainRes.value;
   if (brainRes.timedOut) degraded.brain = true;
 
+  // H-8: same verified ledger anchors the Stop-to-Stop panel uses.
+  const anchorsByVehicle = new Map<string, OdometerBucketAnchor[]>();
+  await mapPool(
+    [...weekVehicleIds],
+    4,
+    async (vehicleId) => {
+      try {
+        const history = await odometerService.getLedger(vehicleId, { limit: 5000 });
+        const anchors: OdometerBucketAnchor[] = (history.data || [])
+          .filter((h: any) => h.isVerified && h.isAnchorPoint)
+          .map((h: any) => ({
+            id: h.id,
+            date: toEntryYmd(h.date),
+            odometer: Number(h.value) || 0,
+            referenceId: h.referenceId,
+            source: h.source,
+          }));
+        if (anchors.length >= 2) anchorsByVehicle.set(vehicleId, anchors);
+      } catch (e) {
+        console.warn('[buildFuelWeekReports] ledger anchors failed for', vehicleId, e);
+      }
+    },
+  );
+
   const drivers = input.drivers.map((d) => ({
     id: String(d.id || d.driverId || ''),
     fuelScenarioId: d.fuelScenarioId,
@@ -308,6 +334,7 @@ export async function buildFuelWeekReportsForFinalize(
     input.fuelCards,
     FLEET_USE_FUEL_BRAIN ? brainByDriverVehicle : undefined,
     personalAllowance,
+    anchorsByVehicle.size > 0 ? anchorsByVehicle : undefined,
   );
 
   return { reports, trips, degraded };

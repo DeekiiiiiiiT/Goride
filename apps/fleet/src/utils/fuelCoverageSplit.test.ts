@@ -38,7 +38,7 @@ describe('fuelCoverageSplit', () => {
     ).toBe(10);
   });
 
-  it('Fixed_Amount pool: allowance on rideShare+misc; ops/deadhead company; personal driver', () => {
+  it('Fixed_Amount: allowance on rideShare only; misc fully company (F-8)', () => {
     const rule = percentageRule({ coverageType: 'Fixed_Amount', coverageValue: 60 });
     const split = splitAllCategoryCosts(
       { rideShare: 80, companyUsage: 20, deadhead: 10, personal: 40, misc: 40 },
@@ -47,14 +47,14 @@ describe('fuelCoverageSplit', () => {
     expect(split.company.companyUsage).toBe(20);
     expect(split.company.deadhead).toBe(10);
     expect(split.driver.personal).toBe(40);
-    // variable = 120, covered = 60 → ratio 0.5
-    expect(split.company.rideShare).toBeCloseTo(40, 10);
-    expect(split.company.misc).toBeCloseTo(20, 10);
-    expect(split.driver.rideShare).toBeCloseTo(40, 10);
-    expect(split.driver.misc).toBeCloseTo(20, 10);
+    // allowance 60 on rideShare 80 only — misc no longer pools
+    expect(split.company.rideShare).toBeCloseTo(60, 10);
+    expect(split.company.misc).toBeCloseTo(40, 10);
+    expect(split.driver.rideShare).toBeCloseTo(20, 10);
+    expect(split.driver.misc).toBeCloseTo(0, 10);
   });
 
-  it('Fixed_Amount when allowance exceeds variable covers all rideShare+misc', () => {
+  it('Fixed_Amount when allowance exceeds rideShare covers all rideShare; misc company', () => {
     const rule = percentageRule({ coverageType: 'Fixed_Amount', coverageValue: 500 });
     const split = splitAllCategoryCosts(
       { rideShare: 80, companyUsage: 0, deadhead: 0, personal: 10, misc: 20 },
@@ -63,6 +63,12 @@ describe('fuelCoverageSplit', () => {
     expect(split.company.rideShare).toBeCloseTo(80, 10);
     expect(split.company.misc).toBeCloseTo(20, 10);
     expect(split.driver.rideShare).toBeCloseTo(0, 10);
+    expect(split.driver.misc).toBeCloseTo(0, 10);
+  });
+
+  it('Percentage: misc is never driver-billed (F-8)', () => {
+    const rule = percentageRule({ coverageValue: 50, miscCoverage: 0 });
+    expect(getCategoryCoverageSplit('misc', 100, rule)).toEqual({ company: 100, driver: 0 });
   });
 
   it('normalizePercentageRule persists all five granular fields', () => {

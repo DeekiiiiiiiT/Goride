@@ -24,11 +24,29 @@ describe('leftover / misc engine', () => {
       rule: { coverageType: 'Percentage', rideShareCoverage: 60, personalCoverage: 0, miscCoverage: 50 },
     });
     expect(money.miscellaneousCost).toBeCloseTo(200, 5);
-    // rideShare company 60% of 700 = 420; personal 0%; misc 50% of 200 = 100
-    expect(money.companyShare).toBeCloseTo(520, 5);
-    expect(money.driverShare).toBeCloseTo(480, 5);
+    // F-8: misc is 100% company even when miscCoverage is 50
+    // rideShare company 60% of 700 = 420; personal 0%; misc 200 company
+    expect(money.companyShare).toBeCloseTo(620, 5);
+    expect(money.driverShare).toBeCloseTo(380, 5);
     expect(money.overExplained).toBe(false);
     expect(money.overExplainedCost).toBe(0);
+  });
+
+  it('F-1: windowTimingCost carved out of unexplained', () => {
+    const money = assembleLeftoverWeekMoney({
+      totalSpend: 27000,
+      rideShareCost: 22500,
+      companyUsageCost: 0,
+      deadheadCost: 0,
+      personalUsageCost: 0,
+      windowTimingCost: 4500,
+      rule: { coverageType: 'Full' },
+    });
+    expect(money.windowTimingCost).toBe(4500);
+    expect(money.miscellaneousCost).toBeCloseTo(0, 5);
+    expect(money.companyShare).toBeCloseTo(27000, 5);
+    expect(money.driverShare).toBe(0);
+    expect(money.spendTieDelta).toBeCloseTo(0, 5);
   });
 
   it('floors negative misc for split and flags over-explained (C-2)', () => {

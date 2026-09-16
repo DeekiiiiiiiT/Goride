@@ -65,10 +65,13 @@ export function getCategoryCoverageSplit(
 
   if (rule.coverageType === 'Full') {
     if (category === 'personal') return { company: 0, driver: amount };
+    // F-8: true unexplained is company-held (not driver-billable via coverage %).
     return { company: amount, driver: 0 };
   }
 
   if (rule.coverageType === 'Percentage') {
+    // F-8: misc / true unexplained never hits driver via Percentage sweep.
+    if (category === 'misc') return { company: amount, driver: 0 };
     const pct = getCompanyCoveragePercent(category, rule);
     const companyPay = amount * (pct / 100);
     return { company: companyPay, driver: amount - companyPay };
@@ -76,7 +79,7 @@ export function getCategoryCoverageSplit(
 
   if (rule.coverageType === 'Fixed_Amount') {
     if (category === 'personal') return { company: 0, driver: amount };
-    if (category === 'companyUsage' || category === 'deadhead') {
+    if (category === 'companyUsage' || category === 'deadhead' || category === 'misc') {
       return { company: amount, driver: 0 };
     }
     const companyPay = Math.min(amount, rule.coverageValue || 0);
@@ -120,12 +123,14 @@ export function splitAllCategoryCosts(
   }
 
   const allowance = rule.coverageValue || 0;
+  // F-8: misc is company-absorbed; Fixed_Amount allowance applies to rideShare only
+  // (never pool misc with rideshare — that crowded out legitimate coverage).
   const company: CategoryCosts = {
     rideShare: 0,
     companyUsage: costs.companyUsage,
     deadhead: costs.deadhead,
     personal: 0,
-    misc: 0,
+    misc: costs.misc,
   };
   const driver: CategoryCosts = {
     rideShare: 0,
@@ -135,20 +140,37 @@ export function splitAllCategoryCosts(
     misc: 0,
   };
 
-  const variable = costs.rideShare + costs.misc;
-  const coveredVariable = Math.min(allowance, Math.max(0, variable));
-  if (variable > 0 && coveredVariable > 0) {
-    const ratio = coveredVariable / variable;
-    company.rideShare = costs.rideShare * ratio;
-    company.misc = costs.misc * ratio;
-  }
+  const coveredRideShare = Math.min(allowance, Math.max(0, costs.rideShare));
+  company.rideShare = coveredRideShare;
   driver.rideShare = costs.rideShare - company.rideShare;
-  driver.misc = costs.misc - company.misc;
 
   return { company, driver };
 }
 
-/** Spend residual after Ride Share / Ops / Deadhead / Personal (cash leakage). */
+/**
+ * Litres outside the fill-to-fill efficiency set (first fill + no-odo fills).
+ * Valued at price → windowTimingCost (F-1 / F-2) — inventory timing, not leakage.
+ */
+export function computeWindowTimingLiters(
+  totalLiters: number,
+  efficiencyFuel: number,
+): number {
+  return Math.max(0, (Number(totalLiters) || 0) - (Number(efficiencyFuel) || 0));
+}
+
+export function computeWindowTimingCost(
+  totalLiters: number,
+  efficiencyFuel: number,
+  pricePerLiter: number,
+): number {
+  if (!(Number(pricePerLiter) > 0)) return 0;
+  return computeWindowTimingLiters(totalLiters, efficiencyFuel) * pricePerLiter;
+}
+
+/**
+ * True unexplained after Ride Share / Ops / Deadhead / Personal and window timing.
+ * F-1: miscellaneousCost must NOT include first-fill / no-odo timing artefact.
+ */
 export function computeMiscellaneousCost(
   totalSpend: number,
   categorized: {
@@ -156,13 +178,16 @@ export function computeMiscellaneousCost(
     companyUsage?: number;
     deadhead?: number;
     personal?: number;
+    /** Named tank-window timing — carved out of unexplained (F-1). */
+    windowTiming?: number;
   },
 ): number {
   const allocated =
     (Number(categorized.rideShare) || 0) +
     (Number(categorized.companyUsage) || 0) +
     (Number(categorized.deadhead) || 0) +
-    (Number(categorized.personal) || 0);
+    (Number(categorized.personal) || 0) +
+    (Number(categorized.windowTiming) || 0);
   return totalSpend - allocated;
 }
 
@@ -185,23 +210,28 @@ export function assembleLeftoverWeekMoney(input: {
   companyUsageCost: number;
   deadheadCost: number;
   personalUsageCost: number;
+  /** F-1: tank-window timing carved out before residual. */
+  windowTimingCost?: number;
   rule?: FuelCoverageRule | null;
 }): {
   miscellaneousCost: number;
+  windowTimingCost: number;
   overExplainedCost: number;
   overExplained: boolean;
   companyShare: number;
   driverShare: number;
   costs: CategoryCosts;
   split: CategorySplit;
-  /** C-4: |Σ categories + misc − totalSpend| — must be ≤ ε after assemble. */
+  /** C-4: |Σ categories + timing + misc − totalSpend| — must be ≤ ε after assemble. */
   spendTieDelta: number;
 } {
+  const windowTimingCost = Math.max(0, Number(input.windowTimingCost) || 0);
   const miscellaneousCost = computeMiscellaneousCost(input.totalSpend, {
     rideShare: input.rideShareCost,
     companyUsage: input.companyUsageCost,
     deadhead: input.deadheadCost,
     personal: input.personalUsageCost,
+    windowTiming: windowTimingCost,
   });
   const { miscForSplit, overExplainedCost } = floorMiscForSplit(miscellaneousCost);
   const costs: CategoryCosts = {
@@ -212,18 +242,22 @@ export function assembleLeftoverWeekMoney(input: {
     misc: miscForSplit,
   };
   const split = splitAllCategoryCosts(costs, input.rule || undefined);
+  // Timing is company-held outside the coverage category split.
+  const companyShare = sumCategoryShare(split.company) + windowTimingCost;
   const categorySum =
     input.rideShareCost +
     input.companyUsageCost +
     input.deadheadCost +
     input.personalUsageCost +
+    windowTimingCost +
     miscellaneousCost;
   const spendTieDelta = categorySum - (Number(input.totalSpend) || 0);
   return {
     miscellaneousCost,
+    windowTimingCost,
     overExplainedCost,
     overExplained: isOverExplainedFuelWeek(input.totalSpend, miscellaneousCost),
-    companyShare: sumCategoryShare(split.company),
+    companyShare,
     driverShare: sumCategoryShare(split.driver),
     costs,
     split,
@@ -231,7 +265,7 @@ export function assembleLeftoverWeekMoney(input: {
   };
 }
 
-/** C-4 freeze invariant — categories + misc must reconstruct spend. */
+/** C-4 freeze invariant — categories + timing + misc must reconstruct spend. */
 export function assertCategoryCostsTieSpend(
   totalSpend: number,
   categoryCosts: {
@@ -242,12 +276,14 @@ export function assertCategoryCostsTieSpend(
   },
   miscellaneousCost: number,
   eps = 0.02,
+  windowTimingCost = 0,
 ): boolean {
   const sum =
     (Number(categoryCosts.rideShareCost) || 0) +
     (Number(categoryCosts.companyUsageCost) || 0) +
     (Number(categoryCosts.deadheadCost) || 0) +
     (Number(categoryCosts.personalUsageCost) || 0) +
+    (Number(windowTimingCost) || 0) +
     (Number(miscellaneousCost) || 0);
   return Math.abs(sum - (Number(totalSpend) || 0)) <= eps;
 }

@@ -57,6 +57,8 @@ export async function materializeWizardPeriodCounts(input: {
   strip: MoneyStripTotals;
   vehicleCount?: number;
   driverCount?: number;
+  /** F-5: stamp degraded money inputs for server auto-close. */
+  degradedInputs?: boolean;
 }) {
   try {
     const pid = await ensureWizardPeriodId(input);
@@ -73,6 +75,7 @@ export async function materializeWizardPeriodCounts(input: {
       unexplained: input.strip.leakage,
       vehicleCount: input.vehicleCount,
       driverCount: input.driverCount,
+      degradedInputs: Boolean(input.degradedInputs),
     });
   } catch {
     /* offline — counts stay local */
@@ -85,6 +88,41 @@ export async function refreshSecondApproveActors(periodId: string): Promise<stri
     .filter((a) => a.action === 'second_approve')
     .map((a) => String(a.actor_id || ''))
     .filter(Boolean);
+}
+
+/** U-10: rehydrate durable step notes from period audit (action=step). */
+export function stepNotesFromEvidenceAudit(
+  audit: Array<{ action?: string; at?: string; payload?: unknown }> | null | undefined,
+): Array<{ step: string; note: string; at: string }> {
+  const out: Array<{ step: string; note: string; at: string }> = [];
+  for (const a of audit || []) {
+    if (a.action !== 'step') continue;
+    const payload =
+      a.payload && typeof a.payload === 'object' ? (a.payload as Record<string, unknown>) : {};
+    const note = String(payload.note || '').trim();
+    if (!note) continue;
+    const step = String(payload.step || '').trim() || 'step';
+    out.push({ step, note, at: String(a.at || '') });
+  }
+  return out;
+}
+
+export async function loadWizardStepNotes(periodId: string): Promise<{
+  notes: Array<{ step: string; note: string; at: string }>;
+  actors: string[];
+}> {
+  const pack = await api.getFuelPeriodEvidencePack(periodId);
+  const audit = (pack?.audit || []) as Array<{
+    action?: string;
+    at?: string;
+    actor_id?: string;
+    payload?: unknown;
+  }>;
+  const actors = audit
+    .filter((a) => a.action === 'second_approve')
+    .map((a) => String(a.actor_id || ''))
+    .filter(Boolean);
+  return { notes: stepNotesFromEvidenceAudit(audit), actors };
 }
 
 export async function recordWizardSecondApproval(input: {

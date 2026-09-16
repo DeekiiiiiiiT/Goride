@@ -33,6 +33,8 @@ export type PostCollectedInput = {
   courierRetainedMinor: number;
   actorId?: string | null;
   metadata?: Record<string, unknown>;
+  /** Market-seeded default for new accounts only (X-3). */
+  pauseThresholdMinor?: number | null;
 };
 
 function deliveryDb(sb: Sb) {
@@ -58,6 +60,10 @@ export async function postRemittanceCollected(
     p_actor_id: input.actorId ?? null,
     p_actor_type: "system",
     p_metadata: input.metadata ?? {},
+    p_pause_threshold_minor: input.pauseThresholdMinor != null &&
+        input.pauseThresholdMinor > 0
+      ? Math.round(input.pauseThresholdMinor)
+      : null,
   });
   if (error) throw new Error(error.message || "apply_remittance_event failed");
   return data as RemittanceEventRow;
@@ -127,6 +133,7 @@ export async function getRemittanceAccount(
   courierId: string;
   balanceMinor: number;
   thresholdMinor: number;
+  thresholdSource: "seeded" | "override";
   isPaused: boolean;
   pausedSince: string | null;
 } | null> {
@@ -134,16 +141,18 @@ export async function getRemittanceAccount(
   const { data, error } = await db
     .from("courier_remittance_accounts")
     .select(
-      "courier_id, balance_minor, pause_threshold_minor, is_paused, paused_since",
+      "courier_id, balance_minor, pause_threshold_minor, threshold_source, is_paused, paused_since",
     )
     .eq("courier_id", courierId)
     .maybeSingle();
   if (error) throw new Error(error.message);
   if (!data) return null;
+  const src = String(data.threshold_source ?? "seeded");
   return {
     courierId: String(data.courier_id),
     balanceMinor: Number(data.balance_minor ?? 0),
     thresholdMinor: Number(data.pause_threshold_minor ?? 1000000),
+    thresholdSource: src === "override" ? "override" : "seeded",
     isPaused: Boolean(data.is_paused),
     pausedSince: data.paused_since ? String(data.paused_since) : null,
   };

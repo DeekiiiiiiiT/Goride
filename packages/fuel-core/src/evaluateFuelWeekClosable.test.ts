@@ -28,4 +28,19 @@ describe('evaluateFuelWeekClosable', () => {
       evaluateFuelWeekClosable({ underExplainedUnreviewed: true }).map((x) => x.code),
     ).toContain('under_explained_unreviewed');
   });
+
+  it('blocks degraded money inputs (F-5)', () => {
+    expect(
+      evaluateFuelWeekClosable({ degradedInputs: true }).map((x) => x.code),
+    ).toContain('degraded_inputs');
+  });
+
+  it('blocks on stop-to-stop conservation failures', () => {
+    expect(
+      evaluateFuelWeekClosable({ stopToStopVolumeFailed: true }).map((x) => x.code),
+    ).toContain('stop_to_stop_volume');
+    expect(
+      evaluateFuelWeekClosable({ stopToStopTripsTruncated: true }).map((x) => x.code),
+    ).toContain('stop_to_stop_trips_truncated');
+  });
 });

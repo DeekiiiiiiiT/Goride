@@ -9,12 +9,15 @@ import { Trip } from '../types/data';
 import { resolveFuelFillDriver } from './resolveFuelFillDriver';
 import { isEntryInInclusiveYmdRange, reportWeekYmdBounds } from './fuelWeekPeriod';
 import {
-  isCashStyleFuelPaymentSource,
-  resolveFuelPaymentSource,
-} from './fuelPaymentSource';
+  isGasCardFuelEntry,
+  isOutOfPocketFuelEntry,
+  countsInGasCardSpend,
+  countsInFuelLogSpend,
+} from '@roam/fuel-core';
 import { isJaaStatementLedgerRow } from './jaaFuelStatementMatcher';
 
-const OUT_OF_POCKET_TYPES = new Set(['Reimbursement', 'Manual_Entry', 'Fuel_Manual_Entry']);
+// Re-export partition helpers for fleet callers that imported from this module.
+export { isGasCardFuelEntry, isOutOfPocketFuelEntry, countsInGasCardSpend };
 
 export type DriverWeekAttributionContext = {
   vehicles: Vehicle[];
@@ -23,46 +26,6 @@ export type DriverWeekAttributionContext = {
   /** P-2: optional precomputed Map<entryId, driverId> from precomputeFuelFillDrivers. */
   driverByEntryId?: Map<string, string>;
 };
-
-/** Driver cash at the pump — never fleet gas card, even when type is still Manual_Entry after statement match. */
-export function isOutOfPocketFuelEntry(entry: FuelEntry): boolean {
-  if (isGasCardFuelEntry(entry)) return false;
-  const metaPay = (entry.metadata as Record<string, unknown> | undefined)?.paymentSource;
-  const raw =
-    entry.paymentSource ||
-    (typeof metaPay === 'string' ? metaPay : undefined);
-  if (raw) {
-    const resolved = resolveFuelPaymentSource(raw).enum;
-    if (resolved === 'Gas_Card') return false;
-    if (isCashStyleFuelPaymentSource(resolved)) return true;
-  }
-  return OUT_OF_POCKET_TYPES.has(entry.type);
-}
-
-/** Company / fleet gas-card charges (not driver cash). Explicit paymentSource wins over type. */
-export function isGasCardFuelEntry(entry: FuelEntry): boolean {
-  if (entry.paymentSource === 'Gas_Card') return true;
-  if (
-    entry.paymentSource === 'RideShare_Cash' ||
-    entry.paymentSource === 'Personal' ||
-    entry.paymentSource === 'Petty_Cash'
-  ) {
-    return false;
-  }
-  if (entry.type === 'Card_Transaction') return true;
-  return false;
-}
-
-/** Approved JAA fuel spend only — excludes fees, declines, and $0 awaiting-statement anchors. */
-export function countsInGasCardSpend(entry: FuelEntry): boolean {
-  if (!isGasCardFuelEntry(entry)) return false;
-  const meta = entry.metadata as Record<string, unknown> | undefined;
-  if (meta?.jaaRowKind === 'fee' || meta?.jaaRowKind === 'declined') return false;
-  if (meta?.countsInFuelSpend === false) return false;
-  if (meta?.awaitingCardStatement) return false;
-  const amt = Number(entry.amount) || 0;
-  return amt > 0;
-}
 
 /**
  * True when resolveFuelFillDriver attributes this fill to the report's driver.
@@ -139,6 +102,7 @@ export function sumPaidByDriverForReport(
   const attribution: DriverWeekAttributionContext = ctx || { vehicles };
   return entriesBelongingToDriverWeekReport(entries, report, attribution)
     .filter(isOutOfPocketFuelEntry)
+    .filter(countsInFuelLogSpend)
     .reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
 }
 

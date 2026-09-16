@@ -22,6 +22,10 @@ import { StationProfile } from '../../types/station';
 import { useQuery } from '@tanstack/react-query';
 import type { FuelCard } from '../../types/fuel';
 import { findActiveFuelCardForSession } from '../../utils/fuelCardMatch';
+import {
+    asGasCardAnchorSavePayload,
+    buildGasCardOdometerAnchor,
+} from '../../utils/buildGasCardOdometerAnchor';
 
 interface SubmitExpenseModalProps {
     isOpen: boolean;
@@ -553,7 +557,7 @@ export function SubmitExpenseModal({ isOpen, onClose, onSave, drivers, vehicles,
                         entry.stationName ||
                         undefined;
 
-                    const fuelEntry = {
+                    const fuelEntry = buildGasCardOdometerAnchor({
                         id: entry.id,
                         date: commonData.date || getLocalDateString(),
                         time: entry.time
@@ -562,32 +566,16 @@ export function SubmitExpenseModal({ isOpen, onClose, onSave, drivers, vehicles,
                         cardId: assignedGasCard.id,
                         vehicleId: commonData.vehicleId,
                         driverId: commonData.driverId,
-                        amount: 0,
                         odometer: parseFloat(entry.odometer),
                         odometerImageUrl: odometerImageUrl || undefined,
                         location: stationLabel,
                         matchedStationId: entry.matchedStationId,
-                        type: 'Manual_Entry' as const,
-                        entryMode: 'Anchor' as const,
-                        paymentSource: 'Gas_Card' as const,
-                        entrySource: 'admin-manual' as const,
-                        reconciliationStatus: 'Pending' as const,
-                        metadata: {
-                            awaitingCardStatement: true,
-                            paymentSource: 'company_card',
-                            odometerMethod: odometerImageUrl ? 'Admin Photo Upload' : 'Direct Entry',
-                            odometerProofUrl: odometerImageUrl || undefined,
-                            matchedStationId: entry.matchedStationId,
-                            stationLocation: entry.stationLocation,
-                            driverName: driver?.name,
-                            countsInFuelSpend: false,
-                            countsInFuelVolume: false,
-                            source: 'Manual',
-                            isManual: true,
-                        },
-                    };
+                        stationAddress: entry.stationLocation,
+                        entrySource: 'admin-manual',
+                        driverName: driver?.name,
+                    });
 
-                    await onSave({ _saveAsGasCardAnchor: true, fuelEntry }, isLast);
+                    await onSave(asGasCardAnchorSavePayload(fuelEntry), isLast);
                 }
                 toast.success("Gas Card odometer logged — waiting for Roam Fuels statement");
                 onClose();

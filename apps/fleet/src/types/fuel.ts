@@ -93,6 +93,12 @@ export interface FuelEntry {
   entryMode: 'Anchor' | 'Floating'; // Anchor = Verified Odo, Floating = Legacy/Cash without Odo
   paymentSource: 'RideShare_Cash' | 'Gas_Card' | 'Personal' | 'Petty_Cash';
   
+  /**
+   * N-18: fill usage for Phase 4 server category authority
+   * (`ride` | `company` | `deadhead` | `personal`). Not vehicle-fitness.
+   */
+  usageCategory?: string;
+
   // Entry source tagging — distinguishes live driver submissions from admin back-office entries
   entrySource?: 'driver-portal' | 'admin-manual' | 'admin-edit' | 'bulk-import' | 'fuel-card';
   
@@ -222,8 +228,10 @@ export interface WeeklyFuelReport {
   deadheadDistance: number;
   deadheadCost: number;
 
-  // 5. The Leakage (Remainder) -> Miscellaneous
-  miscellaneousCost: number; // Previously fuelMiscCost (GasCard - RideShare - CompanyUsage - Personal)
+  // 5. The Leakage (Remainder) -> Miscellaneous (true unexplained after F-1 timing carve-out)
+  miscellaneousCost: number;
+  /** First-fill + no-odo litres × price — timing, not leakage. */
+  windowTimingCost?: number;
   
   // 6. The Split
   companyShare: number;
@@ -331,21 +339,28 @@ export interface OdometerBucket {
   actualFuelCost: number;
   associatedReceipts: string[]; // List of FuelEntry IDs (Floating and Anchor) that fall in this window
   closingEntryId?: string; // The specific anchor entry that closed this bucket
+  closingBoundarySource?: 'fuel' | 'checkin' | 'service' | 'manual' | 'unknown';
   
   // Trip Data
   totalTripDistance: number;
   tripsCount: number;
   
   // Performance
-  expectedFuelLiters: number; // based on vehicle MPG/Efficiency
+  expectedFuelLiters: number; // modeled burn (not a conservation control)
   varianceLiters: number;
   variancePercent: number;
   
   // Attribution
   rideShareDistance: number;
+  /** Evidenced Personal adjustments only. */
   personalDistance: number;
   companyMiscDistance: number;
-  unaccountedDistance: number; // The "Jump" or "Gap" (Bucket Range - sum of all trips)
+  /** Over-logged: category evidence exceeds odometer (N-6). */
+  unaccountedDistance: number;
+  unexplainedDistance?: number;
+  confidenceTier?: 'exact' | 'partial' | 'indeterminate';
+  confidenceReason?: string;
+  chainAnomaly?: boolean;
   
   // Phase 4: Deduction Triggers
   deductionRecommendation?: number;

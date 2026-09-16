@@ -826,9 +826,44 @@ function FuelManagementInner({
   }, [cards, isRoamManagedCard]);
 
   // Log Handlers
-  const handleSaveLog = async (entryOrEntries: FuelEntry | FuelEntry[]) => {
+  const handleSaveLog = async (entryOrEntries: FuelEntry | FuelEntry[] | { _saveAsGasCardAnchor: true; fuelEntry: FuelEntry }) => {
       setIsSyncing(true);
       try {
+          // Gas Card Known fill = odometer anchor only (same as Submit Expense Gas Card)
+          if (
+              entryOrEntries &&
+              typeof entryOrEntries === 'object' &&
+              !Array.isArray(entryOrEntries) &&
+              '_saveAsGasCardAnchor' in entryOrEntries &&
+              entryOrEntries._saveAsGasCardAnchor &&
+              entryOrEntries.fuelEntry
+          ) {
+              const saved = await fuelService.saveFuelEntry(entryOrEntries.fuelEntry);
+              const softDupId = (saved as FuelEntry & { softDuplicateOf?: string }).softDuplicateOf;
+              if (
+                  softDupId ||
+                  (saved.id !== entryOrEntries.fuelEntry.id &&
+                      String(saved.paymentSource || '') !== 'Gas_Card')
+              ) {
+                  toast.error(
+                      'Gas Card odometer log was blocked as a duplicate of another fill. Deploy the dual-pay fix or check for a true re-submit.',
+                  );
+                  void loadLogsAndTransactions();
+                  return;
+              }
+              if ((saved as FuelEntry & { gateHeld?: boolean }).gateHeld) {
+                  toast.error('Select a verified station so the Gas Card log posts to Transaction Logs.');
+                  void loadLogsAndTransactions();
+                  return;
+              }
+              setLogs((prev) => [saved, ...prev.filter((l) => l.id !== saved.id)]);
+              toast.success('Gas Card odometer logged — waiting for Roam Fuels statement');
+              setIsLogModalOpen(false);
+              setEditingLog(null);
+              void loadLogsAndTransactions();
+              return;
+          }
+
           if (Array.isArray(entryOrEntries)) {
               // Bulk Mode
               const promises = entryOrEntries.map(entry => fuelService.saveFuelEntry(entry));
@@ -888,6 +923,28 @@ function FuelManagementInner({
               } : entry;
 
               const savedLog = await fuelService.saveFuelEntry(payload);
+
+              const softDupId = (savedLog as FuelEntry & { softDuplicateOf?: string }).softDuplicateOf;
+              const looksLikeSoftDup =
+                  !!softDupId ||
+                  (!editingLog &&
+                      savedLog.id !== entry.id &&
+                      (Number(savedLog.amount) !== Number(entry.amount) ||
+                          String(savedLog.paymentSource || '') !== String(entry.paymentSource || '')));
+              if (looksLikeSoftDup) {
+                  toast.warning(
+                      "This fill matches an existing log at the same odometer/time — no second entry was created. If cash and gas card both happened, change the time by a few minutes or check Paid By.",
+                  );
+                  void loadLogsAndTransactions();
+                  return;
+              }
+              if ((savedLog as FuelEntry & { gateHeld?: boolean }).gateHeld) {
+                  toast.warning(
+                      "Saved to station review (Learnt) — pick a verified station so it posts to Transaction Logs.",
+                  );
+                  void loadLogsAndTransactions();
+                  return;
+              }
               
               // Process settlement
               const scenariosData = await fuelService.getFuelScenarios();
@@ -1609,7 +1666,6 @@ function FuelManagementInner({
           loading={reconLandingLoading}
           periodsLoadError={serverPeriodsError}
           vehicles={vehicles}
-          trips={trips}
           fuelEntries={logs}
           adjustments={adjustments}
           disputes={disputes}

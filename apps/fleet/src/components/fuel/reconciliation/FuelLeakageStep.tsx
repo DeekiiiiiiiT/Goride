@@ -7,7 +7,7 @@ import { Card, CardContent } from '../../ui/card';
 import { CompactVehicleList, type CompactVehicleRow } from './CompactVehicleList';
 import { FuelGapAttribution } from './FuelGapAttribution';
 import { BucketReconciliationView } from '../BucketReconciliationView';
-import { unexplainedLabel } from '../../../utils/fuelReconGlossary';
+import { residualVsSpendPhrase, unexplainedLabel } from '../../../utils/fuelReconGlossary';
 import {
   FUEL_RESIDUAL_DISPOSITIONS,
   isOverExplainedFuelWeek,
@@ -34,6 +34,10 @@ export type FuelLeakageStepProps = {
   }>;
   leakageDisposition: FuelResidualDisposition | '';
   onLeakageDispositionChange: (value: FuelResidualDisposition) => void;
+  /** Accept reason — shown next to disposition (U-13 UX). */
+  acceptNote: string;
+  onAcceptNoteChange: (value: string) => void;
+  onAcceptNoteBlur?: () => void;
   weekStart: string;
   weekEnd: string;
   fuelEntries: FuelEntry[];
@@ -47,6 +51,7 @@ export type FuelLeakageStepProps = {
   adjustments: MileageAdjustment[];
   dateRange: DateRange | undefined;
   onRefresh: () => void;
+  transactions?: import('../../../types/data').FinancialTransaction[];
 };
 
 export function FuelLeakageStep(props: FuelLeakageStepProps) {
@@ -71,6 +76,10 @@ export function FuelLeakageStep(props: FuelLeakageStepProps) {
     onRefresh,
     leakageDisposition,
     onLeakageDispositionChange,
+    acceptNote,
+    onAcceptNoteChange,
+    onAcceptNoteBlur,
+    transactions = [],
   } = props;
 
   const overExplained = isOverExplainedFuelWeek(totalSpend, leakage);
@@ -85,8 +94,8 @@ export function FuelLeakageStep(props: FuelLeakageStepProps) {
           className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-[13px] text-amber-950"
         >
           {overExplained && leakage < 0
-            ? `Over-explained is ${overPct != null ? `${overPct}%` : 'beyond'} of spend — this week is not fit to finalize until inputs are fixed (modelled costs exceed gas-card spend).`
-            : `${unexplainedLabel(leakage)} is ${overPct != null ? `${overPct}%` : 'beyond'} of spend — this week is not fit to finalize until inputs are fixed (fuel spend is not fully explained by distance categories).`}
+            ? `Over-explained is ${residualVsSpendPhrase(overPct)} — this week is not fit to finalize until inputs are fixed (modelled costs exceed gas-card spend).`
+            : `${unexplainedLabel(leakage)} is ${residualVsSpendPhrase(overPct)} — this week is not fit to finalize until inputs are fixed (fuel spend is not fully explained by distance categories).`}
         </div>
       )}
       <h3 className="px-1 text-[12px] font-semibold uppercase tracking-wide text-slate-500">
@@ -127,7 +136,7 @@ export function FuelLeakageStep(props: FuelLeakageStepProps) {
             : 'Investigate missing litres, odometer, or card misuse. Accept requires an 8+ character reason in the step note.'
           : 'Accept acknowledges leftover fuel spend; the unexplained amount stays on the week (not zeroed). Type a reason (8+ chars) in the step note, then accept. Keys: j/k queue · a accept · e edit · Enter continue'}
       </p>
-      <div className="rounded-lg border border-slate-200 bg-white px-3 py-2">
+      <div className="space-y-3 rounded-lg border border-slate-200 bg-white px-3 py-3">
         <label className="block space-y-1">
           <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
             Residual disposition
@@ -148,8 +157,22 @@ export function FuelLeakageStep(props: FuelLeakageStepProps) {
             ))}
           </select>
         </label>
-        <p className="mt-1 text-[11px] text-slate-500">
-          Required with an 8+ character note before you accept this week.
+        <label className="block space-y-1">
+          <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+            Accept reason <span className="font-normal normal-case text-slate-400">(required, 8+ characters)</span>
+          </span>
+          <textarea
+            className="min-h-[72px] w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
+            value={acceptNote}
+            disabled={periodLocked}
+            onChange={(e) => onAcceptNoteChange(e.target.value)}
+            onBlur={onAcceptNoteBlur}
+            placeholder="Why are you accepting this unexplained amount?"
+            aria-required
+          />
+        </label>
+        <p className="text-[11px] text-slate-500">
+          Choose a disposition and type a reason here, then use Mark reviewed &amp; continue above.
         </p>
       </div>
       {leakageRows.length > 0 && (
@@ -190,6 +213,7 @@ export function FuelLeakageStep(props: FuelLeakageStepProps) {
               dateRange={dateRange}
               periodLocked={periodLocked}
               onRefresh={onRefresh}
+              transactions={transactions}
             />
           </CardContent>
         </Card>

@@ -17,6 +17,7 @@ import { defineConfig, devices } from '@playwright/test';
  *   RUSH_PARTNER_EMAIL / RUSH_PARTNER_PASSWORD (or E2E_PARTNER_*)
  *   E2E_FLEET_EMAIL / E2E_FLEET_PASSWORD — fleet wizard E2E
  *   E2E_FUEL_WEEK / E2E_FUEL_ALLOW_FINALIZE=1 — optional deep-link / destructive finalize
+ *   E2E_FUEL_WEEK_2 / E2E_FUEL_SOAK_MODE / E2E_FUEL_FLIP_ENFORCE — shadow soak smoke
  */
 export default defineConfig({
   testDir: './e2e',
@@ -35,10 +36,10 @@ export default defineConfig({
   projects: [
     {
       name: 'fleet',
-      testMatch: /fleet-rush-integration\.spec\.ts|fuel-recon-wizard\.spec\.ts|driver-settlements-desk\.spec\.ts|driver-detail-smoke\.spec\.ts/,
+      testMatch: /fleet-rush-integration\.spec\.ts|fuel-recon-wizard\.spec\.ts|fuel-recon-shadow-soak\.spec\.ts|driver-settlements-desk\.spec\.ts|driver-detail-smoke\.spec\.ts/,
       use: {
         ...devices['Desktop Chrome'],
-        baseURL: process.env.FLEET_BASE_URL?.trim() || 'http://localhost:5173',
+        baseURL: process.env.FLEET_BASE_URL?.trim() || 'http://localhost:3000',
       },
     },
     {

@@ -285,6 +285,8 @@ export function processJaaRawFuelData(
       type: 'Card_Transaction',
       entryMode: 'Floating',
       paymentSource: 'Gas_Card',
+      // N-18: JAA gas-card fills default to ride-share usage (overrideable later).
+      usageCategory: 'ride',
       entrySource: 'fuel-card',
       reconciliationStatus: isApprovedFuel ? 'Pending' : 'Archived',
       metadata: {

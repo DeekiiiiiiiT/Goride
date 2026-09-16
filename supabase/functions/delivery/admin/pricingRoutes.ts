@@ -22,7 +22,6 @@ import {
   resolvePricingLayers,
   scopeStoredRules,
 } from "../pricingLayers.ts";
-import { recordCashSettlement } from "../courierCashLedger.ts";
 import { computeCodTrialBalance } from "../../_shared/dashPricing.ts";
 import {
   assertValidPricingConfig,
@@ -525,6 +524,11 @@ export function registerPricingAdminRoutes(app: Hono) {
       adminUser,
     });
     if (error) return c.json({ error: error.message }, 500);
+
+    const { reseedSeededPauseThresholds } = await import(
+      "../remittance/reseedSeededThresholds.ts"
+    );
+    await reseedSeededPauseThresholds(db, parsed.cod?.pauseThresholdJmd);
 
     await db.from("pricing_change_log").insert({
       scope: "global",
@@ -1213,100 +1217,35 @@ export function registerPricingAdminRoutes(app: Hono) {
     return c.json({ entries: data ?? [] });
   });
 
-  admin.get("/pricing/cod/balances", async (c) => {
-    const db = getDb();
-    const { data, error } = await db
-      .from("courier_cash_balances")
-      .select("*")
-      .order("balance_jmd", { ascending: false });
-    if (error) return c.json({ error: error.message }, 500);
-    return c.json({ balances: data ?? [] });
-  });
+  admin.get("/pricing/cod/balances", (c) =>
+    c.json(
+      {
+        error: "gone",
+        message: "Use Remittance Desk /admin/remittance/accounts — legacy COD balances retired",
+      },
+      410,
+    )
+  );
 
-  admin.get("/pricing/cod/events", async (c) => {
-    const db = getDb();
-    const courierId = c.req.query("courier_id");
-    let query = db
-      .from("courier_cash_events")
-      .select("*")
-      .order("created_at", { ascending: false })
-      .limit(200);
-    if (courierId) query = query.eq("courier_id", courierId);
-    const { data, error } = await query;
-    if (error) return c.json({ error: error.message }, 500);
-    return c.json({ events: data ?? [] });
-  });
+  admin.get("/pricing/cod/events", (c) =>
+    c.json(
+      {
+        error: "gone",
+        message: "Use GET /admin/remittance/events?courier_id= — legacy COD events retired",
+      },
+      410,
+    )
+  );
 
-  admin.post("/pricing/cod/settle", async (c) => {
-    const adminUser = adminFromCtx(c);
-    const denied = requireDashWrite(adminUser);
-    if (denied) return denied;
-
-    const body = await c.req.json().catch(() => ({}));
-    const courierId = String(body.courier_id ?? body.courierId ?? "");
-    const amountJmd = Number(body.amount_jmd ?? body.amountJmd);
-    const settlementMethod = String(body.settlement_method ?? body.settlementMethod ?? "manual");
-    const notes = body.notes ? String(body.notes) : null;
-
-    if (!courierId || !Number.isFinite(amountJmd) || amountJmd <= 0) {
-      return c.json({ error: "courier_id and positive amount_jmd required" }, 400);
-    }
-
-    const db = getDb();
-    // Production: Layer A′ remittance settle is the authority (legacy only if emergency).
-    if (Deno.env.get("DELIVERY_COD_LEGACY_WRITE") !== "1") {
-      const { settleRemittance } = await import("../remittance/settleRemittance.ts");
-      const { getRemittanceAccount } = await import("../remittance/remittanceLedger.ts");
-      const acct = await getRemittanceAccount(db, courierId);
-      const expected = body.expected_balance_minor != null
-        ? Math.round(Number(body.expected_balance_minor))
-        : (acct?.balanceMinor ?? Math.round(amountJmd * 100));
-      const methodMap: Record<string, string> = {
-        manual: "other",
-        lynk: "lynk",
-        wipay: "wipay",
-        bank: "bank_transfer",
-        cash: "cash_office",
-      };
-      const result = await settleRemittance(db, {
-        courierId,
-        amountMinor: Math.round(amountJmd * 100),
-        method: methodMap[settlementMethod.toLowerCase()] || "other",
-        expectedBalanceMinor: expected,
-        idempotencyKey: String(body.idempotency_key ?? body.idempotencyKey ?? crypto.randomUUID()),
-        actorId: adminUser.id,
-        notes,
-      });
-      if (!result.ok) return c.json(result, result.status as 400);
-      await writeKvAudit(
-        adminUser,
-        "roam_dash.cod_settlement_v2",
-        courierId,
-        result.reference,
-        JSON.stringify(result),
-      );
-      return c.json({ ok: true, ...result, balance_after: result.balanceAfterMinor / 100 });
-    }
-
-    const result = await recordCashSettlement(
-      db,
-      courierId,
-      amountJmd,
-      settlementMethod,
-      notes,
-      adminUser.id,
-    );
-
-    await writeKvAudit(
-      adminUser,
-      "roam_dash.cod_settlement",
-      courierId,
-      "",
-      JSON.stringify({ amount_jmd: amountJmd, settlement_method: settlementMethod }),
-    );
-
-    return c.json({ ok: true, balance_after: result.balanceAfter });
-  });
+  admin.post("/pricing/cod/settle", (c) =>
+    c.json(
+      {
+        error: "gone",
+        message: "Use POST /admin/remittance/settle — legacy COD settle retired",
+      },
+      410,
+    )
+  );
 
   admin.post("/remittance/settle", async (c) => {
     const adminUser = adminFromCtx(c);
@@ -1389,12 +1328,34 @@ export function registerPricingAdminRoutes(app: Hono) {
     const { data, error } = await db
       .from("courier_remittance_accounts")
       .select(
-        "courier_id, balance_minor, pause_threshold_minor, is_paused, paused_since, updated_at",
+        "courier_id, balance_minor, pause_threshold_minor, threshold_source, is_paused, paused_since, updated_at",
       )
       .order("balance_minor", { ascending: false })
       .limit(200);
     if (error) return c.json({ error: error.message }, 500);
     return c.json({ accounts: data ?? [] });
+  });
+
+  // X-1: admin remittance history (mirrors courier events + settlement_id for reverse)
+  admin.get("/remittance/events", async (c) => {
+    const adminUser = adminFromCtx(c);
+    const denied = requireDashWrite(adminUser);
+    if (denied) return denied;
+    const courierId = String(c.req.query("courier_id") ?? "").trim();
+    if (!courierId) {
+      return c.json({ error: "courier_id required" }, 400);
+    }
+    const limit = Math.min(200, Math.max(1, Number(c.req.query("limit") ?? 50)));
+    const { data, error } = await getDb()
+      .from("courier_remittance_events")
+      .select(
+        "id, event_type, amount_minor, balance_after_minor, order_id, bag_total_minor, platform_due_minor, merchant_due_minor, courier_retained_minor, settlement_id, reversal_of, created_at, notes, metadata",
+      )
+      .eq("courier_id", courierId)
+      .order("created_at", { ascending: false })
+      .limit(limit);
+    if (error) return c.json({ error: error.message }, 500);
+    return c.json({ events: data ?? [] });
   });
 
   admin.get("/remittance/exceptions", async (c) => {
@@ -1448,11 +1409,17 @@ export function registerPricingAdminRoutes(app: Hono) {
     }
     const courierId = c.req.param("courierId");
     const db = getDb();
-    await db.from("courier_remittance_accounts").upsert({
-      courier_id: courierId,
-      pause_threshold_minor: thresholdMinor,
-      updated_at: new Date().toISOString(),
-    }, { onConflict: "courier_id" });
+    const { data, error } = await db.from("courier_remittance_accounts")
+      .update({
+        pause_threshold_minor: thresholdMinor,
+        threshold_source: "override",
+        updated_at: new Date().toISOString(),
+      })
+      .eq("courier_id", courierId)
+      .select("courier_id")
+      .maybeSingle();
+    if (error) return c.json({ error: error.message }, 500);
+    if (!data) return c.json({ error: "account_not_found" }, 404);
     const { getRemittanceAccount } = await import("../remittance/remittanceLedger.ts");
     const acct = await getRemittanceAccount(db, courierId);
     return c.json({ ok: true, account: acct });

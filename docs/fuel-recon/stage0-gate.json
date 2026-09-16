@@ -3,19 +3,21 @@
   "capturedAt": "2026-09-15",
   "healedAt": "2026-09-15",
   "shadowRestoredAt": "2026-09-15",
-  "verdict": "Rev 6: prod rolled back to FUEL_SERVER_ENGINE=shadow for N-17 PA parity + soak. Enforce paused until shadowMinWeeks met.",
+  "verdict": "Close-out: shadow soak running. N-19 authoritySource on fuel_engine_diff. N-18 writers stamp usageCategory (pending soak proof of server_entries). Phase 4 wait is ladder_live_trip_agg. Enforce paused until shadowMinWeeks met.",
   "fixtures": [
     "packages/fuel-core/fixtures/fuel-week-char/blast-radius-2026-09-15.json",
     "packages/fuel-core/fixtures/fuel-week-char/dual-engine-goldens.json"
   ],
-  "playbookBeforeEnforce": "N-17 PA parity + ≥2 shadow close cycles with zero unexpected fuel_engine_diff (or signed exceptions)",
+  "playbookBeforeEnforce": "N-17 PA parity + N-19 authoritySource on fuel_engine_diff + ≥2 shadow close cycles with zero unexpected fuel_engine_diff (or signed exceptions)",
   "playbookStatus": {
     "reopenReseal20260824": "done",
     "nightlyDriftProof": "implemented_rev3_phase1",
     "fuelSealErrorLanding": "live",
     "n15LoaderAuthority": "done",
     "n17PersonalAllowance": "done",
-    "phase4ServerCats": "done",
+    "n19AuthoritySource": "live",
+    "phase4ServerCats": "ladder_live_trip_agg",
+    "n18FillTagging": "writers_live_pending_soak",
     "breakGlassFinalizeUi": "done",
     "soakExit": "pending_shadow_min_weeks",
     "lastVerifiedAt": "2026-09-15",
@@ -28,12 +30,15 @@
       "status": "closed",
       "deltaDriverMinor": 0,
       "deltaCompanyMinor": 0
-    }
+    },
+    "n18DeferredWhy": "Writers stamp usageCategory (saveFuelEntry / JAA / driver). Promote to live after soak shows authoritySource=server_entries on tagged weeks."
   },
   "opsChecklistBeforeShadow": [
     "DONE: Stage 0 heal $0",
     "DONE: N-15 tripCategoryAgg",
-    "DONE: Rev6 rollback enforce→shadow (N-17 risk)"
+    "DONE: Rev6 rollback enforce→shadow (N-17 risk)",
+    "DONE: N-19 authoritySource on fuel_engine_diff",
+    "DONE: N-18 usageCategory writers (save / JAA / driver / server stamp)"
   ],
   "fuelServerEngineRollout": {
     "currentProd": "shadow",
@@ -41,17 +46,39 @@
     "then": null,
     "shadowMinWeeks": 2,
     "shadowStartedAt": "2026-09-15",
+    "enforcedAt": null,
     "doc": "docs/fuel-recon/server-engine-rollout.md",
     "prerequisiteWeek": "2026-08-24",
     "prerequisiteDriverId": "73e5b1dc-01b4-45ee-a34a-25a3256b9841",
     "waitConditions": [
       "playbookStatus.reopenReseal20260824 = done",
       "N-17 PA parity green (PA week zero deltas; tampered earned fails)",
-      "Phase 4 server-tagged entries authority live",
+      "N-19 live: fuel_engine_diff carries authoritySourceByDriver (expect trip_agg until fill tagging; no unexplained fallthrough to snap_category_costs on PA/normal weeks)",
+      "Phase 4 ladder live; soak rows show authoritySource (expect trip_agg until fill tagging ships)",
       "shadowMinWeeks met with zero unexpected fuel_engine_diff (or signed exceptions in finance_recon_drift)",
       "Finalize break-glass UI live"
     ],
     "doNotFlipProdEnforceUntil": "waitConditions all satisfied",
-    "note": "Rev6: enforce paused until soak exit. Shadow since 2026-09-15. Break-glass X-Fuel-Force-Client-Money + reason ≥8 (admin UI)."
+    "note": "Close-out: enforce paused until soak exit. Shadow since 2026-09-15. N-18 writers_live_pending_soak. Break-glass X-Fuel-Force-Client-Money + reason ≥8 (admin UI)."
+  },
+  "soakChecklist": [
+    "Close via wizard (and one bulk path if used in ops)",
+    "Pull fuel_period_audit where action = fuel_engine_diff",
+    "Classify every mismatch: expected (signed exception) vs bug",
+    "Confirm authoritySourceByDriver present on each driver (N-19)",
+    "Confirm nightly statement↔ledger drift stays $0",
+    "Exercise break-glass once in staging — reason ≥8, audit fuel_force_client_money",
+    "PA org week: expect zero share deltas (N-17)"
+  ],
+  "enforceFlipPlaybook": {
+    "when": "After soakExit=done and waitConditions all satisfied",
+    "steps": [
+      "Re-run fuel-core tests, Deno fuel suite, fleet fuel finalize tests",
+      "Set Supabase secret FUEL_SERVER_ENGINE=enforce (prod) — not Vercel",
+      "Update this file: currentProd=enforce, next=null, soakExit=done, enforcedAt=ISO date",
+      "First prod close: expect lock on match; mismatch → 422 + break-glass UI",
+      "48h watch: finalize outcomes, partial_money, open finance_recon_drift kind=fuel"
+    ],
+    "rollback": "Flip FUEL_SERVER_ENGINE secret back to shadow. Keep break-glass UI ≥2 weeks post-enforce."
   }
 }

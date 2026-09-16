@@ -36,6 +36,7 @@ import {
   evaluateFuelWeekClosableClient,
   fuelWeekClosableBlockerMessage,
 } from '../../../utils/fuelWeekClosableGate';
+import { stopToStopClosableFlagsFromReports } from '../../../utils/stopToStopClosableFlags';
 import {
   FUEL_SECOND_APPROVER_THRESHOLD,
   resolveFuelSecondApproverThreshold,
@@ -64,6 +65,20 @@ export type FuelBulkFinalizeDialogProps = {
   transactions?: import('../../../types/data').FinancialTransaction[];
   onComplete: () => void;
 };
+
+/**
+ * Execute-loop fields from the prepared period (N-2: must use `period` from the
+ * item — `periodForGate` is prepare-loop scoped only).
+ */
+export function bulkFinalizeExecuteGateFields(period: FuelReconciliationPeriod): {
+  periodCounts: FuelReconciliationPeriod['counts'];
+  leakageReviewed: boolean;
+} {
+  return {
+    periodCounts: period.counts,
+    leakageReviewed: period.leakageReviewed ?? false,
+  };
+}
 
 /** H3: same early hard gates as the single-week wizard — checkbox cannot override. */
 export function bulkEarlyGateFailure(
@@ -363,6 +378,12 @@ export function FuelBulkFinalizeDialog({
               ),
               totalSpend: period.totalSpend,
               unexplained: period.netLeakage,
+              ...stopToStopClosableFlagsFromReports({
+                reports,
+                fuelEntries: weekEntries,
+                weekStartYmd: period.startDate,
+                weekEndYmd: period.endDate,
+              }),
             });
             if (closableBlockers.length > 0) {
               weekResults.push({
@@ -415,8 +436,7 @@ export function FuelBulkFinalizeDialog({
                 trips,
                 transactions,
                 disputes,
-                periodCounts: periodForGate.counts,
-                leakageReviewed: periodForGate.leakageReviewed ?? false,
+                ...bulkFinalizeExecuteGateFields(period),
                 totalSpend: period.totalSpend,
                 unexplained: period.netLeakage,
               },

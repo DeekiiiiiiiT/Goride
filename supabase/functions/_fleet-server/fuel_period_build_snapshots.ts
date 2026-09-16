@@ -80,6 +80,9 @@ export function assembleSnapshotsFromEntries(
       vehicleId: String(e.vehicleId || e.vehicle_id || ""),
       reconciliationStatus: String(e.reconciliationStatus || e.reconciliation_status || "Pending"),
       driverShareRatio: entryDriverShareRatio(e),
+      paymentSource: (e.paymentSource || e.payment_source || null) as string | null,
+      type: String(e.type || ""),
+      metadata: e.metadata,
     })),
     builtBy: "fuel_period_build_snapshots",
   });

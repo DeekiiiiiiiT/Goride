@@ -68,6 +68,7 @@ export function rowToKvValue(row: Record<string, unknown>): Record<string, unkno
   }
   if (!payload.resolution && row.resolution) payload.resolution = row.resolution;
   if (!payload.paymentMethod && row.payment_method) payload.paymentMethod = row.payment_method;
+  if (!payload.paymentSource && row.payment_source) payload.paymentSource = row.payment_source;
   return payload;
 }
 

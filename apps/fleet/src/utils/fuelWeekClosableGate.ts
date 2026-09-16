@@ -62,6 +62,12 @@ export function buildFuelWeekClosableInput(opts: {
   openDisputesInWeek?: boolean;
   totalSpend?: number;
   unexplained?: number;
+  /** Optional stop-to-stop conservation flags (from week bucket compute). */
+  stopToStopVolumeFailed?: boolean;
+  stopToStopDistanceFailed?: boolean;
+  stopToStopAttributionFailed?: boolean;
+  stopToStopChainFailed?: boolean;
+  stopToStopTripsTruncated?: boolean;
 }): EvaluateFuelWeekClosableInput {
   const unexplained =
     opts.unexplained ??
@@ -85,6 +91,11 @@ export function buildFuelWeekClosableInput(opts: {
     degradedInputs: opts.degradedInputs,
     missingCategoryCosts: snapshotsMissingCategoryCosts(opts.reports),
     unresolvedCoverageRule: reportsHaveUnresolvedCoverageRule(opts.reports, opts.scenarios),
+    stopToStopVolumeFailed: opts.stopToStopVolumeFailed,
+    stopToStopDistanceFailed: opts.stopToStopDistanceFailed,
+    stopToStopAttributionFailed: opts.stopToStopAttributionFailed,
+    stopToStopChainFailed: opts.stopToStopChainFailed,
+    stopToStopTripsTruncated: opts.stopToStopTripsTruncated,
   };
 }
 
@@ -115,6 +126,16 @@ export function fuelWeekClosableBlockerMessage(blocker: FuelWeekClosableBlocker)
       return 'Blocked — snapshots missing categoryCosts';
     case 'unresolved_coverage_rule':
       return 'Blocked — fuel coverage rule unresolved';
+    case 'stop_to_stop_volume':
+      return 'Blocked — stop-to-stop volume not reconciled';
+    case 'stop_to_stop_distance':
+      return 'Blocked — stop-to-stop distance not reconciled';
+    case 'stop_to_stop_attribution':
+      return 'Blocked — stop-to-stop attribution does not close';
+    case 'stop_to_stop_chain':
+      return 'Blocked — stop-to-stop odometer chain anomaly';
+    case 'stop_to_stop_trips_truncated':
+      return 'Blocked — stop-to-stop trip fetch truncated';
     default:
       return blocker.message;
   }

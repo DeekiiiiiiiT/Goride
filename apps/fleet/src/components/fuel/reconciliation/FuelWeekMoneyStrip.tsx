@@ -1,5 +1,6 @@
 import { FUEL_SPEND_EPS } from '../../../utils/fuelMoneyEpsilon';
 import { formatFuelMoney } from '../../../utils/formatFuelMoney';
+import { unexplainedLabel } from '../../../utils/fuelReconGlossary';
 
 function MoneyStatCard({
   label,
@@ -48,6 +49,7 @@ export function FuelWeekMoneyStrip({
   company,
   driver,
   leakage,
+  windowTiming = 0,
   priorMedian,
 }: {
   gasCard: number;
@@ -56,22 +58,23 @@ export function FuelWeekMoneyStrip({
   company: number;
   driver: number;
   leakage: number;
+  /** F-1: tank-window timing (first fill / no-odo) — not a third payer. */
+  windowTiming?: number;
   priorMedian?: { totalSpend: number; unexplained: number };
 }) {
   const sourcesTie = Math.abs(gasCard + cashFromEarnings - totalSpend) <= FUEL_SPEND_EPS;
-  // N-4: sign-based identity. Positive misc is already folded into company+driver;
-  // negative (over-explained) must include unexplained in the equation.
+  // F-7: Company + Driver is the payer identity; unexplained is subordinate.
+  // Over-explained still conserves with leakage in the equation under the hood.
   const overExplainedResidual = leakage < -FUEL_SPEND_EPS;
   const splitTie = overExplainedResidual
     ? Math.abs(company + driver + leakage - totalSpend) <= FUEL_SPEND_EPS
     : Math.abs(company + driver - totalSpend) <= FUEL_SPEND_EPS;
-  const splitLabel = overExplainedResidual
-    ? 'Company + Driver + Unexplained'
-    : 'Company + Driver';
   const spendDelta =
     priorMedian != null ? totalSpend - priorMedian.totalSpend : null;
   const unexplainedDelta =
     priorMedian != null ? leakage - priorMedian.unexplained : null;
+  const hasTiming = Math.abs(windowTiming) > FUEL_SPEND_EPS;
+  const hasLeakage = Math.abs(leakage) > FUEL_SPEND_EPS;
 
   return (
     <div className="flex flex-col gap-8">
@@ -116,15 +119,38 @@ export function FuelWeekMoneyStrip({
             Usage split determined by activity type and policy rules.
           </p>
         </div>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <MoneyStatCard label="Company keeps" value={company} />
           <MoneyStatCard label="Driver’s fuel share (charge)" value={driver} />
-          <MoneyStatCard
-            label="Unexplained fuel"
-            value={leakage}
-            warn={Math.abs(leakage) > FUEL_SPEND_EPS}
-          />
         </div>
+        {(hasTiming || hasLeakage) && (
+          <div className="rounded border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
+            <p className="mb-1 text-[11px] font-medium uppercase tracking-tight text-slate-500">
+              Spend breakdown
+            </p>
+            {hasTiming && (
+              <p title="Fuel bought outside the odometer burn window (first fill / fills without odometer). Timing difference — not theft.">
+                Of which tank window / timing:{' '}
+                <span className="font-semibold tabular-nums">{formatFuelMoney(windowTiming)}</span>
+              </p>
+            )}
+            {hasLeakage && (
+              <p
+                className={leakage > 0 ? 'text-[#684000]' : undefined}
+                title="Spend not explained by categorized burn after timing is carved out."
+              >
+                Of which {unexplainedLabel(leakage).toLowerCase()}:{' '}
+                <span className="font-semibold tabular-nums">{formatFuelMoney(leakage)}</span>
+              </p>
+            )}
+            <p className="text-slate-500">
+              Of which charged to driver from unexplained:{' '}
+              <span className="font-semibold tabular-nums text-slate-800">
+                {formatFuelMoney(0)}
+              </span>
+            </p>
+          </div>
+        )}
         {unexplainedDelta != null && (
           <p className="text-xs text-slate-500">
             Unexplained vs median: {unexplainedDelta >= 0 ? '+' : ''}
@@ -139,9 +165,14 @@ export function FuelWeekMoneyStrip({
             Company {formatFuelMoney(company)}, driver {formatFuelMoney(driver)}, unexplained{' '}
             {formatFuelMoney(leakage)}, total {formatFuelMoney(totalSpend)}.
           </span>
-          {splitLabel} {splitTie ? '=' : '≠'} Total{' '}
+          Company + Driver {splitTie ? '=' : '≠'} Total{' '}
           {splitTie ? '✓' : '— shared-car or calc mismatch'}
         </p>
+        {overExplainedResidual && (
+          <p className="text-xs text-slate-500" role="status">
+            Incl. over-explained residual {formatFuelMoney(leakage)} (modelled burn exceeded purchases).
+          </p>
+        )}
       </section>
     </div>
   );

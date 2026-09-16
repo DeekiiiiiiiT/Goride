@@ -2117,35 +2117,26 @@ export function fetchPricingAudit(accessToken: string, marketId?: string) {
   );
 }
 
-export function fetchCodBalances(accessToken: string) {
-  return deliveryFetch<{ balances: Array<Record<string, unknown>> }>(
-    accessToken,
-    '/admin/pricing/cod/balances',
-  );
-}
-
-export function fetchCodEvents(accessToken: string, courierId?: string) {
-  const sp = courierId ? `?courier_id=${encodeURIComponent(courierId)}` : '';
-  return deliveryFetch<{ events: Array<Record<string, unknown>> }>(
-    accessToken,
-    `/admin/pricing/cod/events${sp}`,
-  );
-}
-
-export function settleCourierCash(
-  accessToken: string,
-  payload: { courier_id: string; amount_jmd: number; settlement_method: string; notes?: string },
-) {
-  return deliveryFetch(accessToken, '/admin/pricing/cod/settle', {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  });
-}
-
 export function fetchRemittanceAccounts(accessToken: string) {
   return deliveryFetch<{ accounts: Array<Record<string, unknown>> }>(
     accessToken,
     '/admin/remittance/accounts',
+  );
+}
+
+/** X-1: remittance ledger history for one courier (admin desk). */
+export function fetchRemittanceEvents(
+  accessToken: string,
+  courierId: string,
+  limit = 50,
+) {
+  const sp = new URLSearchParams({
+    courier_id: courierId,
+    limit: String(limit),
+  });
+  return deliveryFetch<{ events: Array<Record<string, unknown>> }>(
+    accessToken,
+    `/admin/remittance/events?${sp}`,
   );
 }
 

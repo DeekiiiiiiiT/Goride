@@ -12,7 +12,8 @@
 | Who | Read |
 |-----|------|
 | Everyone (PM, ops, new eng) | **Parts 1–10** — layers, wallets, Fleet Log Cash, Delivery contrast, examples, glossary |
-| Implementers (Delivery remittance + Log Cash) | **Parts 11–20** — code audit, Layer A′ contract, data model, phases, tests, rollout |
+| Implementers (current truth) | **Part 23** (production authority) + **Part 34** (remittance freeze / final state) |
+| Implementers (historical) | **Parts 11–22** — original audit, plan, ship verification (do not treat open items as current); **Parts 27–33** — admin/threshold path to closeout; **Parts 31–32** — AA-1 / AB-1 audits that led to Part 33 |
 
 **Phase 2 note:** Historical backfill from `courier_cash_balances` / `courier_cash_events` into `courier_remittance_*` is a required Phase 2 deliverable (opening balances and/or event replay with audit notes) — not optional polish.
 
@@ -547,6 +548,15 @@ If any answer is unclear, stop and ask. Cash bugs are expensive and hard to reve
 | 2026-09-15 | Part 24 residuals closed: V-1 alert hygiene, V-2 kill-switch legacy failover, V-3 admin write-off; Parts 21–22 marked historical |
 | 2026-09-15 | Part 25 W-1/W-2 closed: write_off sign CHECK + desk reverse of wrong write-offs |
 | 2026-09-15 | Round 5 independently verified (12 Deno + 1397 fleet tests green). Added Part 26: ledger is finished; 3 remaining items are legacy **admin surface** — X-1 no admin event history, X-2 Pricing COD tab reads the dead table, X-3 market pause threshold is decorative |
+| 2026-09-15 | Part 27 admin surface closeout: X-1/X-2/X-3 closed; TOC points at Part 23 + 26–27; legacy `/pricing/cod/*` → 410 |
+| 2026-09-15 | Round 6 independently verified (15 Deno + 1403 fleet tests green). Added Part 28: X-1/X-2 fully closed; 3 refinements — Y-1 market threshold seeds new accounts only, Y-2 seed resolved on every collection, Y-3 no PostgREST reload after the RPC signature change |
+| 2026-09-15 | Round 7 independently verified (15 Deno + 1404 fleet tests green). Added Part 29: Y-3 closed; **Z-1** `threshold_source` landed but is never set to `'override'` by the desk PATCH — do not build the re-seed until it is; Z-2 (ex Y-2) unchanged |
+| 2026-09-15 | Part 30: Z-1 PATCH override + Default reseed; Z-2 skip seed lookup when account exists |
+| 2026-09-15 | Round 8 independently verified (17 Deno + 1404 fleet tests green). Added Part 31: Z-1/Z-2 closed; **AA-1** seeding is layer-aware but re-seeding is flat and global-only — needs a product decision on whether COD pause threshold is a courier attribute or a platform default |
+| 2026-09-15 | Round 9 independently verified (17 Deno + 1404 fleet tests green). AA-1 answered by making the rules-form copy scope-aware. Added Part 32: **AB-1** — `threshold_source` has 2 values for 3 provenances, so a Default save still overwrites area-seeded couriers the new copy says it won't |
+| 2026-09-15 | Part 33: AB-1/AA-1 closed — COD pause is platform Default + desk override only; seed and reseed share the global Default; town/parish pause knobs removed from Pricing UI |
+| 2026-09-15 | Round 10 independently verified — **Delivery Remittance closed, no open findings**. Added Part 34 with the final-state summary. Note: `@roam/fleet` CI is red on 2 **fuel** tests from the concurrent fuel workstream, unrelated to remittance |
+| 2026-09-15 | Remittance freeze: TOC → Part 23 + Part 34; Part 30 town-seed ops struck; Part 23 Q2 widened; Part 33/34 labels; workstream frozen (no Part 35) |
 
 **Owners:** Platform / Fleet finance engineering + product  
 **Source analysis:** Cross-repo review of rides cashSettlement, fleet settlements, delivery courier cash ledger, and existing money docs
@@ -558,7 +568,7 @@ If any answer is unclear, stop and ask. Cash bugs are expensive and hard to reve
 
 **Added:** 2026-09-15  
 **Audience:** Engineers implementing Part 6  
-**Status:** Plan only — no code written yet  
+**Status:** Historical plan — build and cutover completed 2026-09-15. See Part 23 (authority) and Part 27 (admin closeout).  
 **Hard constraint from product:** Build this **alongside** Driver Settlements, never **inside** it. Driver Settlements is in active production use and must not regress.
 
 ---
@@ -1195,17 +1205,19 @@ The 403 body now carries the balance and threshold, so the courier app can rende
 
 | Method | Path | Who | Purpose |
 |--------|------|-----|---------|
-| GET | `/courier/remittance` | courier | balance, threshold, pause state, progress |
-| GET | `/courier/remittance/events` | courier | own history, paginated |
-| GET | `/courier/remittance/orders/:id` | courier | per-order breakdown: bag / remit / kept |
-| GET | `/admin/remittance/accounts` | admin | desk list, sortable, filter paused |
-| GET | `/admin/remittance/accounts/:id` | admin | detail + history + drift flag |
+| GET | `/courier/remittance` | courier | balance, threshold, pause state |
+| GET | `/courier/remittance/events` | courier | own history |
+| GET | `/admin/remittance/accounts` | admin | desk list |
+| GET | `/admin/remittance/events?courier_id=` | admin | history timeline (X-1) |
+| PATCH | `/admin/remittance/accounts/:courierId/threshold` | admin (write) | per-courier pause override |
 | POST | `/admin/remittance/settle` | admin (write) | guarded settle → receipt |
-| POST | `/admin/remittance/settlements/:id/reverse` | admin (write) | reversal |
-| POST | `/admin/remittance/adjust` | admin (write) | correction, reason required |
+| POST | `/admin/remittance/write-off` | admin (write) | forgive owed balance |
+| POST | `/admin/remittance/reverse` | admin (write) | reverse settlement **or** write-off (`settlementId` xor `eventId`) |
 | GET | `/admin/remittance/exceptions` | admin | parking queue |
 | POST | `/admin/remittance/exceptions/:id/retry` | admin (write) | re-attempt |
-| GET | `/admin/remittance/reconciliation` | admin | the four checks from 13.6 |
+| POST | `/admin/remittance/exceptions/:id/resolve` | admin (write) | mark resolved |
+| GET | `/admin/remittance/reconciliation` | admin | drift / missing / trial / stale pending |
+| GET/POST | `/admin/pricing/cod/*` | — | **410 Gone** — retired with X-2 |
 
 All admin writes go through `requireDashWrite` and `writeKvAudit`, matching the existing pattern.
 
@@ -1490,7 +1502,7 @@ These change the build and are not an engineer's call. Decide before Phase 3.
 Recommendation: **no** in v1 (D-8). Add later as an explicit `payout_offset` settlement method that writes one event in each ledger sharing a correlation id, never as an implicit balance transfer.
 
 **Q2 — Is the pause threshold global, per-market, or per-courier?**  
-**Decided (harden):** per-courier column `pause_threshold_minor`, default J$10,000; editable on Remittance Desk. Remaining open: market-level defaults later if needed.
+**Decided (Part 33):** COD pause is a **platform Default** with per-courier Remittance Desk override. Seed and Default reseed both use the global Default only. Town/parish do **not** set remittance pause (area knobs removed from Pricing UI). Desk `PATCH` sets `threshold_source = 'override'`; Pricing Default save reseeds rows still `'seeded'`.
 
 **Q3 — What happens to a courier who stops working owing money?**  
 **Decided (Part 24 V-3 / Part 25 W-2):** Dash admin Write Off on Remittance Desk posts a
@@ -1854,7 +1866,7 @@ product lock: no real delivery users yet; remittance is the sole live COD author
 | N-2 | Closed | `v_remittance_stale_pending` + finance-recon + Remittance Desk strip |
 | N-3 | Closed | CI sets `REMITTANCE_S6_DIFF: '1'` |
 | N-4 | Closed | Test imports production `remittanceMinorsFromSplit` |
-| Q2 | Closed | Desk edits `pause_threshold_minor` |
+| Q2 | Closed | Platform Default seeds/reseeds `'seeded'`; desk sets `'override'` (Parts 33–34) |
 
 ## 23.2 Production authority
 
@@ -2064,3 +2076,594 @@ alerted and drainable.
 Part 26 is not ledger work — it is **retiring the old admin surface the cutover left behind**.
 Until X-1 and X-2 land, the admin experience of a finished system is a stale balance list, no
 history, and a UUID paste box.
+
+---
+---
+
+# Part 27 — Admin surface closeout (verified 2026-09-15)
+
+X-1 / X-2 / X-3 closed. Remittance Desk is the sole admin COD home.
+
+## 27.1 Closed items
+
+| ID | Status | What shipped |
+|----|--------|--------------|
+| X-1 | Closed | `GET /admin/remittance/events?courier_id=` + desk History timeline with in-row reverse for write-offs / settlements |
+| X-2 | Closed | Pricing **COD Ledger** tab removed; Overview deep-links to `/remittance`; `/admin/pricing/cod/*` returns **410**; dead client helpers removed |
+| X-3 | Closed | Market `pause_threshold_jmd` seeds new `courier_remittance_accounts.pause_threshold_minor` via `p_pause_threshold_minor` on collect; desk override unchanged; Pricing labels say “default for new accounts” |
+
+## 27.2 Ops playbook — first live COD week
+
+Daily (must stay empty / drained):
+
+- `v_remittance_drift`
+- `v_remittance_missing_collections`
+- unresolved `courier_remittance_exceptions`
+- `v_remittance_stale_pending`
+- Fleet rush delivery contribution to weekly cash base === 0 (S-1)
+
+On-call money moves: **Remittance Desk only** (settle / write-off / reverse from History).
+
+Kill-switch:
+
+- `DELIVERY_REMITTANCE_OFF=1` stops remittance writes and auto-fails over to **legacy** `courier_cash_*` (known weak: no race-safe RPC). Use for short incidents only.
+- After restore: drain missing collections / exceptions back onto remittance; do not leave kill-switch on.
+- Emergency dual-write while remittance stays on: `DELIVERY_COD_LEGACY_WRITE=1`.
+
+Do **not** enable `RUSH_TRIP_PROJECTION` / `RUSH_SETTLEMENT` until S-1 stays green for delivery trips.
+
+## 27.3 Explicit non-goals (deferred)
+
+| ID | Topic | Status |
+|----|-------|--------|
+| Q1 | Net COD against earnings payouts | Deferred — needs Layer A′/B design review |
+| Q4 | Fleet claim on courier COD cash | Deferred — Roam owns receivable |
+| Q5 | Courier self-report remittance | Deferred — schema ready (`pending` + `external_ref`) |
+
+## 27.4 Definition of done
+
+- One admin COD number (Remittance Desk); Pricing has no second balance list.
+- Operator can see how a balance was built and reverse a write-off without pasting a UUID.
+- New remittance accounts inherit market pause default; desk can override per courier.
+- Docs TOC lands on Part 23 + Part 27 for current truth.
+
+---
+---
+
+# Part 28 — Threshold seeding review (verified 2026-09-15)
+
+Sixth pass. **X-1 and X-2 are fully closed.** X-3 is closed for new couriers but not for the
+existing population, and the signature change in the seeding migration needs one ops guard.
+
+## 28.1 Verification run
+
+```
+REMITTANCE_S6_DIFF=1 node scripts/check-remittance-separation.mjs   OK (S-2/S-3/S-4/S-6)
+deno test supabase/functions/delivery/remittance/                   15 passed, 0 failed
+pnpm --filter @roam/fleet test                                      242 files, 1403 passed, 0 failed
+```
+
+| Claim | Verified |
+|-------|----------|
+| X-1 | `GET /admin/remittance/events?courier_id=` live; desk has a **History** panel via `fetchRemittanceEvents`, carrying `settlement_id` + `reversal_of` so a write-off row can be reversed in place |
+| X-2 | Pricing hub COD tab **removed entirely** — no `codBalances` state, no `'cod'` tab; the three `/pricing/cod/*` routes return **410 Gone** with a pointer to the replacement rather than disappearing silently |
+| X-3 (new accounts) | `apply_remittance_event` gained `p_pause_threshold_minor`; `collectOnDelivery` resolves the market rule and seeds it on first create |
+
+Returning 410 with the replacement endpoint named is the right call — a deleted route gives a
+caller a 404 and no idea why.
+
+## 28.2 Open
+
+### Y-1 — The market threshold still does nothing for existing couriers
+
+The seed is `INSERT … ON CONFLICT (courier_id) DO NOTHING`, so it applies **only when the
+account row is first created**. Every account that already exists — including every one the
+Phase-2 backfill created from legacy balances — keeps `1000000`.
+
+So an operator who changes a market's COD pause threshold still changes nothing for the
+couriers already collecting, which is the population they actually care about. X-3's symptom is
+narrowed, not removed: the knob is now live for couriers who have never delivered, and inert
+for everyone else.
+
+It also cannot be safely bulk-applied as things stand, because the schema cannot distinguish
+**"1000000 because nobody ever set it"** from **"1000000 because an operator chose it"**. A
+re-seed would silently stomp deliberate per-courier overrides.
+
+**Fix:** record provenance, then re-seed only what was never overridden.
+
+```sql
+ALTER TABLE delivery.courier_remittance_accounts
+  ADD COLUMN IF NOT EXISTS threshold_source text NOT NULL DEFAULT 'seeded'
+    CHECK (threshold_source IN ('seeded','override'));
+```
+
+`PATCH /remittance/accounts/:courierId/threshold` sets `'override'`; a market-rules save re-seeds
+`WHERE threshold_source = 'seeded'`. That makes "global default, per-courier override" true
+rather than aspirational, which is the shape Part 26 recommended and operators expect.
+
+Until then, Part 19 Q2 should say plainly: **the market threshold seeds new accounts only;
+changing it does not move existing couriers.**
+
+### Y-2 — The seed is resolved on every collection but used only on first create
+
+[`collectOnDelivery.ts:162-163`](../supabase/functions/delivery/remittance/collectOnDelivery.ts)
+calls `marketIdForOrder` (a `merchants` lookup) and then `resolveCodPauseThresholdMinor`
+(`resolvePricingLayers`) for **every** cash delivery — but the value is discarded by
+`ON CONFLICT DO NOTHING` on all but the courier's first one.
+
+It is safely written (try/catch, falls back to `1000000`, cannot break collection), so this is
+cost rather than risk: two or more extra queries on the hot path of every COD order, for a value
+used once per courier in their lifetime.
+
+**Fix:** look up the account first and resolve the threshold only when it is missing — or pass
+it lazily and let the RPC ask only on the insert branch.
+
+### Y-3 — The function signature changed with no PostgREST schema reload
+
+[`20260915190000_remittance_pause_threshold_seed.sql`](../supabase/migrations/20260915190000_remittance_pause_threshold_seed.sql)
+drops the 15-argument `apply_remittance_event` and creates a 16-argument one. PostgREST caches
+function signatures, and RPC calls resolve against that cache.
+
+If the cache does not refresh at deploy, **every COD collection fails until it does** — and
+because collection is wrapped by D-7, the failures are silent to couriers and land as parked
+exceptions. A working system quietly stops booking money.
+
+Supabase normally reloads the schema cache when migrations apply, so this may never bite. Making
+it deterministic costs one line at the end of the migration:
+
+```sql
+NOTIFY pgrst, 'reload schema';
+```
+
+Worth adding before the next signature change regardless, since this is the first migration in
+the series to alter an RPC signature rather than its body.
+
+## 28.3 What is done
+
+The admin surface is now coherent: one balance list, one history view, one settle path, and the
+retired routes announce their replacement. Combined with the ledger work closed in Parts 21–25,
+Layer A′ is complete as designed.
+
+Everything in Part 28 is refinement of a working system — a knob whose scope should be widened
+(Y-1), a query that should move off the hot path (Y-2), and a deployment guard (Y-3).
+
+---
+---
+
+# Part 29 — Threshold provenance review (verified 2026-09-15)
+
+Seventh pass. **Y-3 is closed.** Y-1 landed its schema but not its behaviour, and Y-2 is
+unchanged.
+
+## 29.1 Verification run
+
+```
+REMITTANCE_S6_DIFF=1 node scripts/check-remittance-separation.mjs   OK (S-2/S-3/S-4/S-6)
+deno test supabase/functions/delivery/remittance/                   15 passed, 0 failed
+pnpm --filter @roam/fleet test                                      243 files, 1404 passed, 0 failed
+```
+
+| Item | State |
+|------|-------|
+| **Y-3** | **Closed** — `NOTIFY pgrst, 'reload schema'` added to migration 190000, plus a dedicated `20260915200000_remittance_pgrst_reload.sql` and a trailing NOTIFY in 210000 |
+| Y-1 schema | Landed — `threshold_source` column, CHECK `('seeded','override')`, backfill, and `apply_remittance_event` stamps `'seeded'` on create |
+| **Y-1 behaviour** | **Not wired — see Z-1** |
+| **Y-2** | **Unchanged — still resolved on every collection** |
+
+## 29.2 Open
+
+### Z-1 (important) — `threshold_source` is inert, and that makes it a trap
+
+The column exists and is stamped `'seeded'` on account creation. Nothing else touches it:
+
+```
+grep -rn "threshold_source" supabase/functions/ packages/   →   no matches
+```
+
+Two consequences, and the second is worse than the first.
+
+**1. Y-1's actual symptom is unchanged.** There is still no re-seed path, so changing a market's
+COD pause threshold still does nothing for couriers who already have an account. That was the
+whole point of Y-1 — the column was the enabling step, not the deliverable.
+
+**2. The column is currently wrong, not merely unused.**
+`PATCH /remittance/accounts/:courierId/threshold`
+([`pricingRoutes.ts:1407`](../supabase/functions/delivery/admin/pricingRoutes.ts)) upserts
+`pause_threshold_minor` and `updated_at` — and **does not set `threshold_source = 'override'`**.
+So every threshold an operator deliberately sets from the desk remains labelled `'seeded'`.
+
+That is the dangerous state. The column's only purpose is to let a future re-seed know what it
+may safely overwrite. Whoever writes that re-seed will trust it — and it will silently stomp
+every genuine per-courier override, because none of them are marked. Right now the data says
+"nobody has ever overridden anything", and that is false the moment the desk control is used.
+
+**Fix — both halves, and the first one before any re-seed exists:**
+
+```ts
+// PATCH .../threshold — an operator setting a value IS the override
+await db.from("courier_remittance_accounts").upsert({
+  courier_id: courierId,
+  pause_threshold_minor: thresholdMinor,
+  threshold_source: "override",
+  updated_at: new Date().toISOString(),
+}, { onConflict: "courier_id" });
+```
+
+```sql
+-- Re-seed on market-rules save: seeded rows follow the market, overrides do not.
+UPDATE delivery.courier_remittance_accounts a
+   SET pause_threshold_minor = :market_threshold_minor, updated_at = now()
+ WHERE a.threshold_source = 'seeded'
+   AND a.courier_id = ANY(:courier_ids_in_market);
+```
+
+Until the PATCH is fixed, **do not build the re-seed** — an unwired provenance column is
+harmless, but a re-seed reading a provenance column that was never maintained will quietly undo
+operator decisions. This is the same shape as the lesson recorded for the settlement week
+recon: *an SQL check is only as good as the writers that maintain its input.*
+
+There is also a smaller issue in the same handler: the `upsert` will **create** an account row
+for a courier who has none, bypassing the market seed entirely and landing whatever the operator
+typed with `threshold_source` defaulted. Guard it to update-only, or stamp it `'override'` as
+above so at least the label is true.
+
+### Z-2 — Y-2 is unchanged
+
+[`collectOnDelivery.ts:162-163`](../supabase/functions/delivery/remittance/collectOnDelivery.ts)
+still calls `marketIdForOrder` then `resolveCodPauseThresholdMinor` on **every** cash delivery,
+and `ON CONFLICT DO NOTHING` discards the result on all but the courier's first.
+
+Still cost rather than risk — it is try/caught with a `1000000` fallback and cannot break
+collection. But it is two-plus queries per COD order for a value used once per courier ever, and
+it grows with order volume rather than with courier count.
+
+**Fix:** read the account first; resolve the market threshold only when it is absent.
+
+## 29.3 What is done
+
+Ledger, admin surface, and deployment safety are all complete. Y-3 in particular is worth
+noting as closed properly — the NOTIFY was added to the migration that caused the risk *and* to
+the two around it, so the RPC signature change cannot leave PostgREST serving a stale cache.
+
+What remains is one wiring gap with a sharp edge (Z-1) and one hot-path optimisation (Z-2).
+Neither affects money already recorded.
+
+---
+---
+
+# Part 30 — Threshold wiring closeout (verified 2026-09-15)
+
+Z-1 and Z-2 closed. Lesson: do not re-seed until writers maintain `threshold_source`.
+
+## 30.1 Closed
+
+| ID | Status | What shipped |
+|----|--------|--------------|
+| Z-1 PATCH | Closed | Update-only `PATCH …/threshold` stamps `threshold_source = 'override'`; 404 if no account |
+| Z-1 reseed | Closed | After **global/Default** pricing save, `reseedSeededPauseThresholds` updates `'seeded'` rows only |
+| Z-2 | Closed | `needsThresholdSeed` — market/pricing lookup only when remittance account is missing |
+| Desk UX | Closed | Default vs Custom override badge; Pricing labels distinguish Default vs town |
+
+## 30.2 Ops
+
+- Desk Save threshold = custom override; survives Default pricing saves.
+- Pricing Default COD pause moves couriers still on Default.
+- **Superseded by Part 33:** COD pause is platform Default only — town/parish no longer set remittance pause.
+- `NOTIFY pgrst` remains on RPC/schema migrations (Y-3).
+
+Q1 / Q4 / Q5 remain deferred.
+
+---
+---
+
+# Part 31 — Threshold layering review (verified 2026-09-15)
+
+Eighth pass. **Z-1 and Z-2 are both closed, and closed well.** One thread remains, and it is a
+design question rather than a bug.
+
+## 31.1 Verification run
+
+```
+REMITTANCE_S6_DIFF=1 node scripts/check-remittance-separation.mjs   OK (S-2/S-3/S-4/S-6)
+deno test supabase/functions/delivery/remittance/                   17 passed, 0 failed
+pnpm --filter @roam/fleet test                                      1404 passed, 0 failed
+```
+
+| Item | Verified |
+|------|----------|
+| **Z-1 override stamping** | `PATCH .../threshold` now sets `threshold_source: 'override'` — and was changed from `upsert` to `update` + `.eq(courier_id)` with a 404, closing the account-creating edge too |
+| **Z-1 re-seed** | `reseedSeededPauseThresholds` filters `.eq("threshold_source", "seeded")`, wired into the global pricing save |
+| **Z-1 visibility** | Desk shows whether a courier's threshold is seeded or an override |
+| **Z-2 hot path** | `getRemittanceAccount` first; market lookup + layer resolution only when the account is absent |
+
+Both halves of Z-1 landed in the right order — the writer that maintains the column was fixed
+before the reader that trusts it. That was the part that mattered.
+
+## 31.2 Open
+
+### AA-1 — Re-seeding is flat, but seeding is layered
+
+The two paths disagree about what a courier's threshold should be.
+
+**Seeding at creation is layer-aware.** `resolveCodPauseThresholdMinor` calls
+`resolvePricingLayers(db, { marketId })` and reads the resolved `cod.pauseThresholdJmd`, so a
+new courier picks up their market's or parish's value.
+
+**Re-seeding is flat.** `reseedSeededPauseThresholds` writes one value to every seeded row:
+
+```ts
+.update({ pause_threshold_minor: thresholdMinor })
+.eq("threshold_source", "seeded");          // no market or parish scope
+```
+
+Two consequences:
+
+1. **A global pricing save flattens the layers.** A courier seeded at a market's J$20,000 is
+   silently reset to the global J$10,000 the next time anyone saves global pricing. The market
+   layer is honoured exactly once and then discarded.
+2. **Market and parish saves re-seed nobody.** Only the `global_pricing_profiles` route calls
+   the re-seed; the `market_pricing_profiles` and `parish_pricing_profiles` routes
+   ([`pricingRoutes.ts:741,862,878,920`](../supabase/functions/delivery/admin/pricingRoutes.ts))
+   do not. So the original Y-1 complaint — *changing a threshold does not move existing
+   couriers* — still holds at exactly the layer where operators tune it.
+
+### The design question underneath
+
+Scoping the re-seed by market is not simply a missing `WHERE` clause, because **a courier has
+no market.** The seed uses `marketIdForOrder` — the market of whichever COD order happened to be
+their first. A courier who works across Kingston and Spanish Town gets whichever one they
+delivered in first, permanently, by accident.
+
+So there are two coherent designs, and the code currently implies both:
+
+- **Threshold is a courier attribute** (today's storage). Then it needs a defensible source —
+  the courier's home market or fleet, not their first order — and re-seeding scopes to that.
+- **Threshold is a market rule evaluated at pause time.** Then `pause_threshold_minor` stops
+  being stored per courier except as an override, `is_paused` can no longer be a generated
+  column, and the pause gate resolves layers on read.
+
+The first keeps the generated-column guarantee that made C-3 unrepresentable, and is the
+smaller change. The second is more correct but gives up the structural pause guarantee — not
+worth it.
+
+**Recommended:** keep the threshold on the account, but source it from something stable. If
+couriers have a home market or fleet attribution, seed from that instead of
+`marketIdForOrder`, and scope the re-seed the same way. If they genuinely have no stable
+market, then say so and make the **global** value the only seed source — flat re-seeding is
+then correct, market-layer COD thresholds should be removed from the rules form, and Part 19
+Q2 records that COD pause is a platform-wide default with per-courier overrides.
+
+Either way the current state is the one to avoid: a layered seed and a flat re-seed that
+overwrite each other, with the winner decided by which screen someone saved last.
+
+## 31.3 What is done
+
+Everything else. The ledger, the separation from Driver Settlements, the admin surface,
+deployment safety, and threshold provenance are all complete and verified across eight passes.
+AA-1 affects only which number a courier is paused at — never how much they owe, which is
+recorded correctly regardless.
+
+---
+---
+
+# Part 32 — Threshold scope review (verified 2026-09-15)
+
+Ninth pass. AA-1 was answered with a **third option I did not list, and it is the better
+one**: rather than changing the layering, the knobs were relabelled to state exactly what each
+scope does. A control that tells the truth about its blast radius is usually worth more than a
+control that does something cleverer.
+
+## 32.1 Verification run
+
+```
+REMITTANCE_S6_DIFF=1 node scripts/check-remittance-separation.mjs   OK (S-2/S-3/S-4/S-6)
+deno test supabase/functions/delivery/remittance/                   17 passed, 0 failed
+pnpm --filter @roam/fleet test                                      1404 passed, 0 failed
+```
+
+The COD field in the rules form is now scope-aware
+([`RiderRulesForm.tsx:113`](../packages/dash-admin/src/pages/pricing/marketRules/RiderRulesForm.tsx)):
+
+| Scope | Label | Tip |
+|-------|-------|-----|
+| Default | "Default COD pause (applies to couriers still on Default)" | Saving Default updates couriers still on Default; desk Save locks an override |
+| Area | "Default for new remittance accounts in this area (first cash delivery)" | Applies at account creation; **does not bulk-update existing couriers** |
+
+`RiderRulesReadonly` takes the same `scopeLabel`, so the read-only view cannot drift from the
+editable one.
+
+## 32.2 Open
+
+### AB-1 — The new copy is accurate for two cases out of three
+
+`threshold_source` has two values, but there are three real provenances:
+
+| Real case | Stored as |
+|-----------|-----------|
+| Seeded from the global Default | `'seeded'` |
+| Seeded from a market / parish layer | `'seeded'` ← same value |
+| Operator set it on the desk | `'override'` |
+
+`apply_remittance_event` stamps `'seeded'` unconditionally
+([`20260915210000_remittance_threshold_source.sql:64`](../supabase/migrations/20260915210000_remittance_threshold_source.sql)),
+regardless of whether `p_pause_threshold_minor` was resolved from the global default or from a
+market layer. The re-seed then matches on `.eq("threshold_source", "seeded")` with no scope
+distinction.
+
+So for a courier seeded at a market's J$20,000:
+
+- The Default tip says a Default save updates "couriers still on Default" — **this courier is
+  not on Default**, but a Default save moves them to J$10,000 anyway.
+- The Area tip says the area value "does not bulk-update existing couriers" — true, but it
+  understates: the area value is applied once at account creation and then **silently
+  overwritten by the next Default save**.
+
+Both statements are individually defensible and together they are misleading, which is the
+failure mode the relabelling set out to fix. The copy is now honest about *when* each knob
+applies and still silent about *which one wins*.
+
+**Fix — one more provenance value, so the re-seed can honour the promise:**
+
+```sql
+ALTER TABLE delivery.courier_remittance_accounts
+  DROP CONSTRAINT courier_remittance_accounts_threshold_source_check;
+ALTER TABLE delivery.courier_remittance_accounts
+  ADD CONSTRAINT courier_remittance_accounts_threshold_source_check
+  CHECK (threshold_source IN ('seeded_default', 'seeded_area', 'override'));
+```
+
+`apply_remittance_event` gains a `p_threshold_scope` (the caller already knows — `collectOnDelivery`
+resolves the layer and can compare it against the global default), and the re-seed narrows to
+`.eq("threshold_source", "seeded_default")`. Existing `'seeded'` rows migrate to
+`'seeded_default'`, which is what they effectively are today.
+
+That makes both tips literally true: a Default save moves only couriers actually on Default, and
+an area value survives until someone overrides it.
+
+**Cheaper alternative if the layering is not worth the schema churn:** drop `cod.pause_threshold_jmd`
+from the area rules form entirely and keep it only at Default. The area knob currently buys one
+courier one initial value that the next Default save erases — that is close to no value, and the
+simplest honest control is the one that is not there.
+
+## 32.3 What is done
+
+Everything else, across nine passes: the ledger, the separation from Driver Settlements, the
+admin surface, deployment safety, threshold provenance and now threshold copy. AB-1 is the last
+thread of the threshold story and, like AA-1, touches only which number a courier is paused at —
+never what they owe.
+
+---
+
+# Part 33 — Platform-only COD pause (verified 2026-09-15)
+
+**Closeout implementation.** AB-1 / AA-1 closed by the cheaper alternative from Part 32.3: **drop area COD pause**
+and keep one platform Default plus Remittance Desk overrides.
+
+## 33.1 Locked decision
+
+| Source | Role |
+|--------|------|
+| Pricing **Default** `cod.pause_threshold_jmd` | Seeds new remittance accounts; reseeds rows with `threshold_source = 'seeded'` on Default save |
+| Remittance Desk Save threshold | Sets `threshold_source = 'override'`; survives Default saves |
+| Town / parish rider rules | **No** COD pause control; historical blob values ignored for remittance |
+
+`threshold_source` stays `'seeded' | 'override'` (no three-value schema). Couriers have no stable
+home market, so layered seed + layered reseed was expensive and still accidental (first COD order).
+
+## 33.2 What changed
+
+- [`resolveCodPauseThresholdMinor`](../supabase/functions/delivery/remittance/collectOnDelivery.ts)
+  resolves **global** pricing layers only (`resolvePricingLayers(db, {})`). `marketIdForOrder` is
+  gone from the threshold path.
+- Rider / legacy Pricing forms show the COD pause field **only** on Default scope.
+- Desk copy: “Saving here locks a custom override. Pricing Default updates only couriers still on
+  Default.” (no town / first-delivery sentence.)
+- [`reseedSeededPauseThresholds`](../supabase/functions/delivery/remittance/reseedSeededThresholds.ts)
+  unchanged — still Default-only on global save.
+
+## 33.3 Optional ops (report only)
+
+Seeded accounts whose `pause_threshold_minor` ≠ current global Default may be listed in SQL for
+ops to desk-override or wait for the next Default save. No auto-migrate.
+
+## 33.4 Gates
+
+| Check | Pass |
+|-------|------|
+| Deno remittance | green (`--allow-read --allow-env`) |
+| Fleet tests | green |
+| `REMITTANCE_S6_DIFF=1` | OK; empty `fleet-financials` diff |
+| Manual | Town form has no COD pause; Default save moves seeded, not override; first collect matches Default |
+
+Money path (bag split, settle, write-off) unchanged. Q1 / Q4 / Q5 remain deferred.
+
+---
+---
+
+# Part 34 — Remittance closeout (verified 2026-09-15)
+
+**Independent verification / freeze.** **AB-1 is closed, and the whole threshold thread with it.** Nothing remains open in
+the Delivery Remittance workstream.
+
+## 34.1 Verification run
+
+```
+REMITTANCE_S6_DIFF=1 node scripts/check-remittance-separation.mjs   OK (S-2/S-3/S-4/S-6)
+deno test supabase/functions/delivery/remittance/                   17 passed, 0 failed
+pnpm --filter @roam/fleet test                                      2 failed | 1402 passed   ← see 34.3
+```
+
+The two fleet failures are **not** remittance — see 34.3.
+
+## 34.2 AB-1 closed, and closed the right way
+
+The cheaper option was taken, and taken completely — the control was removed *and* the code that
+read it was removed, in the same change:
+
+| Layer | Before | Now |
+|-------|--------|-----|
+| Seed | `resolveCodPauseThresholdMinor(sb, marketId)` → `resolvePricingLayers(db, { marketId })` | `resolveCodPauseThresholdMinor(sb)` → `resolvePricingLayers(db, {})` — global only, with the reason in a comment |
+| `marketIdForOrder` | merchant lookup per collection | **deleted** |
+| Re-seed | global Default | unchanged — now agrees with the seed |
+| Rules form | COD pause on every scope | rendered only when `scopeLabel === 'default'`, in both the editable and read-only views |
+
+This is why the fix is complete rather than cosmetic: hiding the field alone would have left
+area profiles seeding couriers from a value nobody could see. Removing the layered lookup means
+the stale `cod.pause_threshold_jmd` still serialized into area rule blobs is now genuinely dead
+data rather than an invisible input.
+
+**`threshold_source` is now correct as designed.** Two stored values for two real provenances:
+seeded from the platform Default, or overridden on the desk. The third case AB-1 identified no
+longer exists, so the column does not need a third value.
+
+The threshold story across Parts 26–34 ended in the right place: **COD pause is a platform-wide
+default with per-courier overrides**, seed and re-seed read the same source, the desk shows which
+couriers are overridden, and the UI offers exactly one knob for it. Part 19 Q2 is answered.
+
+## 34.3 Not remittance — two fuel tests are failing
+
+```
+FAIL src/utils/fuelBrainClassify.test.ts
+  > flag-off recon parity (legacy residual) > with brainClassification puts residual in Personal
+  AssertionError: expected 0 to be greater than 0
+
+FAIL src/utils/personalAllowance.recon.test.ts
+  > calculateReconciliation personal allowance
+  > flag-on: company absorbs earned; overage to driver; shares balance
+  AssertionError: expected +0 to be 40
+```
+
+Neither file references remittance, and no remittance change in this round touches fuel. They
+come from the concurrent fuel reconciliation workstream — `FuelPeriodWizard`, `FuelLeakageStep`,
+`buildFuelWizardRows`, `useFuelWizardActions` and a dozen sibling files are modified in the same
+working tree.
+
+**This suite passed 1404/1404 at the Round 9 check and fails 2 now**, so the regression landed
+between those two points, from the fuel side. Flagged here only because
+`pnpm --filter @roam/fleet test` is a CI step and is currently red — the fix belongs to the fuel
+workstream, not this one.
+
+## 34.4 Delivery Remittance — final state
+
+Ten passes. Every finding raised in Parts 11, 22, 24, 25, 26, 28, 29, 31 and 32 is closed.
+
+| Area | State |
+|------|-------|
+| Ledger | All five event types sign-constrained; balance arithmetic and trial balance enforced by CHECK; append-only |
+| Concurrency | One `SECURITY DEFINER` RPC under `FOR UPDATE`; idempotent on replay **and** on concurrent duplicate |
+| Refusals | Every endpoint validates before the first write — overdraw, stale balance, invalid reason, short notes |
+| Corrections | Reversal for settlements and write-offs; nothing mutates, nothing deletes |
+| Pause | `is_paused` generated from balance vs threshold; gate folded into `requireActiveCourier` so no accept path can skip it |
+| Separation | `fleet-financials/**` untouched; S-2/S-3/S-4/S-6 enforced in CI with the diff gate on |
+| Recon | Drift, missing collections, trial-balance breaks, stale pending — all alerted; exceptions queue drainable |
+| Admin | One balance list, one history view, one settle path; retired routes return 410 naming their replacement |
+| Courier | Balance, threshold progress, per-order breakdown, paused screen — remittance never mixed with earnings |
+| Ops | Kill-switch fails over to legacy rather than going silent; `NOTIFY pgrst` on signature changes |
+
+Deferred by product decision, not oversight: **Q1** netting COD against earnings payouts, **Q4**
+fleet claim on courier COD, **Q5** courier self-reported remittance. The schema is ready for Q5
+(`pending` status plus `external_ref`) whenever it is wanted.
+
+**Remittance workstream frozen.** No Part 35. Further cash questions are product (Q1 / Q4 / Q5) or
+other streams (e.g. fuel CI).
+

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "../ui/dialog";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
@@ -9,12 +9,23 @@ import { Textarea } from "../ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
 import { FuelEntry, FuelCard } from '../../types/fuel';
 import { StationProfile } from '../../types/station';
-import { Plus, X, History, Loader2, MapPin, Building2, Fuel } from 'lucide-react';
+import { Plus, X, History, Loader2, MapPin, Building2, Fuel, Camera } from 'lucide-react';
 import { toast } from "sonner";
 import { fuelService } from '../../services/fuelService';
 import { FuelCalculationService } from '../../services/fuelCalculationService';
 import { useQuery } from '@tanstack/react-query';
 import { formatCustomerFacingFuelCardLabel } from '../../utils/fuelCardDisplay';
+import { findActiveFuelCardForSession } from '../../utils/fuelCardMatch';
+import {
+    asGasCardAnchorSavePayload,
+    buildGasCardOdometerAnchor,
+} from '../../utils/buildGasCardOdometerAnchor';
+import { uploadEvidenceFile } from '../../services/uploadEvidence';
+
+export type FuelLogSavePayload =
+    | FuelEntry
+    | FuelEntry[]
+    | ReturnType<typeof asGasCardAnchorSavePayload>;
 
 const PAYMENT_SOURCE_MAP: Record<string, string> = {
     'driver_cash': 'Personal',
@@ -45,7 +56,7 @@ const PAYMENT_SOURCE_TO_DROPDOWN: Record<string, string> = {
 interface FuelLogModalProps {
     isOpen: boolean;
     onClose: () => void;
-    onSave: (entry: FuelEntry | FuelEntry[]) => void;
+    onSave: (entry: FuelLogSavePayload) => void;
     initialData?: FuelEntry | null;
     vehicles: any[];
     drivers: any[];
@@ -76,6 +87,12 @@ export function FuelLogModal({
 
     const [activeTab, setActiveTab] = useState('single');
     const [time, setTime] = useState<string>('');
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    const [assignedGasCard, setAssignedGasCard] = useState<FuelCard | null>(null);
+    const [gasCardLookupDone, setGasCardLookupDone] = useState(false);
+    const [odometerPreviewUrl, setOdometerPreviewUrl] = useState('');
+    const [pendingOdometerFile, setPendingOdometerFile] = useState<File | null>(null);
+    const odometerFileInputRef = useRef<HTMLInputElement>(null);
 
     // --- Verified Station Data ---
     const [verifiedStations, setVerifiedStations] = useState<StationProfile[]>([]);
@@ -109,7 +126,7 @@ export function FuelLogModal({
     const [bulkCommon, setBulkCommon] = useState({
         driverId: '',
         vehicleId: '',
-        type: 'company_card' as const
+        type: 'rideshare_cash' as const
     });
 
     const [bulkEntries, setBulkEntries] = useState<Array<{
@@ -242,21 +259,56 @@ export function FuelLogModal({
     }, [initialData, verifiedStations]);
 
     const isRideShareCash = formData.type === 'rideshare_cash';
+    const isGasCard = formData.type === 'company_card';
     const isBulkRideShareCash = bulkCommon.type === 'rideshare_cash';
 
-    // RideShare Cash: cash ÷ liters → $/L. Other cash: amount ÷ $/L → liters.
-    const handleCalculation = (field: 'amount' | 'pricePerLiter' | 'liters', value: number) => {
-        const updates: any = { [field]: value };
-        if (formData.type === 'rideshare_cash') {
-            const currentAmount = field === 'amount' ? value : formData.amount;
-            const currentLiters = field === 'liters' ? value : formData.liters;
-            updates.pricePerLiter = FuelCalculationService.calculatePricePerLiter(currentAmount, currentLiters) ?? 0;
+    // Active inventory card (vehicle first, then driver) — same as Submit Expense / driver claim
+    useEffect(() => {
+        if (!isOpen || !isGasCard) {
+            setAssignedGasCard(null);
+            setGasCardLookupDone(!isGasCard);
+            return;
+        }
+        const card =
+            findActiveFuelCardForSession(cards, {
+                vehicleId: formData.vehicleId,
+                driverId: formData.driverId,
+            }) || null;
+        setAssignedGasCard(card);
+        setGasCardLookupDone(true);
+        if (card) {
+            setFormData((prev) => (prev.cardId === card.id ? prev : { ...prev, cardId: card.id }));
+        }
+    }, [isOpen, isGasCard, cards, formData.vehicleId, formData.driverId]);
+
+    // Reset odometer proof when modal opens for a new Known fill
+    useEffect(() => {
+        if (!isOpen) return;
+        if (initialData?.odometerImageUrl) {
+            setOdometerPreviewUrl(initialData.odometerImageUrl);
+            setPendingOdometerFile(null);
         } else {
-            const currentAmount = field === 'amount' ? value : formData.amount;
-            const currentPrice = field === 'pricePerLiter' ? value : formData.pricePerLiter;
-            if (currentAmount && currentAmount > 0 && currentPrice && currentPrice > 0) {
-                updates.liters = Number((currentAmount / currentPrice).toFixed(2));
-            }
+            setOdometerPreviewUrl('');
+            setPendingOdometerFile(null);
+        }
+    }, [isOpen, initialData?.id, initialData?.odometerImageUrl]);
+
+    // RideShare / cash: amount ÷ liters → $/L.
+    // Fallback: amount ÷ $/L → liters when price is typed first.
+    const handleCalculation = (field: 'amount' | 'pricePerLiter' | 'liters', value: number) => {
+        const updates: any = { [field]: Number.isFinite(value) ? value : 0 };
+        const currentAmount = field === 'amount' ? updates[field] : formData.amount;
+        const currentLiters = field === 'liters' ? updates[field] : formData.liters;
+        const currentPrice = field === 'pricePerLiter' ? updates[field] : formData.pricePerLiter;
+        if (field === 'liters' || (field === 'amount' && Number(currentLiters) > 0)) {
+            updates.pricePerLiter =
+                FuelCalculationService.calculatePricePerLiter(currentAmount, currentLiters) ?? 0;
+        } else if (
+            (field === 'pricePerLiter' || field === 'amount') &&
+            currentAmount > 0 &&
+            currentPrice > 0
+        ) {
+            updates.liters = Number((currentAmount / currentPrice).toFixed(2));
         }
         setFormData(prev => ({ ...prev, ...updates }));
     };
@@ -288,18 +340,17 @@ export function FuelLogModal({
             const updates: any = { [field]: value };
             const numValue = typeof value === 'number' ? value : parseFloat(value) || 0;
             const currentAmount = field === 'amount' ? numValue : entry.amount;
-            if (bulkCommon.type === 'rideshare_cash') {
-                const currentLiters = field === 'liters' ? numValue : entry.liters;
-                if (field === 'amount' || field === 'liters') {
-                    updates.pricePerLiter = FuelCalculationService.calculatePricePerLiter(currentAmount, currentLiters) ?? 0;
-                }
-            } else {
-                const currentPrice = field === 'pricePerLiter' ? numValue : entry.pricePerLiter;
-                if (field === 'amount' || field === 'pricePerLiter') {
-                    if (currentAmount > 0 && currentPrice > 0) {
-                        updates.liters = Number((currentAmount / currentPrice).toFixed(2));
-                    }
-                }
+            const currentLiters = field === 'liters' ? numValue : entry.liters;
+            const currentPrice = field === 'pricePerLiter' ? numValue : entry.pricePerLiter;
+            if (field === 'liters' || (field === 'amount' && currentLiters > 0)) {
+                updates.pricePerLiter =
+                    FuelCalculationService.calculatePricePerLiter(currentAmount, currentLiters) ?? 0;
+            } else if (
+                (field === 'amount' || field === 'pricePerLiter') &&
+                currentAmount > 0 &&
+                currentPrice > 0
+            ) {
+                updates.liters = Number((currentAmount / currentPrice).toFixed(2));
             }
             return { ...entry, ...updates };
         }));
@@ -343,12 +394,13 @@ export function FuelLogModal({
         }
     };
 
-    const handleSave = () => {
+    const handleSave = async () => {
         if (!formData.date) { toast.error("Please select a date"); return; }
         if (!formData.vehicleId) { toast.error("Please select a vehicle"); return; }
-        if (!formData.amount) { toast.error("Please enter a valid amount"); return; }
-        if (isRideShareCash && !(Number(formData.liters) > 0)) {
-            toast.error("Enter liters for RideShare Cash");
+        if (!formData.driverId) { toast.error("Please select a driver"); return; }
+        if (!(Number(formData.odometer) > 0)) { toast.error("Odometer reading is required"); return; }
+        if (!formData.matchedStationId) {
+            toast.error("Select a verified station from the Dominion list");
             return;
         }
         if (initialData && (initialData.isLocked || initialData.status === 'Finalized') && !String(formData.editReason || '').trim()) {
@@ -358,8 +410,73 @@ export function FuelLogModal({
 
         const fullDate = formData.date;
         const finalTime = time ? (time.length === 5 ? `${time}:00` : time) : initialData?.time;
-        // Preserve time component in date field to prevent timezone-shift on re-display
         const dateWithTime = finalTime ? `${fullDate}T${finalTime}` : fullDate;
+
+        // ——— Gas Card Known fill = driver/admin claim (odo + card + station; CSV supplies $ later) ———
+        if (isGasCard && !initialData) {
+            if (!gasCardLookupDone) {
+                toast.error("Looking up assigned gas card…");
+                return;
+            }
+            if (!assignedGasCard) {
+                toast.error("No Active gas card assigned to this vehicle/driver in Card Inventory");
+                return;
+            }
+            if (!odometerPreviewUrl && !pendingOdometerFile) {
+                toast.error("Odometer photo is required for Gas Card fills");
+                return;
+            }
+
+            setIsSubmitting(true);
+            try {
+                const entryId = crypto.randomUUID();
+                let odometerImageUrl = odometerPreviewUrl || '';
+                if (pendingOdometerFile) {
+                    const { url } = await uploadEvidenceFile(pendingOdometerFile, {
+                        evidenceType: 'odometer_proof',
+                        sourceType: 'fuel_entry',
+                        sourceId: entryId,
+                        retentionClass: 'ephemeral',
+                        parentStatus: 'Pending',
+                    });
+                    odometerImageUrl = url;
+                }
+                const driver = drivers.find((d: any) => d.id === formData.driverId);
+                const fuelEntry = buildGasCardOdometerAnchor({
+                    id: entryId,
+                    date: dateWithTime,
+                    time: finalTime,
+                    cardId: assignedGasCard.id,
+                    vehicleId: formData.vehicleId,
+                    driverId: formData.driverId,
+                    odometer: Number(formData.odometer),
+                    odometerImageUrl: odometerImageUrl || undefined,
+                    location: formData.location || undefined,
+                    stationAddress: formData.stationAddress || undefined,
+                    matchedStationId: formData.matchedStationId,
+                    entrySource: 'admin-manual',
+                    driverName: driver?.name,
+                });
+                onSave(asGasCardAnchorSavePayload(fuelEntry));
+                onClose();
+            } catch (e) {
+                console.error('[FuelLogModal] Gas Card Known fill failed', e);
+                toast.error(e instanceof Error ? e.message : 'Failed to save Gas Card log');
+            } finally {
+                setIsSubmitting(false);
+            }
+            return;
+        }
+
+        if (!formData.amount) { toast.error("Please enter a valid amount"); return; }
+        if (!(Number(formData.liters) > 0)) {
+            toast.error(
+                isRideShareCash
+                    ? "Enter liters for RideShare Cash"
+                    : "Enter volume (L) or a price so volume can be calculated",
+            );
+            return;
+        }
 
         const entry: any = {
             ...initialData,
@@ -367,13 +484,13 @@ export function FuelLogModal({
             date: dateWithTime as string,
             time: finalTime,
             type: initialData?.type
-                ? initialData.type   // Preserve original type on edits — never overwrite
+                ? initialData.type
                 : (formData.type === 'company_card' ? 'Card_Transaction' : 'Fuel_Manual_Entry'),
             amount: Number(formData.amount),
             liters: Number(formData.liters),
-            pricePerLiter: isRideShareCash
-                ? (FuelCalculationService.calculatePricePerLiter(formData.amount, formData.liters) ?? 0)
-                : Number(formData.pricePerLiter),
+            pricePerLiter: FuelCalculationService.calculatePricePerLiter(formData.amount, formData.liters)
+                ?? Number(formData.pricePerLiter)
+                ?? 0,
             odometer: Number(formData.odometer),
             location: formData.location || '',
             stationAddress: formData.stationAddress || '',
@@ -389,9 +506,9 @@ export function FuelLogModal({
                 : 'admin-manual',
             metadata: {
                 ...(initialData?.metadata || {}),
-                pricePerLiter: isRideShareCash
-                    ? (FuelCalculationService.calculatePricePerLiter(formData.amount, formData.liters) ?? 0)
-                    : Number(formData.pricePerLiter),
+                pricePerLiter: FuelCalculationService.calculatePricePerLiter(formData.amount, formData.liters)
+                    ?? Number(formData.pricePerLiter)
+                    ?? 0,
                 editReason: formData.editReason,
                 source: 'Fuel Log',
                 portal_type: 'Manual_Entry',
@@ -404,34 +521,34 @@ export function FuelLogModal({
                 paymentSource: formData.type,
                 matchedStationId: formData.matchedStationId || undefined,
             },
-            // Server records append-only corrections for sealed rows when this is set
             ...(initialData && formData.editReason
                 ? { correctionReason: formData.editReason }
                 : {}),
         } as FuelEntry & { correctionReason?: string };
-
-        // Locked entries keep their signature/lock fields on edit — the payload
-        // carries them through so server-side integrity records stay intact.
 
         onSave(entry);
         onClose();
     };
 
     const handleBulkSave = () => {
+        if (bulkCommon.type === 'company_card') {
+            toast.error("Gas Card Known fill is single-entry only (odometer claim). Use Single Entry.");
+            return;
+        }
         if (!bulkCommon.vehicleId) { toast.error("Please select a Vehicle"); return; }
         if (!bulkCommon.driverId) { toast.error("Please select a Driver"); return; }
 
         const validEntries = bulkEntries.filter(e => e.amount > 0 && e.date);
         if (validEntries.length === 0) { toast.error("Please add at least one valid entry (Amount > 0)"); return; }
-        if (isBulkRideShareCash && validEntries.some(e => !(e.liters > 0))) {
-            toast.error("Enter liters for each RideShare Cash row");
+        if (validEntries.some(e => !(e.liters > 0))) {
+            toast.error("Enter liters for each row");
             return;
         }
 
         const entries: any[] = validEntries.map(row => ({
             id: row.id,
             date: row.date,
-            type: bulkCommon.type === 'company_card' ? 'Card_Transaction' : 'Fuel_Manual_Entry',
+            type: 'Fuel_Manual_Entry',
             amount: row.amount,
             liters: row.liters,
             pricePerLiter: isBulkRideShareCash
@@ -483,14 +600,22 @@ export function FuelLogModal({
 
                 {!initialData && (
                   <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600 -mt-2 mb-2">
-                    Known fill — use this when you already know the fill is real.
+                    {isGasCard
+                      ? 'Gas Card Known fill logs odometer only. Amount and liters come from the Roam Fuels CSV when matched.'
+                      : 'Known fill — use this when you already know the fill is real.'}
                   </div>
                 )}
 
-                <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+                <Tabs value={activeTab} onValueChange={(v) => {
+                    if (v === 'bulk' && isGasCard) {
+                        toast.error('Gas Card is single-entry only');
+                        return;
+                    }
+                    setActiveTab(v);
+                }} className="w-full">
                     <TabsList className="grid w-full grid-cols-2 mb-4">
                         <TabsTrigger value="single">Single Entry</TabsTrigger>
-                        <TabsTrigger value="bulk" disabled={!!initialData}>Bulk Entry</TabsTrigger>
+                        <TabsTrigger value="bulk" disabled={!!initialData || isGasCard}>Bulk Entry</TabsTrigger>
                     </TabsList>
 
                     <TabsContent value="single">
@@ -520,7 +645,12 @@ export function FuelLogModal({
                                     <Label htmlFor="type">Paid By</Label>
                                     <Select
                                         value={formData.type}
-                                        onValueChange={(val) => setFormData(prev => ({ ...prev, type: val as any }))}
+                                        onValueChange={(val) => {
+                                            if (val === 'company_card' && activeTab === 'bulk') {
+                                                setActiveTab('single');
+                                            }
+                                            setFormData(prev => ({ ...prev, type: val as any }));
+                                        }}
                                     >
                                         <SelectTrigger><SelectValue /></SelectTrigger>
                                         <SelectContent className="w-72">
@@ -584,25 +714,37 @@ export function FuelLogModal({
                                 </div>
                             </div>
 
-                            {formData.type === 'company_card' && (
+                            {isGasCard && (
                                 <div className="space-y-2">
-                                    <Label htmlFor="card">Fuel Card</Label>
-                                    <Select
-                                        value={formData.cardId}
-                                        onValueChange={(val) => setFormData(prev => ({ ...prev, cardId: val }))}
-                                    >
-                                        <SelectTrigger><SelectValue placeholder="Select Fuel Card" /></SelectTrigger>
-                                        <SelectContent>
-                                            {cards.filter(c => c.status === 'Active').map(c => (
-                                                <SelectItem key={c.id} value={c.id}>
-                                                    {formatCustomerFacingFuelCardLabel(c, !!isRoamManagedCard?.(c))}
-                                                </SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
+                                    <Label>Fuel Card</Label>
+                                    <div className={`rounded-md border px-3 py-2 text-sm ${
+                                        gasCardLookupDone && !assignedGasCard
+                                            ? 'border-amber-200 bg-amber-50 text-amber-900'
+                                            : 'border-slate-200 bg-white text-slate-800'
+                                    }`}>
+                                        {!gasCardLookupDone ? (
+                                            <span className="text-slate-500">Looking up Active card…</span>
+                                        ) : assignedGasCard ? (
+                                            <span>
+                                                {formatCustomerFacingFuelCardLabel(
+                                                    assignedGasCard,
+                                                    !!isRoamManagedCard?.(assignedGasCard),
+                                                )}
+                                                {' '}
+                                                <span className="font-mono text-xs text-slate-500">
+                                                    {assignedGasCard.cardNumber}
+                                                </span>
+                                            </span>
+                                        ) : (
+                                            <span>
+                                                No Active gas card assigned to this vehicle/driver in Card Inventory
+                                            </span>
+                                        )}
+                                    </div>
                                 </div>
                             )}
 
+                            {!isGasCard && (
                             <div className="grid grid-cols-3 gap-4">
                                 <div className="space-y-2">
                                     <Label htmlFor="amount">{isRideShareCash ? 'Cash Amount ($)' : 'Total Cost ($)'}</Label>
@@ -611,47 +753,92 @@ export function FuelLogModal({
                                         onChange={(e) => handleCalculation('amount', parseFloat(e.target.value))}
                                     />
                                 </div>
-                                {isRideShareCash ? (
-                                    <>
-                                        <div className="space-y-2">
-                                            <Label htmlFor="liters">Volume (L)</Label>
-                                            <Input id="liters" type="number" step="0.001" placeholder="0.000"
-                                                value={formData.liters || ''}
-                                                onChange={(e) => handleCalculation('liters', parseFloat(e.target.value))}
-                                            />
-                                        </div>
-                                        <div className="space-y-2">
-                                            <Label htmlFor="price">Price ($/L)</Label>
-                                            <Input id="price" disabled className="bg-slate-50"
-                                                value={formData.pricePerLiter ? `$${Number(formData.pricePerLiter).toFixed(3)}` : '—'}
-                                            />
-                                        </div>
-                                    </>
-                                ) : (
-                                    <>
-                                        <div className="space-y-2">
-                                            <Label htmlFor="liters">Volume (L)</Label>
-                                            <Input id="liters" type="number" disabled className="bg-slate-50"
-                                                placeholder="Calculated" value={formData.liters || ''}
-                                            />
-                                        </div>
-                                        <div className="space-y-2">
-                                            <Label htmlFor="price">Price ($/L)</Label>
-                                            <Input id="price" type="number" step="0.001" placeholder="0.000"
-                                                value={formData.pricePerLiter || ''}
-                                                onChange={(e) => handleCalculation('pricePerLiter', parseFloat(e.target.value))}
-                                            />
-                                        </div>
-                                    </>
-                                )}
+                                <div className="space-y-2">
+                                    <Label htmlFor="liters">Volume (L)</Label>
+                                    <Input
+                                        id="liters"
+                                        type="number"
+                                        step="0.001"
+                                        placeholder={isRideShareCash ? "0.000" : "0.000"}
+                                        value={formData.liters || ''}
+                                        onChange={(e) => handleCalculation('liters', parseFloat(e.target.value))}
+                                    />
+                                </div>
+                                <div className="space-y-2">
+                                    <Label htmlFor="price">Price ($/L)</Label>
+                                    {isRideShareCash ? (
+                                        <Input
+                                            id="price"
+                                            disabled
+                                            className="bg-slate-50"
+                                            value={formData.pricePerLiter ? `$${Number(formData.pricePerLiter).toFixed(3)}` : '—'}
+                                        />
+                                    ) : (
+                                        <Input
+                                            id="price"
+                                            type="number"
+                                            step="0.001"
+                                            placeholder="Auto from $ ÷ L"
+                                            value={formData.pricePerLiter || ''}
+                                            onChange={(e) => handleCalculation('pricePerLiter', parseFloat(e.target.value))}
+                                        />
+                                    )}
+                                </div>
                             </div>
+                            )}
 
-                            <div className="space-y-2">
-                                <Label htmlFor="odometer">Odometer (km)</Label>
-                                <Input id="odometer" type="number" placeholder="Current Reading"
-                                    value={formData.odometer}
-                                    onChange={(e) => setFormData(prev => ({ ...prev, odometer: parseFloat(e.target.value) }))}
-                                />
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-2">
+                                    <Label htmlFor="odometer">Odometer (km)</Label>
+                                    <Input id="odometer" type="number" placeholder="Current Reading"
+                                        value={formData.odometer || ''}
+                                        onChange={(e) => setFormData(prev => ({ ...prev, odometer: parseFloat(e.target.value) }))}
+                                    />
+                                </div>
+                                {isGasCard && (
+                                    <div className="space-y-2">
+                                        <Label>Odometer photo</Label>
+                                        <input
+                                            ref={odometerFileInputRef}
+                                            type="file"
+                                            accept="image/*"
+                                            className="hidden"
+                                            onChange={(e) => {
+                                                const file = e.target.files?.[0];
+                                                if (!file) return;
+                                                setPendingOdometerFile(file);
+                                                setOdometerPreviewUrl(URL.createObjectURL(file));
+                                            }}
+                                        />
+                                        {odometerPreviewUrl ? (
+                                            <div className="relative h-20 w-full border rounded group">
+                                                <img src={odometerPreviewUrl} alt="Odometer proof" className="h-full w-full object-contain" />
+                                                <Button
+                                                    type="button"
+                                                    size="icon"
+                                                    variant="destructive"
+                                                    className="absolute top-1 right-1 h-6 w-6 opacity-0 group-hover:opacity-100"
+                                                    onClick={() => {
+                                                        setPendingOdometerFile(null);
+                                                        setOdometerPreviewUrl('');
+                                                        if (odometerFileInputRef.current) odometerFileInputRef.current.value = '';
+                                                    }}
+                                                >
+                                                    <X className="h-3 w-3" />
+                                                </Button>
+                                            </div>
+                                        ) : (
+                                            <Button
+                                                type="button"
+                                                variant="outline"
+                                                className="w-full h-20 border-dashed text-slate-500"
+                                                onClick={() => odometerFileInputRef.current?.click()}
+                                            >
+                                                <Camera className="h-4 w-4 mr-2" /> Upload odometer photo
+                                            </Button>
+                                        )}
+                                    </div>
+                                )}
                             </div>
 
                             {/* === STATION PICKER: Brand -> Station Cascade === */}
@@ -821,12 +1008,6 @@ export function FuelLogModal({
                                                         <p className="text-[10px] text-slate-400 leading-tight">Cash from fares</p>
                                                     </div>
                                                 </SelectItem>
-                                                <SelectItem value="company_card">
-                                                    <div>
-                                                        <span className="font-medium">Gas Card</span>
-                                                        <p className="text-[10px] text-slate-400 leading-tight">Company fuel card</p>
-                                                    </div>
-                                                </SelectItem>
                                                 <SelectItem value="petty_cash">
                                                     <div>
                                                         <span className="font-medium">Petty Cash</span>
@@ -975,9 +1156,16 @@ export function FuelLogModal({
                 </Tabs>
 
                 <DialogFooter>
-                    <Button variant="outline" onClick={onClose}>Cancel</Button>
-                    <Button onClick={() => activeTab === 'single' ? handleSave() : handleBulkSave()}>
-                        {activeTab === 'single' ? 'Save Log' : `Save ${bulkEntries.filter(e => e.amount > 0).length} Logs`}
+                    <Button variant="outline" onClick={onClose} disabled={isSubmitting}>Cancel</Button>
+                    <Button
+                        onClick={() => activeTab === 'single' ? void handleSave() : handleBulkSave()}
+                        disabled={isSubmitting || (isGasCard && (!gasCardLookupDone || !assignedGasCard))}
+                    >
+                        {isSubmitting
+                            ? 'Saving…'
+                            : activeTab === 'single'
+                                ? (isGasCard && !initialData ? 'Submit Odometer Log' : 'Save Log')
+                                : `Save ${bulkEntries.filter(e => e.amount > 0).length} Logs`}
                     </Button>
                 </DialogFooter>
             </DialogContent>

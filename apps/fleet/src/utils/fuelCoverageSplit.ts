@@ -48,14 +48,19 @@ export function getCoverageMatrixRows(rule: FuelRule | undefined): {
 
   if (rule.coverageType === 'Fixed_Amount') {
     // Fixed is $ not % — show qualitative markers via 100/0 for locked categories.
+    // F-8: misc is company-held; rideShare is allowance-based.
     return labels.map(({ key, label }) => {
       if (key === 'personal') return { key, label, companyPct: 0, driverPct: 100 };
-      if (key === 'companyUsage' || key === 'deadhead') return { key, label, companyPct: 100, driverPct: 0 };
-      return { key, label, companyPct: -1, driverPct: -1 }; // signal: allowance-based
+      if (key === 'companyUsage' || key === 'deadhead' || key === 'misc') {
+        return { key, label, companyPct: 100, driverPct: 0 };
+      }
+      return { key, label, companyPct: -1, driverPct: -1 }; // rideShare: allowance-based
     });
   }
 
   return labels.map(({ key, label }) => {
+    // F-8: unexplained always company on Percentage path.
+    if (key === 'misc') return { key, label, companyPct: 100, driverPct: 0 };
     const companyPct = getCompanyCoveragePercent(key, rule);
     return { key, label, companyPct, driverPct: 100 - companyPct };
   });

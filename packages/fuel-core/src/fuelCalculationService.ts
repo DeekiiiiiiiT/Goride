@@ -38,7 +38,10 @@ import {
   filterFuelOpsLogEntries,
   fuelOpsLiters,
   fuelOpsSpendAmount,
+  countsInFuelLogSpend,
 } from './fuelOpsEligibility.ts';
+import type { OdometerBucketAnchor } from './fuelTypes.ts';
+import { calculateOdometerBuckets as calculateOdometerBucketsEngine } from './odometerBucketEngine.ts';
 import {
   FALLBACK_EFFICIENCY_KM_L,
   GAP_ANOMALY_PCT,
@@ -50,6 +53,7 @@ import { resolvePricePerLiter } from './resolvePricePerLiter.ts';
 import {
   assembleLeftoverWeekMoney,
   computeMiscellaneousCost,
+  computeWindowTimingCost,
   splitAllCategoryCosts,
   getCategoryCoverageSplit as splitCategory,
   type FuelCoverageCategory,
@@ -236,6 +240,8 @@ export const FuelCalculationService = {
             /** Skip allowance (multi-vehicle slices apply once after merge). */
             skipPersonalAllowance?: boolean;
             personalAllowance?: PersonalAllowanceReconContext;
+            /** H-8: ledger anchors so freeze buckets match Stop-to-Stop panel. */
+            externalAnchors?: OdometerBucketAnchor[];
         }
     ): WeeklyFuelReport => {
         const startStr = FuelCalculationService.toLocalDateStr(weekStart);
@@ -279,15 +285,22 @@ export const FuelCalculationService = {
         const totalGasCardCost = vehicleEntries.reduce((sum, e) => sum + fuelOpsSpendAmount(e), 0);
         const totalLiters = vehicleEntries.reduce((sum, e) => sum + fuelOpsLiters(e), 0);
 
-        // 3b. Compute observed efficiency (km/L) from fuel entries with odometer readings
+        // 3b. Observed efficiency — align with bucket engine (F-3): spend-eligible + odo + litres
         const entriesWithOdo = vehicleEntries
-            .filter(e => e.odometer !== undefined && e.odometer !== null && e.odometer > 0 && (e.liters || 0) > 0)
+            .filter(
+              (e) =>
+                countsInFuelLogSpend(e) &&
+                e.odometer !== undefined &&
+                e.odometer !== null &&
+                e.odometer > 0 &&
+                fuelOpsLiters(e) > 0,
+            )
             .sort((a, b) => (a.odometer || 0) - (b.odometer || 0));
 
         // Step 2.3: Efficiency fuel — exclude first fill-up (standard fill-to-fill method).
         // Floating entries (no odometer) are already excluded by entriesWithOdo filter.
         const efficiencyFuel = entriesWithOdo.length >= 2
-            ? entriesWithOdo.slice(1).reduce((sum, e) => sum + (e.liters || 0), 0)
+            ? entriesWithOdo.slice(1).reduce((sum, e) => sum + fuelOpsLiters(e), 0)
             : 0;
 
         let observedEfficiency = 0;
@@ -326,40 +339,48 @@ export const FuelCalculationService = {
             .filter(a => a.type === 'Company_Misc' || a.type === 'Maintenance')
             .reduce((sum, a) => sum + (a.distance || 0), 0);
 
-        // 4b. Option C: Hybrid Residual — compute personal km from odometer buckets.
-        // Move bucket calculation up so we can derive personal distance from the odometer delta.
-        const buckets = FuelCalculationService.calculateOdometerBuckets(vehicle, vehicleEntries, vehicleTrips, vehicleAdjustments);
+        // 4b. Stop-to-stop buckets — personal = evidenced adjustments only (never residual).
+        // H-8: prefer ledger anchors when provided so freeze ≡ Stop-to-Stop panel.
+        const buckets = FuelCalculationService.calculateOdometerBuckets(
+            vehicle,
+            vehicleEntries,
+            vehicleTrips,
+            vehicleAdjustments,
+            options?.externalAnchors,
+        );
         const odometerIncomplete = buckets.length === 0 && vehicleEntries.length > 0;
         const totalOdometerDelta = buckets.reduce((sum, b) => sum + (b.endOdometer - b.startOdometer), 0);
+        const evidencedPersonalFromBuckets = buckets.reduce((sum, b) => sum + (b.personalDistance || 0), 0);
 
-        // Step 2.3a: Compute raw residual (everything that isn't trip or company ops)
+        // Residual after RS + company (diagnostic only). Personal cost uses evidenced personal on non-Brain path.
         const rawResidual = totalOdometerDelta > 0
             ? Math.max(0, totalOdometerDelta - totalTripDistance - companyMiscDistance)
-            : vehicleAdjustments.filter(a => a.type === 'Personal').reduce((sum, a) => sum + (a.distance || 0), 0);
+            : evidencedPersonalFromBuckets;
 
-        // Step 2.3b: Split residual into deadhead + personal (brain residual OR legacy deadhead cap)
         let deadheadDistance = 0;
-        let personalDistance = rawResidual;
+        let personalDistance = evidencedPersonalFromBuckets;
         const useBrain =
             !options?.forceLegacyResidual &&
             !!options?.brainClassification;
 
         if (useBrain && options?.brainClassification) {
             const brain = options.brainClassification;
-            // Brain residual Personal: RS/CO from trips+adj; DH+Personal from Available.
             personalDistance = Math.max(0, brain.personalKm || 0);
             deadheadDistance = Math.max(0, brain.deadheadKm || 0);
             if (totalOdometerDelta > 0) {
                 const purposeSum = personalDistance + deadheadDistance;
-                if (purposeSum > rawResidual && purposeSum > 0) {
-                    const scale = rawResidual / purposeSum;
+                // Brain is evidence for DH/Personal split — cap at rawResidual only.
+                // Do NOT subtract unexplainedFromBuckets (that double-subtracts residual → R-1).
+                const residualCap = Math.max(0, rawResidual);
+                if (purposeSum > residualCap && purposeSum > 0) {
+                    const scale = residualCap / purposeSum;
                     personalDistance *= scale;
                     deadheadDistance *= scale;
                 }
             }
         } else if (deadheadData && totalOdometerDelta > 0) {
-            deadheadDistance = Math.min(deadheadData.deadheadKm, rawResidual);
-            personalDistance = Math.max(0, rawResidual - deadheadDistance);
+            const residualAfterPersonal = Math.max(0, rawResidual - personalDistance);
+            deadheadDistance = Math.min(deadheadData.deadheadKm, residualAfterPersonal);
         }
 
         // 5. Costs need a real JMD/L — when unavailable, keep km but charge $0 (fail loud)
@@ -376,12 +397,16 @@ export const FuelCalculationService = {
             ? 0
             : (personalDistance / observedEfficiency) * actualPricePerLiter;
 
-        // 6. Misc leftover via fuel-core (same math as Deno weekSnapshotEngine)
+        // 6. F-1: carve tank-window timing out of unexplained; misc = true leakage only
+        const windowTimingCost = priceUnavailable
+            ? 0
+            : computeWindowTimingCost(totalLiters, efficiencyFuel, actualPricePerLiter);
         const miscellaneousCost = computeMiscellaneousCost(totalGasCardCost, {
             rideShare: rideShareCost,
             companyUsage: companyUsageCost,
             deadhead: deadheadCost,
             personal: personalUsageCost,
+            windowTiming: windowTimingCost,
         });
 
         // 6b. Personal Allowance (Option 2): company absorbs earned; overage → personal split
@@ -433,6 +458,7 @@ export const FuelCalculationService = {
                 companyUsageCost,
                 deadheadCost,
                 personalUsageCost,
+                windowTimingCost,
                 rule: fuelRule || null,
             });
             rideShareSplit = { company: money.split.company.rideShare, driver: money.split.driver.rideShare };
@@ -472,7 +498,8 @@ export const FuelCalculationService = {
                 deadheadSplit.company +
                 personalSplit.company +
                 miscSplit.company +
-                earnedAbsorbCompany;
+                earnedAbsorbCompany +
+                windowTimingCost;
             driverShare =
                 rideShareSplit.driver +
                 companyUsageSplit.driver +
@@ -581,6 +608,7 @@ export const FuelCalculationService = {
             personalDistance,
             personalUsageCost,
             miscellaneousCost,
+            windowTimingCost,
             companyShare,
             driverShare,
             status: 'Draft',
@@ -727,6 +755,8 @@ export const FuelCalculationService = {
         /** Key `${driverId}:${vehicleId}` → brain classification (consumer path only). */
         brainByDriverVehicle?: Map<string, FuelBrainClassificationInput>,
         personalAllowance?: PersonalAllowanceReconContext,
+        /** H-8: ledger anchors keyed by vehicleId (same shape as Stop-to-Stop panel). */
+        externalAnchorsByVehicleId?: Map<string, OdometerBucketAnchor[]>,
     ): WeeklyFuelReport[] => {
         const startStr = FuelCalculationService.toLocalDateStr(weekStart);
         const endStr = FuelCalculationService.toLocalDateStr(weekEnd);
@@ -839,6 +869,7 @@ export const FuelCalculationService = {
                         personalAllowance: personalAllowance
                             ? { ...personalAllowance, driverWeekTrips: expandedTrips }
                             : undefined,
+                        externalAnchors: externalAnchorsByVehicleId?.get(primaryVehicle.id),
                     },
                 );
                 // Restore: pending from original entries
@@ -907,6 +938,7 @@ export const FuelCalculationService = {
                         fuelScenarioId: policyId,
                         brainClassification: brainByDriverVehicle?.get(`${driverId}:${vid}`),
                         skipPersonalAllowance: true,
+                        externalAnchors: externalAnchorsByVehicleId?.get(vid),
                     },
                 );
                 if (!sliceMeta && slice.metadata?.rideShareCalc) sliceMeta = slice.metadata;
@@ -923,6 +955,10 @@ export const FuelCalculationService = {
                 merged.pendingCount = (merged.pendingCount || 0) + (slice.pendingCount || 0);
                 merged.companyShare += slice.companyShare;
                 merged.driverShare += slice.driverShare;
+                merged.odometerBuckets = [
+                    ...(merged.odometerBuckets || []),
+                    ...(slice.odometerBuckets || []),
+                ];
             }
             merged.vehicleId = primaryVehicle.id;
             if (sliceMeta) {
@@ -986,199 +1022,15 @@ export const FuelCalculationService = {
     },
 
     /**
-     * Groups fuel entries and trips into odometer-based buckets.
-     * Each bucket represents the distance traveled between two verified odometer scans (Anchors),
-     * accumulating any "Floating" receipts that occurred between those scans.
+     * Stop-to-stop buckets — delegates to odometerBucketEngine (fill boundaries + referenceId join).
      */
     calculateOdometerBuckets: (
         vehicle: FuelCalcVehicle,
         fuelEntries: FuelEntry[],
         trips: FuelCalcTrip[],
         adjustments: MileageAdjustment[] = [],
-        externalAnchors?: { id: string; date: string; odometer: number }[]
+        externalAnchors?: OdometerBucketAnchor[]
     ): OdometerBucket[] => {
-        // 1. Determine anchors: use external unified anchors if provided, otherwise extract from fuel entries
-        let anchors: { id: string; date: string; odometer: number }[];
-
-        if (externalAnchors && externalAnchors.length >= 2) {
-            anchors = [...externalAnchors].sort((a, b) => a.odometer - b.odometer);
-        } else {
-            anchors = fuelEntries
-                .filter(e => e.vehicleId === vehicle.id && e.odometer !== undefined && e.odometer !== null)
-                .map(e => ({ id: e.id, date: e.date, odometer: e.odometer! }))
-                .sort((a, b) => a.odometer - b.odometer);
-        }
-
-        const floating = fuelEntries
-            .filter(e => e.vehicleId === vehicle.id && (e.odometer === undefined || e.odometer === null));
-
-        if (anchors.length < 2) return [];
-
-        const buckets: OdometerBucket[] = [];
-        // Compute observed efficiency using the same 3-tier fallback chain as calculateReconciliation
-        const allVehicleEntries = fuelEntries.filter(e => e.vehicleId === vehicle.id);
-        // Step 3.2: Filter to entries with BOTH valid odometer (>0) AND valid liters (>0), sorted by odometer
-        const odoEntries = allVehicleEntries
-            .filter(e => e.odometer !== undefined && e.odometer !== null && e.odometer > 0 && (e.liters || 0) > 0)
-            .sort((a, b) => (a.odometer || 0) - (b.odometer || 0));
-
-        // Step 3.3: Efficiency fuel — exclude first fill-up (standard fill-to-fill method)
-        const bucketEfficiencyFuel = odoEntries.length >= 2
-            ? odoEntries.slice(1).reduce((sum, e) => sum + (e.liters || 0), 0)
-            : 0;
-
-        let bucketEfficiencyKmL = 0; // km/L
-        // Step 3.4: >= 3 entries for reliability, use bucketEfficiencyFuel (not allLiters)
-        if (odoEntries.length >= 3 && bucketEfficiencyFuel > 0) {
-            const odoSpan = (odoEntries[odoEntries.length - 1].odometer || 0) - (odoEntries[0].odometer || 0);
-            if (odoSpan > 0) {
-                bucketEfficiencyKmL = odoSpan / bucketEfficiencyFuel;
-            }
-        }
-        if (bucketEfficiencyKmL <= 0) {
-            const cityEff = vehicle.fuelSettings?.efficiencyCity;
-            if (cityEff && cityEff > 0) {
-                bucketEfficiencyKmL = 100 / cityEff; // L/100km -> km/L
-            } else {
-                bucketEfficiencyKmL = FALLBACK_EFFICIENCY_KM_L;
-            }
-        }
-
-        // Convert km/L to L/100km for expected fuel calculation
-        const avgEfficiency = 100 / bucketEfficiencyKmL; // L/100km
-
-        for (let i = 0; i < anchors.length - 1; i++) {
-            const startAnchor = anchors[i];
-            const endAnchor = anchors[i + 1];
-
-            const startOdo = startAnchor.odometer;
-            const endOdo = endAnchor.odometer;
-            const bucketDistance = endOdo - startOdo;
-
-            if (bucketDistance <= 0) continue;
-
-            // 2. Identify "Floating" receipts that fall within this anchor window
-            // We use dates as the boundary for these legacy receipts.
-            const windowReceipts = floating.filter(f => 
-                f.date >= startAnchor.date && f.date <= endAnchor.date
-            );
-
-            // 3. Accumulate Volume & Cost
-            // Check if the closing anchor corresponds to a fuel entry (it might be a check-in or service record)
-            const closingFuelEntry = fuelEntries.find(e => e.id === endAnchor.id || (e.odometer === endAnchor.odometer && e.date === endAnchor.date));
-            const closingLiters = closingFuelEntry?.liters || 0;
-            const closingCost = closingFuelEntry?.amount || 0;
-
-            // Also find any fuel entries that fall WITHIN the bucket window (between anchors, with odometer readings)
-            // These are fuel entries whose odometer is between startOdo and endOdo, excluding the anchors themselves
-            const midBucketFuelEntries = fuelEntries.filter(e =>
-                e.vehicleId === vehicle.id &&
-                e.odometer !== undefined && e.odometer !== null &&
-                e.odometer > startOdo && e.odometer < endOdo &&
-                e.id !== startAnchor.id && e.id !== endAnchor.id
-            );
-
-            const totalLiters = closingLiters 
-                + windowReceipts.reduce((sum, r) => sum + (r.liters || 0), 0)
-                + midBucketFuelEntries.reduce((sum, e) => sum + (e.liters || 0), 0);
-            const totalCost = closingCost 
-                + windowReceipts.reduce((sum, r) => sum + (r.amount || 0), 0)
-                + midBucketFuelEntries.reduce((sum, e) => sum + (e.amount || 0), 0);
-
-            const associatedReceipts = [
-                ...(closingFuelEntry ? [closingFuelEntry.id] : []),
-                ...windowReceipts.map(r => r.id),
-                ...midBucketFuelEntries.map(e => e.id)
-            ];
-
-            // 4. Find trips that belong to this bucket
-            const bucketTrips = trips.filter(t => {
-                // Only include Completed and Cancelled trips (Processing trips are unverified)
-                if (t.status !== 'Completed' && t.status !== 'Cancelled') return false;
-                
-                const tripStart = t.startOdometer || 0;
-                const tripEnd = t.endOdometer || 0;
-                // If trip has odometers, use them. If not, use date range as fallback
-                if (t.startOdometer && t.endOdometer) {
-                    return t.vehicleId === vehicle.id && tripStart >= startOdo && tripEnd <= endOdo;
-                }
-                return t.vehicleId === vehicle.id && t.date >= startAnchor.date && t.date <= endAnchor.date;
-            });
-
-            // 5. Find adjustments in this bucket
-            const bucketAdjustments = adjustments.filter(a => {
-                return a.vehicleId === vehicle.id && a.date >= startAnchor.date && a.date <= endAnchor.date;
-            });
-
-            // 6. Calculate Distances
-            const rideShareDistance = bucketTrips.reduce((sum, t) => sum + FuelCalculationService.getTotalTripRideshareKm(t), 0);
-            const companyMiscDistance = bucketAdjustments
-                .filter(a => a.type === 'Company_Misc' || a.type === 'Maintenance')
-                .reduce((sum, a) => sum + (a.distance || 0), 0);
-
-            // N-6: logged personal vs inferred residual; gap anomalies use true unaccounted only.
-            const personalEvidenceDistance = bucketAdjustments
-                .filter((a) => a.type === 'Personal')
-                .reduce((sum, a) => sum + (a.distance || 0), 0);
-            const categoryEvidenceDistance =
-              rideShareDistance + companyMiscDistance + personalEvidenceDistance;
-            const inferredPersonalDistance = Math.max(
-              0,
-              bucketDistance - categoryEvidenceDistance,
-            );
-            const personalDistance = inferredPersonalDistance;
-            // True gap only when logged categories exceed the bucket (inferred cannot absorb).
-            const unaccountedDistance = Math.max(0, categoryEvidenceDistance - bucketDistance);
-
-            // 7. Efficiency Variance
-            const expectedFuelLiters = (bucketDistance / 100) * avgEfficiency;
-            const varianceLiters = totalLiters - expectedFuelLiters;
-            const variancePercent = expectedFuelLiters > 0 ? (varianceLiters / expectedFuelLiters) * 100 : 0;
-
-            // 8. Phase 1 (Logic Refactoring): 105% Overflow Anomaly
-            const tankCapacity =
-              Number(vehicle.fuelSettings?.tankCapacity) ||
-              Number(vehicle.specifications?.tankCapacity) ||
-              0;
-            const isOverflow = tankCapacity > 0 && totalLiters > tankCapacity * 1.05;
-
-            // 9. Phase 4: Deduction Recommendation
-            // Deduction = Gap * (Total Cost in Bucket / Total Distance in Bucket)
-            // This charges the driver the actual cost of fuel for the unlogged distance.
-            let deductionRecommendation = 0;
-            let deductionReason = "";
-
-            if (unaccountedDistance > 10) { // Threshold: 10km gap
-                deductionRecommendation = Number((unaccountedDistance * (totalCost / bucketDistance)).toFixed(2));
-                deductionReason = `Unaccounted distance gap of ${unaccountedDistance.toLocaleString()}km identified between odometer anchors.`;
-            }
-
-            buckets.push({
-                id: `bucket_${vehicle.id}_${startOdo}_${endOdo}`,
-                vehicleId: vehicle.id,
-                startOdometer: startOdo,
-                endOdometer: endOdo,
-                startDate: startAnchor.date,
-                endDate: endAnchor.date,
-                actualFuelLiters: totalLiters,
-                actualFuelCost: totalCost,
-                associatedReceipts,
-                closingEntryId: closingFuelEntry?.id || endAnchor.id,
-                totalTripDistance: rideShareDistance,
-                tripsCount: bucketTrips.length,
-                expectedFuelLiters,
-                varianceLiters,
-                variancePercent,
-                rideShareDistance,
-                personalDistance,
-                companyMiscDistance,
-                unaccountedDistance,
-                deductionRecommendation: deductionRecommendation > 0 ? deductionRecommendation : undefined,
-                deductionReason: deductionReason || undefined,
-                status: (isOverflow || unaccountedDistance > (bucketDistance * 0.1)) ? 'Anomaly' : 'Complete'
-            });
-        }
-
-        return buckets;
+        return calculateOdometerBucketsEngine(vehicle, fuelEntries, trips, adjustments, externalAnchors);
     }
 };

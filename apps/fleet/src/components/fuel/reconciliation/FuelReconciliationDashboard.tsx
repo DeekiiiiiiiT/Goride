@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, type Dispatch, type SetStateAction } from 'react';
 import { FuelPeriodLandingPage } from './FuelPeriodLandingPage';
 import { FuelPeriodWizard } from './FuelPeriodWizard';
 import { FuelPeriodResetDialog } from './FuelPeriodResetDialog';
@@ -22,7 +22,7 @@ import { ymdToLocalDate } from '../../../utils/timezoneDisplay';
 import type { DateRange } from 'react-day-picker';
 import type { FuelAutoCloseDualApprovalMode } from '../../../utils/fuelDualApproval';
 import { isReconWeekSealed, reconWeekSealMessage } from '../../../utils/reconWeekSeal';
-import { isEntryInInclusiveYmdRange } from '../../../utils/fuelWeekPeriod';
+import { useFuelWeekDataset } from '../../../hooks/useFuelWeekDataset';
 
 export const FUEL_RECON_WIZARD_PRIMARY =
   import.meta.env.VITE_FUEL_RECON_WIZARD_PRIMARY !== '0';
@@ -46,6 +46,134 @@ function periodAllowsReconWork(period: FuelReconciliationPeriod): boolean {
   });
 }
 
+function FuelReconciliationWizardView({
+  period,
+  wizardSession,
+  initialStepId,
+  vehicles,
+  trips,
+  fuelEntries,
+  adjustments,
+  disputes,
+  scenarios,
+  drivers,
+  fuelCards,
+  finalizedReports,
+  transactions,
+  isRefreshing,
+  onRefresh,
+  onFinalize,
+  onAddAdjustment,
+  onResolveDispute,
+  onOpenConfiguration,
+  onOpenTransactionLogs,
+  onOpenReviewQueue,
+  onAcceptFuelException,
+  onEditFuelEntry,
+  onBack,
+  onResetPeriod,
+  resetPeriod,
+  setResetPeriod,
+  setWizardSession,
+}: {
+  period: FuelReconciliationPeriod;
+  wizardSession: number;
+  initialStepId?: FuelStepId;
+  vehicles: Vehicle[];
+  trips: Trip[];
+  fuelEntries: FuelEntry[];
+  adjustments: MileageAdjustment[];
+  disputes: FuelDispute[];
+  scenarios: FuelScenario[];
+  drivers: any[];
+  fuelCards: FuelCard[];
+  finalizedReports: FinalizedFuelReport[];
+  transactions?: FinancialTransaction[];
+  isRefreshing?: boolean;
+  onRefresh: () => void;
+  onFinalize: (reports: WeeklyFuelReport[]) => Promise<boolean | void> | boolean | void;
+  onAddAdjustment: () => void;
+  onResolveDispute: (dispute: FuelDispute) => void;
+  onOpenConfiguration?: () => void;
+  onOpenTransactionLogs?: (opts: {
+    fuelEntryId?: string;
+    date?: string;
+    vehicleId?: string;
+  }) => void;
+  onOpenReviewQueue?: () => void;
+  onAcceptFuelException?: (
+    entryId: string,
+    note: string,
+  ) => Promise<boolean | void> | boolean | void;
+  onEditFuelEntry?: (entryId: string) => void;
+  onBack: () => void;
+  onResetPeriod?: () => void;
+  resetPeriod: FuelReconciliationPeriod | null;
+  setResetPeriod: (p: FuelReconciliationPeriod | null) => void;
+  setWizardSession: Dispatch<SetStateAction<number>>;
+}) {
+  const dateRange: DateRange = {
+    from: ymdToLocalDate(period.startDate),
+    to: ymdToLocalDate(period.endDate),
+  };
+  // P-1: week-scoped props via hook — landing never mounts this tree.
+  const week = useFuelWeekDataset({
+    weekStart: period.startDate,
+    weekEnd: period.endDate,
+    fuelEntries,
+    adjustments,
+    trips,
+    finalizedReports,
+  });
+  return (
+    <>
+      <FuelPeriodWizard
+        key={`${period.id}-${wizardSession}`}
+        period={period}
+        vehicles={vehicles}
+        trips={week.trips}
+        fuelEntries={week.fuelEntries}
+        adjustments={week.adjustments}
+        disputes={disputes}
+        scenarios={scenarios}
+        drivers={drivers}
+        fuelCards={fuelCards}
+        finalizedReports={week.finalizedReports}
+        transactions={transactions}
+        dateRange={dateRange}
+        isRefreshing={isRefreshing}
+        sessionKey={wizardSession}
+        initialStepId={initialStepId}
+        onBack={onBack}
+        onRefresh={onRefresh}
+        onFinalize={onFinalize}
+        onAddAdjustment={onAddAdjustment}
+        onResolveDispute={onResolveDispute}
+        onOpenConfiguration={onOpenConfiguration}
+        onOpenTransactionLogs={onOpenTransactionLogs}
+        onOpenReviewQueue={onOpenReviewQueue}
+        onAcceptFuelException={onAcceptFuelException}
+        onEditFuelEntry={onEditFuelEntry}
+        onResetPeriod={onResetPeriod}
+      />
+      {resetPeriod && (
+        <FuelPeriodResetDialog
+          open={!!resetPeriod}
+          onOpenChange={(open) => !open && setResetPeriod(null)}
+          period={resetPeriod}
+          finalizedReports={finalizedReports}
+          fuelEntries={week.fuelEntries}
+          onComplete={() => {
+            setResetPeriod(null);
+            setWizardSession((n) => n + 1);
+            onRefresh();
+          }}
+        />
+      )}
+    </>
+  );
+}
+
 export function FuelReconciliationDashboard({
   outstanding,
   inProgress,
@@ -53,7 +181,7 @@ export function FuelReconciliationDashboard({
   loading,
   periodsLoadError,
   vehicles,
-  trips,
+  trips = [],
   fuelEntries,
   adjustments,
   disputes,
@@ -85,7 +213,8 @@ export function FuelReconciliationDashboard({
   /** SQL period list failed — do not treat empty Completed as authoritative. */
   periodsLoadError?: boolean;
   vehicles: Vehicle[];
-  trips: Trip[];
+  /** Optional — wizard fetches week trips via useFuelWeekReports when empty (P-1/P-9). */
+  trips?: Trip[];
   fuelEntries: FuelEntry[];
   adjustments: MileageAdjustment[];
   disputes: FuelDispute[];
@@ -205,73 +334,40 @@ export function FuelReconciliationDashboard({
   }
 
   if (view.kind === 'wizard') {
-    const period = view.period;
-    const dateRange: DateRange = {
-      from: ymdToLocalDate(period.startDate),
-      to: ymdToLocalDate(period.endDate),
-    };
-    // P-1: week-scoped props — wizard must not re-render on whole-fleet array churn.
-    const weekFuelEntries = fuelEntries.filter((e) =>
-      isEntryInInclusiveYmdRange(e.date, period.startDate, period.endDate),
-    );
-    const weekAdjustments = adjustments.filter((a) =>
-      isEntryInInclusiveYmdRange(a.date, period.startDate, period.endDate),
-    );
-    const weekTrips = trips.filter((t) =>
-      isEntryInInclusiveYmdRange(t.date, period.startDate, period.endDate),
-    );
-    const weekFinalized = finalizedReports.filter(
-      (f) => String(f.weekStart || '').split('T')[0] === period.startDate,
-    );
     return (
-      <>
-        <FuelPeriodWizard
-          key={`${period.id}-${wizardSession}`}
-          period={period}
-          vehicles={vehicles}
-          trips={weekTrips}
-          fuelEntries={weekFuelEntries}
-          adjustments={weekAdjustments}
-          disputes={disputes}
-          scenarios={scenarios}
-          drivers={drivers}
-          fuelCards={fuelCards}
-          finalizedReports={weekFinalized}
-          transactions={transactions}
-          dateRange={dateRange}
-          isRefreshing={isRefreshing}
-          sessionKey={wizardSession}
-          initialStepId={view.initialStepId}
-          onBack={() => {
-            setView({ kind: 'landing' });
-            onRefresh();
-          }}
-          onRefresh={onRefresh}
-          onFinalize={onFinalize}
-          onAddAdjustment={onAddAdjustment}
-          onResolveDispute={onResolveDispute}
-          onOpenConfiguration={onOpenConfiguration}
-          onOpenTransactionLogs={onOpenTransactionLogs}
-          onOpenReviewQueue={onOpenReviewQueue}
-          onAcceptFuelException={onAcceptFuelException}
-          onEditFuelEntry={onEditFuelEntry}
-          onResetPeriod={period.locked ? () => setResetPeriod(period) : undefined}
-        />
-        {resetPeriod && (
-          <FuelPeriodResetDialog
-            open={!!resetPeriod}
-            onOpenChange={(open) => !open && setResetPeriod(null)}
-            period={resetPeriod}
-            finalizedReports={finalizedReports}
-            fuelEntries={weekFuelEntries}
-            onComplete={() => {
-              setResetPeriod(null);
-              setWizardSession((n) => n + 1);
-              onRefresh();
-            }}
-          />
-        )}
-      </>
+      <FuelReconciliationWizardView
+        period={view.period}
+        wizardSession={wizardSession}
+        initialStepId={view.initialStepId}
+        vehicles={vehicles}
+        trips={trips}
+        fuelEntries={fuelEntries}
+        adjustments={adjustments}
+        disputes={disputes}
+        scenarios={scenarios}
+        drivers={drivers}
+        fuelCards={fuelCards}
+        finalizedReports={finalizedReports}
+        transactions={transactions}
+        isRefreshing={isRefreshing}
+        onRefresh={onRefresh}
+        onFinalize={onFinalize}
+        onAddAdjustment={onAddAdjustment}
+        onResolveDispute={onResolveDispute}
+        onOpenConfiguration={onOpenConfiguration}
+        onOpenTransactionLogs={onOpenTransactionLogs}
+        onOpenReviewQueue={onOpenReviewQueue}
+        onAcceptFuelException={onAcceptFuelException}
+        onEditFuelEntry={onEditFuelEntry}
+        onBack={() => {
+          setView({ kind: 'landing' });
+          onRefresh();
+        }}
+        onResetPeriod={view.period.locked ? () => setResetPeriod(view.period) : undefined}
+        resetPeriod={resetPeriod}
+        setResetPeriod={setResetPeriod}
+        setWizardSession={setWizardSession}
+      />
     );
   }
 

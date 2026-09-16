@@ -15,7 +15,7 @@ if (app !== 'fleet' && app !== 'admin') {
 
 const filter =
   app === 'fleet'
-    ? /(?:^|[/\\])(?:src[/\\])?(?:services[/\\]fuelCalculationService|services[/\\]fuelBrainClient|services[/\\]fuelFinalizeService|utils[/\\]fuelBrainFlags|utils[/\\]buildFuelWeekReportsForFinalize|utils[/\\]fuelAnalyticsAggregates|utils[/\\]payoutDraftFuel|utils[/\\]fuelCycleEngine|utils[/\\]personalAllowance|utils[/\\]resolvePrice|packages[/\\]fuel-core[/\\])/
+    ? /(?:^|[/\\])(?:src[/\\])?(?:services[/\\]fuelCalculationService|services[/\\]fuelBrainClient|services[/\\]fuelFinalizeService|services[/\\]stopToStopGapChargeService|utils[/\\]fuelBrainFlags|utils[/\\]buildFuelWeekReportsForFinalize|utils[/\\]fuelAnalyticsAggregates|utils[/\\]payoutDraftFuel|utils[/\\]fuelCycleEngine|utils[/\\]personalAllowance|utils[/\\]resolvePrice|utils[/\\]stopToStopClosableFlags|utils[/\\]fuelWeekClosableGate|components[/\\]fuel[/\\]BucketReconciliationView|components[/\\]fuel[/\\]reconciliation[/\\]FuelBulkFinalizeDialog|packages[/\\]fuel-core[/\\])/
     : /(?:^|[/\\])(?:src[/\\])?(?:services[/\\]fuelCalculationService|utils[/\\]fuelCycleEngine|components[/\\]admin[/\\]fuel-cost-analytics|packages[/\\]fuel-core[/\\])/;
 
 const r = spawnSync(
