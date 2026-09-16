@@ -204,17 +204,16 @@ export function DashboardCourierTable({
                     )}
                     aria-hidden={!actionsOpen}
                   >
-                    <div className="flex justify-end px-2 pt-2">
-                      <button
-                        type="button"
-                        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800"
-                        aria-label="Close options"
-                        onClick={() => setActionsRowId(null)}
-                      >
-                        <X className="h-4 w-4" />
-                      </button>
-                    </div>
-                    <div className="flex flex-1 flex-col justify-center px-1.5 pb-2">
+                    <button
+                      type="button"
+                      className="absolute right-2 top-2 z-10 flex h-8 w-8 items-center justify-center rounded-md text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800"
+                      aria-label="Close options"
+                      onClick={() => setActionsRowId(null)}
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                    {/* Center actions in full panel height (X is overlay so it does not shift the stack) */}
+                    <div className="flex h-full flex-col justify-center px-1.5">
                       <button
                         type="button"
                         className="rounded-lg px-3 py-2.5 text-left text-sm font-medium text-slate-900 hover:bg-slate-50 dark:text-slate-100 dark:hover:bg-slate-800"
