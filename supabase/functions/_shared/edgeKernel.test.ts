@@ -38,8 +38,14 @@ Deno.test("normalizeFleetCorePathname maps /fleet-core to make-server paths", ()
     "/make-server-37f42386/admin/foo",
   );
   assertEquals(
-    normalizeFleetCorePathname("/functions/v1/fleet-core/health"),
-    "/make-server-37f42386/health",
+    normalizeFleetCorePathname("/functions/v1/fleet-core/trips"),
+    "/make-server-37f42386/trips",
+  );
+  assertEquals(normalizeFleetCorePathname("/fleet-core/health"), "/health");
+  assertEquals(normalizeFleetCorePathname("/fleet-core/ready"), "/ready");
+  assertEquals(
+    normalizeFleetCorePathname("/fleet-core/v1/extraction-status"),
+    "/v1/extraction-status",
   );
 });
 

@@ -83,6 +83,14 @@ export function normalizeFleetCorePathname(pathname: string): string {
   if (pathname.startsWith("/functions/v1/fleet-core")) {
     pathname = pathname.slice("/functions/v1".length) || "/fleet-core";
   }
+  // Kernel routes stay on the slug path (not rewritten onto make-server prefixes).
+  if (
+    pathname === "/fleet-core/health" ||
+    pathname === "/fleet-core/ready" ||
+    pathname === "/fleet-core/v1/extraction-status"
+  ) {
+    return pathname.slice("/fleet-core".length) || "/";
+  }
   if (pathname === "/fleet-core" || pathname.startsWith("/fleet-core/")) {
     pathname = `/make-server-37f42386${pathname.slice("/fleet-core".length)}`;
   }

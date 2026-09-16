@@ -29,10 +29,8 @@ interface Route {
   middleware: string;
 }
 
-async function tollRoutes(): Promise<Route[]> {
-  const source = await Deno.readTextFile(
-    new URL("./make_server_legacy_boot.tsx", import.meta.url),
-  );
+async function tollRoutesFromFile(rel: string): Promise<Route[]> {
+  const source = await Deno.readTextFile(new URL(rel, import.meta.url));
   const starts: Array<{ index: number; method: string }> = [];
   for (const m of source.matchAll(REGISTRATION_RE)) {
     starts.push({ index: m.index!, method: m[1] });
@@ -51,6 +49,13 @@ async function tollRoutes(): Promise<Route[]> {
     });
   }
   return routes;
+}
+
+async function tollRoutes(): Promise<Route[]> {
+  // F0: residual handlers live in register_residual_monolith_routes.tsx
+  const a = await tollRoutesFromFile("./make_server_legacy_boot.tsx");
+  const b = await tollRoutesFromFile("./register_residual_monolith_routes.tsx");
+  return [...a, ...b];
 }
 
 Deno.test("every toll route is registered with requireAuth", async () => {
