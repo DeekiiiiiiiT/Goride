@@ -22,6 +22,25 @@ import * as fuelLogic from "./fuel_logic.ts";
 import { recalculateVehicleFuelEntries } from "./fuel_cycle_stamp.ts";
 import { Buffer } from "node:buffer";
 import {
+  DEFAULT_ENTERPRISE_MODULES,
+  resolveEffectiveModules,
+  rushModuleOverridesForServiceLines,
+  RUSH_MODULE_KEYS,
+} from "./enterprise_modules.ts";
+import {
+  isFeatureEnabled,
+  setFeatureFlag,
+  getFeatureFlag,
+  getAllFeatureFlags,
+  enableFlagForOrg,
+  disableFlagForOrg,
+  getFeatureFlagStats,
+  getAllFeatureFlagStats,
+  initializeDefaultFlags,
+  emergencyDisableAll,
+  FEATURE_FLAGS,
+} from "./feature_flags.ts";
+import {
   requireAuth,
   requirePermission,
   requirePlatformStaff,
@@ -12951,13 +12970,6 @@ export function registerResidualMonolithRoutes(app: Hono) {
     );
   });
 
-  import {
-    DEFAULT_ENTERPRISE_MODULES,
-    resolveEffectiveModules,
-    rushModuleOverridesForServiceLines,
-    RUSH_MODULE_KEYS,
-  } from "./enterprise_modules.ts";
-
   // GET /enterprise/me/modules — tenant effective feature modules
   app.get("/make-server-37f42386/enterprise/me/modules", requireAuth(), async (c) => {
     try {
@@ -13016,20 +13028,6 @@ export function registerResidualMonolithRoutes(app: Hono) {
   // ═══════════════════════════════════════════════════════════════════════════
   // FEATURE FLAGS ADMIN ENDPOINTS (Phase 0 of Fleet Data Isolation)
   // ═══════════════════════════════════════════════════════════════════════════
-
-  import {
-    isFeatureEnabled,
-    setFeatureFlag,
-    getFeatureFlag,
-    getAllFeatureFlags,
-    enableFlagForOrg,
-    disableFlagForOrg,
-    getFeatureFlagStats,
-    getAllFeatureFlagStats,
-    initializeDefaultFlags,
-    emergencyDisableAll,
-    FEATURE_FLAGS,
-  } from "./feature_flags.ts";
 
   // GET /admin/feature-flags — List all feature flags and their status
   app.get("/make-server-37f42386/admin/feature-flags", requireAuth(), async (c) => {
