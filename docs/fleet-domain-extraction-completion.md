@@ -1073,12 +1073,14 @@ Maintenance copy: `Platform is under maintenance…` + `maintenanceMessage` from
 
 | Slug | Screen | Totals | Eng preflight | Authenticated UI |
 |------|--------|--------|---------------|------------------|
-| fleet-fuel | Fuel Entries | X-Total-Count | PASS (`smoke-edge-fn` + `smoke-fleet-fuel-cors`) | **PO pending** |
-| fleet-toll | Tags / plazas / ledger | X-Total-Count | PASS | **PO pending** |
-| fleet-ops | Maintenance / expense hub | as used | PASS | **PO pending** |
-| fleet-claims | Claims list | as used | PASS | **PO pending** |
-| fleet-pay | Settlement desk | as used | PASS | **PO pending** |
-| fleet-core | Residual (drivers/trips/ledger) | as used | PASS | **PO pending** |
+| fleet-fuel | Fuel Entries | X-Total-Count | PASS (`smoke-edge-fn` + `smoke-fleet-fuel-cors`) | **PO: run checklist** |
+| fleet-toll | Tags / plazas / ledger | X-Total-Count | PASS | **PO: run checklist** |
+| fleet-ops | Maintenance / expense hub | as used | PASS | **PO: run checklist** |
+| fleet-claims | Claims list | as used | PASS | **PO: run checklist** |
+| fleet-pay | Settlement desk | as used | PASS | **PO: run checklist** |
+| fleet-core | Residual (drivers/trips/ledger) | as used | PASS | **PO: run checklist** |
+
+**PO how-to:** open [`docs/phase-i-cors-browser-checklist.md`](./phase-i-cors-browser-checklist.md), logged-in Fleet (Admin for pay/claims), fill Result column then copy PASS/FAIL into this table. Eng preflight already green — authenticated totals are the remaining D9 gate.
 
 ---
 
