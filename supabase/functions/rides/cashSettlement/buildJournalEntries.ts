@@ -1,7 +1,22 @@
 import type { CashSettlementComputed } from "./computeOutcome.ts";
+import {
+  driverAccountKeyForUser,
+  driverCashAccountKeyForUser,
+  driverDebtAccountKeyForUser,
+  driverDigitalAccountKeyForUser,
+  riderAccountKeyForUser,
+} from "../../_shared/ridesAccountKeys.ts";
 
 export const PLATFORM_RECEIVABLE_KEY = "platform:receivable";
 export const PLATFORM_CLEARING_KEY = "platform:clearing";
+
+export {
+  driverAccountKeyForUser,
+  driverCashAccountKeyForUser,
+  driverDebtAccountKeyForUser,
+  driverDigitalAccountKeyForUser,
+  riderAccountKeyForUser,
+};
 
 export type JournalEntryType =
   | "cash_trip_arrears"
@@ -47,31 +62,6 @@ export interface WalletDeltaPreview {
   fare_allocated_minor: number;
   driver_digital_credit_minor?: number;
   rider_wallet_debit_minor?: number;
-}
-
-function userAccountKey(userId: string, role: "rider" | "driver"): string {
-  return `user:${userId}:${role}`;
-}
-
-export function riderAccountKeyForUser(userId: string): string {
-  return userAccountKey(userId, "rider");
-}
-
-/** Legacy single driver account (V1). */
-export function driverAccountKeyForUser(userId: string): string {
-  return userAccountKey(userId, "driver");
-}
-
-export function driverDigitalAccountKeyForUser(userId: string): string {
-  return `user:${userId}:driver:digital`;
-}
-
-export function driverCashAccountKeyForUser(userId: string): string {
-  return `user:${userId}:driver:cash`;
-}
-
-export function driverDebtAccountKeyForUser(userId: string): string {
-  return `user:${userId}:driver:debt`;
 }
 
 /** V1 single-account journal builder — used when CASH_SETTLEMENT_V2 is off. Deprecated after V2 production soak. */

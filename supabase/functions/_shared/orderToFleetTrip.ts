@@ -172,7 +172,8 @@ async function upsertDeliveryDetails(
   trip: Record<string, unknown>,
 ): Promise<void> {
   const { createClient } = await import("https://esm.sh/@supabase/supabase-js@2");
-  const { computeCodTrialBalance } = await import("./dashPricing.ts");
+  // Import only COD balance math — not the full dash-pricing engine (fleet graph hygiene).
+  const { computeCodTrialBalance } = await import("../../../packages/dash-pricing/src/codBalance.ts");
   const db = createClient(
     Deno.env.get("SUPABASE_URL") ?? "",
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",

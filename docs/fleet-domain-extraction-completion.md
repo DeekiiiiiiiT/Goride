@@ -1,8 +1,8 @@
 # Fleet domain extraction — completion playbook
 
-**Status:** **F5 closeout — Rev 5 gates hardening in progress (2026-09-16).** F1 SQL shim filter + F2/F3 retire/`f5-soak-log.json` landed. Client cutover is in tree (`API_ENDPOINTS.fleet` = 0). **Do not retire `make-server-37f42386` until soak log shows 7 consecutive greens.**
+**Status:** **All engineering closed and verified — awaiting release + soak (Rev 6, 2026-09-16).** Every gate is green (6/6 manifests, D15 0 collisions + exception note, extraction-status current, 13/13 tests), all work is committed (`7d78c7e8`), and the retirement guard is a double gate: a live `--days 7` query **and** 7 consecutive `ok:true` days in `docs/f5-soak-log.json` ending today/yesterday UTC — both fail closed. **Rev 6 found no defect in the code, gates, or guards.**
 
-Day 0 post-F1 rebaseline: **4368 non-health / 45 health** (≈ prior ~4400 — filter validated). Daily: `pnpm check:shim-traffic:log`.
+**The remaining critical-path item is a release, not a commit.** The client cutover is committed (`API_ENDPOINTS.fleet` = 0 sites, 296 on `.fleetCore`, legacy keys aliased), but fleet/admin/driver builds have not shipped, so live traffic has not left the shim and the soak clock has not started. Day 0 post-F1 rebaseline: **4,368 non-health / 45 health** (≈ prior ~4,400 — filter validated by agreement). Daily: `pnpm check:shim-traffic:log`. **Do not retire `make-server-37f42386` until the soak log shows 7 consecutive greens.** See **§G**.
 
 **Goal:** Bring **Toll, Maintenance / Expense Hub, Claims, and Driver pay / settlement** to the same bar as fuel: own Edge Function (or intentional mount on `fleet-ops`), full client cutover, money-path seals safe, **browser** + auth proven — then, after soak, retire `make-server-37f42386`.
 
@@ -269,7 +269,120 @@ flowchart TD
 
 ---
 
-## F. Verification pass — Rev 5, 2026-09-16 (**current**)
+## G. Verification pass — Rev 6, 2026-09-16 (**current**)
+
+Read-only re-audit of the §F5 fixes. Gates executed, guard chain read end-to-end.
+
+### G0. All three blocking defects closed — the program is now correctly gated
+
+```
+$ git log --oneline -3
+  7d78c7e8 Clarify D9 PO browser steps for the six-slug soak checklist.
+  8ec1265b Record Rev 5 gate hardening ship SHA and soak log as source of truth.
+  5e0b6a3c Harden F5 soak gates and cut residual clients over to fleet-core.
+$ git status --short | wc -l → 7   (all unrelated leftovers)
+
+$ lint-edge-kernel → ok      $ manifests → 6/6 current (core 567)
+$ overlap → 0 live collisions + intentional-exception note
+$ extraction-status → CURRENT   $ deno test → 13 passed | 0 failed
+```
+
+| §F5 item | Status | Evidence |
+|---|---|---|
+| 1. Fix the instrument's SQL | ✅ **CLOSED — and validated the right way** | Predicate `and log_attributes['request.pathname'] like '%make-server-37f42386%'` added; limit raised 100 → 200. **Re-baselined post-fix: 4,368 vs prior ~4,400** — the agreement is the proof the truncation wasn't already hiding traffic |
+| 2. Retirement guard | ✅ **CLOSED — stronger than specified** | See below |
+| 3. Commit + push | ✅ **CLOSED** | 3 commits; working tree down to 7 unrelated files |
+| 4. Re-baseline | ✅ | `docs/f5-soak-log.json` Day 0 recorded with top offenders |
+| 5. Machine-check "7 consecutive" | ✅ **CLOSED** (one manual step remains — G1) | `docs/f5-soak-log.json` is the source of truth |
+| 6. PO browser pass | 🟡 Open — table ready, six rows pending | §8 D9 table |
+
+**On item 2 — the retirement guard is now a genuine double gate**, and it is the best-built control in this program:
+
+```js
+// scripts/f5-retire-shim.mjs
+run("node", ["scripts/check-shim-traffic.mjs", "--days", "7"]);   // live query must be clean
+assertSoakStreak();  // AND the log must show NEED consecutive ok:true days
+                     // ending today or yesterday UTC
+```
+
+Both must pass; both fail closed; `--force` is explicit and prints a warning. The `ending today or yesterday UTC` condition is the detail that makes it correct — it prevents an old green streak from authorizing a retirement weeks later. That is a subtlety I did not specify and it was got right.
+
+The instrument fix deserves the same note. I asked for the re-baseline as validation, and it was run and recorded with the reasoning written into the log entry itself: *"Agrees with prior ~4400 Day-0 — filter validated."* That is how a measurement change should be shipped.
+
+**Nothing in the engineering, the money path, the CI gates, or the retirement guard is open.**
+
+### G1. 🟡 The soak log's daily commit is the last hand-step
+
+`.github/workflows/shim-traffic-soak.yml` runs the check with `--append-log`, then:
+
+```yaml
+- name: Upload soak log artifact
+  uses: actions/upload-artifact@v4
+  with: { name: f5-soak-log, path: docs/f5-soak-log.json }
+```
+
+It uploads an **artifact**. It never commits the log back — the workflow's own header says *"commit the log after green/red runs"*, i.e. by hand. But `f5-retire-shim` reads `docs/f5-soak-log.json` **from the repo** and requires the streak to end today or yesterday.
+
+So completing the soak requires someone to download the artifact and commit it on **seven consecutive days**. Miss two days and the streak check fails — correctly, since it cannot see those days, but for a bookkeeping reason rather than a traffic reason.
+
+This fails **closed**, so it is not a correctness risk — it is friction on a seven-day critical path, and the failure mode ("streak check failed") won't obviously read as "you forgot to commit Tuesday."
+
+**Fix:** have the workflow commit the updated log back on each run (a bot commit to `main`, or a PR), so the chain accumulates without human involvement. Then the §8 table becomes a mirror of a file nobody has to maintain.
+
+### G2. 🟠 The soak has not started — this is now the whole program
+
+Day 0 stands at **4,368 non-health hits / 24 h**, with the top offenders naming exactly what is still calling the shim:
+
+| Path | Requests |
+|---|---|
+| `/stations` | 1,147 |
+| `/platform-status` | 537 |
+| `/transactions` | 340 |
+| `/enterprise/me/modules` | 226 |
+| `/fuel-entries` | 196 |
+| `/drivers`, `/vehicles`, `/fleet-timezone`, … | 144–157 each |
+
+The client cutover **is committed** (`API_ENDPOINTS.fleet` → 0 call sites, 296 on `.fleetCore`, legacy keys aliased). What has not happened is the **app release** — fleet/admin/driver builds carrying that config to real browsers and devices. Until those ship, Day 1 cannot begin and every daily run will report the same red.
+
+This is not a defect; it is the remaining work. But it is worth stating plainly because the previous five rounds all ended with an engineering action, and this one does not: **the next step is a release, not a commit.**
+
+Two things to watch once the builds ship:
+
+- **`/platform-status` (537/day)** is in the kernel's maintenance-exempt list, so it is reachable on the shim even under maintenance. Confirm it is served from `fleet-core` (or a product-line function) post-release rather than lingering as a hard-coded shim URL somewhere outside `API_ENDPOINTS`.
+- **Cached and native clients.** Installed driver/admin apps and cached web bundles will keep the old base URL until users update. The legacy-key aliasing covers anything reading `API_ENDPOINTS`, but a stale *deployed bundle* still points at `/make-server-37f42386` directly. Expect the tail to decay over days, and treat a stubborn non-zero floor as "old clients still live", not a bug — the top-offenders list will identify it.
+
+### G3. 🟡 Minor: untracked `debug-33ad82.log` at repo root
+
+1.7 KB, dated 2026-09-15, not gitignored. Delete it or add it to `.gitignore` — the working tree is otherwise clean, and a stray log is exactly the kind of thing that gets swept into a future commit.
+
+### G4. What's left
+
+| # | Work | Owner | Blocking? |
+|---|---|---|---|
+| 1 | **Ship fleet/admin/driver builds** so live traffic leaves the shim | eng/release | **Yes — the soak cannot start** |
+| 2 | Make the soak workflow commit `f5-soak-log.json` back (G1) | eng | No — removes the 7-day hand-step |
+| 3 | Daily: confirm the log accumulates; watch the top-offenders list decay | eng | Soak-bound |
+| 4 | PO: authenticated browser pass on six slugs; fill the §8 D9 table | PO | Gates D9 |
+| 5 | Delete/ignore `debug-33ad82.log` (G3) | eng | No |
+| 6 | At 7 consecutive green days: `pnpm f5:retire-shim` → commit → CI deploy | eng | Soak-bound |
+| 7 | *Optional:* staging window for a full app-ship RTO | eng | No |
+
+Item 1 is the only thing on the critical path, and it is a release, not code.
+
+### G5. The lesson this round
+
+Rev 1: *a checklist is a memory aid, not a control.*
+Rev 2: *building a control is not arming it.*
+Rev 3: *an armed control does nothing until it's in the pipeline it was written for.*
+Rev 4: *the last gate is the one nobody instruments.*
+Rev 5: *an instrument that can only fail optimistically is worse than none.*
+Rev 6: **the controls are sound; what's left is not engineering.**
+
+Six rounds, and for the first time there is no defect to report in the code, the gates, or the guards. The retirement guard is stricter than what was asked for, the instrument fix was validated by re-measurement rather than by assertion, and the working tree is clean. The program's remaining risk is a release and seven days of patience — and the one hand-step left (G1) fails closed, which is the right way for a hand-step to fail.
+
+---
+
+## F. Verification pass — Rev 5, 2026-09-16 (**superseded by §G**)
 
 Read-only re-audit of the §E6 closeout. Gates executed, scripts read, instrument test-run.
 
@@ -1048,6 +1161,7 @@ Maintenance copy: `Platform is under maintenance…` + `maintenanceMessage` from
 | **D9 maintenance drill** | **2026-09-16** | Flipped `platform:settings:fleet` (+ legacy) `maintenanceMode=true`; all six slugs returned **503** maintenance payload on business paths; `/health` stayed **200**; restored to `false` |
 | **Audit Rev 4 (verification)** | **2026-09-16** | **Engineering program CLOSED.** Remaining work operational (§E). |
 | **F5 closeout P0–P3** | **2026-09-16** | **Done.** `scripts/check-shim-traffic.mjs` + `pnpm check:shim-traffic`; N=**7**; overlap success line names dual-door; CORS checklist six rows; client cutover + straggler scripts/cron. Retirement: `pnpm f5:retire-shim` (blocked until soak green). |
+| **Audit Rev 6 (verification)** | **2026-09-16** | **No defects found.** All three §F5 blockers closed: instrument SQL now filters shim paths server-side (limit 100→200) and was **validated by re-baseline — 4,368 vs prior ~4,400**; `f5-retire-shim` is a double gate (live `--days 7` **and** 7 consecutive `ok:true` log days ending today/yesterday UTC, both fail-closed, `--force` explicit); all work committed at `7d78c7e8` with 7 unrelated files left. Gates re-run green. **Remaining: a release, not code** — fleet/admin/driver builds must ship before Day 1 (§G2). Open: 🟡 soak workflow uploads the log as an artifact but never commits it, so the 7-day chain needs a daily manual commit — fails closed (§G1); 🟡 PO browser pass; 🟡 stray `debug-33ad82.log` |
 | **Audit Rev 5 (verification)** | **2026-09-16** | Gate defects found (F1–F4). |
 | **Rev 5 gate hardening** | **2026-09-16** | **Shipped `5e0b6a3c`.** F1 SQL `like '%make-server-37f42386%'`; F2 retire `--days 7` + consecutive soak-log guard; F3 `docs/f5-soak-log.json` + `--append-log` + daily workflow artifact; F4 cutover committed/pushed; `pnpm deploy:fleet-core` smoke green; fleet/admin/driver **built** (Vercel should pick up `main`). Post-F1 Day 0 = **4368** non-health (filter validated). **Still open:** add GH secret `ROAM_MGMT_PAT`; wait for client traffic to leave shim; PO D9 browser; 7 green days then `pnpm f5:retire-shim`. |
 
@@ -1087,20 +1201,45 @@ Maintenance copy: `Platform is under maintenance…` + `maintenanceMessage` from
 ## 9. Agent kickoff prompt (copy/paste)
 
 ```
-Read docs/fleet-domain-extraction-completion.md §8 F5 soak + docs/f5-soak-log.json.
+Read docs/fleet-domain-extraction-completion.md §G (Rev 6) + docs/f5-soak-log.json.
 
-Rev 5 gate hardening SHIPPED on 5e0b6a3c (SQL filter, 7-day retire guard, soak log,
-cutover pushed). fleet-core smoke green. Do NOT redo F1–F3.
+ENGINEERING IS DONE. Rev 6 audited the code, the CI gates, the instrument and the
+retirement guard and found NO defects. Everything is committed (7d78c7e8).
+Do NOT redo F1-F3, do NOT re-sweep clients, do NOT re-carve the residual.
 
-NEXT (operational):
-1. Confirm Vercel (or host) deployed fleet/admin/driver from main 5e0b6a3c.
-2. Add GitHub secret ROAM_MGMT_PAT so shim-traffic-soak.yml can run daily.
-3. Daily: pnpm check:shim-traffic:log — commit docs/f5-soak-log.json updates.
-4. After first clean 24h, that day is soak day 1; need 7 consecutive ok:true.
-5. PO: fill §8 D9 authenticated browser table (checklist ready).
-6. When 7 greens + D9 PASS: pnpm f5:retire-shim && commit && CI.
+What remains is a RELEASE and seven days of patience.
+
+CRITICAL PATH
+1. Ship fleet/admin/driver builds from main so live traffic actually leaves
+   make-server-37f42386. The cutover is committed but not released — until those
+   builds are in real browsers/devices, Day 1 cannot start and every daily run will
+   report the same ~4,368 red. Confirm the host (Vercel or equivalent) deployed
+   from the current main, not a cached older build.
+2. Add GitHub secret ROAM_MGMT_PAT so .github/workflows/shim-traffic-soak.yml can
+   run. Without it the daily gate cannot query edge logs.
+
+REMOVE THE LAST HAND-STEP (§G1) — do this early, it pays off over 7 days
+3. The soak workflow uploads docs/f5-soak-log.json as an ARTIFACT and never commits
+   it, but f5-retire-shim reads the file FROM THE REPO and requires the streak to end
+   today or yesterday UTC. So the 7-day chain currently needs a manual commit every
+   single day; miss two and the streak check fails for bookkeeping reasons, not
+   traffic reasons. Make the workflow commit the log back (bot commit or PR).
+
+THEN
+4. Daily: watch the top-offenders list decay. Two things to expect, neither a bug:
+   - /platform-status (537/day) is maintenance-exempt in the kernel — confirm it is
+     served from fleet-core post-release, not a hard-coded shim URL outside
+     API_ENDPOINTS.
+   - Cached web bundles and installed driver/admin apps keep the old base URL until
+     users update. A stubborn non-zero floor = old clients, not a defect. The
+     offenders list will tell you which.
+5. PO: authenticated browser pass on six slugs; fill the §8 D9 table.
+6. Housekeeping: delete or gitignore debug-33ad82.log (untracked at repo root).
+7. At 7 consecutive ok:true days AND D9 PASS: pnpm f5:retire-shim && commit && CI.
+   The guard will refuse if either the live 7-day query or the log streak fails.
+   Do not pass --force.
 
 Stay on the current branch. Do not retire early.
 ```
 
-Steps 1–5 are the path to done. Step 6 is soak-bound.
+Item 1 is the only thing on the critical path — and it is a release, not code.
