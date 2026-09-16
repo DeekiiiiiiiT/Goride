@@ -717,7 +717,8 @@ export const FuelCalculationService = {
             weekSplit.company.deadhead +
             weekSplit.company.personal +
             weekSplit.company.misc +
-            allowanceSplit.earnedCost;
+            allowanceSplit.earnedCost +
+            (Number(report.windowTimingCost) || 0);
         const driverShare =
             weekSplit.driver.rideShare +
             weekSplit.driver.companyUsage +
@@ -910,6 +911,7 @@ export const FuelCalculationService = {
             merged.deadheadCost = 0;
             merged.personalUsageCost = 0;
             merged.miscellaneousCost = 0;
+            merged.windowTimingCost = 0;
             merged.totalTripDistance = 0;
             merged.companyMiscDistance = 0;
             merged.deadheadDistance = 0;
@@ -948,6 +950,8 @@ export const FuelCalculationService = {
                 merged.deadheadCost += slice.deadheadCost || 0;
                 merged.personalUsageCost += slice.personalUsageCost;
                 merged.miscellaneousCost += slice.miscellaneousCost;
+                merged.windowTimingCost =
+                    (merged.windowTimingCost || 0) + (Number(slice.windowTimingCost) || 0);
                 merged.totalTripDistance += slice.totalTripDistance;
                 merged.companyMiscDistance += slice.companyMiscDistance;
                 merged.deadheadDistance += slice.deadheadDistance || 0;
@@ -985,7 +989,8 @@ export const FuelCalculationService = {
                         (merged.rideShareCost || 0) +
                         (merged.companyUsageCost || 0) +
                         (merged.deadheadCost || 0) +
-                        (merged.miscellaneousCost || 0);
+                        (merged.miscellaneousCost || 0) +
+                        (Number(merged.windowTimingCost) || 0);
                     const residualCost = Math.max(0, (merged.totalGasCardCost || 0) - attributed);
                     if (residualCost > 0) {
                         effGuess = (merged.personalDistance * priceGuess) / residualCost;

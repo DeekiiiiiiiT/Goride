@@ -283,12 +283,14 @@ describe('generateDriverFleetReport shared car', () => {
 
     const row = reports.find((r) => r.driverId === 'd1');
     expect(row).toBeTruthy();
+    // F-1: categories + window timing + true unexplained = total spend
     const buckets =
       (row!.rideShareCost || 0) +
       (row!.companyUsageCost || 0) +
       (row!.deadheadCost || 0) +
       (row!.personalUsageCost || 0) +
-      (row!.miscellaneousCost || 0);
+      (row!.miscellaneousCost || 0) +
+      (Number((row as { windowTimingCost?: number }).windowTimingCost) || 0);
     expect(buckets).toBeCloseTo(row!.totalGasCardCost, 1);
     expect(row!.driverShare + row!.companyShare).toBeCloseTo(row!.totalGasCardCost, 1);
   });

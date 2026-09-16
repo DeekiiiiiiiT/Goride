@@ -84,10 +84,15 @@ jobs:
             fn="$1"
             max=4
             n=0
+            # make-server exceeds --use-api 5MB cap; Docker bundler allows ~20MB.
+            use_api_flag="--use-api"
+            if [ "$fn" = "make-server-37f42386" ]; then
+              use_api_flag=""
+            fi
             while [ "$n" -lt "$max" ]; do
               n=$((n+1))
-              echo ">>> Deploying ${fn} (attempt ${n}/${max})..."
-              if supabase functions deploy "$fn" --use-api --project-ref "$SUPABASE_PROJECT_REF"; then
+              echo ">>> Deploying ${fn} (attempt ${n}/${max}, flags: ${use_api_flag:-docker})..."
+              if supabase functions deploy "$fn" $use_api_flag --project-ref "$SUPABASE_PROJECT_REF"; then
                 echo ">>> ${fn} OK"
                 return 0
               fi
