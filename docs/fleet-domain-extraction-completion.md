@@ -1048,7 +1048,8 @@ Maintenance copy: `Platform is under maintenance…` + `maintenanceMessage` from
 | **D9 maintenance drill** | **2026-09-16** | Flipped `platform:settings:fleet` (+ legacy) `maintenanceMode=true`; all six slugs returned **503** maintenance payload on business paths; `/health` stayed **200**; restored to `false` |
 | **Audit Rev 4 (verification)** | **2026-09-16** | **Engineering program CLOSED.** Remaining work operational (§E). |
 | **F5 closeout P0–P3** | **2026-09-16** | **Done.** `scripts/check-shim-traffic.mjs` + `pnpm check:shim-traffic`; N=**7**; overlap success line names dual-door; CORS checklist six rows; client cutover + straggler scripts/cron. Retirement: `pnpm f5:retire-shim` (blocked until soak green). |
-| **Audit Rev 5 (verification)** | **2026-09-16** | **All six §E6 items verified landed**; gates re-run green (6/6 manifests, D15 0 + exception note, extraction-status current, 13/13 tests). Client cutover confirmed: `.fleet` → **0** sites, 296 on `.fleetCore`, legacy keys aliased. ADR-0022 rehearsal timed and honestly scoped. **3 open (§F):** 🔴 `check-shim-traffic` SQL lacks a shim predicate so `limit 100` truncates low-volume shim paths — **false-green risk that worsens as the soak succeeds** (F1); 🟠 `f5-retire-shim` prechecks `--hours 24` against a 7-day rule (F2); 🔴 83 uncommitted incl. the client cutover, so the soak cannot start (F4). Also 🟡 nothing machine-checks "7 *consecutive*" (F3). **Auditor's correction:** my §E "sweep after soak" ordering was wrong — cutover must precede soak, and this round did it right |
+| **Audit Rev 5 (verification)** | **2026-09-16** | Gate defects found (F1–F4). |
+| **Rev 5 gate hardening** | **2026-09-16** | **Shipped `5e0b6a3c`.** F1 SQL `like '%make-server-37f42386%'`; F2 retire `--days 7` + consecutive soak-log guard; F3 `docs/f5-soak-log.json` + `--append-log` + daily workflow artifact; F4 cutover committed/pushed; `pnpm deploy:fleet-core` smoke green; fleet/admin/driver **built** (Vercel should pick up `main`). Post-F1 Day 0 = **4368** non-health (filter validated). **Still open:** add GH secret `ROAM_MGMT_PAT`; wait for client traffic to leave shim; PO D9 browser; 7 green days then `pnpm f5:retire-shim`. |
 
 ### F5 soak (N = 7)
 
@@ -1084,46 +1085,20 @@ Maintenance copy: `Platform is under maintenance…` + `maintenanceMessage` from
 ## 9. Agent kickoff prompt (copy/paste)
 
 ```
-Read docs/fleet-domain-extraction-completion.md §F (Rev 5) — it supersedes §E.
+Read docs/fleet-domain-extraction-completion.md §8 F5 soak + docs/f5-soak-log.json.
 
-Engineering is closed and all gates are green. Cutover to fleet-core is done in the
-working tree (API_ENDPOINTS.fleet = 0 sites). Do NOT redo any of that, and do NOT
-re-sweep clients — that ordering is correct as-is.
+Rev 5 gate hardening SHIPPED on 5e0b6a3c (SQL filter, 7-day retire guard, soak log,
+cutover pushed). fleet-core smoke green. Do NOT redo F1–F3.
 
-Three fixes BEFORE any soak result can be trusted. Do them in this order.
+NEXT (operational):
+1. Confirm Vercel (or host) deployed fleet/admin/driver from main 5e0b6a3c.
+2. Add GitHub secret ROAM_MGMT_PAT so shim-traffic-soak.yml can run daily.
+3. Daily: pnpm check:shim-traffic:log — commit docs/f5-soak-log.json updates.
+4. After first clean 24h, that day is soak day 1; need 7 consecutive ok:true.
+5. PO: fill §8 D9 authenticated browser table (checklist ready).
+6. When 7 greens + D9 PASS: pnpm f5:retire-shim && commit && CI.
 
-1) FIX THE INSTRUMENT (§F1). scripts/check-shim-traffic.mjs queries every edge path,
-   applies `limit 100`, and only then filters for make-server-37f42386 client-side.
-   Low-volume shim traffic falls below the cut and the script prints
-   "non-health: 0 / ok" and exits 0. It is least trustworthy exactly when its answer
-   authorizes retirement. Add the predicate to the SQL:
-       where source = 'function_edge_logs'
-         and log_attributes['request.pathname'] like '%make-server-37f42386%'
-   Keep the client-side isShimPath check. Then RE-RUN the Day-0 baseline: if the
-   number barely moves from ~4,400, the instrument is validated.
-
-2) FIX THE RETIREMENT GUARD (§F2). scripts/f5-retire-shim.mjs prechecks
-   `check-shim-traffic --hours 24` while the stated rule is 7 consecutive days.
-   It would authorize the one irreversible step in this program after a single clean
-   day. Change the precheck to --days 7.
-
-3) COMMIT AND PUSH, then ship fleet/admin/driver builds (§F4). 83 changes are
-   uncommitted — including the client cutover itself, so live traffic has NOT left
-   the shim and the soak cannot start. Day 0 will keep reading red until this ships.
-   This is the fourth round in five that ended one push short.
-
-THEN:
-4. Re-baseline; start the clock on the first clean 24h. Append daily results to the
-   §8 soak table.
-5. Persist daily results (docs/f5-soak-log.md or JSON) so "7 CONSECUTIVE" is
-   machine-checked rather than hand-entered — the workflow is stateless today (§F3).
-6. PO: authenticated browser pass on six slugs; fill the §8 D9 table.
-7. At 7 green days: pnpm f5:retire-shim && commit && CI deploy.
-8. Optional: staging window for a full app-ship RTO (code drill already timed:
-   14ms remount, ~6.1s redeploy; ≤4h stays the planning ceiling).
-
-Stay on the current branch.
-A gate that can only fail optimistically is worse than no gate.
+Stay on the current branch. Do not retire early.
 ```
 
-Steps 1–3 are hours. After them, the program is waiting on the clock.
+Steps 1–5 are the path to done. Step 6 is soak-bound.
