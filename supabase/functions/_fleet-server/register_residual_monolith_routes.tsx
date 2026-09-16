@@ -323,6 +323,7 @@ import {
   listCatalogOrphanVehicles,
   stampCatalogProvenance,
 } from "./vehicle_catalog_enterprise.ts";
+import { assertRequiredEnv } from "./env_boot.ts";
 
 // Wave 5: Fail-fast env validation at startup (after all imports — never between import lines)
 assertRequiredEnv();
