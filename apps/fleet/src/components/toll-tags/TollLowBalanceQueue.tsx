@@ -64,9 +64,14 @@ export function TollLowBalanceQueue({
             Tags that need a top-up before drivers get stuck at a plaza.
           </p>
         </div>
-        <Button variant="outline" onClick={() => void load()}>
-          <RefreshCw className="h-4 w-4 mr-2" />
-          Refresh
+        <Button
+          variant="outline"
+          className="self-end h-9 w-9 p-0 sm:w-auto sm:px-4"
+          aria-label="Refresh"
+          onClick={() => void load()}
+        >
+          <RefreshCw className="h-4 w-4 sm:mr-2" />
+          <span className="hidden sm:inline">Refresh</span>
         </Button>
       </div>
 
