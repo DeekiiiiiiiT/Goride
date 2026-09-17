@@ -1,23 +1,30 @@
-# Stop-to-Stop Charge Gap — enabled runbook
+# Stop-to-Stop Charge Gap — runbook (Rev 9)
 
-**Status:** Enabled (Rev 3 closeout Wave B)  
-**Flag:** `STOP_TO_STOP_CHARGES_ENABLED = true` in `BucketReconciliationView.tsx`
+**Status:** Enabled — solo-owner operable; multi-user dual control parked  
+**Flag:** `STOP_TO_STOP_CHARGES_ENABLED` in `BucketReconciliationView.tsx`  
+**Edge:** Client calls `/fleet-fuel` → `fuel_period_routes` gap-charge handlers
 
-## What Charge Gap does
+## Flow (solo owner — current)
 
-1. UI requires **exact** confidence tier + panel reconciled (volume/distance/attribution/chain).
-2. Client calls `POST …/gap-charges/recommend` (no client vehicle history — server loads the vehicle).
-3. Same click then calls `POST …/gap-charges/approve` when the user has `fuel.second_approve`; otherwise toast asks for a second approver.
-4. Approve writes a **Pending** `Gap_Deduction` ledger row (`transaction:{id}`) with deterministic id + `metadata.idempotencyKey`.
-5. DB unique index `fleet_transactions_gap_deduction_idempotency_uidx` blocks concurrent duplicates.
+1. UI requires **exact** confidence tier + panel reconciled + period not locked.
+2. **Post charge (Pending)** → recommend then auto-approve in one step.  
+   - Refuses if period **locked** (`period_locked` 409).  
+   - Requires signed-in actor (`actor_required` 401).  
+   - Org check on vehicle; stamps `recommendedBy`.  
+   - Writes **Pending** `Gap_Deduction` ledger row.
+3. If approve falls through, row stays **Recommended** — use **Approve charge (Pending)** on the same login.
+4. Idempotency: deterministic tx id + unique index.
 
-## Ops checks
+## Multi-user (deferred)
 
-- Retry Charge Gap on the same bucket → same `transactionId`, no second row.
-- Multi-driver window → recommend returns `blocked` (409).
-- Non-exact tier → button hidden / charge blocked.
-- Dispute path: FuelDispute on the Pending row (do not flip to Approved from this panel).
+When owners use a second team login, turn on distinct-actor dual control (`requireDistinctActor: true`), set `autoApprove: false`, and run the checklist in Notion: **Future Features → Future tests — Gap charge dual control (multi-user)**.
 
-## Historical audit
+## Ops checks (solo)
 
-Rows posted before the kill-switch era may still exist. Search ledger for `metadata.transactionType = Gap_Deduction`. Prefer Pending; any Approved from the old client writer should be reviewed manually.
+- Post charge on exact + reconciled row → Pending ledger.
+- Locked week → mutate APIs 409; UI buttons hidden.
+- Dispute via FuelDispute on the Pending row.
+
+## Kill switch
+
+Set `STOP_TO_STOP_CHARGES_ENABLED = false` to hide CTAs immediately.

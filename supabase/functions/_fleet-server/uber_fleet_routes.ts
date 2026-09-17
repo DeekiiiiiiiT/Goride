@@ -347,7 +347,7 @@ export function registerUberFleetRoutes(app: {
           privacyPolicyUrl: "https://roamenterprise.co/privacy",
           redirectUri: "https://roamfleet.co/uber-callback",
           webhookUrl:
-            "https://csfllzzastacofsvcdsc.supabase.co/functions/v1/make-server-37f42386/uber/webhook",
+            "https://csfllzzastacofsvcdsc.supabase.co/functions/v1/fleet-core/uber/webhook",
         },
       });
     } catch (e: any) {

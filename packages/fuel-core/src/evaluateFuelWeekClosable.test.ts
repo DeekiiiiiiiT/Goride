@@ -43,4 +43,24 @@ describe('evaluateFuelWeekClosable', () => {
       evaluateFuelWeekClosable({ stopToStopTripsTruncated: true }).map((x) => x.code),
     ).toContain('stop_to_stop_trips_truncated');
   });
+
+  it('blocks N-1 thin odometer chain', () => {
+    expect(
+      evaluateFuelWeekClosable({ odometerChainUnusable: true }).map((x) => x.code),
+    ).toContain('odometer_chain_unusable');
+  });
+
+  it('R-2: thin chain signal cleared when not flagged (reviewed by caller)', () => {
+    expect(evaluateFuelWeekClosable({ odometerChainUnusable: false })).toEqual([]);
+  });
+
+  it('blocks N-2 unattributed fills unreviewed', () => {
+    expect(
+      evaluateFuelWeekClosable({ unattributedUnreviewed: true }).map((x) => x.code),
+    ).toContain('unattributed_unreviewed');
+  });
+
+  it('R-1: unattributed reviewed clears blocker', () => {
+    expect(evaluateFuelWeekClosable({ unattributedUnreviewed: false })).toEqual([]);
+  });
 });

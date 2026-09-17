@@ -6,6 +6,7 @@ import {
   classifyFuelMiscResidual,
   coverageRuleIsResolved,
   evaluateFuelWeekClosable,
+  isUnattributedBeyondGate,
   type EvaluateFuelWeekClosableInput,
   type FuelWeekClosableBlocker,
 } from '@roam/fuel-core';
@@ -22,12 +23,35 @@ export function snapshotsMissingCategoryCosts(reports: WeeklyFuelReport[]): bool
     if (spend <= FUEL_SPEND_EPS) continue;
     const cats = categoryCostsFromReport(r);
     if (
-      !assertCategoryCostsTieSpend(spend, cats, Number(r.miscellaneousCost) || 0)
+      !assertCategoryCostsTieSpend(
+        spend,
+        cats,
+        Number(r.miscellaneousCost) || 0,
+        0.02,
+        Number(r.windowTimingCost) || 0,
+        Number(r.unattributedFillCost) || 0,
+      )
     ) {
       return true;
     }
   }
   return false;
+}
+
+/** N-1: any money-bearing report whose efficiency fell back (thin odometer chain). */
+export function reportsHaveOdometerChainUnusable(reports: WeeklyFuelReport[]): boolean {
+  for (const r of reports) {
+    const spend = Number(r.totalGasCardCost) || 0;
+    if (spend <= FUEL_SPEND_EPS) continue;
+    const src = String(r.metadata?.rideShareCalc?.efficiencySource || '');
+    if (src && src !== 'odometer') return true;
+  }
+  return false;
+}
+
+/** N-2: aggregate unattributed fill spend across reports. */
+export function totalUnattributedFillCost(reports: WeeklyFuelReport[]): number {
+  return reports.reduce((s, r) => s + (Number(r.unattributedFillCost) || 0), 0);
 }
 
 export function reportsHaveUnresolvedCoverageRule(
@@ -57,6 +81,10 @@ export function buildFuelWeekClosableInput(opts: {
   reports: WeeklyFuelReport[];
   scenarios: FuelScenario[];
   leakageReviewed: boolean;
+  /** R-2: operator acknowledged thin odometer chain. */
+  odometerChainReviewed?: boolean;
+  /** R-1: wizard accepted fills-without-odometer beyond gate. */
+  unattributedReviewed?: boolean;
   countsUnevaluated?: boolean;
   degradedInputs?: boolean;
   openDisputesInWeek?: boolean;
@@ -76,6 +104,7 @@ export function buildFuelWeekClosableInput(opts: {
     opts.totalSpend ??
     opts.reports.reduce((s, r) => s + (Number(r.totalGasCardCost) || 0), 0);
   const residualKind = classifyFuelMiscResidual(totalSpend, unexplained);
+  const unattributed = totalUnattributedFillCost(opts.reports);
 
   return {
     hasUnacknowledgedExceptionFills:
@@ -96,6 +125,10 @@ export function buildFuelWeekClosableInput(opts: {
     stopToStopAttributionFailed: opts.stopToStopAttributionFailed,
     stopToStopChainFailed: opts.stopToStopChainFailed,
     stopToStopTripsTruncated: opts.stopToStopTripsTruncated,
+    odometerChainUnusable:
+      reportsHaveOdometerChainUnusable(opts.reports) && !opts.odometerChainReviewed,
+    unattributedUnreviewed:
+      isUnattributedBeyondGate(totalSpend, unattributed) && !opts.unattributedReviewed,
   };
 }
 
@@ -136,6 +169,10 @@ export function fuelWeekClosableBlockerMessage(blocker: FuelWeekClosableBlocker)
       return 'Blocked — stop-to-stop odometer chain anomaly';
     case 'stop_to_stop_trips_truncated':
       return 'Blocked — stop-to-stop trip fetch truncated';
+    case 'odometer_chain_unusable':
+      return 'Blocked — not enough odometered fills to measure tank timing';
+    case 'unattributed_unreviewed':
+      return 'Blocked — fills without odometer need review';
     default:
       return blocker.message;
   }

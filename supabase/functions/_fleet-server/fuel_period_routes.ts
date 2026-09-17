@@ -182,6 +182,12 @@ function mapPeriod(row: Record<string, unknown>) {
     leakageReviewedAt: row.leakage_reviewed_at,
     leakageReviewedBy: row.leakage_reviewed_by,
     leakageReviewedNote: row.leakage_review_note,
+    odometerChainReviewedAt: row.odometer_chain_reviewed_at,
+    odometerChainReviewedBy: row.odometer_chain_reviewed_by,
+    odometerChainReviewedNote: row.odometer_chain_review_note,
+    unattributedReviewedAt: row.unattributed_reviewed_at,
+    unattributedReviewedBy: row.unattributed_reviewed_by,
+    unattributedReviewedNote: row.unattributed_review_note,
     lockedAt: row.locked_at,
     lockedBy: row.locked_by,
     reopenedAt: row.reopened_at,
@@ -760,6 +766,12 @@ async function processJobRow(job: Record<string, unknown>) {
         leakage_reviewed_at: null,
         leakage_reviewed_by: null,
         leakage_review_note: null,
+        odometer_chain_reviewed_at: null,
+        odometer_chain_reviewed_by: null,
+        odometer_chain_review_note: null,
+        unattributed_reviewed_at: null,
+        unattributed_reviewed_by: null,
+        unattributed_review_note: null,
         counts: {},
         current_step: "data-quality",
         version: nextVersion,
@@ -1242,7 +1254,11 @@ export function registerFuelPeriodRoutes(app: Hono) {
           materialCategoryCostDeltas,
           resolveEngineCategoryCosts,
           loadServerTaggedFuelEntriesForWeek,
+          loadServerWindowMoneyEntriesForWeek,
         } = await import("./fuel_week_category_loader.ts");
+        const { deriveWindowMoneyFromEntries } = await import(
+          "../../../packages/fuel-core/src/deriveWindowMoneyFromEntries.ts"
+        );
         const { upsertFinanceReconDrifts } = await import("./finance_recon_drift.ts");
         type EngineAuthoritySource =
           | "server_entries"
@@ -1263,6 +1279,11 @@ export function registerFuelPeriodRoutes(app: Hono) {
           weekKey,
           weekEnd,
         );
+        const windowMoneyEntries = await loadServerWindowMoneyEntriesForWeek(
+          orgId,
+          weekKey,
+          weekEnd,
+        );
         for (const snap of snapshots) {
           const snapObj = (snap && typeof snap === "object" ? snap : {}) as Record<string, unknown>;
           const { authority: cats, snapCats, authoritySource } = resolveEngineCategoryCosts(
@@ -1276,15 +1297,24 @@ export function registerFuelPeriodRoutes(app: Hono) {
               0.009 ||
             snapCats != null;
           if (!hasCats) continue;
+          const meta = (snapObj.metadata && typeof snapObj.metadata === "object"
+            ? snapObj.metadata
+            : {}) as Record<string, unknown>;
+          // R-3: derive JMD/L from entries — ignore client stamp.
+          const driverWindowEntries = windowMoneyEntries.filter(
+            (e) => !driverId || String(e.driverId || "") === driverId,
+          );
+          const derivedWindow = deriveWindowMoneyFromEntries(driverWindowEntries);
+          const clientTiming = Number(meta.windowTimingCost) || 0;
+          const clientUnattr = Number(meta.unattributedFillCost) || 0;
           const clientCalc = {
             totalSpend: Number(snapObj.totalGasCardCost) || 0,
             companyShare: Number(snapObj.companyShare) || 0,
             driverShare: Number(snapObj.driverShare) || 0,
             miscellaneousCost: Number(snapObj.miscellaneousCost) || 0,
+            windowTimingCost: clientTiming,
+            unattributedFillCost: clientUnattr,
           };
-          const meta = (snapObj.metadata && typeof snapObj.metadata === "object"
-            ? snapObj.metadata
-            : {}) as Record<string, unknown>;
           const paEarned =
             Number(snapObj.personalAllowanceEarnedCost) ||
             Number(meta.personalAllowanceEarnedCost) ||
@@ -1298,6 +1328,8 @@ export function registerFuelPeriodRoutes(app: Hono) {
             companyUsageCost: Number(cats.companyUsageCost) || 0,
             deadheadCost: Number(cats.deadheadCost) || 0,
             personalUsageCost: Number(cats.personalUsageCost) || 0,
+            windowTimingCost: derivedWindow.windowTimingCost,
+            unattributedFillCost: derivedWindow.unattributedFillCost,
             rule:
               snapObj.fuelRule ||
               meta.fuelRule ||
@@ -1603,7 +1635,112 @@ export function registerFuelPeriodRoutes(app: Hono) {
     },
   );
 
-  // Stop-to-stop gap charge — recommend (no money) / approve (Pending ledger, idempotent).
+  app.post(
+    `${BASE}/fuel/periods/:id/odometer-chain-review`,
+    requirePermission("fuel.accept_unexplained"),
+    async (c: Context) => {
+      const orgId = getOrgId(c);
+      if (!orgId) return c.json({ error: "org required" }, 400);
+      const periodId = periodIdParam(c);
+      if (!periodId) return c.json({ error: "period id required" }, 400);
+      const body = await c.req.json().catch(() => ({}));
+      const note = String(body.note || "").trim();
+      if (note.length < 8) {
+        return c.json({ error: "note_too_short", minLength: 8 }, 422);
+      }
+      const period = await loadPeriod(orgId, periodId);
+      if (!period) return c.json({ error: "Not found" }, 404);
+      if (String(period.status) === "locked") {
+        return c.json({ error: "period_locked" }, 409);
+      }
+      const actor = actorId(c);
+      const now = new Date().toISOString();
+      const sb = getServiceClient();
+      const { error } = await sb
+        .from("fuel_reconciliation_period")
+        .update({
+          odometer_chain_reviewed_at: now,
+          odometer_chain_reviewed_by: actor,
+          odometer_chain_review_note: note,
+          updated_at: now,
+        })
+        .eq("id", periodId)
+        .eq("org_id", orgId);
+      if (error) return c.json({ error: error.message }, 500);
+      await insertAudit(orgId, periodId, "odometer_chain_review", { note }, actor);
+      return c.json({ ok: true, odometerChainReviewedAt: now });
+    },
+  );
+
+  app.post(
+    `${BASE}/fuel/periods/:id/unattributed-review`,
+    requirePermission("fuel.accept_unexplained"),
+    async (c: Context) => {
+      const orgId = getOrgId(c);
+      if (!orgId) return c.json({ error: "org required" }, 400);
+      const periodId = periodIdParam(c);
+      if (!periodId) return c.json({ error: "period id required" }, 400);
+      const body = await c.req.json().catch(() => ({}));
+      const note = String(body.note || "").trim();
+      if (note.length < 8) {
+        return c.json({ error: "note_too_short", minLength: 8 }, 422);
+      }
+      const amount = Number(body.amount);
+      const period = await loadPeriod(orgId, periodId);
+      if (!period) return c.json({ error: "Not found" }, 404);
+      if (String(period.status) === "locked") {
+        return c.json({ error: "period_locked" }, 409);
+      }
+      const actor = actorId(c);
+      const now = new Date().toISOString();
+      const sb = getServiceClient();
+      const { error } = await sb
+        .from("fuel_reconciliation_period")
+        .update({
+          unattributed_reviewed_at: now,
+          unattributed_reviewed_by: actor,
+          unattributed_review_note: note,
+          updated_at: now,
+        })
+        .eq("id", periodId)
+        .eq("org_id", orgId);
+      if (error) return c.json({ error: error.message }, 500);
+      await insertAudit(
+        orgId,
+        periodId,
+        "unattributed_review",
+        { note, amount: Number.isFinite(amount) ? amount : null },
+        actor,
+      );
+      return c.json({ ok: true, unattributedReviewedAt: now });
+    },
+  );
+
+  // Stop-to-stop gap charge — list / recommend (no money) / approve (Pending ledger).
+  app.get(
+    `${BASE}/fuel/periods/:id/gap-charges`,
+    requirePermission("fuel.view"),
+    async (c: Context) => {
+      const orgId = getOrgId(c);
+      if (!orgId) return c.json({ error: "org required" }, 400);
+      const periodId = periodIdParam(c);
+      if (!periodId) return c.json({ error: "period id required" }, 400);
+      const period = await loadPeriod(orgId, periodId);
+      if (!period) return c.json({ error: "Not found" }, 404);
+      const statusFilter = String(c.req.query("status") || "").trim();
+      const prefix = `gap_charge_rec:${orgId}:${periodId}:`;
+      const rows = ((await kv.getByPrefix(prefix)) || []) as Record<string, unknown>[];
+      let recommendations = rows.filter((r) => r && typeof r === "object");
+      if (statusFilter) {
+        recommendations = recommendations.filter((r) => String(r.status || "") === statusFilter);
+      }
+      recommendations.sort((a, b) =>
+        String(b.createdAt || "").localeCompare(String(a.createdAt || "")),
+      );
+      return c.json({ recommendations });
+    },
+  );
+
   app.post(
     `${BASE}/fuel/periods/:id/gap-charges/recommend`,
     requirePermission("fuel.edit_entry"),
@@ -1612,25 +1749,52 @@ export function registerFuelPeriodRoutes(app: Hono) {
       if (!orgId) return c.json({ error: "org required" }, 400);
       const periodId = periodIdParam(c);
       if (!periodId) return c.json({ error: "period id required" }, 400);
-      const body = await c.req.json().catch(() => ({}));
+      // Q-1: refuse money-path mutations on locked periods.
+      const period = await loadPeriod(orgId, periodId);
       const {
         buildRecommendPayload,
         gapChargeKvKey,
+        assertPeriodNotLockedForGapCharge,
+        assertGapChargeRecommendOverwrite,
       } = await import("./stop_to_stop_gap_charge_http.ts");
-      const { stampOrg } = await import("./org_scope.ts");
+      const lockGate = assertPeriodNotLockedForGapCharge(period);
+      if (!lockGate.ok) {
+        if (lockGate.error === "period_not_found") return c.json({ error: "Not found" }, 404);
+        return c.json({ error: "period_locked" }, 409);
+      }
+      // Q-2: never stamp a recommendation without a known actor.
+      const actor = actorId(c);
+      if (!actor) return c.json({ error: "actor_required" }, 401);
+      const body = await c.req.json().catch(() => ({}));
+      const { belongsToOrgStrict } = await import("./org_scope.ts");
       const vehicleId = String(body.vehicleId || "").trim();
       if (!vehicleId) return c.json({ error: "vehicleId required" }, 400);
       // N-5: never trust client-supplied assignment history for driver resolution.
+      // P-4: verify vehicle belongs to caller's org (do not stampOrg — that overwrote org).
       const vehicleRaw = await kv.get(`vehicle:${vehicleId}`);
       if (!vehicleRaw || typeof vehicleRaw !== "object") {
         return c.json({ error: "vehicle_not_found" }, 404);
       }
-      const vehicle = stampOrg(vehicleRaw as Record<string, unknown>, c);
+      if (!belongsToOrgStrict(vehicleRaw as Record<string, unknown>, c)) {
+        return c.json({ error: "vehicle_not_found" }, 404);
+      }
+      const vehicle = vehicleRaw as Record<string, unknown>;
+      const bucketId = String(body.bucketId || "");
+      if (!bucketId) return c.json({ error: "bucketId and vehicleId required" }, 400);
+      const key = gapChargeKvKey(orgId, periodId, bucketId);
+      const existing = (await kv.get(key)) as { status?: string; recommendedBy?: string } | null;
+      const overwrite = assertGapChargeRecommendOverwrite({ actor, existing });
+      if (!overwrite.ok) {
+        return c.json({
+          error: "already_recommended",
+          message: "This gap charge is already recommended — a different person must approve it.",
+        }, 409);
+      }
       const rec = buildRecommendPayload({
         orgId,
         periodId,
         snapshotId: body.snapshotId ? String(body.snapshotId) : undefined,
-        bucketId: String(body.bucketId || ""),
+        bucketId,
         vehicleId,
         amount: Number(body.amount) || 0,
         overLoggedKm: Number(body.overLoggedKm) || 0,
@@ -1639,6 +1803,7 @@ export function registerFuelPeriodRoutes(app: Hono) {
         startYmd: String(body.startYmd || "").split("T")[0],
         endYmd: String(body.endYmd || "").split("T")[0],
         vehicle: vehicle as any,
+        recommendedBy: actor,
       });
       if (!rec.bucketId || !rec.vehicleId) {
         return c.json({ error: "bucketId and vehicleId required" }, 400);
@@ -1646,12 +1811,13 @@ export function registerFuelPeriodRoutes(app: Hono) {
       if (rec.status === "blocked") {
         return c.json({ recommendation: rec }, 409);
       }
-      await kv.set(gapChargeKvKey(orgId, periodId, rec.bucketId), rec);
+      await kv.set(key, rec);
       await insertAudit(orgId, periodId, "gap_charge_recommend", {
         bucketId: rec.bucketId,
         amount: rec.amount,
         driverId: rec.resolvedDriverId,
-      }, actorId(c));
+        recommendedBy: rec.recommendedBy,
+      }, actor);
       return c.json({ recommendation: rec });
     },
   );
@@ -1664,14 +1830,23 @@ export function registerFuelPeriodRoutes(app: Hono) {
       if (!orgId) return c.json({ error: "org required" }, 400);
       const periodId = periodIdParam(c);
       if (!periodId) return c.json({ error: "period id required" }, 400);
-      const body = await c.req.json().catch(() => ({}));
-      const bucketId = String(body.bucketId || "");
-      if (!bucketId) return c.json({ error: "bucketId required" }, 400);
+      // Q-1: refuse money-path mutations on locked periods.
+      const period = await loadPeriod(orgId, periodId);
       const {
         buildApproveTransaction,
         gapChargeKvKey,
         gapChargeIdempotencyKey,
+        assertPeriodNotLockedForGapCharge,
+        assertGapChargeDualControl,
       } = await import("./stop_to_stop_gap_charge_http.ts");
+      const lockGate = assertPeriodNotLockedForGapCharge(period);
+      if (!lockGate.ok) {
+        if (lockGate.error === "period_not_found") return c.json({ error: "Not found" }, 404);
+        return c.json({ error: "period_locked" }, 409);
+      }
+      const body = await c.req.json().catch(() => ({}));
+      const bucketId = String(body.bucketId || "");
+      if (!bucketId) return c.json({ error: "bucketId required" }, 400);
       const { stampOrgRequired } = await import("./org_scope.ts");
       const key = gapChargeKvKey(orgId, periodId, bucketId);
       const rec = (await kv.get(key)) as any;
@@ -1681,6 +1856,21 @@ export function registerFuelPeriodRoutes(app: Hono) {
       if (String(rec.confidenceTier) !== "exact") {
         return c.json({ error: "confidence_not_exact" }, 422);
       }
+      // Q-2: fail closed — never approve when actor or recommendedBy is missing.
+      const dual = assertGapChargeDualControl({
+        actor: actorId(c),
+        recommendedBy: rec.recommendedBy,
+      });
+      if (!dual.ok) {
+        const message =
+          dual.error === "same_actor_forbidden"
+            ? "A different person must approve this gap charge."
+            : dual.error === "recommendation_missing_actor"
+            ? "This recommendation has no recommender — re-recommend before approving."
+            : "Signed-in user required to approve.";
+        return c.json({ error: dual.error, message }, dual.status);
+      }
+      const actor = dual.actor;
       const idem = gapChargeIdempotencyKey(orgId, bucketId);
       // Idempotent: if already approved and ledger row exists, reuse.
       if (rec.transactionId) {
@@ -1723,7 +1913,7 @@ export function registerFuelPeriodRoutes(app: Hono) {
         status: "approved",
         transactionId: txId,
         approvedAt: new Date().toISOString(),
-        approvedBy: actorId(c),
+        approvedBy: actor,
       };
       await kv.set(key, updated);
       await insertAudit(orgId, periodId, "gap_charge_approve", {
@@ -1732,7 +1922,9 @@ export function registerFuelPeriodRoutes(app: Hono) {
         idempotencyKey: idem,
         amount: rec.amount,
         driverId: rec.resolvedDriverId,
-      }, actorId(c));
+        recommendedBy: rec.recommendedBy,
+        approvedBy: actor,
+      }, actor);
       return c.json({
         recommendation: updated,
         transaction: persisted,

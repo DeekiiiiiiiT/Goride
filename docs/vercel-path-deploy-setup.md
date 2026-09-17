@@ -14,6 +14,22 @@ Supabase deploy workflows are **unchanged**.
 
 You work across apps — set up **all 10** hooks now so any Commit & Sync only deploys what you touched.
 
+### Cutover-critical hooks (must exist)
+
+These three **fail the path-deploy job** if the shared `packages/` fan-out (or their own app paths) would fire them but the secret is missing. That prevents a silent stale UI after a fleet-core / api-client cutover:
+
+| Project | GitHub secret | Why required |
+|---------|---------------|--------------|
+| roam-fleet | `VERCEL_DEPLOY_HOOK_FLEET` | Fleet residual → `fleet-core` |
+| roam-driver | `VERCEL_DEPLOY_HOOK_DRIVER` | Driver residual → `fleet-core` |
+| roam-dominion | `VERCEL_DEPLOY_HOOK_DOMINION` | Admin (`apps/admin/`) residual → `fleet-core` |
+
+Other hooks still soft-skip when unset (Hobby — only configure apps you ship).
+
+### Optional: soak log push token
+
+If branch protection blocks `github-actions[bot]` from pushing the daily F5 soak log, add repo secret `SOAK_LOG_GIT_TOKEN` (classic PAT or fine-grained token with **Contents: Read and write** on this repo). The soak workflow prefers it over `GITHUB_TOKEN`.
+
 ### 1) Create a Deploy Hook on each Vercel project
 
 For **each** project in the table below:
@@ -44,6 +60,8 @@ GitHub → **Goride** → **Settings** → **Secrets and variables** → **Actio
 Paste each hook URL into the matching secret name from the table.
 
 Skip only if you truly never ship that app — missing secrets just mean that app won’t auto-deploy.
+
+**Exception:** `VERCEL_DEPLOY_HOOK_FLEET`, `VERCEL_DEPLOY_HOOK_DRIVER`, and `VERCEL_DEPLOY_HOOK_DOMINION` are cutover-critical. If a push would wake them (app path or `packages/` shared fan-out) and the secret is missing, **`vercel-path-deploy` fails** instead of skipping. Fix by adding the hook URL as the GitHub secret.
 
 ### 3) Confirm auto Git deploy is off
 

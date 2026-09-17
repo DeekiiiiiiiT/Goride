@@ -28,6 +28,12 @@ export type FuelPeriodRow = {
   leakageReviewedAt?: string | null;
   leakageReviewedBy?: string | null;
   leakageReviewedNote?: string | null;
+  odometerChainReviewedAt?: string | null;
+  odometerChainReviewedBy?: string | null;
+  odometerChainReviewedNote?: string | null;
+  unattributedReviewedAt?: string | null;
+  unattributedReviewedBy?: string | null;
+  unattributedReviewedNote?: string | null;
   lockedAt?: string | null;
   computedAt?: string | null;
   fuelSealError?: string | null;

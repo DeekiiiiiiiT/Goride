@@ -14,8 +14,10 @@ export type ComputeFuelWeekInput = {
   companyUsageCost: number;
   deadheadCost: number;
   personalUsageCost: number;
-  /** F-1: tank-window timing carved before residual. */
+  /** F-1/N-2: first-fill tank-window timing carved before residual. */
   windowTimingCost?: number;
+  /** N-2: no-odometer fill spend carved before residual. */
+  unattributedFillCost?: number;
   rule?: FuelCoverageRule | null;
   driverId?: string;
   vehicleId?: string;
@@ -30,6 +32,8 @@ export type WeekCalc = {
   companyShare: number;
   driverShare: number;
   miscellaneousCost: number;
+  windowTimingCost: number;
+  unattributedFillCost: number;
   overExplainedCost: number;
   residualKind: FuelMiscResidualKind;
   driverId?: string;
@@ -64,6 +68,7 @@ export function computeFuelWeek(input: ComputeFuelWeekInput): WeekCalc {
     deadheadCost: Number(input.deadheadCost) || 0,
     personalUsageCost: Number(input.personalUsageCost) || 0,
     windowTimingCost: Number(input.windowTimingCost) || 0,
+    unattributedFillCost: Number(input.unattributedFillCost) || 0,
     rule: input.rule,
   });
   const absorbed = applyPersonalAllowanceAbsorb(
@@ -76,6 +81,8 @@ export function computeFuelWeek(input: ComputeFuelWeekInput): WeekCalc {
     companyShare: absorbed.companyShare,
     driverShare: absorbed.driverShare,
     miscellaneousCost: money.miscellaneousCost,
+    windowTimingCost: money.windowTimingCost,
+    unattributedFillCost: money.unattributedFillCost,
     overExplainedCost: money.overExplainedCost,
     residualKind: classifyFuelMiscResidual(
       Number(input.totalSpend) || 0,
@@ -91,16 +98,34 @@ export function computeFuelWeek(input: ComputeFuelWeekInput): WeekCalc {
 
 const EPS = 0.01;
 
-/** Per-field absolute deltas for shadow/enforce compare. */
+/** Per-field absolute deltas for shadow/enforce compare (includes N-3 timing fields). */
 export function diffWeekCalc(
-  reviewed: Pick<WeekCalc, 'totalSpend' | 'companyShare' | 'driverShare' | 'miscellaneousCost'>,
-  recomputed: Pick<WeekCalc, 'totalSpend' | 'companyShare' | 'driverShare' | 'miscellaneousCost'>,
+  reviewed: Pick<
+    WeekCalc,
+    | 'totalSpend'
+    | 'companyShare'
+    | 'driverShare'
+    | 'miscellaneousCost'
+    | 'windowTimingCost'
+    | 'unattributedFillCost'
+  >,
+  recomputed: Pick<
+    WeekCalc,
+    | 'totalSpend'
+    | 'companyShare'
+    | 'driverShare'
+    | 'miscellaneousCost'
+    | 'windowTimingCost'
+    | 'unattributedFillCost'
+  >,
 ): { field: string; delta: number }[] {
   const fields: Array<keyof typeof reviewed> = [
     'totalSpend',
     'companyShare',
     'driverShare',
     'miscellaneousCost',
+    'windowTimingCost',
+    'unattributedFillCost',
   ];
   const out: { field: string; delta: number }[] = [];
   for (const f of fields) {

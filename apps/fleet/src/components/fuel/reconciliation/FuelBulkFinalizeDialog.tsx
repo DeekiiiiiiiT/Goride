@@ -73,10 +73,14 @@ export type FuelBulkFinalizeDialogProps = {
 export function bulkFinalizeExecuteGateFields(period: FuelReconciliationPeriod): {
   periodCounts: FuelReconciliationPeriod['counts'];
   leakageReviewed: boolean;
+  odometerChainReviewed: boolean;
+  unattributedReviewed: boolean;
 } {
   return {
     periodCounts: period.counts,
     leakageReviewed: period.leakageReviewed ?? false,
+    odometerChainReviewed: period.odometerChainReviewed ?? false,
+    unattributedReviewed: period.unattributedReviewed ?? false,
   };
 }
 
@@ -369,6 +373,8 @@ export function FuelBulkFinalizeDialog({
               reports,
               scenarios,
               leakageReviewed: periodForGate.leakageReviewed ?? false,
+              odometerChainReviewed: periodForGate.odometerChainReviewed ?? false,
+              unattributedReviewed: periodForGate.unattributedReviewed ?? false,
               countsUnevaluated:
                 !periodForGate.counts || Object.keys(periodForGate.counts).length === 0,
               openDisputesInWeek: disputes.some(

@@ -1,33 +1,55 @@
 name: Shim traffic soak (F5)
 
 # Daily N=7 soak gate: fail if make-server-37f42386 has non-health traffic.
-# Requires repo secret ROAM_MGMT_PAT (Supabase Management API token).
-# Uploads docs/f5-soak-log.json as an artifact; commit the log after green/red runs.
+# Auth: ROAM_MGMT_PAT or SUPABASE_ACCESS_TOKEN (same Supabase account access token).
+# Appends docs/f5-soak-log.json and commits it back (red + green) so the
+# retire-shim streak guard reads git truth - not an expiring artifact alone.
+# Optional: SOAK_LOG_GIT_TOKEN (repo contents) if branch protection blocks GITHUB_TOKEN.
 
 on:
   schedule:
     - cron: "0 13 * * *" # ~08:00 Jamaica
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   check:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.SOAK_LOG_GIT_TOKEN || github.token }}
+          # Prefer SOAK_LOG_GIT_TOKEN when set (branch-protection bypass).
+          # github.token alone is enough when Actions can push to the default branch.
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
+      # Prefer ROAM_MGMT_PAT; fall back to SUPABASE_ACCESS_TOKEN (already used by edge deploy).
+      - name: Require Management API token
+        env:
+          ROAM_MGMT_PAT: ${{ secrets.ROAM_MGMT_PAT }}
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          if [ -z "$ROAM_MGMT_PAT" ] && [ -z "$SUPABASE_ACCESS_TOKEN" ]; then
+            echo "::error::Neither ROAM_MGMT_PAT nor SUPABASE_ACCESS_TOKEN is set. Add a Supabase Account Access Token (https://supabase.com/dashboard/account/tokens) as a repo Actions secret."
+            exit 2
+          fi
       - name: check-shim-traffic (24h + append log)
         env:
           ROAM_MGMT_PAT: ${{ secrets.ROAM_MGMT_PAT }}
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           ROAM_PROJECT_REF: csfllzzastacofsvcdsc
+          GITHUB_ACTIONS: "true"
         run: |
           set +e
           node scripts/check-shim-traffic.mjs --hours 24 --append-log
           STATUS=$?
           set -e
           echo "check_exit=$STATUS" >> "$GITHUB_OUTPUT"
-          exit $STATUS
+          # Preserve exit for the final step; still allow commit-back below.
+          echo "$STATUS" > /tmp/soak-check-exit
         id: traffic
       - name: Upload soak log artifact
         if: always()
@@ -36,3 +58,38 @@ jobs:
           name: f5-soak-log
           path: docs/f5-soak-log.json
           if-no-files-found: warn
+      - name: Commit soak log back to repo
+        if: always()
+        env:
+          SOAK_PUSH_TOKEN: ${{ secrets.SOAK_LOG_GIT_TOKEN || github.token }}
+        run: |
+          set -e
+          if [ ! -f docs/f5-soak-log.json ]; then
+            echo "::warning::docs/f5-soak-log.json missing — nothing to commit"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/f5-soak-log.json
+          if git diff --staged --quiet; then
+            echo "Soak log unchanged — skip commit"
+            exit 0
+          fi
+          # Derive message from today's row when present
+          DAY=$(node -e "const d=require('./docs/f5-soak-log.json'); const t=new Date().toISOString().slice(0,10); const r=(d.days||[]).find(x=>x.date===t)||(d.days||[]).at(-1); if(!r){console.log('unknown');process.exit(0)}; console.log(r.date+' ok='+r.ok+' nonHealth='+r.nonHealth)")
+          git commit -m "chore(f5): soak log ${DAY}"
+          # Push with the same token used for checkout
+          git remote set-url origin "https://x-access-token:${SOAK_PUSH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          if ! git push origin HEAD:"${GITHUB_REF_NAME}"; then
+            echo "::error::Failed to push soak log. If main is protected, add SOAK_LOG_GIT_TOKEN (PAT with contents:write) as a repo secret, or allow github-actions[bot] to push docs/f5-soak-log.json."
+            exit 1
+          fi
+          echo "Committed and pushed soak log (${DAY})"
+      - name: Propagate traffic check exit
+        if: always()
+        run: |
+          STATUS=0
+          if [ -f /tmp/soak-check-exit ]; then
+            STATUS=$(cat /tmp/soak-check-exit)
+          fi
+          exit "$STATUS"

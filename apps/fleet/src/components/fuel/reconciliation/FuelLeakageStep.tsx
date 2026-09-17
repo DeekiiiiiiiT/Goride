@@ -8,6 +8,7 @@ import { CompactVehicleList, type CompactVehicleRow } from './CompactVehicleList
 import { FuelGapAttribution } from './FuelGapAttribution';
 import { BucketReconciliationView } from '../BucketReconciliationView';
 import { residualVsSpendPhrase, unexplainedLabel } from '../../../utils/fuelReconGlossary';
+import { formatFuelMoney } from '../../../utils/formatFuelMoney';
 import {
   FUEL_RESIDUAL_DISPOSITIONS,
   isOverExplainedFuelWeek,
@@ -52,6 +53,13 @@ export type FuelLeakageStepProps = {
   dateRange: DateRange | undefined;
   onRefresh: () => void;
   transactions?: import('../../../types/data').FinancialTransaction[];
+  /** R-1: dedicated accept for fills without odometer (names $). */
+  unattributedFill?: number;
+  needsUnattributedAck?: boolean;
+  unattributedReviewed?: boolean;
+  unattributedNote?: string;
+  onUnattributedNoteChange?: (value: string) => void;
+  onAckUnattributed?: () => void;
 };
 
 export function FuelLeakageStep(props: FuelLeakageStepProps) {
@@ -80,6 +88,12 @@ export function FuelLeakageStep(props: FuelLeakageStepProps) {
     onAcceptNoteChange,
     onAcceptNoteBlur,
     transactions = [],
+    unattributedFill = 0,
+    needsUnattributedAck = false,
+    unattributedReviewed = false,
+    unattributedNote = '',
+    onUnattributedNoteChange,
+    onAckUnattributed,
   } = props;
 
   const overExplained = isOverExplainedFuelWeek(totalSpend, leakage);
@@ -88,6 +102,45 @@ export function FuelLeakageStep(props: FuelLeakageStepProps) {
 
   return (
     <div className="space-y-3">
+      {needsUnattributedAck && !periodLocked && (
+        <div className="space-y-3 rounded-lg border border-slate-300 bg-white px-3 py-3">
+          {unattributedReviewed ? (
+            <p className="text-sm text-slate-700">
+              Fills without odometer accepted: {formatFuelMoney(unattributedFill)}.
+            </p>
+          ) : (
+            <>
+              <p className="text-sm font-medium text-slate-900">
+                Accept fills without odometer: {formatFuelMoney(unattributedFill)}
+              </p>
+              <p className="text-[12px] text-slate-500">
+                Separate from unexplained misc — this accept only clears the fills-without-odometer
+                gate.
+              </p>
+              <label className="block space-y-1">
+                <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                  Reason{' '}
+                  <span className="font-normal normal-case text-slate-400">(8+ characters)</span>
+                </span>
+                <textarea
+                  className="min-h-[72px] w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
+                  value={unattributedNote}
+                  onChange={(e) => onUnattributedNoteChange?.(e.target.value)}
+                  placeholder="Why are you accepting fills logged without odometer?"
+                />
+              </label>
+              <Button
+                type="button"
+                className="min-h-11"
+                disabled={!onAckUnattributed || unattributedNote.trim().length < 8}
+                onClick={() => onAckUnattributed?.()}
+              >
+                Accept fills without odometer: {formatFuelMoney(unattributedFill)}
+              </Button>
+            </>
+          )}
+        </div>
+      )}
       {overExplained && (
         <div
           role="alert"

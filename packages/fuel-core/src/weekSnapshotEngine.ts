@@ -82,8 +82,10 @@ export type WeekSnapDriverContext = {
   categoryCosts?: WeekSnapCategoryCosts | null;
   /** Explicit residual when categories omitted (must not silently wipe). */
   miscellaneousCost?: number | null;
-  /** F-1: tank-window timing carved before residual. */
+  /** F-1/N-2: first-fill tank-window timing carved before residual. */
   windowTimingCost?: number | null;
+  /** N-2: no-odometer fill spend carved before residual. */
+  unattributedFillCost?: number | null;
   /** F-10: optional precomputed payment split (client finalize). */
   gasCardSpend?: number | null;
   driverSpend?: number | null;
@@ -122,8 +124,10 @@ export type BuiltWeekSnapshot = {
     blendedRatio: number;
     appliedFuelRule?: WeekSnapFuelRule | null;
     brain?: Record<string, unknown> | null;
-    /** F-1: tank-window timing carved before residual. */
+    /** F-1/N-2: first-fill tank-window timing carved before residual. */
     windowTimingCost?: number;
+    /** N-2: no-odometer fill spend carved before residual. */
+    unattributedFillCost?: number;
   };
 };
 
@@ -206,6 +210,7 @@ export function assembleWeekSnapshotsFromCalcInput(input: {
         deadheadCost: Number(ctx.categoryCosts.deadheadCost) || 0,
         personalUsageCost: Number(ctx.categoryCosts.personalUsageCost) || 0,
         windowTimingCost: Number(ctx.windowTimingCost) || 0,
+        unattributedFillCost: Number(ctx.unattributedFillCost) || 0,
         rule: rule as FuelCoverageRule | null,
       });
       companyShare = money.companyShare;
@@ -306,6 +311,7 @@ export function assembleWeekSnapshotsFromCalcInput(input: {
         appliedFuelRule: rule,
         brain: brainByDriver?.get(driverId) || null,
         windowTimingCost: Number(ctx.windowTimingCost) || 0,
+        unattributedFillCost: Number(ctx.unattributedFillCost) || 0,
       },
     });
   }

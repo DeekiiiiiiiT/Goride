@@ -228,10 +228,14 @@ export interface WeeklyFuelReport {
   deadheadDistance: number;
   deadheadCost: number;
 
-  // 5. The Leakage (Remainder) -> Miscellaneous (true unexplained after F-1 timing carve-out)
+  // 5. The Leakage (Remainder) -> Miscellaneous (true unexplained after F-1/N-2 carves)
   miscellaneousCost: number;
-  /** First-fill + no-odo litres × price — timing, not leakage. */
+  /** First-fill litres × price — tank-window timing, not leakage. */
   windowTimingCost?: number;
+  /** No-odometer fill litres × price — unmeasured burn, gated separately. */
+  unattributedFillCost?: number;
+  /** Driver share of misc from coverage split (0 under F-8). */
+  driverMiscShare?: number;
   
   // 6. The Split
   companyShare: number;

@@ -122,7 +122,8 @@ export async function syncOrderToFleetKv(
     return { ok: false, reason: "missing_supabase_config" };
   }
 
-  const url = `${base}/functions/v1/make-server-37f42386/internal/trips/project`;
+  // Residual lives on fleet-core (ADR-0021); keep make-server until F5 soak ends.
+  const url = `${base}/functions/v1/fleet-core/internal/trips/project`;
   const res = await fetch(url, {
     method: "POST",
     headers: {

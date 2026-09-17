@@ -53,12 +53,12 @@ import { resolvePricePerLiter } from './resolvePricePerLiter.ts';
 import {
   assembleLeftoverWeekMoney,
   computeMiscellaneousCost,
-  computeWindowTimingCost,
   splitAllCategoryCosts,
   getCategoryCoverageSplit as splitCategory,
   type FuelCoverageCategory,
 } from './fuelCoverageSplit.ts';
 import { floorMiscForSplit } from './fuelFinalizeGate.ts';
+import { deriveWindowMoneyFromEntries } from './deriveWindowMoneyFromEntries.ts';
 
 export {
   FALLBACK_EFFICIENCY_KM_L,
@@ -397,16 +397,22 @@ export const FuelCalculationService = {
             ? 0
             : (personalDistance / observedEfficiency) * actualPricePerLiter;
 
-        // 6. F-1: carve tank-window timing out of unexplained; misc = true leakage only
-        const windowTimingCost = priceUnavailable
-            ? 0
-            : computeWindowTimingCost(totalLiters, efficiencyFuel, actualPricePerLiter);
+        // 6. N-1/N-2: hoist efficiencySource before carve; split first-fill timing vs no-odo
+        // R-3: derive carves from entries; FCS already resolved price for categories.
+        const derivedWindow = deriveWindowMoneyFromEntries(vehicleEntries, {
+            pricePerLiter: actualPricePerLiter,
+            hasVehicleEfficiencySettings: !!vehicle.fuelSettings?.efficiencyCity,
+        });
+        const efficiencySource = derivedWindow.efficiencySource;
+        const windowTimingCost = priceUnavailable ? 0 : derivedWindow.windowTimingCost;
+        const unattributedFillCost = priceUnavailable ? 0 : derivedWindow.unattributedFillCost;
         const miscellaneousCost = computeMiscellaneousCost(totalGasCardCost, {
             rideShare: rideShareCost,
             companyUsage: companyUsageCost,
             deadhead: deadheadCost,
             personal: personalUsageCost,
             windowTiming: windowTimingCost,
+            unattributedFill: unattributedFillCost,
         });
 
         // 6b. Personal Allowance (Option 2): company absorbs earned; overage → personal split
@@ -459,6 +465,7 @@ export const FuelCalculationService = {
                 deadheadCost,
                 personalUsageCost,
                 windowTimingCost,
+                unattributedFillCost,
                 rule: fuelRule || null,
             });
             rideShareSplit = { company: money.split.company.rideShare, driver: money.split.driver.rideShare };
@@ -499,7 +506,8 @@ export const FuelCalculationService = {
                 personalSplit.company +
                 miscSplit.company +
                 earnedAbsorbCompany +
-                windowTimingCost;
+                windowTimingCost +
+                unattributedFillCost;
             driverShare =
                 rideShareSplit.driver +
                 companyUsageSplit.driver +
@@ -509,10 +517,6 @@ export const FuelCalculationService = {
         }
 
         // 8. Health Status — cycle spine when FLEET_CYCLE_HEALTH (default ON)
-        const efficiencySource: 'odometer' | 'vehicle_settings' | 'default_fallback' =
-            entriesWithOdo.length >= 3
-              ? 'odometer'
-              : (vehicle.fuelSettings?.efficiencyCity ? 'vehicle_settings' : 'default_fallback');
         const priceSource = priceResolved.priceSource;
 
         const fuelCycles = calculateFuelCycles(vehicleEntries, [vehicle]);
@@ -609,6 +613,8 @@ export const FuelCalculationService = {
             personalUsageCost,
             miscellaneousCost,
             windowTimingCost,
+            unattributedFillCost,
+            driverMiscShare: miscSplit.driver,
             companyShare,
             driverShare,
             status: 'Draft',
@@ -628,6 +634,8 @@ export const FuelCalculationService = {
             metadata: {
                 scenarioName: activeScenario?.name || 'Standard (Fallback)',
                 scenarioId: activeScenario?.id,
+                windowTimingCost,
+                unattributedFillCost,
                 // Ride Share calculation transparency
                 rideShareCalc: {
                     totalRideshareKm: totalTripDistance,
@@ -718,7 +726,8 @@ export const FuelCalculationService = {
             weekSplit.company.personal +
             weekSplit.company.misc +
             allowanceSplit.earnedCost +
-            (Number(report.windowTimingCost) || 0);
+            (Number(report.windowTimingCost) || 0) +
+            (Number(report.unattributedFillCost) || 0);
         const driverShare =
             weekSplit.driver.rideShare +
             weekSplit.driver.companyUsage +
@@ -912,6 +921,8 @@ export const FuelCalculationService = {
             merged.personalUsageCost = 0;
             merged.miscellaneousCost = 0;
             merged.windowTimingCost = 0;
+            merged.unattributedFillCost = 0;
+            merged.driverMiscShare = 0;
             merged.totalTripDistance = 0;
             merged.companyMiscDistance = 0;
             merged.deadheadDistance = 0;
@@ -952,6 +963,10 @@ export const FuelCalculationService = {
                 merged.miscellaneousCost += slice.miscellaneousCost;
                 merged.windowTimingCost =
                     (merged.windowTimingCost || 0) + (Number(slice.windowTimingCost) || 0);
+                merged.unattributedFillCost =
+                    (merged.unattributedFillCost || 0) + (Number(slice.unattributedFillCost) || 0);
+                merged.driverMiscShare =
+                    (merged.driverMiscShare || 0) + (Number(slice.driverMiscShare) || 0);
                 merged.totalTripDistance += slice.totalTripDistance;
                 merged.companyMiscDistance += slice.companyMiscDistance;
                 merged.deadheadDistance += slice.deadheadDistance || 0;
@@ -964,6 +979,15 @@ export const FuelCalculationService = {
                     ...(slice.odometerBuckets || []),
                 ];
             }
+            // P-1 harden: recompute misc from merged named buckets so a forgotten field cannot desync.
+            merged.miscellaneousCost = computeMiscellaneousCost(merged.totalGasCardCost, {
+                rideShare: merged.rideShareCost,
+                companyUsage: merged.companyUsageCost,
+                deadhead: merged.deadheadCost || 0,
+                personal: merged.personalUsageCost,
+                windowTiming: Number(merged.windowTimingCost) || 0,
+                unattributedFill: Number(merged.unattributedFillCost) || 0,
+            });
             merged.vehicleId = primaryVehicle.id;
             if (sliceMeta) {
                 merged.metadata = { ...merged.metadata, ...sliceMeta };
@@ -990,7 +1014,8 @@ export const FuelCalculationService = {
                         (merged.companyUsageCost || 0) +
                         (merged.deadheadCost || 0) +
                         (merged.miscellaneousCost || 0) +
-                        (Number(merged.windowTimingCost) || 0);
+                        (Number(merged.windowTimingCost) || 0) +
+                        (Number(merged.unattributedFillCost) || 0);
                     const residualCost = Math.max(0, (merged.totalGasCardCost || 0) - attributed);
                     if (residualCost > 0) {
                         effGuess = (merged.personalDistance * priceGuess) / residualCost;

@@ -6,6 +6,12 @@ export type FuelCategoryLoaderEntry = {
   usageCategory?: string | null;
   driverId?: string | null;
   vehicleId?: string | null;
+  /** N-3: needed for window timing / unattributed derive. */
+  liters?: number | null;
+  odometer?: number | null;
+  type?: string | null;
+  paymentSource?: string | null;
+  metadata?: Record<string, unknown> | null;
 };
 
 export type FuelCategoryLoaderTripAgg = Partial<WeekSnapCategoryCosts>;
@@ -192,6 +198,57 @@ export async function loadServerTaggedFuelEntriesForWeek(
         usageCategory: usage,
         driverId: (v.driverId ?? v.driver_id ?? null) as string | null,
         vehicleId: (v.vehicleId ?? v.vehicle_id ?? null) as string | null,
+        liters: v.liters != null ? Number(v.liters) : null,
+        odometer: v.odometer != null ? Number(v.odometer) : null,
+        type: (v.type as string) || null,
+        paymentSource: (v.paymentSource ?? v.payment_source ?? null) as string | null,
+        metadata: (v.metadata && typeof v.metadata === "object"
+          ? (v.metadata as Record<string, unknown>)
+          : null),
+      });
+    }
+    return out;
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * N-3: all org-week fuel entries with litres/odometer for independent window-money derive.
+ * Unlike tagged category load, usageCategory is optional — timing needs every ops fill.
+ */
+export async function loadServerWindowMoneyEntriesForWeek(
+  orgId: string,
+  weekStart: string,
+  weekEnd: string,
+): Promise<FuelCategoryLoaderEntry[]> {
+  try {
+    const { fromKvStore } = await import("./fleet_sql_bridge.ts");
+    const orgOr =
+      `value->>organizationId.eq.${orgId},value->>orgId.eq.${orgId},value->>org_id.eq.${orgId}`;
+    const { data, error } = await fromKvStore()
+      .select("value")
+      .like("key", "fuel_entry:%")
+      .or(orgOr)
+      .gte("value->>date", weekStart)
+      .lte("value->>date", weekEnd);
+    if (error) return [];
+    const out: FuelCategoryLoaderEntry[] = [];
+    for (const row of data || []) {
+      const v = (row as { value?: Record<string, unknown> })?.value;
+      if (!v || typeof v !== "object") continue;
+      out.push({
+        amount: Number(v.amount) || 0,
+        usageCategory: (v.usageCategory ?? v.usage_category ?? null) as string | null,
+        driverId: (v.driverId ?? v.driver_id ?? null) as string | null,
+        vehicleId: (v.vehicleId ?? v.vehicle_id ?? null) as string | null,
+        liters: v.liters != null ? Number(v.liters) : null,
+        odometer: v.odometer != null ? Number(v.odometer) : null,
+        type: (v.type as string) || null,
+        paymentSource: (v.paymentSource ?? v.payment_source ?? null) as string | null,
+        metadata: (v.metadata && typeof v.metadata === "object"
+          ? (v.metadata as Record<string, unknown>)
+          : null),
       });
     }
     return out;

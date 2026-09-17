@@ -49,6 +49,41 @@ describe('leftover / misc engine', () => {
     expect(money.spendTieDelta).toBeCloseTo(0, 5);
   });
 
+  it('N-2: unattributedFillCost carved separately from timing', () => {
+    const money = assembleLeftoverWeekMoney({
+      totalSpend: 27000,
+      rideShareCost: 9000,
+      companyUsageCost: 0,
+      deadheadCost: 0,
+      personalUsageCost: 0,
+      windowTimingCost: 4500,
+      unattributedFillCost: 13500,
+      rule: { coverageType: 'Full' },
+    });
+    expect(money.windowTimingCost).toBe(4500);
+    expect(money.unattributedFillCost).toBe(13500);
+    expect(money.miscellaneousCost).toBeCloseTo(0, 5);
+    expect(money.companyShare).toBeCloseTo(27000, 5);
+    expect(money.spendTieDelta).toBeCloseTo(0, 5);
+  });
+
+  it('N-1: thin chain — zero timing when caller does not carve', () => {
+    const money = assembleLeftoverWeekMoney({
+      totalSpend: 9000,
+      rideShareCost: 5400,
+      companyUsageCost: 0,
+      deadheadCost: 0,
+      personalUsageCost: 0,
+      windowTimingCost: 0,
+      unattributedFillCost: 0,
+      rule: { coverageType: 'Full' },
+    });
+    // Without the unguarded full-spend carve, misc is positive (under-explained), not negative over-explained
+    expect(money.miscellaneousCost).toBeCloseTo(3600, 5);
+    expect(money.miscellaneousCost).toBeGreaterThan(0);
+    expect(money.overExplainedCost).toBe(0);
+  });
+
   it('floors negative misc for split and flags over-explained (C-2)', () => {
     const money = assembleLeftoverWeekMoney({
       totalSpend: 8000,

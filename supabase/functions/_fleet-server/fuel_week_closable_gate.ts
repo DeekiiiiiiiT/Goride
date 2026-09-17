@@ -3,8 +3,9 @@
  */
 import * as kv from "./kv_store.tsx";
 import { listUnapprovedFuelTxInWindow } from "../../../packages/fuel-core/src/fuelReviewQueue.ts";
-import { classifyFuelMiscResidual, residualFlagsFromSpendRows, residualSpendRowsFromSnapshots } from "../../../packages/fuel-core/src/fuelFinalizeGate.ts";
+import { classifyFuelMiscResidual, residualFlagsFromSpendRows, residualSpendRowsFromSnapshots, isUnattributedBeyondGate } from "../../../packages/fuel-core/src/fuelFinalizeGate.ts";
 import { coverageRuleIsResolved } from "../../../packages/fuel-core/src/fuelCoverageSplit.ts";
+import { deriveWindowMoneyFromEntries } from "../../../packages/fuel-core/src/deriveWindowMoneyFromEntries.ts";
 import type { EvaluateFuelWeekClosableInput } from "../../../packages/fuel-core/src/evaluateFuelWeekClosable.ts";
 import { evaluateStopToStopFromSnapshots } from "../../../packages/fuel-core/src/stopToStopConservation.ts";
 import {
@@ -369,6 +370,38 @@ export async function buildFuelWeekClosableInputForPeriod(
   // (pre-remediation weeks have none — avoid blocking historical reopens blindly).
   const hasFrozenBuckets = snaps.some((s) => Array.isArray(s.odometerBuckets) && s.odometerBuckets.length > 0);
 
+  // N-1 / N-2: thin odometer chain + unattributed fills (from stamps and/or entry derive).
+  let stampedUnattributed = 0;
+  let odometerChainUnusable = false;
+  for (const s of snaps) {
+    const spend = Number(s.totalGasCardCost) || Number(s.totalSpend) || 0;
+    const smeta =
+      s.metadata && typeof s.metadata === "object"
+        ? (s.metadata as Record<string, unknown>)
+        : {};
+    stampedUnattributed += Number(smeta.unattributedFillCost) || Number(s.unattributedFillCost) || 0;
+    const calc =
+      smeta.rideShareCalc && typeof smeta.rideShareCalc === "object"
+        ? (smeta.rideShareCalc as Record<string, unknown>)
+        : {};
+    const src = String(calc.efficiencySource || "");
+    if (spend > 0.009 && src && src !== "odometer") odometerChainUnusable = true;
+  }
+  // R-3: price from entries — ignore client stamp.
+  const derived = deriveWindowMoneyFromEntries(
+    weekEntries as Parameters<typeof deriveWindowMoneyFromEntries>[0],
+  );
+  if (derived?.odometerChainUnusable && totalSpend > 0.009) {
+    odometerChainUnusable = true;
+  }
+  const unattributedCost = Math.max(
+    stampedUnattributed,
+    Number(derived?.unattributedFillCost) || 0,
+  );
+  // R-1 / R-2: first-class period columns only (no leakage fallback for unattributed).
+  const odometerChainReviewed = Boolean(period.odometer_chain_reviewed_at);
+  const unattributedReviewed = Boolean(period.unattributed_reviewed_at);
+
   return {
     countsUnevaluated,
     overExplained: snapResidual.anyOverExplained || residualKind === "over_explained",
@@ -380,6 +413,9 @@ export async function buildFuelWeekClosableInputForPeriod(
     missingCategoryCosts,
     unresolvedCoverageRule,
     degradedInputs,
+    odometerChainUnusable: odometerChainUnusable && !odometerChainReviewed,
+    unattributedUnreviewed:
+      isUnattributedBeyondGate(totalSpend, unattributedCost) && !unattributedReviewed,
     ...(hasFrozenBuckets
       ? {
           stopToStopVolumeFailed: s2s.stopToStopVolumeFailed,

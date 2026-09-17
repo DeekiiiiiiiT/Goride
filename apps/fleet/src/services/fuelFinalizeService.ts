@@ -53,6 +53,10 @@ export type FuelFinalizeDeps = {
   /** Org period row — empty counts triggers counts_unevaluated gate. */
   periodCounts?: Record<string, { actionable?: number }>;
   leakageReviewed?: boolean;
+  /** R-2: thin odometer chain acknowledged. */
+  odometerChainReviewed?: boolean;
+  /** R-1: fills-without-odometer accepted. */
+  unattributedReviewed?: boolean;
   degradedInputs?: boolean;
   unexplained?: number;
   totalSpend?: number;
@@ -169,6 +173,8 @@ export async function finalizeFuelWeekReports(
     reports,
     scenarios,
     leakageReviewed: deps.leakageReviewed ?? false,
+    odometerChainReviewed: deps.odometerChainReviewed ?? false,
+    unattributedReviewed: deps.unattributedReviewed ?? false,
     countsUnevaluated,
     degradedInputs: deps.degradedInputs,
     openDisputesInWeek,
@@ -331,8 +337,10 @@ export async function finalizeFuelWeekReports(
           stopToStopEngineVersion: 's2s-v1',
           stopToStopBucketCount: (report.odometerBuckets || []).length,
           stopToStopFrozenAt: new Date().toISOString(),
-          // H-8: finalize now loads verified ledger anchors (same as Stop-to-Stop panel).
-          stopToStopAnchorMode: 'ledger',
+          // P-5: derive from report build (ledger vs ops_fills vs mixed) — never hardcode.
+          stopToStopAnchorMode:
+            (report.metadata as { stopToStopAnchorMode?: string } | undefined)
+              ?.stopToStopAnchorMode || 'ops_fills',
           settledEntries: (relevantEntries.length ? relevantEntries : weekEntries).map((e) => ({
             id: e.id,
             amount: e.amount,

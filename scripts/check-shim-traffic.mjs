@@ -185,9 +185,12 @@ async function main() {
   const pat = getPat();
   const projectRef = getProjectRef();
   if (!pat) {
-    console.error(
-      "Missing ROAM_MGMT_PAT (or SUPABASE_ACCESS_TOKEN / SUPABASE_PAT). Cannot query edge logs.",
-    );
+    const msg =
+      "Missing ROAM_MGMT_PAT (or SUPABASE_ACCESS_TOKEN / SUPABASE_PAT). Cannot query edge logs.";
+    console.error(msg);
+    if (process.env.GITHUB_ACTIONS === "true") {
+      console.error(`::error::${msg}`);
+    }
     process.exit(2);
   }
 

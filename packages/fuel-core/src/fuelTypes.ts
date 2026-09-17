@@ -232,8 +232,12 @@ export interface WeeklyFuelReport {
   deadheadDistance: number;
   deadheadCost: number;
   miscellaneousCost: number;
-  /** F-1: first-fill + no-odo litres × price — timing, not leakage. */
+  /** F-1/N-2: first-fill litres × price — tank-window timing, not leakage. */
   windowTimingCost?: number;
+  /** N-2: no-odometer fill litres × price — unmeasured burn, gated separately. */
+  unattributedFillCost?: number;
+  /** N-4: driver share of misc from coverage split (0 under F-8). */
+  driverMiscShare?: number;
   companyShare: number;
   driverShare: number;
   status: 'Draft' | 'Finalized';

@@ -101,6 +101,8 @@ export function freezeReportMoneyThroughAssembler(args: {
         vehicleIds: report.vehicleIds || [report.vehicleId],
         fuelRule: toWeekSnapFuelRule(fuelRule),
         categoryCosts: categoryCostsFromReport(report),
+        windowTimingCost: Number(report.windowTimingCost) || 0,
+        unattributedFillCost: Number(report.unattributedFillCost) || 0,
       },
     ],
   ]);
@@ -161,6 +163,8 @@ export function freezeReportMoneyThroughAssembler(args: {
   const weekMoney = computeFuelWeek({
     totalSpend: totalGasCardCost,
     ...cats,
+    windowTimingCost: Number(report.windowTimingCost) || 0,
+    unattributedFillCost: Number(report.unattributedFillCost) || 0,
     rule: toWeekSnapFuelRule(fuelRule) || null,
     driverId: report.driverId,
     personalAllowanceEarnedCost: earnedEligible ? earnedRaw : 0,

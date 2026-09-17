@@ -16,11 +16,20 @@
  *   VERCEL_DEPLOY_HOOK_RUSH_COURIER
  *   VERCEL_DEPLOY_HOOK_RUSH_PARTNER
  *
- * Missing secrets are skipped (safe on Hobby — only configure hooks you use).
+ * Missing secrets for non-critical apps are skipped (Hobby — only configure what you use).
+ * Cutover-critical apps (fleet / driver / dominion) FAIL the job if selected to fire
+ * but their secret is unset — silent skip would leave clients on the old shim.
  */
 import { execFileSync } from "node:child_process";
 
 /** @typedef {{ secret: string, paths: string[], label: string }} AppHook */
+
+/** Fleet-core cutover front doors — must never soft-skip when in the fire set. */
+const CRITICAL_SECRETS = new Set([
+  "VERCEL_DEPLOY_HOOK_FLEET",
+  "VERCEL_DEPLOY_HOOK_DRIVER",
+  "VERCEL_DEPLOY_HOOK_DOMINION",
+]);
 
 /** @type {AppHook[]} */
 const APPS = [
@@ -146,7 +155,10 @@ function main() {
       "[vercel-path-deploy] shared packages/workspace changed — will fire every configured app hook",
     );
     for (const app of APPS) {
-      if (process.env[app.secret]) toFire.add(app.secret);
+      // Always select cutover-critical apps so a missing secret fails closed.
+      if (process.env[app.secret] || CRITICAL_SECRETS.has(app.secret)) {
+        toFire.add(app.secret);
+      }
     }
   }
 
@@ -159,14 +171,24 @@ function main() {
 
   let fired = 0;
   let skippedMissing = 0;
+  let criticalMissing = 0;
   for (const app of APPS) {
     if (!toFire.has(app.secret)) continue;
     const url = process.env[app.secret];
     if (!url) {
-      console.log(
-        `[vercel-path-deploy] skip ${app.label}: secret ${app.secret} not set`,
-      );
-      skippedMissing++;
+      const critical = CRITICAL_SECRETS.has(app.secret);
+      if (critical) {
+        console.error(
+          `[vercel-path-deploy] FAIL ${app.label}: required secret ${app.secret} not set (cutover-critical)`,
+        );
+        criticalMissing++;
+        process.exitCode = 1;
+      } else {
+        console.log(
+          `[vercel-path-deploy] skip ${app.label}: secret ${app.secret} not set`,
+        );
+        skippedMissing++;
+      }
       continue;
     }
     console.log(`[vercel-path-deploy] POST ${app.label}`);
@@ -183,7 +205,7 @@ function main() {
   }
 
   console.log(
-    `[vercel-path-deploy] done: fired=${fired} missingSecret=${skippedMissing}`,
+    `[vercel-path-deploy] done: fired=${fired} missingSecret=${skippedMissing} criticalMissing=${criticalMissing}`,
   );
 }
 

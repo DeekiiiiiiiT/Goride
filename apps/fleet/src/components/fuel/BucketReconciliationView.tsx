@@ -40,7 +40,12 @@ import { Vehicle } from '../../types/vehicle';
 import { Trip, FinancialTransaction } from '../../types/data';
 import { FuelEntry, MileageAdjustment, OdometerBucket } from '../../types/fuel';
 import { FuelCalculationService, FALLBACK_EFFICIENCY_KM_L } from '../../services/fuelCalculationService';
-import { recommendGapCharge } from '../../services/stopToStopGapChargeService';
+import {
+  recommendGapCharge,
+  approveGapCharge,
+  listGapCharges,
+  gapChargeErrorMessage,
+} from '../../services/stopToStopGapChargeService';
 import { odometerService } from '../../services/odometerService';
 import { MasterLogTimeline } from '../vehicles/odometer/MasterLogTimeline';
 import { bucketClosesInFuelWeek, toEntryYmd } from '../../utils/fuelWeekPeriod';
@@ -52,11 +57,17 @@ import {
   stopToStopIsReconciled,
   sumBucketDistanceKm,
   chainSpanKm,
+  type GapChargeRecommendation,
 } from '@roam/fuel-core';
 import { useAuth } from '../auth/AuthContext';
 
-/** Charge Gap on — Pending Gap_Deduction, window driver, idempotent id. */
+/** Charge Gap on — Recommend then distinct Approve → Pending (Rev 8 / Q-3). */
 export const STOP_TO_STOP_CHARGES_ENABLED = true;
+
+type PendingRecSummary = Pick<
+  GapChargeRecommendation,
+  'bucketId' | 'vehicleId' | 'amount' | 'status' | 'recommendedBy'
+>;
 
 /** Calendar day label without UTC date-only shift (yyyy-MM-dd must not parse as UTC midnight). */
 function formatBucketDay(value: string): string {
@@ -107,8 +118,14 @@ export function BucketReconciliationView({
     onRefresh,
     periodLocked = false,
 }: BucketReconciliationViewProps) {
-    const { organizationId } = useAuth();
+    const { organizationId, user } = useAuth();
+    const actorId = user?.id || null;
     const [isPosting, setIsPosting] = React.useState<string | null>(null);
+    /** Pending recommendations hydrated from GET …/gap-charges (Q-3). */
+    const [pendingRecs, setPendingRecs] = React.useState<Map<string, PendingRecSummary>>(
+        () => new Map(),
+    );
+    const [periodPending, setPeriodPending] = React.useState<PendingRecSummary[]>([]);
     const [unifiedAnchors, setUnifiedAnchors] = React.useState<UnifiedAnchor[] | null>(null);
     const [bucketTrips, setBucketTrips] = React.useState<Trip[] | null>(null);
     const [tripsTruncated, setTripsTruncated] = React.useState(false);
@@ -187,6 +204,51 @@ export function BucketReconciliationView({
         };
         loadAnchors();
     }, [vehicle.id]);
+
+    // Q-3: hydrate pending recommendations from server (not session-local state).
+    React.useEffect(() => {
+        if (!STOP_TO_STOP_CHARGES_ENABLED || !organizationId || !periodYmd) {
+            setPendingRecs(new Map());
+            setPeriodPending([]);
+            return;
+        }
+        let cancelled = false;
+        const loadPending = async () => {
+            try {
+                const periodId = `week_${periodYmd.from}_${periodYmd.to}`;
+                const rows = await listGapCharges({
+                    periodId,
+                    weekStart: periodYmd.from,
+                    weekEnd: periodYmd.to,
+                    status: 'recommended',
+                });
+                if (cancelled) return;
+                const summaries: PendingRecSummary[] = rows
+                    .filter((r) => r.status === 'recommended' && r.bucketId)
+                    .map((r) => ({
+                        bucketId: r.bucketId,
+                        vehicleId: r.vehicleId,
+                        amount: Number(r.amount) || 0,
+                        status: r.status,
+                        recommendedBy: r.recommendedBy,
+                    }));
+                setPeriodPending(summaries);
+                const byBucket = new Map<string, PendingRecSummary>();
+                for (const s of summaries) byBucket.set(s.bucketId, s);
+                setPendingRecs(byBucket);
+            } catch (err) {
+                console.error('Failed to load pending gap charges:', err);
+                if (!cancelled) {
+                    setPendingRecs(new Map());
+                    setPeriodPending([]);
+                }
+            }
+        };
+        loadPending();
+        return () => {
+            cancelled = true;
+        };
+    }, [organizationId, periodYmd?.from, periodYmd?.to]);
     
     const effectiveTrips = bucketTrips ?? trips;
 
@@ -308,27 +370,96 @@ export function BucketReconciliationView({
                 weekStart: periodYmd?.from,
                 weekEnd: periodYmd?.to,
                 bucket,
+                // Solo-owner ops: recommend + approve in one step. Multi-user dual control deferred.
+                autoApprove: true,
             });
             if (result.status === 'blocked') {
                 toast.error(result.blockReason || 'Charge blocked');
                 return;
             }
-            if (result.needsSecondApprove) {
-                toast.message(
-                    'Gap charge recommended — a second approver must post the Pending charge.',
+            if (result.status === 'approved' || result.transactionId) {
+                setPendingRecs((prev) => {
+                    const next = new Map(prev);
+                    next.delete(bucket.id);
+                    return next;
+                });
+                setPeriodPending((prev) => prev.filter((p) => p.bucketId !== bucket.id));
+                toast.success(
+                    result.transactionId
+                        ? `Gap charge saved (Pending) for driver ${result.resolvedDriverId || '—'}`
+                        : 'Gap charge saved (Pending)',
                 );
-                if (onRefresh) onRefresh();
+            } else if (result.needsSecondApprove) {
+                const summary: PendingRecSummary = {
+                    bucketId: bucket.id,
+                    vehicleId: bucket.vehicleId,
+                    amount: Number(result.amount) || Number(bucket.deductionRecommendation) || 0,
+                    status: 'recommended',
+                    recommendedBy: result.recommendedBy || actorId || undefined,
+                };
+                setPendingRecs((prev) => new Map(prev).set(bucket.id, summary));
+                setPeriodPending((prev) => {
+                    const without = prev.filter((p) => p.bucketId !== bucket.id);
+                    return [...without, summary];
+                });
+                toast.message(
+                    'Gap charge recommended — approve to post Pending (or use a second team login when dual control is on).',
+                );
+            } else {
+                toast.message('Gap charge recommended.');
+            }
+            if (onRefresh) onRefresh();
+        } catch (e: any) {
+            console.error(e);
+            toast.error(gapChargeErrorMessage(e?.body || e?.message, 'Failed to post gap charge'));
+        } finally {
+            setIsPosting(null);
+        }
+    };
+
+    const handleApproveDeduction = async (bucket: OdometerBucket) => {
+        if (!STOP_TO_STOP_CHARGES_ENABLED) {
+            toast.error('Stop-to-stop charges are disabled');
+            return;
+        }
+        if (!panelReconciled) {
+            toast.error('Panel not reconciled — fix litres/distance before charging');
+            return;
+        }
+        if (bucket.confidenceTier !== 'exact') {
+            toast.error('Only exact-tier buckets can be charged');
+            return;
+        }
+        setIsPosting(`approve_${bucket.id}`);
+        try {
+            const periodId = periodYmd
+                ? `week_${periodYmd.from}_${periodYmd.to}`
+                : 'adhoc';
+            const result = await approveGapCharge({
+                periodId,
+                weekStart: periodYmd?.from,
+                weekEnd: periodYmd?.to,
+                bucketId: bucket.id,
+            });
+            if (result.sameActor || result.status === 'blocked') {
+                toast.error(result.blockReason || 'A different person must approve this gap charge.');
                 return;
             }
+            setPendingRecs((prev) => {
+                const next = new Map(prev);
+                next.delete(bucket.id);
+                return next;
+            });
+            setPeriodPending((prev) => prev.filter((p) => p.bucketId !== bucket.id));
             toast.success(
                 result.transactionId
                     ? `Gap charge saved (Pending) for driver ${result.resolvedDriverId || '—'}`
-                    : 'Gap charge recorded',
+                    : 'Gap charge approved (Pending)',
             );
             if (onRefresh) onRefresh();
-        } catch (e) {
+        } catch (e: any) {
             console.error(e);
-            toast.error("Failed to post deduction");
+            toast.error(gapChargeErrorMessage(e?.body || e?.message, 'Failed to approve gap charge'));
         } finally {
             setIsPosting(null);
         }
@@ -382,6 +513,35 @@ export function BucketReconciliationView({
                                 <li>Trip fetch may be truncated — treat rows as indeterminate.</li>
                             )}
                         </ul>
+                    </div>
+                </div>
+            )}
+
+            {STOP_TO_STOP_CHARGES_ENABLED && !periodLocked && periodPending.length > 0 && (
+                <div className="flex items-start gap-3 p-3 bg-indigo-50 rounded-lg border border-indigo-200 text-sm text-indigo-950">
+                    <Banknote className="h-4 w-4 text-indigo-600 mt-0.5 shrink-0" />
+                    <div className="min-w-0">
+                        <p className="font-semibold">
+                            {periodPending.length} gap charge{periodPending.length !== 1 ? 's' : ''} awaiting finish
+                        </p>
+                        <p className="text-xs mt-0.5 opacity-90">
+                            {(() => {
+                                const onVehicle = periodPending.filter((p) => p.vehicleId === vehicle.id);
+                                const elsewhere = periodPending.length - onVehicle.length;
+                                const totalAmt = onVehicle.reduce((s, p) => s + (p.amount || 0), 0);
+                                const parts: string[] = [];
+                                if (onVehicle.length) {
+                                    parts.push(
+                                        `${onVehicle.length} on this vehicle (${formatCurrency(totalAmt)})`,
+                                    );
+                                }
+                                if (elsewhere > 0) {
+                                    parts.push(`${elsewhere} on other vehicles this week`);
+                                }
+                                return parts.join(' · ');
+                            })()}
+                            {' — '}use Approve on the row to post Pending.
+                        </p>
                     </div>
                 </div>
             )}
@@ -619,39 +779,84 @@ export function BucketReconciliationView({
                                     </TableCell>
                                     <TableCell className="text-right">
                                         <div className="flex flex-col items-end gap-1">
-                                            {bucket.isDeductionPosted ? (
-                                                <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-emerald-50 text-emerald-700 border-emerald-100 uppercase font-bold">
-                                                    Posted
-                                                </Badge>
-                                            ) : bucket.deductionRecommendation ? (
-                                                <div className="text-sm font-bold text-red-600">
-                                                    {formatCurrency(bucket.deductionRecommendation)}
-                                                </div>
-                                            ) : (
-                                                <span className="text-xs text-slate-400">No recommendation</span>
-                                            )}
+                                            {(() => {
+                                                const pending = pendingRecs.get(bucket.id);
+
+                                                if (bucket.isDeductionPosted) {
+                                                    return (
+                                                        <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-emerald-50 text-emerald-700 border-emerald-100 uppercase font-bold">
+                                                            Pending
+                                                        </Badge>
+                                                    );
+                                                }
+                                                if (pending) {
+                                                    return (
+                                                        <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-amber-50 text-amber-800 border-amber-200 uppercase font-bold">
+                                                            Recommended
+                                                        </Badge>
+                                                    );
+                                                }
+                                                if (bucket.deductionRecommendation) {
+                                                    return (
+                                                        <div className="text-sm font-bold text-red-600">
+                                                            {formatCurrency(bucket.deductionRecommendation)}
+                                                        </div>
+                                                    );
+                                                }
+                                                return (
+                                                    <span className="text-xs text-slate-400">No recommendation</span>
+                                                );
+                                            })()}
                                             {STOP_TO_STOP_CHARGES_ENABLED &&
                                             !periodLocked &&
                                             !bucket.isDeductionPosted &&
                                             bucket.deductionRecommendation &&
                                             bucket.confidenceTier === 'exact' &&
                                             panelReconciled ? (
-                                                <Button 
-                                                    size="sm" 
-                                                    variant="ghost" 
-                                                    className="h-6 px-1.5 text-[10px] text-red-600 hover:text-red-700 hover:bg-red-50 flex items-center gap-1"
-                                                    onClick={() => handlePostDeduction(bucket)}
-                                                    disabled={isPosting === bucket.id || indeterminate}
-                                                >
-                                                    {isPosting === bucket.id ? (
-                                                        <Loader2 className="h-3 w-3 animate-spin" />
-                                                    ) : (
-                                                        <>
-                                                            <Banknote className="h-3 w-3" />
-                                                            Charge Gap
-                                                        </>
-                                                    )}
-                                                </Button>
+                                                <div className="flex flex-col items-end gap-0.5">
+                                                    {(() => {
+                                                        const pending = pendingRecs.get(bucket.id);
+                                                        if (!pending) {
+                                                            return (
+                                                                <Button
+                                                                    size="sm"
+                                                                    variant="ghost"
+                                                                    className="h-6 px-1.5 text-[10px] text-red-600 hover:text-red-700 hover:bg-red-50 flex items-center gap-1"
+                                                                    onClick={() => handlePostDeduction(bucket)}
+                                                                    disabled={isPosting === bucket.id || indeterminate}
+                                                                >
+                                                                    {isPosting === bucket.id ? (
+                                                                        <Loader2 className="h-3 w-3 animate-spin" />
+                                                                    ) : (
+                                                                        <>
+                                                                            <Banknote className="h-3 w-3" />
+                                                                            Post charge (Pending)
+                                                                        </>
+                                                                    )}
+                                                                </Button>
+                                                            );
+                                                        }
+                                                        // Solo-owner: same person can finish approve if auto-approve fell through.
+                                                        return (
+                                                            <Button
+                                                                size="sm"
+                                                                variant="ghost"
+                                                                className="h-6 px-1.5 text-[10px] text-indigo-700 hover:text-indigo-800 hover:bg-indigo-50 flex items-center gap-1"
+                                                                onClick={() => handleApproveDeduction(bucket)}
+                                                                disabled={isPosting === `approve_${bucket.id}` || indeterminate}
+                                                            >
+                                                                {isPosting === `approve_${bucket.id}` ? (
+                                                                    <Loader2 className="h-3 w-3 animate-spin" />
+                                                                ) : (
+                                                                    <>
+                                                                        <Banknote className="h-3 w-3" />
+                                                                        Approve charge (Pending)
+                                                                    </>
+                                                                )}
+                                                            </Button>
+                                                        );
+                                                    })()}
+                                                </div>
                                             ) : null}
                                         </div>
                                     </TableCell>

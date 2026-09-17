@@ -4815,17 +4815,40 @@ export const api = {
     );
     const body = await response.json().catch(() => ({}));
     if (response.status === 409) {
-      return body as { recommendation: Record<string, unknown> };
+      return body as { recommendation: Record<string, unknown>; error?: string; message?: string };
     }
     if (!response.ok) {
       const err = new Error(
-        (body as { error?: string })?.error || 'Gap charge recommend failed',
+        (body as { message?: string; error?: string })?.message ||
+          (body as { error?: string })?.error ||
+          'Gap charge recommend failed',
       ) as Error & { status?: number; body?: unknown };
       err.status = response.status;
       err.body = body;
       throw err;
     }
     return body as { recommendation: Record<string, unknown> };
+  },
+
+  async listFuelGapCharges(args: { periodId: string; status?: string }) {
+    const qs = args.status ? `?status=${encodeURIComponent(args.status)}` : '';
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.fuel}/fuel/periods/${encodeURIComponent(args.periodId)}/gap-charges${qs}`,
+      {
+        method: 'GET',
+        headers: await requireAuthHeaders(),
+      },
+    );
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const err = new Error(
+        (body as { error?: string })?.error || 'Gap charge list failed',
+      ) as Error & { status?: number; body?: unknown };
+      err.status = response.status;
+      err.body = body;
+      throw err;
+    }
+    return body as { recommendations: Record<string, unknown>[] };
   },
 
   async approveFuelGapCharge(args: { periodId: string; bucketId: string }) {
@@ -4840,7 +4863,9 @@ export const api = {
     const body = await response.json().catch(() => ({}));
     if (!response.ok) {
       const err = new Error(
-        (body as { error?: string })?.error || 'Gap charge approve failed',
+        (body as { message?: string; error?: string })?.message ||
+          (body as { error?: string })?.error ||
+          'Gap charge approve failed',
       ) as Error & { status?: number; body?: unknown };
       err.status = response.status;
       err.body = body;
@@ -4938,6 +4963,42 @@ export const api = {
     if (!response.ok) {
       const errText = await response.text().catch(() => '');
       throw new Error(errText || 'Leakage review failed');
+    }
+    return response.json();
+  },
+
+  async reviewFuelPeriodOdometerChain(args: { periodId: string; note: string }) {
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.fuel}/fuel/periods/${encodeURIComponent(args.periodId)}/odometer-chain-review`,
+      {
+        method: 'POST',
+        headers: await requireAuthHeaders(),
+        body: JSON.stringify({ note: args.note }),
+      },
+    );
+    if (!response.ok) {
+      const errText = await response.text().catch(() => '');
+      throw new Error(errText || 'Odometer chain review failed');
+    }
+    return response.json();
+  },
+
+  async reviewFuelPeriodUnattributed(args: {
+    periodId: string;
+    note: string;
+    amount?: number;
+  }) {
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.fuel}/fuel/periods/${encodeURIComponent(args.periodId)}/unattributed-review`,
+      {
+        method: 'POST',
+        headers: await requireAuthHeaders(),
+        body: JSON.stringify({ note: args.note, amount: args.amount }),
+      },
+    );
+    if (!response.ok) {
+      const errText = await response.text().catch(() => '');
+      throw new Error(errText || 'Unattributed fill review failed');
     }
     return response.json();
   },

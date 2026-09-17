@@ -1421,6 +1421,16 @@ function FuelManagementInner({
                   periodRow.leakage_reviewed_at ||
                   periodRow.status === 'locked',
               ),
+              odometerChainReviewed: Boolean(
+                periodRow.odometerChainReviewedAt ||
+                  periodRow.odometer_chain_reviewed_at ||
+                  periodRow.status === 'locked',
+              ),
+              unattributedReviewed: Boolean(
+                periodRow.unattributedReviewedAt ||
+                  periodRow.unattributed_reviewed_at ||
+                  periodRow.status === 'locked',
+              ),
               totalSpend: spendEstimate,
               unexplained: reports.reduce(
                 (s, r) => s + (Number(r.miscellaneousCost) || 0),

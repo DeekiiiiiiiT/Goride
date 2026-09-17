@@ -1,8 +1,13 @@
 /** Operator-facing names for Consumption Reconciliation (M17 / U-13). */
 export const UNEXPLAINED_LABEL = 'Unexplained';
 export const OVER_EXPLAINED_LABEL = 'Over-explained';
-/** F-1: named tank-window timing — not leakage. */
+/** F-1/N-2: first-fill tank-window timing — not leakage. */
 export const WINDOW_TIMING_LABEL = 'Tank window / timing';
+/** N-2: fills logged without an odometer — unmeasured burn, gated separately. */
+export const UNATTRIBUTED_FILL_LABEL = 'Fills without odometer';
+/** R-4: honest operator tooltip — purchase value; also offsets overstated km/L in-window. */
+export const UNATTRIBUTED_FILL_TOOLTIP =
+  'Fills without odometer — purchase value of unmeasured fills. When they sit inside the odometer window they also offset overstated km/L (categories look low by the same fuel).';
 
 export function unexplainedLabel(amount: number): string {
   return amount < 0 ? OVER_EXPLAINED_LABEL : UNEXPLAINED_LABEL;

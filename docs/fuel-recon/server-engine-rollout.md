@@ -13,7 +13,8 @@ Enforce stays paused until soak exit. Shadow logs the same diffs without blockin
 3. **N-19 live** — every `fuel_engine_diff` audit carries `authoritySourceByDriver` (and per-mismatch `authoritySource`)  
 4. **`shadowMinWeeks: 2`** with zero unexpected `fuel_engine_diff` (or signed `finance_recon_drift` exceptions)  
 5. Phase 4 ladder live; soak rows show `authoritySource` (expect **`trip_agg`** until fill tagging ships; no unexplained fallthrough to `snap_category_costs` on PA/normal weeks)  
-6. Then set `FUEL_SERVER_ENGINE=enforce` on Supabase secrets (not Vercel)
+6. **N-3 live** — shadow/enforce derives `windowTimingCost` + `unattributedFillCost` from week entries (not client stamp alone) and `diffWeekCalc` reports timing/unattributed deltas  
+7. Then set `FUEL_SERVER_ENGINE=enforce` on Supabase secrets (not Vercel)
 
 ### Honest Phase 4 / N-18 posture
 
@@ -35,6 +36,7 @@ For each closed week:
 - [ ] Classify every mismatch: expected (signed exception) vs bug
 - [ ] Confirm `authoritySourceByDriver` present for each driver (N-19) — expect `trip_agg` until Wave 4
 - [ ] Inspect share/category deltas — no unexplained `driverShare` / `companyShare` / category deltas
+- [ ] Inspect timing/unattributed deltas — N-3 fields present on `fuel_engine_diff` when non-zero
 - [ ] Any residual rows signed in `finance_recon_drift` (`kind=fuel`, `source=close` or `nightly`)
 - [ ] Confirm nightly statement↔ledger drift stays $0
 - [ ] PA weeks show zero PA-shaped share drift after N-17

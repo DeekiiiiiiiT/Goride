@@ -1,21 +1,31 @@
 # Phase I / D9 — Authenticated browser CORS checklist (six slugs)
 
-Run against **CI-deployed** functions (not a laptop-only deploy). Use a logged-in Fleet session (Admin where pay/claims live). Maintenance-mode drill is already done across all six slugs — do **not** re-run it here.
+Run against **production** (CI-deployed) functions — not a laptop-only deploy.
 
-Per row in DevTools → Network:
+**Where to log in**
+- Fleet UI: https://www.roamfleet.co (fuel, toll, ops, fleet-core residual)
+- Admin UI: https://roamdominion.co (claims + pay / settlement)
 
-1. Open the primary screen.
-2. Confirm preflight **OPTIONS** → **204** (or 200) with `X-Roam-Product-Line` / `X-Roam-Settings-Segment`.
-3. Confirm list responses expose `X-Total-Count` when the UI shows a total; UI total matches the header.
-4. Confirm **zero** CORS errors in the console.
+Maintenance-mode drill is already done across all six slugs — do **not** re-run it here.
 
-| Slug | Primary screen(s) | Totals header | Result |
-|------|-------------------|---------------|--------|
-| `fleet-fuel` | Fuel Entries (cards / finalized reports as needed) | `X-Total-Count` | |
-| `fleet-toll` | Tags, plazas, toll ledger, reconciliation | `X-Total-Count` | |
-| `fleet-ops` | Maintenance summary, logs, expense hub | As used today | |
-| `fleet-claims` | Claims list / detail | As used today | |
-| `fleet-pay` | Settlement desk, periods, statements | As used today | |
-| `fleet-core` | Residual Fleet UI on `.fleetCore` (drivers, trips, ledger, etc.) | As used on residual lists | |
+## Per slug (same four DevTools steps)
 
-Record pass/fail in `docs/fleet-domain-extraction-completion.md` §8.
+1. Open the primary screen below.
+2. DevTools → **Network** → filter `options` → confirm preflight **OPTIONS** → **204** (or 200) with request headers `X-Roam-Product-Line` / `X-Roam-Settings-Segment` accepted.
+3. On the list **GET**: when the UI shows a total/count, response exposes **`X-Total-Count`** and **UI total = header**.
+4. **Console:** zero CORS errors.
+
+| Slug | Primary screen(s) | Where | Totals header | Result |
+|------|-------------------|-------|---------------|--------|
+| `fleet-fuel` | Fuel → Entries (cards / finalized reports) | Fleet | `X-Total-Count` | |
+| `fleet-toll` | Toll → Tags / plazas / ledger / reconciliation | Fleet | `X-Total-Count` | |
+| `fleet-ops` | Maintenance summary, logs, expense hub | Fleet | As used today | |
+| `fleet-claims` | Claims list / detail | Admin | As used today | |
+| `fleet-pay` | Settlement desk, periods, statements | Admin | As used today | |
+| `fleet-core` | Drivers / trips / ledger (residual) | Fleet | As used on residual lists | |
+
+**Eng note (2026-09-17):** anonymous OPTIONS → 204 with `X-Roam-Product-Line` accepted on all six production slugs. Authenticated UI totals still require your logged-in session above.
+
+When all six are PASS, copy results into `docs/fleet-domain-extraction-completion.md` §8 **D9 browser checklist** → **Authenticated UI** column.
+
+**Done when:** six PASS rows + no CORS console errors. Then the only remaining gate is the 7-day shim soak.

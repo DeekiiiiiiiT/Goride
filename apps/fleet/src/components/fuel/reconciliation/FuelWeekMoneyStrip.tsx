@@ -1,6 +1,11 @@
 import { FUEL_SPEND_EPS } from '../../../utils/fuelMoneyEpsilon';
 import { formatFuelMoney } from '../../../utils/formatFuelMoney';
-import { unexplainedLabel } from '../../../utils/fuelReconGlossary';
+import {
+  UNATTRIBUTED_FILL_LABEL,
+  UNATTRIBUTED_FILL_TOOLTIP,
+  WINDOW_TIMING_LABEL,
+  unexplainedLabel,
+} from '../../../utils/fuelReconGlossary';
 
 function MoneyStatCard({
   label,
@@ -50,6 +55,8 @@ export function FuelWeekMoneyStrip({
   driver,
   leakage,
   windowTiming = 0,
+  unattributedFill = 0,
+  driverFromUnexplained = 0,
   priorMedian,
 }: {
   gasCard: number;
@@ -58,8 +65,12 @@ export function FuelWeekMoneyStrip({
   company: number;
   driver: number;
   leakage: number;
-  /** F-1: tank-window timing (first fill / no-odo) — not a third payer. */
+  /** N-2: first-fill tank-window timing — not a third payer. */
   windowTiming?: number;
+  /** N-2: fills without odometer — company-held, gated separately. */
+  unattributedFill?: number;
+  /** N-4: derived from split.driver.misc (0 under F-8). */
+  driverFromUnexplained?: number;
   priorMedian?: { totalSpend: number; unexplained: number };
 }) {
   const sourcesTie = Math.abs(gasCard + cashFromEarnings - totalSpend) <= FUEL_SPEND_EPS;
@@ -74,7 +85,9 @@ export function FuelWeekMoneyStrip({
   const unexplainedDelta =
     priorMedian != null ? leakage - priorMedian.unexplained : null;
   const hasTiming = Math.abs(windowTiming) > FUEL_SPEND_EPS;
+  const hasUnattributed = Math.abs(unattributedFill) > FUEL_SPEND_EPS;
   const hasLeakage = Math.abs(leakage) > FUEL_SPEND_EPS;
+  const showBreakdown = hasTiming || hasUnattributed || hasLeakage;
 
   return (
     <div className="flex flex-col gap-8">
@@ -123,21 +136,29 @@ export function FuelWeekMoneyStrip({
           <MoneyStatCard label="Company keeps" value={company} />
           <MoneyStatCard label="Driver’s fuel share (charge)" value={driver} />
         </div>
-        {(hasTiming || hasLeakage) && (
+        {showBreakdown && (
           <div className="rounded border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
             <p className="mb-1 text-[11px] font-medium uppercase tracking-tight text-slate-500">
               Spend breakdown
             </p>
             {hasTiming && (
-              <p title="Fuel bought outside the odometer burn window (first fill / fills without odometer). Timing difference — not theft.">
-                Of which tank window / timing:{' '}
+              <p title="First fill of the odometer window — inventory timing, not theft.">
+                Of which {WINDOW_TIMING_LABEL.toLowerCase()}:{' '}
                 <span className="font-semibold tabular-nums">{formatFuelMoney(windowTiming)}</span>
+              </p>
+            )}
+            {hasUnattributed && (
+              <p title={UNATTRIBUTED_FILL_TOOLTIP}>
+                Of which {UNATTRIBUTED_FILL_LABEL.toLowerCase()}:{' '}
+                <span className="font-semibold tabular-nums">
+                  {formatFuelMoney(unattributedFill)}
+                </span>
               </p>
             )}
             {hasLeakage && (
               <p
                 className={leakage > 0 ? 'text-[#684000]' : undefined}
-                title="Spend not explained by categorized burn after timing is carved out."
+                title="Spend not explained by categorized burn after timing and unattributed fills are carved out."
               >
                 Of which {unexplainedLabel(leakage).toLowerCase()}:{' '}
                 <span className="font-semibold tabular-nums">{formatFuelMoney(leakage)}</span>
@@ -146,7 +167,7 @@ export function FuelWeekMoneyStrip({
             <p className="text-slate-500">
               Of which charged to driver from unexplained:{' '}
               <span className="font-semibold tabular-nums text-slate-800">
-                {formatFuelMoney(0)}
+                {formatFuelMoney(driverFromUnexplained)}
               </span>
             </p>
           </div>

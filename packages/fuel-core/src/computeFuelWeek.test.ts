@@ -19,10 +19,46 @@ describe('computeFuelWeek', () => {
   });
 
   it('detects shadow mismatches (enforce input)', () => {
-    const a = { totalSpend: 100, companyShare: 100, driverShare: 0, miscellaneousCost: 0 };
-    const b = { totalSpend: 100, companyShare: 50, driverShare: 50, miscellaneousCost: 0 };
+    const a = {
+      totalSpend: 100,
+      companyShare: 100,
+      driverShare: 0,
+      miscellaneousCost: 0,
+      windowTimingCost: 0,
+      unattributedFillCost: 0,
+    };
+    const b = {
+      totalSpend: 100,
+      companyShare: 50,
+      driverShare: 50,
+      miscellaneousCost: 0,
+      windowTimingCost: 0,
+      unattributedFillCost: 0,
+    };
     expect(weekCalcMatches(a, b)).toBe(false);
     expect(diffWeekCalc(a, b).some((d) => d.field === 'driverShare')).toBe(true);
+  });
+
+  it('N-3: diffs windowTimingCost and unattributedFillCost', () => {
+    const a = {
+      totalSpend: 1000,
+      companyShare: 1000,
+      driverShare: 0,
+      miscellaneousCost: 0,
+      windowTimingCost: 100,
+      unattributedFillCost: 50,
+    };
+    const b = {
+      totalSpend: 1000,
+      companyShare: 1000,
+      driverShare: 0,
+      miscellaneousCost: 0,
+      windowTimingCost: 200,
+      unattributedFillCost: 0,
+    };
+    const deltas = diffWeekCalc(a, b);
+    expect(deltas.some((d) => d.field === 'windowTimingCost')).toBe(true);
+    expect(deltas.some((d) => d.field === 'unattributedFillCost')).toBe(true);
   });
 
   it('C-4 spend tie holds for residual definition', () => {

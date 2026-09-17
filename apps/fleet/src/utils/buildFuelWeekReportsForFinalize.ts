@@ -337,6 +337,28 @@ export async function buildFuelWeekReportsForFinalize(
     anchorsByVehicle.size > 0 ? anchorsByVehicle : undefined,
   );
 
+  // P-5: stamp what was actually used per report (not unconditional 'ledger').
+  for (const report of reports) {
+    const vids = (report.vehicleIds?.length ? report.vehicleIds : [report.vehicleId]).filter(
+      Boolean,
+    ) as string[];
+    const modes = vids.map((vid) =>
+      anchorsByVehicle.has(vid) ? ('ledger' as const) : ('ops_fills' as const),
+    );
+    const stopToStopAnchorMode =
+      modes.length === 0
+        ? 'ops_fills'
+        : modes.every((m) => m === 'ledger')
+          ? 'ledger'
+          : modes.every((m) => m === 'ops_fills')
+            ? 'ops_fills'
+            : 'mixed';
+    report.metadata = {
+      ...(report.metadata || {}),
+      stopToStopAnchorMode,
+    };
+  }
+
   return { reports, trips, degraded };
 }
 

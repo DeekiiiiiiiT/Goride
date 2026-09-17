@@ -45,6 +45,10 @@ export interface FuelReconciliationPeriod {
   counts: Record<FuelStepId, FuelStepCounts>;
   /** True when leakage_reviewed_at set (or locked with residual treated as accepted). */
   leakageReviewed?: boolean;
+  /** R-2: thin odometer chain acknowledged. */
+  odometerChainReviewed?: boolean;
+  /** R-1: fills-without-odometer beyond gate accepted. */
+  unattributedReviewed?: boolean;
   /** N-7: locked week whose statement seal failed — retry seal. */
   fuelSealError?: string | null;
 }

@@ -18,7 +18,11 @@ export type FuelWeekClosableBlocker = {
     | 'stop_to_stop_distance'
     | 'stop_to_stop_attribution'
     | 'stop_to_stop_chain'
-    | 'stop_to_stop_trips_truncated';
+    | 'stop_to_stop_trips_truncated'
+    /** N-1: thin odometer chain — timing carve has no basis. */
+    | 'odometer_chain_unusable'
+    /** N-2: no-odometer fill spend beyond gate and not yet acknowledged. */
+    | 'unattributed_unreviewed';
   message: string;
 };
 
@@ -41,6 +45,10 @@ export type EvaluateFuelWeekClosableInput = {
   stopToStopAttributionFailed?: boolean;
   stopToStopChainFailed?: boolean;
   stopToStopTripsTruncated?: boolean;
+  /** N-1: spend present but efficiencySource !== 'odometer'. */
+  odometerChainUnusable?: boolean;
+  /** N-2: unattributed fill spend beyond gate and not wizard-accepted. */
+  unattributedUnreviewed?: boolean;
 };
 
 export function evaluateFuelWeekClosable(
@@ -129,6 +137,18 @@ export function evaluateFuelWeekClosable(
     blockers.push({
       code: 'stop_to_stop_trips_truncated',
       message: 'Stop-to-stop trip fetch truncated — refuse close',
+    });
+  }
+  if (input.odometerChainUnusable) {
+    blockers.push({
+      code: 'odometer_chain_unusable',
+      message: 'Not enough odometered fills to measure tank timing',
+    });
+  }
+  if (input.unattributedUnreviewed) {
+    blockers.push({
+      code: 'unattributed_unreviewed',
+      message: 'Fills without odometer need review',
     });
   }
   return blockers;

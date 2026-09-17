@@ -13,9 +13,13 @@ import {
 import { type FuelWizardDriver } from './buildFuelWizardRows';
 import { useFuelWizardDerived } from './useFuelWizardDerived';
 import { type FuelExceptionBlocker } from '../../../utils/fuelFinalizeGating';
-import { fuelWeekClosableBlockerMessage } from '../../../utils/fuelWeekClosableGate';
+import {
+  fuelWeekClosableBlockerMessage,
+  reportsHaveOdometerChainUnusable,
+} from '../../../utils/fuelWeekClosableGate';
 import { FUEL_SPEND_EPS } from '../../../utils/fuelMoneyEpsilon';
 import {
+  isUnattributedBeyondGate,
   validateDisposition,
   type FuelResidualDisposition,
 } from '@roam/fuel-core';
@@ -161,6 +165,10 @@ function FuelPeriodWizardInner({
     by?: string | null;
     note?: string | null;
   }>({});
+  const [odometerChainReviewed, setOdometerChainReviewed] = useState(false);
+  const [odometerChainNoteDraft, setOdometerChainNoteDraft] = useState('');
+  const [unattributedReviewed, setUnattributedReviewed] = useState(false);
+  const [unattributedNoteDraft, setUnattributedNoteDraft] = useState('');
   const [showGapDetail, setShowGapDetail] = useState(false);
   const [showCostBreakdown, setShowCostBreakdown] = useState(false);
   const [bucketVehicleId, setBucketVehicleId] = useState<string | null>(null);
@@ -250,6 +258,8 @@ function FuelPeriodWizardInner({
     periodLocked,
     activeStepId,
     leakageReviewed,
+    odometerChainReviewed,
+    unattributedReviewed,
     vehicles,
     drivers,
     fuelEntries,
@@ -268,6 +278,12 @@ function FuelPeriodWizardInner({
     periodUnexplained: period.netLeakage,
   });
 
+  const needsOdometerChainAck = reportsHaveOdometerChainUnusable(liveReports);
+  const needsUnattributedAck = isUnattributedBeyondGate(
+    strip.totalSpend,
+    strip.unattributedFill,
+  );
+
   // Fresh walkthrough on period open or after Reopen week
   useEffect(() => {
     setShowGapDetail(false);
@@ -284,6 +300,8 @@ function FuelPeriodWizardInner({
         periodLocked ? FUEL_STEP_ORDER.length - 1 : Math.max(0, FUEL_STEP_ORDER.indexOf(startId)),
       );
       setLeakageReviewed(periodLocked);
+      setOdometerChainReviewed(periodLocked);
+      setUnattributedReviewed(periodLocked);
       return;
     }
     if (initialStepId && FUEL_STEP_ORDER.includes(initialStepId)) {
@@ -352,6 +370,8 @@ function FuelPeriodWizardInner({
           leakageReviewedAt?: string | null;
           leakageReviewedBy?: string | null;
           leakageReviewedNote?: string | null;
+          odometerChainReviewedAt?: string | null;
+          unattributedReviewedAt?: string | null;
           currentStep?: string | null;
         } | null = null;
         let notes: Array<{ step: string; note: string; at: string }> = [];
@@ -367,6 +387,8 @@ function FuelPeriodWizardInner({
               leakageReviewedAt: (p.leakageReviewedAt as string) || null,
               leakageReviewedBy: (p.leakageReviewedBy as string) || null,
               leakageReviewedNote: (p.leakageReviewedNote as string) || null,
+              odometerChainReviewedAt: (p.odometerChainReviewedAt as string) || null,
+              unattributedReviewedAt: (p.unattributedReviewedAt as string) || null,
               currentStep: (p.currentStep as string) || null,
             };
             notes = Array.isArray(bundle.stepNotes) ? bundle.stepNotes : [];
@@ -407,6 +429,16 @@ function FuelPeriodWizardInner({
           setLeakageReviewed(false);
           setLeakageReviewMeta({});
         }
+        if (hit.odometerChainReviewedAt) {
+          setOdometerChainReviewed(true);
+        } else if (!periodLocked) {
+          setOdometerChainReviewed(false);
+        }
+        if (hit.unattributedReviewedAt) {
+          setUnattributedReviewed(true);
+        } else if (!periodLocked) {
+          setUnattributedReviewed(false);
+        }
 
         // H9: restore current_step unless deep-link or locked
         if (
@@ -444,6 +476,8 @@ function FuelPeriodWizardInner({
             note: hit.leakageReviewedNote,
           });
         }
+        if (hit.odometerChainReviewedAt) setOdometerChainReviewed(true);
+        if (hit.unattributedReviewedAt) setUnattributedReviewed(true);
       } catch {
         /* offline — local leakage cache still applies */
       }
@@ -532,6 +566,71 @@ function FuelPeriodWizardInner({
     const settlementIdx = settlementPreviewStepIndex();
     setProgressIndex(Math.max(progressIndex, settlementIdx));
     setActiveStepId('settlement-preview');
+  };
+
+  const ensurePeriodId = async (): Promise<string | null> => {
+    if (serverPeriodId) return serverPeriodId;
+    try {
+      const ensured = await api.ensureFuelReconciliationPeriod({
+        weekStart: period.startDate,
+        weekEnd: period.endDate,
+      });
+      const id = String((ensured as { id?: string })?.id || '');
+      if (id) {
+        setServerPeriodId(id);
+        return id;
+      }
+    } catch {
+      /* offline */
+    }
+    return null;
+  };
+
+  const handleAckOdometerChain = async () => {
+    const note = odometerChainNoteDraft.trim();
+    if (note.length < 8) {
+      toast.error('Add a short reason (8+ characters) before acknowledging thin odometer chain.');
+      return;
+    }
+    const periodId = await ensurePeriodId();
+    if (!periodId) {
+      toast.error('Could not open fuel period for review.');
+      return;
+    }
+    try {
+      await api.reviewFuelPeriodOdometerChain({ periodId, note });
+      setOdometerChainReviewed(true);
+      setOdometerChainNoteDraft('');
+      toast.success('Thin odometer chain acknowledged');
+      handleContinue();
+    } catch (e: any) {
+      toast.error(e?.message || 'Could not save odometer chain review');
+    }
+  };
+
+  const handleAckUnattributed = async () => {
+    const note = unattributedNoteDraft.trim();
+    if (note.length < 8) {
+      toast.error('Add a short reason (8+ characters) before accepting fills without odometer.');
+      return;
+    }
+    const periodId = await ensurePeriodId();
+    if (!periodId) {
+      toast.error('Could not open fuel period for review.');
+      return;
+    }
+    try {
+      await api.reviewFuelPeriodUnattributed({
+        periodId,
+        note,
+        amount: strip.unattributedFill,
+      });
+      setUnattributedReviewed(true);
+      setUnattributedNoteDraft('');
+      toast.success('Fills without odometer accepted');
+    } catch (e: any) {
+      toast.error(e?.message || 'Could not save unattributed review');
+    }
   };
 
   const handleRecordSecondApproval = async () => {
@@ -657,6 +756,12 @@ function FuelPeriodWizardInner({
               actionLabel: 'Continue',
               onAction: handleContinue,
             }
+          : needsOdometerChainAck && !odometerChainReviewed
+            ? {
+                title: 'Thin odometer chain',
+                body: 'Not enough odometered fills to measure tank timing. Acknowledge below to continue — categories stay as-is; timing carves stay $0.',
+                actionLabel: undefined,
+              }
           : qualityRows.length === 0
           ? {
               title: 'Data looks clear',
@@ -880,6 +985,8 @@ function FuelPeriodWizardInner({
         driver={strip.driver}
         leakage={strip.leakage}
         windowTiming={strip.windowTiming}
+        unattributedFill={strip.unattributedFill}
+        driverFromUnexplained={strip.driverFromUnexplained}
         priorMedian={priorMedian}
       />
 
@@ -957,6 +1064,11 @@ function FuelPeriodWizardInner({
               showBreakdown={showCostBreakdown}
               onToggleBreakdown={() => setShowCostBreakdown((v) => !v)}
               onAddAdjustment={onAddAdjustment}
+              needsOdometerChainAck={needsOdometerChainAck}
+              odometerChainReviewed={odometerChainReviewed}
+              odometerChainNote={odometerChainNoteDraft}
+              onOdometerChainNoteChange={setOdometerChainNoteDraft}
+              onAckOdometerChain={() => void handleAckOdometerChain()}
             />
           </div>
         )}
@@ -1000,6 +1112,12 @@ function FuelPeriodWizardInner({
             onAcceptNoteBlur={() =>
               persistStep(activeStepId, stepNoteDraft.trim() || undefined)
             }
+            unattributedFill={strip.unattributedFill}
+            needsUnattributedAck={needsUnattributedAck}
+            unattributedReviewed={unattributedReviewed}
+            unattributedNote={unattributedNoteDraft}
+            onUnattributedNoteChange={setUnattributedNoteDraft}
+            onAckUnattributed={() => void handleAckUnattributed()}
           />
         )}
 

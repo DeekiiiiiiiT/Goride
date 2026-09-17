@@ -3,6 +3,9 @@
 **Date:** 2026-09-15
 **Rev 2:** 2026-09-15, verified against commit `b7fd7b1a` *"Fix fuel recon money math and
 harden close gates"* (tree at `3d29df75`).
+**Rev 3:** 2026-09-17, verified against tree `a89c479c`. All four Rev 2 items closed and
+F-11 recorded; two residuals on the *acceptance* path remain.
+**Rev 4:** 2026-09-17 — R-1 / R-2 / R-3 / R-4 closed. Acceptance path complete; audit done.
 **Scope:** The money math behind Business Finance → Week Reconciliation → Fuel.
 Specifically the two identities on the week money strip ("Where the money came from"
 and "Who ends up paying"), the derivation of *Unexplained fuel*, and the close gates
@@ -12,7 +15,90 @@ that let those numbers post.
 
 ---
 
-## 0. Rev 2 — verification of the remediation
+**Rev 3:** 2026-09-17 — N-1 / N-2 / N-3 / N-4 closed; F-11 confirmed locked and surfaced.
+Carve guarded by `efficiencySource === 'odometer'`; first-fill timing split from
+`unattributedFillCost`; server derives both via `deriveWindowMoneyFromEntries` +
+`loadServerWindowMoneyEntriesForWeek`; freeze stamps timing/unattributed; money strip
+derives driver-from-unexplained; Unavailable km policy shown on Data Quality.
+
+**Rev 4:** 2026-09-17 — R-1 / R-2 / R-3 / R-4 closed. Thin-chain and unattributed each have
+dedicated acknowledgements; server price is entry-derived; unattributed tooltip is honest.
+
+## 0. Rev 4 — verification (R-1…R-4 closed)
+
+**One-line answer: fully done.** Money math (N-1…N-4) and acceptance path (R-1…R-4) are closed.
+
+| # | Item | Status | Evidence |
+|---|---|---|---|
+| R-2 | Thin chain reviewable | ✅ **closed** | `odometer_chain_reviewed_*` columns + POST `odometer-chain-review`; gate = signal && !reviewed; Data Quality ack UI |
+| R-1 | Dedicated unattributed accept | ✅ **closed** | `unattributed_reviewed_*` + POST `unattributed-review`; no leakage fallback; Leakage step names `$` |
+| R-3 | Server-side price | ✅ **closed** | `deriveWindowMoneyFromEntries` uses `resolvePricePerLiter` from entry spend/litres; stamp override test-only |
+| R-4 | Honest unattributed label | ✅ **closed** | `UNATTRIBUTED_FILL_TOOLTIP` + money-strip title |
+
+### Still to be done — none for this audit
+
+Out of scope (unchanged): `FUEL_SERVER_ENGINE` enforce flip; F-8 misc→company; efficiency-denominator redesign.
+
+## 0a. Rev 3 — verification (tree `a89c479c`)
+
+**All four Rev 2 items closed at the root. The arithmetic is now sound on every path I
+can construct.** Acceptance-path residuals R-1…R-4 are closed in Rev 4 above.
+
+Gates: **fuel-core 110/110** (was 102) · `deno check` green on `fuel_week_closable_gate.ts`
+and `fuel_period_routes.ts`.
+
+| # | Item | Status | Evidence |
+|---|---|---|---|
+| N-1 | Carve unguarded by efficiency source | ✅ **closed** | `efficiencySource === 'odometer'` guard in `deriveWindowMoneyFromEntries.ts`; new `odometer_chain_unusable` blocker with accurate copy |
+| N-2 | No-odo fills absorbed as "timing" | ✅ **closed** | split into `computeFirstFillTimingLiters` vs `computeUnattributedFillLiters`; the latter gated by `isUnattributedBeyondGate` and surfaced in the strip |
+| N-3 | Server trusted the client's stamp | ✅ **closed** | `deriveWindowMoneyFromEntries` recomputes from entries; `diffWeekCalc` now diffs both fields |
+| N-4 | Driver-charged figure hardcoded `0` | ✅ **closed** | derived from `miscSplit.driver` via `driverMiscShare` |
+
+### Re-simulated against the new formulas — every case correct, identity exact
+
+```
+A  6 odometered, perfect      rideShare 22500  timing 4500  unattr     0  misc    0.00 (ok)
+                              -> closable                            |Σ−spend| = 0.000000
+B  1 odometered + 1 floating  rideShare  5400  timing    0  unattr     0  misc 3600.00
+                              -> odometer_chain_unusable, under_explained_unreviewed
+C  2 odometered               rideShare  4500  timing    0  unattr     0  misc 4500.00
+                              -> odometer_chain_unusable, under_explained_unreviewed
+D  3 odometered + 3 floating  rideShare  9000  timing 4500  unattr 13500  misc    0.00 (ok)
+                              -> unattributed_unreviewed
+E  6 odometered + 1 small     rideShare 22500  timing 4500  unattr   900  misc    0.00 (ok)
+                              -> closable
+```
+
+- **B and C** were the N-1 regression. They no longer produce a false `over_explained`
+  hard block; the carve is suppressed, the residual returns to a reviewable
+  `under_explained`, and the real problem is named correctly.
+- **D** was the N-2 blind spot. $13,500 previously vanished into "timing" with `misc 0.00`
+  and the week read clean. It is now a named `unattributedFillCost` and **blocks**.
+- **E** confirms the small-unattributed case still closes — the gate is proportionate, not
+  absolutist.
+- `|Σ categories + timing + unattributed + misc − spend| = 0.000000` in all five.
+  Conservation survived splitting the carve in two.
+
+**The testing lesson landed.** `fuelFinalizeGate.test.ts` carries the exact
+degraded fixtures that were missing — a 1-fill week, a 2-fill week, and the 3-odometered +
+3-floating case — each asserting `efficiencySource`, `odometerChainUnusable` and the split
+costs. The controls shipped with the inputs that make them fail.
+
+**N-3 is a genuine independent check**, not a restatement: `fuel_period_routes.ts`
+derives from entries and feeds `recomputed`, while `clientCalc` carries the client's
+stamped `windowTimingCost` / `unattributedFillCost`, and both fields are in
+`diffWeekCalc`'s field list. A wrong client stamp now produces a diff.
+
+### Rev 3 residuals — closed in Rev 4
+
+- **R-1 (Medium)** — ✅ closed (dedicated unattributed accept; no leakage fallback)
+- **R-2 (Medium)** — ✅ closed (thin-chain reviewable ack)
+- **R-3 (Low)** — ✅ closed (entry-derived price)
+- **R-4 (Low)** — ✅ closed (honest tooltip)
+
+---
+
+## 0b. Rev 2 — verification of the remediation
 
 **10 of 11 findings closed at the root. The core fix is correct.** F-11 was always a
 policy question, not a defect, and remains deliberately unchanged.
@@ -25,7 +111,7 @@ pre-existing environment issue, not a regression.)*
 | # | Finding | Status | Evidence |
 |---|---|---|---|
 | F-1 | First-fill residual floor | ✅ **closed** | `windowTimingCost` carved before residual; perfect week now yields misc **0.00** (re-simulated) |
-| F-2 | No-odo fills inflate unexplained | ⚠️ **over-corrected** → see **N-2** | carved out, but as company-absorbed *timing* |
+| F-2 | No-odo fills inflate unexplained | ✅ **closed (Rev 3)** | split to `unattributedFillCost` + gate |
 | F-3 | Price numerator/denominator filters | ✅ **closed** | `fuelOpsLiters` now applies `countsInFuelLogSpend`; `entriesWithOdo` aligned to bucket engine |
 | F-4 | Server gate netted residuals | ✅ **closed** | `residualFlagsFromSpendRows` ORed into both over/under at `fuel_week_closable_gate.ts:332,374-376` |
 | F-5 | `degradedInputs` hardcoded false | ✅ **closed** | now `period.degradedInputs \|\| meta.degradedInputs \|\| missingCategoryCosts` (:349-352) |
@@ -34,7 +120,7 @@ pre-existing environment issue, not a regression.)*
 | F-8 | Unexplained billable to driver | ✅ **closed** | misc → company 100% under Percentage; Fixed_Amount allowance applies to rideShare only (crowd-out gone) |
 | F-9 | Ratio gate had no absolute cap | ✅ **closed** | `FUEL_MISC_MAX_ABS_JMD = 5000`, both conditions required |
 | F-10 | Snapshot `driverSpend: 0` | ✅ **closed** | `partitionWeekSnapSpend`; `netPay = driverSpend − driverShare` |
-| F-11 | Unavailable km as rideshare | ⏸ **deferred** | unchanged — was flagged as policy to confirm, not a defect |
+| F-11 | Unavailable km as rideshare | ✅ **confirmed locked (Rev 3)** | glossary + Data Quality surface; km stack unchanged |
 
 **Proof F-1 is genuinely fixed.** Re-running the original synthetic — 6 fills, 25 L each
 @ $180/L, every km an evidenced trip:
@@ -48,16 +134,23 @@ Previously this reported $4,500 of unexplained fuel on flawless data. It now rep
 with the $4,500 correctly named as tank-window timing and held by the company. That is the
 right answer and the right shape.
 
-### Still to be done
+### Rev 3 — N-1…N-4 closed
 
-Four items, all arising from the fix itself. **N-1 and N-2 are the ones that matter** —
-both are consequences of one design choice: `windowTimingCost` conflates two different
-things and is applied without checking that it is meaningful.
+| # | Finding | Status |
+|---|---|---|
+| N-1 | Unguarded window-timing carve | ✅ **closed** — carve only when `efficiencySource === 'odometer'`; `odometer_chain_unusable` hard block |
+| N-2 | No-odo fills hidden as timing | ✅ **closed** — `unattributedFillCost` + ratio/abs gate + wizard surface |
+| N-3 | Server cannot verify timing | ✅ **closed** — `deriveWindowMoneyFromEntries` + shadow/enforce + freeze stamps |
+| N-4 | Driver-from-unexplained hardcoded 0 | ✅ **closed** — derived from `driverMiscShare` |
 
-- **N-1 (High, regression)** — degraded-odometer weeks now hard-block. [§3.12](#n-1--high-regression--the-window-timing-carve-is-unguarded-by-efficiency-source)
-- **N-2 (High, blind spot)** — fills without odometers are silently absorbed, so leakage in them is undetectable. [§3.13](#n-2--high-blind-spot--no-odometer-fills-are-not-timing-and-carving-them-out-hides-real-leakage)
-- **N-3 (Medium)** — the server never derives `windowTimingCost`; it trusts the client's stamp. [§3.14](#n-3--medium--the-server-cannot-verify-windowtimingcost)
-- **N-4 (Low)** — "charged to driver from unexplained" is a hardcoded `0`. [§3.15](#n-4--low--the-driver-charged-from-unexplained-figure-is-a-literal-zero)
+### Still to be done (Rev 2 — superseded)
+
+~~Four items~~ **closed in Rev 3.**
+
+- ~~**N-1**~~ ✅
+- ~~**N-2**~~ ✅
+- ~~**N-3**~~ ✅
+- ~~**N-4**~~ ✅
 
 ---
 
@@ -602,6 +695,119 @@ so the number is load-bearing rather than decorative.
 
 ---
 
+---
+
+## 3c. Rev 3 findings — the acceptance path
+
+The two new refusals from Rev 2's fix are correctly *raised*. Neither is correctly
+*discharged*.
+
+### R-1 · MEDIUM — the unattributed review flag has no writer
+
+Both gates read a dedicated acknowledgement and then fall back to the leakage review:
+
+```ts
+// client — fuelWeekClosableGate.ts:127-129
+unattributedUnreviewed:
+  isUnattributedBeyondGate(totalSpend, unattributed) &&
+  !(opts.unattributedReviewed ?? opts.leakageReviewed),
+
+// server — fuel_week_closable_gate.ts:407-411
+const unattributedReviewed =
+  leakageReviewed ||
+  Boolean(meta.unattributed_reviewed_at) || …
+```
+
+I grepped the whole repo: **nothing ever passes `unattributedReviewed`, and nothing ever
+writes `unattributed_reviewed_at`.** Only readers exist. So the fallback is the only live
+path, and the blocker is always discharged by the existing *"Mark reviewed & continue"* on
+the **unexplained fuel** step.
+
+The consequence is a scope mismatch in the acknowledgement. A reviewer reads a step whose
+copy is about unexplained fuel — *"Accept acknowledges leftover fuel spend; the unexplained
+amount stays on the week"* — clicks once, and thereby also accepts an unbounded amount of
+unattributed fill spend. In simulated case D that single click signs off **$13,500, half
+the week's spend**, on a step that never mentions it.
+
+Mitigating: the amount is genuinely visible. `FuelWeekMoneyStrip.tsx:153` renders it in the
+"Of which…" breakdown, so a reviewer who reads the strip will see the number before
+clicking. This is a control-design gap, not a hidden number.
+
+**Fix:** give the unattributed blocker its own acknowledgement — a distinct control that
+writes `unattributed_reviewed_at` with a reason, the same shape the leakage review already
+has. Until then the gate's own `unattributedReviewed` field is inert, which is the "control
+that cannot fail" pattern in its milder form: it *can* fail, but only via someone else's
+switch.
+
+---
+
+### R-2 · MEDIUM — `odometer_chain_unusable` has no acceptance path at all
+
+[`evaluateFuelWeekClosable.ts:142-147`](packages/fuel-core/src/evaluateFuelWeekClosable.ts#L142-L147):
+
+```ts
+if (input.odometerChainUnusable) {
+  blockers.push({ code: 'odometer_chain_unusable',
+    message: 'Not enough odometered fills to measure tank timing' });
+}
+```
+
+Unconditional — no `&& !reviewed`, no acknowledgement field, unlike every other reviewable
+blocker in the same function. And the break-glass does not reach it: `X-Fuel-Force-Client-Money`
+appears once, at [`fuel_period_routes.ts:1411`](supabase/functions/_fleet-server/fuel_period_routes.ts#L1411),
+inside the `engineMode === "enforce"` branch guarding `SNAPSHOT_MISMATCH`. It overrides the
+engine diff, not the closable gate.
+
+So **any vehicle-week with fewer than 3 odometered fills can never close.** That is not an
+exotic shape — a driver who fills twice a week produces it every week, and it is exactly
+the profile of the cash-heavy vehicle in the reference screenshots. Cases B and C above are
+both permanently stuck.
+
+The refusal itself is right: without three odometered fills you genuinely cannot measure
+tank timing, and the engine correctly declines to invent it. But "correct and unworkable"
+still stops the week from closing, and the pressure will go somewhere — most likely into
+back-dated odometer entries, which is worse than the problem being solved.
+
+**Fix:** make it reviewable, not absolute. A reviewer should be able to acknowledge "timing
+cannot be measured this week" — which the engine already handles correctly by setting both
+carves to 0 and letting the residual land in `misc` as reviewable leakage. The money is
+already right in that state; only the gate needs to allow someone to say so.
+
+---
+
+### R-3 · LOW — the derive's price input is still client-supplied
+
+`deriveWindowMoneyFromEntries` independently re-derives the *litre buckets* from entries,
+which is the substance of N-3. But its `pricePerLiter` argument comes from the client's own
+stamp — `calcMeta.actualPricePerLiter`
+([`fuel_period_routes.ts:1295`](supabase/functions/_fleet-server/fuel_period_routes.ts#L1295);
+the gate uses `priceGuess`, the max stamped price across snapshots, at :388-398).
+
+A wrong stamped price therefore shifts the derived and the client's costs in lockstep and
+produces no diff. Closing this means deriving price server-side too — `Σ eligible amount /
+Σ eligible litres` over the same entry set, which the server already has in hand.
+
+Two things make this genuinely low rather than a repeat of the old pattern: the litre
+bucketing — where N-1 and N-2 actually lived — is now independent, and the gate takes
+`Math.max(stampedUnattributed, derivedUnattributed)` (:403-406), so the approximation errs
+toward blocking.
+
+---
+
+### R-4 · LOW — `unattributedFillCost` also absorbs an efficiency artefact
+
+Efficiency is still `odoDistance / Σ litres of odometered fills 2..n`. When floating fills
+sit *inside* that odometer span, their fuel propelled part of `odoDistance` but is excluded
+from the denominator, so km/L is overstated and the categorised costs are understated. The
+shortfall lands in `unattributedFillCost`.
+
+In simulated case D that inflates the figure above the pure value of the no-odo fills. The
+**money is not wrong** — it is company-held and gated either way — but the label reads
+"fills without odometer" while the amount is that value plus an efficiency correction. Worth
+a note in the tooltip, or a denominator that includes in-span floating litres.
+
+---
+
 ## 4. What I verified, and what I did not
 
 **Verified by reading the code path end to end:**
@@ -641,7 +847,31 @@ lines 281–388 on a synthetic perfect week. The engine itself was not executed.
 
 ---
 
-## 5. Rev 2 — remaining order of work
+## 5. Rev 4 — remaining order of work
+
+**None.** R-1…R-4 closed 2026-09-17. Optional follow-ups outside this audit: flip
+`FUEL_SERVER_ENGINE` to enforce after shadow soak; F-8 policy; efficiency-denominator redesign.
+
+### Rev 3 order of work (completed — retained for reference)
+
+1. **R-2 first — it is the one that stops work.** Make `odometer_chain_unusable` reviewable:
+   an acknowledgement field on the blocker plus a control that writes it. The engine already
+   produces the right money in that state (both carves 0, residual reviewable as leakage);
+   only the gate needs to let a human say "timing cannot be measured this week."
+2. **R-1 — give the unattributed blocker its own acknowledgement.** Write
+   `unattributed_reviewed_at` with a reason from a control that names the amount, and drop
+   the `?? leakageReviewed` fallback once it exists. One click should not accept two
+   unrelated things.
+3. **R-3 — derive price server-side** (`Σ eligible amount / Σ eligible litres` over the same
+   entries) so the last client-supplied input to the derive goes away before the shadow soak
+   concludes.
+4. **R-4 — tooltip or denominator fix** so `unattributedFillCost` says what it contains.
+
+*(F-11 is closed: `UNAVAILABLE_KM_POLICY` in `fuelReconGlossary.ts` records the decision
+and `FuelDataQualityStep` surfaces it to operators. The km stack is unchanged, which
+was the right call — the question was whether the policy was deliberate, and it now says so.)*
+
+### Rev 2 order of work (completed — retained for reference)
 
 1. **N-1 — guard the carve.** Only compute `windowTimingCost` when
    `efficiencySource === 'odometer'`. Add an `odometerChainUnusable` gate input so a thin
@@ -693,21 +923,17 @@ owner in `b7fd7b1a` and verified in §0.
 
 ## 6. One-line answer to the question asked
 
-**Rev 2 — close, and correct on the healthy path.** The residual plug is gone: a clean
-week now reports **0.00** unexplained where it used to report a full fill-up, drivers are
-no longer billed for the residual under any coverage type, the payment tiles are a true
-partition, and the server close gate can no longer net one driver's error against another's.
-That is the substance of the original audit, closed at the root.
+**Rev 4 — fully done.** Money math and acceptance path are closed.
 
-What is left is the **degraded path**, and it is the path your reference week is on. The
-window-timing carve is applied whether or not the odometer chain can support it, which
-turns a thin-chain week into an unactionable hard block (**N-1**) and lets a cash-heavy
-week write off most of its spend as "timing" and read as zero leakage (**N-2**). Both are
-narrow fixes to one function. Land them — with the degraded fixtures that make them fail —
-and the arithmetic is sound end to end.
+Confirmed: healthy weeks report 0.00 unexplained with first-fill timing named correctly;
+thin odometer chains raise `odometer_chain_unusable` and clear after dedicated ack; no-odo
+fills are a visible, separately gated line with accept that names the dollar amount;
+leakage review no longer clears unattributed; the server derives JMD/L from entries;
+unattributed tooltip states purchase value + efficiency offset. Conservation exact across
+fixtures. `FUEL_SERVER_ENGINE` remains shadow (no enforce flip in this work).
 
-> **Rev 1 answer (superseded):** *No — not yet flawless. The money conserves and the
-> identities tie, and the Personal Allowance and negative-residual handling are genuinely
-> correct. But "Unexplained fuel" is a residual plug carrying a known artefact worth about
-> one fill-up per vehicle per week, and under a Percentage or Fixed_Amount policy a share
-> of that artefact is being charged to drivers.*
+> **Rev 3 answer (superseded):** *the arithmetic is done; two governance items remain.*
+
+> **Rev 2 answer (superseded):** *close, and correct on the healthy path… degraded path remains.*
+
+> **Rev 1 answer (superseded):** *No — not yet flawless…*

@@ -3,6 +3,9 @@ import {
   driversInBucketWindow,
   resolveGapChargeDriver,
   gapChargeIdempotencyKey,
+  assertPeriodNotLockedForGapCharge,
+  assertGapChargeDualControl,
+  assertGapChargeRecommendOverwrite,
 } from './stopToStopGapCharge.ts';
 
 describe('stopToStopGapCharge', () => {
@@ -79,5 +82,69 @@ describe('stopToStopGapCharge', () => {
       '2026-09-08',
     );
     expect(ids).toEqual(['d1']);
+  });
+
+  it('assertPeriodNotLockedForGapCharge refuses locked / locked_at', () => {
+    expect(assertPeriodNotLockedForGapCharge(null).ok).toBe(false);
+    expect(assertPeriodNotLockedForGapCharge({ status: 'open' }).ok).toBe(true);
+    expect(assertPeriodNotLockedForGapCharge({ status: 'locked' })).toEqual({
+      ok: false,
+      error: 'period_locked',
+    });
+    expect(assertPeriodNotLockedForGapCharge({ status: 'open', locked_at: '2026-09-01' })).toEqual({
+      ok: false,
+      error: 'period_locked',
+    });
+  });
+
+  it('assertGapChargeDualControl requires actor and recommender; same-actor optional', () => {
+    expect(assertGapChargeDualControl({ actor: null, recommendedBy: 'a' })).toMatchObject({
+      ok: false,
+      error: 'actor_required',
+      status: 401,
+    });
+    expect(assertGapChargeDualControl({ actor: 'a', recommendedBy: null })).toMatchObject({
+      ok: false,
+      error: 'recommendation_missing_actor',
+      status: 409,
+    });
+    // Solo-owner default: same actor allowed
+    expect(assertGapChargeDualControl({ actor: 'a', recommendedBy: 'a' })).toEqual({
+      ok: true,
+      actor: 'a',
+      recommendedBy: 'a',
+    });
+    expect(
+      assertGapChargeDualControl({
+        actor: 'a',
+        recommendedBy: 'a',
+        requireDistinctActor: true,
+      }),
+    ).toMatchObject({
+      ok: false,
+      error: 'same_actor_forbidden',
+      status: 403,
+    });
+    expect(assertGapChargeDualControl({ actor: 'b', recommendedBy: 'a' })).toEqual({
+      ok: true,
+      actor: 'b',
+      recommendedBy: 'a',
+    });
+  });
+
+  it('assertGapChargeRecommendOverwrite blocks other actor', () => {
+    expect(
+      assertGapChargeRecommendOverwrite({
+        actor: 'b',
+        existing: { status: 'recommended', recommendedBy: 'a' },
+      }),
+    ).toEqual({ ok: false, error: 'already_recommended' });
+    expect(
+      assertGapChargeRecommendOverwrite({
+        actor: 'a',
+        existing: { status: 'recommended', recommendedBy: 'a' },
+      }).ok,
+    ).toBe(true);
+    expect(assertGapChargeRecommendOverwrite({ actor: 'a', existing: null }).ok).toBe(true);
   });
 });

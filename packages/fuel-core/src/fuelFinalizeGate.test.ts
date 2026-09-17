@@ -12,6 +12,8 @@ import {
   computeWindowTimingCost,
 } from './index.ts';
 import { computeMiscellaneousCost } from './fuelCoverageSplit.ts';
+import { deriveWindowMoneyFromEntries } from './deriveWindowMoneyFromEntries.ts';
+import { diffWeekCalc } from './computeFuelWeek.ts';
 
 describe('classifyFuelMiscResidual (C-7 / F-9)', () => {
   it('splits over vs under by sign', () => {
@@ -93,16 +95,95 @@ describe('F-4 residualFlagsFromSpendRows', () => {
 
 describe('F-1 perfect week residual floor', () => {
   it('first-fill litres × price land in timing, not unexplained', () => {
-    // Audit synthetic: 6 fills × 25L @ $180, efficiencyFuel = 5×25 = 125
-    const totalLiters = 150;
-    const efficiencyFuel = 125;
+    // Audit synthetic: 6 fills × 25L @ $180 — first fill only is timing
+    const firstFillLiters = 25;
     const price = 180;
-    const timing = computeWindowTimingCost(totalLiters, efficiencyFuel, price);
+    const timing = computeWindowTimingCost(firstFillLiters, price);
     expect(timing).toBe(4500);
     const misc = computeMiscellaneousCost(27000, {
       rideShare: 22500,
       windowTiming: timing,
     });
     expect(misc).toBeCloseTo(0, 5);
+  });
+});
+
+describe('N-1 / N-2 deriveWindowMoneyFromEntries', () => {
+  it('N-1: 1 odo fill + floating → timing 0, chain unusable', () => {
+    const result = deriveWindowMoneyFromEntries(
+      [
+        { odometer: 1000, liters: 25, amount: 4500, type: 'Manual_Entry', paymentSource: 'Cash' },
+        { odometer: null, liters: 25, amount: 4500, type: 'Manual_Entry', paymentSource: 'Cash' },
+      ],
+      { pricePerLiter: 180 },
+    );
+    expect(result.efficiencySource).not.toBe('odometer');
+    expect(result.windowTimingCost).toBe(0);
+    expect(result.unattributedFillCost).toBe(0);
+    expect(result.odometerChainUnusable).toBe(true);
+  });
+
+  it('N-1: 2 odo fills → timing 0 (fallback efficiency)', () => {
+    const result = deriveWindowMoneyFromEntries(
+      [
+        { odometer: 1000, liters: 25, amount: 4500, type: 'Manual_Entry', paymentSource: 'Cash' },
+        { odometer: 1250, liters: 25, amount: 4500, type: 'Manual_Entry', paymentSource: 'Cash' },
+      ],
+      { pricePerLiter: 180 },
+    );
+    expect(result.efficiencySource).not.toBe('odometer');
+    expect(result.windowTimingCost).toBe(0);
+    expect(result.odometerChainUnusable).toBe(true);
+  });
+
+  it('N-2: 3 odo + 3 floating → first-fill timing + unattributed floating', () => {
+    const odo = [
+      { odometer: 1000, liters: 25, amount: 4500, type: 'Manual_Entry', paymentSource: 'Gas_Card' },
+      { odometer: 1250, liters: 25, amount: 4500, type: 'Manual_Entry', paymentSource: 'Gas_Card' },
+      { odometer: 1500, liters: 25, amount: 4500, type: 'Manual_Entry', paymentSource: 'Gas_Card' },
+    ];
+    const floating = [
+      { odometer: null, liters: 25, amount: 4500, type: 'Manual_Entry', paymentSource: 'Cash' },
+      { odometer: null, liters: 25, amount: 4500, type: 'Manual_Entry', paymentSource: 'Cash' },
+      { odometer: null, liters: 25, amount: 4500, type: 'Manual_Entry', paymentSource: 'Cash' },
+    ];
+    const result = deriveWindowMoneyFromEntries([...odo, ...floating], { pricePerLiter: 180 });
+    expect(result.efficiencySource).toBe('odometer');
+    expect(result.windowTimingCost).toBe(4500); // first fill only
+    expect(result.unattributedFillCost).toBe(13500); // 3×25×180
+    expect(result.odometerChainUnusable).toBe(false);
+  });
+
+  it('R-3: entry-derived price ignores wrong stamp; diffWeekCalc sees unattributed delta', () => {
+    const entries = [
+      { odometer: 1000, liters: 25, amount: 4500, type: 'Manual_Entry', paymentSource: 'Gas_Card' },
+      { odometer: 1250, liters: 25, amount: 4500, type: 'Manual_Entry', paymentSource: 'Gas_Card' },
+      { odometer: 1500, liters: 25, amount: 4500, type: 'Manual_Entry', paymentSource: 'Gas_Card' },
+      { odometer: null, liters: 25, amount: 4500, type: 'Manual_Entry', paymentSource: 'Cash' },
+    ];
+    // Entry-implied price = 4500/25 = 180; wrong stamp would be 90.
+    const fromEntries = deriveWindowMoneyFromEntries(entries);
+    const withWrongStamp = deriveWindowMoneyFromEntries(entries, { pricePerLiter: 90 });
+    expect(fromEntries.pricePerLiter).toBe(180);
+    expect(fromEntries.unattributedFillCost).toBe(4500);
+    expect(withWrongStamp.unattributedFillCost).toBe(2250);
+    const clientCalc = {
+      totalSpend: 18000,
+      companyShare: 0,
+      driverShare: 0,
+      miscellaneousCost: 0,
+      windowTimingCost: withWrongStamp.windowTimingCost,
+      unattributedFillCost: withWrongStamp.unattributedFillCost,
+    };
+    const serverCalc = {
+      totalSpend: 18000,
+      companyShare: 0,
+      driverShare: 0,
+      miscellaneousCost: 0,
+      windowTimingCost: fromEntries.windowTimingCost,
+      unattributedFillCost: fromEntries.unattributedFillCost,
+    };
+    const deltas = diffWeekCalc(clientCalc, serverCalc);
+    expect(deltas.some((d) => d.field === 'unattributedFillCost')).toBe(true);
   });
 });

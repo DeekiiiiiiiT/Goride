@@ -26,6 +26,7 @@ export type GapChargeRecommendation = {
   blockReason?: string;
   transactionId?: string;
   createdAt: string;
+  recommendedBy?: string;
   approvedAt?: string;
   approvedBy?: string;
   engineVersion: string;
@@ -33,6 +34,69 @@ export type GapChargeRecommendation = {
 
 export function gapChargeIdempotencyKey(orgId: string, bucketId: string): string {
   return `gap_deduction:${orgId}:${bucketId}`;
+}
+
+/** Q-1: period freeze — refuse money mutations when locked. */
+export function assertPeriodNotLockedForGapCharge(
+  period: { status?: unknown; locked_at?: unknown } | null | undefined,
+): { ok: true } | { ok: false; error: 'period_not_found' | 'period_locked' } {
+  if (!period) return { ok: false, error: 'period_not_found' };
+  if (String(period.status) === 'locked' || period.locked_at) {
+    return { ok: false, error: 'period_locked' };
+  }
+  return { ok: true };
+}
+
+/**
+ * Q-2 identity gates — never approve with missing actor/recommender.
+ * Same-actor approve is allowed while fleet is solo-owner operated (product deferral).
+ * Re-enable distinct-actor enforcement when multi-user dual control ships.
+ */
+export function assertGapChargeDualControl(input: {
+  actor: string | null | undefined;
+  recommendedBy: string | null | undefined;
+  /** When true (future multi-user), refuse recommender === approver. Default false for solo. */
+  requireDistinctActor?: boolean;
+}):
+  | { ok: true; actor: string; recommendedBy: string }
+  | {
+      ok: false;
+      error: 'actor_required' | 'recommendation_missing_actor' | 'same_actor_forbidden';
+      status: 401 | 403 | 409;
+    } {
+  const actor = input.actor != null && String(input.actor).trim() ? String(input.actor) : null;
+  if (!actor) return { ok: false, error: 'actor_required', status: 401 };
+  const recommendedBy =
+    input.recommendedBy != null && String(input.recommendedBy).trim()
+      ? String(input.recommendedBy)
+      : null;
+  if (!recommendedBy) {
+    return { ok: false, error: 'recommendation_missing_actor', status: 409 };
+  }
+  if (input.requireDistinctActor === true && actor === recommendedBy) {
+    return { ok: false, error: 'same_actor_forbidden', status: 403 };
+  }
+  return { ok: true, actor, recommendedBy };
+}
+
+/**
+ * Prevent second-person Recommend from overwriting recommendedBy (dual-control inversion).
+ * Same actor may refresh; other actor gets already_recommended.
+ */
+export function assertGapChargeRecommendOverwrite(input: {
+  actor: string;
+  existing: { status?: string; recommendedBy?: string | null } | null | undefined;
+}): { ok: true } | { ok: false; error: 'already_recommended' } {
+  const existing = input.existing;
+  if (!existing || existing.status !== 'recommended') return { ok: true };
+  const by =
+    existing.recommendedBy != null && String(existing.recommendedBy).trim()
+      ? String(existing.recommendedBy)
+      : null;
+  if (by && by !== input.actor) {
+    return { ok: false, error: 'already_recommended' };
+  }
+  return { ok: true };
 }
 
 /** Drivers who had the vehicle at any point in [startYmd, endYmd]. */

@@ -78,6 +78,9 @@ apps/dash-merchant/ios/App/App.xcworkspace/xcuserdata/
 .vercel
 .env*
 
+# Local / debug logs (never commit)
+*.log
+
 # Fleet edge prebundle outputs (scripts/build-edge-bundle.mjs)
 supabase/functions/make-server-37f42386/index.ts
 supabase/functions/fleet-fuel/index.ts

@@ -147,29 +147,51 @@ export function splitAllCategoryCosts(
   return { company, driver };
 }
 
-/**
- * Litres outside the fill-to-fill efficiency set (first fill + no-odo fills).
- * Valued at price → windowTimingCost (F-1 / F-2) — inventory timing, not leakage.
- */
-export function computeWindowTimingLiters(
-  totalLiters: number,
-  efficiencyFuel: number,
-): number {
-  return Math.max(0, (Number(totalLiters) || 0) - (Number(efficiencyFuel) || 0));
+/** N-2: first odometered fill litres only — tank-window inventory timing. */
+export function computeFirstFillTimingLiters(firstFillLiters: number): number {
+  return Math.max(0, Number(firstFillLiters) || 0);
 }
 
-export function computeWindowTimingCost(
+/**
+ * N-2: litres bought this week with no usable odometer (unmeasured burn).
+ * sumOdoLiters = Σ litres on all odometered fills (including first).
+ */
+export function computeUnattributedFillLiters(
   totalLiters: number,
-  efficiencyFuel: number,
+  sumOdoLiters: number,
+): number {
+  return Math.max(0, (Number(totalLiters) || 0) - (Number(sumOdoLiters) || 0));
+}
+
+/**
+ * @deprecated Prefer computeFirstFillTimingLiters. Kept as alias for first-fill litres.
+ * Legacy (totalLiters − efficiencyFuel) mixed first-fill + no-odo — removed in N-2.
+ */
+export function computeWindowTimingLiters(firstFillLiters: number): number {
+  return computeFirstFillTimingLiters(firstFillLiters);
+}
+
+/** N-2: first-fill litres × price — company-held tank-window timing (not leakage). */
+export function computeWindowTimingCost(
+  firstFillLiters: number,
   pricePerLiter: number,
 ): number {
   if (!(Number(pricePerLiter) > 0)) return 0;
-  return computeWindowTimingLiters(totalLiters, efficiencyFuel) * pricePerLiter;
+  return computeFirstFillTimingLiters(firstFillLiters) * pricePerLiter;
+}
+
+/** N-2: no-odometer litres × price — company-held, gated separately from misc. */
+export function computeUnattributedFillCost(
+  unattributedLiters: number,
+  pricePerLiter: number,
+): number {
+  if (!(Number(pricePerLiter) > 0)) return 0;
+  return Math.max(0, Number(unattributedLiters) || 0) * pricePerLiter;
 }
 
 /**
- * True unexplained after Ride Share / Ops / Deadhead / Personal and window timing.
- * F-1: miscellaneousCost must NOT include first-fill / no-odo timing artefact.
+ * True unexplained after Ride Share / Ops / Deadhead / Personal, timing, and unattributed.
+ * F-1/N-2: miscellaneousCost must NOT include first-fill timing or no-odo fills.
  */
 export function computeMiscellaneousCost(
   totalSpend: number,
@@ -178,8 +200,10 @@ export function computeMiscellaneousCost(
     companyUsage?: number;
     deadhead?: number;
     personal?: number;
-    /** Named tank-window timing — carved out of unexplained (F-1). */
+    /** Named tank-window timing — carved out of unexplained (F-1 / N-2). */
     windowTiming?: number;
+    /** No-odometer fill spend — carved out of unexplained (N-2). */
+    unattributedFill?: number;
   },
 ): number {
   const allocated =
@@ -187,7 +211,8 @@ export function computeMiscellaneousCost(
     (Number(categorized.companyUsage) || 0) +
     (Number(categorized.deadhead) || 0) +
     (Number(categorized.personal) || 0) +
-    (Number(categorized.windowTiming) || 0);
+    (Number(categorized.windowTiming) || 0) +
+    (Number(categorized.unattributedFill) || 0);
   return totalSpend - allocated;
 }
 
@@ -210,28 +235,33 @@ export function assembleLeftoverWeekMoney(input: {
   companyUsageCost: number;
   deadheadCost: number;
   personalUsageCost: number;
-  /** F-1: tank-window timing carved out before residual. */
+  /** F-1/N-2: first-fill tank-window timing carved out before residual. */
   windowTimingCost?: number;
+  /** N-2: no-odometer fill spend carved out before residual. */
+  unattributedFillCost?: number;
   rule?: FuelCoverageRule | null;
 }): {
   miscellaneousCost: number;
   windowTimingCost: number;
+  unattributedFillCost: number;
   overExplainedCost: number;
   overExplained: boolean;
   companyShare: number;
   driverShare: number;
   costs: CategoryCosts;
   split: CategorySplit;
-  /** C-4: |Σ categories + timing + misc − totalSpend| — must be ≤ ε after assemble. */
+  /** C-4: |Σ categories + timing + unattributed + misc − totalSpend| — must be ≤ ε after assemble. */
   spendTieDelta: number;
 } {
   const windowTimingCost = Math.max(0, Number(input.windowTimingCost) || 0);
+  const unattributedFillCost = Math.max(0, Number(input.unattributedFillCost) || 0);
   const miscellaneousCost = computeMiscellaneousCost(input.totalSpend, {
     rideShare: input.rideShareCost,
     companyUsage: input.companyUsageCost,
     deadhead: input.deadheadCost,
     personal: input.personalUsageCost,
     windowTiming: windowTimingCost,
+    unattributedFill: unattributedFillCost,
   });
   const { miscForSplit, overExplainedCost } = floorMiscForSplit(miscellaneousCost);
   const costs: CategoryCosts = {
@@ -242,19 +272,22 @@ export function assembleLeftoverWeekMoney(input: {
     misc: miscForSplit,
   };
   const split = splitAllCategoryCosts(costs, input.rule || undefined);
-  // Timing is company-held outside the coverage category split.
-  const companyShare = sumCategoryShare(split.company) + windowTimingCost;
+  // Timing + unattributed are company-held outside the coverage category split.
+  const companyShare =
+    sumCategoryShare(split.company) + windowTimingCost + unattributedFillCost;
   const categorySum =
     input.rideShareCost +
     input.companyUsageCost +
     input.deadheadCost +
     input.personalUsageCost +
     windowTimingCost +
+    unattributedFillCost +
     miscellaneousCost;
   const spendTieDelta = categorySum - (Number(input.totalSpend) || 0);
   return {
     miscellaneousCost,
     windowTimingCost,
+    unattributedFillCost,
     overExplainedCost,
     overExplained: isOverExplainedFuelWeek(input.totalSpend, miscellaneousCost),
     companyShare,
@@ -265,7 +298,7 @@ export function assembleLeftoverWeekMoney(input: {
   };
 }
 
-/** C-4 freeze invariant — categories + timing + misc must reconstruct spend. */
+/** C-4 freeze invariant — categories + timing + unattributed + misc must reconstruct spend. */
 export function assertCategoryCostsTieSpend(
   totalSpend: number,
   categoryCosts: {
@@ -277,6 +310,7 @@ export function assertCategoryCostsTieSpend(
   miscellaneousCost: number,
   eps = 0.02,
   windowTimingCost = 0,
+  unattributedFillCost = 0,
 ): boolean {
   const sum =
     (Number(categoryCosts.rideShareCost) || 0) +
@@ -284,6 +318,7 @@ export function assertCategoryCostsTieSpend(
     (Number(categoryCosts.deadheadCost) || 0) +
     (Number(categoryCosts.personalUsageCost) || 0) +
     (Number(windowTimingCost) || 0) +
+    (Number(unattributedFillCost) || 0) +
     (Number(miscellaneousCost) || 0);
   return Math.abs(sum - (Number(totalSpend) || 0)) <= eps;
 }

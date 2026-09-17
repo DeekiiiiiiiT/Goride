@@ -59,6 +59,9 @@ export {
   computeMiscellaneousCost,
   computeWindowTimingCost,
   computeWindowTimingLiters,
+  computeFirstFillTimingLiters,
+  computeUnattributedFillLiters,
+  computeUnattributedFillCost,
   getCategoryCoverageSplit,
   getCompanyCoveragePercent,
   splitAllCategoryCosts,
@@ -71,6 +74,14 @@ export {
   type FuelCoverageCategory,
   type FuelCoverageRule,
 } from './fuelCoverageSplit.ts';
+
+export {
+  deriveWindowMoneyFromEntries,
+  type WindowMoneyEntry,
+  type EfficiencySource,
+  type DeriveWindowMoneyResult,
+  type DeriveWindowMoneyOpts,
+} from './deriveWindowMoneyFromEntries.ts';
 
 export {
   deriveFuelExpenseStatus,
@@ -94,6 +105,8 @@ export {
   listUnderExplainedResidualRows,
   residualFlagsFromSpendRows,
   residualSpendRowsFromSnapshots,
+  isUnattributedBeyondGate,
+  classifyUnattributedResidual,
   type FlooredMiscSplit,
   type FuelMiscResidualKind,
   type FuelResidualSpendRow,
@@ -212,6 +225,9 @@ export {
   GAP_DEDUCTION_TX_TYPE,
   STOP_TO_STOP_ENGINE_VERSION,
   gapChargeIdempotencyKey,
+  assertPeriodNotLockedForGapCharge,
+  assertGapChargeDualControl,
+  assertGapChargeRecommendOverwrite,
   driversInBucketWindow,
   resolveGapChargeDriver,
   buildGapDeductionTransaction,

@@ -3,6 +3,9 @@
  * Approve writes a Pending ledger row; Charge Gap UI calls these routes.
  */
 import {
+  assertGapChargeDualControl,
+  assertGapChargeRecommendOverwrite,
+  assertPeriodNotLockedForGapCharge,
   buildGapDeductionTransaction,
   gapChargeIdempotencyKey,
   resolveGapChargeDriver,
@@ -10,6 +13,12 @@ import {
   type GapChargeRecommendation,
 } from "../../../packages/fuel-core/src/stopToStopGapCharge.ts";
 import type { VehicleWithDriverHistory } from "../../../packages/fuel-core/src/vehicleDriverAssignmentHistory.ts";
+
+export {
+  assertGapChargeDualControl,
+  assertGapChargeRecommendOverwrite,
+  assertPeriodNotLockedForGapCharge,
+};
 
 export function buildRecommendPayload(input: {
   orgId: string;
@@ -24,6 +33,8 @@ export function buildRecommendPayload(input: {
   startYmd: string;
   endYmd: string;
   vehicle: VehicleWithDriverHistory | null;
+  /** Actor who created the recommendation (P-3 dual control). */
+  recommendedBy?: string | null;
 }): GapChargeRecommendation {
   const rec: GapChargeRecommendation = {
     id: `rec_${input.bucketId}`,
@@ -39,6 +50,7 @@ export function buildRecommendPayload(input: {
     status: "recommended",
     createdAt: new Date().toISOString(),
     engineVersion: STOP_TO_STOP_ENGINE_VERSION,
+    recommendedBy: input.recommendedBy ? String(input.recommendedBy) : undefined,
   };
 
   const resolved = resolveGapChargeDriver({

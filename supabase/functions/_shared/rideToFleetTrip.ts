@@ -180,7 +180,7 @@ export async function syncRideToFleetKv(ride: Record<string, unknown>): Promise<
     console.warn("[rideToFleetTrip] fleet context resolve failed — syncing without attribution:", e);
   }
 
-  const url = `${base}/functions/v1/make-server-37f42386/trips`;
+  const url = `${base}/functions/v1/fleet-core/trips`;
   const res = await fetch(url, {
     method: "POST",
     headers: {

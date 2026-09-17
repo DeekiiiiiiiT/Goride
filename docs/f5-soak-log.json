@@ -1,6 +1,6 @@
 {
-  "updatedAt": "2026-09-16T13:55:00.000Z",
-  "note": "Source of truth for F5 N=7 consecutive green days. Append via: pnpm check:shim-traffic:log. §8 mirrors this file.",
+  "updatedAt": "2026-09-17T17:05:00.000Z",
+  "note": "Source of truth for F5 N=7 consecutive green days. Append via: pnpm check:shim-traffic:log (CI commits this file back). §8 mirrors this file.",
   "days": [
     {
       "date": "2026-09-16",
@@ -20,6 +20,26 @@
         { "path": "/functions/v1/make-server-37f42386/fleet-timezone", "requests": 122 },
         { "path": "/functions/v1/make-server-37f42386/fuel/periods/recompute", "requests": 105 },
         { "path": "/functions/v1/make-server-37f42386/fuel-disputes", "requests": 99 }
+      ]
+    },
+    {
+      "date": "2026-09-17",
+      "nonHealth": 157,
+      "health": 0,
+      "ok": false,
+      "windowHours": 24,
+      "note": "Post cutover decay: fleet-core now carries majority residual (e.g. platform-status 112 vs shim 26). Remaining shim = stale clients + Uber webhook hint path. Not streak Day 1 yet.",
+      "topOffenders": [
+        { "path": "/functions/v1/make-server-37f42386/platform-status", "requests": 26 },
+        { "path": "/functions/v1/make-server-37f42386/drivers", "requests": 22 },
+        { "path": "/functions/v1/make-server-37f42386/transactions", "requests": 21 },
+        { "path": "/functions/v1/make-server-37f42386/vehicle-catalog-pending/my", "requests": 13 },
+        { "path": "/functions/v1/make-server-37f42386/fuel-entries", "requests": 10 },
+        { "path": "/functions/v1/make-server-37f42386/stations", "requests": 9 },
+        { "path": "/functions/v1/make-server-37f42386/vehicles", "requests": 8 },
+        { "path": "/functions/v1/make-server-37f42386/platform-feature-flags", "requests": 6 },
+        { "path": "/functions/v1/make-server-37f42386/scan-odometer", "requests": 6 },
+        { "path": "/functions/v1/make-server-37f42386/check-ins", "requests": 6 }
       ]
     }
   ]

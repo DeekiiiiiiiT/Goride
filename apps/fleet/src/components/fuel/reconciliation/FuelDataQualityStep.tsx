@@ -5,6 +5,7 @@ import { FUEL_SPEND_EPS } from '../../../utils/fuelMoneyEpsilon';
 import { downloadCSV } from '../../../utils/export';
 import type { WeeklyFuelReport } from '../../../types/fuel';
 import { formatFuelMoney } from '../../../utils/formatFuelMoney';
+import { UNAVAILABLE_KM_POLICY } from '../../../utils/fuelReconGlossary';
 
 export type FuelQualityRow = {
   id: string;
@@ -40,6 +41,11 @@ export function FuelDataQualityStep({
   showBreakdown,
   onToggleBreakdown,
   onAddAdjustment,
+  needsOdometerChainAck = false,
+  odometerChainReviewed = false,
+  odometerChainNote = '',
+  onOdometerChainNoteChange,
+  onAckOdometerChain,
 }: {
   rows: FuelQualityRow[];
   breakdownRows: FuelQualityRow[];
@@ -48,6 +54,12 @@ export function FuelDataQualityStep({
   showBreakdown: boolean;
   onToggleBreakdown: () => void;
   onAddAdjustment: () => void;
+  /** R-2: thin odometer chain needs operator ack before week can close. */
+  needsOdometerChainAck?: boolean;
+  odometerChainReviewed?: boolean;
+  odometerChainNote?: string;
+  onOdometerChainNoteChange?: (value: string) => void;
+  onAckOdometerChain?: () => void;
 }) {
   const handleExport = async () => {
     if (!breakdownRows.length) return;
@@ -69,8 +81,48 @@ export function FuelDataQualityStep({
   return (
     <div className="space-y-4">
       <p className="rounded border border-slate-200 bg-[#f5f2ff] px-4 py-3 text-[13px] leading-[18px] text-slate-600">
-        Estimates use trip km + odometer; unexplained = total − estimated categories.
+        Estimates use trip km + odometer. Tank-window timing and fills without odometer are carved
+        out before unexplained. Each needs its own acknowledgement when over the close gate.
       </p>
+      <p className="text-[12px] leading-[16px] text-slate-500" title={UNAVAILABLE_KM_POLICY}>
+        {UNAVAILABLE_KM_POLICY}
+      </p>
+
+      {needsOdometerChainAck && !periodLocked && (
+        <div className="space-y-3 rounded border border-amber-200 bg-amber-50 px-4 py-3">
+          {odometerChainReviewed ? (
+            <p className="text-sm text-amber-950">
+              Thin odometer chain acknowledged — timing stays unmeasurable; categories unchanged.
+            </p>
+          ) : (
+            <>
+              <p className="text-sm text-amber-950">
+                Not enough odometered fills to measure tank timing. Categories stay as-is; timing and
+                fills-without-odometer carves stay $0.
+              </p>
+              <label className="block space-y-1">
+                <span className="text-[11px] font-semibold uppercase tracking-wide text-amber-900">
+                  Reason <span className="font-normal normal-case">(8+ characters)</span>
+                </span>
+                <textarea
+                  className="min-h-[72px] w-full rounded-md border border-amber-200 bg-white px-3 py-2 text-sm"
+                  value={odometerChainNote}
+                  onChange={(e) => onOdometerChainNoteChange?.(e.target.value)}
+                  placeholder="Why are you continuing with an unmeasurable tank window?"
+                />
+              </label>
+              <Button
+                type="button"
+                className="min-h-11"
+                disabled={!onAckOdometerChain || odometerChainNote.trim().length < 8}
+                onClick={() => onAckOdometerChain?.()}
+              >
+                Acknowledge &amp; continue
+              </Button>
+            </>
+          )}
+        </div>
+      )}
 
       <div className="flex flex-wrap gap-2">
         <Button type="button" variant="outline" className="min-h-11" onClick={() => void handleExport()}>

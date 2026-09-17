@@ -145,6 +145,8 @@ export function serverRowsToLandingPeriods(rows: FuelPeriodRow[]): FuelReconcili
       exceptionCount: locked ? 0 : counts['data-quality']?.actionable || 0,
       counts,
       leakageReviewed: locked || Boolean(s.leakageReviewedAt),
+      odometerChainReviewed: locked || Boolean(s.odometerChainReviewedAt),
+      unattributedReviewed: locked || Boolean(s.unattributedReviewedAt),
       fuelSealError: s.fuelSealError ? String(s.fuelSealError) : null,
     });
   }

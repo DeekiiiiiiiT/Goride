@@ -226,8 +226,12 @@ export type MoneyStripTotals = {
   company: number;
   driver: number;
   leakage: number;
-  /** F-1: tank-window timing (not leakage). */
+  /** F-1/N-2: first-fill tank-window timing (not leakage). */
   windowTiming: number;
+  /** N-2: fills without odometer. */
+  unattributedFill: number;
+  /** N-4: driver misc share from coverage split. */
+  driverFromUnexplained: number;
 };
 
 export function buildMoneyStrip(input: {
@@ -254,6 +258,8 @@ export function buildMoneyStrip(input: {
   let driver = 0;
   let leakage = 0;
   let windowTiming = 0;
+  let unattributedFill = 0;
+  let driverFromUnexplained = 0;
   for (const r of liveReports) {
     gasCard += sumGasCard(fuelEntries, r, vehicles, paidByDriverCtx);
     cashFromEarnings += sumPaidByDriver(fuelEntries, r, vehicles, paidByDriverCtx);
@@ -261,7 +267,19 @@ export function buildMoneyStrip(input: {
     company += Number(r.companyShare) || 0;
     driver += Number(r.driverShare) || 0;
     leakage += Number(r.miscellaneousCost) || 0;
-    windowTiming += Number((r as { windowTimingCost?: number }).windowTimingCost) || 0;
+    windowTiming += Number(r.windowTimingCost) || 0;
+    unattributedFill += Number(r.unattributedFillCost) || 0;
+    driverFromUnexplained += Number(r.driverMiscShare) || 0;
   }
-  return { totalSpend, gasCard, cashFromEarnings, company, driver, leakage, windowTiming };
+  return {
+    totalSpend,
+    gasCard,
+    cashFromEarnings,
+    company,
+    driver,
+    leakage,
+    windowTiming,
+    unattributedFill,
+    driverFromUnexplained,
+  };
 }

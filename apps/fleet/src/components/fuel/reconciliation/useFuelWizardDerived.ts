@@ -47,6 +47,8 @@ export function useFuelWizardDerived(input: {
   periodLocked: boolean;
   activeStepId: FuelStepId;
   leakageReviewed: boolean;
+  odometerChainReviewed?: boolean;
+  unattributedReviewed?: boolean;
   vehicles: Vehicle[];
   drivers: FuelWizardDriver[];
   fuelEntries: FuelEntry[];
@@ -70,6 +72,8 @@ export function useFuelWizardDerived(input: {
     periodLocked,
     activeStepId,
     leakageReviewed,
+    odometerChainReviewed = false,
+    unattributedReviewed = false,
     vehicles,
     drivers,
     fuelEntries,
@@ -238,6 +242,8 @@ export function useFuelWizardDerived(input: {
         reports: liveReports,
         scenarios,
         leakageReviewed: leakageReviewed || periodLocked,
+        odometerChainReviewed: odometerChainReviewed || periodLocked,
+        unattributedReviewed: unattributedReviewed || periodLocked,
         countsUnevaluated,
         degradedInputs,
         openDisputesInWeek: openDisputes.length > 0,
@@ -255,6 +261,8 @@ export function useFuelWizardDerived(input: {
       liveReports,
       scenarios,
       leakageReviewed,
+      odometerChainReviewed,
+      unattributedReviewed,
       periodLocked,
       countsUnevaluated,
       degradedInputs,

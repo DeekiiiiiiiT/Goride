@@ -162,6 +162,35 @@ export function listUnderExplainedResidualRows(
 }
 
 /**
+ * N-2: no-odometer fill spend uses the same ratio + absolute caps as misc.
+ * Returns true when unattributed exceeds the gate (needs wizard acknowledgment).
+ */
+export function isUnattributedBeyondGate(
+  totalSpend: number,
+  unattributedFillCost: number,
+  ratio: number = FUEL_MISC_MAX_RATIO,
+  absCap: number = FUEL_MISC_MAX_ABS_JMD,
+): boolean {
+  const spend = num(totalSpend);
+  const unattr = Math.max(0, num(unattributedFillCost));
+  if (unattr <= 0) return false;
+  if (spend <= 0) return unattr > 0;
+  return !(unattr <= ratio * spend && unattr <= absCap);
+}
+
+/** Alias — classify unattributed against the misc gate band. */
+export function classifyUnattributedResidual(
+  totalSpend: number,
+  unattributedFillCost: number,
+  ratio: number = FUEL_MISC_MAX_RATIO,
+  absCap: number = FUEL_MISC_MAX_ABS_JMD,
+): 'ok' | 'needs_review' {
+  return isUnattributedBeyondGate(totalSpend, unattributedFillCost, ratio, absCap)
+    ? 'needs_review'
+    : 'ok';
+}
+
+/**
  * F-4: flags from snapshot/report rows so opposite residuals cannot cancel
  * in a week aggregate.
  */

@@ -231,6 +231,8 @@ describe('FuelBulkFinalizeDialog', () => {
     expect(bulkFinalizeExecuteGateFields(p)).toEqual({
       periodCounts: p.counts,
       leakageReviewed: true,
+      odometerChainReviewed: false,
+      unattributedReviewed: false,
     });
   });
 
