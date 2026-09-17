@@ -152,21 +152,30 @@ export function DashboardDriverTable({
               return (
                 <li key={row.id} className="relative overflow-hidden px-3 py-3.5 pr-10">
                   <div className="flex items-center gap-3">
+                    {/* Stack: circular driver photo above circular vehicle photo */}
                     <div
                       className={cn(
-                        'flex h-14 w-20 shrink-0 items-center justify-center overflow-hidden rounded-md border border-slate-200 bg-slate-100 dark:border-slate-700 dark:bg-slate-800',
+                        'flex w-14 shrink-0 flex-col items-center gap-1.5',
                         busy && 'opacity-60',
                       )}
                     >
-                      {!unassigned && row.vehicleImage ? (
-                        <img
-                          src={row.vehicleImage}
-                          alt=""
-                          className="h-full w-full object-cover object-center"
-                        />
-                      ) : (
-                        <Car className="h-6 w-6 text-slate-400" aria-hidden />
-                      )}
+                      <Avatar className="h-11 w-11 border border-slate-200 dark:border-slate-700">
+                        <AvatarImage src={row.avatarUrl} alt="" />
+                        <AvatarFallback className="bg-slate-100 text-[11px] font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200">
+                          {initials(displayName)}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="flex h-11 w-11 items-center justify-center overflow-hidden rounded-full border border-slate-200 bg-slate-100 dark:border-slate-700 dark:bg-slate-800">
+                        {!unassigned && row.vehicleImage ? (
+                          <img
+                            src={row.vehicleImage}
+                            alt=""
+                            className="h-full w-full object-cover object-center"
+                          />
+                        ) : (
+                          <Car className="h-5 w-5 text-slate-400" aria-hidden />
+                        )}
+                      </div>
                     </div>
 
                     <div className="min-w-0 flex-1">
