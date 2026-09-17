@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
-# Vercel Ignored Build Step helper.
+# Vercel Ignored Build Step helper (safety net).
+# Primary routing: git.deploymentEnabled=false + scripts/vercel-path-deploy.mjs
+# (Deploy Hooks). Keep ignoreCommand so accidental Git auto-deploys still skip.
 # Exit 0 = SKIP build · Exit 1 = RUN build (Vercel convention).
 #
 # Usage (from apps/<name>/vercel.json when Root Directory is that app):

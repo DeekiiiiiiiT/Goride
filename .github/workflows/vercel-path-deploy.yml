@@ -1,0 +1,42 @@
+# Path-filtered Vercel deploys (Hobby-safe monorepo)
+#
+# Commit & Sync unchanged: push → GitHub.
+# - Supabase: existing Deploy Supabase Edge Function workflow (unchanged)
+# - Vercel: ONLY apps whose folders changed get a Deploy Hook (this workflow)
+#
+# One-time setup: docs/vercel-path-deploy-setup.md
+name: Vercel path deploy
+
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: vercel-path-deploy-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fire Deploy Hooks for changed apps only
+        env:
+          GITHUB_SHA: ${{ github.sha }}
+          GITHUB_EVENT_BEFORE: ${{ github.event.before }}
+          VERCEL_DEPLOY_HOOK_FLEET: ${{ secrets.VERCEL_DEPLOY_HOOK_FLEET }}
+          VERCEL_DEPLOY_HOOK_DRIVER: ${{ secrets.VERCEL_DEPLOY_HOOK_DRIVER }}
+          VERCEL_DEPLOY_HOOK_DOMINION: ${{ secrets.VERCEL_DEPLOY_HOOK_DOMINION }}
+          VERCEL_DEPLOY_HOOK_ENTERPRISE: ${{ secrets.VERCEL_DEPLOY_HOOK_ENTERPRISE }}
+          VERCEL_DEPLOY_HOOK_HAUL: ${{ secrets.VERCEL_DEPLOY_HOOK_HAUL }}
+          VERCEL_DEPLOY_HOOK_RIDES_PASSENGER: ${{ secrets.VERCEL_DEPLOY_HOOK_RIDES_PASSENGER }}
+          VERCEL_DEPLOY_HOOK_RUSH_COMMAND: ${{ secrets.VERCEL_DEPLOY_HOOK_RUSH_COMMAND }}
+          VERCEL_DEPLOY_HOOK_RUSH_CUSTOMER: ${{ secrets.VERCEL_DEPLOY_HOOK_RUSH_CUSTOMER }}
+          VERCEL_DEPLOY_HOOK_RUSH_COURIER: ${{ secrets.VERCEL_DEPLOY_HOOK_RUSH_COURIER }}
+          VERCEL_DEPLOY_HOOK_RUSH_PARTNER: ${{ secrets.VERCEL_DEPLOY_HOOK_RUSH_PARTNER }}
+        run: node scripts/vercel-path-deploy.mjs
