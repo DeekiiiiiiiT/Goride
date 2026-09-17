@@ -1,7 +1,7 @@
 {
   "slug": "fleet-fuel",
-  "generatedAt": "2026-09-17T17:12:06.496Z",
-  "routeCount": 116,
+  "generatedAt": "2026-09-17T17:43:11.794Z",
+  "routeCount": 118,
   "routes": [
     "DELETE ${BASE_PATH}/admin/evidence-inbox/gate-held/:transactionId",
     "DELETE ${BASE_PATH}/finalized-reports/:weekStart/:identityId",
@@ -108,8 +108,10 @@
     "POST ${BASE}/fuel/periods/:id/gap-charges/recommend",
     "POST ${BASE}/fuel/periods/:id/leakage-review",
     "POST ${BASE}/fuel/periods/:id/materialize",
+    "POST ${BASE}/fuel/periods/:id/odometer-chain-review",
     "POST ${BASE}/fuel/periods/:id/reopen",
     "POST ${BASE}/fuel/periods/:id/second-approve",
+    "POST ${BASE}/fuel/periods/:id/unattributed-review",
     "POST ${BASE}/fuel/periods/auto-close",
     "POST ${BASE}/fuel/periods/backfill",
     "POST ${BASE}/fuel/periods/ensure",

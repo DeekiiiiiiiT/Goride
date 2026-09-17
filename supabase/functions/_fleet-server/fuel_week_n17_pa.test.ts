@@ -30,6 +30,8 @@ Deno.test("N-17: PA earned absorb → client and server shares match (zero delta
     companyShare: server.companyShare,
     driverShare: server.driverShare,
     miscellaneousCost: server.miscellaneousCost,
+    windowTimingCost: server.windowTimingCost,
+    unattributedFillCost: server.unattributedFillCost,
   };
   const deltas = diffWeekCalc(clientCalc, server);
   assertEquals(deltas.length, 0);
@@ -66,6 +68,8 @@ Deno.test("N-17: tampered earned on snap → SNAPSHOT_MISMATCH money deltas", ()
     companyShare: honest.companyShare,
     driverShare: honest.driverShare,
     miscellaneousCost: honest.miscellaneousCost,
+    windowTimingCost: honest.windowTimingCost,
+    unattributedFillCost: honest.unattributedFillCost,
   };
   const tamperedServer = computeFuelWeek({
     totalSpend: 700,

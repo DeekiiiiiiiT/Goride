@@ -68,6 +68,8 @@ Deno.test("N-15: production-shaped snap (untagged entries + tripCategoryAgg) →
     companyShare: Number(snap.companyShare),
     driverShare: Number(snap.driverShare),
     miscellaneousCost: Number(snap.miscellaneousCost),
+    windowTimingCost: recomputed.windowTimingCost,
+    unattributedFillCost: recomputed.unattributedFillCost,
   };
   const deltas = [
     ...diffWeekCalc(clientCalc, recomputed),
@@ -109,6 +111,8 @@ Deno.test("N-15: tampered categoryCosts vs honest tripCategoryAgg → SNAPSHOT_M
     companyShare: Number(snap.companyShare),
     driverShare: Number(snap.driverShare),
     miscellaneousCost: Number(snap.miscellaneousCost),
+    windowTimingCost: recomputed.windowTimingCost,
+    unattributedFillCost: recomputed.unattributedFillCost,
   };
   const deltas = [
     ...diffWeekCalc(clientCalc, recomputed),

@@ -29,6 +29,8 @@ Deno.test("C-1: tampered driverShare with categoryCosts yields SNAPSHOT_MISMATCH
     companyShare: recomputed.companyShare,
     driverShare: recomputed.driverShare + 1000,
     miscellaneousCost: recomputed.miscellaneousCost,
+    windowTimingCost: recomputed.windowTimingCost,
+    unattributedFillCost: recomputed.unattributedFillCost,
   };
   const deltas = diffWeekCalc(tampered, recomputed);
   assertEquals(deltas.some((d) => d.field === "driverShare"), true);
