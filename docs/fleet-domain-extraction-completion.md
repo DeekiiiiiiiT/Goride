@@ -74,7 +74,7 @@ The recency condition on gate 2 is deliberate: it stops a stale green streak aut
 | Day | Date (UTC) | Non-health | Health | Notes |
 |-----|------------|------------|--------|-------|
 | 0 | 2026-09-16 | **4,368** | 45 | Post-SQL-filter rebaseline (≈ prior ~4,400 — filter validated). Expected red, pre-client-ship. |
-| 1 | 2026-09-17 | **157** | 0 | Post-cutover decay, 96% drop. `platform-status` 26, `drivers` 22, `transactions` 21. Still `ok:false`. |
+| 1 | 2026-09-17 | **202** | 0 | Rev 10 full-tail rebaseline (19 paths). Earlier truncated row was 157 / top-10=127. Still `ok:false`. |
 | 2–7 | | | | Streak starts the first `ok:true` day. |
 
 ### External callers (never decay on their own)

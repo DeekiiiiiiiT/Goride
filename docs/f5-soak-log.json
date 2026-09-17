@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-09-17T17:05:00.000Z",
+  "updatedAt": "2026-09-17T20:06:09.441Z",
   "note": "Source of truth for F5 N=7 consecutive green days. Append via: pnpm check:shim-traffic:log (CI commits this file back). §8 mirrors this file.",
   "days": [
     {
@@ -10,36 +10,132 @@
       "windowHours": 24,
       "note": "Post-F1 SQL filter rebaseline (pathname like %make-server-37f42386%). Agrees with prior ~4400 Day-0 — filter validated. Expected red until client ship.",
       "topOffenders": [
-        { "path": "/functions/v1/make-server-37f42386/stations", "requests": 1147 },
-        { "path": "/functions/v1/make-server-37f42386/platform-status", "requests": 537 },
-        { "path": "/functions/v1/make-server-37f42386/transactions", "requests": 340 },
-        { "path": "/functions/v1/make-server-37f42386/enterprise/me/modules", "requests": 226 },
-        { "path": "/functions/v1/make-server-37f42386/fuel-entries", "requests": 196 },
-        { "path": "/functions/v1/make-server-37f42386/drivers", "requests": 157 },
-        { "path": "/functions/v1/make-server-37f42386/vehicles", "requests": 144 },
-        { "path": "/functions/v1/make-server-37f42386/fleet-timezone", "requests": 122 },
-        { "path": "/functions/v1/make-server-37f42386/fuel/periods/recompute", "requests": 105 },
-        { "path": "/functions/v1/make-server-37f42386/fuel-disputes", "requests": 99 }
+        {
+          "path": "/functions/v1/make-server-37f42386/stations",
+          "requests": 1147
+        },
+        {
+          "path": "/functions/v1/make-server-37f42386/platform-status",
+          "requests": 537
+        },
+        {
+          "path": "/functions/v1/make-server-37f42386/transactions",
+          "requests": 340
+        },
+        {
+          "path": "/functions/v1/make-server-37f42386/enterprise/me/modules",
+          "requests": 226
+        },
+        {
+          "path": "/functions/v1/make-server-37f42386/fuel-entries",
+          "requests": 196
+        },
+        {
+          "path": "/functions/v1/make-server-37f42386/drivers",
+          "requests": 157
+        },
+        {
+          "path": "/functions/v1/make-server-37f42386/vehicles",
+          "requests": 144
+        },
+        {
+          "path": "/functions/v1/make-server-37f42386/fleet-timezone",
+          "requests": 122
+        },
+        {
+          "path": "/functions/v1/make-server-37f42386/fuel/periods/recompute",
+          "requests": 105
+        },
+        {
+          "path": "/functions/v1/make-server-37f42386/fuel-disputes",
+          "requests": 99
+        }
       ]
     },
     {
       "date": "2026-09-17",
-      "nonHealth": 157,
+      "nonHealth": 202,
       "health": 0,
       "ok": false,
       "windowHours": 24,
-      "note": "Post cutover decay: fleet-core now carries majority residual (e.g. platform-status 112 vs shim 26). Remaining shim = stale clients + Uber webhook hint path. Not streak Day 1 yet.",
+      "note": "Rev 10 full-tail rebaseline (persist every offender). nonHealth=202 across 19 paths (was truncated top-10 sum 127 of 157). No inventory shimPathSuffix present. Still ok:false — streak not started.",
       "topOffenders": [
-        { "path": "/functions/v1/make-server-37f42386/platform-status", "requests": 26 },
-        { "path": "/functions/v1/make-server-37f42386/drivers", "requests": 22 },
-        { "path": "/functions/v1/make-server-37f42386/transactions", "requests": 21 },
-        { "path": "/functions/v1/make-server-37f42386/vehicle-catalog-pending/my", "requests": 13 },
-        { "path": "/functions/v1/make-server-37f42386/fuel-entries", "requests": 10 },
-        { "path": "/functions/v1/make-server-37f42386/stations", "requests": 9 },
-        { "path": "/functions/v1/make-server-37f42386/vehicles", "requests": 8 },
-        { "path": "/functions/v1/make-server-37f42386/platform-feature-flags", "requests": 6 },
-        { "path": "/functions/v1/make-server-37f42386/scan-odometer", "requests": 6 },
-        { "path": "/functions/v1/make-server-37f42386/check-ins", "requests": 6 }
+        {
+          "path": "/functions/v1/make-server-37f42386/platform-feature-flags",
+          "requests": 43
+        },
+        {
+          "path": "/functions/v1/make-server-37f42386/platform-status",
+          "requests": 34
+        },
+        {
+          "path": "/functions/v1/make-server-37f42386/drivers",
+          "requests": 22
+        },
+        {
+          "path": "/functions/v1/make-server-37f42386/transactions",
+          "requests": 21
+        },
+        {
+          "path": "/functions/v1/make-server-37f42386/vehicle-catalog-pending/my",
+          "requests": 13
+        },
+        {
+          "path": "/functions/v1/make-server-37f42386/fuel-entries",
+          "requests": 10
+        },
+        {
+          "path": "/functions/v1/make-server-37f42386/stations",
+          "requests": 9
+        },
+        {
+          "path": "/functions/v1/make-server-37f42386/vehicles",
+          "requests": 8
+        },
+        {
+          "path": "/functions/v1/make-server-37f42386/scan-odometer",
+          "requests": 6
+        },
+        {
+          "path": "/functions/v1/make-server-37f42386/check-ins",
+          "requests": 6
+        },
+        {
+          "path": "/functions/v1/make-server-37f42386/trips/search",
+          "requests": 5
+        },
+        {
+          "path": "/functions/v1/make-server-37f42386/fuel-cards",
+          "requests": 5
+        },
+        {
+          "path": "/functions/v1/make-server-37f42386/enterprise/me/modules",
+          "requests": 4
+        },
+        {
+          "path": "/functions/v1/make-server-37f42386/trips",
+          "requests": 4
+        },
+        {
+          "path": "/functions/v1/make-server-37f42386/upload",
+          "requests": 3
+        },
+        {
+          "path": "/functions/v1/make-server-37f42386/trips/stats",
+          "requests": 3
+        },
+        {
+          "path": "/functions/v1/make-server-37f42386/maps-config",
+          "requests": 2
+        },
+        {
+          "path": "/functions/v1/make-server-37f42386/ai/process-fuel-receipt",
+          "requests": 2
+        },
+        {
+          "path": "/functions/v1/make-server-37f42386/settings/preferences",
+          "requests": 2
+        }
       ]
     }
   ]
