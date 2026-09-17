@@ -44,7 +44,10 @@
 
 - [ ] Uber Developer org **RoamFleet** (renamed from GoRide Fleet if needed) has an Application with Vehicles scopes
 - [ ] Privacy Policy `https://roamenterprise.co/privacy` + Redirect `https://roamfleet.co/uber-callback` registered
-- [ ] Webhook URL `…/make-server-37f42386/uber/webhook` registered (subscription may need Uber POC)
-- [ ] Supabase Edge Function secrets: `UBER_CLIENT_ID` + `UBER_CLIENT_SECRET` on fleet server (`make-server-37f42386`)
+- [ ] **Webhook URL (required before F5 shim retire):**  
+      `https://csfllzzastacofsvcdsc.supabase.co/functions/v1/fleet-core/uber/webhook`  
+      Re-point in Uber’s developer dashboard (not in this repo). Do **not** leave `…/make-server-37f42386/uber/webhook` — that path never decays and drops sync events after retirement.
+- [ ] Supabase Edge Function secrets: `UBER_CLIENT_ID` + `UBER_CLIENT_SECRET` on **`fleet-core`** (and on `make-server-37f42386` until F5 retire)
 - [ ] Optional: `UBER_FLEET_SCOPES` override (default `vehicle_suppliers.vehicles.read vehicle_suppliers.vehicles.assignment`)
 - [ ] Smoke: Settings → Connect → Sync Now returns vehicle match summary (not 401/403)
+- [ ] After webhook re-point: new `uber_webhook_log:*` rows in `kv_store_37f42386`, and shim soak no longer lists `…/make-server-37f42386/uber/webhook`

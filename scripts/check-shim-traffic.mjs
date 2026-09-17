@@ -6,7 +6,7 @@
  *   node scripts/check-shim-traffic.mjs              # last 24h
  *   node scripts/check-shim-traffic.mjs --hours 24
  *   node scripts/check-shim-traffic.mjs --days 7      # chunked ≤24h windows
- *   node scripts/check-shim-traffic.mjs --append-log  # also write docs/f5-soak-log.json
+ *   node scripts/check-shim-traffic.mjs --append-log  # write docs/f5-soak-log.json (single-day window only)
  *
  * Auth: ROAM_MGMT_PAT | SUPABASE_ACCESS_TOKEN | SUPABASE_PAT
  * Project: ROAM_PROJECT_REF (default csfllzzastacofsvcdsc)
@@ -258,29 +258,25 @@ async function main() {
   }
 
   if (appendLog) {
-    // For multi-day windows, append one row per calendar day in the window.
+    // Never write day rows with empty offenders — that falsely clears the tail.
+    // Soak CI uses --hours 24 --append-log (one measured window).
     if (daily.length > 1) {
-      for (const d of daily) {
-        appendSoakLog({
-          date: d.day,
-          nonHealth: d.nonHealth,
-          health: d.health,
-          ok: d.nonHealth === 0,
-          topOffenders: [],
-          windowHours: 24,
-        });
-      }
-    } else {
-      const today = new Date().toISOString().slice(0, 10);
-      appendSoakLog({
-        date: today,
-        nonHealth,
-        health: healthHits,
-        ok: nonHealth === 0,
-        topOffenders: offenders.slice(0, 10).map(([p, n]) => ({ path: p, requests: n })),
-        windowHours: hours,
-      });
+      console.error(
+        "Abort: --append-log requires a single-day window (--hours ≤24). " +
+          "Multi-day append would store empty topOffenders and hide the decay tail.",
+      );
+      process.exit(2);
     }
+    const today = new Date().toISOString().slice(0, 10);
+    appendSoakLog({
+      date: today,
+      nonHealth,
+      health: healthHits,
+      ok: nonHealth === 0,
+      // Persist every shim offender (SQL limit 200). Truncation hid 1–2/day webhooks.
+      topOffenders: offenders.map(([p, n]) => ({ path: p, requests: n })),
+      windowHours: hours,
+    });
   }
 
   if (nonHealth > 0) {

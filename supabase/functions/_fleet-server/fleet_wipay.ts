@@ -32,9 +32,10 @@ function wipayGatewayUrl(): string {
   return "https://jm.wipayfinancial.com/plugins/payments/request";
 }
 
-function fleetServerPublicUrl(): string {
+function fleetCorePublicUrl(): string {
   const base = Deno.env.get("SUPABASE_URL") ?? "";
-  return `${base.replace(/\/$/, "")}/functions/v1/fleet-server`;
+  // Residual WiPay webhook lives on fleet-core (pathStyle rewrites → make-server routes).
+  return `${base.replace(/\/$/, "")}/functions/v1/fleet-core`;
 }
 
 export function fleetRushModulePriceJmd(): number {
@@ -90,7 +91,7 @@ export async function createFleetWipayCheckout(opts: {
     return { error: "WiPay callback secret not configured — set WIPAY_CALLBACK_SECRET" };
   }
 
-  const responseUrl = new URL(`${fleetServerPublicUrl()}/make-server-37f42386/webhooks/wipay-fleet-modules`);
+  const responseUrl = new URL(`${fleetCorePublicUrl()}/webhooks/wipay-fleet-modules`);
   responseUrl.searchParams.set("secret", callbackSecret);
   const customerReturn = `${opts.returnBase.replace(/\/$/, "")}/signup?wipay=fleet-modules`;
   const orderRef = `FLEET-${opts.purchaseId.replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 12)}`;

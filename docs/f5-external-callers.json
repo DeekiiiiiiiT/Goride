@@ -1,0 +1,42 @@
+{
+  "updatedAt": "2026-09-17T19:35:00.000Z",
+  "note": "External callers that hold make-server-37f42386 URLs outside client bundles. f5-external-callers-check.mjs + f5-retire-shim fail closed until every row is cleared/fixed AND latest soak topOffenders has no path matching any callers[].shimPathSuffix on the shim.",
+  "callers": [
+    {
+      "id": "uber-webhook",
+      "kind": "third_party_dashboard",
+      "status": "cleared",
+      "shimPathSuffix": "/uber/webhook",
+      "targetUrl": "https://csfllzzastacofsvcdsc.supabase.co/functions/v1/fleet-core/uber/webhook",
+      "owner": "PO",
+      "note": "Cleared 2026-09-17: RoamFleet Production PRIMARY webhook updated in Uber dashboard from make-server-37f42386 → fleet-core."
+    },
+    {
+      "id": "rush-trip-recon-cron",
+      "kind": "pg_cron",
+      "status": "fixed",
+      "shimPathSuffix": "/rush/trip-recon/cron",
+      "targetUrl": "…/functions/v1/fleet-core/rush/trip-recon/cron",
+      "owner": "eng",
+      "note": "Migration 20260917140000_rush_trip_recon_cron_fleet_core applied live."
+    },
+    {
+      "id": "wipay-fleet-modules",
+      "kind": "partner_callback_builder",
+      "status": "fixed",
+      "shimPathSuffix": "/webhooks/wipay-fleet-modules",
+      "targetUrl": "…/functions/v1/fleet-core/webhooks/wipay-fleet-modules",
+      "owner": "eng",
+      "note": "fleet_wipay.ts no longer mints fleet-server/make-server URLs."
+    },
+    {
+      "id": "fuel-period-auto-close",
+      "kind": "github_actions",
+      "status": "cleared",
+      "shimPathSuffix": "/fuel/periods/auto-close",
+      "targetUrl": "…/functions/v1/fleet-fuel/fuel/periods/auto-close",
+      "owner": "eng",
+      "note": "Live workflow already posts fleet-fuel; docs updated."
+    }
+  ]
+}

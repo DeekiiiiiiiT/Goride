@@ -4,13 +4,15 @@ Daily job locks eligible Consumption Reconciliation weeks. Uses the same server 
 
 ## Endpoint
 
-`POST /make-server-37f42386/fuel/periods/auto-close?orgId=all`
+`POST /fleet-fuel/fuel/periods/auto-close?orgId=all`
+
+(Live workflow posts this path — not the retired shim.)
 
 Headers:
 - `X-Fleet-Cron-Secret: <FLEET_CRON_SECRET>` (or `CRON_SECRET`)
 
 Related:
-- `POST /make-server-37f42386/fuel/periods/:id/build-snapshots` — full week engine (scenario shares + settledEntries); set `FUEL_BUILD_SNAPSHOTS_ENGINE=entries` for legacy entry-only assembler.
+- `POST /fleet-fuel/fuel/periods/:id/build-snapshots` — full week engine (scenario shares + settledEntries); set `FUEL_BUILD_SNAPSHOTS_ENGINE=entries` for legacy entry-only assembler.
 
 ## Schedule
 

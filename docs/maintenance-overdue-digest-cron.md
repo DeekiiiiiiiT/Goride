@@ -4,7 +4,8 @@ Daily job posts in-app `alert:*` rows for overdue / due-soon schedule items.
 
 ## Endpoint
 
-`POST /make-server-37f42386/maintenance/overdue-digest`
+`POST /fleet-ops/maintenance/overdue-digest`  
+(or residual `POST /fleet-core/maintenance/overdue-digest` if mounted on fleet-core)
 
 Headers:
 - `X-Fleet-Cron-Secret: <FLEET_CRON_SECRET>` (or `X-Rides-Cron-Secret` / `RIDES_CRON_SECRET`)

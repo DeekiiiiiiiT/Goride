@@ -5,6 +5,8 @@
  * Guards (unless --force):
  *   1. check-shim-traffic --days 7 exits 0
  *   2. docs/f5-soak-log.json has 7 consecutive ok:true rows ending today or yesterday UTC
+ *   3. f5-external-callers-check (inventory cleared + no inventory shimPathSuffix in soak offenders)
+ *      — --force still skips 1–2 but NEVER skips external callers (data-loss path)
  *
  * Updates extraction-status shim:null, deploy wiring, and D15 note (fleet-core
  * stays out of FLEET_SLUGS — residual home; comparing it to the residual
@@ -91,7 +93,18 @@ if (!force) {
     process.exit(1);
   }
 } else {
-  console.warn("WARNING: --force skips traffic + soak-log guards");
+  console.warn("WARNING: --force skips traffic + soak-log guards (NOT external callers)");
+}
+
+console.log("Precheck: f5-external-callers-check");
+{
+  const ext = run("node", ["scripts/f5-external-callers-check.mjs"]);
+  if (ext !== 0) {
+    console.error(
+      "Abort: external callers not clear (Uber webhook / inventory). Never skipped by --force.",
+    );
+    process.exit(ext);
+  }
 }
 
 {
