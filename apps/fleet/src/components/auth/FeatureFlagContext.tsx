@@ -4,10 +4,17 @@ import {
   allModulesOff,
   mergeFleetEffectiveModules,
   DEFAULT_FLEET_ENABLED_MODULES,
+  DEFAULT_ENTERPRISE_ENABLED_MODULES,
   type ModuleKey,
 } from '@roam/platform-settings';
 import { withProductLineHeaders } from '../../config/productLine';
 import { fetchEnterpriseModules } from '../../services/enterpriseModulesClient';
+import {
+  readCachedEnabledModules,
+  readCachedServiceLines,
+  writeCachedEnabledModules,
+  writeCachedServiceLines,
+} from '../../utils/orgShellCache';
 import { useAuth } from './AuthContext';
 
 /** Legacy fleet module keys used by AppSidebar gating. */
@@ -31,6 +38,19 @@ interface FeatureFlagContextValue {
   isModuleEnabled: (module: FleetLegacyModuleKey | ModuleKey | string) => boolean;
   loading: boolean;
   refresh: () => void;
+}
+
+/** Optimistic first paint — never boot with allModulesOff (hides Fleet/Delivery nav). */
+function initialEnabledModules(): Record<string, boolean> {
+  const cached = readCachedEnabledModules();
+  return mergeWithLegacyFleetDefaults({
+    ...DEFAULT_ENTERPRISE_ENABLED_MODULES,
+    ...(cached || {}),
+  });
+}
+
+function initialServiceLines(): Array<'rideshare' | 'rush_delivery'> {
+  return readCachedServiceLines() ?? ['rideshare'];
 }
 
 const FeatureFlagContext = createContext<FeatureFlagContextValue>({
@@ -58,12 +78,10 @@ function mergeWithLegacyFleetDefaults(effective: Record<string, boolean>): Recor
 
 export function FeatureFlagProvider({ children }: { children: React.ReactNode }) {
   const { user, session } = useAuth();
-  const [enabledModules, setEnabledModules] = useState<Record<string, boolean>>(() =>
-    mergeWithLegacyFleetDefaults(allModulesOff()),
-  );
-  const [serviceLines, setServiceLines] = useState<Array<'rideshare' | 'rush_delivery'>>(['rideshare']);
+  const [enabledModules, setEnabledModules] = useState<Record<string, boolean>>(initialEnabledModules);
+  const [serviceLines, setServiceLines] = useState<Array<'rideshare' | 'rush_delivery'>>(initialServiceLines);
   const [loading, setLoading] = useState(true);
-  const lastKnownRef = useRef<Record<string, boolean> | null>(null);
+  const lastKnownRef = useRef<Record<string, boolean> | null>(readCachedEnabledModules());
   const orgOverridesRef = useRef<Record<string, boolean>>({});
   const userId = user?.id ?? null;
 
@@ -110,7 +128,11 @@ export function FeatureFlagProvider({ children }: { children: React.ReactNode })
       const lines = Array.isArray(data.serviceLines)
         ? data.serviceLines.filter((s: string) => s === 'rideshare' || s === 'rush_delivery')
         : ['rideshare'];
-      if (lines.length) setServiceLines(lines as Array<'rideshare' | 'rush_delivery'>);
+      if (lines.length) {
+        const nextLines = lines as Array<'rideshare' | 'rush_delivery'>;
+        setServiceLines(nextLines);
+        writeCachedServiceLines(nextLines);
+      }
 
       const orgOverrides = (data.orgOverrides || {}) as Record<string, boolean>;
       orgOverridesRef.current = orgOverrides;
@@ -121,6 +143,7 @@ export function FeatureFlagProvider({ children }: { children: React.ReactNode })
       });
       lastKnownRef.current = next;
       setEnabledModules(next);
+      writeCachedEnabledModules(next);
     } catch (e) {
       console.log('[FeatureFlags] Org modules fetch failed:', e);
       if (lastKnownRef.current) {

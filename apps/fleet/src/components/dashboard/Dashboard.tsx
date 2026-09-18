@@ -6,6 +6,7 @@ import { toast } from 'sonner';
 import { api } from '../../services/api';
 import { useServiceLineScope } from '../../contexts/ServiceLineScopeContext';
 import { applyDriverAssignmentChange } from '../../utils/vehicleDriverAssignmentHistory';
+import { personMatchesServiceLine } from '../../utils/vehicleServiceLines';
 import { isVehicleParked } from '../../utils/vehicleCatalogGate';
 import { showCatalogGateToastIfApplicable } from '../../utils/catalogGateErrors';
 import { Button } from '../ui/button';
@@ -99,19 +100,8 @@ function writeLineToUrl(line: DashboardLine) {
   }
 }
 
-function driverServiceLines(d: { serviceLines?: string[]; service_lines?: string[] }): string[] {
-  const lines = d.serviceLines ?? d.service_lines;
-  return Array.isArray(lines) ? lines.filter((l): l is string => typeof l === 'string') : [];
-}
-
-function isRideshareCapable(d: { serviceLines?: string[]; service_lines?: string[] }): boolean {
-  const lines = driverServiceLines(d);
-  if (!lines.length) return true;
-  return lines.includes('rideshare');
-}
-
 function isRushCapable(d: { serviceLines?: string[]; service_lines?: string[] }): boolean {
-  return driverServiceLines(d).includes('rush_delivery');
+  return personMatchesServiceLine(d, 'rush_delivery');
 }
 
 function normalizeCourierRow(
@@ -260,12 +250,12 @@ export function Dashboard({ onSelectDriver }: Props) {
     return map;
   }, [vehicleList]);
 
-  const rideshareIdSet = useMemo(() => {
-    const ids = new Set<string>();
+  const profileById = useMemo(() => {
+    const map = new Map<string, { serviceLines?: string[]; service_lines?: string[] }>();
     for (const d of driversList as Array<{ id?: string; serviceLines?: string[]; service_lines?: string[] }>) {
-      if (d?.id && isRideshareCapable(d)) ids.add(String(d.id));
+      if (d?.id) map.set(String(d.id), d);
     }
-    return ids;
+    return map;
   }, [driversList]);
 
   const rows: DashboardDriverRow[] = useMemo(() => {
@@ -274,10 +264,17 @@ export function Dashboard({ onSelectDriver }: Props) {
 
     return roster
       .filter((driver) => {
+        // Courier-only belongs on Delivery — use roster serviceLines (profile enrich is fallback).
         if (!dual) return true;
-        // Prefer explicit capability when both lines exist; legacy (no id in list) stays rideshare.
-        if (rideshareIdSet.size === 0) return true;
-        return rideshareIdSet.has(driver.id);
+        const profile = profileById.get(driver.id);
+        return personMatchesServiceLine(
+          {
+            serviceLines:
+              (driver as { serviceLines?: string[] }).serviceLines ?? profile?.serviceLines,
+            service_lines: profile?.service_lines,
+          },
+          'rideshare',
+        );
       })
       .map((driver) => {
         const assigned = byDriverId.get(driver.id);
@@ -306,7 +303,7 @@ export function Dashboard({ onSelectDriver }: Props) {
           vin: assigned?.vin || '',
         };
       });
-  }, [rosterPayload, byDriverId, rideshareVisible, rushVisible, rideshareIdSet]);
+  }, [rosterPayload, byDriverId, rideshareVisible, rushVisible, profileById]);
 
   const courierRows: DashboardCourierRow[] = useMemo(() => {
     return (driversList as Array<Record<string, unknown>>)
@@ -531,7 +528,8 @@ export function Dashboard({ onSelectDriver }: Props) {
   const loading =
     ((showRideshare || showDelivery) && vehiclesLoading) ||
     (showRideshare && rosterLoading) ||
-    ((showRideshare || showDelivery) && driversLoading);
+    // Delivery list needs getDrivers; rideshare filters from roster.serviceLines.
+    (showDelivery && driversLoading);
 
   if (loading && rows.length === 0 && courierRows.length === 0) {
     return (

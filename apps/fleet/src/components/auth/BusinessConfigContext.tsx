@@ -4,6 +4,10 @@ import { DEFAULT_BUSINESS_TYPE, isValidBusinessType } from '../../utils/business
 import { api } from '../../services/api';
 import { supabase } from '../../utils/supabase/client';
 import { fetchEnterpriseModules } from '../../services/enterpriseModulesClient';
+import {
+  readCachedServiceLines,
+  writeCachedServiceLines,
+} from '../../utils/orgShellCache';
 import { useAuth } from './AuthContext';
 
 export type ServiceLine = 'rideshare' | 'rush_delivery';
@@ -40,7 +44,9 @@ function normalizeServiceLines(raw: unknown): ServiceLine[] {
 export function BusinessConfigProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
   const [businessType, setBusinessTypeState] = useState<BusinessType>(DEFAULT_BUSINESS_TYPE);
-  const [serviceLines, setServiceLines] = useState<ServiceLine[]>(['rideshare']);
+  const [serviceLines, setServiceLines] = useState<ServiceLine[]>(
+    () => readCachedServiceLines() ?? ['rideshare'],
+  );
   const [isLoading, setIsLoading] = useState(true);
   const [reloadToken, setReloadToken] = useState(0);
 
@@ -70,6 +76,7 @@ export function BusinessConfigProvider({ children }: { children: React.ReactNode
         }
 
         setServiceLines(orgLines);
+        writeCachedServiceLines(orgLines);
         const derived = serviceLineToBusinessType(orgLines);
 
         if (prefs?.businessType && isValidBusinessType(prefs.businessType)) {
@@ -85,6 +92,7 @@ export function BusinessConfigProvider({ children }: { children: React.ReactNode
           const metaLines = normalizeServiceLines(session?.user?.user_metadata?.serviceLines);
           if (metaLines.length) {
             setServiceLines(metaLines);
+            writeCachedServiceLines(metaLines);
             const derived = serviceLineToBusinessType(metaLines);
             setBusinessTypeState(derived);
             localStorage.setItem('preference_business_type', derived);
