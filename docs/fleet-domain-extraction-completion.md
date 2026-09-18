@@ -1,6 +1,6 @@
 # Fleet domain extraction — completion playbook
 
-**Status (2026-09-17, Rev 10):** Extraction is **complete and deployed**. Six functions live; D9 browser pass closed; four external callers re-pointed; soak instruments armed (full offender tail + inventory-driven gate 3). **One gate remains: 7 consecutive `ok:true` soak days**, then retire `make-server-37f42386`.
+**Status (2026-09-17, Rev 12):** Extraction is **complete and deployed**. Six functions live; D9 closed; four external callers re-pointed; soak instruments armed and verified by arithmetic; gate 3 runs daily in soak CI. **One gate remains: 7 consecutive `ok:true` soak days**, then retire `make-server-37f42386`.
 
 **Nothing else is open.** See §1 for the clock and plateau watch.
 
@@ -10,23 +10,29 @@
 
 ## 1. What's left
 
-### 1.1 Instruments armed (Rev 10)
+### 1.1 Instruments armed and verified (Rev 10–12)
 
-Closed in this closeout:
+- **D13 / repo = production** — external-caller check, retire gate 3, `fleet_wipay` fleet-core URLs, and migration `20260917140000_rush_trip_recon_cron_fleet_core` are all **tracked in git** (`92d4fb11`, `da3d3f6e`). Working tree clean. The repo and the live DB now agree on the `pg_cron` schedule.
+- **Full soak tail** — `check-shim-traffic.mjs:277` persists every shim offender (`offenders.map(...)`, no slice). `--append-log` exits 2 on a multi-day window so it can never write empty `topOffenders`. `appendSoakLog` is idempotent (same-date replace, then sort), and a same-day re-run can only move a day redder, never greener.
+- **Inventory-driven gate 3** — `f5-external-callers-check.mjs` asserts every `callers[].shimPathSuffix` against the latest soak day; the Uber-only regex is gone. Runs clean: `4 cleared/fixed`, `4 suffixes checked`. `--force` still cannot skip it.
+- **Daily CI (Rev 12)** — `.github/workflows/shim-traffic-soak.yml` runs gate 3 after append, before commit-back. Callers red is non-fatal to the log write/commit; either traffic or callers red fails the job so a regression surfaces the next morning.
 
-- **D13 / repo = production** — external-caller check, retire gate 3, `fleet_wipay` fleet-core URLs, and migration `20260917140000_rush_trip_recon_cron_fleet_core` are in git (migration was already applied live).
-- **Full soak tail** — `check-shim-traffic.mjs` persists every shim offender (no `slice(0, 10)`). `--append-log` refuses multi-day windows so it cannot write empty `topOffenders`.
-- **Inventory-driven gate 3** — `f5-external-callers-check.mjs` asserts every `callers[].shimPathSuffix` against the latest soak day; Uber-only regex removed. `--force` still cannot skip this gate.
+**Verified by arithmetic, not assertion:**
 
-Day 1 history (2026-09-17 truncated row: nonHealth 157, top-10 sum 127) stays as evidence of the old bug. From the Rev 10 re-baseline forward, every path is attributable.
+| Day | non-health | paths stored | sum | unaccounted |
+|---|---|---|---|---|
+| 2026-09-16 | 4,368 | 10 | 3,073 | 1,295 ← old truncation, kept as evidence |
+| 2026-09-17 | 202 | **19** | **202** | **0** |
+
+From the Rev 10 re-baseline forward every request is attributable to a path. (Day 1 reads 202 rather than the earlier 157 because the re-baseline measured a later window — same day, more accumulated traffic.)
 
 ### 1.2 Let the tail decay, and watch for plateaus
 
-Both early soak days are `ok:false` (4,368 → 157). The streak starts the first day `nonHealth` hits **0** — a single non-health request fails the day, and that is intended. Do not reach for `--force`.
+Both early soak days are `ok:false` (4,368 → 202 on the full-tail re-baseline). The streak starts the first day `nonHealth` hits **0** — a single non-health request fails the day, and that is intended. Do not reach for `--force`.
 
 With the four known external callers re-pointed, the remainder should be stale clients (cached bundles, un-updated apps) decaying as caches expire. **A path that plateaus instead of falling across 2–3 red days is a fifth external caller you have not found** — add it to [`docs/f5-external-callers.json`](./f5-external-callers.json), re-point, then continue. Full-tail persistence is what makes that signal visible.
 
-Daily: CI workflow `shim-traffic-soak.yml` appends [`docs/f5-soak-log.json`](./f5-soak-log.json), or run `pnpm check:shim-traffic:log` locally (`ROAM_MGMT_PAT` or `SUPABASE_ACCESS_TOKEN`). After each append: `pnpm f5:external-callers`.
+Daily: CI workflow `shim-traffic-soak.yml` appends [`docs/f5-soak-log.json`](./f5-soak-log.json) **and** runs `f5-external-callers-check` (primary). Local optional: `pnpm check:shim-traffic:log` then `pnpm f5:external-callers` (`ROAM_MGMT_PAT` or `SUPABASE_ACCESS_TOKEN`).
 
 At **7 consecutive `ok:true`** ending today or yesterday UTC: `pnpm f5:retire-shim` → commit → CI. Never `--force`.
 
@@ -57,7 +63,7 @@ All six boot via `createFleetFunction` (`_shared/edgeKernel.ts`), which owns pat
 
 **Pass rule:** 7 consecutive calendar days with `ok: true` in [`docs/f5-soak-log.json`](./f5-soak-log.json) **and** `check-shim-traffic --days 7` exit 0. Only `/health` and `/ready` are ignored.
 
-**Commands:** `pnpm check:shim-traffic` · `pnpm check:shim-traffic:log` (append today's row). Auth: `ROAM_MGMT_PAT` or `SUPABASE_ACCESS_TOKEN`. Daily workflow `.github/workflows/shim-traffic-soak.yml` commits the log back on red *and* green.
+**Commands:** `pnpm check:shim-traffic` · `pnpm check:shim-traffic:log` (append today's row). Auth: `ROAM_MGMT_PAT` or `SUPABASE_ACCESS_TOKEN`. Daily workflow `.github/workflows/shim-traffic-soak.yml` appends the log, runs gate 3 (`f5-external-callers-check`), and commits the log back on red *and* green (callers red does not block commit-back; either red fails the job).
 
 **`pnpm f5:retire-shim` has three prechecks:**
 
@@ -205,6 +211,8 @@ Big-bang extraction · merging into `fuel-brain`/`toll-brain` (different service
 | D9 authenticated pass | 2026-09-17 | **CLOSED** — six slugs PASS with per-row evidence |
 | **Rev 9 audit** | **2026-09-17** | Gates green. Open then: §1.1 commit/push, §1.2 soak-log truncation |
 | **Rev 10 closeout** | **2026-09-17** | Full offender persist; inventory `shimPathSuffix` asserts; D13 commit/push; only the 7-day clock remains |
+| **Rev 11 audit** | **2026-09-17** | **Rev 10 verified by arithmetic**, not assertion: Day 1 = 202 non-health across 19 paths, sum 202, **0 unaccounted**. Gap then: gate 3 not in daily soak workflow |
+| **Rev 12 closeout** | **2026-09-17** | Gate 3 in `shim-traffic-soak.yml` (after append, before commit-back; non-fatal to log write; fatal to job). Only the 7-day clock remains |
 
 ---
 
@@ -215,13 +223,14 @@ Read docs/fleet-domain-extraction-completion.md §1 + docs/f5-soak-log.json
 + docs/f5-external-callers.json.
 
 Extraction is COMPLETE and deployed. Six functions live, D9 closed, four external
-callers re-pointed, soak instruments armed (Rev 10). Do NOT redo any of it, and
-read §7 before proposing anything — those questions are settled.
+callers re-pointed, soak instruments armed and verified (Rev 11 arithmetic), gate 3
+runs daily in soak CI (Rev 12). Do NOT redo any of it, and read §7 before proposing
+anything — those questions are settled.
 
 IT IS ONLY THE CLOCK.
 
-1) Let the tail decay to 0. Daily: pnpm check:shim-traffic:log (or CI soak workflow)
-   then pnpm f5:external-callers. The streak starts the first ok:true day; one
+1) Let the tail decay to 0. Daily CI: shim-traffic-soak.yml appends the log and runs
+   f5-external-callers-check. The streak starts the first ok:true day; one
    non-health request fails the day and that is intended.
 2) A path that PLATEAUS rather than falls across 2–3 red days is a fifth external
    caller — add to f5-external-callers.json, re-point, do not --force.

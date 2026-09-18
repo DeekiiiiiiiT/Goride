@@ -1,9 +1,11 @@
 name: Shim traffic soak (F5)
 
-# Daily N=7 soak gate: fail if make-server-37f42386 has non-health traffic.
+# Daily N=7 soak gate: fail if make-server-37f42386 has non-health traffic
+# AND inventory gate 3 (f5-external-callers-check) if any shimPathSuffix reappears.
 # Auth: ROAM_MGMT_PAT or SUPABASE_ACCESS_TOKEN (same Supabase account access token).
 # Appends docs/f5-soak-log.json and commits it back (red + green) so the
 # retire-shim streak guard reads git truth - not an expiring artifact alone.
+# Callers check is non-fatal to append/commit; either red fails the job at the end.
 # Optional: SOAK_LOG_GIT_TOKEN (repo contents) if branch protection blocks GITHUB_TOKEN.
 
 on:
@@ -51,6 +53,15 @@ jobs:
           # Preserve exit for the final step; still allow commit-back below.
           echo "$STATUS" > /tmp/soak-check-exit
         id: traffic
+      - name: f5-external-callers-check (gate 3 daily)
+        if: always()
+        run: |
+          set +e
+          node scripts/f5-external-callers-check.mjs
+          STATUS=$?
+          set -e
+          echo "$STATUS" > /tmp/callers-check-exit
+          # Non-zero is preserved for final propagate; do not exit here.
       - name: Upload soak log artifact
         if: always()
         uses: actions/upload-artifact@v4
@@ -85,11 +96,19 @@ jobs:
             exit 1
           fi
           echo "Committed and pushed soak log (${DAY})"
-      - name: Propagate traffic check exit
+      - name: Propagate soak gate exits
         if: always()
         run: |
-          STATUS=0
+          TRAFFIC=0
+          CALLERS=0
           if [ -f /tmp/soak-check-exit ]; then
-            STATUS=$(cat /tmp/soak-check-exit)
+            TRAFFIC=$(cat /tmp/soak-check-exit)
           fi
-          exit "$STATUS"
+          if [ -f /tmp/callers-check-exit ]; then
+            CALLERS=$(cat /tmp/callers-check-exit)
+          fi
+          echo "traffic_exit=$TRAFFIC callers_exit=$CALLERS"
+          if [ "$TRAFFIC" != "0" ]; then
+            exit "$TRAFFIC"
+          fi
+          exit "$CALLERS"
