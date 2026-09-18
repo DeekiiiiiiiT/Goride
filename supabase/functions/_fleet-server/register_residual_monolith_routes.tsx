@@ -13015,6 +13015,12 @@ export function registerResidualMonolithRoutes(app: Hono) {
         }
       }
 
+      // Opt-in forensic tab — gated by feature_flag:driver_activity (not enterprise catalog)
+      effectiveModules.driver_activity = await isFeatureEnabled(
+        FEATURE_FLAGS.DRIVER_ACTIVITY,
+        orgId,
+      );
+
       return c.json({
         orgId,
         productLine: org.product_line,

@@ -58,10 +58,39 @@ export function applyFuelMatchLinks(
     },
   };
 
+  // Split card sibling: cash owns pump liters — never take statement volume into ops totals.
+  const isSplitNonVolumeOwner =
+    drvMeta.splitVolumeOwner === false &&
+    typeof drvMeta.fillGroupId === "string" &&
+    String(drvMeta.fillGroupId).length > 0;
+
+  const stmtLitersNum = stmtLiters;
+  const matchedLiters = isSplitNonVolumeOwner ? 0 : (stmt.liters ?? drv.liters);
+  const matchedCountsVolume = isSplitNonVolumeOwner
+    ? false
+    : Number(stmt.liters) > 0;
+
+  let splitReconPatch: Record<string, unknown> = {};
+  if (isSplitNonVolumeOwner) {
+    const expected = Math.abs(Number(drvMeta.splitExpectedCardAmount) || 0);
+    const pumpTotal = Math.abs(Number(drvMeta.splitPumpTotal) || 0);
+    const stmtAmt = Math.abs(stmtAmount);
+    const delta = Math.round((stmtAmt - expected) * 100) / 100;
+    const tolerance = Math.max(50, pumpTotal * 0.01);
+    const reconciled = Math.abs(delta) <= tolerance;
+    splitReconPatch = {
+      splitReconciled: reconciled,
+      splitVariance: !reconciled,
+      splitVarianceDelta: delta,
+      splitStatementAmount: stmtAmt,
+      ...(stmtLitersNum != null ? { splitStatementLiters: stmtLitersNum } : {}),
+    };
+  }
+
   const driver: Record<string, unknown> = {
     ...drv,
     amount: stmt.amount,
-    liters: stmt.liters ?? drv.liters,
+    liters: matchedLiters,
     pricePerLiter: stmtPpl ?? drv.pricePerLiter,
     location: drv.location || stmt.location,
     cardId: stmt.cardId || drv.cardId,
@@ -71,7 +100,7 @@ export function applyFuelMatchLinks(
       ...drvMeta,
       awaitingCardStatement: false,
       countsInFuelSpend: true,
-      countsInFuelVolume: Number(stmt.liters) > 0,
+      countsInFuelVolume: matchedCountsVolume,
       jaaMatchedStatementId: stmt.id,
       jaaMatchStatus: pair.status,
       jaaMatchedAt: new Date().toISOString(),
@@ -81,6 +110,7 @@ export function applyFuelMatchLinks(
       jaaMatchScore: (pair as { score?: number }).score,
       priorDriverAmount: drv.amount,
       priorDriverLiters: drv.liters,
+      ...splitReconPatch,
     },
   };
 
@@ -113,6 +143,36 @@ export async function persistFuelMatchPair(
 
   await kv.set(`fuel_entry:${linked.statement.id}`, linked.statement);
   await kv.set(`fuel_entry:${linked.driver.id}`, linked.driver);
+
+  // Mirror split recon flags onto cash sibling transaction (Review Queue surface).
+  try {
+    const drvMeta = metaOf(linked.driver);
+    const fillGroupId = typeof drvMeta.fillGroupId === "string" ? drvMeta.fillGroupId : "";
+    if (fillGroupId && (drvMeta.splitVariance === true || drvMeta.splitReconciled === true)) {
+      const txs = (await kv.getByPrefix("transaction:")) || [];
+      for (const raw of txs) {
+        const tx = raw as Record<string, unknown>;
+        const tm = metaOf(tx);
+        if (tm.fillGroupId !== fillGroupId || tm.splitRole !== "cash") continue;
+        const patched = {
+          ...tx,
+          metadata: {
+            ...tm,
+            splitReconciled: drvMeta.splitReconciled === true,
+            splitVariance: drvMeta.splitVariance === true,
+            splitVarianceDelta: drvMeta.splitVarianceDelta,
+            splitStatementAmount: drvMeta.splitStatementAmount,
+            splitExpectedCardAmount: drvMeta.splitExpectedCardAmount,
+            splitPumpTotal: drvMeta.splitPumpTotal,
+          },
+        };
+        await kv.set(`transaction:${tx.id}`, patched);
+        break;
+      }
+    }
+  } catch (sibErr) {
+    console.error("[persistFuelMatchPair] split cash sibling stamp failed (non-fatal)", sibErr);
+  }
 
   // Reload after cycle stamp so attach reads latest money/odo/meta
   const statementFresh =

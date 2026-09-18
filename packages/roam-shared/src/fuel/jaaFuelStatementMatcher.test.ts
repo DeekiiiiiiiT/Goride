@@ -283,6 +283,83 @@ describe('matchJaaStatementToDriverLogs', () => {
   });
 });
 
+describe('applyFuelMatchLinks split volume owner', () => {
+  it('keeps liters at 0 and stamps recon when card is non-volume owner', () => {
+    const statement = entry({
+      id: 'stmt-split',
+      amount: 3500,
+      liters: 20,
+      entrySource: 'fuel-card',
+      metadata: { importSource: 'jaa_raw' },
+    });
+    const driver = entry({
+      id: 'drv-split',
+      amount: 0,
+      liters: 0,
+      entrySource: 'driver-portal',
+      paymentSource: 'Gas_Card',
+      entryMode: 'Anchor',
+      metadata: {
+        awaitingCardStatement: true,
+        fillGroupId: 'fg-1',
+        splitRole: 'card',
+        splitPumpTotal: 5000,
+        splitExpectedCardAmount: 3500,
+        splitVolumeOwner: false,
+        countsInFuelSpend: false,
+        countsInFuelVolume: false,
+      },
+    });
+    const linked = applyFuelMatchLinks({
+      status: 'matched',
+      statementEntry: statement,
+      driverEntry: driver,
+      score: 90,
+      notes: 'test',
+    });
+    expect(linked.driver?.amount).toBe(3500);
+    expect(linked.driver?.liters).toBe(0);
+    expect(linked.driver?.metadata?.countsInFuelVolume).toBe(false);
+    expect(linked.driver?.metadata?.countsInFuelSpend).toBe(true);
+    expect(linked.driver?.metadata?.splitStatementLiters).toBe(20);
+    expect(linked.driver?.metadata?.splitReconciled).toBe(true);
+    expect(linked.driver?.metadata?.splitVariance).toBe(false);
+  });
+
+  it('flags split variance when statement amount differs beyond tolerance', () => {
+    const statement = entry({
+      id: 'stmt-var',
+      amount: 4200,
+      liters: 22,
+      entrySource: 'fuel-card',
+      metadata: { importSource: 'jaa_raw' },
+    });
+    const driver = entry({
+      id: 'drv-var',
+      amount: 0,
+      liters: 0,
+      entrySource: 'driver-portal',
+      paymentSource: 'Gas_Card',
+      metadata: {
+        fillGroupId: 'fg-2',
+        splitVolumeOwner: false,
+        splitPumpTotal: 5000,
+        splitExpectedCardAmount: 3500,
+      },
+    });
+    const linked = applyFuelMatchLinks({
+      status: 'matched',
+      statementEntry: statement,
+      driverEntry: driver,
+      score: 90,
+      notes: 'test',
+    });
+    expect(linked.driver?.liters).toBe(0);
+    expect(linked.driver?.metadata?.splitVariance).toBe(true);
+    expect(linked.driver?.metadata?.splitReconciled).toBe(false);
+  });
+});
+
 describe('hydrateStatementsFromCards', () => {
   it('attributes blank driver from card history at statement time after handoff', () => {
     const statements = [

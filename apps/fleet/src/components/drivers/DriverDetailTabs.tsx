@@ -15,6 +15,7 @@ import type {
   QuotaConfig,
   Trip,
 } from '../../types/data';
+import { useFeatureFlags } from '../auth/FeatureFlagContext';
 const DriverProfileTab = React.lazy(() =>
   import('./tabs/DriverProfileTab').then((m) => ({ default: m.DriverProfileTab })),
 );
@@ -98,12 +99,17 @@ export type DriverDetailTabsProps = {
 };
 
 export function DriverDetailTabs(p: DriverDetailTabsProps) {
+  const { isModuleEnabled } = useFeatureFlags();
+  const activityEnabled = isModuleEnabled('driver_activity');
+
   return (
     <Tabs value={p.activeTab} className="space-y-4" onValueChange={p.onTabChange}>
       <TabsList>
         <TabsTrigger value="overview" aria-label="Overview tab">Overview</TabsTrigger>
         <TabsTrigger value="financial" aria-label="Financials tab">Financials</TabsTrigger>
-        <TabsTrigger value="activity" aria-label="Activity tab">Activity</TabsTrigger>
+        {activityEnabled && (
+          <TabsTrigger value="activity" aria-label="Activity tab">Activity</TabsTrigger>
+        )}
         <TabsTrigger value="quality" aria-label="Service Quality tab">Service Quality</TabsTrigger>
         <TabsTrigger value="wallet" aria-label="Cash Wallet tab">Cash Wallet</TabsTrigger>
         <TabsTrigger value="profile" aria-label="Profile tab">Profile</TabsTrigger>
@@ -231,14 +237,16 @@ export function DriverDetailTabs(p: DriverDetailTabsProps) {
         </Suspense>
       </TabsContent>
 
-      <TabsContent value="activity" className="space-y-6">
-        <Suspense fallback={SpinFallback}>
-          <DriverActivityTab
-            driverId={p.driverId}
-            selectedPlatforms={p.selectedPlatforms}
-          />
-        </Suspense>
-      </TabsContent>
+      {activityEnabled && (
+        <TabsContent value="activity" className="space-y-6">
+          <Suspense fallback={SpinFallback}>
+            <DriverActivityTab
+              driverId={p.driverId}
+              selectedPlatforms={p.selectedPlatforms}
+            />
+          </Suspense>
+        </TabsContent>
+      )}
 
       <TabsContent value="quality" className="space-y-6">
         {p.performanceLoading ? (

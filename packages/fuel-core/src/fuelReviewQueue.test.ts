@@ -128,6 +128,23 @@ describe('countFuelReviewQueueWork', () => {
     const c = countFuelReviewQueueWork(rows);
     expect(c.logReview).toBe(1);
     expect(c.pendingReady).toBe(1);
+    expect(c.splitVariance).toBe(0);
     expect(c.total).toBe(2);
+  });
+
+  it('counts unresolved split variance', () => {
+    const rows = [
+      tx({
+        id: 'split',
+        metadata: {
+          fillGroupId: 'fg-1',
+          splitVariance: true,
+          splitReconciled: false,
+        },
+      }),
+    ];
+    const c = countFuelReviewQueueWork(rows);
+    expect(c.splitVariance).toBe(1);
+    expect(c.total).toBeGreaterThanOrEqual(1);
   });
 });

@@ -1,6 +1,10 @@
 import type { TripSession } from './tripSession';
 
-export type OfflineActionType = 'SUBMIT_TRIP' | 'SUBMIT_FUEL_EXPENSE' | 'SUBMIT_GAS_CARD_ANCHOR';
+export type OfflineActionType =
+  | 'SUBMIT_TRIP'
+  | 'SUBMIT_FUEL_EXPENSE'
+  | 'SUBMIT_GAS_CARD_ANCHOR'
+  | 'SUBMIT_SPLIT_FUEL_FILL';
 
 export interface SubmitTripPayload {
   tripData: Partial<TripSession>;
@@ -36,6 +40,20 @@ export interface SubmitGasCardAnchorPayload {
   label?: string;
 }
 
+/** Atomic Gas Card + Cash split — both rows or neither. */
+export interface SubmitSplitFuelFillPayload {
+  fillGroupId: string;
+  cashTransaction: Record<string, any>;
+  cardFuelEntry: Record<string, any>;
+  odometerBlobKey?: string;
+  receiptBlobKey?: string;
+  odometerFileName?: string;
+  receiptFileName?: string;
+  odometerMimeType?: string;
+  receiptMimeType?: string;
+  label?: string;
+}
+
 export type OfflineAction =
   | {
       id: string;
@@ -57,6 +75,14 @@ export type OfflineAction =
       id: string;
       type: 'SUBMIT_GAS_CARD_ANCHOR';
       payload: SubmitGasCardAnchorPayload;
+      timestamp: number;
+      retryCount: number;
+      lastError?: string;
+    }
+  | {
+      id: string;
+      type: 'SUBMIT_SPLIT_FUEL_FILL';
+      payload: SubmitSplitFuelFillPayload;
       timestamp: number;
       retryCount: number;
       lastError?: string;

@@ -166,4 +166,48 @@ describe('computeDriverOperationalMetrics', () => {
     expect(r.cancellationRate).toBe(rates.cancellationRate);
     expect(r.acceptanceRate).toBe(rates.acceptanceRate);
   });
+
+  it('fills Uber Open km from CSV when trips lack normalizedOpenDistance', () => {
+    const tripDate = '2026-03-10T12:00:00';
+    const trip: Trip = {
+      id: 't1',
+      date: tripDate,
+      requestTime: '2026-03-10T11:50:00',
+      pickupTime: '2026-03-10T12:00:00',
+      dropoffTime: '2026-03-10T12:30:00',
+      platform: 'Uber',
+      status: 'Completed',
+      amount: 1000,
+      distance: 12,
+      duration: 30,
+    } as Trip;
+
+    const r = computeDriverOperationalMetrics({
+      ...baseInput,
+      driver: { id: 'd1', uberDriverId: 'uber-uuid-1' },
+      allTrips: [trip],
+      dateRange: {
+        from: new Date(2026, 2, 10),
+        to: new Date(2026, 2, 10),
+      },
+      csvMetrics: [
+        {
+          id: 'dm1',
+          driverId: 'uber-uuid-1',
+          periodStart: '2026-03-10T00:00:00.000Z',
+          periodEnd: '2026-03-10T23:59:59.000Z',
+          onTripDistance: 12,
+          openDistance: 40,
+          enrouteDistance: 5,
+          unavailableDistance: 2,
+          openTime: 1.5,
+          dataSources: ['time_distance'],
+        } as any,
+      ],
+    });
+
+    expect(r.distanceMetrics.open).toBe(40);
+    expect(r.perPlatformDistance.Uber.open).toBe(40);
+    expect(r.tripRatio.available).toBe(1.5);
+  });
 });

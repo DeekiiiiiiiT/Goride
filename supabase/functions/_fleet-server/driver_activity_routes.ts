@@ -10,6 +10,7 @@ import { appendDriverAuditEvent } from "./drivers_audit.ts";
 import { isFeatureEnabled, FEATURE_FLAGS } from "./feature_flags.ts";
 import * as kv from "./kv_store.tsx";
 import {
+  buildCoverageBySource,
   buildCoverageWindows,
   clampActivityWindow,
   clusterEventsByJob,
@@ -19,8 +20,11 @@ import {
   mapDeliveryStatusToCanonical,
   mapOfferStatusToCanonical,
   mapRidesAuditToCanonical,
+  presenceCoverageKeys,
   presenceToCanonical,
+  sourceFullyRecorded,
   sumSegmentSeconds,
+  tripCoverageKeys,
   type ActivityEventLike,
 } from "./driver_activity_logic.ts";
 
@@ -171,14 +175,18 @@ async function ingestRidesLane(sb: SupabaseClient, ridesDb: SupabaseClient): Pro
   scanned: number;
   inserted: number;
   conflicted: number;
+  unmapped: number;
+  unmappedTypes: string[];
   ok: boolean;
   error?: string;
 }> {
   try {
-    const wm = await getWatermark(sb, "rides.audit_events");
+    const fleet = serviceClient();
+    const wm = await getWatermark(fleet, "rides.audit_events");
+    // First run: look back far enough to cover historical append-only sources (coverage from 2025-01-01)
     const overlapStart = wm?.last_occurred_at
       ? new Date(Date.parse(wm.last_occurred_at) - 5 * 60_000).toISOString()
-      : new Date(Date.now() - 30 * 86400000).toISOString();
+      : "2025-01-01T00:00:00.000Z";
 
     const { data: audits, error } = await ridesDb
       .from("audit_events")
@@ -192,22 +200,55 @@ async function ingestRidesLane(sb: SupabaseClient, ridesDb: SupabaseClient): Pro
     const rows: Array<Omit<ProjectionRow, "id" | "ingested_at">> = [];
     const rideIds = [...new Set((audits || []).map((a: any) => a.ride_request_id).filter(Boolean))];
     const assignedByRide = new Map<string, string>();
+    const cancelledByRide = new Map<string, string>();
     if (rideIds.length) {
       const { data: rides } = await ridesDb
         .from("ride_requests")
-        .select("id, assigned_driver_user_id")
+        .select("id, assigned_driver_user_id, cancelled_by")
         .in("id", rideIds.slice(0, 1000));
       for (const r of rides || []) {
         if (r.assigned_driver_user_id) {
           assignedByRide.set(String(r.id), String(r.assigned_driver_user_id));
         }
+        if ((r as any).cancelled_by) {
+          cancelledByRide.set(String(r.id), String((r as any).cancelled_by));
+        }
       }
     }
 
+    const unmappedTypes = new Set<string>();
+    let unmapped = 0;
     for (const a of audits || []) {
-      const canonical = mapRidesAuditToCanonical(a.event_type, a.payload || {});
-      if (!canonical) continue;
-      const driverId = String(a.actor_user_id || assignedByRide.get(String(a.ride_request_id)) || "").trim();
+      const rawType = String(a.event_type || "");
+      const rideId = a.ride_request_id ? String(a.ride_request_id) : "";
+      const payload: Record<string, unknown> = {
+        ...(a.payload || {}),
+        raw_event_type: rawType,
+      };
+      // Enrich cancel party from ride_requests (audit payload often lacks cancelled_by)
+      if (rideId && cancelledByRide.has(rideId) && !payload.cancelled_by) {
+        payload.cancelled_by = cancelledByRide.get(rideId);
+      }
+      if (rawType === "admin_ride_force_complete") payload.action = "force_complete";
+      if (rawType === "admin_ride_force_cancel") payload.action = "force_cancel";
+
+      const canonical = mapRidesAuditToCanonical(rawType, payload);
+      if (!canonical) {
+        // Ignore known non-timeline noise (fare/config); count true gaps
+        const lower = rawType.toLowerCase();
+        if (
+          lower &&
+          !lower.startsWith("fare_") &&
+          !lower.includes("vehicle") &&
+          !lower.includes("config") &&
+          lower !== "fare_quoted"
+        ) {
+          unmapped++;
+          unmappedTypes.add(rawType);
+        }
+        continue;
+      }
+      const driverId = String(a.actor_user_id || assignedByRide.get(rideId) || "").trim();
       if (!driverId) continue;
       const orgId = (await orgForDriver(driverId)) || "unknown";
       rows.push({
@@ -218,9 +259,10 @@ async function ingestRidesLane(sb: SupabaseClient, ridesDb: SupabaseClient): Pro
         source_event_id: String(a.id),
         event_type: canonical,
         occurred_at: a.created_at,
-        job_ref: a.ride_request_id ? String(a.ride_request_id) : null,
+        job_ref: rideId || null,
         job_seq: null,
-        payload: stripCoords({ ...(a.payload || {}), raw_event_type: a.event_type }),
+        // M2: retain coords; strip at read when viewer lacks drivers.location.view
+        payload,
       });
     }
 
@@ -255,12 +297,32 @@ async function ingestRidesLane(sb: SupabaseClient, ridesDb: SupabaseClient): Pro
     const result = await insertProjectionRows(sb, rows);
     if ((audits || []).length) {
       const last = audits![audits!.length - 1];
-      await setWatermark(sb, "rides.audit_events", last.created_at, String(last.id));
+      await setWatermark(fleet, "rides.audit_events", last.created_at, String(last.id));
     }
-    return { scanned: (audits || []).length + (offers || []).length, ...result, ok: true };
+    if (unmapped > 0) {
+      console.warn("[activity_ingest] unmapped_event_types", {
+        unmapped,
+        types: [...unmappedTypes],
+      });
+    }
+    return {
+      scanned: (audits || []).length + (offers || []).length,
+      ...result,
+      unmapped,
+      unmappedTypes: [...unmappedTypes],
+      ok: true,
+    };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
-    return { scanned: 0, inserted: 0, conflicted: 0, ok: false, error: msg };
+    return {
+      scanned: 0,
+      inserted: 0,
+      conflicted: 0,
+      unmapped: 0,
+      unmappedTypes: [],
+      ok: false,
+      error: msg,
+    };
   }
 }
 
@@ -272,12 +334,13 @@ async function ingestPresenceLane(sb: SupabaseClient): Promise<{
   error?: string;
 }> {
   try {
-    const wm = await getWatermark(sb, "fleet.driver_presence_log");
+    const fleet = serviceClient();
+    const wm = await getWatermark(fleet, "fleet.driver_presence_log");
     const overlapStart = wm?.last_occurred_at
       ? new Date(Date.parse(wm.last_occurred_at) - 5 * 60_000).toISOString()
-      : new Date(Date.now() - 30 * 86400000).toISOString();
+      : "2025-01-01T00:00:00.000Z";
 
-    const { data, error } = await sb
+    const { data, error } = await fleet
       .from("fleet_driver_presence_log")
       .select("id, user_id, service_line, is_online, occurred_at, reason, payload")
       .gte("occurred_at", overlapStart)
@@ -300,17 +363,21 @@ async function ingestPresenceLane(sb: SupabaseClient): Promise<{
         occurred_at: p.occurred_at,
         job_ref: null,
         job_seq: null,
-        payload: stripCoords({ reason: p.reason, ...(p.payload || {}) }),
+        payload: { reason: p.reason, ...(p.payload || {}) },
       });
     }
     const result = await insertProjectionRows(sb, rows);
     if ((data || []).length) {
       const last = data![data!.length - 1];
-      await setWatermark(sb, "fleet.driver_presence_log", last.occurred_at, String(last.id));
+      await setWatermark(fleet, "fleet.driver_presence_log", last.occurred_at, String(last.id));
     }
     return { scanned: (data || []).length, ...result, ok: true };
   } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
+    const msg = e instanceof Error
+      ? e.message
+      : (typeof e === "object" && e && "message" in e)
+      ? String((e as { message: unknown }).message)
+      : JSON.stringify(e);
     return { scanned: 0, inserted: 0, conflicted: 0, ok: false, error: msg };
   }
 }
@@ -323,10 +390,11 @@ async function ingestDeliveryLane(sb: SupabaseClient, deliveryDb: SupabaseClient
   error?: string;
 }> {
   try {
-    const wm = await getWatermark(sb, "delivery.order_events");
+    const fleet = serviceClient();
+    const wm = await getWatermark(fleet, "delivery.order_events");
     const overlapStart = wm?.last_occurred_at
       ? new Date(Date.parse(wm.last_occurred_at) - 5 * 60_000).toISOString()
-      : new Date(Date.now() - 30 * 86400000).toISOString();
+      : "2025-01-01T00:00:00.000Z";
 
     const { data: events, error } = await deliveryDb
       .from("order_events")
@@ -367,17 +435,21 @@ async function ingestDeliveryLane(sb: SupabaseClient, deliveryDb: SupabaseClient
         occurred_at: e.created_at,
         job_ref: e.order_id ? String(e.order_id) : null,
         job_seq: null,
-        payload: stripCoords({ status: e.status, notes: e.notes }),
+        payload: { status: e.status, notes: e.notes },
       });
     }
     const result = await insertProjectionRows(sb, rows);
     if ((events || []).length) {
       const last = events![events!.length - 1];
-      await setWatermark(sb, "delivery.order_events", last.created_at, String(last.id));
+      await setWatermark(fleet, "delivery.order_events", last.created_at, String(last.id));
     }
     return { scanned: (events || []).length, ...result, ok: true };
   } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
+    const msg = e instanceof Error
+      ? e.message
+      : (typeof e === "object" && e && "message" in e)
+      ? String((e as { message: unknown }).message)
+      : JSON.stringify(e);
     return { scanned: 0, inserted: 0, conflicted: 0, ok: false, error: msg };
   }
 }
@@ -408,11 +480,11 @@ async function ingestAdminLane(sb: SupabaseClient, driverIdFilter?: string): Pro
         occurred_at: at,
         job_ref: null,
         job_seq: null,
-        payload: stripCoords({
+        payload: {
           action: (r as any).action,
           reason: (r as any).reason,
           actorId: (r as any).actorId,
-        }),
+        },
       });
     }
     const result = await insertProjectionRows(sb, projection);
@@ -450,7 +522,7 @@ export function registerDriverActivityRoutes(app: Hono) {
     const ridesDb = serviceClient("rides");
     const deliveryDb = serviceClient("delivery");
     const body = await c.req.json().catch(() => ({}));
-    const lanes = String((body as any).lanes || "rides,presence,delivery").split(",").map((s: string) => s.trim());
+    const lanes = String((body as any).lanes || "rides,presence,delivery,admin").split(",").map((s: string) => s.trim());
 
     const results: Record<string, unknown> = {};
     if (lanes.includes("presence")) results.presence = await ingestPresenceLane(sb);
@@ -600,23 +672,34 @@ export function registerDriverActivityRoutes(app: Hono) {
       const lanes: Array<{ serviceLine: string; ok: boolean; error?: string }> = [];
 
       const coverageRows = await loadCoverage(sb, serviceLines);
-      const coverage = buildCoverageWindows(
-        window.from,
-        window.to,
-        coverageRows.map((r) => ({
-          covered_from: r.covered_from,
-          covered_to: r.covered_to,
-          note: r.note,
-        })),
-      );
+      const coverageBySource = buildCoverageBySource(window.from, window.to, coverageRows);
+      // Banner summary: presence-aware — do NOT union all sources (C4)
+      const presenceKeys = presenceCoverageKeys(coverageBySource);
+      const tripKeys = tripCoverageKeys(coverageBySource);
+      const presenceWindows = presenceKeys.flatMap((k) => coverageBySource[k] || []);
+      const tripWindows = tripKeys.flatMap((k) => coverageBySource[k] || []);
+      const presenceRecorded = presenceWindows.length > 0 && presenceWindows.some((w) => w.recorded);
+      const tripsRecorded = tripWindows.length > 0 && tripWindows.some((w) => w.recorded);
+      // Prefer presence windows for top-level coverage when present; else trips
+      const coverage = presenceWindows.length
+        ? (presenceKeys[0] ? coverageBySource[presenceKeys[0]] : presenceWindows)
+        : tripKeys[0]
+        ? coverageBySource[tripKeys[0]]
+        : buildCoverageWindows(window.from, window.to, []);
 
-      const whollyUncovered = coverage.length > 0 && coverage.every((w) => !w.recorded);
+      const whollyUncovered = !presenceRecorded && !tripsRecorded;
       if (whollyUncovered) {
         return c.json({
           success: true,
           orgId,
           window,
           coverage,
+          coverageBySource,
+          coverageHonesty: {
+            presenceRecorded: false,
+            tripsRecorded: false,
+            message: "Activity was not recorded for this window.",
+          },
           segments: [],
           data: [],
           nextCursor: null,
@@ -752,6 +835,16 @@ export function registerDriverActivityRoutes(app: Hono) {
         orgId,
         window,
         coverage,
+        coverageBySource,
+        coverageHonesty: {
+          presenceRecorded,
+          tripsRecorded,
+          message: !presenceRecorded && tripsRecorded
+            ? "Trips recorded · presence not recorded"
+            : presenceRecorded && !tripsRecorded
+            ? "Presence recorded · trip events not recorded"
+            : undefined,
+        },
         segments,
         data: sanitized,
         clusters: clustered,
@@ -826,11 +919,17 @@ export function registerDriverActivityRoutes(app: Hono) {
       const sessionsClosedByTimeout = segments.filter((s) => s.closedBy === "timeout").length;
 
       const coverageRows = await loadCoverage(sb, serviceLines);
-      const coverage = buildCoverageWindows(window.from, window.to, coverageRows);
-      const anyRecorded = coverage.some((w) => w.recorded);
+      const coverageBySource = buildCoverageBySource(window.from, window.to, coverageRows);
+      const presenceKeys = presenceCoverageKeys(coverageBySource);
+      const tripKeys = tripCoverageKeys(coverageBySource);
+      const presenceOk = presenceKeys.some((k) => sourceFullyRecorded(coverageBySource[k] || []));
+      const tripsOk = tripKeys.some((k) =>
+        (coverageBySource[k] || []).some((w) => w.recorded),
+      );
+      const anyRecorded = presenceOk || tripsOk;
       const basis = !anyRecorded
         ? "unavailable"
-        : coverage.some((w) => !w.recorded)
+        : !presenceOk || !tripsOk
         ? "partial"
         : "event";
 
@@ -850,6 +949,11 @@ export function registerDriverActivityRoutes(app: Hono) {
         basis,
         openSessionCount,
         sessionsClosedByTimeout,
+        coverageBySource,
+        coverageHonesty: {
+          presenceRecorded: presenceOk,
+          tripsRecorded: tripsOk,
+        },
       });
     },
   );

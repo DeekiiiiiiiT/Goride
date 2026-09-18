@@ -80,6 +80,8 @@ export const DEFAULT_ENTERPRISE_ENABLED_MODULES: EnterpriseEnabledModules = {
   rush_courier_settlements: true,
   rush_supply_health: true,
   rush_merchant_link: true,
+  /** Allowed by product line; org must opt in (see resolveEffectiveModules). */
+  fuelSplitPayment: true,
 };
 
 /** @deprecated Use DEFAULT_FLEET_ENABLED_MODULES */

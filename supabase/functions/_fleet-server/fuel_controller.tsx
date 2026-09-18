@@ -88,6 +88,7 @@ import {
   pickFleetVisibleEntryId,
   resolveLinkedFuelEntryIdsUnion,
 } from "./fuel_entry_pair.ts";
+import { persistSplitFill, assertSplitFillAllowed } from "./fuel_split_fill.ts";
 
 const app = new Hono();
 
@@ -211,6 +212,26 @@ app.post(`${BASE_PATH}/fuel/ensure-posted-entries`, requirePermission("fuel.view
   } catch (e: any) {
     console.error("[EnsurePosted] failed", e);
     return c.json({ error: e?.message || "Ensure failed" }, 500);
+  }
+});
+
+/** Atomic Gas Card + Cash split fill (idempotent on fillGroupId). */
+app.post(`${BASE_PATH}/fuel/split-fill`, async (c) => {
+  const gate = assertSplitFillAllowed(c);
+  if (!gate.allowed) return c.json(gate.body, gate.status);
+  try {
+    const body = await c.req.json();
+    const result = await persistSplitFill(c, body);
+    if (!result.ok) {
+      return c.json(
+        { error: result.error, code: result.code },
+        result.status as 400 | 409 | 500,
+      );
+    }
+    return c.json({ success: true, data: result.data });
+  } catch (e: any) {
+    console.error("[SplitFill] failed", e);
+    return c.json({ error: e?.message || "Split fill failed" }, 500);
   }
 });
 

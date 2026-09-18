@@ -115,6 +115,34 @@ export const fuelService = {
     return result.data || result;
   },
 
+  /** Atomic Gas Card + Cash — one pump stop, two ledger rows. */
+  async saveSplitFill(args: {
+    fillGroupId: string;
+    cashTransaction: Record<string, unknown>;
+    cardFuelEntry: Record<string, unknown>;
+  }): Promise<{
+    fillGroupId: string;
+    cashTransactionId: string;
+    cardFuelEntryId: string;
+    cashTransaction: Record<string, unknown>;
+    cardFuelEntry: Record<string, unknown>;
+    idempotent?: boolean;
+  }> {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/fuel/split-fill`, {
+      method: 'POST',
+      headers: await authHeaders(),
+      body: JSON.stringify(args),
+    });
+    if (!response.ok) {
+      await throwIfCatalogGateBlocked(response, 'Cannot save split fuel fill — vehicle is pending catalog approval');
+      const errorBody = await response.json().catch(() => ({}));
+      console.error('[FuelService] Save split fill failed:', response.status, errorBody);
+      throw new Error(errorBody.error || `Failed to save split fill (${response.status})`);
+    }
+    const result = await response.json();
+    return result.data || result;
+  },
+
   async deleteFuelEntry(id: string): Promise<void> {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/fuel-entries/${id}`, {
       method: 'DELETE',

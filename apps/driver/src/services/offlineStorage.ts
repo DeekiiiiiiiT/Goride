@@ -52,6 +52,12 @@ export const offlineStorage = {
     if (item?.type === 'SUBMIT_GAS_CARD_ANCHOR') {
       void offlineBlobStore.removeMany([item.payload.odometerBlobKey]);
     }
+    if (item?.type === 'SUBMIT_SPLIT_FUEL_FILL') {
+      void offlineBlobStore.removeMany([
+        item.payload.odometerBlobKey,
+        item.payload.receiptBlobKey,
+      ]);
+    }
   },
 
   saveQueue: (queue: OfflineAction[]) => {
@@ -71,6 +77,12 @@ export const offlineStorage = {
       }
       if (item.type === 'SUBMIT_GAS_CARD_ANCHOR') {
         void offlineBlobStore.removeMany([item.payload.odometerBlobKey]);
+      }
+      if (item.type === 'SUBMIT_SPLIT_FUEL_FILL') {
+        void offlineBlobStore.removeMany([
+          item.payload.odometerBlobKey,
+          item.payload.receiptBlobKey,
+        ]);
       }
     }
     localStorage.removeItem(STORAGE_KEY);

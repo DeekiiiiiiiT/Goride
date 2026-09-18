@@ -64,6 +64,7 @@ export const ENTERPRISE_MODULE_KEYS = [
   "rush_courier_settlements",
   "rush_supply_health",
   "rush_merchant_link",
+  "fuelSplitPayment",
 ] as const;
 
 export const RUSH_MODULE_KEYS = [
@@ -73,6 +74,9 @@ export const RUSH_MODULE_KEYS = [
   "rush_supply_health",
   "rush_merchant_link",
 ] as const;
+
+/** Org must set true — missing override stays off. */
+export const OPT_IN_MODULE_KEYS = ["fuelSplitPayment"] as const;
 
 /** Sync rush_* module keys from service_lines — RoamFleet is shared, not a Rush upsell. */
 export function rushModuleOverridesForServiceLines(
@@ -135,6 +139,7 @@ export const DEFAULT_ENTERPRISE_MODULES: Record<EnterpriseModuleKey, boolean> = 
   rush_courier_settlements: true,
   rush_supply_health: true,
   rush_merchant_link: true,
+  fuelSplitPayment: true,
 };
 
 export function normalizeModuleKeyMap(
@@ -158,8 +163,13 @@ export function resolveEffectiveModules(
   const pl = normalizeModuleKeyMap(productLine);
   const org = normalizeModuleKeyMap(orgOverrides);
   const effective: Record<string, boolean> = {};
+  const optIn = new Set<string>(OPT_IN_MODULE_KEYS);
   for (const key of ENTERPRISE_MODULE_KEYS) {
     const lineOn = pl[key] !== false;
+    if (optIn.has(key)) {
+      effective[key] = lineOn && org[key] === true;
+      continue;
+    }
     const orgOn = org[key] !== false;
     effective[key] = lineOn && orgOn;
   }

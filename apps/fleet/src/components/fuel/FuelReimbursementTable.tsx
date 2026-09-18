@@ -31,6 +31,7 @@ import {
     isLogReviewEligible,
     isPendingFuelQueueRow,
     isStationGateHeld,
+    isUnresolvedSplitVariance,
     metaFlagOn,
 } from '@roam/fuel-core';
 
@@ -424,12 +425,18 @@ export function FuelReimbursementTable({
                         Odometer review
                     </Badge>
                 )}
+                {isUnresolvedSplitVariance(tx) && (
+                    <Badge variant="outline" className="text-[9px] h-5 px-1.5 font-normal bg-rose-50 text-rose-800 border-rose-200">
+                        Split amount mismatch
+                    </Badge>
+                )}
             </>
         );
         const hasAny =
             isStationGateHeld(tx) ||
             metaFlagOn(tx.metadata?.automated) ||
-            isLogReviewEligible(tx);
+            isLogReviewEligible(tx) ||
+            isUnresolvedSplitVariance(tx);
         return (
             <div className="flex flex-wrap gap-1 items-center min-h-[1.25rem]">
                 {hasAny ? badges : <span className="text-xs text-slate-300">—</span>}

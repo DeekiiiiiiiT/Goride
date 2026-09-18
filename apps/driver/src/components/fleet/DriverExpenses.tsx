@@ -42,17 +42,24 @@ import { uploadEvidenceFile } from '../../services/uploadEvidence';
 import { EvidenceRetentionNotice } from '../evidence/EvidenceRetentionNotice';
 import { FinancialTransaction, TransactionCategory } from '../../types/data';
 import { StationProfile } from '../../types/station';
-import { PaymentMethodSelector } from './expenses/PaymentMethodSelector';
+import { PaymentMethodSelector, type FuelPaymentMethodSelect } from './expenses/PaymentMethodSelector';
 import { GasCardSummary, type FuelPumpStep } from './expenses/GasCardSummary';
 import { derivePricePerLiter } from './expenses/FuelCashInputs';
 import { ReceiptUploader } from './expenses/ReceiptUploader';
 import { PumpNumbersConfirm } from './expenses/PumpNumbersConfirm';
+import { SplitCashPortion } from './expenses/SplitCashPortion';
 import { OdometerScanner } from './common/OdometerScanner';
 import { fuelService } from '../../services/fuelService';
 import { findActiveFuelCardForSession } from '../../utils/fuelCardMatch';
 import type { FuelCard } from '../../types/fuel';
 import { useOffline } from '../providers/OfflineProvider';
 import { offlineBlobStore } from '../../services/offlineBlobStore';
+import { useFuelSplitPaymentEnabled } from '../../hooks/useFuelSplitPaymentEnabled';
+import {
+  buildCardSplitMetadata,
+  buildCashSplitMetadata,
+  validateSplitCashAmounts,
+} from '@roam/fuel-core';
 
 interface ExpenseLoggerProps {
   defaultOpen?: boolean;
@@ -67,6 +74,7 @@ type ViewState =
   | 'fuel_gps_retry'
   | 'method_select'
   | 'gas_card_details' // Gas Card only — never shares cash/pump entry_details
+  | 'split_details' // Gas Card + Cash — pump photo + cash portion
   | 'entry_details'
   | 'toll_scan'
   | 'toll_review';
@@ -84,7 +92,7 @@ interface FuelEntryState {
   odometerReading?: number;
   odometerProof?: File;
   odometerMethod?: string;
-  paymentMethod?: 'gas_card' | 'personal_cash' | 'rideshare_cash';
+  paymentMethod?: FuelPaymentMethodSelect;
   pricePerLiter?: string;
   manualReason?: string;
   volume?: string; 
@@ -117,8 +125,12 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
   const { driverRecord } = useCurrentDriver();
   const { isOnline, addToQueue, queue } = useOffline();
   const { getLocation } = useGeolocation();
+  const fuelSplitEnabled = useFuelSplitPaymentEnabled();
   const pendingFuelOffline = queue.filter(
-    (q) => q.type === 'SUBMIT_FUEL_EXPENSE' || q.type === 'SUBMIT_GAS_CARD_ANCHOR',
+    (q) =>
+      q.type === 'SUBMIT_FUEL_EXPENSE' ||
+      q.type === 'SUBMIT_GAS_CARD_ANCHOR' ||
+      q.type === 'SUBMIT_SPLIT_FUEL_FILL',
   ).length;
   const [transactions, setTransactions] = useState<FinancialTransaction[]>([]);
   const [fuelEntries, setFuelEntries] = useState<any[]>([]);
@@ -142,6 +154,8 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
   const [date, setDate] = useState<Date>(new Date());
   const [time, setTime] = useState<string>(format(new Date(), 'HH:mm'));
   const [amount, setAmount] = useState('');
+  /** Split fills only — cash portion of pump total. */
+  const [cashPortion, setCashPortion] = useState('');
   const [category, setCategory] = useState<string>('Fuel');
   const [notes, setNotes] = useState('');
   const [odometer, setOdometer] = useState('');
@@ -182,6 +196,7 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
 
   const resetForm = () => {
     setAmount('');
+    setCashPortion('');
     setCategory('Fuel');
     setNotes('');
     setOdometer('');
@@ -590,32 +605,46 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
   const constructTransactionPayload = (
     baseTx: Partial<FinancialTransaction>, 
     receiptUrl: string, 
-    odometerProofUrl: string
+    odometerProofUrl: string,
+    opts?: { cashAmountOverride?: number; splitMeta?: Record<string, unknown> },
   ): Partial<FinancialTransaction> => {
     const isGasCard = category === 'Fuel' && fuelEntry.paymentMethod === 'gas_card';
+    const isSplit = category === 'Fuel' && fuelEntry.paymentMethod === 'gas_card_and_cash';
     const isFuel = category === 'Fuel';
 
-    // Cash + gas card both store real pump total (negative expense)
-    let finalAmount = -Math.abs(parseFloat(amount || '0'));
+    // Cash + gas card both store real pump total (negative expense); split uses cash portion only.
+    const cashAmt =
+      opts?.cashAmountOverride != null
+        ? opts.cashAmountOverride
+        : parseFloat(amount || '0');
+    let finalAmount = -Math.abs(cashAmt);
     if (!isFuel && !amount) finalAmount = 0;
 
     let methodStr = 'Cash'; 
     if (isFuel) {
-        methodStr = isGasCard ? 'Gas Card' : (fuelEntry.paymentMethod === 'rideshare_cash' ? 'RideShare Cash' : 'Cash');
+        methodStr = isGasCard
+          ? 'Gas Card'
+          : isSplit || fuelEntry.paymentMethod === 'rideshare_cash'
+            ? 'RideShare Cash'
+            : 'Cash';
     }
 
     const finalOdometer = isFuel ? fuelEntry.odometerReading : (odometer ? parseInt(odometer) : undefined);
 
-    const rawAmount = Math.abs(parseFloat(amount || '0'));
-    // Pump flow: liters typed/OCR'd; $/L = total ÷ liters
+    const rawAmount = Math.abs(cashAmt);
+    // Pump flow: liters typed/OCR'd; $/L = total ÷ liters (split uses full pump total for $/L)
+    const pumpForPrice = isSplit ? parseFloat(amount || '0') : rawAmount;
     let calculatedVolume = fuelEntry.volume ? parseFloat(fuelEntry.volume) : undefined;
-    let fuelPrice = derivePricePerLiter(amount, fuelEntry.volume || '') ?? undefined;
+    let fuelPrice = derivePricePerLiter(
+      isSplit ? amount : String(rawAmount),
+      fuelEntry.volume || '',
+    ) ?? undefined;
     if (fuelPrice == null && fuelEntry.pricePerLiter) {
       const parsed = parseFloat(fuelEntry.pricePerLiter);
       if (parsed > 0) fuelPrice = parsed;
     }
-    if (isFuel && calculatedVolume != null && !(calculatedVolume > 0) && fuelPrice && fuelPrice > 0 && rawAmount > 0) {
-      calculatedVolume = Number((rawAmount / fuelPrice).toFixed(2));
+    if (isFuel && calculatedVolume != null && !(calculatedVolume > 0) && fuelPrice && fuelPrice > 0 && pumpForPrice > 0) {
+      calculatedVolume = Number((pumpForPrice / fuelPrice).toFixed(2));
     }
 
     const metadata = {
@@ -630,14 +659,20 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
         odometerManualReason: (isFuel) ? fuelEntry.manualReason : undefined,
         locationMetadata: fuelEntry.locationMetadata,
         parentCompany: fuelEntry.parentCompany,
-        paymentSource: isFuel ? (isGasCard ? 'company_card' : (fuelEntry.paymentMethod === 'rideshare_cash' ? 'rideshare_cash' : 'driver_cash')) : undefined,
-        // Flag for admin Log Review when odometer was not AI-verified
+        paymentSource: isFuel
+          ? (isGasCard
+              ? 'company_card'
+              : (isSplit || fuelEntry.paymentMethod === 'rideshare_cash'
+                  ? 'rideshare_cash'
+                  : 'driver_cash'))
+          : undefined,
         needsLogReview: (isFuel && fuelEntry.odometerMethod && fuelEntry.odometerMethod !== 'ai_verified') ? true : undefined,
         logReviewReason: (isFuel && fuelEntry.odometerMethod === 'photo_review')
             ? 'AI scan failed — odometer photo pending admin review'
             : (isFuel && fuelEntry.odometerMethod === 'manual_override')
                 ? 'Manual odometer override — pending admin verification'
                 : undefined,
+        ...(opts?.splitMeta || {}),
     };
 
     return {
@@ -645,7 +680,7 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
         amount: finalAmount,
         paymentMethod: methodStr as any,
         odometer: finalOdometer,
-        metadata: metadata,
+        metadata: metadata as any,
         receiptUrl: receiptUrl
     };
   };
@@ -678,6 +713,230 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
     }
 
     const isGasCardFuel = category === 'Fuel' && fuelEntry.paymentMethod === 'gas_card';
+    const isSplitFuel = category === 'Fuel' && fuelEntry.paymentMethod === 'gas_card_and_cash';
+
+    // ——— Split: Gas Card + Cash (atomic two-row write) ———
+    if (isSplitFuel) {
+      if (viewState !== 'split_details') {
+        setViewState('split_details');
+      }
+      if (!fuelEntry.odometerReading || fuelEntry.odometerReading <= 0) {
+        const msg = 'Odometer reading is required';
+        setSubmitError(msg);
+        toast.error(msg);
+        return;
+      }
+      if (!fuelEntry.odometerProof && fuelEntry.odometerMethod !== 'manual_override') {
+        const msg = 'Odometer photo is required for split fills';
+        setSubmitError(msg);
+        toast.error(msg);
+        setViewState('odometer_scan');
+        return;
+      }
+      if (!assignedGasCard) {
+        const msg = 'No Active gas card assigned to you. Contact your fleet manager.';
+        setSubmitError(msg);
+        toast.error(msg);
+        return;
+      }
+      if (!receiptFile) {
+        const msg = 'Pump display photo is required';
+        setSubmitError(msg);
+        toast.error(msg);
+        setFuelPumpStep('photo');
+        return;
+      }
+      const splitCheck = validateSplitCashAmounts(amount, cashPortion);
+      if (!splitCheck.ok) {
+        setSubmitError(splitCheck.error);
+        toast.error(splitCheck.error);
+        return;
+      }
+      const liters = parseFloat(fuelEntry.volume || '0');
+      if (!(liters > 0)) {
+        const msg = 'Liters from the pump are required';
+        setSubmitError(msg);
+        toast.error(msg);
+        return;
+      }
+
+      const fillGroupId = crypto.randomUUID();
+      const cashMeta = buildCashSplitMetadata({
+        fillGroupId,
+        splitPumpTotal: splitCheck.pumpTotal,
+      });
+      const cardMeta = buildCardSplitMetadata({
+        fillGroupId,
+        splitPumpTotal: splitCheck.pumpTotal,
+        splitExpectedCardAmount: splitCheck.card,
+      });
+
+      const buildSplitPayloads = async (odometerProofUrl: string, receiptUrl: string) => {
+        const vehicles = await api.getVehicles().catch(() => []);
+        const resolvedVehicleId = resolveVehicleIdForDriver(driverRecord, vehicles, user?.id);
+        const { driverId: canonicalDriverId } = resolveCanonicalDriverIdentity(
+          driverRecord,
+          { id: user?.id, name: user?.user_metadata?.name, email: user?.email },
+        );
+        const now = new Date();
+        const ymd = isValid(date) ? format(date, 'yyyy-MM-dd') : format(now, 'yyyy-MM-dd');
+        const timeStr = time ? `${time}:00` : format(now, 'HH:mm:ss');
+        const cashTxId = crypto.randomUUID();
+        const cardEntryId = crypto.randomUUID();
+
+        const cashTransaction = constructTransactionPayload(
+          {
+            id: cashTxId,
+            date: ymd,
+            time: timeStr,
+            category: 'Fuel',
+            type: 'Expense',
+            status: 'Pending',
+            description: `Fuel (split cash) — ${merchant || 'Pump'}`,
+            driverId: canonicalDriverId || user?.id,
+            vehicleId: resolvedVehicleId,
+            notes,
+          } as any,
+          receiptUrl,
+          odometerProofUrl,
+          { cashAmountOverride: splitCheck.cash, splitMeta: cashMeta as any },
+        );
+
+        const cardFuelEntry = {
+          id: cardEntryId,
+          date: ymd,
+          time: timeStr,
+          cardId: assignedGasCard.id,
+          vehicleId: resolvedVehicleId,
+          driverId: canonicalDriverId || user?.id,
+          amount: 0,
+          liters: 0,
+          odometer: fuelEntry.odometerReading,
+          odometerImageUrl: odometerProofUrl || undefined,
+          type: 'Manual_Entry',
+          entryMode: 'Anchor',
+          paymentSource: 'Gas_Card',
+          entrySource: 'driver-portal',
+          reconciliationStatus: 'Pending',
+          metadata: {
+            ...cardMeta,
+            awaitingCardStatement: true,
+            odometerMethod: fuelEntry.odometerMethod,
+            odometerProofUrl: odometerProofUrl || undefined,
+            locationMetadata: fuelEntry.locationMetadata,
+            parentCompany: fuelEntry.parentCompany,
+            paymentSource: 'company_card',
+            countsInFuelSpend: false,
+            countsInFuelVolume: false,
+          },
+        };
+
+        return { cashTransaction, cardFuelEntry, fillGroupId };
+      };
+
+      const queueSplitOffline = async () => {
+        const entryId = crypto.randomUUID();
+        const odometerBlobKey = fuelEntry.odometerProof ? `fuel-odo-${entryId}` : undefined;
+        const receiptBlobKey = receiptFile ? `fuel-rcpt-${entryId}` : undefined;
+        if (odometerBlobKey && fuelEntry.odometerProof) {
+          await offlineBlobStore.put(odometerBlobKey, fuelEntry.odometerProof);
+        }
+        if (receiptBlobKey && receiptFile) {
+          await offlineBlobStore.put(receiptBlobKey, receiptFile);
+        }
+        const { cashTransaction, cardFuelEntry, fillGroupId: gid } = await buildSplitPayloads('', '');
+        addToQueue({
+          type: 'SUBMIT_SPLIT_FUEL_FILL',
+          payload: {
+            fillGroupId: gid,
+            cashTransaction,
+            cardFuelEntry,
+            odometerBlobKey,
+            receiptBlobKey,
+            odometerFileName: fuelEntry.odometerProof?.name,
+            receiptFileName: receiptFile?.name,
+            odometerMimeType: fuelEntry.odometerProof?.type,
+            receiptMimeType: receiptFile?.type,
+            label: `Gas Card + Cash — ${format(date, 'MMM d')}`,
+          },
+        });
+        toast.success("Split fill saved on this phone — will send when you're back online");
+        setViewState('list');
+        resetForm();
+      };
+
+      if (!isOnline) {
+        setIsSubmitting(true);
+        try {
+          await queueSplitOffline();
+        } catch (err) {
+          toast.error(err instanceof Error ? err.message : 'Could not save split fill offline');
+        } finally {
+          setIsSubmitting(false);
+        }
+        return;
+      }
+
+      setIsSubmitting(true);
+      let submitTimedOut = false;
+      const submitDeadline = setTimeout(() => {
+        submitTimedOut = true;
+        setIsSubmitting(false);
+        const msg = 'Save timed out. Check your connection and try again.';
+        setSubmitError(msg);
+        toast.error(msg);
+      }, SUBMIT_DEADLINE_MS);
+      try {
+        let odometerProofUrl = '';
+        let receiptUrl = '';
+        if (fuelEntry.odometerProof) {
+          const uploadRes = await uploadEvidenceFile(fuelEntry.odometerProof, {
+            evidenceType: 'odometer_proof',
+            sourceType: 'fuel_entry',
+            sourceId: crypto.randomUUID(),
+            retentionClass: 'ephemeral',
+            parentStatus: 'Pending',
+          });
+          if (submitTimedOut) return;
+          odometerProofUrl = uploadRes.url;
+        }
+        if (receiptFile) {
+          const uploadRes = await uploadEvidenceFile(receiptFile, {
+            evidenceType: 'fuel_receipt',
+            sourceType: 'transaction',
+            sourceId: crypto.randomUUID(),
+            retentionClass: 'ephemeral',
+            parentStatus: 'Pending',
+          });
+          if (submitTimedOut) return;
+          receiptUrl = uploadRes.url;
+        }
+        const payloads = await buildSplitPayloads(odometerProofUrl, receiptUrl);
+        if (submitTimedOut) return;
+        await fuelService.saveSplitFill(payloads);
+        if (submitTimedOut) return;
+        toast.success('Split fill logged — cash pending approval; card awaiting statement');
+        setViewState('list');
+        resetForm();
+        fetchTransactions();
+      } catch (err) {
+        if (submitTimedOut) return;
+        console.error('[DriverExpenses] Split fill submit error:', err);
+        const errMsg = err instanceof Error ? err.message : String(err);
+        if (/failed to fetch|network|timeout|offline|load failed|aborted/i.test(errMsg)) {
+          try {
+            await queueSplitOffline();
+            return;
+          } catch { /* fall through */ }
+        }
+        setSubmitError(errMsg);
+        toast.error(errMsg || 'Failed to save split fill');
+      } finally {
+        clearTimeout(submitDeadline);
+        if (!submitTimedOut) setIsSubmitting(false);
+      }
+      return;
+    }
 
     // ——— Gas Card: odometer-only Roam anchor (no pump / no reimbursement tx) ———
     if (isGasCardFuel) {
@@ -1291,21 +1550,18 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
     }
   };
 
-  const handleMethodSelect = async (method: 'gas_card' | 'personal_cash' | 'rideshare_cash') => {
+  const handleMethodSelect = async (method: FuelPaymentMethodSelect) => {
     setFuelEntry(prev => ({ ...prev, paymentMethod: method }));
     setPumpFromOcr(false);
     setAmount('');
+    setCashPortion('');
     setReceiptFile(null);
     setReceiptPreview(null);
     setAssignedGasCard(null);
     setGasCardLookupDone(false);
 
-    // Gas Card never enters cash/pump UI — dedicated screen + odometer-only submit.
-    if (method === 'gas_card') {
-      setFuelPumpStep('photo');
-      setViewState('gas_card_details');
+    const loadGasCard = async () => {
       try {
-        // Do not swallow getFuelCards failures as [] — that falsely shows "no card".
         const [vehicles, cards] = await Promise.all([
           api.getVehicles().catch(() => []),
           fuelService.getFuelCards(),
@@ -1318,7 +1574,6 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
         const driverIds = collectDriverAliasIds(
           driverRecord || { id: user?.id, driverId: user?.id },
         );
-        // Vehicle first; rental / driver cards resolve via assignedDriverId (+ aliases)
         const card =
           findActiveFuelCardForSession(cards, {
             vehicleId: resolvedVehicleId,
@@ -1333,6 +1588,20 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
       } finally {
         setGasCardLookupDone(true);
       }
+    };
+
+    // Gas Card never enters cash/pump UI — dedicated screen + odometer-only submit.
+    if (method === 'gas_card') {
+      setFuelPumpStep('photo');
+      setViewState('gas_card_details');
+      await loadGasCard();
+      return;
+    }
+
+    if (method === 'gas_card_and_cash') {
+      setFuelPumpStep('photo');
+      setViewState('split_details');
+      await loadGasCard();
       return;
     }
 
@@ -1377,6 +1646,7 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
       case 'fuel_gps_retry': setViewState('odometer_scan'); break;
       case 'method_select': setViewState('odometer_scan'); break;
       case 'gas_card_details': setViewState('method_select'); break;
+      case 'split_details': setViewState('method_select'); break;
       case 'toll_scan': setViewState('category_select'); break;
       case 'toll_review': 
         // Clear scanned data so they can re-scan
@@ -1624,6 +1894,7 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
                 {viewState === 'fuel_gps_retry' && "Lock location"}
                 {viewState === 'method_select' && "Payment Method"}
                 {viewState === 'gas_card_details' && "Gas Card Fill"}
+                {viewState === 'split_details' && "Gas Card + Cash"}
                 {viewState === 'entry_details' && (category === 'Fuel' ? "Fuel Details" : "Expense Details")}
                 {viewState === 'toll_scan' && "Scan Toll Receipt"}
                 {viewState === 'toll_review' && "Review Toll Details"}
@@ -1772,6 +2043,7 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
               onSelect={handleMethodSelect}
               onCancel={goBack}
               showGasCard={isFleetDriver}
+              showSplitPayment={isFleetDriver && fuelSplitEnabled}
             />
           )}
 
@@ -1790,6 +2062,84 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
                 cardMissing={gasCardLookupDone && !assignedGasCard}
               />
             </div>
+          )}
+
+          {viewState === 'split_details' && (
+            <form onSubmit={handleSubmit} className="p-6 space-y-6" id="split-fuel-form" noValidate>
+              {fuelNoGpsManualVerifyNotice}
+              {gasCardLookupDone && !assignedGasCard && (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                  No active gas card assigned. Contact your fleet manager before logging a split fill.
+                </div>
+              )}
+              {assignedGasCard?.cardNumber && (
+                <p className="text-xs text-slate-500">
+                  Gas card ···{String(assignedGasCard.cardNumber).slice(-4)}
+                </p>
+              )}
+
+              {fuelPumpStep === 'photo' && (
+                <ReceiptUploader
+                  label="Pump Display Photo (required)"
+                  hint="This Sale + Liters — photo is mandatory"
+                  previewUrl={receiptPreview}
+                  isScanning={isScanning}
+                  onFileSelect={handleFileChange}
+                  onClear={handleRetakePumpPhoto}
+                  fileName={receiptFile?.name}
+                />
+              )}
+
+              {fuelPumpStep === 'confirm' && (
+                <PumpNumbersConfirm
+                  totalSpent={amount}
+                  onTotalSpentChange={setAmount}
+                  liters={fuelEntry.volume || ''}
+                  onLitersChange={(v) => setFuelEntry((prev) => ({ ...prev, volume: v }))}
+                  fromOcr={pumpFromOcr}
+                  onConfirm={handleConfirmPumpNumbers}
+                  onRetakePhoto={handleRetakePumpPhoto}
+                />
+              )}
+
+              {fuelPumpStep === 'submit' && (
+                <div className="space-y-4">
+                  <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm">
+                    <p className="text-[10px] font-bold uppercase text-emerald-700 tracking-wider">
+                      Pump total
+                    </p>
+                    <p className="font-semibold text-slate-900">
+                      ${parseFloat(amount || '0').toFixed(2)} ·{' '}
+                      {parseFloat(fuelEntry.volume || '0').toFixed(3)} L
+                    </p>
+                  </div>
+                  <SplitCashPortion
+                    pumpTotal={amount}
+                    cashAmount={cashPortion}
+                    onCashAmountChange={setCashPortion}
+                  />
+                  <Button
+                    type="submit"
+                    className="w-full h-12"
+                    disabled={
+                      isSubmitting ||
+                      !gasCardLookupDone ||
+                      !assignedGasCard ||
+                      !validateSplitCashAmounts(amount, cashPortion).ok
+                    }
+                  >
+                    {isSubmitting ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Saving…
+                      </>
+                    ) : (
+                      'Submit split fill'
+                    )}
+                  </Button>
+                </div>
+              )}
+            </form>
           )}
 
           {viewState === 'entry_details' && (

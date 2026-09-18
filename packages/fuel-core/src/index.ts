@@ -161,6 +161,8 @@ export {
   holdReasonForUnapprovedTx,
   listUnapprovedFuelTxInWindow,
   countFuelReviewQueueWork,
+  countSplitVarianceFromFuelEntries,
+  isUnresolvedSplitVariance,
   type FuelReviewQueueTx,
   type FuelClassifyFields,
   type FuelUnapprovedHoldReason,
@@ -279,6 +281,26 @@ export {
   type FuelPaymentSourceEnum,
   type FuelPaymentSourceMeta,
 } from './fuelPaymentSource.ts';
+
+export {
+  SPLIT_RECON_TOLERANCE_FLOOR_JMD,
+  SPLIT_RECON_TOLERANCE_PCT,
+  splitReconTolerance,
+  deriveSplitCardAmount,
+  validateSplitCashAmounts,
+  metaOfSplit,
+  isSplitFillMeta,
+  isSplitVolumeOwner,
+  isSplitNonVolumeOwner,
+  evaluateSplitCardRecon,
+  splitReconMetadataPatch,
+  buildCashSplitMetadata,
+  buildCardSplitMetadata,
+  type FuelSplitRole,
+  type FuelSplitMetadata,
+  type SplitCashValidation,
+  type SplitReconResult,
+} from './fuelSplitPayment.ts';
 
 export {
   UNASSIGNED_FUEL_DRIVER_ID,

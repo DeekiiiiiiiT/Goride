@@ -147,6 +147,9 @@ function getDisplayTitle(item: OfflineAction) {
   if (item.type === 'SUBMIT_GAS_CARD_ANCHOR') {
     return item.payload.label || 'Gas Card odometer log';
   }
+  if (item.type === 'SUBMIT_SPLIT_FUEL_FILL') {
+    return item.payload.label || 'Gas Card + Cash fill';
+  }
   return 'Unknown Action';
 }
 

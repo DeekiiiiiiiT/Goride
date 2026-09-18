@@ -1,11 +1,16 @@
 /**
  * F-20 — whitelist projection for trip list payloads.
  * Prefer keeping only UI/filter/sort fields over blacklist-stripping huge blobs.
+ *
+ * Must retain CSV-normalized distance scalars: Driver Overview Open/Unavail km
+ * (and fuel rideshare splits) are computed from these — stripping them zeroes
+ * Open km while Open hours still look fine (hours come from DriverMetrics CSV).
  */
 const TRIP_LIST_KEEP = new Set([
   "id",
   "date",
   "requestTime",
+  "pickupTime",
   "dropoffTime",
   "platform",
   "status",
@@ -29,11 +34,17 @@ const TRIP_LIST_KEEP = new Set([
   "fare",
   "tips",
   "tolls",
+  "tollCharges",
   "paymentMethod",
   "isManual",
   "anchorPeriodId",
   "tripType",
   "currency",
+  "cancellationReason",
+  // Uniform-average distribution from Uber time & distance CSV (import Phase 4)
+  "normalizedOpenDistance",
+  "normalizedEnrouteDistance",
+  "normalizedUnavailableDistance",
 ]);
 
 export function projectTripListValue(raw: Record<string, unknown> | null | undefined): Record<string, unknown> {

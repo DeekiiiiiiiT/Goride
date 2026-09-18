@@ -35,12 +35,29 @@ export function registerPlatformStatusRoutes(app: Hono) {
         claimableLoss: true,
         performanceAnalytics: true,
       };
+      // Opt-in forensic tab — public shell has no org; never treat global enabled
+      // as GA. Logged-in UI uses /enterprise/me/modules with orgId (allowlist).
+      const driverActivity = false;
       return c.json({
-        enabledModules: { ...defaultModules, ...(settings.enabledModules || {}) },
+        enabledModules: {
+          ...defaultModules,
+          ...(settings.enabledModules || {}),
+          driver_activity: driverActivity,
+        },
       });
     } catch (e: any) {
       console.log(`platform-feature-flags GET error: ${e.message}`);
-      return c.json({ enabledModules: { fuelManagement: true, tollManagement: true, driverPortal: true, fleetEquipment: true, claimableLoss: true, performanceAnalytics: true } });
+      return c.json({
+        enabledModules: {
+          fuelManagement: true,
+          tollManagement: true,
+          driverPortal: true,
+          fleetEquipment: true,
+          claimableLoss: true,
+          performanceAnalytics: true,
+          driver_activity: false,
+        },
+      });
     }
   });
 

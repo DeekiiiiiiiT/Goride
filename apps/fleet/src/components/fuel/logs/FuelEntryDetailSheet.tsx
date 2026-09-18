@@ -262,6 +262,31 @@ export function FuelEntryDetailSheet({
                 </div>
               }
             />
+            {typeof entry.metadata?.fillGroupId === 'string' &&
+              entry.metadata.fillGroupId.length > 0 && (
+              <DetailRow
+                icon={<Link2 className="h-3.5 w-3.5 text-slate-400" />}
+                label="Split fill"
+                value={
+                  <div className="flex flex-col gap-0.5 text-xs">
+                    <span>
+                      Linked pump stop · {String(entry.metadata.splitRole || 'part')}
+                      {entry.metadata.splitPumpTotal != null
+                        ? ` · pump ${formatFuelMoney(Number(entry.metadata.splitPumpTotal) || 0)}`
+                        : ''}
+                    </span>
+                    {entry.metadata.splitVariance === true && (
+                      <Badge
+                        variant="outline"
+                        className="w-fit border-rose-200 bg-rose-50 text-[10px] text-rose-800"
+                      >
+                        Split amount mismatch
+                      </Badge>
+                    )}
+                  </div>
+                }
+              />
+            )}
             <DetailRow
               icon={<Gauge className="h-3.5 w-3.5 text-slate-400" />}
               label="Odometer"

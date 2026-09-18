@@ -43,6 +43,7 @@ import {
   formatFuelEntryTime,
   formatFuelLogDate,
 } from './fuelLogDisplay';
+import type { FuelLogDisplayRow } from './groupFuelEntriesByFillGroup';
 
 function AuditBreakdownItem({ label, value, max }: { label: string; value?: number; max: number }) {
   const percentage = ((value || 0) / max) * 100;
@@ -118,6 +119,8 @@ export function resolvePaymentLabel(entry: FuelEntry): string {
 }
 
 export type FuelTransactionsTableProps = {
+  /** Grouped rows from FuelLogTable (pagination unit); table still renders flattened pagedEntries. */
+  pagedDisplayRows?: FuelLogDisplayRow[];
   pagedEntries: FuelEntry[];
   filteredCount: number;
   vehicles: Vehicle[];
@@ -143,6 +146,7 @@ export type FuelTransactionsTableProps = {
 };
 
 export function FuelTransactionsTable({
+  pagedDisplayRows: _pagedDisplayRows,
   pagedEntries,
   filteredCount,
   vehicles,
@@ -297,9 +301,26 @@ export function FuelTransactionsTable({
                     </div>
                   </TableCell>
                   <TableCell>
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                       {getTypeIcon(resolvePaymentLabel(entry))}
                       <span className="text-xs">{resolvePaymentLabel(entry)}</span>
+                      {typeof entry.metadata?.fillGroupId === 'string' &&
+                        entry.metadata.fillGroupId.length > 0 && (
+                        <Badge
+                          variant="outline"
+                          className="h-4 px-1 text-[9px] border-emerald-200 bg-emerald-50 text-emerald-800"
+                        >
+                          Split
+                        </Badge>
+                      )}
+                      {entry.metadata?.splitVariance === true && (
+                        <Badge
+                          variant="outline"
+                          className="h-4 px-1 text-[9px] border-rose-200 bg-rose-50 text-rose-800"
+                        >
+                          Mismatch
+                        </Badge>
+                      )}
                     </div>
                   </TableCell>
                   <TableCell className="hidden md:table-cell">

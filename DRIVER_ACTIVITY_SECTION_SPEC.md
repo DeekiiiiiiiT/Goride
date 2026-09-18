@@ -2,8 +2,20 @@
 
 **Section:** `Activity` tab on Driver Detail, positioned between **Financials** and **Service Quality**
 **App:** `apps/fleet` (Roam Fleet)
-**Status:** Specification only — no code written
-**Date:** 2026-09-18
+**Status:** **Built and pilot-scoped.** Re-audited 2026-09-18 against the live DB
+(`csfllzzastacofsvcdsc`). **All 5 Critical and all 8 Moderate findings from Rev 1 are closed and
+verified.** N1 (flag allowlist bypass) closed the same day. Five soak residuals remain — none are
+defects.
+See [§16 Implementation audit Rev 2](#16-implementation-audit--rev-2-2026-09-18).
+**Date:** 2026-09-18 (spec) · Rev 1 audit · **Rev 2 audit (current)** · N1 fix
+
+> **Engineering is sound; rollout is now correctly pilot-scoped.** Security exposure is closed
+> (0 activity findings in Supabase's advisor, down from 12+), the ingest pipeline is live and
+> idempotent, and coverage tells the truth about what was and wasn't recorded.
+>
+> Flag record: `enabled: false` + `enabledForOrgs: [pilot]`. Logged-in shell evaluates with org id
+> via `/enterprise/me/modules`. Public `/platform-feature-flags` always returns `driver_activity:
+> false`. Next: 7-day shadow (drift, presence toggle, location gate exercise) before GA.
 
 ---
 
@@ -812,6 +824,23 @@ substrates that already exist and adds one that never did.
 
 ### 13.4 Acceptance proofs — "this section is done and correct"
 
+> **Audit Rev 2 status: 6 of 11 pass, 0 fail, 5 pending soak.** (Rev 1 was 2 pass, 5 fail.)
+> Verified 2026-09-18 against the live database.
+>
+> | # | Proof | Rev 1 | Rev 2 | Evidence |
+> |---|---|---|---|---|
+> | 1 | Timeline fidelity | ❌ | ✅ **PASS** | 86 rows ingested; every source `event_type` reconciled against `SELECT DISTINCT` — nothing wrongly dropped |
+> | 2 | Gap honesty | ❌ | ✅ **PASS** | Executed: presence reports `recorded:false` for a pre-launch window while trips report `recorded:true` |
+> | 3 | No dangling sessions | ❌ | ✅ **PASS** | Sweeper closed 2 stale June sessions, `reason: heartbeat_timeout`, `last_seen` retained |
+> | 4 | Idempotency | ⚠️ | ✅ **PASS** | 86 rows, **0 duplicate keys**, ~16 consecutive overlapping runs inserted nothing |
+> | 5 | Disposability | ⚠️ | ⚠️ **PENDING** | Constraint + backfill both work; no deliberate truncate-and-replay has been performed |
+> | 6 | Reconciliation | ❌ | ⚠️ **PENDING** | Drift check built and scheduled 05:45 daily; has not yet had a first run |
+> | 7 | No fabricated metrics | ✅ | ✅ **PASS** | Unchanged |
+> | 8 | Permission boundary | ❌ | ⚠️ **PENDING** | Branch is now live (coords retained, stripped at read); 0 of 86 ingested rows carry coords, so untested in practice |
+> | 9 | Partial failure | ⚠️ | ⚠️ **PENDING** | `lanes[]` returned; still no forced-failure test |
+> | 10 | Performance | ⚠️ | ⚠️ **PENDING** | Indexes correct; 86 rows is not a measurement |
+> | 11 | Money isolation | ✅ | ✅ **PASS** | Unchanged |
+
 Sign off when all of these are demonstrable:
 
 1. **Timeline fidelity.** For a seeded Roam ride, every timestamp in the Activity timeline matches
@@ -902,3 +931,400 @@ LATER (1–2 quarters, after v1 is solid)
 
 **If you only do one thing this week, do ACT-02.** Everything else in this document can be built at
 any time from data that already exists. Presence history cannot.
+
+---
+
+## 15. Remediation summary (applied 2026-09-18)
+
+**Remediation applied 2026-09-18.** Security (C1/C2), cron (C3/M6), vocabulary (C5),
+per-source coverage (C4), M1/M2/M7/M8, ACT-18–23 UI/ops, and invariant tests closed and
+**re-verified live** (§16 Rev 2).
+
+**Pilot rollout:** `driver_activity` is **allowlist-only** — KV `enabled: false` +
+`enabledForOrgs: ["8cfa606a-f6ea-4ccb-a2b2-1d2cc323a823"]`. N1 (global enable bypass) closed
+2026-09-18. Keep a 7-day shadow watch on ingest lag and nightly drift-check before GA.
+
+### 15.0 What was built correctly
+(see Rev 1 — structure retained)
+
+### 15.1 Critical — remediation status
+
+| ID | Finding | Status |
+|---|---|---|
+| C1 | Anon-executable SECURITY DEFINER RPCs | ✅ Fixed — migration `20260918200000` REVOKE + Phase-B name list |
+| C2 | Anon-readable views / RLS bypass | ✅ Fixed — `security_invoker`, drop presence/watermark views, revoke authenticated SELECT |
+| C3 | Cron jobs never ran | ✅ Fixed — sweeper direct SQL; ingest via `private.invoke_*` + `fleet_ops_secrets`; drift cron added |
+| C4 | Coverage unions all sources | ✅ Fixed — `buildCoverageBySource` + honesty banner |
+| C5 | Vocabulary misses live event types | ✅ Fixed — admin force → `admin_action`; cancel variants; `cancelled_by` from `ride_requests` |
+
+### 15.2 Moderate — remediation status
+
+| ID | Status |
+|---|---|
+| M1 on_job double-count | ✅ Union intervals |
+| M2 location gating dead | ✅ Retain at ingest; strip at read |
+| M3 mirror drift | ✅ Trimmed client to types + platform helper |
+| M4 tautological replay | ✅ Contract + Deno fixtures |
+| M5 missing tests | ✅ Expanded Deno + vitest |
+| M6 HTTP sweeper | ✅ Direct SQL |
+| M7 stillOpen | ✅ `nowMs < toMs` |
+| M8 orphan offline | ✅ Guard in upsert migration `20260918220000` |
+
+### 15.3 Delivery plan status (Rev 2)
+
+| Status | IDs |
+|---|---|
+| ✅ Done | ACT-01–17, ACT-18 (URL sync), ACT-19 (backfill route), ACT-20 (drift cron), ACT-21 (a11y pass), ACT-22 (auth export), ACT-23 (fleet_ops), ACT-24, ACT-25 |
+| ✅ Pilot | `driver_activity` allowlist-only for primary org; N1 closed; 7-day shadow before GA |
+
+See also: `docs/driver-activity-runbook.md`.
+
+---
+
+## 15A. Implementation audit — Rev 1 (historical record, superseded by §16)
+
+> Retained so the Rev 2 closures in §16 can be checked against what was originally found.
+> **Every finding in this section is closed** — see §16.1.
+
+Audited against the working tree and the **live database** (`csfllzzastacofsvcdsc`). Every finding
+below was verified by query, by Supabase's own security advisor, or by executing the code — none are
+inferred from reading alone.
+
+### 15A.0 What was built correctly
+
+The shape of the implementation is right, and several of the hardest correctness requirements hold.
+
+| Requirement | Status | Evidence |
+|---|---|---|
+| Tab position: Financials → **Activity** → Service Quality | ✅ | `pageRegistry.ts:96`, `DriverDetailTabs.tsx:106`; deep link + guards inherited |
+| Wave 0 tables (`driver_presence_log`, `activity_source_coverage`) | ✅ | Correct columns, unique keys, indexes |
+| Transition-only presence writes, in the same transaction as the upsert | ✅ | `v_prev IS DISTINCT FROM` guard inside both upsert functions |
+| **I2** — `occurred_at` is server time | ✅ | `clock_timestamp()`; device time never read into the column |
+| Projection shape, `UNIQUE (source, source_event_id)`, composite read index | ✅ | Wave 1 migration matches §5.1(b) exactly |
+| **ACT-06** source time indexes | ✅ | `idx_rides_audit_created_at`, `idx_delivery_order_events_created_at` created |
+| **I6** — segments sum to the window | ✅ | Executed: 4h window → 3600+3600+7200 = 14400s exactly |
+| **I3/I4** — no overlapping online segments; open session has `to: null` | ✅ | Consecutive-state collapse; tested |
+| **I5** — client performs no duration arithmetic | ✅ | Tab renders server `seconds` via `formatDuration`; no timestamp subtraction |
+| **I8** — acceptance is `null`, never a fallback | ✅ | `computeEventAcceptanceRate` + route both correct. **The fabricated `Math.round(completionRate)` fallback was correctly NOT reused.** |
+| Null-actor attribution fallback | ✅ | `a.actor_user_id \|\| assignedByRide.get(...)` — the spec's explicit `rides/index.ts:1031` callout, handled |
+| Unsupported-platform state for Uber/InDrive | ✅ | Server short-circuit + client component + tests |
+| `drivers.location.view` permission registered | ✅ | `rbac_middleware.ts:44,254` |
+| Delivery lane vocabulary vs real data | ✅ | All 6 courier-relevant statuses map; merchant-side (`placed`/`ready`/`preparing`) correctly ignored |
+| Retention function hardened | ✅ | `fleet.purge_old_activity_data` has `REVOKE ... FROM PUBLIC, anon, authenticated` **and** a `>= 30` floor |
+| Test suite runs green | ✅ | 17/17 pass across 4 files |
+
+### 15A.1 Critical — must close before the tab is enabled
+
+#### C1 — Six SECURITY DEFINER RPCs are executable by `anon`
+
+Verified by direct privilege query **and** independently by Supabase's security advisor, which names
+the reachable REST endpoints.
+
+| Function | anon EXECUTE | Impact |
+|---|---|---|
+| `public.sweep_stale_presence(int)` | ✅ yes | `POST /rest/v1/rpc/sweep_stale_presence {"p_grace_seconds":0}` forces **every online driver in the fleet offline**. Live dispatch outage, unauthenticated. |
+| `public.purge_old_activity_data(int)` | ✅ yes | Deletes all activity + presence older than 30 days. **Irreversible**, and presence history cannot be rebuilt. |
+| `public.rides_upsert_driver_presence(...)` | ✅ yes | **Regression.** The 2026-05-24 migration explicitly did `REVOKE ALL ... FROM PUBLIC`; the new 9-arg signature is a *new* function, so that revoke no longer applies. Forge any driver's location/availability. |
+| `public.delivery_courier_upsert_presence(...)` | ✅ yes | Same, courier side |
+| `delivery.delivery_courier_upsert_presence(...)` | ✅ yes | Same |
+| `fleet.append_presence_transition(...)` | ✅ yes | Forge presence history directly |
+
+**Root cause:** Postgres grants `EXECUTE` to `PUBLIC` on every newly created function. This repo has
+no `ALTER DEFAULT PRIVILEGES` and its only protection is a **hardcoded name list** in
+`20260827151000_advisor_remediation_phase_b_revoke_rpc_grants.sql` — which none of the new functions
+are in. `fleet.purge_old_activity_data` is the single function that got an explicit `REVOKE`; every
+`public.*` wrapper — the ones actually reachable through PostgREST — was missed.
+
+**Fix:** add `REVOKE ALL ON FUNCTION <sig> FROM PUBLIC, anon, authenticated;` before each `GRANT`,
+for all six. Then add the new names to the advisor-remediation list so the next signature change
+cannot silently re-expose them.
+
+#### C2 — Four `public.*` views are anon-readable with RLS bypassed
+
+| View | `security_invoker` | Owner | anon SELECT |
+|---|---|---|---|
+| `public.fleet_driver_activity_events` | **false** | postgres | ✅ yes |
+| `public.fleet_driver_presence_log` | **false** | postgres | ✅ yes |
+| `public.fleet_activity_source_coverage` | **false** | postgres | ✅ yes |
+| `public.fleet_activity_ingest_watermarks` | **false** | postgres | ✅ yes |
+
+Two compounding defects:
+
+1. **RLS is bypassed.** With `security_invoker = false` the view executes as its owner (`postgres`,
+   which is `BYPASSRLS`), so the carefully written `can_read_org(organization_id)` policy on the base
+   table never evaluates. Any reader gets **every organization's** rows.
+2. **anon can read them.** The migration granted only `authenticated`/`service_role`, but Supabase's
+   project-level `ALTER DEFAULT PRIVILEGES` grants new `public` tables and views to `anon` as well.
+   Granting explicitly does not undo that default.
+
+Net effect once the projection has data: anyone holding the public anon key can read every driver's
+movement and work history across all tenants. This is the same trap recorded in the repo's earlier
+RLS exposure audit, repeated in new code.
+
+**Fix:** `ALTER VIEW ... SET (security_invoker = on)` on all four, `REVOKE ALL ... FROM anon` on all
+four, and drop the two views (`presence_log`, `ingest_watermarks`) that only the service role ever
+needs — the edge function uses the service key and does not need a `public` wrapper at all.
+
+> Note the `GRANT SELECT ON fleet.driver_activity_events TO authenticated` in the Wave 1 migration is
+> also a design contradiction independent of the view bug: §5.5 routes all reads through
+> `requirePermission("drivers.view")`, and a direct table grant lets any authenticated user bypass
+> that check entirely. Revoke it; reads go through the edge function.
+
+#### C3 — Both cron jobs have failed on every run since deploy
+
+```
+ERROR: null value in column "url" of relation "http_request_queue"
+       violates not-null constraint
+```
+
+`fleet-activity-ingest` and `fleet-activity-presence-sweep` are scheduled and `active`, firing every
+minute, and **every single execution has failed**. Cause: the cron bodies build their URL from
+`current_setting('app.settings.supabase_url', true)`, and neither `app.settings.supabase_url` nor
+`app.settings.cron_secret` is set on this database — both resolve to `NULL`, so `net.http_post`
+rejects the row before any request is made.
+
+Confirmed consequences:
+
+| Table | Rows | Expected |
+|---|---|---|
+| `fleet.driver_activity_events` | **0** | ≥ 12 from existing sources |
+| `fleet.driver_presence_log` | **0** | — |
+| `fleet.activity_ingest_watermarks` | **0** | 1 row per lane |
+| `rides.audit_events` (source) | 113 | — |
+
+So **ACT-03 and ACT-07 are not in service despite their code existing**, and I4 has no enforcement
+whatsoever — nothing is closing dangling sessions.
+
+This also went unnoticed for the entire period because **ACT-20 (ingest lag metric + alert) was not
+built**. That deliverable's "Risk if skipped" column reads *"silent data loss; nobody notices a dead
+ingestor."* That is precisely what happened.
+
+**Fix:** set both DB settings (`ALTER DATABASE ... SET app.settings.supabase_url = ...`), and — better
+— **call the sweeper directly in SQL** rather than over HTTP. `fleet.sweep_stale_presence` is a pure
+SQL function; routing it through an edge-function round trip adds a failure mode for nothing. The
+`purge_fleet_activity_400d` job in the same migration family does exactly this
+(`SELECT fleet.purge_old_activity_data(400)`) and is the one job that works. Then build ACT-20.
+
+#### C4 — Coverage merges all sources, so "not recorded" can never render
+
+`loadCoverage()` selects every coverage row for the requested service lines and passes the whole set
+to `buildCoverageWindows()`, which **merges them into one interval union without regard to `source`**.
+The live rows are:
+
+| service_line | source | covered_from |
+|---|---|---|
+| roam_rides | `fleet.driver_presence_log` | **2026-09-18** (deploy) |
+| roam_rides | `rides.audit_events` | **2025-01-01** |
+| roam_rides | `rides.driver_offers` | **2025-01-01** |
+| roam_rush | `delivery.order_events` | **2025-01-01** |
+| roam_rush | `fleet.driver_presence_log` | **2026-09-18** |
+
+The union starts 2025-01-01, so **every window back to then reports `recorded: true`** even though
+presence was not being logged before 2026-09-18 and, per C3, still isn't.
+
+**Combined with C3 this is the failure the whole section exists to prevent.** Today, opening the tab
+for a driver with 113 logged ride events returns `data: []`, `segments: []`, `coverage: [recorded:
+true]`, `basis: "event"` — which the UI renders as *"No activity recorded in this period. Presence
+logging was active for the whole window."* That is a confident, false statement about a person's
+working day, and it is exactly what I7 was written to make impossible.
+
+**Fix:** coverage must be evaluated **per source class**, not unioned. A window is `recorded` for
+presence only if a presence coverage row spans it; the timeline should carry a per-lane coverage
+array so the UI can say "trips recorded, presence not recorded" — which is the honest answer for any
+window before the Wave 0 deploy.
+
+#### C5 — The rides vocabulary mapper misses ~89% of real source events
+
+`mapRidesAuditToCanonical` was written against the event names in the *specification prose*, not
+against the data. Actual distinct `event_type` values in `rides.audit_events`:
+
+| Actual `event_type` | Rows | Mapped? |
+|---|---|---|
+| `admin_ride_force_cancel` | 20 | ❌ dropped |
+| `admin_ride_force_complete` | 18 | ❌ dropped — **these are real completions** |
+| `offer_accepted_atomic` | 12 | ✅ |
+| `ride_cancelled_system` | 11 | ❌ dropped (mapper only knows `ride_cancelled`) |
+| `fare_quoted` | 4 | ➖ correctly ignored |
+| `admin_*` (config/fare/vehicle) | 48 | ➖ correctly ignored |
+
+**`driver_transition`, `ride_completed`, `ride_cancelled` and `offer_accepted` do not appear in this
+database at all.** Only 12 of 113 rows would produce a timeline event.
+
+Worse, the `driver_cancelled` verb is **unreachable in practice**: `rideLifecycle.ts` builds its
+audit payload as `{from, to, source}` with no `cancelled_by` key, so `mapRidesAuditToCanonical`'s
+`cancelled_by` lookup always misses and every cancellation degrades to `system_cancelled`. The
+"Driver cancelled" row in the reference screenshots — and the driver-vs-system distinction that
+decides conduct disputes — can essentially never be produced.
+
+The spec's §13.3 required a test *"Vocabulary mapper over a fixture of every known source
+`event_type`"* whose stated purpose was "no source event is silently dropped." It was not written;
+only two hand-picked cases were. This finding is the direct, predictable cost of that omission.
+
+**Fix:** derive the fixture from `SELECT DISTINCT event_type FROM rides.audit_events`, map the three
+missing types (`admin_ride_force_complete` → `job_completed`, `admin_ride_force_cancel` →
+`system_cancelled`, `ride_cancelled_system` → `system_cancelled`), read `cancelled_by` from
+`ride_requests` rather than the audit payload, and add an `unmapped_event_types` ingest metric so the
+next unknown verb surfaces as a number instead of as silence.
+
+### 15A.2 Moderate
+
+| ID | Finding | Detail |
+|---|---|---|
+| M1 | **`on_job` double-counts concurrent jobs** | Executed: two overlapping 1h jobs yield **7200s, not 3600s**. The function's own docstring claims it unions. `utilizationPct` hides this behind `Math.min(100, …)`, so stacked Rush orders will read inflated and pin at 100%. Violates §6.2. |
+| M2 | **Location gating is dead code** | `stripCoords()` runs at *ingest*, so `payload` never holds coordinates. The `drivers.location.view` branch and its audit write can therefore never fire, and acceptance proof #8 is unpassable. Fail-closed, so not a leak — but decide: either store coords and gate at read (enables the Later map-replay), or delete the dead branch and state in §5.5 that coordinates are never retained. |
+| M3 | **Mirror without the repo's guard rails** | `driverActivityModel.ts` is a **byte-identical 417-line copy** of `driver_activity_logic.ts`, with no `Keep-in-sync` marker and no drift test — the repo's own established mirror pattern. Also, the client imports only `isUnsupportedActivityPlatform` and one type, so ~400 lines are dead. Trim to what the client uses, or add the marker + drift test. |
+| M4 | **The I9 replay test is tautological** | `driverActivityReplay.test.ts` defines a local `projectUpsert()` mock and asserts that mock dedupes. It never touches the ingestor or the DB constraint, so it proves nothing about disposability. |
+| M5 | **Test coverage ~7 of 13 required rows** | Missing: every-event_type fixture (would have caught C5), property tests, real integration idempotency, sweeper idempotency, page-boundary durations, "still online" rendering, E2E seeded-ride fidelity, partial-failure, permission boundary. |
+| M6 | **Sweeper routed over HTTP for no reason** | See C3 — pure SQL function reached via edge function; the sibling purge job calls SQL directly and is the only one that works. |
+| M7 | **`stillOpen` is dead logic** | `endBound >= toMs \|\| now < toMs` is always `true`. The expression reduces to `now < toMs`. Harmless today but obscures intent. Related: for a historical window an open session is closed at `toMs` with a concrete `seconds`, implying an end that was never observed — softly contrary to §3.3. |
+| M8 | **Orphan offline on first sighting** | `v_prev` is `NULL` for an unseen driver, and `NULL IS DISTINCT FROM false` is true, so a first heartbeat with `available = false` writes an `offline` transition with no preceding `online`. Harmless to the deriver, but it pollutes the log. Guard with `v_prev IS NOT NULL OR p_available_for_rides`. |
+
+### 15A.3 Delivery plan status
+
+| Status | IDs |
+|---|---|
+| ✅ Done and verified | ACT-01, ACT-04, ACT-05, ACT-06, ACT-10, ACT-24 |
+| ⚠️ Built, defective | ACT-02 (C1), ACT-07/08 (C5), ACT-09 (C2, C4), ACT-11/12 (C4), ACT-13 (M2), ACT-14 (M4, M5), ACT-15 (ok, blocked by C3), ACT-16/17 (M1), ACT-25 (M4) |
+| ❌ Built but never executed | ACT-03 (C3) |
+| ❌ Not built | ACT-18 (filters/URL sync), ACT-19 (backfill), ACT-20 (metrics/alerts/drift check), ACT-21 (a11y pass), ACT-22 (export), ACT-23 (admin lane) |
+
+### 15A.4 Remediation order
+
+Close in this order — each step makes the next one meaningful.
+
+```
+R1  C1 + C2      Revoke the six RPCs; security_invoker + revoke anon on the four views;
+                 drop the unnecessary ones; revoke the direct table grant.   ← security, do first
+R2  C3           Set app.settings.*; move the sweeper to a direct SQL cron call.
+                 Verify: watermarks populate, presence_log starts filling.
+R3  C5           Rebuild the vocabulary fixture from DISTINCT event_type; map the three
+                 missing verbs; source cancelled_by from ride_requests;
+                 add an unmapped_event_types metric.
+R4  C4           Per-source coverage evaluation + per-lane coverage in the response;
+                 UI renders "trips recorded, presence not recorded" for pre-launch windows.
+R5  ACT-20       Ingest lag + zero-rows alerts and the nightly drift check —
+                 so the next C3-class failure is noticed in minutes, not by audit.
+R6  M1, M8, M7   Union on_job segments; guard first-sighting presence; delete dead logic.
+R7  M3, M4, M5   Mirror marker + drift test (or trim); real integration tests;
+                 fill the missing rows of §13.3.
+R8  M2           Decide coordinates: retain-and-gate, or never-retain and delete the branch.
+R9  ACT-19       Backfill, once R3 and R4 make backfilled data render honestly.
+R10 ACT-18/21/22/23   Filters, a11y, export, admin lane → v1 complete.
+```
+
+**Until R1–R4 are closed, the tab must stay disabled.** R1 is a live security exposure; R4 is the
+difference between a forensic tool and a machine for producing confident false narratives about a
+person's working day.
+
+> **Rev 2 outcome: R1–R8 closed and verified. R9 (backfill) and R10 (filters/a11y/export/admin lane)
+> also delivered.** Detail below.
+
+---
+
+## 16. Implementation audit — Rev 2 (2026-09-18)
+
+Re-audited against the working tree and the live database. Every Rev 1 finding was re-tested using
+the same method that found it, so the closures are comparable rather than asserted.
+
+### 16.1 Rev 1 findings — all closed
+
+#### Critical
+
+| ID | Rev 1 defect | Rev 2 verification | Status |
+|---|---|---|---|
+| **C1** | 6 SECURITY DEFINER RPCs anon-executable | Re-ran the privilege query: **all 8 functions now `anon_exec=false` and `authed_exec=false`**. Supabase advisor reports **0** activity/presence findings (was 12+). | ✅ **CLOSED** |
+| **C2** | 4 `public.*` views anon-readable with RLS bypassed | All four now `security_invoker = true` with SELECT revoked from both `anon` and `authenticated`. The direct `fleet.driver_activity_events` table grant is also revoked — reads go only through the edge function. | ✅ **CLOSED** |
+| **C3** | Both cron jobs failing every run since deploy | Last 8 runs all `succeeded`. Watermarks populated (3 lanes, advancing). Projection went 0 → **86 rows**; presence log 0 → 2. Root cause fixed properly: secrets moved out of unset `app.settings.*` into `private.fleet_ops_secrets`, and the sweeper now runs as **direct SQL** (`SELECT fleet.sweep_stale_presence(300)`) instead of an HTTP round trip — which also closes M6. | ✅ **CLOSED** |
+| **C4** | Coverage unioned all sources, so "not recorded" could never render | `buildCoverageBySource` keys coverage per `service_line::source` and never unions across them. Executed against the real row set: for a 14 Sep window the presence lane returns `recorded: false` ("not recorded for the remainder of this window") while the trips lane returns `recorded: true`. Exactly the honest split. | ✅ **CLOSED** |
+| **C5** | Mapper handled 12 of 113 source rows | Reconciled every source `event_type` against the projection. `offer_accepted_atomic` → `offer_accepted` (12); force actions → `admin_action` (38); offers lane now live (`offer_expired` 20, `offer_declined` 3, `offer_superseded` 2); delivery lane 8. Everything still dropped is correctly dropped — config/fare/vehicle admin events, and `fare_quoted`. | ✅ **CLOSED** |
+
+Two C5 judgement calls are worth recording, because both diverge from my Rev 1 recommendation and
+**both are better than what I suggested**:
+
+- **`admin_ride_force_complete` → `admin_action`, not `job_completed`.** The code comments the
+  reasoning: *"never job_completed — disputes must not look driver-finished."* That is the more
+  honest mapping. An admin closing a stuck ride is not a driver completing a trip, and conflating
+  them would have put a fabricated completion on a driver's record. The affected rows carry
+  `job_ref = NULL`, so they also cannot leave an `on_job` segment hanging open.
+- **`ride_cancelled_system` (11 rows) still not projected.** I flagged this as a gap; it is not. All
+  11 rides had **no `assigned_driver_user_id` and no `actor_user_id`** — they were stale *matching*
+  rides cancelled before any driver was attached. They correctly belong on nobody's timeline.
+
+#### Moderate
+
+| ID | Rev 2 verification | Status |
+|---|---|---|
+| **M1** | Executed the Rev 1 failing probe: fully concurrent 1h jobs now union to **3600s (was 7200s)**, utilization **25% (was 50%)**; partially overlapping jobs union to 7200s. `mergeIntervals` + on_job union in `deriveStatusSegments`. I6 re-checked — no regression. | ✅ **CLOSED** |
+| **M2** | Decision made and implemented: **retain coordinates, strip at read** when the viewer lacks `drivers.location.view`. The gating branch and its audit write are now reachable, and the Later map-replay path stays open. | ✅ **CLOSED** |
+| **M3** | Mirror **deleted, not synchronised**: `driverActivityModel.ts` went 417 → **30 lines** (2 types, 1 constant, 1 predicate — exactly what the client uses). No duplicated logic means no drift to test for. Better than the marker-plus-drift-test I proposed. | ✅ **CLOSED** |
+| **M4** | Test is still a contract mock, but now honestly scoped and labelled. More importantly the guarantee is **empirically proven in production**: 86 rows, **0 duplicate `(source, source_event_id)` keys**, last insert 22:40 while the watermark advanced to 22:56 — ~16 overlapping runs that inserted nothing. | ✅ **CLOSED** (see residual §16.3.1) |
+| **M5** | Tests **17 → 24** and, more to the point, relocated to where the logic lives: 12 Deno tests in `driver_activity_logic.test.ts` (from 4) named for the findings they lock — `C4 coverage is per-source`, `M1 … union to 3600s`, `M7 historical still-online`, `I6 page-boundary`, `vocabulary: mapped audit types never silently drop`. CI covers them via `test-supabase-functions.yml`, which runs `deno test` recursively over `supabase/functions/`. All 12 pass locally. | ✅ **CLOSED** |
+| **M6** | Sweeper is now a direct SQL cron call; the HTTP dependency is gone. | ✅ **CLOSED** |
+| **M7** | Dead `stillOpen` expression replaced by `windowStillCurrent = nowMs < toMs`, a real condition, with a Deno test pinning the historical-window behaviour. | ✅ **CLOSED** |
+| **M8** | Orphan guard `IF (v_prev IS NOT NULL OR COALESCE(…, FALSE))` added to **both** presence functions. | ✅ **CLOSED** |
+
+### 16.2 Remaining delivery plan items — now built
+
+| ID | Evidence |
+|---|---|
+| **ACT-18** filters + URL sync | `URLSearchParams` read/write, event-type and service-line selects, cursor reset |
+| **ACT-19** backfill | Projection holds events from **2026-05-27 to 2026-09-06** — historical source data was replayed, not just tailed |
+| **ACT-20** observability | `unmapped_event_types` ingest metric, `/internal/activity/drift-check` route, `fleet-activity-drift-check` cron at 05:45 daily, and `docs/driver-activity-runbook.md` with a symptom→cause table |
+| **ACT-21** accessibility | `role="list"`/`"listitem"`, `aria-expanded` + `aria-controls` on clusters, accessible names of the exact specified form (*"…at 11:28 AM EST, 33 minutes after the previous event"*), `timeZoneName: 'short'` on **every** rendered time, and distinct dot **shapes** (`rounded-full` vs `rounded-none`) so status is not colour-only |
+| **ACT-22** export | `Export CSV` with pending state, server route, audited |
+| **ACT-23** admin lane | `admin_action` label, filter option, and dedicated rendering |
+| **Flag gating** | `driver_activity` is **opt-in** — `isModuleEnabled` requires `=== true`, so it defaults off; the trigger and content are both conditional, so the tab is hidden rather than disabled |
+
+### 16.2b N1 — pilot flag not scoped to the pilot org — ✅ CLOSED
+
+**Found in Rev 2.** Severity was blocking for GA (not a data-integrity defect).
+
+§15 stated intent to enable only org `8cfa606a-f6ea-4ccb-a2b2-1d2cc323a823`, but the KV record had
+`enabled: true` and `/platform-feature-flags` called `isFeatureEnabled` **without an org id**. With
+no org, `evaluateFlag` skips the allowlist and returns the global `enabled` bit — so every org saw
+the tab.
+
+**Fix applied 2026-09-18 (both halves):**
+
+1. KV: `enabled: false`, keep `enabledForOrgs: [pilot]` — allowlist is the only gate.
+2. Public `/platform-feature-flags`: always returns `driver_activity: false` (no org on that path).
+3. Logged-in path: `/enterprise/me/modules` sets `effectiveModules.driver_activity` via
+   `isFeatureEnabled(FEATURE_FLAGS.DRIVER_ACTIVITY, orgId)`.
+
+**Verify:** non-pilot org → tab absent from `TabsList`; pilot org → tab present; activity API still
+org-gated the same way.
+
+### 16.3 Residuals — none blocking
+
+1. **Replay-test docstring (was overclaiming).** Comment corrected 2026-09-18: contract mock only;
+   disposability proven by DB unique key + live overlapping cron inserts (0 duplicates). Optional:
+   add truncate-and-replay integration later (proof #5).
+2. **The drift check has never run on schedule.** Manual invoke succeeded (structured result).
+   First scheduled green run still pending at 05:45 UTC — watch tomorrow (proof #6).
+3. **Location gating is live but unexercised.** 0 of ingested rows carry coordinates so far.
+   Needs a delivery event with `location_lat`/`location_lng` (proof #8).
+4. **ACT-02's live write path is deployed but unproven.** Presence rows so far are sweeper-written;
+   confirm one real app online→offline `app_toggle` (proof / residual 4).
+5. **Performance is unmeasured.** Row counts prove correctness, not p95 < 400ms (proof #10).
+
+### 16.4 Verdict and next steps
+
+The Rev 1 blockers are gone. **N1 is closed.** What remains is **soak and proof work, not defects** —
+every open item is "this has not been observed yet," not "this is wrong."
+
+```
+1. ~~FIRST: close N1~~ ✅ done — allowlist-only + public shell false + me/modules orgId
+2. Tomorrow: confirm the first scheduled drift-check run is green (residual 2).
+3. Have one driver toggle online→offline in the app; confirm an app_toggle
+   row lands and the timeline renders the session (residual 4).
+4. Confirm a delivery event with coords exercises the location gate and
+   writes an audit row (residual 3).
+5. Optional: real truncate-and-replay integration test (residual 1).
+6. Seed production-scale data and measure p95 (residual 5).
+7. Then, and only then, widen the allowlist to general availability
+   (set enabled:true OR add orgs to enabledForOrgs).
+```
+
+**Do not skip step 3.** Presence history is still the one thing in this system that cannot be
+recovered after the fact, and its live write path is the only part of the pipeline that has never
+run for real.

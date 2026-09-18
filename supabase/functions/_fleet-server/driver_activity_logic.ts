@@ -48,7 +48,20 @@ export type CoverageWindow = {
   reason?: string;
 };
 
-/** Map rides.audit_events.event_type (+ payload) → canonical verb. */
+/** Cancel party from payload or ride_requests.cancelled_by (ingest enriches payload). */
+function cancelPartyFromPayload(payload: Record<string, unknown>): ActivityEventType {
+  const by = String(
+    payload.cancelled_by || payload.cancelledBy || payload.source || "",
+  ).toLowerCase();
+  if (by.includes("driver")) return "driver_cancelled";
+  if (by.includes("rider") || by.includes("passenger")) return "rider_cancelled";
+  return "system_cancelled";
+}
+
+/**
+ * Map rides.audit_events.event_type (+ payload) → canonical verb.
+ * Admin force_* → admin_action (never job_completed — disputes must not look driver-finished).
+ */
 export function mapRidesAuditToCanonical(
   eventType: string,
   payload: Record<string, unknown> = {},
@@ -56,23 +69,49 @@ export function mapRidesAuditToCanonical(
   const t = String(eventType || "").toLowerCase();
   if (t === "offer_accepted" || t === "offer_accepted_atomic") return "offer_accepted";
   if (t === "ride_completed") return "job_completed";
-  if (t === "ride_cancelled") {
-    const by = String(payload.cancelled_by || payload.cancelledBy || payload.source || "").toLowerCase();
-    if (by.includes("driver")) return "driver_cancelled";
-    if (by.includes("rider") || by.includes("passenger")) return "rider_cancelled";
-    return "system_cancelled";
+  if (t === "admin_ride_force_complete") return "admin_action";
+  if (t === "admin_ride_force_cancel") return "admin_action";
+  if (
+    t === "ride_cancelled" ||
+    t === "ride_cancelled_system" ||
+    t.startsWith("ride_auto_cancelled_")
+  ) {
+    return cancelPartyFromPayload(payload);
   }
+  if (t === "ride_cancelled_rider" || t === "ride_cancelled_passenger") {
+    return "rider_cancelled";
+  }
+  if (t === "ride_cancelled_driver") return "driver_cancelled";
   if (t === "driver_transition" || t === "cash_settlement_pending") {
     const to = String(payload.to || "").toLowerCase();
     if (to === "driver_en_route_pickup" || to === "en_route_pickup") return "en_route_pickup";
     if (to === "driver_arrived_pickup" || to === "arrived_pickup") return "arrived_pickup";
     if (to === "on_trip" || to === "in_progress" || to === "trip_started") return "job_started";
     if (to === "completed") return "job_completed";
-    if (to === "cancelled") return "system_cancelled";
+    if (to === "cancelled") return cancelPartyFromPayload(payload);
     return null;
   }
+  // Config/fare/vehicle admin_* and fare_quoted are intentionally ignored
   return null;
 }
+
+/** Known audit verbs that must map (fixture for C5). Unknown → null is OK if listed as ignorable. */
+export const RIDES_AUDIT_MAPPED_TYPES = [
+  "offer_accepted",
+  "offer_accepted_atomic",
+  "ride_completed",
+  "ride_cancelled",
+  "ride_cancelled_system",
+  "ride_cancelled_rider",
+  "ride_cancelled_passenger",
+  "ride_cancelled_driver",
+  "ride_auto_cancelled_matching_timeout",
+  "ride_auto_cancelled_no_drivers",
+  "admin_ride_force_complete",
+  "admin_ride_force_cancel",
+  "driver_transition",
+  "cash_settlement_pending",
+] as const;
 
 /** Map rides.driver_offers.status → canonical verb. */
 export function mapOfferStatusToCanonical(status: string): ActivityEventType | null {
@@ -214,23 +253,35 @@ export function deriveStatusSegments(
     }
   }
 
-  const endBound = Math.min(Date.parse(nowIso), toMs);
+  const nowMs = Date.parse(nowIso);
+  const endBound = Math.min(nowMs, toMs);
+  const windowStillCurrent = nowMs < toMs;
   if (online && onlineFrom != null) {
-    const stillOpen = endBound >= toMs || Date.parse(nowIso) < toMs;
-    segments.push({
-      kind: "online",
-      from: new Date(onlineFrom).toISOString(),
-      to: stillOpen && Date.parse(nowIso) < toMs ? null : new Date(endBound).toISOString(),
-      seconds: stillOpen && Date.parse(nowIso) < toMs
-        ? null
-        : Math.floor((endBound - onlineFrom) / 1000),
-      closedBy: stillOpen && Date.parse(nowIso) < toMs ? undefined : closedBy,
-    });
+    if (windowStillCurrent) {
+      // Open session: to=null, seconds=null (client ticks live)
+      segments.push({
+        kind: "online",
+        from: new Date(onlineFrom).toISOString(),
+        to: null,
+        seconds: null,
+        closedBy: undefined,
+      });
+    } else {
+      // Historical window: close at window end with concrete seconds
+      segments.push({
+        kind: "online",
+        from: new Date(onlineFrom).toISOString(),
+        to: new Date(endBound).toISOString(),
+        seconds: Math.floor((endBound - onlineFrom) / 1000),
+        closedBy,
+      });
+    }
   } else if (cursor < toMs) {
     emitOfflineGap(cursor, Math.min(endBound, toMs));
   }
 
-  // on_job segments from job lifecycle
+  // Per-job intervals (timeline), then merge overlaps for utilization (M1)
+  const jobIntervals: Array<{ start: number; end: number; open: boolean }> = [];
   const jobEvents = sorted.filter((e) =>
     ["en_route_pickup", "arrived_pickup", "job_started", "job_completed", "driver_cancelled", "rider_cancelled", "system_cancelled"]
       .includes(e.event_type)
@@ -254,29 +305,118 @@ export function deriveStatusSegments(
     );
     if (!start) continue;
     const startMs = Math.max(Date.parse(start.occurred_at), fromMs);
-    const endMs = end ? Math.min(Date.parse(end.occurred_at), toMs) : Math.min(Date.parse(nowIso), toMs);
+    const endMs = end ? Math.min(Date.parse(end.occurred_at), toMs) : Math.min(nowMs, toMs);
     if (endMs <= startMs) continue;
+    jobIntervals.push({ start: startMs, end: endMs, open: !end });
+  }
+
+  // Emit merged on_job segments (union) so overlapping jobs don't double-count
+  const mergedJobs = mergeIntervals(jobIntervals.map((j) => ({ start: j.start, end: j.end })));
+  for (const iv of mergedJobs) {
+    const stillOpenJob = jobIntervals.some((j) => j.open && j.end === iv.end);
     segments.push({
       kind: "on_job",
-      from: new Date(startMs).toISOString(),
-      to: end ? new Date(endMs).toISOString() : null,
-      seconds: end ? Math.floor((endMs - startMs) / 1000) : null,
+      from: new Date(iv.start).toISOString(),
+      to: stillOpenJob && windowStillCurrent ? null : new Date(iv.end).toISOString(),
+      seconds: stillOpenJob && windowStillCurrent
+        ? null
+        : Math.floor((iv.end - iv.start) / 1000),
     });
   }
 
   return segments;
 }
 
-/** Union length of online segments in seconds (for multi-line, pass pre-merged). */
+/** Merge overlapping [start,end] intervals; returns sorted non-overlapping union. */
+export function mergeIntervals(
+  intervals: Array<{ start: number; end: number }>,
+): Array<{ start: number; end: number }> {
+  if (!intervals.length) return [];
+  const sorted = [...intervals]
+    .filter((i) => Number.isFinite(i.start) && Number.isFinite(i.end) && i.end > i.start)
+    .sort((a, b) => a.start - b.start);
+  const out: Array<{ start: number; end: number }> = [];
+  for (const iv of sorted) {
+    const last = out[out.length - 1];
+    if (!last || iv.start > last.end) out.push({ ...iv });
+    else last.end = Math.max(last.end, iv.end);
+  }
+  return out;
+}
+
+/** Union length of segments of a kind (on_job already unioned in deriveStatusSegments). */
 export function sumSegmentSeconds(segments: StatusSegment[], kind: StatusSegment["kind"]): number {
+  if (kind === "on_job") {
+    const merged = mergeIntervals(
+      segments
+        .filter((s) => s.kind === "on_job")
+        .map((s) => ({
+          start: Date.parse(s.from),
+          end: s.to ? Date.parse(s.to) : Date.now(),
+        }))
+        .filter((i) => Number.isFinite(i.start) && Number.isFinite(i.end) && i.end > i.start),
+    );
+    return merged.reduce((acc, i) => acc + Math.floor((i.end - i.start) / 1000), 0);
+  }
   return segments
     .filter((s) => s.kind === kind && s.seconds != null)
     .reduce((acc, s) => acc + (s.seconds || 0), 0);
 }
 
+export type CoverageSourceRow = {
+  covered_from: string;
+  covered_to: string | null;
+  note?: string | null;
+  service_line?: string;
+  source?: string;
+};
+
+export type CoverageBySource = Record<string, CoverageWindow[]>;
+
+/**
+ * Build coverage windows per source key (`service_line::source` or just `source`).
+ * Never union across sources — presence vs trips must stay independent (C4).
+ */
+export function buildCoverageBySource(
+  windowFrom: string,
+  windowTo: string,
+  coverageRows: CoverageSourceRow[],
+): CoverageBySource {
+  const byKey = new Map<string, CoverageSourceRow[]>();
+  for (const r of coverageRows) {
+    const key = r.source
+      ? (r.service_line ? `${r.service_line}::${r.source}` : r.source)
+      : "unknown";
+    const list = byKey.get(key) || [];
+    list.push(r);
+    byKey.set(key, list);
+  }
+  const out: CoverageBySource = {};
+  for (const [key, rows] of byKey) {
+    out[key] = buildCoverageWindows(windowFrom, windowTo, rows);
+  }
+  return out;
+}
+
+/** True when every window for this source list is recorded across the range. */
+export function sourceFullyRecorded(windows: CoverageWindow[]): boolean {
+  return windows.length > 0 && windows.every((w) => w.recorded);
+}
+
+/** Presence source keys for honesty banners. */
+export function presenceCoverageKeys(coverageBySource: CoverageBySource): string[] {
+  return Object.keys(coverageBySource).filter((k) => k.includes("driver_presence_log"));
+}
+
+/** Trip/offer/order source keys (non-presence). */
+export function tripCoverageKeys(coverageBySource: CoverageBySource): string[] {
+  return Object.keys(coverageBySource).filter((k) => !k.includes("driver_presence_log"));
+}
+
 /**
  * Build coverage windows for a requested range given coverage registry rows.
  * Uncovered portions must render as not-recorded bands.
+ * Call per-source — do not pass mixed sources (C4).
  */
 export function buildCoverageWindows(
   windowFrom: string,

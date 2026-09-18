@@ -1,21 +1,30 @@
 // cache-bust: force recompile — 2026-02-10
 import React from 'react';
 import { Button } from '@roam/ui';
-import { CreditCard, Wallet } from 'lucide-react';
+import { CreditCard, Wallet, Combine } from 'lucide-react';
 import { Label } from '@roam/ui';
+
+export type FuelPaymentMethodSelect =
+  | 'gas_card'
+  | 'personal_cash'
+  | 'rideshare_cash'
+  | 'gas_card_and_cash';
 
 interface PaymentMethodSelectorProps {
   /** personal_cash kept in type for older callers; UI no longer offers it. */
-  onSelect: (method: 'gas_card' | 'personal_cash' | 'rideshare_cash') => void;
+  onSelect: (method: FuelPaymentMethodSelect) => void;
   onCancel: () => void;
   /** Fleet drivers can log company gas card; independents cannot. */
   showGasCard?: boolean;
+  /** Opt-in: Gas Card + Cash split fill. */
+  showSplitPayment?: boolean;
 }
 
 export function PaymentMethodSelector({
   onSelect,
   onCancel,
   showGasCard = true,
+  showSplitPayment = false,
 }: PaymentMethodSelectorProps) {
   return (
     <div className="flex flex-col p-6 pb-8">
@@ -47,6 +56,22 @@ export function PaymentMethodSelector({
             <p className="text-[10px] text-slate-500">I paid with cash from fares</p>
           </div>
         </Button>
+
+        {showGasCard && showSplitPayment && (
+          <Button
+            variant="outline"
+            className="h-24 flex flex-col items-center justify-center gap-2 border-2 hover:border-emerald-500 hover:bg-emerald-50 group transition-all"
+            onClick={() => onSelect('gas_card_and_cash')}
+          >
+            <Combine className="h-6 w-6 text-emerald-600 group-hover:scale-110 transition-transform" />
+            <div className="text-center">
+              <p className="font-bold">Gas Card + Cash</p>
+              <p className="text-[10px] text-slate-500">
+                Card ran short or cash topped up — one pump stop
+              </p>
+            </div>
+          </Button>
+        )}
       </div>
 
       <Button

@@ -2,7 +2,7 @@
  * Driver Activity tab — forensic timeline for Driver Detail.
  * Durations come from the server; never subtract adjacent visible timestamps.
  */
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { AlertTriangle, ChevronDown, ChevronRight, Download, Lock } from 'lucide-react';
 import { api } from '../../../services/api';
@@ -12,7 +12,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { TabLoadingSkeleton } from '../../ui/TabLoadingSkeleton';
 import { ContentVisibilityList } from '../ContentVisibilityList';
 import { MetricCard } from '../OverviewMetricsGrid';
-import { isUnsupportedActivityPlatform, type CoverageWindow } from '../../../utils/driverActivityModel';
+import {
+  isUnsupportedActivityPlatform,
+  type CoverageHonesty,
+  type CoverageWindow,
+} from '../../../utils/driverActivityModel';
 import { useDriverPeriod } from '../context/DriverPeriodContext';
 import { formatInFleetTz, fleetCalendarDay, useFleetTimezone } from '../../../utils/timezoneDisplay';
 
@@ -20,6 +24,8 @@ export type DriverActivityTabProps = {
   driverId: string;
   selectedPlatforms?: Set<string>;
 };
+
+type ServiceLineFilter = 'all' | 'roam_rides' | 'roam_rush' | 'fleet_ops';
 
 function formatDuration(seconds: number | null | undefined): string {
   if (seconds == null || !Number.isFinite(seconds)) return '—';
@@ -31,11 +37,121 @@ function formatDuration(seconds: number | null | undefined): string {
   return `${s}s`;
 }
 
-function eventLabel(type: string): string {
-  return type.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+const EVENT_TYPE_LABELS: Record<string, string> = {
+  went_online: 'Went online',
+  went_offline: 'Went offline',
+  offer_received: 'Offer received',
+  offer_accepted: 'Offer accepted',
+  offer_declined: 'Offer declined',
+  offer_expired: 'Offer expired',
+  en_route_pickup: 'En route to pickup',
+  arrived_pickup: 'Arrived at pickup',
+  job_started: 'On trip started',
+  job_completed: 'Job completed',
+  driver_cancelled: 'Driver cancelled',
+  rider_cancelled: 'Passenger cancelled',
+  system_cancelled: 'System cancelled',
+  admin_action: 'Admin action',
+};
+
+function eventLabel(type: string, payload?: Record<string, unknown>): string {
+  if (type === 'admin_action') {
+    const action = String(payload?.action || payload?.raw_event_type || '').toLowerCase();
+    if (action.includes('force_complete') || action === 'admin_ride_force_complete') {
+      return 'Admin force complete';
+    }
+    if (action.includes('force_cancel') || action === 'admin_ride_force_cancel') {
+      return 'Admin force cancel';
+    }
+  }
+  return (
+    EVENT_TYPE_LABELS[type] ||
+    type.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
+  );
 }
 
-function CoverageBanner({ coverage, tz }: { coverage: CoverageWindow[]; tz: string }) {
+const STATUS_EVENT_TYPES: Record<string, string[]> = {
+  enroute: ['en_route_pickup'],
+  on_trip: ['job_started'],
+  online: ['went_online'],
+  offline: ['went_offline'],
+};
+
+function resolveEventTypesFilter(eventType: string, status: string): string | undefined | null {
+  if (eventType !== 'all') {
+    if (status !== 'all') {
+      const allowed = STATUS_EVENT_TYPES[status] || [];
+      return allowed.includes(eventType) ? eventType : null;
+    }
+    return eventType;
+  }
+  if (status !== 'all') {
+    return (STATUS_EVENT_TYPES[status] || []).join(',') || undefined;
+  }
+  return undefined;
+}
+
+function readActivityFiltersFromUrl(): {
+  serviceLine: ServiceLineFilter;
+  eventType: string;
+  status: string;
+  sort: 'asc' | 'desc';
+} {
+  if (typeof window === 'undefined') {
+    return { serviceLine: 'all', eventType: 'all', status: 'all', sort: 'desc' };
+  }
+  const q = new URLSearchParams(window.location.search);
+  const sl = q.get('actLine') || 'all';
+  const serviceLine: ServiceLineFilter =
+    sl === 'roam_rides' || sl === 'roam_rush' || sl === 'fleet_ops' ? sl : 'all';
+  const sort = q.get('actSort') === 'asc' ? 'asc' : 'desc';
+  return {
+    serviceLine,
+    eventType: q.get('actEvent') || 'all',
+    status: q.get('actStatus') || 'all',
+    sort,
+  };
+}
+
+function writeActivityFiltersToUrl(next: {
+  serviceLine: ServiceLineFilter;
+  eventType: string;
+  status: string;
+  sort: 'asc' | 'desc';
+}) {
+  if (typeof window === 'undefined') return;
+  const url = new URL(window.location.href);
+  const setOrDelete = (key: string, value: string, def: string) => {
+    if (!value || value === def) url.searchParams.delete(key);
+    else url.searchParams.set(key, value);
+  };
+  setOrDelete('actLine', next.serviceLine, 'all');
+  setOrDelete('actEvent', next.eventType, 'all');
+  setOrDelete('actStatus', next.status, 'all');
+  setOrDelete('actSort', next.sort, 'desc');
+  window.history.replaceState({}, '', url.toString());
+}
+
+function CoverageBanner({
+  coverage,
+  honesty,
+  tz,
+}: {
+  coverage: CoverageWindow[];
+  honesty?: CoverageHonesty | null;
+  tz: string;
+}) {
+  if (honesty?.message) {
+    return (
+      <div
+        className="rounded-md border border-dashed border-slate-300 bg-[repeating-linear-gradient(135deg,#f1f5f9,#f1f5f9_8px,#e2e8f0_8px,#e2e8f0_16px)] px-3 py-2 text-sm text-slate-700"
+        data-testid="activity-coverage-banner"
+        role="status"
+      >
+        {honesty.message}
+      </div>
+    );
+  }
   const uncovered = coverage.filter((c) => !c.recorded);
   if (!uncovered.length) return null;
   const wholly = coverage.every((c) => !c.recorded);
@@ -67,11 +183,22 @@ function UnsupportedPlatformState({ platform }: { platform: string }) {
   );
 }
 
+function emptyIdleCopy(honesty?: CoverageHonesty | null): string {
+  if (honesty && !honesty.presenceRecorded && honesty.tripsRecorded) {
+    return 'No presence sessions in this period. Trip events may still appear below when filters allow — presence logging was not active for the full window.';
+  }
+  if (honesty?.presenceRecorded) {
+    return 'No activity recorded in this period. Presence logging was active for the covered window.';
+  }
+  return 'No activity recorded in this period.';
+}
+
 export function DriverActivityTab({ driverId, selectedPlatforms }: DriverActivityTabProps) {
   const { period } = useDriverPeriod();
   const fleetTimezone = useFleetTimezone() || 'America/Jamaica';
   const from = period.from.toISOString();
   const to = period.to.toISOString();
+  const listRef = useRef<HTMLDivElement>(null);
 
   const platformFilter = useMemo(() => {
     if (!selectedPlatforms || selectedPlatforms.has('All') || selectedPlatforms.size === 0) {
@@ -82,14 +209,29 @@ export function DriverActivityTab({ driverId, selectedPlatforms }: DriverActivit
 
   const unsupported = platformFilter ? isUnsupportedActivityPlatform(platformFilter) : false;
 
-  const [serviceLine, setServiceLine] = useState<'all' | 'roam_rides' | 'roam_rush'>('all');
-  const [eventType, setEventType] = useState<string>('all');
-  const [sort, setSort] = useState<'desc' | 'asc'>('desc');
+  const initialFilters = useMemo(() => readActivityFiltersFromUrl(), []);
+  const [serviceLine, setServiceLine] = useState<ServiceLineFilter>(initialFilters.serviceLine);
+  const [eventType, setEventType] = useState<string>(initialFilters.eventType);
+  const [statusFilter, setStatusFilter] = useState<string>(initialFilters.status);
+  const [sort, setSort] = useState<'desc' | 'asc'>(initialFilters.sort);
   const [cursor, setCursor] = useState<string | null>(null);
   const [accumulated, setAccumulated] = useState<any[]>([]);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [exporting, setExporting] = useState(false);
+  const [focusedIdx, setFocusedIdx] = useState(0);
 
-  const serviceLines = serviceLine === 'all' ? 'roam_rides,roam_rush' : serviceLine;
+  const serviceLines =
+    serviceLine === 'all' ? 'roam_rides,roam_rush,fleet_ops' : serviceLine;
+  const resolvedEventTypes = resolveEventTypesFilter(eventType, statusFilter);
+
+  useEffect(() => {
+    writeActivityFiltersToUrl({
+      serviceLine,
+      eventType,
+      status: statusFilter,
+      sort,
+    });
+  }, [serviceLine, eventType, statusFilter, sort]);
 
   const summaryQuery = useQuery({
     queryKey: ['driverActivitySummary', driverId, from, to, serviceLines],
@@ -99,28 +241,42 @@ export function DriverActivityTab({ driverId, selectedPlatforms }: DriverActivit
   });
 
   const pageQuery = useQuery({
-    queryKey: ['driverActivity', driverId, from, to, serviceLines, eventType, sort, cursor],
+    queryKey: [
+      'driverActivity',
+      driverId,
+      from,
+      to,
+      serviceLines,
+      eventType,
+      statusFilter,
+      sort,
+      cursor,
+    ],
     queryFn: () =>
       api.getDriverActivity(driverId, {
         from,
         to,
         serviceLines,
-        eventTypes: eventType === 'all' ? undefined : eventType,
+        eventTypes: resolvedEventTypes || undefined,
         sort,
         cursor: cursor || undefined,
         limit: 200,
         platform: platformFilter || undefined,
       }),
-    enabled: Boolean(driverId) && !unsupported,
+    enabled: Boolean(driverId) && !unsupported && resolvedEventTypes !== null,
     staleTime: 60_000,
   });
 
   useEffect(() => {
     setCursor(null);
     setAccumulated([]);
-  }, [driverId, from, to, serviceLines, eventType, sort, platformFilter]);
+  }, [driverId, from, to, serviceLines, eventType, statusFilter, sort, platformFilter]);
 
   useEffect(() => {
+    if (resolvedEventTypes === null) {
+      setAccumulated([]);
+      return;
+    }
     if (!pageQuery.data?.data) return;
     setAccumulated((prev) => {
       if (!cursor) return pageQuery.data.data;
@@ -131,7 +287,7 @@ export function DriverActivityTab({ driverId, selectedPlatforms }: DriverActivit
       }
       return next;
     });
-  }, [pageQuery.data, cursor]);
+  }, [pageQuery.data, cursor, resolvedEventTypes]);
 
   const events = accumulated;
   const dayGroups = useMemo(() => {
@@ -144,6 +300,43 @@ export function DriverActivityTab({ driverId, selectedPlatforms }: DriverActivit
     }
     return [...map.entries()];
   }, [events, fleetTimezone]);
+
+  const handleExport = useCallback(async () => {
+    setExporting(true);
+    try {
+      await api.downloadDriverActivityCsv(driverId, { from, to, serviceLines });
+    } catch (e) {
+      console.error('[activity] export failed', e);
+    } finally {
+      setExporting(false);
+    }
+  }, [driverId, from, to, serviceLines]);
+
+  const onTimelineKeyDown = useCallback(
+    (ev: React.KeyboardEvent) => {
+      if (!events.length) return;
+      if (ev.key === 'j' || ev.key === 'ArrowDown') {
+        ev.preventDefault();
+        setFocusedIdx((i) => Math.min(events.length - 1, i + 1));
+      } else if (ev.key === 'k' || ev.key === 'ArrowUp') {
+        ev.preventDefault();
+        setFocusedIdx((i) => Math.max(0, i - 1));
+      } else if (ev.key === 'Enter') {
+        const row = events[focusedIdx];
+        if (row?.job_ref) {
+          setExpanded((prev) => {
+            const next = new Set(prev);
+            if (next.has(row.job_ref)) next.delete(row.job_ref);
+            else next.add(row.job_ref);
+            return next;
+          });
+        }
+      } else if (ev.key === 'Escape') {
+        setExpanded(new Set());
+      }
+    },
+    [events, focusedIdx],
+  );
 
   if (unsupported) {
     return <UnsupportedPlatformState platform={platformFilter || 'Uber'} />;
@@ -174,11 +367,15 @@ export function DriverActivityTab({ driverId, selectedPlatforms }: DriverActivit
   }
 
   const coverage: CoverageWindow[] = payload?.coverage || [];
-  const whollyUncovered = coverage.length > 0 && coverage.every((c) => !c.recorded);
+  const honesty: CoverageHonesty | null = payload?.coverageHonesty || summaryQuery.data?.coverageHonesty || null;
+  const whollyUncovered =
+    (honesty && !honesty.presenceRecorded && !honesty.tripsRecorded) ||
+    (coverage.length > 0 && coverage.every((c) => !c.recorded) && !honesty?.tripsRecorded);
   const summary = summaryQuery.data;
   const watermark = payload?.watermark as string | null | undefined;
   const lagMs = watermark ? Date.now() - Date.parse(watermark) : 0;
   const stale = lagMs > 15 * 60_000;
+  const failedLanes = (payload?.lanes || []).filter((l: any) => !l.ok);
 
   const toggleCluster = (jobRef: string) => {
     setExpanded((prev) => {
@@ -191,7 +388,16 @@ export function DriverActivityTab({ driverId, selectedPlatforms }: DriverActivit
 
   return (
     <div className="space-y-4" data-testid="driver-activity-tab">
-      <CoverageBanner coverage={coverage} tz={fleetTimezone} />
+      <CoverageBanner coverage={coverage} honesty={honesty} tz={fleetTimezone} />
+
+      {failedLanes.length > 0 && (
+        <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900" role="status">
+          Some lanes failed to load: {failedLanes.map((l: any) => l.serviceLine).join(', ')}. Summary tiles show — not 0.
+          <Button variant="outline" size="sm" className="ml-2" onClick={() => void pageQuery.refetch()}>
+            Retry
+          </Button>
+        </div>
+      )}
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-5" data-testid="activity-summary-strip">
         <MetricCard
@@ -221,9 +427,12 @@ export function DriverActivityTab({ driverId, selectedPlatforms }: DriverActivit
       {summary?.basis && summary.basis !== 'event' && (
         <p className="text-xs text-slate-500">Basis: {summary.basis}</p>
       )}
+      {summary?.acceptanceRate == null && (summary?.offersReceived ?? 0) === 0 && (
+        <p className="text-xs text-slate-500">Acceptance: no offers in period</p>
+      )}
 
       <div className="flex flex-wrap items-center gap-2" data-testid="activity-filters">
-        <Select value={serviceLine} onValueChange={(v) => setServiceLine(v as typeof serviceLine)}>
+        <Select value={serviceLine} onValueChange={(v) => setServiceLine(v as ServiceLineFilter)}>
           <SelectTrigger className="w-[160px]">
             <SelectValue placeholder="Service line" />
           </SelectTrigger>
@@ -231,10 +440,23 @@ export function DriverActivityTab({ driverId, selectedPlatforms }: DriverActivit
             <SelectItem value="all">All lines</SelectItem>
             <SelectItem value="roam_rides">Roam Rides</SelectItem>
             <SelectItem value="roam_rush">Roam Rush</SelectItem>
+            <SelectItem value="fleet_ops">Fleet ops</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select value={statusFilter} onValueChange={setStatusFilter}>
+          <SelectTrigger className="w-[180px]" data-testid="activity-status-filter">
+            <SelectValue placeholder="Status" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All statuses</SelectItem>
+            <SelectItem value="enroute">Enroute</SelectItem>
+            <SelectItem value="on_trip">On trip</SelectItem>
+            <SelectItem value="online">Online / open</SelectItem>
+            <SelectItem value="offline">Offline / unavailable</SelectItem>
           </SelectContent>
         </Select>
         <Select value={eventType} onValueChange={setEventType}>
-          <SelectTrigger className="w-[180px]">
+          <SelectTrigger className="w-[200px]">
             <SelectValue placeholder="Event type" />
           </SelectTrigger>
           <SelectContent>
@@ -242,7 +464,10 @@ export function DriverActivityTab({ driverId, selectedPlatforms }: DriverActivit
             <SelectItem value="went_online">Went online</SelectItem>
             <SelectItem value="went_offline">Went offline</SelectItem>
             <SelectItem value="offer_accepted">Offer accepted</SelectItem>
+            <SelectItem value="arrived_pickup">Arrived at pickup</SelectItem>
             <SelectItem value="job_completed">Job completed</SelectItem>
+            <SelectItem value="driver_cancelled">Driver cancelled</SelectItem>
+            <SelectItem value="rider_cancelled">Passenger cancelled</SelectItem>
             <SelectItem value="admin_action">Admin action</SelectItem>
           </SelectContent>
         </Select>
@@ -259,16 +484,11 @@ export function DriverActivityTab({ driverId, selectedPlatforms }: DriverActivit
           variant="outline"
           size="sm"
           className="ml-auto"
-          onClick={() => {
-            window.open(
-              api.getDriverActivityExportUrl(driverId, { from, to, serviceLines }),
-              '_blank',
-              'noopener',
-            );
-          }}
+          disabled={exporting}
+          onClick={() => void handleExport()}
         >
           <Download className="mr-1 h-4 w-4" />
-          Export CSV
+          {exporting ? 'Exporting…' : 'Export CSV'}
         </Button>
       </div>
 
@@ -291,24 +511,32 @@ export function DriverActivityTab({ driverId, selectedPlatforms }: DriverActivit
           className="rounded-md border border-slate-200 bg-white px-4 py-8 text-center text-sm text-slate-600"
           data-testid="activity-empty-idle"
         >
-          No activity recorded in this period. Presence logging was active for the covered window.
+          {emptyIdleCopy(honesty)}
         </div>
       ) : (
-        <div className="space-y-4" role="list" aria-label="Driver activity timeline">
+        <div
+          ref={listRef}
+          className="space-y-4 motion-safe:transition-opacity"
+          role="list"
+          aria-label="Driver activity timeline"
+          tabIndex={0}
+          onKeyDown={onTimelineKeyDown}
+        >
           {dayGroups.map(([day, rows]) => (
-            <div key={day} className="space-y-1" role="listitem">
+            <div key={day} className="space-y-1">
               <div className="sticky top-0 z-10 bg-white/95 py-1 text-xs font-semibold uppercase tracking-wide text-slate-500 backdrop-blur">
                 {formatInFleetTz(`${day}T12:00:00`, fleetTimezone, {
                   month: 'long',
                   day: 'numeric',
                   year: 'numeric',
+                  timeZoneName: 'short',
                 })}
               </div>
               <ContentVisibilityList
                 items={rows}
                 estimateRowPx={40}
                 getKey={(e: any) => String(e.id)}
-                renderRow={(e: any) => {
+                renderRow={(e: any, rowIndex?: number) => {
                   const isPresence =
                     e.event_type === 'went_online' || e.event_type === 'went_offline';
                   const open = e.segmentOpen && e.event_type === 'went_online';
@@ -321,23 +549,31 @@ export function DriverActivityTab({ driverId, selectedPlatforms }: DriverActivit
                     rows.find((x: any) => x.job_ref === jobRef)?.id === e.id &&
                     clusterKids.length > 0;
                   const isOpen = jobRef ? expanded.has(jobRef) : false;
+                  const timeLabel = formatInFleetTz(e.occurred_at, fleetTimezone, {
+                    hour: 'numeric',
+                    minute: '2-digit',
+                    timeZoneName: 'short',
+                  });
+                  const gapLabel =
+                    e.segmentSeconds != null
+                      ? `, ${formatDuration(e.segmentSeconds)} after the previous event`
+                      : '';
 
                   return (
                     <div
-                      className="flex items-start gap-2 rounded px-2 py-1.5 text-sm hover:bg-slate-50"
-                      aria-label={`${eventLabel(e.event_type)} at ${formatInFleetTz(e.occurred_at, fleetTimezone)}${
-                        e.segmentSeconds != null
-                          ? `, ${formatDuration(e.segmentSeconds)} segment`
-                          : ''
+                      role="listitem"
+                      className={`flex items-start gap-2 rounded px-2 py-1.5 text-sm hover:bg-slate-50 ${
+                        events[focusedIdx]?.id === e.id ? 'ring-1 ring-slate-300' : ''
                       }`}
+                      aria-label={`${eventLabel(e.event_type, e.payload)} at ${timeLabel}${gapLabel}`}
                     >
                       <span
-                        className={`mt-1.5 h-2.5 w-2.5 shrink-0 rounded-sm border ${
+                        className={`mt-1.5 h-2.5 w-2.5 shrink-0 border ${
                           e.event_type === 'went_online'
-                            ? 'border-emerald-600 bg-emerald-500'
+                            ? 'rounded-full border-emerald-600 bg-emerald-500'
                             : e.event_type === 'went_offline'
-                              ? 'border-slate-600 bg-slate-800'
-                              : 'border-sky-600 bg-sky-500 rotate-45'
+                              ? 'rounded-none border-slate-600 bg-slate-800'
+                              : 'rotate-45 rounded-sm border-sky-600 bg-sky-500'
                         }`}
                         aria-hidden
                       />
@@ -346,7 +582,7 @@ export function DriverActivityTab({ driverId, selectedPlatforms }: DriverActivit
                           {isClusterHead ? (
                             <button
                               type="button"
-                              className="inline-flex items-center gap-1 font-medium text-slate-900"
+                              className="inline-flex items-center gap-1 font-medium text-slate-900 motion-reduce:transition-none"
                               aria-expanded={isOpen}
                               aria-controls={`cluster-${jobRef}`}
                               onClick={() => toggleCluster(jobRef!)}
@@ -360,12 +596,10 @@ export function DriverActivityTab({ driverId, selectedPlatforms }: DriverActivit
                             </button>
                           ) : (
                             <span className="font-medium text-slate-900">
-                              {eventLabel(e.event_type)}
+                              {eventLabel(e.event_type, e.payload)}
                             </span>
                           )}
-                          <span className="tabular-nums text-slate-500">
-                            {formatInFleetTz(e.occurred_at, fleetTimezone)}
-                          </span>
+                          <span className="tabular-nums text-slate-500">{timeLabel}</span>
                           {open && <Badge variant="secondary">still online</Badge>}
                           {e.closedBy === 'timeout' && (
                             <Badge variant="outline" className="text-slate-500">
@@ -377,8 +611,11 @@ export function DriverActivityTab({ driverId, selectedPlatforms }: DriverActivit
                               {formatDuration(e.segmentSeconds)}
                             </span>
                           )}
-                          {(e.payload?.lat != null || e.payload?.lng != null) && (
-                            <span className="inline-flex items-center gap-0.5 text-xs text-slate-400">
+                          {e.locationWithheld && (
+                            <span
+                              className="inline-flex items-center gap-0.5 text-xs text-slate-400"
+                              title="Requires drivers.location.view"
+                            >
                               <Lock className="h-3 w-3" /> Location hidden
                             </span>
                           )}
@@ -386,7 +623,7 @@ export function DriverActivityTab({ driverId, selectedPlatforms }: DriverActivit
                         {isClusterHead && isOpen && (
                           <ul
                             id={`cluster-${jobRef}`}
-                            className="mt-1 space-y-0.5 border-l border-slate-200 pl-3"
+                            className="mt-1 space-y-0.5 border-l border-slate-200 pl-3 motion-safe:animate-in"
                           >
                             {[e, ...clusterKids]
                               .sort((a, b) =>
@@ -394,9 +631,13 @@ export function DriverActivityTab({ driverId, selectedPlatforms }: DriverActivit
                               )
                               .map((child: any) => (
                                 <li key={child.id} className="text-xs text-slate-600">
-                                  {eventLabel(child.event_type)}{' '}
+                                  {eventLabel(child.event_type, child.payload)}{' '}
                                   <span className="tabular-nums text-slate-400">
-                                    {formatInFleetTz(child.occurred_at, fleetTimezone)}
+                                    {formatInFleetTz(child.occurred_at, fleetTimezone, {
+                                      hour: 'numeric',
+                                      minute: '2-digit',
+                                      timeZoneName: 'short',
+                                    })}
                                   </span>
                                 </li>
                               ))}
@@ -434,7 +675,9 @@ export function DriverActivityTab({ driverId, selectedPlatforms }: DriverActivit
 
       <p className="text-xs text-slate-400" data-testid="activity-watermark">
         Showing {events.length} events
-        {watermark ? ` · Data as of ${formatInFleetTz(watermark, fleetTimezone)}` : null}
+        {watermark
+          ? ` · Data as of ${formatInFleetTz(watermark, fleetTimezone, { timeZoneName: 'short' })}`
+          : null}
       </p>
     </div>
   );

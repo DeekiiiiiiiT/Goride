@@ -383,6 +383,7 @@ export function requireAuth(options?: RequireAuthOptions) {
       path.includes("/platform-feature-flags") ||
       path.includes("/health") ||
       path.includes("/internal/seal-fuel-week") ||
+      path.includes("/internal/activity/") ||
       // Public Maps JS bootstrap (browser key only)
       path.includes("/maps-config") ||
       // Server Places proxy — Fleet address fields (key stays server-side)

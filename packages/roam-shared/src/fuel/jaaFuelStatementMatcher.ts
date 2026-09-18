@@ -323,10 +323,40 @@ export function applyFuelMatchLinks<T extends FuelEntryLike>(
     },
   } as T;
 
+  // Split card sibling: cash owns pump liters — never take statement volume into ops totals.
+  const isSplitNonVolumeOwner =
+    drvMeta.splitVolumeOwner === false &&
+    typeof drvMeta.fillGroupId === 'string' &&
+    String(drvMeta.fillGroupId).length > 0;
+
+  const stmtLitersNum = stmt.liters != null ? Number(stmt.liters) : null;
+  const matchedLiters = isSplitNonVolumeOwner ? 0 : (stmt.liters ?? drv.liters);
+  const matchedCountsVolume = isSplitNonVolumeOwner
+    ? false
+    : Number(stmt.liters) > 0;
+
+  // Split recon: statement amount vs driver's expected card claim (mirrors fuel-core).
+  let splitReconPatch: Record<string, unknown> = {};
+  if (isSplitNonVolumeOwner) {
+    const expected = Math.abs(Number(drvMeta.splitExpectedCardAmount) || 0);
+    const pumpTotal = Math.abs(Number(drvMeta.splitPumpTotal) || 0);
+    const stmtAmt = Math.abs(Number(stmt.amount) || 0);
+    const delta = Math.round((stmtAmt - expected) * 100) / 100;
+    const tolerance = Math.max(50, pumpTotal * 0.01);
+    const reconciled = Math.abs(delta) <= tolerance;
+    splitReconPatch = {
+      splitReconciled: reconciled,
+      splitVariance: !reconciled,
+      splitVarianceDelta: delta,
+      splitStatementAmount: stmtAmt,
+      ...(stmtLitersNum != null ? { splitStatementLiters: stmtLitersNum } : {}),
+    };
+  }
+
   const driver = {
     ...drv,
     amount: stmt.amount,
-    liters: stmt.liters ?? drv.liters,
+    liters: matchedLiters,
     pricePerLiter: stmtPpl ?? drv.pricePerLiter,
     location: drv.location || stmt.location,
     cardId: stmt.cardId || drv.cardId,
@@ -336,7 +366,7 @@ export function applyFuelMatchLinks<T extends FuelEntryLike>(
       ...drvMeta,
       awaitingCardStatement: false,
       countsInFuelSpend: true,
-      countsInFuelVolume: Number(stmt.liters) > 0,
+      countsInFuelVolume: matchedCountsVolume,
       jaaMatchedStatementId: stmt.id,
       jaaReceiptNumber: stmtMeta.jaaReceiptNumber,
       jaaResponse: stmtMeta.jaaResponse,
@@ -344,6 +374,7 @@ export function applyFuelMatchLinks<T extends FuelEntryLike>(
       jaaMatchScore: pair.score,
       priorDriverAmount: drv.amount,
       priorDriverLiters: drv.liters,
+      ...splitReconPatch,
     },
     // bypassSignatureCheck intentionally omitted — sealed edits need correctionReason.
   } as T;

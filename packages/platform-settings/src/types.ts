@@ -84,6 +84,11 @@ export interface EnterpriseEnabledModules {
   rush_courier_settlements: boolean;
   rush_supply_health: boolean;
   rush_merchant_link: boolean;
+  /**
+   * Gas Card + Cash split fills — opt-in per org (FeatureFlag requires === true).
+   * Product line may allow; org must explicitly enable.
+   */
+  fuelSplitPayment: boolean;
 }
 
 /** Merge compat: fleet keys + enterprise keys. */

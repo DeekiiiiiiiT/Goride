@@ -164,7 +164,8 @@ export function FeatureFlagProvider({ children }: { children: React.ReactNode })
 
   const isModuleEnabled = useCallback(
     (module: FleetLegacyModuleKey | ModuleKey | string) => {
-      if (module.startsWith('rush_')) {
+      // Opt-in flags (must be explicitly true)
+      if (module === 'driver_activity' || module === 'fuelSplitPayment' || module.startsWith('rush_')) {
         return enabledModules[module] === true;
       }
       return enabledModules[module] !== false;

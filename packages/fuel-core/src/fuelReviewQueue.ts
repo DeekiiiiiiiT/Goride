@@ -46,7 +46,9 @@ export type FuelUnapprovedTxBlocker = {
 export type FuelReviewQueueCounts = {
   logReview: number;
   pendingReady: number;
-  /** logReview + pendingReady (station holds excluded). */
+  /** Unresolved gas-card+cash statement mismatches. */
+  splitVariance: number;
+  /** logReview + pendingReady (station holds excluded). splitVariance counted separately in total. */
   total: number;
 };
 
@@ -150,6 +152,14 @@ export function holdReasonForUnapprovedTx(t: FuelClassifyFields): FuelUnapproved
   return 'pending_review';
 }
 
+/** Statement amount disagreed with driver's expected card claim on a split fill. */
+export function isUnresolvedSplitVariance(t: FuelClassifyFields): boolean {
+  const m = t.metadata || {};
+  if (!metaFlagOn(m.splitVariance)) return false;
+  if (metaFlagOn(m.splitReconciled)) return false;
+  return typeof m.fillGroupId === 'string' && String(m.fillGroupId).length > 0;
+}
+
 /**
  * Pending fuel reimbursements in [startYmd, endYmd] inclusive — Finalize hard blockers.
  * Does not invent fuel_entry rows; Pending txs have no fuel_entry yet.
@@ -186,9 +196,27 @@ export function listUnapprovedFuelTxInWindow(
 export function countFuelReviewQueueWork(txs: FuelReviewQueueTx[]): FuelReviewQueueCounts {
   let logReview = 0;
   let pendingReady = 0;
+  let splitVariance = 0;
   for (const t of txs) {
+    if (isUnresolvedSplitVariance(t)) splitVariance += 1;
     if (isLogReviewEligible(t)) logReview += 1;
     else if (isPendingReadyForReview(t)) pendingReady += 1;
   }
-  return { logReview, pendingReady, total: logReview + pendingReady };
+  return {
+    logReview,
+    pendingReady,
+    splitVariance,
+    total: logReview + pendingReady + splitVariance,
+  };
+}
+
+/** Count unresolved split variances on fuel_entry rows (card siblings after statement match). */
+export function countSplitVarianceFromFuelEntries(
+  entries: Array<{ metadata?: Record<string, unknown> | null }>,
+): number {
+  let n = 0;
+  for (const e of entries) {
+    if (isUnresolvedSplitVariance({ metadata: e.metadata || {} })) n += 1;
+  }
+  return n;
 }

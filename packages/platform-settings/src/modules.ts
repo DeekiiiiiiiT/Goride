@@ -237,7 +237,16 @@ export const ENTERPRISE_MODULE_CATALOG: readonly ModuleCatalogEntry[] = [
   { key: 'rush_courier_settlements', label: 'Rush Courier Settlements', description: 'Weekly courier settlement from Rush revenue.', group: 'money' },
   { key: 'rush_supply_health', label: 'Rush Supply Health', description: 'Read-only courier online/compliance panel.', group: 'optional' },
   { key: 'rush_merchant_link', label: 'Rush Merchant Link', description: 'Optional merchant linkage for fleet operators.', group: 'optional' },
+  {
+    key: 'fuelSplitPayment',
+    label: 'Fuel Split Payment',
+    description: 'Drivers can log one fill paid partly by gas card and partly by cash.',
+    group: 'optional',
+  },
 ] as const;
+
+/** Org must set true — missing override stays off even when product line allows. */
+export const OPT_IN_MODULE_KEYS = ['fuelSplitPayment'] as const;
 
 /** Rush module keys default off — fail-closed at merge time. */
 export const RUSH_MODULE_KEYS = [
@@ -288,9 +297,14 @@ export function resolveEffectiveModules(
   const pl = normalizeModuleKeyMap(productLine);
   const org = normalizeModuleKeyMap(orgOverrides);
   const effective: Record<string, boolean> = {};
+  const optIn = new Set<string>(OPT_IN_MODULE_KEYS);
 
   for (const key of catalogKeys) {
     const lineOn = pl[key] !== false;
+    if (optIn.has(key)) {
+      effective[key] = lineOn && org[key] === true;
+      continue;
+    }
     const orgOn = org[key] !== false;
     effective[key] = lineOn && orgOn;
   }

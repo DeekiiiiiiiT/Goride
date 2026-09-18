@@ -1140,6 +1140,30 @@ export const api = {
     return `${API_ENDPOINTS.fleetCore}/drivers/${encodeURIComponent(driverId)}/activity/export.csv?${q}`;
   },
 
+  /** Authenticated CSV download (Bearer) — do not use window.open. */
+  async downloadDriverActivityCsv(
+    driverId: string,
+    params: { from: string; to: string; serviceLines?: string },
+  ) {
+    const url = this.getDriverActivityExportUrl(driverId, params);
+    const response = await fetchWithRetry(url, {
+      headers: await requireAuthHeaders(null),
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error || err.message || 'Failed to export activity');
+    }
+    const blob = await response.blob();
+    const objectUrl = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = objectUrl;
+    a.download = `driver-activity-${driverId}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(objectUrl);
+  },
+
   /** Append an ops audit event (write-off, payout, delete tx, compliance verify, etc.). */
   async appendDriverAudit(
     driverId: string,

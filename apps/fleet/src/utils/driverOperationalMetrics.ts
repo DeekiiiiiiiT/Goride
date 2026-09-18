@@ -530,9 +530,20 @@ export function computeDriverOperationalMetrics(input: ComputeDriverOperationalM
    // PHASE 2.1: EXTRACT CSV SOURCE OF TRUTH (If Applicable)
    // CRITICAL: Only apply this override if "All" platforms are selected.
    const isAllPlatforms = selectedPlatforms.has('All');
+
+   const driverMetricIds = new Set(
+     [driver?.id, driver?.uberDriverId, driver?.inDriveDriverId, (driver as any)?.driverId]
+       .map((id) => String(id || '').trim().toLowerCase())
+       .filter(Boolean),
+   );
    
    const relevantCsvMetrics = (isAllPlatforms && csvMetrics) ? csvMetrics.filter(m => {
       if (!isValidDriverMetricPeriod(m)) return false;
+      // Scope to this driver — fleet-wide metrics would inflate Open km
+      if (driverMetricIds.size > 0) {
+        const mid = String(m.driverId || '').trim().toLowerCase();
+        if (!mid || !driverMetricIds.has(mid)) return false;
+      }
       const mStart = new Date(m.periodStart);
       const mEnd = new Date(m.periodEnd);
       return mStart <= end && mEnd >= start;
@@ -744,7 +755,10 @@ export function computeDriverOperationalMetrics(input: ComputeDriverOperationalM
    // (isAllPlatforms and relevantCsvMetrics are defined above)
 
    // Check if we have valid CSV metrics for distance (Source: driver_time_and_distance.csv)
-   const hasCsvDistance = relevantCsvMetrics.some(m => (m.onTripDistance || 0) > 0);
+   // Prefer time_distance rows; fall back to any overlapping row that carries openDistance.
+   const hasCsvDistance = relevantCsvMetrics.some(
+     (m) => (m.onTripDistance || 0) > 0 || (m.openDistance || 0) > 0 || (m.enrouteDistance || 0) > 0,
+   );
 
    if (hasCsvDistance) {
        let csvOpenDist = 0;
@@ -773,22 +787,58 @@ export function computeDriverOperationalMetrics(input: ComputeDriverOperationalM
        
        // --- APPLING THE FIX ---
        
-       // 1. On Trip Distance: Force match the CSV report
-       recOnTripDist = csvOnTripDist; 
+       // 1. On Trip Distance: Force match the CSV report when present
+       if (csvOnTripDist > 0) recOnTripDist = csvOnTripDist; 
        
-       // 2. Other Distances: Force match the CSV report
-       // recOpenDist = csvOpenDist; // Handled per-trip via Uniform Average
-       // recEnrouteDist is already calculated via Uniform Average in the loop (if isAllPlatforms is true), 
-       // so it naturally sums to csvTotalEnroute (which is csvEnrouteDist).
-       // We do NOT override it here to respect the per-trip distribution.
-       // recEnrouteDist = csvEnrouteDist; 
-       // recUnavailableDist = csvUnavailableDist; // Handled per-trip via Uniform Average
+       // 2. Open / Unavailable: always prefer CSV volume for this driver when trip list
+       // lost normalized* (remote F-20 whitelist) OR trips were never stamped.
+       if (csvOpenDist > 0) {
+           recOpenDist = csvOpenDist;
+           for (const plat of Object.keys(perPlatformDistanceAccum)) {
+               perPlatformDistanceAccum[plat].open = 0;
+           }
+           if (!perPlatformDistanceAccum.Uber) {
+               perPlatformDistanceAccum.Uber = {
+                   open: 0, enroute: 0, onTrip: 0, unavailable: 0,
+                   riderCancelled: 0, driverCancelled: 0, deliveryFailed: 0,
+               };
+           }
+           perPlatformDistanceAccum.Uber.open = csvOpenDist;
+       }
+       if (csvUnavailableDist > 0) {
+           recUnavailableDist = csvUnavailableDist;
+           for (const plat of Object.keys(perPlatformDistanceAccum)) {
+               perPlatformDistanceAccum[plat].unavailable = 0;
+           }
+           if (!perPlatformDistanceAccum.Uber) {
+               perPlatformDistanceAccum.Uber = {
+                   open: 0, enroute: 0, onTrip: 0, unavailable: 0,
+                   riderCancelled: 0, driverCancelled: 0, deliveryFailed: 0,
+               };
+           }
+           perPlatformDistanceAccum.Uber.unavailable = csvUnavailableDist;
+       }
        
        // 3. Time Metrics: Force match the CSV report (if populated)
        // if (csvOnTripTime > 0) recOnTripTime = csvOnTripTime; // DISABLED: User wants "On Trip" time to come strictly from Trip Activity Logs
        if (csvEnrouteTime > 0) recEnrouteTime = csvEnrouteTime;
        if (csvOpenTime > 0) recOpenTime = csvOpenTime;
        if (csvUnavailableTime > 0) recUnavailableTime = csvUnavailableTime;
+
+       // Refresh platform totals after open/unavailable fill
+       for (const [plat, acc] of Object.entries(perPlatformDistanceAccum)) {
+           perPlatformDistance[plat] = {
+               ...acc,
+               total:
+                   acc.open +
+                   acc.enroute +
+                   acc.onTrip +
+                   acc.unavailable +
+                   acc.riderCancelled +
+                   acc.driverCancelled +
+                   acc.deliveryFailed,
+           };
+       }
    }
 
    // Prefer assigned fleet vehicles (catalog economy); never fleet-wide VehicleMetrics.find.

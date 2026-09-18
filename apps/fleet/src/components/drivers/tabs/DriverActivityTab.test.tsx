@@ -30,6 +30,7 @@ vi.mock('../../../services/api', () => ({
       basis: 'unavailable',
     }),
     getDriverActivityExportUrl: vi.fn().mockReturnValue('https://example.test/export.csv'),
+    downloadDriverActivityCsv: vi.fn().mockResolvedValue(undefined),
   },
 }));
 
@@ -87,5 +88,31 @@ describe('DriverActivityTab smoke', () => {
     );
     expect(await screen.findByTestId('activity-unsupported-platform')).toBeTruthy();
     expect(isUnsupportedActivityPlatform('Uber')).toBe(true);
+  });
+
+  it('shows trips-recorded presence-not banner from honesty message', async () => {
+    const { api } = await import('../../../services/api');
+    vi.mocked(api.getDriverActivity).mockResolvedValueOnce({
+      success: true,
+      coverage: [
+        {
+          from: '2026-09-01T00:00:00.000Z',
+          to: '2026-09-07T00:00:00.000Z',
+          recorded: true,
+        },
+      ],
+      coverageHonesty: {
+        presenceRecorded: false,
+        tripsRecorded: true,
+        message: 'Trips recorded · presence not recorded',
+      },
+      segments: [],
+      data: [],
+      nextCursor: null,
+      watermark: null,
+    } as any);
+    const { DriverActivityTab } = await import('./DriverActivityTab');
+    renderWithQuery(<DriverActivityTab driverId="driver-1" />);
+    expect(await screen.findByText('Trips recorded · presence not recorded')).toBeTruthy();
   });
 });

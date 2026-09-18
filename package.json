@@ -94,6 +94,7 @@
     "deploy:fleet-pay": "node scripts/build-edge-bundle.mjs fleet-pay && npx supabase functions deploy fleet-pay --use-api --project-ref csfllzzastacofsvcdsc && node scripts/smoke-edge-fn.mjs fleet-pay",
     "deploy:fleet-ops": "node scripts/build-edge-bundle.mjs fleet-ops && npx supabase functions deploy fleet-ops --use-api --project-ref csfllzzastacofsvcdsc && node scripts/smoke-edge-fn.mjs fleet-ops",
     "deploy:fleet-core": "node scripts/build-edge-bundle.mjs fleet-core && npx supabase functions deploy fleet-core --use-api --project-ref csfllzzastacofsvcdsc && node scripts/smoke-edge-fn.mjs fleet-core",
+    "deploy:fleet-activity-cron": "npx supabase functions deploy fleet-activity-cron --use-api --project-ref csfllzzastacofsvcdsc --no-verify-jwt",
     "smoke:fleet-fuel-auth": "node scripts/smoke-fleet-fuel-auth.mjs",
     "smoke:fleet-fuel-cors": "node scripts/smoke-fleet-fuel-cors.mjs",
     "smoke:make-server-auth": "node scripts/smoke-make-server-auth.mjs",

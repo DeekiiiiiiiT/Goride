@@ -113,6 +113,74 @@ async function syncGasCardAnchor(action: Extract<OfflineAction, { type: 'SUBMIT_
   await offlineBlobStore.removeMany([payload.odometerBlobKey]);
 }
 
+async function syncSplitFuelFill(action: Extract<OfflineAction, { type: 'SUBMIT_SPLIT_FUEL_FILL' }>) {
+  const { payload } = action;
+  const cashTx = { ...payload.cashTransaction };
+  const cardEntry = { ...payload.cardFuelEntry };
+  const txId = String(cashTx.id || crypto.randomUUID());
+  const entryId = String(cardEntry.id || crypto.randomUUID());
+  cashTx.id = txId;
+  cardEntry.id = entryId;
+
+  let receiptUrl = cashTx.receiptUrl || '';
+  let odometerProofUrl =
+    cashTx.metadata?.odometerProofUrl || cardEntry.odometerImageUrl || '';
+
+  if (payload.receiptBlobKey) {
+    const blob = await offlineBlobStore.get(payload.receiptBlobKey);
+    if (!blob) throw new Error('Offline receipt photo missing');
+    const file = new File(
+      [blob],
+      payload.receiptFileName || 'receipt.jpg',
+      { type: payload.receiptMimeType || blob.type || 'image/jpeg' },
+    );
+    const uploadRes = await uploadEvidenceFile(file, {
+      evidenceType: 'fuel_receipt',
+      sourceType: 'transaction',
+      sourceId: txId,
+      retentionClass: 'ephemeral',
+      parentStatus: 'Pending',
+    });
+    receiptUrl = uploadRes.url;
+  }
+
+  if (payload.odometerBlobKey) {
+    const blob = await offlineBlobStore.get(payload.odometerBlobKey);
+    if (!blob) throw new Error('Offline odometer photo missing');
+    const file = new File(
+      [blob],
+      payload.odometerFileName || 'odometer.jpg',
+      { type: payload.odometerMimeType || blob.type || 'image/jpeg' },
+    );
+    const uploadRes = await uploadEvidenceFile(file, {
+      evidenceType: 'odometer_proof',
+      sourceType: 'fuel_entry',
+      sourceId: entryId,
+      retentionClass: 'ephemeral',
+      parentStatus: 'Pending',
+    });
+    odometerProofUrl = uploadRes.url;
+  }
+
+  if (receiptUrl) cashTx.receiptUrl = receiptUrl;
+  if (odometerProofUrl) {
+    cashTx.metadata = { ...(cashTx.metadata || {}), odometerProofUrl };
+    cardEntry.odometerImageUrl = odometerProofUrl;
+    cardEntry.metadata = {
+      ...(cardEntry.metadata || {}),
+      odometerProofUrl,
+    };
+  }
+
+  const { fuelService } = await import('../../services/fuelService');
+  await fuelService.saveSplitFill({
+    fillGroupId: payload.fillGroupId,
+    cashTransaction: cashTx,
+    cardFuelEntry: cardEntry,
+  });
+  await offlineBlobStore.removeMany([payload.odometerBlobKey, payload.receiptBlobKey]);
+}
+
 export function OfflineProvider({ children }: { children: React.ReactNode }) {
   const isOnline = useNetworkStatus();
   const { user } = useAuth();
@@ -217,6 +285,10 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
                   fuelSuccess++;
               } else if (action.type === 'SUBMIT_GAS_CARD_ANCHOR') {
                   await syncGasCardAnchor(action);
+                  processedIds.push(action.id);
+                  fuelSuccess++;
+              } else if (action.type === 'SUBMIT_SPLIT_FUEL_FILL') {
+                  await syncSplitFuelFill(action);
                   processedIds.push(action.id);
                   fuelSuccess++;
               }

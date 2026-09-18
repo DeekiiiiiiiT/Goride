@@ -32,6 +32,10 @@ import { FuelLogToolbar } from './logs/FuelLogToolbar';
 import { FuelTransactionsTable, resolvePaymentLabel } from './logs/FuelTransactionsTable';
 import { FuelCyclesPanel } from './logs/FuelCyclesPanel';
 import { fuelEntrySortMs } from './logs/fuelLogDisplay';
+import {
+  flattenFuelLogDisplayRows,
+  groupFuelEntriesByFillGroup,
+} from './logs/groupFuelEntriesByFillGroup';
 import { useFuelExceptionAssignments } from './logs/useFuelExceptionAssignments';
 
 const PAGE_SIZE = 50;
@@ -387,12 +391,22 @@ export function FuelLogTable({
     sortDir,
   ]);
 
-  const pagedEntries = useMemo(() => {
-    const start = page * PAGE_SIZE;
-    return filteredEntries.slice(start, start + PAGE_SIZE);
-  }, [filteredEntries, page]);
+  const displayRows = useMemo(
+    () => groupFuelEntriesByFillGroup(filteredEntries),
+    [filteredEntries],
+  );
 
-  const pageCount = Math.max(1, Math.ceil(filteredEntries.length / PAGE_SIZE));
+  const pagedDisplayRows = useMemo(() => {
+    const start = page * PAGE_SIZE;
+    return displayRows.slice(start, start + PAGE_SIZE);
+  }, [displayRows, page]);
+
+  const pagedEntries = useMemo(
+    () => flattenFuelLogDisplayRows(pagedDisplayRows),
+    [pagedDisplayRows],
+  );
+
+  const pageCount = Math.max(1, Math.ceil(displayRows.length / PAGE_SIZE));
 
   useEffect(() => {
     setPage(0);
@@ -837,8 +851,9 @@ export function FuelLogTable({
       <div className="rounded-md border bg-white overflow-x-auto">
         {activeView === 'transactions' ? (
           <FuelTransactionsTable
+            pagedDisplayRows={pagedDisplayRows}
             pagedEntries={pagedEntries}
-            filteredCount={filteredEntries.length}
+            filteredCount={displayRows.length}
             vehicles={vehicles}
             page={page}
             pageCount={pageCount}
