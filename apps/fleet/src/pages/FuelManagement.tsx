@@ -79,6 +79,7 @@ import {
   dispositionMapFromRows,
   upsertDispositionIntoMap,
 } from '../utils/fuelFlagDisposition';
+import { shouldCreateUnverifiedVendor } from '../utils/fuelUnverifiedVendorGate';
 import { mergeFuelCardWithAssignmentHistory } from '../utils/mergeFuelCardWithAssignmentHistory';
 import { supabase } from '../utils/supabase/client';
 import {
@@ -1047,18 +1048,55 @@ function FuelManagementInner({
   }, [cards, isRoamManagedCard]);
 
   // Log Handlers
-  const handleSaveLog = async (entryOrEntries: FuelEntry | FuelEntry[] | { _saveAsGasCardAnchor: true; fuelEntry: FuelEntry }) => {
+  type GasCardAnchorSave = { _saveAsGasCardAnchor: true; fuelEntry: FuelEntry };
+  const isGasCardAnchorSave = (
+    v: FuelEntry | FuelEntry[] | GasCardAnchorSave,
+  ): v is GasCardAnchorSave =>
+    typeof v === 'object' &&
+    v !== null &&
+    !Array.isArray(v) &&
+    '_saveAsGasCardAnchor' in v &&
+    (v as GasCardAnchorSave)._saveAsGasCardAnchor === true;
+
+  const handleSaveLog = async (entryOrEntries: FuelEntry | FuelEntry[] | GasCardAnchorSave) => {
       setIsSyncing(true);
       try {
-          // Gas Card Known fill = odometer anchor only (same as Submit Expense Gas Card)
-          if (
-              entryOrEntries &&
-              typeof entryOrEntries === 'object' &&
-              !Array.isArray(entryOrEntries) &&
-              '_saveAsGasCardAnchor' in entryOrEntries &&
-              entryOrEntries._saveAsGasCardAnchor &&
-              entryOrEntries.fuelEntry
-          ) {
+          // Narrow once: array → gas-card anchor → single FuelEntry (§12 / R5 handleSaveLog).
+          if (Array.isArray(entryOrEntries)) {
+              // Bulk Mode
+              const promises = entryOrEntries.map(entry => fuelService.saveFuelEntry(entry));
+              const savedLogs = await Promise.all(promises);
+              
+              /* 
+                 Phase 6: Legacy Auto-Settlement Disabled.
+                 Settlement is now handled via the "Finalize" flow in Reconciliation Table.
+                 (No getFuelScenarios fetch — R6-2; that call had no consumers.)
+              */
+              
+              // Phase 7: Bulk vendor creation for entries without GPS/verified stations (R6-1).
+              const vendorCreationPromises = savedLogs
+                  .filter((log) => shouldCreateUnverifiedVendor(log))
+                  .map((log) => {
+                      const vendorName = String(log.location).trim();
+                      return api.createUnverifiedVendor({
+                          transactionId: log.transactionId!,
+                          vendorName,
+                          sourceType: 'no_gps'
+                      }).catch(err => {
+                          console.warn(`[Vendor Gate] Failed to create vendor for ${vendorName}:`, err);
+                          return null;
+                      });
+                  });
+              
+              if (vendorCreationPromises.length > 0) {
+                  await Promise.all(vendorCreationPromises);
+                  console.log(`[Vendor Gate] Created ${vendorCreationPromises.length} unverified vendors from bulk entry`);
+              }
+              
+              setLogs(prev => [...savedLogs, ...prev]);
+              toast.success(`Successfully recorded ${savedLogs.length} transactions (Pending Reconciliation)`);
+          } else if (isGasCardAnchorSave(entryOrEntries)) {
+              // Gas Card Known fill = odometer anchor only (same as Submit Expense Gas Card)
               const saved = await fuelService.saveFuelEntry(entryOrEntries.fuelEntry);
               const softDupId = (saved as FuelEntry & { softDuplicateOf?: string }).softDuplicateOf;
               if (
@@ -1084,48 +1122,8 @@ function FuelManagementInner({
               setDeskEditOpenCodes(null);
               void loadLogsAndTransactions();
               return;
-          }
-
-          if (Array.isArray(entryOrEntries)) {
-              // Bulk Mode
-              const promises = entryOrEntries.map(entry => fuelService.saveFuelEntry(entry));
-              const savedLogs = await Promise.all(promises);
-              
-              // Process settlements for bulk entries
-              const scenariosData = await fuelService.getFuelScenarios();
-              /* 
-                 Phase 6: Legacy Auto-Settlement Disabled.
-                 Settlement is now handled via the "Finalize" flow in Reconciliation Table.
-              */
-              
-              // Phase 7: Bulk vendor creation for entries without GPS/verified stations
-              const vendorCreationPromises = savedLogs
-                  .filter(log => {
-                      const hasNoGPS = !log.geofenceMetadata || !log.geofenceMetadata.lat || !log.geofenceMetadata.lng;
-                      const hasNoVerifiedStation = !log.matchedStationId;
-                      const hasVendorName = log.location && log.location.trim() !== '';
-                      return log.transactionId && hasNoGPS && hasNoVerifiedStation && hasVendorName;
-                  })
-                  .map(log => 
-                      api.createUnverifiedVendor({
-                          transactionId: log.transactionId!,
-                          vendorName: log.location,
-                          sourceType: 'no_gps'
-                      }).catch(err => {
-                          console.warn(`[Vendor Gate] Failed to create vendor for ${log.location}:`, err);
-                          return null;
-                      })
-                  );
-              
-              if (vendorCreationPromises.length > 0) {
-                  await Promise.all(vendorCreationPromises);
-                  console.log(`[Vendor Gate] Created ${vendorCreationPromises.length} unverified vendors from bulk entry`);
-              }
-              
-              setLogs(prev => [...savedLogs, ...prev]);
-              toast.success(`Successfully recorded ${savedLogs.length} transactions (Pending Reconciliation)`);
           } else {
-              // Single Mode
+              // Single Mode — FuelEntry after array / gas-card arms
               const entry = entryOrEntries;
               
               // Phase 1: Foundation & Persistence
@@ -1168,33 +1166,25 @@ function FuelManagementInner({
                   return;
               }
               
-              // Process settlement
-              const scenariosData = await fuelService.getFuelScenarios();
               /* 
                  Phase 6: Legacy Auto-Settlement Disabled.
                  Settlement is now handled via the "Finalize" flow in Reconciliation Table.
+                 (No getFuelScenarios fetch — R6-2; that call had no consumers.)
               */
 
-              // Phase 7: Auto-create unverified vendor if entry lacks GPS and verified station match
-              if (!editingLog && savedLog.transactionId) {
-                  const hasNoGPS = !savedLog.geofenceMetadata || 
-                                   !savedLog.geofenceMetadata.lat || 
-                                   !savedLog.geofenceMetadata.lng;
-                  const hasNoVerifiedStation = !savedLog.matchedStationId;
-                  const hasVendorName = savedLog.location && savedLog.location.trim() !== '';
-                  
-                  if (hasNoGPS && hasNoVerifiedStation && hasVendorName) {
-                      try {
-                          await api.createUnverifiedVendor({
-                              transactionId: savedLog.transactionId,
-                              vendorName: savedLog.location,
-                              sourceType: 'no_gps'
-                          });
-                          console.log(`[Vendor Gate] Created unverified vendor for: ${savedLog.location}`);
-                      } catch (vendorError: any) {
-                          console.warn('[Vendor Gate] Failed to create unverified vendor:', vendorError);
-                          // Don't block the main flow - just log the error
-                      }
+              // Phase 7: Auto-create unverified vendor if entry lacks GPS (R6-1).
+              if (shouldCreateUnverifiedVendor(savedLog, { skip: Boolean(editingLog) })) {
+                  const vendorName = String(savedLog.location).trim();
+                  try {
+                      await api.createUnverifiedVendor({
+                          transactionId: savedLog.transactionId!,
+                          vendorName,
+                          sourceType: 'no_gps'
+                      });
+                      console.log(`[Vendor Gate] Created unverified vendor for: ${vendorName}`);
+                  } catch (vendorError: any) {
+                      console.warn('[Vendor Gate] Failed to create unverified vendor:', vendorError);
+                      // Don't block the main flow - just log the error
                   }
               }
 
@@ -1214,7 +1204,7 @@ function FuelManagementInner({
                               driverId: savedLog.driverId,
                               vehicleId: savedLog.vehicleId,
                               driverName: getDriverName(savedLog.driverId),
-                              odometer: savedLog.odometer,
+                              odometer: savedLog.odometer ?? undefined,
                               quantity: savedLog.liters,
                               metadata: {
                                   ...existingTx.metadata,

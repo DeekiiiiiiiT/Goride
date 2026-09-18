@@ -198,6 +198,8 @@ export function FuelFlagsDesk({
     setBulkBusy(true);
     let ok = 0;
     let failed = 0;
+    // R5-3: retain failed entry ids so partial retry does not clear the selection.
+    const failedEntryIds = new Set<string>();
     try {
       for (const { row, reason } of selectedOpenReasons) {
         const note =
@@ -209,10 +211,16 @@ export function FuelFlagsDesk({
           ok += 1;
         } catch {
           failed += 1;
+          failedEntryIds.add(row.entryId);
         }
       }
-      setSelectedIds(new Set());
-      setBulkNote('');
+      if (failed === 0) {
+        setSelectedIds(new Set());
+        setBulkNote('');
+      } else {
+        setSelectedIds(failedEntryIds);
+        // Keep bulkNote so the operator can retry without retyping.
+      }
       if (ok > 0 && failed === 0) {
         toast.success(
           action === 'escalated'

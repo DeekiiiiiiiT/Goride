@@ -1,13 +1,14 @@
 /**
  * Fuel Integrity desk — Fill flags + Stop-to-stop under one week-scoped home.
+ * Telematics tab hidden until a provider is wired (R5-4); seam stays in telematicsEvidence.ts.
  */
+import { useEffect } from 'react';
 import { Button } from '../../ui/button';
 import {
   FuelFlagsDesk,
   type FuelFlagsPeriodOption,
 } from '../flags/FuelFlagsDesk';
 import { FuelStopToStopPanel } from './FuelStopToStopPanel';
-import { FuelTelematicsPanel } from './FuelTelematicsPanel';
 import type { FuelFlagDeskRow } from '../../../utils/fuelFillFlagClassify';
 import type { FuelEntry, MileageAdjustment } from '../../../types/fuel';
 import type { Trip, FinancialTransaction } from '../../../types/data';
@@ -17,6 +18,12 @@ import type { DateRange } from 'react-day-picker';
 export type FuelIntegritySubtab = 'fill-flags' | 'stop-to-stop' | 'telematics';
 
 export type { FuelFlagsPeriodOption };
+
+/** Live tabs only — telematics stays in the union for a future provider. */
+const INTEGRITY_VISIBLE_TABS = [
+  ['fill-flags', 'Fill flags'],
+  ['stop-to-stop', 'Stop-to-stop'],
+] as const;
 
 export type FuelIntegrityDeskProps = {
   periods: FuelFlagsPeriodOption[];
@@ -77,6 +84,14 @@ export function FuelIntegrityDesk({
 }: FuelIntegrityDeskProps) {
   const selected = periods.find((p) => p.weekStart === selectedWeekStart) || null;
 
+  // Stale telematics selection → Fill flags (tab hidden until provider wired).
+  useEffect(() => {
+    if (subtab === 'telematics') onSubtabChange('fill-flags');
+  }, [subtab, onSubtabChange]);
+
+  const activeSubtab: 'fill-flags' | 'stop-to-stop' =
+    subtab === 'stop-to-stop' ? 'stop-to-stop' : 'fill-flags';
+
   return (
     <div className="space-y-4">
       <div className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-3 shadow-sm sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
@@ -107,20 +122,14 @@ export function FuelIntegrityDesk({
           </Button>
         )}
         <div className="flex flex-wrap gap-1.5">
-          {(
-            [
-              ['fill-flags', 'Fill flags'],
-              ['stop-to-stop', 'Stop-to-stop'],
-              ['telematics', 'Telematics'],
-            ] as const
-          ).map(([id, label]) => (
+          {INTEGRITY_VISIBLE_TABS.map(([id, label]) => (
             <Button
               key={id}
               type="button"
               size="sm"
-              variant={subtab === id ? 'default' : 'outline'}
+              variant={activeSubtab === id ? 'default' : 'outline'}
               className={`min-h-9 ${
-                subtab === id ? 'bg-[#3525cd] text-white hover:bg-[#2a1ea4]' : ''
+                activeSubtab === id ? 'bg-[#3525cd] text-white hover:bg-[#2a1ea4]' : ''
               }`}
               onClick={() => onSubtabChange(id)}
             >
@@ -133,21 +142,7 @@ export function FuelIntegrityDesk({
         ) : null}
       </div>
 
-      {subtab === 'fill-flags' ? (
-        <FuelFlagsDesk
-          periods={periods}
-          selectedWeekStart={selectedWeekStart}
-          onSelectWeekStart={onSelectWeekStart}
-          rows={rows}
-          loading={loading}
-          dispositionsTruncated={dispositionsTruncated}
-          canDisposition={canDisposition}
-          canAcceptCritical={canAcceptCritical}
-          onAcceptFlag={onAcceptFlag}
-          onEditFill={onEditFill}
-          embeddedInShell
-        />
-      ) : subtab === 'stop-to-stop' ? (
+      {activeSubtab === 'stop-to-stop' ? (
         <FuelStopToStopPanel
           vehicles={vehicles}
           fuelEntries={fuelEntries}
@@ -161,11 +156,18 @@ export function FuelIntegrityDesk({
           onRefresh={onRefreshStopToStop}
         />
       ) : (
-        <FuelTelematicsPanel
-          vehicles={vehicles}
-          preferredVehicleId={preferredVehicleId}
-          weekStart={selectedWeekStart}
-          weekEnd={selected?.weekEnd || null}
+        <FuelFlagsDesk
+          periods={periods}
+          selectedWeekStart={selectedWeekStart}
+          onSelectWeekStart={onSelectWeekStart}
+          rows={rows}
+          loading={loading}
+          dispositionsTruncated={dispositionsTruncated}
+          canDisposition={canDisposition}
+          canAcceptCritical={canAcceptCritical}
+          onAcceptFlag={onAcceptFlag}
+          onEditFill={onEditFill}
+          embeddedInShell
         />
       )}
     </div>

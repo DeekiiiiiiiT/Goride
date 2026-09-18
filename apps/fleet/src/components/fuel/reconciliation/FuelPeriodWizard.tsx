@@ -1009,7 +1009,15 @@ function FuelPeriodWizardInner({
   })();
 
   // When closable/hard gates block, don't claim "Ready to lock" in the coach card.
-  const stepHeroResolved =
+  // Explicit type so both arms share optional actionDisabled (R5-2).
+  type StepHeroResolved = {
+    title: string;
+    body: string;
+    actionLabel?: string;
+    onAction?: () => void;
+    actionDisabled?: boolean;
+  };
+  const stepHeroResolved: StepHeroResolved =
     activeStepId === 'finalize' && finalizeBlockedReason && !periodLocked
       ? {
           title: 'Can’t finalize yet',

@@ -327,7 +327,8 @@ export const FUEL_FLAG_GLOSSARY: FuelFlagGlossaryGroup[] = FUEL_FLAG_CATEGORY_LE
         checks: guide.checks,
       };
     })
-    .filter((x): x is FuelFlagGlossaryItem => Boolean(x));
+    // Null narrow only — predicate on FuelFlagGlossaryItem fails because checks? is optional.
+    .filter((x): x is NonNullable<typeof x> => x != null);
   return {
     heading: cat.title,
     items: [...fromRows, ...fromBullets],
