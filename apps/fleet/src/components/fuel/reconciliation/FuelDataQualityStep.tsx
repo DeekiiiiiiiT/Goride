@@ -1,6 +1,6 @@
 /**
  * Stitch B flagged vehicle cards + Stitch C desktop issue queue table.
- * Cash-desk actions: Review details (pending-logs overlay) + Mark reviewed.
+ * Cash-desk actions: Review details (flagged evidence overlay) + Mark reviewed.
  */
 import { useState } from 'react';
 import { Gauge, TrendingUp, TriangleAlert, User } from 'lucide-react';
@@ -11,10 +11,7 @@ import type { FuelEntry, WeeklyFuelReport } from '../../../types/fuel';
 import { formatFuelMoney } from '../../../utils/formatFuelMoney';
 import { UNAVAILABLE_KM_POLICY } from '../../../utils/fuelReconGlossary';
 import { isFuelDataQualityFlagged } from '../../../utils/fuelDataQualityReview';
-import {
-  FuelVehicleEvidenceSheet,
-  pendingFuelLogsForVehicle,
-} from './FuelPendingLogsSheet';
+import { FuelVehicleEvidenceSheet } from './FuelPendingLogsSheet';
 import { buildFuelFlagDeskRows, type FuelFlagDeskRow } from '../../../utils/fuelFillFlagClassify';
 import type { FuelFlagDispositionMap } from '../../../utils/fuelFlagDisposition';
 import { toEntryYmd } from '../../../utils/fuelWeekPeriod';
@@ -50,13 +47,31 @@ function severityChipClass(r: FuelQualityRow): string {
   return 'border-slate-200 bg-slate-50 text-slate-700';
 }
 
-function plainIssue(r: FuelQualityRow): string {
-  if (r.subtitle) return r.subtitle;
-  if (r.odometerIncomplete) return 'Last fuel log mileage doesn’t match the trip tracker.';
-  if (r.healthStatus === 'Red') return 'Needs a fix before you lock the week.';
-  if (r.healthStatus === 'Amber') return 'Needs a quick look — tank cycle or gap signal.';
-  if (r.pendingCount > 0) return `${r.pendingCount} fill(s) will post when you Finalize.`;
-  return 'Review this vehicle.';
+/** Issue copy aligned with Fuel Flags classifier (not pending-to-post counts). */
+export function plainIssue(r: FuelQualityRow, openFlaggedFillCount = 0): string {
+  const parts: string[] = [];
+  if (r.healthStatus && r.healthStatus !== 'Emerald') parts.push(r.healthStatus);
+  if (openFlaggedFillCount > 0) {
+    parts.push(
+      openFlaggedFillCount === 1
+        ? '1 flagged fill needs review'
+        : `${openFlaggedFillCount} flagged fills need review`,
+    );
+  } else if (r.odometerIncomplete) {
+    parts.push('Incomplete odometer data — unexplained fuel may be inflated');
+  } else if (r.subtitle) {
+    // Health-only / odometer subtitle from toFuelQualityRow (no pending).
+    return r.subtitle;
+  } else if (r.healthStatus === 'Red') {
+    parts.push('Needs a fix before you lock the week.');
+  } else if (r.healthStatus === 'Amber') {
+    parts.push('Needs a quick look — tank cycle or gap signal.');
+  } else if (r.pendingCount > 0) {
+    parts.push(`${r.pendingCount} fill(s) will post when you Finalize.`);
+  } else {
+    parts.push('Review this vehicle.');
+  }
+  return parts.join(' · ');
 }
 
 function FlaggedVehicleCard({
@@ -65,12 +80,14 @@ function FlaggedVehicleCard({
   onReviewDetails,
   onMarkReviewed,
   openCriticalCount = 0,
+  openFlaggedFillCount = 0,
 }: {
   r: FuelQualityRow;
   periodLocked?: boolean;
   onReviewDetails: (row: FuelQualityRow) => void;
   onMarkReviewed?: (vehicleId: string) => void;
   openCriticalCount?: number;
+  openFlaggedFillCount?: number;
 }) {
   const markBlocked = openCriticalCount > 0;
   return (
@@ -97,7 +114,7 @@ function FlaggedVehicleCard({
         </span>
       </div>
       <p className="mt-2.5 rounded-lg border border-slate-200/60 bg-slate-50/80 p-2.5 text-sm leading-relaxed text-slate-600">
-        {plainIssue(r)}
+        {plainIssue(r, openFlaggedFillCount)}
         {r.totalSpend > FUEL_SPEND_EPS && (
           <>
             {' '}
@@ -218,13 +235,16 @@ export function FuelDataQualityStep({
         r.reasons.some((x) => x.severity === 'critical' && !x.resolved),
     ).length;
 
+  const openFlaggedByVehicle = (vehicleId: string) =>
+    allFlagRows.filter(
+      (r) =>
+        r.entry.vehicleId === vehicleId && r.reasons.some((x) => !x.resolved),
+    ).length;
+
   const flaggedFillCount = allFlagRows.filter((r) =>
     r.reasons.some((x) => !x.resolved),
   ).length;
 
-  const pendingEntries = reviewRow
-    ? pendingFuelLogsForVehicle(weekFuelEntries, reviewRow.id)
-    : [];
   const reviewFlaggedRows = reviewRow
     ? allFlagRows.filter((r) => r.entry.vehicleId === reviewRow.id)
     : [];
@@ -342,6 +362,7 @@ export function FuelDataQualityStep({
                     onReviewDetails={setReviewRow}
                     onMarkReviewed={onMarkReviewed}
                     openCriticalCount={openCriticalByVehicle(r.id)}
+                    openFlaggedFillCount={openFlaggedByVehicle(r.id)}
                   />
                 </li>
               ))}
@@ -381,7 +402,7 @@ export function FuelDataQualityStep({
                             : 'text-slate-900'
                         }
                       >
-                        {plainIssue(r)}
+                        {plainIssue(r, openFlaggedByVehicle(r.id))}
                       </div>
                     </td>
                     <td className="px-3 py-3">
@@ -556,7 +577,6 @@ export function FuelDataQualityStep({
         plate={reviewRow?.plate || ''}
         driverName={reviewRow?.driverName || 'Driver'}
         flaggedRows={reviewFlaggedRows}
-        pendingEntries={pendingEntries}
       />
     </div>
   );

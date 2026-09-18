@@ -9,7 +9,7 @@ import { FuelCardAssignModal } from '../components/fuel/FuelCardAssignModal';
 import { FuelLogModal } from '../components/fuel/FuelLogModal';
 import { FuelLogTable } from '../components/fuel/FuelLogTable';
 import { FuelConfiguration } from '../components/fuel/FuelConfiguration';
-import { FuelFlagsDesk } from '../components/fuel/flags/FuelFlagsDesk';
+import { FuelIntegrityDesk, type FuelIntegritySubtab } from '../components/fuel/integrity/FuelIntegrityDesk';
 import { BucketReconciliationView } from '../components/fuel/BucketReconciliationView';
 import { MileageAdjustmentModal } from '../components/fuel/MileageAdjustmentModal';
 import { AddFuelChoiceDialog } from '../components/fuel/AddFuelChoiceDialog';
@@ -138,12 +138,20 @@ function FuelManagementInner({
     useFuelSettlementReopenGate();
   const { confirmIfMismatch: confirmForceClientMoney, dialog: forceClientMoneyDialog } =
     useFuelForceClientMoneyDialog();
-  const [activeTab, setActiveTab] = useState(defaultTab);
+  const [activeTab, setActiveTab] = useState(
+    defaultTab === 'flags' ? 'integrity' : defaultTab,
+  );
   const lastFuelDataLoadAtRef = useRef(0);
 
   useEffect(() => {
-    setActiveTab(defaultTab);
+    setActiveTab(defaultTab === 'flags' ? 'integrity' : defaultTab);
   }, [defaultTab]);
+
+  const [integritySubtab, setIntegritySubtab] = useState<FuelIntegritySubtab>('fill-flags');
+  const [integrityPreferredVehicleId, setIntegrityPreferredVehicleId] = useState<string | null>(
+    null,
+  );
+  const [integrityTripsLoading, setIntegrityTripsLoading] = useState(false);
 
   const fleetTz = useFleetTimezone();
 
@@ -395,7 +403,7 @@ function FuelManagementInner({
     // Flags desk needs lock status; recon also needs periods after recompute.
     enabled:
       Boolean(landingPeriodRange.from && landingPeriodRange.to) &&
-      (activeTab === 'flags' ||
+      (activeTab === 'integrity' ||
         (activeTab === 'reconciliation' && periodsQueryReady)),
   });
 
@@ -559,7 +567,7 @@ function FuelManagementInner({
 
   // Hydrate dispositions scoped to the active week’s entry IDs (R-2 — never org-wide clip).
   useEffect(() => {
-    if (activeTab !== 'flags' && activeTab !== 'reconciliation') return;
+    if (activeTab !== 'integrity' && activeTab !== 'reconciliation') return;
     let cancelled = false;
     const weekStart =
       activeTab === 'reconciliation'
@@ -668,6 +676,52 @@ function FuelManagementInner({
     fetchTripsForRange();
   }, [activeTab, periodsQueryReady, reconciliationDateRange, isBucketSheetOpen]);
 
+  const integrityDateRange = useMemo((): DateRange | undefined => {
+    if (!flagsSelectedWeekStart) return undefined;
+    const opt = flagsPeriodOptions.find((p) => p.weekStart === flagsSelectedWeekStart);
+    const weekEnd = opt?.weekEnd || flagsSelectedWeekStart;
+    return {
+      from: ymdToLocalDate(flagsSelectedWeekStart),
+      to: ymdToLocalDate(weekEnd),
+    };
+  }, [flagsSelectedWeekStart, flagsPeriodOptions]);
+
+  // Integrity Stop-to-stop tab needs trips for the selected week (same fetch as bucket sheet).
+  useEffect(() => {
+    if (activeTab !== 'integrity' || integritySubtab !== 'stop-to-stop') return;
+    if (!flagsSelectedWeekStart) return;
+    let cancelled = false;
+    const run = async () => {
+      setIntegrityTripsLoading(true);
+      try {
+        const opt = flagsPeriodOptions.find((p) => p.weekStart === flagsSelectedWeekStart);
+        const weekEnd =
+          opt?.weekEnd || reconciliationPeriodEnd || flagsSelectedWeekStart;
+        const { trips: weekTrips, tripsTruncated } = await fetchTripsForFuelWeekPaged(
+          flagsSelectedWeekStart,
+          weekEnd,
+        );
+        if (cancelled) return;
+        setTrips(weekTrips);
+        if (tripsTruncated) setFuelDataTruncated(true);
+      } catch (e) {
+        console.error('Failed to fetch trips for integrity stop-to-stop', e);
+      } finally {
+        if (!cancelled) setIntegrityTripsLoading(false);
+      }
+    };
+    void run();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    activeTab,
+    integritySubtab,
+    flagsSelectedWeekStart,
+    flagsPeriodOptions,
+    reconciliationPeriodEnd,
+  ]);
+
   const loadLogsAndTransactions = useCallback(async () => {
     const { startDate, endDate } = fuelFetchWindow;
     // R6: Review Queue backlog is not week-bounded — same lookback as the nav badge.
@@ -725,7 +779,7 @@ function FuelManagementInner({
 
   // Silent refresh when switching to Logs / Review / Flags if data is stale (>30s)
   useEffect(() => {
-    if (activeTab !== 'logs' && activeTab !== 'reimbursements' && activeTab !== 'flags') return;
+    if (activeTab !== 'logs' && activeTab !== 'reimbursements' && activeTab !== 'integrity') return;
     const age = Date.now() - lastFuelDataLoadAtRef.current;
     if (lastFuelDataLoadAtRef.current > 0 && age > 30_000) {
       void loadLogsAndTransactions();
@@ -742,7 +796,7 @@ function FuelManagementInner({
   ) => {
       const scope =
         opts?.scope ||
-        (activeTab === 'logs' || activeTab === 'reimbursements' || activeTab === 'flags'
+        (activeTab === 'logs' || activeTab === 'reimbursements' || activeTab === 'integrity'
           ? 'core'
           : activeTab === 'reconciliation' || activeTab === 'configuration'
             ? 'recon'
@@ -880,7 +934,7 @@ function FuelManagementInner({
   // Sequential post-paint: activity-bounds → one finalized-reports call (ROAM-FLEET-10).
   // Never parallel with recompute/periods/trips/logs on recon mount.
   useEffect(() => {
-    if (activeTab === 'logs' || activeTab === 'reimbursements' || activeTab === 'flags') return;
+    if (activeTab === 'logs' || activeTab === 'reimbursements' || activeTab === 'integrity') return;
     if (activeTab === 'reconciliation' && !periodsQueryReady) return;
     let cancelled = false;
     const delayMs = activeTab === 'reconciliation' ? 900 : 200;
@@ -916,7 +970,7 @@ function FuelManagementInner({
 
   // Tab-scoped bootstrap — logs/flags stay light; recon loads cards (C-6); cards tab loads full bundle.
   useEffect(() => {
-    if (activeTab === 'logs' || activeTab === 'reimbursements' || activeTab === 'flags') {
+    if (activeTab === 'logs' || activeTab === 'reimbursements' || activeTab === 'integrity') {
       if (coreLoadedRef.current || reconLoadedRef.current || fullLoadedRef.current) return;
       void loadData(true, { scope: 'core' });
       return;
@@ -1791,10 +1845,10 @@ function FuelManagementInner({
   } else if (activeTab === 'logs') {
       pageTitle = "Transaction Logs";
       pageDescription = "Posted fuel fill-ups. Use Add fuel to create. Odometer shows current km; Δ Prev shows change from last fill.";
-  } else if (activeTab === 'flags') {
-      pageTitle = "Fuel Flags";
+  } else if (activeTab === 'integrity') {
+      pageTitle = "Fuel Integrity";
       pageDescription =
-        "Monitor problem fills — integrity, exceptions, location, and price outliers. Accept, edit, or escalate each open flag; locking the week only marks leftovers as cleared-by-lock.";
+        "Investigate problem fills and stop-to-stop tank/odometer gaps for the selected week.";
   } else if (activeTab === 'configuration') {
       pageTitle = "Fleet Policy Configuration";
       pageDescription = "Manage company and driver expense splits for fuel.";
@@ -1819,7 +1873,7 @@ function FuelManagementInner({
           ) : undefined
         }
     >
-      {(activeTab !== 'configuration' && activeTab !== 'cards' && activeTab !== 'flags') && (
+      {(activeTab !== 'configuration' && activeTab !== 'cards' && activeTab !== 'integrity') && (
         <div
           className={`flex justify-end items-center gap-3 mb-4 flex-wrap${
             activeTab === 'logs' && !embedded ? ' md:justify-end' : ''
@@ -1924,6 +1978,14 @@ function FuelManagementInner({
           autoCloseDualApprovalMode={autoCloseDualApprovalMode}
           initialWeekStart={initialWeekStart}
           dispositions={flagDispositions}
+          onOpenIntegrityStopToStop={({ weekStart, vehicleId }) => {
+            setFlagsWeekStart(weekStart);
+            if (vehicleId) setIntegrityPreferredVehicleId(vehicleId);
+            setIntegritySubtab('stop-to-stop');
+            setActiveTab('integrity');
+            onTabChange?.('integrity');
+            toast.info('Opening Fuel Integrity → Stop-to-stop…');
+          }}
           onRefresh={() => loadData(true)}
           onFinalize={handleFinalize}
           onAddAdjustment={() => { setAdjustmentDefaults({}); setIsAdjustmentModalOpen(true); }}
@@ -2099,18 +2161,34 @@ function FuelManagementInner({
         </div>
       )}
 
-      {activeTab === 'flags' && (
-        <FuelFlagsDesk
+      {activeTab === 'integrity' && (
+        <FuelIntegrityDesk
           periods={flagsPeriodOptions}
           selectedWeekStart={flagsSelectedWeekStart}
           onSelectWeekStart={(weekStart) => {
             setFlagsWeekStart(weekStart);
           }}
+          subtab={integritySubtab}
+          onSubtabChange={setIntegritySubtab}
           rows={flagsDeskRows}
-          loading={!fuelLogsHydrated || (activeTab === 'flags' && serverPeriodsPending)}
+          loading={!fuelLogsHydrated || (activeTab === 'integrity' && serverPeriodsPending)}
           dispositionsTruncated={flagDispositionsTruncated}
           canDisposition={can('fuel.edit_entry')}
           canAcceptCritical={can('fuel.accept_unexplained')}
+          vehicles={vehicles as Vehicle[]}
+          fuelEntries={logs}
+          trips={trips}
+          adjustments={adjustments}
+          transactions={transactions}
+          dateRange={integrityDateRange}
+          periodLocked={Boolean(
+            flagsPeriodOptions.find((p) => p.weekStart === flagsSelectedWeekStart)?.locked,
+          )}
+          preferredVehicleId={integrityPreferredVehicleId}
+          tripsLoading={integrityTripsLoading}
+          onRefreshStopToStop={() => {
+            void loadData(true);
+          }}
           onReconcileWeek={(weekStart) => {
             const hit = flagsPeriodOptions.find((p) => p.weekStart === weekStart);
             if (!hit) return;
@@ -2136,7 +2214,7 @@ function FuelManagementInner({
             setEditingLog(entry);
             setIsLogModalOpen(true);
           }}
-          onAcceptFlag={async (row, flagCode, note, action = 'accepted') => {
+          onAcceptFlag={async (row, flagCode, note, action = 'accepted', opts) => {
             if (action === 'accepted' && row.reasons.some((r) => r.code === flagCode && r.severity === 'critical') && note.trim().length < 8) {
               toast.error('Add a note (8+ characters) to accept a critical flag.');
               return;
@@ -2192,9 +2270,14 @@ function FuelManagementInner({
                   setLogs((prev) => prev.map((l) => (l.id === row.entryId ? updated : l)));
                 }
               }
-              toast.success(action === 'escalated' ? 'Flag escalated' : 'Flag accepted');
+              if (!opts?.quiet) {
+                toast.success(action === 'escalated' ? 'Flag escalated' : 'Flag accepted');
+              }
             } catch (e: any) {
-              toast.error(e?.message || 'Could not save disposition');
+              if (!opts?.quiet) {
+                toast.error(e?.message || 'Could not save disposition');
+              }
+              throw e;
             }
           }}
         />

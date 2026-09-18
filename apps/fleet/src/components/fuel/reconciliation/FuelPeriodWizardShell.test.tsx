@@ -74,8 +74,10 @@ describe('FuelPeriodWizard shell chrome', () => {
     expect(screen.getByText(/locked/i)).toBeTruthy();
   });
 
-  it('deep-link finalize step: last step hides Continue footer', () => {
-    const { container } = render(
+  it('deep-link finalize step: last step shows Finalize week CTA', async () => {
+    const user = userEvent.setup();
+    const onFinalize = vi.fn();
+    render(
       <FuelPeriodWizardContinueFooter
         isLast
         canContinue={false}
@@ -83,9 +85,31 @@ describe('FuelPeriodWizard shell chrome', () => {
         leakageReviewed
         continueLabel="Continue"
         onContinue={() => undefined}
+        onFinalize={onFinalize}
+        finalizeDisabled={false}
       />,
     );
-    expect(container.querySelector('button')).toBeNull();
+    const btn = screen.getByRole('button', { name: /^Finalize week$/i });
+    expect(btn).toBeEnabled();
+    await user.click(btn);
+    expect(onFinalize).toHaveBeenCalled();
+  });
+
+  it('deep-link finalize step: disables Finalize when blocked', () => {
+    render(
+      <FuelPeriodWizardContinueFooter
+        isLast
+        canContinue={false}
+        activeStepId="finalize"
+        leakageReviewed
+        continueLabel="Continue"
+        onContinue={() => undefined}
+        onFinalize={() => undefined}
+        finalizeDisabled
+      />,
+    );
+    expect(screen.getByRole('button', { name: /^Finalize week$/i })).toBeDisabled();
+    expect(screen.getByText(/Clear blockers above/i)).toBeTruthy();
   });
 
   it('disables Continue and explains flagged vehicles on data-quality', () => {

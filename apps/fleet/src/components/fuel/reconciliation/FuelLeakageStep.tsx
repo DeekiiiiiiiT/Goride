@@ -228,7 +228,7 @@ export function FuelLeakageStep(props: FuelLeakageStepProps) {
           Choose a disposition and type a reason here, then use Mark reviewed &amp; continue above.
         </p>
       </div>
-      {leakageRows.length > 0 && (
+      {vehicles.length > 0 && (
         <Button type="button" variant="outline" className="min-h-11" onClick={onToggleGapDetail}>
           {showGapDetail ? 'Hide' : 'Show'} stop-to-stop gap detail
         </Button>

@@ -326,35 +326,38 @@ export const FUEL_FLAG_CATEGORY_LEGEND: FuelFlagCategoryLegendItem[] = [
     rows: [
       {
         flag: 'Exception',
-        meaning:
-          'Hard problem fill (signalTier: exception) — blocks Finalize until dispositioned.',
+        meaning: 'Hard problem fill — blocks Finalize until you Accept or Edit.',
       },
       {
         flag: 'Integrity critical',
-        meaning: 'Auto rules said this fill is badly wrong (see reasons below).',
+        meaning: 'Auto rules say this fill is badly wrong — fix or explain before you trust it.',
       },
       {
         flag: 'Integrity warning',
-        meaning: 'Suspicious but milder.',
+        meaning: 'Suspicious fill — check the named reason before Accepting.',
       },
       {
         flag: 'isFlagged',
-        meaning: 'Generic “this fill is flagged” (capacity/outlier style).',
+        meaning: 'Capacity / outlier-style flag — open the row for the specific reason checklist.',
       },
       {
         flag: 'Location anomaly',
-        meaning: 'GPS/station match looks wrong for this fill.',
+        meaning: 'Station / GPS for this fill does not line up — confirm where they fueled.',
       },
     ],
-    bulletsTitle: 'Integrity / anomaly reasons the backend writes',
+    bulletsTitle: 'Common reasons you will see on a row',
     bullets: [
-      'Tank overflow (one fill bigger than tank)',
-      'Soft anchor / tank overfill',
-      'High fuel consumption (efficiency way off)',
-      'High transaction frequency',
-      'Fragmented purchase (tiny liters, e.g. <5L)',
-      'Approaching capacity',
-      'High fuel velocity ($/km)',
+      'Approaching Capacity',
+      'Fragmented Purchase',
+      'Tank Overflow',
+      'Tank Overfill Anomaly',
+      'Soft Anchor / Tank Overfill',
+      'High Fuel Consumption',
+      'High Transaction Frequency',
+      'High Fuel Velocity ($/km)',
+      'Odometer Regression',
+      'Odometer Gap Detected',
+      'Odometer Stagnation',
     ],
   },
   {
@@ -365,7 +368,7 @@ export const FUEL_FLAG_CATEGORY_LEGEND: FuelFlagCategoryLegendItem[] = [
     rows: [
       {
         flag: 'Station median outlier',
-        meaning: 'Paid $/L is high versus this station’s recent median for the period.',
+        meaning: 'Price per liter is high vs this station’s recent norm — verify receipt $/L.',
       },
     ],
     note: 'Computed for the selected period and stamped as Outlier on matching fills.',

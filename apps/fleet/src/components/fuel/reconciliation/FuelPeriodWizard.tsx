@@ -52,7 +52,6 @@ import {
 import { useFuelWizardKeyboard } from './useFuelWizardKeyboard';
 import {
   applyLocalLeakageReview,
-  downloadWizardEvidencePack,
   loadWizardStepNotes,
   materializeWizardPeriodCounts,
   persistLeakageReviewToServer,
@@ -140,6 +139,8 @@ interface FuelPeriodWizardProps {
   initialStepId?: FuelStepId;
   /** Desk disposition map — client finalize gate parity (R-1). */
   dispositions?: import('../../../utils/fuelFlagDisposition').FuelFlagDispositionMap;
+  /** Open Fuel Integrity → Stop-to-stop for this week/vehicle. */
+  onOpenIntegrityStopToStop?: (args: { weekStart: string; vehicleId?: string }) => void;
 }
 
 function FuelPeriodWizardInner({
@@ -169,6 +170,7 @@ function FuelPeriodWizardInner({
   sessionKey = 0,
   initialStepId,
   dispositions,
+  onOpenIntegrityStopToStop,
 }: FuelPeriodWizardProps) {
   const { user } = useAuth();
   const [leakageReviewed, setLeakageReviewed] = useState(false);
@@ -725,22 +727,6 @@ function FuelPeriodWizardInner({
     }
   };
 
-  const handleDownloadEvidencePack = async () => {
-    await downloadWizardEvidencePack({
-      serverPeriodId,
-      weekStart: period.startDate,
-      weekEnd: period.endDate,
-      weekLabel: period.label,
-      setServerPeriodId,
-      strip,
-      settlementRows,
-      openDisputeCount: openDisputes.length,
-      leakageReviewed,
-      stepNotes,
-      secondApproverConfirmed,
-    });
-  };
-
   // Always re-gate from live fuelEntries via useFuelWizardDerived (not weekReports.gateResult cache).
 
   const openExceptionInLogs = (blocker: FuelExceptionBlocker) => {
@@ -960,29 +946,79 @@ function FuelPeriodWizardInner({
             : {
                 title: 'Ready to lock this week',
                 body: 'Finalize posts pending fuel to settlements and freezes this week. If driver payouts already exist and the leftover would change, you will confirm Reopen settlement first.',
-                actionLabel: finalizing ? 'Finalizing…' : 'Finalize week',
-                onAction: handleFinalizeClick,
-                actionDisabled:
-                  finalizing ||
-                  liveReports.length === 0 ||
-                  hasDegradedInputs ||
-                  closableBlockers.length > 0 ||
-                  !!gateResult.hasExceptionBlockers ||
-                  !!gateResult.hasUnapprovedFuelTxBlockers ||
-                  !!gateResult.hasOverExplainedBlockers ||
-                  (!!gateResult.hasUnderExplainedBlockers && !leakageReviewed) ||
-                  (!!gateResult.hasBlockingWarnings && !financeWarningAcknowledged) ||
-                  (needsHumanSecondApprover(
-                    strip.totalSpend,
-                    secondApproverThreshold,
-                    dualApprovalUiMode,
-                  ) &&
-                    !secondApproverConfirmed),
               };
       default:
         return { title: '', body: '' };
     }
   })();
+
+  const finalizeDisabled =
+    finalizing ||
+    periodLocked ||
+    liveReports.length === 0 ||
+    hasDegradedInputs ||
+    closableBlockers.length > 0 ||
+    !!gateResult.hasExceptionBlockers ||
+    !!gateResult.hasUnapprovedFuelTxBlockers ||
+    !!gateResult.hasOverExplainedBlockers ||
+    (!!gateResult.hasUnderExplainedBlockers && !leakageReviewed) ||
+    (!!gateResult.hasBlockingWarnings && !financeWarningAcknowledged) ||
+    (needsHumanSecondApprover(
+      strip.totalSpend,
+      secondApproverThreshold,
+      dualApprovalUiMode,
+    ) &&
+      !secondApproverConfirmed);
+
+  const finalizeBlockedReason = (() => {
+    if (periodLocked) return 'This week is already locked.';
+    if (finalizing) return 'Finalizing…';
+    if (liveReports.length === 0) return 'No fuel spend reports loaded for this week yet.';
+    if (hasDegradedInputs) {
+      return 'Trips, deadhead, personal allowance, cards, or brain data is incomplete — tap Retry week data.';
+    }
+    if (closableBlockers.length > 0) {
+      return fuelWeekClosableBlockerMessage(closableBlockers[0]);
+    }
+    if (gateResult.hasExceptionBlockers) {
+      return `Resolve ${gateResult.exceptionBlockers.length} exception fill(s) above first.`;
+    }
+    if (gateResult.hasUnapprovedFuelTxBlockers) {
+      return 'Approve or reject pending fuel receipts in Review Queue first.';
+    }
+    if (gateResult.hasOverExplainedBlockers) {
+      return 'Over-explained week — fix odometer / efficiency inputs (cannot accept away).';
+    }
+    if (gateResult.hasUnderExplainedBlockers && !leakageReviewed) {
+      return 'Under-explained fuel still needs Mark reviewed on Unexplained fuel.';
+    }
+    if (gateResult.hasBlockingWarnings && !financeWarningAcknowledged) {
+      return 'Check the review box above before Finalize.';
+    }
+    if (
+      needsHumanSecondApprover(
+        strip.totalSpend,
+        secondApproverThreshold,
+        dualApprovalUiMode,
+      ) &&
+      !secondApproverConfirmed
+    ) {
+      return `Spend is above ${formatFuelMoney(secondApproverThreshold)} — a different admin must record second approval.`;
+    }
+    return null;
+  })();
+
+  // When closable/hard gates block, don't claim "Ready to lock" in the coach card.
+  const stepHeroResolved =
+    activeStepId === 'finalize' && finalizeBlockedReason && !periodLocked
+      ? {
+          title: 'Can’t finalize yet',
+          body: finalizeBlockedReason,
+          ...(hasDegradedInputs
+            ? { actionLabel: 'Retry week data' as const, onAction: handleRetryWeek }
+            : {}),
+        }
+      : stepHero;
 
   const exportSettlementCsv = () => {
     void downloadCSV(
@@ -1100,11 +1136,11 @@ function FuelPeriodWizardInner({
         <div className="space-y-4">
           {/* Stitch B order: coach → money → steps → queue */}
           <FuelWizardStepHero
-            title={stepHero.title}
-            body={stepHero.body}
-            actionLabel={stepHero.actionLabel}
-            onAction={stepHero.onAction}
-            actionDisabled={stepHero.actionDisabled}
+            title={stepHeroResolved.title}
+            body={stepHeroResolved.body}
+            actionLabel={stepHeroResolved.actionLabel}
+            onAction={stepHeroResolved.onAction}
+            actionDisabled={stepHeroResolved.actionDisabled}
             focusKey={activeStepId}
           />
 
@@ -1263,9 +1299,42 @@ function FuelPeriodWizardInner({
                 secondApproveBusy={secondApproveBusy}
                 dualApprovalUiMode={dualApprovalUiMode}
                 onRecordSecondApproval={() => void handleRecordSecondApproval()}
-                onExportCsv={exportSettlementCsv}
-                onDownloadEvidencePack={() => void handleDownloadEvidencePack()}
                 settlementRows={settlementRows}
+                closableBlockMessages={closableBlockers.map(fuelWeekClosableBlockerMessage)}
+                onOpenStopToStopGapDetail={() => {
+                  const brokenVid = liveReports
+                    .flatMap((r) => r.odometerBuckets || [])
+                    .find((b) => b.chainAnomaly || b.confidenceTier === 'indeterminate')
+                    ?.vehicleId;
+                  const target =
+                    (brokenVid && vehicles.find((v) => v.id === brokenVid)) ||
+                    vehicles.find((v) => leakageRows.some((r) => r.id === v.id)) ||
+                    vehicles[0];
+                  if (target) setBucketVehicleId(target.id);
+                  setShowGapDetail(true);
+                  setActiveStepId('leakage-gap');
+                  setProgressIndex(Math.max(0, FUEL_STEP_ORDER.indexOf('leakage-gap')));
+                }}
+                onOpenIntegrityStopToStop={
+                  onOpenIntegrityStopToStop
+                    ? () => {
+                        const brokenVid = liveReports
+                          .flatMap((r) => r.odometerBuckets || [])
+                          .find(
+                            (b) =>
+                              b.chainAnomaly || b.confidenceTier === 'indeterminate',
+                          )?.vehicleId;
+                        const target =
+                          (brokenVid && vehicles.find((v) => v.id === brokenVid)) ||
+                          vehicles.find((v) => leakageRows.some((r) => r.id === v.id)) ||
+                          vehicles[0];
+                        onOpenIntegrityStopToStop({
+                          weekStart: period.startDate,
+                          vehicleId: target?.id,
+                        });
+                      }
+                    : undefined
+                }
                 provenance={{
                   tripCount: weekTrips.length,
                   tripsTimedOut: Boolean(weekDegraded?.trips),
@@ -1299,6 +1368,10 @@ function FuelPeriodWizardInner({
         continueLabel={continueLabel}
         onContinue={handleContinue}
         onAddNote={() => overflowRef.current?.openNote()}
+        onFinalize={() => void handleFinalizeClick()}
+        finalizeDisabled={finalizeDisabled}
+        finalizing={finalizing}
+        finalizeBlockedReason={finalizeBlockedReason}
       />
       </FuelPeriodWizardBodyGate>
     </div>

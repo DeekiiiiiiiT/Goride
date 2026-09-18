@@ -34,7 +34,7 @@ describe('FuelLeakageStep render', () => {
         showGapDetail={false}
         onToggleGapDetail={onToggle}
         bucketVehicle={null}
-        vehicles={[]}
+        vehicles={[{ id: 'v1', licensePlate: 'ABC' } as any]}
         periodLocked={false}
         onBucketVehicleChange={() => undefined}
         adjustments={[]}

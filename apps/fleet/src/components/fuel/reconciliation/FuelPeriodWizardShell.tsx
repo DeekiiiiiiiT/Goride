@@ -151,6 +151,10 @@ export function FuelPeriodWizardContinueFooter({
   continueLabel,
   onContinue,
   onAddNote,
+  onFinalize,
+  finalizeDisabled,
+  finalizing,
+  finalizeBlockedReason,
 }: {
   isLast: boolean;
   canContinue: boolean;
@@ -159,11 +163,18 @@ export function FuelPeriodWizardContinueFooter({
   continueLabel: string;
   onContinue: () => void;
   onAddNote?: () => void;
+  /** Last step — primary lock action (replaces Continue). */
+  onFinalize?: () => void;
+  finalizeDisabled?: boolean;
+  finalizing?: boolean;
+  /** Specific why Finalize is locked (closable gate / second approver / etc.). */
+  finalizeBlockedReason?: string | null;
 }) {
-  if (isLast) return null;
-
-  const blockedCopy =
-    activeStepId === 'adjustments-disputes'
+  const blockedCopy = isLast
+    ? finalizeDisabled
+      ? finalizeBlockedReason || 'Clear blockers above, then Finalize week.'
+      : 'Ready to lock this week'
+    : activeStepId === 'adjustments-disputes'
       ? 'Resolve open disputes before continuing.'
       : activeStepId === 'leakage-gap' && !leakageReviewed
         ? 'Use “Mark reviewed” above, or finish gap review.'
@@ -171,11 +182,20 @@ export function FuelPeriodWizardContinueFooter({
           ? 'Mark every flagged vehicle reviewed before continuing.'
           : 'Finish remaining items on this step to continue.';
 
+  const primaryDisabled = isLast
+    ? Boolean(finalizeDisabled || finalizing || !onFinalize)
+    : !canContinue;
+  const primaryLabel = isLast
+    ? finalizing
+      ? 'Finalizing…'
+      : 'Finalize week'
+    : continueLabel;
+
   return (
     <div className="fixed bottom-0 left-0 right-0 z-40 border-t border-slate-200 bg-white/95 px-4 pt-3 pb-[max(1.5rem,env(safe-area-inset-bottom))] backdrop-blur-md shadow-[0_-4px_12px_rgba(15,23,42,0.06)] md:static md:mt-4 md:rounded-xl md:border md:bg-white md:pb-3 md:pt-3 md:shadow-sm md:backdrop-blur-none">
       <div className="mx-auto flex max-w-6xl flex-col gap-2 md:flex-row md:items-center md:justify-between">
         <div className="min-w-0 md:flex-1">
-          {!canContinue ? (
+          {primaryDisabled && !finalizing ? (
             <p className="flex items-start gap-2 text-xs text-rose-700 md:text-sm">
               <span
                 className="mt-1.5 inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-rose-600"
@@ -186,21 +206,24 @@ export function FuelPeriodWizardContinueFooter({
           ) : (
             <p className="hidden items-center gap-1.5 text-xs text-slate-500 md:flex">
               <ShieldCheck className="h-3.5 w-3.5" aria-hidden />
-              Ready to continue
+              {isLast ? 'Ready to lock' : 'Ready to continue'}
             </p>
           )}
         </div>
         <div className="flex w-full flex-col gap-2 md:w-auto md:flex-row md:items-center">
           <Button
             type="button"
-            disabled={!canContinue}
+            disabled={primaryDisabled}
             className="h-12 min-h-12 w-full rounded-xl bg-[#3525cd] text-base font-semibold tracking-wide text-white shadow-sm hover:bg-[#2a1ea4] disabled:bg-slate-300 md:w-auto md:px-6"
-            onClick={onContinue}
+            onClick={() => {
+              if (isLast) onFinalize?.();
+              else onContinue();
+            }}
           >
-            <span>{continueLabel}</span>
-            <ArrowRight className="ml-2 h-[18px] w-[18px]" aria-hidden />
+            {primaryLabel}
+            {!isLast && <ArrowRight className="ml-2 h-4 w-4" aria-hidden />}
           </Button>
-          {onAddNote && (
+          {onAddNote && !isLast && (
             <button
               type="button"
               className="flex h-10 w-full items-center justify-center text-sm text-slate-500 transition-colors hover:text-[#3525cd] md:w-auto md:px-2"

@@ -27,8 +27,6 @@ describe('FuelFinalizeStep render', () => {
         secondApproverConfirmed={false}
         secondApproveBusy={false}
         onRecordSecondApproval={onRecord}
-        onExportCsv={() => undefined}
-        onDownloadEvidencePack={() => undefined}
         settlementRows={[]}
       />,
     );
@@ -56,8 +54,6 @@ describe('FuelFinalizeStep render', () => {
         secondApproveBusy={false}
         dualApprovalUiMode="service_only"
         onRecordSecondApproval={() => undefined}
-        onExportCsv={() => undefined}
-        onDownloadEvidencePack={() => undefined}
         settlementRows={[]}
       />,
     );

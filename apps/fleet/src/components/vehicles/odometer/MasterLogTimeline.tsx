@@ -535,7 +535,14 @@ const MasterLogTimelineInternal: React.FC<MasterLogTimelineProps & React.HTMLAtt
   }
 
   return (
-    <div className={`space-y-6 mx-auto p-2 ${embedded ? 'max-w-none' : 'max-w-7xl'}`} {...props}>
+    <div
+      className={
+        embedded
+          ? 'w-full min-w-0 space-y-6 p-2'
+          : 'w-full min-w-0 space-y-6 p-2 md:mx-auto md:max-w-[1400px]'
+      }
+      {...props}
+    >
       {/* Filter Bar */}
       <Card className="bg-white border-slate-200 shadow-sm">
           <CardContent className="p-4">

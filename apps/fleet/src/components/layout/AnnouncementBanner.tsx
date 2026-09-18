@@ -51,7 +51,7 @@ export function AnnouncementBanner({ preview }: { preview?: boolean }) {
           PREVIEW — Visible to all users
         </div>
       )}
-      <div className="flex items-center gap-3 px-4 py-2.5 max-w-7xl mx-auto">
+      <div className="flex w-full min-w-0 items-center gap-3 px-4 py-2.5 md:mx-auto md:max-w-[1400px]">
         <IconComp className="w-4 h-4 shrink-0" />
         <p className="text-sm flex-1">{announcement.message}</p>
         {announcement.dismissible && (

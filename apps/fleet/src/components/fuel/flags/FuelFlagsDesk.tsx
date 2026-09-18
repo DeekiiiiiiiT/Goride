@@ -4,6 +4,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Badge } from '../../ui/badge';
 import { Button } from '../../ui/button';
+import { Checkbox } from '../../ui/checkbox';
 import {
   Sheet,
   SheetContent,
@@ -20,7 +21,8 @@ import {
   type FuelFillFlagCategory,
 } from '../../../utils/fuelFillFlagClassify';
 import { formatFuelLogDate } from '../logs/fuelLogDisplay';
-import { plainEnglishForFlagReason } from '../analytics/fuelFlagGlossary';
+import { FlagCheckGuideBlock } from '../analytics/FlagCheckGuideBlock';
+import { toast } from 'sonner';
 
 export type FuelFlagsPeriodOption = {
   weekStart: string;
@@ -52,6 +54,7 @@ export function FuelFlagsDesk({
   onAcceptFlag,
   onEditFill,
   onReconcileWeek,
+  embeddedInShell = false,
 }: {
   periods: FuelFlagsPeriodOption[];
   selectedWeekStart: string | null;
@@ -67,9 +70,12 @@ export function FuelFlagsDesk({
     flagCode: string,
     note: string,
     action?: 'accepted' | 'escalated' | 'corrected',
+    opts?: { quiet?: boolean },
   ) => Promise<void> | void;
   onEditFill?: (entryId: string) => void;
   onReconcileWeek?: (weekStart: string) => void;
+  /** Period + reconcile owned by FuelIntegrityDesk. */
+  embeddedInShell?: boolean;
 }) {
   const selected = periods.find((p) => p.weekStart === selectedWeekStart) || null;
   const [statusFilter, setStatusFilter] = useState<'open' | 'resolved' | 'cleared' | 'all'>(() =>
@@ -80,10 +86,18 @@ export function FuelFlagsDesk({
   const [detailRow, setDetailRow] = useState<FuelFlagDeskRow | null>(null);
   const [acceptNote, setAcceptNote] = useState('');
   const [acceptBusy, setAcceptBusy] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
+  const [bulkNote, setBulkNote] = useState('');
+  const [bulkBusy, setBulkBusy] = useState(false);
 
   useEffect(() => {
     if (selected?.locked) setStatusFilter('all');
   }, [selectedWeekStart, selected?.locked]);
+
+  useEffect(() => {
+    setSelectedIds(new Set());
+    setBulkNote('');
+  }, [selectedWeekStart, statusFilter]);
 
   const overlayLegend = FUEL_FLAG_CATEGORY_LEGEND.find((i) => i.id === overlayLegendId) || null;
 
@@ -93,6 +107,28 @@ export function FuelFlagsDesk({
     if (statusFilter === 'cleared') return rows.filter((r) => r.status === 'cleared_by_lock');
     return rows.filter((r) => r.status === 'open');
   }, [rows, statusFilter]);
+
+  const selectableRows = useMemo(
+    () => filtered.filter((r) => r.status === 'open' && r.reasons.some((rr) => !rr.resolved)),
+    [filtered],
+  );
+  const selectableIdSet = useMemo(
+    () => new Set(selectableRows.map((r) => r.entryId)),
+    [selectableRows],
+  );
+
+  // Drop selections that left the current filter / were resolved.
+  useEffect(() => {
+    setSelectedIds((prev) => {
+      let changed = false;
+      const next = new Set<string>();
+      for (const id of prev) {
+        if (selectableIdSet.has(id)) next.add(id);
+        else changed = true;
+      }
+      return changed ? next : prev;
+    });
+  }, [selectableIdSet]);
 
   const openCount = rows.filter((r) => r.status === 'open').length;
   const resolvedCount = rows.filter((r) => r.status === 'resolved').length;
@@ -119,6 +155,79 @@ export function FuelFlagsDesk({
       ),
     }));
   }, [filtered]);
+
+  const selectedRows = useMemo(
+    () => selectableRows.filter((r) => selectedIds.has(r.entryId)),
+    [selectableRows, selectedIds],
+  );
+  const selectedOpenReasons = useMemo(
+    () =>
+      selectedRows.flatMap((r) =>
+        r.reasons.filter((rr) => !rr.resolved).map((rr) => ({ row: r, reason: rr })),
+      ),
+    [selectedRows],
+  );
+  const selectedHasCritical = selectedOpenReasons.some((x) => x.reason.severity === 'critical');
+  const allSelectableChecked =
+    selectableRows.length > 0 && selectableRows.every((r) => selectedIds.has(r.entryId));
+  const someSelectableChecked = selectableRows.some((r) => selectedIds.has(r.entryId));
+
+  const toggleRowSelected = (entryId: string, checked: boolean) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(entryId);
+      else next.delete(entryId);
+      return next;
+    });
+  };
+
+  const toggleSelectAllVisible = (checked: boolean) => {
+    if (!checked) {
+      setSelectedIds(new Set());
+      return;
+    }
+    setSelectedIds(new Set(selectableRows.map((r) => r.entryId)));
+  };
+
+  const runBulkAction = async (action: 'accepted' | 'escalated') => {
+    if (!onAcceptFlag || selectedOpenReasons.length === 0) return;
+    if (action === 'accepted' && selectedHasCritical) {
+      if (!canAcceptCritical) return;
+      if (bulkNote.trim().length < 8) return;
+    }
+    setBulkBusy(true);
+    let ok = 0;
+    let failed = 0;
+    try {
+      for (const { row, reason } of selectedOpenReasons) {
+        const note =
+          action === 'escalated'
+            ? bulkNote.trim() || 'Escalated to dispute'
+            : bulkNote.trim();
+        try {
+          await onAcceptFlag(row, reason.code, note, action, { quiet: true });
+          ok += 1;
+        } catch {
+          failed += 1;
+        }
+      }
+      setSelectedIds(new Set());
+      setBulkNote('');
+      if (ok > 0 && failed === 0) {
+        toast.success(
+          action === 'escalated'
+            ? `Escalated ${ok} flag${ok === 1 ? '' : 's'}`
+            : `Accepted ${ok} flag${ok === 1 ? '' : 's'}`,
+        );
+      } else if (ok > 0 && failed > 0) {
+        toast.error(`Saved ${ok}, failed ${failed}`);
+      } else if (failed > 0) {
+        toast.error('Could not save bulk disposition');
+      }
+    } finally {
+      setBulkBusy(false);
+    }
+  };
 
   return (
     <div className="space-y-4">
@@ -188,25 +297,39 @@ export function FuelFlagsDesk({
                 <SheetTitle className="pr-8 text-left">{overlayLegend.detailTitle}</SheetTitle>
                 <SheetDescription className="text-left">{overlayLegend.body}</SheetDescription>
               </SheetHeader>
-              <div className="mt-5 overflow-x-auto">
-                <table className="w-full border-collapse text-left text-sm">
-                  <thead>
-                    <tr className="border-b border-slate-200 text-[11px] uppercase tracking-wider text-slate-500">
-                      <th className="py-2 pr-3 font-semibold">Flag</th>
-                      <th className="py-2 font-semibold">Meaning</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-200">
-                    {overlayLegend.rows.map((row) => (
-                      <tr key={row.flag}>
-                        <td className="py-2.5 pr-3 align-top font-medium text-slate-900">
-                          {row.flag}
-                        </td>
-                        <td className="py-2.5 align-top text-slate-600">{row.meaning}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+              <div className="mt-5 space-y-4">
+                {overlayLegend.rows.map((row) => (
+                  <div
+                    key={row.flag}
+                    className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5"
+                  >
+                    <p className="text-sm font-semibold text-slate-900">{row.flag}</p>
+                    <div className="mt-2">
+                      <FlagCheckGuideBlock reason={row.flag} />
+                    </div>
+                  </div>
+                ))}
+                {overlayLegend.bullets && overlayLegend.bullets.length > 0 && (
+                  <div className="space-y-3">
+                    <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                      {overlayLegend.bulletsTitle || 'Common reasons'}
+                    </p>
+                    {overlayLegend.bullets.map((b) => (
+                        <div
+                          key={b}
+                          className="rounded-lg border border-slate-200 bg-white px-3 py-2.5"
+                        >
+                          <p className="text-sm font-semibold text-slate-900">{b}</p>
+                          <div className="mt-2">
+                            <FlagCheckGuideBlock reason={b} />
+                          </div>
+                        </div>
+                      ))}
+                  </div>
+                )}
+                {overlayLegend.note && (
+                  <p className="text-xs text-slate-500">{overlayLegend.note}</p>
+                )}
               </div>
             </>
           )}
@@ -214,23 +337,25 @@ export function FuelFlagsDesk({
       </Sheet>
 
       <div className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-3 shadow-sm sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
-        <label className="flex min-w-[220px] flex-1 flex-col gap-1 text-xs font-medium text-slate-600">
-          Period
-          <select
-            className="min-h-11 rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-900"
-            value={selectedWeekStart || ''}
-            onChange={(e) => onSelectWeekStart(e.target.value)}
-          >
-            {periods.length === 0 && <option value="">No periods</option>}
-            {periods.map((p) => (
-              <option key={p.weekStart} value={p.weekStart}>
-                {p.label}
-                {p.locked ? ' · Locked' : ' · Open'}
-              </option>
-            ))}
-          </select>
-        </label>
-        {selectedWeekStart && onReconcileWeek && (
+        {!embeddedInShell && (
+          <label className="flex min-w-[220px] flex-1 flex-col gap-1 text-xs font-medium text-slate-600">
+            Period
+            <select
+              className="min-h-11 rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-900"
+              value={selectedWeekStart || ''}
+              onChange={(e) => onSelectWeekStart(e.target.value)}
+            >
+              {periods.length === 0 && <option value="">No periods</option>}
+              {periods.map((p) => (
+                <option key={p.weekStart} value={p.weekStart}>
+                  {p.label}
+                  {p.locked ? ' · Locked' : ' · Open'}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+        {!embeddedInShell && selectedWeekStart && onReconcileWeek && (
           <Button
             type="button"
             variant="outline"
@@ -285,6 +410,89 @@ export function FuelFlagsDesk({
         </div>
       ) : (
         <div className="space-y-3">
+          {canDisposition && selectableRows.length > 0 && (
+            <div className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
+              <div className="flex flex-wrap items-center gap-3">
+                <label className="flex min-h-11 cursor-pointer items-center gap-2 text-sm font-medium text-slate-800">
+                  <Checkbox
+                    checked={
+                      allSelectableChecked
+                        ? true
+                        : someSelectableChecked
+                          ? 'indeterminate'
+                          : false
+                    }
+                    onCheckedChange={(v) => toggleSelectAllVisible(v === true)}
+                    disabled={bulkBusy}
+                    aria-label="Select all open flags"
+                  />
+                  Select all open
+                </label>
+                <p className="text-sm text-slate-600">
+                  {selectedIds.size === 0
+                    ? `${selectableRows.length} open fill${selectableRows.length === 1 ? '' : 's'} available`
+                    : `${selectedIds.size} selected · ${selectedOpenReasons.length} open flag${
+                        selectedOpenReasons.length === 1 ? '' : 's'
+                      }`}
+                </p>
+              </div>
+              {selectedIds.size > 0 && (
+                <div className="flex flex-col gap-3 border-t border-slate-100 pt-3">
+                  {selectedHasCritical && (
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-medium text-slate-600">
+                        Note for critical accept (8+ characters)
+                      </label>
+                      <Textarea
+                        value={bulkNote}
+                        onChange={(e) => setBulkNote(e.target.value)}
+                        className="min-h-[72px]"
+                        disabled={bulkBusy}
+                        placeholder="Required to accept critical flags in bulk"
+                      />
+                    </div>
+                  )}
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      className="min-h-11 bg-[#3525cd] text-white hover:bg-[#2a1ea4]"
+                      disabled={
+                        bulkBusy ||
+                        !onAcceptFlag ||
+                        (selectedHasCritical &&
+                          (!canAcceptCritical || bulkNote.trim().length < 8))
+                      }
+                      onClick={() => void runBulkAction('accepted')}
+                    >
+                      Accept selected ({selectedOpenReasons.length})
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="min-h-11"
+                      disabled={bulkBusy || !onAcceptFlag}
+                      onClick={() => void runBulkAction('escalated')}
+                    >
+                      Escalate selected ({selectedOpenReasons.length})
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      className="min-h-11"
+                      disabled={bulkBusy}
+                      onClick={() => {
+                        setSelectedIds(new Set());
+                        setBulkNote('');
+                      }}
+                    >
+                      Clear selection
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           {grouped.map((g) => (
             <div
               key={g.vehicleKey}
@@ -297,55 +505,77 @@ export function FuelFlagsDesk({
                 </p>
               </div>
               <ul className="divide-y divide-slate-100">
-                {g.rows.map((r) => (
-                  <li key={r.entryId}>
-                    <button
-                      type="button"
-                      className="flex w-full flex-wrap items-center gap-3 px-4 py-3 text-left hover:bg-slate-50/80"
-                      onClick={() => {
-                        setDetailRow(r);
-                        setAcceptNote('');
-                      }}
-                    >
-                      <span className="w-24 shrink-0 text-sm text-slate-700">
-                        {formatFuelLogDate(r.dateYmd)}
-                      </span>
-                      <span className="min-w-[5rem] text-sm font-medium tabular-nums text-slate-900">
-                        {formatFuelMoney(Number(r.entry.amount) || 0)}
-                      </span>
-                      <div className="flex flex-1 flex-wrap gap-1">
-                        {r.reasons.map((reason) => (
-                          <Badge
-                            key={`${reason.code}|${reason.label}`}
-                            variant="outline"
-                            className={`text-[10px] font-medium ${
-                              reason.resolved
-                                ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
-                                : reason.severity === 'critical'
-                                  ? 'border-rose-200 bg-rose-50 text-rose-800'
-                                  : reason.severity === 'warning'
-                                    ? 'border-amber-200 bg-amber-50 text-amber-900'
-                                    : 'border-slate-200 bg-slate-50 text-slate-700'
-                            }`}
-                          >
-                            {reason.label}
-                          </Badge>
-                        ))}
-                      </div>
-                      <span
-                        className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
-                          r.status === 'open'
-                            ? 'border-amber-200 bg-amber-50 text-amber-900'
-                            : r.status === 'resolved'
-                              ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
-                              : 'border-slate-200 bg-slate-50 text-slate-600'
-                        }`}
+                {g.rows.map((r) => {
+                  const canSelect =
+                    canDisposition &&
+                    r.status === 'open' &&
+                    r.reasons.some((rr) => !rr.resolved);
+                  return (
+                    <li key={r.entryId} className="flex items-stretch gap-0">
+                      {canDisposition && (
+                        <div className="flex shrink-0 items-center border-r border-slate-100 px-3">
+                          {canSelect ? (
+                            <Checkbox
+                              checked={selectedIds.has(r.entryId)}
+                              onCheckedChange={(v) =>
+                                toggleRowSelected(r.entryId, v === true)
+                              }
+                              disabled={bulkBusy}
+                              aria-label={`Select ${r.plate} ${formatFuelLogDate(r.dateYmd)}`}
+                            />
+                          ) : (
+                            <span className="inline-block size-4" aria-hidden />
+                          )}
+                        </div>
+                      )}
+                      <button
+                        type="button"
+                        className="flex min-w-0 flex-1 flex-wrap items-center gap-3 px-4 py-3 text-left hover:bg-slate-50/80"
+                        onClick={() => {
+                          setDetailRow(r);
+                          setAcceptNote('');
+                        }}
                       >
-                        {statusLabel(r.status)}
-                      </span>
-                    </button>
-                  </li>
-                ))}
+                        <span className="w-24 shrink-0 text-sm text-slate-700">
+                          {formatFuelLogDate(r.dateYmd)}
+                        </span>
+                        <span className="min-w-[5rem] text-sm font-medium tabular-nums text-slate-900">
+                          {formatFuelMoney(Number(r.entry.amount) || 0)}
+                        </span>
+                        <div className="flex flex-1 flex-wrap gap-1">
+                          {r.reasons.map((reason) => (
+                            <Badge
+                              key={`${reason.code}|${reason.label}`}
+                              variant="outline"
+                              className={`text-[10px] font-medium ${
+                                reason.resolved
+                                  ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
+                                  : reason.severity === 'critical'
+                                    ? 'border-rose-200 bg-rose-50 text-rose-800'
+                                    : reason.severity === 'warning'
+                                      ? 'border-amber-200 bg-amber-50 text-amber-900'
+                                      : 'border-slate-200 bg-slate-50 text-slate-700'
+                              }`}
+                            >
+                              {reason.label}
+                            </Badge>
+                          ))}
+                        </div>
+                        <span
+                          className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
+                            r.status === 'open'
+                              ? 'border-amber-200 bg-amber-50 text-amber-900'
+                              : r.status === 'resolved'
+                                ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
+                                : 'border-slate-200 bg-slate-50 text-slate-600'
+                          }`}
+                        >
+                          {statusLabel(r.status)}
+                        </span>
+                      </button>
+                    </li>
+                  );
+                })}
               </ul>
             </div>
           ))}
@@ -393,9 +623,9 @@ export function FuelFlagsDesk({
                       <p className="mt-0.5 text-[10px] font-medium uppercase tracking-wide text-slate-500">
                         {reason.code.replace(/_/g, ' ')} · {reason.severity}
                       </p>
-                      <p className="mt-1 text-xs text-slate-600">
-                        {plainEnglishForFlagReason(reason.label)}
-                      </p>
+                      <div className="mt-2">
+                        <FlagCheckGuideBlock reason={reason.label} />
+                      </div>
                       {reason.resolved && reason.disposition && (
                         <p className="mt-1 text-xs text-emerald-800">
                           {reason.disposition.action} · {reason.disposition.note || 'no note'}

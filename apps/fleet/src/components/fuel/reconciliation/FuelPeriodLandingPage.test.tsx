@@ -141,7 +141,7 @@ describe('FuelPeriodLandingPage calendar seal', () => {
           onBulkFinalize={() => undefined}
         />,
       );
-      expect(screen.getAllByText(/Week ending 2026-09-13 is still open/i).length).toBeGreaterThan(0);
+      expect(screen.queryByText(/Week ending 2026-09-13 is still open/i)).toBeNull();
       expect(screen.getByText(/Opens after week ends/i)).toBeTruthy();
       const finalize = screen.getByRole('button', { name: /Finalize weeks/i });
       expect(finalize).toBeDisabled();

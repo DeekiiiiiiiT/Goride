@@ -500,23 +500,6 @@ export function BucketReconciliationView({
 
     return (
         <div className="space-y-6">
-            {!panelReconciled && (
-                <div className="flex items-start gap-3 p-4 bg-amber-50 rounded-lg border border-amber-200">
-                    <AlertTriangle className="h-5 w-5 text-amber-600 mt-0.5 shrink-0" />
-                    <div className="text-sm text-amber-950">
-                        <p className="font-semibold">Panel not reconciled — do not use for decisions or charges</p>
-                        <ul className="list-disc list-inside mt-1 space-y-0.5 opacity-90">
-                            {conservation.messages.map((m) => (
-                                <li key={m}>{m}</li>
-                            ))}
-                            {tripsTruncated && (
-                                <li>Trip fetch may be truncated — treat rows as indeterminate.</li>
-                            )}
-                        </ul>
-                    </div>
-                </div>
-            )}
-
             {STOP_TO_STOP_CHARGES_ENABLED && !periodLocked && periodPending.length > 0 && (
                 <div className="flex items-start gap-3 p-3 bg-indigo-50 rounded-lg border border-indigo-200 text-sm text-indigo-950">
                     <Banknote className="h-4 w-4 text-indigo-600 mt-0.5 shrink-0" />

@@ -9,6 +9,9 @@ import {
   isOutOfPocketFuelEntry as isOutOfPocketFuelEntryCore,
 } from './fuelPaymentSource.ts';
 
+// Public barrel: consumers often import this next to fuelOps helpers from @roam/fuel-core.
+export { isJaaStatementLedgerRow };
+
 /** Company / fleet gas-card charges — F-6 normalize-then-partition (fuelPaymentSource). */
 export function isGasCardFuelEntry(entry: FuelEntry): boolean {
   return isGasCardFuelEntryCore(entry);

@@ -43,8 +43,8 @@ describe('computeServiceQualityRates', () => {
     expect(r.totalTrips).toBe(100);
     expect(r.completionRate).toBe(80);
     expect(r.cancellationRate).toBe(20);
-    // No CSV → acceptance mirrors completion
-    expect(r.acceptanceRate).toBe(80);
+    // No CSV → acceptance stays null (never fabricate from completion)
+    expect(r.acceptanceRate).toBeNull();
   });
 
   it('prefers CSV acceptance over trip-derived completion', () => {

@@ -206,7 +206,7 @@ describe('fuelPeriodServerMerge landing SoT', () => {
     expect(locked[0].leakageReviewed).toBe(true);
   });
 
-  it('reopened week with cleared leakage review lands Outstanding (not stale In Progress)', () => {
+  it('reopened week with SQL period lands In Progress (operator already engaged)', () => {
     const cards = serverRowsToLandingPeriods([
       row({
         weekStart: '2026-01-19',
@@ -221,7 +221,7 @@ describe('fuelPeriodServerMerge landing SoT', () => {
     ]);
     expect(cards).toHaveLength(1);
     expect(cards[0].locked).toBe(false);
-    expect(cards[0].status).toBe('outstanding');
+    expect(cards[0].status).toBe('in_progress');
     expect(cards[0].counts['leakage-gap'].actionable).toBeGreaterThan(0);
   });
 

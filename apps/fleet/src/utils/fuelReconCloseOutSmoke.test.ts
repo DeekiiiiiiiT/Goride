@@ -150,10 +150,9 @@ describe('recon close-out smoke contracts', () => {
     expect(leakageKeys.length).toBe(4);
 
     const finalizeKeys: Array<keyof FuelFinalizeStepProps> = [
-      'onDownloadEvidencePack',
       'needsSecondApprover',
       'settlementRows',
     ];
-    expect(finalizeKeys.length).toBe(3);
+    expect(finalizeKeys.length).toBe(2);
   });
 });

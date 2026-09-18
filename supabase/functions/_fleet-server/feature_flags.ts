@@ -59,6 +59,8 @@ export const FEATURE_FLAGS = {
   LEGACY_DRIVER_JOIN: "legacy_driver_join",
   /** Unified fleet.ledger_entries read model for Ledgers desk */
   LEDGER_READ_MODEL: "ledger_read_model",
+  /** Driver Detail Activity tab (forensic timeline) */
+  DRIVER_ACTIVITY: "driver_activity",
 } as const;
 
 export type FeatureFlagName = typeof FEATURE_FLAGS[keyof typeof FEATURE_FLAGS];
@@ -406,6 +408,11 @@ export async function initializeDefaultFlags(): Promise<void> {
       name: FEATURE_FLAGS.LEDGER_READ_MODEL,
       enabled: false,
       description: "Unified fleet.ledger_entries read model for Ledgers desk (/ledger/search|stats)",
+    },
+    {
+      name: FEATURE_FLAGS.DRIVER_ACTIVITY,
+      enabled: false,
+      description: "Driver Detail Activity tab — forensic timeline (enable after ingest drift is green)",
     },
   ];
 

@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNetworkStatus } from '../../hooks/useNetworkStatus';
 import { offlineStorage } from '../../services/offlineStorage';
 import { OfflineAction } from '../../types/offline';
@@ -7,20 +7,9 @@ import { api } from '../../services/api';
 import { createManualTrip } from '../../utils/tripFactory';
 import { mapMatchService } from '../../services/mapMatchService';
 import { toast } from 'sonner';
+import { OfflineContext } from './offlineContext';
 
-interface OfflineContextType {
-  isOnline: boolean;
-  queue: OfflineAction[];
-  addToQueue: (action: Omit<OfflineAction, 'id' | 'timestamp' | 'retryCount'>) => void;
-  refreshQueue: () => void;
-  processQueue: (forceRetry?: boolean) => Promise<void>;
-  removeFromQueue: (id: string) => void;
-  clearQueue: () => void;
-  syncStatus: 'IDLE' | 'SYNCING' | 'ERROR';
-  setSyncStatus: (status: 'IDLE' | 'SYNCING' | 'ERROR') => void;
-}
-
-const OfflineContext = createContext<OfflineContextType | undefined>(undefined);
+export { useOffline } from './offlineContext';
 
 const MAX_RETRIES = 3;
 
@@ -163,12 +152,4 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
       {children}
     </OfflineContext.Provider>
   );
-}
-
-export function useOffline() {
-  const context = useContext(OfflineContext);
-  if (context === undefined) {
-    throw new Error('useOffline must be used within an OfflineProvider');
-  }
-  return context;
 }

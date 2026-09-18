@@ -137,9 +137,9 @@ export function buildFuelStepCounts(input: BuildFuelStepCountsInput): Record<Fue
 }
 
 /**
- * Align with Toll Reconciliation landing:
- * - outstanding: early review still open (exceptions / disputes / unexplained)
- * - in_progress: review clear, week not locked yet (ready to finalize)
+ * Align with operator mental model for landing tabs:
+ * - outstanding: unlocked week with open early work that has not been started yet
+ * - in_progress: operator has engaged the week (SQL period exists / reviews), or early work is clear and ready to finalize
  * - completed: SQL fuel_reconciliation_period locked only (not KV snapshots)
  *
  * Empty weeks (no spend vehicles) are not open work — callers must filter them
@@ -151,13 +151,20 @@ export function classifyFuelReconPeriodStatus(opts: {
   exceptionCount: number;
   openDisputeCount: number;
   leakageActionable: number;
+  /** True once the week has a SQL period / reviews — keep under In Progress while finishing flags. */
+  operatorStarted?: boolean;
 }): FuelPeriodStatus {
   if (opts.locked) return 'completed';
   // No spend yet — not Outstanding work (was inflating Finalize weeks for empty current week).
   if (opts.withSpendCount <= 0) {
-    if (opts.exceptionCount > 0 || opts.openDisputeCount > 0) return 'outstanding';
+    if (opts.exceptionCount > 0 || opts.openDisputeCount > 0) {
+      return opts.operatorStarted ? 'in_progress' : 'outstanding';
+    }
     return 'in_progress';
   }
+
+  // Started weeks stay In Progress even with remaining flags / disputes / unexplained.
+  if (opts.operatorStarted) return 'in_progress';
 
   const earlyOpen =
     opts.exceptionCount + opts.openDisputeCount + opts.leakageActionable;
@@ -269,12 +276,17 @@ export function deriveFuelReconciliationPeriods(input: DeriveFuelPeriodsInput): 
     const locked = Boolean(lockedWeekStarts?.has(startDate));
 
     const openDisputeCount = withSpend.filter((v) => v.hasOpenDispute).length;
+    const reviewedIds = dataQualityReviewedByWeek?.get(startDate);
+    const operatorStarted =
+      Boolean(leakageReviewedWeeks?.has(startDate)) ||
+      Boolean(reviewedIds && reviewedIds.size > 0);
     const status = classifyFuelReconPeriodStatus({
       locked,
       withSpendCount: withSpend.length,
       exceptionCount,
       openDisputeCount,
       leakageActionable: counts['leakage-gap'].actionable,
+      operatorStarted,
     });
 
     const totalSpend = withSpend.reduce((s, v) => s + v.totalSpend, 0);

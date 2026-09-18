@@ -34,9 +34,13 @@ export type FuelFinalizeStepProps = {
   onRecordSecondApproval: () => void;
   /** human = distinct admin CTA; service_only = system stamps approve on Finalize. */
   dualApprovalUiMode?: 'human' | 'service_only';
-  onExportCsv: () => void;
-  onDownloadEvidencePack: () => void;
   settlementRows: FuelSettlementRow[];
+  /** Hard closable-gate reasons shown when Finalize is locked. */
+  closableBlockMessages?: string[];
+  /** Jump to Unexplained fuel → stop-to-stop gap detail (when S2S blocks Finalize). */
+  onOpenStopToStopGapDetail?: () => void;
+  /** Open Fuel Integrity desk Stop-to-stop tab for the same week. */
+  onOpenIntegrityStopToStop?: () => void;
   /** U-9: data provenance shown where the operator signs. */
   provenance?: {
     tripCount: number;
@@ -71,15 +75,56 @@ export function FuelFinalizeStep(props: FuelFinalizeStepProps) {
     secondApproveBusy,
     onRecordSecondApproval,
     dualApprovalUiMode = 'human',
-    onExportCsv,
-    onDownloadEvidencePack,
     settlementRows,
+    closableBlockMessages = [],
+    onOpenStopToStopGapDetail,
+    onOpenIntegrityStopToStop,
     provenance,
   } = props;
   const serviceOnly = dualApprovalUiMode === 'service_only';
+  const hasStopToStopBlock = closableBlockMessages.some((m) =>
+    m.toLowerCase().includes('stop-to-stop'),
+  );
 
   return (
     <div className="space-y-3">
+      {closableBlockMessages.length > 0 && (
+        <div
+          className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-950"
+          role="alert"
+        >
+          <p className="font-semibold">Finalize is blocked</p>
+          <ul className="mt-1 list-inside list-disc space-y-0.5">
+            {closableBlockMessages.map((m) => (
+              <li key={m}>{m}</li>
+            ))}
+          </ul>
+          {(hasStopToStopBlock && (onOpenStopToStopGapDetail || onOpenIntegrityStopToStop)) ? (
+            <div className="mt-2 flex flex-wrap gap-2">
+              {onOpenStopToStopGapDetail ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="min-h-11 border-rose-300 bg-white text-rose-950 hover:bg-rose-100"
+                  onClick={onOpenStopToStopGapDetail}
+                >
+                  Open stop-to-stop gap detail
+                </Button>
+              ) : null}
+              {onOpenIntegrityStopToStop ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="min-h-11 border-rose-300 bg-white text-rose-950 hover:bg-rose-100"
+                  onClick={onOpenIntegrityStopToStop}
+                >
+                  Open in Fuel Integrity
+                </Button>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
+      )}
       {provenance && (
         <div
           className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-[13px] text-slate-800"
@@ -109,14 +154,6 @@ export function FuelFinalizeStep(props: FuelFinalizeStepProps) {
           </ul>
         </div>
       )}
-      <div className="flex flex-wrap justify-end gap-2">
-        <Button type="button" variant="outline" className="min-h-11" onClick={onExportCsv}>
-          Export CSV
-        </Button>
-        <Button type="button" variant="outline" className="min-h-11" onClick={onDownloadEvidencePack}>
-          Download evidence pack
-        </Button>
-      </div>
       <FuelUnapprovedTxBlockersPanel
         blockers={unapprovedFuelTxBlockers}
         onOpenReviewQueue={onOpenReviewQueue}

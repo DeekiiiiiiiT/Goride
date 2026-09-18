@@ -60,7 +60,13 @@ export const FLEET_PAGE_REGISTRY: Record<string, FleetPageDef> = {
     permission: 'nav.fuel_overview',
   },
   'fuel-logs': { id: 'fuel-logs', path: '/fuel-logs', permission: 'nav.fuel_logs' },
-  'fuel-flags': { id: 'fuel-flags', path: '/fuel-flags', permission: 'nav.fuel_logs' },
+  'fuel-integrity': {
+    id: 'fuel-integrity',
+    path: '/fuel-integrity',
+    permission: 'nav.fuel_logs',
+  },
+  /** Legacy bookmark — resolves to Fuel Integrity desk. */
+  'fuel-flags': { id: 'fuel-integrity', path: '/fuel-flags', permission: 'nav.fuel_logs' },
   'fuel-cards': { id: 'fuel-cards', path: '/fuel-cards', permission: 'nav.fuel_overview' },
   'fuel-configuration': {
     id: 'fuel-configuration',
@@ -87,6 +93,7 @@ const PATH_TO_PAGE = Object.values(FLEET_PAGE_REGISTRY)
 export const DRIVER_DETAIL_TABS = [
   'overview',
   'financial',
+  'activity',
   'quality',
   'wallet',
   'profile',
@@ -146,5 +153,7 @@ export function resolvePageFromPathname(pathname: string): string {
 
 export function pathForPageId(pageId: string): string {
   if (pageId === 'couriers') return '/drivers?workforce=couriers';
+  // Legacy Fuel Flags bookmarks → canonical Integrity path when navigating by old id.
+  if (pageId === 'fuel-flags') return '/fuel-integrity';
   return FLEET_PAGE_REGISTRY[pageId]?.path ?? '/';
 }

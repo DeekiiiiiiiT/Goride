@@ -683,7 +683,7 @@ export function AdminLayout({ children, currentPage, onNavigate }: AdminLayoutPr
 
         {/* Content area */}
         <main className="flex-1 overflow-auto p-4 lg:p-8">
-          <div className="mx-auto max-w-7xl">
+          <div className="w-full min-w-0 md:mx-auto md:max-w-[1400px]">
             {children}
           </div>
         </main>

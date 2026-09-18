@@ -121,12 +121,15 @@ export function serverRowsToLandingPeriods(rows: FuelPeriodRow[]): FuelReconcili
       Boolean(s.leakageReviewedAt),
     );
     const openDisputeCount = counts['adjustments-disputes']?.actionable || 0;
+    // SQL period row exists ⇒ operator opened / worked this week → In Progress.
+    const operatorStarted = true;
     const status = classifyFuelReconPeriodStatus({
       locked,
       withSpendCount: Math.max(vehicleCount, totalSpend > FUEL_SPEND_EPS ? 1 : 0),
       exceptionCount: locked ? 0 : counts['data-quality']?.actionable || 0,
       openDisputeCount: locked ? 0 : openDisputeCount,
       leakageActionable: locked ? 0 : counts['leakage-gap']?.actionable || 0,
+      operatorStarted,
     });
 
     out.push({

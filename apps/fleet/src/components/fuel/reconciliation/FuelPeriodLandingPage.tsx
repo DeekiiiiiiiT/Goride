@@ -170,9 +170,6 @@ function PeriodCard({
     weekStart: period.startDate,
     periodEnd: period.endDate,
   });
-  const sealMessage = weekSealed
-    ? reconWeekSealMessage({ weekStart: period.startDate, periodEnd: period.endDate })
-    : null;
   const age = daysOpen(period.endDate);
   const aging = !period.locked && age >= 14;
   const ctaClass = weekSealed
@@ -203,14 +200,6 @@ function PeriodCard({
       }`}
     >
       <CardContent className="flex flex-col gap-3 p-4">
-        {sealMessage && (
-          <div
-            className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950"
-            role="status"
-          >
-            {sealMessage}
-          </div>
-        )}
         {period.locked && period.fuelSealError && (
           <div
             className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-950"
@@ -470,7 +459,8 @@ export function FuelPeriodLandingPage({
       oldestLabel: oldest?.label || null,
       oldestDays: oldest ? daysOpen(oldest.endDate) : 0,
       unlockedOpenCount: unlockedOpen.length,
-      sealedBanner:
+      // Keep seal copy for disabled Finalize tooltip only — no page banner.
+      sealedTooltip:
         sealedOpen.length > 0
           ? reconWeekSealMessage({
               weekStart: sealedOpen[0].startDate,
@@ -524,15 +514,6 @@ export function FuelPeriodLandingPage({
         </section>
       )}
 
-      {portfolio.sealedBanner && (
-        <div
-          className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950"
-          role="status"
-        >
-          {portfolio.sealedBanner}
-        </div>
-      )}
-
       <div className="flex flex-wrap items-center justify-end gap-2">
           {onBulkFinalize && (
             <Button
@@ -543,7 +524,7 @@ export function FuelPeriodLandingPage({
               disabled={portfolio.unlockedOpenCount === 0}
               title={
                 portfolio.unlockedOpenCount === 0 && openWorkCount > 0
-                  ? portfolio.sealedBanner || undefined
+                  ? portfolio.sealedTooltip || undefined
                   : undefined
               }
               onClick={onBulkFinalize}

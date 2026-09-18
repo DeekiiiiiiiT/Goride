@@ -30,6 +30,9 @@ const DriverOverviewTab = React.lazy(() =>
 const DriverFinancialsTab = React.lazy(() =>
   import('./tabs/DriverFinancialsTab').then((m) => ({ default: m.DriverFinancialsTab })),
 );
+const DriverActivityTab = React.lazy(() =>
+  import('./tabs/DriverActivityTab').then((m) => ({ default: m.DriverActivityTab })),
+);
 
 const SpinFallback = (
   <div className="flex justify-center py-12">
@@ -100,6 +103,7 @@ export function DriverDetailTabs(p: DriverDetailTabsProps) {
       <TabsList>
         <TabsTrigger value="overview" aria-label="Overview tab">Overview</TabsTrigger>
         <TabsTrigger value="financial" aria-label="Financials tab">Financials</TabsTrigger>
+        <TabsTrigger value="activity" aria-label="Activity tab">Activity</TabsTrigger>
         <TabsTrigger value="quality" aria-label="Service Quality tab">Service Quality</TabsTrigger>
         <TabsTrigger value="wallet" aria-label="Cash Wallet tab">Cash Wallet</TabsTrigger>
         <TabsTrigger value="profile" aria-label="Profile tab">Profile</TabsTrigger>
@@ -223,6 +227,15 @@ export function DriverDetailTabs(p: DriverDetailTabsProps) {
             onVerifyTransaction={p.handleVerifyTransaction}
             onEditTransaction={p.handleEditTransaction}
             onDeleteTransaction={p.handleDeleteTransaction}
+          />
+        </Suspense>
+      </TabsContent>
+
+      <TabsContent value="activity" className="space-y-6">
+        <Suspense fallback={SpinFallback}>
+          <DriverActivityTab
+            driverId={p.driverId}
+            selectedPlatforms={p.selectedPlatforms}
           />
         </Suspense>
       </TabsContent>

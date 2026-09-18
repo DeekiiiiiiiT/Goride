@@ -41,6 +41,7 @@ export type Permission =
   | 'nav.user_management' | 'nav.settings'
   | 'nav.database_management'
   | 'drivers.create' | 'drivers.edit' | 'drivers.delete' | 'drivers.view'
+  | 'drivers.location.view'
   | 'vehicles.create' | 'vehicles.edit' | 'vehicles.delete' | 'vehicles.view'
   | 'vehicles.bypass_catalog_gate'
   | 'fuel.approve' | 'fuel.reject' | 'fuel.create_entry' | 'fuel.edit_entry'
@@ -250,6 +251,7 @@ const ALL_CUSTOMER_PERMISSIONS: Permission[] = [
   'nav.user_management', 'nav.settings',
   'nav.database_management',
   'drivers.create', 'drivers.edit', 'drivers.delete', 'drivers.view',
+  'drivers.location.view',
   'vehicles.create', 'vehicles.edit', 'vehicles.delete', 'vehicles.view',
   // 'vehicles.bypass_catalog_gate' is platform-only (added below).
   'fuel.approve', 'fuel.reject', 'fuel.create_entry', 'fuel.edit_entry',

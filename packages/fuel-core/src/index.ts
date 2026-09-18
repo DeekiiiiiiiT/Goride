@@ -263,6 +263,7 @@ export {
   isOutOfPocketFuelEntry,
   countsInGasCardSpend,
   countsInFuelLogSpend,
+  isJaaStatementLedgerRow,
 } from './fuelOpsEligibility.ts';
 
 export {

@@ -1,9 +1,37 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildFuelPeriodResetInventory,
+  classifyFuelReconPeriodStatus,
   deriveFuelReconciliationPeriods,
 } from './fuelPeriodStatus';
 import type { FuelEntry, FinalizedFuelReport } from '../types/fuel';
+
+describe('classifyFuelReconPeriodStatus', () => {
+  it('keeps untouched early-open weeks Outstanding', () => {
+    expect(
+      classifyFuelReconPeriodStatus({
+        locked: false,
+        withSpendCount: 1,
+        exceptionCount: 2,
+        openDisputeCount: 0,
+        leakageActionable: 0,
+      }),
+    ).toBe('outstanding');
+  });
+
+  it('moves started weeks to In Progress even with open exceptions', () => {
+    expect(
+      classifyFuelReconPeriodStatus({
+        locked: false,
+        withSpendCount: 1,
+        exceptionCount: 4,
+        openDisputeCount: 0,
+        leakageActionable: 1,
+        operatorStarted: true,
+      }),
+    ).toBe('in_progress');
+  });
+});
 
 describe('fuelPeriodStatus', () => {
   const weekOptions = [
@@ -60,6 +88,28 @@ describe('fuelPeriodStatus', () => {
     expect(periods[0].status).toBe('outstanding');
     expect(periods[0].exceptionCount).toBe(1);
     expect(periods[0].counts['data-quality'].actionable).toBeGreaterThan(0);
+  });
+
+  it('marks week in_progress when data-quality reviews already exist', () => {
+    const periods = deriveFuelReconciliationPeriods({
+      weekOptions,
+      vehicles: [{ id: 'v1', fuelScenarioId: 's1' } as any],
+      fuelEntries: [
+        {
+          id: 'e1',
+          vehicleId: 'v1',
+          date: '2026-07-07',
+          amount: 50,
+          reconciliationStatus: 'Pending',
+          metadata: { signalTier: 'exception', anomalyReason: 'Extreme Mid-Cycle Drift' },
+        } as FuelEntry,
+      ],
+      disputes: [],
+      finalizedReports: [],
+      scenarios: [],
+      dataQualityReviewedByWeek: new Map([['2026-07-06', new Set(['v1'])]]),
+    });
+    expect(periods[0].status).toBe('in_progress');
   });
 
   it('snapshots alone do not mark week completed or locked (SQL lock SoT)', () => {

@@ -577,6 +577,7 @@ export const PAGE_PERMISSION_MAP: Record<string, Permission> = {
   'fuel-reconciliation':'nav.fuel_reconciliation',
   'fuel-cards':         'nav.fuel_cards',
   'fuel-logs':          'nav.fuel_logs',
+  'fuel-integrity':     'nav.fuel_logs',
   'fuel-flags':         'nav.fuel_logs',
   'fuel-reports':       'nav.fuel_reports',
   'fuel-configuration': 'nav.fuel_configuration',

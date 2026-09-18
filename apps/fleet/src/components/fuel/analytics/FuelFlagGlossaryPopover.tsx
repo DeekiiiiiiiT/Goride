@@ -44,6 +44,13 @@ export function FuelFlagGlossaryPopover() {
                       <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 leading-relaxed">
                         {item.meaning}
                       </p>
+                      {item.checks && item.checks.length > 0 && (
+                        <ul className="mt-1.5 list-disc space-y-0.5 pl-4 text-xs leading-relaxed text-slate-600 dark:text-slate-400">
+                          {item.checks.map((c) => (
+                            <li key={c}>{c}</li>
+                          ))}
+                        </ul>
+                      )}
                     </li>
                   ))}
                 </ul>

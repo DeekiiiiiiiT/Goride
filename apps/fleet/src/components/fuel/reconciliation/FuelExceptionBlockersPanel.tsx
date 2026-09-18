@@ -51,10 +51,6 @@ export function FuelExceptionBlockersPanel({
                 ? '1 fill is blocking Finalize'
                 : `${blockers.length} fills are blocking Finalize`}
             </p>
-            <p className="text-sm text-rose-800">
-              Resolve each flag here — you do not need to leave this week. Accept if the fill is
-              fine, or edit the numbers if something is wrong.
-            </p>
           </div>
         </div>
 

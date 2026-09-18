@@ -14,6 +14,7 @@ export const FUEL_PAGE_IDS = [
   'fuel-reconciliation',
   'fuel-cards',
   'fuel-logs',
+  'fuel-integrity',
   'fuel-flags',
   'fuel-configuration',
   'fuel-reimbursements',
@@ -181,7 +182,11 @@ export function buildFleetNavModel(input: BuildFleetNavModelInput): FleetNavMode
     }),
     leaf(canView('fuel-cards'), { id: 'fuel-cards', label: 'Fuel Cards' }),
     leaf(canView('fuel-logs'), { id: 'fuel-logs', label: 'Transaction Logs' }),
-    leaf(canView('fuel-logs'), { id: 'fuel-flags', label: 'Fuel Flags' }),
+    leaf(canView('fuel-logs'), {
+      id: 'fuel-integrity',
+      label: 'Fuel Integrity',
+      activeIds: ['fuel-integrity', 'fuel-flags'],
+    }),
     leaf(canView('fuel-configuration'), {
       id: 'fuel-configuration',
       label: 'Configuration',

@@ -252,6 +252,7 @@ import { registerDriversComplianceRoutes } from "./drivers_compliance.ts";
 import { registerDriversNotesRoutes } from "./drivers_notes.ts";
 import { registerDriversReconciliationRoutes } from "./drivers_reconciliation.ts";
 import { registerDriversAuditRoutes } from "./drivers_audit.ts";
+import { registerDriverActivityRoutes } from "./driver_activity_routes.ts";
 import { registerDriversSavedViewsRoutes } from "./drivers_saved_views.ts";
 import { registerDriverOperationalPeriodRoutes } from "./driver_operational_periods.ts";
 import { registerPlatformVendorRoutes } from "./platform_vendor_routes.ts";
@@ -487,6 +488,7 @@ export function registerResidualMonolithRoutes(app: Hono) {
   registerDriversNotesRoutes(app);
   registerDriversReconciliationRoutes(app);
   registerDriversAuditRoutes(app);
+  registerDriverActivityRoutes(app);
   registerDriversSavedViewsRoutes(app);
   registerDriverOperationalPeriodRoutes(app);
   registerLedgerEnsureRoutes(app);

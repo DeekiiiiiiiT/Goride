@@ -137,7 +137,7 @@ export function normalizeAcceptancePercent(raw: number | null | undefined): numb
 
 /**
  * Completion / cancellation / acceptance rates for a period.
- * Acceptance prefers CSV when provided; otherwise mirrors completion rate.
+ * Acceptance prefers CSV when provided; otherwise null (never fabricate from completion).
  */
 export function computeServiceQualityRates(
   counts: ServiceQualityTripCounts,
@@ -149,11 +149,7 @@ export function computeServiceQualityRates(
   const completionRate = totalTrips > 0 ? (completed / totalTrips) * 100 : 0;
   const cancellationRate = totalTrips > 0 ? (cancelled / totalTrips) * 100 : 0;
 
-  const fromCsv = normalizeAcceptancePercent(csvAcceptanceRate);
-  let acceptanceRate: number | null = fromCsv;
-  if (acceptanceRate == null && totalTrips > 0) {
-    acceptanceRate = Math.round(completionRate);
-  }
+  const acceptanceRate: number | null = normalizeAcceptancePercent(csvAcceptanceRate);
 
   return { totalTrips, completionRate, cancellationRate, acceptanceRate };
 }

@@ -186,3 +186,19 @@ describe('DriverCashWalletTab smoke', () => {
     expect(screen.getByTestId('wallet-settlements-empty')).toBeTruthy();
   });
 });
+
+describe('pageRegistry activity tab', () => {
+  it('includes activity between financial and quality', async () => {
+    const { DRIVER_DETAIL_TABS, isDriverDetailTab, pathForDriverDetail } = await import(
+      '../../../navigation/pageRegistry'
+    );
+    expect(DRIVER_DETAIL_TABS).toContain('activity');
+    const fi = DRIVER_DETAIL_TABS.indexOf('financial');
+    const ai = DRIVER_DETAIL_TABS.indexOf('activity');
+    const qi = DRIVER_DETAIL_TABS.indexOf('quality');
+    expect(ai).toBe(fi + 1);
+    expect(qi).toBe(ai + 1);
+    expect(isDriverDetailTab('activity')).toBe(true);
+    expect(pathForDriverDetail('abc', 'activity')).toBe('/drivers/abc/activity');
+  });
+});

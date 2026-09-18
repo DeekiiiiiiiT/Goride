@@ -21,8 +21,6 @@ describe('FuelFinalizeStep contract', () => {
       secondApproverConfirmed: false,
       secondApproveBusy: false,
       onRecordSecondApproval: () => undefined,
-      onExportCsv: () => undefined,
-      onDownloadEvidencePack: () => undefined,
       settlementRows: [],
     };
     expect(props.needsSecondApprover && !props.secondApproverConfirmed).toBe(true);

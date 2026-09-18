@@ -13,11 +13,11 @@ import {
   isOutOfPocketFuelEntry,
   countsInGasCardSpend,
   countsInFuelLogSpend,
+  isJaaStatementLedgerRow,
 } from '@roam/fuel-core';
-import { isJaaStatementLedgerRow } from './jaaFuelStatementMatcher';
 
 // Re-export partition helpers for fleet callers that imported from this module.
-export { isGasCardFuelEntry, isOutOfPocketFuelEntry, countsInGasCardSpend };
+export { isGasCardFuelEntry, isOutOfPocketFuelEntry, countsInGasCardSpend, isJaaStatementLedgerRow };
 
 export type DriverWeekAttributionContext = {
   vehicles: Vehicle[];

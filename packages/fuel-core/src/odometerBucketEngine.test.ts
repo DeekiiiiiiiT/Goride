@@ -456,6 +456,97 @@ describe('stop-to-stop half-open floating receipts (H-6)', () => {
   });
 });
 
+describe('stop-to-stop dual-pay same odometer', () => {
+  it('collapses same-odo boundaries and sums both closing fills (5179KZ pattern)', () => {
+    const entries: FuelEntry[] = [
+      fill('open', '2026-09-10', 184000, 0, 0),
+      {
+        id: 'cash-dual',
+        vehicleId: 'v5179',
+        date: '2026-09-11T11:03:00',
+        odometer: 184476,
+        liters: 15.432,
+        amount: 3500,
+        type: 'Reimbursement',
+        paymentSource: 'RideShare_Cash',
+      } as FuelEntry,
+      {
+        id: 'card-dual',
+        vehicleId: 'v5179',
+        date: '2026-09-11T11:01:00',
+        odometer: 184476,
+        liters: 6.63,
+        amount: 1500,
+        type: 'Manual_Entry',
+        paymentSource: 'Gas_Card',
+        metadata: { countsInFuelSpend: true },
+      } as FuelEntry,
+      fill('next', '2026-09-13', 184801, 13.268, 3000),
+    ];
+    const buckets = calculateOdometerBuckets(vehicle, entries, [], []);
+    expect(buckets.some((b) => b.chainAnomaly)).toBe(false);
+    expect(buckets).toHaveLength(2);
+    const dualClose = buckets.find((b) => b.endOdometer === 184476);
+    expect(dualClose).toBeTruthy();
+    expect(dualClose!.actualFuelLiters).toBeCloseTo(15.432 + 6.63, 5);
+    expect(dualClose!.associatedReceipts.sort()).toEqual(['card-dual', 'cash-dual'].sort());
+    const weekOps = 15.432 + 6.63 + 13.268;
+    const cons = evaluateStopToStopConservation({
+      buckets,
+      weekOpsLiters: weekOps,
+      chainDistanceKm: chainSpanKm(buckets),
+    });
+    expect(cons.volumeOk).toBe(true);
+    expect(cons.chainOk).toBe(true);
+  });
+
+  it('collapses duplicate external fuel anchors at the same odometer', () => {
+    const entries: FuelEntry[] = [
+      fill('open', '2026-09-10', 184000, 0, 0),
+      {
+        id: 'cash-dual',
+        vehicleId: 'v5179',
+        date: '2026-09-11T11:03:00',
+        odometer: 184476,
+        liters: 15.432,
+        amount: 3500,
+        type: 'Reimbursement',
+        paymentSource: 'RideShare_Cash',
+      } as FuelEntry,
+      {
+        id: 'card-dual',
+        vehicleId: 'v5179',
+        date: '2026-09-11T11:01:00',
+        odometer: 184476,
+        liters: 6.63,
+        amount: 1500,
+        type: 'Manual_Entry',
+        paymentSource: 'Gas_Card',
+      } as FuelEntry,
+    ];
+    const buckets = calculateOdometerBuckets(vehicle, entries, [], [], [
+      { id: 'fuel_open', referenceId: 'open', source: 'fuel', date: '2026-09-10', odometer: 184000 },
+      {
+        id: 'fuel_cash-dual',
+        referenceId: 'cash-dual',
+        source: 'fuel',
+        date: '2026-09-11',
+        odometer: 184476,
+      },
+      {
+        id: 'fuel_card-dual',
+        referenceId: 'card-dual',
+        source: 'fuel',
+        date: '2026-09-11',
+        odometer: 184476,
+      },
+    ]);
+    expect(buckets).toHaveLength(1);
+    expect(buckets[0].chainAnomaly).toBeFalsy();
+    expect(buckets[0].actualFuelLiters).toBeCloseTo(22.062, 5);
+  });
+});
+
 describe('stop-to-stop non-monotonic chain', () => {
   it('surfaces an indeterminate anomaly rather than a silent empty window', () => {
     // Force bad chain via external anchors with descending dates on ascending odo

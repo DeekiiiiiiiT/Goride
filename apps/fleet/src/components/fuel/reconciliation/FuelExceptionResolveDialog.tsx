@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { AlertTriangle, CheckCircle2, Pencil } from 'lucide-react';
 import { parseISO, format } from 'date-fns';
 import {
@@ -12,7 +12,7 @@ import {
 import { Button } from '../../ui/button';
 import { Textarea } from '../../ui/textarea';
 import type { FuelExceptionBlocker } from '../../../utils/fuelFinalizeGating';
-import { plainEnglishForFlagReason } from '../analytics/fuelFlagGlossary';
+import { FlagCheckGuideBlock } from '../analytics/FlagCheckGuideBlock';
 import { formatFuelMoney } from '../../../utils/formatFuelMoney';
 
 function formatFillDate(ymd: string): string {
@@ -46,10 +46,6 @@ export function FuelExceptionResolveDialog({
   onEditFill?: (blocker: FuelExceptionBlocker) => void;
 }) {
   const [note, setNote] = useState('');
-  const meaning = useMemo(
-    () => (blocker ? plainEnglishForFlagReason(blocker.reason) : ''),
-    [blocker],
-  );
   const noteOk = note.trim().length >= 8;
 
   if (!blocker) return null;
@@ -82,7 +78,7 @@ export function FuelExceptionResolveDialog({
             {plate || blocker.vehicleId || 'Vehicle'} · {blocker.location}
           </div>
           <div className="text-xs font-medium text-rose-800">{blocker.reason}</div>
-          <p className="text-sm text-slate-700">{meaning}</p>
+          <FlagCheckGuideBlock reason={blocker.reason} />
         </div>
 
         <div className="space-y-1.5">

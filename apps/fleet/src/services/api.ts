@@ -1076,6 +1076,69 @@ export const api = {
     return response.json();
   },
 
+  async getDriverActivity(
+    driverId: string,
+    params: {
+      from: string;
+      to: string;
+      serviceLines?: string;
+      eventTypes?: string;
+      sort?: 'asc' | 'desc';
+      cursor?: string;
+      limit?: number;
+      platform?: string;
+    },
+  ) {
+    const q = new URLSearchParams();
+    q.set('from', params.from);
+    q.set('to', params.to);
+    if (params.serviceLines) q.set('serviceLines', params.serviceLines);
+    if (params.eventTypes) q.set('eventTypes', params.eventTypes);
+    if (params.sort) q.set('sort', params.sort);
+    if (params.cursor) q.set('cursor', params.cursor);
+    if (params.limit) q.set('limit', String(params.limit));
+    if (params.platform) q.set('platform', params.platform);
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.fleetCore}/drivers/${encodeURIComponent(driverId)}/activity?${q}`,
+      { headers: await requireAuthHeaders(null) },
+    );
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error || err.message || 'Failed to fetch driver activity');
+    }
+    return response.json();
+  },
+
+  async getDriverActivitySummary(
+    driverId: string,
+    params: { from: string; to: string; serviceLines?: string },
+  ) {
+    const q = new URLSearchParams();
+    q.set('from', params.from);
+    q.set('to', params.to);
+    if (params.serviceLines) q.set('serviceLines', params.serviceLines);
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.fleetCore}/drivers/${encodeURIComponent(driverId)}/activity/summary?${q}`,
+      { headers: await requireAuthHeaders(null) },
+    );
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error || 'Failed to fetch activity summary');
+    }
+    return response.json();
+  },
+
+  getDriverActivityExportUrl(
+    driverId: string,
+    params: { from: string; to: string; serviceLines?: string },
+  ) {
+    const q = new URLSearchParams();
+    q.set('from', params.from);
+    q.set('to', params.to);
+    if (params.serviceLines) q.set('serviceLines', params.serviceLines);
+    return `${API_ENDPOINTS.fleetCore}/drivers/${encodeURIComponent(driverId)}/activity/export.csv?${q}`;
+  },
+
   /** Append an ops audit event (write-off, payout, delete tx, compliance verify, etc.). */
   async appendDriverAudit(
     driverId: string,

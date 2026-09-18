@@ -49,6 +49,18 @@ function resolveFuelEntryId(anchor: OdometerBucketAnchor): string | undefined {
   return undefined;
 }
 
+/** Same odometer = same stop — keep earliest boundary; litres merge at close. */
+function collapseBoundariesByOdometer(boundaries: Anchor[]): Anchor[] {
+  if (boundaries.length < 2) return boundaries;
+  const out: Anchor[] = [];
+  for (const b of boundaries) {
+    const last = out[out.length - 1];
+    if (last && last.odometer === b.odometer) continue;
+    out.push(b);
+  }
+  return out;
+}
+
 function tripOverlapKm(
   t: FuelCalcTrip,
   startOdo: number,
@@ -133,6 +145,9 @@ export function calculateOdometerBuckets(
       }))
       .sort((a, b) => a.odometer - b.odometer || a.date.localeCompare(b.date));
   }
+
+  // Dual-pay / same-stop: one odometer → one boundary (zero-km windows break chain + drop litres).
+  boundaries = collapseBoundariesByOdometer(boundaries);
 
   if (boundaries.length < 2) return [];
 
@@ -240,8 +255,18 @@ export function calculateOdometerBuckets(
     );
 
     const closingFuelEntry = findClosingFuelEntry(endAnchor);
-    const closingLiters = closingFuelEntry ? fuelOpsLiters(closingFuelEntry) : 0;
-    const closingCost = closingFuelEntry ? fuelOpsSpendAmount(closingFuelEntry) : 0;
+    // Dual-pay at same odo: cash + card both close this window (not mid, not a second boundary).
+    const closingFuelEntries = allOpsForVehicle.filter(
+      (e) =>
+        countsInFuelLogSpend(e) &&
+        !floatingIds.has(e.id) &&
+        e.odometer != null &&
+        e.odometer === endOdo &&
+        e.odometer > startOdo,
+    );
+    const closingLiters = closingFuelEntries.reduce((s, e) => s + fuelOpsLiters(e), 0);
+    const closingCost = closingFuelEntries.reduce((s, e) => s + fuelOpsSpendAmount(e), 0);
+    const closingIds = new Set(closingFuelEntries.map((e) => e.id));
 
     const midBucketFuelEntries = allOpsForVehicle.filter(
       (e) =>
@@ -252,7 +277,7 @@ export function calculateOdometerBuckets(
         e.odometer < endOdo &&
         e.id !== (startAnchor.referenceId || startAnchor.id) &&
         e.id !== (endAnchor.referenceId || endAnchor.id) &&
-        e.id !== closingFuelEntry?.id,
+        !closingIds.has(e.id),
     );
 
     const totalLiters =
@@ -265,7 +290,7 @@ export function calculateOdometerBuckets(
       midBucketFuelEntries.reduce((sum, e) => sum + fuelOpsSpendAmount(e), 0);
 
     const associatedReceipts = [
-      ...(closingFuelEntry ? [closingFuelEntry.id] : []),
+      ...closingFuelEntries.map((e) => e.id),
       ...windowReceipts.map((r) => r.id),
       ...midBucketFuelEntries.map((e) => e.id),
     ];

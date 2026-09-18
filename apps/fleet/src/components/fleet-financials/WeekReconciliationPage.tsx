@@ -80,7 +80,7 @@ export function WeekReconciliationPage({
 
   if (!canFuel && !canTolls) {
     return (
-      <div className="mx-auto max-w-[1400px] space-y-6 p-4 sm:p-6">
+      <div className="w-full min-w-0 space-y-6 p-4 sm:p-6 md:mx-auto md:max-w-[1400px]">
         <BusinessFinanceDeskChrome
           deskLabel="Week Reconciliation"
           onBack={onBackToBusinessFinance}
@@ -93,7 +93,7 @@ export function WeekReconciliationPage({
   }
 
   return (
-    <div className="mx-auto max-w-[1400px] space-y-6 p-4 sm:p-6">
+    <div className="w-full min-w-0 space-y-6 p-4 sm:p-6 md:mx-auto md:max-w-[1400px]">
       <BusinessFinanceDeskChrome
         deskLabel="Week Reconciliation"
         onBack={onBackToBusinessFinance}

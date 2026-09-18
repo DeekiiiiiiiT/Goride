@@ -82,9 +82,9 @@ export function toFuelQualityRow(
     netPay: v.netPay,
     misc: v.misc,
     odometerIncomplete: Boolean(v.odometerIncomplete),
+    // Pending posts on Finalize — do not put in issue subtitle (use flagged fills in Data quality).
     subtitle: [
       v.healthStatus && v.healthStatus !== 'Emerald' ? v.healthStatus : null,
-      v.pendingCount > 0 ? `${v.pendingCount} pending log(s)` : null,
       v.odometerIncomplete ? 'Incomplete odometer data — unexplained fuel may be inflated' : null,
     ]
       .filter(Boolean)
