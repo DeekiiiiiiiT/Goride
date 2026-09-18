@@ -130,7 +130,7 @@ export function bulkEarlyGateFailure(
     return `Blocked — unexplained fuel still needs review (${counts['leakage-gap'].actionable})`;
   }
   if (counts['data-quality'].actionable > 0) {
-    return `Blocked — ${counts['data-quality'].actionable} data-quality item(s) still need review`;
+    return `Blocked — ${counts['data-quality'].actionable} flagged vehicle(s) still need review`;
   }
   const leftover = fuelActionableTotal(counts) - counts.finalize.actionable;
   if (leftover > 0) {
@@ -384,6 +384,8 @@ export function FuelBulkFinalizeDialog({
               ),
               totalSpend: period.totalSpend,
               unexplained: period.netLeakage,
+              dataQualityVehiclesUnreviewed:
+                (periodForGate.counts?.['data-quality']?.actionable ?? 0) > 0,
               ...stopToStopClosableFlagsFromReports({
                 reports,
                 fuelEntries: weekEntries,

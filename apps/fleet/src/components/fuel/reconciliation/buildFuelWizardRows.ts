@@ -81,6 +81,7 @@ export function toFuelQualityRow(
     cashFromEarnings: v.driverSpend,
     netPay: v.netPay,
     misc: v.misc,
+    odometerIncomplete: Boolean(v.odometerIncomplete),
     subtitle: [
       v.healthStatus && v.healthStatus !== 'Emerald' ? v.healthStatus : null,
       v.pendingCount > 0 ? `${v.pendingCount} pending log(s)` : null,

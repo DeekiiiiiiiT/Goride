@@ -780,6 +780,36 @@ export function computeStationMedianOutlierLoss(
   return Math.round(loss * 100) / 100;
 }
 
+/**
+ * Entry IDs whose paid $/L is above this station’s median — no display limit.
+ * Optional weekStartYmd/weekEndYmd scopes which fills are considered outliers
+ * (median still uses the 30-day window ending at weekEndYmd / periodEndYmd).
+ */
+export function buildStationMedianOutlierIdSet(
+  entries: FuelEntry[],
+  periodEndYmd: string,
+  pct = DEFAULT_PRICE_OUTLIER_PCT,
+  weekStartYmd?: string,
+  weekEndYmd?: string,
+): Set<string> {
+  const end = weekEndYmd || periodEndYmd;
+  const medians = buildStationMedianPerLiter(entries, end);
+  const out = new Set<string>();
+  for (const e of filterFuelOpsLogEntries(entries)) {
+    const day = entryDateYmd(e);
+    if (weekStartYmd && (day < weekStartYmd || day > end)) continue;
+    const sid = stationKey(e);
+    if (!sid) continue;
+    const median = medians.get(sid);
+    if (median == null) continue;
+    const paid = paidPerLiter(e);
+    if (paid == null) continue;
+    if (!isPriceOutlier(paid, median, pct)) continue;
+    out.add(e.id);
+  }
+  return out;
+}
+
 export function buildStationMedianOutlierFlags(
   entries: FuelEntry[],
   vehicles: Vehicle[],

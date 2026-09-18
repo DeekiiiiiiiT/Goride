@@ -22,7 +22,11 @@ export type FuelWeekClosableBlocker = {
     /** N-1: thin odometer chain — timing carve has no basis. */
     | 'odometer_chain_unusable'
     /** N-2: no-odometer fill spend beyond gate and not yet acknowledged. */
-    | 'unattributed_unreviewed';
+    | 'unattributed_unreviewed'
+    /** Critical fill flags without a disposition record. */
+    | 'undisposed_flags'
+    /** Flagged vehicles not marked reviewed on Data quality. */
+    | 'data_quality_unreviewed';
   message: string;
 };
 
@@ -49,13 +53,22 @@ export type EvaluateFuelWeekClosableInput = {
   odometerChainUnusable?: boolean;
   /** N-2: unattributed fill spend beyond gate and not wizard-accepted. */
   unattributedUnreviewed?: boolean;
+  /** Critical fill flags not dispositioned (desk + wizard shared). */
+  undisposedCriticalFlags?: boolean;
+  /** Data-quality flagged vehicles not marked reviewed. */
+  dataQualityVehiclesUnreviewed?: boolean;
 };
 
 export function evaluateFuelWeekClosable(
   input: EvaluateFuelWeekClosableInput,
 ): FuelWeekClosableBlocker[] {
   const blockers: FuelWeekClosableBlocker[] = [];
-  if (input.hasUnacknowledgedExceptionFills) {
+  if (input.undisposedCriticalFlags) {
+    blockers.push({
+      code: 'undisposed_flags',
+      message: 'Critical fill flags not dispositioned.',
+    });
+  } else if (input.hasUnacknowledgedExceptionFills) {
     blockers.push({
       code: 'exception_fills',
       message: 'Unacknowledged exception-tier fills remain',
@@ -149,6 +162,12 @@ export function evaluateFuelWeekClosable(
     blockers.push({
       code: 'unattributed_unreviewed',
       message: 'Fills without odometer need review',
+    });
+  }
+  if (input.dataQualityVehiclesUnreviewed) {
+    blockers.push({
+      code: 'data_quality_unreviewed',
+      message: 'Data-quality flagged vehicles not marked reviewed.',
     });
   }
   return blockers;

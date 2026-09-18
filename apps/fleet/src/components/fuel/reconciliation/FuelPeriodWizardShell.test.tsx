@@ -55,8 +55,9 @@ describe('FuelPeriodWizard shell chrome', () => {
     );
     expect(screen.getByText('Jul 6 – Jul 12')).toBeTruthy();
     expect(screen.getByText(/^Open$/i)).toBeTruthy();
-    expect(screen.getByText('Data quality')).toBeTruthy();
-    await user.click(screen.getByRole('button', { name: /^Continue$/i }));
+    expect(screen.getByText('What to do now')).toBeTruthy();
+    expect(screen.getByText(/Confirm fills and odometer/i)).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: /Continue/i }));
     expect(onContinue).toHaveBeenCalled();
   });
 
@@ -85,6 +86,21 @@ describe('FuelPeriodWizard shell chrome', () => {
     expect(container.querySelector('button')).toBeNull();
   });
 
+  it('disables Continue and explains flagged vehicles on data-quality', () => {
+    render(
+      <FuelPeriodWizardContinueFooter
+        isLast={false}
+        canContinue={false}
+        activeStepId="data-quality"
+        leakageReviewed={false}
+        continueLabel="Continue"
+        onContinue={() => undefined}
+      />,
+    );
+    expect(screen.getByText(/mark every flagged vehicle reviewed/i)).toBeTruthy();
+    expect(screen.getByRole('button', { name: /^Continue$/i })).toBeDisabled();
+  });
+
   it('empty body gate uses product copy', () => {
     render(
       <FuelPeriodWizardBodyGate
@@ -96,7 +112,7 @@ describe('FuelPeriodWizard shell chrome', () => {
         <div>should not show</div>
       </FuelPeriodWizardBodyGate>,
     );
-    expect(screen.getByText(/no fuel spend for this week/i)).toBeTruthy();
+    expect(screen.getByText(/no fuel spend this week/i)).toBeTruthy();
     expect(screen.queryByText('should not show')).toBeNull();
   });
 });

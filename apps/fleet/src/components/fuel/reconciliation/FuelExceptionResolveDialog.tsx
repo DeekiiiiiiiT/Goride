@@ -12,7 +12,7 @@ import {
 import { Button } from '../../ui/button';
 import { Textarea } from '../../ui/textarea';
 import type { FuelExceptionBlocker } from '../../../utils/fuelFinalizeGating';
-import { FUEL_FLAG_GLOSSARY } from '../analytics/fuelFlagGlossary';
+import { plainEnglishForFlagReason } from '../analytics/fuelFlagGlossary';
 import { formatFuelMoney } from '../../../utils/formatFuelMoney';
 
 function formatFillDate(ymd: string): string {
@@ -21,18 +21,6 @@ function formatFillDate(ymd: string): string {
   } catch {
     return ymd;
   }
-}
-
-function plainEnglishForReason(reason: string): string {
-  const needle = reason.trim().toLowerCase();
-  for (const group of FUEL_FLAG_GLOSSARY) {
-    for (const item of group.items) {
-      if (item.title.toLowerCase() === needle || needle.includes(item.title.toLowerCase())) {
-        return item.meaning;
-      }
-    }
-  }
-  return 'The system flagged this fill as a serious tank-cycle / leakage issue. Confirm it is OK to lock the week, or fix the fill numbers.';
 }
 
 export type FuelExceptionResolveAction = 'accept' | 'edit';
@@ -59,9 +47,10 @@ export function FuelExceptionResolveDialog({
 }) {
   const [note, setNote] = useState('');
   const meaning = useMemo(
-    () => (blocker ? plainEnglishForReason(blocker.reason) : ''),
+    () => (blocker ? plainEnglishForFlagReason(blocker.reason) : ''),
     [blocker],
   );
+  const noteOk = note.trim().length >= 8;
 
   if (!blocker) return null;
 
@@ -98,7 +87,7 @@ export function FuelExceptionResolveDialog({
 
         <div className="space-y-1.5">
           <label htmlFor="exception-resolve-note" className="text-xs font-medium text-slate-600">
-            Optional note (saved on the fill)
+            Note required (8+ characters — saved for the audit trail)
           </label>
           <Textarea
             id="exception-resolve-note"
@@ -114,7 +103,7 @@ export function FuelExceptionResolveDialog({
           <Button
             type="button"
             className="min-h-11 w-full bg-[#3525cd] text-white hover:bg-[#2a1ea4]"
-            disabled={busy}
+            disabled={busy || !noteOk}
             onClick={() => void onAccept(blocker, note.trim())}
           >
             <CheckCircle2 className="mr-2 h-4 w-4" />

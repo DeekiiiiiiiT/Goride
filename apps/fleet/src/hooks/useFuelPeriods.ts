@@ -34,6 +34,13 @@ export type FuelPeriodRow = {
   unattributedReviewedAt?: string | null;
   unattributedReviewedBy?: string | null;
   unattributedReviewedNote?: string | null;
+  /** Cash-desk: flagged vehicle acknowledgements */
+  dataQualityVehicleReviews?: Array<{
+    vehicleId: string;
+    at: string;
+    by?: string | null;
+    note?: string | null;
+  }>;
   lockedAt?: string | null;
   computedAt?: string | null;
   fuelSealError?: string | null;

@@ -14,6 +14,7 @@ import {
 } from "../../../packages/fuel-core/src/fuelOpsEligibility.ts";
 import { isEntryInInclusiveYmdRange } from "../../../packages/fuel-core/src/fuelWeekRange.ts";
 import type { FuelEntry } from "../../../packages/fuel-core/src/fuelTypes.ts";
+import { getServiceClient } from "./service_client.ts";
 
 function ymd(v: unknown): string {
   return String(v || "").split("T")[0];
@@ -227,19 +228,81 @@ async function loadWeekClosableKvBundle(
 }
 
 function entryIsUnackedException(e: Record<string, unknown>): boolean {
-  const tier = String(e.reviewTier || (e.metadata as any)?.reviewTier || e.anomalyTier || "")
+  const meta = (e.metadata && typeof e.metadata === "object"
+    ? e.metadata
+    : {}) as Record<string, unknown>;
+  const tier = String(e.reviewTier || meta.reviewTier || e.anomalyTier || "")
     .toLowerCase();
-  const signalTier = String((e.metadata as any)?.signalTier || e.signalTier || "").toLowerCase();
-  const isException =
+  const signalTier = String(meta.signalTier || e.signalTier || "").toLowerCase();
+  const integrity = String(meta.integrityStatus || "").toLowerCase();
+  const isCritical =
     tier === "exception" ||
     signalTier === "exception" ||
-    Boolean((e.metadata as any)?.isException);
-  if (!isException) return false;
-  const ack = (e.metadata as any)?.reconExceptionAck || e.reconExceptionAck;
-  if (ack && typeof ack === "object") return false;
+    integrity === "critical" ||
+    Boolean(meta.isException);
+  if (!isCritical) return false;
+  const ack = meta.reconExceptionAck || e.reconExceptionAck;
   if (ack === true || ack === "true" || ack === 1 || ack === "1") return false;
-  if ((e.metadata as any)?.exceptionResolvedAt) return false;
+  if (meta.exceptionResolvedAt) return false;
   return true;
+}
+
+/** Load disposed (entry_id, flag_code) pairs for org. */
+async function loadDisposedEntryFlagPairs(
+  orgId: string,
+  entryIds: string[],
+): Promise<Set<string>> {
+  const out = new Set<string>();
+  if (entryIds.length === 0) return out;
+  const sb = getServiceClient();
+  // Chunk to avoid URL limits
+  const chunk = 200;
+  for (let i = 0; i < entryIds.length; i += chunk) {
+    const slice = entryIds.slice(i, i + chunk);
+    const { data, error } = await sb
+      .from("fuel_flag_disposition")
+      .select("entry_id, flag_code")
+      .eq("org_id", orgId)
+      .in("entry_id", slice);
+    if (error) {
+      console.warn("[fuel_week_closable] disposition load failed", error.message);
+      continue;
+    }
+    for (const row of data || []) {
+      out.add(`${row.entry_id}::${row.flag_code}`);
+    }
+  }
+  return out;
+}
+
+function entryHasOpenCriticalFlag(
+  e: Record<string, unknown>,
+  disposed: Set<string>,
+): boolean {
+  const id = String(e.id || "").trim();
+  if (!id) return false;
+  const meta = (e.metadata && typeof e.metadata === "object"
+    ? e.metadata
+    : {}) as Record<string, unknown>;
+  const signalTier = String(meta.signalTier || e.signalTier || "").toLowerCase();
+  const integrity = String(meta.integrityStatus || "").toLowerCase();
+  const codes: string[] = [];
+  if (signalTier === "exception") codes.push("signal_exception");
+  if (integrity === "critical") codes.push("integrity_critical");
+  if (codes.length === 0) return false;
+  // Legacy ack covers signal_exception only
+  const legacyAck =
+    meta.exceptionResolvedAt ||
+    meta.reconExceptionAck === true ||
+    meta.reconExceptionAck === "true" ||
+    meta.reconExceptionAck === 1 ||
+    meta.reconExceptionAck === "1";
+  for (const code of codes) {
+    if (disposed.has(`${id}::${code}`)) continue;
+    if (code === "signal_exception" && legacyAck) continue;
+    return true;
+  }
+  return false;
 }
 
 function snapFuelRule(snap: Record<string, unknown>): Record<string, unknown> | null {
@@ -292,8 +355,14 @@ export async function weekHasUnackedExceptionFills(
   weekEnd: string,
 ): Promise<boolean> {
   const { entries } = await loadWeekClosableKvBundle(orgId, weekStart, weekEnd);
+  const ids = entries.map((e) => String(e.id || "")).filter(Boolean);
+  const disposed = await loadDisposedEntryFlagPairs(orgId, ids);
   for (const e of entries) {
-    if (entryIsUnackedException(e)) return true;
+    if (entryHasOpenCriticalFlag(e, disposed)) return true;
+    // Fallback for legacy exception-only path when integrity not stamped
+    if (entryIsUnackedException(e) && !disposed.has(`${e.id}::signal_exception`)) {
+      return true;
+    }
   }
   return false;
 }
@@ -402,12 +471,36 @@ export async function buildFuelWeekClosableInputForPeriod(
   const odometerChainReviewed = Boolean(period.odometer_chain_reviewed_at);
   const unattributedReviewed = Boolean(period.unattributed_reviewed_at);
 
+  // DQ vehicle reviews — Amber/Red / odometerIncomplete vs period jsonb reviews.
+  const reviews = Array.isArray(period.data_quality_vehicle_reviews)
+    ? (period.data_quality_vehicle_reviews as Array<Record<string, unknown>>)
+    : [];
+  const reviewedIds = new Set(
+    reviews.map((r) => String(r.vehicleId || r.vehicle_id || "").trim()).filter(Boolean),
+  );
+  let dataQualityVehiclesUnreviewed = false;
+  for (const s of snaps) {
+    const vid = String(s.vehicleId || "").trim();
+    if (!vid) continue;
+    const health = String(s.healthStatus || (s.metadata as any)?.healthStatus || "");
+    const odoIncomplete = Boolean(
+      s.odometerIncomplete || (s.metadata as any)?.odometerIncomplete,
+    );
+    const flagged = (health && health !== "Emerald") || odoIncomplete;
+    if (flagged && !reviewedIds.has(vid)) {
+      dataQualityVehiclesUnreviewed = true;
+      break;
+    }
+  }
+
   return {
     countsUnevaluated,
     overExplained: snapResidual.anyOverExplained || residualKind === "over_explained",
     underExplainedUnreviewed:
       (snapResidual.anyUnderExplained || residualKind === "under_explained") && !leakageReviewed,
     hasUnacknowledgedExceptionFills: hasUnackedExceptions,
+    undisposedCriticalFlags: hasUnackedExceptions,
+    dataQualityVehiclesUnreviewed,
     hasOpenDisputes,
     hasUnapprovedFuelTx: unapprovedFuel,
     missingCategoryCosts,

@@ -9,6 +9,7 @@ import { FuelCardAssignModal } from '../components/fuel/FuelCardAssignModal';
 import { FuelLogModal } from '../components/fuel/FuelLogModal';
 import { FuelLogTable } from '../components/fuel/FuelLogTable';
 import { FuelConfiguration } from '../components/fuel/FuelConfiguration';
+import { FuelFlagsDesk } from '../components/fuel/flags/FuelFlagsDesk';
 import { BucketReconciliationView } from '../components/fuel/BucketReconciliationView';
 import { MileageAdjustmentModal } from '../components/fuel/MileageAdjustmentModal';
 import { AddFuelChoiceDialog } from '../components/fuel/AddFuelChoiceDialog';
@@ -55,6 +56,7 @@ import {
   serverLockedWeekStarts,
   weekStartYmd,
 } from '../utils/fuelPeriodServerMerge';
+import { parseDataQualityVehicleReviews, reviewedVehicleIdSet } from '../utils/fuelDataQualityReview';
 import { fuelPeriodFinalizeIdempotencyKey } from '../utils/fuelPeriodIdempotency';
 import { interpretFuelFinalizeJobResult } from '../utils/fuelFinalizeJobResult';
 import {
@@ -65,6 +67,15 @@ import {
   resolveFuelSecondApproverThreshold,
   FUEL_SECOND_APPROVER_THRESHOLD,
 } from '../utils/fuelDualApproval';
+import {
+  buildFuelFlagDeskRows,
+  isFuelFillFlagWeekCleared,
+} from '../utils/fuelFillFlagClassify';
+import { buildStationMedianOutlierIdSet } from '../utils/fuelAnalyticsAggregates';
+import {
+  dispositionMapFromRows,
+  upsertDispositionIntoMap,
+} from '../utils/fuelFlagDisposition';
 import { mergeFuelCardWithAssignmentHistory } from '../utils/mergeFuelCardWithAssignmentHistory';
 import { supabase } from '../utils/supabase/client';
 import {
@@ -275,6 +286,9 @@ function FuelManagementInner({
 
   // Fuel Log State
   const [logs, setLogs] = useState<FuelEntry[]>([]);
+  const [flagDispositions, setFlagDispositions] = useState<
+    import('../utils/fuelFlagDisposition').FuelFlagDispositionMap
+  >(() => new Map());
   const [fuelDataTruncated, setFuelDataTruncated] = useState(false);
   const [transactionsTruncated, setTransactionsTruncated] = useState(false);
   const [isLogModalOpen, setIsLogModalOpen] = useState(false);
@@ -369,11 +383,11 @@ function FuelManagementInner({
   } = useFuelPeriods({
     from: landingPeriodRange.from,
     to: landingPeriodRange.to,
-    // Recon-only — never compete with Transaction Logs page load (HTTP/1.1 overhead).
+    // Flags desk needs lock status; recon also needs periods after recompute.
     enabled:
-      activeTab === 'reconciliation' &&
-      periodsQueryReady &&
-      Boolean(landingPeriodRange.from && landingPeriodRange.to),
+      Boolean(landingPeriodRange.from && landingPeriodRange.to) &&
+      (activeTab === 'flags' ||
+        (activeTab === 'reconciliation' && periodsQueryReady)),
   });
 
   // P-3: when SQL covers every week option, land server-only (no browser derive).
@@ -384,6 +398,14 @@ function FuelManagementInner({
     const leakageReviewedWeeks = serverLeakageReviewedWeekStarts(serverFuelPeriods);
     for (const w of listFuelLeakageReviewedWeeks()) {
       if (!serverByWeek.has(w)) leakageReviewedWeeks.add(w);
+    }
+    const dataQualityReviewedByWeek = new Map<string, Set<string>>();
+    for (const r of serverFuelPeriods) {
+      const wk = weekStartYmd(r.weekStart);
+      const ids = reviewedVehicleIdSet(
+        parseDataQualityVehicleReviews(r.dataQualityVehicleReviews),
+      );
+      if (ids.size) dataQualityReviewedByWeek.set(wk, ids);
     }
     const needDeriveGaps = reconciliationWeekOptions.some(
       (w) => !serverByWeek.has(w.startDate),
@@ -403,6 +425,7 @@ function FuelManagementInner({
             liveReportsByWeek: undefined,
             leakageReviewedWeeks,
             lockedWeekStarts: serverLockedWeekStarts(serverFuelPeriods),
+            dataQualityReviewedByWeek,
           }).filter((d) => !serverByWeek.has(d.startDate))
         : [];
     return mergeServerFirstLandingPeriods(serverFuelPeriods, derived);
@@ -436,7 +459,101 @@ function FuelManagementInner({
     [fuelReconPeriods],
   );
 
-  // Keep finalized-week SQL rows fresh — handled by periodsQueryReady gate above.
+  const flagsPeriodOptions = useMemo(() => {
+    const lockedByWeek = new Map(
+      serverFuelPeriods.map((r) => [
+        weekStartYmd(r.weekStart),
+        isFuelFillFlagWeekCleared(r),
+      ] as const),
+    );
+    return reconciliationWeekOptions.map((w) => ({
+      weekStart: w.startDate,
+      weekEnd: w.endDate,
+      label: w.label,
+      locked: lockedByWeek.get(w.startDate) === true,
+    }));
+  }, [reconciliationWeekOptions, serverFuelPeriods]);
+
+  const [flagsWeekStart, setFlagsWeekStart] = useState<string | null>(null);
+  const flagsSelectedWeekStart =
+    flagsWeekStart || reconciliationPeriodStart || flagsPeriodOptions[0]?.weekStart || null;
+
+  useEffect(() => {
+    if (!flagsWeekStart && flagsPeriodOptions[0]?.weekStart) {
+      setFlagsWeekStart(reconciliationPeriodStart || flagsPeriodOptions[0].weekStart);
+    }
+  }, [flagsPeriodOptions, reconciliationPeriodStart, flagsWeekStart]);
+
+  const flagsDeskRows = useMemo(() => {
+    if (!flagsSelectedWeekStart) return [];
+    const opt = flagsPeriodOptions.find((p) => p.weekStart === flagsSelectedWeekStart);
+    const weekEnd = opt?.weekEnd || reconciliationPeriodEnd || flagsSelectedWeekStart;
+    const weekLocked = Boolean(opt?.locked);
+    const outlierIds = buildStationMedianOutlierIdSet(
+      logs,
+      weekEnd,
+      undefined,
+      flagsSelectedWeekStart,
+      weekEnd,
+    );
+    const plateByVehicleId = new Map<string, string>();
+    for (const v of vehicles as Vehicle[]) {
+      if (v?.id) {
+        plateByVehicleId.set(
+          v.id,
+          (v as { licensePlate?: string }).licensePlate || v.id.slice(0, 8),
+        );
+      }
+    }
+    const driverNameById = new Map<string, string>();
+    for (const d of drivers as Array<{
+      id?: string;
+      driverId?: string;
+      name?: string;
+      firstName?: string;
+      lastName?: string;
+    }>) {
+      const id = d.id || d.driverId;
+      if (!id) continue;
+      const name =
+        d.name || [d.firstName, d.lastName].filter(Boolean).join(' ') || 'Unknown driver';
+      driverNameById.set(id, name);
+    }
+    return buildFuelFlagDeskRows(logs, {
+      weekStartYmd: flagsSelectedWeekStart,
+      weekEndYmd: weekEnd,
+      weekLocked,
+      outlierEntryIds: outlierIds,
+      dispositions: flagDispositions,
+      plateByVehicleId,
+      driverNameById,
+    });
+  }, [
+    flagsSelectedWeekStart,
+    flagsPeriodOptions,
+    reconciliationPeriodEnd,
+    logs,
+    vehicles,
+    drivers,
+    flagDispositions,
+  ]);
+
+  // Keep dual-approval prefs for landing badges + finalize gate (org-scoped)
+  useEffect(() => {
+    if (activeTab !== 'flags' && activeTab !== 'reconciliation') return;
+    let cancelled = false;
+    void api
+      .listFuelFlagDispositions()
+      .then((rows) => {
+        if (cancelled) return;
+        setFlagDispositions(dispositionMapFromRows(rows));
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTab, flagsSelectedWeekStart, logs.length]);
+
   // Dual-approval prefs for landing badges + finalize gate (org-scoped)
   useEffect(() => {
     if (activeTab !== 'reconciliation') return;
@@ -556,9 +673,9 @@ function FuelManagementInner({
     void loadLogsAndTransactions();
   }, [loadLogsAndTransactions]);
 
-  // Silent refresh when switching to Logs / Review if data is stale (>30s)
+  // Silent refresh when switching to Logs / Review / Flags if data is stale (>30s)
   useEffect(() => {
-    if (activeTab !== 'logs' && activeTab !== 'reimbursements') return;
+    if (activeTab !== 'logs' && activeTab !== 'reimbursements' && activeTab !== 'flags') return;
     const age = Date.now() - lastFuelDataLoadAtRef.current;
     if (lastFuelDataLoadAtRef.current > 0 && age > 30_000) {
       void loadLogsAndTransactions();
@@ -575,7 +692,7 @@ function FuelManagementInner({
   ) => {
       const scope =
         opts?.scope ||
-        (activeTab === 'logs' || activeTab === 'reimbursements'
+        (activeTab === 'logs' || activeTab === 'reimbursements' || activeTab === 'flags'
           ? 'core'
           : activeTab === 'reconciliation' || activeTab === 'configuration'
             ? 'recon'
@@ -713,7 +830,7 @@ function FuelManagementInner({
   // Sequential post-paint: activity-bounds → one finalized-reports call (ROAM-FLEET-10).
   // Never parallel with recompute/periods/trips/logs on recon mount.
   useEffect(() => {
-    if (activeTab === 'logs' || activeTab === 'reimbursements') return;
+    if (activeTab === 'logs' || activeTab === 'reimbursements' || activeTab === 'flags') return;
     if (activeTab === 'reconciliation' && !periodsQueryReady) return;
     let cancelled = false;
     const delayMs = activeTab === 'reconciliation' ? 900 : 200;
@@ -747,9 +864,9 @@ function FuelManagementInner({
     };
   }, [activeTab, periodsQueryReady, fuelFetchWindow.startDate, fuelFetchWindow.endDate]);
 
-  // Tab-scoped bootstrap — logs stay light; recon loads cards (C-6); cards tab loads full bundle.
+  // Tab-scoped bootstrap — logs/flags stay light; recon loads cards (C-6); cards tab loads full bundle.
   useEffect(() => {
-    if (activeTab === 'logs' || activeTab === 'reimbursements') {
+    if (activeTab === 'logs' || activeTab === 'reimbursements' || activeTab === 'flags') {
       if (coreLoadedRef.current || reconLoadedRef.current || fullLoadedRef.current) return;
       void loadData(true, { scope: 'core' });
       return;
@@ -1561,6 +1678,10 @@ function FuelManagementInner({
   } else if (activeTab === 'logs') {
       pageTitle = "Transaction Logs";
       pageDescription = "Posted fuel fill-ups. Use Add fuel to create. Odometer shows current km; Δ Prev shows change from last fill.";
+  } else if (activeTab === 'flags') {
+      pageTitle = "Fuel Flags";
+      pageDescription =
+        "Monitor problem fills — integrity, exceptions, location, and price outliers. Clears when you lock the week.";
   } else if (activeTab === 'configuration') {
       pageTitle = "Fleet Policy Configuration";
       pageDescription = "Manage company and driver expense splits for fuel.";
@@ -1585,7 +1706,7 @@ function FuelManagementInner({
           ) : undefined
         }
     >
-      {(activeTab !== 'configuration' && activeTab !== 'cards') && (
+      {(activeTab !== 'configuration' && activeTab !== 'cards' && activeTab !== 'flags') && (
         <div
           className={`flex justify-end items-center gap-3 mb-4 flex-wrap${
             activeTab === 'logs' && !embedded ? ' md:justify-end' : ''
@@ -1719,24 +1840,52 @@ function FuelManagementInner({
               toast.error('Could not find that fill to resolve.');
               return false;
             }
-            const priorTier = entry.metadata?.signalTier;
-            const updated: FuelEntry = {
-              ...entry,
-              correctionReason: note?.trim() || 'Fuel exception acknowledged',
-              metadata: {
-                ...entry.metadata,
-                priorSignalTier: priorTier,
-                signalTier: 'observe',
-                reconExceptionAck: true,
-                exceptionResolvedAt: new Date().toISOString(),
-                exceptionResolveAction: 'accepted',
-                exceptionResolveNote: note || undefined,
-                auditStatus: 'Clear',
-              },
-            };
+            const noteTrim = note?.trim() || '';
+            if (noteTrim.length < 8) {
+              toast.error('Add a short note (at least 8 characters) to accept a critical flag.');
+              return false;
+            }
+            const periodId =
+              serverFuelPeriods.find(
+                (r) => weekStartYmd(r.weekStart) === reconciliationPeriodStart,
+              )?.id || null;
             try {
+              const res = await api.upsertFuelFlagDisposition({
+                entryId,
+                flagCode: 'signal_exception',
+                action: 'accepted',
+                note: noteTrim,
+                periodId,
+                severity: 'critical',
+              });
+              const disp = (res as { disposition?: Record<string, unknown> })?.disposition;
+              if (disp) {
+                setFlagDispositions((prev) =>
+                  upsertDispositionIntoMap(prev, {
+                    entryId: String(disp.entryId || entryId),
+                    flagCode: String(disp.flagCode || 'signal_exception'),
+                    action: 'accepted',
+                    note: noteTrim,
+                    actorId: disp.actorId != null ? String(disp.actorId) : null,
+                    at: disp.at != null ? String(disp.at) : new Date().toISOString(),
+                    periodId: periodId,
+                  }),
+                );
+              }
+              // Dual-read: keep legacy metadata ack without destroying signalTier.
+              const updated: FuelEntry = {
+                ...entry,
+                correctionReason: noteTrim || 'Fuel exception acknowledged',
+                metadata: {
+                  ...entry.metadata,
+                  reconExceptionAck: true,
+                  exceptionResolvedAt: new Date().toISOString(),
+                  exceptionResolveAction: 'accepted',
+                  exceptionResolveNote: noteTrim || undefined,
+                  auditStatus: 'Clear',
+                },
+              };
               const saved = await fuelService.saveFuelEntry(updated);
-              // Keep ack locally even if remote stamp rewrites signalTier until edge redeploy.
               const merged: FuelEntry = {
                 ...updated,
                 ...(saved && typeof saved === 'object' ? saved : {}),
@@ -1747,8 +1896,9 @@ function FuelManagementInner({
                     saved?.metadata?.exceptionResolvedAt ||
                     updated.metadata?.exceptionResolvedAt,
                   exceptionResolveAction: 'accepted',
-                  exceptionResolveNote: note || undefined,
-                  signalTier: 'observe',
+                  exceptionResolveNote: noteTrim || undefined,
+                  // Preserve original signalTier — disposition is the source of truth.
+                  signalTier: entry.metadata?.signalTier,
                 },
               };
               setLogs((prev) => prev.map((l) => (l.id === entryId ? merged : l)));
@@ -1811,6 +1961,97 @@ function FuelManagementInner({
                 getDriverName={getDriverName}
             />
         </div>
+      )}
+
+      {activeTab === 'flags' && (
+        <FuelFlagsDesk
+          periods={flagsPeriodOptions}
+          selectedWeekStart={flagsSelectedWeekStart}
+          onSelectWeekStart={(weekStart) => {
+            setFlagsWeekStart(weekStart);
+          }}
+          rows={flagsDeskRows}
+          loading={!fuelLogsHydrated || (activeTab === 'flags' && serverPeriodsPending)}
+          canDisposition={can('fuel.edit_entry')}
+          canAcceptCritical={can('fuel.accept_unexplained')}
+          onReconcileWeek={(weekStart) => {
+            const hit = flagsPeriodOptions.find((p) => p.weekStart === weekStart);
+            if (!hit) return;
+            handleReconciliationPeriodSelect({
+              id: hit.weekStart,
+              startDate: hit.weekStart,
+              endDate: hit.weekEnd,
+              label: hit.label,
+            });
+            setActiveTab('reconciliation');
+            onTabChange?.('reconciliation');
+          }}
+          onEditFill={(entryId) => {
+            const entry = logs.find((l) => l.id === entryId);
+            if (!entry) {
+              toast.error('Could not find that fill to edit.');
+              return;
+            }
+            setEditingLog(entry);
+            setIsLogModalOpen(true);
+          }}
+          onAcceptFlag={async (row, flagCode, note, action = 'accepted') => {
+            if (action === 'accepted' && row.reasons.some((r) => r.code === flagCode && r.severity === 'critical') && note.trim().length < 8) {
+              toast.error('Add a note (8+ characters) to accept a critical flag.');
+              return;
+            }
+            const periodId =
+              serverFuelPeriods.find(
+                (r) => weekStartYmd(r.weekStart) === flagsSelectedWeekStart,
+              )?.id || null;
+            const severity =
+              row.reasons.find((r) => r.code === flagCode)?.severity || 'warning';
+            try {
+              const res = await api.upsertFuelFlagDisposition({
+                entryId: row.entryId,
+                flagCode,
+                action,
+                note: note.trim() || undefined,
+                periodId,
+                severity,
+              });
+              const disp = (res as { disposition?: Record<string, unknown> })?.disposition;
+              if (disp) {
+                setFlagDispositions((prev) =>
+                  upsertDispositionIntoMap(prev, {
+                    entryId: String(disp.entryId || row.entryId),
+                    flagCode: String(disp.flagCode || flagCode),
+                    action: action === 'escalated' ? 'escalated' : 'accepted',
+                    note: note.trim() || null,
+                    actorId: disp.actorId != null ? String(disp.actorId) : null,
+                    at: disp.at != null ? String(disp.at) : new Date().toISOString(),
+                    periodId,
+                  }),
+                );
+              }
+              if (action === 'accepted' && flagCode === 'signal_exception') {
+                const entry = logs.find((l) => l.id === row.entryId);
+                if (entry) {
+                  const updated: FuelEntry = {
+                    ...entry,
+                    metadata: {
+                      ...entry.metadata,
+                      reconExceptionAck: true,
+                      exceptionResolvedAt: new Date().toISOString(),
+                      exceptionResolveAction: 'accepted',
+                      exceptionResolveNote: note.trim() || undefined,
+                    },
+                  };
+                  await fuelService.saveFuelEntry(updated);
+                  setLogs((prev) => prev.map((l) => (l.id === row.entryId ? updated : l)));
+                }
+              }
+              toast.success(action === 'escalated' ? 'Flag escalated' : 'Flag accepted');
+            } catch (e: any) {
+              toast.error(e?.message || 'Could not save disposition');
+            }
+          }}
+        />
       )}
 
       {activeTab === 'logs' && (

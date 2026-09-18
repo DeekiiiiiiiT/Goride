@@ -63,4 +63,20 @@ describe('evaluateFuelWeekClosable', () => {
   it('R-1: unattributed reviewed clears blocker', () => {
     expect(evaluateFuelWeekClosable({ unattributedUnreviewed: false })).toEqual([]);
   });
+
+  it('blocks undisposed critical fill flags', () => {
+    expect(
+      evaluateFuelWeekClosable({ undisposedCriticalFlags: true }).map((x) => x.code),
+    ).toContain('undisposed_flags');
+  });
+
+  it('clears when undisposedCriticalFlags is false', () => {
+    expect(evaluateFuelWeekClosable({ undisposedCriticalFlags: false })).toEqual([]);
+  });
+
+  it('blocks data-quality vehicles unreviewed', () => {
+    expect(
+      evaluateFuelWeekClosable({ dataQualityVehiclesUnreviewed: true }).map((x) => x.code),
+    ).toContain('data_quality_unreviewed');
+  });
 });

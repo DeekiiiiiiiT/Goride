@@ -23,6 +23,7 @@ import {
   buildFuelVehicleSnapshots,
   type FuelPeriodVehicleSnapshot,
 } from './fuelPeriodDerive';
+import { isFuelDataQualityFlagged } from './fuelDataQualityReview';
 
 export type { FuelPeriodVehicleSnapshot } from './fuelPeriodDerive';
 
@@ -57,11 +58,16 @@ export interface BuildFuelStepCountsInput {
   vehicles: FuelPeriodVehicleSnapshot[];
   /** When true, misc/gap review no longer blocks. */
   leakageReviewed?: boolean;
+  /**
+   * Vehicle IDs marked reviewed on Data quality (cash-desk).
+   * Amber/Red or odometerIncomplete stay actionable until listed here.
+   */
+  dataQualityReviewedVehicleIds?: Set<string> | string[];
 }
 
 /**
  * Per-step actionable vs informational for one week.
- * - Amber/Red health is informational only (signal for Leakage / Stop-to-Stop review)
+ * - Amber/Red or odometerIncomplete blocks data-quality Continue until marked reviewed (cash-desk)
  * - Pending logs are informational on step 1 (they post on Finalize)
  * - Open disputes block adjustments-disputes
  * - Missing policy assignment is informational (default OK)
@@ -71,6 +77,10 @@ export interface BuildFuelStepCountsInput {
 export function buildFuelStepCounts(input: BuildFuelStepCountsInput): Record<FuelStepId, FuelStepCounts> {
   const counts = emptyFuelStepCounts();
   const { vehicles, leakageReviewed = false } = input;
+  const reviewed =
+    input.dataQualityReviewedVehicleIds instanceof Set
+      ? input.dataQualityReviewedVehicleIds
+      : new Set(input.dataQualityReviewedVehicleIds || []);
 
   for (const v of vehicles) {
     // Pending = not yet posted; expected until Finalize — show as info, do not gate Continue
@@ -78,8 +88,14 @@ export function buildFuelStepCounts(input: BuildFuelStepCountsInput): Record<Fue
       counts['data-quality'].informational += v.pendingCount;
       counts.finalize.informational += v.pendingCount;
     }
-    if (v.healthStatus && v.healthStatus !== 'Emerald') {
-      counts['data-quality'].informational += 1;
+
+    // Cash-desk: flagged vehicles block Continue until acknowledged
+    if (isFuelDataQualityFlagged(v)) {
+      if (reviewed.has(v.vehicleId)) {
+        counts['data-quality'].informational += 1;
+      } else {
+        counts['data-quality'].actionable += 1;
+      }
     }
 
     if (v.hasOpenDispute) {
@@ -172,6 +188,8 @@ export interface DeriveFuelPeriodsInput {
   leakageReviewedWeeks?: Set<string>;
   /** R-2: SQL-locked weeks from server merge — gap-fill derive respects Completed. */
   lockedWeekStarts?: Set<string>;
+  /** weekStart YMD → vehicle IDs marked reviewed for cash-desk data-quality. */
+  dataQualityReviewedByWeek?: Map<string, Set<string>>;
 }
 
 function entryInWeek(e: FuelEntry, start: string, end: string): boolean {
@@ -192,6 +210,7 @@ export function deriveFuelReconciliationPeriods(input: DeriveFuelPeriodsInput): 
     liveReportsByWeek,
     leakageReviewedWeeks,
     lockedWeekStarts,
+    dataQualityReviewedByWeek,
   } = input;
 
   return weekOptions.map((week) => {
@@ -227,6 +246,7 @@ export function deriveFuelReconciliationPeriods(input: DeriveFuelPeriodsInput): 
     const counts = buildFuelStepCounts({
       vehicles: active.length ? active : vehicleSnaps.filter((v) => v.totalSpend > 0),
       leakageReviewed: Boolean(leakageReviewedWeeks?.has(startDate)),
+      dataQualityReviewedVehicleIds: dataQualityReviewedByWeek?.get(startDate),
     });
     // Exception fills hard-block Finalize — surface on data-quality chips
     if (exceptionCount > 0) {

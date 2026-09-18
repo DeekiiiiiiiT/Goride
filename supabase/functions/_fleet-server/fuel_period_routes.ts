@@ -188,6 +188,9 @@ function mapPeriod(row: Record<string, unknown>) {
     unattributedReviewedAt: row.unattributed_reviewed_at,
     unattributedReviewedBy: row.unattributed_reviewed_by,
     unattributedReviewedNote: row.unattributed_review_note,
+    dataQualityVehicleReviews: Array.isArray(row.data_quality_vehicle_reviews)
+      ? row.data_quality_vehicle_reviews
+      : [],
     lockedAt: row.locked_at,
     lockedBy: row.locked_by,
     reopenedAt: row.reopened_at,
@@ -772,6 +775,7 @@ async function processJobRow(job: Record<string, unknown>) {
         unattributed_reviewed_at: null,
         unattributed_reviewed_by: null,
         unattributed_review_note: null,
+        data_quality_vehicle_reviews: [],
         counts: {},
         current_step: "data-quality",
         version: nextVersion,
@@ -1669,6 +1673,175 @@ export function registerFuelPeriodRoutes(app: Hono) {
       if (error) return c.json({ error: error.message }, 500);
       await insertAudit(orgId, periodId, "odometer_chain_review", { note }, actor);
       return c.json({ ok: true, odometerChainReviewedAt: now });
+    },
+  );
+
+  /** Cash-desk: mark one flagged vehicle reviewed so Data quality Continue can unlock. */
+  app.post(
+    `${BASE}/fuel/periods/:id/data-quality-vehicle-review`,
+    requirePermission("fuel.edit_entry"),
+    async (c: Context) => {
+      const orgId = getOrgId(c);
+      if (!orgId) return c.json({ error: "org required" }, 400);
+      const periodId = periodIdParam(c);
+      if (!periodId) return c.json({ error: "period id required" }, 400);
+      const body = await c.req.json().catch(() => ({}));
+      const vehicleId = String(body.vehicleId || "").trim();
+      if (!vehicleId) return c.json({ error: "vehicleId required" }, 400);
+      const note = String(body.note || "").trim() || null;
+      const period = await loadPeriod(orgId, periodId);
+      if (!period) return c.json({ error: "Not found" }, 404);
+      if (String(period.status) === "locked") {
+        return c.json({ error: "period_locked" }, 409);
+      }
+      const ifMatch = c.req.header("If-Match");
+      if (ifMatch != null && ifMatch !== "" && Number(ifMatch) !== Number(period.version)) {
+        return c.json({ error: "version_conflict", currentVersion: period.version }, 409);
+      }
+      const actor = actorId(c);
+      const now = new Date().toISOString();
+      const existing = Array.isArray(period.data_quality_vehicle_reviews)
+        ? (period.data_quality_vehicle_reviews as Array<Record<string, unknown>>)
+        : [];
+      const filtered = existing.filter((r) => String(r?.vehicleId || r?.vehicle_id || "") !== vehicleId);
+      const next = [
+        ...filtered,
+        { vehicleId, at: now, by: actor, note },
+      ];
+      const nextVersion = (Number(period.version) || 1) + 1;
+      const sb = getServiceClient();
+      const { data: updated, error } = await sb
+        .from("fuel_reconciliation_period")
+        .update({
+          data_quality_vehicle_reviews: next,
+          version: nextVersion,
+          updated_at: now,
+        })
+        .eq("id", periodId)
+        .eq("org_id", orgId)
+        .eq("version", Number(period.version) || 1)
+        .select("id")
+        .maybeSingle();
+      if (error) return c.json({ error: error.message }, 500);
+      if (!updated) {
+        return c.json({ error: "version_conflict", currentVersion: period.version }, 409);
+      }
+      await insertAudit(
+        orgId,
+        periodId,
+        "data_quality_vehicle_review",
+        { vehicleId, note, version: nextVersion },
+        actor,
+      );
+      return c.json({
+        ok: true,
+        dataQualityVehicleReviews: next,
+        version: nextVersion,
+      });
+    },
+  );
+
+  /** Upsert fill-level flag disposition — desk + wizard share one record. */
+  app.post(
+    `${BASE}/fuel/flags/disposition`,
+    requirePermission("fuel.edit_entry"),
+    async (c: Context) => {
+      const orgId = getOrgId(c);
+      if (!orgId) return c.json({ error: "org required" }, 400);
+      const body = await c.req.json().catch(() => ({}));
+      const entryId = String(body.entryId || "").trim();
+      const flagCode = String(body.flagCode || "").trim();
+      const action = String(body.action || "").trim();
+      const note = String(body.note || "").trim();
+      const periodId = String(body.periodId || "").trim() || null;
+      const severity = String(body.severity || "").trim();
+      if (!entryId || !flagCode) {
+        return c.json({ error: "entryId and flagCode required" }, 400);
+      }
+      if (action !== "accepted" && action !== "corrected" && action !== "escalated") {
+        return c.json({ error: "invalid action" }, 400);
+      }
+      if (action === "accepted" && severity === "critical" && note.length < 8) {
+        return c.json({ error: "note_required", minLength: 8 }, 422);
+      }
+      if (action === "accepted" && severity === "critical") {
+        const { hasPermission } = await import("./rbac_middleware.ts");
+        const rbacUser = c.get("rbacUser") as { resolvedRole?: string } | undefined;
+        const role = (rbacUser?.resolvedRole || "fleet_viewer") as import("./rbac_middleware.ts").Role;
+        if (!hasPermission(role, "fuel.accept_unexplained")) {
+          return c.json({ error: "forbidden", permission: "fuel.accept_unexplained" }, 403);
+        }
+      }
+      const actor = actorId(c);
+      if (!actor) return c.json({ error: "actor required" }, 400);
+      const now = new Date().toISOString();
+      const sb = getServiceClient();
+      const row = {
+        org_id: orgId,
+        entry_id: entryId,
+        flag_code: flagCode,
+        action,
+        note: note || null,
+        period_id: periodId,
+        actor_id: actor,
+        at: now,
+      };
+      const { data, error } = await sb
+        .from("fuel_flag_disposition")
+        .upsert(row, { onConflict: "org_id,entry_id,flag_code" })
+        .select("*")
+        .maybeSingle();
+      if (error) return c.json({ error: error.message }, 500);
+      if (periodId) {
+        await insertAudit(
+          orgId,
+          periodId,
+          "flag_disposition",
+          { entryId, flagCode, action, note: note || null },
+          actor,
+        );
+      }
+      return c.json({
+        ok: true,
+        disposition: {
+          entryId,
+          flagCode,
+          action,
+          note: note || null,
+          actorId: actor,
+          at: now,
+          periodId,
+          id: data?.id,
+        },
+      });
+    },
+  );
+
+  /** List dispositions for the org (desk hydrate; client filters to week entries). */
+  app.get(
+    `${BASE}/fuel/flags/dispositions`,
+    requirePermission("fuel.view"),
+    async (c: Context) => {
+      const orgId = getOrgId(c);
+      if (!orgId) return c.json({ dispositions: [] });
+      const periodId = String(c.req.query("periodId") || "").trim();
+      const sb = getServiceClient();
+      let q = sb.from("fuel_flag_disposition").select("*").eq("org_id", orgId);
+      if (periodId) q = q.eq("period_id", periodId);
+      const { data, error } = await q.order("at", { ascending: false }).limit(2000);
+      if (error) return c.json({ error: error.message }, 500);
+      return c.json({
+        dispositions: (data || []).map((r: any) => ({
+          id: r.id,
+          entryId: r.entry_id,
+          flagCode: r.flag_code,
+          action: r.action,
+          note: r.note,
+          actorId: r.actor_id,
+          at: r.at,
+          periodId: r.period_id,
+        })),
+      });
     },
   );
 

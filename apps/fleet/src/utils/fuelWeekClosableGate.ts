@@ -96,6 +96,8 @@ export function buildFuelWeekClosableInput(opts: {
   stopToStopAttributionFailed?: boolean;
   stopToStopChainFailed?: boolean;
   stopToStopTripsTruncated?: boolean;
+  /** Flagged DQ vehicles still missing Mark reviewed. */
+  dataQualityVehiclesUnreviewed?: boolean;
 }): EvaluateFuelWeekClosableInput {
   const unexplained =
     opts.unexplained ??
@@ -105,10 +107,13 @@ export function buildFuelWeekClosableInput(opts: {
     opts.reports.reduce((s, r) => s + (Number(r.totalGasCardCost) || 0), 0);
   const residualKind = classifyFuelMiscResidual(totalSpend, unexplained);
   const unattributed = totalUnattributedFillCost(opts.reports);
+  const hasCritical =
+    opts.gateResult.hasExceptionBlockers || (opts.gateResult.exceptionBlockers?.length ?? 0) > 0;
 
   return {
-    hasUnacknowledgedExceptionFills:
-      opts.gateResult.hasExceptionBlockers || (opts.gateResult.exceptionBlockers?.length ?? 0) > 0,
+    hasUnacknowledgedExceptionFills: hasCritical,
+    undisposedCriticalFlags: hasCritical,
+    dataQualityVehiclesUnreviewed: Boolean(opts.dataQualityVehiclesUnreviewed),
     hasOpenDisputes: Boolean(opts.openDisputesInWeek),
     hasUnapprovedFuelTx: opts.gateResult.hasUnapprovedFuelTxBlockers,
     overExplained:
@@ -173,6 +178,10 @@ export function fuelWeekClosableBlockerMessage(blocker: FuelWeekClosableBlocker)
       return 'Blocked — not enough odometered fills to measure tank timing';
     case 'unattributed_unreviewed':
       return 'Blocked — fills without odometer need review';
+    case 'undisposed_flags':
+      return 'Blocked — critical fill flags not dispositioned';
+    case 'data_quality_unreviewed':
+      return 'Blocked — data-quality flagged vehicles not marked reviewed';
     default:
       return blocker.message;
   }

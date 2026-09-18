@@ -1,7 +1,13 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { DateRange } from 'react-day-picker';
+import { ShieldCheck } from 'lucide-react';
 import { FuelPeriodStepper } from './FuelPeriodStepper';
 import { FuelWeekMoneyStrip } from './FuelWeekMoneyStrip';
+import { FuelWizardProgressPill } from './FuelWizardProgressPill';
+import {
+  FuelWizardOverflowMenu,
+  type FuelWizardOverflowMenuHandle,
+} from './FuelWizardOverflowMenu';
 import { FuelDataQualityStep } from './FuelDataQualityStep';
 import { FuelExceptionBlockersPanel } from './FuelExceptionBlockersPanel';
 import { FuelUnapprovedTxBlockersPanel } from './FuelUnapprovedTxBlockersPanel';
@@ -52,7 +58,6 @@ import {
   persistLeakageReviewToServer,
   persistWizardStep,
   recordWizardSecondApproval,
-  settlementPreviewStepIndex,
 } from './useFuelWizardActions';
 import {
   hasDistinctSecondApprove,
@@ -85,6 +90,10 @@ import type { FinancialTransaction, Trip } from '../../../types/data';
 import type { Vehicle } from '../../../types/vehicle';
 import { FUEL_STEP_ICONS } from '../../../utils/fuelStepIcons';
 import { loadFuelLeakageReview } from '../../../utils/fuelLeakageReviewStore';
+import {
+  parseDataQualityVehicleReviews,
+  reviewedVehicleIdSet,
+} from '../../../utils/fuelDataQualityReview';
 
 export type { FuelWizardDriver };
 
@@ -169,6 +178,10 @@ function FuelPeriodWizardInner({
   const [odometerChainNoteDraft, setOdometerChainNoteDraft] = useState('');
   const [unattributedReviewed, setUnattributedReviewed] = useState(false);
   const [unattributedNoteDraft, setUnattributedNoteDraft] = useState('');
+  /** Cash-desk: flagged vehicles marked reviewed this week */
+  const [dqReviewedVehicleIds, setDqReviewedVehicleIds] = useState<Set<string>>(
+    () => new Set(),
+  );
   const [showGapDetail, setShowGapDetail] = useState(false);
   const [showCostBreakdown, setShowCostBreakdown] = useState(false);
   const [bucketVehicleId, setBucketVehicleId] = useState<string | null>(null);
@@ -179,6 +192,7 @@ function FuelPeriodWizardInner({
   const [secondApproveActors, setSecondApproveActors] = useState<string[]>([]);
   const [secondApproveBusy, setSecondApproveBusy] = useState(false);
   const [serverPeriodId, setServerPeriodId] = useState<string | null>(null);
+  const [serverPeriodVersion, setServerPeriodVersion] = useState<number | null>(null);
   const [secondApproverThreshold, setSecondApproverThreshold] = useState(
     FUEL_SECOND_APPROVER_THRESHOLD,
   );
@@ -260,6 +274,7 @@ function FuelPeriodWizardInner({
     leakageReviewed,
     odometerChainReviewed,
     unattributedReviewed,
+    dataQualityReviewedVehicleIds: dqReviewedVehicleIds,
     vehicles,
     drivers,
     fuelEntries,
@@ -284,6 +299,11 @@ function FuelPeriodWizardInner({
     strip.unattributedFill,
   );
 
+  // Cash-desk + thin odometer chain: footer Continue stays locked until acks done
+  const canContinueStep =
+    canContinue &&
+    !(activeStepId === 'data-quality' && needsOdometerChainAck && !odometerChainReviewed);
+
   // Fresh walkthrough on period open or after Reopen week
   useEffect(() => {
     setShowGapDetail(false);
@@ -302,6 +322,7 @@ function FuelPeriodWizardInner({
       setLeakageReviewed(periodLocked);
       setOdometerChainReviewed(periodLocked);
       setUnattributedReviewed(periodLocked);
+      setDqReviewedVehicleIds(new Set());
       return;
     }
     if (initialStepId && FUEL_STEP_ORDER.includes(initialStepId)) {
@@ -372,6 +393,7 @@ function FuelPeriodWizardInner({
           leakageReviewedNote?: string | null;
           odometerChainReviewedAt?: string | null;
           unattributedReviewedAt?: string | null;
+          dataQualityVehicleReviews?: unknown;
           currentStep?: string | null;
         } | null = null;
         let notes: Array<{ step: string; note: string; at: string }> = [];
@@ -389,6 +411,7 @@ function FuelPeriodWizardInner({
               leakageReviewedNote: (p.leakageReviewedNote as string) || null,
               odometerChainReviewedAt: (p.odometerChainReviewedAt as string) || null,
               unattributedReviewedAt: (p.unattributedReviewedAt as string) || null,
+              dataQualityVehicleReviews: p.dataQualityVehicleReviews,
               currentStep: (p.currentStep as string) || null,
             };
             notes = Array.isArray(bundle.stepNotes) ? bundle.stepNotes : [];
@@ -416,6 +439,10 @@ function FuelPeriodWizardInner({
 
         if (cancelled || !hit?.id) return;
         setServerPeriodId(hit.id);
+        const hitVersion = Number((hit as { version?: number }).version);
+        if (Number.isFinite(hitVersion) && hitVersion > 0) {
+          setServerPeriodVersion(hitVersion);
+        }
 
         // H8: server review wins; absence clears device-only acceptance for this week.
         if (hit.leakageReviewedAt) {
@@ -438,6 +465,16 @@ function FuelPeriodWizardInner({
           setUnattributedReviewed(true);
         } else if (!periodLocked) {
           setUnattributedReviewed(false);
+        }
+
+        const dqReviews = parseDataQualityVehicleReviews(
+          (hit as { dataQualityVehicleReviews?: unknown }).dataQualityVehicleReviews,
+        );
+        if (periodLocked) {
+          // Locked: treat all as reviewed for chip calm
+          setDqReviewedVehicleIds(new Set());
+        } else {
+          setDqReviewedVehicleIds(reviewedVehicleIdSet(dqReviews));
         }
 
         // H9: restore current_step unless deep-link or locked
@@ -509,7 +546,7 @@ function FuelPeriodWizardInner({
   }, [gatedStates, progressIndex, periodLocked]);
 
   const handleContinue = () => {
-    if (!canContinue || isLast) return;
+    if (!canContinueStep || isLast) return;
     const noteForStep = stepNoteDraft.trim();
     if (noteForStep) {
       setStepNotes((prev) => [
@@ -563,9 +600,7 @@ function FuelPeriodWizardInner({
       disposition: validated.disposition,
       note: validated.note,
     });
-    const settlementIdx = settlementPreviewStepIndex();
-    setProgressIndex(Math.max(progressIndex, settlementIdx));
-    setActiveStepId('settlement-preview');
+    toast.success('Unexplained fuel marked reviewed');
   };
 
   const ensurePeriodId = async (): Promise<string | null> => {
@@ -602,7 +637,6 @@ function FuelPeriodWizardInner({
       setOdometerChainReviewed(true);
       setOdometerChainNoteDraft('');
       toast.success('Thin odometer chain acknowledged');
-      handleContinue();
     } catch (e: any) {
       toast.error(e?.message || 'Could not save odometer chain review');
     }
@@ -630,6 +664,41 @@ function FuelPeriodWizardInner({
       toast.success('Fills without odometer accepted');
     } catch (e: any) {
       toast.error(e?.message || 'Could not save unattributed review');
+    }
+  };
+
+  const handleMarkDataQualityVehicle = async (vehicleId: string, note?: string) => {
+    if (periodLocked || !vehicleId) return;
+    setDqReviewedVehicleIds((prev) => {
+      const next = new Set(prev);
+      next.add(vehicleId);
+      return next;
+    });
+    const periodId = await ensurePeriodId();
+    if (!periodId) {
+      toast.message('Marked on this device — open period when online to sync.');
+      return;
+    }
+    try {
+      const res = await api.reviewFuelPeriodDataQualityVehicle({
+        periodId,
+        vehicleId,
+        note,
+        version: serverPeriodVersion ?? undefined,
+      });
+      const reviews = parseDataQualityVehicleReviews(
+        (res as { dataQualityVehicleReviews?: unknown })?.dataQualityVehicleReviews,
+      );
+      if (reviews.length) setDqReviewedVehicleIds(reviewedVehicleIdSet(reviews));
+      const nextVer = Number((res as { version?: number }).version);
+      if (Number.isFinite(nextVer) && nextVer > 0) setServerPeriodVersion(nextVer);
+      toast.success('Vehicle marked reviewed');
+    } catch (e: any) {
+      if (e?.message === 'version_conflict') {
+        toast.message('Period changed — refresh and try again.');
+        return;
+      }
+      toast.message(e?.message || 'Saved locally — server sync failed.');
     }
   };
 
@@ -753,28 +822,30 @@ function FuelPeriodWizardInner({
           ? {
               title: 'Exception fills must be cleared',
               body: `${exceptionBlockers.length} fill(s) are marked Exception and will block Finalize. Resolve them here — accept if OK, or edit the numbers.`,
-              actionLabel: 'Continue',
-              onAction: handleContinue,
             }
           : needsOdometerChainAck && !odometerChainReviewed
             ? {
                 title: 'Thin odometer chain',
                 body: 'Not enough odometered fills to measure tank timing. Acknowledge below to continue — categories stay as-is; timing carves stay $0.',
-                actionLabel: undefined,
               }
-          : qualityRows.length === 0
-          ? {
-              title: 'Data looks clear',
-              body: 'No Amber/Red flags or pending issues blocking this week. Continue to the next step.',
-              actionLabel: 'Continue',
-              onAction: handleContinue,
-            }
-          : {
-              title: 'Review flagged vehicles',
-              body: 'Amber/Red means tank-cycle or gap issues — not every top-up variance. Pending logs post when you Finalize.',
-              actionLabel: 'Continue',
-              onAction: handleContinue,
-            };
+          : (() => {
+              const flaggedLeft = qualityRows.filter(
+                (r) =>
+                  !dqReviewedVehicleIds.has(r.id) &&
+                  (r.healthStatus === 'Amber' ||
+                    r.healthStatus === 'Red' ||
+                    r.odometerIncomplete),
+              ).length;
+              return flaggedLeft === 0
+                ? {
+                    title: 'Data looks clear',
+                    body: 'No flagged cars left on this step. Tap Continue to move forward.',
+                  }
+                : {
+                    title: 'Review flagged vehicles',
+                    body: `Look at the ${flaggedLeft} flagged car${flaggedLeft === 1 ? '' : 's'} below. If nothing looks wrong or you've added your notes, mark each reviewed, then tap Continue.`,
+                  };
+            })();
       case 'adjustments-disputes':
         return openDisputes.length === 0
           ? {
@@ -800,9 +871,9 @@ function FuelPeriodWizardInner({
               title: strip.leakage < 0 ? 'Review over-explained fuel' : 'Review unexplained fuel',
               body:
                 strip.leakage < 0
-                  ? `Over-explained fuel ${formatFuelMoney(strip.leakage)} — categorized costs exceed gas-card spend. Check odometer/trips/policy, or accept and continue.`
-                  : `Unexplained fuel ${formatFuelMoney(strip.leakage)} — charge stop-to-stop gaps if needed, or accept and continue.`,
-              actionLabel: 'Mark reviewed & continue',
+                  ? `Over-explained fuel ${formatFuelMoney(strip.leakage)} — categorized costs exceed gas-card spend. Check odometer/trips/policy, or accept below.`
+                  : `Unexplained fuel ${formatFuelMoney(strip.leakage)} — charge stop-to-stop gaps if needed, or accept below.`,
+              actionLabel: 'Mark reviewed',
               onAction: handleMarkLeakageReviewed,
             }
           : {
@@ -817,15 +888,11 @@ function FuelPeriodWizardInner({
                         : ''
                     }.`
                   : 'No unexplained fuel this week.',
-              actionLabel: 'Continue',
-              onAction: handleContinue,
             };
       case 'settlement-preview':
         return {
           title: 'Confirm settle-up for this week',
           body: 'Cash from earnings is a credit; driver’s fuel share is a charge. Net this week is what settles on pay.',
-          actionLabel: 'Continue to Finalize',
-          onAction: handleContinue,
         };
       case 'finalize':
         return periodLocked
@@ -853,14 +920,12 @@ function FuelPeriodWizardInner({
                 return {
                   title: 'Can’t finalize yet',
                   body: `${holds} fuel receipt(s) await station match in Station Database. Review Queue cannot clear them.`,
-                  actionLabel: undefined,
                 };
               })()
           : exceptionBlockers.length > 0
             ? {
                 title: 'Can’t finalize yet',
                 body: `Resolve the ${exceptionBlockers.length} exception fill(s) listed below in this week — then Finalize.`,
-                actionLabel: undefined,
               }
             : gateResult.hasOverExplainedBlockers
             ? {
@@ -870,7 +935,6 @@ function FuelPeriodWizardInner({
                     ? `${gateResult.overExplainedBlockers[0].pctOfSpend}% of spend`
                     : 'beyond spend'
                 }. Modelled category costs exceed gas-card spend — fix odometer / efficiency / distance inputs. This cannot be accepted away.`,
-                actionLabel: undefined,
               }
             : gateResult.hasUnderExplainedBlockers && !leakageReviewed
             ? {
@@ -880,7 +944,6 @@ function FuelPeriodWizardInner({
                     ? `${gateResult.underExplainedBlockers[0].pctOfSpend}% of spend`
                     : 'beyond spend'
                 }. Fuel spend is not fully explained — investigate missing litres / gaps, then accept Unexplained with a typed reason.`,
-                actionLabel: undefined,
               }
             : hasDegradedInputs
             ? {
@@ -939,7 +1002,7 @@ function FuelPeriodWizardInner({
     exceptionBlockerCount: exceptionBlockers.length,
     periodLocked,
     leakageReviewed,
-    canContinue,
+    canContinue: canContinueStep,
     isLast,
     setQueueIndex,
     onMarkLeakageReviewed: handleMarkLeakageReviewed,
@@ -959,16 +1022,58 @@ function FuelPeriodWizardInner({
   });
 
   const continueLabel =
-    activeStepId === 'leakage-gap' ? 'Continue to Settlement' : 'Continue';
+    activeStepId === 'leakage-gap'
+      ? 'Continue to Settle-up'
+      : activeStepId === 'settlement-preview'
+        ? 'Continue to Finalize'
+        : 'Continue';
+
+  const moneyStripProps = {
+    gasCard: strip.gasCard,
+    cashFromEarnings: strip.cashFromEarnings,
+    totalSpend: strip.totalSpend,
+    company: strip.company,
+    driver: strip.driver,
+    leakage: strip.leakage,
+    windowTiming: strip.windowTiming,
+    unattributedFill: strip.unattributedFill,
+    driverFromUnexplained: strip.driverFromUnexplained,
+    priorMedian,
+  };
+
+  const overflowRef = useRef<FuelWizardOverflowMenuHandle>(null);
+
+  const selectStep = (id: FuelStepId) => {
+    const idx = FUEL_STEP_ORDER.indexOf(id);
+    const state = stepperStates.find((s) => s.id === id);
+    if (!state || state.locked) return;
+    setActiveStepId(id);
+    if (idx > progressIndex) setProgressIndex(idx);
+    persistStep(id, stepNoteDraft.trim() || undefined);
+  };
 
   return (
-    <div className="space-y-4 pb-24">
-      <FuelPeriodWizardHeader
-        period={period}
-        periodLocked={periodLocked}
-        onBack={onBack}
-        onResetPeriod={onResetPeriod}
-      />
+    <div className="space-y-4 pb-28 md:pb-8">
+      <div className="flex items-start justify-between gap-3">
+        <FuelPeriodWizardHeader
+          period={period}
+          periodLocked={periodLocked}
+          onBack={onBack}
+        />
+        <div className="shrink-0 pt-1">
+          <FuelWizardOverflowMenu
+            ref={overflowRef}
+            periodLocked={periodLocked}
+            onRefresh={onRefresh}
+            onResetPeriod={onResetPeriod}
+            stepNoteDraft={stepNoteDraft}
+            onStepNoteChange={setStepNoteDraft}
+            onStepNoteBlur={() =>
+              persistStep(activeStepId, stepNoteDraft.trim() || undefined)
+            }
+          />
+        </div>
+      </div>
 
       <FuelPeriodWizardBodyGate
         loading={weekReports.loading}
@@ -977,210 +1082,217 @@ function FuelPeriodWizardInner({
         updating={weekReports.updating}
         onRetry={handleRetryWeek}
       >
-      <FuelWeekMoneyStrip
-        gasCard={strip.gasCard}
-        cashFromEarnings={strip.cashFromEarnings}
-        totalSpend={strip.totalSpend}
-        company={strip.company}
-        driver={strip.driver}
-        leakage={strip.leakage}
-        windowTiming={strip.windowTiming}
-        unattributedFill={strip.unattributedFill}
-        driverFromUnexplained={strip.driverFromUnexplained}
-        priorMedian={priorMedian}
-      />
-
-      <FuelPeriodStepper
-        states={stepperStates}
-        activeStepId={activeStepId}
-        onSelect={(id) => {
-          const idx = FUEL_STEP_ORDER.indexOf(id);
-          const state = stepperStates.find((s) => s.id === id);
-          if (!state || state.locked) return;
-          setActiveStepId(id);
-          // Don't auto-advance progress when jumping back — only Continue marks steps done
-          if (idx > progressIndex) setProgressIndex(idx);
-          persistStep(id, stepNoteDraft.trim() || undefined);
-        }}
-        labels={FUEL_STEP_LABELS}
-        icons={FUEL_STEP_ICONS}
-      />
-
-      <div className="sr-only" aria-live="assertive" aria-atomic="true">
-        {gateLiveMessage}
+      {/* Stitch C desktop progress bar */}
+      <div className="hidden md:block">
+        <FuelWizardProgressPill
+          activeStepId={activeStepId}
+          states={stepperStates}
+          variant="bar"
+        />
       </div>
 
-      <label className={`block space-y-1 ${activeStepId === 'leakage-gap' ? 'hidden' : ''}`}>
-        <span className="text-xs font-medium text-slate-500">Step note (optional)</span>
-        <textarea
-          className="min-h-[64px] w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
-          value={stepNoteDraft}
-          onChange={(e) => setStepNoteDraft(e.target.value)}
-          onBlur={() => {
-            // U-10: persist notes via step/audit API on blur (not component-only).
-            persistStep(activeStepId, stepNoteDraft.trim() || undefined);
-          }}
-          placeholder="Judgement call for this step — included in evidence pack"
-        />
-      </label>
-      <FuelWizardStepHero
-        title={stepHero.title}
-        body={stepHero.body}
-        actionLabel={stepHero.actionLabel}
-        onAction={stepHero.onAction}
-        actionDisabled={stepHero.actionDisabled}
-        focusKey={activeStepId}
-      />
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-[minmax(0,1.65fr)_minmax(280px,1fr)] md:items-start md:gap-5">
+        <div className="space-y-4">
+          {/* Stitch B order: coach → money → steps → queue */}
+          <FuelWizardStepHero
+            title={stepHero.title}
+            body={stepHero.body}
+            actionLabel={stepHero.actionLabel}
+            onAction={stepHero.onAction}
+            actionDisabled={stepHero.actionDisabled}
+            focusKey={activeStepId}
+          />
 
-      <div className="space-y-3">
-        {activeStepId === 'data-quality' && (
-          <div className="space-y-4">
-            <FuelUnapprovedTxBlockersPanel
-              blockers={unapprovedFuelTxBlockers}
-              onOpenReviewQueue={onOpenReviewQueue}
-            />
-            <FuelExceptionBlockersPanel
-              blockers={exceptionBlockers}
-              plateByVehicleId={plateByVehicleId}
-              busyId={exceptionBusyId}
-              onAcceptException={
-                onAcceptFuelException
-                  ? handleAcceptException
-                  : async () => undefined
-              }
-              onEditFill={
-                onEditFuelEntry
-                  ? (b) => onEditFuelEntry(b.id)
-                  : onOpenTransactionLogs
-                    ? openExceptionInLogs
-                    : undefined
-              }
-            />
-            <FuelDataQualityStep
-              rows={qualityRows}
-              breakdownRows={breakdownRows}
-              periodLocked={periodLocked}
-              weekLabel={period.label}
-              showBreakdown={showCostBreakdown}
-              onToggleBreakdown={() => setShowCostBreakdown((v) => !v)}
-              onAddAdjustment={onAddAdjustment}
-              needsOdometerChainAck={needsOdometerChainAck}
-              odometerChainReviewed={odometerChainReviewed}
-              odometerChainNote={odometerChainNoteDraft}
-              onOdometerChainNoteChange={setOdometerChainNoteDraft}
-              onAckOdometerChain={() => void handleAckOdometerChain()}
+          <div className="md:hidden">
+            <FuelWeekMoneyStrip {...moneyStripProps} variant="collapsed" />
+          </div>
+
+          <div className="md:hidden">
+            <FuelWizardProgressPill
+              activeStepId={activeStepId}
+              states={stepperStates}
+              variant="timeline"
             />
           </div>
-        )}
 
-        {activeStepId === 'adjustments-disputes' && (
-          <FuelDisputesStep
-            openDisputes={openDisputes}
-            periodLocked={periodLocked}
-            onResolveDispute={onResolveDispute}
-            onAddAdjustment={onAddAdjustment}
-          />
-        )}
+          <div className="hidden md:block">
+            <FuelPeriodStepper
+              states={stepperStates}
+              activeStepId={activeStepId}
+              onSelect={selectStep}
+              labels={FUEL_STEP_LABELS}
+              icons={FUEL_STEP_ICONS}
+            />
+          </div>
 
-        {activeStepId === 'policy-check' && <FuelPolicyCheckStep policyRows={policyRows} />}
+          <div className="sr-only" aria-live="assertive" aria-atomic="true">
+            {gateLiveMessage}
+          </div>
 
-        {activeStepId === 'leakage-gap' && (
-          <FuelLeakageStep
-            leakage={strip.leakage}
-            totalSpend={strip.totalSpend}
-            leakageRows={leakageRows}
-            queueIndex={queueIndex}
-            vehicleSnaps={vehicleSnaps}
-            weekStart={period.startDate}
-            weekEnd={period.endDate}
-            fuelEntries={fuelEntries}
-            trips={weekTrips}
-            showGapDetail={showGapDetail}
-            onToggleGapDetail={() => setShowGapDetail((v) => !v)}
-            bucketVehicle={bucketVehicle || null}
-            vehicles={vehicles}
-            periodLocked={periodLocked}
-            onBucketVehicleChange={setBucketVehicleId}
-            adjustments={adjustments}
-            dateRange={dateRange}
-            onRefresh={onRefresh}
-            transactions={transactions}
-            leakageDisposition={leakageDisposition}
-            onLeakageDispositionChange={setLeakageDisposition}
-            acceptNote={stepNoteDraft}
-            onAcceptNoteChange={setStepNoteDraft}
-            onAcceptNoteBlur={() =>
-              persistStep(activeStepId, stepNoteDraft.trim() || undefined)
-            }
-            unattributedFill={strip.unattributedFill}
-            needsUnattributedAck={needsUnattributedAck}
-            unattributedReviewed={unattributedReviewed}
-            unattributedNote={unattributedNoteDraft}
-            onUnattributedNoteChange={setUnattributedNoteDraft}
-            onAckUnattributed={() => void handleAckUnattributed()}
-          />
-        )}
+          <div className="space-y-3">
+            {activeStepId === 'data-quality' && (
+              <div className="space-y-4">
+                <FuelUnapprovedTxBlockersPanel
+                  blockers={unapprovedFuelTxBlockers}
+                  onOpenReviewQueue={onOpenReviewQueue}
+                />
+                <FuelExceptionBlockersPanel
+                  blockers={exceptionBlockers}
+                  plateByVehicleId={plateByVehicleId}
+                  busyId={exceptionBusyId}
+                  onAcceptException={
+                    onAcceptFuelException
+                      ? handleAcceptException
+                      : async () => undefined
+                  }
+                  onEditFill={
+                    onEditFuelEntry
+                      ? (b) => onEditFuelEntry(b.id)
+                      : onOpenTransactionLogs
+                        ? openExceptionInLogs
+                        : undefined
+                  }
+                />
+                <FuelDataQualityStep
+                  rows={qualityRows}
+                  breakdownRows={breakdownRows}
+                  periodLocked={periodLocked}
+                  showBreakdown={showCostBreakdown}
+                  onToggleBreakdown={() => setShowCostBreakdown((v) => !v)}
+                  onAddAdjustment={onAddAdjustment}
+                  needsOdometerChainAck={needsOdometerChainAck}
+                  odometerChainReviewed={odometerChainReviewed}
+                  odometerChainNote={odometerChainNoteDraft}
+                  onOdometerChainNoteChange={setOdometerChainNoteDraft}
+                  onAckOdometerChain={() => void handleAckOdometerChain()}
+                  reviewedVehicleIds={dqReviewedVehicleIds}
+                  onMarkReviewed={(id) => void handleMarkDataQualityVehicle(id)}
+                  weekFuelEntries={weekFuelEntries}
+                  weekStartYmd={period.startDate}
+                  weekEndYmd={period.endDate}
+                />
+              </div>
+            )}
 
-        {activeStepId === 'settlement-preview' && (
-          <FuelSettlementPreviewStep rows={settlementRows} onExport={exportSettlementCsv} />
-        )}
+            {activeStepId === 'adjustments-disputes' && (
+              <FuelDisputesStep
+                openDisputes={openDisputes}
+                periodLocked={periodLocked}
+                onResolveDispute={onResolveDispute}
+                onAddAdjustment={onAddAdjustment}
+              />
+            )}
 
-        {activeStepId === 'finalize' && (
-          <FuelFinalizeStep
-            periodLocked={periodLocked}
-            exceptionBlockers={exceptionBlockers}
-            unapprovedFuelTxBlockers={unapprovedFuelTxBlockers}
-            onOpenReviewQueue={onOpenReviewQueue}
-            plateByVehicleId={plateByVehicleId}
-            exceptionBusyId={exceptionBusyId}
-            onAcceptException={
-              onAcceptFuelException
-                ? handleAcceptException
-                : async () => undefined
-            }
-            onEditFill={
-              onEditFuelEntry
-                ? (b) => onEditFuelEntry(b.id)
-                : onOpenTransactionLogs
-                  ? openExceptionInLogs
-                  : undefined
-            }
-            hasBlockingWarnings={gateResult.hasBlockingWarnings}
-            hasExceptionBlockers={gateResult.hasExceptionBlockers}
-            hasUnapprovedFuelTxBlockers={gateResult.hasUnapprovedFuelTxBlockers}
-            financeWarningAcknowledged={financeWarningAcknowledged}
-            onFinanceWarningChange={setFinanceWarningAcknowledged}
-            needsSecondApprover={needsSecondApprover(strip.totalSpend, secondApproverThreshold)}
-            secondApproverThreshold={secondApproverThreshold}
-            secondApproverConfirmed={secondApproverConfirmed}
-            secondApproveBusy={secondApproveBusy}
-            dualApprovalUiMode={dualApprovalUiMode}
-            onRecordSecondApproval={() => void handleRecordSecondApproval()}
-            onExportCsv={exportSettlementCsv}
-            onDownloadEvidencePack={() => void handleDownloadEvidencePack()}
-            settlementRows={settlementRows}
-            provenance={{
-              tripCount: weekTrips.length,
-              tripsTimedOut: Boolean(weekDegraded?.trips),
-              deadheadTimedOut: Boolean(weekDegraded?.deadhead),
-              personalAllowanceTimedOut: Boolean(weekDegraded?.personalAllowance),
-              brainTimedOut: Boolean(weekDegraded?.brain),
-              fuelCardsLoaded: (fuelCards || []).length,
-              fuelCardsMissing: Boolean(weekDegraded?.fuelCards),
-              vehicleCount: vehicles.length,
-            }}
-          />
-        )}
+            {activeStepId === 'policy-check' && <FuelPolicyCheckStep policyRows={policyRows} />}
+
+            {activeStepId === 'leakage-gap' && (
+              <FuelLeakageStep
+                leakage={strip.leakage}
+                totalSpend={strip.totalSpend}
+                leakageRows={leakageRows}
+                queueIndex={queueIndex}
+                vehicleSnaps={vehicleSnaps}
+                weekStart={period.startDate}
+                weekEnd={period.endDate}
+                fuelEntries={fuelEntries}
+                trips={weekTrips}
+                showGapDetail={showGapDetail}
+                onToggleGapDetail={() => setShowGapDetail((v) => !v)}
+                bucketVehicle={bucketVehicle || null}
+                vehicles={vehicles}
+                periodLocked={periodLocked}
+                onBucketVehicleChange={setBucketVehicleId}
+                adjustments={adjustments}
+                dateRange={dateRange}
+                onRefresh={onRefresh}
+                transactions={transactions}
+                leakageDisposition={leakageDisposition}
+                onLeakageDispositionChange={setLeakageDisposition}
+                acceptNote={stepNoteDraft}
+                onAcceptNoteChange={setStepNoteDraft}
+                onAcceptNoteBlur={() =>
+                  persistStep(activeStepId, stepNoteDraft.trim() || undefined)
+                }
+                unattributedFill={strip.unattributedFill}
+                needsUnattributedAck={needsUnattributedAck}
+                unattributedReviewed={unattributedReviewed}
+                unattributedNote={unattributedNoteDraft}
+                onUnattributedNoteChange={setUnattributedNoteDraft}
+                onAckUnattributed={() => void handleAckUnattributed()}
+              />
+            )}
+
+            {activeStepId === 'settlement-preview' && (
+              <FuelSettlementPreviewStep rows={settlementRows} onExport={exportSettlementCsv} />
+            )}
+
+            {activeStepId === 'finalize' && (
+              <FuelFinalizeStep
+                periodLocked={periodLocked}
+                exceptionBlockers={exceptionBlockers}
+                unapprovedFuelTxBlockers={unapprovedFuelTxBlockers}
+                onOpenReviewQueue={onOpenReviewQueue}
+                plateByVehicleId={plateByVehicleId}
+                exceptionBusyId={exceptionBusyId}
+                onAcceptException={
+                  onAcceptFuelException
+                    ? handleAcceptException
+                    : async () => undefined
+                }
+                onEditFill={
+                  onEditFuelEntry
+                    ? (b) => onEditFuelEntry(b.id)
+                    : onOpenTransactionLogs
+                      ? openExceptionInLogs
+                      : undefined
+                }
+                hasBlockingWarnings={gateResult.hasBlockingWarnings}
+                hasExceptionBlockers={gateResult.hasExceptionBlockers}
+                hasUnapprovedFuelTxBlockers={gateResult.hasUnapprovedFuelTxBlockers}
+                financeWarningAcknowledged={financeWarningAcknowledged}
+                onFinanceWarningChange={setFinanceWarningAcknowledged}
+                needsSecondApprover={needsSecondApprover(strip.totalSpend, secondApproverThreshold)}
+                secondApproverThreshold={secondApproverThreshold}
+                secondApproverConfirmed={secondApproverConfirmed}
+                secondApproveBusy={secondApproveBusy}
+                dualApprovalUiMode={dualApprovalUiMode}
+                onRecordSecondApproval={() => void handleRecordSecondApproval()}
+                onExportCsv={exportSettlementCsv}
+                onDownloadEvidencePack={() => void handleDownloadEvidencePack()}
+                settlementRows={settlementRows}
+                provenance={{
+                  tripCount: weekTrips.length,
+                  tripsTimedOut: Boolean(weekDegraded?.trips),
+                  deadheadTimedOut: Boolean(weekDegraded?.deadhead),
+                  personalAllowanceTimedOut: Boolean(weekDegraded?.personalAllowance),
+                  brainTimedOut: Boolean(weekDegraded?.brain),
+                  fuelCardsLoaded: (fuelCards || []).length,
+                  fuelCardsMissing: Boolean(weekDegraded?.fuelCards),
+                  vehicleCount: vehicles.length,
+                }}
+              />
+            )}
+          </div>
+
+          <p className="flex items-center justify-center gap-1.5 py-2 text-center text-xs text-slate-400 md:justify-start">
+            <ShieldCheck className="h-4 w-4" aria-hidden />
+            Reconciliation can be reopened at any time until closed
+          </p>
+        </div>
+
+        <div className="hidden md:sticky md:top-4 md:block">
+          <FuelWeekMoneyStrip {...moneyStripProps} variant="rail" />
+        </div>
       </div>
 
-        {/* Sticky footer — always visible Continue (Finalize uses hero CTA) */}
       <FuelPeriodWizardContinueFooter
         isLast={isLast}
-        canContinue={canContinue}
+        canContinue={canContinueStep}
         activeStepId={activeStepId}
         leakageReviewed={leakageReviewed}
         continueLabel={continueLabel}
         onContinue={handleContinue}
+        onAddNote={() => overflowRef.current?.openNote()}
       />
       </FuelPeriodWizardBodyGate>
     </div>

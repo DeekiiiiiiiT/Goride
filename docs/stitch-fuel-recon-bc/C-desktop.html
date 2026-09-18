@@ -1,0 +1,773 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Fuel Recon C — Desktop Companion | Roam Fleet</title>
+<!-- Material Symbols -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Google Fonts: Inter -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind CSS CDN -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<!-- Tailwind Configuration verbatim -->
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          "colors": {
+            "tertiary-container": "#885500",
+            "tertiary-fixed": "#ffddb8",
+            "surface-variant": "#e4e1ee",
+            "tertiary-fixed-dim": "#ffb95f",
+            "outline": "#777587",
+            "on-tertiary-fixed": "#2a1700",
+            "on-primary-fixed-variant": "#3323cc",
+            "secondary-fixed": "#6ffbbe",
+            "secondary-container": "#6cf8bb",
+            "error": "#ba1a1a",
+            "tertiary": "#684000",
+            "outline-variant": "#c7c4d8",
+            "on-tertiary-fixed-variant": "#653e00",
+            "surface-tint": "#4d44e3",
+            "surface-container-high": "#eae6f4",
+            "on-secondary-fixed-variant": "#005236",
+            "on-primary": "#ffffff",
+            "surface": "#fcf8ff",
+            "on-tertiary-container": "#ffd4a4",
+            "on-secondary-fixed": "#002113",
+            "on-surface-variant": "#464555",
+            "on-secondary-container": "#00714d",
+            "secondary": "#006c49",
+            "surface-bright": "#fcf8ff",
+            "primary-fixed": "#e2dfff",
+            "on-secondary": "#ffffff",
+            "primary-container": "#4f46e5",
+            "background": "#fcf8ff",
+            "primary-fixed-dim": "#c3c0ff",
+            "on-surface": "#1b1b24",
+            "on-error": "#ffffff",
+            "surface-container-lowest": "#ffffff",
+            "inverse-primary": "#c3c0ff",
+            "on-tertiary": "#ffffff",
+            "surface-container-low": "#f5f2ff",
+            "inverse-surface": "#302f39",
+            "secondary-fixed-dim": "#4edea3",
+            "on-primary-fixed": "#0f0069",
+            "surface-container-highest": "#e4e1ee",
+            "surface-container": "#f0ecf9",
+            "on-primary-container": "#dad7ff",
+            "surface-dim": "#dcd8e5",
+            "on-error-container": "#93000a",
+            "error-container": "#ffdad6",
+            "inverse-on-surface": "#f3effc",
+            "primary": "#3525cd",
+            "on-background": "#1b1b24"
+          },
+          "borderRadius": {
+            "DEFAULT": "0.125rem",
+            "lg": "0.25rem",
+            "xl": "0.5rem",
+            "full": "0.75rem"
+          },
+          "spacing": {
+            "unit": "4px",
+            "density-high": "4px",
+            "container-padding": "24px",
+            "component-gap": "8px",
+            "density-medium": "12px",
+            "gutter": "16px"
+          },
+          "fontFamily": {
+            "headline-lg": ["Inter"],
+            "body-md": ["Inter"],
+            "label-sm": ["Inter"],
+            "display": ["Inter"],
+            "body-sm": ["Inter"],
+            "body-lg": ["Inter"],
+            "headline-md": ["Inter"],
+            "label-md": ["Inter"]
+          },
+          "fontSize": {
+            "headline-lg": [
+              "24px",
+              {
+                "lineHeight": "32px",
+                "letterSpacing": "-0.01em",
+                "fontWeight": "600"
+              }
+            ],
+            "body-md": [
+              "14px",
+              {
+                "lineHeight": "20px",
+                "fontWeight": "400"
+              }
+            ],
+            "label-sm": [
+              "11px",
+              {
+                "lineHeight": "14px",
+                "fontWeight": "500"
+              }
+            ],
+            "display": [
+              "36px",
+              {
+                "lineHeight": "44px",
+                "letterSpacing": "-0.02em",
+                "fontWeight": "700"
+              }
+            ],
+            "body-sm": [
+              "13px",
+              {
+                "lineHeight": "18px",
+                "fontWeight": "400"
+              }
+            ],
+            "body-lg": [
+              "16px",
+              {
+                "lineHeight": "24px",
+                "fontWeight": "400"
+              }
+            ],
+            "headline-md": [
+              "20px",
+              {
+                "lineHeight": "28px",
+                "fontWeight": "600"
+              }
+            ],
+            "label-md": [
+              "12px",
+              {
+                "lineHeight": "16px",
+                "letterSpacing": "0.05em",
+                "fontWeight": "600"
+              }
+            ]
+          }
+        },
+      },
+    }
+  </script>
+<style>
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 20;
+      font-size: 20px;
+      line-height: 1;
+      display: inline-block;
+      vertical-align: middle;
+    }
+    .material-symbols-outlined.fill {
+      font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 20;
+    }
+    body {
+      min-width: 1280px;
+    }
+    /* Smooth custom transitions */
+    .drawer-transition {
+      transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.25s ease;
+    }
+  </style>
+</head>
+<body class="bg-background text-on-surface font-body-md text-body-md antialiased min-h-screen flex flex-col">
+<!-- TOP GLOBAL NAVIGATION / APP HEADER (Shared Component: TopNavBar Anchor) -->
+<header class="fixed top-0 left-0 w-full z-40 flex justify-between items-center px-container-padding h-16 bg-surface dark:bg-inverse-surface border-b border-outline-variant dark:border-outline">
+<!-- Left Cluster: Product & Brand Context -->
+<div class="flex items-center gap-gutter">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary dark:text-inverse-primary fill" style="font-variation-settings: 'FILL' 1;">local_gas_station</span>
+<span class="font-headline-md text-headline-md font-bold text-primary dark:text-inverse-primary tracking-tight">Fuel Reconciliation</span>
+</div>
+<div class="h-5 w-px bg-outline-variant"></div>
+<!-- Breadcrumb Link Back -->
+<a class="inline-flex items-center gap-1 text-on-surface-variant hover:text-primary transition-colors font-label-md text-label-md" href="#">
+<span class="material-symbols-outlined text-body-sm">arrow_back</span>
+<span>Back to Reconciliation Periods</span>
+</a>
+<!-- Active Period Badge -->
+<div class="inline-flex items-center gap-2 px-2.5 py-1 rounded bg-surface-container border border-outline-variant">
+<span class="material-symbols-outlined text-body-sm text-outline">calendar_today</span>
+<span class="font-label-md text-label-md font-semibold text-on-surface">Jun 29 – Jul 5, 2026</span>
+<span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-secondary-container text-on-secondary-container">
+          OPEN
+        </span>
+</div>
+</div>
+<!-- Center: Operational Mode Switcher -->
+<div class="flex items-center bg-surface-container-high p-1 rounded-lg border border-outline-variant">
+<button class="px-4 py-1 rounded font-label-md text-label-md font-semibold bg-primary text-on-primary transition-shadow">
+        Fuel
+      </button>
+<button class="px-4 py-1 rounded font-label-md text-label-md font-medium text-on-surface-variant hover:text-primary transition-colors">
+        Tolls
+      </button>
+</div>
+<!-- Right Cluster: Actions & Shared Components TopNavBar elements -->
+<div class="flex items-center gap-3">
+<!-- Search minimal helper -->
+<div class="relative">
+<span class="material-symbols-outlined absolute left-2.5 top-2 text-outline text-[18px]">search</span>
+<input class="h-8 pl-8 pr-3 bg-surface-container-lowest border border-outline-variant rounded font-body-sm text-body-sm focus:border-primary focus:ring-1 focus:ring-primary w-48 transition-all" placeholder="Search plates, drivers..." type="text"/>
+</div>
+<div class="flex items-center gap-1">
+<button class="h-8 w-8 inline-flex items-center justify-center rounded text-on-surface-variant hover:bg-surface-container transition-colors" title="Notifications">
+<span class="material-symbols-outlined">notifications</span>
+</button>
+<button class="h-8 w-8 inline-flex items-center justify-center rounded text-on-surface-variant hover:bg-surface-container transition-colors" title="Help Guide">
+<span class="material-symbols-outlined">help_outline</span>
+</button>
+</div>
+<!-- Trailing Primary Action as defined in Shared JSON -->
+<button class="h-8 px-3 rounded bg-surface-container-lowest border border-outline text-on-surface hover:bg-surface-container transition-colors font-label-md text-label-md font-semibold">
+        Submit Report
+      </button>
+<!-- Overflow Dropdown Menu -->
+<div class="relative">
+<button class="h-8 w-8 inline-flex items-center justify-center rounded text-on-surface-variant hover:bg-surface-container transition-colors" id="overflow-btn" onclick="toggleMenu()">
+<span class="material-symbols-outlined">more_horiz</span>
+</button>
+<!-- Dropdown Card Level 2 -->
+<div class="hidden absolute right-0 mt-1.5 w-52 bg-surface-container-lowest border border-outline-variant rounded-lg py-1 shadow-md z-50" id="overflow-menu">
+<button class="w-full text-left px-3 py-2 text-body-sm font-body-sm text-on-surface hover:bg-surface-container flex items-center gap-2">
+<span class="material-symbols-outlined text-[18px] text-outline">refresh</span>
+<span>Refresh Data</span>
+</button>
+<button class="w-full text-left px-3 py-2 text-body-sm font-body-sm text-on-surface hover:bg-surface-container flex items-center gap-2">
+<span class="material-symbols-outlined text-[18px] text-outline">lock_open</span>
+<span>Reopen Week</span>
+</button>
+<button class="w-full text-left px-3 py-2 text-body-sm font-body-sm text-on-surface hover:bg-surface-container flex items-center gap-2">
+<span class="material-symbols-outlined text-[18px] text-outline">download</span>
+<span>Download Evidence Pack</span>
+</button>
+<div class="h-px bg-surface-container my-1"></div>
+<button class="w-full text-left px-3 py-2 text-body-sm font-body-sm text-on-surface hover:bg-surface-container flex items-center gap-2">
+<span class="material-symbols-outlined text-[18px] text-outline">notes</span>
+<span>Step Notes</span>
+</button>
+</div>
+</div>
+<div class="h-5 w-px bg-outline-variant"></div>
+<!-- User avatar -->
+<div class="flex items-center gap-2 pl-1">
+<div class="w-7 h-7 rounded-full bg-primary-fixed text-on-primary-fixed font-bold font-label-sm text-label-sm flex items-center justify-center border border-primary">
+          FA
+        </div>
+<span class="font-label-md text-label-md font-semibold text-on-surface hidden xl:inline">Fleet Admin</span>
+</div>
+</div>
+</header>
+<!-- WIZARD SUB-HEADER / PROGRESS BAR (Compact Step Indicator) -->
+<div class="fixed top-16 left-0 w-full z-30 bg-surface-container-low border-b border-outline-variant px-container-padding py-2.5 flex items-center justify-between">
+<div class="flex items-center gap-4">
+<div class="flex items-center gap-2">
+<span class="font-label-md text-label-md font-bold uppercase tracking-wider text-primary">Step 4 of 6</span>
+<span class="text-outline">·</span>
+<span class="font-headline-md text-[15px] font-semibold text-on-surface">Review issues</span>
+</div>
+<div class="w-56 h-1.5 bg-surface-container-highest rounded-full overflow-hidden">
+<div class="h-full bg-primary rounded-full" style="width: 66.6%;"></div>
+</div>
+<span class="font-label-sm text-label-sm text-on-surface-variant font-medium">66% complete</span>
+</div>
+<!-- Wizard Nav Quick Links -->
+<div class="flex items-center gap-4 text-label-sm font-label-sm text-on-surface-variant">
+<span class="inline-flex items-center gap-1 text-secondary font-medium">
+<span class="material-symbols-outlined text-[14px]">check_circle</span> 1: Period
+      </span>
+<span class="inline-flex items-center gap-1 text-secondary font-medium">
+<span class="material-symbols-outlined text-[14px]">check_circle</span> 2: Sourcing
+      </span>
+<span class="inline-flex items-center gap-1 text-secondary font-medium">
+<span class="material-symbols-outlined text-[14px]">check_circle</span> 3: Usage
+      </span>
+<span class="inline-flex items-center gap-1 font-bold text-primary border-b-2 border-primary pb-0.5">
+        4: Exceptions
+      </span>
+<span class="text-outline">5: Validation</span>
+<span class="text-outline">6: Finalize</span>
+</div>
+</div>
+<!-- MAIN OPERATIONAL WORKSPACE (65% Work Queue / 35% Money Check Rail) -->
+<main class="pt-28 pb-20 px-container-padding flex-1 max-w-[1720px] w-full mx-auto">
+<div class="flex gap-gutter items-start">
+<!-- LEFT COLUMN: WORK QUEUE (65% Width) -->
+<section class="w-[65%] flex flex-col gap-4">
+<!-- Hero Instruction Strip -->
+<div class="bg-surface-container-lowest border border-outline-variant border-l-4 border-l-primary rounded p-3.5 flex items-center justify-between">
+<div class="flex items-start gap-3">
+<span class="material-symbols-outlined text-primary text-[20px] mt-0.5">info</span>
+<div>
+<p class="font-body-md text-body-md font-medium text-on-surface">
+                Resolve 3 vehicle exceptions before locking settlements.
+              </p>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-0.5">
+                Pending logs will sync upon final approval. High-variance records must be cleared or assigned fleet dispute rules.
+              </p>
+</div>
+</div>
+<button class="whitespace-nowrap ml-4 text-primary font-label-md text-label-md font-semibold hover:underline flex items-center gap-1">
+<span>Bulk assign standard fleet rule</span>
+<span class="material-symbols-outlined text-[16px]">arrow_forward</span>
+</button>
+</div>
+<!-- Filter & Utility Bar -->
+<div class="flex items-center justify-between bg-surface-container-lowest border border-outline-variant rounded p-2.5">
+<div class="flex items-center gap-1.5">
+<button class="px-2.5 py-1 rounded font-label-md text-label-md font-bold bg-surface-container-highest text-primary border border-outline-variant">
+              All Issues (4)
+            </button>
+<button class="px-2.5 py-1 rounded font-label-md text-label-md text-on-surface-variant hover:bg-surface-container transition-colors">
+              Disputes (1)
+            </button>
+<button class="px-2.5 py-1 rounded font-label-md text-label-md text-on-surface-variant hover:bg-surface-container transition-colors">
+              Spikes &amp; Gaps (2)
+            </button>
+<button class="px-2.5 py-1 rounded font-label-md text-label-md text-on-surface-variant hover:bg-surface-container transition-colors">
+              Missing Info (1)
+            </button>
+</div>
+<div class="flex items-center gap-2">
+<button class="h-7 px-2.5 rounded border border-outline-variant bg-surface hover:bg-surface-container text-on-surface font-label-sm text-label-sm font-medium flex items-center gap-1 transition-colors">
+<span class="material-symbols-outlined text-[16px]">file_download</span>
+<span>Export Issue Log (CSV)</span>
+</button>
+<button class="h-7 px-2 rounded border border-outline-variant bg-surface hover:bg-surface-container text-on-surface-variant" title="Table Display Settings">
+<span class="material-symbols-outlined text-[16px]">tune</span>
+</button>
+</div>
+</div>
+<!-- Main Work Area — Vehicle Issue Queue Table -->
+<div class="bg-surface-container-lowest border border-outline-variant rounded overflow-hidden">
+<table class="w-full text-left border-collapse">
+<thead>
+<tr class="bg-surface-container-low border-b border-outline-variant font-label-md text-label-md text-on-surface-variant uppercase tracking-wider">
+<th class="py-2.5 px-4 font-semibold w-48">Vehicle &amp; Plate</th>
+<th class="py-2.5 px-3 font-semibold w-36">Driver</th>
+<th class="py-2.5 px-3 font-semibold">Issue Description</th>
+<th class="py-2.5 px-3 font-semibold w-36">Severity</th>
+<th class="py-2.5 px-3 font-semibold text-right w-28">Impact</th>
+<th class="py-2.5 px-4 font-semibold text-right w-36">Action</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-outline-variant">
+<!-- Row 1: Marcus Johnson -->
+<tr class="hover:bg-surface-container-low/60 transition-colors group min-h-[52px]">
+<td class="py-3 px-4">
+<div class="font-body-md text-body-md font-semibold text-on-surface">TX-8492B</div>
+<div class="font-label-sm text-label-sm text-on-surface-variant">Freightliner M2 · Unit #104</div>
+</td>
+<td class="py-3 px-3">
+<div class="font-body-md text-body-md font-medium text-on-surface">Marcus Johnson</div>
+<div class="font-label-sm text-label-sm text-outline">ID: DRV-8821</div>
+</td>
+<td class="py-3 px-3">
+<div class="font-body-md text-body-md text-on-surface">
+                    Driver flagged personal trip (<span class="font-semibold">$120.00</span>) to deduct from earnings
+                  </div>
+<div class="font-body-sm text-body-sm text-outline flex items-center gap-1.5 mt-0.5">
+<span class="material-symbols-outlined text-[14px]">local_gas_station</span>
+<span>Pilot Travel Center #291 · 28.5 Gal</span>
+</div>
+</td>
+<td class="py-3 px-3">
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded font-label-sm text-label-sm font-semibold bg-tertiary-fixed text-on-tertiary-fixed border border-tertiary-fixed-dim">
+<span class="material-symbols-outlined text-[14px]">flag</span>
+                    Needs Approval
+                  </span>
+</td>
+<td class="py-3 px-3 text-right">
+<div class="font-body-md text-body-md font-bold text-on-surface">$120.00</div>
+<div class="font-label-sm text-label-sm text-tertiary font-medium">Disputed</div>
+</td>
+<td class="py-3 px-4 text-right">
+<button class="h-8 px-3 rounded bg-primary text-on-primary hover:bg-primary-container font-label-md text-label-md font-semibold transition-colors">
+                    Review Dispute
+                  </button>
+</td>
+</tr>
+<!-- Row 2: James Carter -->
+<tr class="hover:bg-surface-container-low/60 transition-colors group min-h-[52px] bg-error-container/10">
+<td class="py-3 px-4">
+<div class="font-body-md text-body-md font-semibold text-on-surface">5179KZ</div>
+<div class="font-label-sm text-label-sm text-on-surface-variant">Class 8 Long Haul · Unit #302</div>
+</td>
+<td class="py-3 px-3">
+<div class="font-body-md text-body-md font-medium text-on-surface">James Carter</div>
+<div class="font-label-sm text-label-sm text-outline">ID: DRV-4190</div>
+</td>
+<td class="py-3 px-3">
+<div class="font-body-md text-body-md text-error font-medium">
+                    Gallons exceeded tank capacity (+40L spike at BP Travel Plaza)
+                  </div>
+<div class="font-body-sm text-body-sm text-on-surface-variant mt-0.5">
+                    Logged 540L into a 500L max tank volume. Potential dual-card fill.
+                  </div>
+</td>
+<td class="py-3 px-3">
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded font-label-sm text-label-sm font-semibold bg-error-container text-on-error-container border border-error/20">
+<span class="material-symbols-outlined text-[14px]">warning</span>
+                    Critical Gap
+                  </span>
+</td>
+<td class="py-3 px-3 text-right">
+<div class="font-body-md text-body-md font-bold text-error">$75.00</div>
+<div class="font-label-sm text-label-sm text-outline">Unexplained</div>
+</td>
+<td class="py-3 px-4 text-right">
+<button class="h-8 px-3 rounded bg-error text-on-error hover:opacity-90 font-label-md text-label-md font-semibold transition-opacity">
+                    Investigate
+                  </button>
+</td>
+</tr>
+<!-- Row 3: Sarah Jenkins -->
+<tr class="hover:bg-surface-container-low/60 transition-colors group min-h-[52px]">
+<td class="py-3 px-4">
+<div class="font-body-md text-body-md font-semibold text-on-surface">9921XB</div>
+<div class="font-label-sm text-label-sm text-on-surface-variant">Ford Transit · Unit #188</div>
+</td>
+<td class="py-3 px-3">
+<div class="font-body-md text-body-md font-medium text-on-surface">Sarah Jenkins</div>
+<div class="font-label-sm text-label-sm text-outline">ID: DRV-7402</div>
+</td>
+<td class="py-3 px-3">
+<div class="font-body-md text-body-md text-on-surface">
+                    Odometer jumped 340 km without intermediate fuel log
+                  </div>
+<div class="font-body-sm text-body-sm text-outline mt-0.5">
+                    Telemetry delta: 48,120 km → 48,460 km. Suspected missed pump receipt.
+                  </div>
+</td>
+<td class="py-3 px-3">
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded font-label-sm text-label-sm font-semibold bg-tertiary-fixed text-on-tertiary-fixed border border-tertiary-fixed-dim">
+<span class="material-symbols-outlined text-[14px]">schedule</span>
+                    Cycle Check
+                  </span>
+</td>
+<td class="py-3 px-3 text-right">
+<div class="font-body-md text-body-md font-bold text-on-surface">$25.00</div>
+<div class="font-label-sm text-label-sm text-outline">Variance</div>
+</td>
+<td class="py-3 px-4 text-right">
+<button class="h-8 px-3 rounded border border-outline text-on-surface hover:bg-surface-container font-label-md text-label-md font-semibold transition-colors">
+                    Verify Odo
+                  </button>
+</td>
+</tr>
+<!-- Row 4: David O'Connor -->
+<tr class="hover:bg-surface-container-low/60 transition-colors group min-h-[52px]">
+<td class="py-3 px-4">
+<div class="font-body-md text-body-md font-semibold text-on-surface">CA-4512</div>
+<div class="font-label-sm text-label-sm text-on-surface-variant">Hybrid Van · Unit #205</div>
+</td>
+<td class="py-3 px-3">
+<div class="font-body-md text-body-md font-medium text-on-surface">David O'Connor</div>
+<div class="font-label-sm text-label-sm text-outline">ID: DRV-9930</div>
+</td>
+<td class="py-3 px-3">
+<div class="font-body-md text-body-md text-on-surface">
+                    Missing fuel receipt attachment for company card swipe
+                  </div>
+<div class="font-body-sm text-body-sm text-outline mt-0.5">
+                    Chevron #1084 · Card #8012 · Verified GPS geofence match
+                  </div>
+</td>
+<td class="py-3 px-3">
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded font-label-sm text-label-sm font-semibold bg-surface-container-highest text-on-surface-variant border border-outline-variant">
+<span class="material-symbols-outlined text-[14px]">receipt_long</span>
+                    Receipt Missing
+                  </span>
+</td>
+<td class="py-3 px-3 text-right">
+<div class="font-body-md text-body-md font-bold text-on-surface">$64.20</div>
+<div class="font-label-sm text-label-sm text-outline">Total</div>
+</td>
+<td class="py-3 px-4 text-right">
+<button class="h-8 px-3 rounded border border-outline text-on-surface hover:bg-surface-container font-label-md text-label-md font-semibold transition-colors">
+                    Attach / Waive
+                  </button>
+</td>
+</tr>
+</tbody>
+</table>
+<!-- Queue Footer Status -->
+<div class="px-4 py-2.5 bg-surface-container-low border-t border-outline-variant flex items-center justify-between text-body-sm">
+<span class="text-on-surface-variant">Showing 4 vehicle exceptions (2 require mandatory administrative action)</span>
+<span class="font-label-md text-label-md text-outline">Sorted by severity &amp; impact</span>
+</div>
+</div>
+</section>
+<!-- RIGHT COLUMN: "MONEY CHECK" PANEL (35% Width) -->
+<aside class="w-[35%] sticky top-28 space-y-4">
+<!-- Inspection Card Level 1 -->
+<div class="bg-surface-container-lowest border border-outline-variant rounded-lg overflow-hidden">
+<!-- Card Header -->
+<div class="p-4 border-b border-outline-variant flex items-center justify-between">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary fill" style="font-variation-settings: 'FILL' 1;">account_balance_wallet</span>
+<h2 class="font-headline-md text-headline-md font-bold text-on-surface">Money Check</h2>
+</div>
+<!-- Clickable Link - opens slide-over drawer -->
+<button class="font-label-md text-label-md text-primary font-semibold hover:underline flex items-center gap-0.5" onclick="openDrawer()">
+<span>What does this mean?</span>
+<span class="material-symbols-outlined text-[16px]">help_outline</span>
+</button>
+</div>
+<div class="p-5 space-y-5">
+<!-- Hero Metric -->
+<div class="bg-surface-container-low p-4 rounded border border-outline-variant">
+<div class="font-label-md text-label-md uppercase tracking-wider text-on-surface-variant font-semibold">
+                Total fuel bought
+              </div>
+<div class="font-display text-display font-extrabold text-on-surface tracking-tight mt-1">
+                $15,650.50
+              </div>
+<div class="font-label-sm text-label-sm text-outline mt-1">
+                Across 142 total refuel transactions this period
+              </div>
+</div>
+<!-- Clear Financial Split Section -->
+<div class="space-y-3">
+<div class="font-label-md text-label-md uppercase tracking-wider text-outline font-bold">
+                Settlement Allocation Split
+              </div>
+<!-- Driver Charge -->
+<div class="flex items-start justify-between p-3 rounded bg-surface border border-outline-variant">
+<div>
+<div class="font-body-md text-body-md font-semibold text-on-surface">Driver charge (fronted/personal)</div>
+<div class="font-body-sm text-body-sm text-on-surface-variant">Deducted from driver payroll earnings</div>
+</div>
+<div class="font-headline-md text-[18px] font-bold text-on-surface">
+                  $1,400.00
+                </div>
+</div>
+<!-- Company Keeps -->
+<div class="flex items-start justify-between p-3 rounded bg-surface border border-outline-variant">
+<div>
+<div class="font-body-md text-body-md font-semibold text-on-surface">Company keeps</div>
+<div class="font-body-sm text-body-sm text-on-surface-variant">Direct operational fleet fuel expense</div>
+</div>
+<div class="font-headline-md text-[18px] font-bold text-primary">
+                  $14,100.00
+                </div>
+</div>
+<!-- Unexplained Variance Flag -->
+<div class="flex items-start justify-between p-3 rounded bg-error-container/20 border border-error/30">
+<div class="flex items-start gap-2">
+<span class="material-symbols-outlined text-error text-[18px] mt-0.5">report_problem</span>
+<div>
+<div class="font-body-md text-body-md font-bold text-error">Unexplained variance</div>
+<div class="font-body-sm text-body-sm text-on-surface-variant">Tank spike &amp; odometer gap quarantines</div>
+</div>
+</div>
+<div class="font-headline-md text-[18px] font-extrabold text-error">
+                  $150.50
+                </div>
+</div>
+</div>
+<div class="h-px bg-outline-variant"></div>
+<!-- Collapsible Payment Sources Accordion -->
+<div class="border border-outline-variant rounded overflow-hidden">
+<button class="w-full px-3.5 py-2.5 bg-surface-container-low flex items-center justify-between text-left hover:bg-surface-container transition-colors" onclick="toggleAccordion()">
+<span class="font-label-md text-label-md font-bold text-on-surface flex items-center gap-2">
+<span class="material-symbols-outlined text-[18px] text-outline">credit_card</span>
+                  Payment Sources Breakdown
+                </span>
+<span class="material-symbols-outlined text-on-surface-variant transition-transform" id="accordion-icon">expand_more</span>
+</button>
+<div class="p-3 bg-surface-container-lowest space-y-2 border-t border-outline-variant" id="accordion-content">
+<div class="flex items-center justify-between font-body-sm text-body-sm">
+<span class="text-on-surface-variant flex items-center gap-1.5">
+<span class="w-2 h-2 rounded-full bg-primary"></span>
+                    Gas card (company paid)
+                  </span>
+<span class="font-semibold text-on-surface">$12,450.00</span>
+</div>
+<div class="flex items-center justify-between font-body-sm text-body-sm">
+<span class="text-on-surface-variant flex items-center gap-1.5">
+<span class="w-2 h-2 rounded-full bg-secondary"></span>
+                    Cash from earnings (driver fronted)
+                  </span>
+<span class="font-semibold text-on-surface">$3,200.50</span>
+</div>
+</div>
+</div>
+<!-- Live Balance Status Indicator -->
+<div class="p-3 rounded bg-secondary-container/30 border border-secondary/20 flex items-center gap-2.5">
+<span class="material-symbols-outlined text-secondary fill" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+<div class="font-label-md text-label-md font-semibold text-on-secondary-container">
+                Ledger Balanced within $150.50 tolerance
+              </div>
+</div>
+</div>
+</div>
+<!-- Quick Tips Mini Panel -->
+<div class="p-3 bg-surface-container-low rounded border border-outline-variant text-body-sm text-on-surface-variant flex items-start gap-2.5">
+<span class="material-symbols-outlined text-outline text-[18px] mt-0.5">lightbulb</span>
+<div>
+<span class="font-semibold text-on-surface">Recon Tip:</span> Disputed personal trips will be withheld from this Friday's payroll settlement run automatically.
+          </div>
+</div>
+</aside>
+</div>
+</main>
+<!-- STICKY BOTTOM ACTION BAR (Docked Full Width across canvas) -->
+<footer class="fixed bottom-0 left-0 w-full z-40 bg-surface-container-lowest border-t border-outline-variant px-container-padding h-16 flex items-center justify-between shadow-sm">
+<!-- Left Side: Blocked reason / status indicator -->
+<div class="flex items-center gap-2.5">
+<span class="w-2.5 h-2.5 rounded-full bg-error animate-pulse"></span>
+<span class="font-body-md text-body-md font-medium text-on-surface">
+<strong class="font-bold text-error">2 critical issues</strong> must be resolved before proceeding to Settlement.
+      </span>
+<span class="text-outline text-label-sm">· Auto-saved 2 mins ago</span>
+</div>
+<!-- Right Side: Action CTA Group -->
+<div class="flex items-center gap-3">
+<button class="h-9 px-4 rounded border border-outline bg-surface-container-lowest text-on-surface hover:bg-surface-container font-label-md text-label-md font-semibold transition-colors">
+        Save Draft
+      </button>
+<!-- Single Primary Action (48px height, solid primary indigo #3525cd) -->
+<button class="h-12 px-6 rounded bg-primary hover:bg-primary-container text-on-primary font-label-md text-label-md font-bold tracking-wide flex items-center gap-2 transition-all shadow-sm">
+<span>Continue to Step 5: Settlement</span>
+<span class="material-symbols-outlined text-[18px]">arrow_forward</span>
+</button>
+</div>
+</footer>
+<!-- EXPLANATION SIDE DRAWER / SLIDE-OVER SHEET (Level 3 Modal Elevation) -->
+<div class="fixed inset-0 bg-inverse-surface/40 backdrop-blur-xs z-50 hidden opacity-0 transition-opacity duration-200" id="drawer-backdrop" onclick="closeDrawer()"></div>
+<div class="fixed right-0 top-0 h-full w-[460px] bg-surface-container-lowest border-l border-outline-variant z-50 shadow-2xl flex flex-col translate-x-full drawer-transition" id="explanation-drawer">
+<!-- Drawer Header -->
+<div class="p-5 border-b border-outline-variant flex items-center justify-between bg-surface-container-low">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary">menu_book</span>
+<h3 class="font-headline-md text-headline-md font-bold text-on-surface">Reconciliation Plain-English Guide</h3>
+</div>
+<button class="h-8 w-8 inline-flex items-center justify-center rounded text-on-surface-variant hover:bg-surface-container transition-colors" onclick="closeDrawer()" title="Close">
+<span class="material-symbols-outlined">close</span>
+</button>
+</div>
+<!-- Drawer Content -->
+<div class="p-6 overflow-y-auto flex-1 space-y-6">
+<!-- Section 1 -->
+<div class="space-y-2">
+<div class="flex items-center gap-2 text-primary font-label-md text-label-md font-bold">
+<span class="material-symbols-outlined text-[18px]">sync_alt</span>
+<span>Where the money came from vs. Who ends up paying</span>
+</div>
+<p class="text-body-md font-body-md text-on-surface-variant leading-relaxed">
+          Every fuel entry starts at a physical fuel terminal. The pump is charged either through an integrated fleet card (FleetCor / Comdata) or directly paid out-of-pocket by the operator.
+        </p>
+<div class="p-3 bg-surface-container-low rounded border border-outline-variant text-body-sm text-on-surface">
+<strong>Rule of thumb:</strong> Total Fuel Bought = Company Expense + Driver Charges + Quarantined Variances.
+        </div>
+</div>
+<div class="h-px bg-outline-variant"></div>
+<!-- Section 2 -->
+<div class="space-y-2">
+<div class="flex items-center gap-2 text-primary font-label-md text-label-md font-bold">
+<span class="material-symbols-outlined text-[18px]">payments</span>
+<span>Why cash from earnings is credited back to drivers</span>
+</div>
+<p class="text-body-md font-body-md text-on-surface-variant leading-relaxed">
+          When drivers pay cash at the pump for commercial route legs, Roam Fleet verifies the odometer reading and GPS proximity. Validated cash expenses are reimbursed back directly on their weekly settlement slip.
+        </p>
+</div>
+<div class="h-px bg-outline-variant"></div>
+<!-- Section 3 -->
+<div class="space-y-2">
+<div class="flex items-center gap-2 text-primary font-label-md text-label-md font-bold">
+<span class="material-symbols-outlined text-[18px]">security</span>
+<span>How unexplained fuel is quarantined until resolved</span>
+</div>
+<p class="text-body-md font-body-md text-on-surface-variant leading-relaxed">
+          If a transaction exceeds tank capacities (e.g., 540L pumped into a 500L tank) or skips an odometer node, Roam Fleet quarantines that specific dollar difference ($150.50 currently). It cannot hit the general ledger until an admin approves or rejects the variance.
+        </p>
+</div>
+<!-- Live Calculation Breakdown -->
+<div class="p-4 bg-surface-container rounded border border-outline-variant space-y-2">
+<span class="font-label-md text-label-md font-bold text-on-surface">Current Week Balancing Math:</span>
+<div class="font-mono text-body-sm space-y-1 text-on-surface-variant">
+<div class="flex justify-between">
+<span>Company Gas Cards:</span>
+<span>$12,450.00</span>
+</div>
+<div class="flex justify-between">
+<span>Driver Paid Fronts:</span>
+<span>+ $3,200.50</span>
+</div>
+<div class="flex justify-between border-t border-outline-variant pt-1 font-bold text-on-surface">
+<span>Total Operational Gross:</span>
+<span>$15,650.50</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Drawer Footer -->
+<div class="p-4 border-t border-outline-variant bg-surface-container-low flex justify-end">
+<button class="h-10 px-5 rounded bg-primary text-on-primary font-label-md text-label-md font-semibold hover:bg-primary-container transition-colors" onclick="closeDrawer()">
+        Got it, back to console
+      </button>
+</div>
+</div>
+<!-- Micro-interactions Script -->
+<script>
+    // Overflow menu toggle
+    function toggleMenu() {
+      const menu = document.getElementById('overflow-menu');
+      menu.classList.toggle('hidden');
+    }
+
+    // Close menu on click outside
+    document.addEventListener('click', function(e) {
+      const btn = document.getElementById('overflow-btn');
+      const menu = document.getElementById('overflow-menu');
+      if (btn && menu && !btn.contains(e.target) && !menu.contains(e.target)) {
+        menu.classList.add('hidden');
+      }
+    });
+
+    // Accordion toggle
+    let accordionOpen = true;
+    function toggleAccordion() {
+      const content = document.getElementById('accordion-content');
+      const icon = document.getElementById('accordion-icon');
+      accordionOpen = !accordionOpen;
+      if (accordionOpen) {
+        content.classList.remove('hidden');
+        icon.style.transform = 'rotate(0deg)';
+      } else {
+        content.classList.add('hidden');
+        icon.style.transform = 'rotate(-90deg)';
+      }
+    }
+
+    // Side Drawer toggle
+    function openDrawer() {
+      const backdrop = document.getElementById('drawer-backdrop');
+      const drawer = document.getElementById('explanation-drawer');
+      backdrop.classList.remove('hidden');
+      setTimeout(() => {
+        backdrop.classList.remove('opacity-0');
+        drawer.classList.remove('translate-x-full');
+      }, 10);
+    }
+
+    function closeDrawer() {
+      const backdrop = document.getElementById('drawer-backdrop');
+      const drawer = document.getElementById('explanation-drawer');
+      drawer.classList.add('translate-x-full');
+      backdrop.classList.add('opacity-0');
+      setTimeout(() => {
+        backdrop.classList.add('hidden');
+      }, 250);
+    }
+  </script>
+</body></html>

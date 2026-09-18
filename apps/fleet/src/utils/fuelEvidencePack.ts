@@ -110,7 +110,17 @@ export function downloadFuelEvidencePackFromServer(args: {
     leakage: Number(p.unexplained) || args.fallbackStrip?.leakage || 0,
   };
   const stepNotes = (args.pack.audit || [])
-    .filter((a) => a.action === 'step' || a.action === 'leakage_review' || a.action === 'second_approve')
+    .filter((a) =>
+      [
+        'step',
+        'leakage_review',
+        'second_approve',
+        'flag_disposition',
+        'data_quality_vehicle_review',
+        'odometer_chain_review',
+        'unattributed_review',
+      ].includes(String(a.action || '')),
+    )
     .map((a) => {
       const payload = (a.payload && typeof a.payload === 'object' ? a.payload : {}) as Record<
         string,
@@ -123,9 +133,24 @@ export function downloadFuelEvidencePackFromServer(args: {
           : source === 'auto_close_service'
             ? ' [system: auto_close_service]'
             : '';
+      const action = String(a.action || '');
+      let noteBody = String(payload.note || '');
+      if (action === 'flag_disposition') {
+        noteBody = [
+          payload.flagCode ? `flag=${payload.flagCode}` : '',
+          payload.action ? `action=${payload.action}` : '',
+          payload.entryId ? `entry=${payload.entryId}` : '',
+          noteBody,
+        ]
+          .filter(Boolean)
+          .join(' · ');
+      }
+      if (action === 'data_quality_vehicle_review' && payload.vehicleId) {
+        noteBody = [`vehicle=${payload.vehicleId}`, noteBody].filter(Boolean).join(' · ');
+      }
       return {
-        step: String(a.action || ''),
-        note: `${String(payload.note || a.payload || '')}${systemLabel}`.trim() || systemLabel.trim(),
+        step: action,
+        note: `${noteBody}${systemLabel}`.trim() || systemLabel.trim(),
         at: String(a.at || ''),
       };
     });

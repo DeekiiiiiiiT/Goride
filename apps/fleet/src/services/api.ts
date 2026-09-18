@@ -4983,6 +4983,84 @@ export const api = {
     return response.json();
   },
 
+  async reviewFuelPeriodDataQualityVehicle(args: {
+    periodId: string;
+    vehicleId: string;
+    note?: string;
+    version?: number;
+  }) {
+    const headers = await requireAuthHeaders();
+    if (args.version != null) {
+      (headers as Record<string, string>)['If-Match'] = String(args.version);
+    }
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.fuel}/fuel/periods/${encodeURIComponent(args.periodId)}/data-quality-vehicle-review`,
+      {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ vehicleId: args.vehicleId, note: args.note }),
+      },
+    );
+    if (response.status === 409) {
+      const err = new Error('version_conflict') as Error & { status?: number; body?: unknown };
+      err.status = 409;
+      try {
+        err.body = await response.json();
+      } catch {
+        err.body = null;
+      }
+      throw err;
+    }
+    if (!response.ok) {
+      const errText = await response.text().catch(() => '');
+      throw new Error(errText || 'Data quality vehicle review failed');
+    }
+    return response.json();
+  },
+
+  async upsertFuelFlagDisposition(args: {
+    entryId: string;
+    flagCode: string;
+    action: 'accepted' | 'corrected' | 'escalated';
+    note?: string;
+    periodId?: string | null;
+    severity?: string;
+  }) {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/fuel/flags/disposition`, {
+      method: 'POST',
+      headers: await requireAuthHeaders(),
+      body: JSON.stringify({
+        entryId: args.entryId,
+        flagCode: args.flagCode,
+        action: args.action,
+        note: args.note,
+        periodId: args.periodId || null,
+        severity: args.severity || '',
+      }),
+    });
+    if (!response.ok) {
+      const errText = await response.text().catch(() => '');
+      throw new Error(errText || 'Flag disposition failed');
+    }
+    return response.json();
+  },
+
+  async listFuelFlagDispositions(opts?: { periodId?: string }) {
+    const qs = new URLSearchParams();
+    if (opts?.periodId) qs.set('periodId', opts.periodId);
+    const suffix = qs.toString() ? `?${qs.toString()}` : '';
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.fuel}/fuel/flags/dispositions${suffix}`,
+      { headers: await requireAuthHeaders(null) },
+    );
+    if (!response.ok) {
+      const errText = await response.text().catch(() => '');
+      throw new Error(errText || 'Failed to list flag dispositions');
+    }
+    const data = await response.json();
+    return Array.isArray(data?.dispositions) ? data.dispositions : [];
+  },
+
   async reviewFuelPeriodUnattributed(args: {
     periodId: string;
     note: string;

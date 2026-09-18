@@ -930,7 +930,7 @@ function AppContent() {
           </PermissionGate>
         )}
 
-        {['fuel-cards', 'fuel-logs', 'fuel-configuration', 'fuel-reimbursements'].includes(currentPage) && (
+        {['fuel-cards', 'fuel-logs', 'fuel-flags', 'fuel-configuration', 'fuel-reimbursements'].includes(currentPage) && (
           <PermissionGate permission={PAGE_PERMISSION_MAP[currentPage] || 'nav.fuel_overview'} onNavigate={setCurrentPage}>
             <Suspense fallback={<div className="p-6 text-sm text-slate-500">Loading fuel…</div>}>
               <FuelManagement 
@@ -938,6 +938,7 @@ function AppContent() {
                       currentPage === 'fuel-reimbursements' ? 'reimbursements' :
                       currentPage === 'fuel-cards' ? 'cards' :
                       currentPage === 'fuel-logs' ? 'logs' :
+                      currentPage === 'fuel-flags' ? 'flags' :
                       currentPage === 'fuel-configuration' ? 'configuration' :
                       'logs'
                   }

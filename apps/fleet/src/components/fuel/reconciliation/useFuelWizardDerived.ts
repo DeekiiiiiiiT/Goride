@@ -17,6 +17,7 @@ import { evaluateFuelFinalizeGating } from '../../../utils/fuelFinalizeGating';
 import { evaluateFuelWeekClosableClient } from '../../../utils/fuelWeekClosableGate';
 import { stopToStopClosableFlagsFromReports } from '../../../utils/stopToStopClosableFlags';
 import { FUEL_SPEND_EPS } from '../../../utils/fuelMoneyEpsilon';
+import { isFuelDataQualityFlagged } from '../../../utils/fuelDataQualityReview';
 import { sumGasCardSpendForReport, sumPaidByDriverForReport } from '../../../utils/fuelPaidByDriver';
 import { isEntryInInclusiveYmdRange } from '../../../utils/fuelWeekPeriod';
 import { precomputeFuelFillDrivers } from '@roam/fuel-core';
@@ -49,6 +50,8 @@ export function useFuelWizardDerived(input: {
   leakageReviewed: boolean;
   odometerChainReviewed?: boolean;
   unattributedReviewed?: boolean;
+  /** Cash-desk: vehicle IDs marked reviewed on Data quality */
+  dataQualityReviewedVehicleIds?: Set<string> | string[];
   vehicles: Vehicle[];
   drivers: FuelWizardDriver[];
   fuelEntries: FuelEntry[];
@@ -74,6 +77,7 @@ export function useFuelWizardDerived(input: {
     leakageReviewed,
     odometerChainReviewed = false,
     unattributedReviewed = false,
+    dataQualityReviewedVehicleIds,
     vehicles,
     drivers,
     fuelEntries,
@@ -169,11 +173,18 @@ export function useFuelWizardDerived(input: {
             v.totalSpend > FUEL_SPEND_EPS ||
             v.pendingCount > 0 ||
             v.hasOpenDispute ||
-            v.isFinalized,
+            v.isFinalized ||
+            Boolean(v.odometerIncomplete) ||
+            Boolean(v.healthStatus && v.healthStatus !== 'Emerald'),
         ),
         leakageReviewed: leakageReviewed || periodLocked,
+        dataQualityReviewedVehicleIds:
+          periodLocked
+            ? // Locked weeks treat flags as informational for chip totals
+              vehicleSnaps.map((v) => v.vehicleId)
+            : dataQualityReviewedVehicleIds,
       }),
-    [vehicleSnaps, leakageReviewed, periodLocked],
+    [vehicleSnaps, leakageReviewed, periodLocked, dataQualityReviewedVehicleIds],
   );
 
   const gatedStates = useMemo(() => computeFuelGatedStepStates(counts), [counts]);
@@ -236,8 +247,17 @@ export function useFuelWizardDerived(input: {
   );
 
   const closableBlockers = useMemo(
-    () =>
-      evaluateFuelWeekClosableClient({
+    () => {
+      const reviewed =
+        dataQualityReviewedVehicleIds instanceof Set
+          ? dataQualityReviewedVehicleIds
+          : new Set(dataQualityReviewedVehicleIds || []);
+      const dataQualityVehiclesUnreviewed =
+        !periodLocked &&
+        vehicleSnaps.some(
+          (v) => isFuelDataQualityFlagged(v) && !reviewed.has(v.vehicleId),
+        );
+      return evaluateFuelWeekClosableClient({
         gateResult,
         reports: liveReports,
         scenarios,
@@ -249,13 +269,15 @@ export function useFuelWizardDerived(input: {
         openDisputesInWeek: openDisputes.length > 0,
         totalSpend: periodTotalSpend,
         unexplained: periodUnexplained,
+        dataQualityVehiclesUnreviewed,
         ...stopToStopClosableFlagsFromReports({
           reports: liveReports,
           fuelEntries,
           weekStartYmd: periodStart,
           weekEndYmd: periodEnd,
         }),
-      }),
+      });
+    },
     [
       gateResult,
       liveReports,
@@ -272,6 +294,8 @@ export function useFuelWizardDerived(input: {
       fuelEntries,
       periodStart,
       periodEnd,
+      vehicleSnaps,
+      dataQualityReviewedVehicleIds,
     ],
   );
 

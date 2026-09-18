@@ -1,0 +1,477 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Fuel Recon B — Calm Self-Serve Mobile</title>
+<!-- Fonts & Material Symbols -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind CSS CDN -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          "colors": {
+            "surface-container": "#f0ecf9",
+            "error-container": "#ffdad6",
+            "on-surface-variant": "#464555",
+            "error": "#ba1a1a",
+            "on-error": "#ffffff",
+            "secondary-fixed": "#6ffbbe",
+            "on-error-container": "#93000a",
+            "on-tertiary": "#ffffff",
+            "on-background": "#1b1b24",
+            "background": "#fcf8ff",
+            "surface": "#fcf8ff",
+            "inverse-on-surface": "#f3effc",
+            "primary-container": "#4f46e5",
+            "on-surface": "#1b1b24",
+            "on-tertiary-fixed-variant": "#653e00",
+            "primary": "#3525cd",
+            "tertiary-container": "#885500",
+            "surface-bright": "#fcf8ff",
+            "secondary": "#006c49",
+            "on-secondary-fixed": "#002113",
+            "tertiary-fixed-dim": "#ffb95f",
+            "outline": "#777587",
+            "secondary-container": "#6cf8bb",
+            "surface-container-highest": "#e4e1ee",
+            "surface-dim": "#dcd8e5",
+            "on-primary-container": "#dad7ff",
+            "tertiary-fixed": "#ffddb8",
+            "on-secondary-fixed-variant": "#005236",
+            "on-primary": "#ffffff",
+            "surface-container-low": "#f5f2ff",
+            "inverse-surface": "#302f39",
+            "inverse-primary": "#c3c0ff",
+            "surface-tint": "#4d44e3",
+            "secondary-fixed-dim": "#4edea3",
+            "on-primary-fixed": "#0f0069",
+            "primary-fixed": "#e2dfff",
+            "on-secondary-container": "#00714d",
+            "surface-container-high": "#eae6f4",
+            "on-secondary": "#ffffff",
+            "on-tertiary-container": "#ffd4a4",
+            "outline-variant": "#c7c4d8",
+            "surface-variant": "#e4e1ee",
+            "surface-container-lowest": "#ffffff",
+            "primary-fixed-dim": "#c3c0ff",
+            "on-primary-fixed-variant": "#3323cc",
+            "on-tertiary-fixed": "#2a1700",
+            "tertiary": "#684000"
+          },
+          "borderRadius": {
+            "DEFAULT": "0.125rem",
+            "lg": "0.25rem",
+            "xl": "0.5rem",
+            "full": "0.75rem"
+          },
+          "spacing": {
+            "density-high": "4px",
+            "unit": "4px",
+            "gutter": "16px",
+            "density-medium": "12px",
+            "component-gap": "8px",
+            "container-padding": "24px"
+          },
+          "fontFamily": {
+            "label-sm": ["Inter"],
+            "display": ["Inter"],
+            "body-lg": ["Inter"],
+            "headline-lg": ["Inter"],
+            "label-md": ["Inter"],
+            "headline-md": ["Inter"],
+            "body-sm": ["Inter"],
+            "body-md": ["Inter"]
+          },
+          "fontSize": {
+            "label-sm": ["11px", { "lineHeight": "14px", "fontWeight": "500" }],
+            "display": ["36px", { "lineHeight": "44px", "letterSpacing": "-0.02em", "fontWeight": "700" }],
+            "body-lg": ["16px", { "lineHeight": "24px", "fontWeight": "400" }],
+            "headline-lg": ["24px", { "lineHeight": "32px", "letterSpacing": "-0.01em", "fontWeight": "600" }],
+            "label-md": ["12px", { "lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "600" }],
+            "headline-md": ["20px", { "lineHeight": "28px", "fontWeight": "600" }],
+            "body-sm": ["13px", { "lineHeight": "18px", "fontWeight": "400" }],
+            "body-md": ["14px", { "lineHeight": "20px", "fontWeight": "400" }]
+          }
+        },
+      },
+    }
+  </script>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-surface text-on-surface font-body-md text-body-md antialiased min-h-screen flex justify-center selection:bg-primary-fixed selection:text-primary">
+<!-- Mobile Canvas Frame: 390px simulated device -->
+<main class="w-full max-w-[390px] bg-background min-h-screen flex flex-col relative pb-36 shadow-sm">
+<!-- 1. Header / Navigation -->
+<header class="sticky top-0 z-30 bg-surface-container-lowest/95 backdrop-blur-md border-b border-surface-container-highest">
+<!-- Status bar placeholder spacing -->
+<div class="h-2 w-full"></div>
+<!-- Top Bar -->
+<div class="flex items-center justify-between px-4 h-14">
+<button aria-label="Go back" class="h-11 w-11 -ml-2 rounded-xl flex items-center justify-center text-on-surface hover:bg-surface-container-low active:scale-95 transition-all" type="button">
+<span class="material-symbols-outlined text-[24px]">arrow_back</span>
+</button>
+<div class="text-center flex-1">
+<h1 class="font-headline-md text-headline-md text-on-surface leading-tight font-semibold">Fuel Reconciliation</h1>
+</div>
+<div class="relative">
+<button aria-label="More options" class="h-11 w-11 -mr-2 rounded-xl flex items-center justify-center text-on-surface-variant hover:bg-surface-container-low active:scale-95 transition-all" id="menuBtn" type="button">
+<span class="material-symbols-outlined text-[24px]">more_vert</span>
+</button>
+<!-- Overflow Dropdown Menu -->
+<div class="hidden absolute right-0 mt-1 w-44 bg-surface-container-lowest border border-surface-container-highest rounded-xl shadow-lg py-1.5 z-50" id="menuDropdown">
+<button class="w-full px-4 py-2.5 text-left font-body-sm text-body-sm text-on-surface hover:bg-surface-container-low flex items-center gap-2.5" type="button">
+<span class="material-symbols-outlined text-[18px] text-on-surface-variant">refresh</span>
+              Refresh logs
+            </button>
+<button class="w-full px-4 py-2.5 text-left font-body-sm text-body-sm text-on-surface hover:bg-surface-container-low flex items-center gap-2.5" type="button">
+<span class="material-symbols-outlined text-[18px] text-on-surface-variant">help_outline</span>
+              Get help
+            </button>
+</div>
+</div>
+</div>
+<!-- Subheader with Date Range & Status Badge -->
+<div class="px-4 pb-2.5 flex items-center justify-between">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[18px] text-primary">calendar_today</span>
+<span class="font-headline-md text-body-md font-medium text-on-surface">Jun 29 – Jul 5, 2026</span>
+</div>
+<span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-secondary-container/40 text-on-secondary-container font-label-sm text-label-sm font-semibold border border-secondary/20">
+<span class="w-1.5 h-1.5 rounded-full bg-secondary animate-pulse"></span>
+          OPEN
+        </span>
+</div>
+<!-- Fuel vs Tolls Tab Navigation -->
+<div class="flex px-4 gap-6 border-t border-surface-container-highest/60 pt-1">
+<button class="relative py-2.5 font-label-md text-label-md text-primary font-semibold flex items-center gap-1.5" type="button">
+<span>Fuel</span>
+<span class="px-1.5 py-0.2 rounded-full bg-primary-fixed text-on-primary-fixed text-[10px] font-bold">Week 27</span>
+<span class="absolute bottom-0 left-0 right-0 h-0.5 bg-primary rounded-t-full"></span>
+</button>
+<button class="py-2.5 font-label-md text-label-md text-on-surface-variant hover:text-on-surface transition-colors flex items-center gap-1.5" type="button">
+<span>Tolls</span>
+<span class="text-outline-variant font-label-sm text-label-sm">(Settled)</span>
+</button>
+</div>
+</header>
+<!-- Scrollable Content -->
+<div class="px-4 py-4 space-y-4">
+<!-- 2. Coaching Card (Hero Guidance) -->
+<section class="bg-surface-container-lowest rounded-xl border border-surface-container-highest border-l-4 border-l-primary p-4 shadow-sm">
+<div class="flex items-start gap-3">
+<div class="w-8 h-8 rounded-lg bg-surface-container-low flex items-center justify-center shrink-0 text-primary">
+<span class="material-symbols-outlined text-[20px]">lightbulb</span>
+</div>
+<div>
+<h2 class="font-headline-md text-body-lg font-semibold text-on-surface">What to do now</h2>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-1 leading-relaxed">
+              Look at the 2 flagged cars below. If nothing looks wrong or you've added your notes, tap Continue to move forward.
+            </p>
+</div>
+</div>
+</section>
+<!-- 3. "At a Glance" Money Summary -->
+<section class="bg-surface-container-lowest rounded-xl border border-surface-container-highest p-4 shadow-sm">
+<div class="flex items-center justify-between pb-3 border-b border-surface-container-highest">
+<span class="font-label-md text-label-md text-on-surface-variant uppercase tracking-wider">Weekly Fuel Cost</span>
+<span class="font-label-sm text-label-sm text-outline">USD Currency</span>
+</div>
+<!-- 2-Number Calm Metric Grid -->
+<div class="grid grid-cols-2 gap-3 pt-3.5 pb-3">
+<div class="pr-2 border-r border-surface-container-highest/70">
+<p class="font-label-sm text-label-sm text-on-surface-variant">Total fuel bought</p>
+<p class="font-headline-lg text-headline-lg text-on-surface font-semibold tracking-tight mt-0.5">$4,400.00</p>
+<span class="font-label-sm text-[10px] text-outline uppercase tracking-wider">Sample</span>
+</div>
+<div class="pl-1">
+<p class="font-label-sm text-label-sm text-on-surface-variant">Amount drivers will pay</p>
+<p class="font-headline-lg text-headline-lg text-on-surface font-semibold tracking-tight mt-0.5">$500.00</p>
+<span class="font-label-sm text-[10px] text-outline uppercase tracking-wider">Sample</span>
+</div>
+</div>
+<!-- Reassurance badge with checkmark -->
+<div class="mt-2 py-2 px-3 bg-surface-container-low rounded-lg flex items-center gap-2 border border-surface-container-high">
+<span class="material-symbols-outlined text-[18px] text-secondary font-semibold" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+<span class="font-body-sm text-body-sm text-on-secondary-fixed-variant font-medium">Numbers balance with your fleet cards</span>
+</div>
+<!-- Breakdown trigger -->
+<div class="mt-3 pt-2 flex items-center justify-between">
+<button class="h-10 text-left font-label-md text-label-md text-primary font-semibold flex items-center gap-1 hover:underline active:opacity-80" id="breakdownToggleBtn" type="button">
+<span>See how we got this</span>
+<span class="material-symbols-outlined text-[16px]">arrow_forward</span>
+</button>
+<span class="font-label-sm text-label-sm text-outline-variant">Auto-synced</span>
+</div>
+<!-- Collapsible Breakdown Drawer/Card -->
+<div class="hidden mt-3 pt-3 border-t border-dashed border-surface-container-highest space-y-2.5 bg-surface-container-low/60 -mx-4 -mb-4 p-4 rounded-b-xl" id="breakdownPanel">
+<div class="flex justify-between items-center font-body-sm text-body-sm">
+<span class="text-on-surface-variant">Gas cards (Shell &amp; Comdata)</span>
+<span class="font-semibold text-on-surface">$4,250.00</span>
+</div>
+<div class="flex justify-between items-center font-body-sm text-body-sm">
+<span class="text-on-surface-variant">Driver cash receipts</span>
+<span class="font-semibold text-on-surface">$150.00</span>
+</div>
+<div class="h-px bg-surface-container-highest my-1"></div>
+<div class="flex justify-between items-center font-body-sm text-body-sm">
+<span class="text-on-surface-variant">Company share (88.6%)</span>
+<span class="font-semibold text-on-surface">$3,900.00</span>
+</div>
+<div class="flex justify-between items-center font-body-sm text-body-sm text-primary">
+<span class="font-medium">Driver recoverable portion</span>
+<span class="font-bold">$500.00</span>
+</div>
+</div>
+</section>
+<!-- 4. "You Are Here" Progress Tracker -->
+<section class="bg-surface-container-lowest rounded-xl border border-surface-container-highest p-4 shadow-sm">
+<div class="flex items-center justify-between mb-3">
+<h2 class="font-label-md text-label-md text-on-surface font-semibold uppercase tracking-wider">Reconciliation Steps</h2>
+<span class="font-label-sm text-label-sm text-primary font-medium">Step 4 of 6</span>
+</div>
+<div class="space-y-2.5 relative">
+<!-- Step 1 -->
+<div class="flex items-center gap-3">
+<div class="w-6 h-6 rounded-full bg-secondary-container/40 text-on-secondary-container flex items-center justify-center shrink-0 border border-secondary/30">
+<span class="material-symbols-outlined text-[14px] font-bold">check</span>
+</div>
+<div class="flex-1 flex justify-between items-center">
+<span class="font-body-sm text-body-sm text-on-surface-variant line-through opacity-80">Step 1: Data Quality</span>
+<span class="font-label-sm text-[10px] text-secondary font-semibold">Done</span>
+</div>
+</div>
+<!-- Step 2 -->
+<div class="flex items-center gap-3">
+<div class="w-6 h-6 rounded-full bg-secondary-container/40 text-on-secondary-container flex items-center justify-center shrink-0 border border-secondary/30">
+<span class="material-symbols-outlined text-[14px] font-bold">check</span>
+</div>
+<div class="flex-1 flex justify-between items-center">
+<span class="font-body-sm text-body-sm text-on-surface-variant line-through opacity-80">Step 2: Disputes</span>
+<span class="font-label-sm text-[10px] text-secondary font-semibold">Done</span>
+</div>
+</div>
+<!-- Step 3 -->
+<div class="flex items-center gap-3">
+<div class="w-6 h-6 rounded-full bg-secondary-container/40 text-on-secondary-container flex items-center justify-center shrink-0 border border-secondary/30">
+<span class="material-symbols-outlined text-[14px] font-bold">check</span>
+</div>
+<div class="flex-1 flex justify-between items-center">
+<span class="font-body-sm text-body-sm text-on-surface-variant line-through opacity-80">Step 3: Policy Check</span>
+<span class="font-label-sm text-[10px] text-secondary font-semibold">Done</span>
+</div>
+</div>
+<!-- Step 4 (ACTIVE) -->
+<div class="flex items-center gap-3 p-2 -mx-2 rounded-lg bg-surface-container-low border border-primary-fixed">
+<div class="relative w-6 h-6 rounded-full bg-primary text-on-primary flex items-center justify-center shrink-0 shadow-sm">
+<span class="w-2 h-2 rounded-full bg-surface-bright animate-ping absolute"></span>
+<span class="font-label-sm text-label-sm font-bold">4</span>
+</div>
+<div class="flex-1 flex justify-between items-center">
+<span class="font-body-sm text-body-sm text-on-surface font-semibold">Review Flagged Vehicles</span>
+<span class="px-2 py-0.5 rounded-full bg-primary-container text-on-primary font-label-sm text-[10px] font-semibold">Current step</span>
+</div>
+</div>
+<!-- Step 5 (Upcoming) -->
+<div class="flex items-center gap-3 opacity-60">
+<div class="w-6 h-6 rounded-full bg-surface-container-high text-outline flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-[14px]">lock</span>
+</div>
+<div class="flex-1">
+<span class="font-body-sm text-body-sm text-on-surface-variant">Step 5: Settle-up</span>
+</div>
+</div>
+<!-- Step 6 (Upcoming) -->
+<div class="flex items-center gap-3 opacity-60">
+<div class="w-6 h-6 rounded-full bg-surface-container-high text-outline flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-[14px]">lock</span>
+</div>
+<div class="flex-1">
+<span class="font-body-sm text-body-sm text-on-surface-variant">Step 6: Finalize &amp; Post</span>
+</div>
+</div>
+</div>
+</section>
+<!-- 5. Flagged Vehicles List -->
+<section class="space-y-3">
+<div class="flex items-center justify-between px-0.5">
+<h2 class="font-headline-md text-headline-md font-semibold text-on-surface">Vehicles that need a quick look (2)</h2>
+<span class="font-label-sm text-label-sm text-outline">Action required</span>
+</div>
+<!-- Flagged Item 1 -->
+<article class="bg-surface-container-lowest rounded-xl border border-surface-container-highest p-4 shadow-sm transition-all hover:border-outline-variant">
+<div class="flex items-start justify-between gap-2">
+<div>
+<div class="flex items-center gap-2">
+<span class="font-headline-md text-body-lg font-bold text-on-surface tracking-tight">5179KZ</span>
+<span class="text-outline-variant text-[12px]">•</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant font-medium">White Freightliner</span>
+</div>
+<p class="font-body-sm text-body-sm text-outline mt-0.5 flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]">person</span>
+                Driver: <span class="text-on-surface font-medium">James Carter</span>
+</p>
+</div>
+<!-- Soft Amber Chip -->
+<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-tertiary-fixed text-on-tertiary-fixed font-label-sm text-label-sm font-semibold border border-tertiary-container/30">
+<span class="material-symbols-outlined text-[13px]">speed</span>
+              Odometer gap (12 km)
+            </span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-2.5 leading-relaxed bg-surface-container-low/70 p-2.5 rounded-lg border border-surface-container-high/60">
+            Last fuel log mileage doesn't match the trip tracker by <strong class="text-on-surface font-semibold">$42.00 SAMPLE</strong>.
+          </p>
+<div class="mt-3 pt-1 flex items-center justify-between">
+<button class="h-12 w-full rounded-xl bg-surface-container hover:bg-surface-container-high text-primary font-label-md text-label-md font-semibold flex items-center justify-center gap-1.5 transition-colors active:scale-98" type="button">
+<span>Review details</span>
+<span class="material-symbols-outlined text-[18px]">arrow_forward</span>
+</button>
+</div>
+</article>
+<!-- Flagged Item 2 -->
+<article class="bg-surface-container-lowest rounded-xl border border-surface-container-highest p-4 shadow-sm transition-all hover:border-outline-variant">
+<div class="flex items-start justify-between gap-2">
+<div>
+<div class="flex items-center gap-2">
+<span class="font-headline-md text-body-lg font-bold text-on-surface tracking-tight">9921XB</span>
+<span class="text-outline-variant text-[12px]">•</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant font-medium">Ford Transit</span>
+</div>
+<p class="font-body-sm text-body-sm text-outline mt-0.5 flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]">person</span>
+                Driver: <span class="text-on-surface font-medium">Sarah Jenkins</span>
+</p>
+</div>
+<!-- Soft Rose/Amber Chip -->
+<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-error-container text-on-error-container font-label-sm text-label-sm font-semibold border border-error/20">
+<span class="material-symbols-outlined text-[13px]">wrong_location</span>
+              Possible off-route refill
+            </span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-2.5 leading-relaxed bg-surface-container-low/70 p-2.5 rounded-lg border border-surface-container-high/60">
+            Refueled 15 miles outside assigned delivery corridor (<strong class="text-on-surface font-semibold">$28.50 SAMPLE</strong>).
+          </p>
+<div class="mt-3 pt-1 flex items-center justify-between">
+<button class="h-12 w-full rounded-xl bg-surface-container hover:bg-surface-container-high text-primary font-label-md text-label-md font-semibold flex items-center justify-center gap-1.5 transition-colors active:scale-98" type="button">
+<span>Review details</span>
+<span class="material-symbols-outlined text-[18px]">arrow_forward</span>
+</button>
+</div>
+</article>
+</section>
+<!-- Trust & Clarity Safety Footnote -->
+<div class="text-center py-2 text-outline font-label-sm text-label-sm flex items-center justify-center gap-1.5">
+<span class="material-symbols-outlined text-[16px]">verified_user</span>
+<span>Reconciliation can be reopened at any time until closed</span>
+</div>
+</div>
+<!-- 6. Sticky Bottom Action Bar -->
+<div class="fixed bottom-0 left-0 right-0 max-w-[390px] mx-auto bg-surface-container-lowest/95 backdrop-blur-md border-t border-surface-container-highest px-4 pt-3 pb-6 z-40 shadow-md">
+<div class="flex flex-col gap-2">
+<!-- Primary CTA: 48px min touch target -->
+<button class="w-full h-12 rounded-xl bg-primary hover:bg-primary/95 active:scale-[0.99] text-on-primary font-label-md text-body-md font-semibold tracking-wide flex items-center justify-center gap-2 shadow-sm transition-transform" type="button">
+<span>Continue to Settle-up</span>
+<span class="material-symbols-outlined text-[18px]">arrow_forward</span>
+</button>
+<!-- Secondary Text Link -->
+<button class="w-full h-10 flex items-center justify-center font-label-md text-body-sm text-on-surface-variant hover:text-primary active:opacity-80 transition-colors" id="noteTriggerBtn" type="button">
+<span class="material-symbols-outlined text-[16px] mr-1.5 text-outline">edit_note</span>
+          Add a note for the record
+        </button>
+</div>
+</div>
+<!-- Interactive Note Bottom Sheet (Modal preview) -->
+<div class="fixed inset-0 bg-on-background/40 backdrop-blur-xs z-50 hidden flex-col justify-end" id="noteSheet">
+<div class="bg-surface-container-lowest rounded-t-2xl p-5 border-t border-surface-container-highest max-w-[390px] mx-auto w-full shadow-2xl">
+<div class="w-10 h-1 rounded-full bg-surface-container-highest mx-auto mb-4"></div>
+<div class="flex items-center justify-between mb-3">
+<h3 class="font-headline-md text-headline-md font-semibold text-on-surface">Weekly Reconciliation Note</h3>
+<button class="h-9 w-9 rounded-full flex items-center justify-center hover:bg-surface-container" id="closeNoteBtn" type="button">
+<span class="material-symbols-outlined text-[20px]">close</span>
+</button>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant mb-3">
+          This note will be permanently logged in the audit trail for Week 27.
+        </p>
+<textarea class="w-full p-3 rounded-xl border border-surface-container-highest focus:border-primary focus:ring-1 focus:ring-primary font-body-sm text-body-sm text-on-surface bg-surface-container-low/40 resize-none outline-none" placeholder="e.g. Verified with James Carter: detour caused by highway bridge maintenance." rows="3"></textarea>
+<div class="mt-4 flex gap-2.5">
+<button class="flex-1 h-11 rounded-xl border border-surface-container-highest text-on-surface font-label-md text-label-md font-semibold" id="cancelNoteBtn" type="button">
+            Cancel
+          </button>
+<button class="flex-1 h-11 rounded-xl bg-primary text-on-primary font-label-md text-label-md font-semibold" id="saveNoteBtn" type="button">
+            Save note
+          </button>
+</div>
+</div>
+</div>
+</main>
+<!-- Interactive JavaScript for micro-interactions -->
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+      // Toggle More dropdown menu
+      const menuBtn = document.getElementById('menuBtn');
+      const menuDropdown = document.getElementById('menuDropdown');
+
+      menuBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        menuDropdown.classList.toggle('hidden');
+      });
+
+      document.addEventListener('click', () => {
+        if (!menuDropdown.classList.contains('hidden')) {
+          menuDropdown.classList.add('hidden');
+        }
+      });
+
+      // Toggle Money breakdown section
+      const breakdownToggleBtn = document.getElementById('breakdownToggleBtn');
+      const breakdownPanel = document.getElementById('breakdownPanel');
+
+      breakdownToggleBtn.addEventListener('click', () => {
+        const isHidden = breakdownPanel.classList.contains('hidden');
+        if (isHidden) {
+          breakdownPanel.classList.remove('hidden');
+          breakdownToggleBtn.innerHTML = `<span>Hide breakdown</span><span class="material-symbols-outlined text-[16px]">expand_less</span>`;
+        } else {
+          breakdownPanel.classList.add('hidden');
+          breakdownToggleBtn.innerHTML = `<span>See how we got this</span><span class="material-symbols-outlined text-[16px]">arrow_forward</span>`;
+        }
+      });
+
+      // Note Sheet interaction
+      const noteTriggerBtn = document.getElementById('noteTriggerBtn');
+      const noteSheet = document.getElementById('noteSheet');
+      const closeNoteBtn = document.getElementById('closeNoteBtn');
+      const cancelNoteBtn = document.getElementById('cancelNoteBtn');
+      const saveNoteBtn = document.getElementById('saveNoteBtn');
+
+      function openNoteModal() {
+        noteSheet.classList.remove('hidden');
+        noteSheet.classList.add('flex');
+      }
+
+      function closeNoteModal() {
+        noteSheet.classList.add('hidden');
+        noteSheet.classList.remove('flex');
+      }
+
+      noteTriggerBtn.addEventListener('click', openNoteModal);
+      closeNoteBtn.addEventListener('click', closeNoteModal);
+      cancelNoteBtn.addEventListener('click', closeNoteModal);
+      saveNoteBtn.addEventListener('click', () => {
+        closeNoteModal();
+      });
+    });
+  </script>
+</body></html>

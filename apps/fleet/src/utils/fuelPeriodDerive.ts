@@ -27,6 +27,8 @@ export interface FuelPeriodVehicleSnapshot {
   isFinalized: boolean;
   /** Shared-car presence without owning the driver-week money row */
   hasWeekActivity?: boolean;
+  /** When true, cash-desk flags the vehicle until DQ review (wizard enriches from live report). */
+  odometerIncomplete?: boolean;
 }
 
 /** Dispute open in this Monday–Sunday week — YMD-normalized (never raw string split alone). */

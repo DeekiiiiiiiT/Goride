@@ -22,6 +22,9 @@ import {
   fuelPaymentSourceDisplayLabel,
   resolveFuelPaymentSource,
 } from './fuelPaymentSource';
+import { classifyFuelFillFlags } from './fuelFillFlagClassify';
+import type { FuelFlagDispositionMap } from './fuelFlagDisposition';
+import { isLegacyExceptionAck } from './fuelFlagDisposition';
 
 export type { FuelUnapprovedTxBlocker };
 
@@ -149,36 +152,37 @@ function resolveExceptionReason(entry: FuelEntry): string {
   return reason || 'Flagged as exception-tier (must be reviewed before lock)';
 }
 
-/** True when recon admin acknowledged the exception (finalize may proceed). */
+/** True when recon admin acknowledged the exception (finalize may proceed). Dual-read legacy metadata. */
 export function isFuelExceptionAcknowledged(
   entry: Pick<FuelEntry, 'metadata'> | null | undefined,
 ): boolean {
-  const meta = entry?.metadata as Record<string, unknown> | undefined;
-  if (!meta) return false;
-  if (meta.exceptionResolvedAt) return true;
-  // Persist paths can coerce JSON booleans to strings — treat both as ack.
-  const ack = meta.reconExceptionAck;
-  if (ack === true || ack === 'true' || ack === 1 || ack === '1') return true;
-  return false;
+  return isLegacyExceptionAck(
+    (entry?.metadata || null) as Record<string, unknown> | null,
+  );
 }
 
-/** Exception-tier fills that still hard-block Finalize. */
+/**
+ * Critical fill flags that still hard-block Finalize.
+ * Filters classifyFuelFillFlags — one vocabulary with the desk.
+ */
 export function listExceptionTierFillBlockers(
   fuelEntries: FuelEntry[],
   startYmd: string,
   endYmd: string,
+  dispositions?: FuelFlagDispositionMap,
 ): FuelExceptionBlocker[] {
   return fuelEntries
     .filter((e) => {
       const d = entryDateYmd(e);
       if (startYmd && d < startYmd) return false;
       if (endYmd && d > endYmd) return false;
-      if (e.metadata?.signalTier !== 'exception') return false;
-      if (isFuelExceptionAcknowledged(e)) return false;
-      return true;
+      const c = classifyFuelFillFlags(e, { dispositions });
+      return c.hasOpenCritical;
     })
     .map((e) => {
       const payRaw = resolveEntryPaymentRaw(e);
+      const c = classifyFuelFillFlags(e, { dispositions });
+      const openCritical = c.reasons.find((r) => r.severity === 'critical' && !r.resolved);
       return {
         id: e.id,
         dateYmd: entryDateYmd(e),
@@ -189,10 +193,20 @@ export function listExceptionTierFillBlockers(
           payRaw || resolveFuelPaymentSource(payRaw).enum,
         ),
         location: resolveEntryLocation(e),
-        reason: resolveExceptionReason(e),
+        reason: openCritical?.label || resolveExceptionReason(e),
       };
     })
     .sort((a, b) => a.dateYmd.localeCompare(b.dateYmd) || a.id.localeCompare(b.id));
+}
+
+/** Count of undisposed critical fill flags in the week window. */
+export function countUndisposedCriticalFlags(
+  fuelEntries: FuelEntry[],
+  startYmd: string,
+  endYmd: string,
+  dispositions?: FuelFlagDispositionMap,
+): number {
+  return listExceptionTierFillBlockers(fuelEntries, startYmd, endYmd, dispositions).length;
 }
 
 export function evaluateFuelFinalizeGating(opts: {
@@ -204,6 +218,7 @@ export function evaluateFuelFinalizeGating(opts: {
   transactions?: Array<FinancialTransaction | Record<string, unknown>>;
   weekStartYmd?: string;
   weekEndYmd?: string;
+  dispositions?: FuelFlagDispositionMap;
 }): FuelFinalizeGateResult {
   const disputes = opts.disputes || [];
   const fuelEntries = opts.fuelEntries || [];
@@ -230,7 +245,12 @@ export function evaluateFuelFinalizeGating(opts: {
     return acc;
   }, [] as FuelReFinalizeWarning[]);
 
-  const exceptionBlockers = listExceptionTierFillBlockers(fuelEntries, startYmd, endYmd);
+  const exceptionBlockers = listExceptionTierFillBlockers(
+    fuelEntries,
+    startYmd,
+    endYmd,
+    opts.dispositions,
+  );
 
   const unapprovedFuelTxBlockers = listUnapprovedFuelTxInWindow(
     (opts.transactions || []) as Parameters<typeof listUnapprovedFuelTxInWindow>[0],
