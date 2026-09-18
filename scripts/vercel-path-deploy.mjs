@@ -2,7 +2,7 @@
  * Path → Vercel Deploy Hook router for the Goride monorepo.
  *
  * Commit & Sync is unchanged: push to main → this script runs in Actions →
- * only apps whose paths changed get a Deploy Hook POST.
+ * only apps whose paths (or depended-on packages/) changed get a Deploy Hook POST.
  *
  * Secrets (GitHub → Settings → Secrets → Actions), one per app you ship:
  *   VERCEL_DEPLOY_HOOK_FLEET
@@ -21,98 +21,26 @@
  * but their secret is unset — silent skip would leave clients on the old shim.
  */
 import { execFileSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
+import {
+  APPS,
+  CRITICAL_SECRETS,
+  selectSecretsToFire,
+} from "./vercel-path-deploy-lib.mjs";
 
-/** @typedef {{ secret: string, paths: string[], label: string }} AppHook */
-
-/** Fleet-core cutover front doors — must never soft-skip when in the fire set. */
-const CRITICAL_SECRETS = new Set([
-  "VERCEL_DEPLOY_HOOK_FLEET",
-  "VERCEL_DEPLOY_HOOK_DRIVER",
-  "VERCEL_DEPLOY_HOOK_DOMINION",
-]);
-
-/** @type {AppHook[]} */
-const APPS = [
-  {
-    label: "roam-fleet",
-    secret: "VERCEL_DEPLOY_HOOK_FLEET",
-    paths: ["apps/fleet/", "vercel.json"],
-  },
-  {
-    label: "roam-driver",
-    secret: "VERCEL_DEPLOY_HOOK_DRIVER",
-    paths: ["apps/driver/"],
-  },
-  {
-    label: "roam-dominion",
-    secret: "VERCEL_DEPLOY_HOOK_DOMINION",
-    paths: ["apps/admin/"],
-  },
-  {
-    label: "roam-enterprise",
-    secret: "VERCEL_DEPLOY_HOOK_ENTERPRISE",
-    paths: ["apps/enterprise/"],
-  },
-  {
-    label: "roam-haul",
-    secret: "VERCEL_DEPLOY_HOOK_HAUL",
-    paths: ["apps/haul/"],
-  },
-  {
-    label: "rides-passenger",
-    secret: "VERCEL_DEPLOY_HOOK_RIDES_PASSENGER",
-    paths: ["apps/rides-passenger/"],
-  },
-  {
-    label: "roam-rush-command",
-    secret: "VERCEL_DEPLOY_HOOK_RUSH_COMMAND",
-    paths: ["apps/rush-command/"],
-  },
-  {
-    label: "roam-rush-customer",
-    secret: "VERCEL_DEPLOY_HOOK_RUSH_CUSTOMER",
-    paths: ["apps/dash-customer/"],
-  },
-  {
-    label: "roam-rush-courier",
-    secret: "VERCEL_DEPLOY_HOOK_RUSH_COURIER",
-    paths: ["apps/dash-courier/"],
-  },
-  {
-    label: "roam-rush-partner",
-    secret: "VERCEL_DEPLOY_HOOK_RUSH_PARTNER",
-    paths: ["apps/dash-merchant/"],
-  },
-];
-
-/**
- * Shared packages wake every *configured* app hook (secrets present).
- * Avoids silent stale UIs after api-client / ui changes without mass-waking
- * apps that have no hook secret set.
- */
-const SHARED_PATHS = [
-  "packages/",
-  "pnpm-lock.yaml",
-  "package.json",
-  "pnpm-workspace.yaml",
-];
+const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 
 function gitDiffNames(base, head) {
   const out = execFileSync(
     "git",
     ["diff", "--name-only", `${base}...${head}`],
-    { encoding: "utf8" },
+    { encoding: "utf8", cwd: REPO_ROOT },
   );
   return out
     .split("\n")
     .map((l) => l.trim())
     .filter(Boolean);
-}
-
-function pathMatched(file, prefixes) {
-  return prefixes.some(
-    (p) => file === p.replace(/\/$/, "") || file.startsWith(p),
-  );
 }
 
 function main() {
@@ -128,9 +56,11 @@ function main() {
   let files;
   if (!base || /^0+$/.test(base)) {
     // First push / unknown before → only look at the tip commit
-    files = execFileSync("git", ["show", "--name-only", "--pretty=format:", head], {
-      encoding: "utf8",
-    })
+    files = execFileSync(
+      "git",
+      ["show", "--name-only", "--pretty=format:", head],
+      { encoding: "utf8", cwd: REPO_ROOT },
+    )
       .split("\n")
       .map((l) => l.trim())
       .filter(Boolean);
@@ -138,28 +68,16 @@ function main() {
     files = gitDiffNames(base, head);
   }
 
-  console.log(`[vercel-path-deploy] ${files.length} changed file(s) (${base || "tip"}...${head})`);
+  console.log(
+    `[vercel-path-deploy] ${files.length} changed file(s) (${base || "tip"}...${head})`,
+  );
 
-  const sharedHit = files.some((f) => pathMatched(f, SHARED_PATHS));
-  /** @type {Set<string>} */
-  const toFire = new Set();
-
-  for (const app of APPS) {
-    if (files.some((f) => pathMatched(f, app.paths))) {
-      toFire.add(app.secret);
-    }
-  }
-
-  if (sharedHit) {
-    console.log(
-      "[vercel-path-deploy] shared packages/workspace changed — will fire every configured app hook",
-    );
-    for (const app of APPS) {
-      // Always select cutover-critical apps so a missing secret fails closed.
-      if (process.env[app.secret] || CRITICAL_SECRETS.has(app.secret)) {
-        toFire.add(app.secret);
-      }
-    }
+  const { secrets: toFire, reasons } = selectSecretsToFire(files, {
+    repoRoot: REPO_ROOT,
+    env: process.env,
+  });
+  if (reasons.length) {
+    console.log(`[vercel-path-deploy] reasons: ${reasons.join("; ")}`);
   }
 
   if (toFire.size === 0) {
@@ -192,9 +110,11 @@ function main() {
       continue;
     }
     console.log(`[vercel-path-deploy] POST ${app.label}`);
-    const res = execFileSync("curl", ["-sS", "-o", "/dev/null", "-w", "%{http_code}", "-X", "POST", url], {
-      encoding: "utf8",
-    }).trim();
+    const res = execFileSync(
+      "curl",
+      ["-sS", "-o", "/dev/null", "-w", "%{http_code}", "-X", "POST", url],
+      { encoding: "utf8" },
+    ).trim();
     if (res.startsWith("2")) {
       fired++;
       console.log(`[vercel-path-deploy] ok ${app.label} HTTP ${res}`);

@@ -1,7 +1,7 @@
 {
   "slug": "fleet-fuel",
-  "generatedAt": "2026-09-17T17:43:11.794Z",
-  "routeCount": 118,
+  "generatedAt": "2026-09-18T13:03:41.114Z",
+  "routeCount": 121,
   "routes": [
     "DELETE ${BASE_PATH}/admin/evidence-inbox/gate-held/:transactionId",
     "DELETE ${BASE_PATH}/finalized-reports/:weekStart/:identityId",
@@ -41,6 +41,7 @@
     "GET ${BASE_PATH}/stations/:id/proof-of-work",
     "GET ${BASE_PATH}/stations/check-duplicate",
     "GET ${BASE_PATH}/stations/duplicate-audit",
+    "GET ${BASE}/fuel/flags/dispositions",
     "GET ${BASE}/fuel/jobs/:jobId",
     "GET ${BASE}/fuel/periods",
     "GET ${BASE}/fuel/periods/:id",
@@ -101,8 +102,10 @@
     "POST ${BASE_PATH}/stations/demote",
     "POST ${BASE_PATH}/stations/migrate-status",
     "POST ${BASE_PATH}/stations/promote-learnt",
+    "POST ${BASE}/fuel/flags/disposition",
     "POST ${BASE}/fuel/period-jobs/process",
     "POST ${BASE}/fuel/periods/:id/build-snapshots",
+    "POST ${BASE}/fuel/periods/:id/data-quality-vehicle-review",
     "POST ${BASE}/fuel/periods/:id/finalize",
     "POST ${BASE}/fuel/periods/:id/gap-charges/approve",
     "POST ${BASE}/fuel/periods/:id/gap-charges/recommend",

@@ -20,6 +20,9 @@ GitHub → Actions → **Deploy Supabase Edge Function** → **Run workflow** �
 
 ## Files
 
-- `scripts/vercel-should-build.sh` — Vercel ignore-build helper
+- `scripts/vercel-path-deploy.mjs` + `vercel-path-deploy-lib.mjs` — Deploy Hook router (app + package dependents)
+- `scripts/vercel-should-build.mjs` — Vercel ignore-build helper (same rules)
 - `.github/workflows/deploy-supabase-edge.yml` — path + changed-function deploy
-- each app’s `vercel.json` → `ignoreCommand`
+- each app’s `vercel.json` → `ignoreCommand` + `git.deploymentEnabled`
+
+See also: [vercel-path-deploy-setup.md](./vercel-path-deploy-setup.md)

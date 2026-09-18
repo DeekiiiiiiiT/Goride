@@ -1,7 +1,8 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "git": { "deploymentEnabled": false },
-  "ignoreCommand": "bash scripts/vercel-should-build.sh apps/fleet",
+  "git": { "deploymentEnabled": { "main": false } },
+  "github": { "enabled": false },
+  "ignoreCommand": "node scripts/vercel-should-build.mjs apps/fleet",
   "installCommand": "npm install -g pnpm@9.15.4 && pnpm install --no-frozen-lockfile --ignore-scripts && pnpm rebuild esbuild @tailwindcss/oxide",
   "buildCommand": "pnpm --filter @roam/fleet build",
   "outputDirectory": "apps/fleet/build",

@@ -78,6 +78,7 @@
     "check:edge-overlap": "node scripts/check-edge-manifest-overlap.mjs",
     "check:shim-traffic": "node scripts/check-shim-traffic.mjs",
     "check:shim-traffic:log": "node scripts/check-shim-traffic.mjs --hours 24 --append-log",
+    "test:vercel-path-deploy": "node --test scripts/vercel-path-deploy-lib.test.mjs",
     "f5:cutover-fleet-core": "node scripts/f5-cutover-fleet-core.mjs",
     "f5:remount-rehearsal": "node scripts/f5-adr0022-remount-rehearsal.mjs",
     "f5:external-callers": "node scripts/f5-external-callers-check.mjs",

@@ -78,13 +78,21 @@ describe('buildFuelStepCounts', () => {
     expect(canAdvanceFuelStep('adjustments-disputes', counts)).toBe(false);
   });
 
-  it('Amber/Red is informational only — does not block Continue', () => {
-    const counts = buildFuelStepCounts({
+  it('Amber/Red blocks Continue until vehicle is marked reviewed (cash-desk)', () => {
+    const before = buildFuelStepCounts({
       vehicles: [{ ...base, healthStatus: 'Amber' }],
     });
-    expect(counts['data-quality'].actionable).toBe(0);
-    expect(counts['data-quality'].informational).toBe(1);
-    expect(canAdvanceFuelStep('data-quality', counts)).toBe(true);
+    expect(before['data-quality'].actionable).toBe(1);
+    expect(before['data-quality'].informational).toBe(0);
+    expect(canAdvanceFuelStep('data-quality', before)).toBe(false);
+
+    const after = buildFuelStepCounts({
+      vehicles: [{ ...base, healthStatus: 'Amber' }],
+      dataQualityReviewedVehicleIds: new Set([base.vehicleId]),
+    });
+    expect(after['data-quality'].actionable).toBe(0);
+    expect(after['data-quality'].informational).toBe(1);
+    expect(canAdvanceFuelStep('data-quality', after)).toBe(true);
   });
 
   it('leakage misc blocks until reviewed', () => {

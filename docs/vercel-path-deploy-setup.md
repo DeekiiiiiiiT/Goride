@@ -5,10 +5,16 @@
 ## What already landed in the repo
 
 - Workflow: `.github/workflows/vercel-path-deploy.yml`
-- Router: `scripts/vercel-path-deploy.mjs`
-- Each app `vercel.json` has `"git": { "deploymentEnabled": false }` so **Git pushes no longer auto-wake every project**
+- Router: `scripts/vercel-path-deploy.mjs` + shared logic in `scripts/vercel-path-deploy-lib.mjs`
+- Ignore helper: `scripts/vercel-should-build.mjs` (safety net if Git still wakes a project)
+- Each app `vercel.json` has:
+  - `"git": { "deploymentEnabled": { "main": false } }` — no auto Git deploy on `main`
+  - `"github": { "enabled": false }` — legacy GitHub auto-deploy off
+  - `ignoreCommand` → node path helper (skip irrelevant accidental Git wakes)
 
 Supabase deploy workflows are **unchanged**.
+
+**Hobby note:** Vercel “deployment policies” (API block of Git vs Deploy Hook) require Pro. We rely on `vercel.json` + Deploy Hooks + path routing.
 
 ## Do this once for **all** Roam apps (recommended)
 
@@ -16,7 +22,7 @@ You work across apps — set up **all 10** hooks now so any Commit & Sync only d
 
 ### Cutover-critical hooks (must exist)
 
-These three **fail the path-deploy job** if the shared `packages/` fan-out (or their own app paths) would fire them but the secret is missing. That prevents a silent stale UI after a fleet-core / api-client cutover:
+These three **fail the path-deploy job** if their own app path (or a `packages/` they depend on) would fire them but the secret is missing:
 
 | Project | GitHub secret | Why required |
 |---------|---------------|--------------|
@@ -36,22 +42,23 @@ For **each** project in the table below:
 
 1. Open the project → **Settings** → **Git**
 2. Confirm GitHub repo `DeekiiiiiiiT/Goride` is linked
-3. Scroll to **Deploy Hooks**
-4. Name: `main-path-deploy` · Branch: `main` → **Create Hook**
-5. **Copy the URL** (treat like a password)
+3. Confirm **Root Directory** matches the app folder (e.g. `apps/driver`)
+4. Scroll to **Deploy Hooks**
+5. Name: `main-path-deploy` · Branch: `main` → **Create Hook**
+6. **Copy the URL** (treat like a password)
 
-| Project | Open | GitHub secret name |
-|---------|------|--------------------|
-| roam-fleet | [Settings → Git](https://vercel.com/sadiki-thomas-projects/roam-fleet/settings/git) | `VERCEL_DEPLOY_HOOK_FLEET` |
-| roam-driver | [Settings → Git](https://vercel.com/sadiki-thomas-projects/roam-driver/settings/git) | `VERCEL_DEPLOY_HOOK_DRIVER` |
-| roam-dominion | [Settings → Git](https://vercel.com/sadiki-thomas-projects/roam-dominion/settings/git) | `VERCEL_DEPLOY_HOOK_DOMINION` |
-| roam-enterprise | [Settings → Git](https://vercel.com/sadiki-thomas-projects/roam-enterprise/settings/git) | `VERCEL_DEPLOY_HOOK_ENTERPRISE` |
-| roam-haul | [Settings → Git](https://vercel.com/sadiki-thomas-projects/roam-haul/settings/git) | `VERCEL_DEPLOY_HOOK_HAUL` |
-| rides-passenger | [Settings → Git](https://vercel.com/sadiki-thomas-projects/rides-passenger/settings/git) | `VERCEL_DEPLOY_HOOK_RIDES_PASSENGER` |
-| roam-rush-command | [Settings → Git](https://vercel.com/sadiki-thomas-projects/roam-rush-command/settings/git) | `VERCEL_DEPLOY_HOOK_RUSH_COMMAND` |
-| roam-rush-customer | [Settings → Git](https://vercel.com/sadiki-thomas-projects/roam-rush-customer/settings/git) | `VERCEL_DEPLOY_HOOK_RUSH_CUSTOMER` |
-| roam-rush-courier | [Settings → Git](https://vercel.com/sadiki-thomas-projects/roam-rush-courier/settings/git) | `VERCEL_DEPLOY_HOOK_RUSH_COURIER` |
-| roam-rush-partner | [Settings → Git](https://vercel.com/sadiki-thomas-projects/roam-rush-partner/settings/git) | `VERCEL_DEPLOY_HOOK_RUSH_PARTNER` |
+| Project | Root Directory | Open | GitHub secret name |
+|---------|----------------|------|--------------------|
+| roam-fleet | `apps/fleet` | [Settings → Git](https://vercel.com/sadiki-thomas-projects/roam-fleet/settings/git) | `VERCEL_DEPLOY_HOOK_FLEET` |
+| roam-driver | `apps/driver` | [Settings → Git](https://vercel.com/sadiki-thomas-projects/roam-driver/settings/git) | `VERCEL_DEPLOY_HOOK_DRIVER` |
+| roam-dominion | `apps/admin` | [Settings → Git](https://vercel.com/sadiki-thomas-projects/roam-dominion/settings/git) | `VERCEL_DEPLOY_HOOK_DOMINION` |
+| roam-enterprise | `apps/enterprise` | [Settings → Git](https://vercel.com/sadiki-thomas-projects/roam-enterprise/settings/git) | `VERCEL_DEPLOY_HOOK_ENTERPRISE` |
+| roam-haul | `apps/haul` | [Settings → Git](https://vercel.com/sadiki-thomas-projects/roam-haul/settings/git) | `VERCEL_DEPLOY_HOOK_HAUL` |
+| rides-passenger | `apps/rides-passenger` | [Settings → Git](https://vercel.com/sadiki-thomas-projects/rides-passenger/settings/git) | `VERCEL_DEPLOY_HOOK_RIDES_PASSENGER` |
+| roam-rush-command | `apps/rush-command` | [Settings → Git](https://vercel.com/sadiki-thomas-projects/roam-rush-command/settings/git) | `VERCEL_DEPLOY_HOOK_RUSH_COMMAND` |
+| roam-rush-customer | `apps/dash-customer` | [Settings → Git](https://vercel.com/sadiki-thomas-projects/roam-rush-customer/settings/git) | `VERCEL_DEPLOY_HOOK_RUSH_CUSTOMER` |
+| roam-rush-courier | `apps/dash-courier` | [Settings → Git](https://vercel.com/sadiki-thomas-projects/roam-rush-courier/settings/git) | `VERCEL_DEPLOY_HOOK_RUSH_COURIER` |
+| roam-rush-partner | `apps/dash-merchant` | [Settings → Git](https://vercel.com/sadiki-thomas-projects/roam-rush-partner/settings/git) | `VERCEL_DEPLOY_HOOK_RUSH_PARTNER` |
 
 ### 2) Add all 10 GitHub secrets
 
@@ -61,23 +68,20 @@ Paste each hook URL into the matching secret name from the table.
 
 Skip only if you truly never ship that app — missing secrets just mean that app won’t auto-deploy.
 
-**Exception:** `VERCEL_DEPLOY_HOOK_FLEET`, `VERCEL_DEPLOY_HOOK_DRIVER`, and `VERCEL_DEPLOY_HOOK_DOMINION` are cutover-critical. If a push would wake them (app path or `packages/` shared fan-out) and the secret is missing, **`vercel-path-deploy` fails** instead of skipping. Fix by adding the hook URL as the GitHub secret.
+**Exception:** `VERCEL_DEPLOY_HOOK_FLEET`, `VERCEL_DEPLOY_HOOK_DRIVER`, and `VERCEL_DEPLOY_HOOK_DOMINION` are cutover-critical. If a push would wake them and the secret is missing, **`vercel-path-deploy` fails** instead of skipping.
 
-### 3) Confirm auto Git deploy is off
+### 3) Confirm Git creates **zero** deployment rows
 
-There is **no “Auto deploy” toggle** on the Vercel Git settings page (that’s normal). Auto-off is the `git.deploymentEnabled: false` line already in each app’s `vercel.json` in this repo.
+After this config is on `main`:
 
-It only becomes live **after you Commit & Sync** those files to `main`.
+1. Open Vercel → **Deployments** (team view)
+2. Make a tiny change only in one app (or only in `docs/`) and Commit & Sync
+3. **Pass**
+   - Untouched apps: **no new row at all** (not even Queued / Canceled — those still burn Hobby’s 100/day)
+   - Touched app: **one** new deploy via Deploy Hook (GitHub Action **Vercel path deploy** logs `POST <app>`)
+4. **Fail** = every project still gets a new row → tell Cursor; we re-check
 
-**How to confirm after that push:**
-
-1. Open any Roam app on Vercel → **Deployments**
-2. Note the newest deployment time
-3. Make a tiny change only in one app (or only in `docs/`) and Commit & Sync again
-4. Pass = untouched apps get **no** new Git push deployment; only the app you touched gets one (via the **Vercel path deploy** GitHub Action + Deploy Hook)
-5. Fail = every project wakes on that push again → tell Cursor; we re-check
-
-Until the path-deploy Commit & Sync is on GitHub, auto Git deploy is **still on** (old behavior).
+Also check the Action log: fleet-only push must show only `POST roam-fleet`.
 
 ## How it behaves after setup
 
@@ -86,14 +90,16 @@ Until the path-deploy Commit & Sync is on GitHub, auto Git deploy is **still on*
 | `apps/fleet/**` only | Fleet only |
 | `apps/driver/**` only | Driver only |
 | `supabase/**` only | Supabase Actions only (no Vercel) |
-| `docs/**` only | Nothing on Vercel |
-| `packages/**` (shared) | Every app that has a hook secret configured |
+| `docs/**` / `.github/**` only | Nothing on Vercel |
+| `pnpm-lock.yaml` / root `package.json` alone | Nothing on Vercel |
+| `packages/fuel-core/**` | Only apps that depend on `@roam/fuel-core` (fleet, driver, dominion) |
+| `packages/ui/**` | Every app that lists `@roam/ui` as a workspace dep |
 
-## After Hobby quota resets (~next morning)
+## Verify selection locally
 
-1. Finish steps 1–2 for **all 10** apps above  
-2. Commit & Sync a change in whichever app you’re working on  
-3. Confirm **only that app** shows a new Ready deploy on Vercel  
+```bash
+node --test scripts/vercel-path-deploy-lib.test.mjs
+```
 
 ## Manual override
 
