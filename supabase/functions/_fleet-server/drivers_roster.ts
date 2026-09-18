@@ -11,6 +11,7 @@ import { filterByOrgSafe, getOrgId } from "./org_scope.ts";
 import { shouldReadTable, listByOrg } from "./repos/baseRepo.ts";
 import { getServiceClient } from "./service_client.ts";
 import { aggregateCanonicalFareEarningsByDriver } from "./ledger_driver_events.ts";
+import { healOrgCourierRoster } from "./workforce_link.ts";
 
 const PREFIX = "/make-server-37f42386";
 
@@ -40,6 +41,8 @@ export type DriverRosterRow = {
   organizationId?: string;
   tier?: string;
   bankInfo?: unknown;
+  /** Workforce lines — used to keep courier-only out of the Drivers tab. */
+  serviceLines?: Array<"rideshare" | "rush_delivery">;
   /** True when licenseExpiry (UTC YYYY-MM-DD) is before today. */
   dispatchBlocked: boolean;
   dispatchBlockReason?: string;
@@ -80,6 +83,17 @@ function normalizeStatus(raw: unknown): string {
   if (lower === "needs attention" || lower === "needs_attention") return "Needs Attention";
   if (lower === "active") return "Active";
   return s;
+}
+
+function rosterServiceLines(
+  d: Record<string, unknown>,
+): Array<"rideshare" | "rush_delivery"> | undefined {
+  const raw = d.serviceLines ?? d.service_lines;
+  if (!Array.isArray(raw)) return undefined;
+  const lines = raw.filter(
+    (l): l is "rideshare" | "rush_delivery" => l === "rideshare" || l === "rush_delivery",
+  );
+  return lines.length ? lines : undefined;
 }
 
 const DRIVER_LIST_CAP = 5000;
@@ -326,7 +340,23 @@ export async function handleDriversRoster(c: Context) {
   const t0 = Date.now();
   try {
     const today = new Date().toISOString().split("T")[0];
-    const drivers = await loadOrgDrivers(c);
+    let drivers = await loadOrgDrivers(c);
+
+    // Same courier heal as GET /drivers — keeps serviceLines accurate for list filter
+    const healOrgId = getOrgId(c);
+    if (healOrgId) {
+      try {
+        drivers = await healOrgCourierRoster(
+          { supabase: getServiceClient(), kv, invalidateDriverCache: () => {} },
+          healOrgId,
+          drivers,
+        );
+      } catch (healErr: unknown) {
+        const msg = healErr instanceof Error ? healErr.message : String(healErr);
+        console.warn(`[drivers/roster] courier roster heal skipped: ${msg}`);
+      }
+    }
+
     const aliasMap = buildAliasMap(drivers);
 
     const driverIds = drivers.map((d) => asStr(d.id)).filter(Boolean);
@@ -373,6 +403,7 @@ export async function handleDriversRoster(c: Context) {
 
       const licenseExpiry = asStr(d.licenseExpiry) || undefined;
       const block = licenseDispatchBlock(licenseExpiry, today);
+      const serviceLines = rosterServiceLines(d);
 
       const row: DriverRosterRow = {
         id,
@@ -400,6 +431,7 @@ export async function handleDriversRoster(c: Context) {
         organizationId: asStr(d.organizationId) || undefined,
         tier: asStr(d.tier) || undefined,
         bankInfo: d.bankInfo,
+        ...(serviceLines ? { serviceLines } : {}),
         dispatchBlocked: block.dispatchBlocked,
         ...(block.dispatchBlockReason
           ? { dispatchBlockReason: block.dispatchBlockReason }

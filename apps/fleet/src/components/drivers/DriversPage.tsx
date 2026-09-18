@@ -8,6 +8,7 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../services/api';
 import { useVocab } from '../../utils/vocabulary';
+import { personMatchesServiceLine } from '../../utils/vehicleServiceLines';
 import { formatJMD } from '../../utils/formatJMD';
 import { exportToCSV } from '../../utils/csvHelpers';
 import { format } from 'date-fns';
@@ -511,9 +512,13 @@ export function DriversPage({
         // Courier-only (rush_delivery, no rideshare) belongs on Couriers tab, not Drivers.
         if (!rushVisible) return true;
         const profile = profileById.get(row.id) as { serviceLines?: string[] } | undefined;
-        const lines = profile?.serviceLines;
-        if (!Array.isArray(lines) || lines.length === 0) return true;
-        return lines.includes('rideshare');
+        // Roster carries serviceLines; profile enrich is delayed — prefer whichever is present.
+        return personMatchesServiceLine(
+          {
+            serviceLines: profile?.serviceLines ?? (row as { serviceLines?: string[] }).serviceLines,
+          },
+          'rideshare',
+        );
       })
       .map((row) => {
         const profile = profileById.get(row.id);

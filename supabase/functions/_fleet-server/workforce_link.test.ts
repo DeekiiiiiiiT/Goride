@@ -5,6 +5,7 @@
 /// <reference lib="deno.ns" />
 import { assertEquals, assertRejects } from "https://deno.land/std@0.224.0/assert/mod.ts";
 import {
+  healOrgCourierRoster,
   linkCourierToFleet,
   linkDriverToFleet,
   mergeRushIntoServiceLines,
@@ -135,6 +136,8 @@ function makeCourierDeps(overrides: Partial<{
   courier: Record<string, unknown> | null;
   kvRecord: Record<string, unknown> | null;
   metaOrg: string | null;
+  /** When set, user is also a rideshare fleet driver for this fleet. */
+  driverFleetId: string | null;
 }>): WorkforceCourierLinkDeps & { kvWrites: unknown[]; courierUpdates: unknown[] } {
   const kvWrites: unknown[] = [];
   const courierUpdates: unknown[] = [];
@@ -152,6 +155,7 @@ function makeCourierDeps(overrides: Partial<{
     : overrides.courier;
   const kvRecord = overrides.kvRecord ?? null;
   const metaOrg = overrides.metaOrg ?? null;
+  const driverFleetId = overrides.driverFleetId ?? null;
 
   const courierTable = {
     select: () => ({
@@ -177,6 +181,26 @@ function makeCourierDeps(overrides: Partial<{
                 data: overrides.orgExists === false ? null : { id },
                 error: null,
               }),
+            }),
+          }),
+        };
+      }
+      if (table === "driver_profiles") {
+        return {
+          select: () => ({
+            eq: () => ({
+              maybeSingle: async () => ({
+                data: driverFleetId
+                  ? { mode: "fleet", fleet_id: driverFleetId }
+                  : null,
+                error: null,
+              }),
+            }),
+            in: async () => ({
+              data: driverFleetId
+                ? [{ user_id: USER_ID, mode: "fleet", fleet_id: driverFleetId }]
+                : [],
+              error: null,
             }),
           }),
         };
@@ -256,11 +280,38 @@ Deno.test("linkCourierToFleet merges rush onto existing rideshare roster", async
       total_deliveries: 0,
     },
     metaOrg: FLEET_A,
+    driverFleetId: FLEET_A,
   });
   const result = await linkCourierToFleet(deps, USER_ID, FLEET_A);
   assertEquals(result.success, true);
   const row = deps.kvWrites[0] as Record<string, unknown>;
   assertEquals(row.serviceLines, ["rideshare", "rush_delivery"]);
+});
+
+Deno.test("linkCourierToFleet does not invent rideshare for courier-only blank lines", async () => {
+  const deps = makeCourierDeps({
+    orgExists: true,
+    kvRecord: {
+      id: USER_ID,
+      organizationId: FLEET_A,
+      driverName: "Pat",
+      // missing serviceLines — must NOT become rideshare+rush
+    },
+    courier: {
+      user_id: USER_ID,
+      mode: "independent",
+      fleet_id: null,
+      display_name: "Pat",
+      email: "c@test.com",
+      status: "active",
+      total_deliveries: 0,
+    },
+    metaOrg: FLEET_A,
+  });
+  const result = await linkCourierToFleet(deps, USER_ID, FLEET_A);
+  assertEquals(result.success, true);
+  const row = deps.kvWrites[0] as Record<string, unknown>;
+  assertEquals(row.serviceLines, ["rush_delivery"]);
 });
 
 Deno.test("linkCourierToFleet refuses other fleet", async () => {
@@ -279,4 +330,73 @@ Deno.test("linkCourierToFleet refuses other fleet", async () => {
   const result = await linkCourierToFleet(deps, USER_ID, FLEET_A);
   assertEquals(result.success, false);
   if (!result.success) assertEquals(result.status, 409);
+});
+
+Deno.test("healOrgCourierRoster strips rideshare from courier-only dual lines", async () => {
+  const badRow = {
+    id: USER_ID,
+    organizationId: FLEET_A,
+    serviceLines: ["rideshare", "rush_delivery"],
+    driverName: "Pat",
+  };
+  const deps = makeCourierDeps({
+    orgExists: true,
+    kvRecord: badRow,
+    courier: {
+      user_id: USER_ID,
+      mode: "fleet",
+      fleet_id: FLEET_A,
+      display_name: "Pat",
+      email: "c@test.com",
+      status: "active",
+      total_deliveries: 0,
+    },
+    metaOrg: FLEET_A,
+  });
+  // heal lists courier_profiles via schema().from().select().eq().eq() — extend mock
+  const courierList = [{ user_id: USER_ID }];
+  const schemaCourier = {
+    select: () => {
+      const filters: Array<() => unknown> = [];
+      const chain = {
+        eq: () => {
+          filters.push(() => null);
+          return {
+            eq: async () => ({ data: courierList, error: null }),
+            maybeSingle: async () => ({
+              data: {
+                user_id: USER_ID,
+                mode: "fleet",
+                fleet_id: FLEET_A,
+                display_name: "Pat",
+                email: "c@test.com",
+                status: "active",
+                total_deliveries: 0,
+              },
+              error: null,
+            }),
+          };
+        },
+      };
+      return chain;
+    },
+    update: (row: unknown) => {
+      deps.courierUpdates.push(row);
+      return { eq: () => ({ error: null }) };
+    },
+  };
+  (deps.supabase as { schema: (n: string) => unknown }).schema = (name: string) => {
+    if (name !== "delivery") throw new Error("unexpected schema");
+    return {
+      from: (table: string) => {
+        if (table === "courier_profiles") return schemaCourier;
+        throw new Error(table);
+      },
+    };
+  };
+
+  const out = await healOrgCourierRoster(deps, FLEET_A, [badRow]);
+  assertEquals(out.length, 1);
+  assertEquals(out[0].serviceLines, ["rush_delivery"]);
+  assertEquals((deps.kvWrites[0] as Record<string, unknown>).serviceLines, ["rush_delivery"]);
 });

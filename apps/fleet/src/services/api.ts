@@ -888,6 +888,7 @@ export const api = {
       organizationId?: string;
       tier?: string;
       bankInfo?: unknown;
+      serviceLines?: Array<'rideshare' | 'rush_delivery'>;
       dispatchBlocked?: boolean;
       dispatchBlockReason?: string;
       overdueFollowUpCount?: number;

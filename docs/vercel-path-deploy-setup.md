@@ -8,9 +8,9 @@
 - Router: `scripts/vercel-path-deploy.mjs` + shared logic in `scripts/vercel-path-deploy-lib.mjs`
 - Ignore helper: `scripts/vercel-should-build.mjs` (safety net if Git still wakes a project)
 - Each app `vercel.json` has:
-  - `"git": { "deploymentEnabled": { "main": false } }` — no auto Git deploy on `main`
-  - `"github": { "enabled": false }` — legacy GitHub auto-deploy off
+  - `"git": { "deploymentEnabled": { "main": false } }` — no auto Git deploy on `main` (Deploy Hooks / CLI still work)
   - `ignoreCommand` → node path helper (skip irrelevant accidental Git wakes)
+  - Do **not** set `"github": { "enabled": false }` — that kills Deploy Hooks too (legacy kill-switch)
 
 Supabase deploy workflows are **unchanged**.
 

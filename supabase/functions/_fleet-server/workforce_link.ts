@@ -288,6 +288,19 @@ export async function linkCourierToFleet(
   const status =
     (typeof existingCourier.status === "string" && existingCourier.status) || "active";
 
+  // Only treat blank serviceLines as rideshare when this user is already a
+  // rideshare fleet driver. Courier-only joins must stay rush_delivery-only
+  // (legacy empty-lines default was incorrectly tagging them as rideshare).
+  const { data: driverProf } = await deps.supabase
+    .from("driver_profiles")
+    .select("mode, fleet_id")
+    .eq("user_id", userId)
+    .maybeSingle();
+  const isRideshareFleetMember =
+    driverProf?.mode === "fleet" &&
+    !!driverProf?.fleet_id &&
+    String(driverProf.fleet_id) === trimmedFleetId;
+
   const driverKv = await deps.kv.get(`driver:${userId}`);
   if (driverKv && typeof driverKv === "object") {
     const kvOrg =
@@ -303,7 +316,7 @@ export async function linkCourierToFleet(
     }
     const serviceLines = mergeRushIntoServiceLines(
       (driverKv as { serviceLines?: unknown }).serviceLines,
-      { treatMissingAsRideshare: true },
+      { treatMissingAsRideshare: isRideshareFleetMember },
     );
     const needsWrite =
       kvOrg !== trimmedFleetId ||
@@ -356,6 +369,7 @@ export async function linkCourierToFleet(
 /**
  * Ensure every fleet-linked courier_profiles row is on the org drivers roster
  * with serviceLines including rush_delivery (heals pre-gap accepts).
+ * Also strips spurious rideshare from courier-only rows (no driver_profiles fleet).
  */
 export async function healOrgCourierRoster(
   deps: WorkforceCourierLinkDeps,
@@ -373,6 +387,24 @@ export async function healOrgCourierRoster(
     .eq("fleet_id", trimmed);
   if (error || !couriers?.length) return drivers;
 
+  const courierIds = couriers.map((cp) => String(cp.user_id)).filter(Boolean);
+  const rideshareFleetIds = new Set<string>();
+  if (courierIds.length) {
+    const { data: dps } = await deps.supabase
+      .from("driver_profiles")
+      .select("user_id, mode, fleet_id")
+      .in("user_id", courierIds);
+    for (const dp of dps ?? []) {
+      if (
+        dp?.mode === "fleet" &&
+        dp?.fleet_id &&
+        String(dp.fleet_id) === trimmed
+      ) {
+        rideshareFleetIds.add(String(dp.user_id));
+      }
+    }
+  }
+
   const byId = new Map(
     drivers
       .filter((d) => d && typeof d === "object" && d.id)
@@ -384,7 +416,21 @@ export async function healOrgCourierRoster(
     const id = String(cp.user_id);
     const existing = byId.get(id);
     const lines = normalizeServiceLines(existing?.serviceLines);
-    if (existing && lines.includes("rush_delivery")) continue;
+    const dualOk = rideshareFleetIds.has(id);
+
+    if (existing && lines.includes("rush_delivery")) {
+      // Courier-only wrongly tagged rideshare → Drivers tab leak
+      if (lines.includes("rideshare") && !dualOk) {
+        const fixed: Record<string, unknown> = {
+          ...existing,
+          serviceLines: ["rush_delivery"] as ServiceLine[],
+        };
+        await deps.kv.set(`driver:${id}`, fixed);
+        byId.set(id, fixed);
+        healed = true;
+      }
+      continue;
+    }
 
     const linked = await linkCourierToFleet(deps, id, trimmed);
     if (!linked.success) continue;
@@ -396,6 +442,7 @@ export async function healOrgCourierRoster(
   }
 
   if (!healed) return drivers;
+  deps.invalidateDriverCache();
   return Array.from(byId.values());
 }
 
