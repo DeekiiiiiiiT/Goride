@@ -64,6 +64,34 @@ describe('classifyFuelFillFlags', () => {
     expect(c.reasons.some((r) => r.code === 'integrity_critical')).toBe(true);
   });
 
+  it('normalizes integrityStatus case (R-8)', () => {
+    for (const status of ['Critical', 'CRITICAL', ' critical ']) {
+      const c = classifyFuelFillFlags(
+        entry({
+          id: `case-${status}`,
+          date: '2026-09-10',
+          metadata: { integrityStatus: status },
+        }),
+      );
+      expect(c.hasOpenCritical).toBe(true);
+      expect(c.reasons.some((r) => r.code === 'integrity_critical')).toBe(true);
+    }
+  });
+
+  it('normalizes signalTier case (R3-4)', () => {
+    for (const tier of ['Exception', 'EXCEPTION', ' exception ']) {
+      const c = classifyFuelFillFlags(
+        entry({
+          id: `tier-${tier}`,
+          date: '2026-09-10',
+          metadata: { signalTier: tier, anomalyReason: 'Tank Overflow' },
+        }),
+      );
+      expect(c.hasOpenCritical).toBe(true);
+      expect(c.reasons.some((r) => r.code === 'signal_exception')).toBe(true);
+    }
+  });
+
   it('flags location anomaly under Integrity', () => {
     const c = classifyFuelFillFlags(
       entry({ id: '4', date: '2026-09-10', locationStatus: 'anomaly' }),

@@ -13,7 +13,8 @@ import {
   FUEL_STEP_ORDER,
   type FuelStepId,
 } from '../../../utils/fuelPeriodGating';
-import { evaluateFuelFinalizeGating } from '../../../utils/fuelFinalizeGating';
+import { assembleFuelClientFinalizeGate } from '../../../utils/fuelFinalizeGating';
+import type { FuelFlagDispositionMap } from '../../../utils/fuelFlagDisposition';
 import { evaluateFuelWeekClosableClient } from '../../../utils/fuelWeekClosableGate';
 import { stopToStopClosableFlagsFromReports } from '../../../utils/stopToStopClosableFlags';
 import { FUEL_SPEND_EPS } from '../../../utils/fuelMoneyEpsilon';
@@ -68,6 +69,8 @@ export function useFuelWizardDerived(input: {
   degradedInputs?: boolean;
   periodTotalSpend?: number;
   periodUnexplained?: number;
+  /** Desk/page disposition map — required for client↔server gate parity (R-1). */
+  dispositions?: FuelFlagDispositionMap;
 }) {
   const {
     periodStart,
@@ -94,6 +97,7 @@ export function useFuelWizardDerived(input: {
     degradedInputs = false,
     periodTotalSpend,
     periodUnexplained,
+    dispositions,
   } = input;
 
   const { vehicleSnaps, openDisputes } = useMemo(() => {
@@ -234,7 +238,7 @@ export function useFuelWizardDerived(input: {
 
   const gateResult = useMemo(
     () =>
-      evaluateFuelFinalizeGating({
+      assembleFuelClientFinalizeGate({
         reports: liveReports,
         disputes,
         fuelEntries,
@@ -242,8 +246,18 @@ export function useFuelWizardDerived(input: {
         transactions,
         weekStartYmd: periodStart,
         weekEndYmd: periodEnd,
+        dispositions,
       }),
-    [liveReports, disputes, fuelEntries, finalizedReports, transactions, periodStart, periodEnd],
+    [
+      liveReports,
+      disputes,
+      fuelEntries,
+      finalizedReports,
+      transactions,
+      periodStart,
+      periodEnd,
+      dispositions,
+    ],
   );
 
   const closableBlockers = useMemo(

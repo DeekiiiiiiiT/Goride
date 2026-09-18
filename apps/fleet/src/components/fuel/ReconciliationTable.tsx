@@ -86,6 +86,8 @@ interface ReconciliationTableProps {
     onViewBuckets?: (vehicle: Vehicle) => void;
     loading?: boolean;
     reportsOverride?: WeeklyFuelReport[];
+    /** Desk disposition map — finalize gate parity (R-1). */
+    dispositions?: import('../../utils/fuelFlagDisposition').FuelFlagDispositionMap;
 }
 
 export function ReconciliationTable({
@@ -109,6 +111,7 @@ export function ReconciliationTable({
     onViewBuckets,
     loading = false,
     reportsOverride,
+    dispositions,
 }: ReconciliationTableProps) {
     const [isFinalizeDialogOpen, setIsFinalizeDialogOpen] = React.useState(false);
 
@@ -260,8 +263,9 @@ export function ReconciliationTable({
           finalizedReports,
           weekStartYmd: startYmd,
           weekEndYmd: endYmd,
+          dispositions,
         }),
-      [reports, disputes, fuelEntries, finalizedReports, startYmd, endYmd],
+      [reports, disputes, fuelEntries, finalizedReports, startYmd, endYmd, dispositions],
     );
     const reFinalizeWarnings = gate.reFinalizeWarnings;
     const dataQualityWarnings = gate.dataQualityWarnings;

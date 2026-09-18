@@ -38,6 +38,11 @@ import {
 } from '../../../utils/fuelWeekClosableGate';
 import { stopToStopClosableFlagsFromReports } from '../../../utils/stopToStopClosableFlags';
 import {
+  dispositionMapFromRows,
+  emptyFuelFlagDispositionMap,
+  type FuelFlagDispositionMap,
+} from '../../../utils/fuelFlagDisposition';
+import {
   FUEL_SECOND_APPROVER_THRESHOLD,
   resolveFuelSecondApproverThreshold,
 } from '../../../utils/fuelDualApproval';
@@ -48,7 +53,39 @@ type PreparedWeek = {
   reports: WeeklyFuelReport[];
   trips: Trip[];
   weekEntries: FuelEntry[];
+  /** Per-week disposition map — never reuse page selected-week map (R3-2). */
+  dispositions: FuelFlagDispositionMap;
 };
+
+/** Operator copy when dispositions cannot be trusted (R4-2 / R4-3). */
+export const FUEL_BULK_DISPOSITIONS_LOAD_SKIP =
+  'Could not load flag dispositions for this week — retry.';
+
+export type LoadWeekFlagDispositionsResult =
+  | { ok: true; map: FuelFlagDispositionMap }
+  | { ok: false; reason: 'load_failed' | 'truncated' };
+
+/** Fail closed without calling an empty map "no dispositions" (R4-2 / R4-3). */
+export async function loadWeekFlagDispositions(
+  entryIds: string[],
+  listFn: (opts: { entryIds: string[] }) => Promise<{
+    dispositions: Array<{ entryId: string; flagCode: string; action: string }>;
+    truncated: boolean;
+  }> = (opts) => api.listFuelFlagDispositions(opts),
+): Promise<LoadWeekFlagDispositionsResult> {
+  if (entryIds.length === 0) {
+    return { ok: true, map: emptyFuelFlagDispositionMap() };
+  }
+  try {
+    const res = await listFn({ entryIds });
+    if (res.truncated) {
+      return { ok: false, reason: 'truncated' };
+    }
+    return { ok: true, map: dispositionMapFromRows(res.dispositions) };
+  } catch {
+    return { ok: false, reason: 'load_failed' };
+  }
+}
 
 export type FuelBulkFinalizeDialogProps = {
   open: boolean;
@@ -246,6 +283,21 @@ export function FuelBulkFinalizeDialog({
               endDate: period.endDate,
             });
 
+            // R3-2: hydrate dispositions for THIS week's entry IDs — page map is selected-week only.
+            // R4-2 / R4-3: load failure or truncated read ≠ "no dispositions".
+            const entryIds = weekEntries.map((e) => e.id).filter(Boolean);
+            const hydrate = await loadWeekFlagDispositions(entryIds);
+            if (!hydrate.ok) {
+              weekResults.push({
+                id: period.id,
+                label,
+                status: 'skipped',
+                message: FUEL_BULK_DISPOSITIONS_LOAD_SKIP,
+              });
+              continue;
+            }
+            const weekDispositions = hydrate.map;
+
             const { reports, trips, gateResult } = await buildFuelWeekReportsWithGating({
               weekStartYmd: period.startDate,
               weekEndYmd: period.endDate,
@@ -258,6 +310,7 @@ export function FuelBulkFinalizeDialog({
               disputes,
               finalizedReports: priorReports.length ? priorReports : finalizedReports,
               transactions,
+              dispositions: weekDispositions,
             });
 
             if (!reports.length) {
@@ -403,7 +456,14 @@ export function FuelBulkFinalizeDialog({
               continue;
             }
 
-            prepared.push({ period: periodForGate, label, reports, trips, weekEntries });
+            prepared.push({
+              period: periodForGate,
+              label,
+              reports,
+              trips,
+              weekEntries,
+              dispositions: weekDispositions,
+            });
           } catch (e: any) {
             console.error('[FuelBulkFinalize] prepare failed', period.id, e);
             weekResults.push({ id: period.id, label, status: 'failed', message: e?.message || 'Failed' });
@@ -429,7 +489,8 @@ export function FuelBulkFinalizeDialog({
 
         for (let i = 0; i < prepared.length; i++) {
           const item = prepared[i];
-          const { period, label, reports, trips, weekEntries } = item;
+          const { period, label, reports, trips, weekEntries, dispositions: weekDispositions } =
+            item;
           onProgress(formatFuelBulkProgress(i + 1, prepared.length, label));
 
           try {
@@ -447,6 +508,7 @@ export function FuelBulkFinalizeDialog({
                 ...bulkFinalizeExecuteGateFields(period),
                 totalSpend: period.totalSpend,
                 unexplained: period.netLeakage,
+                dispositions: weekDispositions,
               },
               {
                 priorReports,

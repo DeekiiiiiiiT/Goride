@@ -89,6 +89,8 @@ describe('fuelPeriodServerMerge landing SoT', () => {
         driverShare: 0,
         actionableTotal: 2,
         exceptionCount: 0,
+        openFlaggedFillCount: 0,
+        dataQualityVehicleActionable: 0,
         counts: emptyFuelStepCounts(),
       },
     ];
@@ -113,6 +115,8 @@ describe('fuelPeriodServerMerge landing SoT', () => {
         driverShare: 0,
         actionableTotal: 0,
         exceptionCount: 0,
+        openFlaggedFillCount: 0,
+        dataQualityVehicleActionable: 0,
         counts: emptyFuelStepCounts(),
       },
     ];
@@ -154,6 +158,8 @@ describe('fuelPeriodServerMerge landing SoT', () => {
         driverShare: 0,
         actionableTotal: 2,
         exceptionCount: 0,
+        openFlaggedFillCount: 0,
+        dataQualityVehicleActionable: 0,
         counts: emptyFuelStepCounts(),
       },
     ];

@@ -53,6 +53,8 @@ export type BuildFuelWeekReportsInput = {
   transactions?: FinancialTransaction[];
   personalAllowance?: PersonalAllowanceReconContext;
   seedPersonalAllowance?: boolean;
+  /** Desk disposition map — threaded into finalize gating (R-1). */
+  dispositions?: import('./fuelFlagDisposition').FuelFlagDispositionMap;
 };
 
 export async function fetchTripsForFuelWeek(weekStartYmd: string, weekEndYmd: string): Promise<Trip[]> {
@@ -379,6 +381,7 @@ export async function buildFuelWeekReportsWithGating(
     transactions: input.transactions,
     weekStartYmd: input.weekStartYmd,
     weekEndYmd: input.weekEndYmd,
+    dispositions: input.dispositions,
   });
   return { reports, trips, gateResult, degraded };
 }

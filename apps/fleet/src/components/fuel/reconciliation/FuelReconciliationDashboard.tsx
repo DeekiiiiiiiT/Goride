@@ -75,6 +75,7 @@ function FuelReconciliationWizardView({
   resetPeriod,
   setResetPeriod,
   setWizardSession,
+  dispositions,
 }: {
   period: FuelReconciliationPeriod;
   wizardSession: number;
@@ -111,6 +112,7 @@ function FuelReconciliationWizardView({
   resetPeriod: FuelReconciliationPeriod | null;
   setResetPeriod: (p: FuelReconciliationPeriod | null) => void;
   setWizardSession: Dispatch<SetStateAction<number>>;
+  dispositions?: import('../../../utils/fuelFlagDisposition').FuelFlagDispositionMap;
 }) {
   const dateRange: DateRange = {
     from: ymdToLocalDate(period.startDate),
@@ -155,6 +157,7 @@ function FuelReconciliationWizardView({
         onAcceptFuelException={onAcceptFuelException}
         onEditFuelEntry={onEditFuelEntry}
         onResetPeriod={onResetPeriod}
+        dispositions={dispositions}
       />
       {resetPeriod && (
         <FuelPeriodResetDialog
@@ -205,6 +208,7 @@ export function FuelReconciliationDashboard({
   secondApproverThreshold,
   autoCloseDualApprovalMode,
   initialWeekStart,
+  dispositions,
 }: {
   outstanding: FuelReconciliationPeriod[];
   inProgress: FuelReconciliationPeriod[];
@@ -246,6 +250,7 @@ export function FuelReconciliationDashboard({
   autoCloseDualApprovalMode?: FuelAutoCloseDualApprovalMode;
   /** Monday week start from Close Week Review / Week Reconciliation hub. */
   initialWeekStart?: string;
+  dispositions?: import('../../../utils/fuelFlagDisposition').FuelFlagDispositionMap;
 }) {
   const [view, setView] = useState<View>({ kind: 'landing' });
   const [resetPeriod, setResetPeriod] = useState<FuelReconciliationPeriod | null>(null);
@@ -367,6 +372,7 @@ export function FuelReconciliationDashboard({
         resetPeriod={resetPeriod}
         setResetPeriod={setResetPeriod}
         setWizardSession={setWizardSession}
+        dispositions={dispositions}
       />
     );
   }

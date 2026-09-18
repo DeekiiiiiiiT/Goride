@@ -23,22 +23,36 @@ function StepStatusCell({
   counts,
   onOpenStep,
   disabled,
+  openFlaggedFillCount = 0,
+  dataQualityVehicleActionable = 0,
 }: {
   stepId: FuelStepId;
   counts: FuelReconciliationPeriod['counts'];
   onOpenStep: (stepId: FuelStepId) => void;
   disabled?: boolean;
+  openFlaggedFillCount?: number;
+  dataQualityVehicleActionable?: number;
 }) {
   const Icon = FUEL_STEP_ICONS[stepId];
   const label = FUEL_STEP_LABELS[stepId];
   const { actionable, informational } = counts[stepId];
   const unevaluated = actionable === 0 && informational > 0;
   const isClear = actionable === 0 && !unevaluated;
-  const statusText = unevaluated
+  let statusText = unevaluated
     ? 'Not evaluated'
     : isClear
       ? 'Done'
       : `${actionable} to review`;
+  // R-5: data-quality chip names fills + vehicles when both matter.
+  if (stepId === 'data-quality' && !isClear && !unevaluated) {
+    const fills = openFlaggedFillCount;
+    const vehicles = dataQualityVehicleActionable;
+    if (fills > 0 && vehicles > 0) {
+      statusText = `${fills} flagged fills · ${vehicles} vehicle${vehicles === 1 ? '' : 's'}`;
+    } else if (fills > 0) {
+      statusText = `${fills} flagged fills`;
+    }
+  }
 
   return (
     <button
@@ -307,6 +321,8 @@ function PeriodCard({
               stepId={stepId}
               counts={period.counts}
               disabled={weekSealed}
+              openFlaggedFillCount={period.openFlaggedFillCount}
+              dataQualityVehicleActionable={period.dataQualityVehicleActionable}
               onOpenStep={(id) => (onSelectStep ? onSelectStep(period, id) : onSelect())}
             />
           ))}

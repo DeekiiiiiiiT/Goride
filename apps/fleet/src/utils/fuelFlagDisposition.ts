@@ -34,7 +34,16 @@ export function upsertDispositionIntoMap(
 }
 
 export function dispositionMapFromRows(
-  rows: Array<Partial<FuelFlagDispositionRecord> & { entryId?: string; entry_id?: string; flagCode?: string; flag_code?: string }>,
+  rows: Array<
+    Omit<Partial<FuelFlagDispositionRecord>, 'action'> & {
+      entryId?: string;
+      entry_id?: string;
+      flagCode?: string;
+      flag_code?: string;
+      /** Untrusted boundary — validated at runtime against the action allow-list. */
+      action?: string;
+    }
+  >,
 ): FuelFlagDispositionMap {
   const map = emptyFuelFlagDispositionMap();
   for (const r of rows) {
@@ -105,4 +114,16 @@ export function isFlagCodeDisposed(opts: {
     return true;
   }
   return false;
+}
+
+/** Content sig so week-report caches invalidate when dispositions change. */
+export function dispositionMapContentSig(map?: FuelFlagDispositionMap): string {
+  if (!map || map.size === 0) return '0';
+  const parts: string[] = [];
+  for (const [entryId, byCode] of map) {
+    for (const [code, rec] of byCode) {
+      parts.push(`${entryId}:${code}:${rec.action}`);
+    }
+  }
+  return parts.sort().join('|');
 }

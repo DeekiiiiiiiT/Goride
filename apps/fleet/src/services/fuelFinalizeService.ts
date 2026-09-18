@@ -60,6 +60,8 @@ export type FuelFinalizeDeps = {
   degradedInputs?: boolean;
   unexplained?: number;
   totalSpend?: number;
+  /** Desk disposition map — refuse finalize when criticals still open (R-1). */
+  dispositions?: import('../utils/fuelFlagDisposition').FuelFlagDispositionMap;
 };
 
 export type FuelFinalizeOptions = {
@@ -160,6 +162,7 @@ export async function finalizeFuelWeekReports(
     transactions: deps.transactions,
     weekStartYmd,
     weekEndYmd,
+    dispositions: deps.dispositions,
   });
   const openDisputesInWeek = (deps.disputes || []).some((d) => {
     if (d.status !== 'Open') return false;

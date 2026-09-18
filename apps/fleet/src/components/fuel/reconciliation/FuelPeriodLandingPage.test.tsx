@@ -23,6 +23,8 @@ function period(partial: Partial<FuelReconciliationPeriod>): FuelReconciliationP
     driverShare: 30_000,
     actionableTotal: 0,
     exceptionCount: 0,
+    openFlaggedFillCount: 0,
+    dataQualityVehicleActionable: 0,
     counts: emptyFuelStepCounts(),
     ...partial,
   };

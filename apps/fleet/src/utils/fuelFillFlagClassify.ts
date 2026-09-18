@@ -74,8 +74,8 @@ export function classifyFuelFillFlags(
   const reasons: FuelFillFlagReason[] = [];
   const m = meta(entry);
   const anomalyReason = String(m.anomalyReason || '').trim();
-  const signalTier = String(m.signalTier || '').trim();
-  const integrity = String(m.integrityStatus || '').trim();
+  const signalTier = String(m.signalTier || '').trim().toLowerCase();
+  const integrity = String(m.integrityStatus || '').trim().toLowerCase();
   const location = String(entry.locationStatus || '').trim();
 
   if (signalTier === 'exception') {
@@ -198,6 +198,31 @@ export function classifyFuelFillFlags(
     isFlagged: withDisposition.length > 0,
     hasOpenCritical,
   };
+}
+
+/**
+ * Flag code to accept for a fill — desk + wizard parity.
+ * Prefer open critical; else first unresolved reason.
+ */
+export function resolveOpenFlagCodeForAccept(
+  entry: FuelEntry,
+  dispositions?: FuelFlagDispositionMap,
+): string | null {
+  const c = classifyFuelFillFlags(entry, { dispositions });
+  const openCritical = c.reasons.find((r) => r.severity === 'critical' && !r.resolved);
+  if (openCritical) return openCritical.code;
+  const firstOpen = c.reasons.find((r) => !r.resolved);
+  return firstOpen?.code ?? null;
+}
+
+/** All unresolved reason codes on a fill (desk edit → corrected). */
+export function listOpenFlagCodesForEntry(
+  entry: FuelEntry,
+  dispositions?: FuelFlagDispositionMap,
+): string[] {
+  return classifyFuelFillFlags(entry, { dispositions })
+    .reasons.filter((r) => !r.resolved)
+    .map((r) => r.code);
 }
 
 /** Week cleared when SQL recon period is locked. */

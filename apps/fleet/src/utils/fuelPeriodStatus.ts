@@ -18,12 +18,12 @@ import {
   type PeriodWeekOption,
 } from './fuelWeekPeriod';
 import { FUEL_SPEND_EPS } from './fuelMoneyEpsilon';
-import { isFuelExceptionAcknowledged } from './fuelFinalizeGating';
 import {
   buildFuelVehicleSnapshots,
   type FuelPeriodVehicleSnapshot,
 } from './fuelPeriodDerive';
 import { isFuelDataQualityFlagged } from './fuelDataQualityReview';
+import { classifyFuelFillFlags } from './fuelFillFlagClassify';
 
 export type { FuelPeriodVehicleSnapshot } from './fuelPeriodDerive';
 
@@ -43,6 +43,10 @@ export interface FuelReconciliationPeriod {
   driverShare: number;
   actionableTotal: number;
   exceptionCount: number;
+  /** Open flagged fills this week (classifier + dispositions) — landing chip (R-5). */
+  openFlaggedFillCount: number;
+  /** Data-quality vehicle actionable count before fill exceptions are added. */
+  dataQualityVehicleActionable: number;
   counts: Record<FuelStepId, FuelStepCounts>;
   /** True when leakage_reviewed_at set (or locked with residual treated as accepted). */
   leakageReviewed?: boolean;
@@ -190,6 +194,8 @@ export interface DeriveFuelPeriodsInput {
   lockedWeekStarts?: Set<string>;
   /** weekStart YMD → vehicle IDs marked reviewed for cash-desk data-quality. */
   dataQualityReviewedByWeek?: Map<string, Set<string>>;
+  /** Desk disposition map — open fill counts honor accepts (R-5). */
+  dispositions?: import('./fuelFlagDisposition').FuelFlagDispositionMap;
 }
 
 function entryInWeek(e: FuelEntry, start: string, end: string): boolean {
@@ -211,6 +217,7 @@ export function deriveFuelReconciliationPeriods(input: DeriveFuelPeriodsInput): 
     leakageReviewedWeeks,
     lockedWeekStarts,
     dataQualityReviewedByWeek,
+    dispositions,
   } = input;
 
   return weekOptions.map((week) => {
@@ -218,9 +225,13 @@ export function deriveFuelReconciliationPeriods(input: DeriveFuelPeriodsInput): 
     const { startDate, endDate, label } = fuelWeekBoundsFromPeriodId(id);
     const weekEntries = fuelEntries.filter((e) => entryInWeek(e, startDate, endDate));
     const live = liveReportsByWeek?.get(id);
-    const exceptionCount = weekEntries.filter(
-      (e) => e.metadata?.signalTier === 'exception' && !isFuelExceptionAcknowledged(e),
-    ).length;
+    let openFlaggedFillCount = 0;
+    let exceptionCount = 0;
+    for (const e of weekEntries) {
+      const c = classifyFuelFillFlags(e, { dispositions });
+      if (c.reasons.some((r) => !r.resolved)) openFlaggedFillCount += 1;
+      if (c.hasOpenCritical) exceptionCount += 1;
+    }
 
     const { snapshots: vehicleSnaps } = buildFuelVehicleSnapshots({
       vehicles,
@@ -248,7 +259,8 @@ export function deriveFuelReconciliationPeriods(input: DeriveFuelPeriodsInput): 
       leakageReviewed: Boolean(leakageReviewedWeeks?.has(startDate)),
       dataQualityReviewedVehicleIds: dataQualityReviewedByWeek?.get(startDate),
     });
-    // Exception fills hard-block Finalize — surface on data-quality chips
+    const dataQualityVehicleActionable = counts['data-quality'].actionable;
+    // Critical fill flags hard-block Finalize — surface on data-quality chips
     if (exceptionCount > 0) {
       counts['data-quality'].actionable += exceptionCount;
     }
@@ -284,6 +296,8 @@ export function deriveFuelReconciliationPeriods(input: DeriveFuelPeriodsInput): 
       driverShare,
       actionableTotal: locked ? 0 : fuelActionableTotal(counts),
       exceptionCount: locked ? 0 : exceptionCount,
+      openFlaggedFillCount: locked ? 0 : openFlaggedFillCount,
+      dataQualityVehicleActionable: locked ? 0 : dataQualityVehicleActionable,
       counts,
       leakageReviewed: Boolean(leakageReviewedWeeks?.has(startDate)),
     };
@@ -293,6 +307,32 @@ export function deriveFuelReconciliationPeriods(input: DeriveFuelPeriodsInput): 
     // Drop empty unlocked weeks (incl. current week with $0 spend) — they are not recon work
     // and were inflating Outstanding + Finalize weeks.
     return p.vehicleCount > 0 || p.exceptionCount > 0 || p.actionableTotal > 0;
+  });
+}
+
+/** Enrich landing cards with open fill-flag counts from live logs + dispositions (R-5). */
+export function enrichLandingPeriodsWithFlagCounts(
+  periods: FuelReconciliationPeriod[],
+  fuelEntries: FuelEntry[],
+  dispositions?: import('./fuelFlagDisposition').FuelFlagDispositionMap,
+): FuelReconciliationPeriod[] {
+  return periods.map((p) => {
+    if (p.locked) {
+      return {
+        ...p,
+        openFlaggedFillCount: 0,
+        exceptionCount: 0,
+      };
+    }
+    const weekEntries = fuelEntries.filter((e) => entryInWeek(e, p.startDate, p.endDate));
+    let openFlaggedFillCount = 0;
+    let exceptionCount = 0;
+    for (const e of weekEntries) {
+      const c = classifyFuelFillFlags(e, { dispositions });
+      if (c.reasons.some((r) => !r.resolved)) openFlaggedFillCount += 1;
+      if (c.hasOpenCritical) exceptionCount += 1;
+    }
+    return { ...p, openFlaggedFillCount, exceptionCount };
   });
 }
 

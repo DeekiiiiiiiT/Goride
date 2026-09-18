@@ -143,6 +143,8 @@ export function serverRowsToLandingPeriods(rows: FuelPeriodRow[]): FuelReconcili
       driverShare: Number(s.driverShare) || 0,
       actionableTotal: locked ? 0 : fuelActionableTotal(counts),
       exceptionCount: locked ? 0 : counts['data-quality']?.actionable || 0,
+      openFlaggedFillCount: 0,
+      dataQualityVehicleActionable: locked ? 0 : counts['data-quality']?.actionable || 0,
       counts,
       leakageReviewed: locked || Boolean(s.leakageReviewedAt),
       odometerChainReviewed: locked || Boolean(s.odometerChainReviewedAt),

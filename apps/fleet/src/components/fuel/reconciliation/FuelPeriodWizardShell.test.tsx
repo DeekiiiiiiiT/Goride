@@ -28,7 +28,9 @@ const period: FuelReconciliationPeriod = {
   companyShare: 6_000,
   driverShare: 5_500,
   actionableTotal: 0,
-  exceptionCount: 0,
+    exceptionCount: 0,
+    openFlaggedFillCount: 0,
+    dataQualityVehicleActionable: 0,
   counts: emptyFuelStepCounts(),
 };
 

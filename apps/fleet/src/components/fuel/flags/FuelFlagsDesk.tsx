@@ -46,6 +46,7 @@ export function FuelFlagsDesk({
   onSelectWeekStart,
   rows,
   loading,
+  dispositionsTruncated,
   canDisposition,
   canAcceptCritical,
   onAcceptFlag,
@@ -57,13 +58,15 @@ export function FuelFlagsDesk({
   onSelectWeekStart: (weekStart: string) => void;
   rows: FuelFlagDeskRow[];
   loading?: boolean;
+  /** R-2: server could not return every disposition for this week’s fills. */
+  dispositionsTruncated?: boolean;
   canDisposition?: boolean;
   canAcceptCritical?: boolean;
   onAcceptFlag?: (
     row: FuelFlagDeskRow,
     flagCode: string,
     note: string,
-    action?: 'accepted' | 'escalated',
+    action?: 'accepted' | 'escalated' | 'corrected',
   ) => Promise<void> | void;
   onEditFill?: (entryId: string) => void;
   onReconcileWeek?: (weekStart: string) => void;
@@ -117,12 +120,17 @@ export function FuelFlagsDesk({
     }));
   }, [filtered]);
 
-  const openCriticalOnDetail = detailRow?.reasons.find(
-    (r) => r.severity === 'critical' && !r.resolved,
-  );
-
   return (
     <div className="space-y-4">
+      {dispositionsTruncated && (
+        <div
+          role="status"
+          className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900"
+        >
+          Some older decisions didn’t load for this week — refresh or narrow the week so resolved
+          flags don’t look open by mistake.
+        </div>
+      )}
       <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
@@ -366,33 +374,156 @@ export function FuelFlagsDesk({
               </SheetHeader>
 
               <ul className="mt-4 space-y-2">
-                {detailRow.reasons.map((reason) => (
-                  <li
-                    key={`${reason.code}|${reason.label}`}
-                    className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm"
-                  >
-                    <p className="font-semibold text-slate-900">{reason.label}</p>
-                    <p className="mt-1 text-xs text-slate-600">
-                      {plainEnglishForFlagReason(reason.label)}
-                    </p>
-                    {reason.resolved && reason.disposition && (
-                      <p className="mt-1 text-xs text-emerald-800">
-                        {reason.disposition.action} · {reason.disposition.note || 'no note'}
-                        {reason.disposition.at
-                          ? ` · ${String(reason.disposition.at).slice(0, 10)}`
-                          : ''}
+                {detailRow.reasons.map((reason) => {
+                  const isOpen = !reason.resolved;
+                  const needsCriticalNote = reason.severity === 'critical' && isOpen;
+                  const acceptDisabled =
+                    acceptBusy ||
+                    !onAcceptFlag ||
+                    !isOpen ||
+                    (needsCriticalNote
+                      ? !canAcceptCritical || acceptNote.trim().length < 8
+                      : false);
+                  return (
+                    <li
+                      key={`${reason.code}|${reason.label}`}
+                      className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm"
+                    >
+                      <p className="font-semibold text-slate-900">{reason.label}</p>
+                      <p className="mt-0.5 text-[10px] font-medium uppercase tracking-wide text-slate-500">
+                        {reason.code.replace(/_/g, ' ')} · {reason.severity}
                       </p>
-                    )}
-                  </li>
-                ))}
+                      <p className="mt-1 text-xs text-slate-600">
+                        {plainEnglishForFlagReason(reason.label)}
+                      </p>
+                      {reason.resolved && reason.disposition && (
+                        <p className="mt-1 text-xs text-emerald-800">
+                          {reason.disposition.action} · {reason.disposition.note || 'no note'}
+                          {reason.disposition.at
+                            ? ` · ${String(reason.disposition.at).slice(0, 10)}`
+                            : ''}
+                        </p>
+                      )}
+                      {isOpen && canDisposition && (
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          <Button
+                            type="button"
+                            size="sm"
+                            className="min-h-9 bg-[#3525cd] text-white hover:bg-[#2a1ea4]"
+                            disabled={acceptDisabled}
+                            onClick={async () => {
+                              if (!onAcceptFlag || !detailRow) return;
+                              setAcceptBusy(true);
+                              try {
+                                await onAcceptFlag(
+                                  detailRow,
+                                  reason.code,
+                                  acceptNote.trim(),
+                                  'accepted',
+                                );
+                                setDetailRow((prev) => {
+                                  if (!prev) return null;
+                                  const nextReasons = prev.reasons.map((r) =>
+                                    r.code === reason.code
+                                      ? {
+                                          ...r,
+                                          resolved: true,
+                                          disposition: {
+                                            entryId: prev.entryId,
+                                            flagCode: reason.code,
+                                            action: 'accepted' as const,
+                                            note: acceptNote.trim() || null,
+                                          },
+                                        }
+                                      : r,
+                                  );
+                                  const stillOpen = nextReasons.some((r) => !r.resolved);
+                                  if (!stillOpen) {
+                                    setAcceptNote('');
+                                    return null;
+                                  }
+                                  return {
+                                    ...prev,
+                                    reasons: nextReasons,
+                                    status: 'open' as const,
+                                    hasOpenCritical: nextReasons.some(
+                                      (r) => r.severity === 'critical' && !r.resolved,
+                                    ),
+                                  };
+                                });
+                              } finally {
+                                setAcceptBusy(false);
+                              }
+                            }}
+                          >
+                            Accept {reason.label}
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="min-h-9"
+                            disabled={acceptBusy || !onAcceptFlag}
+                            onClick={async () => {
+                              if (!onAcceptFlag || !detailRow) return;
+                              setAcceptBusy(true);
+                              try {
+                                await onAcceptFlag(
+                                  detailRow,
+                                  reason.code,
+                                  acceptNote.trim() || 'Escalated to dispute',
+                                  'escalated',
+                                );
+                                setDetailRow((prev) => {
+                                  if (!prev) return null;
+                                  const nextReasons = prev.reasons.map((r) =>
+                                    r.code === reason.code
+                                      ? {
+                                          ...r,
+                                          resolved: true,
+                                          disposition: {
+                                            entryId: prev.entryId,
+                                            flagCode: reason.code,
+                                            action: 'escalated' as const,
+                                            note: acceptNote.trim() || 'Escalated to dispute',
+                                          },
+                                        }
+                                      : r,
+                                  );
+                                  const stillOpen = nextReasons.some((r) => !r.resolved);
+                                  if (!stillOpen) {
+                                    setAcceptNote('');
+                                    return null;
+                                  }
+                                  return {
+                                    ...prev,
+                                    reasons: nextReasons,
+                                    status: 'open' as const,
+                                    hasOpenCritical: nextReasons.some(
+                                      (r) => r.severity === 'critical' && !r.resolved,
+                                    ),
+                                  };
+                                });
+                              } finally {
+                                setAcceptBusy(false);
+                              }
+                            }}
+                          >
+                            Escalate {reason.label}
+                          </Button>
+                        </div>
+                      )}
+                    </li>
+                  );
+                })}
               </ul>
 
               {detailRow.status === 'open' && canDisposition && (
                 <div className="mt-5 space-y-3">
-                  {openCriticalOnDetail && (
+                  {detailRow.reasons.some((r) => r.severity === 'critical' && !r.resolved) && (
                     <div className="space-y-1.5">
                       <label className="text-xs font-medium text-slate-600">
-                        Accept note (required for critical, 8+)
+                        Note for critical accept (8+ characters)
                       </label>
                       <Textarea
                         value={acceptNote}
@@ -402,34 +533,6 @@ export function FuelFlagsDesk({
                       />
                     </div>
                   )}
-                  <Button
-                    type="button"
-                    className="min-h-11 w-full bg-[#3525cd] text-white hover:bg-[#2a1ea4]"
-                    disabled={
-                      acceptBusy ||
-                      !onAcceptFlag ||
-                      (openCriticalOnDetail
-                        ? !canAcceptCritical || acceptNote.trim().length < 8
-                        : false)
-                    }
-                    onClick={async () => {
-                      if (!onAcceptFlag || !detailRow) return;
-                      const code =
-                        openCriticalOnDetail?.code ||
-                        detailRow.reasons.find((r) => !r.resolved)?.code;
-                      if (!code) return;
-                      setAcceptBusy(true);
-                      try {
-                        await onAcceptFlag(detailRow, code, acceptNote.trim());
-                        setDetailRow(null);
-                        setAcceptNote('');
-                      } finally {
-                        setAcceptBusy(false);
-                      }
-                    }}
-                  >
-                    Accept with note
-                  </Button>
                   {onEditFill && (
                     <Button
                       type="button"
@@ -444,31 +547,6 @@ export function FuelFlagsDesk({
                       Edit fill
                     </Button>
                   )}
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="min-h-11 w-full"
-                    disabled={acceptBusy || !onAcceptFlag}
-                    onClick={async () => {
-                      if (!onAcceptFlag || !detailRow) return;
-                      const code = detailRow.reasons.find((r) => !r.resolved)?.code;
-                      if (!code) return;
-                      setAcceptBusy(true);
-                      try {
-                        await onAcceptFlag(
-                          detailRow,
-                          code,
-                          acceptNote.trim() || 'Escalated to dispute',
-                          'escalated',
-                        );
-                        setDetailRow(null);
-                      } finally {
-                        setAcceptBusy(false);
-                      }
-                    }}
-                  >
-                    Escalate to dispute
-                  </Button>
                 </div>
               )}
             </>

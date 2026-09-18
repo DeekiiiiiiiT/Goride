@@ -138,6 +138,8 @@ interface FuelPeriodWizardProps {
   sessionKey?: number;
   /** Deep-link from landing step chip (M3). */
   initialStepId?: FuelStepId;
+  /** Desk disposition map — client finalize gate parity (R-1). */
+  dispositions?: import('../../../utils/fuelFlagDisposition').FuelFlagDispositionMap;
 }
 
 function FuelPeriodWizardInner({
@@ -166,6 +168,7 @@ function FuelPeriodWizardInner({
   onResetPeriod,
   sessionKey = 0,
   initialStepId,
+  dispositions,
 }: FuelPeriodWizardProps) {
   const { user } = useAuth();
   const [leakageReviewed, setLeakageReviewed] = useState(false);
@@ -239,6 +242,7 @@ function FuelPeriodWizardInner({
     // Wrong-week parent trips zero ride-share math and can stall brain work.
     trips: tripsOverlapThisWeek ? trips : undefined,
     seedPersonalAllowance: false,
+    dispositions,
   });
   const liveReports = weekReports.reports;
   const weekTrips = weekReports.trips.length ? weekReports.trips : trips;
@@ -291,6 +295,7 @@ function FuelPeriodWizardInner({
     degradedInputs: hasDegradedInputs,
     periodTotalSpend: period.totalSpend,
     periodUnexplained: period.netLeakage,
+    dispositions,
   });
 
   const needsOdometerChainAck = reportsHaveOdometerChainUnusable(liveReports);
@@ -1170,6 +1175,7 @@ function FuelPeriodWizardInner({
                   weekFuelEntries={weekFuelEntries}
                   weekStartYmd={period.startDate}
                   weekEndYmd={period.endDate}
+                  dispositions={dispositions}
                 />
               </div>
             )}

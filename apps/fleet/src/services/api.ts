@@ -5045,9 +5045,25 @@ export const api = {
     return response.json();
   },
 
-  async listFuelFlagDispositions(opts?: { periodId?: string }) {
+  async listFuelFlagDispositions(opts?: {
+    periodId?: string;
+    entryIds?: string[];
+  }): Promise<{
+    dispositions: Array<{
+      id?: string;
+      entryId: string;
+      flagCode: string;
+      action: string;
+      note?: string | null;
+      actorId?: string | null;
+      at?: string | null;
+      periodId?: string | null;
+    }>;
+    truncated: boolean;
+  }> {
     const qs = new URLSearchParams();
     if (opts?.periodId) qs.set('periodId', opts.periodId);
+    if (opts?.entryIds?.length) qs.set('entryIds', opts.entryIds.join(','));
     const suffix = qs.toString() ? `?${qs.toString()}` : '';
     const response = await fetchWithRetry(
       `${API_ENDPOINTS.fuel}/fuel/flags/dispositions${suffix}`,
@@ -5058,7 +5074,10 @@ export const api = {
       throw new Error(errText || 'Failed to list flag dispositions');
     }
     const data = await response.json();
-    return Array.isArray(data?.dispositions) ? data.dispositions : [];
+    return {
+      dispositions: Array.isArray(data?.dispositions) ? data.dispositions : [],
+      truncated: Boolean(data?.truncated),
+    };
   },
 
   async reviewFuelPeriodUnattributed(args: {

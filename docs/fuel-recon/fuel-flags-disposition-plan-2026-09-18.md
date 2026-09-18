@@ -1,117 +1,249 @@
-# Fuel Flags — disposition architecture & implementation plan
+# Fuel Flags — disposition architecture, implementation & verification
 
-**Date:** 2026-09-18
-**Status:** Plan — not started
+**Date:** 2026-09-18 · **Rev 8** (Rev 7 = Round 4 done; Rev 5 = Round 3 done; Rev 3 = Round 2 done)
+**Status:** Phases 0–5 + Round 2 (R-1–R-8) + Round 3 (R3-1–R3-4) + Round 4 (R4-1–R4-4)
+**Done and independently verified. No open items.** Feature is complete and shippable.
+Still no feature flag — this path is live.
+**The only outstanding action is to commit:** all four rounds sit uncommitted on one working tree
+(26 files). See §12.
 **Scope:** `Fleet Operations → Fuel Flags` desk, and its synchronisation with the fuel
 reconciliation wizard (`Business Finance → Week Reconciliation → Fuel`).
 **Explicitly out of scope:** all fuel money math — category costs, residual classification,
-driver share, settlement. This plan changes classification, disposition and gating only.
+driver share, settlement. This work changes classification, disposition and gating only.
 
 ---
 
-## 1. System as it stands
+## 0. Verification summary (Rev 8)
 
-Three independent flag systems share one input (`fuel_entries.metadata`) and never talk to
+Verified independently against the working-tree code, with the full suites and a typecheck — not
+by self-report. Round 2 + Round 3 + Round 4 remain **uncommitted** at time of closeout.
+
+**Round 4 acceptance**
+
+| Item | Acceptance | Status |
+|---|---|---|
+| R4-1 | Hoist narrowed `src` in the desk `corrected` note block | **Done** — typecheck delta confirms it, see below |
+| R4-2 | Disposition list reject → skip with retry copy, not `undisposed_flags` | **Done** — `loadWeekFlagDispositions` + `FUEL_BULK_DISPOSITIONS_LOAD_SKIP` |
+| R4-3 | `truncated === true` → same skip sentinel | **Done** |
+| R4-4 | Remove dead `dispositions` prop from bulk dialog | **Done** — prop and dashboard pass both gone; the dashboard's remaining `dispositions` passes go to the **wizard**, which still needs them |
+
+**Full suites (not just the touched files):**
+
+| Suite | Command | Result |
+|---|---|---|
+| fleet fuel | `cd apps/fleet && VITE_SUPABASE_URL=… VITE_SUPABASE_ANON_KEY=… npx vitest run src/utils src/components/fuel` | **1291 pass**, 1 skipped, 219 files (+3 vs Rev 6) |
+| fuel-core | `npx vitest run packages/fuel-core/src` **from the repo root** | **119 pass**, 18 files |
+
+`packages/fuel-core` has no local vitest binary, so `npx vitest` fails there with
+`MODULE_NOT_FOUND` — run it from the repo root. (Unlike `apps/fleet`, it needs no jest-dom setup.)
+
+**Typecheck — R4-1 confirmed by delta.** `cd apps/fleet && npx tsc --noEmit -p tsconfig.json`,
+filtered by **filename**:
+
+| Rev | Errors in `FuelManagement.tsx` |
+|---|---|
+| Rev 6 (before R4-1) | 17 |
+| Rev 8 (after R4-1) | **16** |
+
+Exactly one error removed — the self-introduced `entry.metadata?.editReason` in the R-3 block. The
+remaining 16 are the pre-existing `handleSaveLog` union-narrowing class, identical at HEAD. **This
+work now contributes zero typecheck errors.** No errors in any flags/disposition/bulk file.
+
+**R4 test quality:** the two integration tests render the dialog and assert both the operator copy
+*and* `expect(finalizeFuelWeekReports).not.toHaveBeenCalled()` — they prove the week is actually
+refused, not merely that a string rendered. The truncated case seeds a real disposition row, so it
+cannot pass accidentally on an empty list. The third test pins the helper's discriminated union
+directly via injected `listFn`.
+
+---
+
+## 0a. Verification summary (Rev 6 — historical)
+
+Verified by reading the working-tree code, running the suites and typechecking — not by
+self-report. Round 2 + Round 3 work remains **uncommitted** at time of review.
+
+**Tests:** `cd apps/fleet && VITE_SUPABASE_URL=… VITE_SUPABASE_ANON_KEY=… npx vitest run src/utils
+src/components/fuel` → **1288 pass, 1 skipped, 219 files** (up from 1286 — the two new R3 tests).
+`packages/fuel-core` clean. See §0b for why this must run from `apps/fleet`.
+
+| Item | Acceptance | Status |
+|---|---|---|
+| R3-1 | Widen `dispositionMapFromRows` to `action?: string` via `Omit<…,'action'>` | **Done** — `FuelManagement:591` cleared |
+| R3-2 | Per-week `listFuelFlagDispositions({ entryIds })` in bulk prepare + execute | **Done** — `PreparedWeek.dispositions` carries it; gate at `FuelBulkFinalizeDialog:400` consumes the per-week `gateResult` |
+| R3-3 | Drop the `period_id` AND in the `entryIds` branch | **Done** — clause removed, rationale comment left in place |
+| R3-4 | Client `signalTier` `.toLowerCase()` + case test | **Done** |
+
+**R3-2 test quality:** `hydrates dispositions per week so week B dispositioned criticals finalize
+(R3-2)` mocks `getAllFuelEntriesInRange` and `listFuelFlagDispositions` per week, asserts
+`finalizeFuelWeekReports` is called twice, and inspects the per-call `entryIds`. It proves the
+plumbing (each week fetches its own map). It does not prove a *missing* disposition would block
+week B, because `buildFuelWeekReportsWithGating` is mocked to return no blockers — acceptable, as
+that path is covered by `fuelFlagDisposition.sync.test.ts`.
+
+### Typecheck status — read this before trusting a clean bill
+
+`cd apps/fleet && npx tsc --noEmit -p tsconfig.json` reports **17 errors in `FuelManagement.tsx`**
+at Rev 6. Sixteen are a pre-existing union-narrowing problem in `handleSaveLog`. R4-1 removes the
+self-introduced error in the R-3 `corrected` block; remaining errors in that file are inherited
+`handleSaveLog` noise. Filter by filename, not by error text, when checking this file.
+
+*Method note:* parity was established by comparing the `handleSaveLog` signature and access
+patterns against `git show HEAD:…`, not by running `tsc` on a pristine checkout.
+
+---
+
+## 0b. Verification summary (Rev 4 — historical)
+
+Verified by reading the working-tree code, running the suites, and typechecking — not by
+self-report. **Round 2 work is uncommitted at time of review.**
+
+### How to run these tests
+
+Run from **`apps/fleet`**, not the repo root:
+
+```bash
+cd apps/fleet
+VITE_SUPABASE_URL=https://test.supabase.co VITE_SUPABASE_ANON_KEY=test npx vitest run src/utils src/components/fuel
+```
+
+The repo root has no vitest config for this app. Running from the root skips
+`apps/fleet/src/test/setup.ts` (wired at `apps/fleet/vite.config.ts:205`), which loads the
+`jest-dom` matchers — producing ~5 spurious failures (`Invalid Chai property: toBeDisabled`,
+ambiguous `getByRole` lookups). Those are an invocation artefact, not defects.
+
+**Result:** 1286 pass, 1 skipped, across 219 files in `apps/fleet`; `packages/fuel-core` clean.
+
+**Typecheck:** `cd apps/fleet && npx tsc --noEmit -p tsconfig.json` — **one new error introduced by
+Round 2**, see §8 R3-1 (closed in Rev 5). `ReconciliationTable.tsx:374` (×2) is pre-existing (it was `:370` before
+the +6-line prop diff).
+
+New wiring tests:
+
+| Item | Acceptance test | File |
+|---|---|---|
+| R-1 | `wizard gate assembly clears integrity_critical when desk disposition is threaded` | `fuelFlagDisposition.sync.test.ts` |
+| R-1 | `wrong-code signal_exception disposition does not clear integrity_critical` | `fuelFlagDisposition.sync.test.ts` |
+| R-8 | `normalizes integrityStatus case (R-8)` | `fuelFillFlagClassify.test.ts` |
+
+**Round 2 findings**
+
+| # | Finding | Status |
+|---|---|---|
+| R-1 | Dispositions never reached client finalize gate | **Fixed** — `assembleFuelClientFinalizeGate` + map threaded through wizard, table, bulk, finalize; wizard accept uses `resolveOpenFlagCodeForAccept` |
+| R-2 | Dispositions list truncated org-wide at 2000 | **Fixed** — `GET` scoped by `entryIds` (chunked); returns `truncated`; desk banner |
+| R-3 | `'corrected'` unreachable | **Fixed** — desk-originated edit-save upserts `corrected` for open codes |
+| R-4 | Desk accepts one flag code at a time | **Fixed** — per-reason Accept / Escalate in detail sheet |
+| R-5 | Landing chip counted vehicles only | **Fixed** — `openFlaggedFillCount` + chip copy `N flagged fills · M vehicles` |
+| R-6 | Stale “Clears when you lock the week” copy | **Fixed** |
+| R-7 | Double `classifyFuelFillFlags` in blockers | **Fixed** — single-pass loop |
+| R-8 | `integrityStatus` case drift client vs edge | **Fixed** — client `.toLowerCase()`; case tests |
+
+**R-1 wiring, verified by reading the chain:** `FuelManagement.flagDispositions` →
+`FuelReconciliationDashboard` → `FuelReconciliationWizardView` → `FuelPeriodWizard` →
+`useFuelWizardDerived` (gate) **and** `useFuelWeekReports` (with `dispositionMapContentSig` so the
+report cache invalidates when a disposition changes) **and** `FuelBulkFinalizeDialog` →
+`buildFuelWeekReportsWithGating` + `finalizeFuelWeekReports`. `ReconciliationTable` takes the prop
+directly. `assembleFuelClientFinalizeGate` declares `dispositions` as a **required** key (value may
+be `undefined`), so TypeScript forces every call site to make the choice explicit.
+
+Caveat: the two R-1 tests still hand-construct the map via `dispositionMapFromRows` and assert on
+`assembleFuelClientFinalizeGate`. They prove the helper honours dispositions; they do **not** prove
+`FuelManagement` feeds a non-empty map. That guarantee currently rests on the required-key type
+plus manual review.
+
+---
+
+## 0c. Verification summary (Rev 2 — historical)
+
+Verified by reading the committed code, not by self-report.
+
+**Tests:** 53 pass — 40 in `apps/fleet` (`fuelFillFlagClassify`, `fuelFlagDisposition.sync`,
+`fuelDataQualityReview`, `fuelPeriodGating`, `fuelFinalizeGating`) + 13 in
+`packages/fuel-core/src/evaluateFuelWeekClosable.test.ts`. Fleet suites require
+`VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` to be set or collection fails on
+`packages/api-client/src/supabaseInfo.ts` — dummy values are sufficient.
+
+All three acceptance tests named in Rev 1 exist and pass:
+
+| Phase | Acceptance test | File |
+|---|---|---|
+| 0 | `includes an older-week outlier that fleet-wide slice(80) would drop` | `fuelFillFlagClassify.test.ts:194` |
+| 1 | `accept disposition clears exception blocker without signalTier mutation` | `fuelFlagDisposition.sync.test.ts:23` |
+| 2 | `bulk finalize closable input refuses when DQ vehicles unreviewed` | `fuelFlagDisposition.sync.test.ts:44` |
+
+**Typecheck:** `tsc -p apps/fleet/tsconfig.json --noEmit` reports no new errors in any file this
+work touched. Pre-existing unrelated errors remain (leaflet types in `platform-ops-ui`,
+`platform-settings` module maps, recharts formatter signatures, `FuelPeriodWizard.tsx:1194`
+`vehicleSnaps` → `FuelLeakageStep` prop mismatch — all predate this work).
+
+### Findings status
+
+| # | Finding | Status |
+|---|---|---|
+| F-1 | Wizard resolution does not clear desk flags | **Fixed** — one classifier; `signalTier` no longer mutated |
+| F-2 | Outlier flags truncated fleet-wide before week filter | **Fixed** — `buildStationMedianOutlierIdSet`, untruncated + week-scoped |
+| F-3 | Data-quality review is a client-only gate | **Fixed** — read by server close path and `evaluateFuelWeekClosable` |
+| F-4 | Legend promises a flag never produced | **Fixed** — retail-estimate row deleted |
+| F-5 | Duplicate reason badges | **Fixed** — dedupe by `code\|label` + `is_flagged` suppression |
+| F-6 | `primarySeverity` computed and discarded | **Fixed** — sort is severity desc, then date desc |
+| F-7 | Two glossaries drifting apart | **Fixed** — single `FUEL_FLAG_BY_CODE`, keyed by code |
+| F-8 | Desk dropdown silently moved the wizard's week | **Fixed** — own `flagsWeekStart` + explicit *Reconcile this week* |
+| F-9 | DQ review route had no optimistic concurrency | **Fixed** — `If-Match` **and** conditional `.eq("version", …)` update |
+| F-10 | "Review details" showed the wrong fills | **Fixed** — `FuelVehicleEvidenceSheet`, flagged fills first |
+| F-11 | IA split across two departments | **Addressed** — desk is a fills view beside Transaction Logs; both linked |
+| F-12 | Locked week + default filter = empty screen | **Fixed** — defaults to `all` when the selected week is locked |
+
+### What shipped, by phase
+
+- **Phase 0** — all six items.
+- **Phase 1** — `fuel_flag_disposition` created with correct key types (`entry_id text` matches
+  `fleet.fuel_entries.id`; `period_id text` matches the period PK), SELECT-only RLS for
+  `authenticated`, writes reserved to service role / edge. Backfill from
+  `reconExceptionAck` / `exceptionResolvedAt` with `ON CONFLICT DO NOTHING`. The classifier marks
+  disposed reasons `resolved` rather than dropping them, preserving the audit trail.
+- **Phase 2** — `undisposed_flags` and `data_quality_unreviewed` added to
+  `evaluateFuelWeekClosable`; `undisposedCriticalFlags` takes precedence over the legacy
+  `exception_fills` branch. Server mirror reads `fuel_flag_disposition` in 200-id chunks and
+  evaluates DQ vehicle reviews in `buildFuelWeekClosableInputForPeriod`. Deno drift tests added.
+- **Phase 3** — evidence sheet shows flagged fills first; *Mark reviewed* is disabled with
+  *"N flagged fills need a decision first."*
+- **Phase 4** — tri-state status (`open` / `resolved` / `cleared_by_lock`), header counter with
+  at-risk total, group-by-vehicle, detail sheet with Accept / Edit / Escalate.
+- **Phase 5** — accepting a `critical` flag additionally requires `fuel.accept_unexplained`;
+  dispositions land in `fuel_period_audit` and the evidence pack.
+
+### Deviations from the Rev 1 plan (accepted)
+
+- **`'void'` dropped** from the action enum; shipped set is `accepted | corrected | escalated`.
+- **Backfill actor sentinel** — rows with no `exceptionResolvedBy` get
+  `00000000-0000-0000-0000-000000000000`. Audit queries counting actors must exclude it.
+- **F-4 resolved by deletion**, not by wiring `buildPriceOutlierFlags` in. Retail-estimate
+  outliers remain unimplemented; the legend no longer claims otherwise.
+
+---
+
+## 1. System before this work (Rev 1 record)
+
+Three independent flag systems shared one input (`fuel_entries.metadata`) and never talked to
 each other.
 
-| System | Where | Grain | Disposition | Blocks lock? |
+| System | Where | Grain | Disposition | Blocked lock? |
 |---|---|---|---|---|
-| **Fuel Flags desk** | `apps/fleet/src/utils/fuelFillFlagClassify.ts:54`, `apps/fleet/src/components/fuel/flags/FuelFlagsDesk.tsx` | per **fill** | none — `cleared` is literally `weekLocked` (`fuelFillFlagClassify.ts:193`) | no |
-| **Exception blockers** | `apps/fleet/src/utils/fuelFinalizeGating.ts:166` | per **fill**, only `signalTier === 'exception'` | accept/edit → writes `reconExceptionAck` (`apps/fleet/src/pages/FuelManagement.tsx:1807`) | yes, via `exception_fills` |
-| **Data-quality review** (in-flight work) | `apps/fleet/src/utils/fuelDataQualityReview.ts:13`, `apps/fleet/src/components/fuel/reconciliation/FuelDataQualityStep.tsx` | per **vehicle-week** | "Mark reviewed" → `fuel_reconciliation_period.data_quality_vehicle_reviews` | **no** — Continue button only |
-
-The desk is the only surface with a catalogue of flags. It is the only one with no action.
+| **Fuel Flags desk** | `fuelFillFlagClassify.ts`, `FuelFlagsDesk.tsx` | per **fill** | none — `cleared` was literally `weekLocked` | no |
+| **Exception blockers** | `fuelFinalizeGating.ts` | per **fill**, only `signalTier === 'exception'` | accept/edit → `reconExceptionAck` | yes, via `exception_fills` |
+| **Data-quality review** | `fuelDataQualityReview.ts`, `FuelDataQualityStep.tsx` | per **vehicle-week** | "Mark reviewed" → `data_quality_vehicle_reviews` | no — Continue button only |
 
 ### The core defect
 
-> **Nothing in the system can move a flag from Open to Resolved. `Cleared` means "the week got
+> **Nothing in the system could move a flag from Open to Resolved. `Cleared` meant "the week got
 > locked", not "a human looked at it".**
 
-Lock launders unreviewed flags. Four open flags on a week read **Cleared** the moment that week
-locks, with no evidence anyone opened them. Same class of problem the settlement close audit
-closed with *"make invariants unrepresentable"* — this one is still representable.
+Lock laundered unreviewed flags. Same class of problem the settlement close audit closed with
+*"make invariants unrepresentable."*
 
 ---
 
-## 2. Findings
-
-### Critical
-
-**F-1 — Wizard resolution does not clear desk flags.**
-Accepting an exception flips `signalTier → 'observe'` and stamps `reconExceptionAck`
-(`FuelManagement.tsx:1807-1853`), but leaves `integrityStatus`, `isFlagged` and `anomalyReason`
-untouched. `classifyFuelFillFlags` never consults `isFuelExceptionAcknowledged`
-(`fuelFinalizeGating.ts:153`). Net effect: resolve a fill in the wizard, and the desk still shows
-it **Open** with `integrity_critical` + `is_flagged`. The two surfaces disagree permanently.
-
-**F-2 — Outlier flags are silently truncated and can vanish entirely.**
-`FuelManagement.tsx:478` calls `buildStationMedianOutlierFlags(logs, vehicles, weekEnd, 80)`.
-That function (`apps/fleet/src/utils/fuelAnalyticsAggregates.ts:783`) sorts **all fleet entries**
-by date desc and `.slice(0, 80)` *before* the desk filters to the selected week
-(`fuelFillFlagClassify.ts:178`). Select any week that is not the most recent and its price
-outliers can be dropped entirely — no empty state, no warning. The `80` is also an undocumented
-magic number; Analytics uses `6` (`apps/fleet/src/hooks/useFuelAnalytics.ts:301`), so the two
-surfaces disagree on what an outlier is.
-
-**F-3 — Data-quality review is a client-only gate.**
-`data_quality_vehicle_reviews` is written by the new route
-(`supabase/functions/_fleet-server/fuel_period_routes.ts:1679`) and read by **nothing** on the
-close path — not `packages/fuel-core/src/evaluateFuelWeekClosable.ts`, not
-`supabase/functions/_fleet-server/fuel_week_closable_gate.ts`.
-`FuelBulkFinalizeDialog.tsx:371` closes weeks straight through the closable gate, so **bulk
-finalize bypasses the new Continue gate completely.** Repeat of the week-recon audit lesson: an
-SQL check is only as good as the writers that maintain its input — here there is no check at all.
-
-### High
-
-**F-4 — The legend promises a flag the desk never produces.**
-`fuelFillFlagClassify.ts:262` documents "Price outlier — vs retail estimate", but only
-`buildStationMedianOutlierFlags` is wired in. `buildPriceOutlierFlags` (Petrojam / retail markup)
-is not.
-
-**F-5 — Duplicate reason badges.**
-Dedupe is by `code`, not by rendered label (`fuelFillFlagClassify.ts:118-123`).
-`integrity_warning` and `is_flagged` both label with `anomalyReason`, so a fill flagged
-"Odometer Regression" renders that badge twice.
-
-**F-6 — `primarySeverity` is computed and thrown away.**
-Rows sort by date only (`fuelFillFlagClassify.ts:197`). A critical exception sorts below a stale
-info flag.
-
-**F-7 — Two glossaries drifting apart.**
-`FUEL_FLAG_CATEGORY_LEGEND` (`fuelFillFlagClassify.ts:216`) vs `FUEL_FLAG_GLOSSARY`
-(`apps/fleet/src/components/fuel/analytics/fuelFlagGlossary.ts`). The resolve dialog's
-`plainEnglishForReason` (`FuelExceptionResolveDialog.tsx:26`) does substring matching against the
-*other* list.
-
-### Medium
-
-**F-8 — Selecting a period on the desk silently moves the wizard's week.**
-`onSelectWeekStart` calls `handleReconciliationPeriodSelect` (`FuelManagement.tsx:1911`).
-
-**F-9 — New DQ review route has no optimistic concurrency.**
-Unlike its neighbours it does a blind read-modify-write with no `version` check or bump
-(`fuel_period_routes.ts:1707`). Two admins marking reviews concurrently → one review silently
-lost.
-
-**F-10 — "Review details" shows the wrong fills.**
-`pendingFuelLogsForVehicle` returns *pending* fills, falling back to *all* fills
-(`FuelPendingLogsSheet.tsx:25`) — never the *flagged* ones. The operator is asked to mark a
-vehicle reviewed after being shown evidence unrelated to why it was flagged.
-
-**F-11 — IA split.**
-Flags lives under Fleet Operations (`apps/fleet/src/components/layout/fleetNavModel.ts:184`);
-the wizard lives under Business Finance. Same work, two departments.
-
-**F-12 — Locked week + default filter = empty screen.**
-Default filter is `open`; on a locked week every row is `cleared`, so the desk renders
-"No open flags — try Cleared or All".
-
----
-
-## 3. Target architecture
-
-One principle:
+## 2. Target architecture (implemented)
 
 > **A flag is a claim. A disposition is a durable, attributed record that answers it. The lock
 > gate reads dispositions, not the week's lock status.**
@@ -122,8 +254,8 @@ fuel_entries.metadata ──► classifyFuelFillFlags() ──► FuelFlagClaim[
                         fuel_flag_disposition ────────────┤
                         (entry_id, flag_code, action,     │
                          actor, at, note, period_id)      ▼
-                                              resolveFuelFlagState()
-                                          Open │ Resolved │ Accepted-with-note
+                                              resolveDeskRowStatus()
+                                          Open │ Resolved │ Cleared-by-lock
                                                           │
                      ┌────────────────────────────────────┼──────────────────────┐
                      ▼                                    ▼                      ▼
@@ -133,204 +265,164 @@ fuel_entries.metadata ──► classifyFuelFillFlags() ──► FuelFlagClaim[
 
 Three rules that make the desync unrepresentable:
 
-1. **One classifier.** `classifyFuelFillFlags` becomes the only producer of fill-level flags.
-   `listExceptionTierFillBlockers` stops re-deriving from `signalTier` and instead filters
-   `classify()` output to `severity === 'critical'`. One vocabulary, one dedupe, one severity
-   ladder.
-2. **Disposition is data, not a tier mutation.** Stop flipping `signalTier` to `'observe'` on
-   accept — it is destructive (the original signal is lost) and it is the direct cause of F-1.
-   Write a disposition row; the classifier subtracts dispositions.
-3. **The closable gate is the single arbiter.** Add `undisposedCriticalFlags` to
-   `EvaluateFuelWeekClosableInput` so wizard Continue, bulk finalize, HTTP finalize and
-   auto-close all obey the same predicate. Closes F-3 by construction.
+1. **One classifier.** `classifyFuelFillFlags` is the only producer of fill-level flags.
+   `listExceptionTierFillBlockers` filters `classify()` output on `hasOpenCritical`.
+   ✅ Implemented — note this **widens** the blocker: `integrity_critical` now blocks where
+   previously only `signalTier === 'exception'` did.
+2. **Disposition is data, not a tier mutation.** ✅ Implemented — `signalTier` is preserved.
+3. **The closable gate is the single arbiter.** ✅ Implemented server-side and client-side
+   (`assembleFuelClientFinalizeGate` threads dispositions — Rev 3 / R-1).
 
 ---
 
-## 4. Phased implementation
-
-### Phase 0 — Stop the bleeding (~½ day, no schema)
-
-Correctness fixes to code that is not committed yet. Ship regardless of the rest of the plan.
-
-- [ ] **F-2** Build outlier IDs per week. Filter `logs` to the week window *before* calling
-      `buildStationMedianOutlierFlags`, and remove the truncation. Preferred: add
-      `buildStationMedianOutlierIdSet(entries, vehicles, weekEndYmd, pct)` to
-      `fuelAnalyticsAggregates.ts` with no `.slice()` and no display formatting, and have both the
-      desk and Analytics derive from it.
-- [ ] **F-5** Dedupe reasons by `` `${code}|${label}` ``, and drop `is_flagged` when a more
-      specific `integrity_*` reason with the same label already fired.
-- [ ] **F-6** Sort desk rows `severity desc, date desc`.
-- [ ] **F-4** Either wire `buildPriceOutlierFlags` in, or delete the retail-estimate row from the
-      legend. Do not document a flag that is never emitted.
-- [ ] **F-12** When the selected week is locked, default the status filter to `all`.
-- [ ] **F-9** Add version compare + bump to the DQ review route, matching its neighbours in
-      `fuel_period_routes.ts`.
-
-**Acceptance:** a unit test that picks a non-latest week containing a known station-median
-outlier and asserts it appears on the desk. That test fails today.
-
----
-
-### Phase 1 — The disposition record (~2–3 days)
-
-**Migration** — `supabase/migrations/<ts>_fuel_flag_disposition.sql`:
-
-```sql
-create table public.fuel_flag_disposition (
-  id         uuid primary key default gen_random_uuid(),
-  org_id     uuid not null,
-  entry_id   uuid not null,
-  flag_code  text not null,
-  action     text not null check (action in ('accepted','corrected','escalated','void')),
-  note       text,
-  period_id  uuid references public.fuel_reconciliation_period(id),
-  actor_id   uuid not null,
-  at         timestamptz not null default now(),
-  unique (org_id, entry_id, flag_code)
-);
-```
-
-Rules:
-
-- `action = 'corrected'` is written by the **edit fill** path, not by a button — the edit re-runs
-  the classifier and the flag disappears on its own.
-- `note` required (≥ 8 chars) for `accepted` on `severity === 'critical'`. Same shape as the
-  existing leakage / unattributed reviews, so the evidence pack already knows how to render it.
-- RLS: org-scoped, mirroring `fuel_reconciliation_period`.
-
-**Backfill:** every entry with `reconExceptionAck` or `exceptionResolvedAt` gets a
-`('signal_exception','accepted')` row carrying `exceptionResolveNote` and the original timestamp.
-Keep `reconExceptionAck` readable for one release, then retire it.
-
-**Client:**
-
-- `classifyFuelFillFlags` gains `opts.dispositions: Map<entryId, Set<flagCode>>`. Disposed reasons
-  are marked **resolved**, not dropped — the desk shows *"Accepted by X on Y — note"*, which is
-  what an auditor needs.
-- `listExceptionTierFillBlockers` (`fuelFinalizeGating.ts:166`) is rewritten as a filter over
-  `classifyFuelFillFlags` output. Delete the parallel `signalTier` check.
-- Remove the `signalTier: 'observe'` mutation from `FuelManagement.tsx:1820` and its local-merge
-  workaround at `:1831-1844`.
-
-**Acceptance:** accept a flag on the desk → the wizard's exception blocker for that fill
-disappears, and vice versa, with no page reload and no `signalTier` mutation. Write it as one
-test over shared state, not two per-surface tests.
-
----
-
-### Phase 2 — Make the gate real (~2 days)
-
-- [ ] Add `undisposedCriticalFlags?: boolean` → blocker code `undisposed_flags` in
-      `packages/fuel-core/src/evaluateFuelWeekClosable.ts`, message
-      *"Critical fill flags not dispositioned."*
-- [ ] Mirror it in `supabase/functions/_fleet-server/fuel_week_closable_gate.ts` and add it to the
-      Deno drift test, per the existing edge shared-code mirror pattern.
-- [ ] Feed `dataQualityReviewedVehicleIds` into the same gate so bulk finalize can no longer skip
-      it (`FuelBulkFinalizeDialog.tsx:371`).
-- [ ] Add the user-visible message to `fuelWeekClosableBlockerMessage`
-      (`apps/fleet/src/utils/fuelWeekClosableGate.ts:141`).
-
-**Blocking subset — decide explicitly.** Recommendation:
+## 3. Severity → blocking policy (implemented as planned)
 
 | Severity | Behaviour |
 |---|---|
-| `critical` | Hard-blocks close until dispositioned |
-| `warning` | Requires acknowledgement **only** if it carries money impact; otherwise counted, not gated |
+| `critical` | Hard-blocks close until dispositioned (`signal_exception`, `integrity_critical`) |
+| `warning` | Counted, not gated (`integrity_warning`, `is_flagged`, `location_anomaly`, `price_outlier`) |
 | `info` | Never blocks |
 
-Rationale: `Approaching Capacity` and `Fragmented Purchase` are warnings. If warnings block, every
-week blocks and operators learn to rubber-stamp — the exact failure mode noted in the Fuel Review
-Queue disposition.
-
-**Acceptance:** each new blocker needs an input that makes `evaluateFuelWeekClosable` return
-non-empty (the file's own header rule), plus one test proving bulk finalize refuses a week the
-wizard would refuse.
+Rationale: if warnings block, every week blocks and operators learn to rubber-stamp — the failure
+mode noted in the Fuel Review Queue disposition.
 
 ---
 
-### Phase 3 — Wire Data quality to the flags (~1–2 days)
+## 4. Where things live now
 
-This is the sync the user-facing experience actually needs.
-
-- [ ] **F-10** `FuelPendingLogsSheet` becomes `FuelVehicleEvidenceSheet`: flagged fills first with
-      their reasons, then pending fills. Reuse `buildFuelFlagDeskRows` filtered to one vehicle —
-      the same rows the desk shows.
-- [ ] "Mark reviewed" on a vehicle with undisposed critical flags is **disabled**, with inline
-      copy: *"3 flagged fills need a decision first."* A vehicle-level ack must not outrank a
-      fill-level blocker.
-- [ ] The Data quality chip counts flagged fills, not just vehicle health, so the landing card
-      reads *"4 flagged fills · 1 vehicle"* instead of *"Not evaluated"*.
-
----
-
-### Phase 4 — IA and the desk's real job (~1–2 days)
-
-Keep both surfaces; give them distinct jobs and connect them.
-
-- **Fuel Flags = the standing monitor.** Cross-week, "what is going wrong in the fleet right now",
-  triage and disposition. Move it next to Transaction Logs — it is a *fills* view.
-- **Wizard Data quality = the week close gate.** Shows only the current week's undisposed
-  blockers, and links out.
-- [ ] Add the missing edges: desk row → *Open in week reconciliation*, and → *Edit fill*; wizard
-      blocker → *See all flags for this vehicle*.
-- [ ] **F-8** Give the desk its own `flagsWeekStart` state; replace the side-effecting dropdown
-      with an explicit *"Reconcile this week →"* button.
-- [ ] **F-7** One glossary keyed by `flag_code`; fold `FUEL_FLAG_CATEGORY_LEGEND` and
-      `FUEL_FLAG_GLOSSARY` together and delete `plainEnglishForReason`'s substring matching.
+| Concern | File |
+|---|---|
+| Classifier + legend + desk rows | `apps/fleet/src/utils/fuelFillFlagClassify.ts` |
+| Disposition map, dual-read helpers | `apps/fleet/src/utils/fuelFlagDisposition.ts` |
+| Finalize blockers (filters classifier) | `apps/fleet/src/utils/fuelFinalizeGating.ts` |
+| Client closable input | `apps/fleet/src/utils/fuelWeekClosableGate.ts` |
+| Shared predicate (client + edge) | `packages/fuel-core/src/evaluateFuelWeekClosable.ts` |
+| Server mirror + DQ review evaluation | `supabase/functions/_fleet-server/fuel_week_closable_gate.ts` |
+| Routes (`/fuel/flags/disposition`, `…/dispositions`, DQ review) | `supabase/functions/_fleet-server/fuel_period_routes.ts` |
+| Desk UI | `apps/fleet/src/components/fuel/flags/FuelFlagsDesk.tsx` |
+| Wizard DQ step + evidence sheet | `.../reconciliation/FuelDataQualityStep.tsx`, `FuelPendingLogsSheet.tsx` |
+| Glossary (single, keyed by code) | `apps/fleet/src/components/fuel/analytics/fuelFlagGlossary.ts` |
+| Schema | `supabase/migrations/20260918140000_fuel_flag_disposition.sql`, `…120000_fuel_period_data_quality_vehicle_reviews.sql` |
 
 ---
 
-### Phase 5 — Permissions and evidence (~1 day)
+## 5. Non-goals (unchanged)
 
-- [ ] `fuel-flags` nav uses `nav.fuel_logs` (`apps/fleet/src/navigation/pageRegistry.ts:63`).
-      Viewing is fine; **dispositioning must require `fuel.edit_entry`**, and accepting a
-      `critical` flag should require the same tier as `fuel.accept_unexplained`. Read access must
-      not imply disposition access.
-- [ ] Dispositions join the evidence pack and the period audit trail, so a locked week can answer
-      *"who cleared this and why"* — which today it cannot.
+- **Do not make every flag blocking.** See §3.
+- **Do not touch the money math.** No category cost, no residual, no driver share changes.
+- **Do not merge the two surfaces.** Standing monitor vs. week close gate; connect, don't merge.
 
 ---
 
-## 5. UX specification for the desk
+## 6. Round 2 — closed (Rev 3)
 
-The table is currently a report; it needs to be a queue.
+All items below were open in Rev 2 and are **Done** as of Rev 3. Summary lives in §0.
 
-- **Every row needs a primary action.** Row → detail sheet with: what the flag means, the fill's
-  numbers, the vehicle's recent fills for context, and three buttons —
-  *Accept with note* / *Edit fill* / *Escalate to dispute*.
-- **Group by vehicle, not by date.** Four separate decisions for one vehicle's bad week is four
-  times the work. One card — *"5179KZ — 4 flags, $14,500"* — with bulk-accept matches the real
-  workflow.
-- **Status must be tri-state**: `Open` / `Resolved` / `Cleared by lock`. Collapsing the last two
-  into "Cleared" is the audit hole.
-- **Header counter**: *"4 open · 0 resolved · $14,500 at risk"*. The desk shows per-row amounts but
-  never totals them, so nobody knows the exposure.
-- Keep the legend — it is genuinely good. Collapse it by default once a user has opened it once.
-
----
-
-## 6. Deliberate non-goals
-
-- **Do not make every flag blocking.** See the severity table in Phase 2.
-- **Do not touch the money math.** Everything here is classification, disposition and gating. No
-  category cost, no residual, no driver share changes. Per the financial-integrity audit rule,
-  that stays out of scope unless explicitly requested.
-- **Do not delete the Fuel Flags desk in favour of the wizard.** They serve different jobs
-  (standing monitor vs. week close gate); the fix is to connect them, not to merge them.
-
----
-
-## 7. Sequencing summary
-
-| Phase | Effort | Ship as |
+| # | Was | Resolution |
 |---|---|---|
-| 0 — Stop the bleeding | ½ day | Straight to `main` — fixes uncommitted code |
-| 1 — Disposition record | 2–3 days | One PR with Phase 2, behind `fuelFlagDispositionEnabled` |
-| 2 — Make the gate real | 2 days | Same PR as Phase 1 — a disposition nothing reads is another F-3 |
-| 3 — Data quality wiring | 1–2 days | Follow-up PR |
-| 4 — IA and desk queue | 1–2 days | Follow-up PR |
-| 5 — Permissions + evidence | 1 day | Follow-up PR |
+| R-1 | Critical — client gate ignored dispositions; wizard hardcoded `signal_exception` | `assembleFuelClientFinalizeGate` + map threaded; `resolveOpenFlagCodeForAccept`; wiring tests |
+| R-2 | High — org-wide `limit(2000)` silent clip | `entryIds` chunked list + `truncated` + desk banner |
+| R-3 | Medium — `corrected` never written | Desk edit-save upserts `corrected` for open codes |
+| R-4 | Medium — single Accept hit first open reason | Per-reason Accept / Escalate buttons |
+| R-5 | Low — chip said vehicles only | `openFlaggedFillCount` + `N flagged fills · M vehicles` |
+| R-6 | Low — stale lock copy | Page description updated |
+| R-7 | Low — double classify | Single-pass in `listExceptionTierFillBlockers` |
+| R-8 | Hardening — case drift | Client `.trim().toLowerCase()` + tests |
 
-**Total ≈ 8–10 working days.**
+No remaining Round 2 blockers. Confirmed: `fuelFlagDispositionEnabled` does not exist anywhere in
+the codebase — **the path is live**, so §8 items reach production without a flag to hold them back.
 
-Phases 1 and 2 must ship together. Phase 0 is independent and should not wait.
+---
+
+## 7. Round 2 sequencing (historical)
+
+| Item | Effort | Priority |
+|---|---|---|
+| R-1 — thread dispositions into all four gate call sites + correct flag code + wiring test | ~1 day | **Done** |
+| R-2 — scope/paginate the dispositions read | ~½ day | **Done** |
+| R-3, R-4 | ~½ day | **Done** |
+| R-5, R-6, R-7, R-8 | ~½ day | **Done** |
+
+---
+
+## 8. Round 3 — closed (Rev 5)
+
+Found verifying Rev 3; all closed in Rev 5.
+
+| # | Was | Resolution |
+|---|---|---|
+| R3-1 | Build-breaking — `action: string` vs union in `dispositionMapFromRows` | Widened helper to `action?: string`; runtime allow-list unchanged |
+| R3-2 | High — bulk reused selected-week dispositions map | Per-week `listFuelFlagDispositions({ entryIds })` in prepare+execute; test asserts two-week finalize |
+| R3-3 | Low — `periodId` AND in entryIds branch dropped null `period_id` | Clause removed from entryIds branch |
+| R3-4 | Low — `signalTier` case drift | Client `.toLowerCase()` + `normalizes signalTier case (R3-4)` test |
+
+---
+
+## 9. Round 3 sequencing (historical)
+
+| Item | Effort | Priority |
+|---|---|---|
+| R3-1 — typecheck fix | minutes | **Done** |
+| R3-2 — per-week disposition hydrate in bulk finalize | ~½ day | **Done** |
+| R3-3, R3-4 | ~1 hour | **Done** |
+
+---
+
+## 10. Round 4 — closed (Rev 7)
+
+Found verifying Rev 5; all closed in Rev 7. Nothing here blocked shipping — polish only.
+Theme: **a failure to load dispositions must not read as "there are none."**
+
+| # | Was | Resolution |
+|---|---|---|
+| R4-1 | Self-introduced typecheck in desk `corrected` note | Hoisted `const src = entry as FuelEntry & { correctionReason?: string }` |
+| R4-2 | Bulk `.catch(() => empty)` → false `undisposed_flags` | `loadWeekFlagDispositions`; skip with `FUEL_BULK_DISPOSITIONS_LOAD_SKIP` |
+| R4-3 | Per-week `truncated` ignored | Same skip sentinel when `truncated === true` |
+| R4-4 | Dead `dispositions` prop on bulk dialog | Prop + dashboard pass removed |
+
+---
+
+## 11. Round 4 sequencing (historical)
+
+| Item | Effort | Priority |
+|---|---|---|
+| R4-1 — narrow the union once in the R-3 block | minutes | **Done** |
+| R4-2 + R4-3 — distinct "could not load dispositions" skip reason | ~1 hour | **Done** |
+| R4-4 — remove dead prop | minutes | **Done** |
+
+Round 2 / Round 3 / Round 4 were implemented on the same working tree; prefer landing Round 2+3
+first, then Round 4, so each review stays readable.
+
+---
+
+## 12. Closeout — the only remaining action
+
+**No open findings.** Four review rounds are closed; the feature is verified and shippable.
+
+**Commit it.** All four rounds live on one uncommitted working tree of 26 files. That is now the
+largest risk to this work — larger than anything left in the code. Nothing here depends on further
+review.
+
+Suggested split, so the history stays reviewable:
+
+1. **Phases 0–5 + Round 2** — the disposition architecture and the client-gate wiring.
+2. **Round 3** — per-week bulk hydration, route scoping, case normalisation, the `action` widening.
+3. **Round 4** — load-failure sentinel, the union narrow, dead-prop removal.
+
+### Standing notes for whoever picks this up next
+
+- **Not this work's debt, but worth a ticket:** 16 pre-existing typecheck errors in
+  `FuelManagement.handleSaveLog`, all one root cause — the parameter is
+  `FuelEntry | FuelEntry[] | { _saveAsGasCardAnchor: true; fuelEntry: FuelEntry }` and the body
+  reads `entry.metadata` / `.id` / `.amount` / `.date` without narrowing. One hoisted narrow at the
+  top of each arm clears the file. R4-1 is the template.
+- **No feature flag exists.** `fuelFlagDispositionEnabled` was proposed in Rev 1 and never built,
+  so merging enables the behaviour immediately. Expect a one-off spike in blocked weeks the first
+  time a period is closed after merge: `integrity_critical` now blocks where only
+  `signalTier === 'exception'` used to. That is intended, but tell the operators first.
+- **Retail-estimate price outliers remain unimplemented** (F-4 was closed by deleting the legend
+  row). `buildPriceOutlierFlags` still exists, unused by the desk, if that flag is ever wanted.
+- **Verification traps, both of which produced wrong conclusions in earlier revisions of this
+  document:** run fleet tests from `apps/fleet` (the repo root skips
+  `apps/fleet/src/test/setup.ts`), run fuel-core from the repo root (no local binary), and filter
+  `tsc` output by **filename** — filtering by error text hid a real regression for two revisions.

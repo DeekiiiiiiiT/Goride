@@ -1817,21 +1817,65 @@ export function registerFuelPeriodRoutes(app: Hono) {
     },
   );
 
-  /** List dispositions for the org (desk hydrate; client filters to week entries). */
+  /** List dispositions scoped by entry IDs (preferred) and/or periodId — never silent org-wide clip. */
   app.get(
     `${BASE}/fuel/flags/dispositions`,
     requirePermission("fuel.view"),
     async (c: Context) => {
       const orgId = getOrgId(c);
-      if (!orgId) return c.json({ dispositions: [] });
+      if (!orgId) return c.json({ dispositions: [], truncated: false });
       const periodId = String(c.req.query("periodId") || "").trim();
+      const entryIdsRaw = String(c.req.query("entryIds") || "").trim();
+      const entryIds = entryIdsRaw
+        ? [...new Set(entryIdsRaw.split(",").map((s) => s.trim()).filter(Boolean))]
+        : [];
+      if (!periodId && entryIds.length === 0) {
+        return c.json({
+          dispositions: [],
+          truncated: false,
+          error: "entryIds_or_periodId_required",
+        }, 400);
+      }
       const sb = getServiceClient();
-      let q = sb.from("fuel_flag_disposition").select("*").eq("org_id", orgId);
-      if (periodId) q = q.eq("period_id", periodId);
-      const { data, error } = await q.order("at", { ascending: false }).limit(2000);
-      if (error) return c.json({ error: error.message }, 500);
+      const CHUNK = 200;
+      const PER_CHUNK_CAP = 2000;
+      const rows: any[] = [];
+      let truncated = false;
+
+      if (entryIds.length > 0) {
+        for (let i = 0; i < entryIds.length; i += CHUNK) {
+          const slice = entryIds.slice(i, i + CHUNK);
+          let q = sb
+            .from("fuel_flag_disposition")
+            .select("*")
+            .eq("org_id", orgId)
+            .in("entry_id", slice)
+            .order("at", { ascending: false })
+            .limit(PER_CHUNK_CAP);
+          // Do not AND period_id here — null period_id rows would drop out (R3-3).
+          const { data, error } = await q;
+          if (error) return c.json({ error: error.message }, 500);
+          const batch = data || [];
+          if (batch.length >= PER_CHUNK_CAP) truncated = true;
+          rows.push(...batch);
+        }
+      } else {
+        // periodId-only fallback (may miss null period_id rows — prefer entryIds).
+        const { data, error } = await sb
+          .from("fuel_flag_disposition")
+          .select("*")
+          .eq("org_id", orgId)
+          .eq("period_id", periodId)
+          .order("at", { ascending: false })
+          .limit(PER_CHUNK_CAP);
+        if (error) return c.json({ error: error.message }, 500);
+        const batch = data || [];
+        if (batch.length >= PER_CHUNK_CAP) truncated = true;
+        rows.push(...batch);
+      }
+
       return c.json({
-        dispositions: (data || []).map((r: any) => ({
+        dispositions: rows.map((r: any) => ({
           id: r.id,
           entryId: r.entry_id,
           flagCode: r.flag_code,
@@ -1841,6 +1885,7 @@ export function registerFuelPeriodRoutes(app: Hono) {
           at: r.at,
           periodId: r.period_id,
         })),
+        truncated,
       });
     },
   );

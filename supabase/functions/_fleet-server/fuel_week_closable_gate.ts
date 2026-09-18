@@ -254,7 +254,17 @@ async function loadDisposedEntryFlagPairs(
 ): Promise<Set<string>> {
   const out = new Set<string>();
   if (entryIds.length === 0) return out;
-  const sb = getServiceClient();
+  // Unit/CI has no service role — treat as no dispositions (fail-closed: flags still open).
+  let sb;
+  try {
+    sb = getServiceClient();
+  } catch (err) {
+    console.warn(
+      "[fuel_week_closable] disposition load skipped — no service client",
+      err instanceof Error ? err.message : err,
+    );
+    return out;
+  }
   // Chunk to avoid URL limits
   const chunk = 200;
   for (let i = 0; i < entryIds.length; i += chunk) {

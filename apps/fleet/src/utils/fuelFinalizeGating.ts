@@ -171,32 +171,32 @@ export function listExceptionTierFillBlockers(
   endYmd: string,
   dispositions?: FuelFlagDispositionMap,
 ): FuelExceptionBlocker[] {
-  return fuelEntries
-    .filter((e) => {
-      const d = entryDateYmd(e);
-      if (startYmd && d < startYmd) return false;
-      if (endYmd && d > endYmd) return false;
-      const c = classifyFuelFillFlags(e, { dispositions });
-      return c.hasOpenCritical;
-    })
-    .map((e) => {
-      const payRaw = resolveEntryPaymentRaw(e);
-      const c = classifyFuelFillFlags(e, { dispositions });
-      const openCritical = c.reasons.find((r) => r.severity === 'critical' && !r.resolved);
-      return {
-        id: e.id,
-        dateYmd: entryDateYmd(e),
-        amount: Number(e.amount) || 0,
-        vehicleId: e.vehicleId || undefined,
-        driverId: e.driverId || undefined,
-        paymentLabel: fuelPaymentSourceDisplayLabel(
-          payRaw || resolveFuelPaymentSource(payRaw).enum,
-        ),
-        location: resolveEntryLocation(e),
-        reason: openCritical?.label || resolveExceptionReason(e),
-      };
-    })
-    .sort((a, b) => a.dateYmd.localeCompare(b.dateYmd) || a.id.localeCompare(b.id));
+  // Single-pass classify (R-7) — avoid filter+map double work.
+  const blockers: FuelExceptionBlocker[] = [];
+  for (const e of fuelEntries) {
+    const d = entryDateYmd(e);
+    if (startYmd && d < startYmd) continue;
+    if (endYmd && d > endYmd) continue;
+    const c = classifyFuelFillFlags(e, { dispositions });
+    if (!c.hasOpenCritical) continue;
+    const payRaw = resolveEntryPaymentRaw(e);
+    const openCritical = c.reasons.find((r) => r.severity === 'critical' && !r.resolved);
+    blockers.push({
+      id: e.id,
+      dateYmd: d,
+      amount: Number(e.amount) || 0,
+      vehicleId: e.vehicleId || undefined,
+      driverId: e.driverId || undefined,
+      paymentLabel: fuelPaymentSourceDisplayLabel(
+        payRaw || resolveFuelPaymentSource(payRaw).enum,
+      ),
+      location: resolveEntryLocation(e),
+      reason: openCritical?.label || resolveExceptionReason(e),
+    });
+  }
+  return blockers.sort(
+    (a, b) => a.dateYmd.localeCompare(b.dateYmd) || a.id.localeCompare(b.id),
+  );
 }
 
 /** Count of undisposed critical fill flags in the week window. */
@@ -207,6 +207,24 @@ export function countUndisposedCriticalFlags(
   dispositions?: FuelFlagDispositionMap,
 ): number {
   return listExceptionTierFillBlockers(fuelEntries, startYmd, endYmd, dispositions).length;
+}
+
+/**
+ * Wizard / bulk / finalize client gate assembly — always pass dispositions
+ * (undefined = legacy dual-read only). Wiring tests must call this helper.
+ */
+export function assembleFuelClientFinalizeGate(opts: {
+  reports: WeeklyFuelReport[];
+  disputes?: FuelDispute[];
+  fuelEntries?: FuelEntry[];
+  finalizedReports?: FinalizedFuelReport[];
+  transactions?: Array<FinancialTransaction | Record<string, unknown>>;
+  weekStartYmd?: string;
+  weekEndYmd?: string;
+  /** Required on the call site — pass the page map or explicit undefined. */
+  dispositions: FuelFlagDispositionMap | undefined;
+}): FuelFinalizeGateResult {
+  return evaluateFuelFinalizeGating(opts);
 }
 
 export function evaluateFuelFinalizeGating(opts: {

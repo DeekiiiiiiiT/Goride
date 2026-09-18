@@ -10,6 +10,7 @@ import {
   fuelScenariosContentSig,
   hashFuelContentSig,
 } from '../utils/fuelContentSig';
+import { dispositionMapContentSig } from '../utils/fuelFlagDisposition';
 
 export const FUEL_WEEK_REPORTS_KEY = 'fuelWeekReports';
 
@@ -32,6 +33,7 @@ export function useFuelWeekReports(
         (input.finalizedReports || [])
           .map((f) => `${f.driverId}:${f.weekStart}:${f.miscellaneousCost}`)
           .join(','),
+        dispositionMapContentSig(input.dispositions),
       ])
     : 'none';
 
