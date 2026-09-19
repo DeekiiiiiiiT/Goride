@@ -1,7 +1,7 @@
 {
   "slug": "fleet-fuel",
-  "generatedAt": "2026-09-18T19:11:17.758Z",
-  "routeCount": 121,
+  "generatedAt": "2026-09-18T23:51:35.101Z",
+  "routeCount": 122,
   "routes": [
     "DELETE ${BASE_PATH}/admin/evidence-inbox/gate-held/:transactionId",
     "DELETE ${BASE_PATH}/finalized-reports/:weekStart/:identityId",
@@ -85,6 +85,7 @@
     "POST ${BASE_PATH}/fuel-entries",
     "POST ${BASE_PATH}/fuel-pnl-offset-backfill/backfill",
     "POST ${BASE_PATH}/fuel/ensure-posted-entries",
+    "POST ${BASE_PATH}/fuel/split-fill",
     "POST ${BASE_PATH}/geo/geocode",
     "POST ${BASE_PATH}/geo/reverse-geocode",
     "POST ${BASE_PATH}/jaa-csv-imports",
