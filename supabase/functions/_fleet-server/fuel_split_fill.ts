@@ -15,10 +15,14 @@ import { stampFuelEntryRetailPrice } from "./fuel_retail_stamp.ts";
 import {
   enrichRecordWithDriverVehicle,
 } from "./driver_vehicle_assignment.ts";
-import { projectFromFuelEntry } from "./odometer_ledger.ts";
+import {
+  projectOdometerReading,
+  resolveFuelRecordedAt,
+} from "./odometer_ledger.ts";
 import { syncLinkedExpenseTransaction } from "./fuel_transaction_sync.ts";
 import type { RbacUser } from "./rbac_middleware.ts";
 import { hasPermission } from "./rbac_middleware.ts";
+import { isOrgModuleEnabled } from "./enterprise_modules.ts";
 
 export type SplitFillBody = {
   fillGroupId: string;
@@ -191,8 +195,37 @@ export async function persistSplitFill(
 
   try {
     await kv.set(`fuel_entry:${cardEntry.id}`, cardEntry);
+    // One odometer projection per fillGroupId (cash owns volume; card never projects).
     try {
-      await projectFromFuelEntry(cardEntry, (cardEntry.organizationId as string) || getOrgId(c));
+      const odo = Number(cardEntry.odometer);
+      const vehicleId = String(cardEntry.vehicleId || "").trim();
+      if (Number.isFinite(odo) && odo > 0 && vehicleId && vehicleId !== "unknown") {
+        await projectOdometerReading({
+          organizationId: (cardEntry.organizationId as string) || getOrgId(c),
+          vehicleId,
+          reading: odo,
+          source: "fuel",
+          referenceId: fillGroupId,
+          referenceType: "fuel_entry",
+          recordedAt: await resolveFuelRecordedAt(cardEntry),
+          readingDate: String(cardEntry.date || "").slice(0, 10) || undefined,
+          driverId: (cardEntry.driverId as string) || null,
+          isHard: true,
+          isVerified: true,
+          notes: cardEntry.location
+            ? `Split fuel at ${cardEntry.location}`
+            : "Split Fuel Fill",
+          imageUrl:
+            (cardEntry.odometerImageUrl as string) ||
+            (cardEntry.odometerProofUrl as string) ||
+            null,
+          payloadExtra: {
+            fillGroupId,
+            metaData: cardEntry.metadata || {},
+            time: cardEntry.time || null,
+          },
+        });
+      }
     } catch (odoErr) {
       console.error("[SplitFill] Odometer projection failed (non-fatal):", odoErr);
     }
@@ -249,6 +282,47 @@ export function assertSplitFillAllowed(c: Context): { allowed: true } | { allowe
         message: 'You do not have the "fuel.create_entry" permission.',
         required: "fuel.create_entry",
         currentRole: rbacUser.resolvedRole,
+      },
+    };
+  }
+  return { allowed: true };
+}
+
+/** RBAC + fuelSplitPayment opt-in module (fail-closed). */
+export async function assertSplitFillAllowedAsync(
+  c: Context,
+): Promise<{ allowed: true } | { allowed: false; status: 401 | 403; body: Record<string, unknown> }> {
+  const rbac = assertSplitFillAllowed(c);
+  if (!rbac.allowed) return rbac;
+
+  const rbacUser = c.get("rbacUser") as RbacUser;
+  let orgId = getOrgId(c) || rbacUser.organizationId || null;
+  if (!orgId && (rbacUser.resolvedRole === "fleet_owner" || rbacUser.rawRole === "admin")) {
+    orgId = rbacUser.userId;
+  }
+  if (!orgId) {
+    return {
+      allowed: false,
+      status: 403,
+      body: {
+        error: "Forbidden",
+        code: "MODULE_DISABLED",
+        message: "Gas Card + Cash split fills require an organization with the module enabled.",
+        module: "fuelSplitPayment",
+      },
+    };
+  }
+
+  const enabled = await isOrgModuleEnabled(orgId, "fuelSplitPayment");
+  if (!enabled) {
+    return {
+      allowed: false,
+      status: 403,
+      body: {
+        error: "Forbidden",
+        code: "MODULE_DISABLED",
+        message: "Gas Card + Cash split fills are not enabled for this organization.",
+        module: "fuelSplitPayment",
       },
     };
   }

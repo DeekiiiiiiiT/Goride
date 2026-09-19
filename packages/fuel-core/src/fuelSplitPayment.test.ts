@@ -7,6 +7,8 @@ import {
   isSplitNonVolumeOwner,
   splitReconMetadataPatch,
   splitReconTolerance,
+  SPLIT_RECON_TOLERANCE_FLOOR_JMD,
+  SPLIT_RECON_TOLERANCE_PCT,
   validateSplitCashAmounts,
 } from './fuelSplitPayment.ts';
 
@@ -104,5 +106,16 @@ describe('splitReconMetadataPatch', () => {
     );
     expect(patch.splitVariance).toBe(true);
     expect(patch.splitReconciled).toBe(false);
+  });
+});
+
+describe('splitReconTolerance drift guard', () => {
+  // Matcher copies inline Math.max(50, pumpTotal * 0.01) — keep locked to these constants.
+  it('matches the inlined matcher formula for representative totals', () => {
+    for (const total of [0, 100, 5000, 10000, 1]) {
+      const expected = Math.max(SPLIT_RECON_TOLERANCE_FLOOR_JMD, Math.abs(total) * SPLIT_RECON_TOLERANCE_PCT);
+      expect(splitReconTolerance(total)).toBe(expected);
+      expect(splitReconTolerance(total)).toBe(Math.max(50, Math.abs(total) * 0.01));
+    }
   });
 });

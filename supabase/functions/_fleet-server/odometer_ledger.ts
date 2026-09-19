@@ -227,15 +227,18 @@ export async function listOdometerLedger(
 
   if (error) throw new Error(error.message);
   const rows = (data || []).map((r) => toClientValue(r as Record<string, unknown>));
+  // Collapse twins BEFORE deltaKm — otherwise a same-clock/value pair yields delta 0.
+  const collapsed = collapseOdometerRowsWithDelta(rows);
+  return { data: collapsed, total: count ?? rows.length };
+}
 
-  for (let i = 0; i < rows.length; i++) {
-    const newer = Number(rows[i].value) || 0;
-    const older = i + 1 < rows.length ? Number(rows[i + 1].value) || 0 : null;
-    rows[i].deltaKm = older != null ? newer - older : null;
-  }
-
-  // Soft-collapse exact same clock+value re-submits before returning.
-  // Client also floors to the minute; here we keep first occurrence of exact match.
+/**
+ * Soft-collapse exact recordedAt+value re-submits (newest-first list), then
+ * compute deltaKm against the prior distinct reading.
+ */
+export function collapseOdometerRowsWithDelta(
+  rows: Record<string, unknown>[],
+): Record<string, unknown>[] {
   const collapsed: Record<string, unknown>[] = [];
   const seen = new Set<string>();
   for (const row of rows) {
@@ -243,10 +246,14 @@ export async function listOdometerLedger(
     const key = `${recAt}-${row.value}`;
     if (seen.has(key)) continue;
     seen.add(key);
-    collapsed.push(row);
+    collapsed.push({ ...row });
   }
-
-  return { data: collapsed, total: count ?? rows.length };
+  for (let i = 0; i < collapsed.length; i++) {
+    const newer = Number(collapsed[i].value) || 0;
+    const older = i + 1 < collapsed.length ? Number(collapsed[i + 1].value) || 0 : null;
+    collapsed[i].deltaKm = older != null ? newer - older : null;
+  }
+  return collapsed;
 }
 
 export async function projectOdometerReading(
@@ -436,6 +443,15 @@ export async function projectFromFuelEntry(
     importSrc === "jaa_statement_details" ||
     entrySource.includes("fuel-card")
   ) {
+    return null;
+  }
+
+  // Split fills project once under fuel_split:{fillGroupId} at persistSplitFill.
+  // Skip every sibling fuel_entry (card never; cash on approval).
+  if (typeof meta.fillGroupId === "string" && meta.fillGroupId.trim().length > 0) {
+    return null;
+  }
+  if (meta.splitVolumeOwner === false) {
     return null;
   }
 

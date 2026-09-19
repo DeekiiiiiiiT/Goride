@@ -295,11 +295,23 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
           } catch (e: any) {
               console.error("Sync failed for action", action.id, e);
               errorCount++;
-              
-              offlineStorage.updateAction(action.id, { 
-                  retryCount: (action.retryCount || 0) + 1,
-                  lastError: e.message || 'Unknown error'
+
+              const code = String(e?.code || "");
+              const msg = String(e?.message || "");
+              const permanent =
+                code === "MODULE_DISABLED" ||
+                /MODULE_DISABLED/i.test(msg) ||
+                /not enabled for this organization/i.test(msg);
+
+              offlineStorage.updateAction(action.id, {
+                  retryCount: permanent ? MAX_RETRIES : (action.retryCount || 0) + 1,
+                  lastError: permanent
+                    ? (msg || "Split fills are not enabled for this fleet")
+                    : (msg || "Unknown error"),
               });
+              if (permanent && action.type === "SUBMIT_SPLIT_FUEL_FILL") {
+                toast.error("Split fuel fill is not available for your fleet");
+              }
           }
       }
 

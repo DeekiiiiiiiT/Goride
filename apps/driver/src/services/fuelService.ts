@@ -135,9 +135,14 @@ export const fuelService = {
     });
     if (!response.ok) {
       await throwIfCatalogGateBlocked(response, 'Cannot save split fuel fill — vehicle is pending catalog approval');
-      const errorBody = await response.json().catch(() => ({}));
+      const errorBody = await response.json().catch(() => ({} as Record<string, unknown>));
       console.error('[FuelService] Save split fill failed:', response.status, errorBody);
-      throw new Error(errorBody.error || `Failed to save split fill (${response.status})`);
+      const err = new Error(
+        String(errorBody.message || errorBody.error || `Failed to save split fill (${response.status})`),
+      ) as Error & { code?: string; status?: number };
+      err.code = typeof errorBody.code === 'string' ? errorBody.code : undefined;
+      err.status = response.status;
+      throw err;
     }
     const result = await response.json();
     return result.data || result;

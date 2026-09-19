@@ -29,6 +29,9 @@ export const SPLIT_RECON_TOLERANCE_FLOOR_JMD = 50;
 /** Fraction of pump total used as tolerance (with floor). */
 export const SPLIT_RECON_TOLERANCE_PCT = 0.01;
 
+/** Must stay in sync with inlined Math.max(50, pumpTotal * 0.01) in
+ * packages/roam-shared/.../jaaFuelStatementMatcher.ts and
+ * supabase/functions/_fleet-server/fuel_jaa_match.ts */
 export function splitReconTolerance(pumpTotal: number): number {
   const total = Math.abs(Number(pumpTotal) || 0);
   return Math.max(SPLIT_RECON_TOLERANCE_FLOOR_JMD, total * SPLIT_RECON_TOLERANCE_PCT);

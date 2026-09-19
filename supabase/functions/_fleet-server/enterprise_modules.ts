@@ -201,3 +201,43 @@ export function allModulesOff(): Record<string, boolean> {
   }
   return out;
 }
+
+/**
+ * Route-level org module gate (fail-closed for OPT_IN_MODULE_KEYS).
+ * Loads org.enabled_modules + product-line defaults the same way as /enterprise/me/modules.
+ */
+export async function isOrgModuleEnabled(
+  orgId: string,
+  moduleKey: EnterpriseModuleKey,
+): Promise<boolean> {
+  const id = String(orgId || "").trim();
+  if (!id) return false;
+
+  const { getServiceClient } = await import("./service_client.ts");
+  const { getPlatformSettingsCached } = await import("./platform_settings.ts");
+
+  const supabase = getServiceClient();
+  const { data: org, error } = await supabase
+    .from("organizations")
+    .select("id, product_line, enabled_modules, service_lines")
+    .eq("id", id)
+    .maybeSingle();
+  if (error || !org) {
+    console.error("[isOrgModuleEnabled] org load failed:", id, error?.message);
+    return false;
+  }
+
+  const settings = await getPlatformSettingsCached(
+    org.product_line === "fleet" ? "fleet" : "enterprise",
+  );
+  const productLineModules = {
+    ...DEFAULT_ENTERPRISE_MODULES,
+    ...((settings?.enabledModules as Record<string, boolean>) || {}),
+  };
+  const orgOverrides = rushModuleOverridesForServiceLines(
+    (org.service_lines as string[] | null) ?? ["rideshare"],
+    (org.enabled_modules as Record<string, boolean> | null) || null,
+  );
+  const effective = resolveEffectiveModules(productLineModules, orgOverrides);
+  return effective[moduleKey] === true;
+}

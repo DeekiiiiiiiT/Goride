@@ -342,6 +342,8 @@ export function applyFuelMatchLinks<T extends FuelEntryLike>(
     const pumpTotal = Math.abs(Number(drvMeta.splitPumpTotal) || 0);
     const stmtAmt = Math.abs(Number(stmt.amount) || 0);
     const delta = Math.round((stmtAmt - expected) * 100) / 100;
+    // Keep in sync with packages/fuel-core/src/fuelSplitPayment.ts → splitReconTolerance()
+    // (floor 50 JMD or 1% of pump total). Circular import blocks sharing the helper.
     const tolerance = Math.max(50, pumpTotal * 0.01);
     const reconciled = Math.abs(delta) <= tolerance;
     splitReconPatch = {

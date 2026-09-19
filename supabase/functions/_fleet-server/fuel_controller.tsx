@@ -88,7 +88,7 @@ import {
   pickFleetVisibleEntryId,
   resolveLinkedFuelEntryIdsUnion,
 } from "./fuel_entry_pair.ts";
-import { persistSplitFill, assertSplitFillAllowed } from "./fuel_split_fill.ts";
+import { persistSplitFill, assertSplitFillAllowedAsync } from "./fuel_split_fill.ts";
 
 const app = new Hono();
 
@@ -217,7 +217,7 @@ app.post(`${BASE_PATH}/fuel/ensure-posted-entries`, requirePermission("fuel.view
 
 /** Atomic Gas Card + Cash split fill (idempotent on fillGroupId). */
 app.post(`${BASE_PATH}/fuel/split-fill`, async (c) => {
-  const gate = assertSplitFillAllowed(c);
+  const gate = await assertSplitFillAllowedAsync(c);
   if (!gate.allowed) return c.json(gate.body, gate.status);
   try {
     const body = await c.req.json();
