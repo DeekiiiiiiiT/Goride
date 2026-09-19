@@ -1,6 +1,6 @@
 {
   "slug": "fleet-toll",
-  "generatedAt": "2026-09-18T19:11:17.774Z",
+  "generatedAt": "2026-09-19T16:07:24.423Z",
   "routeCount": 76,
   "routes": [
     "GET ${BASE}/automation-settings",
