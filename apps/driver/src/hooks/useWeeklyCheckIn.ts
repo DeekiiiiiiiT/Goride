@@ -7,6 +7,8 @@ import { api } from '../services/api';
 const CHECK_IN_POST_MS = 45_000;
 const STATUS_REFRESH_MS = 15_000;
 
+export type VehicleCustodyStatus = 'none' | 'assigned' | 'handed_over' | 'in_custody';
+
 async function fetchWithDeadline(
   input: RequestInfo | URL,
   init: RequestInit | undefined,
@@ -29,13 +31,17 @@ async function fetchWithDeadline(
 
 export function useWeeklyCheckIn(driverId: string | undefined) {
   const [needsCheckIn, setNeedsCheckIn] = useState(false);
+  const [eligible, setEligible] = useState(false);
+  const [custodyStatus, setCustodyStatus] = useState<VehicleCustodyStatus>('none');
+  const [vehicleId, setVehicleId] = useState<string | null>(null);
+  const [vehicleLabel, setVehicleLabel] = useState<string | null>(null);
   const [lastCheckIn, setLastCheckIn] = useState<WeeklyCheckIn | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   const getWeekStart = () => {
     const now = new Date();
     const day = now.getDay();
-    const diff = now.getDate() - day + (day === 0 ? -6 : 1); // Adjust when day is Sunday
+    const diff = now.getDate() - day + (day === 0 ? -6 : 1);
     const monday = new Date(now.setDate(diff));
     monday.setHours(0, 0, 0, 0);
     return monday.toISOString().split('T')[0];
@@ -44,18 +50,19 @@ export function useWeeklyCheckIn(driverId: string | undefined) {
   const checkStatus = async () => {
     if (!driverId) {
       setIsLoading(false);
+      setNeedsCheckIn(false);
+      setEligible(false);
       return;
     }
     setIsLoading(true);
     try {
-      const weekStart = getWeekStart();
       const {
         data: { session },
       } = await supabase.auth.getSession();
       const authToken = session?.access_token ?? publicAnonKey;
 
       const response = await fetchWithDeadline(
-        `https://${projectId}.supabase.co/functions/v1/fleet-core/check-ins?driverId=${driverId}&weekStart=${weekStart}`,
+        `https://${projectId}.supabase.co/functions/v1/fleet-core/check-ins/eligibility?driverId=${encodeURIComponent(driverId)}`,
         {
           headers: {
             Authorization: `Bearer ${authToken}`,
@@ -65,38 +72,39 @@ export function useWeeklyCheckIn(driverId: string | undefined) {
         'Could not verify check-in status. Please try again.',
       );
       if (!response.ok) {
-        // API failure must not force endless check-in loops
-        console.error('Weekly check-in status request failed', response.status);
+        console.error('Weekly check-in eligibility request failed', response.status);
         setNeedsCheckIn(false);
+        setEligible(false);
         return;
       }
       const data = await response.json();
+      setNeedsCheckIn(Boolean(data.needsCheckIn));
+      setEligible(Boolean(data.eligible));
+      setCustodyStatus((data.custodyStatus as VehicleCustodyStatus) || 'none');
+      setVehicleId(data.vehicleId ?? null);
+      setVehicleLabel(data.vehicleLabel ?? null);
 
-      if (data && Array.isArray(data) && data.length > 0) {
-        setNeedsCheckIn(false);
-        setLastCheckIn(data[0]);
-      } else if (Array.isArray(data)) {
-        setNeedsCheckIn(true);
-      } else {
-        setNeedsCheckIn(false);
+      // Keep lastCheckIn hydrated when week already done
+      if (!data.needsCheckIn && data.eligible) {
+        setLastCheckIn((prev) => prev);
       }
     } catch (e) {
       console.error('Error checking weekly status:', e);
-      // Don't trap fleet drivers behind check-in when the API is down
       setNeedsCheckIn(false);
+      setEligible(false);
     } finally {
       setIsLoading(false);
     }
   };
 
   useEffect(() => {
-    checkStatus();
+    void checkStatus();
   }, [driverId]);
 
   const submitCheckIn = async (
     odometer: number,
     photo: File | null,
-    vehicleId: string,
+    vehicleIdArg: string,
     method: 'ai_verified' | 'manual_override' = 'manual_override',
     reviewStatus: 'auto_approved' | 'pending_review' | 'approved' | 'rejected' = 'pending_review',
     aiReading: number | null = null,
@@ -106,7 +114,6 @@ export function useWeeklyCheckIn(driverId: string | undefined) {
       throw new Error('Not signed in — reopen the app and try again');
     }
 
-    // Reuse fuel upload path (60s abort + compression) — raw /upload hung forever on phones
     let photoUrl = '';
     if (photo) {
       const uploadData = await api.uploadFile(photo);
@@ -125,7 +132,7 @@ export function useWeeklyCheckIn(driverId: string | undefined) {
     const payload: WeeklyCheckIn = {
       id: crypto.randomUUID(),
       driverId,
-      vehicleId,
+      vehicleId: vehicleIdArg,
       timestamp: new Date().toISOString(),
       odometer,
       photoUrl,
@@ -135,7 +142,6 @@ export function useWeeklyCheckIn(driverId: string | undefined) {
       reviewStatus,
       aiReading,
       manualReadingReason,
-      // Add metadata for unified timeline
       source: 'Weekly Check-in',
       isVerified: reviewStatus === 'auto_approved' || reviewStatus === 'approved',
     } as any;
@@ -158,11 +164,20 @@ export function useWeeklyCheckIn(driverId: string | undefined) {
       throw new Error(err.error || 'Failed to save check-in');
     }
 
-    // Unblock forced modal immediately — status refresh must not trap the spinner
     setNeedsCheckIn(false);
     setLastCheckIn(payload);
     void checkStatus();
   };
 
-  return { needsCheckIn, lastCheckIn, isLoading, submitCheckIn, refresh: checkStatus };
+  return {
+    needsCheckIn,
+    eligible,
+    custodyStatus,
+    vehicleId,
+    vehicleLabel,
+    lastCheckIn,
+    isLoading,
+    submitCheckIn,
+    refresh: checkStatus,
+  };
 }

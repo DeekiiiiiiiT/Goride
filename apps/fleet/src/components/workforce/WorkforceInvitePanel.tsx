@@ -39,6 +39,87 @@ type InviteRow = {
 };
 
 export function WorkforcePendingInvites({ serviceLine }: { serviceLine: WorkforceInviteServiceLine }) {
+  const { pendingInvites, cancelInvite, copyCode } = usePendingInvites(serviceLine);
+
+  if (pendingInvites.length === 0) return null;
+
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-base">Pending invites</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-2">
+        <PendingInviteList
+          serviceLine={serviceLine}
+          pendingInvites={pendingInvites}
+          cancelInvite={cancelInvite}
+          copyCode={copyCode}
+          limit={8}
+        />
+      </CardContent>
+    </Card>
+  );
+}
+
+/** Compact filter-bar control: opens a dialog with pending workforce invites. */
+export function WorkforcePendingInvitesButton({
+  serviceLine,
+}: {
+  serviceLine: WorkforceInviteServiceLine;
+}) {
+  const [open, setOpen] = useState(false);
+  const { pendingInvites, cancelInvite, copyCode } = usePendingInvites(serviceLine);
+  const count = pendingInvites.length;
+  const who = serviceLine === 'rideshare' ? 'driver' : 'courier';
+
+  return (
+    <>
+      <Button
+        variant="outline"
+        size="sm"
+        className="rounded-full"
+        onClick={() => setOpen(true)}
+        aria-label={`Pending invites${count > 0 ? ` (${count})` : ''}`}
+      >
+        Pending invites{count > 0 ? ` (${count})` : ''}
+      </Button>
+
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Pending invites</DialogTitle>
+            <DialogDescription>
+              {count === 0
+                ? `No pending ${who} invites right now.`
+                : `Waiting for ${who}${count === 1 ? '' : 's'} to accept.`}
+            </DialogDescription>
+          </DialogHeader>
+          {count === 0 ? (
+            <p className="py-6 text-center text-sm text-slate-500">
+              Invite a {who} by Roam Tag or code and it will show up here.
+            </p>
+          ) : (
+            <div className="max-h-[60vh] space-y-2 overflow-y-auto py-1">
+              <PendingInviteList
+                serviceLine={serviceLine}
+                pendingInvites={pendingInvites}
+                cancelInvite={cancelInvite}
+                copyCode={copyCode}
+              />
+            </div>
+          )}
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
+function usePendingInvites(serviceLine: WorkforceInviteServiceLine) {
   const queryClient = useQueryClient();
   const { data: invitesData } = useQuery({
     queryKey: ['workforce-invites'],
@@ -61,61 +142,71 @@ export function WorkforcePendingInvites({ serviceLine }: { serviceLine: Workforc
     );
   }, [invitesData, serviceLine]);
 
-  if (pendingInvites.length === 0) return null;
-
   const copyCode = (code: string) => {
     void navigator.clipboard.writeText(code);
     toast.success('Code copied');
   };
 
+  return { pendingInvites, cancelInvite, copyCode };
+}
+
+function PendingInviteList({
+  serviceLine,
+  pendingInvites,
+  cancelInvite,
+  copyCode,
+  limit,
+}: {
+  serviceLine: WorkforceInviteServiceLine;
+  pendingInvites: InviteRow[];
+  cancelInvite: ReturnType<typeof usePendingInvites>['cancelInvite'];
+  copyCode: (code: string) => void;
+  limit?: number;
+}) {
+  const rows = limit ? pendingInvites.slice(0, limit) : pendingInvites;
   return (
-    <Card>
-      <CardHeader className="pb-2">
-        <CardTitle className="text-base">Pending invites</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-2">
-        {pendingInvites.slice(0, 8).map((inv) => {
-          const isTag = inv.invite_kind === 'roam_tag';
-          const label = isTag
-            ? formatCourierRoamTagDisplay(inv.invited_roam_tag) || 'Roam Tag invite'
-            : String(inv.invite_code ?? '');
-          const cancelling = cancelInvite.isPending && cancelInvite.variables === inv.id;
-          return (
-            <div
-              key={inv.id}
-              className="flex items-center justify-between gap-2 rounded-lg border border-slate-200 px-3 py-2 dark:border-slate-700"
-            >
-              <div className="min-w-0">
-                <span className={`font-semibold tracking-wider ${isTag ? 'text-sm' : 'font-mono text-sm'}`}>
-                  {label}
-                </span>
-                {isTag ? (
-                  <p className="text-[11px] text-slate-500">
-                    Waiting for {serviceLine === 'rideshare' ? 'driver' : 'courier'} to accept
-                  </p>
-                ) : null}
-              </div>
-              <div className="flex shrink-0 items-center gap-1">
-                {!isTag && inv.invite_code ? (
-                  <Button variant="ghost" size="sm" onClick={() => copyCode(String(inv.invite_code))}>
-                    <Copy className="h-4 w-4" />
-                  </Button>
-                ) : null}
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="text-slate-600 hover:text-red-600 dark:text-slate-400 dark:hover:text-red-400"
-                  disabled={cancelInvite.isPending}
-                  onClick={() => cancelInvite.mutate(inv.id)}
-                >
-                  {cancelling ? 'Cancelling…' : 'Cancel'}
-                </Button>
-              </div>
+    <>
+      {rows.map((inv) => {
+        const isTag = inv.invite_kind === 'roam_tag';
+        const label = isTag
+          ? formatCourierRoamTagDisplay(inv.invited_roam_tag) || 'Roam Tag invite'
+          : String(inv.invite_code ?? '');
+        const cancelling = cancelInvite.isPending && cancelInvite.variables === inv.id;
+        return (
+          <div
+            key={inv.id}
+            className="flex items-center justify-between gap-2 rounded-lg border border-slate-200 px-3 py-2 dark:border-slate-700"
+          >
+            <div className="min-w-0">
+              <span className={`font-semibold tracking-wider ${isTag ? 'text-sm' : 'font-mono text-sm'}`}>
+                {label}
+              </span>
+              {isTag ? (
+                <p className="text-[11px] text-slate-500">
+                  Waiting for {serviceLine === 'rideshare' ? 'driver' : 'courier'} to accept
+                </p>
+              ) : null}
             </div>
-          );
-        })}
-      </CardContent>
-    </Card>
+            <div className="flex shrink-0 items-center gap-1">
+              {!isTag && inv.invite_code ? (
+                <Button variant="ghost" size="sm" onClick={() => copyCode(String(inv.invite_code))}>
+                  <Copy className="h-4 w-4" />
+                </Button>
+              ) : null}
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-slate-600 hover:text-red-600 dark:text-slate-400 dark:hover:text-red-400"
+                disabled={cancelInvite.isPending}
+                onClick={() => cancelInvite.mutate(inv.id)}
+              >
+                {cancelling ? 'Cancelling…' : 'Cancel'}
+              </Button>
+            </div>
+          </div>
+        );
+      })}
+    </>
   );
 }
 

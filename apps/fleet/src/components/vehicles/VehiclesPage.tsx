@@ -139,6 +139,8 @@ export function VehiclesPage({
   const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
   const [vehicleToAssign, setVehicleToAssign] = useState<Vehicle | null>(null);
   const [assigningVehicleId, setAssigningVehicleId] = useState<string | null>(null);
+  const [handoverVehicleId, setHandoverVehicleId] = useState<string | null>(null);
+  const [handoverBusy, setHandoverBusy] = useState(false);
 
   // Action States
   const [isFuelModalOpen, setIsFuelModalOpen] = useState(false);
@@ -385,12 +387,27 @@ export function VehiclesPage({
 
     if (!vehicleToUpdate.currentDriverId) return;
 
+    const custody = vehicleToUpdate.custodyStatus;
+    if (custody === 'handed_over' || custody === 'in_custody') {
+      const ok = window.confirm(
+        custody === 'in_custody'
+          ? 'This vehicle is in the driver’s custody. Unassigning clears custody and they must go through hand-over again. Continue?'
+          : 'This vehicle was marked handed over. Unassigning clears custody. Continue?',
+      );
+      if (!ok) return;
+    }
+
     setAssigningVehicleId(vehicleId);
     try {
       await api.saveVehicle({
         ...vehicleToUpdate,
         currentDriverId: '',
         currentDriverName: '',
+        custodyStatus: 'none',
+        handedOverAt: undefined,
+        handedOverBy: undefined,
+        custodyConfirmedAt: undefined,
+        custodyConfirmedBy: undefined,
         driverAssignmentHistory: applyDriverAssignmentChange(vehicleToUpdate, null, ''),
       });
       queryClient.invalidateQueries({ queryKey: ['vehicles'] });
@@ -457,6 +474,11 @@ export function VehiclesPage({
         ...vehicleToUpdate,
         currentDriverId: resolvedDriverId,
         currentDriverName: driverName,
+        custodyStatus: 'assigned',
+        handedOverAt: undefined,
+        handedOverBy: undefined,
+        custodyConfirmedAt: undefined,
+        custodyConfirmedBy: undefined,
         status: 'Active' as const, // Reactivate vehicle on assignment
         driverAssignmentHistory: applyDriverAssignmentChange(
           vehicleToUpdate,
@@ -472,6 +494,11 @@ export function VehiclesPage({
             ...other,
             currentDriverId: '',
             currentDriverName: '',
+            custodyStatus: 'none',
+            handedOverAt: undefined,
+            handedOverBy: undefined,
+            custodyConfirmedAt: undefined,
+            custodyConfirmedBy: undefined,
             driverAssignmentHistory: applyDriverAssignmentChange(other, null, ''),
           });
         }
@@ -511,6 +538,36 @@ export function VehiclesPage({
     }
     await handleAssignDriver(vehicleId, nextDriverId);
   };
+
+  const canMarkHandedOver = (vehicle: Vehicle) =>
+    Boolean(vehicle.currentDriverId) &&
+    (vehicle.custodyStatus === 'assigned' ||
+      !vehicle.custodyStatus ||
+      vehicle.custodyStatus === 'none');
+
+  const confirmListHandOver = async () => {
+    if (!handoverVehicleId) return;
+    const vehicle = manualVehicles.find((v) => v.id === handoverVehicleId);
+    if (!vehicle) return;
+    setHandoverBusy(true);
+    try {
+      await api.handOverVehicle(vehicle.id);
+      await queryClient.invalidateQueries({ queryKey: ['vehicles'] });
+      toast.success('Marked as handed over', {
+        description: `${vehicle.year} ${vehicle.make} ${vehicle.model} → ${vehicle.currentDriverName || 'driver'}`,
+      });
+      setHandoverVehicleId(null);
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : 'Failed to mark handed over');
+    } finally {
+      setHandoverBusy(false);
+    }
+  };
+
+  const handoverTarget = useMemo(
+    () => manualVehicles.find((v) => v.id === handoverVehicleId) ?? null,
+    [manualVehicles, handoverVehicleId],
+  );
 
   const handleLogService = async (id: string) => {
     setActionVehicleId(id);
@@ -881,6 +938,21 @@ export function VehiclesPage({
                             onChange={(nextId) => void handleInlineAssignmentChange(vehicle.id, nextId)}
                           />
                         </div>
+                        {canMarkHandedOver(vehicle) ? (
+                          <Button
+                            type="button"
+                            size="sm"
+                            className="mt-3 w-full bg-indigo-600 hover:bg-indigo-700"
+                            disabled={parked || handoverBusy}
+                            onClick={() => setHandoverVehicleId(vehicle.id)}
+                          >
+                            Mark handed over
+                          </Button>
+                        ) : vehicle.currentDriverId && vehicle.custodyStatus === 'handed_over' ? (
+                          <p className="mt-2 text-xs text-amber-700">Waiting for driver confirm</p>
+                        ) : vehicle.currentDriverId && vehicle.custodyStatus === 'in_custody' ? (
+                          <p className="mt-2 text-xs text-emerald-700">In custody</p>
+                        ) : null}
                         <div className="mt-3 flex justify-end border-t border-slate-100 pt-2 dark:border-slate-800">
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
@@ -930,6 +1002,7 @@ export function VehiclesPage({
                                 <TableHead>Status</TableHead>
                                 <TableHead>License plate</TableHead>
                                 <TableHead>Assignment</TableHead>
+                                <TableHead className="min-w-[140px]">Hand-over</TableHead>
                                 <TableHead className="w-[50px]">
                                     <DropdownMenu>
                                         <DropdownMenuTrigger asChild>
@@ -1005,6 +1078,29 @@ export function VehiclesPage({
                                           personLabel={personLabel}
                                           onChange={(nextId) => void handleInlineAssignmentChange(vehicle.id, nextId)}
                                         />
+                                    </TableCell>
+                                    <TableCell>
+                                      {canMarkHandedOver(vehicle) ? (
+                                        <Button
+                                          type="button"
+                                          size="sm"
+                                          className="h-8 whitespace-nowrap bg-indigo-600 hover:bg-indigo-700"
+                                          disabled={parked || handoverBusy}
+                                          onClick={() => setHandoverVehicleId(vehicle.id)}
+                                        >
+                                          Mark handed over
+                                        </Button>
+                                      ) : vehicle.currentDriverId && vehicle.custodyStatus === 'handed_over' ? (
+                                        <span className="text-xs font-medium text-amber-700">
+                                          Waiting for driver
+                                        </span>
+                                      ) : vehicle.currentDriverId && vehicle.custodyStatus === 'in_custody' ? (
+                                        <span className="text-xs font-medium text-emerald-700">
+                                          In custody
+                                        </span>
+                                      ) : (
+                                        <span className="text-xs text-slate-400">—</span>
+                                      )}
                                     </TableCell>
                                     <TableCell>
                                         <DropdownMenu>
@@ -1127,6 +1223,36 @@ export function VehiclesPage({
           setPendingDrawerOpen(false);
         }}
       />
+
+      <AlertDialog
+        open={Boolean(handoverVehicleId)}
+        onOpenChange={(open) => {
+          if (!open && !handoverBusy) setHandoverVehicleId(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Mark vehicle handed over?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {handoverTarget
+                ? `Confirm you physically handed ${handoverTarget.licensePlate || handoverTarget.id} (${handoverTarget.year} ${handoverTarget.make} ${handoverTarget.model}) to ${handoverTarget.currentDriverName || 'the assigned driver'}. They must then confirm in the driver app before weekly check-in is required.`
+                : 'Confirm physical hand-over to the assigned driver.'}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={handoverBusy}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={handoverBusy}
+              onClick={(e) => {
+                e.preventDefault();
+                void confirmListHandOver();
+              }}
+            >
+              {handoverBusy ? 'Saving…' : 'Mark handed over'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AlertDialog open={!!vehicleToDelete} onOpenChange={(open) => !open && setVehicleToDelete(null)}>
         <AlertDialogContent>

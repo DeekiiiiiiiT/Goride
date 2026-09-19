@@ -13,7 +13,7 @@ import type {
 } from './fuelTypes.ts';
 import {
   filterFuelOpsLogEntries,
-  fuelOpsLiters,
+  fuelTankLiters,
   fuelOpsSpendAmount,
   countsInFuelLogSpend,
 } from './fuelOpsEligibility.ts';
@@ -165,14 +165,14 @@ export function calculateOdometerBuckets(
       (e) =>
         e.odometer != null &&
         e.odometer > 0 &&
-        fuelOpsLiters(e) > 0 &&
+        fuelTankLiters(e) > 0 &&
         countsInFuelLogSpend(e),
     )
     .sort((a, b) => (a.odometer || 0) - (b.odometer || 0));
 
   const bucketEfficiencyFuel =
     odoEntries.length >= 2
-      ? odoEntries.slice(1).reduce((sum, e) => sum + fuelOpsLiters(e), 0)
+      ? odoEntries.slice(1).reduce((sum, e) => sum + fuelTankLiters(e), 0)
       : 0;
 
   let bucketEfficiencyKmL = 0;
@@ -264,7 +264,7 @@ export function calculateOdometerBuckets(
         e.odometer === endOdo &&
         e.odometer > startOdo,
     );
-    const closingLiters = closingFuelEntries.reduce((s, e) => s + fuelOpsLiters(e), 0);
+    const closingLiters = closingFuelEntries.reduce((s, e) => s + fuelTankLiters(e), 0);
     const closingCost = closingFuelEntries.reduce((s, e) => s + fuelOpsSpendAmount(e), 0);
     const closingIds = new Set(closingFuelEntries.map((e) => e.id));
 
@@ -282,8 +282,8 @@ export function calculateOdometerBuckets(
 
     const totalLiters =
       closingLiters +
-      windowReceipts.reduce((sum, r) => sum + fuelOpsLiters(r), 0) +
-      midBucketFuelEntries.reduce((sum, e) => sum + fuelOpsLiters(e), 0);
+      windowReceipts.reduce((sum, r) => sum + fuelTankLiters(r), 0) +
+      midBucketFuelEntries.reduce((sum, e) => sum + fuelTankLiters(e), 0);
     const totalCost =
       closingCost +
       windowReceipts.reduce((sum, r) => sum + fuelOpsSpendAmount(r), 0) +

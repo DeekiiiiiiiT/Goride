@@ -70,6 +70,7 @@
     "check:ledger-view-invoker": "node scripts/assert-ledger-view-invoker.mjs && node scripts/assert-fleet-view-invoker.mjs",
     "check:ledger-sort-whitelist": "node scripts/assert-ledger-sort-whitelist.mjs",
     "check:fuel-entries-unwrap": "node scripts/assert-fuel-entries-unwrap.mjs",
+    "verify:split-cash-enable": "node scripts/verify-split-cash-enable.mjs",
     "check:statement-toll-netting": "node scripts/assert-statement-toll-netting.mjs",
     "check:ledger-amount-drift": "node scripts/check-ledger-amount-drift.mjs",
     "check:ledger-dual-read": "node scripts/ledger-dual-read-compare.mjs",

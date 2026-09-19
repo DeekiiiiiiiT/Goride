@@ -6,6 +6,7 @@
  */
 import * as kv from "./kv_store.tsx";
 import { fromKvStore } from "./fleet_sql_bridge.ts";
+import { applyCustodyResetOnAssignmentChange } from "./vehicle_custody.ts";
 
 export type VehicleAssignmentSource =
   | "payload"
@@ -48,16 +49,22 @@ export function applyDriverAssignmentChangeOnVehicle(
   );
 
   if (!nextId) {
-    return { ...next, driverAssignmentHistory: closed };
+    return applyCustodyResetOnAssignmentChange(previous, {
+      ...next,
+      driverAssignmentHistory: closed,
+    });
   }
 
   // Avoid duplicate append if client already wrote the open row for nextId
   const last = closed[closed.length - 1];
   if (last && last.driverId === nextId && !last.unassignedAt) {
-    return { ...next, driverAssignmentHistory: closed };
+    return applyCustodyResetOnAssignmentChange(previous, {
+      ...next,
+      driverAssignmentHistory: closed,
+    });
   }
 
-  return {
+  return applyCustodyResetOnAssignmentChange(previous, {
     ...next,
     driverAssignmentHistory: [
       ...closed,
@@ -67,7 +74,7 @@ export function applyDriverAssignmentChangeOnVehicle(
         assignedAt: atIso,
       },
     ],
-  };
+  });
 }
 
 /** Roam UUID + linked platform IDs + lowercase variants. */

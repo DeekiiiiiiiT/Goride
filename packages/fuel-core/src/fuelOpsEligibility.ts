@@ -66,18 +66,21 @@ export function fuelOpsSpendAmount(entry: FuelEntry): number {
   return Number(entry.amount) || 0;
 }
 
-/**
- * Litres for ops analytics / JMD/L.
- * Spend-eligible rows count as today; split volume-owner awaiting cash still counts
- * pump liters (tank truth) without counting spend until statement sets cash amount.
- */
-export function fuelOpsLiters(entry: FuelEntry): number {
+function entryLiters(entry: FuelEntry): number {
   if (!isFuelOpsLogEntry(entry)) return 0;
-  const meta = entry.metadata as Record<string, unknown> | undefined;
   const liters = Number(entry.liters) || 0;
+  return liters > 0 ? liters : 0;
+}
+
+/**
+ * Physical tank / cycle volume — includes awaiting-cash split volume owners
+ * (liters known at pump even before Dominion sets the cash amount).
+ */
+export function fuelTankLiters(entry: FuelEntry): number {
+  const liters = entryLiters(entry);
   if (liters <= 0) return 0;
   if (countsInFuelLogSpend(entry)) return liters;
-  // Split cash volume owner waiting on statement — liters known at pump
+  const meta = entry.metadata as Record<string, unknown> | undefined;
   if (
     meta?.awaitingCashStatement === true &&
     meta?.splitVolumeOwner === true &&
@@ -89,7 +92,24 @@ export function fuelOpsLiters(entry: FuelEntry): number {
   return 0;
 }
 
-/** @deprecated Alias — use fuelOpsLiters (now spend-eligible). */
+/**
+ * Litres for JMD/L / price analytics — same eligibility as spend (F-3).
+ * Fee/declined/awaiting rows do not dilute price.
+ */
+export function fuelPriceLiters(entry: FuelEntry): number {
+  if (!countsInFuelLogSpend(entry)) return 0;
+  return entryLiters(entry);
+}
+
+/**
+ * @deprecated Prefer fuelPriceLiters for $/L and fuelTankLiters for cycle/tank.
+ * Kept as price-aligned denominator so existing JMD/L call sites stay correct.
+ */
+export function fuelOpsLiters(entry: FuelEntry): number {
+  return fuelPriceLiters(entry);
+}
+
+/** Alias — price denominator (excludes awaiting cash volume). */
 export function fuelOpsPriceLiters(entry: FuelEntry): number {
-  return fuelOpsLiters(entry);
+  return fuelPriceLiters(entry);
 }

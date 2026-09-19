@@ -13,6 +13,13 @@ import { FuelIntegrityDesk, type FuelIntegritySubtab } from '../components/fuel/
 import { BucketReconciliationView } from '../components/fuel/BucketReconciliationView';
 import { MileageAdjustmentModal } from '../components/fuel/MileageAdjustmentModal';
 import { AddFuelChoiceDialog } from '../components/fuel/AddFuelChoiceDialog';
+import { fuelSaveErrorMessage } from '../utils/fuelSaveErrorMessage';
+import {
+  classifyFuelLogEdit,
+  findAwaitingCashTxForFillGroup,
+} from '../utils/fuelLogEditGate';
+import { SplitCashResolveDialog } from '../components/fuel/SplitCashResolveDialog';
+import { AdminSplitFillModal } from '../components/fuel/AdminSplitFillModal';
 import {
   Sheet,
   SheetContent,
@@ -95,7 +102,13 @@ import {
 import { Checkbox } from '../components/ui/checkbox';
 import { Label } from '../components/ui/label';
 import { toast } from 'sonner';
-import { acknowledgeSplitVarianceMeta } from '@roam/fuel-core';
+import {
+  resolveSplitCashAcceptDerived,
+  resolveSplitCashManual,
+  resolveSplitCashVoid,
+  stampSplitVarianceSiblingAudit,
+  assertSplitCashInvariant,
+} from '@roam/fuel-core';
 import { DateRange } from 'react-day-picker';
 import type { FuelCard, FuelEntry, FuelScenario, MileageAdjustment, FuelDispute, WeeklyFuelReport, FinalizedFuelReport, JaaProgram } from '../types/fuel';
 import type { FinancialTransaction } from '../types/data';
@@ -313,6 +326,9 @@ function FuelManagementInner({
     codes: string[];
   } | null>(null);
   const [isAddFuelChoiceOpen, setIsAddFuelChoiceOpen] = useState(false);
+  const [splitResolveTx, setSplitResolveTx] = useState<FinancialTransaction | null>(null);
+  const [isResolvingSplit, setIsResolvingSplit] = useState(false);
+  const [isSplitFillModalOpen, setIsSplitFillModalOpen] = useState(false);
 
   // Reimbursement State
   const [transactions, setTransactions] = useState<FinancialTransaction[]>([]);
@@ -1297,7 +1313,7 @@ function FuelManagementInner({
           void loadData(true, { scope: activeTab === 'logs' ? 'core' : 'full' });
       } catch (e) {
           console.error(e);
-          toast.error(e instanceof Error ? e.message : "Failed to save transaction(s)");
+          toast.error(fuelSaveErrorMessage(e, 'Failed to save transaction(s)'));
       } finally {
           setIsSyncing(false);
       }
@@ -1367,16 +1383,42 @@ function FuelManagementInner({
       }
   }, [invalidateReviewQueueCounts]);
 
-  const handleAcknowledgeSplitVariance = useCallback(async (tx: FinancialTransaction) => {
+  const handleResolveSplitCash = useCallback(async (args: {
+      tx: FinancialTransaction;
+      action: 'accept_derived' | 'enter_cash' | 'void';
+      cashAmount?: number;
+      reason?: string;
+  }) => {
+      const { tx, action, cashAmount, reason } = args;
       const fillGroupId = String(tx.metadata?.fillGroupId || '');
       if (!fillGroupId) {
           toast.error('Missing split fill group');
           return;
       }
       try {
+          const actor = { reason, at: new Date().toISOString() };
+          let patch;
+          if (action === 'accept_derived') {
+              patch = resolveSplitCashAcceptDerived(
+                  tx.metadata as Record<string, unknown>,
+                  Number(cashAmount ?? tx.metadata?.splitDerivedCashAmount) || 0,
+                  actor,
+              );
+          } else if (action === 'enter_cash') {
+              patch = resolveSplitCashManual(
+                  tx.metadata as Record<string, unknown>,
+                  Number(cashAmount) || 0,
+                  actor,
+              );
+          } else {
+              patch = resolveSplitCashVoid(tx.metadata as Record<string, unknown>, actor);
+          }
+
           const patchedTx = {
               ...tx,
-              metadata: acknowledgeSplitVarianceMeta(tx.metadata as Record<string, unknown>),
+              amount: patch.amount,
+              status: patch.status || tx.status,
+              metadata: assertSplitCashInvariant(patch.metadata),
           };
           const savedTx = await api.saveTransaction(patchedTx);
           setTransactions((prev) => prev.map((t) => (t.id === savedTx.id ? savedTx : t)));
@@ -1385,22 +1427,85 @@ function FuelManagementInner({
               (e) => String(e.metadata?.fillGroupId || '') === fillGroupId,
           );
           for (const entry of siblings) {
+              const isCash =
+                  entry.metadata?.splitRole === 'cash' || entry.metadata?.splitVolumeOwner === true;
               const updated = await fuelService.saveFuelEntry({
                   ...entry,
-                  metadata: acknowledgeSplitVarianceMeta(
-                      (entry.metadata || {}) as Record<string, unknown>,
-                  ),
+                  ...(isCash
+                      ? {
+                            amount: Math.abs(Number(patch.amount) || 0),
+                            metadata: assertSplitCashInvariant({
+                                ...(entry.metadata || {}),
+                                ...patch.metadata,
+                            }),
+                        }
+                      : {
+                            metadata: stampSplitVarianceSiblingAudit(
+                                (entry.metadata || {}) as Record<string, unknown>,
+                                action === 'accept_derived'
+                                    ? 'accept_derived'
+                                    : action === 'enter_cash'
+                                      ? 'enter_cash'
+                                      : 'void',
+                                actor,
+                            ),
+                        }),
               });
               setLogs((prev) => prev.map((l) => (l.id === updated.id ? updated : l)));
           }
           invalidateReviewQueueCounts();
-          toast.success('Split mismatch acknowledged');
+          toast.success(
+              action === 'void'
+                  ? 'Cash reimbursement voided'
+                  : 'Cash amount set — approve in Pending when ready',
+          );
       } catch (e) {
           console.error(e);
-          toast.error('Failed to acknowledge split mismatch');
+          const msg = e instanceof Error && e.message === 'split_cash_reason_required'
+              ? 'Reason required (at least 8 characters)'
+              : 'Failed to resolve split cash';
+          toast.error(msg);
           throw e;
       }
   }, [logs, invalidateReviewQueueCounts]);
+
+  const openSplitResolveForEntry = useCallback(
+    (entry: FuelEntry, splitSiblings?: FuelEntry[]) => {
+      const gate = classifyFuelLogEdit(entry, splitSiblings || []);
+      const fillGroupId =
+        gate.kind === 'resolve_split_cash'
+          ? gate.fillGroupId
+          : String(entry.metadata?.fillGroupId || '');
+      if (!fillGroupId) {
+        toast.error('Missing split fill group');
+        return;
+      }
+      const tx = findAwaitingCashTxForFillGroup(transactions, fillGroupId);
+      if (!tx) {
+        toast.error('Cash reimbursement for this split was not found in Review Queue');
+        return;
+      }
+      setSplitResolveTx(tx);
+    },
+    [transactions],
+  );
+
+  const handleLogEdit = useCallback(
+    (entry: FuelEntry, splitSiblings?: FuelEntry[]) => {
+      const gate = classifyFuelLogEdit(entry, splitSiblings || []);
+      if (gate.kind === 'resolve_split_cash') {
+        openSplitResolveForEntry(entry, splitSiblings);
+        return;
+      }
+      if (gate.kind === 'awaiting_card_readonly') {
+        toast.info(gate.reason);
+        return;
+      }
+      setEditingLog(entry);
+      setIsLogModalOpen(true);
+    },
+    [openSplitResolveForEntry],
+  );
 
     const handleSaveExpense = async (transactionData: any, shouldRefresh = true) => {
         setIsSyncing(true);
@@ -1967,7 +2072,7 @@ function FuelManagementInner({
               onDelete={can('fuel.delete_entry') ? handleDeleteExpense : undefined}
               onViewDriverLedger={onViewDriverLedger}
               onApproveLogReview={handleApproveLogReview}
-              onAcknowledgeSplitVariance={handleAcknowledgeSplitVariance}
+              onResolveSplitCash={handleResolveSplitCash}
               isRefreshing={isRefreshing}
               onViewInTransactionLogs={({ fuelEntryId, date, vehicleId }) => {
                   setActiveTab('logs');
@@ -2146,8 +2251,7 @@ function FuelManagementInner({
               return;
             }
             setDeskEditOpenCodes(null);
-            setEditingLog(entry);
-            setIsLogModalOpen(true);
+            handleLogEdit(entry);
           }}
           onSelectPeriodWeek={(period) => {
             handleReconciliationPeriodSelect({
@@ -2243,8 +2347,7 @@ function FuelManagementInner({
               entryId,
               codes: listOpenFlagCodesForEntry(entry, flagDispositions),
             });
-            setEditingLog(entry);
-            setIsLogModalOpen(true);
+            handleLogEdit(entry);
           }}
           onAcceptFlag={async (row, flagCode, note, action = 'accepted', opts) => {
             if (action === 'accepted' && row.reasons.some((r) => r.code === flagCode && r.severity === 'critical') && note.trim().length < 8) {
@@ -2321,7 +2424,8 @@ function FuelManagementInner({
                 entries={logs}
                 transactions={transactions}
                 vehicles={vehicles}
-                onEdit={(log) => { setEditingLog(log); setIsLogModalOpen(true); }}
+                onEdit={handleLogEdit}
+                onResolveSplitCash={openSplitResolveForEntry}
                 onDelete={handleDeleteLog}
                 getVehicleName={getVehicleName}
                 getDriverName={getDriverName}
@@ -2383,7 +2487,43 @@ function FuelManagementInner({
           setEditingLog(null);
           setIsLogModalOpen(true);
         }}
+        onChooseSplitFill={() => {
+          setIsSplitFillModalOpen(true);
+        }}
       />
+
+      <SplitCashResolveDialog
+        open={!!splitResolveTx}
+        tx={splitResolveTx}
+        busy={isResolvingSplit}
+        onOpenChange={(open) => {
+          if (!open) setSplitResolveTx(null);
+        }}
+        onResolve={async (args) => {
+          setIsResolvingSplit(true);
+          try {
+            await handleResolveSplitCash(args);
+            setSplitResolveTx(null);
+          } finally {
+            setIsResolvingSplit(false);
+          }
+        }}
+      />
+
+      {isSplitFillModalOpen && (
+        <AdminSplitFillModal
+          isOpen={isSplitFillModalOpen}
+          onClose={() => setIsSplitFillModalOpen(false)}
+          onSaved={async () => {
+            await loadLogsAndTransactions();
+            await loadData(true);
+          }}
+          vehicles={vehicles}
+          drivers={drivers}
+          cards={cards}
+          isRoamManagedCard={isRoamManagedCard}
+        />
+      )}
 
       {isLogModalOpen && (
       <FuelLogModal 

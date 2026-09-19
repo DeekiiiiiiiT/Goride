@@ -818,13 +818,70 @@ export const api = {
     });
     if (!response.ok) {
       await throwIfCatalogGateBlocked(response, "Cannot save vehicle — pending catalog approval");
-      throw new Error("Failed to save vehicle");
+      const err = await response.json().catch(() => ({}));
+      throw new Error(
+        typeof err?.error === 'string' && err.error.trim()
+          ? err.error
+          : 'Failed to save vehicle',
+      );
     }
     return response.json() as Promise<{
       success?: boolean;
       data?: unknown;
       catalogMatched?: boolean;
       catalogStatus?: 'matched' | 'pending_catalog' | 'needs_info';
+    }>;
+  },
+
+  async handOverVehicle(vehicleId: string) {
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.fleetCore}/vehicles/${encodeURIComponent(vehicleId)}/hand-over`,
+      {
+        method: 'POST',
+        headers: await getHeaders(),
+        body: JSON.stringify({}),
+      },
+    );
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err?.error || 'Failed to mark vehicle handed over');
+    }
+    return response.json() as Promise<{ vehicle: any; already?: boolean }>;
+  },
+
+  async confirmVehicleCustody(vehicleId: string) {
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.fleetCore}/vehicles/${encodeURIComponent(vehicleId)}/confirm-custody`,
+      {
+        method: 'POST',
+        headers: await getHeaders(),
+        body: JSON.stringify({}),
+      },
+    );
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err?.error || 'Failed to confirm vehicle custody');
+    }
+    return response.json() as Promise<{ vehicle: any; already?: boolean }>;
+  },
+
+  async getCheckInEligibility(driverId?: string) {
+    const qs = driverId ? `?driverId=${encodeURIComponent(driverId)}` : '';
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/check-ins/eligibility${qs}`, {
+      headers: await getHeaders(null),
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err?.error || 'Failed to load check-in eligibility');
+    }
+    return response.json() as Promise<{
+      needsCheckIn: boolean;
+      eligible: boolean;
+      reason: string | null;
+      custodyStatus: 'none' | 'assigned' | 'handed_over' | 'in_custody';
+      vehicleId: string | null;
+      vehicleLabel: string | null;
+      weekStart: string;
     }>;
   },
 

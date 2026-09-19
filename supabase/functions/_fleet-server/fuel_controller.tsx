@@ -63,6 +63,7 @@ import { findConflictingGasCardAnchor } from "./gas_card_anchor_guard.ts";
 import { canReuseLinkedFuelEntry } from "./fuel_entry_link.ts";
 import { projectFromFuelEntry } from "./odometer_ledger.ts";
 import { findSoftDuplicateFuelEntry } from "./fuel_soft_dedup.ts";
+import { findUnlinkedSplitHalfConflict } from "./fuel_split_halves.ts";
 import { stampOrg, getOrgId, filterByOrg, belongsToOrg } from "./org_scope.ts";
 import { stampFuelEntryRetailPrice } from "./fuel_retail_stamp.ts";
 import {
@@ -4140,6 +4141,21 @@ app.post(`${BASE_PATH}/fuel-entries`, async (c: Context) => {
           data: softDup,
           softDuplicateOf: String(softDup.id),
         });
+      }
+      // Unlinked Gas Card + Cash at same pump → refuse (would double-count liters)
+      const unlinkedHalf = await findUnlinkedSplitHalfConflict(
+        entry as Record<string, unknown>,
+        entry.id,
+      );
+      if (unlinkedHalf) {
+        return c.json(
+          {
+            error: unlinkedHalf.reason,
+            code: unlinkedHalf.code,
+            conflictingEntryId: unlinkedHalf.id,
+          },
+          409,
+        );
       }
     }
 

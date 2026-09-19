@@ -83,6 +83,54 @@ Deno.test("soft-dedup collapses true re-submit of same Gas Card Known fill", () 
   assertEquals(isSoftDuplicatePair(second, first), true);
 });
 
+Deno.test("admin-manual soft-dedup ignores clock across same day", () => {
+  const morning = {
+    id: "a",
+    vehicleId: "5179KZ",
+    odometer: 184476,
+    date: "2026-09-11",
+    time: "08:15:00",
+    paymentSource: "Gas_Card",
+    entrySource: "admin-manual",
+    metadata: { entrySource: "admin-manual" },
+  };
+  const midnightBackfill = {
+    id: "b",
+    vehicleId: "5179KZ",
+    odometer: 184476,
+    date: "2026-09-11",
+    time: "",
+    paymentSource: "Gas_Card",
+    entrySource: "admin-manual",
+    metadata: { entrySource: "admin-manual" },
+  };
+  assertEquals(isSoftDuplicatePair(midnightBackfill, morning), true);
+});
+
+Deno.test("driver-portal soft-dedup still requires 15-minute window", () => {
+  const first = {
+    id: "a",
+    vehicleId: "5179KZ",
+    odometer: 184476,
+    date: "2026-09-11T08:15:00",
+    time: "08:15:00",
+    paymentSource: "Gas_Card",
+    entrySource: "driver-portal",
+    metadata: { entrySource: "driver-portal" },
+  };
+  const later = {
+    id: "b",
+    vehicleId: "5179KZ",
+    odometer: 184476,
+    date: "2026-09-11T08:40:00",
+    time: "08:40:00",
+    paymentSource: "Gas_Card",
+    entrySource: "driver-portal",
+    metadata: { entrySource: "driver-portal" },
+  };
+  assertEquals(isSoftDuplicatePair(later, first), false);
+});
+
 Deno.test("CSV statement candidate reuses real Gas Card driver fill", () => {
   const csv = {
     id: "csv",

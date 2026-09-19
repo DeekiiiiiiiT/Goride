@@ -131,4 +131,25 @@ describe('splitReconTolerance drift guard', () => {
     expect(shared).toMatch(pattern);
     expect(edge).toMatch(pattern);
   });
+
+  it('keeps both mirrors on M4 splitPumpLiters price-band (no stmt-liter fallback)', async () => {
+    const { readFile } = await import('node:fs/promises');
+    const { resolve } = await import('node:path');
+    const root = resolve(__dirname, '../../..');
+    const shared = await readFile(
+      resolve(root, 'packages/roam-shared/src/fuel/jaaFuelStatementMatcher.ts'),
+      'utf8',
+    );
+    const edge = await readFile(
+      resolve(root, 'supabase/functions/_fleet-server/fuel_jaa_match.ts'),
+      'utf8',
+    );
+    for (const src of [shared, edge]) {
+      expect(src).toMatch(/splitPumpLiters/);
+      expect(src).toMatch(/splitPumpPriceOutlier/);
+      expect(src).toMatch(/Number\(drvMeta\.splitPumpLiters\)\s*\|\|\s*0/);
+      // Must not reintroduce statement-liter inflation for the band
+      expect(src).not.toMatch(/litersForBand/);
+    }
+  });
 });

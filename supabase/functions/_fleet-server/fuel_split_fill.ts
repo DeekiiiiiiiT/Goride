@@ -121,6 +121,15 @@ export async function persistSplitFill(
   // Cash amount is $0 until Dominion statement derives cash = pump − card
   cashTx.amount = 0;
 
+  // Shared pump liters BEFORE card liters are zeroed — M4 price band needs full pump volume
+  const cashMeta = (cashTx.metadata as Record<string, unknown> | undefined) || {};
+  const pumpLiters =
+    Number(cashTx.quantity) ||
+    Number(cashMeta.fuelVolume) ||
+    Number(cardEntry.liters) ||
+    0;
+  const splitPumpLiters = pumpLiters > 0 ? pumpLiters : undefined;
+
   cashTx.metadata = ensureFillGroupMeta(
     cashTx.metadata as Record<string, unknown> | undefined,
     fillGroupId,
@@ -129,6 +138,7 @@ export async function persistSplitFill(
       splitPumpTotal: pumpTotal,
       splitVolumeOwner: true,
       awaitingCashStatement: true,
+      splitPumpLiters,
     },
   );
 
@@ -142,6 +152,7 @@ export async function persistSplitFill(
       awaitingCardStatement: true,
       countsInFuelSpend: false,
       countsInFuelVolume: false,
+      splitPumpLiters,
     },
   );
 

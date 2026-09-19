@@ -215,6 +215,7 @@ import { registerEnterpriseIntakeAdminRoutes } from "./enterprise_intake_admin_r
 import { registerWorkforceInviteRoutes } from "./workforce_invite_routes.ts";
 import { registerCourierRoamTagRoutes } from "./courier_roam_tag_routes.ts";
 import { registerDriverRoamTagRoutes } from "./driver_roam_tag_routes.ts";
+import { registerVehicleCustodyRoutes, assertVehicleCustodyForCheckIn } from "./vehicle_custody_routes.ts";
 import { registerFleetTagRoutes } from "./fleet_tag_routes.ts";
 import { registerFleetModuleCheckoutRoutes } from "./fleet_module_checkout.ts";
 import {
@@ -10698,6 +10699,11 @@ export function registerResidualMonolithRoutes(app: Hono) {
           error: "No vehicle assigned to this driver — assign a vehicle before weekly check-in",
         }, 400);
       }
+
+      const custodyOk = await assertVehicleCustodyForCheckIn(String(checkIn.vehicleId));
+      if (!custodyOk.ok) {
+        return c.json({ error: custodyOk.error }, custodyOk.status);
+      }
       
       // Key: checkin:{id}
       const key = `checkin:${checkIn.id}`;
@@ -12875,6 +12881,12 @@ export function registerResidualMonolithRoutes(app: Hono) {
   registerDriverRoamTagRoutes(app, {
     supabase,
     requireAuth,
+  });
+
+  registerVehicleCustodyRoutes(app, {
+    requireAuth,
+    getOrgId,
+    requirePermission,
   });
 
   registerFleetTagRoutes(app, {

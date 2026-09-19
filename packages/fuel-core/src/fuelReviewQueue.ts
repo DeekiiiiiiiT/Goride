@@ -4,7 +4,15 @@
  *
  * Queue ≠ ledger: queue predicates ignore date windows; window filters apply
  * only via listUnapprovedFuelTxInWindow (finalize) and ledger helpers.
+ *
+ * Awaiting-cash split halves are excluded from finalize blockers (C1 re-home);
+ * visibility is owned by listAwaitingCashStatement / the Awaiting-statement tab.
  */
+import {
+  isAwaitingCashTx,
+  isStaleAwaitingCash,
+  AWAITING_CASH_STALE_DAYS,
+} from './fuelSplitCashLifecycle.ts';
 
 /** Classify fields only — no identity required (R9). */
 export type FuelClassifyFields = {
@@ -48,7 +56,11 @@ export type FuelReviewQueueCounts = {
   pendingReady: number;
   /** Unresolved gas-card+cash statement mismatches. */
   splitVariance: number;
-  /** logReview + pendingReady (station holds excluded). splitVariance counted separately in total. */
+  /** Cash half still waiting on Dominion statement. */
+  awaitingCash: number;
+  /** Awaiting cash older than AWAITING_CASH_STALE_DAYS. */
+  staleAwaitingCash: number;
+  /** logReview + pendingReady + splitVariance + awaitingCash (station holds excluded). */
   total: number;
 };
 
@@ -137,6 +149,17 @@ export function isPendingReadyForReview(t: FuelClassifyFields): boolean {
   if (!isPendingFuelQueueRow(t) || isStationGateHeld(t)) return false;
   // Cash half of a split fill waits on Dominion CSV — not reimbursable yet
   if (metaFlagOn(t.metadata?.awaitingCashStatement)) return false;
+  // Card-covered or voided $0 split cash must not clog the approval queue (M3)
+  if (metaFlagOn(t.metadata?.splitCardCoveredFull)) return false;
+  if (metaFlagOn(t.metadata?.splitCashVoided)) return false;
+  const amt = Math.abs(Number(t.amount) || 0);
+  if (
+    amt < 0.005 &&
+    metaFlagOn(t.metadata?.splitReconciled) &&
+    typeof t.metadata?.fillGroupId === 'string'
+  ) {
+    return false;
+  }
   return true;
 }
 
@@ -163,20 +186,37 @@ export function isUnresolvedSplitVariance(t: FuelClassifyFields): boolean {
   return typeof m.fillGroupId === 'string' && String(m.fillGroupId).length > 0;
 }
 
-/** Stamp acknowledge without inventing cash — variance history stays for audit. */
+/**
+ * @deprecated Flag-only acknowledge permanently hides unpaid cash (C2).
+ * Use resolveSplitCashAcceptDerived / resolveSplitCashManual / resolveSplitCashVoid.
+ */
 export function acknowledgeSplitVarianceMeta(
-  meta: Record<string, unknown> | null | undefined,
+  _meta: Record<string, unknown> | null | undefined,
 ): Record<string, unknown> {
-  return {
-    ...(meta && typeof meta === 'object' ? meta : {}),
-    splitReconciled: true,
-  };
+  throw new Error(
+    'acknowledgeSplitVarianceMeta_removed: use resolveSplitCashAcceptDerived|Manual|Void',
+  );
+}
+
+/** All cash halves still waiting on Dominion (non-blocking for finalize). */
+export function listAwaitingCashStatement(txs: FuelReviewQueueTx[]): FuelReviewQueueTx[] {
+  return txs.filter((t) => isAwaitingCashTx(t));
+}
+
+/** Awaiting cash older than threshold (default 14d). */
+export function listStaleAwaitingCashStatement(
+  txs: FuelReviewQueueTx[],
+  now: Date = new Date(),
+  thresholdDays: number = AWAITING_CASH_STALE_DAYS,
+): FuelReviewQueueTx[] {
+  return txs.filter((t) => isStaleAwaitingCash(t, now, thresholdDays));
 }
 
 /**
  * Pending fuel reimbursements in [startYmd, endYmd] inclusive — Finalize hard blockers.
  * Does not invent fuel_entry rows; Pending txs have no fuel_entry yet.
- * Awaiting-cash split halves (waiting on statement) are excluded — not actionable yet.
+ * Awaiting-cash split halves are excluded — money re-homes to the open period (C1).
+ * Visibility for those rows is the Awaiting-statement queue, not finalize.
  */
 export function listUnapprovedFuelTxInWindow(
   txs: FuelReviewQueueTx[],
@@ -208,12 +248,21 @@ export function listUnapprovedFuelTxInWindow(
 }
 
 /** Nav badge / queue work counts — station holds excluded from total. */
-export function countFuelReviewQueueWork(txs: FuelReviewQueueTx[]): FuelReviewQueueCounts {
+export function countFuelReviewQueueWork(
+  txs: FuelReviewQueueTx[],
+  now: Date = new Date(),
+): FuelReviewQueueCounts {
   let logReview = 0;
   let pendingReady = 0;
   let splitVariance = 0;
+  let awaitingCash = 0;
+  let staleAwaitingCash = 0;
   for (const t of txs) {
     if (isUnresolvedSplitVariance(t)) splitVariance += 1;
+    if (isAwaitingCashTx(t)) {
+      awaitingCash += 1;
+      if (isStaleAwaitingCash(t, now)) staleAwaitingCash += 1;
+    }
     if (isLogReviewEligible(t)) logReview += 1;
     else if (isPendingReadyForReview(t)) pendingReady += 1;
   }
@@ -221,7 +270,9 @@ export function countFuelReviewQueueWork(txs: FuelReviewQueueTx[]): FuelReviewQu
     logReview,
     pendingReady,
     splitVariance,
-    total: logReview + pendingReady + splitVariance,
+    awaitingCash,
+    staleAwaitingCash,
+    total: logReview + pendingReady + splitVariance + awaitingCash,
   };
 }
 

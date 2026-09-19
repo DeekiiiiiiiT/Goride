@@ -22,6 +22,7 @@ import { StationProfile } from '../../types/station';
 import { useQuery } from '@tanstack/react-query';
 import type { FuelCard } from '../../types/fuel';
 import { findActiveFuelCardForSession } from '../../utils/fuelCardMatch';
+import { validateGasCardCreateGates } from '../../utils/gasCardCreateGates';
 import {
     asGasCardAnchorSavePayload,
     buildGasCardOdometerAnchor,
@@ -507,15 +508,6 @@ export function SubmitExpenseModal({ isOpen, onClose, onSave, drivers, vehicles,
 
         // ——— Gas Card: match live driver flow (odometer + station + card; CSV supplies money) ———
         if (commonData.paymentSource === 'company_card') {
-            if (!gasCardLookupDone) {
-                toast.error("Looking up assigned gas card…");
-                return;
-            }
-            if (!assignedGasCard) {
-                toast.error("No Active gas card assigned to this vehicle/driver in Card Inventory");
-                return;
-            }
-
             const gasEntries = entries.filter((e) => e.odometer && parseFloat(e.odometer) > 0);
             if (gasEntries.length === 0) {
                 toast.error("Odometer reading is required");
@@ -523,14 +515,23 @@ export function SubmitExpenseModal({ isOpen, onClose, onSave, drivers, vehicles,
             }
 
             for (const entry of gasEntries) {
-                if (!entry.odometerImageUrl && !entry.pendingOdometerFile) {
-                    toast.error("Odometer photo is required for Gas Card fills");
+                const gate = validateGasCardCreateGates({
+                    assignedGasCard,
+                    gasCardLookupDone,
+                    matchedStationId: entry.matchedStationId,
+                    odometer: entry.odometer,
+                    hasOdometerPhoto: !!(entry.odometerImageUrl || entry.pendingOdometerFile),
+                });
+                if (!gate.ok) {
+                    toast.error(gate.error);
                     return;
                 }
-                if (!entry.matchedStationId) {
-                    toast.error("Select a verified station from the Dominion list");
-                    return;
-                }
+            }
+
+            const card = assignedGasCard;
+            if (!card) {
+                toast.error('No Active gas card assigned to this vehicle/driver in Card Inventory');
+                return;
             }
 
             setIsSubmitting(true);
@@ -563,7 +564,7 @@ export function SubmitExpenseModal({ isOpen, onClose, onSave, drivers, vehicles,
                         time: entry.time
                             ? (entry.time.length === 5 ? `${entry.time}:00` : entry.time)
                             : undefined,
-                        cardId: assignedGasCard.id,
+                        cardId: card.id,
                         vehicleId: commonData.vehicleId,
                         driverId: commonData.driverId,
                         odometer: parseFloat(entry.odometer),

@@ -361,6 +361,27 @@ export function applyFuelMatchLinks<T extends FuelEntryLike>(
       reconciled = false;
       delta = overPump;
     }
+
+    // M4: price-band on full pump $/L — keep in sync with fuel_jaa_match.ts + fuelSplitCashLifecycle.splitPumpPriceOutlierPatch
+    // Never fall back to statement liters (partial card portion → false positives).
+    const pumpLiters = Number(drvMeta.splitPumpLiters) || 0;
+    let outlierPatch: Record<string, unknown> = { splitPumpPriceOutlier: false };
+    if (pumpLiters > 0) {
+      const retail = Number(drvMeta.retailEstimateJmd) || Number(stmtMeta.retailEstimateJmd) || 0;
+      const implied =
+        pumpTotal > 0 ? Math.round((pumpTotal / pumpLiters) * 100) / 100 : null;
+      const pct = 0.18;
+      if (implied != null && retail > 0) {
+        const outlier = (implied - retail) / retail >= pct;
+        outlierPatch = {
+          splitPumpPriceOutlier: outlier,
+          splitPumpImpliedPerLiter: implied,
+          splitPumpRetailEstimate: retail,
+          splitPumpPriceOutlierPct: pct,
+        };
+      }
+    }
+
     splitReconPatch = {
       splitReconciled: reconciled,
       splitVariance: !reconciled,
@@ -369,6 +390,7 @@ export function applyFuelMatchLinks<T extends FuelEntryLike>(
       splitDerivedCashAmount: Math.max(0, derivedCash),
       awaitingCashStatement: !reconciled,
       ...(stmtLitersNum != null ? { splitStatementLiters: stmtLitersNum } : {}),
+      ...outlierPatch,
     };
   }
 

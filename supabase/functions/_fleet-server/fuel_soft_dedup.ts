@@ -95,9 +95,21 @@ function paymentKeyOf(entry: Record<string, unknown>): string {
   );
 }
 
+/** Admin-manual backfills often lack a reliable clock — match on day + odo only. */
+export function isAdminManualFuelEntry(entry: Record<string, unknown>): boolean {
+  const meta = entryMeta(entry);
+  const src = String(
+    meta.entrySource || entry.entrySource || (entry as { source?: unknown }).source || "",
+  ).toLowerCase();
+  return src === "admin-manual";
+}
+
 /**
  * Pure pair check (no DB) — used by findSoftDuplicateFuelEntry + unit tests.
  * Returns true when candidate should reuse `row` instead of inserting.
+ *
+ * Clock window: 15 minutes for driver-portal / default.
+ * Admin-manual: same calendar day + odometer + payment family (ignore clock / missing time).
  */
 export function isSoftDuplicatePair(
   candidate: Record<string, unknown>,
@@ -107,14 +119,19 @@ export function isSoftDuplicatePair(
   if (!sameOdometer(candidate.odometer, row.odometer)) return false;
   if (ymd(String(candidate.date || "")) !== ymd(String(row.date || ""))) return false;
 
-  const candClock = entryClockMs(candidate);
-  const rowClock = entryClockMs(row);
-  if (!candClock || !rowClock || Math.abs(rowClock - candClock) > windowMs) return false;
-
   // Dual payment at the same pump (cash + card) must stay as two ledger rows.
   const candPay = paymentKeyOf(candidate);
   const rowPay = paymentKeyOf(row);
   if (candPay && rowPay && candPay !== rowPay) return false;
+
+  const adminDayMatch =
+    isAdminManualFuelEntry(candidate) || isAdminManualFuelEntry(row);
+
+  if (!adminDayMatch) {
+    const candClock = entryClockMs(candidate);
+    const rowClock = entryClockMs(row);
+    if (!candClock || !rowClock || Math.abs(rowClock - candClock) > windowMs) return false;
+  }
 
   const candidateIsCsv = isGasCardCsvFuelEntry(candidate);
   const rowIsCsv = isGasCardCsvFuelEntry(row);
@@ -144,8 +161,11 @@ export async function findSoftDuplicateFuelEntry(
   const day = ymd(entry.date as string);
   if (!day) return null;
 
-  const clock = entryClockMs(entry);
-  if (!clock) return null;
+  // Driver / default path needs a clock; admin-manual may backfill with empty time.
+  if (!isAdminManualFuelEntry(entry)) {
+    const clock = entryClockMs(entry);
+    if (!clock) return null;
+  }
 
   // Scope to same calendar day — avoids scanning the full vehicle history
   const res = await queryFleet("fuel_entries", {

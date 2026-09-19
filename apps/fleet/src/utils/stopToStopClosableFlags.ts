@@ -3,7 +3,7 @@
  */
 import {
   evaluateStopToStopFromSnapshots,
-  fuelOpsLiters,
+  fuelTankLiters,
   filterFuelOpsLogEntries,
   isEntryInInclusiveYmdRange,
 } from '@roam/fuel-core';
@@ -27,7 +27,7 @@ export function stopToStopClosableFlagsFromReports(input: {
 
   const weekOpsLiters = filterFuelOpsLogEntries(input.fuelEntries)
     .filter((e) => isEntryInInclusiveYmdRange(e.date, input.weekStartYmd, input.weekEndYmd))
-    .reduce((s, e) => s + fuelOpsLiters(e), 0);
+    .reduce((s, e) => s + fuelTankLiters(e), 0);
 
   const s2s = evaluateStopToStopFromSnapshots({
     snapshots: input.reports.map((r) => ({

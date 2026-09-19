@@ -328,6 +328,107 @@ describe('applyFuelMatchLinks split volume owner', () => {
     expect(linked.driver?.metadata?.awaitingCashStatement).toBe(false);
   });
 
+  it('flags pump price outlier when splitPumpLiters imply high $/L vs retail', () => {
+    const statement = entry({
+      id: 'stmt-out',
+      amount: 3000,
+      liters: 15,
+      entrySource: 'fuel-card',
+      metadata: { importSource: 'jaa_raw', retailEstimateJmd: 200 },
+    });
+    const driver = entry({
+      id: 'drv-out',
+      amount: 0,
+      liters: 0,
+      entrySource: 'driver-portal',
+      paymentSource: 'Gas_Card',
+      metadata: {
+        fillGroupId: 'fg-out',
+        splitRole: 'card',
+        splitPumpTotal: 10000,
+        splitPumpLiters: 30,
+        splitVolumeOwner: false,
+        retailEstimateJmd: 200,
+      },
+    });
+    const linked = applyFuelMatchLinks({
+      status: 'matched',
+      statementEntry: statement,
+      driverEntry: driver,
+      score: 90,
+      notes: 'test',
+    });
+    // 10000/30 ≈ 333 vs 200 → outlier; must NOT use statement 15 L
+    expect(linked.driver?.metadata?.splitPumpPriceOutlier).toBe(true);
+    expect(linked.driver?.metadata?.splitPumpImpliedPerLiter).toBe(333.33);
+  });
+
+  it('does not flag price outlier when full pump liters match retail band', () => {
+    const statement = entry({
+      id: 'stmt-ok',
+      amount: 6000,
+      liters: 30,
+      entrySource: 'fuel-card',
+      metadata: { importSource: 'jaa_raw' },
+    });
+    const driver = entry({
+      id: 'drv-ok',
+      amount: 0,
+      liters: 0,
+      entrySource: 'driver-portal',
+      paymentSource: 'Gas_Card',
+      metadata: {
+        fillGroupId: 'fg-ok',
+        splitRole: 'card',
+        splitPumpTotal: 10000,
+        splitPumpLiters: 50,
+        splitVolumeOwner: false,
+        retailEstimateJmd: 200,
+      },
+    });
+    const linked = applyFuelMatchLinks({
+      status: 'matched',
+      statementEntry: statement,
+      driverEntry: driver,
+      score: 90,
+      notes: 'test',
+    });
+    expect(linked.driver?.metadata?.splitPumpPriceOutlier).toBe(false);
+    expect(linked.driver?.metadata?.splitPumpImpliedPerLiter).toBe(200);
+  });
+
+  it('skips price outlier when splitPumpLiters missing (legacy fail-safe)', () => {
+    const statement = entry({
+      id: 'stmt-leg',
+      amount: 3500,
+      liters: 20,
+      entrySource: 'fuel-card',
+      metadata: { importSource: 'jaa_raw', retailEstimateJmd: 200 },
+    });
+    const driver = entry({
+      id: 'drv-leg',
+      amount: 0,
+      liters: 0,
+      entrySource: 'driver-portal',
+      paymentSource: 'Gas_Card',
+      metadata: {
+        fillGroupId: 'fg-leg',
+        splitRole: 'card',
+        splitPumpTotal: 10000,
+        splitVolumeOwner: false,
+        retailEstimateJmd: 200,
+      },
+    });
+    const linked = applyFuelMatchLinks({
+      status: 'matched',
+      statementEntry: statement,
+      driverEntry: driver,
+      score: 90,
+      notes: 'test',
+    });
+    expect(linked.driver?.metadata?.splitPumpPriceOutlier).toBe(false);
+  });
+
   it('flags variance when statement exceeds pump (negative cash)', () => {
     const statement = entry({
       id: 'stmt-over',

@@ -8,11 +8,16 @@ import {
   isPendingReadyForReview,
   isStationGateHeld,
   isUnresolvedSplitVariance,
-  acknowledgeSplitVarianceMeta,
+  listAwaitingCashStatement,
+  listStaleAwaitingCashStatement,
   listUnapprovedFuelTxInWindow,
   type FuelReviewQueueTx,
 } from './fuelReviewQueue';
-
+import {
+  resolveSplitCashAcceptDerived,
+  resolveSplitCashVoid,
+  acknowledgeSplitVarianceMeta,
+} from './index';
 function tx(partial: Partial<FuelReviewQueueTx> & { id: string }): FuelReviewQueueTx {
   return {
     status: 'Pending',
@@ -164,20 +169,83 @@ describe('countFuelReviewQueueWork', () => {
     expect(listUnapprovedFuelTxInWindow([awaiting], '2026-09-01', '2026-09-30')).toHaveLength(0);
   });
 
-  it('drops split variance from count after acknowledge', () => {
+  it('counts awaiting cash and drops variance after money resolve', () => {
+    const awaiting = tx({
+      id: 'await',
+      amount: 0,
+      date: '2026-09-01',
+      metadata: {
+        fillGroupId: 'fg-1',
+        splitRole: 'cash',
+        awaitingCashStatement: true,
+      },
+    });
+    const open = tx({
+      id: 'split',
+      metadata: {
+        fillGroupId: 'fg-2',
+        splitVariance: true,
+        awaitingCashStatement: true,
+        splitRole: 'cash',
+        splitDerivedCashAmount: 1000,
+      },
+    });
+    const c = countFuelReviewQueueWork([awaiting, open], new Date('2026-09-20T12:00:00Z'));
+    expect(c.awaitingCash).toBe(2);
+    expect(c.staleAwaitingCash).toBeGreaterThanOrEqual(1);
+    expect(c.splitVariance).toBe(1);
+
+    const resolved = {
+      ...open,
+      ...resolveSplitCashAcceptDerived(open.metadata, 1000),
+      odometer: 100,
+      metadata: {
+        ...resolveSplitCashAcceptDerived(open.metadata, 1000).metadata,
+        entrySource: 'admin-manual',
+        odometerMethod: 'manual',
+      },
+    };
+    expect(isUnresolvedSplitVariance(resolved)).toBe(false);
+    expect(isPendingReadyForReview(resolved)).toBe(true);
+    expect(listAwaitingCashStatement([resolved])).toHaveLength(0);
+  });
+
+  it('void resolve leaves no awaiting and no pending-ready', () => {
     const open = tx({
       id: 'split',
       metadata: {
         fillGroupId: 'fg-1',
         splitVariance: true,
+        awaitingCashStatement: true,
+        splitRole: 'cash',
       },
     });
-    expect(isUnresolvedSplitVariance(open)).toBe(true);
-    const closed = {
+    const voided = {
       ...open,
-      metadata: acknowledgeSplitVarianceMeta(open.metadata),
+      ...resolveSplitCashVoid(open.metadata, { reason: 'Never swiped card after all' }),
     };
-    expect(isUnresolvedSplitVariance(closed)).toBe(false);
-    expect(countFuelReviewQueueWork([closed]).splitVariance).toBe(0);
+    expect(voided.metadata.awaitingCashStatement).toBe(false);
+    expect(isPendingReadyForReview(voided)).toBe(false);
+  });
+
+  it('deprecated acknowledge throws instead of hiding money', () => {
+    expect(() => acknowledgeSplitVarianceMeta({ fillGroupId: 'x' })).toThrow(
+      /acknowledgeSplitVarianceMeta_removed/,
+    );
+  });
+
+  it('lists stale awaiting at 14d', () => {
+    const stale = tx({
+      id: 's',
+      date: '2026-09-01',
+      amount: 0,
+      metadata: {
+        fillGroupId: 'fg-1',
+        splitRole: 'cash',
+        awaitingCashStatement: true,
+      },
+    });
+    const now = new Date('2026-09-20T12:00:00Z');
+    expect(listStaleAwaitingCashStatement([stale], now)).toHaveLength(1);
   });
 });

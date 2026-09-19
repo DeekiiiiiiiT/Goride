@@ -16,6 +16,7 @@ import { usePermissions } from '../../hooks/usePermissions';
 import { isEntryInInclusiveYmdRange, toEntryYmd } from '../../utils/fuelWeekPeriod';
 import { resolveFuelEntrySource } from '../../utils/fuelEntrySource';
 import { isJaaStatementLedgerRow } from '../../utils/jaaFuelStatementMatcher';
+import { isAdminKnownFillCashMeta } from '../../utils/adminKnownFillStamp';
 import { resolveGasCardLedgerIntegrity } from '../../utils/fuelLedgerIntegrity';
 import {
   buildCycleKpis,
@@ -44,7 +45,8 @@ interface FuelLogTableProps {
   entries: FuelEntry[];
   transactions: FinancialTransaction[];
   vehicles: Vehicle[];
-  onEdit: (entry: FuelEntry) => void;
+  onEdit: (entry: FuelEntry, splitSiblings?: FuelEntry[]) => void;
+  onResolveSplitCash?: (entry: FuelEntry, splitSiblings?: FuelEntry[]) => void;
   onDelete: (id: string) => void;
   getVehicleName: (id?: string) => string;
   getDriverName: (id?: string) => string;
@@ -63,6 +65,7 @@ export function FuelLogTable({
   transactions,
   vehicles,
   onEdit,
+  onResolveSplitCash,
   onDelete,
   getVehicleName,
   getDriverName,
@@ -312,6 +315,8 @@ export function FuelLogTable({
         if (filterType !== 'all') {
           if (filterType === 'Fuel_Manual_Entry') {
             if (!isManualEntry(entry)) return false;
+          } else if (filterType === 'known_fill_no_review') {
+            if (!isAdminKnownFillCashMeta(entry.metadata as Record<string, unknown>)) return false;
           } else if (entry.type !== filterType) return false;
         }
         if (filterVehicle !== 'all' && entry.vehicleId !== filterVehicle) return false;
@@ -878,6 +883,7 @@ export function FuelLogTable({
               setViewingSplitSiblings(siblings);
             }}
             onEdit={onEdit}
+            onResolveSplitCash={onResolveSplitCash}
             onDelete={onDelete}
             onPageChange={setPage}
           />
@@ -940,8 +946,18 @@ export function FuelLogTable({
         onEdit={(entry) => {
           setViewingEntry(null);
           setViewingSplitSiblings(undefined);
-          onEdit(entry);
+          onEdit(entry, viewingSplitSiblings);
         }}
+        onResolveSplitCash={
+          onResolveSplitCash
+            ? (entry) => {
+                setViewingEntry(null);
+                const siblings = viewingSplitSiblings;
+                setViewingSplitSiblings(undefined);
+                onResolveSplitCash(entry, siblings);
+              }
+            : undefined
+        }
       />
     </div>
   );

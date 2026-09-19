@@ -10,7 +10,7 @@ import type { EvaluateFuelWeekClosableInput } from "../../../packages/fuel-core/
 import { evaluateStopToStopFromSnapshots } from "../../../packages/fuel-core/src/stopToStopConservation.ts";
 import {
   filterFuelOpsLogEntries,
-  fuelOpsLiters,
+  fuelTankLiters,
 } from "../../../packages/fuel-core/src/fuelOpsEligibility.ts";
 import { isEntryInInclusiveYmdRange } from "../../../packages/fuel-core/src/fuelWeekRange.ts";
 import type { FuelEntry } from "../../../packages/fuel-core/src/fuelTypes.ts";
@@ -435,7 +435,7 @@ export async function buildFuelWeekClosableInputForPeriod(
   const { entries: weekEntries } = await loadWeekClosableKvBundle(orgId, weekStart, weekEnd);
   const opsLiters = filterFuelOpsLogEntries(weekEntries as unknown as FuelEntry[])
     .filter((e) => isEntryInInclusiveYmdRange(e.date, weekStart, weekEnd))
-    .reduce((s, e) => s + fuelOpsLiters(e), 0);
+    .reduce((s, e) => s + fuelTankLiters(e), 0);
   const s2s = evaluateStopToStopFromSnapshots({
     snapshots: snaps.map((s) => ({
       odometerBuckets: Array.isArray(s.odometerBuckets)

@@ -6,6 +6,7 @@ import {
   Building2,
   Car,
   ChevronRight,
+  Copy,
   FileText,
   Loader2,
   Star,
@@ -54,16 +55,35 @@ export function IndependentProfilePage({ onNavigate }: Props) {
   const [roamTagDraft, setRoamTagDraft] = useState('');
   const [roamTagLocked, setRoamTagLocked] = useState(false);
   const [roamTagSaving, setRoamTagSaving] = useState(false);
+  const [roamTagLoading, setRoamTagLoading] = useState(true);
   const [pendingInviteCount, setPendingInviteCount] = useState(0);
 
+  // Load once auth user is available (avoids racing getSession on first paint).
   useEffect(() => {
-    void loadDriverRoamTag().then((tag) => {
-      if (!tag) return;
-      setRoamTagDraft(tag.custom_tag_name || '');
-      setRoamTagLocked(Boolean(tag.has_custom_tag));
-    });
-    void loadMyFleetInvites().then((rows) => setPendingInviteCount(rows.length));
-  }, []);
+    if (!user?.id) {
+      setRoamTagLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setRoamTagLoading(true);
+    void (async () => {
+      const tag = await loadDriverRoamTag();
+      if (cancelled) return;
+      if (tag?.custom_tag_name) {
+        setRoamTagDraft(tag.custom_tag_name);
+        setRoamTagLocked(Boolean(tag.has_custom_tag));
+      } else if (tag) {
+        setRoamTagDraft('');
+        setRoamTagLocked(false);
+      }
+      setRoamTagLoading(false);
+      const rows = await loadMyFleetInvites();
+      if (!cancelled) setPendingInviteCount(rows.length);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id]);
 
   const saveRoamTag = useCallback(async () => {
     if (roamTagLocked) return;
@@ -88,6 +108,17 @@ export function IndependentProfilePage({ onNavigate }: Props) {
     setRoamTagLocked(true);
     toast.success('Roam Tag saved');
   }, [roamTagDraft, roamTagLocked]);
+
+  const copyRoamTag = useCallback(async () => {
+    const tag = formatDriverRoamTagDisplay(roamTagDraft);
+    if (!tag || tag === '@') return;
+    try {
+      await navigator.clipboard.writeText(tag);
+      toast.success('Roam Tag copied');
+    } catch {
+      toast.error('Could not copy — try selecting the tag instead');
+    }
+  }, [roamTagDraft]);
 
   const avatarUrl =
     (driverRecord?.avatarUrl as string | undefined) ||
@@ -171,6 +202,13 @@ export function IndependentProfilePage({ onNavigate }: Props) {
       <section>
         <h2 className="mb-3 px-1 text-sm font-semibold text-slate-900 dark:text-white">Roam Tag</h2>
         <div className={cn(cardClass, 'space-y-3 p-5')}>
+          {roamTagLoading ? (
+            <div className="flex items-center gap-2 text-sm text-slate-500">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Loading your Roam Tag…
+            </div>
+          ) : (
+            <>
           <div className="flex items-center gap-1">
             <AtSign className="h-4 w-4 shrink-0 text-slate-400" />
             <Input
@@ -190,22 +228,36 @@ export function IndependentProfilePage({ onNavigate }: Props) {
               autoCorrect="off"
               spellCheck={false}
             />
+            {roamTagLocked ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-9 w-9 shrink-0 text-slate-500 hover:text-slate-900 dark:hover:text-white"
+                aria-label="Copy Roam Tag"
+                onClick={() => void copyRoamTag()}
+              >
+                <Copy className="h-4 w-4" />
+              </Button>
+            ) : null}
           </div>
-          <p className="text-xs text-slate-500 dark:text-slate-400">
-            {roamTagLocked
-              ? `Your permanent Roam Tag is ${formatDriverRoamTagDisplay(roamTagDraft)}. Fleets use this to invite you.`
-              : 'Choose a unique @tag so fleets can invite you. You can’t change it later.'}
-          </p>
           {!roamTagLocked ? (
-            <Button
-              type="button"
-              className="w-full bg-[#004ac6] hover:bg-[#003da3]"
-              disabled={roamTagSaving || !normalizeDriverRoamTagName(roamTagDraft)}
-              onClick={() => void saveRoamTag()}
-            >
-              {roamTagSaving ? 'Saving…' : 'Save Roam Tag'}
-            </Button>
+            <>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Choose a unique @tag so fleets can invite you. You can’t change it later.
+              </p>
+              <Button
+                type="button"
+                className="w-full bg-[#004ac6] hover:bg-[#003da3]"
+                disabled={roamTagSaving || !normalizeDriverRoamTagName(roamTagDraft)}
+                onClick={() => void saveRoamTag()}
+              >
+                {roamTagSaving ? 'Saving…' : 'Save Roam Tag'}
+              </Button>
+            </>
           ) : null}
+            </>
+          )}
         </div>
       </section>
 

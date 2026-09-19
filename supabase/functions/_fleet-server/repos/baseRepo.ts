@@ -40,6 +40,22 @@ export function rowToKvValue(row: Record<string, unknown>): Record<string, unkno
   if (!payload.currentDriverId && row.current_driver_id) {
     payload.currentDriverId = row.current_driver_id;
   }
+  // Vehicle custody SSOT columns → client camelCase (prefer typed when present)
+  if (Object.prototype.hasOwnProperty.call(row, "custody_status") && row.custody_status != null) {
+    payload.custodyStatus = row.custody_status;
+  }
+  if (Object.prototype.hasOwnProperty.call(row, "handed_over_at")) {
+    payload.handedOverAt = row.handed_over_at;
+  }
+  if (Object.prototype.hasOwnProperty.call(row, "handed_over_by")) {
+    payload.handedOverBy = row.handed_over_by;
+  }
+  if (Object.prototype.hasOwnProperty.call(row, "custody_confirmed_at")) {
+    payload.custodyConfirmedAt = row.custody_confirmed_at;
+  }
+  if (Object.prototype.hasOwnProperty.call(row, "custody_confirmed_by")) {
+    payload.custodyConfirmedBy = row.custody_confirmed_by;
+  }
   if (payload.value == null && row.reading != null) payload.value = row.reading;
   if (payload.odometer == null && row.odometer != null) payload.odometer = row.odometer;
   if (!payload.driverId && row.driver_id) payload.driverId = row.driver_id;

@@ -131,6 +131,16 @@ export interface Vehicle {
   currentDriverName?: string;
 
   /**
+   * Possession lifecycle (assignment ≠ physical custody).
+   * Forced weekly check-in requires `in_custody`.
+   */
+  custodyStatus?: 'none' | 'assigned' | 'handed_over' | 'in_custody';
+  handedOverAt?: string;
+  handedOverBy?: string;
+  custodyConfirmedAt?: string;
+  custodyConfirmedBy?: string;
+
+  /**
    * Platforms this vehicle is used on. Empty/missing → treat as rideshare-only (legacy).
    * Dual-tagged vehicles appear on both Fleet Vehicles tabs.
    */

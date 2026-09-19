@@ -1,6 +1,7 @@
 /**
  * Server-side JAA match link application — mirrors roam-shared applyFuelMatchLinks.
  * After link persist, auto-stamps Verified GOD station when merchant uniquely matches.
+ * Split cash: O(1) marker lookup, re-home to open period when fill week sealed (C1/M2/M3/M4).
  */
 import * as kv from "./kv_store.tsx";
 import { stampEntryCycleMetadata } from "./fuel_cycle_stamp.ts";
@@ -8,6 +9,11 @@ import {
   attachJaaPairIfUniqueMerchant,
   type AttachJaaPairResult,
 } from "./fuel_jaa_station_heal.ts";
+import {
+  applySplitCashMatchToTx,
+  splitPumpPriceOutlierPatch,
+} from "../../../packages/fuel-core/src/fuelSplitCashLifecycle.ts";
+import { planSplitCashPeriodLanding } from "./fuel_split_cash_rehome.ts";
 
 function metaOf(entry: Record<string, unknown>): Record<string, unknown> {
   const m = entry?.metadata;
@@ -96,6 +102,22 @@ export function applyFuelMatchLinks(
       reconciled = false;
       delta = overPump;
     }
+
+    // M4: price-band on full pump $/L — never use statement liters (partial card portion)
+    const pumpLiters = Number(drvMeta.splitPumpLiters) || 0;
+    const retail =
+      Number(drvMeta.retailEstimateJmd) ||
+      Number(stmtMeta.retailEstimateJmd) ||
+      null;
+    const outlierPatch =
+      pumpLiters > 0
+        ? splitPumpPriceOutlierPatch({
+            pumpTotal,
+            pumpLiters,
+            retailEstimateJmd: retail,
+          })
+        : { splitPumpPriceOutlier: false };
+
     splitReconPatch = {
       splitReconciled: reconciled,
       splitVariance: !reconciled,
@@ -104,6 +126,7 @@ export function applyFuelMatchLinks(
       splitDerivedCashAmount: Math.max(0, derivedCash),
       awaitingCashStatement: !reconciled,
       ...(stmtLitersNum != null ? { splitStatementLiters: stmtLitersNum } : {}),
+      ...outlierPatch,
     };
   }
 
@@ -141,6 +164,43 @@ export function applyFuelMatchLinks(
   return { statement, driver };
 }
 
+async function loadCashSiblingTx(
+  fillGroupId: string,
+): Promise<Record<string, unknown> | null> {
+  // M2: O(1) via fuel_split marker written at persistSplitFill
+  const marker = (await kv.get(`fuel_split:${fillGroupId}`)) as Record<
+    string,
+    unknown
+  > | null;
+  const cashId =
+    marker && typeof marker.cashTransactionId === "string"
+      ? marker.cashTransactionId
+      : null;
+  if (cashId) {
+    const tx = await kv.get(`transaction:${cashId}`);
+    if (tx && typeof tx === "object") return tx as Record<string, unknown>;
+  }
+
+  // Legacy fallback — scan then backfill marker
+  const txs = (await kv.getByPrefix("transaction:")) || [];
+  for (const raw of txs) {
+    const tx = raw as Record<string, unknown>;
+    const tm = metaOf(tx);
+    if (tm.fillGroupId !== fillGroupId || tm.splitRole !== "cash") continue;
+    if (cashId == null && tx.id) {
+      await kv.set(`fuel_split:${fillGroupId}`, {
+        fillGroupId,
+        cashTransactionId: tx.id,
+        cardFuelEntryId: marker?.cardFuelEntryId || null,
+        createdAt: new Date().toISOString(),
+        backfilledAt: new Date().toISOString(),
+      });
+    }
+    return tx;
+  }
+  return null;
+}
+
 /** Persist linked pair + re-stamp cycle metadata; auto GOD attach when merchant unique. */
 export async function persistFuelMatchPair(
   pair: FuelMatchPair,
@@ -149,6 +209,8 @@ export async function persistFuelMatchPair(
   statementId?: string;
   driverId?: string;
   stationHeal?: AttachJaaPairResult;
+  splitCashRehome?: string;
+  splitCashBlocked?: string;
 }> {
   const linked = applyFuelMatchLinks(pair);
   if (!linked.statement || !linked.driver) return { ok: false };
@@ -164,7 +226,10 @@ export async function persistFuelMatchPair(
   await kv.set(`fuel_entry:${linked.statement.id}`, linked.statement);
   await kv.set(`fuel_entry:${linked.driver.id}`, linked.driver);
 
-  // Mirror split recon onto cash sibling transaction — set derived cash amount when reconciled.
+  let splitCashRehome: string | undefined;
+  let splitCashBlocked: string | undefined;
+
+  // Mirror split recon onto cash sibling transaction — set derived cash when reconciled.
   try {
     const drvMeta = metaOf(linked.driver);
     const fillGroupId = typeof drvMeta.fillGroupId === "string" ? drvMeta.fillGroupId : "";
@@ -174,70 +239,99 @@ export async function persistFuelMatchPair(
         drvMeta.splitReconciled === true ||
         drvMeta.splitDerivedCashAmount != null)
     ) {
-      const txs = (await kv.getByPrefix("transaction:")) || [];
-      for (const raw of txs) {
-        const tx = raw as Record<string, unknown>;
+      const tx = await loadCashSiblingTx(fillGroupId);
+      if (tx) {
         const tm = metaOf(tx);
-        if (tm.fillGroupId !== fillGroupId || tm.splitRole !== "cash") continue;
-
         const reconciled = drvMeta.splitReconciled === true;
         const derivedCash = Math.abs(Number(drvMeta.splitDerivedCashAmount) || 0);
-        const nextMeta: Record<string, unknown> = {
-          ...tm,
-          splitReconciled: reconciled,
-          splitVariance: drvMeta.splitVariance === true,
-          splitVarianceDelta: drvMeta.splitVarianceDelta,
-          splitStatementAmount: drvMeta.splitStatementAmount,
-          splitDerivedCashAmount: drvMeta.splitDerivedCashAmount,
-          splitPumpTotal: drvMeta.splitPumpTotal,
-          splitExpectedCardAmount: drvMeta.splitExpectedCardAmount,
-        };
 
-        let nextAmount = tx.amount;
         if (reconciled) {
-          // Cash reimbursement amount now known — clear awaiting; amount is negative expense
-          nextAmount = derivedCash > 0 ? -derivedCash : 0;
-          nextMeta.awaitingCashStatement = false;
-        } else {
-          // Negative-cash / variance — do not invent reimbursement
-          nextMeta.awaitingCashStatement = true;
-        }
+          const orgId = String(
+            tx.organizationId || linked.driver.organizationId || linked.statement.organizationId || "",
+          );
+          const driverId = String(tx.driverId || linked.driver.driverId || "");
+          const fillDate = String(tx.date || linked.driver.date || "");
 
-        const patched = {
-          ...tx,
-          amount: nextAmount,
-          metadata: nextMeta,
-        };
-        await kv.set(`transaction:${tx.id}`, patched);
+          const plan = await planSplitCashPeriodLanding({
+            orgId,
+            driverId,
+            fillDate,
+          });
 
-        // Sync linked cash fuel_entry if already posted
-        const linkedEntryId =
-          typeof tm.linkedFuelEntryId === "string"
-            ? tm.linkedFuelEntryId
-            : typeof tx.fuelEntryId === "string"
-              ? tx.fuelEntryId
-              : null;
-        if (linkedEntryId && reconciled) {
-          const fe = await kv.get(`fuel_entry:${linkedEntryId}`);
-          if (fe && typeof fe === "object") {
-            const entry = fe as Record<string, unknown>;
-            const em = metaOf(entry);
-            await kv.set(`fuel_entry:${linkedEntryId}`, {
-              ...entry,
-              amount: derivedCash,
-              metadata: {
-                ...em,
-                awaitingCashStatement: false,
-                splitReconciled: true,
-                splitVariance: false,
-                splitDerivedCashAmount: derivedCash,
-                splitStatementAmount: drvMeta.splitStatementAmount,
-                splitPumpTotal: drvMeta.splitPumpTotal,
+          const applied = applySplitCashMatchToTx({
+            tx: tx as {
+              id: string;
+              date?: string;
+              status?: string;
+              amount?: number;
+              metadata?: Record<string, unknown> | null;
+            },
+            plan,
+            derivedCashPositive: derivedCash,
+            drvMeta,
+            reconciled: true,
+          });
+
+          if (applied.outcome === "blocked") {
+            console.error(
+              "[persistFuelMatchPair] split cash re-home blocked",
+              {
+                fillGroupId,
+                fillWeekKey: applied.fillWeekKey,
+                blockedReason: applied.blockedReason,
               },
-            });
+            );
+            splitCashBlocked = applied.blockedReason;
+            await kv.set(`transaction:${tx.id}`, applied.tx);
+          } else {
+            if (applied.outcome === "rehome" && applied.rehomeToWeek) {
+              splitCashRehome = applied.rehomeToWeek;
+            }
+            await kv.set(`transaction:${tx.id}`, applied.tx);
+
+            // Sync linked cash fuel_entry amount (physical date stays on fill)
+            const linkedEntryId =
+              typeof tm.linkedFuelEntryId === "string"
+                ? tm.linkedFuelEntryId
+                : typeof tx.fuelEntryId === "string"
+                  ? tx.fuelEntryId
+                  : null;
+            if (linkedEntryId && applied.fuelEntryMeta) {
+              const fe = await kv.get(`fuel_entry:${linkedEntryId}`);
+              if (fe && typeof fe === "object") {
+                const entry = fe as Record<string, unknown>;
+                const em = metaOf(entry);
+                await kv.set(`fuel_entry:${linkedEntryId}`, {
+                  ...entry,
+                  amount: applied.fuelEntryAmount,
+                  metadata: {
+                    ...em,
+                    ...applied.fuelEntryMeta,
+                  },
+                });
+              }
+            }
           }
+        } else {
+          const applied = applySplitCashMatchToTx({
+            tx: tx as {
+              id: string;
+              date?: string;
+              status?: string;
+              amount?: number;
+              metadata?: Record<string, unknown> | null;
+            },
+            plan: {
+              action: "write_in_place",
+              fillWeekKey: "",
+              originalFillDate: "",
+            },
+            derivedCashPositive: derivedCash,
+            drvMeta,
+            reconciled: false,
+          });
+          await kv.set(`transaction:${tx.id}`, applied.tx);
         }
-        break;
       }
     }
   } catch (sibErr) {
@@ -268,5 +362,7 @@ export async function persistFuelMatchPair(
     statementId: String(linked.statement.id),
     driverId: String(linked.driver.id),
     stationHeal,
+    splitCashRehome,
+    splitCashBlocked,
   };
 }

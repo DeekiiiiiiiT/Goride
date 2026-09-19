@@ -196,6 +196,7 @@ export function FuelLogToolbar({
                       <SelectItem value="all">All Types</SelectItem>
                       <SelectItem value="Fuel_Manual_Entry">Manual Entry</SelectItem>
                       <SelectItem value="Card_Transaction">Card Transaction</SelectItem>
+                      <SelectItem value="known_fill_no_review">Known fill (no review)</SelectItem>
                     </SelectContent>
                   </Select>
                   <Label>Anchor</Label>

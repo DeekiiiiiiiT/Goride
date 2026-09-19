@@ -21,6 +21,9 @@ import {
     buildGasCardOdometerAnchor,
 } from '../../utils/buildGasCardOdometerAnchor';
 import { uploadEvidenceFile } from '../../services/uploadEvidence';
+import { validateGasCardCreateGates } from '../../utils/gasCardCreateGates';
+import { stampAdminKnownFillCashMeta } from '../../utils/adminKnownFillStamp';
+import { useAuth } from '../auth/AuthContext';
 
 export type FuelLogSavePayload =
     | FuelEntry
@@ -33,6 +36,12 @@ const PAYMENT_SOURCE_MAP: Record<string, string> = {
     'company_card': 'Gas_Card',
     'petty_cash': 'Petty_Cash',
 };
+
+type KnownFillPaymentKey = 'driver_cash' | 'rideshare_cash' | 'company_card' | 'petty_cash';
+
+function isKnownFillPaymentKey(val: string): val is KnownFillPaymentKey {
+    return val === 'driver_cash' || val === 'rideshare_cash' || val === 'company_card' || val === 'petty_cash';
+}
 
 // Reverse-map: resolve ANY stored paymentSource value back to a dropdown key
 const PAYMENT_SOURCE_TO_DROPDOWN: Record<string, string> = {
@@ -74,6 +83,7 @@ export function FuelLogModal({
     cards,
     isRoamManagedCard,
 }: FuelLogModalProps) {
+    const { user } = useAuth();
     // Phase 5: Use React Query for parent companies caching
     const { data: parentCompaniesData = [] } = useQuery({
         queryKey: ['parentCompanies'],
@@ -123,10 +133,14 @@ export function FuelLogModal({
     });
 
     // Bulk Entry State
-    const [bulkCommon, setBulkCommon] = useState({
+    const [bulkCommon, setBulkCommon] = useState<{
+        driverId: string;
+        vehicleId: string;
+        type: KnownFillPaymentKey;
+    }>({
         driverId: '',
         vehicleId: '',
-        type: 'rideshare_cash' as const
+        type: 'rideshare_cash',
     });
 
     const [bulkEntries, setBulkEntries] = useState<Array<{
@@ -414,16 +428,15 @@ export function FuelLogModal({
 
         // ——— Gas Card Known fill = driver/admin claim (odo + card + station; CSV supplies $ later) ———
         if (isGasCard && !initialData) {
-            if (!gasCardLookupDone) {
-                toast.error("Looking up assigned gas card…");
-                return;
-            }
-            if (!assignedGasCard) {
-                toast.error("No Active gas card assigned to this vehicle/driver in Card Inventory");
-                return;
-            }
-            if (!odometerPreviewUrl && !pendingOdometerFile) {
-                toast.error("Odometer photo is required for Gas Card fills");
+            const gate = validateGasCardCreateGates({
+                assignedGasCard,
+                gasCardLookupDone,
+                matchedStationId: formData.matchedStationId,
+                odometer: formData.odometer,
+                hasOdometerPhoto: !!(odometerPreviewUrl || pendingOdometerFile),
+            });
+            if (!gate.ok) {
+                toast.error(gate.error);
                 return;
             }
 
@@ -446,7 +459,7 @@ export function FuelLogModal({
                     id: entryId,
                     date: dateWithTime,
                     time: finalTime,
-                    cardId: assignedGasCard.id,
+                    cardId: assignedGasCard!.id,
                     vehicleId: formData.vehicleId,
                     driverId: formData.driverId,
                     odometer: Number(formData.odometer),
@@ -520,6 +533,9 @@ export function FuelLogModal({
                     : 'admin-manual',
                 paymentSource: formData.type,
                 matchedStationId: formData.matchedStationId || undefined,
+                ...(!initialData && formData.type !== 'company_card'
+                    ? stampAdminKnownFillCashMeta({}, user?.id)
+                    : {}),
             },
             ...(initialData && formData.editReason
                 ? { correctionReason: formData.editReason }
@@ -530,13 +546,77 @@ export function FuelLogModal({
         onClose();
     };
 
-    const handleBulkSave = () => {
-        if (bulkCommon.type === 'company_card') {
-            toast.error("Gas Card Known fill is single-entry only (odometer claim). Use Single Entry.");
-            return;
-        }
+    const handleBulkSave = async () => {
         if (!bulkCommon.vehicleId) { toast.error("Please select a Vehicle"); return; }
         if (!bulkCommon.driverId) { toast.error("Please select a Driver"); return; }
+
+        // Bulk Gas Card — same anchors as Driver claim loops
+        if (bulkCommon.type === 'company_card') {
+            const card = findActiveFuelCardForSession(cards, {
+                vehicleId: bulkCommon.vehicleId,
+                driverId: bulkCommon.driverId,
+            }) ?? null;
+            const gasRows = bulkEntries.filter((e) => Number(e.odometer) > 0 && e.date);
+            if (gasRows.length === 0) {
+                toast.error('Add at least one row with date and odometer');
+                return;
+            }
+            for (const row of gasRows) {
+                const gate = validateGasCardCreateGates({
+                    assignedGasCard: card,
+                    gasCardLookupDone: true,
+                    matchedStationId: row.matchedStationId,
+                    odometer: row.odometer,
+                    hasOdometerPhoto: !!(pendingOdometerFile || odometerPreviewUrl),
+                });
+                if (!gate.ok) {
+                    toast.error(gate.error);
+                    return;
+                }
+            }
+            if (!card) {
+                toast.error('No Active gas card assigned to this vehicle/driver in Card Inventory');
+                return;
+            }
+            setIsSubmitting(true);
+            try {
+                let sharedOdoUrl = odometerPreviewUrl || '';
+                if (pendingOdometerFile) {
+                    const { url } = await uploadEvidenceFile(pendingOdometerFile, {
+                        evidenceType: 'odometer_proof',
+                        sourceType: 'fuel_entry',
+                        sourceId: crypto.randomUUID(),
+                        retentionClass: 'ephemeral',
+                        parentStatus: 'Pending',
+                    });
+                    sharedOdoUrl = url;
+                }
+                const driver = drivers.find((d: any) => d.id === bulkCommon.driverId);
+                const anchors = gasRows.map((row) =>
+                    buildGasCardOdometerAnchor({
+                        id: row.id,
+                        date: row.date,
+                        cardId: card.id,
+                        vehicleId: bulkCommon.vehicleId,
+                        driverId: bulkCommon.driverId,
+                        odometer: Number(row.odometer),
+                        odometerImageUrl: sharedOdoUrl || undefined,
+                        location: row.location || undefined,
+                        stationAddress: row.stationAddress || undefined,
+                        matchedStationId: row.matchedStationId,
+                        entrySource: 'admin-manual',
+                        driverName: driver?.name,
+                    }),
+                );
+                onSave(anchors);
+                onClose();
+            } catch (e) {
+                toast.error(e instanceof Error ? e.message : 'Failed to save Gas Card bulk logs');
+            } finally {
+                setIsSubmitting(false);
+            }
+            return;
+        }
 
         const validEntries = bulkEntries.filter(e => e.amount > 0 && e.date);
         if (validEntries.length === 0) { toast.error("Please add at least one valid entry (Amount > 0)"); return; }
@@ -563,7 +643,7 @@ export function FuelLogModal({
             paymentSource: PAYMENT_SOURCE_MAP[bulkCommon.type] || 'Personal',
             matchedStationId: row.matchedStationId || undefined,
             entrySource: 'bulk-import',
-            metadata: {
+            metadata: stampAdminKnownFillCashMeta({
                 pricePerLiter: isBulkRideShareCash
                     ? (FuelCalculationService.calculatePricePerLiter(row.amount, row.liters) ?? 0)
                     : row.pricePerLiter,
@@ -573,7 +653,7 @@ export function FuelLogModal({
                 entrySource: 'bulk-import',
                 paymentSource: bulkCommon.type,
                 matchedStationId: row.matchedStationId || undefined,
-            }
+            }, user?.id),
         }));
 
         onSave(entries);
@@ -607,15 +687,11 @@ export function FuelLogModal({
                 )}
 
                 <Tabs value={activeTab} onValueChange={(v) => {
-                    if (v === 'bulk' && isGasCard) {
-                        toast.error('Gas Card is single-entry only');
-                        return;
-                    }
                     setActiveTab(v);
                 }} className="w-full">
                     <TabsList className="grid w-full grid-cols-2 mb-4">
                         <TabsTrigger value="single">Single Entry</TabsTrigger>
-                        <TabsTrigger value="bulk" disabled={!!initialData || isGasCard}>Bulk Entry</TabsTrigger>
+                        <TabsTrigger value="bulk" disabled={!!initialData}>Bulk Entry</TabsTrigger>
                     </TabsList>
 
                     <TabsContent value="single">
@@ -646,9 +722,6 @@ export function FuelLogModal({
                                     <Select
                                         value={formData.type}
                                         onValueChange={(val) => {
-                                            if (val === 'company_card' && activeTab === 'bulk') {
-                                                setActiveTab('single');
-                                            }
                                             setFormData(prev => ({ ...prev, type: val as any }));
                                         }}
                                     >
@@ -992,7 +1065,10 @@ export function FuelLogModal({
                                         <Label>Paid By</Label>
                                         <Select
                                             value={bulkCommon.type}
-                                            onValueChange={(val) => setBulkCommon(prev => ({ ...prev, type: val as any }))}
+                                            onValueChange={(val) => {
+                                                if (!isKnownFillPaymentKey(val)) return;
+                                                setBulkCommon((prev) => ({ ...prev, type: val }));
+                                            }}
                                         >
                                             <SelectTrigger className="bg-white"><SelectValue /></SelectTrigger>
                                             <SelectContent className="w-72">
@@ -1012,6 +1088,12 @@ export function FuelLogModal({
                                                     <div>
                                                         <span className="font-medium">Petty Cash</span>
                                                         <p className="text-[10px] text-slate-400 leading-tight">Office petty cash</p>
+                                                    </div>
+                                                </SelectItem>
+                                                <SelectItem value="company_card">
+                                                    <div>
+                                                        <span className="font-medium">Gas Card</span>
+                                                        <p className="text-[10px] text-slate-400 leading-tight">Odometer anchors — money from statement</p>
                                                     </div>
                                                 </SelectItem>
                                             </SelectContent>
@@ -1043,6 +1125,24 @@ export function FuelLogModal({
                                     </div>
                                 </div>
                             </div>
+
+                            {bulkCommon.type === 'company_card' && (
+                              <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-3 space-y-2">
+                                <p className="text-xs text-slate-600">
+                                  Bulk Gas Card needs one shared odometer photo plus date, odometer, and verified station on each row (amount/liters ignored).
+                                </p>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  className="gap-2"
+                                  onClick={() => odometerFileInputRef.current?.click()}
+                                >
+                                  <Camera className="h-4 w-4" />
+                                  {odometerPreviewUrl ? 'Change shared odometer photo' : 'Upload shared odometer photo'}
+                                </Button>
+                              </div>
+                            )}
 
                             <div className="space-y-2">
                                 <div className="grid grid-cols-12 gap-2 text-xs font-medium text-slate-500 px-2">

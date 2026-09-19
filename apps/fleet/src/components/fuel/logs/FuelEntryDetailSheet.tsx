@@ -36,6 +36,7 @@ import {
 } from './fuelLogDisplay';
 import { buildSplitBreakdown, isPendingSplitEntry } from './splitFillDisplay';
 import { splitReconTolerance } from '@roam/fuel-core';
+import { classifyFuelLogEdit } from '../../../utils/fuelLogEditGate';
 
 /**
  * Read-only detail view for a single fuel entry (classic Fuel Log Details overlay).
@@ -56,6 +57,7 @@ export type FuelEntryDetailSheetProps = {
   tankCapacity?: number;
   canEdit?: boolean;
   onEdit?: (entry: FuelEntry) => void;
+  onResolveSplitCash?: (entry: FuelEntry) => void;
 };
 
 function DetailRow({
@@ -106,6 +108,7 @@ export function FuelEntryDetailSheet({
   tankCapacity = 40,
   canEdit = false,
   onEdit,
+  onResolveSplitCash,
 }: FuelEntryDetailSheetProps) {
   if (!entry) return null;
 
@@ -119,6 +122,7 @@ export function FuelEntryDetailSheet({
   const splitTolerance = splitBreakdown
     ? splitReconTolerance(splitBreakdown.pumpTotal)
     : null;
+  const editGate = classifyFuelLogEdit(entry, splitGroup);
 
   const liters = typeof entry.liters === 'number' ? entry.liters : 0;
   const amount = entry.amount ?? 0;
@@ -142,7 +146,10 @@ export function FuelEntryDetailSheet({
     'Unknown';
   const entryTime = formatFuelEntryTime(entry);
   const isSealed = !!entry.signature || entry.isLocked === true || entry.status === 'Finalized';
-  const editBlocked = isSealed;
+  const editBlocked =
+    isSealed ||
+    editGate.kind === 'awaiting_card_readonly' ||
+    (editGate.kind === 'resolve_split_cash' && !onResolveSplitCash);
   const fuelType =
     entry.fuelType ||
     (entry.metadata as { jaaFuelType?: string } | undefined)?.jaaFuelType ||
@@ -416,27 +423,59 @@ export function FuelEntryDetailSheet({
         </div>
 
         {/* Footer actions */}
-        <div className="flex items-center justify-between border-t border-slate-100 bg-slate-50/50 p-4">
-          {canEdit && onEdit ? (
-            <Button
-              variant="outline"
-              size="sm"
-              className="gap-1.5 text-xs"
-              disabled={editBlocked}
-              title={editBlocked ? 'Locked seal — edit disabled' : undefined}
-              onClick={() => {
-                close();
-                onEdit(entry);
-              }}
-            >
-              <Pencil className="h-3 w-3" /> Edit This Log
+        <div className="flex flex-col gap-2 border-t border-slate-100 bg-slate-50/50 p-4">
+          {editGate.kind === 'awaiting_card_readonly' ? (
+            <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+              {editGate.reason}
+            </div>
+          ) : null}
+          {editGate.kind === 'resolve_split_cash' ? (
+            <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-900">
+              Cash is awaiting the card statement. Use Resolve Cash to set the amount — edits here
+              would not apply.
+            </div>
+          ) : null}
+          <div className="flex items-center justify-between">
+            {canEdit && editGate.kind === 'resolve_split_cash' && onResolveSplitCash ? (
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-1.5 text-xs"
+                disabled={isSealed}
+                onClick={() => {
+                  close();
+                  onResolveSplitCash(entry);
+                }}
+              >
+                <Pencil className="h-3 w-3" /> Resolve Cash
+              </Button>
+            ) : canEdit && onEdit ? (
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-1.5 text-xs"
+                disabled={editBlocked}
+                title={
+                  editGate.kind === 'awaiting_card_readonly'
+                    ? editGate.reason
+                    : editBlocked
+                      ? 'Locked seal — edit disabled'
+                      : undefined
+                }
+                onClick={() => {
+                  close();
+                  onEdit(entry);
+                }}
+              >
+                <Pencil className="h-3 w-3" /> Edit This Log
+              </Button>
+            ) : (
+              <span />
+            )}
+            <Button variant="ghost" size="sm" className="text-xs" onClick={close}>
+              Close
             </Button>
-          ) : (
-            <span />
-          )}
-          <Button variant="ghost" size="sm" className="text-xs" onClick={close}>
-            Close
-          </Button>
+          </div>
         </div>
       </DialogContent>
     </Dialog>

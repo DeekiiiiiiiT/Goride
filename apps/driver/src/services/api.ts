@@ -690,6 +690,28 @@ export const api = {
     return response.json();
   },
 
+  async confirmVehicleCustody(vehicleId: string) {
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.fleetCore}/vehicles/${encodeURIComponent(vehicleId)}/confirm-custody`,
+      {
+        method: 'POST',
+        headers: await getHeaders(),
+        body: JSON.stringify({}),
+      },
+    );
+    if (!response.ok) {
+      let msg = 'Failed to confirm vehicle custody';
+      try {
+        const j = await response.json();
+        if (j && typeof j.error === 'string') msg = j.error;
+      } catch {
+        /* ignore */
+      }
+      throw new Error(msg);
+    }
+    return response.json();
+  },
+
   /** Request to join a fleet via permanent Fleet Tag (pending owner approval). */
   async requestFleetJoin(fleetTag: string, serviceLine: 'rideshare' | 'rush_delivery' = 'rideshare') {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/workforce/join-requests`, {

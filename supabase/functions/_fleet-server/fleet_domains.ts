@@ -98,6 +98,11 @@ export const FLEET_DOMAINS: FleetDomainDef[] = [
         current_driver_id: str(v.currentDriverId),
         toll_tag_id: str(v.tollTagId) ?? str(v.tollTagUuid),
         vehicle_catalog_id: str(v.vehicle_catalog_id) ?? str(v.vehicleCatalogId),
+        custody_status: str(v.custodyStatus) ?? "none",
+        handed_over_at: str(v.handedOverAt),
+        handed_over_by: str(v.handedOverBy),
+        custody_confirmed_at: str(v.custodyConfirmedAt),
+        custody_confirmed_by: str(v.custodyConfirmedBy),
       }),
   },
   {

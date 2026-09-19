@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { useDriver } from '../../contexts/DriverContext';
 import { useAuth } from '../../contexts/AuthContext';
@@ -51,7 +51,15 @@ export function DriverShell({ forcePassengerRides = false }: { forcePassengerRid
   const { mode, isFleetDriver, fleet, loading, profile } = useDriver();
   const { user, signOut } = useAuth();
   const { driverRecord } = useCurrentDriver();
-  const { needsCheckIn, isLoading: checkInHookLoading, submitCheckIn } = useWeeklyCheckIn(driverRecord?.id);
+  const {
+    needsCheckIn,
+    eligible: checkInEligible,
+    custodyStatus,
+    vehicleId: custodyVehicleId,
+    isLoading: checkInHookLoading,
+    submitCheckIn,
+    refresh: refreshCheckIn,
+  } = useWeeklyCheckIn(driverRecord?.id);
 
   const [currentPage, setCurrentPage] = useState(forcePassengerRides ? 'passenger-rides' : 'dashboard');
   const [menuOpen, setMenuOpen] = useState(false);
@@ -60,8 +68,20 @@ export function DriverShell({ forcePassengerRides = false }: { forcePassengerRid
   const bottomNavItems = getBottomNavItems();
   const menuNavItems = getNavigationItems(mode);
 
-  const checkInModalOpen = isFleetDriver && (needsCheckIn || checkInOpen);
-  const checkInForced = isFleetDriver && needsCheckIn;
+  const assignedVehicleId = useMemo(() => {
+    const id =
+      resolveVehicleIdForDriver(driverRecord, [], user?.id) ||
+      driverRecord?.assignedVehicleId ||
+      driverRecord?.vehicleId ||
+      (typeof driverRecord?.vehicle === 'string' ? driverRecord.vehicle : undefined);
+    if (!id || id === 'unknown') return null;
+    return String(id);
+  }, [driverRecord, user?.id]);
+
+  // Forced only when server says eligible (in custody + week due). Never trap without a vehicle.
+  const custodyReady = checkInEligible === true;
+  const checkInForced = isFleetDriver && custodyReady && needsCheckIn;
+  const checkInModalOpen = checkInForced || checkInOpen;
   // Shared mint chrome for fleet + independent (fleet extras stay outside page routing).
   const mintHomeLayout = currentPage === 'dashboard';
   const mintEarningsLayout = currentPage === 'earnings';
@@ -119,6 +139,7 @@ export function DriverShell({ forcePassengerRides = false }: { forcePassengerRid
     setCheckInSubmitting(true);
     try {
       const vehicleId =
+        assignedVehicleId ||
         resolveVehicleIdForDriver(driverRecord, [], user?.id) ||
         driverRecord?.assignedVehicleId ||
         driverRecord?.vehicleId ||
@@ -141,7 +162,14 @@ export function DriverShell({ forcePassengerRides = false }: { forcePassengerRid
   const renderPage = () => {
     switch (currentPage) {
       case 'dashboard':
-        return <DriverMintHome onOpenFleetInvites={() => setCurrentPage('fleet-invites')} />;
+        return (
+          <DriverMintHome
+            onOpenFleetInvites={() => setCurrentPage('fleet-invites')}
+            custodyStatus={custodyStatus}
+            assignedVehicleId={custodyVehicleId || assignedVehicleId}
+            onCustodyConfirmed={() => void refreshCheckIn()}
+          />
+        );
       case 'passenger-rides':
         return <RideDispatchPage />;
       case 'earnings':

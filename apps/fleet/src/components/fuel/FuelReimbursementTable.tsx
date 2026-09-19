@@ -30,12 +30,22 @@ import { StationProfile } from '../../types/station';
 import {
     isLogReviewEligible,
     isPendingFuelQueueRow,
+    isPendingReadyForReview,
     isStationGateHeld,
     isUnresolvedSplitVariance,
+    isAwaitingCashTx,
+    isStaleAwaitingCash,
+    daysAwaitingCash,
+    describeSplitCashRehome,
+    describeSplitCashRehomeBlocked,
     metaFlagOn,
     splitReconTolerance,
 } from '@roam/fuel-core';
 import { formatFuelMoney } from '../../utils/formatFuelMoney';
+import {
+    SplitCashResolveDialog,
+    type SplitCashResolveChoice,
+} from './SplitCashResolveDialog';
 
 /** Liters from stored quantity/fuelVolume, or amount ÷ price/L (same as manual log). */
 function computeResolvedFuelLiters(tx: FinancialTransaction): number | null {
@@ -161,8 +171,13 @@ interface FuelReimbursementTableProps {
     onDelete?: (id: string) => void;
     onViewDriverLedger?: (driverId: string) => void;
     onApproveLogReview?: (id: string, odometer: number, notes?: string) => void;
-    /** Acknowledge split amount mismatch — never edits cash amount. */
-    onAcknowledgeSplitVariance?: (tx: FinancialTransaction) => Promise<void> | void;
+    /** Resolve split cash money — accept derived / enter cash / void (C2). */
+    onResolveSplitCash?: (args: {
+        tx: FinancialTransaction;
+        action: SplitCashResolveChoice;
+        cashAmount?: number;
+        reason?: string;
+    }) => Promise<void> | void;
     isRefreshing?: boolean;
     /** Jump to Transaction Logs for a posted fuel entry */
     onViewInTransactionLogs?: (opts: { fuelEntryId?: string; date?: string; vehicleId?: string }) => void;
@@ -177,7 +192,7 @@ export function FuelReimbursementTable({
     onDelete,
     onViewDriverLedger,
     onApproveLogReview,
-    onAcknowledgeSplitVariance,
+    onResolveSplitCash,
     isRefreshing = false,
     onViewInTransactionLogs,
 }: FuelReimbursementTableProps) {
@@ -200,8 +215,8 @@ export function FuelReimbursementTable({
     const [approvalBrand, setApprovalBrand] = useState('');
     const [approvalMatchedStationId, setApprovalMatchedStationId] = useState('');
     const [approvalStationLocation, setApprovalStationLocation] = useState('');
-    const [splitMismatchTx, setSplitMismatchTx] = useState<FinancialTransaction | null>(null);
-    const [isAcknowledgingSplit, setIsAcknowledgingSplit] = useState(false);
+    const [splitResolveTx, setSplitResolveTx] = useState<FinancialTransaction | null>(null);
+    const [isResolvingSplit, setIsResolvingSplit] = useState(false);
 
     useEffect(() => {
         if (!isDetailsOpen) return;
@@ -307,24 +322,44 @@ export function FuelReimbursementTable({
 
     const pendingAll = transactions.filter((t) => isPendingFuelQueueRow(t));
     const pendingStationHoldCount = pendingAll.filter((t) => isStationGateHeld(t)).length;
-    const pendingReadyForReview = pendingAll.filter((t) => !isStationGateHeld(t));
+    const pendingReadyForReview = pendingAll.filter((t) => isPendingReadyForReview(t));
 
     const logReview = transactions.filter((t) => isLogReviewEligible(t));
     const splitMismatchTxs = useMemo(
         () => transactions.filter((t) => isUnresolvedSplitVariance(t)),
         [transactions],
     );
+    const awaitingCashTxs = useMemo(
+        () => transactions.filter((t) => isAwaitingCashTx(t)),
+        [transactions],
+    );
+    const staleAwaitingCount = useMemo(
+        () => awaitingCashTxs.filter((t) => isStaleAwaitingCash(t)).length,
+        [awaitingCashTxs],
+    );
+    const blockedRehomeCount = useMemo(
+        () =>
+            awaitingCashTxs.filter((t) =>
+                metaFlagOn((t.metadata as Record<string, unknown> | undefined)?.splitCashRehomeBlocked),
+            ).length,
+        [awaitingCashTxs],
+    );
 
-    const confirmAcknowledgeSplit = async () => {
-        if (!splitMismatchTx || !onAcknowledgeSplitVariance) return;
-        setIsAcknowledgingSplit(true);
+    const confirmResolveSplit = async (args: {
+        tx: FinancialTransaction;
+        action: SplitCashResolveChoice;
+        cashAmount?: number;
+        reason?: string;
+    }) => {
+        if (!onResolveSplitCash) return;
+        setIsResolvingSplit(true);
         try {
-            await onAcknowledgeSplitVariance(splitMismatchTx);
-            setSplitMismatchTx(null);
+            await onResolveSplitCash(args);
+            setSplitResolveTx(null);
         } catch (e) {
-            console.error('[SplitMismatch] Acknowledge failed:', e);
+            console.error('[SplitCash] Resolve failed:', e);
         } finally {
-            setIsAcknowledgingSplit(false);
+            setIsResolvingSplit(false);
         }
     };
 
@@ -546,6 +581,16 @@ export function FuelReimbursementTable({
                                     <TableCell className="font-medium">
                                         {formatDate(tx.date)}
                                         <div className="text-xs text-slate-500">{tx.time}</div>
+                                        {(() => {
+                                            const rehome = describeSplitCashRehome(
+                                                tx.metadata as Record<string, unknown>,
+                                            );
+                                            return rehome ? (
+                                                <div className="mt-0.5 text-[10px] font-normal text-slate-500">
+                                                    {rehome}
+                                                </div>
+                                            ) : null;
+                                        })()}
                                     </TableCell>
                                     <TableCell>
                                         <div className="flex items-center gap-2">
@@ -888,6 +933,22 @@ export function FuelReimbursementTable({
                                 </Badge>
                             )}
                         </TabsTrigger>
+                        <TabsTrigger value="awaiting-statement">
+                            Awaiting statement
+                            {awaitingCashTxs.length > 0 && (
+                                <Badge
+                                    variant="secondary"
+                                    className={cn(
+                                        'ml-1.5 text-[10px] px-1.5 py-0',
+                                        staleAwaitingCount > 0
+                                            ? 'bg-amber-100 text-amber-900'
+                                            : 'bg-slate-100 text-slate-700',
+                                    )}
+                                >
+                                    {awaitingCashTxs.length}
+                                </Badge>
+                            )}
+                        </TabsTrigger>
                     </TabsList>
                     {pendingStationHoldCount > 0 && (
                         <div className="flex items-center gap-2 rounded-md border border-sky-200 bg-sky-50 px-3 py-1.5 text-xs text-sky-900">
@@ -959,7 +1020,27 @@ export function FuelReimbursementTable({
                                         const tol = splitReconTolerance(pump);
                                         return (
                                             <TableRow key={tx.id}>
-                                                <TableCell className="text-xs">{tx.date}</TableCell>
+                                                <TableCell className="text-xs">
+                                                    {tx.date}
+                                                    {(() => {
+                                                        const rehome = describeSplitCashRehome(m);
+                                                        const blocked = describeSplitCashRehomeBlocked(m);
+                                                        return (
+                                                            <>
+                                                                {rehome && (
+                                                                    <div className="mt-0.5 text-[10px] text-slate-500">
+                                                                        {rehome}
+                                                                    </div>
+                                                                )}
+                                                                {blocked && (
+                                                                    <div className="mt-0.5 text-[10px] text-amber-800">
+                                                                        {blocked}
+                                                                    </div>
+                                                                )}
+                                                            </>
+                                                        );
+                                                    })()}
+                                                </TableCell>
                                                 <TableCell className="text-xs">
                                                     {tx.driverName || tx.driverId || '—'}
                                                 </TableCell>
@@ -974,6 +1055,9 @@ export function FuelReimbursementTable({
                                                                 ? ` · Derived cash ${formatFuelMoney(derived)}`
                                                                 : ''}
                                                         </span>
+                                                        {m.splitPumpPriceOutlier === true && (
+                                                            <span className="text-amber-700">Price band flag</span>
+                                                        )}
                                                     </div>
                                                 </TableCell>
                                                 <TableCell className="text-xs">
@@ -990,14 +1074,107 @@ export function FuelReimbursementTable({
                                                     </div>
                                                 </TableCell>
                                                 <TableCell className="text-right">
+                                                    {can('fuel.approve') && (
                                                     <Button
                                                         size="sm"
                                                         variant="outline"
                                                         className="h-8 text-xs"
-                                                        onClick={() => setSplitMismatchTx(tx)}
+                                                        onClick={() => setSplitResolveTx(tx)}
                                                     >
-                                                        Review
+                                                        Decide pay
                                                     </Button>
+                                                    )}
+                                                </TableCell>
+                                            </TableRow>
+                                        );
+                                    })}
+                                </TableBody>
+                            </Table>
+                        </div>
+                    )}
+                </TabsContent>
+
+                <TabsContent value="awaiting-statement" className="space-y-4">
+                    {awaitingCashTxs.length === 0 ? (
+                        <div className="rounded-md border bg-white p-8 text-center text-slate-500">
+                            <p className="text-sm">All split cash is matched or resolved.</p>
+                            <p className="text-xs text-slate-400 mt-1">
+                                Rows appear here after a split fill until the Dominion statement derives the cash amount.
+                            </p>
+                        </div>
+                    ) : (
+                        <div className="rounded-md border bg-white overflow-hidden">
+                            {staleAwaitingCount > 0 && (
+                                <div className="border-b border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                                    {staleAwaitingCount} fill{staleAwaitingCount === 1 ? '' : 's'} waiting 14+ days — chase the statement or enter cash / void.
+                                </div>
+                            )}
+                            {blockedRehomeCount > 0 && (
+                                <div className="border-b border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                                    {blockedRehomeCount} fill{blockedRehomeCount === 1 ? '' : 's'} cannot post into an open week — reopen or create a later fuel period (or fix missing driver).
+                                </div>
+                            )}
+                            <Table>
+                                <TableHeader>
+                                    <TableRow>
+                                        <TableHead>Date</TableHead>
+                                        <TableHead>Driver</TableHead>
+                                        <TableHead>Age</TableHead>
+                                        <TableHead>Pump</TableHead>
+                                        <TableHead className="text-right">Action</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {awaitingCashTxs.map((tx) => {
+                                        const m = (tx.metadata || {}) as Record<string, unknown>;
+                                        const pump = Number(m.splitPumpTotal) || 0;
+                                        const days = daysAwaitingCash(tx);
+                                        const stale = isStaleAwaitingCash(tx);
+                                        const rehome = describeSplitCashRehome(m);
+                                        const blocked = describeSplitCashRehomeBlocked(m);
+                                        return (
+                                            <TableRow
+                                                key={tx.id}
+                                                className={stale || blocked ? 'bg-amber-50/60' : undefined}
+                                            >
+                                                <TableCell className="text-xs">
+                                                    {tx.date}
+                                                    {rehome && (
+                                                        <div className="mt-0.5 text-[10px] text-slate-500">{rehome}</div>
+                                                    )}
+                                                    {blocked && (
+                                                        <div className="mt-0.5 text-[10px] text-amber-800">{blocked}</div>
+                                                    )}
+                                                </TableCell>
+                                                <TableCell className="text-xs">
+                                                    {tx.driverName || tx.driverId || '—'}
+                                                </TableCell>
+                                                <TableCell className="text-xs">
+                                                    {days != null ? (
+                                                        <span className={stale ? 'font-medium text-amber-900' : 'text-slate-600'}>
+                                                            {days}d waiting
+                                                        </span>
+                                                    ) : (
+                                                        '—'
+                                                    )}
+                                                </TableCell>
+                                                <TableCell className="text-xs">
+                                                    {formatFuelMoney(pump)}
+                                                    {m.splitPumpPriceOutlier === true && (
+                                                        <div className="text-[10px] text-amber-700">Price band flag</div>
+                                                    )}
+                                                </TableCell>
+                                                <TableCell className="text-right">
+                                                    {can('fuel.approve') && onResolveSplitCash && (
+                                                    <Button
+                                                        size="sm"
+                                                        variant="outline"
+                                                        className="h-8 text-xs"
+                                                        onClick={() => setSplitResolveTx(tx)}
+                                                    >
+                                                        Resolve
+                                                    </Button>
+                                                    )}
                                                 </TableCell>
                                             </TableRow>
                                         );
@@ -1009,81 +1186,15 @@ export function FuelReimbursementTable({
                 </TabsContent>
             </Tabs>
 
-            <Dialog
-                open={!!splitMismatchTx}
+            <SplitCashResolveDialog
+                open={!!splitResolveTx}
+                tx={splitResolveTx}
+                busy={isResolvingSplit}
                 onOpenChange={(open) => {
-                    if (!open) setSplitMismatchTx(null);
+                    if (!open) setSplitResolveTx(null);
                 }}
-            >
-                <DialogContent className="sm:max-w-[480px]">
-                    <DialogHeader>
-                        <DialogTitle>Split amount mismatch</DialogTitle>
-                        <DialogDescription>
-                            Statement card charge exceeds the pump total, so cash can&apos;t be derived.
-                            Cash is not auto-changed.
-                        </DialogDescription>
-                    </DialogHeader>
-                    {splitMismatchTx && (() => {
-                        const m = (splitMismatchTx.metadata || {}) as Record<string, unknown>;
-                        const pump = Number(m.splitPumpTotal) || 0;
-                        const statement = Number(m.splitStatementAmount);
-                        const derived = Number(m.splitDerivedCashAmount);
-                        const delta = Number(m.splitVarianceDelta);
-                        const tol = splitReconTolerance(pump);
-                        const sibling = logs.find(
-                            (e) =>
-                                e.metadata?.fillGroupId === m.fillGroupId &&
-                                e.metadata?.splitRole === 'card',
-                        );
-                        return (
-                            <div className="space-y-3 text-sm">
-                                <div className="rounded-md border bg-slate-50 px-3 py-2 space-y-1">
-                                    <div className="flex justify-between"><span className="text-slate-500">Pump total</span><span className="font-medium">{formatFuelMoney(pump)}</span></div>
-                                    <div className="flex justify-between"><span className="text-slate-500">Statement card</span><span className="font-medium">{Number.isFinite(statement) ? formatFuelMoney(statement) : '—'}</span></div>
-                                    <div className="flex justify-between"><span className="text-slate-500">Derived cash</span><span className="font-medium">{Number.isFinite(derived) ? formatFuelMoney(derived) : '—'}</span></div>
-                                    <div className="flex justify-between"><span className="text-slate-500">Over pump</span><span className="font-medium text-rose-700">{Number.isFinite(delta) ? formatFuelMoney(Math.abs(delta)) : '—'}</span></div>
-                                    <div className="flex justify-between"><span className="text-slate-500">Tolerance</span><span className="font-medium">{formatFuelMoney(tol)}</span></div>
-                                </div>
-                                {sibling && onViewInTransactionLogs && (
-                                    <Button
-                                        variant="link"
-                                        className="h-auto p-0 text-xs"
-                                        onClick={() =>
-                                            onViewInTransactionLogs({
-                                                fuelEntryId: sibling.id,
-                                                date: sibling.date,
-                                                vehicleId: sibling.vehicleId,
-                                            })
-                                        }
-                                    >
-                                        Open in Transaction Logs
-                                    </Button>
-                                )}
-                            </div>
-                        );
-                    })()}
-                    <DialogFooter className="gap-2 sm:gap-0">
-                        <Button variant="outline" onClick={() => setSplitMismatchTx(null)}>
-                            Close
-                        </Button>
-                        {onAcknowledgeSplitVariance && can('fuel.approve') && (
-                            <Button
-                                onClick={() => void confirmAcknowledgeSplit()}
-                                disabled={isAcknowledgingSplit}
-                            >
-                                {isAcknowledgingSplit ? (
-                                    <>
-                                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                        Saving…
-                                    </>
-                                ) : (
-                                    'Acknowledge mismatch'
-                                )}
-                            </Button>
-                        )}
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
+                onResolve={confirmResolveSplit}
+            />
 
             {/* Details Modal (existing Pending detail view) */}
             <Dialog open={isDetailsOpen} onOpenChange={(open) => { if(!open) { setIsDetailsOpen(false); setAction(null); } }}>

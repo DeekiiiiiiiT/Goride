@@ -18,6 +18,7 @@ import {
   Plus,
   MoreVertical, 
   CheckCircle2, 
+  ChevronDown,
   ChevronLeft, 
   ChevronRight,
   Download,
@@ -28,6 +29,13 @@ import {
   BookmarkPlus,
   Trash2,
 } from 'lucide-react';
+import { applyDriverAssignmentChange } from '../../utils/vehicleDriverAssignmentHistory';
+import { isVehicleParked } from '../../utils/vehicleCatalogGate';
+import { showCatalogGateToastIfApplicable } from '../../utils/catalogGateErrors';
+import {
+  DashboardAssignVehicleDialog,
+  type AssignableVehicleOption,
+} from '../dashboard/DashboardAssignVehicleDialog';
 import { Checkbox } from '../ui/checkbox';
 import {
   loadDriverSavedViews,
@@ -111,6 +119,16 @@ function driverDisplayName(name: unknown): string {
   return 'Unknown Driver';
 }
 
+function vehicleAssignmentLabel(v: {
+  year?: string | number;
+  make?: string;
+  model?: string;
+  licensePlate?: string;
+}): string {
+  const ym = [v.year, v.make, v.model].filter(Boolean).join(' ').trim();
+  return ym || v.licensePlate || '';
+}
+
 function driverInitials(name: unknown): string {
   const label = driverDisplayName(name);
   const initials = label
@@ -171,7 +189,7 @@ import {
 } from "../ui/dialog";
 import { Label } from "../ui/label";
 import { Link2 } from 'lucide-react';
-import { WorkforceInvitePanel, WorkforcePendingInvites } from '../workforce/WorkforceInvitePanel';
+import { WorkforceInvitePanel, WorkforcePendingInvitesButton } from '../workforce/WorkforceInvitePanel';
 // Interface for our View Model
 interface DriverProfile {
   id: string;
@@ -334,10 +352,10 @@ export function DriversPage({
   const [saveViewName, setSaveViewName] = useState('');
   const [bulkStatusBusy, setBulkStatusBusy] = useState(false);
 
-  const [driverToDelete, setDriverToDelete] = useState<string | null>(null);
-  const [isDeleting, setIsDeleting] = useState(false);
   const [driverToRemove, setDriverToRemove] = useState<string | null>(null);
   const [isRemoving, setIsRemoving] = useState(false);
+  const [assignDriverId, setAssignDriverId] = useState<string | null>(null);
+  const [busyDriverId, setBusyDriverId] = useState<string | null>(null);
 
   const { serviceLineParam } = useServiceLineScopeParam();
   const earningsServiceLine = serviceLineParam;
@@ -422,6 +440,39 @@ export function DriversPage({
     refetchOnMount: false,
   });
 
+  const { data: vehiclesRaw = [] } = useQuery({
+    queryKey: ['vehicles'],
+    queryFn: () => api.getVehicles(),
+    staleTime: 5 * 60 * 1000,
+    refetchOnWindowFocus: false,
+  });
+  const vehicleList = useMemo(
+    () => (Array.isArray(vehiclesRaw) ? vehiclesRaw : []),
+    [vehiclesRaw],
+  );
+  const byDriverId = useMemo(() => {
+    const map = new Map<string, any>();
+    for (const v of vehicleList) {
+      const driverId = v?.currentDriverId;
+      if (driverId && typeof driverId === 'string' && !map.has(driverId)) {
+        map.set(driverId, v);
+      }
+    }
+    return map;
+  }, [vehicleList]);
+  const assignableVehicles: AssignableVehicleOption[] = useMemo(
+    () =>
+      vehicleList.map((v: any) => ({
+        id: v.id,
+        label: vehicleAssignmentLabel(v) || v.licensePlate || v.id,
+        licensePlate: v.licensePlate || '',
+        image: v.image,
+        currentDriverName: v.currentDriverName,
+        parked: isVehicleParked(v),
+      })),
+    [vehicleList],
+  );
+
   useEffect(() => {
     if (!metricsEnrichError) return;
     toast.error(
@@ -443,34 +494,6 @@ export function DriversPage({
   const safeManualDrivers = asArray<DriverProfile>(manualDrivers);
   const safeImportedMetrics = asArray<import('../../types/data').DriverMetrics>(importedMetrics);
   const safeRoster = asArray<DriverProfile>(rosterRaw);
-
-  const handleDeleteDriver = async () => {
-    if (!driverToDelete) return;
-    
-    setIsDeleting(true);
-    try {
-      const response = await fetch(`${API_ENDPOINTS.fleetCore}/drivers/${driverToDelete}`, {
-        method: 'DELETE',
-        headers: await requireAuthHeaders(null)
-      });
-      
-      const data = await response.json();
-      
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to delete driver');
-      }
-      
-      // Phase 7.1: Invalidate React Query cache after deletion
-      queryClient.invalidateQueries({ queryKey: ['drivers'] });
-      queryClient.invalidateQueries({ queryKey: ['driversRoster'] });
-      toast.success("Driver deleted successfully");
-      setDriverToDelete(null);
-    } catch (error: any) {
-      toast.error(error.message || "Failed to delete driver");
-    } finally {
-      setIsDeleting(false);
-    }
-  };
 
   // Detach membership (auth + KV + driver_profiles + vehicle) without deleting the account
   const handleRemoveFromFleet = async () => {
@@ -768,6 +791,118 @@ export function DriversPage({
     });
   };
 
+  const assignDriver = useMemo(
+    () => drivers.find((d) => d.id === assignDriverId) ?? null,
+    [drivers, assignDriverId],
+  );
+
+  const refreshAssignmentCaches = async () => {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['vehicles'] }),
+      queryClient.invalidateQueries({ queryKey: ['driversRoster'] }),
+      queryClient.invalidateQueries({ queryKey: ['drivers'] }),
+    ]);
+  };
+
+  const clearVehicleDriver = async (vehicle: any) => {
+    await api.saveVehicle({
+      ...vehicle,
+      currentDriverId: '',
+      currentDriverName: '',
+      custodyStatus: 'none',
+      handedOverAt: undefined,
+      handedOverBy: undefined,
+      custodyConfirmedAt: undefined,
+      custodyConfirmedBy: undefined,
+      driverAssignmentHistory: applyDriverAssignmentChange(vehicle, null, ''),
+    });
+  };
+
+  const handleUnassignVehicle = async (driverId: string) => {
+    const vehicle = byDriverId.get(driverId);
+    if (!vehicle) {
+      toast.info('This driver has no vehicle to unassign.');
+      return;
+    }
+    const custody = vehicle.custodyStatus;
+    if (custody === 'handed_over' || custody === 'in_custody') {
+      const ok = window.confirm(
+        custody === 'in_custody'
+          ? 'This vehicle is in the driver’s custody. Unassigning clears custody and they must go through hand-over again. Continue?'
+          : 'This vehicle was marked handed over. Unassigning clears custody. Continue?',
+      );
+      if (!ok) return;
+    }
+    setBusyDriverId(driverId);
+    try {
+      await clearVehicleDriver(vehicle);
+      await refreshAssignmentCaches();
+      toast.success('Vehicle unassigned');
+    } catch (error) {
+      const handled = showCatalogGateToastIfApplicable(error);
+      if (!handled) toast.error('Could not unassign vehicle');
+    } finally {
+      setBusyDriverId(null);
+    }
+  };
+
+  const handleConfirmAssign = async (vehicleId: string) => {
+    if (!assignDriverId) return;
+    const driver = drivers.find((d) => d.id === assignDriverId);
+    if (!driver) return;
+
+    const nextVehicle = vehicleList.find((v: any) => v.id === vehicleId);
+    if (!nextVehicle) {
+      toast.error('Vehicle not found');
+      return;
+    }
+    if (isVehicleParked(nextVehicle)) {
+      toast.warning('Vehicle is parked', {
+        description: 'Pending catalog approval — cannot assign yet.',
+      });
+      return;
+    }
+
+    setBusyDriverId(assignDriverId);
+    try {
+      const previous = byDriverId.get(assignDriverId);
+      if (previous && previous.id !== vehicleId) {
+        await clearVehicleDriver(previous);
+      }
+
+      await api.saveVehicle({
+        ...nextVehicle,
+        currentDriverId: assignDriverId,
+        currentDriverName: driver.name,
+        custodyStatus: 'assigned',
+        handedOverAt: undefined,
+        handedOverBy: undefined,
+        custodyConfirmedAt: undefined,
+        custodyConfirmedBy: undefined,
+        status: 'Active',
+        driverAssignmentHistory: applyDriverAssignmentChange(
+          nextVehicle,
+          assignDriverId,
+          driver.name,
+        ),
+      });
+      await refreshAssignmentCaches();
+      toast.success('Vehicle assigned', {
+        description: `${driver.name} → ${vehicleAssignmentLabel(nextVehicle) || nextVehicle.licensePlate}`,
+      });
+      setAssignDriverId(null);
+    } catch (error) {
+      const handled = showCatalogGateToastIfApplicable(error);
+      if (!handled) {
+        toast.error('Could not assign vehicle', {
+          description: error instanceof Error ? error.message : undefined,
+        });
+      }
+    } finally {
+      setBusyDriverId(null);
+    }
+  };
+
   const handleNextPage = () => {
       if (currentPage < totalPages) setCurrentPage(prev => prev + 1);
   };
@@ -904,7 +1039,6 @@ export function DriversPage({
         <CouriersPage embedded />
       ) : (
       <>
-        <WorkforcePendingInvites serviceLine="rideshare" />
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
             
             {/* Filters (Left) */}
@@ -952,6 +1086,8 @@ export function DriversPage({
                     <SelectItem value="risk">At Risk</SelectItem>
                   </SelectContent>
                 </Select>
+
+                <WorkforcePendingInvitesButton serviceLine="rideshare" />
 
                 {overdueFollowUpDriverCount > 0 && (
                   <Button
@@ -1105,6 +1241,7 @@ export function DriversPage({
                         <TableHead className="w-[250px] font-semibold text-slate-700 dark:text-slate-300">Driver</TableHead>
                         <TableHead className="w-[100px] font-semibold text-slate-700 dark:text-slate-300">Status</TableHead>
                         <TableHead className="font-semibold text-slate-700 dark:text-slate-300">Tier</TableHead>
+                        <TableHead className="min-w-[180px] font-semibold text-slate-700 dark:text-slate-300">Vehicle</TableHead>
                         <TableHead className="w-[100px]"></TableHead>
                     </TableRow>
                 </TableHeader>
@@ -1200,6 +1337,71 @@ export function DriversPage({
                                     <TierBadge tier={driver.tier} />
                                 </TableCell>
                                 <TableCell onClick={(e) => e.stopPropagation()}>
+                                  {(() => {
+                                    const assigned = byDriverId.get(driver.id);
+                                    const unassigned = !assigned;
+                                    const busy = busyDriverId === driver.id;
+                                    const assignment = assigned
+                                      ? vehicleAssignmentLabel(assigned) || assigned.licensePlate || 'Assigned'
+                                      : 'Unassigned';
+                                    return (
+                                      <DropdownMenu>
+                                        <DropdownMenuTrigger asChild>
+                                          <button
+                                            type="button"
+                                            disabled={busy}
+                                            className="group -mx-1.5 flex w-full max-w-[220px] items-center gap-3 rounded-md px-1.5 py-1 text-left transition-colors hover:bg-slate-100 disabled:opacity-60 dark:hover:bg-slate-800"
+                                            aria-label={`Change vehicle for ${driver.name}`}
+                                          >
+                                            {unassigned ? (
+                                              <span className="text-slate-400 group-hover:text-slate-600">
+                                                Unassigned
+                                              </span>
+                                            ) : (
+                                              <>
+                                                {assigned?.image ? (
+                                                  <div className="flex h-10 w-16 flex-shrink-0 overflow-hidden rounded-md border border-slate-200 bg-slate-100">
+                                                    <img
+                                                      src={assigned.image}
+                                                      alt=""
+                                                      className="h-full w-full object-cover"
+                                                    />
+                                                  </div>
+                                                ) : null}
+                                                <span className="truncate text-slate-800 dark:text-slate-200">
+                                                  {assignment}
+                                                </span>
+                                              </>
+                                            )}
+                                            <ChevronDown className="h-3.5 w-3.5 flex-shrink-0 text-slate-400 opacity-0 group-hover:opacity-100 group-data-[state=open]:opacity-100" />
+                                          </button>
+                                        </DropdownMenuTrigger>
+                                        <DropdownMenuContent align="start" className="w-52">
+                                          <DropdownMenuLabel>Vehicle</DropdownMenuLabel>
+                                          <DropdownMenuItem
+                                            disabled={busy}
+                                            onClick={() => setAssignDriverId(driver.id)}
+                                          >
+                                            {unassigned ? 'Assign vehicle' : 'Assign another vehicle'}
+                                          </DropdownMenuItem>
+                                          {!unassigned ? (
+                                            <>
+                                              <DropdownMenuSeparator />
+                                              <DropdownMenuItem
+                                                disabled={busy}
+                                                className="text-rose-600 focus:text-rose-700"
+                                                onClick={() => void handleUnassignVehicle(driver.id)}
+                                              >
+                                                Unassign vehicle
+                                              </DropdownMenuItem>
+                                            </>
+                                          ) : null}
+                                        </DropdownMenuContent>
+                                      </DropdownMenu>
+                                    );
+                                  })()}
+                                </TableCell>
+                                <TableCell onClick={(e) => e.stopPropagation()}>
                                     <div className="flex items-center justify-end gap-1">
                                         <Button 
                                            variant="ghost" 
@@ -1234,28 +1436,19 @@ export function DriversPage({
                                             <DropdownMenuContent align="end">
                                                 <DropdownMenuItem onClick={() => openDriver(driver.id)}>View Analysis</DropdownMenuItem>
                                                 <DropdownMenuItem>View History</DropdownMenuItem>
-                                                <DropdownMenuSeparator />
-                                                {can('drivers.delete') && (
-                                                <>
-                                                <DropdownMenuItem
-                                                    className="cursor-pointer"
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        setDriverToRemove(driver.id);
-                                                    }}
-                                                >
-                                                    Remove from Fleet
-                                                </DropdownMenuItem>
-                                                <DropdownMenuItem 
-                                                    className="text-rose-600 focus:text-rose-600 focus:bg-rose-50 dark:focus:bg-rose-900/20 cursor-pointer"
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        setDriverToDelete(driver.id);
-                                                    }}
-                                                >
-                                                    Delete Driver
-                                                </DropdownMenuItem>
-                                                </>
+                                                {can('drivers.edit') && (
+                                                  <>
+                                                    <DropdownMenuSeparator />
+                                                    <DropdownMenuItem
+                                                        className="cursor-pointer"
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            setDriverToRemove(driver.id);
+                                                        }}
+                                                    >
+                                                        Remove from Fleet
+                                                    </DropdownMenuItem>
+                                                  </>
                                                 )}
                                             </DropdownMenuContent>
                                         </DropdownMenu>
@@ -1309,6 +1502,54 @@ export function DriversPage({
                   <TierBadge tier={driver.tier} />
                 </div>
               </button>
+              <div className="mt-3">
+                  {(() => {
+                    const assigned = byDriverId.get(driver.id);
+                    const unassigned = !assigned;
+                    const busy = busyDriverId === driver.id;
+                    const assignment = assigned
+                      ? vehicleAssignmentLabel(assigned) || assigned.licensePlate || 'Assigned'
+                      : 'Unassigned';
+                    return (
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <button
+                            type="button"
+                            disabled={busy}
+                            className="flex w-full items-center justify-between rounded-md border border-slate-200 px-3 py-2 text-left text-sm dark:border-slate-700"
+                            aria-label={`Change vehicle for ${driver.name}`}
+                          >
+                            <span className={unassigned ? 'text-slate-400' : 'text-slate-800 dark:text-slate-200'}>
+                              {assignment}
+                            </span>
+                            <ChevronDown className="h-3.5 w-3.5 text-slate-400" />
+                          </button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="start" className="w-52">
+                          <DropdownMenuLabel>Vehicle</DropdownMenuLabel>
+                          <DropdownMenuItem
+                            disabled={busy}
+                            onClick={() => setAssignDriverId(driver.id)}
+                          >
+                            {unassigned ? 'Assign vehicle' : 'Assign another vehicle'}
+                          </DropdownMenuItem>
+                          {!unassigned ? (
+                            <>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem
+                                disabled={busy}
+                                className="text-rose-600 focus:text-rose-700"
+                                onClick={() => void handleUnassignVehicle(driver.id)}
+                              >
+                                Unassign vehicle
+                              </DropdownMenuItem>
+                            </>
+                          ) : null}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    );
+                  })()}
+              </div>
               <div className="mt-3 flex items-center justify-between border-t border-slate-100 pt-2 dark:border-slate-800">
                 <Checkbox
                   checked={selectedIds.has(driver.id)}
@@ -1325,20 +1566,14 @@ export function DriversPage({
                   <DropdownMenuContent align="end">
                     <DropdownMenuItem onClick={() => openDriver(driver.id)}>View Analysis</DropdownMenuItem>
                     <DropdownMenuItem onClick={() => openDriver(driver.id, 'profile')}>Add note</DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    {can('drivers.delete') && (
+                    {can('drivers.edit') && (
                       <>
+                        <DropdownMenuSeparator />
                         <DropdownMenuItem
                           className="cursor-pointer"
                           onClick={() => setDriverToRemove(driver.id)}
                         >
                           Remove from Fleet
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          className="cursor-pointer text-rose-600 focus:bg-rose-50 focus:text-rose-600 dark:focus:bg-rose-900/20"
-                          onClick={() => setDriverToDelete(driver.id)}
-                        >
-                          Delete Driver
                         </DropdownMenuItem>
                       </>
                     )}
@@ -1395,6 +1630,18 @@ export function DriversPage({
       </div>
       </>
       )}
+
+      <DashboardAssignVehicleDialog
+        open={Boolean(assignDriverId)}
+        onOpenChange={(open) => {
+          if (!open && !busyDriverId) setAssignDriverId(null);
+        }}
+        driverName={assignDriver?.name || ''}
+        vehicles={assignableVehicles}
+        currentVehicleId={assignDriverId ? byDriverId.get(assignDriverId)?.id : undefined}
+        busy={Boolean(busyDriverId)}
+        onConfirm={handleConfirmAssign}
+      />
 
       <AddDriverModal
         isOpen={isAddModalOpen}
@@ -1483,31 +1730,6 @@ export function DriversPage({
           </form>
         </DialogContent>
       </Dialog>
-
-      {/* Delete Confirmation Dialog */}
-      <AlertDialog open={!!driverToDelete} onOpenChange={(open) => !open && setDriverToDelete(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This action cannot be undone. This will permanently delete the driver account and remove their data from the system.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
-            <AlertDialogAction 
-              onClick={(e) => {
-                e.preventDefault();
-                handleDeleteDriver();
-              }}
-              className="bg-rose-600 hover:bg-rose-700 focus:ring-rose-600"
-              disabled={isDeleting}
-            >
-              {isDeleting ? "Deleting..." : "Delete Driver"}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
 
       {/* Remove From Fleet Confirmation Dialog */}
       <AlertDialog open={!!driverToRemove} onOpenChange={(open) => !open && setDriverToRemove(null)}>

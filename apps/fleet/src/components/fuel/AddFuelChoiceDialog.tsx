@@ -1,4 +1,4 @@
-import { ChevronRight, Fuel, User } from 'lucide-react';
+import { ChevronRight, Fuel, User, Combine } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -13,6 +13,7 @@ type AddFuelChoiceDialogProps = {
   onOpenChange: (open: boolean) => void;
   onChooseDriverClaim: () => void;
   onChooseKnownFill: () => void;
+  onChooseSplitFill: () => void;
 };
 
 function ChoiceCard({
@@ -50,13 +51,14 @@ function ChoiceCard({
 }
 
 /**
- * Self-serve gate before admin create — Driver claim vs Known fill.
+ * Self-serve gate before admin create — Driver claim / Known fill / Gas Card + Cash.
  */
 export function AddFuelChoiceDialog({
   open,
   onOpenChange,
   onChooseDriverClaim,
   onChooseKnownFill,
+  onChooseSplitFill,
 }: AddFuelChoiceDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -82,6 +84,15 @@ export function AddFuelChoiceDialog({
             onClick={() => {
               onOpenChange(false);
               onChooseKnownFill();
+            }}
+          />
+          <ChoiceCard
+            icon={<Combine className="h-5 w-5" aria-hidden />}
+            title="Gas Card + Cash"
+            description="One pump stop paid partly by card and partly by the driver. Cash settles after the statement."
+            onClick={() => {
+              onOpenChange(false);
+              onChooseSplitFill();
             }}
           />
         </div>

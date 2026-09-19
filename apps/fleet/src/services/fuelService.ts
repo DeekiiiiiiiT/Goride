@@ -253,9 +253,17 @@ export const fuelService = {
     });
     if (!response.ok) {
       await throwIfCatalogGateBlocked(response, "Cannot save fuel entry — vehicle is pending catalog approval");
-      const errorBody = await response.json().catch(() => ({}));
+      const errorBody = await response.json().catch(() => ({} as Record<string, unknown>));
       console.error('[FuelService] Save fuel entry failed:', response.status, errorBody);
-      throw new Error(errorBody.error || `Failed to save fuel entry (${response.status})`);
+      const err = new Error(
+        String(errorBody.error || errorBody.message || `Failed to save fuel entry (${response.status})`),
+      ) as Error & { code?: string; status?: number; conflictingEntryId?: string };
+      err.code = typeof errorBody.code === 'string' ? errorBody.code : undefined;
+      err.status = response.status;
+      if (typeof errorBody.conflictingEntryId === 'string') {
+        err.conflictingEntryId = errorBody.conflictingEntryId;
+      }
+      throw err;
     }
     const result = await response.json();
     // If the server gate-held the entry (no GPS + no manual station override),
@@ -273,6 +281,39 @@ export const fuelService = {
         softDuplicateOf: String(result.softDuplicateOf),
       } as FuelEntry & { softDuplicateOf?: string };
     }
+    return result.data || result;
+  },
+
+  /** Atomic Gas Card + Cash — one pump stop, two ledger rows (server stamps invariants). */
+  async saveSplitFill(args: {
+    fillGroupId: string;
+    cashTransaction: Record<string, unknown>;
+    cardFuelEntry: Record<string, unknown>;
+  }): Promise<{
+    fillGroupId: string;
+    cashTransactionId: string;
+    cardFuelEntryId: string;
+    cashTransaction: Record<string, unknown>;
+    cardFuelEntry: Record<string, unknown>;
+    idempotent?: boolean;
+  }> {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/fuel/split-fill`, {
+      method: 'POST',
+      headers: await requireAuthHeaders(),
+      body: JSON.stringify(args),
+    });
+    if (!response.ok) {
+      await throwIfCatalogGateBlocked(response, 'Cannot save split fuel fill — vehicle is pending catalog approval');
+      const errorBody = await response.json().catch(() => ({} as Record<string, unknown>));
+      console.error('[FuelService] Save split fill failed:', response.status, errorBody);
+      const err = new Error(
+        String(errorBody.message || errorBody.error || `Failed to save split fill (${response.status})`),
+      ) as Error & { code?: string; status?: number };
+      err.code = typeof errorBody.code === 'string' ? errorBody.code : undefined;
+      err.status = response.status;
+      throw err;
+    }
+    const result = await response.json();
     return result.data || result;
   },
 

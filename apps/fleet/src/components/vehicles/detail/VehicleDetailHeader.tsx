@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Activity, AlertTriangle, ListChecks, ShieldCheck, Tag, Unlink } from 'lucide-react';
 import { toast } from "sonner";
 import { Button } from '../../ui/button';
@@ -12,11 +12,31 @@ import {
   SelectTrigger,
   SelectValue,
 } from '../../ui/select';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '../../ui/dialog';
 import { ImageWithFallback } from '../../figma/ImageWithFallback';
 import { Vehicle } from '../../../types/vehicle';
 import { api } from '../../../services/api';
 import type { VehicleCatalogRecord } from '../../../types/vehicleCatalog';
 import { TollClassPicker } from '../TollClassPicker';
+
+function custodyChip(vehicle: Vehicle): { label: string; className: string } | null {
+  if (!vehicle.currentDriverId) return null;
+  const status = vehicle.custodyStatus || 'assigned';
+  if (status === 'in_custody') {
+    return { label: 'In custody', className: 'bg-emerald-100 text-emerald-800 border-emerald-200' };
+  }
+  if (status === 'handed_over') {
+    return { label: 'Waiting for driver confirm', className: 'bg-amber-100 text-amber-900 border-amber-200' };
+  }
+  return { label: 'Assigned — awaiting handover', className: 'bg-indigo-100 text-indigo-800 border-indigo-200' };
+}
 
 export interface VehicleDetailHeaderProps {
   vehicle: Vehicle;
@@ -39,6 +59,28 @@ export function VehicleDetailHeader({
   handleUnassignTag,
   onUpdate,
 }: VehicleDetailHeaderProps) {
+  const [handoverOpen, setHandoverOpen] = useState(false);
+  const [handoverBusy, setHandoverBusy] = useState(false);
+  const chip = custodyChip(vehicle);
+  const canHandOver =
+    Boolean(vehicle.currentDriverId) &&
+    (vehicle.custodyStatus === 'assigned' || !vehicle.custodyStatus || vehicle.custodyStatus === 'none');
+
+  const confirmHandOver = async () => {
+    setHandoverBusy(true);
+    try {
+      const res = await api.handOverVehicle(vehicle.id);
+      const updated = (res.vehicle || { ...vehicle, custodyStatus: 'handed_over' }) as Vehicle;
+      onUpdate?.(updated);
+      toast.success(res.already ? 'Already handed over' : 'Marked as handed over');
+      setHandoverOpen(false);
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : 'Failed to mark handed over');
+    } finally {
+      setHandoverBusy(false);
+    }
+  };
+
   return (
       /* --- Header Section --- */
       <div className="grid grid-cols-1 gap-6">
@@ -122,6 +164,11 @@ export function VehicleDetailHeader({
                                      <div>
                                          <p className="text-xs text-indigo-600 font-semibold uppercase tracking-wider">Current Driver</p>
                                          <p className="font-medium text-slate-900">{vehicle.currentDriverName || 'Unassigned'}</p>
+                                         {chip ? (
+                                           <Badge variant="outline" className={`mt-1 text-[10px] ${chip.className}`}>
+                                             {chip.label}
+                                           </Badge>
+                                         ) : null}
                                      </div>
                                      <Button 
                                         variant="outline" 
@@ -131,6 +178,15 @@ export function VehicleDetailHeader({
                                      >
                                          Change Driver
                                      </Button>
+                                     {canHandOver ? (
+                                       <Button
+                                         size="sm"
+                                         className="ml-2 h-8 text-xs bg-indigo-600 hover:bg-indigo-700"
+                                         onClick={() => setHandoverOpen(true)}
+                                       >
+                                         Mark handed over
+                                       </Button>
+                                     ) : null}
                                  </div>
 
                                  <div className="flex items-center gap-3 bg-slate-50 p-3 rounded-lg border border-slate-200 pr-8">
@@ -281,6 +337,27 @@ export function VehicleDetailHeader({
                  </div>
              </div>
           </Card>
+
+          <Dialog open={handoverOpen} onOpenChange={setHandoverOpen}>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Mark vehicle handed over?</DialogTitle>
+                <DialogDescription>
+                  Confirm that {vehicle.currentDriverName || 'the driver'} has physically received{' '}
+                  <span className="font-mono font-semibold">{vehicle.licensePlate}</span>. They will
+                  then confirm custody in the Roam Driver app before weekly check-in becomes mandatory.
+                </DialogDescription>
+              </DialogHeader>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setHandoverOpen(false)} disabled={handoverBusy}>
+                  Cancel
+                </Button>
+                <Button onClick={() => void confirmHandOver()} disabled={handoverBusy}>
+                  {handoverBusy ? 'Saving…' : 'Confirm hand-over'}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
 
       </div>
   );

@@ -38,6 +38,7 @@ import { FuelEntry } from '../../../types/fuel';
 import { Vehicle } from '../../../types/vehicle';
 import { formatFuelMoney } from '../../../utils/formatFuelMoney';
 import { resolveFuelEntrySource } from '../../../utils/fuelEntrySource';
+import { classifyFuelLogEdit } from '../../../utils/fuelLogEditGate';
 import {
   entrySourceLabel,
   formatFuelEntryTime,
@@ -152,7 +153,9 @@ export type FuelTransactionsTableProps = {
   canEdit: boolean;
   canDelete: boolean;
   onView: (entry: FuelEntry, splitSiblings?: FuelEntry[]) => void;
-  onEdit: (entry: FuelEntry) => void;
+  onEdit: (entry: FuelEntry, splitSiblings?: FuelEntry[]) => void;
+  /** When set, show Resolve for awaiting-cash split rows (A7). */
+  onResolveSplitCash?: (entry: FuelEntry, splitSiblings?: FuelEntry[]) => void;
   onDelete: (id: string) => void;
   onPageChange: (page: number) => void;
 };
@@ -179,6 +182,7 @@ export function FuelTransactionsTable({
   canDelete,
   onView,
   onEdit,
+  onResolveSplitCash,
   onDelete,
   onPageChange,
 }: FuelTransactionsTableProps) {
@@ -302,6 +306,19 @@ export function FuelTransactionsTable({
               const entryTimeLabel = formatFuelEntryTime(entry);
               const rowSelected = rowIds.every((id) => selectedIds.has(id));
               const focusHit = rowIds.includes(focusEntryId || '');
+              const editGate = classifyFuelLogEdit(entry, splitSiblings || []);
+              const showResolve =
+                editGate.kind === 'resolve_split_cash' && !!onResolveSplitCash;
+              const editDisabled =
+                isLocked ||
+                !canEdit ||
+                editGate.kind === 'awaiting_card_readonly';
+              const editLabel =
+                editGate.kind === 'resolve_split_cash'
+                  ? 'Resolve Cash'
+                  : editGate.kind === 'awaiting_card_readonly'
+                    ? 'Awaiting Statement'
+                    : 'Edit Log';
 
               return (
                 <TableRow
@@ -691,14 +708,30 @@ export function FuelTransactionsTable({
                             <Eye className="h-3.5 w-3.5 text-slate-500" />
                             View Details
                           </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={() => onEdit(entry)}
-                            disabled={isLocked || !canEdit}
-                            className="cursor-pointer gap-2 text-xs"
-                          >
-                            <Pencil className="h-3.5 w-3.5 text-slate-500" />
-                            Edit Log
-                          </DropdownMenuItem>
+                          {showResolve ? (
+                            <DropdownMenuItem
+                              onClick={() => onResolveSplitCash?.(entry, splitSiblings)}
+                              disabled={isLocked || !canEdit}
+                              className="cursor-pointer gap-2 text-xs"
+                            >
+                              <Pencil className="h-3.5 w-3.5 text-slate-500" />
+                              Resolve Cash
+                            </DropdownMenuItem>
+                          ) : (
+                            <DropdownMenuItem
+                              onClick={() => onEdit(entry, splitSiblings)}
+                              disabled={editDisabled}
+                              title={
+                                editGate.kind === 'awaiting_card_readonly'
+                                  ? editGate.reason
+                                  : undefined
+                              }
+                              className="cursor-pointer gap-2 text-xs"
+                            >
+                              <Pencil className="h-3.5 w-3.5 text-slate-500" />
+                              {editLabel}
+                            </DropdownMenuItem>
+                          )}
                           <DropdownMenuSeparator />
                           <DropdownMenuItem
                             onClick={() => onDelete(entry.id)}
