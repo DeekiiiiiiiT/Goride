@@ -69,7 +69,7 @@ export function DriverHomeDashboard({ tripFlowActive, startTripSlot }: Props) {
   if (tripFlowActive) return null;
 
   return (
-    <div className="flex h-full min-h-0 flex-col px-6 pb-1 pt-2">
+    <div className="flex min-h-0 flex-1 flex-col px-6 pb-1 pt-2">
       <div className="shrink-0">
         <DriverHomePeriodToggle period={period} onPeriodChange={setPeriod} />
         <div className="flex w-full gap-3">
@@ -123,18 +123,13 @@ export function DriverHomeDashboard({ tripFlowActive, startTripSlot }: Props) {
       </div>
 
       <div className="shrink-0 space-y-4">
-        <div className="text-center">
-          <h2 className="text-2xl font-bold text-slate-900 dark:text-white">
-            {online ? 'You are Online' : 'You are Offline'}
-          </h2>
-          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-            {online
-              ? 'Waiting for nearby passengers…'
-              : locationGoOnlineBlocked
-                ? 'Allow location to go online'
-                : 'Slide below to start receiving rides'}
-          </p>
-        </div>
+        <p className="text-center text-sm text-slate-500 dark:text-slate-400">
+          {online
+            ? 'Waiting for nearby passengers…'
+            : locationGoOnlineBlocked
+              ? 'Allow location to go online'
+              : 'Slide below to start receiving rides'}
+        </p>
 
         <div className="grid grid-cols-2 gap-3">
           <div className="driver-home-premium-card flex items-center gap-3 p-4">

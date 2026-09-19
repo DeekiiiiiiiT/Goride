@@ -1,5 +1,4 @@
 import React, { useEffect, useMemo } from 'react';
-import { ChevronRight } from 'lucide-react';
 import {
   Banknote,
   BarChart3,
@@ -15,10 +14,6 @@ import { useIndependentTrips } from '../../hooks/useIndependentTrips';
 import { useDriverWallets } from '../../hooks/useDriverWallets';
 import { useDriver } from '../../contexts/DriverContext';
 import { CASH_SETTLEMENT_ENABLED } from '../../lib/cashSettlementFlags';
-
-type EarningsPageProps = {
-  onNavigate?: (page: string) => void;
-};
 
 function WalletChip({
   label,
@@ -55,7 +50,7 @@ function WalletChip({
   );
 }
 
-export function IndependentEarningsPage({ onNavigate }: EarningsPageProps) {
+export function IndependentEarningsPage() {
   const { isFleetDriver } = useDriver();
   const { data: allData, loading: allLoading, error } = useIndependentEarnings('all');
   const { data: weekData, loading: weekLoading } = useIndependentEarnings('week');
@@ -122,24 +117,6 @@ export function IndependentEarningsPage({ onNavigate }: EarningsPageProps) {
           <BarChart3 className="h-6 w-6 text-emerald-600 dark:text-emerald-400" aria-hidden />
         </div>
       </section>
-
-      {isFleetDriver && onNavigate && totalMinor === 0 && (
-        <button
-          type="button"
-          onClick={() => onNavigate('fleet-settlement')}
-          className="flex w-full items-center justify-between rounded-2xl border border-blue-200 bg-blue-50/80 px-4 py-3 text-left dark:border-blue-900/40 dark:bg-blue-950/30"
-        >
-          <div>
-            <p className="text-sm font-semibold text-slate-900 dark:text-white">
-              Open Fleet Settlement
-            </p>
-            <p className="text-xs text-slate-500">
-              Weekly cash owed, Log Cash, and fuel for your fleet
-            </p>
-          </div>
-          <ChevronRight className="h-5 w-5 text-slate-400" aria-hidden />
-        </button>
-      )}
 
       {CASH_SETTLEMENT_ENABLED && (
         <section className="space-y-3">

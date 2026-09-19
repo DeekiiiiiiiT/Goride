@@ -28,6 +28,7 @@ import { IndependentProfilePage } from '../independent/IndependentProfilePage';
 import { IndependentProfileDocumentsPage } from '../independent/IndependentProfileDocumentsPage';
 import { IndependentTripsPage } from '../independent/IndependentTripsPage';
 import { DriverExpenses } from '../fleet/DriverExpenses';
+import { ManageExpensesSheet, type ManageExpensesChoice } from '../fleet/ManageExpensesSheet';
 import { FleetSettlementPage } from '../fleet/FleetSettlementPage';
 import { WeeklyCheckInModal } from '../fleet/WeeklyCheckInModal';
 import { useCurrentDriver } from '../../hooks/useCurrentDriver';
@@ -63,6 +64,8 @@ export function DriverShell({ forcePassengerRides = false }: { forcePassengerRid
 
   const [currentPage, setCurrentPage] = useState(forcePassengerRides ? 'passenger-rides' : 'dashboard');
   const [menuOpen, setMenuOpen] = useState(false);
+  const [expensesChooserOpen, setExpensesChooserOpen] = useState(false);
+  const [expensesMode, setExpensesMode] = useState<'view' | 'log'>('view');
   const [checkInOpen, setCheckInOpen] = useState(false);
   const [checkInSubmitting, setCheckInSubmitting] = useState(false);
   const bottomNavItems = getBottomNavItems();
@@ -173,7 +176,7 @@ export function DriverShell({ forcePassengerRides = false }: { forcePassengerRid
       case 'passenger-rides':
         return <RideDispatchPage />;
       case 'earnings':
-        return <IndependentEarningsPage onNavigate={setCurrentPage} />;
+        return <IndependentEarningsPage />;
       case 'trips':
         return <IndependentTripsPage />;
       case 'profile':
@@ -181,12 +184,18 @@ export function DriverShell({ forcePassengerRides = false }: { forcePassengerRid
       case 'documents':
         return <IndependentProfileDocumentsPage onBack={() => setCurrentPage('profile')} />;
       case 'expenses':
-        return <DriverExpenses onBack={() => setCurrentPage('dashboard')} />;
+        return (
+          <DriverExpenses
+            key={expensesMode}
+            mode={expensesMode}
+            onBack={() => setCurrentPage('dashboard')}
+          />
+        );
       case 'fleet-settlement':
         return isFleetDriver ? (
           <FleetSettlementPage onBack={() => setCurrentPage('earnings')} />
         ) : (
-          <IndependentEarningsPage onNavigate={setCurrentPage} />
+          <IndependentEarningsPage />
         );
       case 'vehicle':
         return <MyVehicle />;
@@ -217,7 +226,8 @@ export function DriverShell({ forcePassengerRides = false }: { forcePassengerRid
   const shell = (
     <div
       className={cn(
-        'flex min-h-[100dvh] flex-col overflow-x-hidden',
+        // Viewport-locked shell: top chrome stays put; only <main> scrolls (app pattern).
+        'flex h-[100dvh] max-h-[100dvh] flex-col overflow-hidden',
         mintDriverLayout
           ? mintHomeLayout
             ? 'bg-[#f7f9fb] dark:bg-[#121312]'
@@ -225,11 +235,13 @@ export function DriverShell({ forcePassengerRides = false }: { forcePassengerRid
           : 'bg-gradient-to-br from-slate-100 via-white to-slate-100 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900',
       )}
     >
-      <AnnouncementBanner />
+      <div className="shrink-0">
+        <AnnouncementBanner />
+      </div>
 
       <header
         className={cn(
-          'sticky top-0 z-40 border-b safe-t backdrop-blur-lg',
+          'z-40 shrink-0 border-b safe-t backdrop-blur-lg',
           mintDriverLayout
             ? mintHomeLayout
               ? 'border-slate-200/90 bg-white shadow-sm dark:border-white/5 dark:bg-[#121312]'
@@ -360,14 +372,18 @@ export function DriverShell({ forcePassengerRides = false }: { forcePassengerRid
 
       <main
         className={cn(
-          'flex min-h-0 flex-1 flex-col overflow-x-hidden pb-[var(--driver-bottom-nav-total)]',
-          mintHomeLayout ? 'overflow-hidden' : 'overflow-y-auto',
+          'flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-auto overscroll-y-contain pb-[var(--driver-bottom-nav-total)]',
         )}
       >
         <div
           className={cn(
             'mx-auto w-full min-w-0 max-w-lg safe-x sm:max-w-2xl md:max-w-3xl lg:max-w-4xl',
-            mintHomeLayout ? 'flex min-h-0 flex-1 flex-col py-0' : mintDriverLayout ? 'py-6' : 'py-4',
+            // min-h-full keeps home fill; content may grow so main scrolls under fixed chrome
+            mintHomeLayout
+              ? 'flex min-h-full flex-col py-0'
+              : mintDriverLayout
+                ? 'py-6'
+                : 'py-4',
           )}
         >
           {renderPage()}
@@ -472,6 +488,11 @@ export function DriverShell({ forcePassengerRides = false }: { forcePassengerRid
                     key={item.id}
                     type="button"
                     onClick={() => {
+                      if (item.id === 'expenses') {
+                        setMenuOpen(false);
+                        setExpensesChooserOpen(true);
+                        return;
+                      }
                       setCurrentPage(item.id);
                       setMenuOpen(false);
                     }}
@@ -526,6 +547,16 @@ export function DriverShell({ forcePassengerRides = false }: { forcePassengerRid
           </div>
         </div>
       )}
+
+      <ManageExpensesSheet
+        open={expensesChooserOpen}
+        onOpenChange={setExpensesChooserOpen}
+        onChoose={(choice: ManageExpensesChoice) => {
+          setExpensesMode(choice);
+          setExpensesChooserOpen(false);
+          setCurrentPage('expenses');
+        }}
+      />
 
       {isFleetDriver && (
         <WeeklyCheckInModal

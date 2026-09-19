@@ -102,7 +102,7 @@ export function DriverMintHome({
       : null;
 
   return (
-    <div className="flex h-full min-h-0 flex-1 flex-col">
+    <div className="flex min-h-full flex-1 flex-col">
       {pendingInviteCount > 0 && !tripFlowActive && onOpenFleetInvites ? (
         <button
           type="button"

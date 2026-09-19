@@ -19,7 +19,6 @@ import {
   Check,
   Clock,
   XCircle,
-  Plus,
   Ticket,
   Camera,
   X,
@@ -42,6 +41,7 @@ import { uploadEvidenceFile } from '../../services/uploadEvidence';
 import { EvidenceRetentionNotice } from '../evidence/EvidenceRetentionNotice';
 import { FinancialTransaction, TransactionCategory } from '../../types/data';
 import { StationProfile } from '../../types/station';
+import { isTollCategory } from '../../utils/tollCategoryHelper';
 import { PaymentMethodSelector, type FuelPaymentMethodSelect } from './expenses/PaymentMethodSelector';
 import { GasCardSummary, type FuelPumpStep } from './expenses/GasCardSummary';
 import { derivePricePerLiter } from './expenses/FuelCashInputs';
@@ -61,7 +61,10 @@ import {
 } from '@roam/fuel-core';
 
 interface ExpenseLoggerProps {
+  /** @deprecated Prefer `mode="log"` */
   defaultOpen?: boolean;
+  /** view = list only; log = start at category picker */
+  mode?: 'view' | 'log';
   onBack?: () => void;
 }
 
@@ -118,13 +121,14 @@ interface ExpenseItem {
   receiptUrl?: string;
 }
 
-export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerProps) {
+export function DriverExpenses({ defaultOpen = false, mode, onBack }: ExpenseLoggerProps) {
   const { user } = useAuth();
   const { isFleetDriver } = useDriver();
   const { driverRecord } = useCurrentDriver();
   const { isOnline, addToQueue, queue } = useOffline();
   const { getLocation } = useGeolocation();
   const { enabled: fuelSplitEnabled, loading: fuelSplitLoading } = useFuelSplitPaymentEnabled();
+  const isLogMode = mode === 'log' || (mode == null && defaultOpen);
   const pendingFuelOffline = queue.filter(
     (q) =>
       q.type === 'SUBMIT_FUEL_EXPENSE' ||
@@ -134,7 +138,10 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
   const [transactions, setTransactions] = useState<FinancialTransaction[]>([]);
   const [fuelEntries, setFuelEntries] = useState<any[]>([]);
   const [combinedExpenses, setCombinedExpenses] = useState<ExpenseItem[]>([]);
-  const [loading, setLoading] = useState(true);
+  /** View screen: no list until driver picks Fuel or Tolls. */
+  const [listFilter, setListFilter] = useState<'fuel' | 'toll' | null>(null);
+  const [listFetched, setListFetched] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   
@@ -142,7 +149,7 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
   const periodStart = startOfWeek(new Date(), { weekStartsOn: 1 });
   const periodEnd = endOfWeek(new Date(), { weekStartsOn: 1 });
   
-  const [viewState, setViewState] = useState<ViewState>(defaultOpen ? 'category_select' : 'list');
+  const [viewState, setViewState] = useState<ViewState>(isLogMode ? 'category_select' : 'list');
   const [fuelEntry, setFuelEntry] = useState<FuelEntryState>({});
   const [tankStatus, setTankStatus] = useState<any>(null);
   
@@ -153,7 +160,7 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
   const [date, setDate] = useState<Date>(new Date());
   const [time, setTime] = useState<string>(format(new Date(), 'HH:mm'));
   const [amount, setAmount] = useState('');
-  const [category, setCategory] = useState<string>('Fuel');
+  const [category, setCategory] = useState<string>('');
   const [notes, setNotes] = useState('');
   const [odometer, setOdometer] = useState('');
   const [receiptFile, setReceiptFile] = useState<File | null>(null);
@@ -182,18 +189,28 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
   const [gasCardLookupDone, setGasCardLookupDone] = useState(false);
 
   useEffect(() => {
-    if (user) {
-      fetchTransactions();
-      // Fetch verified stations for selection
+    if (!user) return;
+    if (isLogMode) {
+      // Stations only needed while logging — never prefetch expense rows on view entry.
       api.getStations().then(data => {
         setVerifiedStations(data.filter((s: any) => s.status === 'verified'));
       }).catch(console.error);
+      return;
     }
-  }, [user]);
+    // View mode: load period totals for Fuel/Tolls cards (list rows still wait for a tap).
+    void fetchTransactions();
+  }, [user, isLogMode, driverRecord?.id, driverRecord?.driverId]);
+
+  const selectViewCategory = (next: 'fuel' | 'toll') => {
+    setListFilter(next);
+    if (!listFetched && !loading) {
+      void fetchTransactions();
+    }
+  };
 
   const resetForm = () => {
     setAmount('');
-    setCategory('Fuel');
+    setCategory('');
     setNotes('');
     setOdometer('');
     setReceiptFile(null);
@@ -221,28 +238,61 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
   const fetchTransactions = async () => {
     setLoading(true);
     try {
-      const driverIds = [
-          user?.id,
-          driverRecord?.id,
-          driverRecord?.driverId
-      ].filter(Boolean) as string[];
-      
-      const driverName = driverRecord?.driverName || driverRecord?.name || '';
-      const vehicleId = driverRecord?.assignedVehicleId || driverRecord?.vehicle || '';
-      
-      console.log('[DriverExpenses] Driver info:', { 
-        driverIds, 
-        driverName, 
+      const aliasIds = collectDriverAliasIds({
+        id: driverRecord?.id,
+        driverId: driverRecord?.driverId,
+        uberDriverId: driverRecord?.uberDriverId,
+        inDriveDriverId: driverRecord?.inDriveDriverId,
+      });
+      if (user?.id) aliasIds.push(user.id);
+      const driverIds = Array.from(new Set(aliasIds.filter(Boolean)));
+
+      const vehicleId =
+        resolveVehicleIdForDriver(driverRecord, [], user?.id) ||
+        driverRecord?.assignedVehicleId ||
+        driverRecord?.vehicleId ||
+        driverRecord?.vehicle ||
+        '';
+      const periodStartYmd = format(periodStart, 'yyyy-MM-dd');
+      const periodEndYmd = format(periodEnd, 'yyyy-MM-dd');
+      // Fuel rows are usually stamped with the auth user id (Kenny = auth.users.id).
+      const fuelDriverId = user?.id || driverRecord?.id || driverRecord?.driverId || '';
+
+      console.log('[DriverExpenses] Driver info:', {
+        driverIds,
+        fuelDriverId,
         vehicleId,
-        driverRecord: JSON.stringify(driverRecord, null, 2).substring(0, 500)
+        periodStartYmd,
+        periodEndYmd,
       });
 
-      // Fetch transactions and fuel entries
-      // If we have a vehicle ID, fetch fuel entries for that vehicle specifically
+      // Fuel GETs used to send the anon key → 401 under requireAuth(strict) and
+      // Promise.all rejected, so tolls never painted either. Each leg must be resilient.
       const [allTx, allFuel, vehicleFuel] = await Promise.all([
-        api.getTransactions(driverIds).catch(() => []),
-        api.getAllFuelEntries(),
-        vehicleId ? api.getFuelEntriesByVehicle(vehicleId) : Promise.resolve([])
+        api.getTransactions(driverIds, { limit: 5000 }).catch(() => []),
+        api
+          .getAllFuelEntries({
+            driverId: fuelDriverId || undefined,
+            startDate: periodStartYmd,
+            endDate: periodEndYmd,
+            limit: 1000,
+          })
+          .catch((err) => {
+            console.error('[DriverExpenses] getAllFuelEntries failed', err);
+            return [] as any[];
+          }),
+        vehicleId
+          ? api
+              .getFuelEntriesByVehicle(String(vehicleId), {
+                startDate: periodStartYmd,
+                endDate: periodEndYmd,
+                limit: 1000,
+              })
+              .catch((err) => {
+                console.error('[DriverExpenses] getFuelEntriesByVehicle failed', err);
+                return [] as any[];
+              })
+          : Promise.resolve([] as any[]),
       ]);
       
       console.log('[DriverExpenses] Fetched all fuel entries:', allFuel?.length || 0);
@@ -254,6 +304,7 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
           driverId: allFuel[0].driverId,
           vehicleId: allFuel[0].vehicleId,
           date: allFuel[0].date,
+          amount: allFuel[0].amount ?? allFuel[0].cost,
           station: allFuel[0].station || allFuel[0].location,
         });
       }
@@ -272,12 +323,14 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
         if (f.id) fuelMap.set(f.id, f);
       });
       
-      // Add entries matching by driver ID
+      // Add entries matching by any known driver alias (auth / fleet / rideshare ids)
       (allFuel || []).forEach((f: any) => {
         if (f.id && !fuelMap.has(f.id)) {
-          const driverIdMatch = 
-            driverIds.includes(f.driverId) || 
-            driverIds.includes(f.driver_id);
+          const entryDriverId = String(f.driverId || f.driver_id || '').trim();
+          const driverIdMatch =
+            !entryDriverId ||
+            driverIds.length === 0 ||
+            driverIds.some((id) => id === entryDriverId);
           if (driverIdMatch) {
             fuelMap.set(f.id, f);
           }
@@ -288,7 +341,7 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
       
       // Filter by current period
       const myFuel = Array.from(fuelMap.values()).filter((f: any) => {
-        const entryDate = f.date ? parseISO(f.date) : (f.createdAt ? new Date(f.createdAt) : null);
+        const entryDate = f.date ? parseISO(String(f.date).slice(0, 10)) : (f.createdAt ? new Date(f.createdAt) : null);
         if (!entryDate || isNaN(entryDate.getTime())) {
           console.log('[DriverExpenses] Skipping entry with invalid date:', f.id, f.date);
           return false;
@@ -353,7 +406,7 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
       // Combine into unified expense items for display
       const combined: ExpenseItem[] = [];
       
-      // Add fuel entries
+      // Add fuel entries — fleet.fuel_entries stores money in `amount` (cost is legacy KV).
       myFuel.forEach((f: any) => {
         const splitRole = f.metadata?.splitRole || f.splitRole;
         const isSplit = typeof (f.metadata?.fillGroupId || f.fillGroupId) === 'string' &&
@@ -366,11 +419,12 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
               : isSplit
                 ? 'Gas Card + Cash · split fill'
                 : null;
+        const spend = Math.abs(Number(f.amount ?? f.cost ?? 0) || 0);
         combined.push({
           id: f.id,
           type: 'fuel',
-          date: f.date ? parseISO(f.date) : new Date(f.createdAt),
-          amount: f.cost || f.amount || 0,
+          date: f.date ? parseISO(String(f.date).slice(0, 10)) : new Date(f.createdAt),
+          amount: spend,
           description: splitLabel
             ? `${splitLabel} — ${f.station || f.stationName || 'Pump'}`
             : f.station || f.stationName || 'Fuel Purchase',
@@ -397,7 +451,7 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
           if (fuelLogOverlapsExpense(t, txDate)) return;
         }
 
-        const isToll = t.category?.toLowerCase().includes('toll');
+        const isToll = isTollCategory(t.category) || String(t.category || '').toLowerCase().includes('toll');
         const isMaintenance = t.category?.toLowerCase().includes('maintenance') || 
                              t.category?.toLowerCase().includes('service') ||
                              t.category?.toLowerCase().includes('repair');
@@ -411,7 +465,7 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
           id: t.id,
           type: isFuelExpense ? 'fuel' : (isToll ? 'toll' : (isMaintenance ? 'maintenance' : 'other')),
           date: txDate,
-          amount: t.amount || 0,
+          amount: Math.abs(Number(t.amount) || 0),
           description: isSplitTx
             ? `Gas Card + Cash · cash portion — ${baseDesc}`
             : baseDesc,
@@ -424,6 +478,7 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
       combined.sort((a, b) => b.date.getTime() - a.date.getTime());
 
       setCombinedExpenses(combined);
+      setListFetched(true);
       
     } catch (e) {
       console.error("Failed to fetch transactions", e);
@@ -1638,7 +1693,7 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
   const goBack = () => {
     switch (viewState) {
       case 'category_select': 
-        if (defaultOpen && onBack) {
+        if (isLogMode && onBack) {
           onBack();
         } else {
           setViewState('list'); 
@@ -1707,11 +1762,12 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
   };
 
   if (viewState === 'list') {
-    // Calculate period totals
     const fuelTotal = combinedExpenses.filter(e => e.type === 'fuel').reduce((sum, e) => sum + e.amount, 0);
     const tollTotal = combinedExpenses.filter(e => e.type === 'toll').reduce((sum, e) => sum + e.amount, 0);
-    const maintenanceTotal = combinedExpenses.filter(e => e.type === 'maintenance').reduce((sum, e) => sum + e.amount, 0);
-    const periodTotal = fuelTotal + tollTotal + maintenanceTotal;
+    const filteredExpenses =
+      listFilter == null
+        ? []
+        : combinedExpenses.filter((e) => e.type === listFilter);
 
     return (
       <div className="space-y-6 w-full min-w-0 max-w-full">
@@ -1720,16 +1776,10 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
               <h2 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-100">Expenses</h2>
               <p className="text-sm text-slate-600 dark:text-slate-400 mt-0.5 leading-snug">
                 {isFleetDriver
-                  ? 'Log your operational costs for reimbursement.'
-                  : 'Log fuel, tolls, and other driving costs.'}
+                  ? "Tap Fuel or Tolls to see this period's logs."
+                  : "Tap Fuel or Tolls to see this period's costs."}
               </p>
            </div>
-           <Button
-             className="w-full shrink-0 sm:w-auto"
-             onClick={() => setViewState('category_select')}
-           >
-              <Plus className="mr-2 h-4 w-4 shrink-0" /> Log Expense
-           </Button>
         </div>
 
         {pendingFuelOffline > 0 && (
@@ -1743,7 +1793,7 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
           </div>
         )}
 
-        {/* Current Period — 2×2 on phones, 4 columns from sm up so amounts never crush */}
+        {/* Current Period — Fuel / Tolls (tap to load that category's rows) */}
         <Card className="bg-gradient-to-r from-indigo-500/10 to-purple-500/10 border-indigo-200/50 dark:border-indigo-800/50 overflow-hidden">
           <CardContent className="p-3 sm:p-4">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between mb-3 min-w-0">
@@ -1758,66 +1808,70 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
                 {format(periodStart, 'MMM d')} – {format(periodEnd, 'MMM d, yyyy')}
               </Badge>
             </div>
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3">
-              <div className="min-w-0 rounded-lg bg-white/50 p-2.5 text-center dark:bg-slate-900/30 sm:p-2">
-                <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-400">
+            <div className="grid grid-cols-2 gap-2 sm:gap-3">
+              <button
+                type="button"
+                onClick={() => void selectViewCategory('fuel')}
+                className={cn(
+                  'min-w-0 rounded-xl border-2 p-3 text-center transition-all active:scale-[0.98] sm:p-3.5',
+                  listFilter === 'fuel'
+                    ? 'border-orange-400 bg-orange-50 shadow-sm dark:border-orange-500 dark:bg-orange-950/40'
+                    : 'border-transparent bg-white/50 hover:border-orange-200 dark:bg-slate-900/30 dark:hover:border-orange-800',
+                )}
+              >
+                <div className="mb-1.5 flex items-center justify-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">
+                  <Fuel className="h-3.5 w-3.5 text-orange-500" aria-hidden />
                   Fuel
                 </div>
                 <div className="break-words text-sm font-bold tabular-nums leading-tight text-orange-600 sm:text-base">
-                  ${fuelTotal.toFixed(2)}
+                  {loading && !listFetched ? (
+                    <Loader2 className="mx-auto h-4 w-4 animate-spin text-orange-500" aria-hidden />
+                  ) : listFetched ? (
+                    `$${fuelTotal.toFixed(2)}`
+                  ) : (
+                    '—'
+                  )}
                 </div>
-              </div>
-              <div className="min-w-0 rounded-lg bg-white/50 p-2.5 text-center dark:bg-slate-900/30 sm:p-2">
-                <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-400">
+              </button>
+              <button
+                type="button"
+                onClick={() => void selectViewCategory('toll')}
+                className={cn(
+                  'min-w-0 rounded-xl border-2 p-3 text-center transition-all active:scale-[0.98] sm:p-3.5',
+                  listFilter === 'toll'
+                    ? 'border-purple-400 bg-purple-50 shadow-sm dark:border-purple-500 dark:bg-purple-950/40'
+                    : 'border-transparent bg-white/50 hover:border-purple-200 dark:bg-slate-900/30 dark:hover:border-purple-800',
+                )}
+              >
+                <div className="mb-1.5 flex items-center justify-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">
+                  <Ticket className="h-3.5 w-3.5 text-purple-500" aria-hidden />
                   Tolls
                 </div>
                 <div className="break-words text-sm font-bold tabular-nums leading-tight text-purple-600 sm:text-base">
-                  ${tollTotal.toFixed(2)}
+                  {loading && !listFetched ? (
+                    <Loader2 className="mx-auto h-4 w-4 animate-spin text-purple-500" aria-hidden />
+                  ) : listFetched ? (
+                    `$${tollTotal.toFixed(2)}`
+                  ) : (
+                    '—'
+                  )}
                 </div>
-              </div>
-              <div className="min-w-0 rounded-lg bg-white/50 p-2.5 text-center dark:bg-slate-900/30 sm:p-2">
-                <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-400">
-                  Maint.
-                </div>
-                <div className="break-words text-sm font-bold tabular-nums leading-tight text-blue-600 sm:text-base">
-                  ${maintenanceTotal.toFixed(2)}
-                </div>
-              </div>
-              <div className="min-w-0 rounded-lg bg-white/50 p-2.5 text-center ring-1 ring-slate-200/80 dark:bg-slate-900/30 dark:ring-slate-700/80 sm:p-2">
-                <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-400">
-                  Total
-                </div>
-                <div className="break-words text-sm font-bold tabular-nums leading-tight text-slate-900 dark:text-slate-100 sm:text-base">
-                  ${periodTotal.toFixed(2)}
-                </div>
-              </div>
+              </button>
             </div>
           </CardContent>
         </Card>
 
         <div className="space-y-4">
-           {loading ? (
+           {listFilter == null ? null : loading ? (
               <div className="text-center py-10">
                  <Loader2 className="h-8 w-8 animate-spin mx-auto text-indigo-500" />
+                 <p className="mt-3 text-sm text-slate-500 dark:text-slate-400">
+                   Loading {listFilter === 'fuel' ? 'fuel' : 'toll'} logs...
+                 </p>
               </div>
-           ) : combinedExpenses.length === 0 ? (
-              <Card className="bg-slate-50 dark:bg-slate-800/50 border-dashed">
-                 <CardContent className="flex flex-col items-center justify-center py-10 text-center">
-                     <div className="bg-white dark:bg-slate-800 p-4 rounded-full shadow-sm mb-3">
-                         <Receipt className="h-8 w-8 text-slate-300 dark:text-slate-600" />
-                     </div>
-                     <h3 className="font-semibold text-slate-900 dark:text-slate-100">No expenses this period</h3>
-                     <p className="text-slate-500 dark:text-slate-400 text-sm max-w-sm mt-1">
-                        Log fuel, tolls, and maintenance costs for {format(periodStart, 'MMM d')} - {format(periodEnd, 'MMM d')}.
-                     </p>
-                     <Button variant="outline" className="mt-4" onClick={() => setViewState('category_select')}>
-                        Log First Expense
-                     </Button>
-                 </CardContent>
-              </Card>
-           ) : (
+           ) : filteredExpenses.length > 0 ? (
               <div className="grid w-full min-w-0 max-w-full gap-3">
-                 {combinedExpenses.map(expense => (
+                 {filteredExpenses.map(expense => (
                     <Card key={expense.id} className="min-w-0 max-w-full overflow-hidden">
                        <CardContent className="p-0">
                           <div className="flex min-w-0 items-start gap-3 p-3 sm:p-4 sm:gap-4">
@@ -1864,6 +1918,10 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
                     </Card>
                  ))}
               </div>
+           ) : (
+              <p className="px-1 py-8 text-center text-sm text-slate-500 dark:text-slate-400">
+                No {listFilter === 'fuel' ? 'fuel' : 'toll'} transactions this period.
+              </p>
            )}
         </div>
       </div>
@@ -1941,16 +1999,18 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
               <Label className="text-base font-semibold">Select Category</Label>
               <div className="grid grid-cols-2 gap-3">
                 {[
-                  { id: 'Fuel', icon: Fuel, color: 'text-orange-500', bg: 'bg-orange-50', border: 'border-orange-200' },
-                  { id: 'Maintenance', icon: Wrench, color: 'text-blue-500', bg: 'bg-blue-50', border: 'border-blue-200' },
-                  { id: 'Tolls', icon: Ticket, color: 'text-purple-500', bg: 'bg-purple-50', border: 'border-purple-200' },
-                  { id: 'Other Expenses', icon: Receipt, color: 'text-slate-500', bg: 'bg-slate-50', border: 'border-slate-200' },
+                  { id: 'Fuel', icon: Fuel, color: 'text-orange-500', bg: 'bg-orange-50 dark:bg-orange-950/40', border: 'border-orange-200 dark:border-orange-700' },
+                  { id: 'Maintenance', icon: Wrench, color: 'text-blue-500', bg: 'bg-blue-50 dark:bg-blue-950/40', border: 'border-blue-200 dark:border-blue-700' },
+                  { id: 'Tolls', icon: Ticket, color: 'text-purple-500', bg: 'bg-purple-50 dark:bg-purple-950/40', border: 'border-purple-200 dark:border-purple-700' },
+                  { id: 'Other Expenses', icon: Receipt, color: 'text-slate-500 dark:text-slate-400', bg: 'bg-slate-50 dark:bg-slate-800', border: 'border-slate-200 dark:border-slate-600' },
                 ].map((item) => (
                   <div 
                     key={item.id}
                     className={cn(
                       "flex flex-col items-center justify-center p-6 rounded-xl border-2 cursor-pointer transition-all hover:scale-[1.02] active:scale-[0.98]",
-                      category === item.id ? `${item.border} ${item.bg}` : "border-slate-100 hover:bg-slate-50"
+                      category === item.id
+                        ? `${item.border} ${item.bg} text-slate-900 dark:text-slate-100`
+                        : "border-slate-200 text-slate-900 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-100 dark:hover:bg-slate-800/50",
                     )}
                     onClick={() => handleCategorySelect(item.id)}
                   >

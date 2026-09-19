@@ -22,7 +22,7 @@ export interface NavItem {
 /** Shared hamburger menu for fleet + independent (fleet extras: Start Trip + Check-in stay outside nav). */
 const drawerNavItems: NavItem[] = [
   { id: 'vehicle', label: 'My Vehicle', icon: Car },
-  { id: 'expenses', label: 'Expenses', icon: Receipt },
+  { id: 'expenses', label: 'Manage expenses', icon: Receipt },
   { id: 'fleet-settlement', label: 'Fleet Settlement', icon: Scale },
   { id: 'tax', label: 'Tax Center', icon: FileText },
   { id: 'insurance', label: 'Insurance', icon: Shield },

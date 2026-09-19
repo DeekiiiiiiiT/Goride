@@ -2363,15 +2363,26 @@ export const api = {
     return response.json();
   },
 
-  async getFuelEntriesByVehicle(vehicleId: string): Promise<any[]> {
+  async getFuelEntriesByVehicle(
+    vehicleId: string,
+    opts?: { startDate?: string; endDate?: string; limit?: number },
+  ): Promise<any[]> {
+    const params = new URLSearchParams();
+    params.set('vehicleId', vehicleId);
+    params.set('limit', String(opts?.limit ?? 1000));
+    if (opts?.startDate) params.set('startDate', opts.startDate);
+    if (opts?.endDate) params.set('endDate', opts.endDate);
+    const qs = params.toString();
+    const authHeaders = await getHeaders(null);
+
     // Check both potential key formats in the database for backward compatibility
     const [resUnderscore, resHyphen] = await Promise.all([
-      fetchWithRetry(`${API_ENDPOINTS.fuel}/fuel-entries?vehicleId=${vehicleId}&limit=1000`, {
-        headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+      fetchWithRetry(`${API_ENDPOINTS.fuel}/fuel-entries?${qs}`, {
+        headers: authHeaders,
       }),
-      fetchWithRetry(`${API_ENDPOINTS.fuel}/fuel-entries?vehicleId=${vehicleId}&prefix=fuel-entry&limit=1000`, {
-        headers: { 'Authorization': `Bearer ${publicAnonKey}` }
-      })
+      fetchWithRetry(`${API_ENDPOINTS.fuel}/fuel-entries?${qs}&prefix=fuel-entry`, {
+        headers: authHeaders,
+      }),
     ]);
 
     const dataUnderscore = resUnderscore.ok
@@ -2478,14 +2489,34 @@ export const api = {
     return response.json();
   },
 
-  async getAllFuelEntries(organizationId?: string) {
-    const url = organizationId
-      ? `${API_ENDPOINTS.fuel}/fuel-entries?organizationId=${organizationId}`
-      : `${API_ENDPOINTS.fuel}/fuel-entries`;
+  async getAllFuelEntries(
+    organizationIdOrOpts?:
+      | string
+      | {
+          organizationId?: string;
+          driverId?: string;
+          startDate?: string;
+          endDate?: string;
+          limit?: number;
+        },
+  ) {
+    const opts =
+      typeof organizationIdOrOpts === 'string'
+        ? { organizationId: organizationIdOrOpts }
+        : organizationIdOrOpts || {};
+    const params = new URLSearchParams();
+    if (opts.organizationId) params.set('organizationId', opts.organizationId);
+    if (opts.driverId) params.set('driverId', opts.driverId);
+    if (opts.startDate) params.set('startDate', opts.startDate);
+    if (opts.endDate) params.set('endDate', opts.endDate);
+    params.set('limit', String(opts.limit ?? 1000));
+    const qs = params.toString();
+    const url = `${API_ENDPOINTS.fuel}/fuel-entries${qs ? `?${qs}` : ''}`;
+    // Must use the driver JWT — fuel routes reject the anon key (requireAuth strict).
     const response = await fetchWithRetry(url, {
-        headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+      headers: await getHeaders(null),
     });
-    if (!response.ok) throw new Error("Failed to fetch fuel entries");
+    if (!response.ok) throw new Error('Failed to fetch fuel entries');
     return unwrapFuelEntriesPayload(await response.json(), response.headers.get('X-Total-Count'));
   },
 
