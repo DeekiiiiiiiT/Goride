@@ -1354,6 +1354,8 @@ function FuelManagementInner({
           toast.error("Failed to approve reimbursement");
       }
   }, [transactions, loadLogsAndTransactions, invalidateReviewQueueCounts]);
+
+  const handleRejectReimbursement = useCallback(async (id: string, reason?: string) => {
       try {
           const updated = await api.rejectExpense(id, reason);
           setTransactions(prev => prev.map(t => t.id === id ? updated : t));
