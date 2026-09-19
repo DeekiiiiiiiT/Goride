@@ -14,6 +14,10 @@ export function DriverSettingsPage() {
         <NavigationSettingsRow onClick={() => setNavigationOpen(true)} />
       </section>
 
+      <p className="px-1 text-xs text-slate-500 dark:text-slate-400">
+        Set your Roam Tag and manage fleet invites from Profile.
+      </p>
+
       <NavigationPreferenceSheet
         open={navigationOpen}
         onOpenChange={setNavigationOpen}

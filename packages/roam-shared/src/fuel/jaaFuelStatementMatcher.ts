@@ -335,22 +335,39 @@ export function applyFuelMatchLinks<T extends FuelEntryLike>(
     ? false
     : Number(stmt.liters) > 0;
 
-  // Split recon: statement amount vs driver's expected card claim (mirrors fuel-core).
+  // Split recon: statement vs pump (cash = pump − card). Legacy claim dual-read.
   let splitReconPatch: Record<string, unknown> = {};
   if (isSplitNonVolumeOwner) {
-    const expected = Math.abs(Number(drvMeta.splitExpectedCardAmount) || 0);
     const pumpTotal = Math.abs(Number(drvMeta.splitPumpTotal) || 0);
     const stmtAmt = Math.abs(Number(stmt.amount) || 0);
-    const delta = Math.round((stmtAmt - expected) * 100) / 100;
+    const legacyExpected =
+      drvMeta.splitExpectedCardAmount != null
+        ? Math.abs(Number(drvMeta.splitExpectedCardAmount) || 0)
+        : null;
     // Keep in sync with packages/fuel-core/src/fuelSplitPayment.ts → splitReconTolerance()
-    // (floor 50 JMD or 1% of pump total). Circular import blocks sharing the helper.
     const tolerance = Math.max(50, pumpTotal * 0.01);
-    const reconciled = Math.abs(delta) <= tolerance;
+    const derivedCash = Math.round((pumpTotal - stmtAmt) * 100) / 100;
+    const overPump = Math.round((stmtAmt - pumpTotal) * 100) / 100;
+    let reconciled = stmtAmt > 0 && stmtAmt <= pumpTotal + tolerance && derivedCash >= -tolerance;
+    let delta = overPump > 0 ? overPump : 0;
+    if (reconciled && legacyExpected != null) {
+      const claimDelta = Math.round((stmtAmt - legacyExpected) * 100) / 100;
+      if (Math.abs(claimDelta) > tolerance) {
+        reconciled = false;
+        delta = claimDelta;
+      }
+    }
+    if (stmtAmt <= 0) {
+      reconciled = false;
+      delta = overPump;
+    }
     splitReconPatch = {
       splitReconciled: reconciled,
       splitVariance: !reconciled,
       splitVarianceDelta: delta,
       splitStatementAmount: stmtAmt,
+      splitDerivedCashAmount: Math.max(0, derivedCash),
+      awaitingCashStatement: !reconciled,
       ...(stmtLitersNum != null ? { splitStatementLiters: stmtLitersNum } : {}),
     };
   }

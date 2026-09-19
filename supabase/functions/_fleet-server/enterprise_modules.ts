@@ -75,8 +75,8 @@ export const RUSH_MODULE_KEYS = [
   "rush_merchant_link",
 ] as const;
 
-/** Org must set true — missing override stays off. */
-export const OPT_IN_MODULE_KEYS = ["fuelSplitPayment"] as const;
+/** Reserved for modules that must stay off until an org explicitly opts in. (Empty — fuelSplitPayment is production-default on.) */
+export const OPT_IN_MODULE_KEYS = [] as const;
 
 /** Sync rush_* module keys from service_lines — RoamFleet is shared, not a Rush upsell. */
 export function rushModuleOverridesForServiceLines(

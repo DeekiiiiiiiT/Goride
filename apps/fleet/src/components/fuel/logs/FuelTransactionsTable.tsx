@@ -44,6 +44,15 @@ import {
   formatFuelLogDate,
 } from './fuelLogDisplay';
 import type { FuelLogDisplayRow } from './groupFuelEntriesByFillGroup';
+import {
+  cardDisplayAmount,
+  cardSplitEntry,
+  cashSplitEntry,
+  isPendingSplitEntry,
+  primaryEntryForDisplayRow,
+  splitEntriesHaveMismatch,
+  splitRowLiters,
+} from './splitFillDisplay';
 
 function AuditBreakdownItem({ label, value, max }: { label: string; value?: number; max: number }) {
   const percentage = ((value || 0) / max) * 100;
@@ -72,6 +81,8 @@ function getTypeIcon(label: string) {
   switch (label) {
     case 'Gas Card':
       return <CreditCard className="h-4 w-4 text-indigo-500" />;
+    case 'Gas Card + Cash':
+      return <CreditCard className="h-4 w-4 text-emerald-600" />;
     case 'Driver Cash':
       return <Banknote className="h-4 w-4 text-emerald-500" />;
     case 'RideShare Cash':
@@ -119,8 +130,9 @@ export function resolvePaymentLabel(entry: FuelEntry): string {
 }
 
 export type FuelTransactionsTableProps = {
-  /** Grouped rows from FuelLogTable (pagination unit); table still renders flattened pagedEntries. */
-  pagedDisplayRows?: FuelLogDisplayRow[];
+  /** Grouped rows from FuelLogTable — one visual row per pump stop. */
+  pagedDisplayRows: FuelLogDisplayRow[];
+  /** Flattened entries on the page (selection / export). */
   pagedEntries: FuelEntry[];
   filteredCount: number;
   vehicles: Vehicle[];
@@ -139,14 +151,14 @@ export type FuelTransactionsTableProps = {
   getDriverName: (id?: string) => string;
   canEdit: boolean;
   canDelete: boolean;
-  onView: (entry: FuelEntry) => void;
+  onView: (entry: FuelEntry, splitSiblings?: FuelEntry[]) => void;
   onEdit: (entry: FuelEntry) => void;
   onDelete: (id: string) => void;
   onPageChange: (page: number) => void;
 };
 
 export function FuelTransactionsTable({
-  pagedDisplayRows: _pagedDisplayRows,
+  pagedDisplayRows,
   pagedEntries,
   filteredCount,
   vehicles,
@@ -179,6 +191,17 @@ export function FuelTransactionsTable({
     pagedEntries.length > 0 && pagedEntries.every((e) => selectedIds.has(e.id));
   const pageSomeSelected =
     pagedEntries.some((e) => selectedIds.has(e.id)) && !pageAllSelected;
+
+  const toggleRowSelection = (ids: string[]) => {
+    const allOn = ids.every((id) => selectedIds.has(id));
+    for (const id of ids) {
+      if (allOn) {
+        if (selectedIds.has(id)) onToggleSelect(id);
+      } else if (!selectedIds.has(id)) {
+        onToggleSelect(id);
+      }
+    }
+  };
 
   return (
     <>
@@ -253,7 +276,23 @@ export function FuelTransactionsTable({
               </TableCell>
             </TableRow>
           ) : (
-            pagedEntries.map((entry) => {
+            pagedDisplayRows.map((row) => {
+              const entry = primaryEntryForDisplayRow(row);
+              const isSplit = row.kind === 'split';
+              const rowIds = isSplit ? row.entries.map((e) => e.id) : [entry.id];
+              const splitSiblings = isSplit ? row.entries : undefined;
+              const cashLeg = isSplit ? cashSplitEntry(row.entries) : undefined;
+              const cardLeg = isSplit ? cardSplitEntry(row.entries) : undefined;
+              const pendingHalf = !isSplit && isPendingSplitEntry(entry);
+              const hasMismatch = isSplit
+                ? splitEntriesHaveMismatch(row.entries)
+                : entry.metadata?.splitVariance === true &&
+                  entry.metadata?.splitReconciled !== true;
+              const displayLiters = isSplit ? splitRowLiters(row) : Number(entry.liters) || 0;
+              const displayAmount = isSplit
+                ? Number(row.pumpTotal) || 0
+                : Number(entry.amount) || 0;
+              const paidByLabel = isSplit ? 'Gas Card + Cash' : resolvePaymentLabel(entry);
               const locationStatus = entry.metadata?.locationStatus || entry.locationStatus;
               const confidenceScore = entry.metadata?.auditConfidenceScore;
               const isHighlyTrusted =
@@ -261,21 +300,23 @@ export function FuelTransactionsTable({
                 (confidenceScore !== undefined && confidenceScore >= 90);
               const isLocked = entry.isLocked || entry.status === 'Finalized';
               const entryTimeLabel = formatFuelEntryTime(entry);
+              const rowSelected = rowIds.every((id) => selectedIds.has(id));
+              const focusHit = rowIds.includes(focusEntryId || '');
 
               return (
                 <TableRow
-                  key={entry.id}
+                  key={row.id}
                   className={cn(
                     isLocked && 'bg-slate-50/50',
-                    focusEntryId === entry.id && 'bg-emerald-50 ring-2 ring-inset ring-emerald-300',
-                    selectedIds.has(entry.id) && 'bg-indigo-50/40',
+                    focusHit && 'bg-emerald-50 ring-2 ring-inset ring-emerald-300',
+                    rowSelected && 'bg-indigo-50/40',
                   )}
                 >
                   <TableCell className="hidden md:table-cell">
                     <Checkbox
-                      checked={selectedIds.has(entry.id)}
-                      onCheckedChange={() => onToggleSelect(entry.id)}
-                      aria-label={`Select ${entry.id}`}
+                      checked={rowSelected}
+                      onCheckedChange={() => toggleRowSelection(rowIds)}
+                      aria-label={`Select ${row.id}`}
                     />
                   </TableCell>
                   <TableCell>
@@ -301,25 +342,40 @@ export function FuelTransactionsTable({
                     </div>
                   </TableCell>
                   <TableCell>
-                    <div className="flex flex-wrap items-center gap-2">
-                      {getTypeIcon(resolvePaymentLabel(entry))}
-                      <span className="text-xs">{resolvePaymentLabel(entry)}</span>
-                      {typeof entry.metadata?.fillGroupId === 'string' &&
-                        entry.metadata.fillGroupId.length > 0 && (
-                        <Badge
-                          variant="outline"
-                          className="h-4 px-1 text-[9px] border-emerald-200 bg-emerald-50 text-emerald-800"
-                        >
-                          Split
-                        </Badge>
+                    <div className="flex flex-col gap-0.5">
+                      <div className="flex flex-wrap items-center gap-2">
+                        {getTypeIcon(paidByLabel)}
+                        <span className="text-xs">{paidByLabel}</span>
+                        {(isSplit || pendingHalf) && (
+                          <Badge
+                            variant="outline"
+                            className="h-4 px-1 text-[9px] border-emerald-200 bg-emerald-50 text-emerald-800"
+                          >
+                            {pendingHalf ? 'Split (pending)' : 'Split'}
+                          </Badge>
+                        )}
+                        {hasMismatch && (
+                          <Badge
+                            variant="outline"
+                            className="h-4 px-1 text-[9px] border-rose-200 bg-rose-50 text-rose-800"
+                          >
+                            Mismatch
+                          </Badge>
+                        )}
+                      </div>
+                      {isSplit && (
+                        <span className="text-[11px] text-slate-500">
+                          {cashLeg?.metadata?.awaitingCashStatement
+                            ? 'Cash pending statement'
+                            : `Cash ${formatFuelMoney(Number(cashLeg?.amount) || 0)}`}
+                          {' · '}
+                          Card {formatFuelMoney(cardDisplayAmount(cardLeg))}
+                        </span>
                       )}
-                      {entry.metadata?.splitVariance === true && (
-                        <Badge
-                          variant="outline"
-                          className="h-4 px-1 text-[9px] border-rose-200 bg-rose-50 text-rose-800"
-                        >
-                          Mismatch
-                        </Badge>
+                      {pendingHalf && (
+                        <span className="text-[11px] text-amber-600">
+                          Cash approval or statement still open
+                        </span>
                       )}
                     </div>
                   </TableCell>
@@ -409,10 +465,10 @@ export function FuelTransactionsTable({
                         vehicle?.fuelSettings?.tankCapacity ||
                         0;
                       const fillPct =
-                        tankCap > 0 ? Math.min(100, ((entry.liters || 0) / tankCap) * 100) : 0;
+                        tankCap > 0 ? Math.min(100, (displayLiters / tankCap) * 100) : 0;
                       return (
                         <div className="flex min-w-[50px] flex-col gap-1">
-                          <span className="text-xs font-medium">{entry.liters?.toFixed(1)} L</span>
+                          <span className="text-xs font-medium">{displayLiters.toFixed(1)} L</span>
                           <Tooltip>
                             <TooltipTrigger asChild>
                               <div className="h-1.5 w-12 cursor-help overflow-hidden rounded-full border border-slate-200/50 bg-slate-100">
@@ -484,7 +540,9 @@ export function FuelTransactionsTable({
                     })()}
                   </TableCell>
                   <TableCell className="text-xs font-bold">
-                    {(entry.metadata as { awaitingCardStatement?: boolean })?.awaitingCardStatement ? (
+                    {isSplit ? (
+                      formatFuelMoney(displayAmount)
+                    ) : (entry.metadata as { awaitingCardStatement?: boolean })?.awaitingCardStatement ? (
                       <span className="font-medium text-amber-600">Awaiting</span>
                     ) : (entry.metadata as { jaaRowKind?: string })?.jaaRowKind === 'declined' ? (
                       <span className="font-medium text-rose-600">Declined</span>
@@ -599,18 +657,16 @@ export function FuelTransactionsTable({
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex justify-end">
-                      {/* Phone: one-tap view details */}
                       <Button
                         variant="ghost"
                         size="icon"
                         className="min-h-11 min-w-11 text-slate-500 hover:text-slate-800 md:hidden"
                         title="View Details"
                         aria-label="View Details"
-                        onClick={() => onView(entry)}
+                        onClick={() => onView(entry, splitSiblings)}
                       >
                         <Eye className="h-4 w-4" />
                       </Button>
-                      {/* Desktop: full actions menu */}
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <Button
@@ -629,7 +685,7 @@ export function FuelTransactionsTable({
                           </DropdownMenuLabel>
                           <DropdownMenuSeparator />
                           <DropdownMenuItem
-                            onClick={() => onView(entry)}
+                            onClick={() => onView(entry, splitSiblings)}
                             className="cursor-pointer gap-2 text-xs"
                           >
                             <Eye className="h-3.5 w-3.5 text-slate-500" />

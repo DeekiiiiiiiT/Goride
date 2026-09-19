@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useForm, FormProvider } from 'react-hook-form';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ResponsiveDialog,
   ResponsiveDialogContent,
@@ -24,6 +24,11 @@ import {
   loadAddDriverDraft,
   saveAddDriverDraft,
 } from './addDriverForm';
+import { Button } from '../ui/button';
+import { Input } from '../ui/input';
+import { Label } from '../ui/label';
+import { Check } from 'lucide-react';
+import { formatDriverRoamTagDisplay, normalizeDriverRoamTagName } from '@roam/types';
 
 interface AddDriverModalProps {
   isOpen: boolean;
@@ -31,11 +36,17 @@ interface AddDriverModalProps {
   onDriverAdded: (driver: unknown) => void;
 }
 
+type AddMode = 'roam_tag' | 'new_profile';
+
 export function AddDriverModal({
   isOpen,
   onClose,
   onDriverAdded,
 }: AddDriverModalProps) {
+  const queryClient = useQueryClient();
+  const [addMode, setAddMode] = useState<AddMode>('new_profile');
+  const [roamTag, setRoamTag] = useState('');
+  const [tagInviteSent, setTagInviteSent] = useState<{ tag: string; name?: string | null } | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
   const [step, setStep] = useState(1);
@@ -66,6 +77,24 @@ export function AddDriverModal({
       existingDrivers as Parameters<typeof findMatchingDriver>[1],
     );
   }, [watchedName, existingDrivers]);
+
+  const createByTag = useMutation({
+    mutationFn: () =>
+      api.createWorkforceInviteByRoamTag({
+        roamTag: normalizeDriverRoamTagName(roamTag),
+        serviceLine: 'rideshare',
+      }),
+    onSuccess: (data) => {
+      const tag = data?.driver?.custom_tag_name || normalizeDriverRoamTagName(roamTag);
+      setTagInviteSent({
+        tag,
+        name: data?.driver?.display_name ?? null,
+      });
+      void queryClient.invalidateQueries({ queryKey: ['workforce-invites'] });
+      toast.success('Invite sent');
+    },
+    onError: (e: Error) => toast.error(e.message || 'Could not send invite'),
+  });
 
   // Restore draft when opening
   useEffect(() => {
@@ -277,6 +306,9 @@ export function AddDriverModal({
     setProofFile(null);
     setStep(1);
     setLicenseStep('front-upload');
+    setAddMode('new_profile');
+    setRoamTag('');
+    setTagInviteSent(null);
     onClose();
   };
 
@@ -285,74 +317,154 @@ export function AddDriverModal({
       <ResponsiveDialogContent className="sm:max-w-[600px] overflow-hidden max-h-[90vh] overflow-y-auto">
         <ResponsiveDialogHeader>
           <ResponsiveDialogTitle>
-            New Driver Profile
+            {addMode === 'roam_tag' ? 'Invite by Roam Tag' : 'New Driver Profile'}
           </ResponsiveDialogTitle>
           <ResponsiveDialogDescription>
-            {step === 1
-              ? "Start by scanning the driver's license."
-              : 'Verify details and complete onboarding.'}
+            {addMode === 'roam_tag'
+              ? 'Invite an existing Roam Driver by their @tag. They Accept or Decline in the app.'
+              : step === 1
+                ? "Start by scanning the driver's license."
+                : 'Verify details and complete onboarding.'}
           </ResponsiveDialogDescription>
         </ResponsiveDialogHeader>
 
-        <div className="flex items-center gap-2 mb-4 mt-2">
-          <div className={cn('h-2 rounded-full flex-1 transition-all', step >= 1 ? 'bg-slate-900' : 'bg-slate-100')} />
-          <div className={cn('h-2 rounded-full flex-1 transition-all', step >= 2 ? 'bg-slate-900' : 'bg-slate-100')} />
-          <div className={cn('h-2 rounded-full flex-1 transition-all', step >= 3 ? 'bg-slate-900' : 'bg-slate-100')} />
-        </div>
-        <div className="flex justify-between text-xs font-medium text-slate-500 mb-6 uppercase tracking-wider">
-          <span className={cn(step === 1 && 'text-slate-900')}>License</span>
-          <span className={cn(step === 2 && 'text-slate-900')}>Details</span>
-          <span className={cn(step === 3 && 'text-slate-900')}>Proof of Address</span>
+        <div className="flex gap-2 rounded-lg bg-slate-100 p-1 dark:bg-slate-800 mb-4 mt-2">
+          <button
+            type="button"
+            className={cn(
+              'flex-1 rounded-md px-3 py-1.5 text-sm font-medium',
+              addMode === 'roam_tag' ? 'bg-white shadow-sm dark:bg-slate-700' : 'text-slate-600',
+            )}
+            onClick={() => setAddMode('roam_tag')}
+          >
+            By Roam Tag
+          </button>
+          <button
+            type="button"
+            className={cn(
+              'flex-1 rounded-md px-3 py-1.5 text-sm font-medium',
+              addMode === 'new_profile' ? 'bg-white shadow-sm dark:bg-slate-700' : 'text-slate-600',
+            )}
+            onClick={() => {
+              setAddMode('new_profile');
+              setTagInviteSent(null);
+            }}
+          >
+            New profile
+          </button>
         </div>
 
-        <FormProvider {...methods}>
-          <form onSubmit={handleSubmit(onCreate)}>
-            {step === 1 && (
-              <AddDriverLicenseStep
-                licenseStep={licenseStep}
-                licenseFront={licenseFront}
-                licenseBack={licenseBack}
-                onLicenseFront={setLicenseFront}
-                onLicenseBack={setLicenseBack}
-                matchedDriver={matchedDriver}
-              />
-            )}
-            {(step === 2 || step === 3) && (
-              <AddDriverDetailsStep
-                step={step}
-                proofFile={proofFile}
-                onProofFile={setProofFile}
-                isScanning={isScanning}
-                onScanAddress={handleScanAddress}
-                matchedDriver={matchedDriver}
-              />
-            )}
+        {addMode === 'roam_tag' ? (
+          tagInviteSent ? (
+            <div className="flex flex-col items-center justify-center gap-3 py-8">
+              <div className="flex h-14 w-14 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-900/40">
+                <Check className="h-8 w-8 text-emerald-600 dark:text-emerald-400" strokeWidth={2.5} />
+              </div>
+              <p className="text-base font-semibold text-slate-900 dark:text-slate-50">Invite sent</p>
+              <p className="text-sm text-slate-500">
+                {formatDriverRoamTagDisplay(tagInviteSent.tag)}
+                {tagInviteSent.name ? ` · ${tagInviteSent.name}` : ''}
+              </p>
+              <Button className="mt-2" onClick={() => handleClose(false)}>
+                Done
+              </Button>
+            </div>
+          ) : (
+            <div className="space-y-4 py-2">
+              <div className="space-y-2">
+                <Label htmlFor="add-driver-roam-tag">Driver Roam Tag</Label>
+                <div className="flex items-center gap-1">
+                  <span className="text-slate-500">@</span>
+                  <Input
+                    id="add-driver-roam-tag"
+                    value={roamTag.replace(/^@+/, '')}
+                    onChange={(e) => setRoamTag(e.target.value.replace(/^@+/, '').toLowerCase())}
+                    placeholder="driver_handle"
+                    autoCapitalize="none"
+                  />
+                </div>
+                <p className="text-xs text-slate-500">
+                  They&apos;ll get an in-app invite to Accept or Decline.
+                </p>
+              </div>
+              <ResponsiveDialogFooter className="mt-8 flex justify-between sm:justify-between items-center w-full">
+                <Button type="button" variant="outline" onClick={() => handleClose(false)}>
+                  Cancel
+                </Button>
+                <Button
+                  type="button"
+                  className="bg-indigo-600 hover:bg-indigo-700"
+                  disabled={createByTag.isPending || !normalizeDriverRoamTagName(roamTag)}
+                  onClick={() => createByTag.mutate()}
+                >
+                  {createByTag.isPending ? 'Sending…' : 'Send Invite'}
+                </Button>
+              </ResponsiveDialogFooter>
+            </div>
+          )
+        ) : (
+          <>
+            <div className="flex items-center gap-2 mb-4 mt-2">
+              <div className={cn('h-2 rounded-full flex-1 transition-all', step >= 1 ? 'bg-slate-900' : 'bg-slate-100')} />
+              <div className={cn('h-2 rounded-full flex-1 transition-all', step >= 2 ? 'bg-slate-900' : 'bg-slate-100')} />
+              <div className={cn('h-2 rounded-full flex-1 transition-all', step >= 3 ? 'bg-slate-900' : 'bg-slate-100')} />
+            </div>
+            <div className="flex justify-between text-xs font-medium text-slate-500 mb-6 uppercase tracking-wider">
+              <span className={cn(step === 1 && 'text-slate-900')}>License</span>
+              <span className={cn(step === 2 && 'text-slate-900')}>Details</span>
+              <span className={cn(step === 3 && 'text-slate-900')}>Proof of Address</span>
+            </div>
 
-            <ResponsiveDialogFooter className="mt-8 flex justify-between sm:justify-between items-center w-full">
-              <AddDriverModalFooter
-                step={step}
-                licenseStep={licenseStep}
-                isScanning={isScanning}
-                isLoading={isLoading}
-                hasFront={!!licenseFront}
-                hasBack={!!licenseBack}
-                onClose={() => handleClose(false)}
-                onScanFront={handleScanFront}
-                onScanBack={handleScanBack}
-                setLicenseStep={setLicenseStep}
-                setStep={setStep}
-                onConfirmDetails={() => {
-                  const err = validateStep2(getValues());
-                  if (err) {
-                    toast.error(err);
-                    return;
-                  }
-                  setStep(3);
-                }}
-              />
-            </ResponsiveDialogFooter>
-          </form>
-        </FormProvider>
+            <FormProvider {...methods}>
+              <form onSubmit={handleSubmit(onCreate)}>
+                {step === 1 && (
+                  <AddDriverLicenseStep
+                    licenseStep={licenseStep}
+                    licenseFront={licenseFront}
+                    licenseBack={licenseBack}
+                    onLicenseFront={setLicenseFront}
+                    onLicenseBack={setLicenseBack}
+                    matchedDriver={matchedDriver}
+                  />
+                )}
+                {(step === 2 || step === 3) && (
+                  <AddDriverDetailsStep
+                    step={step}
+                    proofFile={proofFile}
+                    onProofFile={setProofFile}
+                    isScanning={isScanning}
+                    onScanAddress={handleScanAddress}
+                    matchedDriver={matchedDriver}
+                  />
+                )}
+
+                <ResponsiveDialogFooter className="mt-8 flex justify-between sm:justify-between items-center w-full">
+                  <AddDriverModalFooter
+                    step={step}
+                    licenseStep={licenseStep}
+                    isScanning={isScanning}
+                    isLoading={isLoading}
+                    hasFront={!!licenseFront}
+                    hasBack={!!licenseBack}
+                    onClose={() => handleClose(false)}
+                    onScanFront={handleScanFront}
+                    onScanBack={handleScanBack}
+                    setLicenseStep={setLicenseStep}
+                    setStep={setStep}
+                    onConfirmDetails={() => {
+                      const err = validateStep2(getValues());
+                      if (err) {
+                        toast.error(err);
+                        return;
+                      }
+                      setStep(3);
+                    }}
+                  />
+                </ResponsiveDialogFooter>
+              </form>
+            </FormProvider>
+          </>
+        )}
       </ResponsiveDialogContent>
     </ResponsiveDialog>
   );

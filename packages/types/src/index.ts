@@ -49,6 +49,7 @@ export * from './riderContacts';
 export * from './passengerSavedPlaces';
 export * from './roamPassengerTag';
 export * from './courierRoamTag';
+export * from './driverRoamTag';
 export * from './fleetTag';
 export * from './passengerProfile';
 export * from './tripShare';

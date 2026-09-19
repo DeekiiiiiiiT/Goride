@@ -7,6 +7,8 @@ import {
   isPendingFuelQueueRow,
   isPendingReadyForReview,
   isStationGateHeld,
+  isUnresolvedSplitVariance,
+  acknowledgeSplitVarianceMeta,
   listUnapprovedFuelTxInWindow,
   type FuelReviewQueueTx,
 } from './fuelReviewQueue';
@@ -146,5 +148,36 @@ describe('countFuelReviewQueueWork', () => {
     const c = countFuelReviewQueueWork(rows);
     expect(c.splitVariance).toBe(1);
     expect(c.total).toBeGreaterThanOrEqual(1);
+  });
+
+  it('excludes awaiting-cash statement from pending ready and finalize blockers', () => {
+    const awaiting = tx({
+      id: 'await',
+      amount: 0,
+      metadata: {
+        fillGroupId: 'fg-1',
+        splitRole: 'cash',
+        awaitingCashStatement: true,
+      },
+    });
+    expect(isPendingReadyForReview(awaiting)).toBe(false);
+    expect(listUnapprovedFuelTxInWindow([awaiting], '2026-09-01', '2026-09-30')).toHaveLength(0);
+  });
+
+  it('drops split variance from count after acknowledge', () => {
+    const open = tx({
+      id: 'split',
+      metadata: {
+        fillGroupId: 'fg-1',
+        splitVariance: true,
+      },
+    });
+    expect(isUnresolvedSplitVariance(open)).toBe(true);
+    const closed = {
+      ...open,
+      metadata: acknowledgeSplitVarianceMeta(open.metadata),
+    };
+    expect(isUnresolvedSplitVariance(closed)).toBe(false);
+    expect(countFuelReviewQueueWork([closed]).splitVariance).toBe(0);
   });
 });

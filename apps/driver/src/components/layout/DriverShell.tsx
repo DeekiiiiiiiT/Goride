@@ -45,6 +45,7 @@ import { DriverCashSettlementOverlay } from '../rides/DriverCashSettlementOverla
 import { DriverDigitalTripCompleteOverlay } from '../rides/DriverDigitalTripCompleteOverlay';
 import { DriverArrivedPickupOverlay } from '../rides/DriverArrivedPickupOverlay';
 import { DriverSettingsPage } from '../settings/DriverSettingsPage';
+import { DriverFleetInvitesPage } from '../fleet/DriverFleetInvitesPage';
 
 export function DriverShell({ forcePassengerRides = false }: { forcePassengerRides?: boolean }) {
   const { mode, isFleetDriver, fleet, loading, profile } = useDriver();
@@ -73,14 +74,16 @@ export function DriverShell({ forcePassengerRides = false }: { forcePassengerRid
     currentPage === 'tax' ||
     currentPage === 'insurance' ||
     currentPage === 'settings' ||
-    currentPage === 'documents';
+    currentPage === 'documents' ||
+    currentPage === 'fleet-invites';
   const mintDriverLayout =
     mintHomeLayout ||
     mintEarningsLayout ||
     mintTripsLayout ||
     mintProfileLayout ||
     mintUtilityLayout;
-  const profileFlowActive = currentPage === 'profile' || currentPage === 'documents';
+  const profileFlowActive =
+    currentPage === 'profile' || currentPage === 'documents' || currentPage === 'fleet-invites';
 
   const profileDisplayName =
     profile?.displayName ||
@@ -138,7 +141,7 @@ export function DriverShell({ forcePassengerRides = false }: { forcePassengerRid
   const renderPage = () => {
     switch (currentPage) {
       case 'dashboard':
-        return <DriverMintHome />;
+        return <DriverMintHome onOpenFleetInvites={() => setCurrentPage('fleet-invites')} />;
       case 'passenger-rides':
         return <RideDispatchPage />;
       case 'earnings':
@@ -165,6 +168,8 @@ export function DriverShell({ forcePassengerRides = false }: { forcePassengerRid
         return <InsuranceCenter />;
       case 'settings':
         return <DriverSettingsPage />;
+      case 'fleet-invites':
+        return <DriverFleetInvitesPage onBack={() => setCurrentPage('profile')} />;
 
       default:
         return (

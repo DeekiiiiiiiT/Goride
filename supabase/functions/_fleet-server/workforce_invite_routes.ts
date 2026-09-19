@@ -1,6 +1,7 @@
 /**
  * Fleet workforce invites — drivers and couriers.
- * Supports invite codes + courier Roam Tag targeted invites (in-app Accept/Decline).
+ * Supports invite codes + Roam Tag targeted invites (in-app Accept/Decline)
+ * for both rush_delivery (courier tags) and rideshare (driver tags).
  */
 import type { Hono } from "npm:hono@4.3.11";
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
@@ -89,7 +90,7 @@ export function registerWorkforceInviteRoutes(
     }
   });
 
-  /** Owner invites a courier by personal Roam Tag → courier Accept/Decline in-app. */
+  /** Owner invites courier or driver by personal Roam Tag → Accept/Decline in-app. */
   app.post("/make-server-37f42386/workforce/invites/by-roam-tag", deps.requireAuth() as never, async (c) => {
     try {
       const orgId = deps.getOrgId(c);
@@ -99,40 +100,123 @@ export function registerWorkforceInviteRoutes(
       if (!rbacUser) return c.json({ error: "Unauthorized" }, 401);
 
       const body = await c.req.json().catch(() => ({}));
-      const serviceLine = body.serviceLine === "rush_delivery" ? "rush_delivery" : null;
-      if (serviceLine !== "rush_delivery") {
-        return c.json({ error: "Roam Tag invites are only for couriers (rush_delivery)" }, 400);
+      const serviceLine =
+        body.serviceLine === "rush_delivery"
+          ? "rush_delivery"
+          : body.serviceLine === "rideshare"
+            ? "rideshare"
+            : null;
+      if (!serviceLine) {
+        return c.json({ error: "serviceLine must be rush_delivery or rideshare" }, 400);
       }
 
-      const enabled = await isFeatureEnabled(FEATURE_FLAGS.RUSH_COURIER_LINK, orgId);
-      if (!enabled) return c.json({ error: "Courier workforce invites not enabled for this org" }, 403);
+      if (serviceLine === "rush_delivery") {
+        const enabled = await isFeatureEnabled(FEATURE_FLAGS.RUSH_COURIER_LINK, orgId);
+        if (!enabled) return c.json({ error: "Courier workforce invites not enabled for this org" }, 403);
+      }
 
       const tag = normalizeTag(String(body.roamTag ?? body.tag ?? ""));
       if (!tag) return c.json({ error: "roamTag required" }, 400);
 
-      const { data: tagRow, error: tagErr } = await deps.supabase.schema("delivery")
-        .from("courier_roam_tags")
+      if (serviceLine === "rush_delivery") {
+        const { data: tagRow, error: tagErr } = await deps.supabase.schema("delivery")
+          .from("courier_roam_tags")
+          .select("user_id, custom_tag_name")
+          .eq("custom_tag_name", tag)
+          .maybeSingle();
+        if (tagErr) throw tagErr;
+        if (!tagRow?.user_id) return c.json({ error: "Courier Roam Tag not found" }, 404);
+
+        const invitedUserId = tagRow.user_id as string;
+
+        const { data: courier } = await deps.supabase.schema("delivery")
+          .from("courier_profiles")
+          .select("user_id, mode, fleet_id, display_name")
+          .eq("user_id", invitedUserId)
+          .maybeSingle();
+        if (!courier) {
+          return c.json({ error: "That Roam Tag is not linked to a courier profile yet" }, 404);
+        }
+        if (courier.mode === "fleet" && courier.fleet_id === orgId) {
+          return c.json({ error: "Courier is already in your fleet" }, 409);
+        }
+        if (courier.mode === "fleet" && courier.fleet_id && courier.fleet_id !== orgId) {
+          return c.json({ error: "Courier is already linked to another fleet" }, 409);
+        }
+
+        const { data: existingPending } = await deps.supabase
+          .from("fleet_workforce_invites")
+          .select("id")
+          .eq("organization_id", orgId)
+          .eq("invited_user_id", invitedUserId)
+          .eq("service_line", "rush_delivery")
+          .eq("status", "pending")
+          .maybeSingle();
+        if (existingPending) {
+          return c.json({ error: "A pending invite already exists for this courier", invite: existingPending }, 409);
+        }
+
+        let inviteCode = randomInviteCode();
+        let data: Record<string, unknown> | null = null;
+        let lastError: { message?: string; code?: string } | null = null;
+        for (let attempt = 0; attempt < 6; attempt++) {
+          inviteCode = randomInviteCode();
+          const res = await deps.supabase
+            .from("fleet_workforce_invites")
+            .insert({
+              organization_id: orgId,
+              service_line: "rush_delivery",
+              invite_code: inviteCode,
+              invite_kind: "roam_tag",
+              invited_user_id: invitedUserId,
+              created_by: rbacUser.userId,
+            })
+            .select()
+            .single();
+          if (!res.error && res.data) {
+            data = res.data as Record<string, unknown>;
+            lastError = null;
+            break;
+          }
+          lastError = res.error;
+          if (res.error?.code !== "23505") break;
+        }
+        if (lastError || !data) throw lastError ?? new Error("Could not create invite");
+
+        return c.json({
+          invite: data,
+          courier: {
+            user_id: invitedUserId,
+            custom_tag_name: tagRow.custom_tag_name,
+            display_name: courier.display_name ?? null,
+          },
+        });
+      }
+
+      // rideshare — driver Roam Tag
+      const { data: tagRow, error: tagErr } = await deps.supabase
+        .from("driver_roam_tags")
         .select("user_id, custom_tag_name")
         .eq("custom_tag_name", tag)
         .maybeSingle();
       if (tagErr) throw tagErr;
-      if (!tagRow?.user_id) return c.json({ error: "Courier Roam Tag not found" }, 404);
+      if (!tagRow?.user_id) return c.json({ error: "Driver Roam Tag not found" }, 404);
 
       const invitedUserId = tagRow.user_id as string;
 
-      const { data: courier } = await deps.supabase.schema("delivery")
-        .from("courier_profiles")
+      const { data: driver } = await deps.supabase
+        .from("driver_profiles")
         .select("user_id, mode, fleet_id, display_name")
         .eq("user_id", invitedUserId)
         .maybeSingle();
-      if (!courier) {
-        return c.json({ error: "That Roam Tag is not linked to a courier profile yet" }, 404);
+      if (!driver) {
+        return c.json({ error: "That Roam Tag is not linked to a driver profile yet" }, 404);
       }
-      if (courier.mode === "fleet" && courier.fleet_id === orgId) {
-        return c.json({ error: "Courier is already in your fleet" }, 409);
+      if (driver.mode === "fleet" && driver.fleet_id === orgId) {
+        return c.json({ error: "Driver is already in your fleet" }, 409);
       }
-      if (courier.mode === "fleet" && courier.fleet_id && courier.fleet_id !== orgId) {
-        return c.json({ error: "Courier is already linked to another fleet" }, 409);
+      if (driver.mode === "fleet" && driver.fleet_id && driver.fleet_id !== orgId) {
+        return c.json({ error: "Driver is already linked to another fleet" }, 409);
       }
 
       const { data: existingPending } = await deps.supabase
@@ -140,11 +224,11 @@ export function registerWorkforceInviteRoutes(
         .select("id")
         .eq("organization_id", orgId)
         .eq("invited_user_id", invitedUserId)
-        .eq("service_line", "rush_delivery")
+        .eq("service_line", "rideshare")
         .eq("status", "pending")
         .maybeSingle();
       if (existingPending) {
-        return c.json({ error: "A pending invite already exists for this courier", invite: existingPending }, 409);
+        return c.json({ error: "A pending invite already exists for this driver", invite: existingPending }, 409);
       }
 
       let inviteCode = randomInviteCode();
@@ -156,7 +240,7 @@ export function registerWorkforceInviteRoutes(
           .from("fleet_workforce_invites")
           .insert({
             organization_id: orgId,
-            service_line: "rush_delivery",
+            service_line: "rideshare",
             invite_code: inviteCode,
             invite_kind: "roam_tag",
             invited_user_id: invitedUserId,
@@ -176,10 +260,10 @@ export function registerWorkforceInviteRoutes(
 
       return c.json({
         invite: data,
-        courier: {
+        driver: {
           user_id: invitedUserId,
           custom_tag_name: tagRow.custom_tag_name,
-          display_name: courier.display_name ?? null,
+          display_name: driver.display_name ?? null,
         },
       });
     } catch (e: unknown) {
@@ -202,24 +286,31 @@ export function registerWorkforceInviteRoutes(
       if (error) throw error;
 
       const invites = data ?? [];
-      const userIds = [
-        ...new Set(
-          invites
-            .map((i: { invited_user_id?: string | null }) => i.invited_user_id)
-            .filter((id): id is string => Boolean(id)),
-        ),
-      ];
+      const courierUserIds: string[] = [];
+      const driverUserIds: string[] = [];
+      for (const inv of invites as { invited_user_id?: string | null; service_line?: string }[]) {
+        if (!inv.invited_user_id) continue;
+        if (inv.service_line === "rideshare") driverUserIds.push(inv.invited_user_id);
+        else courierUserIds.push(inv.invited_user_id);
+      }
       let tagByUser = new Map<string, string>();
-      if (userIds.length) {
+      if (courierUserIds.length) {
         const { data: tags } = await deps.supabase.schema("delivery")
           .from("courier_roam_tags")
           .select("user_id, custom_tag_name")
-          .in("user_id", userIds);
-        tagByUser = new Map(
-          (tags ?? [])
-            .filter((t: { custom_tag_name?: string | null }) => t.custom_tag_name)
-            .map((t: { user_id: string; custom_tag_name: string }) => [t.user_id, t.custom_tag_name]),
-        );
+          .in("user_id", [...new Set(courierUserIds)]);
+        for (const t of tags ?? []) {
+          if (t.custom_tag_name) tagByUser.set(t.user_id as string, t.custom_tag_name as string);
+        }
+      }
+      if (driverUserIds.length) {
+        const { data: tags } = await deps.supabase
+          .from("driver_roam_tags")
+          .select("user_id, custom_tag_name")
+          .in("user_id", [...new Set(driverUserIds)]);
+        for (const t of tags ?? []) {
+          if (t.custom_tag_name) tagByUser.set(t.user_id as string, t.custom_tag_name as string);
+        }
       }
 
       return c.json({
@@ -305,7 +396,7 @@ export function registerWorkforceInviteRoutes(
 
       // Roam-tag invites must be accepted via /invites/:id/accept
       if (invite.invite_kind === "roam_tag") {
-        return c.json({ error: "This invite must be accepted in the courier app inbox" }, 400);
+        return c.json({ error: "This invite must be accepted in the app inbox" }, 400);
       }
 
       const invitedEmail = invite.invited_email ? String(invite.invited_email).trim().toLowerCase() : null;
@@ -380,13 +471,25 @@ export function registerWorkforceInviteRoutes(
       if (invite.invite_kind !== "roam_tag" || invite.invited_user_id !== userId) {
         return c.json({ error: "Forbidden" }, 403);
       }
-      if (String(invite.service_line) !== "rush_delivery") {
-        return c.json({ error: "Invalid invite" }, 400);
-      }
 
       const fleetId = invite.organization_id as string;
-      const linked = await deps.linkCourierToFleet(userId, fleetId);
-      if (!linked.success) return c.json({ error: linked.error }, linked.status);
+      const serviceLine = String(invite.service_line);
+
+      if (serviceLine === "rush_delivery") {
+        const linked = await deps.linkCourierToFleet(userId, fleetId);
+        if (!linked.success) return c.json({ error: linked.error }, linked.status);
+      } else if (serviceLine === "rideshare") {
+        try {
+          await deps.linkDriverToFleet(userId, fleetId);
+        } catch (e: unknown) {
+          const err = e as Error & { status?: number };
+          if (err.status === 409) return c.json({ error: err.message }, 409);
+          if (err.message === "Fleet not found") return c.json({ error: err.message }, 404);
+          throw e;
+        }
+      } else {
+        return c.json({ error: "Invalid invite" }, 400);
+      }
 
       await deps.supabase
         .from("fleet_workforce_invites")
@@ -397,7 +500,7 @@ export function registerWorkforceInviteRoutes(
         })
         .eq("id", invite.id);
 
-      return c.json({ success: true, fleetId, serviceLine: "rush_delivery" });
+      return c.json({ success: true, fleetId, serviceLine });
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
       return c.json({ error: msg }, 500);

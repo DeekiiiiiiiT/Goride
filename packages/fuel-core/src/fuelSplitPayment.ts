@@ -1,7 +1,8 @@
 /**
  * Split fill (Gas Card + Cash) — shared contract.
- * Two ledger rows linked by fillGroupId; cash is typed, card is derived then
- * reconciled by Dominion statement. Cash owns volume.
+ * Two ledger rows linked by fillGroupId. Driver confirms pump total + liters only;
+ * cash amount is derived after Dominion statement: cash = pump − card.
+ * Cash owns volume. Cash reimbursement waits on statement.
  */
 
 export type FuelSplitRole = 'cash' | 'card';
@@ -11,19 +12,23 @@ export type FuelSplitMetadata = {
   fillGroupId: string;
   splitRole: FuelSplitRole;
   splitPumpTotal: number;
-  /** Card row only — driver's claim before statement. */
+  /** @deprecated Legacy driver card claim — new fills omit this. */
   splitExpectedCardAmount?: number;
   /** Cash row true; card row false forever. */
   splitVolumeOwner: boolean;
+  /** Cash tx/entry waits for statement before reimbursement amount is known. */
+  awaitingCashStatement?: boolean;
   splitReconciled?: boolean;
   splitVariance?: boolean;
   splitVarianceDelta?: number;
   splitStatementAmount?: number;
+  /** Derived cash after statement (pump − card). */
+  splitDerivedCashAmount?: number;
   /** Statement liters kept for audit when volume owner is false. */
   splitStatementLiters?: number;
 };
 
-/** Floor JMD tolerance for statement vs expected card amount. */
+/** Floor JMD tolerance for statement vs pump (negative-cash guard). */
 export const SPLIT_RECON_TOLERANCE_FLOOR_JMD = 50;
 
 /** Fraction of pump total used as tolerance (with floor). */
@@ -37,18 +42,46 @@ export function splitReconTolerance(pumpTotal: number): number {
   return Math.max(SPLIT_RECON_TOLERANCE_FLOOR_JMD, total * SPLIT_RECON_TOLERANCE_PCT);
 }
 
-/** Derive card claim from pump total and typed cash. */
+/** Cash portion after statement: pump total − card statement amount. */
+export function deriveSplitCashAmount(pumpTotal: number, statementCardAmount: number): number {
+  const total = Number(pumpTotal) || 0;
+  const card = Math.abs(Number(statementCardAmount) || 0);
+  return Math.round((total - card) * 100) / 100;
+}
+
+/** @deprecated Prefer deriveSplitCashAmount — kept for legacy claim UI/tests. */
 export function deriveSplitCardAmount(pumpTotal: number, cashAmount: number): number {
   const total = Number(pumpTotal) || 0;
   const cash = Number(cashAmount) || 0;
   return Math.round((total - cash) * 100) / 100;
 }
 
+export type SplitPumpValidation =
+  | { ok: true; pumpTotal: number; liters: number }
+  | { ok: false; error: string };
+
+/** Validate pump confirm fields only (OCR confirm / OCR-miss typing). */
+export function validateSplitPumpAmounts(
+  pumpTotalRaw: number | string,
+  litersRaw: number | string,
+): SplitPumpValidation {
+  const pumpTotal = typeof pumpTotalRaw === 'string' ? parseFloat(pumpTotalRaw) : Number(pumpTotalRaw);
+  const liters = typeof litersRaw === 'string' ? parseFloat(litersRaw) : Number(litersRaw);
+  if (!Number.isFinite(pumpTotal) || pumpTotal <= 0) {
+    return { ok: false, error: 'Pump total must be greater than zero' };
+  }
+  if (!Number.isFinite(liters) || liters <= 0) {
+    return { ok: false, error: 'Liters must be greater than zero' };
+  }
+  return { ok: true, pumpTotal, liters };
+}
+
+/** @deprecated Legacy typed-cash validation — new fills use validateSplitPumpAmounts. */
 export type SplitCashValidation =
   | { ok: true; cash: number; card: number; pumpTotal: number }
   | { ok: false; error: string };
 
-/** Validate typed cash: 0 < cash < pumpTotal. */
+/** @deprecated Legacy — driver no longer types cash. */
 export function validateSplitCashAmounts(
   pumpTotalRaw: number | string,
   cashRaw: number | string,
@@ -92,24 +125,64 @@ export function isSplitNonVolumeOwner(meta: Record<string, unknown> | null | und
   return isSplitFillMeta(meta) && m.splitVolumeOwner === false;
 }
 
-export type SplitReconResult =
-  | { status: 'reconciled'; delta: number; tolerance: number }
-  | { status: 'variance'; delta: number; tolerance: number };
+export function isAwaitingCashStatement(meta: Record<string, unknown> | null | undefined): boolean {
+  const v = metaOfSplit(meta).awaitingCashStatement as unknown;
+  return v === true || v === 'true';
+}
 
-/** Compare statement card amount to driver's expected card claim. */
+export type SplitReconResult =
+  | { status: 'reconciled'; delta: number; tolerance: number; derivedCash: number }
+  | { status: 'variance'; delta: number; tolerance: number; derivedCash: number };
+
+/**
+ * Statement vs pump: OK when card ≤ pump + tolerance (cash ≥ 0).
+ * Variance when statement would make negative cash.
+ * Legacy: if splitExpectedCardAmount present, also compare stmt vs claim.
+ */
+export function evaluateSplitStatementRecon(
+  statementAmount: number,
+  pumpTotal: number,
+  legacyExpectedCardAmount?: number | null,
+): SplitReconResult {
+  const stmt = Math.abs(Number(statementAmount) || 0);
+  const pump = Math.abs(Number(pumpTotal) || 0);
+  const tolerance = splitReconTolerance(pump);
+  const derivedCash = deriveSplitCashAmount(pump, stmt);
+  // How far statement exceeds pump (positive = over-charge vs pump)
+  const overPump = Math.round((stmt - pump) * 100) / 100;
+
+  if (stmt <= 0) {
+    return { status: 'variance', delta: overPump, tolerance, derivedCash };
+  }
+
+  // Statement within pump + tolerance → cash non-negative (or tiny rounding)
+  if (stmt <= pump + tolerance && derivedCash >= -tolerance) {
+    // Legacy dual-read: if old claim exists and disagrees with stmt beyond tolerance, still variance
+    if (legacyExpectedCardAmount != null && Number.isFinite(Number(legacyExpectedCardAmount))) {
+      const expected = Math.abs(Number(legacyExpectedCardAmount) || 0);
+      const claimDelta = Math.round((stmt - expected) * 100) / 100;
+      if (Math.abs(claimDelta) > tolerance) {
+        return { status: 'variance', delta: claimDelta, tolerance, derivedCash };
+      }
+    }
+    return {
+      status: 'reconciled',
+      delta: overPump > 0 ? overPump : 0,
+      tolerance,
+      derivedCash: Math.max(0, derivedCash),
+    };
+  }
+
+  return { status: 'variance', delta: overPump, tolerance, derivedCash };
+}
+
+/** @deprecated Use evaluateSplitStatementRecon. */
 export function evaluateSplitCardRecon(
   statementAmount: number,
   expectedCardAmount: number,
   pumpTotal: number,
 ): SplitReconResult {
-  const stmt = Math.abs(Number(statementAmount) || 0);
-  const expected = Math.abs(Number(expectedCardAmount) || 0);
-  const delta = Math.round((stmt - expected) * 100) / 100;
-  const tolerance = splitReconTolerance(pumpTotal);
-  if (Math.abs(delta) <= tolerance) {
-    return { status: 'reconciled', delta, tolerance };
-  }
-  return { status: 'variance', delta, tolerance };
+  return evaluateSplitStatementRecon(statementAmount, pumpTotal, expectedCardAmount);
 }
 
 /** Build metadata patches after statement match on the card row. */
@@ -118,16 +191,22 @@ export function splitReconMetadataPatch(
   statementAmount: number,
   statementLiters: number | null | undefined,
 ): Record<string, unknown> {
-  const expected = Number(drvMeta.splitExpectedCardAmount) || 0;
   const pumpTotal = Number(drvMeta.splitPumpTotal) || 0;
-  const recon = evaluateSplitCardRecon(statementAmount, expected, pumpTotal);
+  const legacyExpected =
+    drvMeta.splitExpectedCardAmount != null ? Number(drvMeta.splitExpectedCardAmount) : null;
+  const recon = evaluateSplitStatementRecon(statementAmount, pumpTotal, legacyExpected);
+  const litersPatch =
+    statementLiters != null ? { splitStatementLiters: Number(statementLiters) || 0 } : {};
+
   if (recon.status === 'reconciled') {
     return {
       splitReconciled: true,
       splitVariance: false,
       splitVarianceDelta: recon.delta,
       splitStatementAmount: statementAmount,
-      ...(statementLiters != null ? { splitStatementLiters: Number(statementLiters) || 0 } : {}),
+      splitDerivedCashAmount: recon.derivedCash,
+      awaitingCashStatement: false,
+      ...litersPatch,
     };
   }
   return {
@@ -135,7 +214,10 @@ export function splitReconMetadataPatch(
     splitVariance: true,
     splitVarianceDelta: recon.delta,
     splitStatementAmount: statementAmount,
-    ...(statementLiters != null ? { splitStatementLiters: Number(statementLiters) || 0 } : {}),
+    splitDerivedCashAmount: recon.derivedCash,
+    // Keep awaiting until ops resolves negative-cash variance
+    awaitingCashStatement: true,
+    ...litersPatch,
   };
 }
 
@@ -148,19 +230,18 @@ export function buildCashSplitMetadata(args: {
     splitRole: 'cash',
     splitPumpTotal: args.splitPumpTotal,
     splitVolumeOwner: true,
+    awaitingCashStatement: true,
   };
 }
 
 export function buildCardSplitMetadata(args: {
   fillGroupId: string;
   splitPumpTotal: number;
-  splitExpectedCardAmount: number;
 }): FuelSplitMetadata {
   return {
     fillGroupId: args.fillGroupId,
     splitRole: 'card',
     splitPumpTotal: args.splitPumpTotal,
-    splitExpectedCardAmount: args.splitExpectedCardAmount,
     splitVolumeOwner: false,
   };
 }

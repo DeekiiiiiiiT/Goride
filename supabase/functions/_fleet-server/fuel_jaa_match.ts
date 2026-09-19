@@ -72,19 +72,37 @@ export function applyFuelMatchLinks(
 
   let splitReconPatch: Record<string, unknown> = {};
   if (isSplitNonVolumeOwner) {
-    const expected = Math.abs(Number(drvMeta.splitExpectedCardAmount) || 0);
     const pumpTotal = Math.abs(Number(drvMeta.splitPumpTotal) || 0);
     const stmtAmt = Math.abs(stmtAmount);
-    const delta = Math.round((stmtAmt - expected) * 100) / 100;
+    const legacyExpected =
+      drvMeta.splitExpectedCardAmount != null
+        ? Math.abs(Number(drvMeta.splitExpectedCardAmount) || 0)
+        : null;
     // Keep in sync with packages/fuel-core/src/fuelSplitPayment.ts → splitReconTolerance()
-    // (floor 50 JMD or 1% of pump total). Circular import blocks sharing the helper.
     const tolerance = Math.max(50, pumpTotal * 0.01);
-    const reconciled = Math.abs(delta) <= tolerance;
+    const derivedCash = Math.round((pumpTotal - stmtAmt) * 100) / 100;
+    const overPump = Math.round((stmtAmt - pumpTotal) * 100) / 100;
+    let reconciled = stmtAmt > 0 && stmtAmt <= pumpTotal + tolerance && derivedCash >= -tolerance;
+    let delta = overPump > 0 ? overPump : 0;
+    // Legacy dual-read: old fills that typed cash and stamped expected card claim
+    if (reconciled && legacyExpected != null) {
+      const claimDelta = Math.round((stmtAmt - legacyExpected) * 100) / 100;
+      if (Math.abs(claimDelta) > tolerance) {
+        reconciled = false;
+        delta = claimDelta;
+      }
+    }
+    if (stmtAmt <= 0) {
+      reconciled = false;
+      delta = overPump;
+    }
     splitReconPatch = {
       splitReconciled: reconciled,
       splitVariance: !reconciled,
       splitVarianceDelta: delta,
       splitStatementAmount: stmtAmt,
+      splitDerivedCashAmount: Math.max(0, derivedCash),
+      awaitingCashStatement: !reconciled,
       ...(stmtLitersNum != null ? { splitStatementLiters: stmtLitersNum } : {}),
     };
   }
@@ -146,29 +164,79 @@ export async function persistFuelMatchPair(
   await kv.set(`fuel_entry:${linked.statement.id}`, linked.statement);
   await kv.set(`fuel_entry:${linked.driver.id}`, linked.driver);
 
-  // Mirror split recon flags onto cash sibling transaction (Review Queue surface).
+  // Mirror split recon onto cash sibling transaction — set derived cash amount when reconciled.
   try {
     const drvMeta = metaOf(linked.driver);
     const fillGroupId = typeof drvMeta.fillGroupId === "string" ? drvMeta.fillGroupId : "";
-    if (fillGroupId && (drvMeta.splitVariance === true || drvMeta.splitReconciled === true)) {
+    if (
+      fillGroupId &&
+      (drvMeta.splitVariance === true ||
+        drvMeta.splitReconciled === true ||
+        drvMeta.splitDerivedCashAmount != null)
+    ) {
       const txs = (await kv.getByPrefix("transaction:")) || [];
       for (const raw of txs) {
         const tx = raw as Record<string, unknown>;
         const tm = metaOf(tx);
         if (tm.fillGroupId !== fillGroupId || tm.splitRole !== "cash") continue;
+
+        const reconciled = drvMeta.splitReconciled === true;
+        const derivedCash = Math.abs(Number(drvMeta.splitDerivedCashAmount) || 0);
+        const nextMeta: Record<string, unknown> = {
+          ...tm,
+          splitReconciled: reconciled,
+          splitVariance: drvMeta.splitVariance === true,
+          splitVarianceDelta: drvMeta.splitVarianceDelta,
+          splitStatementAmount: drvMeta.splitStatementAmount,
+          splitDerivedCashAmount: drvMeta.splitDerivedCashAmount,
+          splitPumpTotal: drvMeta.splitPumpTotal,
+          splitExpectedCardAmount: drvMeta.splitExpectedCardAmount,
+        };
+
+        let nextAmount = tx.amount;
+        if (reconciled) {
+          // Cash reimbursement amount now known — clear awaiting; amount is negative expense
+          nextAmount = derivedCash > 0 ? -derivedCash : 0;
+          nextMeta.awaitingCashStatement = false;
+        } else {
+          // Negative-cash / variance — do not invent reimbursement
+          nextMeta.awaitingCashStatement = true;
+        }
+
         const patched = {
           ...tx,
-          metadata: {
-            ...tm,
-            splitReconciled: drvMeta.splitReconciled === true,
-            splitVariance: drvMeta.splitVariance === true,
-            splitVarianceDelta: drvMeta.splitVarianceDelta,
-            splitStatementAmount: drvMeta.splitStatementAmount,
-            splitExpectedCardAmount: drvMeta.splitExpectedCardAmount,
-            splitPumpTotal: drvMeta.splitPumpTotal,
-          },
+          amount: nextAmount,
+          metadata: nextMeta,
         };
         await kv.set(`transaction:${tx.id}`, patched);
+
+        // Sync linked cash fuel_entry if already posted
+        const linkedEntryId =
+          typeof tm.linkedFuelEntryId === "string"
+            ? tm.linkedFuelEntryId
+            : typeof tx.fuelEntryId === "string"
+              ? tx.fuelEntryId
+              : null;
+        if (linkedEntryId && reconciled) {
+          const fe = await kv.get(`fuel_entry:${linkedEntryId}`);
+          if (fe && typeof fe === "object") {
+            const entry = fe as Record<string, unknown>;
+            const em = metaOf(entry);
+            await kv.set(`fuel_entry:${linkedEntryId}`, {
+              ...entry,
+              amount: derivedCash,
+              metadata: {
+                ...em,
+                awaitingCashStatement: false,
+                splitReconciled: true,
+                splitVariance: false,
+                splitDerivedCashAmount: derivedCash,
+                splitStatementAmount: drvMeta.splitStatementAmount,
+                splitPumpTotal: drvMeta.splitPumpTotal,
+              },
+            });
+          }
+        }
         break;
       }
     }

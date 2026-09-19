@@ -324,9 +324,43 @@ describe('applyFuelMatchLinks split volume owner', () => {
     expect(linked.driver?.metadata?.splitStatementLiters).toBe(20);
     expect(linked.driver?.metadata?.splitReconciled).toBe(true);
     expect(linked.driver?.metadata?.splitVariance).toBe(false);
+    expect(linked.driver?.metadata?.splitDerivedCashAmount).toBe(1500);
+    expect(linked.driver?.metadata?.awaitingCashStatement).toBe(false);
   });
 
-  it('flags split variance when statement amount differs beyond tolerance', () => {
+  it('flags variance when statement exceeds pump (negative cash)', () => {
+    const statement = entry({
+      id: 'stmt-over',
+      amount: 6000,
+      liters: 30,
+      entrySource: 'fuel-card',
+      metadata: { importSource: 'jaa_raw' },
+    });
+    const driver = entry({
+      id: 'drv-over',
+      amount: 0,
+      liters: 0,
+      entrySource: 'driver-portal',
+      paymentSource: 'Gas_Card',
+      metadata: {
+        fillGroupId: 'fg-over',
+        splitVolumeOwner: false,
+        splitPumpTotal: 5000,
+      },
+    });
+    const linked = applyFuelMatchLinks({
+      status: 'matched',
+      statementEntry: statement,
+      driverEntry: driver,
+      score: 90,
+      notes: 'test',
+    });
+    expect(linked.driver?.metadata?.splitVariance).toBe(true);
+    expect(linked.driver?.metadata?.splitReconciled).toBe(false);
+    expect(linked.driver?.metadata?.awaitingCashStatement).toBe(true);
+  });
+
+  it('flags split variance for legacy claim when statement disagrees with typed expected card', () => {
     const statement = entry({
       id: 'stmt-var',
       amount: 4200,

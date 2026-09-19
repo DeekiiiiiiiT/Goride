@@ -67,7 +67,7 @@ export function PaymentMethodSelector({
             <div className="text-center">
               <p className="font-bold">Gas Card + Cash</p>
               <p className="text-[10px] text-slate-500">
-                Card ran short or cash topped up — one pump stop
+                Pump photo now; cash amount set from the gas card statement
               </p>
             </div>
           </Button>

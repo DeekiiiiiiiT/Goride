@@ -34,6 +34,8 @@ import {
   formatFuelLogDate,
   humanizeEntryType,
 } from './fuelLogDisplay';
+import { buildSplitBreakdown, isPendingSplitEntry } from './splitFillDisplay';
+import { splitReconTolerance } from '@roam/fuel-core';
 
 /**
  * Read-only detail view for a single fuel entry (classic Fuel Log Details overlay).
@@ -44,6 +46,8 @@ export type FuelEntryDetailSheetProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   entry: FuelEntry | null;
+  /** Sibling rows for a Gas Card + Cash fill (same fillGroupId). */
+  splitSiblings?: FuelEntry[];
   vehicleLabel?: string;
   driverLabel?: string;
   stationLabel?: string;
@@ -93,6 +97,7 @@ export function FuelEntryDetailSheet({
   open,
   onOpenChange,
   entry,
+  splitSiblings,
   vehicleLabel,
   driverLabel,
   stationLabel,
@@ -103,6 +108,17 @@ export function FuelEntryDetailSheet({
   onEdit,
 }: FuelEntryDetailSheetProps) {
   if (!entry) return null;
+
+  const splitGroup =
+    splitSiblings && splitSiblings.length > 0
+      ? splitSiblings
+      : isPendingSplitEntry(entry)
+        ? [entry]
+        : [];
+  const splitBreakdown = splitGroup.length > 0 ? buildSplitBreakdown(splitGroup) : null;
+  const splitTolerance = splitBreakdown
+    ? splitReconTolerance(splitBreakdown.pumpTotal)
+    : null;
 
   const liters = typeof entry.liters === 'number' ? entry.liters : 0;
   const amount = entry.amount ?? 0;
@@ -115,7 +131,10 @@ export function FuelEntryDetailSheet({
   const curOdo = Number(entry.odometer) || 0;
   const delta = prevOdometer != null ? Math.abs(curOdo - prevOdometer) : null;
   const isRegression = prevOdometer != null ? curOdo < prevOdometer : false;
-  const paidBy = paymentLabel || '—';
+  const paidBy =
+    splitBreakdown && splitGroup.length >= 2
+      ? 'Gas Card + Cash'
+      : paymentLabel || '—';
   const stationName =
     stationLabel ||
     entry.vendor ||
@@ -268,20 +287,59 @@ export function FuelEntryDetailSheet({
                 icon={<Link2 className="h-3.5 w-3.5 text-slate-400" />}
                 label="Split fill"
                 value={
-                  <div className="flex flex-col gap-0.5 text-xs">
-                    <span>
-                      Linked pump stop · {String(entry.metadata.splitRole || 'part')}
-                      {entry.metadata.splitPumpTotal != null
-                        ? ` · pump ${formatFuelMoney(Number(entry.metadata.splitPumpTotal) || 0)}`
-                        : ''}
-                    </span>
-                    {entry.metadata.splitVariance === true && (
-                      <Badge
-                        variant="outline"
-                        className="w-fit border-rose-200 bg-rose-50 text-[10px] text-rose-800"
-                      >
-                        Split amount mismatch
-                      </Badge>
+                  <div className="flex flex-col gap-1 text-xs">
+                    {splitBreakdown ? (
+                      <>
+                        <span>
+                          Pump total {formatFuelMoney(splitBreakdown.pumpTotal)}
+                        </span>
+                        <span>
+                          Cash portion{' '}
+                          {splitBreakdown.cashPendingStatement
+                            ? 'pending statement'
+                            : formatFuelMoney(splitBreakdown.cashAmount)}
+                        </span>
+                        <span>
+                          Gas card{' '}
+                          {splitBreakdown.statementAmount != null
+                            ? `${formatFuelMoney(splitBreakdown.statementAmount)} (statement)`
+                            : 'awaiting statement'}
+                        </span>
+                        {splitBreakdown.cashPendingStatement && (
+                          <span className="text-amber-600">
+                            Cash reimbursement waits for the gas card statement
+                          </span>
+                        )}
+                        {splitGroup.length < 2 && !splitBreakdown.cashPendingStatement && (
+                          <span className="text-amber-600">
+                            Cash approval or statement still open
+                          </span>
+                        )}
+                        {splitBreakdown.hasMismatch && (
+                          <Badge
+                            variant="outline"
+                            className="w-fit border-rose-200 bg-rose-50 text-[10px] text-rose-800"
+                          >
+                            Amount mismatch
+                            {splitBreakdown.varianceDelta != null
+                              ? ` · Δ ${formatFuelMoney(Math.abs(splitBreakdown.varianceDelta))}`
+                              : ''}
+                            {splitTolerance != null
+                              ? ` (tolerance ${formatFuelMoney(splitTolerance)})`
+                              : ''}
+                          </Badge>
+                        )}
+                        {splitBreakdown.reconciled && (
+                          <Badge
+                            variant="outline"
+                            className="w-fit border-emerald-200 bg-emerald-50 text-[10px] text-emerald-800"
+                          >
+                            Mismatch acknowledged
+                          </Badge>
+                        )}
+                      </>
+                    ) : (
+                      <span>Linked pump stop</span>
                     )}
                   </div>
                 }

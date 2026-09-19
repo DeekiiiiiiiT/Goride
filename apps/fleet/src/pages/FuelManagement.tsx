@@ -95,6 +95,7 @@ import {
 import { Checkbox } from '../components/ui/checkbox';
 import { Label } from '../components/ui/label';
 import { toast } from 'sonner';
+import { acknowledgeSplitVarianceMeta } from '@roam/fuel-core';
 import { DateRange } from 'react-day-picker';
 import type { FuelCard, FuelEntry, FuelScenario, MileageAdjustment, FuelDispute, WeeklyFuelReport, FinalizedFuelReport, JaaProgram } from '../types/fuel';
 import type { FinancialTransaction } from '../types/data';
@@ -1328,6 +1329,11 @@ function FuelManagementInner({
       stationOpts?: { matchedStationId?: string; stationLocation?: string }
   ) => {
       try {
+          const existing = transactions.find((t) => t.id === id);
+          if (existing?.metadata?.awaitingCashStatement === true) {
+              toast.error('Cash amount waits for the gas card statement — cannot approve yet');
+              return;
+          }
           const updated = await api.approveExpense(id, notes, undefined, stationOpts);
           setTransactions(prev => prev.map(t => t.id === id ? updated : t));
           
@@ -1347,9 +1353,7 @@ function FuelManagementInner({
           console.error(e);
           toast.error("Failed to approve reimbursement");
       }
-  }, [loadLogsAndTransactions, invalidateReviewQueueCounts]);
-
-  const handleRejectReimbursement = useCallback(async (id: string, reason?: string) => {
+  }, [transactions, loadLogsAndTransactions, invalidateReviewQueueCounts]);
       try {
           const updated = await api.rejectExpense(id, reason);
           setTransactions(prev => prev.map(t => t.id === id ? updated : t));
@@ -1360,6 +1364,41 @@ function FuelManagementInner({
           toast.error("Failed to reject reimbursement");
       }
   }, [invalidateReviewQueueCounts]);
+
+  const handleAcknowledgeSplitVariance = useCallback(async (tx: FinancialTransaction) => {
+      const fillGroupId = String(tx.metadata?.fillGroupId || '');
+      if (!fillGroupId) {
+          toast.error('Missing split fill group');
+          return;
+      }
+      try {
+          const patchedTx = {
+              ...tx,
+              metadata: acknowledgeSplitVarianceMeta(tx.metadata as Record<string, unknown>),
+          };
+          const savedTx = await api.saveTransaction(patchedTx);
+          setTransactions((prev) => prev.map((t) => (t.id === savedTx.id ? savedTx : t)));
+
+          const siblings = logs.filter(
+              (e) => String(e.metadata?.fillGroupId || '') === fillGroupId,
+          );
+          for (const entry of siblings) {
+              const updated = await fuelService.saveFuelEntry({
+                  ...entry,
+                  metadata: acknowledgeSplitVarianceMeta(
+                      (entry.metadata || {}) as Record<string, unknown>,
+                  ),
+              });
+              setLogs((prev) => prev.map((l) => (l.id === updated.id ? updated : l)));
+          }
+          invalidateReviewQueueCounts();
+          toast.success('Split mismatch acknowledged');
+      } catch (e) {
+          console.error(e);
+          toast.error('Failed to acknowledge split mismatch');
+          throw e;
+      }
+  }, [logs, invalidateReviewQueueCounts]);
 
     const handleSaveExpense = async (transactionData: any, shouldRefresh = true) => {
         setIsSyncing(true);
@@ -1926,6 +1965,7 @@ function FuelManagementInner({
               onDelete={can('fuel.delete_entry') ? handleDeleteExpense : undefined}
               onViewDriverLedger={onViewDriverLedger}
               onApproveLogReview={handleApproveLogReview}
+              onAcknowledgeSplitVariance={handleAcknowledgeSplitVariance}
               isRefreshing={isRefreshing}
               onViewInTransactionLogs={({ fuelEntryId, date, vehicleId }) => {
                   setActiveTab('logs');

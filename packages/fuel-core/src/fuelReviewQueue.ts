@@ -134,7 +134,10 @@ export function isLogReviewEligible(t: FuelClassifyFields): boolean {
 }
 
 export function isPendingReadyForReview(t: FuelClassifyFields): boolean {
-  return isPendingFuelQueueRow(t) && !isStationGateHeld(t);
+  if (!isPendingFuelQueueRow(t) || isStationGateHeld(t)) return false;
+  // Cash half of a split fill waits on Dominion CSV — not reimbursable yet
+  if (metaFlagOn(t.metadata?.awaitingCashStatement)) return false;
+  return true;
 }
 
 /** YYYY-MM-DD from tx.date (ISO or date-only). */
@@ -152,7 +155,7 @@ export function holdReasonForUnapprovedTx(t: FuelClassifyFields): FuelUnapproved
   return 'pending_review';
 }
 
-/** Statement amount disagreed with driver's expected card claim on a split fill. */
+/** Statement vs pump (or legacy claim) disagreement on a split fill. */
 export function isUnresolvedSplitVariance(t: FuelClassifyFields): boolean {
   const m = t.metadata || {};
   if (!metaFlagOn(m.splitVariance)) return false;
@@ -160,9 +163,20 @@ export function isUnresolvedSplitVariance(t: FuelClassifyFields): boolean {
   return typeof m.fillGroupId === 'string' && String(m.fillGroupId).length > 0;
 }
 
+/** Stamp acknowledge without inventing cash — variance history stays for audit. */
+export function acknowledgeSplitVarianceMeta(
+  meta: Record<string, unknown> | null | undefined,
+): Record<string, unknown> {
+  return {
+    ...(meta && typeof meta === 'object' ? meta : {}),
+    splitReconciled: true,
+  };
+}
+
 /**
  * Pending fuel reimbursements in [startYmd, endYmd] inclusive — Finalize hard blockers.
  * Does not invent fuel_entry rows; Pending txs have no fuel_entry yet.
+ * Awaiting-cash split halves (waiting on statement) are excluded — not actionable yet.
  */
 export function listUnapprovedFuelTxInWindow(
   txs: FuelReviewQueueTx[],
@@ -176,6 +190,7 @@ export function listUnapprovedFuelTxInWindow(
   const out: FuelUnapprovedTxBlocker[] = [];
   for (const t of txs) {
     if (!isPendingFuelQueueRow(t)) continue;
+    if (metaFlagOn(t.metadata?.awaitingCashStatement)) continue;
     const dateYmd = fuelTxDateYmd(t);
     if (!dateYmd || dateYmd < start || dateYmd > end) continue;
     out.push({

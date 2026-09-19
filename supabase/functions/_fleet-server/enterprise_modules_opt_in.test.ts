@@ -4,9 +4,9 @@ import {
   resolveEffectiveModules,
 } from "./enterprise_modules.ts";
 
-Deno.test("fuelSplitPayment stays off without explicit org override", () => {
+Deno.test("fuelSplitPayment is on by default (product line allows, no org override)", () => {
   const effective = resolveEffectiveModules(DEFAULT_ENTERPRISE_MODULES, null);
-  assertEquals(effective.fuelSplitPayment, false);
+  assertEquals(effective.fuelSplitPayment, true);
 });
 
 Deno.test("fuelSplitPayment stays off when org override is false", () => {
@@ -16,7 +16,7 @@ Deno.test("fuelSplitPayment stays off when org override is false", () => {
   assertEquals(effective.fuelSplitPayment, false);
 });
 
-Deno.test("fuelSplitPayment turns on only when org override is true", () => {
+Deno.test("fuelSplitPayment stays on when org override is true", () => {
   const effective = resolveEffectiveModules(DEFAULT_ENTERPRISE_MODULES, {
     fuelSplitPayment: true,
   });

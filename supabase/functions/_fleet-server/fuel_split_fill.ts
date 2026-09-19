@@ -107,12 +107,19 @@ export async function persistSplitFill(
     Number(
       (cashTx.metadata as Record<string, unknown> | undefined)?.splitPumpTotal ??
         (cardEntry.metadata as Record<string, unknown> | undefined)?.splitPumpTotal,
-    ) || Math.abs(Number(cashTx.amount) || 0);
-
-  const expectedCard =
-    Number(
-      (cardEntry.metadata as Record<string, unknown> | undefined)?.splitExpectedCardAmount,
     ) || 0;
+
+  if (!(pumpTotal > 0)) {
+    return {
+      ok: false,
+      status: 400,
+      error: "splitPumpTotal is required and must be greater than zero",
+      code: "MISSING_PUMP_TOTAL",
+    };
+  }
+
+  // Cash amount is $0 until Dominion statement derives cash = pump − card
+  cashTx.amount = 0;
 
   cashTx.metadata = ensureFillGroupMeta(
     cashTx.metadata as Record<string, unknown> | undefined,
@@ -121,6 +128,7 @@ export async function persistSplitFill(
     {
       splitPumpTotal: pumpTotal,
       splitVolumeOwner: true,
+      awaitingCashStatement: true,
     },
   );
 
@@ -130,7 +138,6 @@ export async function persistSplitFill(
     "card",
     {
       splitPumpTotal: pumpTotal,
-      splitExpectedCardAmount: expectedCard,
       splitVolumeOwner: false,
       awaitingCardStatement: true,
       countsInFuelSpend: false,
@@ -288,18 +295,33 @@ export function assertSplitFillAllowed(c: Context): { allowed: true } | { allowe
   return { allowed: true };
 }
 
-/** RBAC + fuelSplitPayment opt-in module (fail-closed). */
+/**
+ * Resolve org for the split-fill module gate.
+ * Prefer request org scope, then rbac.organizationId; fleet_owner / admin fall back to userId.
+ */
+export function resolveSplitFillOrgId(c: Context, rbacUser: RbacUser): string | null {
+  let orgId = getOrgId(c) || rbacUser.organizationId || null;
+  if (!orgId && (rbacUser.resolvedRole === "fleet_owner" || rbacUser.rawRole === "admin")) {
+    orgId = rbacUser.userId;
+  }
+  return orgId;
+}
+
+export type SplitFillModuleChecker = (
+  orgId: string,
+  moduleKey: "fuelSplitPayment",
+) => Promise<boolean>;
+
+/** RBAC + fuelSplitPayment module gate (org can still disable). */
 export async function assertSplitFillAllowedAsync(
   c: Context,
+  checkModule: SplitFillModuleChecker = isOrgModuleEnabled,
 ): Promise<{ allowed: true } | { allowed: false; status: 401 | 403; body: Record<string, unknown> }> {
   const rbac = assertSplitFillAllowed(c);
   if (!rbac.allowed) return rbac;
 
   const rbacUser = c.get("rbacUser") as RbacUser;
-  let orgId = getOrgId(c) || rbacUser.organizationId || null;
-  if (!orgId && (rbacUser.resolvedRole === "fleet_owner" || rbacUser.rawRole === "admin")) {
-    orgId = rbacUser.userId;
-  }
+  const orgId = resolveSplitFillOrgId(c, rbacUser);
   if (!orgId) {
     return {
       allowed: false,
@@ -313,7 +335,7 @@ export async function assertSplitFillAllowedAsync(
     };
   }
 
-  const enabled = await isOrgModuleEnabled(orgId, "fuelSplitPayment");
+  const enabled = await checkModule(orgId, "fuelSplitPayment");
   if (!enabled) {
     return {
       allowed: false,

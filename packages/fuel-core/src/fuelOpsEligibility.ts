@@ -38,6 +38,7 @@ export function countsInFuelLogSpend(entry: FuelEntry): boolean {
   const meta = entry.metadata as Record<string, unknown> | undefined;
   if (meta?.jaaRowKind === 'fee' || meta?.jaaRowKind === 'declined') return false;
   if (meta?.awaitingCardStatement) return false;
+  if (meta?.awaitingCashStatement) return false;
   if (meta?.countsInFuelSpend === false) return false;
   if (isGasCardFuelEntry(entry)) return countsInGasCardSpend(entry);
   return true;
@@ -66,12 +67,26 @@ export function fuelOpsSpendAmount(entry: FuelEntry): number {
 }
 
 /**
- * Litres for ops analytics / JMD/L — same eligibility as spend (F-3).
- * Statement ledger litres excluded; fee/declined/awaiting rows do not dilute price.
+ * Litres for ops analytics / JMD/L.
+ * Spend-eligible rows count as today; split volume-owner awaiting cash still counts
+ * pump liters (tank truth) without counting spend until statement sets cash amount.
  */
 export function fuelOpsLiters(entry: FuelEntry): number {
-  if (!isFuelOpsLogEntry(entry) || !countsInFuelLogSpend(entry)) return 0;
-  return Number(entry.liters) || 0;
+  if (!isFuelOpsLogEntry(entry)) return 0;
+  const meta = entry.metadata as Record<string, unknown> | undefined;
+  const liters = Number(entry.liters) || 0;
+  if (liters <= 0) return 0;
+  if (countsInFuelLogSpend(entry)) return liters;
+  // Split cash volume owner waiting on statement — liters known at pump
+  if (
+    meta?.awaitingCashStatement === true &&
+    meta?.splitVolumeOwner === true &&
+    typeof meta?.fillGroupId === 'string' &&
+    meta.fillGroupId.length > 0
+  ) {
+    return liters;
+  }
+  return 0;
 }
 
 /** @deprecated Alias — use fuelOpsLiters (now spend-eligible). */

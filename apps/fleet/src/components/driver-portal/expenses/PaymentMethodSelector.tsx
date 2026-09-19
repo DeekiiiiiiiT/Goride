@@ -4,6 +4,10 @@ import { Button } from "../../ui/button";
 import { CreditCard, Wallet } from "lucide-react";
 import { Label } from "../../ui/label";
 
+/**
+ * Fleet in-app driver portal — Gas Card + Cash split is intentionally omitted.
+ * Live split logging lives in apps/driver (PaymentMethodSelector + fuelSplitPayment module).
+ */
 interface PaymentMethodSelectorProps {
   /** personal_cash kept in type for older callers; UI no longer offers it. */
   onSelect: (method: 'gas_card' | 'personal_cash' | 'rideshare_cash') => void;

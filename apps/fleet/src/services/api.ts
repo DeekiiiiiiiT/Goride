@@ -1636,7 +1636,7 @@ export const api = {
 
   async createWorkforceInviteByRoamTag(payload: {
     roamTag: string;
-    serviceLine?: 'rush_delivery';
+    serviceLine?: 'rideshare' | 'rush_delivery';
   }) {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/workforce/invites/by-roam-tag`, {
       method: 'POST',

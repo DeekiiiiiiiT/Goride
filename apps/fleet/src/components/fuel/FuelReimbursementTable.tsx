@@ -33,7 +33,9 @@ import {
     isStationGateHeld,
     isUnresolvedSplitVariance,
     metaFlagOn,
+    splitReconTolerance,
 } from '@roam/fuel-core';
+import { formatFuelMoney } from '../../utils/formatFuelMoney';
 
 /** Liters from stored quantity/fuelVolume, or amount ÷ price/L (same as manual log). */
 function computeResolvedFuelLiters(tx: FinancialTransaction): number | null {
@@ -159,6 +161,8 @@ interface FuelReimbursementTableProps {
     onDelete?: (id: string) => void;
     onViewDriverLedger?: (driverId: string) => void;
     onApproveLogReview?: (id: string, odometer: number, notes?: string) => void;
+    /** Acknowledge split amount mismatch — never edits cash amount. */
+    onAcknowledgeSplitVariance?: (tx: FinancialTransaction) => Promise<void> | void;
     isRefreshing?: boolean;
     /** Jump to Transaction Logs for a posted fuel entry */
     onViewInTransactionLogs?: (opts: { fuelEntryId?: string; date?: string; vehicleId?: string }) => void;
@@ -173,6 +177,7 @@ export function FuelReimbursementTable({
     onDelete,
     onViewDriverLedger,
     onApproveLogReview,
+    onAcknowledgeSplitVariance,
     isRefreshing = false,
     onViewInTransactionLogs,
 }: FuelReimbursementTableProps) {
@@ -195,6 +200,8 @@ export function FuelReimbursementTable({
     const [approvalBrand, setApprovalBrand] = useState('');
     const [approvalMatchedStationId, setApprovalMatchedStationId] = useState('');
     const [approvalStationLocation, setApprovalStationLocation] = useState('');
+    const [splitMismatchTx, setSplitMismatchTx] = useState<FinancialTransaction | null>(null);
+    const [isAcknowledgingSplit, setIsAcknowledgingSplit] = useState(false);
 
     useEffect(() => {
         if (!isDetailsOpen) return;
@@ -303,6 +310,23 @@ export function FuelReimbursementTable({
     const pendingReadyForReview = pendingAll.filter((t) => !isStationGateHeld(t));
 
     const logReview = transactions.filter((t) => isLogReviewEligible(t));
+    const splitMismatchTxs = useMemo(
+        () => transactions.filter((t) => isUnresolvedSplitVariance(t)),
+        [transactions],
+    );
+
+    const confirmAcknowledgeSplit = async () => {
+        if (!splitMismatchTx || !onAcknowledgeSplitVariance) return;
+        setIsAcknowledgingSplit(true);
+        try {
+            await onAcknowledgeSplitVariance(splitMismatchTx);
+            setSplitMismatchTx(null);
+        } catch (e) {
+            console.error('[SplitMismatch] Acknowledge failed:', e);
+        } finally {
+            setIsAcknowledgingSplit(false);
+        }
+    };
 
     const handleAction = (type: 'approve' | 'reject') => {
         setAction(type);
@@ -856,6 +880,14 @@ export function FuelReimbursementTable({
                                 </Badge>
                             )}
                         </TabsTrigger>
+                        <TabsTrigger value="split-mismatches">
+                            Split mismatches
+                            {splitMismatchTxs.length > 0 && (
+                                <Badge variant="destructive" className="ml-1.5 text-[10px] px-1.5 py-0">
+                                    {splitMismatchTxs.length}
+                                </Badge>
+                            )}
+                        </TabsTrigger>
                     </TabsList>
                     {pendingStationHoldCount > 0 && (
                         <div className="flex items-center gap-2 rounded-md border border-sky-200 bg-sky-50 px-3 py-1.5 text-xs text-sky-900">
@@ -896,7 +928,162 @@ export function FuelReimbursementTable({
                         renderTable(pendingReadyForReview, true, true, true)
                     )}
                 </TabsContent>
+
+                <TabsContent value="split-mismatches" className="space-y-4">
+                    {splitMismatchTxs.length === 0 ? (
+                        <div className="rounded-md border bg-white p-8 text-center text-slate-500">
+                            <p className="text-sm">No statement vs pump disagreements.</p>
+                            <p className="text-xs text-slate-400 mt-1">
+                              When a Dominion card charge exceeds the pump total (can&apos;t derive cash), it appears here.
+                            </p>
+                        </div>
+                    ) : (
+                        <div className="rounded-md border bg-white overflow-hidden">
+                            <Table>
+                                <TableHeader>
+                                    <TableRow>
+                                        <TableHead>Date</TableHead>
+                                        <TableHead>Driver</TableHead>
+                                        <TableHead>Pump / Cash / Card</TableHead>
+                                        <TableHead>Delta</TableHead>
+                                        <TableHead className="text-right">Action</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {splitMismatchTxs.map((tx) => {
+                                        const m = (tx.metadata || {}) as Record<string, unknown>;
+                                        const pump = Number(m.splitPumpTotal) || 0;
+                                        const statement = Number(m.splitStatementAmount);
+                                        const derived = Number(m.splitDerivedCashAmount);
+                                        const delta = Number(m.splitVarianceDelta);
+                                        const tol = splitReconTolerance(pump);
+                                        return (
+                                            <TableRow key={tx.id}>
+                                                <TableCell className="text-xs">{tx.date}</TableCell>
+                                                <TableCell className="text-xs">
+                                                    {tx.driverName || tx.driverId || '—'}
+                                                </TableCell>
+                                                <TableCell className="text-xs">
+                                                    <div className="flex flex-col gap-0.5">
+                                                        <span>Pump {formatFuelMoney(pump)}</span>
+                                                        <span className="text-slate-500">
+                                                            {Number.isFinite(statement)
+                                                                ? `Statement card ${formatFuelMoney(statement)}`
+                                                                : 'Statement card —'}
+                                                            {Number.isFinite(derived)
+                                                                ? ` · Derived cash ${formatFuelMoney(derived)}`
+                                                                : ''}
+                                                        </span>
+                                                    </div>
+                                                </TableCell>
+                                                <TableCell className="text-xs">
+                                                    <Badge
+                                                        variant="outline"
+                                                        className="border-rose-200 bg-rose-50 text-rose-800"
+                                                    >
+                                                        {Number.isFinite(delta)
+                                                            ? `Δ ${formatFuelMoney(Math.abs(delta))}`
+                                                            : 'Mismatch'}
+                                                    </Badge>
+                                                    <div className="mt-0.5 text-[10px] text-slate-400">
+                                                        Tol {formatFuelMoney(tol)}
+                                                    </div>
+                                                </TableCell>
+                                                <TableCell className="text-right">
+                                                    <Button
+                                                        size="sm"
+                                                        variant="outline"
+                                                        className="h-8 text-xs"
+                                                        onClick={() => setSplitMismatchTx(tx)}
+                                                    >
+                                                        Review
+                                                    </Button>
+                                                </TableCell>
+                                            </TableRow>
+                                        );
+                                    })}
+                                </TableBody>
+                            </Table>
+                        </div>
+                    )}
+                </TabsContent>
             </Tabs>
+
+            <Dialog
+                open={!!splitMismatchTx}
+                onOpenChange={(open) => {
+                    if (!open) setSplitMismatchTx(null);
+                }}
+            >
+                <DialogContent className="sm:max-w-[480px]">
+                    <DialogHeader>
+                        <DialogTitle>Split amount mismatch</DialogTitle>
+                        <DialogDescription>
+                            Statement card charge exceeds the pump total, so cash can&apos;t be derived.
+                            Cash is not auto-changed.
+                        </DialogDescription>
+                    </DialogHeader>
+                    {splitMismatchTx && (() => {
+                        const m = (splitMismatchTx.metadata || {}) as Record<string, unknown>;
+                        const pump = Number(m.splitPumpTotal) || 0;
+                        const statement = Number(m.splitStatementAmount);
+                        const derived = Number(m.splitDerivedCashAmount);
+                        const delta = Number(m.splitVarianceDelta);
+                        const tol = splitReconTolerance(pump);
+                        const sibling = logs.find(
+                            (e) =>
+                                e.metadata?.fillGroupId === m.fillGroupId &&
+                                e.metadata?.splitRole === 'card',
+                        );
+                        return (
+                            <div className="space-y-3 text-sm">
+                                <div className="rounded-md border bg-slate-50 px-3 py-2 space-y-1">
+                                    <div className="flex justify-between"><span className="text-slate-500">Pump total</span><span className="font-medium">{formatFuelMoney(pump)}</span></div>
+                                    <div className="flex justify-between"><span className="text-slate-500">Statement card</span><span className="font-medium">{Number.isFinite(statement) ? formatFuelMoney(statement) : '—'}</span></div>
+                                    <div className="flex justify-between"><span className="text-slate-500">Derived cash</span><span className="font-medium">{Number.isFinite(derived) ? formatFuelMoney(derived) : '—'}</span></div>
+                                    <div className="flex justify-between"><span className="text-slate-500">Over pump</span><span className="font-medium text-rose-700">{Number.isFinite(delta) ? formatFuelMoney(Math.abs(delta)) : '—'}</span></div>
+                                    <div className="flex justify-between"><span className="text-slate-500">Tolerance</span><span className="font-medium">{formatFuelMoney(tol)}</span></div>
+                                </div>
+                                {sibling && onViewInTransactionLogs && (
+                                    <Button
+                                        variant="link"
+                                        className="h-auto p-0 text-xs"
+                                        onClick={() =>
+                                            onViewInTransactionLogs({
+                                                fuelEntryId: sibling.id,
+                                                date: sibling.date,
+                                                vehicleId: sibling.vehicleId,
+                                            })
+                                        }
+                                    >
+                                        Open in Transaction Logs
+                                    </Button>
+                                )}
+                            </div>
+                        );
+                    })()}
+                    <DialogFooter className="gap-2 sm:gap-0">
+                        <Button variant="outline" onClick={() => setSplitMismatchTx(null)}>
+                            Close
+                        </Button>
+                        {onAcknowledgeSplitVariance && can('fuel.approve') && (
+                            <Button
+                                onClick={() => void confirmAcknowledgeSplit()}
+                                disabled={isAcknowledgingSplit}
+                            >
+                                {isAcknowledgingSplit ? (
+                                    <>
+                                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                        Saving…
+                                    </>
+                                ) : (
+                                    'Acknowledge mismatch'
+                                )}
+                            </Button>
+                        )}
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
 
             {/* Details Modal (existing Pending detail view) */}
             <Dialog open={isDetailsOpen} onOpenChange={(open) => { if(!open) { setIsDetailsOpen(false); setAction(null); } }}>

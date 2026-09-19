@@ -90,6 +90,9 @@ export function FuelLogTable({
   const [filterCycleId, setFilterCycleId] = useState<string | null>(query.cycleId || null);
   const [activeView, setActiveView] = useState<'transactions' | 'cycles'>(query.view);
   const [viewingEntry, setViewingEntry] = useState<FuelEntry | null>(null);
+  const [viewingSplitSiblings, setViewingSplitSiblings] = useState<FuelEntry[] | undefined>(
+    undefined,
+  );
   const [focusEntryId, setFocusEntryId] = useState<string | null>(null);
   const [focusExceptions, setFocusExceptions] = useState(false);
   const exceptionQueueRef = useRef<HTMLDivElement | null>(null);
@@ -870,7 +873,10 @@ export function FuelLogTable({
             getDriverName={getDriverName}
             canEdit={can('fuel.edit_entry')}
             canDelete={can('fuel.delete_entry')}
-            onView={setViewingEntry}
+            onView={(entry, siblings) => {
+              setViewingEntry(entry);
+              setViewingSplitSiblings(siblings);
+            }}
             onEdit={onEdit}
             onDelete={onDelete}
             onPageChange={setPage}
@@ -896,9 +902,13 @@ export function FuelLogTable({
       <FuelEntryDetailSheet
         open={!!viewingEntry}
         onOpenChange={(open) => {
-          if (!open) setViewingEntry(null);
+          if (!open) {
+            setViewingEntry(null);
+            setViewingSplitSiblings(undefined);
+          }
         }}
         entry={viewingEntry}
+        splitSiblings={viewingSplitSiblings}
         vehicleLabel={viewingEntry ? getVehicleName(viewingEntry.vehicleId) : undefined}
         driverLabel={viewingEntry ? getDriverName(viewingEntry.driverId) : undefined}
         stationLabel={
@@ -929,6 +939,7 @@ export function FuelLogTable({
         canEdit={can('fuel.edit_entry')}
         onEdit={(entry) => {
           setViewingEntry(null);
+          setViewingSplitSiblings(undefined);
           onEdit(entry);
         }}
       />

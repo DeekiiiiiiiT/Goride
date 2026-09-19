@@ -90,7 +90,9 @@ export function WorkforcePendingInvites({ serviceLine }: { serviceLine: Workforc
                   {label}
                 </span>
                 {isTag ? (
-                  <p className="text-[11px] text-slate-500">Waiting for courier to accept</p>
+                  <p className="text-[11px] text-slate-500">
+                    Waiting for {serviceLine === 'rideshare' ? 'driver' : 'courier'} to accept
+                  </p>
                 ) : null}
               </div>
               <div className="flex shrink-0 items-center gap-1">

@@ -214,6 +214,7 @@ import { registerEnterpriseAdminRoutes } from "./enterprise_admin_routes.ts";
 import { registerEnterpriseIntakeAdminRoutes } from "./enterprise_intake_admin_routes.ts";
 import { registerWorkforceInviteRoutes } from "./workforce_invite_routes.ts";
 import { registerCourierRoamTagRoutes } from "./courier_roam_tag_routes.ts";
+import { registerDriverRoamTagRoutes } from "./driver_roam_tag_routes.ts";
 import { registerFleetTagRoutes } from "./fleet_tag_routes.ts";
 import { registerFleetModuleCheckoutRoutes } from "./fleet_module_checkout.ts";
 import {
@@ -12867,6 +12868,11 @@ export function registerResidualMonolithRoutes(app: Hono) {
   });
 
   registerCourierRoamTagRoutes(app, {
+    supabase,
+    requireAuth,
+  });
+
+  registerDriverRoamTagRoutes(app, {
     supabase,
     requireAuth,
   });

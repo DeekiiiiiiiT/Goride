@@ -171,7 +171,7 @@ import {
 } from "../ui/dialog";
 import { Label } from "../ui/label";
 import { Link2 } from 'lucide-react';
-import { WorkforceInvitePanel } from '../workforce/WorkforceInvitePanel';
+import { WorkforceInvitePanel, WorkforcePendingInvites } from '../workforce/WorkforceInvitePanel';
 // Interface for our View Model
 interface DriverProfile {
   id: string;
@@ -904,6 +904,7 @@ export function DriversPage({
         <CouriersPage embedded />
       ) : (
       <>
+        <WorkforcePendingInvites serviceLine="rideshare" />
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
             
             {/* Filters (Left) */}

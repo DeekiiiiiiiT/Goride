@@ -3,21 +3,33 @@ import { API_ENDPOINTS } from '../services/apiConfig';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../utils/supabase/client';
 
+export type FuelSplitPaymentGate = {
+  /** Module enabled for this org. */
+  enabled: boolean;
+  /** True while the modules fetch is in flight. */
+  loading: boolean;
+};
+
 /**
- * Opt-in org module — Gas Card + Cash split fills.
+ * Org module — Gas Card + Cash split fills (on by default for fleet).
  * Reads the same /enterprise/me/modules shell as fleet.
  */
-export function useFuelSplitPaymentEnabled(): boolean {
+export function useFuelSplitPaymentEnabled(): FuelSplitPaymentGate {
   const { user } = useAuth();
   const [enabled, setEnabled] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
     async function load() {
       if (!user) {
-        if (!cancelled) setEnabled(false);
+        if (!cancelled) {
+          setEnabled(false);
+          setLoading(false);
+        }
         return;
       }
+      if (!cancelled) setLoading(true);
       try {
         let { data: { session } } = await supabase.auth.getSession();
         const expiresAt = session?.expires_at ?? 0;
@@ -28,21 +40,33 @@ export function useFuelSplitPaymentEnabled(): boolean {
         }
         const token = session?.access_token;
         if (!token) {
-          if (!cancelled) setEnabled(false);
+          if (!cancelled) {
+            setEnabled(false);
+            setLoading(false);
+          }
           return;
         }
         const res = await fetch(`${API_ENDPOINTS.fleetCore}/enterprise/me/modules`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         if (!res.ok) {
-          if (!cancelled) setEnabled(false);
+          if (!cancelled) {
+            setEnabled(false);
+            setLoading(false);
+          }
           return;
         }
         const data = await res.json();
         const on = data?.effectiveModules?.fuelSplitPayment === true;
-        if (!cancelled) setEnabled(on);
+        if (!cancelled) {
+          setEnabled(on);
+          setLoading(false);
+        }
       } catch {
-        if (!cancelled) setEnabled(false);
+        if (!cancelled) {
+          setEnabled(false);
+          setLoading(false);
+        }
       }
     }
     void load();
@@ -51,5 +75,5 @@ export function useFuelSplitPaymentEnabled(): boolean {
     };
   }, [user?.id]);
 
-  return enabled;
+  return { enabled, loading };
 }

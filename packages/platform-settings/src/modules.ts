@@ -241,12 +241,12 @@ export const ENTERPRISE_MODULE_CATALOG: readonly ModuleCatalogEntry[] = [
     key: 'fuelSplitPayment',
     label: 'Fuel Split Payment',
     description: 'Drivers can log one fill paid partly by gas card and partly by cash.',
-    group: 'optional',
+    group: 'ops',
   },
 ] as const;
 
-/** Org must set true — missing override stays off even when product line allows. */
-export const OPT_IN_MODULE_KEYS = ['fuelSplitPayment'] as const;
+/** Reserved for modules that must stay off until an org explicitly opts in. (Empty — fuelSplitPayment is production-default on.) */
+export const OPT_IN_MODULE_KEYS = [] as const;
 
 /** Rush module keys default off — fail-closed at merge time. */
 export const RUSH_MODULE_KEYS = [

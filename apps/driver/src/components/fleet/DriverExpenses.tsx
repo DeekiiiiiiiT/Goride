@@ -47,7 +47,6 @@ import { GasCardSummary, type FuelPumpStep } from './expenses/GasCardSummary';
 import { derivePricePerLiter } from './expenses/FuelCashInputs';
 import { ReceiptUploader } from './expenses/ReceiptUploader';
 import { PumpNumbersConfirm } from './expenses/PumpNumbersConfirm';
-import { SplitCashPortion } from './expenses/SplitCashPortion';
 import { OdometerScanner } from './common/OdometerScanner';
 import { fuelService } from '../../services/fuelService';
 import { findActiveFuelCardForSession } from '../../utils/fuelCardMatch';
@@ -58,7 +57,7 @@ import { useFuelSplitPaymentEnabled } from '../../hooks/useFuelSplitPaymentEnabl
 import {
   buildCardSplitMetadata,
   buildCashSplitMetadata,
-  validateSplitCashAmounts,
+  validateSplitPumpAmounts,
 } from '@roam/fuel-core';
 
 interface ExpenseLoggerProps {
@@ -125,7 +124,7 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
   const { driverRecord } = useCurrentDriver();
   const { isOnline, addToQueue, queue } = useOffline();
   const { getLocation } = useGeolocation();
-  const fuelSplitEnabled = useFuelSplitPaymentEnabled();
+  const { enabled: fuelSplitEnabled, loading: fuelSplitLoading } = useFuelSplitPaymentEnabled();
   const pendingFuelOffline = queue.filter(
     (q) =>
       q.type === 'SUBMIT_FUEL_EXPENSE' ||
@@ -154,8 +153,6 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
   const [date, setDate] = useState<Date>(new Date());
   const [time, setTime] = useState<string>(format(new Date(), 'HH:mm'));
   const [amount, setAmount] = useState('');
-  /** Split fills only — cash portion of pump total. */
-  const [cashPortion, setCashPortion] = useState('');
   const [category, setCategory] = useState<string>('Fuel');
   const [notes, setNotes] = useState('');
   const [odometer, setOdometer] = useState('');
@@ -196,7 +193,6 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
 
   const resetForm = () => {
     setAmount('');
-    setCashPortion('');
     setCategory('Fuel');
     setNotes('');
     setOdometer('');
@@ -359,12 +355,25 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
       
       // Add fuel entries
       myFuel.forEach((f: any) => {
+        const splitRole = f.metadata?.splitRole || f.splitRole;
+        const isSplit = typeof (f.metadata?.fillGroupId || f.fillGroupId) === 'string' &&
+          String(f.metadata?.fillGroupId || f.fillGroupId).length > 0;
+        const splitLabel =
+          splitRole === 'cash'
+            ? 'Gas Card + Cash · cash portion'
+            : splitRole === 'card'
+              ? 'Gas Card + Cash · card (pending statement)'
+              : isSplit
+                ? 'Gas Card + Cash · split fill'
+                : null;
         combined.push({
           id: f.id,
           type: 'fuel',
           date: f.date ? parseISO(f.date) : new Date(f.createdAt),
           amount: f.cost || f.amount || 0,
-          description: f.station || f.stationName || 'Fuel Purchase',
+          description: splitLabel
+            ? `${splitLabel} — ${f.station || f.stationName || 'Pump'}`
+            : f.station || f.stationName || 'Fuel Purchase',
           status: f.auditStatus || f.status || 'pending',
           station: f.station || f.stationName,
           odometer: f.odometer || f.odometerReading,
@@ -393,13 +402,19 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
                              t.category?.toLowerCase().includes('service') ||
                              t.category?.toLowerCase().includes('repair');
         const isFuelExpense = fuelExpenseMirror(t);
+        const splitMeta = t.metadata as Record<string, unknown> | undefined;
+        const isSplitTx =
+          typeof splitMeta?.fillGroupId === 'string' && String(splitMeta.fillGroupId).length > 0;
+        const baseDesc = t.merchant || t.description || t.category || 'Expense';
         
         combined.push({
           id: t.id,
           type: isFuelExpense ? 'fuel' : (isToll ? 'toll' : (isMaintenance ? 'maintenance' : 'other')),
           date: txDate,
           amount: t.amount || 0,
-          description: t.merchant || t.description || t.category || 'Expense',
+          description: isSplitTx
+            ? `Gas Card + Cash · cash portion — ${baseDesc}`
+            : baseDesc,
           status: t.status || 'pending',
           receiptUrl: t.receiptUrl
         });
@@ -746,17 +761,10 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
         setFuelPumpStep('photo');
         return;
       }
-      const splitCheck = validateSplitCashAmounts(amount, cashPortion);
+      const splitCheck = validateSplitPumpAmounts(amount, fuelEntry.volume || '');
       if (!splitCheck.ok) {
         setSubmitError(splitCheck.error);
         toast.error(splitCheck.error);
-        return;
-      }
-      const liters = parseFloat(fuelEntry.volume || '0');
-      if (!(liters > 0)) {
-        const msg = 'Liters from the pump are required';
-        setSubmitError(msg);
-        toast.error(msg);
         return;
       }
 
@@ -768,7 +776,6 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
       const cardMeta = buildCardSplitMetadata({
         fillGroupId,
         splitPumpTotal: splitCheck.pumpTotal,
-        splitExpectedCardAmount: splitCheck.card,
       });
 
       const buildSplitPayloads = async (odometerProofUrl: string, receiptUrl: string) => {
@@ -792,14 +799,14 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
             category: 'Fuel',
             type: 'Expense',
             status: 'Pending',
-            description: `Fuel (split cash) — ${merchant || 'Pump'}`,
+            description: `Fuel (split — cash pending statement) — ${merchant || 'Pump'}`,
             driverId: canonicalDriverId || user?.id,
             vehicleId: resolvedVehicleId,
             notes,
           } as any,
           receiptUrl,
           odometerProofUrl,
-          { cashAmountOverride: splitCheck.cash, splitMeta: cashMeta as any },
+          { cashAmountOverride: 0, splitMeta: cashMeta as any },
         );
 
         const cardFuelEntry = {
@@ -915,7 +922,7 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
         if (submitTimedOut) return;
         await fuelService.saveSplitFill(payloads);
         if (submitTimedOut) return;
-        toast.success('Split fill logged — cash pending approval; card awaiting statement');
+        toast.success('Pump logged; cash will be set when the gas card statement arrives');
         setViewState('list');
         resetForm();
         fetchTransactions();
@@ -1554,7 +1561,6 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
     setFuelEntry(prev => ({ ...prev, paymentMethod: method }));
     setPumpFromOcr(false);
     setAmount('');
-    setCashPortion('');
     setReceiptFile(null);
     setReceiptPreview(null);
     setAssignedGasCard(null);
@@ -2043,7 +2049,7 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
               onSelect={handleMethodSelect}
               onCancel={goBack}
               showGasCard={isFleetDriver}
-              showSplitPayment={isFleetDriver && fuelSplitEnabled}
+              showSplitPayment={isFleetDriver && fuelSplitEnabled && !fuelSplitLoading}
             />
           )}
 
@@ -2113,11 +2119,10 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
                       {parseFloat(fuelEntry.volume || '0').toFixed(3)} L
                     </p>
                   </div>
-                  <SplitCashPortion
-                    pumpTotal={amount}
-                    cashAmount={cashPortion}
-                    onCashAmountChange={setCashPortion}
-                  />
+                  <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
+                    Cash portion is calculated after the gas card statement arrives
+                    (pump total − card charge). Nothing to type now.
+                  </div>
                   <Button
                     type="submit"
                     className="w-full h-12"
@@ -2125,7 +2130,7 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
                       isSubmitting ||
                       !gasCardLookupDone ||
                       !assignedGasCard ||
-                      !validateSplitCashAmounts(amount, cashPortion).ok
+                      !validateSplitPumpAmounts(amount, fuelEntry.volume || '').ok
                     }
                   >
                     {isSubmitting ? (

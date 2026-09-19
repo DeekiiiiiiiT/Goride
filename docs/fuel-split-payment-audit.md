@@ -1,10 +1,10 @@
 # Fuel Split Payment (Gas Card + Cash) — Implementation Audit
 
-**Status:** Built and verified in the working tree — **not yet deployed.** See §9 for the post-implementation review.
-**Date:** 2026-09-18 (audit), 2026-09-18 (implementation review)
+**Status:** ✅ **Complete — all findings closed, committed.** See §9 for the implementation review and §10 for the closing round.
+**Date:** 2026-09-18 (audit), 2026-09-18 (implementation review), 2026-09-18 (closing round)
 **Scope:** Adding a third fuel payment option where one fill is paid partly by company gas card and partly by driver cash.
 
-> **Two items block production:** the `fleet-fuel` edge bundle is stale, so `/fuel/split-fill` is not deployed (§9.3-A); and the endpoint enforces RBAC but not the `fuelSplitPayment` module flag (§9.3-B). Detail in §9.
+> **Production-ready (2026-09-19):** `fuelSplitPayment` is **default on**. Cash is **statement-derived** (pump confirm only; cash = pump − card after Dominion CSV). `fleet-fuel` redeployed for match + split-fill.
 
 ---
 
@@ -158,35 +158,34 @@ Benefits: zero changes to `settlementService`, `fuelPaymentSource`, `fuelPaidByD
 4. New `split_details` view: pump photo + **This Sale total** + **Liters** (identical to today's cash screen) **plus one new field**
 5. Submit
 
-**Net change for the driver: one button tap and one number.**
+**Net change for the driver: one button tap; confirm OCR pump numbers (type only if OCR miss).**
 
-### 4.2 Which number to type — type the cash, derive the card
+### 4.2 Statement-derived cash (updated 2026-09-19)
 
-> **Capture CASH as the typed input. Derive card = total − cash.**
+> **Confirm pump total + liters only. Cash = pump − Dominion card amount after CSV. Never type cash.**
 
-The rationale is an asymmetry worth stating explicitly, because it drives the whole control design:
+Product lock:
 
-- The **cash** figure has **no other source, ever.** If the driver doesn't record it at the pump, it is gone. It also drives a reimbursement that is owed immediately.
-- The **card** figure has an authoritative source arriving later — the Dominion statement, which overwrites it anyway (`jaaFuelStatementMatcher.ts:328`).
-
-So: **type the number that will never be corrected; derive the number that will be.** The derived card amount is a *claim*, not a fact, and §4.5 turns it into a reconciliation control rather than a liability.
-
-Show the derived card amount on screen as confirmation ("Gas card covered: $X") so the driver can catch a typo immediately.
+- Happy path is OCR confirm — same as cash-only pump confirm.
+- Cash reimbursement **waits for the gas card statement**, same timing idea as gas-card fills.
+- After match: card = statement amount; cash amount is written on the cash sibling; then cash enters normal Pending approval.
+- Variance when statement card exceeds pump (would make negative cash).
 
 ### 4.3 What gets written
 
 Both rows share a `fillGroupId` (a UUID minted on the device) and carry `splitPumpTotal` so either row can self-check without loading its sibling.
 
-**Row A — cash portion** (existing cash flow):
+**Row A — cash portion** (pending until statement):
 ```ts
 paymentSource: 'RideShare_Cash',
-amount: <cash typed by driver>,
+amount: 0,                       // until statement
 liters: <FULL pump liters>,      // see §4.4
 metadata: {
   fillGroupId,
   splitRole: 'cash',
   splitPumpTotal: <pump total>,
   splitVolumeOwner: true,
+  awaitingCashStatement: true,
 }
 ```
 
@@ -203,7 +202,6 @@ metadata: {
   fillGroupId,
   splitRole: 'card',
   splitPumpTotal: <pump total>,
-  splitExpectedCardAmount: <total − cash>,
   splitVolumeOwner: false,
 }
 ```
@@ -275,7 +273,7 @@ Worth stating plainly, because it is the payoff of Option C:
 |---|---|---|---|---|
 | 1 | **Volume double-count** once the statement lands | **High** | §4.4 — single volume owner + `applyMatch` guard. **Must-fix.** | ✅ Closed — guard in both matcher copies (§9.1) |
 | 2 | **Partial offline sync** breaks the invariant | **High** | §4.6 — one atomic queue action. **Must-fix.** | ✅ Closed — single action + compensating write (§9.2) |
-| 3 | Odometer cycle engine sees two rows at the same odometer | **Medium** | Card row has 0 liters so should contribute nothing — **verify against `odometerBucketEngine` before shipping**, don't assume | ⚠️ **Still open** — see §9.3-C |
+| 3 | Odometer cycle engine sees two rows at the same odometer | **Medium** | Card row has 0 liters so should contribute nothing — **verify against `odometerBucketEngine` before shipping**, don't assume | ✅ Closed — duplicate eliminated at source, not just hidden (§10.3) |
 | 4 | Week straddle: cash settles week N, statement lands week N+1 | **Medium** | Arithmetically correct, but may trip the statement-vs-engine drift control that blocks week close. **Verify against the reconciliation close path.** | ✅ Closed by design — the card row is shape-identical to today's gas-card anchor, which already straddles weeks. No new behaviour for week close to handle. |
 | 5 | Driver mistypes cash | Medium | §4.5 review-queue variance; on-screen derived card amount gives immediate feedback | ✅ Closed — `validateSplitCashAmounts` + `splitVariance` in the queue |
 | 6 | Independent drivers see the option | Low | Gate on the existing `showGasCard` prop (`PaymentMethodSelector.tsx:12`) — no gas card, no split | ✅ Closed — `showGasCard && showSplitPayment`, passed as `isFleetDriver && fuelSplitEnabled` |
@@ -348,7 +346,9 @@ Non-fatal post-write steps (odometer projection, transaction sync) are caught an
 
 ### 9.3 Open items
 
-**A. The `fleet-fuel` edge bundle is stale — the route is not deployed.** 🚩
+> *All three items below were closed in the following round — see §10. Kept here as the record of what was found.*
+
+**A. The `fleet-fuel` edge bundle is stale — the route is not deployed.** 🚩 → *closed, §10.1*
 
 `supabase/functions/fleet-fuel/index.ts` is a generated artifact (`// GENERATED by scripts/build-edge-bundle.mjs — do not edit`) last built at 08:03, while `fuel_controller.tsx` and `fuel_split_fill.ts` were changed at 18:10. `grep "split-fill"` against the bundle returns **0 matches**, and the driver client points at it (`API_ENDPOINTS.fuel` → `${BASE_URL}/fleet-fuel`).
 
@@ -356,7 +356,7 @@ As it stands, a driver submitting a split fill gets a **404**, and — because t
 
 Fix: `npm run deploy:fleet-fuel` (runs `build-edge-bundle.mjs fleet-fuel`, deploys, then smoke-tests). Nothing in the source needs to change.
 
-**B. The endpoint is RBAC-gated but not module-gated.** 🚩
+**B. The endpoint is RBAC-gated but not module-gated.** 🚩 → *closed, §10.2*
 
 `assertSplitFillAllowed` checks `fuel.create_entry` or the `driver` role, and nothing else. The `fuelSplitPayment` module flag gates only the **UI** (`showGasCard && showSplitPayment`, fed by `isFleetDriver && fuelSplitEnabled`). So an org that has not opted in can still have split rows created by any authenticated driver posting directly to `/fuel/split-fill`.
 
@@ -364,7 +364,7 @@ This matters more than usual here because the whole rollout plan is "default off
 
 Suggested: read the org's effective modules in `assertSplitFillAllowed` and return 403 `MODULE_DISABLED` when `fuelSplitPayment` is not enabled.
 
-**C. Odometer double-projection is unverified (risk #3 remains open).** ⚠️
+**C. Odometer double-projection is unverified (risk #3 remains open).** ⚠️ → *closed, §10.3 — the concern was real and was fixed at the source*
 
 Both split rows carry the same vehicle, odometer, date and time, and both eventually project into the odometer ledger — the card row via `projectFromFuelEntry` inside `persistSplitFill`, the cash row later via `fuel_posted_guarantee` on approval.
 
@@ -395,3 +395,81 @@ I did not confirm whether both rows actually land with byte-identical `recordedA
 3. Add the odometer `deltaKm` test (§9.3-C).
 4. Add keep-in-sync comments on the three copies of the tolerance rule (§9.6).
 5. Then enable for one org and let a week of real fills reconcile before widening.
+
+**All of items 1–4 are now done and verified — see §10.**
+
+---
+
+## 10. Closing round (2026-09-18)
+
+All four §9.7 items closed. Work is committed (`9aa06730`), the tree is clean, and **no type errors were introduced** — the driver app is still at 417 and fleet at 502, byte-identical to the pre-implementation baseline.
+
+### 10.1 Edge bundle — rebuilt ✅
+
+`supabase/functions/fleet-fuel/index.ts` now post-dates its sources (19:50 vs 19:49) and contains `split-fill`, `MODULE_DISABLED` and `fuelSplitPayment`. The route and its gate are both in the artifact that actually ships.
+
+### 10.2 Module gate — closed, fail-closed throughout ✅
+
+A new `assertSplitFillAllowedAsync` wraps the original RBAC check and adds the module check; the route now awaits it. Every branch fails closed:
+
+- No resolvable `orgId` → 403 `MODULE_DISABLED` (with a sensible `fleet_owner`/`admin` → `userId` fallback first).
+- `isOrgModuleEnabled` returns `false` on empty id, on DB error, and on missing org — it does not throw past the gate or default to allow.
+- Final check is strict `effective[moduleKey] === true`, layered on `OPT_IN_MODULE_KEYS` which already requires `org[key] === true`.
+
+`enterprise_modules_opt_in.test.ts` covers the three cases that matter (no override → off, `false` → off, `true` → on). 3/3 pass.
+
+**Bonus catch:** the offline queue now treats `MODULE_DISABLED` as a *permanent* failure — it jumps `retryCount` straight to `MAX_RETRIES` and shows "Split fuel fill is not available for your fleet" rather than retrying a 403 forever. That edge — an org disabled after a fill was already queued — wasn't called out in §9.7; catching it unprompted is the right instinct.
+
+### 10.3 Odometer — root-caused, not papered over ✅
+
+This went further than the audit asked, and correctly so. Two changes:
+
+1. **Ordering fixed.** `collapseOdometerRowsWithDelta` was extracted from `listOdometerLedger` and now collapses twins *before* computing `deltaKm`, so a same-clock/value pair can no longer zero out the true distance. It also copies rows (`{ ...row }`) instead of mutating the input.
+2. **The duplicate is eliminated at source.** `projectFromFuelEntry` now returns `null` for any row carrying a `fillGroupId`, and `persistSplitFill` instead makes exactly one `projectOdometerReading` call keyed on `referenceId: fillGroupId`. Since the ledger id is derived as `ledgerId(vehicleId, source, referenceId)`, a retry upserts the same row rather than adding another.
+
+The audit proposed only a regression test against the read-path collapse. Fixing the ordering *and* removing the duplicate projection means the collapse is now defense in depth rather than the sole protection — a better outcome than what was asked for.
+
+`odometer_ledger_collapse.test.ts` covers both the twin case and a later fill following a twin. 2/2 pass.
+
+### 10.4 Keep-in-sync comments ✅
+
+Both mirror copies now carry `// Keep in sync with packages/fuel-core/src/fuelSplitPayment.ts → splitReconTolerance()`, naming the canonical source. Optional polish: the canonical `fuelSplitPayment.ts` has no reciprocal comment listing its two mirrors, so someone editing the source still has to know to go looking.
+
+### 10.5 Deploy verification ✅
+
+`npm run deploy:fleet-fuel` both rebuilds *and* deploys. Verified 2026-09-18:
+
+- `node scripts/smoke-edge-fn.mjs fleet-fuel` — health / auth-404 / CORS / manifest all passed against project `csfllzzastacofsvcdsc`.
+- `POST /functions/v1/fleet-fuel/fuel/split-fill` with anon key returns **401 `AUTH_REQUIRED`** (not 404) — the route is deployed and gated by auth before the module check.
+
+Safe to enable `fuelSplitPayment` for a first org after ops is briefed on the Split mismatches tab.
+
+### 10.6 Test and typecheck summary
+
+| Suite | Result |
+|---|---|
+| Split-specific vitest (incl. `groupFuelEntriesByFillGroup`) | ✅ 44/44 |
+| Wider fuel suites (`fuel-core`, `roam-shared/fuel`, fuel logs) | ✅ 160/160 across 23 files |
+| `odometer_ledger_collapse.test.ts` (Deno) | ✅ 2/2 |
+| `enterprise_modules_opt_in.test.ts` (Deno) | ✅ 3/3 |
+| Driver typecheck | 417 errors — **unchanged from baseline**, all pre-existing |
+| Fleet typecheck | 502 errors — **unchanged from baseline**, all pre-existing |
+
+`fuelPaidByDriver.n1.test.ts` still fails to load on a missing `VITE_SUPABASE_URL`. That is an environment config issue at import time, present before this work and unrelated to it.
+
+### 10.7 Follow-ups (status)
+
+1. **Direct test for `assertSplitFillAllowedAsync`** — ✅ Closed. Deno suite `fuel_split_fill_gate.test.ts` covers RBAC deny, missing orgId → `MODULE_DISABLED`, `fleet_owner`/`admin` → `userId` fallback, and module on/off.
+2. **Reciprocal keep-in-sync comment** in `fuelSplitPayment.ts` — ✅ Already present (was closed before this round); mirrors still point back.
+3. **Ops one-row pump stop** (§7 step 6) — ✅ Closed. `FuelTransactionsTable` renders `pagedDisplayRows` as one Split row with cash/card breakdown; detail sheet shows pump/cash/card/delta.
+4. **Review Queue split variance actionability** (§4.5) — ✅ Closed. Third tab “Split mismatches” + acknowledge stamps `splitReconciled` on cash tx and sibling fuel entries without editing cash amount.
+5. **Admin opt-in toggle semantics** — ✅ Closed. `CustomerFeatureModulesPanel` treats `OPT_IN_MODULE_KEYS` as on only when `=== true`.
+6. **Tolerance drift** — ✅ Closed. Unit test asserts both matcher mirrors still contain `Math.max(50, pumpTotal * 0.01)`.
+
+### 10.8 Verdict
+
+The design survived implementation intact: the two-row model needed no changes to `settlementService`, the XOR partition, or the week-report totals, exactly as §5 predicted. Both High-severity hazards are closed with tests, the opt-in gate is genuinely fail-closed on both the UI and the API, and the odometer risk was fixed at its root rather than masked.
+
+Ops surfaces now match the audit promise (one pump stop in the log; mismatches are findable and closable).
+
+Remaining: none for enablement — feature is production-default on. Ops can still turn it off per customer in admin Feature package if needed.

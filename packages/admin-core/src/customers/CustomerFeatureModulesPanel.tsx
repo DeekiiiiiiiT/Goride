@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Loader2, ToggleLeft, ToggleRight, AlertCircle, Save, Check } from 'lucide-react';
 import {
   ENTERPRISE_MODULE_CATALOG,
+  OPT_IN_MODULE_KEYS,
   resolveEffectiveModules,
   type ModuleKey,
 } from '@roam/platform-settings';
@@ -22,6 +23,8 @@ type ModulesResponse = {
   effectiveModules: Record<string, boolean>;
 };
 
+const OPT_IN = new Set<string>(OPT_IN_MODULE_KEYS);
+
 const GROUPS: { id: string; label: string }[] = [
   { id: 'freight', label: 'Freight' },
   { id: 'grocery', label: 'Grocery (reserved)' },
@@ -30,6 +33,12 @@ const GROUPS: { id: string; label: string }[] = [
   { id: 'people', label: 'People' },
   { id: 'optional', label: 'Optional' },
 ];
+
+function isDraftOn(key: string, draft: Record<string, boolean>, lineOff: boolean): boolean {
+  if (lineOff) return false;
+  if (OPT_IN.has(key)) return draft[key] === true;
+  return draft[key] !== false;
+}
 
 export function CustomerFeatureModulesPanel({
   orgId,
@@ -62,6 +71,10 @@ export function CustomerFeatureModulesPanel({
           base[k] = v;
         }
       }
+      // Opt-in modules are fail-closed: only true when org override is explicitly true
+      for (const key of OPT_IN_MODULE_KEYS) {
+        base[key] = data.orgOverrides?.[key] === true;
+      }
       setDraft(base);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Failed to load modules');
@@ -86,7 +99,12 @@ export function CustomerFeatureModulesPanel({
       toast.error('Disabled at product-line level — enable it in Settings → Features first');
       return;
     }
-    setDraft((prev) => ({ ...prev, [key]: prev[key] === false }));
+    setDraft((prev) => {
+      if (OPT_IN.has(key)) {
+        return { ...prev, [key]: prev[key] !== true };
+      }
+      return { ...prev, [key]: prev[key] === false };
+    });
     setSaved(false);
   };
 
@@ -108,7 +126,13 @@ export function CustomerFeatureModulesPanel({
       if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
       setSaved(true);
       toast.success('Customer features saved');
-      if (data.orgOverrides) setDraft({ ...productLineModules, ...data.orgOverrides });
+      if (data.orgOverrides) {
+        const next = { ...productLineModules, ...data.orgOverrides };
+        for (const key of OPT_IN_MODULE_KEYS) {
+          next[key] = data.orgOverrides[key] === true;
+        }
+        setDraft(next);
+      }
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Save failed';
       setError(msg);
@@ -167,8 +191,10 @@ export function CustomerFeatureModulesPanel({
             </p>
             {items.map((mod) => {
               const lineOff = productLineModules[mod.key] === false;
-              const on = draft[mod.key] !== false && !lineOff;
-              const effectiveOn = effectivePreview[mod.key] !== false;
+              const on = isDraftOn(mod.key, draft, lineOff);
+              const effectiveOn = OPT_IN.has(mod.key)
+                ? effectivePreview[mod.key] === true
+                : effectivePreview[mod.key] !== false;
               return (
                 <button
                   key={mod.key}

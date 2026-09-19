@@ -1,7 +1,9 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import {
+  AtSign,
   BadgeCheck,
+  Building2,
   Car,
   ChevronRight,
   FileText,
@@ -21,10 +23,20 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@roam/ui';
+import {
+  formatDriverRoamTagDisplay,
+  normalizeDriverRoamTagName,
+  validateDriverRoamTagName,
+} from '@roam/types';
 import { useAuth } from '../../contexts/AuthContext';
 import { useCurrentDriver } from '../../hooks/useCurrentDriver';
 import { useDriverProfileExtras } from '../../hooks/useDriverProfileExtras';
 import { api } from '../../services/api';
+import {
+  claimDriverRoamTag,
+  loadDriverRoamTag,
+  loadMyFleetInvites,
+} from '../../lib/driverRoamTagService';
 import { buildProfileDocuments, documentsSummary } from './profileDocuments';
 
 type Props = {
@@ -39,6 +51,43 @@ export function IndependentProfilePage({ onNavigate }: Props) {
   const { driverRecord, loading: driverLoading } = useCurrentDriver();
   const { vehicle, metrics, loading: extrasLoading } = useDriverProfileExtras(driverRecord, user);
   const [personalOpen, setPersonalOpen] = useState(false);
+  const [roamTagDraft, setRoamTagDraft] = useState('');
+  const [roamTagLocked, setRoamTagLocked] = useState(false);
+  const [roamTagSaving, setRoamTagSaving] = useState(false);
+  const [pendingInviteCount, setPendingInviteCount] = useState(0);
+
+  useEffect(() => {
+    void loadDriverRoamTag().then((tag) => {
+      if (!tag) return;
+      setRoamTagDraft(tag.custom_tag_name || '');
+      setRoamTagLocked(Boolean(tag.has_custom_tag));
+    });
+    void loadMyFleetInvites().then((rows) => setPendingInviteCount(rows.length));
+  }, []);
+
+  const saveRoamTag = useCallback(async () => {
+    if (roamTagLocked) return;
+    const localCheck = validateDriverRoamTagName(roamTagDraft);
+    if (localCheck) {
+      const messages: Record<string, string> = {
+        tag_length: 'Pick something between 3 and 24 characters.',
+        tag_format: 'Use letters, numbers, and underscores only — no spaces.',
+        tag_reserved: 'That name isn’t available. Try a different @tag.',
+      };
+      toast.error(messages[localCheck] || 'Invalid Roam Tag');
+      return;
+    }
+    setRoamTagSaving(true);
+    const result = await claimDriverRoamTag(normalizeDriverRoamTagName(roamTagDraft));
+    setRoamTagSaving(false);
+    if (!result.ok) {
+      toast.error(result.error);
+      return;
+    }
+    setRoamTagDraft(result.tag.custom_tag_name || roamTagDraft);
+    setRoamTagLocked(true);
+    toast.success('Roam Tag saved');
+  }, [roamTagDraft, roamTagLocked]);
 
   const avatarUrl =
     (driverRecord?.avatarUrl as string | undefined) ||
@@ -117,6 +166,81 @@ export function IndependentProfilePage({ onNavigate }: Props) {
             </div>
           </div>
         )}
+      </section>
+
+      <section>
+        <h2 className="mb-3 px-1 text-sm font-semibold text-slate-900 dark:text-white">Roam Tag</h2>
+        <div className={cn(cardClass, 'space-y-3 p-5')}>
+          <div className="flex items-center gap-1">
+            <AtSign className="h-4 w-4 shrink-0 text-slate-400" />
+            <Input
+              value={roamTagDraft.replace(/^@+/, '')}
+              readOnly={roamTagLocked}
+              onChange={(e) =>
+                setRoamTagDraft(
+                  e.target.value
+                    .replace(/^@+/, '')
+                    .toLowerCase()
+                    .replace(/[^a-z0-9_]/g, ''),
+                )
+              }
+              placeholder="your_tag"
+              className="border-0 bg-transparent px-0 shadow-none focus-visible:ring-0"
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
+            />
+          </div>
+          <p className="text-xs text-slate-500 dark:text-slate-400">
+            {roamTagLocked
+              ? `Your permanent Roam Tag is ${formatDriverRoamTagDisplay(roamTagDraft)}. Fleets use this to invite you.`
+              : 'Choose a unique @tag so fleets can invite you. You can’t change it later.'}
+          </p>
+          {!roamTagLocked ? (
+            <Button
+              type="button"
+              className="w-full bg-[#004ac6] hover:bg-[#003da3]"
+              disabled={roamTagSaving || !normalizeDriverRoamTagName(roamTagDraft)}
+              onClick={() => void saveRoamTag()}
+            >
+              {roamTagSaving ? 'Saving…' : 'Save Roam Tag'}
+            </Button>
+          ) : null}
+        </div>
+      </section>
+
+      <section>
+        <h2 className="mb-3 px-1 text-sm font-semibold text-slate-900 dark:text-white">Fleet</h2>
+        <button
+          type="button"
+          onClick={() => onNavigate('fleet-invites')}
+          className={cn(
+            cardClass,
+            'flex w-full items-center justify-between p-5 text-left transition-colors hover:bg-slate-50 active:scale-[0.99] dark:hover:bg-slate-800/80',
+          )}
+        >
+          <div className="flex min-w-0 items-center gap-4">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-indigo-100/80 dark:bg-indigo-950/40">
+              <Building2 className="h-6 w-6 text-indigo-600 dark:text-indigo-400" />
+            </div>
+            <div className="min-w-0">
+              <p className="font-semibold text-slate-900 dark:text-white">Fleet invites</p>
+              <p className="text-sm text-slate-500 dark:text-slate-400">
+                {pendingInviteCount > 0
+                  ? `${pendingInviteCount} pending`
+                  : 'Accept or decline fleet invites'}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            {pendingInviteCount > 0 ? (
+              <span className="inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-[#004ac6] px-1.5 text-[11px] font-semibold text-white">
+                {pendingInviteCount}
+              </span>
+            ) : null}
+            <ChevronRight className="h-5 w-5 shrink-0 text-slate-400" />
+          </div>
+        </button>
       </section>
 
       <section>
