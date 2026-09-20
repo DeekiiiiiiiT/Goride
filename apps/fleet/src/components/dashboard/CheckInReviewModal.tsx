@@ -37,7 +37,7 @@ export function CheckInReviewModal({ isOpen, onClose, checkIn, driverName, onRev
         <ResponsiveDialog open={isOpen} onOpenChange={onClose}>
             <ResponsiveDialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
                 <ResponsiveDialogHeader>
-                    <ResponsiveDialogTitle>Review Manual Check-In</ResponsiveDialogTitle>
+                    <ResponsiveDialogTitle>Review Manual Vehicle Handover</ResponsiveDialogTitle>
                     <ResponsiveDialogDescription>
                         Review the driver's manual entry against the provided photo evidence.
                     </ResponsiveDialogDescription>

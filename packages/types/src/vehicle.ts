@@ -132,7 +132,7 @@ export interface Vehicle {
 
   /**
    * Possession lifecycle (assignment ≠ physical custody).
-   * Forced weekly check-in requires `in_custody`.
+   * Forced Vehicle Handover proof requires `handed_over`; success sets `in_custody`.
    */
   custodyStatus?: 'none' | 'assigned' | 'handed_over' | 'in_custody';
   handedOverAt?: string;
@@ -271,7 +271,7 @@ export interface OdometerReading {
   date: string; // ISO string
   value: number; // The odometer reading in km
   type: OdometerType;
-  source: OdometerSource | 'Weekly Check-in' | 'Fuel Receipt';
+  source: OdometerSource | 'Weekly Check-in' | 'Vehicle Handover' | 'Fuel Receipt';
   notes?: string;
   referenceId?: string; // ID of the service log, document, or trip batch
   imageUrl?: string; // Photo of the odometer

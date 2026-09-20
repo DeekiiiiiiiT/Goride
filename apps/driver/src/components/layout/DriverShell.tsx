@@ -54,13 +54,11 @@ export function DriverShell({ forcePassengerRides = false }: { forcePassengerRid
   const { driverRecord } = useCurrentDriver();
   const {
     needsCheckIn,
-    eligible: checkInEligible,
     custodyStatus,
     vehicleId: custodyVehicleId,
     isLoading: checkInHookLoading,
     submitCheckIn,
-    refresh: refreshCheckIn,
-  } = useWeeklyCheckIn(driverRecord?.id);
+  } = useWeeklyCheckIn(driverRecord?.id || user?.id);
 
   const [currentPage, setCurrentPage] = useState(forcePassengerRides ? 'passenger-rides' : 'dashboard');
   const [menuOpen, setMenuOpen] = useState(false);
@@ -73,17 +71,18 @@ export function DriverShell({ forcePassengerRides = false }: { forcePassengerRid
 
   const assignedVehicleId = useMemo(() => {
     const id =
+      // Eligibility already resolved the in-custody vehicle — prefer that SSOT.
+      custodyVehicleId ||
       resolveVehicleIdForDriver(driverRecord, [], user?.id) ||
       driverRecord?.assignedVehicleId ||
       driverRecord?.vehicleId ||
       (typeof driverRecord?.vehicle === 'string' ? driverRecord.vehicle : undefined);
     if (!id || id === 'unknown') return null;
     return String(id);
-  }, [driverRecord, user?.id]);
+  }, [custodyVehicleId, driverRecord, user?.id]);
 
-  // Forced only when server says eligible (in custody + week due). Never trap without a vehicle.
-  const custodyReady = checkInEligible === true;
-  const checkInForced = isFleetDriver && custodyReady && needsCheckIn;
+  // Forced when fleet marked handed_over and Vehicle Handover proof is still due.
+  const checkInForced = isFleetDriver && needsCheckIn;
   const checkInModalOpen = checkInForced || checkInOpen;
   // Shared mint chrome for fleet + independent (fleet extras stay outside page routing).
   const mintHomeLayout = currentPage === 'dashboard';
@@ -142,6 +141,7 @@ export function DriverShell({ forcePassengerRides = false }: { forcePassengerRid
     setCheckInSubmitting(true);
     try {
       const vehicleId =
+        custodyVehicleId ||
         assignedVehicleId ||
         resolveVehicleIdForDriver(driverRecord, [], user?.id) ||
         driverRecord?.assignedVehicleId ||
@@ -149,13 +149,13 @@ export function DriverShell({ forcePassengerRides = false }: { forcePassengerRid
         driverRecord?.vehicle;
       if (!vehicleId || vehicleId === 'unknown') {
         // Throw so the modal leaves SUBMITTING (silent return left an endless spinner)
-        throw new Error('No vehicle assigned — ask fleet to assign your vehicle before check-in');
+        throw new Error('No vehicle assigned — ask fleet to assign your vehicle before handover');
       }
       await submitCheckIn(odometer, photo, vehicleId, method, reviewStatus, aiReading, manualReadingReason);
       setCheckInOpen(false);
-      toast.success('Weekly check-in saved');
+      toast.success('Vehicle handover recorded');
     } catch (e: any) {
-      toast.error(e?.message || 'Failed to save check-in');
+      toast.error(e?.message || 'Failed to save vehicle handover');
       throw e;
     } finally {
       setCheckInSubmitting(false);
@@ -170,7 +170,6 @@ export function DriverShell({ forcePassengerRides = false }: { forcePassengerRid
             onOpenFleetInvites={() => setCurrentPage('fleet-invites')}
             custodyStatus={custodyStatus}
             assignedVehicleId={custodyVehicleId || assignedVehicleId}
-            onCustodyConfirmed={() => void refreshCheckIn()}
           />
         );
       case 'passenger-rides':

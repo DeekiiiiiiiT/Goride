@@ -850,11 +850,11 @@ export function VehicleDetail({ vehicle, trips, onBack, onAssignDriver, onUpdate
 
       if (odometerEntryKind === 'checkin') {
           if (!vehicle.currentDriverId) {
-              toast.error("Assign a driver to this vehicle before logging a check-in");
+              toast.error("Assign a driver to this vehicle before logging a vehicle handover");
               return;
           }
           if (!newOdometerNotes.trim()) {
-              toast.error("Add a note — required for a manager check-in");
+              toast.error("Add a note — required for a manager vehicle handover");
               return;
           }
       }
@@ -887,9 +887,9 @@ export function VehicleDetail({ vehicle, trips, onBack, onAssignDriver, onUpdate
                   isVerified: true,
                   manualReadingReason: reason,
                   managerNotes: reason,
-                  source: 'Weekly Check-in',
+                  source: 'Vehicle Handover',
               });
-              toast.success("Check-in logged");
+              toast.success("Vehicle handover logged");
           } else {
               await odometerService.addReading({
                   vehicleId: vehicle.id || vehicle.licensePlate,
@@ -1110,10 +1110,10 @@ export function VehicleDetail({ vehicle, trips, onBack, onAssignDriver, onUpdate
       <Dialog open={isUpdateOdometerOpen} onOpenChange={setIsUpdateOdometerOpen}>
           <DialogContent>
               <DialogHeader>
-                  <DialogTitle2>{odometerEntryKind === 'checkin' ? 'Log check-in' : 'Update Odometer'}</DialogTitle2>
+                  <DialogTitle2>{odometerEntryKind === 'checkin' ? 'Log Vehicle Handover' : 'Update Odometer'}</DialogTitle2>
                   <DialogDescription>
                     {odometerEntryKind === 'checkin'
-                      ? 'Record a weekly check-in for the driver assigned to this vehicle.'
+                      ? 'Record vehicle handover proof for the driver assigned to this vehicle.'
                       : 'Record a new odometer reading for this vehicle.'}
                   </DialogDescription>
               </DialogHeader>
@@ -1129,7 +1129,7 @@ export function VehicleDetail({ vehicle, trips, onBack, onAssignDriver, onUpdate
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="manual">Manual reading</SelectItem>
-                          <SelectItem value="checkin">Weekly check-in</SelectItem>
+                          <SelectItem value="checkin">Vehicle Handover</SelectItem>
                         </SelectContent>
                       </Select>
                   </div>
@@ -1163,7 +1163,7 @@ export function VehicleDetail({ vehicle, trips, onBack, onAssignDriver, onUpdate
                   <div className="space-y-2">
                       <Label>{odometerEntryKind === 'checkin' ? 'Notes (required)' : 'Notes (Optional)'}</Label>
                       <Textarea 
-                          placeholder={odometerEntryKind === 'checkin' ? 'Why this check-in is being logged' : 'Routine check, service, etc.'}
+                          placeholder={odometerEntryKind === 'checkin' ? 'Why this handover is being logged' : 'Routine check, service, etc.'}
                           value={newOdometerNotes}
                           onChange={(e) => setNewOdometerNotes(e.target.value)}
                       />
@@ -1173,7 +1173,7 @@ export function VehicleDetail({ vehicle, trips, onBack, onAssignDriver, onUpdate
                   <Button variant="outline" onClick={() => setIsUpdateOdometerOpen(false)}>Cancel</Button>
                   <Button onClick={handleUpdateOdometer} disabled={isUpdatingOdometer}>
                       {isUpdatingOdometer && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                      {odometerEntryKind === 'checkin' ? 'Save check-in' : 'Update Reading'}
+                      {odometerEntryKind === 'checkin' ? 'Save handover' : 'Update Reading'}
                   </Button>
               </div>
           </DialogContent>

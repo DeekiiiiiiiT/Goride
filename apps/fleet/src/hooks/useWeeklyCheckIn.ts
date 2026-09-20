@@ -35,7 +35,7 @@ export function useWeeklyCheckIn(driverId: string | undefined) {
   const getWeekStart = () => {
     const now = new Date();
     const day = now.getDay();
-    const diff = now.getDate() - day + (day === 0 ? -6 : 1); // Adjust when day is Sunday
+    const diff = now.getDate() - day + (day === 0 ? -6 : 1);
     const monday = new Date(now.setDate(diff));
     monday.setHours(0, 0, 0, 0);
     return monday.toISOString().split('T')[0];
@@ -44,37 +44,28 @@ export function useWeeklyCheckIn(driverId: string | undefined) {
   const checkStatus = async () => {
     if (!driverId) {
       setIsLoading(false);
+      setNeedsCheckIn(false);
       return;
     }
     setIsLoading(true);
     try {
-      const weekStart = getWeekStart();
-
       const response = await fetchWithDeadline(
-        `https://${projectId}.supabase.co/functions/v1/fleet-core/check-ins?driverId=${driverId}&weekStart=${weekStart}`,
+        `https://${projectId}.supabase.co/functions/v1/fleet-core/check-ins/eligibility?driverId=${encodeURIComponent(driverId)}`,
         {
           headers: await requireAuthHeaders(null),
         },
         STATUS_REFRESH_MS,
-        'Could not verify check-in status. Please try again.',
+        'Could not verify vehicle handover status. Please try again.',
       );
       if (!response.ok) {
-        console.error('Weekly check-in status request failed', response.status);
+        console.error('Vehicle handover eligibility request failed', response.status);
         setNeedsCheckIn(false);
         return;
       }
       const data = await response.json();
-
-      if (data && Array.isArray(data) && data.length > 0) {
-        setNeedsCheckIn(false);
-        setLastCheckIn(data[0]);
-      } else if (Array.isArray(data)) {
-        setNeedsCheckIn(true);
-      } else {
-        setNeedsCheckIn(false);
-      }
+      setNeedsCheckIn(Boolean(data.needsCheckIn));
     } catch (e) {
-      console.error('Error checking weekly status:', e);
+      console.error('Error checking handover status:', e);
       setNeedsCheckIn(false);
     } finally {
       setIsLoading(false);
@@ -82,7 +73,7 @@ export function useWeeklyCheckIn(driverId: string | undefined) {
   };
 
   useEffect(() => {
-    checkStatus();
+    void checkStatus();
   }, [driverId]);
 
   const submitCheckIn = async (
@@ -98,7 +89,6 @@ export function useWeeklyCheckIn(driverId: string | undefined) {
       throw new Error('Not signed in — reopen the app and try again');
     }
 
-    // Reuse fuel upload path (60s abort + compression) — raw /upload hung forever on phones
     let photoUrl = '';
     if (photo) {
       const uploadData = await api.uploadFile(photo);
@@ -123,7 +113,7 @@ export function useWeeklyCheckIn(driverId: string | undefined) {
       reviewStatus,
       aiReading,
       manualReadingReason,
-      source: 'Weekly Check-in',
+      source: 'Vehicle Handover',
       isVerified: reviewStatus === 'auto_approved' || reviewStatus === 'approved',
     } as any;
 
@@ -135,14 +125,13 @@ export function useWeeklyCheckIn(driverId: string | undefined) {
         body: JSON.stringify(payload),
       },
       CHECK_IN_POST_MS,
-      'Check-in timed out. Please try again.',
+      'Vehicle handover timed out. Please try again.',
     );
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
-      throw new Error(err.error || 'Failed to save check-in');
+      throw new Error(err.error || 'Failed to save vehicle handover');
     }
 
-    // Unblock forced modal immediately — status refresh must not trap the spinner
     setNeedsCheckIn(false);
     setLastCheckIn(payload);
     void checkStatus();

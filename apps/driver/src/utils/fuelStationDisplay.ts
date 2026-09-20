@@ -43,8 +43,7 @@ function calculateSimilarity(str1: string, str2: string): number {
   return Math.max(0, 1 - levenshteinDistance(a, b) / maxLen);
 }
 
-/** Best verified station for a JAA/vendor string (name, brand, aliases). */
-export function matchVendorToVerifiedStation(
+function matchVendorToVerifiedStation(
   vendorName: string,
   stations: StationProfile[],
   minConfidence = 0.65,
@@ -68,58 +67,8 @@ export function matchVendorToVerifiedStation(
   return best?.station ?? null;
 }
 
-export type StationDisplayResult = {
-  label: string;
-  /** true when label came from verified list or linked driver station */
-  fromVerified: boolean;
-  jaaRaw: string;
-};
-
-/**
- * Card Inventory Station column: verified Roam name when we can resolve it; else JAA text.
- * Prefer linked driver log station (matchedStationId / location) over fuzzy vendor match.
- */
-export function resolveCardTransactionStation(
-  entry: FuelEntry,
-  verifiedStations: StationProfile[],
-  entryById?: Map<string, FuelEntry>,
-): StationDisplayResult {
-  const m = (entry.metadata || {}) as Record<string, unknown>;
-  const jaaRaw = String(m.jaaStation || entry.location || '').trim();
-
-  const linkedId = String(m.jaaMatchedDriverEntryId || '');
-  const linked = linkedId && entryById ? entryById.get(linkedId) : undefined;
-  if (linked) {
-    const lm = (linked.metadata || {}) as Record<string, unknown>;
-    const stationId = String(
-      linked.matchedStationId || lm.matchedStationId || lm.bridgedStationId || '',
-    );
-    if (stationId) {
-      const byId = verifiedStations.find((s) => s.id === stationId);
-      if (byId?.name) {
-        return { label: byId.name, fromVerified: true, jaaRaw };
-      }
-    }
-    const driverLoc = String(linked.location || '').trim();
-    if (driverLoc && driverLoc.toLowerCase() !== 'manual entry') {
-      const matched = matchVendorToVerifiedStation(driverLoc, verifiedStations);
-      if (matched) return { label: matched.name, fromVerified: true, jaaRaw };
-      return { label: driverLoc, fromVerified: true, jaaRaw };
-    }
-  }
-
-  if (jaaRaw && jaaRaw !== '—') {
-    const matched = matchVendorToVerifiedStation(jaaRaw, verifiedStations);
-    if (matched) return { label: matched.name, fromVerified: true, jaaRaw };
-  }
-
-  return { label: jaaRaw || '—', fromVerified: false, jaaRaw };
-}
-
 export type FuelEntryStationDisplay = {
-  /** Parent company, or station name when brand is Independent / empty. */
   title: string;
-  /** Street address from verified ledger (or entry fallbacks). */
   subtitle: string;
 };
 
@@ -129,22 +78,25 @@ function isIndependentBrand(brand?: string | null): boolean {
 }
 
 function resolveStationForFuelEntry(
-  entry: FuelEntry,
+  entry: FuelEntry | Record<string, unknown>,
   stations: StationProfile[],
 ): StationProfile | null {
   if (!stations.length) return null;
-  const meta = (entry.metadata || {}) as Record<string, unknown>;
+  const e = entry as FuelEntry;
+  const meta = (e.metadata || {}) as Record<string, unknown>;
   const stationId = String(
-    entry.matchedStationId || meta.matchedStationId || meta.bridgedStationId || '',
+    e.matchedStationId || meta.matchedStationId || meta.bridgedStationId || '',
   ).trim();
   if (stationId) {
     const byId = stations.find((s) => s.id === stationId);
     if (byId) return byId;
   }
   const candidates = [
-    entry.vendor,
+    e.vendor,
     meta.stationName,
-    entry.location,
+    (entry as { station?: string }).station,
+    (entry as { stationName?: string }).stationName,
+    e.location,
     meta.jaaStation,
   ]
     .map((v) => String(v || '').trim())
@@ -156,44 +108,44 @@ function resolveStationForFuelEntry(
   return null;
 }
 
-/**
- * Transaction Logs Station column: brand (or independent station name) + street address.
- * Joins verified Dominion ledger via matchedStationId, else fuzzy vendor match.
- */
+/** Parent company (or independent station name) + street address for driver expense list. */
 export function resolveFuelEntryStationDisplay(
-  entry: FuelEntry,
+  entry: FuelEntry | Record<string, unknown>,
   stations: StationProfile[],
 ): FuelEntryStationDisplay {
-  const meta = (entry.metadata || {}) as Record<string, unknown>;
+  const e = entry as FuelEntry;
+  const meta = (e.metadata || {}) as Record<string, unknown>;
   const station = resolveStationForFuelEntry(entry, stations);
 
   if (station) {
     const title = isIndependentBrand(station.brand)
       ? String(
           station.name ||
-            entry.vendor ||
+            e.vendor ||
             meta.stationName ||
-            entry.location ||
+            (entry as { station?: string }).station ||
+            e.location ||
             'Unknown Station',
         ).trim()
       : String(station.brand).trim();
     const subtitle =
       String(station.address || '').trim() ||
-      String(entry.stationAddress || '').trim() ||
+      String(e.stationAddress || '').trim() ||
       String(meta.stationLocation || '').trim() ||
       'No GPS metadata';
     return { title: title || 'Unknown Station', subtitle };
   }
 
   const title =
-    String(entry.vendor || '').trim() ||
+    String(e.vendor || '').trim() ||
     String(meta.stationName || '').trim() ||
-    String(entry.location || '').trim() ||
+    String((entry as { station?: string }).station || '').trim() ||
+    String((entry as { stationName?: string }).stationName || '').trim() ||
+    String(e.location || '').trim() ||
     'Unknown Station';
   const addressOnly =
-    String(entry.stationAddress || '').trim() ||
+    String(e.stationAddress || '').trim() ||
     String(meta.stationLocation || '').trim();
-  // Never repeat the station name on the subtitle line
   const subtitle =
     addressOnly && normalizeVendorName(addressOnly) !== normalizeVendorName(title)
       ? addressOnly

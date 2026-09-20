@@ -69,10 +69,10 @@ export function useWeeklyCheckIn(driverId: string | undefined) {
           },
         },
         STATUS_REFRESH_MS,
-        'Could not verify check-in status. Please try again.',
+        'Could not verify vehicle handover status. Please try again.',
       );
       if (!response.ok) {
-        console.error('Weekly check-in eligibility request failed', response.status);
+        console.error('Vehicle handover eligibility request failed', response.status);
         setNeedsCheckIn(false);
         setEligible(false);
         return;
@@ -84,12 +84,12 @@ export function useWeeklyCheckIn(driverId: string | undefined) {
       setVehicleId(data.vehicleId ?? null);
       setVehicleLabel(data.vehicleLabel ?? null);
 
-      // Keep lastCheckIn hydrated when week already done
-      if (!data.needsCheckIn && data.eligible) {
+      // Keep lastCheckIn hydrated when handover already done
+      if (!data.needsCheckIn && data.reason === 'handover_complete') {
         setLastCheckIn((prev) => prev);
       }
     } catch (e) {
-      console.error('Error checking weekly status:', e);
+      console.error('Error checking handover status:', e);
       setNeedsCheckIn(false);
       setEligible(false);
     } finally {
@@ -142,7 +142,7 @@ export function useWeeklyCheckIn(driverId: string | undefined) {
       reviewStatus,
       aiReading,
       manualReadingReason,
-      source: 'Weekly Check-in',
+      source: 'Vehicle Handover',
       isVerified: reviewStatus === 'auto_approved' || reviewStatus === 'approved',
     } as any;
 
@@ -157,11 +157,11 @@ export function useWeeklyCheckIn(driverId: string | undefined) {
         body: JSON.stringify(payload),
       },
       CHECK_IN_POST_MS,
-      'Check-in timed out. Please try again.',
+      'Vehicle handover timed out. Please try again.',
     );
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
-      throw new Error(err.error || 'Failed to save check-in');
+      throw new Error(err.error || 'Failed to save vehicle handover');
     }
 
     setNeedsCheckIn(false);

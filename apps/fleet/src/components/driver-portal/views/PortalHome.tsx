@@ -41,15 +41,15 @@ export function PortalHome({ onNavigate }: PortalHomeProps) {
               {needsCheckIn ? <AlertCircle className="w-5 h-5 text-amber-600" /> : <CheckCircle2 className="w-5 h-5 text-emerald-600" />}
             </div>
             <div>
-              <h3 className="font-bold text-sm">Weekly Odometer Anchor</h3>
+              <h3 className="font-bold text-sm">Vehicle Handover</h3>
               <p className="text-xs opacity-80">
-                {needsCheckIn ? "Baseline missing for this week" : `Verified on ${new Date(lastCheckIn?.timestamp || '').toLocaleDateString()}`}
+                {needsCheckIn ? "Handover proof due" : lastCheckIn?.timestamp ? `Verified on ${new Date(lastCheckIn.timestamp).toLocaleDateString()}` : "Custody confirmed"}
               </p>
             </div>
           </div>
           <div className="text-right">
              <span className="text-[10px] font-bold uppercase tracking-wider opacity-60">Status</span>
-             <p className="text-xs font-bold">{needsCheckIn ? "PENDING" : "ESTABLISHED"}</p>
+             <p className="text-xs font-bold">{needsCheckIn ? "PENDING" : "COMPLETE"}</p>
           </div>
         </motion.div>
       )}

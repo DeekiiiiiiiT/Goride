@@ -93,7 +93,7 @@ export function useWeeklyCheckIn(driverId: string | undefined) {
             aiReading,
             manualReadingReason,
             // Add metadata for unified timeline
-            source: 'Weekly Check-in',
+            source: 'Vehicle Handover',
             isVerified: reviewStatus === 'auto_approved' || reviewStatus === 'approved'
         } as any;
 

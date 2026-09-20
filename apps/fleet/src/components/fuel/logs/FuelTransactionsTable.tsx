@@ -36,9 +36,11 @@ import {
 } from 'lucide-react';
 import { FuelEntry } from '../../../types/fuel';
 import { Vehicle } from '../../../types/vehicle';
+import type { StationProfile } from '../../../types/station';
 import { formatFuelMoney } from '../../../utils/formatFuelMoney';
 import { resolveFuelEntrySource } from '../../../utils/fuelEntrySource';
 import { classifyFuelLogEdit } from '../../../utils/fuelLogEditGate';
+import { resolveFuelEntryStationDisplay } from '../../../utils/jaaStationDisplay';
 import {
   entrySourceLabel,
   formatFuelEntryTime,
@@ -82,8 +84,10 @@ function getTypeIcon(label: string) {
   switch (label) {
     case 'Gas Card':
       return <CreditCard className="h-4 w-4 text-indigo-500" />;
+    case 'Cash + Gas Card':
     case 'Gas Card + Cash':
       return <CreditCard className="h-4 w-4 text-emerald-600" />;
+    case 'Cash':
     case 'Driver Cash':
       return <Banknote className="h-4 w-4 text-emerald-500" />;
     case 'RideShare Cash':
@@ -97,6 +101,7 @@ function getTypeIcon(label: string) {
   }
 }
 
+/** Detailed Paid By for overlays (RideShare Cash, Driver Cash, etc.). */
 export function resolvePaymentLabel(entry: FuelEntry): string {
   const source = entry.metadata?.paymentSource || (entry as FuelEntry & { paymentSource?: string }).paymentSource;
   if (source) {
@@ -130,6 +135,15 @@ export function resolvePaymentLabel(entry: FuelEntry): string {
   }
 }
 
+/** Transaction Logs Paid By column — only Cash / Gas Card / Cash + Gas Card. */
+export function resolvePaymentLogLabel(entry: FuelEntry, isSplit = false): string {
+  if (isSplit) return 'Cash + Gas Card';
+  const detailed = resolvePaymentLabel(entry);
+  if (detailed === 'Gas Card') return 'Gas Card';
+  if (detailed === 'Gas Card + Cash' || detailed === 'Cash + Gas Card') return 'Cash + Gas Card';
+  return 'Cash';
+}
+
 export type FuelTransactionsTableProps = {
   /** Grouped rows from FuelLogTable — one visual row per pump stop. */
   pagedDisplayRows: FuelLogDisplayRow[];
@@ -137,6 +151,8 @@ export type FuelTransactionsTableProps = {
   pagedEntries: FuelEntry[];
   filteredCount: number;
   vehicles: Vehicle[];
+  /** Verified Dominion stations for brand + street address display. */
+  verifiedStations?: StationProfile[];
   page: number;
   pageCount: number;
   pageSize: number;
@@ -165,6 +181,7 @@ export function FuelTransactionsTable({
   pagedEntries,
   filteredCount,
   vehicles,
+  verifiedStations = [],
   page,
   pageCount,
   pageSize,
@@ -296,7 +313,7 @@ export function FuelTransactionsTable({
               const displayAmount = isSplit
                 ? Number(row.pumpTotal) || 0
                 : Number(entry.amount) || 0;
-              const paidByLabel = isSplit ? 'Gas Card + Cash' : resolvePaymentLabel(entry);
+              const paidByLabel = resolvePaymentLogLabel(entry, isSplit);
               const locationStatus = entry.metadata?.locationStatus || entry.locationStatus;
               const confidenceScore = entry.metadata?.auditConfidenceScore;
               const isHighlyTrusted =
@@ -397,13 +414,16 @@ export function FuelTransactionsTable({
                     </div>
                   </TableCell>
                   <TableCell className="hidden md:table-cell">
+                    {(() => {
+                      const stationDisplay = resolveFuelEntryStationDisplay(
+                        entry,
+                        verifiedStations,
+                      );
+                      return (
                     <div className="flex flex-col gap-0.5">
                       <div className="flex items-center gap-1.5">
                         <span className="max-w-[140px] truncate text-xs font-semibold text-slate-700">
-                          {entry.location ||
-                            entry.vendor ||
-                            entry.metadata?.stationName ||
-                            'Unknown Station'}
+                          {stationDisplay.title}
                         </span>
                         {locationStatus === 'verified' && (
                           <Tooltip>
@@ -465,12 +485,14 @@ export function FuelTransactionsTable({
                         )}
                       </div>
                       <span
-                        title={entry.location}
+                        title={stationDisplay.subtitle}
                         className="max-w-[140px] truncate text-[11px] text-slate-400"
                       >
-                        {entry.location || 'No GPS metadata'}
+                        {stationDisplay.subtitle}
                       </span>
                     </div>
+                      );
+                    })()}
                   </TableCell>
                   <TableCell className="hidden text-xs font-medium md:table-cell">{getVehicleName(entry.vehicleId)}</TableCell>
                   <TableCell className="hidden text-xs md:table-cell">{getDriverName(entry.driverId)}</TableCell>

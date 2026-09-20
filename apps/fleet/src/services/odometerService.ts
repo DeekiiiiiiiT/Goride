@@ -118,7 +118,7 @@ export const odometerService = {
       const sourceMap: Record<UnifiedOdometerSource, string> = {
           'fuel': 'Fuel Log',
           'service': 'Service Log',
-          'checkin': 'Weekly Check-in',
+          'checkin': 'Vehicle Handover',
           'manual': 'Manual Update'
       };
 

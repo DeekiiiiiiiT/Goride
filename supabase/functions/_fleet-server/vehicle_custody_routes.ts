@@ -1,5 +1,6 @@
 /**
- * Vehicle custody: fleet hand-over + driver confirm + check-in eligibility.
+ * Vehicle custody: fleet hand-over + driver Vehicle Handover proof eligibility.
+ * Check-in POST (odometer + photo) is the handover proof that promotes handed_over to in_custody.
  */
 import type { Hono } from "npm:hono@4.3.11";
 import type { RbacUser } from "./rbac_middleware.ts";
@@ -11,22 +12,11 @@ import {
 import {
   normalizeCustodyStatus,
   type VehicleCustodyStatus,
-  vehicleHasDriverCustody,
 } from "./vehicle_custody.ts";
-import { fleetDb, fleetTable } from "./repos/baseRepo.ts";
 
 function rbacFromContext(c: { get: (k: string) => unknown }): RbacUser | null {
   const user = c.get("rbacUser") as RbacUser | undefined;
   return user?.userId ? user : null;
-}
-
-function getWeekStartMonday(): string {
-  const now = new Date();
-  const day = now.getDay();
-  const diff = now.getDate() - day + (day === 0 ? -6 : 1);
-  const monday = new Date(now.setDate(diff));
-  monday.setHours(0, 0, 0, 0);
-  return monday.toISOString().split("T")[0]!;
 }
 
 function vehicleLabel(v: Record<string, unknown>): string {
@@ -155,7 +145,7 @@ export function registerVehicleCustodyRoutes(
     },
   );
 
-  /** Driver/fleet: custody + weekly check-in eligibility for the signed-in driver. */
+  /** Driver/fleet: Vehicle Handover proof eligibility (needsCheckIn alias for client churn). */
   app.get(
     "/make-server-37f42386/check-ins/eligibility",
     deps.requireAuth() as never,
@@ -186,42 +176,24 @@ export function registerVehicleCustodyRoutes(
           effectiveStatus = "assigned";
         }
 
-        const weekStart = getWeekStartMonday();
-        let needsCheckIn = false;
-        if (vehicleId && effectiveStatus === "in_custody") {
-          const variants = await expandDriverIdVariants(driverIdParam);
-          let q = fleetDb()
-            .from(fleetTable("checkins"))
-            .select("id")
-            .eq("week_start", weekStart)
-            .limit(1);
-          if (variants.length === 1) {
-            q = q.eq("driver_id", variants[0]!);
-          } else if (variants.length > 1) {
-            q = q.in("driver_id", variants);
-          } else {
-            q = q.eq("driver_id", driverIdParam);
-          }
-          const { data } = await q;
-          needsCheckIn = !data?.length;
-        }
+        // One-time proof while fleet has marked handed_over — not weekly.
+        const needsCheckIn = Boolean(vehicleId) && effectiveStatus === "handed_over";
+        const eligible = needsCheckIn;
 
-        const eligible = effectiveStatus === "in_custody" && Boolean(vehicleId);
         let reason: string | null = null;
         if (!vehicleId) reason = "no_vehicle";
         else if (effectiveStatus === "assigned") reason = "awaiting_handover";
-        else if (effectiveStatus === "handed_over") reason = "awaiting_driver_confirm";
-        else if (!needsCheckIn && eligible) reason = "checkin_complete";
-        else if (eligible && needsCheckIn) reason = "checkin_due";
+        else if (effectiveStatus === "handed_over") reason = "handover_proof_due";
+        else if (effectiveStatus === "in_custody") reason = "handover_complete";
 
         return c.json({
-          needsCheckIn: eligible && needsCheckIn,
+          needsCheckIn,
           eligible,
           reason,
           custodyStatus: effectiveStatus,
           vehicleId,
           vehicleLabel: vehicle ? vehicleLabel(vehicle) : null,
-          weekStart,
+          handedOverAt: vehicle?.handedOverAt ?? null,
         });
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : String(e);
@@ -231,23 +203,46 @@ export function registerVehicleCustodyRoutes(
   );
 }
 
-/** Shared guard for POST /check-ins */
+/**
+ * Guard for POST /check-ins (Vehicle Handover proof).
+ * Allowed from handed_over (driver completing proof) or in_custody (fleet backfill).
+ */
 export async function assertVehicleCustodyForCheckIn(
   vehicleId: string,
-): Promise<{ ok: true } | { ok: false; error: string; status: number }> {
+): Promise<{ ok: true; vehicle: Record<string, unknown> } | { ok: false; error: string; status: number }> {
   const vehicle = await loadVehicle(vehicleId);
   if (!vehicle) {
-    return { ok: false, error: "Vehicle not found for check-in", status: 404 };
+    return { ok: false, error: "Vehicle not found for vehicle handover", status: 404 };
   }
-  if (!vehicleHasDriverCustody(vehicle)) {
-    const status = normalizeCustodyStatus(vehicle.custodyStatus);
-    const msg =
-      status === "handed_over"
-        ? "Confirm you have received the vehicle before weekly check-in"
-        : status === "assigned"
-          ? "Fleet must hand over the vehicle before weekly check-in"
-          : "Vehicle custody not confirmed — complete hand-over before weekly check-in";
-    return { ok: false, error: msg, status: 400 };
+  const status = normalizeCustodyStatus(vehicle.custodyStatus);
+  if (status === "handed_over" || status === "in_custody") {
+    return { ok: true, vehicle };
   }
-  return { ok: true };
+  const msg =
+    status === "assigned"
+      ? "Fleet must mark the vehicle as handed over before Vehicle Handover proof"
+      : "Vehicle must be handed over before Vehicle Handover proof";
+  return { ok: false, error: msg, status: 400 };
+}
+
+/** Promote handed_over → in_custody after successful odometer+photo handover proof. */
+export async function completeCustodyFromHandoverProof(
+  vehicleId: string,
+  confirmedByUserId: string,
+): Promise<Record<string, unknown> | null> {
+  const vehicle = await loadVehicle(vehicleId);
+  if (!vehicle) return null;
+  const status = normalizeCustodyStatus(vehicle.custodyStatus);
+  if (status === "in_custody") return vehicle;
+  if (status !== "handed_over") return vehicle;
+
+  const now = new Date().toISOString();
+  const updated: Record<string, unknown> = {
+    ...vehicle,
+    custodyStatus: "in_custody" as VehicleCustodyStatus,
+    custodyConfirmedAt: now,
+    custodyConfirmedBy: confirmedByUserId,
+  };
+  await saveVehicle(updated);
+  return updated;
 }

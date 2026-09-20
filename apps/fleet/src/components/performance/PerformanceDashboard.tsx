@@ -198,7 +198,7 @@ export function PerformanceDashboard() {
           </TabsTrigger>
           <TabsTrigger value="checkins" className="flex items-center gap-2">
             <ClipboardList className="h-4 w-4" />
-            Weekly Check-In
+            Vehicle Handover
           </TabsTrigger>
           <TabsTrigger value="safety" className="flex items-center gap-2">
             <ShieldAlert className="h-4 w-4" />

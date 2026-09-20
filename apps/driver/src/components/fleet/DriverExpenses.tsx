@@ -42,6 +42,7 @@ import { EvidenceRetentionNotice } from '../evidence/EvidenceRetentionNotice';
 import { FinancialTransaction, TransactionCategory } from '../../types/data';
 import { StationProfile } from '../../types/station';
 import { isTollCategory } from '../../utils/tollCategoryHelper';
+import { resolveFuelEntryStationDisplay } from '../../utils/fuelStationDisplay';
 import { PaymentMethodSelector, type FuelPaymentMethodSelect } from './expenses/PaymentMethodSelector';
 import { GasCardSummary, type FuelPumpStep } from './expenses/GasCardSummary';
 import { derivePricePerLiter } from './expenses/FuelCashInputs';
@@ -116,6 +117,10 @@ interface ExpenseItem {
   description: string;
   status: string;
   station?: string;
+  /** Parent company / independent station name (fuel rows). */
+  stationTitle?: string;
+  /** Street address under the title (fuel rows). */
+  stationSubtitle?: string;
   odometer?: number;
   volume?: number;
   receiptUrl?: string;
@@ -268,7 +273,7 @@ export function DriverExpenses({ defaultOpen = false, mode, onBack }: ExpenseLog
 
       // Fuel GETs used to send the anon key → 401 under requireAuth(strict) and
       // Promise.all rejected, so tolls never painted either. Each leg must be resilient.
-      const [allTx, allFuel, vehicleFuel] = await Promise.all([
+      const [allTx, allFuel, vehicleFuel, stationsRaw] = await Promise.all([
         api.getTransactions(driverIds, { limit: 5000 }).catch(() => []),
         api
           .getAllFuelEntries({
@@ -293,7 +298,13 @@ export function DriverExpenses({ defaultOpen = false, mode, onBack }: ExpenseLog
                 return [] as any[];
               })
           : Promise.resolve([] as any[]),
+        api.getStations().catch(() => [] as StationProfile[]),
       ]);
+
+      const verifiedForDisplay = ((stationsRaw || []) as StationProfile[]).filter(
+        (s) => s.status === 'verified',
+      );
+      setVerifiedStations(verifiedForDisplay);
       
       console.log('[DriverExpenses] Fetched all fuel entries:', allFuel?.length || 0);
       console.log('[DriverExpenses] Fetched vehicle fuel entries:', vehicleFuel?.length || 0);
@@ -420,16 +431,22 @@ export function DriverExpenses({ defaultOpen = false, mode, onBack }: ExpenseLog
                 ? 'Gas Card + Cash · split fill'
                 : null;
         const spend = Math.abs(Number(f.amount ?? f.cost ?? 0) || 0);
+        const stationDisplay = resolveFuelEntryStationDisplay(f, verifiedForDisplay);
+        const stationTitle = stationDisplay.title;
+        const stationSubtitle =
+          stationDisplay.subtitle !== 'No GPS metadata' ? stationDisplay.subtitle : undefined;
         combined.push({
           id: f.id,
           type: 'fuel',
           date: f.date ? parseISO(String(f.date).slice(0, 10)) : new Date(f.createdAt),
           amount: spend,
           description: splitLabel
-            ? `${splitLabel} — ${f.station || f.stationName || 'Pump'}`
-            : f.station || f.stationName || 'Fuel Purchase',
+            ? `${splitLabel} — ${stationTitle}`
+            : stationTitle,
           status: f.auditStatus || f.status || 'pending',
-          station: f.station || f.stationName,
+          station: f.station || f.stationName || stationTitle,
+          stationTitle,
+          stationSubtitle,
           odometer: f.odometer || f.odometerReading,
           volume: f.volume || f.liters,
           receiptUrl: f.receiptUrl
@@ -1883,9 +1900,27 @@ export function DriverExpenses({ defaultOpen = false, mode, onBack }: ExpenseLog
                              </div>
                              <div className="min-w-0 flex-1 overflow-hidden">
                                 <div className="flex min-w-0 items-start justify-between gap-2">
-                                   <h4 className="min-w-0 flex-1 break-words line-clamp-3 font-semibold leading-snug text-slate-900 dark:text-slate-100">
-                                     {expense.description || getExpenseLabel(expense.type)}
-                                   </h4>
+                                   <div className="min-w-0 flex-1">
+                                     {expense.type === 'fuel' ? (
+                                       <>
+                                         <h4 className="min-w-0 break-words line-clamp-2 font-semibold leading-snug text-slate-900 dark:text-slate-100">
+                                           {expense.stationTitle || expense.description || 'Fuel'}
+                                         </h4>
+                                         {expense.stationSubtitle ? (
+                                           <p
+                                             title={expense.stationSubtitle}
+                                             className="mt-0.5 line-clamp-1 text-[11px] font-medium text-slate-500 dark:text-slate-400"
+                                           >
+                                             {expense.stationSubtitle}
+                                           </p>
+                                         ) : null}
+                                       </>
+                                     ) : (
+                                       <h4 className="min-w-0 break-words line-clamp-3 font-semibold leading-snug text-slate-900 dark:text-slate-100">
+                                         {expense.description || getExpenseLabel(expense.type)}
+                                       </h4>
+                                     )}
+                                   </div>
                                    <span className="shrink-0 text-right text-sm font-bold tabular-nums text-slate-900 dark:text-slate-100 sm:text-base">
                                       ${Math.abs(expense.amount).toFixed(2)}
                                    </span>
@@ -1900,6 +1935,7 @@ export function DriverExpenses({ defaultOpen = false, mode, onBack }: ExpenseLog
                                        <span className="min-w-0 break-words">• {expense.odometer.toLocaleString()} km</span>
                                      )}
                                    </div>
+                                   {expense.type !== 'fuel' ? (
                                    <Badge
                                      variant="outline"
                                      className={cn(
@@ -1909,8 +1945,9 @@ export function DriverExpenses({ defaultOpen = false, mode, onBack }: ExpenseLog
                                        "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200"
                                      )}
                                    >
-                                     {expense.type === 'fuel' ? getExpenseLabel(expense.type) : expense.status}
+                                     {expense.status}
                                    </Badge>
+                                   ) : null}
                                 </div>
                              </div>
                           </div>

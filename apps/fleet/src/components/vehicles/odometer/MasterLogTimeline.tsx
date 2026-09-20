@@ -443,6 +443,7 @@ const MasterLogTimelineInternal: React.FC<MasterLogTimelineProps & React.HTMLAtt
       case 'Service Request':
         return <Wrench className="h-4 w-4 text-blue-500" />;
       case 'Weekly Check-in':
+      case 'Vehicle Handover':
         return <ClipboardCheck className="h-4 w-4 text-indigo-500" />;
       case 'Baseline':
         return <ShieldCheck className="h-4 w-4 text-purple-500" />;
@@ -452,7 +453,7 @@ const MasterLogTimelineInternal: React.FC<MasterLogTimelineProps & React.HTMLAtt
   };
 
   const getSourceLabel = (source: string) => {
-     if (source === 'Weekly Check-in') return 'Check-in';
+     if (source === 'Weekly Check-in' || source === 'Vehicle Handover' || source === 'checkin') return 'Vehicle Handover';
      return source;
   }
 
@@ -1004,8 +1005,8 @@ const MasterLogTimelineInternal: React.FC<MasterLogTimelineProps & React.HTMLAtt
                     <div className="flex gap-3">
                         <div className="mt-0.5"><CheckCircle2 className="w-4 h-4 text-indigo-500" /></div>
                         <div>
-                            <h4 className="text-xs font-bold text-slate-700">Weekly Check-in</h4>
-                            <p className="text-[11px] text-slate-500 mt-0.5">Verified photo of odometer cluster by admin.</p>
+                            <h4 className="text-xs font-bold text-slate-700">Vehicle Handover</h4>
+                            <p className="text-[11px] text-slate-500 mt-0.5">Verified photo proof when the driver receives the vehicle.</p>
                         </div>
                     </div>
                 </CardContent>

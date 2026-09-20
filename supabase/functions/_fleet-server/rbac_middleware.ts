@@ -156,6 +156,47 @@ function resolveOrganizationId(
   return null;
 }
 
+/**
+ * Drivers often have fleet_id only on driver_profiles / fleet.drivers, not in JWT
+ * app_metadata.organizationId (common after invite / hand-over). Heal org so
+ * requireOrg endpoints (vehicles, drivers) work for weekly check-in + expenses.
+ */
+async function healDriverOrganizationId(userId: string): Promise<string | null> {
+  try {
+    const { getServiceClient } = await import('./service_client.ts');
+    const sb = getServiceClient();
+
+    const { data: profile } = await sb
+      .from('driver_profiles')
+      .select('fleet_id')
+      .eq('user_id', userId)
+      .maybeSingle();
+    const fromProfile = typeof profile?.fleet_id === 'string' ? profile.fleet_id.trim() : '';
+    if (fromProfile) return fromProfile;
+
+    const { data: byId } = await sb
+      .from('fleet_drivers')
+      .select('organization_id')
+      .eq('id', userId)
+      .maybeSingle();
+    const fromDriverId =
+      typeof byId?.organization_id === 'string' ? byId.organization_id.trim() : '';
+    if (fromDriverId) return fromDriverId;
+
+    const { data: byUser } = await sb
+      .from('fleet_drivers')
+      .select('organization_id')
+      .eq('user_id', userId)
+      .maybeSingle();
+    const fromUserCol =
+      typeof byUser?.organization_id === 'string' ? byUser.organization_id.trim() : '';
+    if (fromUserCol) return fromUserCol;
+  } catch (err) {
+    console.warn('[RBAC] healDriverOrganizationId failed', err);
+  }
+  return null;
+}
+
 export function hasPlatformStaffAccess(user: RbacUser): boolean {
   return PLATFORM_RESOLVED_ROLES.has(user.resolvedRole)
     || PLATFORM_STAFF_RAW_ROLES.has(user.rawRole);
@@ -456,6 +497,21 @@ export function requireAuth(options?: RequireAuthOptions) {
         resolvedRole: resolved,
         organizationId: resolveOrganizationId(appMeta, data.user.id, resolved),
       };
+
+      // Driver JWTs often omit organizationId — heal from profile / fleet.drivers
+      // so hand-over → check-in can still load the assigned vehicle.
+      if (
+        !rbacUser.organizationId &&
+        (resolved === 'driver' || String(rawRole).toLowerCase().includes('driver'))
+      ) {
+        const healed = await healDriverOrganizationId(data.user.id);
+        if (healed) {
+          rbacUser.organizationId = healed;
+          console.log(
+            `[RBAC] Healed driver org from profile/roster user=${data.user.id} org=${healed}`,
+          );
+        }
+      }
 
       c.set('rbacUser', rbacUser);
 

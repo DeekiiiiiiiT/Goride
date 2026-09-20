@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 import { FuelEntry } from '../../types/fuel';
 import { FinancialTransaction } from '../../types/data';
 import { Vehicle } from '../../types/vehicle';
+import { StationProfile } from '../../types/station';
 import { useFuelCycles } from '../../hooks/useFuelCycles';
 import { useFuelAnchors } from '../../hooks/useFuelAnchors';
 import { useFuelLogQuery } from '../../hooks/useFuelLogQuery';
@@ -25,6 +26,8 @@ import {
 import { buildTrustedPeriodTotals } from '../../utils/fuelPeriodTotals';
 import { partitionCyclesForPeriod } from '../../utils/fuelCycleTrust';
 import { useFleetTimezone, fleetTzDateKey } from '../../utils/timezoneDisplay';
+import { resolveFuelEntryStationDisplay } from '../../utils/jaaStationDisplay';
+import { fuelService } from '../../services/fuelService';
 import { Skeleton } from '../ui/skeleton';
 import { usePlatformConfig } from '../auth/PlatformConfigContext';
 import { FuelEntryDetailSheet } from './logs/FuelEntryDetailSheet';
@@ -105,8 +108,28 @@ export function FuelLogTable({
   );
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>(query.sortDir || 'desc');
   const [page, setPage] = useState(0);
+  const [verifiedStations, setVerifiedStations] = useState<StationProfile[]>([]);
   const { assignments: exceptionAssignments, assign: handleAssignException } =
     useFuelExceptionAssignments();
+
+  // Verified Dominion ledger — Station column joins brand + street address
+  useEffect(() => {
+    let cancelled = false;
+    fuelService
+      .getStations()
+      .then((stations) => {
+        if (cancelled) return;
+        setVerifiedStations(
+          ((stations || []) as StationProfile[]).filter((s) => s.status === 'verified'),
+        );
+      })
+      .catch(() => {
+        if (!cancelled) setVerifiedStations([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     let timer: number | undefined;
@@ -691,6 +714,10 @@ export function FuelLogTable({
     });
   };
 
+  const viewingStationDisplay = viewingEntry
+    ? resolveFuelEntryStationDisplay(viewingEntry, verifiedStations)
+    : null;
+
   return (
     <div className="space-y-4">
       {loadError && (
@@ -863,6 +890,7 @@ export function FuelLogTable({
             pagedEntries={pagedEntries}
             filteredCount={displayRows.length}
             vehicles={vehicles}
+            verifiedStations={verifiedStations}
             page={page}
             pageCount={pageCount}
             pageSize={PAGE_SIZE}
@@ -917,14 +945,8 @@ export function FuelLogTable({
         splitSiblings={viewingSplitSiblings}
         vehicleLabel={viewingEntry ? getVehicleName(viewingEntry.vehicleId) : undefined}
         driverLabel={viewingEntry ? getDriverName(viewingEntry.driverId) : undefined}
-        stationLabel={
-          viewingEntry
-            ? viewingEntry.vendor ||
-              viewingEntry.metadata?.stationName ||
-              viewingEntry.location ||
-              viewingEntry.stationAddress
-            : undefined
-        }
+        stationLabel={viewingStationDisplay?.title}
+        stationAddressLabel={viewingStationDisplay?.subtitle}
         paymentLabel={viewingEntry ? resolvePaymentLabel(viewingEntry) : undefined}
         prevOdometer={
           viewingEntry ? prevOdometerMap.get(viewingEntry.id)?.prevOdo ?? null : null

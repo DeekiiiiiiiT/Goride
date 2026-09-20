@@ -650,7 +650,8 @@ export const api = {
 
   async getDrivers() {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/drivers`, {
-        headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+        // Driver JWT required — anon key is rejected by requireAuth({ requireOrg: true }).
+        headers: await getHeaders(null),
     });
     if (!response.ok) throw new Error("Failed to fetch drivers");
     const txt = await response.text();
@@ -660,10 +661,7 @@ export const api = {
   async saveDriver(driver: any) {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/drivers`, {
         method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${publicAnonKey}`
-        },
+        headers: await getHeaders(),
         body: JSON.stringify(driver)
     });
     if (!response.ok) throw new Error("Failed to save driver");
@@ -710,6 +708,23 @@ export const api = {
       throw new Error(msg);
     }
     return response.json();
+  },
+
+  /** Self check-in eligibility — returns vehicleId even when list APIs lack org context. */
+  async getCheckInEligibility(driverId: string) {
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.fleetCore}/check-ins/eligibility?driverId=${encodeURIComponent(driverId)}`,
+      { headers: await getHeaders(null) },
+    );
+    if (!response.ok) throw new Error('Failed to fetch check-in eligibility');
+    return response.json() as Promise<{
+      needsCheckIn?: boolean;
+      eligible?: boolean;
+      custodyStatus?: string;
+      vehicleId?: string | null;
+      vehicleLabel?: string | null;
+      reason?: string | null;
+    }>;
   },
 
   /** Request to join a fleet via permanent Fleet Tag (pending owner approval). */

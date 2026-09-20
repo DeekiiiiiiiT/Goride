@@ -345,7 +345,7 @@ export function VehicleDetailHeader({
                 <DialogDescription>
                   Confirm that {vehicle.currentDriverName || 'the driver'} has physically received{' '}
                   <span className="font-mono font-semibold">{vehicle.licensePlate}</span>. They will
-                  then confirm custody in the Roam Driver app before weekly check-in becomes mandatory.
+                  complete Vehicle Handover (odometer photo) in the Roam Driver app to confirm custody.
                 </DialogDescription>
               </DialogHeader>
               <DialogFooter>

@@ -504,7 +504,7 @@ export async function projectFromCheckIn(
     driverId: (checkIn.driverId as string) || null,
     isHard: true,
     isVerified: !!verified,
-    notes: checkIn.weekStart ? `Weekly Check-in (Week: ${checkIn.weekStart})` : "Weekly Check-in",
+    notes: "Vehicle Handover",
     imageUrl: (checkIn.photoUrl as string) || (checkIn.imageUrl as string) || null,
     payloadExtra: {
       weekStart: checkIn.weekStart,

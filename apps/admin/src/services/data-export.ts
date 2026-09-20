@@ -203,7 +203,7 @@ function normalizeCheckInReadings(checkIns: any[], vehicleId: string): OdometerR
         date: c.timestamp || c.date,
         value: c.odometer,
         type: 'Calculated',
-        source: 'Weekly Check-in',
+        source: 'Vehicle Handover',
         createdAt: c.createdAt || new Date().toISOString(),
         isVerified: false,
         referenceId: c.id
@@ -298,7 +298,7 @@ async function fetchAllCheckIns(): Promise<any[]> {
                     date: c.timestamp || c.date,
                     vehicleId: c.vehicleId || v.id,
                     value: c.odometer,
-                    source: 'Weekly Check-in'
+                    source: 'Vehicle Handover'
                 }));
             } catch (e) {
                 console.warn(`Failed to fetch check-ins for vehicle ${v.id}`, e);

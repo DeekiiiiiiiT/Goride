@@ -1235,7 +1235,7 @@ export function VehiclesPage({
             <AlertDialogTitle>Mark vehicle handed over?</AlertDialogTitle>
             <AlertDialogDescription>
               {handoverTarget
-                ? `Confirm you physically handed ${handoverTarget.licensePlate || handoverTarget.id} (${handoverTarget.year} ${handoverTarget.make} ${handoverTarget.model}) to ${handoverTarget.currentDriverName || 'the assigned driver'}. They must then confirm in the driver app before weekly check-in is required.`
+                ? `Confirm you physically handed ${handoverTarget.licensePlate || handoverTarget.id} (${handoverTarget.year} ${handoverTarget.make} ${handoverTarget.model}) to ${handoverTarget.currentDriverName || 'the assigned driver'}. They must complete Vehicle Handover (odometer photo) in the driver app to confirm custody.`
                 : 'Confirm physical hand-over to the assigned driver.'}
             </AlertDialogDescription>
           </AlertDialogHeader>

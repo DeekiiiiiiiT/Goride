@@ -30,7 +30,7 @@ export const odometerService = {
             // Direct history items already have an ID, but we want to ensure source is typed correctly
             if (r.type !== 'Calculated') {
                 // Respect 'checkin' source if it was restored that way
-                const mappedSource = (r.source === 'Weekly Check-in' || r.source === 'checkin') ? 'checkin' : 'manual';
+                const mappedSource = (r.source === 'Weekly Check-in' || r.source === 'Vehicle Handover' || r.source === 'checkin') ? 'checkin' : 'manual';
                 
                 unified.push({
                     ...r,
@@ -100,7 +100,7 @@ export const odometerService = {
               value: checkIn.odometer,
               type: 'Hard',
               source: 'checkin',
-              notes: `Weekly Check-in (Week: ${checkIn.weekStart})`,
+              notes: `Vehicle Handover`,
               referenceId: checkIn.id,
               imageUrl: checkIn.photoUrl || checkIn.imageUrl || checkIn.metadata?.photoUrl,
               isVerified: checkIn.verified || false,
@@ -190,7 +190,7 @@ export const odometerService = {
       const sourceMap: Record<UnifiedOdometerSource, string> = {
           'fuel': 'Fuel Log',
           'service': 'Service Log',
-          'checkin': 'Weekly Check-in',
+          'checkin': 'Vehicle Handover',
           'manual': 'Manual Update'
       };
 

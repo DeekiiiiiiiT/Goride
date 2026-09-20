@@ -11,7 +11,7 @@ import {
 import { format } from 'date-fns';
 import { Button } from '../../ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../../ui/card';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../ui/tabs';
+import { TabsContent } from '../../ui/tabs';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -23,7 +23,6 @@ import {
 import { ErrorBoundary } from '../../ui/ErrorBoundary';
 import { Vehicle } from '../../../types/vehicle';
 import { OdometerHistory } from '../odometer/OdometerHistory';
-import { MasterLogTimeline } from '../odometer/MasterLogTimeline';
 import { ImportOdometerModal } from '../odometer/ImportOdometerModal';
 
 export interface VehicleDetailOdometerTabProps {
@@ -155,21 +154,10 @@ export function VehicleDetailOdometerTab({
                         </CardDescription>
                     </CardHeader>
                     <CardContent>
-                        <Tabs defaultValue="history">
-                            <TabsList>
-                                <TabsTrigger value="history">History Log</TabsTrigger>
-                                <TabsTrigger value="anomalies">Anomalies</TabsTrigger>
-                            </TabsList>
-                            <TabsContent value="history" className="mt-4">
-                                <OdometerHistory 
-                                    vehicleId={vehicle.id || vehicle.licensePlate} 
-                                    refreshTrigger={odometerRefreshTrigger}
-                                />
-                            </TabsContent>
-                            <TabsContent value="anomalies" className="mt-4">
-                                <MasterLogTimeline vehicleId={vehicle.id || vehicle.licensePlate} viewMode="anomalies" />
-                            </TabsContent>
-                        </Tabs>
+                        <OdometerHistory 
+                            vehicleId={vehicle.id || vehicle.licensePlate} 
+                            refreshTrigger={odometerRefreshTrigger}
+                        />
                     </CardContent>
                 </Card>
               </ErrorBoundary>

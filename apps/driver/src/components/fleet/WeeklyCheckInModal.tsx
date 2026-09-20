@@ -165,7 +165,7 @@ export function WeeklyCheckInModal({
             const msg =
                 typeof err?.message === 'string' && err.message.trim()
                     ? err.message
-                    : 'Failed to save check-in. Please try again.';
+                    : 'Failed to save vehicle handover. Please try again.';
             setErrorMsg(msg);
             setStep(fallbackStep);
         }
@@ -203,8 +203,8 @@ export function WeeklyCheckInModal({
                                     <ScanLine className="w-5 h-5 text-indigo-600" />
                                 </div>
                                 <div className="text-xs text-indigo-900 leading-relaxed">
-                                    <p className="font-bold mb-1 uppercase tracking-wider">Weekly Business Baseline</p>
-                                    <p className="opacity-80">Every Monday, we establish a verified anchor to separate platform trips from personal mileage. Photo must be clear.</p>
+                                    <p className="font-bold mb-1 uppercase tracking-wider">Vehicle Handover</p>
+                                    <p className="opacity-80">Confirm you received this vehicle — clear odometer photo required. This is proof for you, your fleet, and Roam.</p>
                                 </div>
                             </div>
                             <div 
@@ -379,7 +379,7 @@ export function WeeklyCheckInModal({
                                 <div className="w-16 h-16 border-4 border-indigo-100 border-t-indigo-600 rounded-full animate-spin"></div>
                             </div>
                             <div className="text-center">
-                                <h3 className="font-medium text-lg text-slate-900">Submitting Check-In</h3>
+                                <h3 className="font-medium text-lg text-slate-900">Submitting Handover</h3>
                                 <p className="text-slate-500 mt-1">Uploading photo and data...</p>
                             </div>
                         </div>
@@ -435,7 +435,7 @@ export function WeeklyCheckInModal({
             >
                 <motion.div className="border-b border-slate-200 px-5 py-4 dark:border-slate-700">
                     <h2 id="weekly-checkin-title" className="text-lg font-semibold text-slate-900 dark:text-white">
-                        Weekly Odometer Check-In
+                        Vehicle Handover
                     </h2>
                     {stepLabel && (
                         <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">{stepLabel}</p>

@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   matchVendorToVerifiedStation,
   resolveCardTransactionStation,
+  resolveFuelEntryStationDisplay,
 } from './jaaStationDisplay';
 import type { StationProfile } from '../types/station';
 import type { FuelEntry } from '../types/fuel';
@@ -68,5 +69,81 @@ describe('jaaStationDisplay', () => {
     const result = resolveCardTransactionStation(stmt, stations);
     expect(result.label).toBe('UNKNOWN PUMP XYZ');
     expect(result.fromVerified).toBe(false);
+  });
+});
+
+describe('resolveFuelEntryStationDisplay', () => {
+  const ledger = [
+    station({
+      id: 'st-fesco',
+      name: 'FESCO BEECHWOOD',
+      brand: 'FESCO',
+      address: '7 - 9 Beechwood Ave',
+    }),
+    station({
+      id: 'st-jampet',
+      name: 'Jampet Service Station',
+      brand: 'Independent',
+      address: '27 Willowdene Pkwy',
+    }),
+  ];
+
+  it('shows chain brand on top and street address below', () => {
+    const entry = {
+      id: 'e1',
+      date: '2026-09-19',
+      amount: 100,
+      location: 'FESCO BEECHWOOD',
+      vendor: 'FESCO BEECHWOOD',
+      matchedStationId: 'st-fesco',
+      metadata: {},
+    } as FuelEntry;
+    const d = resolveFuelEntryStationDisplay(entry, ledger);
+    expect(d.title).toBe('FESCO');
+    expect(d.subtitle).toBe('7 - 9 Beechwood Ave');
+  });
+
+  it('uses station name for Independent brand (never shows Independent)', () => {
+    const entry = {
+      id: 'e2',
+      date: '2026-09-19',
+      amount: 100,
+      location: 'Jampet Service Station',
+      vendor: 'Jampet Service Station',
+      matchedStationId: 'st-jampet',
+      metadata: {},
+    } as FuelEntry;
+    const d = resolveFuelEntryStationDisplay(entry, ledger);
+    expect(d.title).toBe('Jampet Service Station');
+    expect(d.subtitle).toBe('27 Willowdene Pkwy');
+    expect(d.title.toLowerCase()).not.toContain('independent');
+  });
+
+  it('unmatched entry: name on top, does not duplicate name as subtitle', () => {
+    const entry = {
+      id: 'e3',
+      date: '2026-09-19',
+      amount: 100,
+      location: 'Mystery Pump',
+      vendor: 'Mystery Pump',
+      metadata: {},
+    } as FuelEntry;
+    const d = resolveFuelEntryStationDisplay(entry, ledger);
+    expect(d.title).toBe('Mystery Pump');
+    expect(d.subtitle).toBe('No GPS metadata');
+  });
+
+  it('unmatched entry: prefers stationAddress on subtitle', () => {
+    const entry = {
+      id: 'e4',
+      date: '2026-09-19',
+      amount: 100,
+      vendor: 'Mystery Pump',
+      stationAddress: '12 Main St',
+      metadata: {},
+    } as FuelEntry;
+    const d = resolveFuelEntryStationDisplay(entry, ledger);
+    expect(d.title).toBe('Mystery Pump');
+    expect(d.subtitle).toBe('12 Main St');
   });
 });

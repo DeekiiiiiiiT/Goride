@@ -200,7 +200,7 @@ const formatSource = (source: string): string => {
     switch (source) {
         case 'fuel': return 'Fuel Log';
         case 'service': return 'Service Log';
-        case 'checkin': return 'Weekly Check-in';
+        case 'checkin': return 'Vehicle Handover';
         case 'manual': return 'Manual Entry';
         default: return source;
     }

@@ -79,7 +79,7 @@ export function WeeklyCheckInLogs() {
     return (
         <div className="space-y-4">
             <div className="flex items-center justify-between">
-                <h3 className="text-lg font-semibold">Weekly Check-In Logs</h3>
+                <h3 className="text-lg font-semibold">Vehicle Handover Logs</h3>
                 <div className="text-sm text-slate-500">{checkIns.length} Records</div>
             </div>
 
@@ -100,7 +100,7 @@ export function WeeklyCheckInLogs() {
                         {checkIns.length === 0 ? (
                             <TableRow>
                                 <TableCell colSpan={7} className="h-24 text-center text-slate-500">
-                                    No check-in records found.
+                                    No vehicle handover records found.
                                 </TableCell>
                             </TableRow>
                         ) : (
@@ -166,7 +166,7 @@ export function WeeklyCheckInLogs() {
             <Dialog open={!!selectedCheckIn} onOpenChange={(open) => !open && setSelectedCheckIn(null)}>
                 <DialogContent className="sm:max-w-[500px]">
                     <DialogHeader>
-                        <DialogTitle>Check-In Verification Details</DialogTitle>
+                        <DialogTitle>Vehicle Handover Verification Details</DialogTitle>
                         <DialogDescription>
                             Review the odometer submission from {selectedCheckIn && getDriverName(selectedCheckIn.driverId)}.
                         </DialogDescription>

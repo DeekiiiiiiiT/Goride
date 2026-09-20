@@ -139,9 +139,9 @@ export const importExecutor = {
     },
 
     /**
-     * Restores a Weekly Check-in as an Odometer Reading.
+     * Restores a Vehicle Handover as an Odometer Reading.
      * Note: Since CSV lacks driverId, we cannot fully restore to check-in table.
-     * We restore to odometer history but tag it so it appears as a check-in in timeline.
+     * We restore to odometer history but tag it so it appears as a handover in timeline.
      */
     async restoreCheckIn(data: any): Promise<void> {
         const reading: Partial<OdometerReading> = {
@@ -149,7 +149,7 @@ export const importExecutor = {
             id: data.id || crypto.randomUUID(),
             date: new Date(data.date).toISOString(),
             isVerified: true,
-            source: 'Weekly Check-in' // Enforce specific source tag
+            source: 'Vehicle Handover' // Enforce specific source tag
         };
 
         await api.addOdometerReading(reading);

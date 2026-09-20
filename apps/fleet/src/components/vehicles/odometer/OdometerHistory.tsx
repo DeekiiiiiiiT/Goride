@@ -40,7 +40,7 @@ import {
   TableRow,
 } from "../../ui/table";
 import { Input } from "../../ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../ui/select";
+import { Tabs, TabsList, TabsTrigger } from "../../ui/tabs";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -80,12 +80,18 @@ const OdometerHistoryInternal: React.FC<OdometerHistoryProps> = ({
   const [isExportingMaster, setIsExportingMaster] = useState(false);
   const [isExportingCheckins, setIsExportingCheckins] = useState(false);
   const [filters, setFilters] = useState({
-    source: 'all',
+    source: 'fuel' as 'fuel' | 'service' | 'checkin',
     search: '',
     startDate: '',
     endDate: ''
   });
   const fleetTz = useFleetTimezone();
+
+  const SOURCE_TABS = [
+    { value: 'service' as const, label: 'Service Logs', short: 'Service', icon: Wrench },
+    { value: 'fuel' as const, label: 'Fuel Receipts', short: 'Fuel', icon: Fuel },
+    { value: 'checkin' as const, label: 'Vehicle Handover', short: 'Handover', icon: CheckCircle2 },
+  ];
 
   const fetchHistory = useCallback(async () => {
     setLoading(true);
@@ -187,7 +193,7 @@ const OdometerHistoryInternal: React.FC<OdometerHistoryProps> = ({
     const sourceMap: Record<string, string> = {
       'fuel': 'Fuel Receipt',
       'service': 'Service Log',
-      'checkin': 'Weekly Check-in',
+      'checkin': 'Vehicle Handover',
       'manual': 'Manual Entry'
     };
 
@@ -220,7 +226,8 @@ const OdometerHistoryInternal: React.FC<OdometerHistoryProps> = ({
       case 'fuel':
       case 'Fuel Log': return <Fuel className="h-4 w-4 text-amber-500" />;
       case 'checkin':
-      case 'Weekly Check-in': return <CheckCircle2 className="h-4 w-4 text-indigo-500" />;
+      case 'Weekly Check-in':
+      case 'Vehicle Handover': return <CheckCircle2 className="h-4 w-4 text-indigo-500" />;
       case 'Baseline': return <Flag className="h-4 w-4 text-purple-500" />;
       default: return <Calendar className="h-4 w-4 text-slate-400" />;
     }
@@ -231,10 +238,11 @@ const OdometerHistoryInternal: React.FC<OdometerHistoryProps> = ({
       case 'manual': return 'Manual';
       case 'fuel': return 'Fuel';
       case 'service': return 'Service';
-      case 'checkin': return 'Check-in';
+      case 'checkin': return 'Vehicle Handover';
       case 'Trip Import': return 'Import';
       case 'Manual Update': return 'Manual';
-      case 'Weekly Check-in': return 'Check-in';
+      case 'Weekly Check-in': return 'Vehicle Handover';
+      case 'Vehicle Handover': return 'Vehicle Handover';
       default: return source;
     }
   };
@@ -245,6 +253,7 @@ const OdometerHistoryInternal: React.FC<OdometerHistoryProps> = ({
       "Fuel Log": "fuel",
       "Service Log": "service",
       "Weekly Check-in": "checkin",
+      "Vehicle Handover": "checkin",
       "Manual Update": "manual",
     };
     return map[source] || source;
@@ -252,8 +261,7 @@ const OdometerHistoryInternal: React.FC<OdometerHistoryProps> = ({
 
   const filteredHistory = useMemo(() => {
     const rows = history.filter((item) => {
-      // Source filter (must match UnifiedOdometerEntry.source: fuel | service | checkin | manual)
-      if (filters.source !== "all" && canonicalSource(item.source) !== filters.source) return false;
+      if (canonicalSource(item.source) !== filters.source) return false;
       
       // Search (notes)
       if (filters.search && !item.notes?.toLowerCase().includes(filters.search.toLowerCase())) return false;
@@ -279,6 +287,13 @@ const OdometerHistoryInternal: React.FC<OdometerHistoryProps> = ({
       return (Number(b.value) || 0) - (Number(a.value) || 0);
     });
   }, [history, filters, canonicalSource]);
+
+  const sourceTotal = useMemo(
+    () => history.filter((item) => canonicalSource(item.source) === filters.source).length,
+    [history, filters.source, canonicalSource],
+  );
+
+  const activeSourceTab = SOURCE_TABS.find((t) => t.value === filters.source) || SOURCE_TABS[1]!;
 
   const formatDate = (dateStr: string, recordedAt?: string | null) => {
     const raw = recordedAt || dateStr;
@@ -318,6 +333,34 @@ const OdometerHistoryInternal: React.FC<OdometerHistoryProps> = ({
 
   return (
     <div className="space-y-6">
+      <Tabs
+        value={filters.source}
+        onValueChange={(v) =>
+          setFilters((prev) => ({ ...prev, source: v as 'fuel' | 'service' | 'checkin' }))
+        }
+      >
+        <TabsList className="h-auto w-full flex-wrap justify-start gap-1 bg-slate-100 p-1 sm:w-auto">
+          {SOURCE_TABS.map((tab) => {
+            const Icon = tab.icon;
+            const count = history.filter((h) => canonicalSource(h.source) === tab.value).length;
+            return (
+              <TabsTrigger
+                key={tab.value}
+                value={tab.value}
+                className="gap-1.5 px-3 py-2 data-[state=active]:bg-white data-[state=active]:shadow-sm"
+              >
+                <Icon className="h-3.5 w-3.5 shrink-0" />
+                <span className="hidden sm:inline">{tab.label}</span>
+                <span className="sm:hidden">{tab.short}</span>
+                <Badge variant="secondary" className="ml-0.5 h-5 min-w-5 rounded-md px-1.5 text-[10px] font-semibold">
+                  {count}
+                </Badge>
+              </TabsTrigger>
+            );
+          })}
+        </TabsList>
+      </Tabs>
+
       {/* Advanced Filter Bar */}
       <Card className="border-slate-200 bg-slate-50/50 shadow-sm overflow-visible">
         <CardContent className="p-4">
@@ -327,31 +370,12 @@ const OdometerHistoryInternal: React.FC<OdometerHistoryProps> = ({
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                 <Input 
-                  placeholder="Filter by location, driver, or service..." 
+                  placeholder="Filter by location, driver, or notes..." 
                   className="pl-10 bg-white border-slate-200 rounded-lg h-10"
                   value={filters.search}
                   onChange={(e) => setFilters(prev => ({ ...prev, search: e.target.value }))}
                 />
               </div>
-            </div>
-
-            <div className="w-[180px]">
-              <label className="text-xs font-semibold text-slate-500 uppercase mb-1.5 block px-1">Source Type</label>
-              <Select 
-                value={filters.source} 
-                onValueChange={(v) => setFilters(prev => ({ ...prev, source: v }))}
-              >
-                <SelectTrigger className="bg-white border-slate-200 rounded-lg h-10">
-                  <SelectValue placeholder="All Sources" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Sources</SelectItem>
-                  <SelectItem value="fuel">Fuel Logs</SelectItem>
-                  <SelectItem value="service">Service Records</SelectItem>
-                  <SelectItem value="checkin">Check-ins</SelectItem>
-                  <SelectItem value="manual">Manual Entries</SelectItem>
-                </SelectContent>
-              </Select>
             </div>
 
             <div className="flex gap-2">
@@ -378,12 +402,12 @@ const OdometerHistoryInternal: React.FC<OdometerHistoryProps> = ({
             <Button 
               variant="ghost" 
               className="text-slate-500 hover:text-slate-900 h-10"
-              onClick={() => setFilters({
-                source: 'all',
+              onClick={() => setFilters((prev) => ({
+                ...prev,
                 search: '',
                 startDate: '',
                 endDate: ''
-              })}
+              }))}
             >
               Reset
             </Button>
@@ -397,10 +421,10 @@ const OdometerHistoryInternal: React.FC<OdometerHistoryProps> = ({
           <Card className="border-slate-200 shadow-sm">
             <CardHeader className="flex flex-row items-center justify-between border-b border-slate-100 bg-slate-50/30">
               <div className="space-y-1">
-                <CardTitle className="text-base font-semibold">Raw History</CardTitle>
+                <CardTitle className="text-base font-semibold">{activeSourceTab.label}</CardTitle>
                 <CardDescription>
-                  Displaying {filteredHistory.length} of {history.length} records.
-                  “vs prior log” compares mixed sources (fuel + check-in + service) — not fuel-only integrity.
+                  Displaying {filteredHistory.length} of {sourceTotal} records.
+                  “vs prior log” compares within this {activeSourceTab.short.toLowerCase()} timeline only.
                 </CardDescription>
               </div>
             </CardHeader>
@@ -410,8 +434,8 @@ const OdometerHistoryInternal: React.FC<OdometerHistoryProps> = ({
                   <div className="bg-slate-100 h-16 w-16 rounded-full flex items-center justify-center mx-auto mb-4">
                     <Filter className="h-8 w-8 text-slate-300" />
                   </div>
-                  <h3 className="text-slate-900 font-semibold mb-1">No matching records</h3>
-                  <p className="text-slate-500 text-sm max-w-xs mx-auto">Try adjusting your filters or date range to find what you're looking for.</p>
+                  <h3 className="text-slate-900 font-semibold mb-1">No {activeSourceTab.label.toLowerCase()}</h3>
+                  <p className="text-slate-500 text-sm max-w-xs mx-auto">Try another tab, or adjust your search and date range.</p>
                 </div>
               ) : (
                 <Table>
@@ -422,7 +446,7 @@ const OdometerHistoryInternal: React.FC<OdometerHistoryProps> = ({
                       <TableHead className="font-semibold text-slate-600 h-10 text-right">Odometer</TableHead>
                       <TableHead
                         className="font-semibold text-slate-600 h-10 text-right"
-                        title="Change vs the previous log in this mixed timeline (all sources). Red = regression; does not lower Live Status."
+                        title={`Change vs the previous ${activeSourceTab.short.toLowerCase()} log in this tab. Red = regression; does not lower Live Status.`}
                       >
                         vs prior log
                       </TableHead>
@@ -462,7 +486,7 @@ const OdometerHistoryInternal: React.FC<OdometerHistoryProps> = ({
                                 title={
                                   isRegression
                                     ? 'Regression vs prior log — stored for audit; does not lower Live Status'
-                                    : 'Change vs previous log in the mixed mileage timeline'
+                                    : `Change vs previous ${activeSourceTab.short.toLowerCase()} log`
                                 }
                                 className={`font-mono text-[11px] px-1.5 h-5 rounded ${
                                   isRegression
@@ -535,43 +559,52 @@ const OdometerHistoryInternal: React.FC<OdometerHistoryProps> = ({
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-bold text-indigo-900 flex items-center gap-2">
                 <Info className="h-4 w-4" />
-                Raw History
+                {activeSourceTab.label}
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <p className="text-[11px] text-slate-500 leading-relaxed">
-                Mixed mileage timeline (fuel, check-in, service, manual). Red “Regression” means this reading is more than 50 km below the prior log — it stays for audit and does not change Live Status (highest hard km). Fuel Management “Anomaly” is tank/fill cycles only, not this column.
+                Showing {activeSourceTab.label.toLowerCase()} only. “vs prior log” is within this tab —
+                not mixed across fuel, service, and handover. Red “Regression” means this reading is more
+                than 50 km below the prior log in this list; Live Status still uses highest hard km.
               </p>
             </CardContent>
           </Card>
 
           <Card className="border-slate-200 shadow-sm">
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-bold">Source Definitions</CardTitle>
+              <CardTitle className="text-sm font-bold">Jump to source</CardTitle>
             </CardHeader>
             <CardContent className="p-0">
                <div className="divide-y divide-slate-100">
-                  <div className="p-3 flex gap-3">
-                    <div className="mt-1"><Wrench className="h-4 w-4 text-blue-500" /></div>
-                    <div>
-                      <h4 className="text-xs font-bold text-slate-900">Service Logs</h4>
-                      <p className="text-[10px] text-slate-500">Official readings from mechanic invoices. High trust.</p>
-                    </div>
-                  </div>
-                  <div className="p-3 flex gap-3">
-                    <div className="mt-1"><Fuel className="h-4 w-4 text-amber-500" /></div>
-                    <div>
-                      <h4 className="text-xs font-bold text-slate-900">Fuel Receipts</h4>
-                      <p className="text-[10px] text-slate-500">Odometer captured at pump. Excellent frequency.</p>
-                    </div>
-                  </div>
-                  <div className="p-3 flex gap-3">
-                    <div className="mt-1"><CheckCircle2 className="h-4 w-4 text-indigo-500" /></div>
-                    <div>
-                      <h4 className="text-xs font-bold text-slate-900">Weekly Check-in</h4>
-                      <p className="text-[10px] text-slate-500">Verified photo of odometer cluster by admin.</p>
-                    </div>
-                  </div>
+                  {SOURCE_TABS.map((tab) => {
+                    const Icon = tab.icon;
+                    const active = filters.source === tab.value;
+                    const blurb =
+                      tab.value === 'service'
+                        ? 'Official readings from mechanic invoices. High trust.'
+                        : tab.value === 'fuel'
+                          ? 'Odometer captured at pump. Excellent frequency.'
+                          : 'Verified photo proof when the driver receives the vehicle.';
+                    return (
+                      <button
+                        key={tab.value}
+                        type="button"
+                        onClick={() => setFilters((prev) => ({ ...prev, source: tab.value }))}
+                        className={`w-full p-3 flex gap-3 text-left transition-colors hover:bg-slate-50 ${
+                          active ? 'bg-indigo-50/60' : ''
+                        }`}
+                      >
+                        <div className="mt-1"><Icon className={`h-4 w-4 ${
+                          tab.value === 'service' ? 'text-blue-500' : tab.value === 'fuel' ? 'text-amber-500' : 'text-indigo-500'
+                        }`} /></div>
+                        <div>
+                          <h4 className={`text-xs font-bold ${active ? 'text-indigo-900' : 'text-slate-900'}`}>{tab.label}</h4>
+                          <p className="text-[10px] text-slate-500">{blurb}</p>
+                        </div>
+                      </button>
+                    );
+                  })}
                </div>
             </CardContent>
           </Card>

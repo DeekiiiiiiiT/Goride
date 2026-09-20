@@ -1,7 +1,7 @@
 import { DriverMetrics, Trip, AlertRule, Notification, VehicleMetrics, DashboardAlert } from '../types/data';
 import { WeeklyCheckIn } from '../types/check-in';
 import { FuelEntry, MileageAdjustment } from '../types/fuel';
-import { startOfWeek, isAfter, setDay, differenceInDays } from 'date-fns';
+import { startOfWeek, differenceInDays } from 'date-fns';
 
 export const AlertEngine = {
     /**
@@ -260,38 +260,9 @@ export const AlertEngine = {
             }
         });
 
-        // --- 5. Missing Check-In Checks (Phase 7) ---
-        // Only trigger if it's past Tuesday
-        const tuesday = setDay(new Date(currentWeekStart), 2); 
-        // Note: setDay(..., 2) sets to Tuesday of the same week
-        
-        if (isAfter(now, tuesday)) {
-             driverMetrics.forEach(driver => {
-                 // Only check drivers who have trips this week (Active)
-                 const hasTrips = weekTrips.some(t => t.driverId === driver.driverId);
-                 if (!hasTrips) return;
+        // --- 5. Manual Vehicle Handover overrides pending review ---
+        // Weekly "missing check-in" alerts retired — proof is one-time per hand-over cycle.
 
-                 const hasCheckIn = checkIns.some(c => 
-                     c.driverId === driver.driverId && 
-                     c.weekStart === currentWeekStart
-                 );
-                 
-                 if (!hasCheckIn) {
-                     alerts.push({
-                        id: `miss-check-${driver.driverId}-${currentWeekStart}`,
-                        definitionId: 'def-missing-checkin',
-                        timestamp: now.toISOString(),
-                        severity: 'medium',
-                        title: `Missing Weekly Check-In: ${driver.driverName}`,
-                        description: `Active driver has not submitted odometer reading for week of ${currentWeekStart}.`,
-                        status: 'new',
-                        driverId: driver.driverId
-                    });
-                 }
-             });
-        }
-
-        // --- 6. Manual Odometer Overrides (Phase 6) ---
         checkIns.forEach(checkIn => {
              if (checkIn.method === 'manual_override' && checkIn.reviewStatus === 'pending_review') {
                  // Find driver name for better context
@@ -302,7 +273,7 @@ export const AlertEngine = {
                      definitionId: 'def-manual-odometer',
                      timestamp: checkIn.timestamp || now.toISOString(),
                      severity: 'high',
-                     title: `Manual Odometer Override: ${driverName}`,
+                     title: `Manual Vehicle Handover: ${driverName}`,
                      description: `Driver manually entered ${checkIn.odometer} km. Reason: "${checkIn.manualReadingReason || 'None provided'}". Photo evidence requires review.`,
                      status: 'new',
                      driverId: checkIn.driverId,

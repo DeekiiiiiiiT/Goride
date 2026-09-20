@@ -74,7 +74,7 @@ const CATEGORY_SEARCH_TERMS: Record<string, string> = {
   inventory: "inventory stock levels reorder points supplier information parts supplies delete remove purge",
   service: "service maintenance logs oil change tire rotation repairs mechanic delete remove purge",
   odometer: "odometer history readings mileage fuel service check-in manual delete remove purge",
-  checkins: "weekly check-ins checkins submissions odometer vehicle condition inspection delete remove purge",
+  checkins: "vehicle handover handovers checkins submissions odometer vehicle condition inspection delete remove purge",
   factoryReset: "factory reset wipe all data nuclear dangerous everything delete remove purge erase",
   importHistory: "import batch history upload csv file period week delete remove purge undo rollback",
 };
@@ -996,7 +996,7 @@ function DeleteCenterInner() {
     { id: 'fuel', title: 'Fuel', description: 'Delete fuel logs and fuel cards', icon: <Fuel className="h-5 w-5" />, iconColor: 'bg-rose-50 text-rose-600', itemCount: 2 },
     { id: 'toll', title: 'Toll Management', description: 'Delete toll tags, plazas, and toll transactions', icon: <CreditCard className="h-5 w-5" />, iconColor: 'bg-rose-50 text-rose-600', itemCount: 3 },
     { id: 'finance', title: 'Finance & Assets', description: 'Delete transactions, claims, equipment, and inventory', icon: <DollarSign className="h-5 w-5" />, iconColor: 'bg-rose-50 text-rose-600', itemCount: 4 },
-    { id: 'maintenance', title: 'Maintenance & Ops', description: 'Delete service logs, odometer readings, and weekly check-ins', icon: <Wrench className="h-5 w-5" />, iconColor: 'bg-rose-50 text-rose-600', itemCount: 3 },
+    { id: 'maintenance', title: 'Maintenance & Ops', description: 'Delete service logs, odometer readings, and vehicle handovers', icon: <Wrench className="h-5 w-5" />, iconColor: 'bg-rose-50 text-rose-600', itemCount: 3 },
     { id: 'importHistory', title: 'Import History', description: 'Delete an entire import batch — removes all trips, transactions, ledger entries, and metrics it created', icon: <HardDrive className="h-5 w-5" />, iconColor: 'bg-rose-50 text-rose-600', itemCount: 1, badge: 'Cascade' },
     { id: 'dangerZone', title: 'Danger Zone', description: 'Factory reset — permanently erase ALL data from the system', icon: <AlertTriangle className="h-5 w-5" />, iconColor: 'bg-red-100 text-red-700', itemCount: 1, badge: 'Destructive' },
   ];
@@ -1112,7 +1112,7 @@ function DeleteCenterInner() {
       return renderCardGrid([
         { key: 'service', title: 'Service Logs', description: 'Delete vehicle maintenance and service history records', icon: <Wrench className="h-5 w-5" />, recordCount: counts.service, modalId: 'deleteServiceLogs' },
         { key: 'odometer', title: 'Odometer Readings', description: 'Delete odometer reading history', icon: <Gauge className="h-5 w-5" />, recordCount: counts.odometer, modalId: 'deleteOdometerReadings' },
-        { key: 'checkins', title: 'Weekly Check-ins', description: 'Delete driver weekly check-in submissions', icon: <ClipboardCheck className="h-5 w-5" />, recordCount: counts.checkins, modalId: 'deleteCheckins' },
+        { key: 'checkins', title: 'Vehicle Handovers', description: 'Delete driver vehicle handover submissions', icon: <ClipboardCheck className="h-5 w-5" />, recordCount: counts.checkins, modalId: 'deleteCheckins' },
       ]);
     }
 
@@ -1686,7 +1686,7 @@ function DeleteCenterInner() {
         configNote="Odometer readings are used for mileage tracking, fuel efficiency, and maintenance scheduling." />
 
       <DeleteFlowModal isOpen={activeModal === 'deleteCheckins'} onClose={() => setActiveModal(null)} onSuccess={handleDeleteSuccess}
-        title="Delete Weekly Check-ins" entityLabel="check-in submissions" fetchItems={fetchCheckins} deleteItems={(keys) => genericBulkDelete(keys)}
+        title="Delete Vehicle Handovers" entityLabel="vehicle handover submissions" fetchItems={fetchCheckins} deleteItems={(keys) => genericBulkDelete(keys)}
         columns={CHECKIN_COLUMNS} showDateFilter dangerThreshold={50} />
 
       {/* ═══════════════════════════════════════════════════════════════════ */}

@@ -52,6 +52,8 @@ export type FuelEntryDetailSheetProps = {
   vehicleLabel?: string;
   driverLabel?: string;
   stationLabel?: string;
+  /** Street address line (from resolveFuelEntryStationDisplay.subtitle). */
+  stationAddressLabel?: string;
   paymentLabel?: string;
   prevOdometer?: number | null;
   tankCapacity?: number;
@@ -103,6 +105,7 @@ export function FuelEntryDetailSheet({
   vehicleLabel,
   driverLabel,
   stationLabel,
+  stationAddressLabel,
   paymentLabel,
   prevOdometer = null,
   tankCapacity = 40,
@@ -257,11 +260,17 @@ export function FuelEntryDetailSheet({
                 </div>
               }
             />
-            {entry.location ? (
+            {stationAddressLabel && stationAddressLabel !== 'No GPS metadata' ? (
               <DetailRow
                 icon={<MapPin className="h-3.5 w-3.5 text-slate-400" />}
                 label="Address"
-                value={<span className="text-xs text-slate-600">{entry.location}</span>}
+                value={<span className="text-xs text-slate-600">{stationAddressLabel}</span>}
+              />
+            ) : entry.stationAddress ? (
+              <DetailRow
+                icon={<MapPin className="h-3.5 w-3.5 text-slate-400" />}
+                label="Address"
+                value={<span className="text-xs text-slate-600">{entry.stationAddress}</span>}
               />
             ) : null}
             <DetailRow

@@ -80,7 +80,7 @@ function formatBucketDay(value: string): string {
 function boundaryLabel(source?: OdometerBucket['closingBoundarySource']): string {
     switch (source) {
         case 'fuel': return 'Fill';
-        case 'checkin': return 'Check-in';
+        case 'checkin': return 'Vehicle Handover';
         case 'service': return 'Service';
         case 'manual': return 'Manual';
         default: return 'Boundary';

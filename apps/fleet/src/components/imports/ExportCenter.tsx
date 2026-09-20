@@ -80,7 +80,7 @@ const CATEGORY_SEARCH_TERMS: Record<string, string> = {
   fuel: "fuel logs gas diesel purchase volumes costs locations card stations",
   service: "service maintenance logs oil change tire rotation repairs mechanic",
   odometer: "odometer history readings mileage fuel service check-in manual",
-  checkins: "weekly check-ins checkins submissions odometer vehicle condition inspection",
+  checkins: "vehicle handover handovers checkins submissions odometer vehicle condition inspection",
   tollTags: "toll tags inventory numbers providers statuses vehicle assignments ezpass",
   tollPlazas: "toll plazas highways gps coordinates rates locations database",
   tollTransactions: "toll transactions reconciliation matched unmatched refunds charges amounts vehicles drivers export",
@@ -469,7 +469,7 @@ export function ExportCenter() {
     { id: 'fuel', title: 'Fuel', description: 'Export fuel logs', icon: <Fuel className="h-5 w-5" />, iconColor: 'bg-amber-50 text-amber-600', itemCount: 1 },
     { id: 'toll', title: 'Toll Management', description: 'Export toll tags, plazas, and transaction reconciliation data', icon: <CreditCard className="h-5 w-5" />, iconColor: 'bg-emerald-50 text-emerald-600', itemCount: 3 },
     { id: 'finance', title: 'Finance & Assets', description: 'Export transactions, claims, equipment, and inventory', icon: <DollarSign className="h-5 w-5" />, iconColor: 'bg-amber-50 text-amber-700', itemCount: 4 },
-    { id: 'maintenance', title: 'Maintenance & Ops', description: 'Export service logs, odometer history, and weekly check-ins', icon: <Wrench className="h-5 w-5" />, iconColor: 'bg-orange-50 text-orange-600', itemCount: 3 },
+    { id: 'maintenance', title: 'Maintenance & Ops', description: 'Export service logs, odometer history, and vehicle handovers', icon: <Wrench className="h-5 w-5" />, iconColor: 'bg-orange-50 text-orange-600', itemCount: 3 },
     { id: 'system', title: 'System & Backup', description: 'Full system backup as a compressed ZIP archive', icon: <HardDrive className="h-5 w-5" />, iconColor: 'bg-slate-100 text-slate-600', itemCount: 1 },
   ];
 
@@ -751,8 +751,8 @@ export function ExportCenter() {
             {/* ═══ 10. WEEKLY CHECK-INS ═══ */}
             {isInActiveGroup('checkins') && matchesSearch(CATEGORY_SEARCH_TERMS.checkins) && (
             <ExportCategoryCard
-              title="Weekly Check-ins"
-              description="Driver weekly check-in submissions with odometer and vehicle condition data."
+              title="Vehicle Handovers"
+              description="Driver vehicle handover submissions with odometer and photo proof."
               icon={<ClipboardCheck className="h-5 w-5" />}
               recordCount={counts.checkins}
               onExport={exportCheckins}

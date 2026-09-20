@@ -215,7 +215,11 @@ import { registerEnterpriseIntakeAdminRoutes } from "./enterprise_intake_admin_r
 import { registerWorkforceInviteRoutes } from "./workforce_invite_routes.ts";
 import { registerCourierRoamTagRoutes } from "./courier_roam_tag_routes.ts";
 import { registerDriverRoamTagRoutes } from "./driver_roam_tag_routes.ts";
-import { registerVehicleCustodyRoutes, assertVehicleCustodyForCheckIn } from "./vehicle_custody_routes.ts";
+import {
+  registerVehicleCustodyRoutes,
+  assertVehicleCustodyForCheckIn,
+  completeCustodyFromHandoverProof,
+} from "./vehicle_custody_routes.ts";
 import { registerFleetTagRoutes } from "./fleet_tag_routes.ts";
 import { registerFleetModuleCheckoutRoutes } from "./fleet_module_checkout.ts";
 import {
@@ -7927,7 +7931,7 @@ export function registerResidualMonolithRoutes(app: Hono) {
       // Note: MasterLogTimeline 'source' maps to these types
       if (type === 'Fuel Log' || type === 'fuel_entry') {
           key = `fuel_entry:${id}`;
-      } else if (type === 'Check-in' || type === 'checkin' || type === 'Weekly Check-in') {
+      } else if (type === 'Check-in' || type === 'checkin' || type === 'Weekly Check-in' || type === 'Vehicle Handover') {
            key = `checkin:${id}`;
       } else if (type === 'Service Log' || type === 'maintenance_log') {
            if (!vehicleId) return c.json({ error: "Vehicle ID required for Service Logs" }, 400);
@@ -10696,7 +10700,7 @@ export function registerResidualMonolithRoutes(app: Hono) {
       }
       if (!checkIn.vehicleId || checkIn.vehicleId === "unknown") {
         return c.json({
-          error: "No vehicle assigned to this driver — assign a vehicle before weekly check-in",
+          error: "No vehicle assigned to this driver — assign a vehicle before Vehicle Handover",
         }, 400);
       }
 
@@ -10714,15 +10718,30 @@ export function registerResidualMonolithRoutes(app: Hono) {
           // In a real system, we might create a 'notification' object here for the fleet manager
       }
 
-      await kv.set(key, stampOrg({ ...checkIn, timestamp: checkIn.timestamp || new Date().toISOString() }, c));
+      const stamped = stampOrg({
+        ...checkIn,
+        timestamp: checkIn.timestamp || new Date().toISOString(),
+        source: checkIn.source || "Vehicle Handover",
+      }, c);
+      await kv.set(key, stamped);
 
       try {
         await projectFromCheckIn(
-          { ...checkIn, timestamp: checkIn.timestamp || new Date().toISOString() },
+          stamped,
           getOrgId(c),
         );
       } catch (projErr) {
         console.error("[check-ins] odometer ledger projection failed:", projErr);
+      }
+
+      // Handover proof completes custody (handed_over → in_custody)
+      try {
+        const confirmedBy = String(checkIn.driverId || "");
+        if (confirmedBy) {
+          await completeCustodyFromHandoverProof(String(checkIn.vehicleId), confirmedBy);
+        }
+      } catch (custodyErr) {
+        console.error("[check-ins] custody promotion failed:", custodyErr);
       }
       
       return c.json({ success: true, data: checkIn });
