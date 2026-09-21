@@ -15,14 +15,22 @@ if (!slug) {
   process.exit(1);
 }
 
+const DEFAULT_PROJECT_REF = "csfllzzastacofsvcdsc";
+const DEFAULT_SUPABASE_URL = `https://${DEFAULT_PROJECT_REF}.supabase.co`;
+
 const baseIdx = process.argv.indexOf("--base");
+const supabaseUrl = (
+  process.env.SUPABASE_URL ||
+  process.env.VITE_SUPABASE_URL ||
+  DEFAULT_SUPABASE_URL
+).replace(/\/$/, "");
 const base =
   (baseIdx >= 0 && process.argv[baseIdx + 1]) ||
   process.env.SMOKE_BASE_URL ||
-  `${process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || ""}/functions/v1/${slug}`;
+  `${supabaseUrl}/functions/v1/${slug}`;
 
-if (!base || base.endsWith("/functions/v1/")) {
-  console.error("Set SUPABASE_URL or pass --base <url>");
+if (!base || !/^https?:\/\//i.test(base) || base.endsWith("/functions/v1/")) {
+  console.error("Set SUPABASE_URL or pass --base <absolute-url>");
   process.exit(1);
 }
 

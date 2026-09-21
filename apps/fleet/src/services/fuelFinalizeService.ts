@@ -62,6 +62,8 @@ export type FuelFinalizeDeps = {
   totalSpend?: number;
   /** Desk disposition map — refuse finalize when criticals still open (R-1). */
   dispositions?: import('../utils/fuelFlagDisposition').FuelFlagDispositionMap;
+  /** Audited OVER-LOG accepts — must match wizard / server gate or lock re-blocks. */
+  stopToStopGapAccepts?: import('@roam/fuel-core').StopToStopGapAccept[] | null;
 };
 
 export type FuelFinalizeOptions = {
@@ -188,6 +190,7 @@ export async function finalizeFuelWeekReports(
       fuelEntries,
       weekStartYmd,
       weekEndYmd,
+      gapAccepts: deps.stopToStopGapAccepts,
     }),
   });
   if (closableBlockers.length > 0) {
@@ -296,11 +299,16 @@ export async function finalizeFuelWeekReports(
         builtBy: 'fuel_finalize_client',
       });
       const cats = categoryCostsFromReport(report);
+      const windowTimingCost = Number(report.windowTimingCost) || 0;
+      const unattributedFillCost = Number(report.unattributedFillCost) || 0;
       if (
         !assertCategoryCostsTieSpend(
           frozen.totalGasCardCost || Number(report.totalGasCardCost) || 0,
           cats,
           frozen.miscellaneousCost,
+          0.02,
+          windowTimingCost,
+          unattributedFillCost,
         )
       ) {
         throw new Error('freeze_spend_tie_violation');

@@ -78,6 +78,7 @@ export function MobileNavFlyoutPanel({
                     : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800',
                 )}
                 onClick={() => onNavigate(item.id)}
+                title={item.title}
               >
                 <span
                   className={cn(

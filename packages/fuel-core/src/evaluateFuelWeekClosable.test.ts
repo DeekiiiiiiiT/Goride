@@ -74,6 +74,21 @@ describe('evaluateFuelWeekClosable', () => {
     expect(evaluateFuelWeekClosable({ undisposedCriticalFlags: false })).toEqual([]);
   });
 
+  it('blocks disposition_load_failed distinctly from undisposed_flags', () => {
+    const b = evaluateFuelWeekClosable({ dispositionLoadFailed: true });
+    expect(b.map((x) => x.code)).toContain('disposition_load_failed');
+    expect(b.map((x) => x.code)).not.toContain('undisposed_flags');
+  });
+
+  it('prefers disposition_load_failed over undisposed_flags when both set', () => {
+    const b = evaluateFuelWeekClosable({
+      dispositionLoadFailed: true,
+      undisposedCriticalFlags: true,
+    });
+    expect(b.some((x) => x.code === 'disposition_load_failed')).toBe(true);
+    expect(b.some((x) => x.code === 'undisposed_flags')).toBe(false);
+  });
+
   it('blocks data-quality vehicles unreviewed', () => {
     expect(
       evaluateFuelWeekClosable({ dataQualityVehiclesUnreviewed: true }).map((x) => x.code),

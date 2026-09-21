@@ -94,7 +94,12 @@ function FuelReconciliationWizardView({
   isRefreshing?: boolean;
   onRefresh: () => void;
   onFinalize: (reports: WeeklyFuelReport[]) => Promise<boolean | void> | boolean | void;
-  onAddAdjustment: () => void;
+  onAddAdjustment: (defaults?: {
+    vehicleId?: string;
+    date?: Date;
+    dateFrom?: string;
+    dateTo?: string;
+  }) => void;
   onResolveDispute: (dispute: FuelDispute) => void;
   onOpenConfiguration?: () => void;
   onOpenTransactionLogs?: (opts: {
@@ -234,7 +239,12 @@ export function FuelReconciliationDashboard({
   isRefreshing?: boolean;
   onRefresh: () => void;
   onFinalize: (reports: WeeklyFuelReport[]) => Promise<boolean | void> | boolean | void;
-  onAddAdjustment: () => void;
+  onAddAdjustment: (defaults?: {
+    vehicleId?: string;
+    date?: Date;
+    dateFrom?: string;
+    dateTo?: string;
+  }) => void;
   onResolveDispute: (dispute: FuelDispute) => void;
   onOpenConfiguration?: () => void;
   onSelectPeriodWeek?: (period: FuelReconciliationPeriod) => void;

@@ -35,6 +35,7 @@ import {
 import { buildFleetCycleSnapshot } from "./fuel_cycle_snapshot.ts";
 import { summarizeFuelLogEntries } from "./fuel_log_summary.ts";
 import { persistFuelMatchPair } from "./fuel_jaa_match.ts";
+import { buildFuelEntryServiceLineFilters } from "./fuel_service_line_filters.ts";
 import { auditLogic } from "./audit_logic.ts";
 import { findMatchingStation, findMatchingStationSmart, calculateDistance } from "./geo_matcher.ts";
 import { trackedProviderCall, ProviderBlockedError } from "./api_usage_logger.ts";
@@ -2838,6 +2839,8 @@ app.get(`${BASE_PATH}/fuel-entries`, async (c) => {
     const type = c.req.query("type") || "";
     const auditStatus = c.req.query("auditStatus") || "";
     const orgFilter = getOrgId(c) || (isPlatformCaller(c) ? (c.req.query("organizationId") || "").trim() : "");
+    // Phase 0/2: filter on stamped service_line (never derive from vehicle client-side).
+    const serviceLineRaw = (c.req.query("serviceLine") || "").trim().toLowerCase();
 
     let startDate = (c.req.query("startDate") || "").slice(0, 10);
     let endDate = (c.req.query("endDate") || "").slice(0, 10);
@@ -2855,6 +2858,8 @@ app.get(`${BASE_PATH}/fuel-entries`, async (c) => {
     if (entryMode) filters.push({ op: "eq", col: "entry_mode", value: entryMode });
     if (type) filters.push({ op: "eq", col: "type", value: type });
     if (auditStatus) filters.push({ op: "eq", col: "audit_status", value: auditStatus });
+    // R3: same line-vs-unattributed rule as client fuelEntryMatchesLineFilter (S2)
+    filters.push(...buildFuelEntryServiceLineFilters(serviceLineRaw));
     if (search) {
       const safe = search.replace(/,/g, "").replace(/%/g, "");
       const term = `%${safe}%`;
@@ -4003,6 +4008,54 @@ app.get(`${BASE_PATH}/analytics/integrity-metrics`, requirePlatformStaff(), asyn
         return c.json({ error: e.message }, 500);
     }
 });
+
+/** Phase 3: sticky T1 explicit service-line on fuel entries (Review Queue / bulk). */
+app.post(
+  `${BASE_PATH}/fuel-entries/set-service-line`,
+  requirePermission("fuel.approve"),
+  async (c) => {
+    try {
+      const body = (await c.req.json()) as {
+        ids?: string[];
+        serviceLine?: string;
+      };
+      const line = body.serviceLine;
+      if (line !== "rideshare" && line !== "rush_delivery") {
+        return c.json({ error: "serviceLine must be rideshare or rush_delivery" }, 400);
+      }
+      const ids = Array.isArray(body.ids)
+        ? body.ids.map((id) => String(id || "").trim()).filter(Boolean)
+        : [];
+      if (!ids.length) return c.json({ error: "ids required" }, 400);
+      if (ids.length > 200) return c.json({ error: "max 200 ids per request" }, 400);
+
+      const { setExplicitServiceLine } = await import("./service_line_attribution.ts");
+      const rbacUser = c.get("rbacUser") as { userId?: string; id?: string } | undefined;
+      const setBy = rbacUser?.userId || rbacUser?.id || null;
+
+      let updated = 0;
+      const missing: string[] = [];
+      for (const id of ids) {
+        const entry = (await kv.get(`fuel_entry:${id}`)) as Record<string, unknown> | null;
+        if (!entry) {
+          missing.push(id);
+          continue;
+        }
+        const scoped = filterByOrg([entry], c, { endpoint: "/fuel-entries/set-service-line" });
+        if (!scoped.length) {
+          missing.push(id);
+          continue;
+        }
+        const next = setExplicitServiceLine(entry, line, setBy);
+        await kv.set(`fuel_entry:${id}`, stampOrg(next, c));
+        updated++;
+      }
+      return c.json({ success: true, updated, missing });
+    } catch (e: any) {
+      return c.json({ error: e.message }, 500);
+    }
+  },
+);
 
 app.post(`${BASE_PATH}/fuel-entries`, async (c: Context) => {
   // Drivers submit Gas Card / cash fuel from the Driver app. ROLE_PERMISSIONS.driver is

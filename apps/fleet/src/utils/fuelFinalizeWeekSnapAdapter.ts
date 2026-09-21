@@ -148,10 +148,15 @@ export function freezeReportMoneyThroughAssembler(args: {
       },
     } satisfies BuiltWeekSnapshot);
 
-  let driverShare = built.driverShare;
-  let companyShare = built.companyShare;
-  const miscellaneousCost = built.miscellaneousCost;
-  const totalGasCardCost = built.totalGasCardCost || Number(report.totalGasCardCost) || 0;
+  // Wizard-reviewed FCS report is money SoT — entry-sum spend can diverge (cash+card
+  // double-count, extra vehicle fills). Prefer report spend/misc when the report has spend.
+  const reportSpend = Number(report.totalGasCardCost) || 0;
+  const totalGasCardCost =
+    reportSpend > 0.009 ? reportSpend : built.totalGasCardCost || 0;
+  const miscellaneousCost =
+    reportSpend > 0.009
+      ? Number(report.miscellaneousCost) || 0
+      : built.miscellaneousCost;
 
   // N-17: PA absorb via shared computeFuelWeek (same path as server enforce/shadow).
   const earnedRaw = personalEarnedCostAbsorbed(report);
@@ -169,14 +174,14 @@ export function freezeReportMoneyThroughAssembler(args: {
     driverId: report.driverId,
     personalAllowanceEarnedCost: earnedEligible ? earnedRaw : 0,
   });
-  driverShare = weekMoney.driverShare;
-  companyShare = weekMoney.companyShare;
+  const driverShare = weekMoney.driverShare;
+  const companyShare = weekMoney.companyShare;
   const personalAllowanceEarnedCost = weekMoney.personalAllowanceEarnedCost;
 
   const blendedRatio = totalGasCardCost > 0 ? driverShare / totalGasCardCost : 0;
-  const settleSpend = snapEntries.reduce((s, e) => s + (Number(e.amount) || 0), 0);
-  const postedDriverShare = settleSpend * blendedRatio;
-  const postedCompanyShare = Math.max(0, settleSpend - postedDriverShare);
+  // Posted shares follow frozen week money (report SoT), not raw entry-sum inflation.
+  const postedDriverShare = driverShare;
+  const postedCompanyShare = companyShare;
 
   return {
     driverShare,
@@ -189,15 +194,17 @@ export function freezeReportMoneyThroughAssembler(args: {
     personalAllowanceEarnedCost,
     built: {
       ...built,
+      totalGasCardCost,
+      miscellaneousCost,
       driverShare,
       companyShare,
-      miscellaneousCost,
       postedDriverShare,
       postedCompanyShare,
       metadata: {
         ...built.metadata,
         blendedRatio,
         personalAllowanceEarnedCost,
+        spendSource: reportSpend > 0.009 ? 'report' : 'entry_sum',
       },
     },
   };

@@ -41,11 +41,23 @@ import {
   groupFuelEntriesByFillGroup,
 } from './logs/groupFuelEntriesByFillGroup';
 import { useFuelExceptionAssignments } from './logs/useFuelExceptionAssignments';
+import {
+  computeFuelLineConservation,
+} from '../../utils/fuelServiceLineFilter';
+import {
+  isFuelServiceLineAllocationEnabled,
+  projectUnattributedSpendByTripMix,
+} from '../../utils/fuelServiceLineAllocation';
+import { useServiceLineScope } from '../../contexts/ServiceLineScopeContext';
+import { useFuelServiceLine } from '../../contexts/FuelServiceLineContext';
+import { useFeatureFlags } from '../auth/FeatureFlagContext';
 
 const PAGE_SIZE = 50;
 
 interface FuelLogTableProps {
   entries: FuelEntry[];
+  /** Full window for Unallocated honesty when entries are filtered. */
+  allEntriesForConservation?: FuelEntry[];
   transactions: FinancialTransaction[];
   vehicles: Vehicle[];
   onEdit: (entry: FuelEntry, splitSiblings?: FuelEntry[]) => void;
@@ -61,10 +73,15 @@ interface FuelLogTableProps {
   loadError?: string | null;
   onRefresh?: () => void | Promise<void>;
   onAddFuel?: () => void;
+  unattributedCount?: number;
+  unattributedOnly?: boolean;
+  onUnattributedOnlyChange?: (v: boolean) => void;
+  deliveryEmpty?: boolean;
 }
 
 export function FuelLogTable({
   entries,
+  allEntriesForConservation,
   transactions,
   vehicles,
   onEdit,
@@ -80,11 +97,40 @@ export function FuelLogTable({
   loadError = null,
   onRefresh,
   onAddFuel,
+  unattributedCount = 0,
+  unattributedOnly = false,
+  onUnattributedOnlyChange,
+  deliveryEmpty = false,
 }: FuelLogTableProps) {
   const { can } = usePermissions();
   const fleetTz = useFleetTimezone();
   const { defaultCurrency } = usePlatformConfig();
   const { query, setQuery } = useFuelLogQuery();
+  const { rideshareVisible, rushVisible } = useServiceLineScope();
+  const { apiFilter } = useFuelServiceLine();
+  const { enabledModules } = useFeatureFlags();
+  const allocationEnabled = isFuelServiceLineAllocationEnabled(enabledModules);
+  const showLineColumn = rideshareVisible && rushVisible;
+  // KPI ≡ table when any line lens is active (incl. Unattributed chip → apiFilter unattributed).
+  const serviceLineLensActive = apiFilter !== 'all';
+  const conservation = useMemo(() => {
+    const src = allEntriesForConservation ?? entries;
+    return computeFuelLineConservation(src);
+  }, [allEntriesForConservation, entries]);
+  const unallocatedSpend = conservation.unattributedSpend;
+  /** Reporting projection only — attributed never rewritten; ratio from period metadata when present. */
+  const allocationProjection = useMemo(() => {
+    if (!allocationEnabled || unallocatedSpend <= 0) return null;
+    // Without live trip-mix on this screen, use equal share only when both lines exist —
+    // period metadata ratio is preferred when callers pass it later. Default 100% rideshare
+    // until Rush trips exist (matches allocateSharedCostsByTripMix empty-mix behavior).
+    return projectUnattributedSpendByTripMix({
+      rideshareSpend: conservation.rideshareSpend,
+      deliverySpend: conservation.deliverySpend,
+      unattributedSpend: conservation.unattributedSpend,
+      ratio: { rideshare: 1, rush_delivery: 0 },
+    });
+  }, [allocationEnabled, unallocatedSpend, conservation]);
   const [searchTerm, setSearchTerm] = useState(query.search || '');
   const [filterType, setFilterType] = useState<string>(query.type || 'all');
   const [filterVehicle, setFilterVehicle] = useState<string>(query.vehicleId || 'all');
@@ -573,6 +619,7 @@ export function FuelLogTable({
     filteredEntries,
     validAnchorIds,
     ledgerIntegrity,
+    serviceLineLensActive,
   });
   const { transactionKpis, summaryLoading, hasExtraTxnFilters, serverSummary } = txnKpis;
   // Derive from KPI note only — never read summaryError bare (ROAM-FLEET-19 HMR).
@@ -605,6 +652,9 @@ export function FuelLogTable({
       odometer: e.odometer ?? '',
       entrySource: resolveFuelEntrySource(e),
       paymentSource: String(e.paymentSource || e.metadata?.paymentSource || ''),
+      service_line: e.serviceLine ?? (e as { service_line?: string }).service_line ?? '',
+      service_line_source:
+        e.serviceLineSource ?? (e as { service_line_source?: string }).service_line_source ?? '',
       cycleId: String(e.metadata?.cycleId || ''),
       auditScore: e.metadata?.auditConfidenceScore ?? '',
       locked: e.isLocked || e.status === 'Finalized' ? 'yes' : 'no',
@@ -623,6 +673,8 @@ export function FuelLogTable({
       { key: 'odometer', label: 'Odometer' },
       { key: 'entrySource', label: 'Entry Source' },
       { key: 'paymentSource', label: 'Payment' },
+      { key: 'service_line', label: 'service_line' },
+      { key: 'service_line_source', label: 'service_line_source' },
       { key: 'cycleId', label: 'Cycle Id' },
       { key: 'auditScore', label: 'Audit Score' },
       { key: 'locked', label: 'Locked' },
@@ -828,6 +880,9 @@ export function FuelLogTable({
           setFilterCycleId(null);
           setQuery({ cycleId: undefined });
         }}
+        unattributedCount={unattributedCount}
+        unattributedOnly={unattributedOnly}
+        onUnattributedOnlyChange={onUnattributedOnlyChange}
         onClearFilters={clearFilters}
         periodStart={periodStart}
         periodEnd={periodEnd}
@@ -883,6 +938,39 @@ export function FuelLogTable({
         }
       />
 
+      {deliveryEmpty ? (
+        <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center">
+          <p className="text-sm font-medium text-slate-800">No delivery fuel recorded yet</p>
+          <p className="mt-1 text-xs text-slate-500">
+            Delivery fills will appear here once Rush couriers start logging against fleet vehicles
+            tagged for Delivery.
+          </p>
+        </div>
+      ) : null}
+
+      {showLineColumn && unallocatedSpend > 0 ? (
+        allocationEnabled && allocationProjection ? (
+          <p className="text-xs text-indigo-900 bg-indigo-50 border border-indigo-100 rounded-md px-3 py-2">
+            Trip-mix projection (reporting only): Rideshare $
+            {allocationProjection.rideshareTotal.toLocaleString(undefined, {
+              maximumFractionDigits: 2,
+            })}{' '}
+            · Delivery $
+            {allocationProjection.deliveryTotal.toLocaleString(undefined, {
+              maximumFractionDigits: 2,
+            })}{' '}
+            (includes $
+            {unallocatedSpend.toLocaleString(undefined, { maximumFractionDigits: 2 })}{' '}
+            unattributed). Settlements stay one per driver-week.
+          </p>
+        ) : (
+          <p className="text-xs text-amber-800 bg-amber-50 border border-amber-100 rounded-md px-3 py-2">
+            Unallocated: ${unallocatedSpend.toLocaleString(undefined, { maximumFractionDigits: 2 })}{' '}
+            (unattributed fills — set a line in Review Queue)
+          </p>
+        )
+      ) : null}
+
       <div className="rounded-md border bg-white overflow-x-auto">
         {activeView === 'transactions' ? (
           <FuelTransactionsTable
@@ -914,6 +1002,7 @@ export function FuelLogTable({
             onResolveSplitCash={onResolveSplitCash}
             onDelete={onDelete}
             onPageChange={setPage}
+            showLineColumn={showLineColumn}
           />
         ) : (
           <FuelCyclesPanel

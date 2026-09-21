@@ -1,5 +1,6 @@
 import React from 'react';
 import { cn } from '../ui/utils';
+import { FuelServiceLineTabs } from './FuelServiceLineTabs';
 
 interface FuelLayoutProps {
   children: React.ReactNode;
@@ -11,8 +12,14 @@ interface FuelLayoutProps {
   embedded?: boolean;
   /** Optional header actions (e.g. Log Receipt / Add fill-up on Transaction Logs). */
   headerActions?: React.ReactNode;
+  /** Optional per-tab counts for the service-line strip. */
+  serviceLineCounts?: Partial<Record<'all' | 'rideshare' | 'delivery', number>>;
 }
 
+/**
+ * Fuel page chrome. Expects FuelServiceLineProvider above (FuelManagement wraps it)
+ * so tabs and table filters share one ?line= lens.
+ */
 export function FuelLayout({
   children,
   title = 'Fuel Management',
@@ -20,6 +27,7 @@ export function FuelLayout({
   hideDescriptionOnMobile = false,
   embedded = false,
   headerActions,
+  serviceLineCounts,
 }: FuelLayoutProps) {
   return (
     <div className={cn(embedded ? 'space-y-4' : 'space-y-6')}>
@@ -43,7 +51,13 @@ export function FuelLayout({
         </div>
       ) : null}
 
-      <div className={embedded ? undefined : 'md:mt-6'}>{children}</div>
+      {/* Service-line lens — Dashboard slate pills; dual-line orgs only */}
+      <FuelServiceLineTabs
+        counts={serviceLineCounts}
+        className={cn(embedded ? 'mb-2' : 'md:mt-2')}
+      />
+
+      <div className={embedded ? undefined : 'md:mt-4'}>{children}</div>
     </div>
   );
 }

@@ -37,9 +37,13 @@ export type FuelFinalizeStepProps = {
   settlementRows: FuelSettlementRow[];
   /** Hard closable-gate reasons shown when Finalize is locked. */
   closableBlockMessages?: string[];
-  /** Jump to Unexplained fuel → stop-to-stop gap detail (when S2S blocks Finalize). */
+  /** Plain-English stop-to-stop summary above the Fix CTA. */
+  stopToStopSummary?: string;
+  /** Primary: open in-wizard Fix stop-to-stop remediation sheet. */
+  onFixStopToStop?: () => void;
+  /** @deprecated Prefer onFixStopToStop — kept for older callers. */
   onOpenStopToStopGapDetail?: () => void;
-  /** Open Fuel Integrity desk Stop-to-stop tab for the same week. */
+  /** Secondary: Open Fuel Integrity desk Stop-to-stop tab. */
   onOpenIntegrityStopToStop?: () => void;
   /** U-9: data provenance shown where the operator signs. */
   provenance?: {
@@ -77,14 +81,24 @@ export function FuelFinalizeStep(props: FuelFinalizeStepProps) {
     dualApprovalUiMode = 'human',
     settlementRows,
     closableBlockMessages = [],
+    stopToStopSummary,
+    onFixStopToStop,
     onOpenStopToStopGapDetail,
     onOpenIntegrityStopToStop,
     provenance,
   } = props;
   const serviceOnly = dualApprovalUiMode === 'service_only';
-  const hasStopToStopBlock = closableBlockMessages.some((m) =>
-    m.toLowerCase().includes('stop-to-stop'),
-  );
+  const hasStopToStopBlock = closableBlockMessages.some((m) => {
+    const lower = m.toLowerCase();
+    return (
+      lower.includes('stop-to-stop') ||
+      lower.includes('over-log') ||
+      lower.includes('trip/adjustment km') ||
+      lower.includes('odometer readings between fills') ||
+      lower.includes('fuel litres do not match')
+    );
+  });
+  const fixStopToStop = onFixStopToStop || onOpenStopToStopGapDetail;
 
   return (
     <div className="space-y-3">
@@ -94,31 +108,35 @@ export function FuelFinalizeStep(props: FuelFinalizeStepProps) {
           role="alert"
         >
           <p className="font-semibold">Finalize is blocked</p>
+          {stopToStopSummary &&
+          hasStopToStopBlock &&
+          !/is clear/i.test(stopToStopSummary) ? (
+            <p className="mt-1 text-rose-900">{stopToStopSummary}</p>
+          ) : null}
           <ul className="mt-1 list-inside list-disc space-y-0.5">
             {closableBlockMessages.map((m) => (
               <li key={m}>{m}</li>
             ))}
           </ul>
-          {(hasStopToStopBlock && (onOpenStopToStopGapDetail || onOpenIntegrityStopToStop)) ? (
+          {hasStopToStopBlock && (fixStopToStop || onOpenIntegrityStopToStop) ? (
             <div className="mt-2 flex flex-wrap gap-2">
-              {onOpenStopToStopGapDetail ? (
+              {fixStopToStop ? (
                 <Button
                   type="button"
-                  variant="outline"
-                  className="min-h-11 border-rose-300 bg-white text-rose-950 hover:bg-rose-100"
-                  onClick={onOpenStopToStopGapDetail}
+                  className="min-h-11 bg-rose-700 text-white hover:bg-rose-800"
+                  onClick={fixStopToStop}
                 >
-                  Open stop-to-stop gap detail
+                  Fix stop-to-stop blockers
                 </Button>
               ) : null}
               {onOpenIntegrityStopToStop ? (
                 <Button
                   type="button"
-                  variant="outline"
-                  className="min-h-11 border-rose-300 bg-white text-rose-950 hover:bg-rose-100"
+                  variant="ghost"
+                  className="min-h-11 text-rose-950 hover:bg-rose-100"
                   onClick={onOpenIntegrityStopToStop}
                 >
-                  Open in Fuel Integrity
+                  Open in Fuel Integrity (advanced)
                 </Button>
               ) : null}
             </div>

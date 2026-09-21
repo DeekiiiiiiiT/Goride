@@ -88,6 +88,7 @@ export function FuelDualApprovalSettingsPanel() {
     <div className="rounded-lg border border-slate-200 p-4 space-y-4">
       <div>
         <h4 className="text-sm font-semibold text-slate-900">Dual approval (this organization)</h4>
+        <p className="text-xs text-slate-500 mt-0.5">Applies to both service lines.</p>
         <p className="text-xs text-slate-500 mt-0.5">
           Weeks with total spend above this amount need a second identity before Finalize can lock.
           Set to 0 to disable. Settings apply only to your organization.

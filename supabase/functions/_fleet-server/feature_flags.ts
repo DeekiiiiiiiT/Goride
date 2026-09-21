@@ -61,6 +61,16 @@ export const FEATURE_FLAGS = {
   LEDGER_READ_MODEL: "ledger_read_model",
   /** Driver Detail Activity tab (forensic timeline) */
   DRIVER_ACTIVITY: "driver_activity",
+  /**
+   * Fuel Management All/Rideshare/Delivery tabs kill switch (S8).
+   * Default true — dual-line orgs see tabs unless flipped off.
+   */
+  FUEL_SERVICE_LINE_TABS: "fuel_service_line_tabs",
+  /**
+   * Phase 4: project unattributed fuel spend by trip mix in reports (default OFF).
+   * Reporting only — never splits driver-week settlement.
+   */
+  FUEL_SERVICE_LINE_ALLOCATION: "fuel_service_line_allocation",
 } as const;
 
 export type FeatureFlagName = typeof FEATURE_FLAGS[keyof typeof FEATURE_FLAGS];
@@ -413,6 +423,18 @@ export async function initializeDefaultFlags(): Promise<void> {
       name: FEATURE_FLAGS.DRIVER_ACTIVITY,
       enabled: false,
       description: "Driver Detail Activity tab — forensic timeline (enable after ingest drift is green)",
+    },
+    {
+      name: FEATURE_FLAGS.FUEL_SERVICE_LINE_TABS,
+      enabled: true,
+      description:
+        "Fuel Management service-line tabs (All / Rideshare / Delivery). Kill switch for dual-line orgs.",
+    },
+    {
+      name: FEATURE_FLAGS.FUEL_SERVICE_LINE_ALLOCATION,
+      enabled: false,
+      description:
+        "Project unattributed fuel spend by trip mix in reports (Phase 4). Settlement stays one per driver-week.",
     },
   ];
 

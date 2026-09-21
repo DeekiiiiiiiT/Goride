@@ -52,3 +52,24 @@ export function entriesInFuelWeek<T extends { date?: string | null }>(
 ): T[] {
   return items.filter((item) => isEntryInInclusiveYmdRange(item.date, startYmd, endYmd));
 }
+
+/**
+ * Stop-to-stop week membership: bucket belongs to the week of its closing fill (endDate).
+ * Closable gate + Fix sheet + week report stamp must all use this set.
+ */
+export function bucketClosesInFuelWeek(
+  bucket: { endDate?: string | null },
+  weekStartYmd: string,
+  weekEndYmd: string,
+): boolean {
+  return isEntryInInclusiveYmdRange(bucket.endDate, weekStartYmd, weekEndYmd);
+}
+
+export function selectOdometerBucketsClosingInWeek<T extends { endDate?: string | null }>(
+  buckets: T[] | null | undefined,
+  weekStartYmd: string,
+  weekEndYmd: string,
+): T[] {
+  if (!buckets?.length) return [];
+  return buckets.filter((b) => bucketClosesInFuelWeek(b, weekStartYmd, weekEndYmd));
+}

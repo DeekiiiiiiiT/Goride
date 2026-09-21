@@ -25,6 +25,8 @@ export type FuelWeekClosableBlocker = {
     | 'unattributed_unreviewed'
     /** Critical fill flags without a disposition record. */
     | 'undisposed_flags'
+    /** Disposition table could not be loaded — infra, not data quality. */
+    | 'disposition_load_failed'
     /** Flagged vehicles not marked reviewed on Data quality. */
     | 'data_quality_unreviewed';
   message: string;
@@ -55,6 +57,8 @@ export type EvaluateFuelWeekClosableInput = {
   unattributedUnreviewed?: boolean;
   /** Critical fill flags not dispositioned (desk + wizard shared). */
   undisposedCriticalFlags?: boolean;
+  /** Disposition load failed (service client / SQL) — distinct from empty set. */
+  dispositionLoadFailed?: boolean;
   /** Data-quality flagged vehicles not marked reviewed. */
   dataQualityVehiclesUnreviewed?: boolean;
 };
@@ -63,7 +67,13 @@ export function evaluateFuelWeekClosable(
   input: EvaluateFuelWeekClosableInput,
 ): FuelWeekClosableBlocker[] {
   const blockers: FuelWeekClosableBlocker[] = [];
-  if (input.undisposedCriticalFlags) {
+  if (input.dispositionLoadFailed) {
+    blockers.push({
+      code: 'disposition_load_failed',
+      message:
+        'Could not load flag dispositions — retry finalize; if it persists, contact engineering.',
+    });
+  } else if (input.undisposedCriticalFlags) {
     blockers.push({
       code: 'undisposed_flags',
       message: 'Critical fill flags not dispositioned.',

@@ -230,6 +230,12 @@ export function getVocab(businessType: BusinessType, key: VocabKey): string {
 }
 
 /**
+ * Fuel Management service-line UI labels — re-export (audit §6.4).
+ * Prefer importing from here or fuelServiceLineLabels.ts; never hardcode enums in UI.
+ */
+export { fuelServiceLineUiLabel } from './fuelServiceLineLabels';
+
+/**
  * React hook — vocabulary for the active business type.
  * Dual-line orgs use rideshare labels on shared pages (scope is capability-derived 'all').
  * Delivery-only orgs use delivery vocabulary via businessType.

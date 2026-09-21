@@ -67,6 +67,9 @@ jobs:
       - name: Check fuel org-scope
         run: node scripts/check-fuel-org-scope.mjs
 
+      - name: Check no client service-line derivation (fuel)
+        run: node scripts/check-no-client-service-line-derivation.mjs
+
       - name: Test toll-core
         run: pnpm --filter @roam/toll-core test
 
@@ -123,6 +126,9 @@ jobs:
       - name: Deno test fuel recon Rev 3 controls
         run: >
           deno test --allow-read --allow-env
+          supabase/functions/_fleet-server/service_line_attribution.test.ts
+          supabase/functions/_fleet-server/fuel_service_line_filters.test.ts
+          supabase/functions/_fleet-server/fuel_service_line_allocation.test.ts
           supabase/functions/_fleet-server/fuel_rev2_phase1_controls.test.ts
           supabase/functions/_fleet-server/fuel_nightly_statement_ledger.test.ts
           supabase/functions/_fleet-server/fuel_week_seal_h7.test.ts

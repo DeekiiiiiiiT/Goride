@@ -57,6 +57,7 @@ import {
   stopToStopIsReconciled,
   sumBucketDistanceKm,
   chainSpanKm,
+  classifyStopToStopBucketRemediation,
   type GapChargeRecommendation,
 } from '@roam/fuel-core';
 import { useAuth } from '../auth/AuthContext';
@@ -87,6 +88,14 @@ function boundaryLabel(source?: OdometerBucket['closingBoundarySource']): string
     }
 }
 
+export type BucketRemediationCallbacks = {
+    /** Open in-wizard Fix sheet focused on this bucket. */
+    onOpenRemediation?: (bucket: OdometerBucket) => void;
+    onEditFill?: (entryId: string) => void;
+    onFixAdjustments?: (bucket: OdometerBucket) => void;
+    onReviewTrips?: (bucket: OdometerBucket) => void;
+};
+
 interface BucketReconciliationViewProps {
     vehicle: Vehicle;
     trips: Trip[];
@@ -98,6 +107,7 @@ interface BucketReconciliationViewProps {
     onRefresh?: () => void;
     /** When period is Locked, Charge Gap is read-only. */
     periodLocked?: boolean;
+    remediation?: BucketRemediationCallbacks;
 }
 
 type UnifiedAnchor = {
@@ -117,6 +127,7 @@ export function BucketReconciliationView({
     dateRange,
     onRefresh,
     periodLocked = false,
+    remediation,
 }: BucketReconciliationViewProps) {
     const { organizationId, user } = useAuth();
     const actorId = user?.id || null;
@@ -870,16 +881,95 @@ export function BucketReconciliationView({
                                         )}
                                     </TableCell>
                                     <TableCell className="text-center">
-                                        <Button
-                                            type="button"
-                                            size="sm"
-                                            variant="ghost"
-                                            className="h-7 px-2 text-[11px] text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50 gap-1"
-                                            onClick={() => openBucketTimeline(bucket)}
-                                        >
-                                            <ScanLine className="h-3 w-3" />
-                                            Explain gap
-                                        </Button>
+                                        {(() => {
+                                            const rem = classifyStopToStopBucketRemediation(bucket);
+                                            const needsFix = rem.kind !== 'ok';
+                                            if (!needsFix) {
+                                                return (
+                                                    <Button
+                                                        type="button"
+                                                        size="sm"
+                                                        variant="ghost"
+                                                        className="h-7 px-2 text-[11px] text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50 gap-1"
+                                                        onClick={() => openBucketTimeline(bucket)}
+                                                    >
+                                                        <ScanLine className="h-3 w-3" />
+                                                        Inspect timeline
+                                                    </Button>
+                                                );
+                                            }
+                                            return (
+                                                <div className="flex flex-col items-center gap-1">
+                                                    {remediation?.onOpenRemediation ? (
+                                                        <Button
+                                                            type="button"
+                                                            size="sm"
+                                                            className="h-8 px-2 text-[11px] gap-1"
+                                                            onClick={() => remediation.onOpenRemediation?.(bucket)}
+                                                            disabled={periodLocked}
+                                                        >
+                                                            Fix…
+                                                        </Button>
+                                                    ) : null}
+                                                    <div className="flex flex-wrap justify-center gap-0.5">
+                                                        {rem.suggestedActions.includes('fix_odo') &&
+                                                        bucket.closingEntryId &&
+                                                        remediation?.onEditFill ? (
+                                                            <Button
+                                                                type="button"
+                                                                size="sm"
+                                                                variant="ghost"
+                                                                className="h-7 px-1.5 text-[10px] text-slate-700"
+                                                                onClick={() =>
+                                                                    remediation.onEditFill?.(bucket.closingEntryId!)
+                                                                }
+                                                                disabled={periodLocked}
+                                                            >
+                                                                <Gauge className="h-3 w-3" />
+                                                                Odo
+                                                            </Button>
+                                                        ) : null}
+                                                        {rem.suggestedActions.includes('review_trips') &&
+                                                        remediation?.onReviewTrips ? (
+                                                            <Button
+                                                                type="button"
+                                                                size="sm"
+                                                                variant="ghost"
+                                                                className="h-7 px-1.5 text-[10px] text-slate-700"
+                                                                onClick={() => remediation.onReviewTrips?.(bucket)}
+                                                                disabled={periodLocked}
+                                                            >
+                                                                Trips
+                                                            </Button>
+                                                        ) : null}
+                                                        {rem.suggestedActions.includes('review_adjustments') &&
+                                                        remediation?.onFixAdjustments ? (
+                                                            <Button
+                                                                type="button"
+                                                                size="sm"
+                                                                variant="ghost"
+                                                                className="h-7 px-1.5 text-[10px] text-slate-700"
+                                                                onClick={() =>
+                                                                    remediation.onFixAdjustments?.(bucket)
+                                                                }
+                                                                disabled={periodLocked}
+                                                            >
+                                                                Adj
+                                                            </Button>
+                                                        ) : null}
+                                                        <Button
+                                                            type="button"
+                                                            size="sm"
+                                                            variant="ghost"
+                                                            className="h-7 px-1.5 text-[10px] text-indigo-600"
+                                                            onClick={() => openBucketTimeline(bucket)}
+                                                        >
+                                                            <ScanLine className="h-3 w-3" />
+                                                        </Button>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })()}
                                     </TableCell>
                                 </TableRow>
                                 );
@@ -898,6 +988,7 @@ export function BucketReconciliationView({
                         <li><strong>OVER-LOG</strong> means logged trip/adjustment km exceed odometer movement — not “unlogged km”.</li>
                         <li><strong>U (Unexplained)</strong> is odometer km without evidenced category — diagnostic only, not chargeable.</li>
                         <li><strong>Modeled Exp</strong> is circular fill-to-fill burn — use reconciling totals as the real control.</li>
+                        <li><strong>Fix…</strong> opens in-wizard actions (odometer, trips, adjustments) without leaving reconciliation.</li>
                         <li><strong>Charge Gap</strong> posts a Pending driver deduction (window-assigned driver, one charge per bucket). Exact-tier + reconciled panel only.</li>
                     </ul>
                 </div>

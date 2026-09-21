@@ -30,6 +30,13 @@ import { driversForPolicy, driversForVersion } from '../../utils/fuelPolicyAssig
 import { api } from '../../services/api';
 import { useFleetTimezone } from '../../utils/timezoneDisplay';
 import { runFuelPolicyVersionDriverCutoverOnce } from '../../utils/fuelPolicyCutover';
+import { useFuelServiceLine } from '../../contexts/FuelServiceLineContext';
+import {
+  buildLineOverrideScenario,
+  resolvePoliciesForLens,
+  type FuelPolicyServiceLine,
+} from '../../utils/fuelScenarioServiceLine';
+import { fuelServiceLineUiLabel } from '../../utils/vocabulary';
 
 function driverDisplayName(d: any): string {
   return d?.name || [d?.firstName, d?.lastName].filter(Boolean).join(' ') || 'Driver';
@@ -51,6 +58,14 @@ export function PolicySchedulePanel({
   onScenariosChange?: (scenarios: FuelScenario[]) => void;
 }) {
   const fleetTz = useFleetTimezone();
+  const { showTabs, line } = useFuelServiceLine();
+  const policyLens = showTabs
+    ? line === 'delivery'
+      ? 'rush_delivery'
+      : line === 'rideshare'
+        ? 'rideshare'
+        : 'all'
+    : 'all';
   const isControlled = controlledScenarios !== undefined;
   const [localScenarios, setLocalScenarios] = useState<FuelScenario[]>([]);
   const scenarios = isControlled ? controlledScenarios! : localScenarios;
@@ -102,10 +117,58 @@ export function PolicySchedulePanel({
     if (initialPolicyId) setSelectedId(initialPolicyId);
   }, [initialPolicyId]);
 
-  const selected = useMemo(
-    () => scenarios.find((s) => s.id === selectedId) || null,
-    [scenarios, selectedId],
+  const policyRows = useMemo(
+    () => resolvePoliciesForLens(scenarios, policyLens),
+    [scenarios, policyLens],
   );
+
+  const selected = useMemo(() => {
+    const row = policyRows.find((r) => r.scenario.id === selectedId);
+    if (row) return row.scenario;
+    return policyRows[0]?.scenario || null;
+  }, [policyRows, selectedId]);
+
+  const selectedRow = useMemo(
+    () => policyRows.find((r) => r.scenario.id === selected?.id) || null,
+    [policyRows, selected],
+  );
+
+  useEffect(() => {
+    if (!selectedId || !policyRows.some((r) => r.scenario.id === selectedId)) {
+      setSelectedId(policyRows[0]?.scenario.id || null);
+    }
+  }, [policyRows, selectedId]);
+
+  const handleCustomizeForLine = async (parent: FuelScenario, lineKey: FuelPolicyServiceLine) => {
+    const existing = scenarios.find(
+      (s) => s.overridesOfId === parent.id && s.serviceLine === lineKey,
+    );
+    if (existing) {
+      setSelectedId(existing.id);
+      return;
+    }
+    try {
+      const override = buildLineOverrideScenario(parent, lineKey, crypto.randomUUID());
+      const saved = await fuelService.saveFuelScenario(override);
+      commitScenarios([...scenarios, saved]);
+      setSelectedId(saved.id);
+      toast.success(`Created ${fuelServiceLineUiLabel(lineKey)} override`);
+    } catch (e: any) {
+      toast.error(e?.message || 'Failed to create line override');
+    }
+  };
+
+  const handleRevertOverride = async (overrideId: string) => {
+    try {
+      await fuelService.deleteFuelScenario(overrideId);
+      const parentId = scenarios.find((s) => s.id === overrideId)?.overridesOfId;
+      commitScenarios(scenarios.filter((s) => s.id !== overrideId));
+      setSelectedId(parentId || null);
+      toast.success('Reverted to org default');
+    } catch (e: any) {
+      toast.error(e?.message || 'Failed to revert override');
+    }
+  };
 
   const normalized = useMemo(
     () => (selected ? normalizeScenarioVersions(selected) : null),
@@ -183,7 +246,7 @@ export function PolicySchedulePanel({
     );
   }
 
-  if (scenarios.length === 0) {
+  if (policyRows.length === 0) {
     return (
       <div className="rounded-lg border border-dashed border-slate-200 py-12 text-center text-sm text-slate-400">
         Create a policy on the Rules tab first, then manage its schedule here.
@@ -200,6 +263,9 @@ export function PolicySchedulePanel({
           Each version is a Monday period plus drivers. Splits come from Rules (frozen when the
           version is created). The same dates can cover different drivers; one driver cannot
           overlap two versions. Drivers with no version assignment use Default.
+          {policyLens !== 'all'
+            ? ` Viewing ${fuelServiceLineUiLabel(policyLens)} — customize to edit a line override.`
+            : ''}
         </AlertDescription>
       </Alert>
 
@@ -208,13 +274,15 @@ export function PolicySchedulePanel({
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 px-1 mb-2">
             Policies
           </p>
-          {scenarios.map((s) => {
+          {policyRows.map((row) => {
+            const s = row.scenario;
             const n = normalizeScenarioVersions(s);
             const count = n.versions?.length || 0;
             const nDrivers = driversForPolicy(s, drivers).length;
+            const label = row.kind === 'inherited' ? row.parent.name : s.name;
             return (
               <button
-                key={s.id}
+                key={`${row.kind}-${s.id}`}
                 type="button"
                 onClick={() => setSelectedId(s.id)}
                 className={`w-full text-left rounded-md border px-3 py-2.5 transition-colors ${
@@ -224,10 +292,18 @@ export function PolicySchedulePanel({
                 }`}
               >
                 <div className="flex items-center gap-2">
-                  <span className="text-sm font-medium text-slate-900 truncate">{s.name}</span>
-                  {s.isDefault && (
+                  <span className="text-sm font-medium text-slate-900 truncate">{label}</span>
+                  {s.isDefault && row.kind !== 'override' && (
                     <Badge className="bg-indigo-100 text-indigo-700 hover:bg-indigo-100 border-0 text-[10px]">
                       Default
+                    </Badge>
+                  )}
+                  {row.kind === 'inherited' && (
+                    <Badge variant="outline" className="text-[10px]">Inherited</Badge>
+                  )}
+                  {row.kind === 'override' && (
+                    <Badge className="bg-violet-100 text-violet-800 hover:bg-violet-100 border-0 text-[10px]">
+                      Override
                     </Badge>
                   )}
                 </div>
@@ -247,14 +323,39 @@ export function PolicySchedulePanel({
                 <div>
                   <h3 className="text-lg font-medium text-slate-900 flex items-center gap-2">
                     <CalendarRange className="h-5 w-5 text-indigo-600" />
-                    {selected.name}
+                    {selectedRow?.kind === 'inherited' ? selectedRow.parent.name : selected.name}
                   </h3>
                   <p className="text-sm text-slate-500">Version windows by Monday period</p>
                 </div>
-                <Button onClick={openAdd}>
-                  <Plus className="h-4 w-4 mr-2" />
-                  Add version
-                </Button>
+                <div className="flex flex-wrap gap-2">
+                  {selectedRow?.kind === 'inherited' && policyLens !== 'all' ? (
+                    <Button
+                      variant="default"
+                      onClick={() =>
+                        void handleCustomizeForLine(
+                          selectedRow.parent,
+                          policyLens as FuelPolicyServiceLine,
+                        )
+                      }
+                    >
+                      Customize for {fuelServiceLineUiLabel(policyLens)}
+                    </Button>
+                  ) : null}
+                  {selectedRow?.kind === 'override' ? (
+                    <Button
+                      variant="outline"
+                      onClick={() => void handleRevertOverride(selected.id)}
+                    >
+                      Revert to org default
+                    </Button>
+                  ) : null}
+                  {selectedRow?.kind !== 'inherited' ? (
+                    <Button onClick={openAdd}>
+                      <Plus className="h-4 w-4 mr-2" />
+                      Add version
+                    </Button>
+                  ) : null}
+                </div>
               </div>
 
               {versionsNewestFirst.length === 0 ? (
@@ -294,6 +395,8 @@ export function PolicySchedulePanel({
                               </CardDescription>
                             </div>
                             <div className="flex shrink-0 gap-1">
+                              {selectedRow?.kind !== 'inherited' ? (
+                                <>
                               <Button
                                 type="button"
                                 variant="ghost"
@@ -321,6 +424,8 @@ export function PolicySchedulePanel({
                                 <Trash2 className="h-4 w-4" />
                                 <span className="sr-only">Delete version</span>
                               </Button>
+                                </>
+                              ) : null}
                             </div>
                           </div>
                         </CardHeader>

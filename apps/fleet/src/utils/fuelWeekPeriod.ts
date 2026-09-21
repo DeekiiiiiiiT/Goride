@@ -96,14 +96,12 @@ export function reportWeekYmdBounds(report: {
 /**
  * A stop-to-stop bucket belongs to the week of its closing fill (endDate),
  * not to every week it merely overlaps. Fuel added at that fill is this week's spend.
+ * Re-export fuel-core SoT so fleet UI and closable gates never drift.
  */
-export function bucketClosesInFuelWeek(
-  bucket: { endDate: string },
-  startYmd: string,
-  endYmd: string,
-): boolean {
-  return isEntryInInclusiveYmdRange(bucket.endDate, startYmd, endYmd);
-}
+export {
+  bucketClosesInFuelWeek,
+  selectOdometerBucketsClosingInWeek,
+} from '@roam/fuel-core';
 
 /**
  * Current Mon–Sun statement week in fleet timezone (falls back to browser local).

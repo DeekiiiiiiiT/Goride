@@ -111,7 +111,11 @@ async function handleEnsureFromTripIds(c: Context) {
       ledgerRowsWritten: 0,
       unresolvedAfterGenerate: 0,
       errors: 0,
+      periodsRebuilt: 0,
     };
+
+    const touchedByDriver = new Map<string, Set<string>>();
+    const { periodKeyFor } = await import("../../../packages/finance-core/src/periodKey.ts");
 
     const CHUNK = 100;
     for (let i = 0; i < tripIds.length; i += CHUNK) {
@@ -141,6 +145,13 @@ async function handleEnsureFromTripIds(c: Context) {
           stats.skippedNoMoney += 1;
           continue;
         }
+        const driverId = String(trip.driverId ?? "").trim();
+        const day = String(trip.date ?? trip.completed_at ?? "").slice(0, 10);
+        const anchor = day ? periodKeyFor(day) : null;
+        if (driverId && anchor) {
+          if (!touchedByDriver.has(driverId)) touchedByDriver.set(driverId, new Set());
+          touchedByDriver.get(driverId)!.add(anchor);
+        }
         const evs = buildCanonicalTripFareEventsFromTrip(trip as Record<string, unknown>);
         if (evs.length === 0) {
           stats.unresolvedAfterGenerate += 1;
@@ -161,9 +172,21 @@ async function handleEnsureFromTripIds(c: Context) {
       }
     }
 
+    // DFP overlay on Overview / Settlements — rebuild weeks touched by ensured trips.
+    if (touchedByDriver.size > 0) {
+      try {
+        const { rebuildPeriodsForAnchors } = await import("./driver_financial_periods.ts");
+        for (const [driverId, anchors] of touchedByDriver) {
+          stats.periodsRebuilt += await rebuildPeriodsForAnchors(driverId, [...anchors]);
+        }
+      } catch (dfpErr) {
+        console.error("[Ledger EnsureTripIds] DFP rebuild failed:", dfpErr);
+      }
+    }
+
     const durationMs = Date.now() - startMs;
     console.log(
-      `[Ledger EnsureTripIds] OK — requested=${stats.tripIdsRequested} loaded=${stats.tripsLoaded} rows=${stats.ledgerRowsWritten} skipped=${stats.skippedNoMoney} unresolved=${stats.unresolvedAfterGenerate} errors=${stats.errors} (${durationMs}ms)`,
+      `[Ledger EnsureTripIds] OK — requested=${stats.tripIdsRequested} loaded=${stats.tripsLoaded} rows=${stats.ledgerRowsWritten} skipped=${stats.skippedNoMoney} unresolved=${stats.unresolvedAfterGenerate} errors=${stats.errors} periodsRebuilt=${stats.periodsRebuilt} (${durationMs}ms)`,
     );
     return c.json({ success: true, stats, durationMs });
   } catch (e: any) {

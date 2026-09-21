@@ -98,6 +98,8 @@ export function buildFuelWeekClosableInput(opts: {
   stopToStopTripsTruncated?: boolean;
   /** Flagged DQ vehicles still missing Mark reviewed. */
   dataQualityVehiclesUnreviewed?: boolean;
+  /** Server/infra: disposition table could not be loaded. */
+  dispositionLoadFailed?: boolean;
 }): EvaluateFuelWeekClosableInput {
   const unexplained =
     opts.unexplained ??
@@ -107,10 +109,14 @@ export function buildFuelWeekClosableInput(opts: {
     opts.reports.reduce((s, r) => s + (Number(r.totalGasCardCost) || 0), 0);
   const residualKind = classifyFuelMiscResidual(totalSpend, unexplained);
   const unattributed = totalUnattributedFillCost(opts.reports);
+  const dispositionLoadFailed = Boolean(opts.dispositionLoadFailed);
   const hasCritical =
-    opts.gateResult.hasExceptionBlockers || (opts.gateResult.exceptionBlockers?.length ?? 0) > 0;
+    !dispositionLoadFailed &&
+    (opts.gateResult.hasExceptionBlockers ||
+      (opts.gateResult.exceptionBlockers?.length ?? 0) > 0);
 
   return {
+    dispositionLoadFailed,
     hasUnacknowledgedExceptionFills: hasCritical,
     undisposedCriticalFlags: hasCritical,
     dataQualityVehiclesUnreviewed: Boolean(opts.dataQualityVehiclesUnreviewed),
@@ -165,21 +171,23 @@ export function fuelWeekClosableBlockerMessage(blocker: FuelWeekClosableBlocker)
     case 'unresolved_coverage_rule':
       return 'Blocked — fuel coverage rule unresolved';
     case 'stop_to_stop_volume':
-      return 'Blocked — stop-to-stop volume not reconciled';
+      return 'Blocked — stop-to-stop fuel litres do not match the week';
     case 'stop_to_stop_distance':
-      return 'Blocked — stop-to-stop distance not reconciled';
+      return 'Blocked — stop-to-stop distances do not match the odometer chain';
     case 'stop_to_stop_attribution':
-      return 'Blocked — stop-to-stop attribution does not close';
+      return 'Blocked — trip/adjustment km exceed odometer movement (OVER-LOG)';
     case 'stop_to_stop_chain':
-      return 'Blocked — stop-to-stop odometer chain anomaly';
+      return 'Blocked — odometer readings between fills look wrong or out of order';
     case 'stop_to_stop_trips_truncated':
-      return 'Blocked — stop-to-stop trip fetch truncated';
+      return 'Blocked — trip list for stop-to-stop was incomplete (truncated)';
     case 'odometer_chain_unusable':
       return 'Blocked — not enough odometered fills to measure tank timing';
     case 'unattributed_unreviewed':
       return 'Blocked — fills without odometer need review';
     case 'undisposed_flags':
       return 'Blocked — critical fill flags not dispositioned';
+    case 'disposition_load_failed':
+      return 'Blocked — could not load flag dispositions (retry; contact eng if it persists)';
     case 'data_quality_unreviewed':
       return 'Blocked — data-quality flagged vehicles not marked reviewed';
     default:

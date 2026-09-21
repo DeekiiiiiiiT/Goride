@@ -121,6 +121,23 @@ export interface FuelEntry {
   // Link to financial transaction
   transactionId?: string;
 
+  /**
+   * Service-line attribution (server-resolved). Null / missing = Unattributed bucket.
+   * Canonical values: 'rideshare' | 'rush_delivery'. Never derive client-side.
+   */
+  serviceLine?: 'rideshare' | 'rush_delivery' | null;
+  /** Provenance: program | explicit | trip | vehicle | driver | unattributed */
+  serviceLineSource?:
+    | 'program'
+    | 'explicit'
+    | 'trip'
+    | 'vehicle'
+    | 'driver'
+    | 'unattributed'
+    | null;
+  serviceLineSetAt?: string | null;
+  serviceLineSetBy?: string | null;
+
   // Geolocation & Matching (Phase 1)
   locationMetadata?: {
     lat: number;
@@ -517,4 +534,11 @@ export interface FuelScenario {
   isDefault?: boolean;
   /** Period + driver windows (Schedule). Overlap allowed only for different drivers. */
   versions?: FuelScenarioVersion[];
+  /**
+   * Line-specific override (§4.5). null/undefined = org default.
+   * When set with overridesOfId, this policy replaces the parent for that line only.
+   */
+  serviceLine?: 'rideshare' | 'rush_delivery' | null;
+  /** Parent org-default scenario id when this row is a line override. */
+  overridesOfId?: string;
 }

@@ -10,4 +10,6 @@ export type NavLeaf = {
   badgeCount?: number;
   /** Prefer over badge when sharing model between sidebar + top nav. */
   showNewBadge?: boolean;
+  /** Native title / tooltip (e.g. Review Queue · N unattributed). */
+  title?: string;
 };

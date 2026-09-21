@@ -103,6 +103,11 @@ export const FLEET_DOMAINS: FleetDomainDef[] = [
         handed_over_by: str(v.handedOverBy),
         custody_confirmed_at: str(v.custodyConfirmedAt),
         custody_confirmed_by: str(v.custodyConfirmedBy),
+        service_lines: Array.isArray(v.serviceLines)
+          ? (v.serviceLines as unknown[]).filter((x) => x === "rideshare" || x === "rush_delivery")
+          : Array.isArray(v.service_lines)
+            ? (v.service_lines as unknown[]).filter((x) => x === "rideshare" || x === "rush_delivery")
+            : ["rideshare"],
       }),
   },
   {
@@ -262,6 +267,9 @@ export const FLEET_DOMAINS: FleetDomainDef[] = [
               : null,
           ),
         service_line: str(v.service_line) ?? str(v.serviceLine),
+        service_line_source: str(v.service_line_source) ?? str(v.serviceLineSource),
+        service_line_set_at: str(v.service_line_set_at) ?? str(v.serviceLineSetAt),
+        service_line_set_by: str(v.service_line_set_by) ?? str(v.serviceLineSetBy),
       });
     },
   },
@@ -370,6 +378,9 @@ export const FLEET_DOMAINS: FleetDomainDef[] = [
     prefixes: ["expense_journal:"],
     mapRow: (key, v) => base(key, v, "expense_journal:", {
       service_line: str(v.service_line) ?? str(v.serviceLine),
+      service_line_source: str(v.service_line_source) ?? str(v.serviceLineSource),
+      service_line_set_at: str(v.service_line_set_at) ?? str(v.serviceLineSetAt),
+      service_line_set_by: str(v.service_line_set_by) ?? str(v.serviceLineSetBy),
     }),
   },
   {

@@ -212,6 +212,9 @@ export interface FuelScenario {
   rules: FuelRule[];
   isDefault?: boolean;
   versions?: FuelScenarioVersion[];
+  /** Line override (§4.5). null/undefined = org default. */
+  serviceLine?: 'rideshare' | 'rush_delivery' | null;
+  overridesOfId?: string;
 }
 
 export interface WeeklyFuelReport {

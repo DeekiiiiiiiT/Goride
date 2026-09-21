@@ -61,4 +61,44 @@ describe('FuelFinalizeStep render', () => {
     expect(screen.queryByRole('button', { name: /^Record my second approval$/i })).toBeNull();
     unmount();
   });
+
+  it('shows primary Fix stop-to-stop blockers and demotes Integrity', async () => {
+    const user = userEvent.setup();
+    const onFix = vi.fn();
+    const onIntegrity = vi.fn();
+    render(
+      <FuelFinalizeStep
+        periodLocked={false}
+        exceptionBlockers={[]}
+        plateByVehicleId={{}}
+        exceptionBusyId={null}
+        onAcceptException={async () => undefined}
+        hasBlockingWarnings={false}
+        hasExceptionBlockers={false}
+        financeWarningAcknowledged={false}
+        onFinanceWarningChange={() => undefined}
+        needsSecondApprover={false}
+        secondApproverThreshold={50000}
+        secondApproverConfirmed={false}
+        secondApproveBusy={false}
+        onRecordSecondApproval={() => undefined}
+        settlementRows={[]}
+        closableBlockMessages={[
+          'Blocked — trip/adjustment km exceed odometer movement (OVER-LOG)',
+          'Blocked — odometer readings between fills look wrong or out of order',
+        ]}
+        stopToStopSummary="3 fill windows on 5179KZ have trip/adjustment km larger than the odometer moved."
+        onFixStopToStop={onFix}
+        onOpenIntegrityStopToStop={onIntegrity}
+      />,
+    );
+
+    expect(screen.getByText(/3 fill windows on 5179KZ/i)).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: /Fix stop-to-stop blockers/i }));
+    expect(onFix).toHaveBeenCalledTimes(1);
+    expect(
+      screen.getByRole('button', { name: /Open in Fuel Integrity \(advanced\)/i }),
+    ).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /Open stop-to-stop gap detail/i })).toBeNull();
+  });
 });

@@ -8,11 +8,15 @@ import { coverageRuleIsResolved } from "../../../packages/fuel-core/src/fuelCove
 import { deriveWindowMoneyFromEntries } from "../../../packages/fuel-core/src/deriveWindowMoneyFromEntries.ts";
 import type { EvaluateFuelWeekClosableInput } from "../../../packages/fuel-core/src/evaluateFuelWeekClosable.ts";
 import { evaluateStopToStopFromSnapshots } from "../../../packages/fuel-core/src/stopToStopConservation.ts";
+import { applyStopToStopGapAccepts } from "../../../packages/fuel-core/src/applyStopToStopGapAccepts.ts";
+import type { OdometerBucket } from "../../../packages/fuel-core/src/fuelTypes.ts";
+import type { StopToStopGapAccept } from "../../../packages/fuel-core/src/applyStopToStopGapAccepts.ts";
 import {
   filterFuelOpsLogEntries,
   fuelTankLiters,
 } from "../../../packages/fuel-core/src/fuelOpsEligibility.ts";
 import { isEntryInInclusiveYmdRange } from "../../../packages/fuel-core/src/fuelWeekRange.ts";
+import { selectOdometerBucketsClosingInWeek } from "../../../packages/fuel-core/src/fuelWeekRange.ts";
 import type { FuelEntry } from "../../../packages/fuel-core/src/fuelTypes.ts";
 import { getServiceClient } from "./service_client.ts";
 
@@ -227,18 +231,25 @@ async function loadWeekClosableKvBundle(
   return bundle;
 }
 
-function entryIsUnackedException(e: Record<string, unknown>): boolean {
+/**
+ * Legacy exception-only path when integrityStatus is NOT stamped.
+ * Modern fills use integrityStatus + entryHasOpenCriticalFlag (honours dispositions).
+ * Do not include integrity === "critical" here — that re-raises disposed integrity_critical.
+ */
+export function entryIsUnackedException(e: Record<string, unknown>): boolean {
   const meta = (e.metadata && typeof e.metadata === "object"
     ? e.metadata
     : {}) as Record<string, unknown>;
+  const integrity = String(meta.integrityStatus || "").toLowerCase();
+  // Stamped integrity is owned by entryHasOpenCriticalFlag + disposition codes.
+  if (integrity) return false;
+
   const tier = String(e.reviewTier || meta.reviewTier || e.anomalyTier || "")
     .toLowerCase();
   const signalTier = String(meta.signalTier || e.signalTier || "").toLowerCase();
-  const integrity = String(meta.integrityStatus || "").toLowerCase();
   const isCritical =
     tier === "exception" ||
     signalTier === "exception" ||
-    integrity === "critical" ||
     Boolean(meta.isException);
   if (!isCritical) return false;
   const ack = meta.reconExceptionAck || e.reconExceptionAck;
@@ -248,13 +259,20 @@ function entryIsUnackedException(e: Record<string, unknown>): boolean {
 }
 
 /** Load disposed (entry_id, flag_code) pairs for org. */
+export type DisposedFlagLoadResult = {
+  pairs: Set<string>;
+  /** True when service client/SQL failed — distinct from an empty disposition set. */
+  loadFailed: boolean;
+};
+
 async function loadDisposedEntryFlagPairs(
   orgId: string,
   entryIds: string[],
-): Promise<Set<string>> {
+): Promise<DisposedFlagLoadResult> {
   const out = new Set<string>();
-  if (entryIds.length === 0) return out;
-  // Unit/CI has no service role — treat as no dispositions (fail-closed: flags still open).
+  if (entryIds.length === 0) return { pairs: out, loadFailed: false };
+  // Unit/CI has no service role — treat as load failure so callers can surface
+  // disposition_load_failed rather than laundering into undisposed_flags.
   let sb;
   try {
     sb = getServiceClient();
@@ -263,10 +281,11 @@ async function loadDisposedEntryFlagPairs(
       "[fuel_week_closable] disposition load skipped — no service client",
       err instanceof Error ? err.message : err,
     );
-    return out;
+    return { pairs: out, loadFailed: true };
   }
   // Chunk to avoid URL limits
   const chunk = 200;
+  let loadFailed = false;
   for (let i = 0; i < entryIds.length; i += chunk) {
     const slice = entryIds.slice(i, i + chunk);
     const { data, error } = await sb
@@ -276,16 +295,17 @@ async function loadDisposedEntryFlagPairs(
       .in("entry_id", slice);
     if (error) {
       console.warn("[fuel_week_closable] disposition load failed", error.message);
+      loadFailed = true;
       continue;
     }
     for (const row of data || []) {
       out.add(`${row.entry_id}::${row.flag_code}`);
     }
   }
-  return out;
+  return { pairs: out, loadFailed };
 }
 
-function entryHasOpenCriticalFlag(
+export function entryHasOpenCriticalFlag(
   e: Record<string, unknown>,
   disposed: Set<string>,
 ): boolean {
@@ -359,22 +379,48 @@ export async function weekHasOpenFuelDisputes(
   return false;
 }
 
+/** Pure per-entry gate used by weekHasUnackedExceptionFills (testable without KV/SQL). */
+export function entryBlocksFinalizeForFlags(
+  e: Record<string, unknown>,
+  disposed: Set<string>,
+): boolean {
+  if (entryHasOpenCriticalFlag(e, disposed)) return true;
+  const id = String(e.id || "").trim();
+  // Fallback for legacy exception-only path when integrity not stamped
+  if (entryIsUnackedException(e) && !disposed.has(`${id}::signal_exception`)) {
+    return true;
+  }
+  return false;
+}
+
 export async function weekHasUnackedExceptionFills(
   orgId: string,
   weekStart: string,
   weekEnd: string,
 ): Promise<boolean> {
+  const state = await weekFlagClosableState(orgId, weekStart, weekEnd);
+  // Fail-closed for boolean callers: load failure still blocks finalize.
+  return state.dispositionLoadFailed || state.hasUnacked;
+}
+
+/** Flag closable state — distinguishes infra load failure from open critical flags. */
+export async function weekFlagClosableState(
+  orgId: string,
+  weekStart: string,
+  weekEnd: string,
+): Promise<{ hasUnacked: boolean; dispositionLoadFailed: boolean }> {
   const { entries } = await loadWeekClosableKvBundle(orgId, weekStart, weekEnd);
   const ids = entries.map((e) => String(e.id || "")).filter(Boolean);
-  const disposed = await loadDisposedEntryFlagPairs(orgId, ids);
+  const { pairs, loadFailed } = await loadDisposedEntryFlagPairs(orgId, ids);
+  if (loadFailed) {
+    return { hasUnacked: false, dispositionLoadFailed: true };
+  }
   for (const e of entries) {
-    if (entryHasOpenCriticalFlag(e, disposed)) return true;
-    // Fallback for legacy exception-only path when integrity not stamped
-    if (entryIsUnackedException(e) && !disposed.has(`${e.id}::signal_exception`)) {
-      return true;
+    if (entryBlocksFinalizeForFlags(e, pairs)) {
+      return { hasUnacked: true, dispositionLoadFailed: false };
     }
   }
-  return false;
+  return { hasUnacked: false, dispositionLoadFailed: false };
 }
 
 export async function buildFuelWeekClosableInputForPeriod(
@@ -393,14 +439,16 @@ export async function buildFuelWeekClosableInputForPeriod(
   >;
   const countsUnevaluated = Object.keys(counts).length === 0;
 
-  const [hasOpenDisputes, hasUnackedExceptions, unapprovedFuel] = await Promise.all([
+  const [hasOpenDisputes, flagState, unapprovedFuel] = await Promise.all([
     weekHasOpenFuelDisputes(orgId, weekStart, weekEnd),
-    weekHasUnackedExceptionFills(orgId, weekStart, weekEnd),
+    weekFlagClosableState(orgId, weekStart, weekEnd),
     (async () => {
       const { transactions } = await loadWeekClosableKvBundle(orgId, weekStart, weekEnd);
       return listUnapprovedFuelTxInWindow(transactions as any[], weekStart, weekEnd).length > 0;
     })(),
   ]);
+  const hasUnackedExceptions = flagState.hasUnacked;
+  const dispositionLoadFailed = flagState.dispositionLoadFailed;
 
   const signedUnexplained = Number(period.unexplained) || 0;
   const totalSpend = Number(period.total_spend) || 0;
@@ -431,23 +479,38 @@ export async function buildFuelWeekClosableInputForPeriod(
     meta.degraded_inputs === true;
   const degradedInputs = degradedFromPeriod || Boolean(missingCategoryCosts);
 
-  // R-3: stop-to-stop conservation — authoritative at HTTP close.
+  // R-3: stop-to-stop conservation — week-closing buckets only (not ledger history).
   const { entries: weekEntries } = await loadWeekClosableKvBundle(orgId, weekStart, weekEnd);
   const opsLiters = filterFuelOpsLogEntries(weekEntries as unknown as FuelEntry[])
     .filter((e) => isEntryInInclusiveYmdRange(e.date, weekStart, weekEnd))
     .reduce((s, e) => s + fuelTankLiters(e), 0);
+  const allSnapBuckets = snaps.flatMap((s) =>
+    Array.isArray(s.odometerBuckets) ? (s.odometerBuckets as OdometerBucket[]) : [],
+  );
+  const weekBuckets = selectOdometerBucketsClosingInWeek(allSnapBuckets, weekStart, weekEnd);
   const s2s = evaluateStopToStopFromSnapshots({
-    snapshots: snaps.map((s) => ({
-      odometerBuckets: Array.isArray(s.odometerBuckets)
-        ? (s.odometerBuckets as import("../../../packages/fuel-core/src/fuelTypes.ts").OdometerBucket[])
-        : [],
-      totalGasCardCost: Number(s.totalGasCardCost) || 0,
-    })),
+    snapshots: [{ odometerBuckets: weekBuckets, totalGasCardCost: 1 }],
     weekOpsLiters: opsLiters,
   });
-  // Only enforce stop-to-stop blockers when at least one snap carries buckets
-  // (pre-remediation weeks have none — avoid blocking historical reopens blindly).
-  const hasFrozenBuckets = snaps.some((s) => Array.isArray(s.odometerBuckets) && s.odometerBuckets.length > 0);
+  // Only enforce stop-to-stop blockers when this week has closing windows.
+  const hasFrozenBuckets = weekBuckets.length > 0;
+
+  const gapAccepts = Array.isArray(period.stop_to_stop_gap_accepts)
+    ? (period.stop_to_stop_gap_accepts as StopToStopGapAccept[])
+    : [];
+  const s2sApplied = hasFrozenBuckets
+    ? applyStopToStopGapAccepts(
+      {
+        stopToStopVolumeFailed: s2s.stopToStopVolumeFailed,
+        stopToStopDistanceFailed: s2s.stopToStopDistanceFailed,
+        stopToStopAttributionFailed: s2s.stopToStopAttributionFailed,
+        stopToStopChainFailed: s2s.stopToStopChainFailed,
+        stopToStopTripsTruncated: s2s.stopToStopTripsTruncated,
+      },
+      weekBuckets,
+      gapAccepts,
+    )
+    : s2s;
 
   // N-1 / N-2: thin odometer chain + unattributed fills (from stamps and/or entry derive).
   let stampedUnattributed = 0;
@@ -510,6 +573,7 @@ export async function buildFuelWeekClosableInputForPeriod(
       (snapResidual.anyUnderExplained || residualKind === "under_explained") && !leakageReviewed,
     hasUnacknowledgedExceptionFills: hasUnackedExceptions,
     undisposedCriticalFlags: hasUnackedExceptions,
+    dispositionLoadFailed,
     dataQualityVehiclesUnreviewed,
     hasOpenDisputes,
     hasUnapprovedFuelTx: unapprovedFuel,
@@ -521,17 +585,20 @@ export async function buildFuelWeekClosableInputForPeriod(
       isUnattributedBeyondGate(totalSpend, unattributedCost) && !unattributedReviewed,
     ...(hasFrozenBuckets
       ? {
-          stopToStopVolumeFailed: s2s.stopToStopVolumeFailed,
-          stopToStopDistanceFailed: s2s.stopToStopDistanceFailed,
-          stopToStopAttributionFailed: s2s.stopToStopAttributionFailed,
-          stopToStopChainFailed: s2s.stopToStopChainFailed,
-          stopToStopTripsTruncated: s2s.stopToStopTripsTruncated,
+          stopToStopVolumeFailed: s2sApplied.stopToStopVolumeFailed,
+          stopToStopDistanceFailed: s2sApplied.stopToStopDistanceFailed,
+          stopToStopAttributionFailed: s2sApplied.stopToStopAttributionFailed,
+          stopToStopChainFailed: s2sApplied.stopToStopChainFailed,
+          stopToStopTripsTruncated: s2sApplied.stopToStopTripsTruncated,
         }
       : {}),
   };
 }
 
-/** C-3: persist real step counts so auto-close is not stuck on counts_unevaluated. */
+/** C-3: persist real step counts so auto-close is not stuck on counts_unevaluated.
+ * Clear steps use informational:0 — landing chips treat informational>0 + actionable=0
+ * as "Not evaluated" (fabricated only when counts jsonb is empty on open weeks).
+ */
 export function buildServerFuelStepCounts(input: {
   exceptionFillCount: number;
   openDisputeCount: number;
@@ -541,18 +608,18 @@ export function buildServerFuelStepCounts(input: {
   const dq =
     (Number(input.exceptionFillCount) || 0) + (Number(input.unapprovedFuelTxCount) || 0);
   return {
-    "data-quality": { actionable: dq, informational: dq > 0 ? 0 : 1 },
+    "data-quality": { actionable: dq, informational: 0 },
     "adjustments-disputes": {
       actionable: Number(input.openDisputeCount) || 0,
-      informational: (Number(input.openDisputeCount) || 0) > 0 ? 0 : 1,
+      informational: 0,
     },
-    "policy-check": { actionable: 0, informational: 1 },
+    "policy-check": { actionable: 0, informational: 0 },
     "leakage-gap": {
       actionable: input.leakageActionable ? 1 : 0,
-      informational: input.leakageActionable ? 0 : 1,
+      informational: 0,
     },
-    "settlement-preview": { actionable: 0, informational: 1 },
-    finalize: { actionable: 0, informational: 1 },
+    "settlement-preview": { actionable: 0, informational: 0 },
+    finalize: { actionable: 0, informational: 0 },
   };
 }
 
@@ -562,9 +629,13 @@ export async function countUnackedExceptionFills(
   weekEnd: string,
 ): Promise<number> {
   const { entries } = await loadWeekClosableKvBundle(orgId, weekStart, weekEnd);
+  const ids = entries.map((e) => String(e.id || "")).filter(Boolean);
+  const { pairs, loadFailed } = await loadDisposedEntryFlagPairs(orgId, ids);
+  // Fail-closed count when dispositions cannot be loaded (same as empty set).
+  const disposed = loadFailed ? new Set<string>() : pairs;
   let n = 0;
   for (const e of entries) {
-    if (entryIsUnackedException(e)) n += 1;
+    if (entryBlocksFinalizeForFlags(e, disposed)) n += 1;
   }
   return n;
 }

@@ -245,6 +245,8 @@ export {
   isEntryInInclusiveYmdRange,
   isEntryInHalfOpenYmdRange,
   entriesInFuelWeek,
+  bucketClosesInFuelWeek,
+  selectOdometerBucketsClosingInWeek,
 } from './fuelWeekRange.ts';
 
 export {
@@ -262,9 +264,31 @@ export {
   type StopToStopConservationResult,
 } from './stopToStopConservation.ts';
 
-export { calculateOdometerBuckets as calculateOdometerBucketsEngine } from './odometerBucketEngine.ts';
+export {
+  classifyStopToStopBucketRemediation,
+  sortBucketsForRemediation,
+  summarizeStopToStopRemediation,
+  inventoryStopToStopWeekBlockers,
+  type StopToStopRemediationKind,
+  type StopToStopBucketRemediation,
+  type StopToStopWeekBlockerInventory,
+} from './classifyStopToStopBucketRemediation.ts';
 
 export {
+  applyStopToStopGapAccepts,
+  findStopToStopGapAccept,
+  isStopToStopGapAcceptable,
+  stopToStopGapAcceptMatchKey,
+  bucketStopToStopGapAcceptMatchKey,
+  upsertStopToStopGapAccepts,
+  revokeStopToStopGapAccept,
+  validateStopToStopGapAcceptRequest,
+  type StopToStopGapAccept,
+  type StopToStopGapAcceptDisposition,
+  type StopToStopClosableFlagSet,
+} from './applyStopToStopGapAccepts.ts';
+
+export { calculateOdometerBuckets as calculateOdometerBucketsEngine } from './odometerBucketEngine.ts';export {
   GAP_DEDUCTION_TX_TYPE,
   STOP_TO_STOP_ENGINE_VERSION,
   gapChargeIdempotencyKey,

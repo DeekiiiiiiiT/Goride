@@ -1502,6 +1502,29 @@ export function registerResidualMonolithRoutes(app: Hono) {
         console.error("[CanonicalOps] trip fare append after trip save failed:", canonErr);
       }
 
+      // Keep saved pay-week (DFP) in sync — Overview overlays DFP on single-week views.
+      try {
+        const { rebuildPeriodsForAnchors } = await import("./driver_financial_periods.ts");
+        const { periodKeyFor } = await import("../../../packages/finance-core/src/periodKey.ts");
+        const byDriver = new Map<string, Set<string>>();
+        for (const t of processedTrips as Record<string, unknown>[]) {
+          const driverId = String(t.driverId ?? "").trim();
+          const day = String(t.date ?? t.completed_at ?? "").slice(0, 10);
+          const anchor = day ? periodKeyFor(day) : null;
+          if (!driverId || !anchor) continue;
+          if (!byDriver.has(driverId)) byDriver.set(driverId, new Set());
+          byDriver.get(driverId)!.add(anchor);
+        }
+        for (const [driverId, anchors] of byDriver) {
+          const n = await rebuildPeriodsForAnchors(driverId, [...anchors]);
+          if (n > 0) {
+            console.log(`[DFP] rebuilt ${n} week(s) after trip save driver=${driverId}`);
+          }
+        }
+      } catch (dfpErr) {
+        console.error("[DFP] rebuild after trip save failed:", dfpErr);
+      }
+
       // Phase 4 fleet detection: post-trip replay of saved Trip.route through
       // the shared segment geofence matcher (no live GPS stream for fleet).
       try {

@@ -148,9 +148,28 @@ const MasterLogTimelineInternal: React.FC<MasterLogTimelineProps & React.HTMLAtt
   const fetchTimelineData = useCallback(async () => {
     setLoading(true);
     try {
+      // Embedded gap inspect seeds a small window — scope server fetches to that range.
+      // Standalone Master Log still loads the full vehicle history.
+      const scopedFrom = initialDateRange?.from?.trim() || undefined;
+      const scopedTo = initialDateRange?.to?.trim() || undefined;
+      const ledgerOpts = scopedFrom || scopedTo
+        ? {
+            from: scopedFrom,
+            to: scopedTo,
+            limit: 500,
+          }
+        : { limit: 5000 };
+
       const [{ data: ledgerRows }, anomalyResult] = await Promise.all([
-        odometerService.getLedger(vehicleId, { limit: 5000 }),
-        odometerService.getLedger(vehicleId, { anomaliesOnly: true, limit: 500 }).catch(() => ({ data: [] as any[] })),
+        odometerService.getLedger(vehicleId, ledgerOpts),
+        odometerService
+          .getLedger(vehicleId, {
+            anomaliesOnly: true,
+            limit: 500,
+            ...(scopedFrom ? { from: scopedFrom } : {}),
+            ...(scopedTo ? { to: scopedTo } : {}),
+          })
+          .catch(() => ({ data: [] as any[] })),
       ]);
       const unifiedHistory = ledgerRows || [];
       setHistory(unifiedHistory);
@@ -160,115 +179,130 @@ const MasterLogTimelineInternal: React.FC<MasterLogTimelineProps & React.HTMLAtt
       for (const row of ledgerAnomalies) {
         if (!row.metaData) row.metaData = {};
         row.metaData.ledgerRegression = true;
-        row.metaData.anomalyReason = row.metaData.anomalyReason || 'Reading below current hard odometer (regression)';
+        row.metaData.anomalyReason =
+          row.metaData.anomalyReason || 'Reading below current hard odometer (regression)';
       }
 
       // Generate reports for each pair of VERIFIED anchors only
       const verifiedOnly = unifiedHistory
-        .filter(r => r.isVerified)
+        .filter((r) => r.isVerified)
         .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
       if (verifiedOnly.length < 2) {
-          setReports({});
-          return;
+        setReports({});
+        return;
       }
 
-      // Optimization Phase 8: Batch fetch all trips for the vehicle to avoid O(N) sequential calls
-      // This solves the performance bottleneck after running Chaos Seeder
-      const allTripsResponse = await api.getTripsFiltered({ 
-          vehicleId, 
-          limit: 5000 // High limit for batch processing
+      // Batch trips — scoped when embedded so Inspect timeline is not O(all vehicle history)
+      const allTripsResponse = await api.getTripsFiltered({
+        vehicleId,
+        limit: scopedFrom || scopedTo ? 1000 : 5000,
+        ...(scopedFrom ? { startDate: scopedFrom } : {}),
+        ...(scopedTo ? { endDate: scopedTo } : {}),
       });
       const allTrips = allTripsResponse.data || [];
 
       // Fetch adjustments for 3-way attribution
       let allAdjustments: any[] = [];
       try {
-          const adjResponse = await fuelService.getMileageAdjustments();
-          allAdjustments = (adjResponse || []).filter((a: any) => a.vehicleId === vehicleId);
+        const adjResponse = await fuelService.getMileageAdjustments();
+        allAdjustments = (adjResponse || []).filter((a: any) => {
+          if (a.vehicleId !== vehicleId) return false;
+          if (!scopedFrom && !scopedTo) return true;
+          const ymd = String(a.date || '').slice(0, 10);
+          if (scopedFrom && ymd < scopedFrom) return false;
+          if (scopedTo && ymd > scopedTo) return false;
+          return true;
+        });
       } catch (e) {
-          console.error("Failed to fetch adjustments for 3-way attribution", e);
+        console.error('Failed to fetch adjustments for 3-way attribution', e);
       }
 
       const newReports: Record<string, MileageReport> = {};
-      
+
       for (let i = 0; i < verifiedOnly.length - 1; i++) {
         const start = verifiedOnly[i];
-        const end = verifiedOnly[i+1];
-        
+        const end = verifiedOnly[i + 1];
+
         // Filter trips locally from the batch
         const startTime = new Date(start.date).getTime();
         const endTime = new Date(end.date).getTime();
-        
+
         const periodTrips = allTrips.filter((t: Trip) => {
-            // Only include Completed and Cancelled trips (Processing trips are unverified)
-            if (t.status !== 'Completed' && t.status !== 'Cancelled') return false;
-            
-            const tTime = new Date(t.date).getTime();
-            // Prioritize anchorPeriodId tag if available (from Phase 6 logic)
-            if (t.metadata?.anchorPeriodId) {
-                return t.metadata.anchorPeriodId === start.id;
-            }
-            return tTime >= startTime && tTime <= endTime;
+          // Only include Completed and Cancelled trips (Processing trips are unverified)
+          if (t.status !== 'Completed' && t.status !== 'Cancelled') return false;
+
+          const tTime = new Date(t.date).getTime();
+          // Prioritize anchorPeriodId tag if available (from Phase 6 logic)
+          if (t.metadata?.anchorPeriodId) {
+            return t.metadata.anchorPeriodId === start.id;
+          }
+          return tTime >= startTime && tTime <= endTime;
         });
 
         const totalDistance = end.value - start.value;
-        const platformDistance = periodTrips.reduce((sum: number, trip: Trip) => sum + FuelCalculationService.getTotalTripRideshareKm(trip), 0);
+        const platformDistance = periodTrips.reduce(
+          (sum: number, trip: Trip) => sum + FuelCalculationService.getTotalTripRideshareKm(trip),
+          0,
+        );
         const personalDistance = Math.max(0, totalDistance - platformDistance);
         const personalPercentage = totalDistance > 0 ? (personalDistance / totalDistance) * 100 : 0;
 
         // 3-way attribution: match adjustments to this anchor period by date
         const periodAdjustments = allAdjustments.filter((a: any) => {
-            const aTime = new Date(a.date).getTime();
-            return aTime >= startTime && aTime <= endTime;
+          const aTime = new Date(a.date).getTime();
+          return aTime >= startTime && aTime <= endTime;
         });
 
         const adjustedPersonalDistance = periodAdjustments
-            .filter((a: any) => a.type === 'Personal')
-            .reduce((sum: number, a: any) => sum + (a.distance || 0), 0);
+          .filter((a: any) => a.type === 'Personal')
+          .reduce((sum: number, a: any) => sum + (a.distance || 0), 0);
         const companyMiscDistance = periodAdjustments
-            .filter((a: any) => a.type === 'Company_Misc' || a.type === 'Maintenance')
-            .reduce((sum: number, a: any) => sum + (a.distance || 0), 0);
-        const unaccountedDistance = Math.max(0, totalDistance - platformDistance - adjustedPersonalDistance - companyMiscDistance);
+          .filter((a: any) => a.type === 'Company_Misc' || a.type === 'Maintenance')
+          .reduce((sum: number, a: any) => sum + (a.distance || 0), 0);
+        const unaccountedDistance = Math.max(
+          0,
+          totalDistance - platformDistance - adjustedPersonalDistance - companyMiscDistance,
+        );
 
         let anomalyDetected = false;
         let anomalyReason = undefined;
 
         if (totalDistance < 0) {
-            anomalyDetected = true;
-            anomalyReason = "End odometer is lower than start odometer.";
+          anomalyDetected = true;
+          anomalyReason = 'End odometer is lower than start odometer.';
         } else if (totalDistance - platformDistance < -1) {
-            anomalyDetected = true;
-            anomalyReason = `Platform distance exceeds total physical distance.`;
+          anomalyDetected = true;
+          anomalyReason = `Platform distance exceeds total physical distance.`;
         }
 
         newReports[`${start.id}_${end.id}`] = {
-            vehicleId,
-            periodStart: start.date,
-            periodEnd: end.date,
-            startOdometer: start.value,
-            endOdometer: end.value,
-            totalDistance,
-            platformDistance,
-            personalDistance,
-            personalPercentage,
-            anomalyDetected,
-            anomalyReason,
-            tripCount: periodTrips.length,
-            rideShareDistance: platformDistance,
-            adjustedPersonalDistance,
-            companyMiscDistance,
-            unaccountedDistance
+          vehicleId,
+          periodStart: start.date,
+          periodEnd: end.date,
+          startOdometer: start.value,
+          endOdometer: end.value,
+          totalDistance,
+          platformDistance,
+          personalDistance,
+          personalPercentage,
+          anomalyDetected,
+          anomalyReason,
+          tripCount: periodTrips.length,
+          rideShareDistance: platformDistance,
+          adjustedPersonalDistance,
+          companyMiscDistance,
+          unaccountedDistance,
         };
       }
       setReports(newReports);
     } catch (error) {
-      console.error("Failed to fetch timeline data", error);
-      toast.error("Failed to load Master Log");
+      console.error('Failed to fetch timeline data', error);
+      toast.error('Failed to load Master Log');
     } finally {
       setLoading(false);
     }
-  }, [vehicleId]);
+  }, [vehicleId, initialDateRange?.from, initialDateRange?.to]);
 
   useEffect(() => {
     fetchTimelineData();

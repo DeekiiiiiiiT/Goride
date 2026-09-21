@@ -44,6 +44,19 @@ export interface FuelEntry {
 
   transactionId?: string;
 
+  /** Server-resolved service line. Null = unattributed. Do not derive client-side. */
+  serviceLine?: 'rideshare' | 'rush_delivery' | null;
+  serviceLineSource?:
+    | 'program'
+    | 'explicit'
+    | 'trip'
+    | 'vehicle'
+    | 'driver'
+    | 'unattributed'
+    | null;
+  serviceLineSetAt?: string | null;
+  serviceLineSetBy?: string | null;
+
   isFullTank?: boolean;
   locationMetadata?: {
     lat?: number;

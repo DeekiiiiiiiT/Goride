@@ -408,4 +408,117 @@ export function registerFuelAuditRoutes(app: Hono) {
       }
   });
 
+  // Phase 0 / S9: idempotent service-line re-resolve (never overwrites explicit).
+  // Heals T0/T2/T4 gaps the T3-only SQL backfill left in Unattributed.
+  app.post(
+    "/make-server-37f42386/admin/fuel-audit/re-resolve-service-lines",
+    requireAuth({ strict: true }),
+    requirePermission("data.backfill"),
+    async (c) => {
+      try {
+        const body = (await c.req.json().catch(() => ({}))) as {
+          organizationId?: string;
+          limit?: number;
+          /** When true (default), only null-source or unattributed rows — S9 backlog heal. */
+          onlyBacklog?: boolean;
+          /** Also heal expense_journal rows (default true). */
+          includeExpenseJournal?: boolean;
+          dryRun?: boolean;
+        };
+        const orgFilter = String(body.organizationId || "").trim();
+        const limit = Math.min(Math.max(Number(body.limit) || 5000, 1), 20000);
+        const onlyBacklog = body.onlyBacklog !== false;
+        const includeExpenseJournal = body.includeExpenseJournal !== false;
+        const dryRun = body.dryRun === true;
+
+        const { reResolveCostRowServiceLine } = await import("./service_line_attribution.ts");
+
+        type PrefixSpec = { prefix: string; keyOf: (row: Record<string, unknown>) => string };
+        const specs: PrefixSpec[] = [
+          {
+            prefix: "fuel_entry:",
+            keyOf: (row) => `fuel_entry:${String(row.id)}`,
+          },
+        ];
+        if (includeExpenseJournal) {
+          specs.push({
+            prefix: "expense_journal:",
+            keyOf: (row) => `expense_journal:${String(row.id)}`,
+          });
+        }
+
+        let scanned = 0;
+        let changed = 0;
+        let skippedExplicit = 0;
+        let skippedNotBacklog = 0;
+        const CHUNK = 50;
+        const pendingKeys: string[] = [];
+        const pendingVals: Record<string, unknown>[] = [];
+
+        const flush = async () => {
+          if (!pendingKeys.length || dryRun) {
+            pendingKeys.length = 0;
+            pendingVals.length = 0;
+            return;
+          }
+          await kv.mset(pendingKeys.splice(0), pendingVals.splice(0));
+        };
+
+        for (const spec of specs) {
+          if (scanned >= limit) break;
+          const entries =
+            ((await kv.getByPrefix(spec.prefix)) as Record<string, unknown>[]) || [];
+          for (const raw of entries) {
+            if (scanned >= limit) break;
+            if (!raw || typeof raw !== "object") continue;
+            if (orgFilter) {
+              const oid = String(raw.organizationId ?? raw.organization_id ?? "");
+              if (oid !== orgFilter) continue;
+            }
+            scanned++;
+            const src = raw.service_line_source ?? raw.serviceLineSource;
+            if (src === "explicit") {
+              skippedExplicit++;
+              continue;
+            }
+            if (onlyBacklog) {
+              const isBacklog =
+                src == null ||
+                src === "" ||
+                src === "unattributed" ||
+                (raw.service_line == null && raw.serviceLine == null);
+              if (!isBacklog) {
+                skippedNotBacklog++;
+                continue;
+              }
+            }
+            const result = await reResolveCostRowServiceLine(raw);
+            if (!result.changed) continue;
+            changed++;
+            const stamped = stampOrg(result.record, c) as Record<string, unknown>;
+            pendingKeys.push(spec.keyOf(stamped));
+            pendingVals.push(stamped);
+            if (pendingKeys.length >= CHUNK) await flush();
+          }
+        }
+        await flush();
+
+        return c.json({
+          success: true,
+          scanned,
+          changed,
+          skippedExplicit,
+          skippedNotBacklog,
+          onlyBacklog,
+          includeExpenseJournal,
+          dryRun,
+          organizationId: orgFilter || undefined,
+        });
+      } catch (e: any) {
+        console.error("re-resolve-service-lines Error:", e);
+        return c.json({ error: e.message }, 500);
+      }
+    },
+  );
+
 }

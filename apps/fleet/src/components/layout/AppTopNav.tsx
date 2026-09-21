@@ -113,6 +113,7 @@ function LeafItems({
           <DropdownMenuItem
             key={item.id}
             onClick={() => onNavigate(item.id)}
+            title={item.title}
             className={cn(active && 'bg-slate-100 font-medium dark:bg-slate-800')}
           >
             <span className="flex-1">{item.label}</span>

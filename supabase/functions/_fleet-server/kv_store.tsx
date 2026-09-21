@@ -18,6 +18,36 @@ const client = () =>
 /** PostgREST default max rows is 1000 — must page or trips/fuel silently truncate. */
 const KV_PAGE_SIZE = 1000;
 
+/** Optional shared lookup cache for batch mset (S6). */
+type StampOpts = { lookupCache?: import("./service_line_attribution.ts").ServiceLineLookupCache };
+
+/** Fuel/expense service-line ladder — one choke point for every write path (Phase 0). */
+async function stampCostRowServiceLine(
+  key: string,
+  value: any,
+  opts?: StampOpts,
+): Promise<any> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return value;
+  if (
+    !key.startsWith("fuel_entry:") &&
+    !key.startsWith("fuel-entry:") &&
+    !key.startsWith("expense_journal:")
+  ) {
+    return value;
+  }
+  try {
+    const { ensureCostRowServiceLine } = await import("./service_line_attribution.ts");
+    return await ensureCostRowServiceLine(value as Record<string, unknown>, {
+      lookupCache: opts?.lookupCache,
+    });
+  } catch (e) {
+    // S4: never leave source NULL — stamp unattributed so sweeps can find the row.
+    console.error("[kv] service-line stamp failed:", key, e);
+    const { markCostRowUnattributedOnStampFailure } = await import("./service_line_attribution.ts");
+    return markCostRowUnattributedOnStampFailure(value as Record<string, unknown>);
+  }
+}
+
 async function afterUpsert(key: string, value: any): Promise<void> {
   try {
     const { dualWriteFleetKvUpsert } = await import("./fleet_table_dual_write.ts");
@@ -49,22 +79,23 @@ async function allowLegacyWrite(key: string): Promise<boolean> {
 
 // Set stores a key-value pair (fleet table for mapped domains; KV for ephemeral).
 export const set = async (key: string, value: any): Promise<void> => {
+  const stamped = await stampCostRowServiceLine(key, value);
   const writeKv = await allowLegacyWrite(key);
   if (writeKv) {
     const supabase = client();
     const { error } = await supabase.from("kv_store_37f42386").upsert({
       key,
-      value,
+      value: stamped,
     });
     if (error) {
       throw new Error(error.message);
     }
   }
-  await afterUpsert(key, value);
-  if (key.startsWith("transaction:") && value && typeof value === "object") {
+  await afterUpsert(key, stamped);
+  if (key.startsWith("transaction:") && stamped && typeof stamped === "object") {
     try {
       const { mirrorSettlementTransaction } = await import("./settlement_transactions.ts");
-      await mirrorSettlementTransaction(value as Record<string, unknown>);
+      await mirrorSettlementTransaction(stamped as Record<string, unknown>);
     } catch (e) {
       console.error("[kv] settlement transaction mirror failed:", key, e);
     }
@@ -114,11 +145,20 @@ export const del = async (key: string): Promise<void> => {
 
 // Sets multiple key-value pairs.
 export const mset = async (keys: string[], values: any[]): Promise<void> => {
+  // S6: one lookup cache for the whole batch — vehicle/driver/trip/card shared across rows.
+  const { createServiceLineLookupCache } = await import("./service_line_attribution.ts");
+  const lookupCache = createServiceLineLookupCache();
+  const stampedValues: any[] = [];
+  for (let i = 0; i < keys.length; i++) {
+    stampedValues[i] = await stampCostRowServiceLine(keys[i], values[i], { lookupCache });
+    // Keep caller array in sync so subsequent reads of values[i] see attribution.
+    values[i] = stampedValues[i];
+  }
   const pairs: { key: string; value: any }[] = [];
   for (let i = 0; i < keys.length; i++) {
     const k = keys[i];
     const writeKv = await allowLegacyWrite(k);
-    if (writeKv) pairs.push({ key: k, value: values[i] });
+    if (writeKv) pairs.push({ key: k, value: stampedValues[i] });
   }
   if (pairs.length > 0) {
     const supabase = client();
@@ -127,7 +167,7 @@ export const mset = async (keys: string[], values: any[]): Promise<void> => {
       throw new Error(error.message);
     }
   }
-  await Promise.all(keys.map((k, i) => afterUpsert(k, values[i])));
+  await Promise.all(keys.map((k, i) => afterUpsert(k, stampedValues[i])));
 };
 
 // Gets multiple key-value pairs (same order as keys).

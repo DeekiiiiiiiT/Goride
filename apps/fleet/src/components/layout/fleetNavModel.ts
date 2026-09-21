@@ -57,6 +57,8 @@ export type BuildFleetNavModelInput = {
   labels: FleetNavLabels;
   /** Live Review Queue work count (log review + pending ready). */
   reviewQueueCount?: number;
+  /** Unattributed fuel fills in the lookback window (health signal). */
+  unattributedFuelCount?: number;
 };
 
 export type FleetNavDesk = {
@@ -104,6 +106,7 @@ export function buildFleetNavModel(input: BuildFleetNavModelInput): FleetNavMode
     rideshareVisible,
     labels,
     reviewQueueCount = 0,
+    unattributedFuelCount = 0,
   } = input;
 
   const hasRushDeliveryLine = serviceLines.includes('rush_delivery');
@@ -178,7 +181,17 @@ export function buildFleetNavModel(input: BuildFleetNavModelInput): FleetNavMode
     leaf(canView('fuel-reimbursements'), {
       id: 'fuel-reimbursements',
       label: 'Review Queue',
-      ...(reviewQueueCount > 0 ? { badgeCount: reviewQueueCount } : {}),
+      ...(reviewQueueCount > 0 || unattributedFuelCount > 0
+        ? { badgeCount: reviewQueueCount > 0 ? reviewQueueCount : unattributedFuelCount }
+        : {}),
+      ...(unattributedFuelCount > 0
+        ? {
+            title:
+              reviewQueueCount > 0
+                ? `Review Queue · ${unattributedFuelCount} unattributed`
+                : `Review Queue · ${unattributedFuelCount} unattributed (no pending approve)`,
+          }
+        : {}),
     }),
     leaf(canView('fuel-cards'), { id: 'fuel-cards', label: 'Fuel Cards' }),
     leaf(canView('fuel-logs'), { id: 'fuel-logs', label: 'Transaction Logs' }),

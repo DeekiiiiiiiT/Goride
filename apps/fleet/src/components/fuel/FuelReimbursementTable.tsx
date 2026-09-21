@@ -42,11 +42,29 @@ import {
     splitReconTolerance,
 } from '@roam/fuel-core';
 import { formatFuelMoney } from '../../utils/formatFuelMoney';
+import { fuelEntryMatchesLineFilter } from '../../utils/fuelServiceLineFilter';
+import { fuelServiceLineUiLabel } from '../../utils/vocabulary';
+import { Checkbox } from '../ui/checkbox';
+import { toast } from 'sonner';
 import {
     SplitCashResolveDialog,
     type SplitCashResolveChoice,
 } from './SplitCashResolveDialog';
 
+const BULK_SET_SERVICE_LINE_MAX = 200;
+
+function resolveFuelEntryIdForTx(
+    tx: FinancialTransaction,
+    logs: FuelEntry[],
+): string | null {
+    const meta = tx.metadata as Record<string, unknown> | undefined;
+    const fromMeta = meta?.fuelEntryId ?? meta?.sourceId;
+    if (typeof fromMeta === 'string' && fromMeta.trim()) return fromMeta.trim();
+    const linked = logs.find(
+        (l) => l.transactionId === tx.id || l.id === meta?.sourceId,
+    );
+    return linked?.id ? String(linked.id) : null;
+}
 /** Liters from stored quantity/fuelVolume, or amount ÷ price/L (same as manual log). */
 function computeResolvedFuelLiters(tx: FinancialTransaction): number | null {
     const q = Number(tx.quantity) || Number(tx.metadata?.fuelVolume);
@@ -165,7 +183,12 @@ function buildStationHoldDiagnostics(tx: FinancialTransaction): string[] {
 interface FuelReimbursementTableProps {
     transactions: FinancialTransaction[];
     logs?: FuelEntry[];
-    onApprove: (id: string, notes?: string, stationOpts?: { matchedStationId?: string; stationLocation?: string }) => void;
+    onApprove: (
+      id: string,
+      notes?: string,
+      stationOpts?: { matchedStationId?: string; stationLocation?: string },
+      serviceLine?: 'rideshare' | 'rush_delivery',
+    ) => void;
     onReject: (id: string, reason?: string) => void;
     onEdit?: (transaction: FinancialTransaction) => void;
     onDelete?: (id: string) => void;
@@ -181,6 +204,12 @@ interface FuelReimbursementTableProps {
     isRefreshing?: boolean;
     /** Jump to Transaction Logs for a posted fuel entry */
     onViewInTransactionLogs?: (opts: { fuelEntryId?: string; date?: string; vehicleId?: string }) => void;
+    /** Dual-line org: show Unattributed chip + approve service-line control */
+    showServiceLineControls?: boolean;
+    lineFilter?: 'all' | 'rideshare' | 'rush_delivery' | 'unattributed';
+    onLineFilterChange?: (v: 'all' | 'rideshare' | 'rush_delivery' | 'unattributed') => void;
+    unattributedCount?: number;
+    onBulkSetServiceLine?: (fuelEntryIds: string[], line: 'rideshare' | 'rush_delivery') => Promise<void> | void;
 }
 
 export function FuelReimbursementTable({ 
@@ -195,12 +224,18 @@ export function FuelReimbursementTable({
     onResolveSplitCash,
     isRefreshing = false,
     onViewInTransactionLogs,
+    showServiceLineControls = false,
+    lineFilter = 'all',
+    onLineFilterChange,
+    unattributedCount = 0,
+    onBulkSetServiceLine,
 }: FuelReimbursementTableProps) {
     const { can } = usePermissions();
     const [selectedTx, setSelectedTx] = useState<FinancialTransaction | null>(null);
     const [isDetailsOpen, setIsDetailsOpen] = useState(false);
     const [notes, setNotes] = useState('');
     const [action, setAction] = useState<'approve' | 'reject' | null>(null);
+    const [approveServiceLine, setApproveServiceLine] = useState<'rideshare' | 'rush_delivery'>('rideshare');
 
     // Phase 6: Log Review Dialog state
     const [logReviewTx, setLogReviewTx] = useState<FinancialTransaction | null>(null);
@@ -217,6 +252,10 @@ export function FuelReimbursementTable({
     const [approvalStationLocation, setApprovalStationLocation] = useState('');
     const [splitResolveTx, setSplitResolveTx] = useState<FinancialTransaction | null>(null);
     const [isResolvingSplit, setIsResolvingSplit] = useState(false);
+    const [selectedTxIds, setSelectedTxIds] = useState<Set<string>>(() => new Set());
+    const [bulkSetBusy, setBulkSetBusy] = useState(false);
+
+    const bulkSelectEnabled = Boolean(showServiceLineControls && onBulkSetServiceLine);
 
     useEffect(() => {
         if (!isDetailsOpen) return;
@@ -320,18 +359,35 @@ export function FuelReimbursementTable({
         return walletCredit || null;
     };
 
-    const pendingAll = transactions.filter((t) => isPendingFuelQueueRow(t));
+    // Line lens must filter queue rows (chips alone were cosmetic).
+    const scopedTransactions = useMemo(() => {
+        if (lineFilter === 'all') return transactions;
+        return transactions.filter((t) => {
+            const linkedLog = logs.find(
+                (l) => l.transactionId === t.id || l.id === t.metadata?.sourceId,
+            );
+            if (!linkedLog) return lineFilter === 'unattributed';
+            return fuelEntryMatchesLineFilter(linkedLog, lineFilter);
+        });
+    }, [transactions, logs, lineFilter]);
+
+    // Clear stale selection when the lens or queue data changes.
+    useEffect(() => {
+        setSelectedTxIds(new Set());
+    }, [lineFilter, transactions]);
+
+    const pendingAll = scopedTransactions.filter((t) => isPendingFuelQueueRow(t));
     const pendingStationHoldCount = pendingAll.filter((t) => isStationGateHeld(t)).length;
     const pendingReadyForReview = pendingAll.filter((t) => isPendingReadyForReview(t));
 
-    const logReview = transactions.filter((t) => isLogReviewEligible(t));
+    const logReview = scopedTransactions.filter((t) => isLogReviewEligible(t));
     const splitMismatchTxs = useMemo(
-        () => transactions.filter((t) => isUnresolvedSplitVariance(t)),
-        [transactions],
+        () => scopedTransactions.filter((t) => isUnresolvedSplitVariance(t)),
+        [scopedTransactions],
     );
     const awaitingCashTxs = useMemo(
-        () => transactions.filter((t) => isAwaitingCashTx(t)),
-        [transactions],
+        () => scopedTransactions.filter((t) => isAwaitingCashTx(t)),
+        [scopedTransactions],
     );
     const staleAwaitingCount = useMemo(
         () => awaitingCashTxs.filter((t) => isStaleAwaitingCash(t)).length,
@@ -375,7 +431,7 @@ export function FuelReimbursementTable({
             onApprove(selectedTx.id, notes, {
                 matchedStationId: approvalMatchedStationId || undefined,
                 stationLocation: approvalStationLocation || undefined,
-            });
+            }, showServiceLineControls ? approveServiceLine : undefined);
         } else {
             onReject(selectedTx.id, notes);
         }
@@ -516,6 +572,55 @@ export function FuelReimbursementTable({
         return 'Unverified Station';
     };
 
+    const toggleSelectTx = (txId: string, checked: boolean) => {
+        setSelectedTxIds((prev) => {
+            const next = new Set(prev);
+            if (checked) next.add(txId);
+            else next.delete(txId);
+            return next;
+        });
+    };
+
+    const toggleSelectAllInData = (data: FinancialTransaction[], checked: boolean) => {
+        setSelectedTxIds((prev) => {
+            const next = new Set(prev);
+            for (const tx of data) {
+                if (checked) next.add(tx.id);
+                else next.delete(tx.id);
+            }
+            return next;
+        });
+    };
+
+    const runBulkSetServiceLine = async (line: 'rideshare' | 'rush_delivery') => {
+        if (!onBulkSetServiceLine) return;
+        const ids: string[] = [];
+        for (const txId of selectedTxIds) {
+            const tx = transactions.find((t) => t.id === txId);
+            if (!tx) continue;
+            const entryId = resolveFuelEntryIdForTx(tx, logs);
+            if (entryId) ids.push(entryId);
+        }
+        const unique = [...new Set(ids)];
+        if (unique.length === 0) {
+            toast.error('No linked fuel fills on the selected rows');
+            return;
+        }
+        if (unique.length > BULK_SET_SERVICE_LINE_MAX) {
+            toast.error(`Select at most ${BULK_SET_SERVICE_LINE_MAX} fills at once`);
+            return;
+        }
+        setBulkSetBusy(true);
+        try {
+            await onBulkSetServiceLine(unique, line);
+            setSelectedTxIds(new Set());
+        } catch (e) {
+            toast.error(e instanceof Error ? e.message : 'Failed to set service line');
+        } finally {
+            setBulkSetBusy(false);
+        }
+    };
+
     const renderTable = (
         data: FinancialTransaction[],
         showActions = false,
@@ -556,6 +661,21 @@ export function FuelReimbursementTable({
                 <Table>
                     <TableHeader>
                         <TableRow>
+                            {bulkSelectEnabled ? (
+                                <TableHead className="w-10">
+                                    <Checkbox
+                                        checked={
+                                            data.length > 0 && data.every((t) => selectedTxIds.has(t.id))
+                                                ? true
+                                                : data.some((t) => selectedTxIds.has(t.id))
+                                                  ? 'indeterminate'
+                                                  : false
+                                        }
+                                        onCheckedChange={(v) => toggleSelectAllInData(data, v === true)}
+                                        aria-label="Select all rows"
+                                    />
+                                </TableHead>
+                            ) : null}
                             <TableHead>Date</TableHead>
                             <TableHead>Driver</TableHead>
                             <TableHead>Amount</TableHead>
@@ -569,7 +689,7 @@ export function FuelReimbursementTable({
                     <TableBody>
                         {data.length === 0 ? (
                             <TableRow>
-                                <TableCell colSpan={7} className="h-24 text-center text-slate-500">
+                                <TableCell colSpan={bulkSelectEnabled ? 9 : 8} className="h-24 text-center text-slate-500">
                                     No records found.
                                 </TableCell>
                             </TableRow>
@@ -578,6 +698,16 @@ export function FuelReimbursementTable({
                                 const vol = computeResolvedFuelLiters(tx);
                                 return (
                                 <TableRow key={tx.id}>
+                                    {bulkSelectEnabled ? (
+                                        <TableCell className="w-10">
+                                            <Checkbox
+                                                checked={selectedTxIds.has(tx.id)}
+                                                onCheckedChange={(v) => toggleSelectTx(tx.id, v === true)}
+                                                aria-label={`Select ${tx.driverName || 'row'}`}
+                                                disabled={!resolveFuelEntryIdForTx(tx, logs)}
+                                            />
+                                        </TableCell>
+                                    ) : null}
                                     <TableCell className="font-medium">
                                         {formatDate(tx.date)}
                                         <div className="text-xs text-slate-500">{tx.time}</div>
@@ -906,6 +1036,69 @@ export function FuelReimbursementTable({
 
     return (
         <div className="space-y-6">
+            {showServiceLineControls && onLineFilterChange ? (
+              <div className="flex flex-wrap items-center gap-2">
+                {(
+                  [
+                    ['all', fuelServiceLineUiLabel('all')],
+                    ['rideshare', fuelServiceLineUiLabel('rideshare')],
+                    ['rush_delivery', fuelServiceLineUiLabel('rush_delivery')],
+                    ['unattributed', `${fuelServiceLineUiLabel('unattributed')} (${unattributedCount})`],
+                  ] as const
+                ).map(([value, label]) => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => onLineFilterChange(value)}
+                    className={
+                      lineFilter === value
+                        ? 'rounded-full border border-slate-900 bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white'
+                        : 'rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50'
+                    }
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            ) : null}
+            {bulkSelectEnabled && selectedTxIds.size > 0 ? (
+              <div className="flex flex-wrap items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
+                <span className="text-xs font-medium text-slate-700">
+                  {selectedTxIds.size} selected
+                  {selectedTxIds.size > BULK_SET_SERVICE_LINE_MAX
+                    ? ` (max ${BULK_SET_SERVICE_LINE_MAX})`
+                    : ''}
+                </span>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  disabled={bulkSetBusy || selectedTxIds.size > BULK_SET_SERVICE_LINE_MAX}
+                  onClick={() => void runBulkSetServiceLine('rideshare')}
+                >
+                  {bulkSetBusy ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : null}
+                  Set                                     Rideshare
+                                  </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  disabled={bulkSetBusy || selectedTxIds.size > BULK_SET_SERVICE_LINE_MAX}
+                  onClick={() => void runBulkSetServiceLine('rush_delivery')}
+                >
+                  Set {fuelServiceLineUiLabel('rush_delivery')}
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  disabled={bulkSetBusy}
+                  onClick={() => setSelectedTxIds(new Set())}
+                >
+                  Clear
+                </Button>
+              </div>
+            ) : null}
             <Tabs defaultValue="pending" className="w-full">
                 <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
                     <TabsList>
@@ -1509,6 +1702,32 @@ export function FuelReimbursementTable({
                     {/* Action Area */}
                     {action && (
                         <div className="pt-4 border-t">
+                            {action === 'approve' && showServiceLineControls ? (
+                              <div className="mb-4 space-y-2">
+                                <Label className="mb-1 block">Service line</Label>
+                                <div className="flex gap-2">
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant={approveServiceLine === 'rideshare' ? 'default' : 'outline'}
+                                    onClick={() => setApproveServiceLine('rideshare')}
+                                  >
+                                    {fuelServiceLineUiLabel('rideshare')}
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant={approveServiceLine === 'rush_delivery' ? 'default' : 'outline'}
+                                    onClick={() => setApproveServiceLine('rush_delivery')}
+                                  >
+                                    {fuelServiceLineUiLabel('rush_delivery')}
+                                  </Button>
+                                </div>
+                                <p className="text-[11px] text-slate-500">
+                                  Sets an explicit line on the posted fill (sticky — not overwritten by re-resolve).
+                                </p>
+                              </div>
+                            ) : null}
                             <Label htmlFor="action-notes" className="mb-2 block">
                                 {action === 'approve' ? 'Approval Notes (Optional)' : 'Rejection Reason (Required)'}
                             </Label>

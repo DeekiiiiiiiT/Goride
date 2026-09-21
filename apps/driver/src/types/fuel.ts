@@ -75,6 +75,17 @@ export interface FuelEntry {
   // Link to financial transaction
   transactionId?: string;
 
+  /** Server-resolved. Null = unattributed. Do not derive client-side. */
+  serviceLine?: 'rideshare' | 'rush_delivery' | null;
+  serviceLineSource?:
+    | 'program'
+    | 'explicit'
+    | 'trip'
+    | 'vehicle'
+    | 'driver'
+    | 'unattributed'
+    | null;
+
   // Geolocation & Matching (Phase 1)
   locationMetadata?: {
     lat: number;

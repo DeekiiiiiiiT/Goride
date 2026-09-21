@@ -15,6 +15,7 @@ import { Tabs, TabsList, TabsTrigger } from '../../ui/tabs';
 import { Search, Filter as FilterIcon, Download, RotateCcw, History, X, Plus } from 'lucide-react';
 import { PeriodWeekDropdown } from '../../ui/PeriodWeekDropdown';
 import type { DateRange } from 'react-day-picker';
+import { fuelServiceLineUiLabel } from '../../../utils/vocabulary';
 
 export type FuelLogToolbarProps = {
   activeView: 'transactions' | 'cycles';
@@ -51,6 +52,10 @@ export type FuelLogToolbarProps = {
   afterTabs?: React.ReactNode;
   /** Mobile: Add fuel sits beside the calendar; desktop keeps header CTA. */
   onAddFuel?: () => void;
+  /** Unattributed chip */
+  unattributedCount?: number;
+  unattributedOnly?: boolean;
+  onUnattributedOnlyChange?: (v: boolean) => void;
 };
 
 /**
@@ -90,6 +95,9 @@ export function FuelLogToolbar({
   onDateRangeChange,
   afterTabs,
   onAddFuel,
+  unattributedCount = 0,
+  unattributedOnly = false,
+  onUnattributedOnlyChange,
 }: FuelLogToolbarProps) {
   return (
     <div className="space-y-3">
@@ -116,6 +124,20 @@ export function FuelLogToolbar({
             </TabsTrigger>
           </TabsList>
         </Tabs>
+        {onUnattributedOnlyChange ? (
+          <button
+            type="button"
+            onClick={() => onUnattributedOnlyChange(!unattributedOnly)}
+            className={
+              unattributedOnly
+                ? 'inline-flex items-center rounded-full border border-amber-300 bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-900'
+                : 'inline-flex items-center rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50'
+            }
+            aria-pressed={unattributedOnly}
+          >
+            {fuelServiceLineUiLabel('unattributed')} ({unattributedCount})
+          </button>
+        ) : null}
       </div>
 
       {afterTabs ? <div className="mb-2">{afterTabs}</div> : null}

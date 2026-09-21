@@ -247,6 +247,7 @@ describe('FuelBulkFinalizeDialog', () => {
       leakageReviewed: true,
       odometerChainReviewed: false,
       unattributedReviewed: false,
+      stopToStopGapAccepts: p.stopToStopGapAccepts,
     });
   });
 

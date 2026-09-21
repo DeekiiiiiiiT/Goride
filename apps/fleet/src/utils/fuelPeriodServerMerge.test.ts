@@ -225,6 +225,48 @@ describe('fuelPeriodServerMerge landing SoT', () => {
     expect(cards[0].counts['leakage-gap'].actionable).toBeGreaterThan(0);
   });
 
+  it('locked week with persisted clear counts (informational:1) shows Done not Not evaluated', () => {
+    const clearTouched = {
+      'data-quality': { actionable: 0, informational: 1 },
+      'adjustments-disputes': { actionable: 0, informational: 1 },
+      'policy-check': { actionable: 0, informational: 1 },
+      'leakage-gap': { actionable: 0, informational: 1 },
+      'settlement-preview': { actionable: 0, informational: 1 },
+      finalize: { actionable: 0, informational: 1 },
+    };
+    const cards = serverRowsToLandingPeriods([
+      row({
+        weekStart: '2026-09-07',
+        weekEnd: '2026-09-13',
+        status: 'locked',
+        lockedAt: '2026-09-20T19:01:56Z',
+        unexplained: 0,
+        totalSpend: 30_300,
+        counts: clearTouched,
+      }),
+    ]);
+    expect(cards[0].status).toBe('completed');
+    for (const step of Object.keys(cards[0].counts) as Array<keyof typeof cards[0]['counts']>) {
+      expect(cards[0].counts[step]).toEqual({ actionable: 0, informational: 0 });
+    }
+  });
+
+  it('open week with empty counts fabricates Not evaluated (informational:1)', () => {
+    const cards = serverRowsToLandingPeriods([
+      row({
+        weekStart: '2026-09-14',
+        weekEnd: '2026-09-20',
+        status: 'ready',
+        lockedAt: null,
+        unexplained: 0,
+        totalSpend: 1_000,
+        counts: {},
+      }),
+    ]);
+    expect(cards[0].locked).toBe(false);
+    expect(cards[0].counts['data-quality']).toEqual({ actionable: 0, informational: 1 });
+  });
+
   it('locked week with leakage accepted stays Completed', () => {
     const cards = serverRowsToLandingPeriods([
       row({

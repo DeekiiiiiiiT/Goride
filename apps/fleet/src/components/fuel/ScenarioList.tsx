@@ -34,6 +34,15 @@ import {
 } from '../../utils/fuelPolicyDeleteGuard';
 import { generateFuelWeekOptions, trailingDaysWindow, FUEL_ALERTS_TRAILING_DAYS } from '../../utils/fuelWeekPeriod';
 import { useFleetTimezone } from '../../utils/timezoneDisplay';
+import { useFuelServiceLine } from '../../contexts/FuelServiceLineContext';
+import {
+  buildLineOverrideScenario,
+  listLineOverridesForParent,
+  resolvePoliciesForLens,
+  type FuelPolicyServiceLine,
+  type ResolvedFuelPolicyRow,
+} from '../../utils/fuelScenarioServiceLine';
+import { fuelServiceLineUiLabel } from '../../utils/vocabulary';
 
 function vehiclePlate(v: any): string {
   return v.licensePlate || v.plate || v.name || v.id?.slice(0, 8) || 'Vehicle';
@@ -56,6 +65,14 @@ export function ScenarioList({
 }) {
     const queryClient = useQueryClient();
     const fleetTz = useFleetTimezone();
+    const { showTabs, line } = useFuelServiceLine();
+    const policyLens = showTabs
+      ? line === 'delivery'
+        ? 'rush_delivery'
+        : line === 'rideshare'
+          ? 'rideshare'
+          : 'all'
+      : 'all';
     const isControlled = controlledScenarios !== undefined;
     const [localScenarios, setLocalScenarios] = useState<FuelScenario[]>([]);
     const scenarios = isControlled ? controlledScenarios! : localScenarios;
@@ -114,6 +131,42 @@ export function ScenarioList({
     };
 
     const orphans = useMemo(() => orphanDrivers(drivers, scenarios), [drivers, scenarios]);
+
+    const policyRows: ResolvedFuelPolicyRow[] = useMemo(
+      () => resolvePoliciesForLens(scenarios, policyLens),
+      [scenarios, policyLens],
+    );
+
+    const handleCustomizeForLine = async (parent: FuelScenario, lineKey: FuelPolicyServiceLine) => {
+      const existing = scenarios.find(
+        (s) => s.overridesOfId === parent.id && s.serviceLine === lineKey,
+      );
+      if (existing) {
+        setEditingScenario(existing);
+        setIsEditorOpen(true);
+        return;
+      }
+      const override = buildLineOverrideScenario(parent, lineKey, crypto.randomUUID());
+      try {
+        const saved = await fuelService.saveFuelScenario(override);
+        commitScenarios([...scenarios, saved]);
+        setEditingScenario(saved);
+        setIsEditorOpen(true);
+        toast.success(`Created ${fuelServiceLineUiLabel(lineKey)} override`);
+      } catch (e: any) {
+        toast.error(e?.message || 'Failed to create line override');
+      }
+    };
+
+    const handleRevertOverride = async (overrideId: string) => {
+      try {
+        await fuelService.deleteFuelScenario(overrideId);
+        commitScenarios(scenarios.filter((s) => s.id !== overrideId));
+        toast.success('Reverted to org default');
+      } catch (e: any) {
+        toast.error(e?.message || 'Failed to revert override');
+      }
+    };
 
     const handleSave = async (scenario: FuelScenario) => {
         try {
@@ -236,16 +289,20 @@ export function ScenarioList({
                 <div>
                     <h3 className="text-lg font-medium text-slate-900">Rules</h3>
                     <p className="text-sm text-slate-500">
-                        Split percentages only. Add periods and drivers on the Schedule tab.
+                        {policyLens === 'all'
+                          ? 'Split percentages only. Add periods and drivers on the Schedule tab.'
+                          : `Showing effective policies for ${fuelServiceLineUiLabel(policyLens)}. Inherited rows use the org default until you customize.`}
                     </p>
                 </div>
-                <Button
-                    className="shrink-0"
-                    onClick={() => { setEditingScenario(null); setIsEditorOpen(true); }}
-                >
-                    <Plus className="h-4 w-4 mr-2" />
-                    New Policy
-                </Button>
+                {policyLens === 'all' ? (
+                  <Button
+                      className="shrink-0"
+                      onClick={() => { setEditingScenario(null); setIsEditorOpen(true); }}
+                  >
+                      <Plus className="h-4 w-4 mr-2" />
+                      New Policy
+                  </Button>
+                ) : null}
             </div>
 
             {orphans.length > 0 && (
@@ -269,33 +326,52 @@ export function ScenarioList({
                 </div>
             )}
 
-            {scenarios.length === 0 ? (
+            {policyRows.length === 0 ? (
                 <div className="rounded-lg border border-dashed border-slate-200 py-12 text-center text-sm text-slate-400">
                     No fuel policies yet. Create a Default policy to get started.
                 </div>
             ) : (
                 <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-                    {scenarios.map((scenario) => {
+                    {policyRows.map((row) => {
+                        const scenario = row.scenario;
                         const normalized = normalizeScenarioVersions(scenario);
                         const rule = normalized.rules.find((r) => r.category === 'Fuel');
                         const assigned = driversForPolicy(scenario, drivers);
                         const preview = examplePreview(rule);
                         const versionCount = normalized.versions?.length || 0;
+                        const lineOverrides =
+                          policyLens === 'all'
+                            ? listLineOverridesForParent(scenarios, scenario.id)
+                            : [];
                         return (
                             <Card
-                                key={scenario.id}
+                                key={`${row.kind}-${scenario.id}`}
                                 className={`relative transition-all hover:shadow-md ${
-                                    scenario.isDefault ? 'border-indigo-300 ring-1 ring-indigo-200' : 'border-slate-200'
+                                    scenario.isDefault && row.kind === 'org_default'
+                                      ? 'border-indigo-300 ring-1 ring-indigo-200'
+                                      : 'border-slate-200'
                                 }`}
                             >
                                 <CardHeader className="pb-3 border-b border-slate-100">
                                     <div className="flex flex-wrap items-start justify-between gap-2">
                                         <div className="min-w-0 space-y-1">
                                             <div className="flex flex-wrap items-center gap-2">
-                                                <CardTitle className="text-base">{scenario.name}</CardTitle>
-                                                {scenario.isDefault && (
+                                                <CardTitle className="text-base">
+                                                  {row.kind === 'inherited' ? row.parent.name : scenario.name}
+                                                </CardTitle>
+                                                {scenario.isDefault && row.kind !== 'override' && (
                                                     <Badge className="bg-indigo-100 text-indigo-700 hover:bg-indigo-100 border-0">
                                                         Default
+                                                    </Badge>
+                                                )}
+                                                {row.kind === 'inherited' && (
+                                                    <Badge variant="outline" className="border-slate-300 text-slate-600">
+                                                        Inherited from org default
+                                                    </Badge>
+                                                )}
+                                                {row.kind === 'override' && (
+                                                    <Badge className="bg-violet-100 text-violet-800 hover:bg-violet-100 border-0">
+                                                        Override
                                                     </Badge>
                                                 )}
                                                 <Badge variant="outline" className="gap-1 text-slate-500 font-normal">
@@ -310,6 +386,14 @@ export function ScenarioList({
                                             <CardDescription className="line-clamp-2">
                                                 {scenario.description || 'No description provided.'}
                                             </CardDescription>
+                                            {lineOverrides.length > 0 ? (
+                                              <p className="text-[11px] text-slate-500">
+                                                Line overrides:{' '}
+                                                {lineOverrides
+                                                  .map((o) => fuelServiceLineUiLabel(o.serviceLine || 'all'))
+                                                  .join(', ')}
+                                              </p>
+                                            ) : null}
                                         </div>
                                     </div>
                                 </CardHeader>
@@ -352,15 +436,41 @@ export function ScenarioList({
                                     </div>
 
                                     <div className="flex flex-wrap gap-2 pt-1">
-                                        <Button
+                                        {row.kind === 'inherited' && policyLens !== 'all' ? (
+                                          <Button
+                                            variant="default"
+                                            size="sm"
+                                            className="h-8"
+                                            onClick={() =>
+                                              void handleCustomizeForLine(
+                                                row.parent,
+                                                policyLens as FuelPolicyServiceLine,
+                                              )
+                                            }
+                                          >
+                                            Customize for {fuelServiceLineUiLabel(policyLens)}
+                                          </Button>
+                                        ) : (
+                                          <Button
+                                              variant="outline"
+                                              size="sm"
+                                              className="h-8"
+                                              onClick={() => { setEditingScenario(scenario); setIsEditorOpen(true); }}
+                                          >
+                                              <Edit2 className="h-3.5 w-3.5 mr-1.5" />
+                                              Edit splits
+                                          </Button>
+                                        )}
+                                        {row.kind === 'override' ? (
+                                          <Button
                                             variant="outline"
                                             size="sm"
                                             className="h-8"
-                                            onClick={() => { setEditingScenario(scenario); setIsEditorOpen(true); }}
-                                        >
-                                            <Edit2 className="h-3.5 w-3.5 mr-1.5" />
-                                            Edit splits
-                                        </Button>
+                                            onClick={() => void handleRevertOverride(scenario.id)}
+                                          >
+                                            Revert to org default
+                                          </Button>
+                                        ) : null}
                                         {onViewSchedule && (
                                             <Button
                                                 variant="outline"
@@ -372,32 +482,36 @@ export function ScenarioList({
                                                 Schedule
                                             </Button>
                                         )}
-                                        <Button variant="outline" size="sm" className="h-8" onClick={() => handleClone(scenario)}>
-                                            <Copy className="h-3.5 w-3.5 mr-1.5" />
-                                            Clone as new policy
-                                        </Button>
-                                        {!scenario.isDefault && (
-                                            <Button
-                                                variant="outline"
-                                                size="sm"
-                                                className="h-8"
-                                                onClick={() => handleSetDefault(scenario)}
-                                            >
-                                                <Star className="h-3.5 w-3.5 mr-1.5" />
-                                                Make default
+                                        {policyLens === 'all' ? (
+                                          <>
+                                            <Button variant="outline" size="sm" className="h-8" onClick={() => handleClone(scenario)}>
+                                                <Copy className="h-3.5 w-3.5 mr-1.5" />
+                                                Clone as new policy
                                             </Button>
-                                        )}
-                                        {!scenario.isDefault && scenarios.length > 1 && (
-                                            <Button
-                                                variant="outline"
-                                                size="sm"
-                                                className="h-8 text-rose-600 hover:bg-rose-50 hover:text-rose-700"
-                                                onClick={() => requestDelete(scenario.id)}
-                                            >
-                                                <Trash2 className="h-3.5 w-3.5 mr-1.5" />
-                                                Delete
-                                            </Button>
-                                        )}
+                                            {!scenario.isDefault && (
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    className="h-8"
+                                                    onClick={() => handleSetDefault(scenario)}
+                                                >
+                                                    <Star className="h-3.5 w-3.5 mr-1.5" />
+                                                    Make default
+                                                </Button>
+                                            )}
+                                            {!scenario.isDefault && scenarios.length > 1 && (
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    className="h-8 text-rose-600 hover:bg-rose-50 hover:text-rose-700"
+                                                    onClick={() => requestDelete(scenario.id)}
+                                                >
+                                                    <Trash2 className="h-3.5 w-3.5 mr-1.5" />
+                                                    Delete
+                                                </Button>
+                                            )}
+                                          </>
+                                        ) : null}
                                     </div>
                                 </CardContent>
                             </Card>

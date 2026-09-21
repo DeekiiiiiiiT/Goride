@@ -281,4 +281,51 @@ describe('fuelPeriodBuildSnapshots dual-path parity (NEW-13)', () => {
     expect(delta.misc).toBeLessThan(0.01);
     expect(frozen.built.metadata.builtBy).toBe('parity-client-finalize');
   });
+
+  it('N-17: PA earned stamp survives on built.metadata', () => {
+    const earned = 180.6;
+    const report = {
+      id: 'pa-stamp',
+      driverId: 'driver-a',
+      vehicleId: 'veh-1',
+      vehicleIds: ['veh-1'],
+      weekStartDate: WEEK_START,
+      weekEndDate: WEEK_END,
+      totalGasCardCost: 10_000,
+      rideShareDistance: 100,
+      rideShareCost: 8_000,
+      companyUsageDistance: 0,
+      companyUsageCost: 0,
+      personalDistance: 40,
+      personalUsageCost: earned,
+      deadheadDistance: 0,
+      deadheadCost: 0,
+      miscellaneousCost: 0,
+      companyShare: 0,
+      driverShare: 0,
+      status: 'Draft',
+      metadata: {
+        personalAllowance: {
+          enabled: true,
+          earnedCost: earned,
+          overageCost: 0,
+          earnedKm: 40,
+          overageKm: 0,
+        },
+      },
+    } as WeeklyFuelReport;
+
+    const frozen = freezeReportMoneyThroughAssembler({
+      report,
+      settleEntries: [],
+      fuelRule: RULE_A,
+      orgId: ORG,
+      builtBy: 'parity-pa-stamp',
+    });
+
+    expect(frozen.personalAllowanceEarnedCost).toBeCloseTo(earned, 2);
+    expect(frozen.built.metadata.personalAllowanceEarnedCost).toBe(
+      frozen.personalAllowanceEarnedCost,
+    );
+  });
 });

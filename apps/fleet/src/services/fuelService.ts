@@ -97,6 +97,8 @@ export const fuelService = {
     organizationId?: string;
     sortKey?: string;
     sortDir?: 'asc' | 'desc';
+    /** Server-stamped service line filter. */
+    serviceLine?: 'all' | 'rideshare' | 'rush_delivery' | 'unattributed';
   }): Promise<FuelEntry[]> {
     const fallback = currentFuelListWindow();
     const startDate = options?.startDate || fallback.startDate;
@@ -116,6 +118,9 @@ export const fuelService = {
     if (options?.organizationId) query.append("organizationId", options.organizationId);
     if (options?.sortKey) query.append("sortKey", options.sortKey);
     if (options?.sortDir) query.append("sortDir", options.sortDir);
+    if (options?.serviceLine && options.serviceLine !== 'all') {
+      query.append("serviceLine", options.serviceLine);
+    }
     // V-01: ledger needs filtered total in body
     query.append("shape", "envelope");
 
@@ -138,6 +143,7 @@ export const fuelService = {
     endDate: string;
     pageSize?: number;
     maxPages?: number;
+    serviceLine?: 'all' | 'rideshare' | 'rush_delivery' | 'unattributed';
   }): Promise<FuelEntry[]> {
     const pageSize = options.pageSize ?? 1500;
     const maxPages = options.maxPages ?? 40;
@@ -149,6 +155,7 @@ export const fuelService = {
         offset: page * pageSize,
         startDate: options.startDate,
         endDate: options.endDate,
+        serviceLine: options.serviceLine,
       });
       if (typeof (batch as any).totalCount === 'number') {
         totalCount = (batch as any).totalCount;
@@ -174,6 +181,65 @@ export const fuelService = {
       (accumulated as any).totalCount = totalCount;
     }
     return accumulated;
+  },
+
+  /**
+   * Lightweight per-line totals for the date window (S3).
+   * Uses limit=1 + X-Total-Count / envelope total — never understates badges.
+   */
+  async getFuelEntryLineCounts(options: {
+    startDate: string;
+    endDate: string;
+  }): Promise<{
+    all: number;
+    rideshare: number;
+    rush_delivery: number;
+    unattributed: number;
+  }> {
+    const lines = ['all', 'rideshare', 'rush_delivery', 'unattributed'] as const;
+    const results = await Promise.all(
+      lines.map(async (serviceLine) => {
+        const batch = await this.getFuelEntries({
+          startDate: options.startDate,
+          endDate: options.endDate,
+          limit: 1,
+          offset: 0,
+          serviceLine: serviceLine === 'all' ? undefined : serviceLine,
+        });
+        const withTotal = batch as FuelEntry[] & { totalCount?: number };
+        const total =
+          typeof withTotal.totalCount === 'number'
+            ? withTotal.totalCount
+            : Array.isArray(batch)
+              ? batch.length
+              : 0;
+        return [serviceLine, total] as const;
+      }),
+    );
+    const map = Object.fromEntries(results) as Record<(typeof lines)[number], number>;
+    return {
+      all: map.all ?? 0,
+      rideshare: map.rideshare ?? 0,
+      rush_delivery: map.rush_delivery ?? 0,
+      unattributed: map.unattributed ?? 0,
+    };
+  },
+
+  /** Sticky T1 explicit service line (Review Queue / bulk). */
+  async setFuelEntriesServiceLine(
+    ids: string[],
+    serviceLine: 'rideshare' | 'rush_delivery',
+  ): Promise<{ updated: number; missing: string[] }> {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/fuel-entries/set-service-line`, {
+      method: 'POST',
+      headers: await requireAuthHeaders(),
+      body: JSON.stringify({ ids, serviceLine }),
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error || 'Failed to set service line');
+    }
+    return response.json();
   },
 
   /** Append-only correction history for a sealed fuel entry (reason + field diffs). */

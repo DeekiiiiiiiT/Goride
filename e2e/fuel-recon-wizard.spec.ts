@@ -70,6 +70,19 @@ test.describe('Fleet fuel recon wizard', () => {
     });
   });
 
+  test('when stop-to-stop blocks Finalize, Fix CTA opens remediation sheet', async ({ page }) => {
+    const week = process.env.E2E_FUEL_WEEK?.trim();
+    test.skip(!week, 'E2E_FUEL_WEEK not set');
+    await signInFleet(page);
+    await openFuelReconciliation(page, { week: week!, step: 'finalize' });
+    const fixBtn = page.getByRole('button', { name: /Fix stop-to-stop blockers/i });
+    const visible = await fixBtn.isVisible().catch(() => false);
+    test.skip(!visible, 'This week is not S2S-blocked — no Fix CTA');
+    await fixBtn.click();
+    await expect(page.getByText(/Fix stop-to-stop/i).first()).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole('button', { name: /Recheck/i })).toBeVisible();
+  });
+
   test('destructive finalize gated', async ({ page }) => {
     test.skip(!FLEET_ALLOW_FINALIZE, 'E2E_FUEL_ALLOW_FINALIZE!=1');
     const week = process.env.E2E_FUEL_WEEK?.trim();

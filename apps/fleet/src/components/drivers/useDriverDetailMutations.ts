@@ -246,12 +246,23 @@ export function useDriverDetailMutations({
       const result = await api.ensureLedgerFromTripIds(clientTripIds);
       const written = Number(result.stats?.ledgerRowsWritten) || 0;
       const loaded = Number(result.stats?.tripsLoaded) || 0;
+      let periodsRebuilt = Number(result.stats?.periodsRebuilt) || 0;
+      // Belt-and-suspenders: ensure response may predate DFP rebuild wiring.
+      if (periodsRebuilt === 0 && ledgerDateRangeStrings?.startDate) {
+        try {
+          await api.rebuildDriverFinancialPeriods(driverId, ledgerDateRangeStrings.startDate);
+          periodsRebuilt = 1;
+        } catch (rebuildErr: any) {
+          console.warn('[Repair] DFP rebuild after ensure:', rebuildErr?.message || rebuildErr);
+        }
+      }
       setRepairResult({
         success: result.success,
         stats: {
           ledgerRowsWritten: written,
           tripsLoaded: loaded,
           skippedNoMoney: Number(result.stats?.skippedNoMoney) || 0,
+          periodsRebuilt,
           ...result.stats,
         },
         durationMs: result.durationMs,

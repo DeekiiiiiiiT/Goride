@@ -31,6 +31,11 @@ import { listUnapprovedFuelTxInWindow } from "../../../packages/fuel-core/src/fu
 import { evaluateFuelWeekClosable } from "../../../packages/fuel-core/src/evaluateFuelWeekClosable.ts";
 import { validateDisposition } from "../../../packages/fuel-core/src/fuelResidualDisposition.ts";
 import {
+  upsertStopToStopGapAccepts,
+  revokeStopToStopGapAccept,
+  validateStopToStopGapAcceptRequest,
+} from "../../../packages/fuel-core/src/applyStopToStopGapAccepts.ts";
+import {
   buildFuelWeekClosableInputForPeriod,
   fuelClosableBlockerHttpCode,
   snapshotsHaveUnresolvedCoverageRule,
@@ -190,6 +195,9 @@ function mapPeriod(row: Record<string, unknown>) {
     unattributedReviewedNote: row.unattributed_review_note,
     dataQualityVehicleReviews: Array.isArray(row.data_quality_vehicle_reviews)
       ? row.data_quality_vehicle_reviews
+      : [],
+    stopToStopGapAccepts: Array.isArray(row.stop_to_stop_gap_accepts)
+      ? row.stop_to_stop_gap_accepts
       : [],
     lockedAt: row.locked_at,
     lockedBy: row.locked_by,
@@ -776,6 +784,7 @@ async function processJobRow(job: Record<string, unknown>) {
         unattributed_reviewed_by: null,
         unattributed_review_note: null,
         data_quality_vehicle_reviews: [],
+        stop_to_stop_gap_accepts: [],
         counts: {},
         current_step: "data-quality",
         version: nextVersion,
@@ -1738,6 +1747,144 @@ export function registerFuelPeriodRoutes(app: Hono) {
         dataQualityVehicleReviews: next,
         version: nextVersion,
       });
+    },
+  );
+
+  /** Accept OVER-LOG / attribution stop-to-stop windows (single or bulk). Never unlocks chain. */
+  app.post(
+    `${BASE}/fuel/periods/:id/stop-to-stop-gap-accept`,
+    requirePermission("fuel.accept_unexplained"),
+    async (c: Context) => {
+      const orgId = getOrgId(c);
+      if (!orgId) return c.json({ error: "org required" }, 400);
+      const periodId = periodIdParam(c);
+      if (!periodId) return c.json({ error: "period id required" }, 400);
+      const body = await c.req.json().catch(() => ({}));
+      const disposition = String(body.disposition || "").trim() || null;
+      const allowedDisp = new Set(["trips_overstated", "gps_noise", "known_variance", "other"]);
+      if (disposition && !allowedDisp.has(disposition)) {
+        return c.json({ error: "invalid_disposition" }, 422);
+      }
+      const rawAccepts = Array.isArray(body.accepts) ? body.accepts : [];
+      const validated = validateStopToStopGapAcceptRequest({
+        note: String(body.note || ""),
+        accepts: rawAccepts,
+      });
+      if (!validated.ok) {
+        const status = validated.error === "accepts_required" ? 400 : 422;
+        return c.json(
+          { error: validated.error, ...(validated.minLength ? { minLength: validated.minLength } : {}) },
+          status,
+        );
+      }
+      const note = String(body.note || "").trim();
+      const period = await loadPeriod(orgId, periodId);
+      if (!period) return c.json({ error: "Not found" }, 404);
+      if (String(period.status) === "locked") {
+        return c.json({ error: "period_locked" }, 409);
+      }
+      const ifMatch = c.req.header("If-Match");
+      if (ifMatch != null && ifMatch !== "" && Number(ifMatch) !== Number(period.version)) {
+        return c.json({ error: "version_conflict", currentVersion: period.version }, 409);
+      }
+      const actor = actorId(c);
+      const now = new Date().toISOString();
+      const incoming = rawAccepts.map((raw: Record<string, unknown>) => ({
+        bucketId: String(raw.bucketId || "").trim() || undefined,
+        vehicleId: String(raw.vehicleId || "").trim(),
+        startOdometer: Number(raw.startOdometer) || 0,
+        endOdometer: Number(raw.endOdometer) || 0,
+        startDate: String(raw.startDate || "").slice(0, 10),
+        endDate: String(raw.endDate || "").slice(0, 10),
+        note,
+        disposition: disposition || undefined,
+        at: now,
+        by: actor,
+      })).filter((a: { vehicleId: string; endDate: string }) => a.vehicleId && a.endDate);
+      if (incoming.length === 0) {
+        return c.json({ error: "accepts_invalid" }, 400);
+      }
+      const existing = Array.isArray(period.stop_to_stop_gap_accepts)
+        ? (period.stop_to_stop_gap_accepts as Parameters<typeof upsertStopToStopGapAccepts>[0])
+        : [];
+      const next = upsertStopToStopGapAccepts(existing, incoming);
+      const nextVersion = (Number(period.version) || 1) + 1;
+      const sb = getServiceClient();
+      const { data: updated, error } = await sb
+        .from("fuel_reconciliation_period")
+        .update({
+          stop_to_stop_gap_accepts: next,
+          version: nextVersion,
+          updated_at: now,
+        })
+        .eq("id", periodId)
+        .eq("org_id", orgId)
+        .eq("version", Number(period.version) || 1)
+        .select("id")
+        .maybeSingle();
+      if (error) return c.json({ error: error.message }, 500);
+      if (!updated) {
+        return c.json({ error: "version_conflict", currentVersion: period.version }, 409);
+      }
+      await insertAudit(
+        orgId,
+        periodId,
+        "stop_to_stop_gap_accept",
+        { count: incoming.length, note, disposition, version: nextVersion },
+        actor,
+      );
+      return c.json({
+        ok: true,
+        stopToStopGapAccepts: next,
+        version: nextVersion,
+      });
+    },
+  );
+
+  app.post(
+    `${BASE}/fuel/periods/:id/stop-to-stop-gap-accept/revoke`,
+    requirePermission("fuel.accept_unexplained"),
+    async (c: Context) => {
+      const orgId = getOrgId(c);
+      if (!orgId) return c.json({ error: "org required" }, 400);
+      const periodId = periodIdParam(c);
+      if (!periodId) return c.json({ error: "period id required" }, 400);
+      const body = await c.req.json().catch(() => ({}));
+      const period = await loadPeriod(orgId, periodId);
+      if (!period) return c.json({ error: "Not found" }, 404);
+      if (String(period.status) === "locked") {
+        return c.json({ error: "period_locked" }, 409);
+      }
+      const existing = Array.isArray(period.stop_to_stop_gap_accepts)
+        ? (period.stop_to_stop_gap_accepts as Parameters<typeof revokeStopToStopGapAccept>[0])
+        : [];
+      const target = {
+        bucketId: String(body.bucketId || "").trim() || undefined,
+        vehicleId: String(body.vehicleId || "").trim(),
+        startOdometer: Number(body.startOdometer) || 0,
+        endOdometer: Number(body.endOdometer) || 0,
+        endDate: String(body.endDate || "").slice(0, 10),
+      };
+      if (!target.vehicleId || !target.endDate) {
+        return c.json({ error: "target_required" }, 400);
+      }
+      const next = revokeStopToStopGapAccept(existing, target);
+      const actor = actorId(c);
+      const now = new Date().toISOString();
+      const nextVersion = (Number(period.version) || 1) + 1;
+      const sb = getServiceClient();
+      const { error } = await sb
+        .from("fuel_reconciliation_period")
+        .update({
+          stop_to_stop_gap_accepts: next,
+          version: nextVersion,
+          updated_at: now,
+        })
+        .eq("id", periodId)
+        .eq("org_id", orgId);
+      if (error) return c.json({ error: error.message }, 500);
+      await insertAudit(orgId, periodId, "stop_to_stop_gap_accept_revoke", { target }, actor);
+      return c.json({ ok: true, stopToStopGapAccepts: next, version: nextVersion });
     },
   );
 

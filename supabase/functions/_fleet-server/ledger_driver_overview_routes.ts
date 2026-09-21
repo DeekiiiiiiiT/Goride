@@ -130,13 +130,29 @@ export function registerLedgerDriverOverviewRoutes(app: Hono) {
             const periodRow = await getDriverFinancialPeriodDetail(driverId, startDate);
             if (periodRow) {
               const legacyCash = Number((resultCanon.period as { cashCollected?: number })?.cashCollected) || 0;
+              const legacyEarnings = Number((resultCanon.period as { earnings?: number })?.earnings) || 0;
               const projCash = Number(periodRow.cashCollected) || 0;
-              if (Math.abs(legacyCash - projCash) > 0.01) {
+              const projEarnings = Number(periodRow.earningsGross) || 0;
+              const moneyDiverged =
+                Math.abs(legacyCash - projCash) > 0.01 ||
+                Math.abs(legacyEarnings - projEarnings) > 0.01;
+              if (moneyDiverged) {
                 console.warn(
-                  `[FIN_SHADOW overview] driver=${driverId} week=${startDate} legacyCash=${legacyCash} projCash=${projCash}`,
+                  `[FIN_SHADOW overview] DFP stale — serving live ledger driver=${driverId} week=${startDate} liveEarn=${legacyEarnings} dfpEarn=${projEarnings} liveCash=${legacyCash} dfpCash=${projCash}`,
                 );
               }
               if (!isFinanceShadowProjection()) {
+                // Late trip backfills update ledger before DFP rebuild — never overlay stale money.
+                if (moneyDiverged) {
+                  return c.json({
+                    success: true,
+                    data: {
+                      ...resultCanon,
+                      dfpStale: true,
+                      source: (resultCanon as { source?: string }).source || "canonical_events",
+                    },
+                  });
+                }
                 const prevRow = await getDriverFinancialPeriodDetail(driverId, prevStartC);
                 return c.json({
                   success: true,

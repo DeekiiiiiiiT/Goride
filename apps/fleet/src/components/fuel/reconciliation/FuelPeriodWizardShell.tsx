@@ -148,6 +148,8 @@ export function FuelPeriodWizardContinueFooter({
   canContinue,
   activeStepId,
   leakageReviewed,
+  stopToStopBlocking = false,
+  moneyNeedsAccept = false,
   continueLabel,
   onContinue,
   onAddNote,
@@ -160,6 +162,9 @@ export function FuelPeriodWizardContinueFooter({
   canContinue: boolean;
   activeStepId: FuelStepId;
   leakageReviewed: boolean;
+  /** S2S hard-blocks Finalize — honest footer when money residual is already clear. */
+  stopToStopBlocking?: boolean;
+  moneyNeedsAccept?: boolean;
   continueLabel: string;
   onContinue: () => void;
   onAddNote?: () => void;
@@ -176,11 +181,13 @@ export function FuelPeriodWizardContinueFooter({
       : 'Ready to lock this week'
     : activeStepId === 'adjustments-disputes'
       ? 'Resolve open disputes before continuing.'
-      : activeStepId === 'leakage-gap' && !leakageReviewed
-        ? 'Use “Mark reviewed” above, or finish gap review.'
-        : activeStepId === 'data-quality'
-          ? 'Mark every flagged vehicle reviewed before continuing.'
-          : 'Finish remaining items on this step to continue.';
+      : activeStepId === 'leakage-gap' && stopToStopBlocking && !moneyNeedsAccept
+        ? 'Fix stop-to-stop blockers, then Continue — Finalize still requires mileage to close.'
+        : activeStepId === 'leakage-gap' && !leakageReviewed && moneyNeedsAccept
+          ? 'Use “Mark reviewed” above, or finish gap review.'
+          : activeStepId === 'data-quality'
+            ? 'Mark every flagged vehicle reviewed before continuing.'
+            : 'Finish remaining items on this step to continue.';
 
   const primaryDisabled = isLast
     ? Boolean(finalizeDisabled || finalizing || !onFinalize)

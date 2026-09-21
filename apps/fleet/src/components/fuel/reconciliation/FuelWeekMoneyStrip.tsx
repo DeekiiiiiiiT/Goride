@@ -2,7 +2,7 @@
  * Stitch B collapsed Weekly Fuel Cost + Stitch C Money Check rail.
  * Same strip.* fields only — no invented money actions.
  */
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { CheckCircle2, ChevronDown, HelpCircle, Wallet } from 'lucide-react';
 import { FUEL_SPEND_EPS } from '../../../utils/fuelMoneyEpsilon';
 import { formatFuelMoney } from '../../../utils/formatFuelMoney';
@@ -11,6 +11,11 @@ import {
   WINDOW_TIMING_LABEL,
   unexplainedLabel,
 } from '../../../utils/fuelReconGlossary';
+import {
+  buildFuelPartyAllocation,
+  type FuelPartyAllocationParty,
+} from '../../../utils/buildFuelPartyAllocation';
+import type { FuelScenario, WeeklyFuelReport } from '../../../types/fuel';
 import { Button } from '../../ui/button';
 import {
   Sheet,
@@ -19,6 +24,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from '../../ui/sheet';
+import { Tooltip, TooltipContent, TooltipTrigger } from '../../ui/tooltip';
 
 export function FuelWeekMoneyStrip({
   gasCard,
@@ -32,6 +38,8 @@ export function FuelWeekMoneyStrip({
   driverFromUnexplained = 0,
   priorMedian,
   variant = 'collapsed',
+  liveReports = [],
+  scenarios = [],
 }: {
   gasCard: number;
   cashFromEarnings: number;
@@ -44,9 +52,13 @@ export function FuelWeekMoneyStrip({
   driverFromUnexplained?: number;
   priorMedian?: { totalSpend: number; unexplained: number };
   variant?: 'collapsed' | 'rail';
+  /** Enables Driver charge / Company keeps category overlay. */
+  liveReports?: WeeklyFuelReport[];
+  scenarios?: FuelScenario[];
 }) {
   const [whyOpen, setWhyOpen] = useState(false);
   const [sourcesOpen, setSourcesOpen] = useState(true);
+  const [allocParty, setAllocParty] = useState<FuelPartyAllocationParty | null>(null);
   const sourcesTie = Math.abs(gasCard + cashFromEarnings - totalSpend) <= FUEL_SPEND_EPS;
   const overExplainedResidual = leakage < -FUEL_SPEND_EPS;
   const splitTie = overExplainedResidual
@@ -54,6 +66,35 @@ export function FuelWeekMoneyStrip({
     : Math.abs(company + driver - totalSpend) <= FUEL_SPEND_EPS;
   const balanced = sourcesTie && splitTie;
   const showLeakage = Math.abs(leakage) > FUEL_SPEND_EPS;
+
+  const alloc = useMemo(() => {
+    if (!allocParty) return null;
+    return buildFuelPartyAllocation(liveReports, scenarios, allocParty);
+  }, [allocParty, liveReports, scenarios]);
+
+  const frozenShare = allocParty === 'driver' ? driver : company;
+  const allocMismatch =
+    alloc != null && Math.abs(alloc.total - frozenShare) > FUEL_SPEND_EPS;
+
+  useEffect(() => {
+    if (!import.meta.env.DEV || !allocMismatch || !allocParty || !alloc) return;
+    console.assert(
+      false,
+      `[FuelWeekMoneyStrip] ${allocParty} breakdown ${alloc.total} ≠ frozen share ${frozenShare}`,
+    );
+  }, [alloc, allocMismatch, allocParty, frozenShare]);
+
+  const paAbsorb = useMemo(() => {
+    let earnedCost = 0;
+    let earnedKm = 0;
+    for (const r of liveReports) {
+      const pa = r.metadata?.personalAllowance;
+      if (!pa) continue;
+      earnedCost += Number(pa.earnedCost) || 0;
+      earnedKm += Number(pa.earnedKm) || 0;
+    }
+    return { earnedCost, earnedKm };
+  }, [liveReports]);
 
   const detailBody = (
     <div className="space-y-4 text-sm text-slate-700">
@@ -89,7 +130,19 @@ export function FuelWeekMoneyStrip({
             {unexplainedLabel(leakage)}: {formatFuelMoney(leakage)}
           </p>
         )}
-        <p>Charged to driver from unexplained: {formatFuelMoney(driverFromUnexplained)}</p>
+        {Math.abs(driverFromUnexplained) > FUEL_SPEND_EPS ? (
+          <p>Charged to driver from unexplained: {formatFuelMoney(driverFromUnexplained)}</p>
+        ) : (
+          <p>Unexplained fuel is company-held (never billed to driver)</p>
+        )}
+        {paAbsorb.earnedCost > FUEL_SPEND_EPS && (
+          <p>
+            Personal allowance absorbed by company: {formatFuelMoney(paAbsorb.earnedCost)}
+            {paAbsorb.earnedKm > 0
+              ? ` (${paAbsorb.earnedKm % 1 === 0 ? paAbsorb.earnedKm : paAbsorb.earnedKm.toFixed(1)} earned km)`
+              : ''}
+          </p>
+        )}
         <p className={splitTie ? 'text-emerald-700' : 'text-rose-700'}>
           Company + Driver {splitTie ? '=' : '≠'} Total {splitTie ? '✓' : '— check split'}
         </p>
@@ -128,6 +181,71 @@ export function FuelWeekMoneyStrip({
     </Sheet>
   );
 
+  const allocSheet = (
+    <Sheet
+      open={allocParty != null}
+      onOpenChange={(open) => {
+        if (!open) setAllocParty(null);
+      }}
+    >
+      <SheetContent side="right" className="z-[80] w-full overflow-y-auto sm:max-w-md">
+        <SheetHeader>
+          <SheetTitle>
+            {allocParty === 'driver' ? 'Driver charge breakdown' : 'Company keeps breakdown'}
+          </SheetTitle>
+          <SheetDescription>
+            {allocParty === 'driver'
+              ? 'How this week’s driver deduction splits across fuel categories.'
+              : 'How this week’s company fuel expense splits across categories.'}
+          </SheetDescription>
+        </SheetHeader>
+        {alloc ? (
+          <div className="mt-4 space-y-3">
+            {allocMismatch ? (
+              <p
+                className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-medium text-rose-800"
+                role="alert"
+              >
+                Breakdown disagrees with settlement by{' '}
+                {formatFuelMoney(Math.abs(alloc.total - frozenShare))} — do not lock
+              </p>
+            ) : null}
+            <ul className="space-y-2 rounded-md border border-slate-200 bg-white p-3 text-sm">
+              {alloc.lines.map((line) => (
+                <li
+                  key={line.key}
+                  className="flex items-center justify-between gap-3 border-b border-slate-100 pb-2 last:border-0 last:pb-0"
+                >
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button
+                        type="button"
+                        className="inline-flex max-w-[70%] items-center gap-1 text-left text-slate-700 underline decoration-slate-300 decoration-dotted underline-offset-2 hover:text-slate-900"
+                      >
+                        <span>{line.label}</span>
+                        <HelpCircle className="h-3.5 w-3.5 shrink-0 text-slate-400" aria-hidden />
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent side="left" className="max-w-[260px] text-xs leading-relaxed">
+                      {line.tooltip}
+                    </TooltipContent>
+                  </Tooltip>
+                  <span className="font-semibold tabular-nums text-slate-900">
+                    {formatFuelMoney(line.amount)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+            <div className="flex items-center justify-between rounded-md border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-bold">
+              <span>Total</span>
+              <span className="tabular-nums">{formatFuelMoney(alloc.total)}</span>
+            </div>
+          </div>
+        ) : null}
+      </SheetContent>
+    </Sheet>
+  );
+
   if (variant === 'rail') {
     return (
       <aside className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
@@ -159,24 +277,34 @@ export function FuelWeekMoneyStrip({
             <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
               Settlement Allocation Split
             </p>
-            <div className="flex items-start justify-between gap-3 rounded border border-slate-200 bg-white p-3">
+            <button
+              type="button"
+              onClick={() => setAllocParty('driver')}
+              className="flex w-full min-h-11 cursor-pointer items-start justify-between gap-3 rounded border border-slate-200 bg-white p-3 text-left transition hover:border-[#3525cd]/50 hover:bg-slate-50"
+              aria-label="Open driver charge category breakdown"
+            >
               <div>
                 <p className="text-sm font-semibold text-slate-900">Driver charge</p>
-                <p className="text-xs text-slate-500">Deducted from driver payroll earnings</p>
+                <p className="text-xs text-slate-500">Tap for category breakdown</p>
               </div>
               <p className="text-lg font-bold tabular-nums text-slate-900">
                 {formatFuelMoney(driver)}
               </p>
-            </div>
-            <div className="flex items-start justify-between gap-3 rounded border border-slate-200 bg-white p-3">
+            </button>
+            <button
+              type="button"
+              onClick={() => setAllocParty('company')}
+              className="flex w-full min-h-11 cursor-pointer items-start justify-between gap-3 rounded border border-slate-200 bg-white p-3 text-left transition hover:border-[#3525cd]/50 hover:bg-slate-50"
+              aria-label="Open company keeps category breakdown"
+            >
               <div>
                 <p className="text-sm font-semibold text-slate-900">Company keeps</p>
-                <p className="text-xs text-slate-500">Direct operational fleet fuel expense</p>
+                <p className="text-xs text-slate-500">Tap for category breakdown</p>
               </div>
               <p className="text-lg font-bold tabular-nums text-[#3525cd]">
                 {formatFuelMoney(company)}
               </p>
-            </div>
+            </button>
             {showLeakage && (
               <div className="flex items-start justify-between gap-3 rounded border border-rose-200 bg-rose-50/60 p-3">
                 <div>
@@ -241,18 +369,18 @@ export function FuelWeekMoneyStrip({
           </div>
         </div>
         {whySheet('right')}
+        {allocSheet}
       </aside>
     );
   }
 
-  // Stitch B — Weekly Fuel Cost calm card
   return (
     <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
       <div className="flex items-center justify-between border-b border-slate-200 pb-3">
         <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
           Weekly Fuel Cost
         </span>
-        <span className="text-xs text-slate-400">USD Currency</span>
+        <span className="text-xs text-slate-400">JMD</span>
       </div>
       <div className="grid grid-cols-2 gap-3 pb-3 pt-3.5">
         <div className="border-r border-slate-200/70 pr-2">

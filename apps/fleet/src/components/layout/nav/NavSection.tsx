@@ -119,6 +119,7 @@ export function NavSection({
                           type="button"
                           className="w-full cursor-pointer text-left"
                           aria-current={active ? 'page' : undefined}
+                          title={item.title}
                           onClick={() => onNavigate?.(item.id)}
                         >
                           <span className="flex min-w-0 items-center gap-2">

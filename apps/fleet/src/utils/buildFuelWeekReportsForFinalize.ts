@@ -19,6 +19,7 @@ import { buildPersonalAllowanceReconContext } from './buildPersonalAllowanceReco
 import { isEntryInInclusiveYmdRange, toEntryYmd } from './fuelWeekPeriod';
 import { odometerService } from '../services/odometerService';
 import type { OdometerBucketAnchor } from '@roam/fuel-core';
+import { selectOdometerBucketsClosingInWeek } from '@roam/fuel-core';
 import {
   evaluateFuelFinalizeGating,
   type FuelFinalizeGateResult,
@@ -338,6 +339,16 @@ export async function buildFuelWeekReportsForFinalize(
     personalAllowance,
     anchorsByVehicle.size > 0 ? anchorsByVehicle : undefined,
   );
+
+  // Week SoT: never attach historical ledger-anchor windows to week reports.
+  for (const report of reports) {
+    if (!Array.isArray(report.odometerBuckets) || report.odometerBuckets.length === 0) continue;
+    report.odometerBuckets = selectOdometerBucketsClosingInWeek(
+      report.odometerBuckets,
+      weekStartYmd,
+      weekEndYmd,
+    );
+  }
 
   // P-5: stamp what was actually used per report (not unconditional 'ledger').
   for (const report of reports) {

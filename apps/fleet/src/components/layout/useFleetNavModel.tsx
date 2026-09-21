@@ -56,5 +56,6 @@ export function useFleetNavModel(): FleetNavModel {
       sidebarTrips: v('sidebarTrips'),
     },
     reviewQueueCount: queueCounts?.total ?? 0,
+    unattributedFuelCount: queueCounts?.unattributedFuelCount ?? 0,
   });
 }

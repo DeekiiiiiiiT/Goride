@@ -166,6 +166,28 @@ describe('finalizeFuelWeekReports', () => {
     expect(result.snapshotCount).toBe(1);
   });
 
+  it('passes audited OVER-LOG accepts into the closable gate', async () => {
+    const s2s = await import('../utils/stopToStopClosableFlags');
+    const spy = vi.spyOn(s2s, 'stopToStopClosableFlagsFromReports');
+    const accepts = [
+      {
+        vehicleId: 'v1',
+        startOdometer: 100,
+        endOdometer: 200,
+        startDate: '2026-08-10',
+        endDate: '2026-08-16',
+        note: 'platform overlog ok',
+      },
+    ];
+    await finalizeFuelWeekReports(
+      [report()],
+      { ...deps, stopToStopGapAccepts: accepts },
+      { deferSnapshotPersist: true },
+    );
+    expect(spy).toHaveBeenCalledWith(expect.objectContaining({ gapAccepts: accepts }));
+    spy.mockRestore();
+  });
+
   it('refuses when transactions include Pending fuel in the week (R3)', async () => {
     const result = await finalizeFuelWeekReports([report()], {
       ...deps,

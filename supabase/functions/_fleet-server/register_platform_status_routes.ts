@@ -34,6 +34,8 @@ export function registerPlatformStatusRoutes(app: Hono) {
         fleetEquipment: true,
         claimableLoss: true,
         performanceAnalytics: true,
+        // S8 kill switch — default on; ops can set false via org modules
+        fuelServiceLineTabsEnabled: true,
       };
       // Opt-in forensic tab — public shell has no org; never treat global enabled
       // as GA. Logged-in UI uses /enterprise/me/modules with orgId (allowlist).
@@ -56,6 +58,7 @@ export function registerPlatformStatusRoutes(app: Hono) {
           claimableLoss: true,
           performanceAnalytics: true,
           driver_activity: false,
+          fuelServiceLineTabsEnabled: true,
         },
       });
     }

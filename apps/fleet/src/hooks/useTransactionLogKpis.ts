@@ -44,9 +44,18 @@ export function resolveTransactionKpisDisplay(args: {
   summaryLoading: boolean;
   summaryError: string | null;
   serverSummary: FuelLogSummary | null;
+  serviceLineLensActive?: boolean;
 }): TransactionKpis {
-  const { client, hasExtraTxnFilters, summaryLoading, summaryError, serverSummary } = args;
-  if (hasExtraTxnFilters) return client;
+  const {
+    client,
+    hasExtraTxnFilters,
+    summaryLoading,
+    summaryError,
+    serverSummary,
+    serviceLineLensActive,
+  } = args;
+  // Service-line tab / Unattributed chip: KPI ≡ filtered list (audit §4.2).
+  if (hasExtraTxnFilters || serviceLineLensActive) return client;
   if (summaryLoading && !serverSummary) {
     return { ...client, populationNote: 'Loading server totals…' };
   }
@@ -65,6 +74,11 @@ export type UseTransactionLogKpisParams = {
   filteredEntries: FuelEntry[];
   validAnchorIds: Set<string>;
   ledgerIntegrity: Map<string, string>;
+  /**
+   * When true (Rideshare/Delivery/Unattributed lens), KPIs must match the filtered
+   * list — never the org-wide server log-summary.
+   */
+  serviceLineLensActive?: boolean;
 };
 
 /**
@@ -87,6 +101,7 @@ export function useTransactionLogKpis(params: UseTransactionLogKpisParams): {
     filteredEntries,
     validAnchorIds,
     ledgerIntegrity,
+    serviceLineLensActive = false,
   } = params;
 
   const hasExtraTxnFilters = hasExtraTransactionFilters(filters);
@@ -99,7 +114,8 @@ export function useTransactionLogKpis(params: UseTransactionLogKpisParams): {
     startDate: periodStart,
     endDate: periodEnd,
     vehicleId: filterVehicle,
-    enabled: activeView === 'transactions' && !hasExtraTxnFilters,
+    enabled:
+      activeView === 'transactions' && !hasExtraTxnFilters && !serviceLineLensActive,
   });
 
   const clientTransactionKpis = useMemo(() => {
@@ -119,6 +135,7 @@ export function useTransactionLogKpis(params: UseTransactionLogKpisParams): {
         summaryLoading,
         summaryError,
         serverSummary,
+        serviceLineLensActive,
       }),
     [
       clientTransactionKpis,
@@ -126,6 +143,7 @@ export function useTransactionLogKpis(params: UseTransactionLogKpisParams): {
       summaryLoading,
       summaryError,
       serverSummary,
+      serviceLineLensActive,
     ],
   );
 

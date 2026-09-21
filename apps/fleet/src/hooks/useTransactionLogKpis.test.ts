@@ -75,6 +75,19 @@ describe('resolveTransactionKpisDisplay', () => {
     expect(next).toBe(client);
   });
 
+  it('keeps client when service-line lens is active (Delivery/Rideshare tab)', () => {
+    const next = resolveTransactionKpisDisplay({
+      client,
+      hasExtraTxnFilters: false,
+      summaryLoading: false,
+      summaryError: null,
+      serverSummary: server,
+      serviceLineLensActive: true,
+    });
+    expect(next).toBe(client);
+    expect(next.totalFills).toBe(4);
+  });
+
   it('replaces whole tile from server when unfiltered and ready', () => {
     const next = resolveTransactionKpisDisplay({
       client,

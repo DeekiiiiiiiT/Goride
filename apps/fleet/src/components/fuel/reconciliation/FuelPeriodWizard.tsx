@@ -27,7 +27,13 @@ import { FUEL_SPEND_EPS } from '../../../utils/fuelMoneyEpsilon';
 import {
   isUnattributedBeyondGate,
   validateDisposition,
+  classifyStopToStopBucketRemediation,
+  findStopToStopGapAccept,
+  inventoryStopToStopWeekBlockers,
+  selectOdometerBucketsClosingInWeek,
   type FuelResidualDisposition,
+  type OdometerBucket,
+  type StopToStopGapAccept,
 } from '@roam/fuel-core';
 import {
   FUEL_STEP_LABELS,
@@ -44,6 +50,19 @@ import { FuelDisputesStep } from './FuelDisputesStep';
 import { FuelPolicyCheckStep } from './FuelPolicyCheckStep';
 import { FuelLeakageStep } from './FuelLeakageStep';
 import { FuelWizardStepHero } from './FuelWizardStepHero';
+import {
+  StopToStopRemediationSheet,
+  type StopToStopAdjustmentDefaults,
+} from './StopToStopRemediationSheet';
+import { StopToStopTripWindowSheet } from './StopToStopTripWindowSheet';
+import { MasterLogTimeline } from '../../vehicles/odometer/MasterLogTimeline';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '../../ui/dialog';
 import {
   FuelPeriodWizardBodyGate,
   FuelPeriodWizardContinueFooter,
@@ -72,6 +91,7 @@ import { api } from '../../../services/api';
 import { toast } from 'sonner';
 import { useAuth } from '../../auth/AuthContext';
 import { formatFuelMoney } from '../../../utils/formatFuelMoney';
+import { resolveLeakageStepHero } from '../../../utils/resolveLeakageStepHero';
 
 /**
  * Period wizard — production Consumption Reconciliation walkthrough.
@@ -114,7 +134,7 @@ interface FuelPeriodWizardProps {
   onBack: () => void;
   onRefresh: () => void;
   onFinalize: (reports: WeeklyFuelReport[]) => Promise<boolean | void> | boolean | void;
-  onAddAdjustment: () => void;
+  onAddAdjustment: (defaults?: StopToStopAdjustmentDefaults) => void;
   onResolveDispute: (dispute: FuelDispute) => void;
   onOpenConfiguration?: () => void;
   onResetPeriod?: () => void;
@@ -183,6 +203,7 @@ function FuelPeriodWizardInner({
   const [odometerChainNoteDraft, setOdometerChainNoteDraft] = useState('');
   const [unattributedReviewed, setUnattributedReviewed] = useState(false);
   const [unattributedNoteDraft, setUnattributedNoteDraft] = useState('');
+  const [stopToStopGapAccepts, setStopToStopGapAccepts] = useState<StopToStopGapAccept[]>([]);
   /** Cash-desk: flagged vehicles marked reviewed this week */
   const [dqReviewedVehicleIds, setDqReviewedVehicleIds] = useState<Set<string>>(
     () => new Set(),
@@ -190,6 +211,10 @@ function FuelPeriodWizardInner({
   const [showGapDetail, setShowGapDetail] = useState(false);
   const [showCostBreakdown, setShowCostBreakdown] = useState(false);
   const [bucketVehicleId, setBucketVehicleId] = useState<string | null>(null);
+  const [remediationOpen, setRemediationOpen] = useState(false);
+  const [remediationFocusBucketId, setRemediationFocusBucketId] = useState<string | null>(null);
+  const [tripWindowBucket, setTripWindowBucket] = useState<OdometerBucket | null>(null);
+  const [timelineBucket, setTimelineBucket] = useState<OdometerBucket | null>(null);
   const [activeStepId, setActiveStepId] = useState<FuelStepId>('data-quality');
   const [progressIndex, setProgressIndex] = useState(0);
   const [finalizing, setFinalizing] = useState(false);
@@ -280,6 +305,7 @@ function FuelPeriodWizardInner({
     leakageReviewed,
     odometerChainReviewed,
     unattributedReviewed,
+    stopToStopGapAccepts,
     dataQualityReviewedVehicleIds: dqReviewedVehicleIds,
     vehicles,
     drivers,
@@ -401,6 +427,7 @@ function FuelPeriodWizardInner({
           odometerChainReviewedAt?: string | null;
           unattributedReviewedAt?: string | null;
           dataQualityVehicleReviews?: unknown;
+          stopToStopGapAccepts?: unknown;
           currentStep?: string | null;
         } | null = null;
         let notes: Array<{ step: string; note: string; at: string }> = [];
@@ -419,6 +446,7 @@ function FuelPeriodWizardInner({
               odometerChainReviewedAt: (p.odometerChainReviewedAt as string) || null,
               unattributedReviewedAt: (p.unattributedReviewedAt as string) || null,
               dataQualityVehicleReviews: p.dataQualityVehicleReviews,
+              stopToStopGapAccepts: p.stopToStopGapAccepts,
               currentStep: (p.currentStep as string) || null,
             };
             notes = Array.isArray(bundle.stepNotes) ? bundle.stepNotes : [];
@@ -483,6 +511,9 @@ function FuelPeriodWizardInner({
         } else {
           setDqReviewedVehicleIds(reviewedVehicleIdSet(dqReviews));
         }
+
+        const rawAccepts = (hit as { stopToStopGapAccepts?: unknown }).stopToStopGapAccepts;
+        setStopToStopGapAccepts(Array.isArray(rawAccepts) ? (rawAccepts as StopToStopGapAccept[]) : []);
 
         // H9: restore current_step unless deep-link or locked
         if (
@@ -806,6 +837,114 @@ function FuelPeriodWizardInner({
     vehicles.find((v) => leakageRows.some((r) => r.id === v.id)) ||
     vehicles[0];
 
+  // Only fill windows that close in this recon week (same set as closable gate).
+  const weekOdometerBuckets = useMemo(
+    () =>
+      selectOdometerBucketsClosingInWeek(
+        liveReports.flatMap((r) => (r.odometerBuckets || []) as OdometerBucket[]),
+        period.startDate,
+        period.endDate,
+      ),
+    [liveReports, period.startDate, period.endDate],
+  );
+
+  const stopToStopBlocking = closableBlockers.some((b) =>
+    String(b.code).startsWith('stop_to_stop'),
+  );
+
+  const weekS2sInventory = useMemo(
+    () =>
+      inventoryStopToStopWeekBlockers(weekOdometerBuckets, {
+        isAccepted: (b) => Boolean(findStopToStopGapAccept(stopToStopGapAccepts, b)),
+      }),
+    [weekOdometerBuckets, stopToStopGapAccepts],
+  );
+
+  const weekStopToStopClear = weekS2sInventory.blockingCount === 0 && !stopToStopBlocking;
+
+  const resolveStopToStopVehicle = (preferredId?: string | null) => {
+    if (preferredId) {
+      const v = vehicles.find((x) => x.id === preferredId);
+      if (v) return v;
+    }
+    // Prefer a vehicle that still blocks Finalize (chain first).
+    const focus = weekS2sInventory.focusBucket;
+    if (focus?.vehicleId) {
+      const v = vehicles.find((x) => x.id === focus.vehicleId);
+      if (v) return v;
+    }
+    const broken = weekOdometerBuckets.find(
+      (b) => classifyStopToStopBucketRemediation(b).kind !== 'ok',
+    );
+    if (broken?.vehicleId) {
+      const v = vehicles.find((x) => x.id === broken.vehicleId);
+      if (v) return v;
+    }
+    return bucketVehicle || vehicles[0];
+  };
+
+  const otherVehicleBlockingLabel = useMemo(() => {
+    const currentId = (bucketVehicleId && vehicles.find((v) => v.id === bucketVehicleId)?.id) ||
+      weekS2sInventory.focusBucket?.vehicleId ||
+      bucketVehicle?.id;
+    const otherIds = new Set<string>();
+    for (const b of [...weekS2sInventory.chainWindows, ...weekS2sInventory.unacceptedOverLog]) {
+      if (b.vehicleId && b.vehicleId !== currentId) otherIds.add(b.vehicleId);
+    }
+    if (otherIds.size === 0) return null;
+    return [...otherIds]
+      .map((id) => vehicles.find((v) => v.id === id)?.licensePlate || id)
+      .join(', ');
+  }, [weekS2sInventory, bucketVehicleId, vehicles, bucketVehicle]);
+
+  const stopToStopSummary = useMemo(() => weekS2sInventory.weekSummary, [weekS2sInventory]);
+
+  const openStopToStopRemediation = (opts?: {
+    vehicleId?: string;
+    focusBucketId?: string | null;
+  }) => {
+    const focusId =
+      opts?.focusBucketId ||
+      weekS2sInventory.focusBucket?.id ||
+      null;
+    const v = resolveStopToStopVehicle(
+      opts?.vehicleId || weekS2sInventory.focusBucket?.vehicleId || bucketVehicleId,
+    );
+    if (v) setBucketVehicleId(v.id);
+    setRemediationFocusBucketId(focusId);
+    setRemediationOpen(true);
+  };
+
+  const bucketRemediation = {
+    onOpenRemediation: (bucket: OdometerBucket) =>
+      openStopToStopRemediation({ vehicleId: bucket.vehicleId, focusBucketId: bucket.id }),
+    onEditFill: onEditFuelEntry
+      ? (entryId: string) => onEditFuelEntry(entryId)
+      : undefined,
+    onFixAdjustments: (bucket: OdometerBucket) => {
+      onAddAdjustment({
+        vehicleId: bucket.vehicleId,
+        dateFrom: bucket.startDate,
+        dateTo: bucket.endDate,
+        date: bucket.startDate ? new Date(`${bucket.startDate}T12:00:00`) : undefined,
+      });
+    },
+    onReviewTrips: (bucket: OdometerBucket) => {
+      setTripWindowBucket(bucket);
+    },
+  };
+
+  const leakageStepHero = resolveLeakageStepHero({
+    leakage: strip.leakage,
+    leakageReviewed,
+    stopToStopBlocking,
+    stopToStopSummary,
+    leakageMoneyLabel: formatFuelMoney(strip.leakage),
+    leakageReviewNote: leakageReviewMeta.note,
+    leakageReviewBy: leakageReviewMeta.by,
+    leakageReviewAt: leakageReviewMeta.at,
+  });
+
   const stepHero = (() => {
     switch (activeStepId) {
       case 'data-quality':
@@ -856,30 +995,24 @@ function FuelPeriodWizardInner({
           actionLabel: onOpenConfiguration ? 'Open policies' : undefined,
           onAction: onOpenConfiguration,
         };
-      case 'leakage-gap':
-        return Math.abs(strip.leakage) > FUEL_SPEND_EPS && !leakageReviewed
-          ? {
-              title: strip.leakage < 0 ? 'Review over-explained fuel' : 'Review unexplained fuel',
-              body:
-                strip.leakage < 0
-                  ? `Over-explained fuel ${formatFuelMoney(strip.leakage)} — categorized costs exceed gas-card spend. Check odometer/trips/policy, or accept below.`
-                  : `Unexplained fuel ${formatFuelMoney(strip.leakage)} — charge stop-to-stop gaps if needed, or accept below.`,
-              actionLabel: 'Mark reviewed',
-              onAction: handleMarkLeakageReviewed,
-            }
-          : {
-              title: strip.leakage < 0 ? 'Over-explained fuel reviewed' : 'Unexplained fuel reviewed',
-              body:
-                Math.abs(strip.leakage) > FUEL_SPEND_EPS
-                  ? `${strip.leakage < 0 ? 'Over-explained' : 'Unexplained'} fuel ${formatFuelMoney(strip.leakage)} accepted${
-                      leakageReviewMeta.note ? ` — “${leakageReviewMeta.note}”` : ''
-                    }${leakageReviewMeta.by ? ` · by ${String(leakageReviewMeta.by).slice(0, 8)}…` : ''}${
-                      leakageReviewMeta.at
-                        ? ` · ${new Date(leakageReviewMeta.at).toLocaleString()}`
-                        : ''
-                    }.`
-                  : 'No unexplained fuel this week.',
-            };
+      case 'leakage-gap': {
+        return {
+          title: leakageStepHero.title,
+          body: leakageStepHero.body,
+          actionLabel:
+            leakageStepHero.action === 'mark_reviewed'
+              ? 'Mark reviewed'
+              : leakageStepHero.action === 'fix_stop_to_stop'
+                ? 'Fix stop-to-stop blockers'
+                : undefined,
+          onAction:
+            leakageStepHero.action === 'mark_reviewed'
+              ? handleMarkLeakageReviewed
+              : leakageStepHero.action === 'fix_stop_to_stop'
+                ? () => openStopToStopRemediation()
+                : undefined,
+        };
+      }
       case 'settlement-preview':
         return {
           title: 'Confirm settle-up for this week',
@@ -990,7 +1123,7 @@ function FuelPeriodWizardInner({
       return 'Over-explained week — fix odometer / efficiency inputs (cannot accept away).';
     }
     if (gateResult.hasUnderExplainedBlockers && !leakageReviewed) {
-      return 'Under-explained fuel still needs Mark reviewed on Unexplained fuel.';
+      return 'Under-explained fuel still needs Mark reviewed on Fuel gaps.';
     }
     if (gateResult.hasBlockingWarnings && !financeWarningAcknowledged) {
       return 'Check the review box above before Finalize.';
@@ -1088,6 +1221,8 @@ function FuelPeriodWizardInner({
     unattributedFill: strip.unattributedFill,
     driverFromUnexplained: strip.driverFromUnexplained,
     priorMedian,
+    liveReports,
+    scenarios,
   };
 
   const overflowRef = useRef<FuelWizardOverflowMenuHandle>(null);
@@ -1247,7 +1382,16 @@ function FuelPeriodWizardInner({
                 fuelEntries={fuelEntries}
                 trips={weekTrips}
                 showGapDetail={showGapDetail}
-                onToggleGapDetail={() => setShowGapDetail((v) => !v)}
+                onToggleGapDetail={() => {
+                  setShowGapDetail((v) => {
+                    const next = !v;
+                    if (next && !bucketVehicleId) {
+                      const target = resolveStopToStopVehicle(null);
+                      if (target) setBucketVehicleId(target.id);
+                    }
+                    return next;
+                  });
+                }}
                 bucketVehicle={bucketVehicle || null}
                 vehicles={vehicles}
                 periodLocked={periodLocked}
@@ -1269,6 +1413,11 @@ function FuelPeriodWizardInner({
                 unattributedNote={unattributedNoteDraft}
                 onUnattributedNoteChange={setUnattributedNoteDraft}
                 onAckUnattributed={() => void handleAckUnattributed()}
+                stopToStopBlocking={stopToStopBlocking}
+                stopToStopSummary={stopToStopSummary}
+                onFixStopToStop={() => openStopToStopRemediation()}
+                showDispositionForm={leakageStepHero.showDispositionForm}
+                bucketRemediation={bucketRemediation}
               />
             )}
 
@@ -1309,33 +1458,12 @@ function FuelPeriodWizardInner({
                 onRecordSecondApproval={() => void handleRecordSecondApproval()}
                 settlementRows={settlementRows}
                 closableBlockMessages={closableBlockers.map(fuelWeekClosableBlockerMessage)}
-                onOpenStopToStopGapDetail={() => {
-                  const brokenVid = liveReports
-                    .flatMap((r) => r.odometerBuckets || [])
-                    .find((b) => b.chainAnomaly || b.confidenceTier === 'indeterminate')
-                    ?.vehicleId;
-                  const target =
-                    (brokenVid && vehicles.find((v) => v.id === brokenVid)) ||
-                    vehicles.find((v) => leakageRows.some((r) => r.id === v.id)) ||
-                    vehicles[0];
-                  if (target) setBucketVehicleId(target.id);
-                  setShowGapDetail(true);
-                  setActiveStepId('leakage-gap');
-                  setProgressIndex(Math.max(0, FUEL_STEP_ORDER.indexOf('leakage-gap')));
-                }}
+                stopToStopSummary={stopToStopSummary}
+                onFixStopToStop={() => openStopToStopRemediation()}
                 onOpenIntegrityStopToStop={
                   onOpenIntegrityStopToStop
                     ? () => {
-                        const brokenVid = liveReports
-                          .flatMap((r) => r.odometerBuckets || [])
-                          .find(
-                            (b) =>
-                              b.chainAnomaly || b.confidenceTier === 'indeterminate',
-                          )?.vehicleId;
-                        const target =
-                          (brokenVid && vehicles.find((v) => v.id === brokenVid)) ||
-                          vehicles.find((v) => leakageRows.some((r) => r.id === v.id)) ||
-                          vehicles[0];
+                        const target = resolveStopToStopVehicle(bucketVehicleId);
                         onOpenIntegrityStopToStop({
                           weekStart: period.startDate,
                           vehicleId: target?.id,
@@ -1368,11 +1496,115 @@ function FuelPeriodWizardInner({
         </div>
       </div>
 
+      <StopToStopRemediationSheet
+        open={remediationOpen}
+        onOpenChange={setRemediationOpen}
+        vehicleLabel={
+          resolveStopToStopVehicle(bucketVehicleId)?.licensePlate ||
+          resolveStopToStopVehicle(bucketVehicleId)?.id ||
+          'Vehicle'
+        }
+        vehicleId={resolveStopToStopVehicle(bucketVehicleId)?.id || ''}
+        buckets={weekOdometerBuckets}
+        fuelEntries={fuelEntries}
+        periodLocked={periodLocked}
+        periodId={serverPeriodId}
+        periodVersion={serverPeriodVersion}
+        gapAccepts={stopToStopGapAccepts}
+        onGapAcceptsChange={(next, version) => {
+          setStopToStopGapAccepts(next);
+          if (version != null && Number.isFinite(version)) {
+            setServerPeriodVersion(version);
+          }
+        }}
+        focusBucketId={remediationFocusBucketId}
+        onEditFill={(entryId) => {
+          if (onEditFuelEntry) onEditFuelEntry(entryId);
+          else toast.error('Fill editor is not available.');
+        }}
+        onReviewAdjustments={(defaults) => onAddAdjustment(defaults)}
+        onReviewTrips={(bucket) => setTripWindowBucket(bucket)}
+        onInspectTimeline={(bucket) => setTimelineBucket(bucket)}
+        onRecheck={() => {
+          void weekReports.refresh();
+          onRefresh();
+        }}
+        weekStopToStopClear={weekStopToStopClear}
+        otherVehicleBlockingLabel={otherVehicleBlockingLabel}
+        onReturnToFinalize={() => {
+          setRemediationOpen(false);
+          setActiveStepId('finalize');
+          setProgressIndex(FUEL_STEP_ORDER.length - 1);
+        }}
+      />
+
+      <StopToStopTripWindowSheet
+        open={!!tripWindowBucket}
+        onOpenChange={(open) => {
+          if (!open) setTripWindowBucket(null);
+        }}
+        bucket={tripWindowBucket}
+        trips={weekTrips}
+        vehicleLabel={
+          (tripWindowBucket &&
+            vehicles.find((v) => v.id === tripWindowBucket.vehicleId)?.licensePlate) ||
+          tripWindowBucket?.vehicleId ||
+          'Vehicle'
+        }
+        drivers={drivers.map((d) => ({
+          id: d.id,
+          name:
+            d.name ||
+            [d.firstName, d.lastName].filter(Boolean).join(' ').trim() ||
+            d.id,
+        }))}
+        vehicles={vehicles.map((v) => ({
+          id: v.id,
+          plate: v.licensePlate || v.id,
+        }))}
+        periodLocked={periodLocked}
+        onChanged={() => {
+          void weekReports.refresh();
+          onRefresh();
+        }}
+      />
+
+      <Dialog open={!!timelineBucket} onOpenChange={(open) => !open && setTimelineBucket(null)}>
+        <DialogContent className="max-w-[calc(100%-2rem)] sm:max-w-[1100px] w-[95vw] max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>
+              Gap timeline —{' '}
+              {timelineBucket
+                ? vehicles.find((v) => v.id === timelineBucket.vehicleId)?.licensePlate ||
+                  timelineBucket.vehicleId
+                : ''}
+            </DialogTitle>
+            <DialogDescription>
+              {timelineBucket
+                ? `${timelineBucket.startOdometer.toLocaleString()} → ${timelineBucket.endOdometer.toLocaleString()} km · ${timelineBucket.startDate} → ${timelineBucket.endDate}`
+                : ''}
+            </DialogDescription>
+          </DialogHeader>
+          {timelineBucket ? (
+            <MasterLogTimeline
+              vehicleId={timelineBucket.vehicleId}
+              embedded
+              initialDateRange={{
+                from: timelineBucket.startDate,
+                to: timelineBucket.endDate,
+              }}
+            />
+          ) : null}
+        </DialogContent>
+      </Dialog>
+
       <FuelPeriodWizardContinueFooter
         isLast={isLast}
         canContinue={canContinueStep}
         activeStepId={activeStepId}
         leakageReviewed={leakageReviewed}
+        stopToStopBlocking={stopToStopBlocking}
+        moneyNeedsAccept={leakageStepHero.moneyNeedsAccept}
         continueLabel={continueLabel}
         onContinue={handleContinue}
         onAddNote={() => overflowRef.current?.openNote()}

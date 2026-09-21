@@ -112,12 +112,14 @@ export function bulkFinalizeExecuteGateFields(period: FuelReconciliationPeriod):
   leakageReviewed: boolean;
   odometerChainReviewed: boolean;
   unattributedReviewed: boolean;
+  stopToStopGapAccepts: FuelReconciliationPeriod['stopToStopGapAccepts'];
 } {
   return {
     periodCounts: period.counts,
     leakageReviewed: period.leakageReviewed ?? false,
     odometerChainReviewed: period.odometerChainReviewed ?? false,
     unattributedReviewed: period.unattributedReviewed ?? false,
+    stopToStopGapAccepts: period.stopToStopGapAccepts,
   };
 }
 
@@ -444,6 +446,7 @@ export function FuelBulkFinalizeDialog({
                 fuelEntries: weekEntries,
                 weekStartYmd: period.startDate,
                 weekEndYmd: period.endDate,
+                gapAccepts: periodForGate.stopToStopGapAccepts,
               }),
             });
             if (closableBlockers.length > 0) {

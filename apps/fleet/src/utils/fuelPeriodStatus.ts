@@ -54,6 +54,8 @@ export interface FuelReconciliationPeriod {
   odometerChainReviewed?: boolean;
   /** R-1: fills-without-odometer beyond gate accepted. */
   unattributedReviewed?: boolean;
+  /** Audited OVER-LOG stop-to-stop accepts (clears attribution gate when complete). */
+  stopToStopGapAccepts?: import('@roam/fuel-core').StopToStopGapAccept[];
   /** N-7: locked week whose statement seal failed — retry seal. */
   fuelSealError?: string | null;
 }

@@ -128,6 +128,10 @@ export type BuiltWeekSnapshot = {
     windowTimingCost?: number;
     /** N-2: no-odometer fill spend carved before residual. */
     unattributedFillCost?: number;
+    /** N-17: PA earned $ stamped for server recompute (meta + snap). */
+    personalAllowanceEarnedCost?: number;
+    /** Spend provenance for freeze — report SoT vs entry-sum fallback. */
+    spendSource?: 'report' | 'entry_sum';
   };
 };
 

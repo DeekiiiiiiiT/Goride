@@ -4890,7 +4890,15 @@ export const api = {
         err.body = body;
         throw err;
       }
-      throw new Error(body.message || body.error || 'Finalize refused');
+      const refuseErr = new Error(body.message || body.error || 'Finalize refused') as Error & {
+        status?: number;
+        code?: string;
+        body?: unknown;
+      };
+      refuseErr.status = 422;
+      refuseErr.code = body.code || body.error;
+      refuseErr.body = body;
+      throw refuseErr;
     }
     if (!response.ok) {
       const errText = await response.text().catch(() => '');
@@ -5124,6 +5132,91 @@ export const api = {
     if (!response.ok) {
       const errText = await response.text().catch(() => '');
       throw new Error(errText || 'Odometer chain review failed');
+    }
+    return response.json();
+  },
+
+  /** Accept OVER-LOG stop-to-stop windows (single or bulk). Does not post a driver charge. */
+  async acceptFuelPeriodStopToStopGaps(args: {
+    periodId: string;
+    accepts: Array<{
+      bucketId?: string;
+      vehicleId: string;
+      startOdometer: number;
+      endOdometer: number;
+      startDate: string;
+      endDate: string;
+      kind?: string;
+      remediationKind?: string;
+      chainAnomaly?: boolean;
+      confidenceTier?: string;
+      rideShareDistance?: number;
+      personalDistance?: number;
+      companyMiscDistance?: number;
+      unaccountedDistance?: number;
+    }>;
+    note: string;
+    disposition?: 'trips_overstated' | 'gps_noise' | 'known_variance' | 'other';
+    version?: number;
+  }) {
+    const headers = await requireAuthHeaders();
+    if (args.version != null) {
+      (headers as Record<string, string>)['If-Match'] = String(args.version);
+    }
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.fuel}/fuel/periods/${encodeURIComponent(args.periodId)}/stop-to-stop-gap-accept`,
+      {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          accepts: args.accepts,
+          note: args.note,
+          disposition: args.disposition,
+        }),
+      },
+    );
+    if (response.status === 409) {
+      const err = new Error('version_conflict') as Error & { status?: number; body?: unknown };
+      err.status = 409;
+      try {
+        err.body = await response.json();
+      } catch {
+        err.body = null;
+      }
+      throw err;
+    }
+    if (!response.ok) {
+      const errText = await response.text().catch(() => '');
+      throw new Error(errText || 'Stop-to-stop gap accept failed');
+    }
+    return response.json();
+  },
+
+  async revokeFuelPeriodStopToStopGapAccept(args: {
+    periodId: string;
+    bucketId?: string;
+    vehicleId: string;
+    startOdometer: number;
+    endOdometer: number;
+    endDate: string;
+  }) {
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.fuel}/fuel/periods/${encodeURIComponent(args.periodId)}/stop-to-stop-gap-accept/revoke`,
+      {
+        method: 'POST',
+        headers: await requireAuthHeaders(),
+        body: JSON.stringify({
+          bucketId: args.bucketId,
+          vehicleId: args.vehicleId,
+          startOdometer: args.startOdometer,
+          endOdometer: args.endOdometer,
+          endDate: args.endDate,
+        }),
+      },
+    );
+    if (!response.ok) {
+      const errText = await response.text().catch(() => '');
+      throw new Error(errText || 'Stop-to-stop gap accept revoke failed');
     }
     return response.json();
   },

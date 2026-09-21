@@ -24,7 +24,7 @@ export const FUEL_STEP_LABELS: Record<FuelStepId, string> = {
   'data-quality': 'Data quality',
   'adjustments-disputes': 'Disputes',
   'policy-check': 'Policy check',
-  'leakage-gap': 'Unexplained fuel',
+  'leakage-gap': 'Fuel gaps',
   'settlement-preview': 'Settlement',
   finalize: 'Finalize',
 };

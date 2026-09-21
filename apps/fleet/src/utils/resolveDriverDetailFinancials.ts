@@ -77,10 +77,8 @@ export function resolveDriverDetailFinancials(args: {
     }
   }
   const isLedgerComplete = missingFromLedger.length === 0;
-  if (!isLedgerComplete && ledgerHasData) {
-    // Ledger incomplete — auto-repair regenerates missing platforms below.
-  }
-  if (ledgerHasData && ledgerOverview) {
+  // Incomplete ledger + trip platforms → trip fallback below. Never hybrid headlines.
+  if (ledgerHasData && ledgerOverview && isLedgerComplete) {
     // Merge ledger financial fields with trip-computed operational fields
     const platformStats: Record<string, any> = {};
     // Start with trip-computed platforms (keeps distance, ratings, completed counts)
@@ -146,7 +144,7 @@ export function resolveDriverDetailFinancials(args: {
         : null;
 
     // Ledger may count every Roam/InDrive fare as cash — trip evidence is a different cut.
-    // Saved-week overlay already set period.cashCollected; do not smash it with chip sum.
+    // When not on a saved-week overlay, recompute non-Uber cash from trip evidence.
     const fromSavedWeek = ledgerOverview.source === 'driver_financial_periods';
     if (!fromSavedWeek && dateRange?.from) {
       const periodStart = startOfDay(dateRange.from);
@@ -166,8 +164,16 @@ export function resolveDriverDetailFinancials(args: {
       }
     }
 
-    /** Headline = saved week when overlay is on; otherwise fare/tip SSOT. */
-    const displayPeriodEarnings = Number(ledgerOverview.period.earnings) || 0;
+    // Card headlines must match the platform chips. DFP overlay can leave period.*
+    // stale after a late trip backfill while platformStats already include the new rows.
+    const sumMergedEarnings = (() => {
+      let t = 0;
+      for (const [name, s] of Object.entries(platformStats)) {
+        if (name === 'Dispute Recoveries') continue;
+        t += Number((s as any)?.earnings) || 0;
+      }
+      return t;
+    })();
     const sumMergedCash = (() => {
       let t = 0;
       for (const [name, s] of Object.entries(platformStats)) {
@@ -177,9 +183,15 @@ export function resolveDriverDetailFinancials(args: {
       return t;
     })();
 
-    const displayCashCollected = fromSavedWeek
-      ? Number(ledgerOverview.period.cashCollected) || 0
-      : sumMergedCash;
+    const ledgerPeriodEarnings = Number(ledgerOverview.period.earnings) || 0;
+    const ledgerPeriodCash = Number(ledgerOverview.period.cashCollected) || 0;
+    const earningsDrift = Math.abs(ledgerPeriodEarnings - sumMergedEarnings) > 0.05;
+    const cashDrift = Math.abs(ledgerPeriodCash - sumMergedCash) > 0.05;
+
+    const displayPeriodEarnings = earningsDrift ? sumMergedEarnings : ledgerPeriodEarnings;
+    // Saved-week cash only when it still matches the chips; otherwise chip sum wins.
+    const displayCashCollected =
+      fromSavedWeek && !cashDrift ? ledgerPeriodCash : sumMergedCash;
     const prevEarningsNum = Number(ledgerOverview.prevPeriod.earnings) || 0;
     const trendPercentMerged =
       prevEarningsNum > 0
@@ -230,10 +242,9 @@ export function resolveDriverDetailFinancials(args: {
       tripFallback: false as const,
     };
   }
-  // ⚠️ LEGACY FALLBACK — Phase 7 safety net. If this fires, ledger is incomplete.
-  // Phase 6 monitoring should detect & auto-repair. Investigate if this persists.
+  // ⚠️ LEGACY FALLBACK — ledger empty OR incomplete (missing trip platforms). Never hybrid.
   if (ledgerOverviewLoaded) {
-    // Awaiting ledger completeness — auto-repair resolves missing platforms when needed.
+    // Prefer full trip roll-up until ledger covers every platform with completed trips.
   }
 
   // ── Trip-sourced fallback (production): canonical ledger often empty until backfill; trip logs still match Trip Ledger. ──
@@ -243,7 +254,11 @@ export function resolveDriverDetailFinancials(args: {
     Math.abs(Number(metrics.cashCollected) || 0) > 0.0001 ||
     Math.abs(Number(metrics.totalTolls) || 0) > 0.0001;
 
-  if (ledgerOverviewLoaded && !ledgerHasData && tripFinancialSignal) {
+  if (
+    ledgerOverviewLoaded &&
+    tripFinancialSignal &&
+    (!ledgerHasData || !isLedgerComplete)
+  ) {
     return {
       periodEarnings: metrics.periodEarnings,
       prevPeriodEarnings: metrics.prevPeriodEarnings,

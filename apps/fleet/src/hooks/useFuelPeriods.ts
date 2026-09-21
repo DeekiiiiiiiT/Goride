@@ -34,6 +34,8 @@ export type FuelPeriodRow = {
   unattributedReviewedAt?: string | null;
   unattributedReviewedBy?: string | null;
   unattributedReviewedNote?: string | null;
+  /** Audited OVER-LOG stop-to-stop window accepts */
+  stopToStopGapAccepts?: import('@roam/fuel-core').StopToStopGapAccept[];
   /** Cash-desk: flagged vehicle acknowledgements */
   dataQualityVehicleReviews?: Array<{
     vehicleId: string;

@@ -57,9 +57,13 @@ function coerceStepCounts(
     for (const stepId of Object.keys(counts) as FuelStepId[]) {
       const c = (raw as any)[stepId];
       if (c && typeof c === 'object') {
+        const actionable = Number(c.actionable) || 0;
+        // Persisted clear steps historically wrote informational:1 ("touched").
+        // Landing chips treat informational>0 + actionable=0 as "Not evaluated" —
+        // that sentinel is only for missing counts (fabricate below). Clear → Done.
         counts[stepId] = {
-          actionable: Number(c.actionable) || 0,
-          informational: Number(c.informational) || 0,
+          actionable,
+          informational: actionable > 0 ? Number(c.informational) || 0 : 0,
         };
       }
     }
@@ -83,6 +87,10 @@ function coerceStepCounts(
       if (counts[stepId].actionable > 0) {
         counts[stepId].informational += counts[stepId].actionable;
         counts[stepId].actionable = 0;
+      }
+      // Locked + no open work → Done (legacy empty counts already {0,0}).
+      if (counts[stepId].actionable === 0) {
+        counts[stepId].informational = 0;
       }
     }
   }
@@ -152,6 +160,9 @@ export function serverRowsToLandingPeriods(rows: FuelPeriodRow[]): FuelReconcili
       leakageReviewed: locked || Boolean(s.leakageReviewedAt),
       odometerChainReviewed: locked || Boolean(s.odometerChainReviewedAt),
       unattributedReviewed: locked || Boolean(s.unattributedReviewedAt),
+      stopToStopGapAccepts: Array.isArray(s.stopToStopGapAccepts)
+        ? s.stopToStopGapAccepts
+        : [],
       fuelSealError: s.fuelSealError ? String(s.fuelSealError) : null,
     });
   }

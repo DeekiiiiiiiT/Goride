@@ -115,6 +115,13 @@ import type { FinancialTransaction } from '../types/data';
 import type { Trip } from '../types/data';
 import type { Vehicle } from '../types/vehicle';
 import { FuelReconBusyProvider, useFuelReconBusy } from '../components/fuel/reconciliation/fuelReconBusyLock';
+import { FuelServiceLineProvider, useFuelServiceLine } from '../contexts/FuelServiceLineContext';
+import {
+  computeFuelLineConservation,
+  fuelEntryMatchesLineFilter,
+} from '../utils/fuelServiceLineFilter';
+import { fuelCardMatchesLine } from '../utils/fuelCardServiceLine';
+import { integrityVehiclesForLine } from '../utils/fuelIntegrityServiceLine';
 
 export function FuelManagement(props: {
   defaultTab?: string;
@@ -127,7 +134,9 @@ export function FuelManagement(props: {
 }) {
   return (
     <FuelReconBusyProvider>
-      <FuelManagementInner {...props} />
+      <FuelServiceLineProvider>
+        <FuelManagementInner {...props} />
+      </FuelServiceLineProvider>
     </FuelReconBusyProvider>
   );
 }
@@ -153,6 +162,7 @@ function FuelManagementInner({
     useFuelSettlementReopenGate();
   const { confirmIfMismatch: confirmForceClientMoney, dialog: forceClientMoneyDialog } =
     useFuelForceClientMoneyDialog();
+  const { apiFilter, showTabs, unattributedOnly, setUnattributedOnly, setLine, line } = useFuelServiceLine();
   const [activeTab, setActiveTab] = useState(
     defaultTab === 'flags' ? 'integrity' : defaultTab,
   );
@@ -795,6 +805,126 @@ function FuelManagementInner({
     void loadLogsAndTransactions();
   }, [loadLogsAndTransactions]);
 
+  const [serverFilteredLogs, setServerFilteredLogs] = useState<FuelEntry[] | null>(null);
+  /** S3: full-window line totals when the primary logs page is truncated. */
+  const [serverLineCounts, setServerLineCounts] = useState<{
+    all: number;
+    rideshare: number;
+    rush_delivery: number;
+    unattributed: number;
+  } | null>(null);
+  const [serverLineCountsLoading, setServerLineCountsLoading] = useState(false);
+
+  // When the full window is truncated, re-fetch with server serviceLine so the tab is complete.
+  useEffect(() => {
+    if (!fuelDataTruncated || apiFilter === 'all') {
+      setServerFilteredLogs(null);
+      return;
+    }
+    let cancelled = false;
+    const { startDate, endDate } = fuelFetchWindow;
+    void fuelService
+      .getAllFuelEntriesInRange({ startDate, endDate, serviceLine: apiFilter })
+      .then((rows) => {
+        if (!cancelled) setServerFilteredLogs(rows);
+      })
+      .catch(() => {
+        if (!cancelled) setServerFilteredLogs(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [fuelDataTruncated, apiFilter, fuelFetchWindow]);
+
+  // S3: never badge from truncated logs — fetch honest per-line totals (or omit until ready).
+  useEffect(() => {
+    if (!showTabs || !fuelDataTruncated) {
+      setServerLineCounts(null);
+      setServerLineCountsLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setServerLineCountsLoading(true);
+    setServerLineCounts(null);
+    const { startDate, endDate } = fuelFetchWindow;
+    void fuelService
+      .getFuelEntryLineCounts({ startDate, endDate })
+      .then((counts) => {
+        if (!cancelled) {
+          setServerLineCounts(counts);
+          setServerLineCountsLoading(false);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setServerLineCounts(null);
+          setServerLineCountsLoading(false);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [showTabs, fuelDataTruncated, fuelFetchWindow]);
+
+  const lineConservation = useMemo(() => computeFuelLineConservation(logs), [logs]);
+
+  const displayLogs = useMemo(() => {
+    if (serverFilteredLogs && apiFilter !== 'all') return serverFilteredLogs;
+    if (apiFilter === 'all') return logs;
+    return logs.filter((e) => fuelEntryMatchesLineFilter(e, apiFilter));
+  }, [logs, apiFilter, serverFilteredLogs]);
+
+  const serviceLineCounts = useMemo(() => {
+    if (!showTabs) return undefined;
+    // Truncated: omit badges until server totals land — never show understated counts.
+    if (fuelDataTruncated) {
+      if (serverLineCountsLoading || !serverLineCounts) return undefined;
+      return {
+        all: serverLineCounts.all,
+        rideshare: serverLineCounts.rideshare,
+        delivery: serverLineCounts.rush_delivery,
+      };
+    }
+    return {
+      all: lineConservation.allCount,
+      rideshare: lineConservation.rideshareCount,
+      delivery: lineConservation.deliveryCount,
+    };
+  }, [showTabs, fuelDataTruncated, serverLineCounts, serverLineCountsLoading, lineConservation]);
+
+  const unattributedCountForUi = useMemo(() => {
+    if (fuelDataTruncated && serverLineCounts) return serverLineCounts.unattributed;
+    if (fuelDataTruncated) return undefined;
+    return lineConservation.unattributedCount;
+  }, [fuelDataTruncated, serverLineCounts, lineConservation.unattributedCount]);
+
+  // Cards multi-home — do not expect tab counts to sum to All.
+  const displayCards = useMemo(() => {
+    if (!showTabs || apiFilter === 'all' || unattributedOnly) return cards;
+    const line = apiFilter === 'rush_delivery' ? 'rush_delivery' : 'rideshare';
+    return cards.filter((c) => fuelCardMatchesLine(c, line, vehicles, drivers));
+  }, [cards, showTabs, apiFilter, unattributedOnly, vehicles, drivers]);
+
+  const integrityVehicles = useMemo(() => {
+    if (!showTabs || apiFilter === 'all' || unattributedOnly) return vehicles;
+    const line = apiFilter === 'rush_delivery' ? 'rush_delivery' : 'rideshare';
+    return integrityVehiclesForLine(vehicles, line);
+  }, [vehicles, showTabs, apiFilter, unattributedOnly]);
+
+  const integrityVehicleIdSet = useMemo(
+    () => new Set(integrityVehicles.map((v) => v.id).filter(Boolean) as string[]),
+    [integrityVehicles],
+  );
+
+  const displayFlagsDeskRows = useMemo(() => {
+    if (!showTabs || apiFilter === 'all' || unattributedOnly) return flagsDeskRows;
+    // FuelFlagDeskRow has vehicle on entry — top-level vehicleId does not exist (was a no-op filter).
+    return flagsDeskRows.filter((row) => {
+      const vid = row.entry?.vehicleId;
+      return Boolean(vid) && integrityVehicleIdSet.has(String(vid));
+    });
+  }, [flagsDeskRows, showTabs, apiFilter, unattributedOnly, integrityVehicleIdSet]);
+
   // Silent refresh when switching to Logs / Review / Flags if data is stale (>30s)
   useEffect(() => {
     if (activeTab !== 'logs' && activeTab !== 'reimbursements' && activeTab !== 'integrity') return;
@@ -1342,7 +1472,8 @@ function FuelManagementInner({
   const handleApproveReimbursement = useCallback(async (
       id: string,
       notes?: string,
-      stationOpts?: { matchedStationId?: string; stationLocation?: string }
+      stationOpts?: { matchedStationId?: string; stationLocation?: string },
+      serviceLine?: 'rideshare' | 'rush_delivery',
   ) => {
       try {
           const existing = transactions.find((t) => t.id === id);
@@ -1352,13 +1483,27 @@ function FuelManagementInner({
           }
           const updated = await api.approveExpense(id, notes, undefined, stationOpts);
           setTransactions(prev => prev.map(t => t.id === id ? updated : t));
-          
+
           if (updated.category === 'Fuel' || updated.category === 'Fuel Reimbursement') {
               await fuelService.getFuelScenarios();
               try {
                   await loadLogsAndTransactions();
               } catch {
                   /* non-fatal */
+              }
+              if (serviceLine) {
+                const fuelEntryId =
+                  (updated.metadata as { fuelEntryId?: string } | undefined)?.fuelEntryId ||
+                  (updated as { fuelEntryId?: string }).fuelEntryId;
+                if (fuelEntryId) {
+                  try {
+                    await fuelService.setFuelEntriesServiceLine([String(fuelEntryId)], serviceLine);
+                    await loadLogsAndTransactions();
+                  } catch (e) {
+                    console.error('[approve] set service line failed', e);
+                    toast.warning('Approved, but service line was not saved — set it from Transaction Logs.');
+                  }
+                }
               }
               invalidateReviewQueueCounts();
               toast.success("Posted to Transaction Logs");
@@ -1856,6 +2001,11 @@ function FuelManagementInner({
                 0,
               ),
               dispositions: flagDispositions,
+              stopToStopGapAccepts: Array.isArray(periodRow.stopToStopGapAccepts)
+                ? periodRow.stopToStopGapAccepts
+                : Array.isArray(periodRow.stop_to_stop_gap_accepts)
+                  ? periodRow.stop_to_stop_gap_accepts
+                  : [],
             },
             {
               onProgress: (msg) => setMessage(msg),
@@ -1865,7 +2015,12 @@ function FuelManagementInner({
           );
 
           if (weekResult.snapshotCount === 0) {
-            toast.info(weekResult.message || 'No pending items found to finalize.');
+            const blockedMsg = weekResult.message || 'No pending items found to finalize.';
+            if (/^Blocked/i.test(blockedMsg) || weekResult.ok === false) {
+              toast.error(blockedMsg);
+            } else {
+              toast.info(blockedMsg);
+            }
             return false;
           }
 
@@ -1996,6 +2151,7 @@ function FuelManagementInner({
         description={pageDescription}
         hideDescriptionOnMobile={activeTab === 'logs'}
         embedded={embedded}
+        serviceLineCounts={serviceLineCounts}
         headerActions={
           activeTab === 'logs' && !embedded ? (
             <Button
@@ -2074,6 +2230,25 @@ function FuelManagementInner({
               onApproveLogReview={handleApproveLogReview}
               onResolveSplitCash={handleResolveSplitCash}
               isRefreshing={isRefreshing}
+              showServiceLineControls={showTabs}
+              lineFilter={unattributedOnly ? 'unattributed' : apiFilter === 'rush_delivery' ? 'rush_delivery' : apiFilter === 'rideshare' ? 'rideshare' : 'all'}
+              onLineFilterChange={(v) => {
+                if (v === 'unattributed') {
+                  setUnattributedOnly(true);
+                  return;
+                }
+                setUnattributedOnly(false);
+                if (v === 'all') setLine('all');
+                else if (v === 'rideshare') setLine('rideshare');
+                else if (v === 'rush_delivery') setLine('delivery');
+              }}
+              unattributedCount={unattributedCountForUi ?? 0}
+              onBulkSetServiceLine={async (ids, line) => {
+                await fuelService.setFuelEntriesServiceLine(ids, line);
+                await loadLogsAndTransactions();
+                invalidateReviewQueueCounts();
+                toast.success(`Set service line on ${ids.length} fill(s)`);
+              }}
               onViewInTransactionLogs={({ fuelEntryId, date, vehicleId }) => {
                   setActiveTab('logs');
                   onTabChange?.('logs');
@@ -2125,7 +2300,13 @@ function FuelManagementInner({
           }}
           onRefresh={() => loadData(true)}
           onFinalize={handleFinalize}
-          onAddAdjustment={() => { setAdjustmentDefaults({}); setIsAdjustmentModalOpen(true); }}
+          onAddAdjustment={(defaults) => {
+            setAdjustmentDefaults({
+              vehicleId: defaults?.vehicleId,
+              date: defaults?.date,
+            });
+            setIsAdjustmentModalOpen(true);
+          }}
           onResolveDispute={(dispute) => { setSelectedDispute(dispute); setIsResolutionModalOpen(true); }}
           onOpenConfiguration={() => { setActiveTab('configuration'); onTabChange?.('configuration'); }}
           onOpenTransactionLogs={({ fuelEntryId, date, vehicleId }) => {
@@ -2283,7 +2464,7 @@ function FuelManagementInner({
             </div>
             
             <FuelCardList 
-                cards={cards}
+                cards={displayCards}
                 loading={cardsLoading}
                 loadError={cardsLoadError}
                 drivers={drivers}
@@ -2306,12 +2487,12 @@ function FuelManagementInner({
           }}
           subtab={integritySubtab}
           onSubtabChange={setIntegritySubtab}
-          rows={flagsDeskRows}
+          rows={displayFlagsDeskRows}
           loading={!fuelLogsHydrated || (activeTab === 'integrity' && serverPeriodsPending)}
           dispositionsTruncated={flagDispositionsTruncated}
           canDisposition={can('fuel.edit_entry')}
           canAcceptCritical={can('fuel.accept_unexplained')}
-          vehicles={vehicles as Vehicle[]}
+          vehicles={integrityVehicles as Vehicle[]}
           fuelEntries={logs}
           trips={trips}
           adjustments={adjustments}
@@ -2421,7 +2602,8 @@ function FuelManagementInner({
       {activeTab === 'logs' && (
         <div className="space-y-4">
             <FuelLogTable
-                entries={logs}
+                entries={displayLogs}
+                allEntriesForConservation={logs}
                 transactions={transactions}
                 vehicles={vehicles}
                 onEdit={handleLogEdit}
@@ -2437,6 +2619,10 @@ function FuelManagementInner({
                 loadError={fuelLogsLoadError}
                 onRefresh={refreshLogs}
                 onAddFuel={() => setIsAddFuelChoiceOpen(true)}
+                unattributedCount={unattributedCountForUi ?? 0}
+                unattributedOnly={unattributedOnly}
+                onUnattributedOnlyChange={setUnattributedOnly}
+                deliveryEmpty={showTabs && apiFilter === 'rush_delivery' && displayLogs.length === 0}
             />
         </div>
       )}

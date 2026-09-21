@@ -51,6 +51,8 @@ export function useFuelWizardDerived(input: {
   leakageReviewed: boolean;
   odometerChainReviewed?: boolean;
   unattributedReviewed?: boolean;
+  /** Audited OVER-LOG accepts for this period (clears attribution when complete). */
+  stopToStopGapAccepts?: import('@roam/fuel-core').StopToStopGapAccept[] | null;
   /** Cash-desk: vehicle IDs marked reviewed on Data quality */
   dataQualityReviewedVehicleIds?: Set<string> | string[];
   vehicles: Vehicle[];
@@ -80,6 +82,7 @@ export function useFuelWizardDerived(input: {
     leakageReviewed,
     odometerChainReviewed = false,
     unattributedReviewed = false,
+    stopToStopGapAccepts = null,
     dataQualityReviewedVehicleIds,
     vehicles,
     drivers,
@@ -289,6 +292,7 @@ export function useFuelWizardDerived(input: {
           fuelEntries,
           weekStartYmd: periodStart,
           weekEndYmd: periodEnd,
+          gapAccepts: stopToStopGapAccepts,
         }),
       });
     },
@@ -310,6 +314,7 @@ export function useFuelWizardDerived(input: {
       periodEnd,
       vehicleSnaps,
       dataQualityReviewedVehicleIds,
+      stopToStopGapAccepts,
     ],
   );
 

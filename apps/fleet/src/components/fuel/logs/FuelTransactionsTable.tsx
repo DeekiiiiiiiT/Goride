@@ -38,6 +38,8 @@ import { FuelEntry } from '../../../types/fuel';
 import { Vehicle } from '../../../types/vehicle';
 import type { StationProfile } from '../../../types/station';
 import { formatFuelMoney } from '../../../utils/formatFuelMoney';
+import { fuelServiceLineUiLabel } from '../../../utils/vocabulary';
+import { serviceLineSourceLabel } from '../../../utils/fuelServiceLineFilter';
 import { resolveFuelEntrySource } from '../../../utils/fuelEntrySource';
 import { classifyFuelLogEdit } from '../../../utils/fuelLogEditGate';
 import { resolveFuelEntryStationDisplay } from '../../../utils/jaaStationDisplay';
@@ -174,6 +176,8 @@ export type FuelTransactionsTableProps = {
   onResolveSplitCash?: (entry: FuelEntry, splitSiblings?: FuelEntry[]) => void;
   onDelete: (id: string) => void;
   onPageChange: (page: number) => void;
+  /** Show service-line badge column (dual-line orgs). */
+  showLineColumn?: boolean;
 };
 
 export function FuelTransactionsTable({
@@ -202,6 +206,7 @@ export function FuelTransactionsTable({
   onResolveSplitCash,
   onDelete,
   onPageChange,
+  showLineColumn = false,
 }: FuelTransactionsTableProps) {
   const sortIndicator = (field: 'date' | 'amount' | 'liters' | 'odometer') => {
     if (sortField !== field) return null;
@@ -242,6 +247,9 @@ export function FuelTransactionsTable({
               </button>
             </TableHead>
             <TableHead>Paid By</TableHead>
+            {showLineColumn ? (
+              <TableHead className="hidden md:table-cell">Line</TableHead>
+            ) : null}
             <TableHead className="hidden md:table-cell">Station</TableHead>
             <TableHead className="hidden md:table-cell">Vehicle</TableHead>
             <TableHead className="hidden md:table-cell">Driver</TableHead>
@@ -413,6 +421,49 @@ export function FuelTransactionsTable({
                       )}
                     </div>
                   </TableCell>
+                  {showLineColumn ? (
+                    <TableCell className="hidden md:table-cell">
+                      {(() => {
+                        const line =
+                          entry.serviceLine ??
+                          (entry as { service_line?: string }).service_line ??
+                          null;
+                        const src =
+                          entry.serviceLineSource ??
+                          (entry as { service_line_source?: string }).service_line_source ??
+                          null;
+                        const label =
+                          line === 'rush_delivery'
+                            ? fuelServiceLineUiLabel('rush_delivery')
+                            : line === 'rideshare'
+                              ? fuelServiceLineUiLabel('rideshare')
+                              : fuelServiceLineUiLabel('unattributed');
+                        const tip =
+                          line === 'rush_delivery' || line === 'rideshare'
+                            ? `${label} — ${serviceLineSourceLabel(src)}`
+                            : 'Needs service-line attribution';
+                        return (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Badge
+                                variant="outline"
+                                className={
+                                  line === 'rush_delivery'
+                                    ? 'border-violet-200 bg-violet-50 text-violet-800'
+                                    : line === 'rideshare'
+                                      ? 'border-slate-200 bg-slate-50 text-slate-700'
+                                      : 'border-amber-200 bg-amber-50 text-amber-900'
+                                }
+                              >
+                                {label}
+                              </Badge>
+                            </TooltipTrigger>
+                            <TooltipContent>{tip}</TooltipContent>
+                          </Tooltip>
+                        );
+                      })()}
+                    </TableCell>
+                  ) : null}
                   <TableCell className="hidden md:table-cell">
                     {(() => {
                       const stationDisplay = resolveFuelEntryStationDisplay(

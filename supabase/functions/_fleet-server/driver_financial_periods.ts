@@ -1497,9 +1497,29 @@ export async function rebuildDriverFinancialPeriod(
         latestEarnings &&
         latestEarnings.status === "draft" &&
         JSON.stringify(latestEarnings.amountsMinor) === JSON.stringify(earningsAmountsMinor);
-      // Never draft-over-closed from rebuild (restatement spam).
-      if (latestEarnings?.status === "closed" || latestEarnings?.supersedes) {
-        /* keep standing seal */
+
+      // Closed earnings seal + late trip/ledger facts → restatement draft so Pass E
+      // does not stamp stale gross/cash onto DFP (Overview/Settlements drift).
+      if (latestEarnings?.status === "closed") {
+        const sealedGross = statementAmountMajor(latestEarnings, "gross");
+        const sealedCash = statementAmountMajor(latestEarnings, "passengerCash");
+        const diverged =
+          Math.abs(sealedGross - round2(earningsGross)) > 0.05 ||
+          Math.abs(sealedCash - round2(Math.max(0, cashCollected))) > 0.05;
+        if (diverged) {
+          await publishWeekStatement({
+            kind: "earnings",
+            organizationId: organizationIdResolved,
+            driverId,
+            weekKey: periodAnchor,
+            amountsMinor: earningsAmountsMinor,
+            sourceRowIds,
+            status: "draft",
+            allowRestatementDraft: true,
+            closedBy: null,
+            closeReason: "late_trip_backfill_restatement",
+          });
+        }
       } else if (!unchanged) {
         await publishWeekStatement({
           kind: "earnings",

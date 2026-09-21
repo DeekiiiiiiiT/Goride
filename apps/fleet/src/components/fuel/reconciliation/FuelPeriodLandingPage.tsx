@@ -37,6 +37,8 @@ function StepStatusCell({
   const label = FUEL_STEP_LABELS[stepId];
   const { actionable, informational } = counts[stepId];
   const unevaluated = actionable === 0 && informational > 0;
+  // "Not evaluated" = open week with no persisted counts (fabricated informational=1).
+  // Persisted clear steps are {0,0} → green Done.
   const isClear = actionable === 0 && !unevaluated;
   let statusText = unevaluated
     ? 'Not evaluated'
