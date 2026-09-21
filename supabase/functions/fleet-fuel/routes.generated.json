@@ -1,7 +1,7 @@
 {
   "slug": "fleet-fuel",
-  "generatedAt": "2026-09-19T16:07:24.411Z",
-  "routeCount": 193,
+  "generatedAt": "2026-09-21T07:38:57.070Z",
+  "routeCount": 196,
   "routes": [
     "DELETE ${BASE_PATH}/admin/evidence-inbox/gate-held/:transactionId",
     "DELETE ${BASE_PATH}/finalized-reports/:weekStart/:identityId",
@@ -119,6 +119,7 @@
     "POST ${BASE_PATH}/finalized-reports/sync-expenses",
     "POST ${BASE_PATH}/fuel-cards",
     "POST ${BASE_PATH}/fuel-entries",
+    "POST ${BASE_PATH}/fuel-entries/set-service-line",
     "POST ${BASE_PATH}/fuel-pnl-offset-backfill/backfill",
     "POST ${BASE_PATH}/fuel/ensure-posted-entries",
     "POST ${BASE_PATH}/fuel/split-fill",
@@ -156,6 +157,8 @@
     "POST ${BASE}/fuel/periods/:id/odometer-chain-review",
     "POST ${BASE}/fuel/periods/:id/reopen",
     "POST ${BASE}/fuel/periods/:id/second-approve",
+    "POST ${BASE}/fuel/periods/:id/stop-to-stop-gap-accept",
+    "POST ${BASE}/fuel/periods/:id/stop-to-stop-gap-accept/revoke",
     "POST ${BASE}/fuel/periods/:id/unattributed-review",
     "POST ${BASE}/fuel/periods/auto-close",
     "POST ${BASE}/fuel/periods/backfill",

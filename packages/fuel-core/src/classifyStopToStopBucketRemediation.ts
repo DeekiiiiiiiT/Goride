@@ -110,20 +110,20 @@ export function sortBucketsForRemediation<T extends Parameters<typeof classifySt
   });
 }
 
-export function summarizeStopToStopRemediation(
-  buckets: Array<
-    Parameters<typeof classifyStopToStopBucketRemediation>[0] & {
-      id?: string;
-      vehicleId?: string;
-      startOdometer?: number;
-      endOdometer?: number;
-      endDate?: string;
-    }
-  >,
+export function summarizeStopToStopRemediation<
+  T extends Parameters<typeof classifyStopToStopBucketRemediation>[0] & {
+    id?: string;
+    vehicleId?: string;
+    startOdometer?: number;
+    endOdometer?: number;
+    endDate?: string;
+  },
+>(
+  buckets: T[],
   plateHint?: string,
   opts?: {
     /** When set, accepted OVER-LOG windows are excluded from the count. */
-    isAccepted?: (b: (typeof buckets)[number]) => boolean;
+    isAccepted?: (b: T) => boolean;
     /** When true, copy is week-scoped (not “this vehicle”). */
     weekScope?: boolean;
   },

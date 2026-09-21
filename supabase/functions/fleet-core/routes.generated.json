@@ -1,7 +1,7 @@
 {
   "slug": "fleet-core",
-  "generatedAt": "2026-09-19T16:07:24.493Z",
-  "routeCount": 578,
+  "generatedAt": "2026-09-21T07:38:57.152Z",
+  "routeCount": 579,
   "routes": [
     "ALL /make-server-37f42386/webhooks/wipay-fleet-modules",
     "DELETE ${ADMIN_CAT}/:id",
@@ -398,6 +398,7 @@
     "POST /make-server-37f42386/admin/fix-anomaly-flags",
     "POST /make-server-37f42386/admin/fix-corrupted-types",
     "POST /make-server-37f42386/admin/force-logout",
+    "POST /make-server-37f42386/admin/fuel-audit/re-resolve-service-lines",
     "POST /make-server-37f42386/admin/fuel-audit/recalculate-all",
     "POST /make-server-37f42386/admin/fuel-audit/resolve",
     "POST /make-server-37f42386/admin/fuel-stations",
