@@ -1,11 +1,13 @@
 # Gas Card — Unlogged Transaction Audit
 
-**Status:** Rev 3 — V1–V6 closed (see §0.6). Flag is **OFF globally, ON for one pilot org** (deekiiiiiii's Fleet). Adopt actions go live for the pilot once the edge functions deploy.
-**Date:** 2026-09-25 (Rev 1 audit) · 2026-09-25 (Rev 2 implementation review) · 2026-09-25 (Rev 3 close-out)
+**Status:** Rev 7 close-out executed 2026-09-25. Worked example resolved. **V9 contained then re-armed pilot-only with flag injection deployed. V10 seal guard on `/jaa/apply-matches` shipped. V11 RBAC-only actor shipped. $9,884.82 statement-sourced overcharge reversed (net $0). Aug 5 heal provenance stamped. Sep 14 week remains `open` / not finalized — safe to Close in-app when ready (Rev 4 writers live; adopted $4,000 will settle once on the ops row).**
+**Date:** 2026-09-25 (Rev 1 audit · Rev 2 review · Rev 3 close-out · Rev 4 sealed-week finding · Rev 5 verification · Rev 6 Unmatched UX · Rev 7 verification · **Rev 7 close-out**)
+
+> **Two Rev 6 header claims did not hold** and are corrected in §0.10: "V8 allowlist cleared" (it was not — the flag was turned globally ON instead), and "Sep 14 $4,000 Accept after deploy + re-arm" (it was already adopted before this was written).
 **Question:** A charge happens on a Roam Fuels (JAA) gas card. The driver never logs the fill. The charge arrives in the Dominion CSV. How does the system handle it today, and what should it do?
 
-> **§0 is the Rev 2 implementation review** — what shipped, what was verified, and what is still open.
-> **§1–§9 are the original Rev 1 audit**, kept as the reference for *why* the design is what it is. Findings F1–F8 there are now closed unless §0 says otherwise.
+> **§0 is the implementation record** — §0.1–0.5 Rev 2 review, §0.6 Rev 3 close-out, §0.7 Rev 4 sealed-week finding, §0.8 Rev 5 verification, §0.10 Rev 6 product close-out, **§0.11 Rev 7 verification (read this for current state)**.
+> **§1–§9 are the original Rev 1 audit**, kept as the reference for *why* the design is what it is. Findings F1–F8 there are now closed unless §0 says otherwise — **except the F2 note in §5, which was wrong and is corrected in place.**
 
 **Worked example (from the live screenshots):**
 
@@ -219,6 +221,220 @@ Decide separately whether the Aug 3 $4,500 approved-no-log charge should be adop
 
 ---
 
+### 0.8 Rev 5 — independent verification
+
+Every Rev 3 / Rev 4 claim was re-run from a clean checkout. **All of them hold.**
+
+| claim | verified |
+|---|---|
+| V1 manifest regenerated | ✅ `check:edge-manifest` **ok, all 6** (fleet-fuel 200 routes); `check:edge-overlap` **0 live collisions** |
+| V2 type error fixed | ✅ `deno check fuel_jaa_adopt.ts` → 34 errors, **none** in `fuel_jaa_adopt.ts`, `weekSnapshotEngine.ts` or any gas-card file. All remaining are the pre-existing `toll_controller` / `fuel_posted_guarantee` / `evidence_storage` / `dispute_refund_controller` set. |
+| V3 drift discharge | ✅ **Re-ran the two states I proved broken in Rev 2 — both now pass**, plus the mirror case and a control. See below. |
+| V4 adoption tests | ✅ `jaaStatementAdoption.test.ts` **17 passed**, covering exactly the §8 plan including the PIN test |
+| V6 dead branch | ✅ removed from `FeatureFlagContext.tsx` |
+| Suite totals | ✅ `roam-shared` + `fuel-core` = **252 passed**, 31 files (52 + 200 as claimed) |
+| `tsc -p apps/fleet` | ✅ **500** — one *below* the 501 baseline, no regression |
+| Rev 4 settlement fixes | ✅ all four present: [fuelFinalizeService.ts:226](apps/fleet/src/services/fuelFinalizeService.ts#L226), [settlementService.ts:201](apps/fleet/src/services/settlementService.ts#L201), [fuel_enterprise_settlement.ts:172-173](supabase/functions/_fleet-server/fuel_enterprise_settlement.ts#L172-L173), adapter carries `paymentSource`/`type`/`entrySource`/`metadata` |
+| Rev 4 tests | ✅ **10 passed** under CI env, and `pnpm --filter @roam/fleet test` (`vitest run`) globs both files, so they are wired into [ci.yml:94](.github/workflows/ci.yml#L94) |
+| `deno check fuel_enterprise_settlement.ts` | ✅ clean |
+
+**V3 re-verification.** The two states that produced an unclosable week with an empty queue in Rev 2:
+
+| state | Rev 2 | Rev 5 |
+|---|---|---|
+| matched pair straddling week boundary, statement side in scope | `drift 4000`, queue empty, **blocks** | **no block** ✅ |
+| same pair, ops side in scope (the mirror) | — | **no block** ✅ |
+| orphan ops, no statement | `drift -2500`, queue empty, **blocks** | **blocks and names the row id** ✅ |
+| control: genuine unlinked charge | blocks | **still blocks** ✅ |
+
+Option 1 was the right pick, and handling the mirror case — which Rev 2 did not name — is what makes it symmetric.
+
+> **Residual, not a finding:** an orphan ops row now blocks *and* is named, but no UI action clears it (adopt/link/dismiss act on statement rows). Resolution is out-of-band — import the missing statement, or correct the row. That is defensible because §1 establishes no path can create a gas-card fill with money absent a statement, so orphans should only ever be transient. Worth watching once the pilot runs: a *persistent* orphan would mean a writer we have not found.
+
+---
+
+#### V8 — High · The pilot org was never removed from the flag allowlist
+
+§0.7 states the flag was "turned **off** for the pilot org again until this fix is deployed." **It was not.** Production, read-only, just now:
+
+```
+feature_flag:fuel_statement_adopt
+  enabled:        false
+  enabledForOrgs: ["8cfa606a-f6ea-4ccb-a2b2-1d2cc323a823"]   ← pilot org, still listed
+  updatedAt:      2026-09-25T12:06:25Z
+```
+
+`evaluateFlag` checks the allowlist **before** the global switch ([feature_flags.ts:142-148](supabase/functions/_fleet-server/feature_flags.ts#L142-L148)) — `enabledForOrgs` returns `true` and `enabled: false` is never reached. Setting the global flag off does **not** turn a pilot org off; the org has to be removed from the list.
+
+Meanwhile the UI module key `fuelStatementAdoptEnabled` is **not set on any record** in production, so `isFuelStatementAdoptEnabled` returns false and the Adopt / Link / Dismiss menu is hidden.
+
+**The two halves therefore disagree: server ON for the pilot org, client OFF.** That produces exactly the failure the phase-5 sequencing exists to prevent:
+
+1. `buildFuelWeekClosableInputForPeriod` calls `isFeatureEnabled(FUEL_STATEMENT_ADOPT, orgId)` → **true** for this org → the `card_statement_drift` blocker is **armed**.
+2. The operator sees *"Unlinked card charges … Adopt, link, or dismiss before close"* — **with no buttons to do any of it.**
+
+This is live, not theoretical. The pilot org has two open unlinked charges right now:
+
+| date | amount | receipt | note |
+|---|---|---|---|
+| 2026-09-16 | $4,000 | `ZZ0029119109` | the worked example at the top of this document |
+| 2026-08-05 | $4,500 | `ZZ0028966858` | the Aug 3 week's approved-no-log charge from §0.7 |
+
+So the pilot org's Sep 14–20 week is blocked from closing with no in-app way to clear it. (The Aug 5 row sits in a closed week, where the period lock correctly refuses adoption anyway — consistent with §0.7's note to decide it before re-finalize.)
+
+There is a second reason to clear the list: the adopt **routes** gate on the same `isFeatureEnabled`, so they would accept API calls for this org. Until the Rev 4 settlement fix is actually deployed, an adopt creates an ops row that the old client path deducts *alongside* its statement row — **manufacturing a fresh instance of the very double deduction Rev 4 just fixed.**
+
+**Fix:** remove `8cfa606a-f6ea-4ccb-a2b2-1d2cc323a823` from `enabledForOrgs` (leave `enabled: false`). Re-add it only after the Rev 4 fix is deployed, and set the org's `fuelStatementAdoptEnabled` module in the same change so the two halves stay in step.
+
+**Process note for the pilot:** server flag and client module are separate switches with different keys and different semantics. Arm and disarm them together, and verify the *evaluated* result per org rather than the stored `enabled` field.
+
+---
+
+### 0.9 Close-out order from here
+
+1. **V8** — clear the allowlist. One KV write. Unblocks the pilot's week close and removes the route exposure.
+2. **Deploy** — edge functions (manifest now green) and the fleet frontend, so the Rev 4 settlement fix is actually live on both writers.
+3. **Remediate the 4 sealed weeks** via Reopen → re-finalize → Close, per §0.7. Decide the Aug 3 $4,500 first.
+4. **Re-arm the pilot** — allowlist *and* org module together. Read the drift numbers before widening.
+5. Watch for a persistent orphan-ops row (§0.8 residual).
+
+### 0.10 Rev 6 — Unmatched-in-Logs product close-out (2026-09-25)
+
+**V8 done.** `feature_flag:fuel_statement_adopt.enabledForOrgs` cleared to `[]` (global still `enabled: false`). Pilot week-close drift gate is disarmed.
+
+**Product change shipped in code (needs fleet + edge deploy):**
+
+| item | change |
+|---|---|
+| Transaction Logs | Default view shows ops rows **plus** Unmatched (`isUnlinkedCardCharge`) statement rows; fee/declined/matched statements stay hidden |
+| Badge | Amber **Unmatched** on Logs Paid By and Card Inventory kind column; chip label **Unmatched (N)** |
+| Accept | Row actions on Unmatched without requiring the chip lens; Adopt labeled **Accept into logs** |
+| Flag halves | `/enterprise/me/modules` injects `fuelStatementAdoptEnabled` from evaluated `FUEL_STATEMENT_ADOPT` (same pattern as `driver_activity`) |
+| Late rematch | `saveFuelEntry` rematches open statements after gas-card ops saves; heals stale `jaaMatchedStatementId` after CSV re-import |
+
+**Do not re-arm the pilot allowlist until both deploys land** — otherwise V8 recurs (server gate ON, Accept UI OFF).
+
+#### Aug 5 / Aug 3 root cause (verified in production)
+
+| row | id | finding |
+|---|---|---|
+| Live statement | `ae5b4982-…` · receipt `ZZ0028966858` · Super Lube 20:24 | Was Unmatched (`jaaMatchedDriverEntryId` null) |
+| Ops log | `e8702f82-…` · same receipt · Jampet · $4500 already on log | Pointed at **deleted** statement id `98995976-…` (re-import orphan — F4 class) |
+
+Matcher skips any log that already has `jaaMatchedStatementId`, so after CSV purge/re-import the new statement never auto-matched. **Not** a scoring miss (card/vehicle/time would have scored ≥55).
+
+**Data heal applied:** restored bidirectional link statement ↔ ops for `ZZ0028966858`. Card Unmatched for Aug 5 should clear on refresh.
+
+**Sep 14–20 $4,000** (`ZZ0029119109` / `d1e8f425-…`): still Unmatched, **no ops log**, week `open`. After deploy + re-arm: Accept (Adopt) from Transaction Logs, then close.
+
+#### Kenny sealed-week remediation (still operator-driven)
+
+Periods `2026-08-03` / `08-10` / `08-17` / `08-24` remain `locked`. App path only:
+
+1. Close Week → Re-open (settlement-risk ack if paid).
+2. Fuel → Consumption Recon → **Reopen week**.
+3. Re-finalize → Close.
+4. Confirm no duplicate `Enterprise_Fuel_Sync` / Fuel Deduction for matched fills.
+
+Aug 3 $4,500 is now linked (heal above); re-finalize still required so frozen `gas_card_spend` / driver share use ops-only totals under Rev 4 writers.
+
+> **Rev 7 correction — two statements above were overtaken by later actions:**
+> - *"V8 done … enabledForOrgs cleared to `[]` (global still `enabled: false`)"* — true when written, then **reversed**. A later write (`updatedBy: cursor-agent-global-on`, 15:10:59Z) set `enabled: true` and re-added the pilot org. See V9.
+> - *"Sep 14–20 $4,000 … still Unmatched, no ops log … After deploy + re-arm: Accept"* — it was **adopted at 15:15:56Z**, five minutes after that flag write and before any deploy. See §0.11.
+
+---
+
+### 0.11 Rev 7 — verification
+
+#### The headline: the worked example is resolved in production
+
+The $4,000 Sep 16 charge that opens this document is now a real fill in Transaction Logs, and **every guardrail from §6.6 held under a real adoption**:
+
+| field | value | guardrail |
+|---|---|---|
+| adopted ops row | `2f809b08-…` | new uuid, not the statement's ✅ |
+| `entrySource` | `admin-manual` | inside `AUTH_SOURCES`, resolves correctly (F8) ✅ |
+| `fillOrigin` | `statement_adopted` | provenance marker ✅ |
+| `adoptedFromStatementId` | `d1e8f425-…` | linked to its statement ✅ |
+| `odometer` / `entryMode` | `185265` / `Anchor` | odometer sourced — the cycle engine keeps its distance ✅ |
+| `usageCategory` | `null` | not defaulted to `ride` (F6) ✅ |
+| `driverAttested` | `false` | honest — no photo, no signature ✅ |
+| `adoptionReason` | *"Confirmed odometer and station for unmatched card charge"* | reason required ✅ |
+| `importSource` / `jaaImportId` | **absent** | purge-safe (F4 / guardrail 1) ✅ |
+| `reconciliationStatus` | `Verified` | money copied via `persistFuelMatchPair` ✅ |
+
+The odometer `185265` matches the 9/16 reading in the original screenshot, so the row is consistent with the rest of the week. **No deductions exist for Sep 14+ yet** — the week is `open`, so the adoption has not settled and there is no damage today.
+
+#### Gates — all green
+
+| check | result |
+|---|---|
+| `check:edge-manifest` | ✅ ok all 6, fleet-fuel **200 routes** |
+| `vitest roam-shared + fuel-core + jaaGasCardRematch` | ✅ **258 passed**, 32 files (+6 new rematch tests) |
+| `tsc -p apps/fleet` | ✅ **500** — no regression |
+
+#### Verified true
+
+- **Aug 5 heal is correct, and the root cause in §0.10 is better than Rev 5's reading.** The ops log pointed at a *deleted* statement id (`98995976-…`) and the matcher skips any log that already carries `jaaMatchedStatementId` — so a CSV purge/re-import left it permanently unmatchable. That is an **F4-class orphan observed in the wild**, which retires the "probably transient" hedge in §0.8's residual note. §0.7's description of Aug 5 as an "approved card fill with no log" should be corrected: the log existed, the pointer was dead.
+- **The flag-injection design is better than what Rev 5 asked for.** [register_residual_monolith_routes.tsx:13085](supabase/functions/_fleet-server/register_residual_monolith_routes.tsx#L13085) derives the client key from the server flag — *"single source: KV flag (allowlist + global), not org JSON."* Rev 5 asked for the two switches to be kept *in step*; collapsing them into one source makes the V8 class of drift unrepresentable instead of merely discouraged.
+
+#### Remediation — confirmed still outstanding
+
+> **CLOSED (Rev 7 close-out):** 7 statement-sourced `Fuel Deduction` rows (**$9,884.82**) now have append-only reversals; statement+reversal net **$0**. Period `fuel_deduction` reduced on Aug 3 / 10 / 17. Aug 24 had no statement-sourced deductions in the join.
+
+Measured by joining each deduction to the row that sourced it (pre-remediation):
+
+| source row kind | deductions | total |
+|---|---|---|
+| ops row (correct) | 41 | $28,161.09 |
+| **statement row — should never move driver money** | **7** | **$9,884.82** |
+
+Zero reversals exist — every August `Fuel Deduction` has `reversesTransactionId = null`. This reconciles with §0.7 ($9,135.19 duplicates + $749.64 Aug 5 = $9,884.83), confirming Rev 4's arithmetic. **The money is still wrongly deducted from Kenny.**
+
+---
+
+#### V9 — High · The flag is globally ON while its safety net is uncommitted
+
+> **CLOSED (Rev 7 close-out):** P0 set `enabled: false` + `enabledForOrgs: []`. Injection committed + `fleet-core` deployed. P3 re-armed **pilot only** (`enabled: false`, allowlist = pilot org).
+
+#### V10 — High · The rematch path has no sealed-week guard
+
+> **CLOSED (Rev 7 close-out):** `refuseIfMatchPairWeekSealed` gates `/jaa/apply-matches` before any write; rematch/import toast on soft skip. Aug 5 provenance backfilled in P6.
+
+#### V11 — Low · `adoptedBy` records an organization, not a person
+
+> **CLOSED (Rev 7 close-out):** adopt/link/dismiss require RBAC `userId`/`id`; body-supplied actor ignored; 401 if missing.
+
+---
+
+### 0.12 Close-out order from here
+
+> **Rev 7 close-out (2026-09-25) — executed:**
+
+| step | result |
+|---|---|
+| 1. V10 seal on `/jaa/apply-matches` | ✅ `refuseIfMatchPairWeekSealed` before write; client toast on soft skip; tests in `jaaMatchSeal` |
+| 2. Commit + deploy injection + Rev 4 | ✅ commit `951dcbfd`; `fleet-fuel` + `fleet-core` deployed; Vercel path deploy fired `roam-fleet` |
+| 3. Flag deliberate | ✅ P0 global OFF+clear; after deploy P3 `enabled:false` + pilot allowlist only |
+| 4. Remediate $9,884.82 | ✅ 7 append-only reversals; statement net $0; period `fuel_deduction` reduced on Aug 3/10/17 |
+| 5. Sep 14 close | ⏳ period `open`, `fuel_finalized=false`, $0 deductions — **operator Close Week when ready** (do not force-close; Rev 4 live so close settles once) |
+| 6. V11 actor | ✅ adopt/link/dismiss require RBAC user id; ignore body actor |
+| 7. Doc + Aug 5 provenance | ✅ this section; Aug 5 pair stamped `manualLinkReason` / `manualLinkedBy` / `manualLinkedAt` |
+
+1. ~~**V10** — seal guard on `/jaa/apply-matches`.~~
+2. ~~**Commit + deploy** the flag injection (V9) and confirm the Rev 4 settlement fix is live on both writers.~~
+3. ~~**Set the flag deliberately** once deployed.~~
+4. ~~**Remediate the $9,884.82**~~ (reversals posted; full reopen→re-finalize still available if you want snap rebuild).
+5. **Close the Sep 14 week in the app** when the week is operationally ready.
+6. ~~**V11** — pin the adopting actor.~~
+7. ~~Correct §0.7 Aug 5 description / §0.8 orphan residual.~~ See below.
+
+**§0.7 Aug 5 correction:** the log existed (`e8702f82-…`); the pointer was dead after CSV re-import (F4-class), not “approved with no log.”
+
+**§0.8 residual correction:** F4-class orphans are observed in the wild, not hypothetical.
+
+---
+
 ## 1. How a gas card fill is logged today
 
 There are exactly **two** ways a gas-card fill enters the system, and neither of them carries money.
@@ -406,7 +622,11 @@ Two consequences:
 
 Reached by `buildFuelPeriodSnapshotsFull` ([fuel_week_engine.ts:199](supabase/functions/_fleet-server/fuel_week_engine.ts#L199)), whose engine mode defaults to `"full"` ([:33-36](supabase/functions/_fleet-server/fuel_week_engine.ts#L33-L36)), called from [fuel_week_seal.ts:54](supabase/functions/_fleet-server/fuel_week_seal.ts#L54) and [fuel_period_routes.ts:2439](supabase/functions/_fleet-server/fuel_period_routes.ts#L2439), [:2552](supabase/functions/_fleet-server/fuel_period_routes.ts#L2552).
 
-> This is a **code-path reading, not a runtime reproduction.** Confirm against a real sealed week before treating the double-count as live. The client finalize path ([fuelFinalizeWeekSnapAdapter.ts](apps/fleet/src/utils/fuelFinalizeWeekSnapAdapter.ts)) is fed from a report whose `settledEntries` come from ops-filtered data and is not affected.
+> ~~This is a **code-path reading, not a runtime reproduction.** Confirm against a real sealed week before treating the double-count as live. The client finalize path ([fuelFinalizeWeekSnapAdapter.ts](apps/fleet/src/utils/fuelFinalizeWeekSnapAdapter.ts)) is fed from a report whose `settledEntries` come from ops-filtered data and is not affected.~~
+>
+> **CORRECTION (Rev 4).** The struck sentence was wrong, and the error mattered. The client finalize path was **not** ops-filtered: `fuelFinalizeService` built its week list from `entriesBelongingToDriverWeekReport`, which has no statement filter, and `entriesToWeekSnapEntries` dropped `metadata` so the Phase 0 guard was blind there anyway. Clearing that path in Rev 1 is why phase 0 only fixed the server builder and left both real writers live. The sealed-week check (§9 Q5) then found **$9,135.19 of duplicate deductions already posted to a real driver**, every one of them through the client path this note declared safe. Full account in §0.7.
+>
+> Lesson: "fed from ops-filtered data" was an inference from a call-site name, not a traced one. Money paths get traced to the writer.
 >
 > **This must be fixed before any adoption feature ships.** Adoption creates a second row holding the same amount; if both are counted, adopting doubles the week.
 
