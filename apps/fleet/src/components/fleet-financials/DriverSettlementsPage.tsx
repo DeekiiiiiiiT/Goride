@@ -1,7 +1,7 @@
 /**
  * Business Finance ? Driver Settlements
- * Fleet-wide Collect (Log Cash) + Pay (Record Payout) queue ó same txs as Cash Wallet.
- * Hub tabs: Cash desk ∑ Close Week ∑ Restatements.
+ * Fleet-wide Collect (Log Cash) + Pay (Record Payout) queue ù same txs as Cash Wallet.
+ * Hub tabs: Cash desk ù Close Week ù Restatements.
  */
 import React, { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -67,6 +67,10 @@ import {
 } from './settlements';
 import { settlementCommandsApi, isSettlementCommandUnavailable, isPeriodFrozenError, isMoneyLockedError } from '../../services/settlementCommandsApi';
 import { useSettlementCommands, newIdempotencyKey } from '../../hooks/useSettlementCommands';
+import {
+  CashGateError,
+  collectCashPayment,
+} from '../../hooks/useCashCollection';
 import { useServiceLineScopeParam } from '../../hooks/useServiceLineScopeParam';
 import {
   RecordPayoutModal,
@@ -166,10 +170,10 @@ type PeriodRow = {
   fuelFinalized?: boolean;
   /** collect queue source */
   collectKind?: 'driver_owes' | 'cash_held';
-  /** Fleet overpay flag ó badge only. */
+  /** Fleet overpay flag ù badge only. */
   overpaidAmount?: number;
   cashSourceMismatch?: number;
-  /** Close Week freeze ó dual-stamp on Reconciled. */
+  /** Close Week freeze ù dual-stamp on Reconciled. */
   periodFrozen?: boolean;
   metadata?: Record<string, unknown> | null;
 };
@@ -192,7 +196,7 @@ type ReconciledListRow = PeriodRow & {
 };
 
 const MONEY = (n: number | null | undefined) => {
-  if (n == null || !Number.isFinite(n)) return 'ó';
+  if (n == null || !Number.isFinite(n)) return 'ù';
   const body = Math.abs(n).toLocaleString(undefined, {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
@@ -240,13 +244,13 @@ function compareBySettlementWeekDesc(
   return String(a.driverId || '').localeCompare(String(b.driverId || ''));
 }
 
-/** R-3: fail closed when commands are down ó never fall back to saveTransaction. */
+/** R-3: fail closed when commands are down ù never fall back to saveTransaction. */
 function failIfCommandsUnavailable(err: unknown, actionLabel: string): never {
   if (!isSettlementCommandUnavailable(err)) {
     toast.error(err instanceof Error ? err.message : `${actionLabel} failed`);
     throw err;
   }
-  toast.error('Settlement commands unavailable ó redeploy fleet-server');
+  toast.error('Settlement commands unavailable ù redeploy fleet-server');
   throw err;
 }
 
@@ -303,7 +307,7 @@ function queueToReconciledRow(r: SettlementQueueRow): ReconciledListRow {
 }
 
 function queueOwedMajor(r: SettlementQueueRow, mode: MoneyDirection): number {
-  // Pay: settlementAmount is already residual ó ignore amountOwed so a bad queue cannot understate.
+  // Pay: settlementAmount is already residual ù ignore amountOwed so a bad queue cannot understate.
   if (mode === 'pay') return resolvePayQueueOwed(r);
   if (r.amountOwed != null && Number.isFinite(r.amountOwed)) return Math.max(0, Number(r.amountOwed));
   if (r.amountOwedMinor != null) return Math.max(0, (Number(r.amountOwedMinor) || 0) / 100);
@@ -323,7 +327,7 @@ function txToMovementRow(t: FinancialTransaction, kind: 'collect' | 'pay'): Sett
     status: t.status,
     date: t.date,
     periodAnchor,
-    // MonñSun week label ó never collapse end to the Monday anchor.
+    // MonùSun week label ù never collapse end to the Monday anchor.
     periodEnd: storedEnd && storedEnd !== periodAnchor ? storedEnd : periodEndForAnchor(periodAnchor),
     reference: t.referenceNumber,
     description: t.description,
@@ -366,7 +370,7 @@ function mapApiMovementToRow(r: {
     status: r.status,
     date: r.createdAt ? String(r.createdAt).slice(0, 10) : undefined,
     periodAnchor: ymdKey(r.periodAnchor),
-    // Movements store Monday only ó derive Sunday so Done shows Aug 24ñ30, not 24ñ24.
+    // Movements store Monday only ù derive Sunday so Done shows Aug 24ù30, not 24ù24.
     periodEnd: periodEndForAnchor(ymdKey(r.periodAnchor)),
     reference: r.reference || undefined,
     description: r.reason || undefined,
@@ -397,7 +401,7 @@ export function DriverSettlementsPage({
   onNavigate?: (page: string, opts?: SettlementsNavigateOpts) => void;
   initialHubTab?: SettlementsHubTab | null;
   initialWeekKey?: string | null;
-  /** Close Week Review Settlement ó cash desk week bounds. */
+  /** Close Week Review Settlement ù cash desk week bounds. */
   initialCashWeekFrom?: string | null;
   initialCashWeekTo?: string | null;
   initialCashDriverId?: string | null;
@@ -601,7 +605,7 @@ export function DriverSettlementsPage({
     groupBy: 'week' as const,
   };
 
-  // R-9: single read model ó collect + pay always (KPI + lists); reconciled on demand
+  // R-9: single read model ù collect + pay always (KPI + lists); reconciled on demand
   const collectQueueQuery = useSettlementQueue(
     { view: 'collect', ...queueParamsBase },
     { enabled: true },
@@ -658,7 +662,7 @@ export function DriverSettlementsPage({
   const txsQuery = useQuery({
     queryKey: ['driverSettlementsTransactions', rangeWeekFrom ?? '', rangeWeekTo ?? '', scope, allOpen],
     queryFn: async () => {
-      // Desk Done/Awaiting only ó not the reconciled overlay (P-4).
+      // Desk Done/Awaiting only ù not the reconciled overlay (P-4).
       const page = await api.getTransactions(undefined, {
         limit: 1000,
         offset: 0,
@@ -672,7 +676,7 @@ export function DriverSettlementsPage({
     enabled: deskMode === 'collect' || deskMode === 'pay',
   });
 
-  // P-4: overlay txs scoped to driver + week ó never the 5k desk dump.
+  // P-4: overlay txs scoped to driver + week ù never the 5k desk dump.
   const overlayTxsQuery = useQuery({
     queryKey: [
       'reconciledOverlayTxs',
@@ -710,7 +714,7 @@ export function DriverSettlementsPage({
       .filter(Boolean) as { id: string; name: string }[];
   }, [driversQuery.data]);
 
-  // R-4: queue rows for modals / selection ó KPI totals come from API totals + laneMetrics.
+  // R-4: queue rows for modals / selection ù KPI totals come from API totals + laneMetrics.
   const collectOutstanding = useMemo(() => {
     return (collectQueueQuery.data?.rows || [])
       .map(queueToPeriodRow)
@@ -899,7 +903,7 @@ export function DriverSettlementsPage({
       payQueueQuery.data?.page?.truncated,
   );
 
-  // Per-basis errors ó don't blank Collect KPIs when only the tx history query fails.
+  // Per-basis errors ù don't blank Collect KPIs when only the tx history query fails.
   const collectKpiError = collectQueueQuery.isError;
   const payKpiError = payQueueQuery.isError;
   const txKpiError = movementsQuery.isError && txsQuery.isError;
@@ -1032,7 +1036,7 @@ export function DriverSettlementsPage({
   const selectedTotal = selectedRows.reduce((s, r) => s + queueOwedMajor(r, direction), 0);
 
   const refreshAll = async () => {
-    // P-6: Refresh is invalidate-only ó repair is a separate explicit action.
+    // P-6: Refresh is invalidate-only ù repair is a separate explicit action.
     settlementCmds.invalidate();
     void qc.invalidateQueries({ queryKey: settlementKeys.all });
     void qc.invalidateQueries({ queryKey: ['driverSettlementsTransactions'] });
@@ -1218,11 +1222,11 @@ export function DriverSettlementsPage({
         toast.info('Sent for approval');
       }
     } catch (err) {
-      // Cutover: only when command endpoint is absent ó never on business 4xx.
+      // Cutover: only when command endpoint is absent ù never on business 4xx.
       if (isPeriodFrozenError(err)) {
         setPayoutModal((m) => ({ ...m, isOpen: false }));
         showPeriodFrozen(weekAnchor, payoutModal.driverName);
-        // Handled ó do not rethrow (RecordPayoutModal would toast the raw PERIOD_FROZEN text).
+        // Handled ù do not rethrow (RecordPayoutModal would toast the raw PERIOD_FROZEN text).
         return;
       }
       if (isMoneyLockedError(err)) {
@@ -1252,10 +1256,6 @@ export function DriverSettlementsPage({
     const beforeAmt = collectModal.maxAmount;
     let serverAfter: number | null = null;
     const amount = Math.abs(Number(payment.amount) || 0);
-    const overCollect = amount > beforeAmt + MONEY_EPS;
-    const overReason =
-      payment.notes?.match(/\[Over-collection\]\s*(.+)/i)?.[1]?.trim() ||
-      (overCollect ? String(payment.notes || '').trim() : undefined);
 
     // R-3: intentional float/adjustment only (no settlement command yet). Never a pay/collect fallback.
     if (payment.transactionType !== 'payment' || !weekStart) {
@@ -1273,31 +1273,26 @@ export function DriverSettlementsPage({
       await api.saveTransaction(newTx);
     } else {
       try {
-        const res = await settlementCommandsApi.collect({
+        const res = await collectCashPayment(qc, {
           driverId: collectModal.driverId,
           weekAnchor: weekStart,
           amount,
+          expectedOutstanding: beforeAmt,
           method: payment.paymentMethod,
           reference: payment.referenceNumber,
           note: payment.notes,
-          idempotencyKey: newIdempotencyKey(),
-          expectedOutstanding: beforeAmt,
-          ...(overCollect
-            ? { allowOverCollect: true, reason: overReason || 'Over-collection' }
-            : {}),
         });
-        const period = (res as { period?: Record<string, unknown> })?.period;
-        if (period) {
-          const owed = Math.max(
-            0,
-            Number(period.amountOwed) ||
-              Math.abs(Number(period.settlementAmount) || 0) ||
-              Number(period.cashStillHeld) ||
-              0,
-          );
-          serverAfter = owed;
-        }
+        serverAfter = res.afterOwed;
       } catch (err) {
+        if (err instanceof CashGateError) {
+          setCollectModal((m) => ({ ...m, isOpen: false }));
+          if (err.code === 'PERIOD_FROZEN') {
+            showPeriodFrozen(weekStart, collectModal.driverName);
+          } else {
+            showMoneyLocked(weekStart, collectModal.driverName);
+          }
+          return;
+        }
         if (isPeriodFrozenError(err)) {
           setCollectModal((m) => ({ ...m, isOpen: false }));
           showPeriodFrozen(weekStart, collectModal.driverName);
@@ -1329,7 +1324,7 @@ export function DriverSettlementsPage({
             : Math.max(0, beforeAmt - amount);
       const reduced = Math.round((beforeAmt - afterAmt) * 100) / 100;
       toast.success(
-        `Collected ${MONEY(payment.amount)} ∑ owed ${MONEY(beforeAmt)} ? ${MONEY(afterAmt)} (changed by ${MONEY(reduced)})`,
+        `Collected ${MONEY(payment.amount)} ù owed ${MONEY(beforeAmt)} ? ${MONEY(afterAmt)} (changed by ${MONEY(reduced)})`,
         { duration: 7000 },
       );
     }
@@ -1409,7 +1404,7 @@ export function DriverSettlementsPage({
     const liveKeys = new Set(outstandingQueueRows.map((r) => rowKey(r)));
     const vanished = keysAtOpen.filter((k) => !liveKeys.has(k));
     if (vanished.length > 0) {
-      toast.error(`${vanished.length} rows no longer outstanding ó reselect`);
+      toast.error(`${vanished.length} rows no longer outstanding ù reselect`);
       setSelected((prev) => {
         const next = new Set(prev);
         for (const k of vanished) next.delete(k);
@@ -1492,7 +1487,7 @@ export function DriverSettlementsPage({
               || '').slice(0, 10);
           showMoneyLocked(week, selectedRows[0]?.driverName);
         } else {
-          toast.error(`${failed} failed ∑ ${firstErr}`);
+          toast.error(`${failed} failed ù ${firstErr}`);
         }
       }
       setBatchOpen(false);
@@ -1612,7 +1607,7 @@ export function DriverSettlementsPage({
             fallback={
               <div className="flex h-40 items-center justify-center text-sm text-slate-500">
                 <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                Loading close weekÖ
+                Loading close weekù
               </div>
             }
           >
@@ -1629,7 +1624,7 @@ export function DriverSettlementsPage({
             fallback={
               <div className="flex h-40 items-center justify-center text-sm text-slate-500">
                 <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                Loading restatementsÖ
+                Loading restatementsù
               </div>
             }
           >
@@ -1657,7 +1652,7 @@ export function DriverSettlementsPage({
           role="status"
           className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950"
         >
-          Some settlement weeks are missing org tags and are hidden from totals ó refresh after
+          Some settlement weeks are missing org tags and are hidden from totals ù refresh after
           repair.
           <span className="ml-1 text-amber-800/80">
             ({nullOrgPeriodCount} untagged week{nullOrgPeriodCount === 1 ? '' : 's'})
@@ -1809,14 +1804,14 @@ export function DriverSettlementsPage({
           fleetOwesError={payQueueQuery.isError}
           awaitingError={txKpiError}
           clearedError={txKpiError}
-          settledOwesSub={`${settledOwesWeekCount} weeks ∑ ${rangeScopeLabel}`}
-          cashHeldSub={`${cashHeldWeekCount} weeks ∑ ${rangeScopeLabel}`}
-          fleetOwesSub={`${fleetOwesWeekCount} weeks ∑ ${rangeScopeLabel}`}
+          settledOwesSub={`${settledOwesWeekCount} weeks ù ${rangeScopeLabel}`}
+          cashHeldSub={`${cashHeldWeekCount} weeks ù ${rangeScopeLabel}`}
+          fleetOwesSub={`${fleetOwesWeekCount} weeks ù ${rangeScopeLabel}`}
           awaitingSub={`${awaitingRows.length} pending (${direction})`}
           clearedSub={
             direction === 'pay'
-              ? 'Payouts since Mon ∑ ignores week filter'
-              : 'Collections since Mon ∑ ignores week filter'
+              ? 'Payouts since Mon ù ignores week filter'
+              : 'Collections since Mon ù ignores week filter'
           }
           directionLabels={{
             awaiting: 'Awaiting bank clear',
@@ -1830,7 +1825,7 @@ export function DriverSettlementsPage({
           role="status"
           className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950"
         >
-          Totals may be incomplete ó narrow the week range for exact numbers.
+          Totals may be incomplete ù narrow the week range for exact numbers.
         </div>
       ) : null}
 
@@ -1841,7 +1836,7 @@ export function DriverSettlementsPage({
         >
           {txKpiError && !collectKpiError && !payKpiError
             ? 'Payment history (Awaiting / Done / Cleared) failed to load. Collect and Pay queues below may still be valid.'
-            : 'Could not load some settlement queues. Totals marked ìFailed to loadî are not zero ó refresh or try again.'}
+            : 'Could not load some settlement queues. Totals marked ùFailed to loadù are not zero ù refresh or try again.'}
           <Button
             type="button"
             variant="outline"
@@ -1867,7 +1862,7 @@ export function DriverSettlementsPage({
             <div className="space-y-1">
               <h3 className="text-sm font-semibold text-slate-900">Reconciled weeks</h3>
               <p className="text-xs text-slate-500">
-                Closed Settlement Weeks ó click a row for Fleet vs Driver breakdown.
+                Closed Settlement Weeks ù click a row for Fleet vs Driver breakdown.
               </p>
             </div>
             <ReconciledTable
@@ -2252,7 +2247,7 @@ export function DriverSettlementsPage({
               setBatchOpen(true);
             }}
           >
-            {direction === 'collect' ? 'Collect' : 'Pay'} selected ({selectedRows.length}) ∑ {MONEY(selectedTotal)}
+            {direction === 'collect' ? 'Collect' : 'Pay'} selected ({selectedRows.length}) ù {MONEY(selectedTotal)}
           </Button>
         </div>
       ) : null}
@@ -2271,7 +2266,7 @@ export function DriverSettlementsPage({
           <DialogHeader>
             <DialogTitle>Log cash received</DialogTitle>
             <DialogDescription>
-              Same Log Cash flow as Cash Wallet ó pick a driver, then tag the Settlement Week.
+              Same Log Cash flow as Cash Wallet ù pick a driver, then tag the Settlement Week.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-1">
@@ -2280,7 +2275,7 @@ export function DriverSettlementsPage({
               <Select value={logCashDriverId || undefined} onValueChange={setLogCashDriverId}>
                 <SelectTrigger className="h-10">
                   <SelectValue
-                    placeholder={driversQuery.isLoading ? 'Loading driversÖ' : 'Select driver'}
+                    placeholder={driversQuery.isLoading ? 'Loading driversù' : 'Select driver'}
                   />
                 </SelectTrigger>
                 <SelectContent className="max-h-72">
@@ -2418,12 +2413,12 @@ export function DriverSettlementsPage({
             <AlertDialogDescription>
               {txToReverse &&
               (String(txToReverse.kind || '').toLowerCase() === 'pay' || direction === 'pay')
-                ? 'This restores the fleet-owes balance for that Settlement Week ó same as Cash Wallet undo.'
-                : 'This restores cash still owed for that Settlement Week ó same as Cash Wallet undo.'}
+                ? 'This restores the fleet-owes balance for that Settlement Week ù same as Cash Wallet undo.'
+                : 'This restores cash still owed for that Settlement Week ù same as Cash Wallet undo.'}
               {txToReverse ? (
                 <span className="block mt-2 font-medium text-slate-700 tabular-nums">
                   {MONEY(txToReverse.amount)}
-                  {txToReverse.driverName ? ` ∑ ${txToReverse.driverName}` : ''}
+                  {txToReverse.driverName ? ` ù ${txToReverse.driverName}` : ''}
                 </span>
               ) : null}
             </AlertDialogDescription>
@@ -2449,7 +2444,7 @@ export function DriverSettlementsPage({
               }}
               className="bg-red-600 hover:bg-red-700"
             >
-              {reverseBusy ? 'ReversingÖ' : 'Undo'}
+              {reverseBusy ? 'Reversingù' : 'Undo'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -2518,7 +2513,7 @@ export function DriverSettlementsPage({
               {batchBusy ? (
                 <>
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  SavingÖ
+                  Savingù
                 </>
               ) : direction === 'collect' ? (
                 `Log ${selectedRows.length} collection${selectedRows.length !== 1 ? 's' : ''}`

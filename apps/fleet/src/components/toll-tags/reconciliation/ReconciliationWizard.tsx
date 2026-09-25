@@ -49,6 +49,11 @@ import {
 } from '../../../hooks/useTollReconciliationPeriods';
 import { useFleetTimezone } from "../../../utils/timezoneDisplay";
 import {
+  finishBlockReason,
+  runDeadheadCharge,
+  runPersonalUseCharge,
+} from "../../../utils/tollChargeSagas";
+import {
   collectTripsForReimbursedCard,
   computeReimbursedTotals,
   computeGrossTollSpendByPlatform,
@@ -262,81 +267,35 @@ function ReconciliationWizardInner({ period, driverId, drivers, onExit, initialS
       message?: string;
     },
   ) => {
-    const resolvedDriverId = opts.trip?.driverId || tx.driverId;
-    if (!resolvedDriverId) {
-      setPendingPersonalTx(tx);
-      setPendingDriverId('');
-      return;
-    }
-    if (!(await confirmChargeSyncOrAbort())) {
-      toast.message('Charge cancelled — turn on driver charge sync for Expenses/Cash Wallet parity.');
-      return;
-    }
     try {
-      const tollCost = Math.abs(tx.amount);
-      const isCashClaim = tx.paymentMethod === 'Cash' || !!tx.receiptUrl;
-      let linkedOrRejected = false;
-      try {
-        if (opts.trip?.id) {
-          await reconcile(tx, opts.trip);
-          linkedOrRejected = true;
-        } else {
-          await reject(tx, opts.reason);
-          linkedOrRejected = true;
-        }
-        await createClaim({
-          transactionId: tx.id,
-          driverId: resolvedDriverId,
-          amount: tollCost,
-          expectedAmount: tollCost,
-          paidAmount: 0,
-          status: 'Resolved',
-          type: 'Toll_Refund',
-          resolutionReason: 'Charge Driver',
-          subject: opts.subject || (isCashClaim
-            ? 'Cash Personal Toll - Charged to Driver'
-            : 'Unmatched Toll - Personal Use'),
-          message: opts.message || (isCashClaim
-            ? 'Driver used trip cash for a personal toll — charged to driver (no reimbursement).'
-            : 'This toll was identified as personal usage and charged to your account.'),
-          tripId: opts.trip?.id,
-          tripDate: opts.trip?.requestTime || opts.trip?.date,
-          pickup: opts.trip?.pickupLocation || tx.description || undefined,
-          dropoff: opts.trip?.dropoffLocation,
-          platform: opts.trip?.platform,
-          vehicleId: tx.vehicleId,
-          driverName: opts.trip?.driverName || tx.driverName,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          date: tx.date,
-        });
-        await Promise.all([refresh(), refreshClaims()]);
-        toast.success(
-          isCashClaim
-            ? 'Cash personal toll charged to driver'
-            : opts.trip?.id
-              ? 'Linked to trip & charged to driver'
-              : 'Marked as personal (driver liability)',
-        );
-      } catch (error) {
-        // Charge failed after queue mutation — put the toll back so the step stays open.
-        if (linkedOrRejected && opts.trip?.id) {
-          try {
-            await unreconcile({ ...tx, tripId: opts.trip.id, isReconciled: true });
-            await refresh();
-          } catch (rollbackErr) {
-            console.error('Personal charge rollback failed', rollbackErr);
-          }
-        } else if (linkedOrRejected) {
-          await refresh();
-        }
-        throw error;
-      }
-    } catch (error) {
-      console.error('Personal charge failed', error);
-      toast.error('Failed to charge driver for personal toll', {
-        description: error instanceof Error ? error.message : undefined,
+      const result = await runPersonalUseCharge(tx, opts, {
+        confirmChargeSyncOrAbort,
+        reconcile,
+        reject,
+        unreconcile,
+        createClaim: async (payload) => {
+          await createClaim(payload as any);
+        },
+        refresh,
+        refreshClaims,
+        onNeedDriver: (t) => {
+          setPendingPersonalTx(t);
+          setPendingDriverId('');
+        },
+        onCancelled: () => {
+          toast.message('Charge cancelled — turn on driver charge sync for Expenses/Cash Wallet parity.');
+        },
+        onSuccess: (msg) => toast.success(msg),
+        onError: (error) => {
+          console.error('Personal charge failed', error);
+          toast.error('Failed to charge driver for personal toll', {
+            description: error instanceof Error ? error.message : undefined,
+          });
+        },
       });
+      if (result === 'ok' || result === 'cancelled' || result === 'need_driver') return;
+    } catch (error) {
+      // onError already toasted when saga failed after a queue mutation.
       throw error;
     }
   }, [reconcile, reject, unreconcile, createClaim, refresh, refreshClaims, confirmChargeSyncOrAbort]);
@@ -1136,64 +1095,28 @@ function ReconciliationWizardInner({ period, driverId, drivers, onExit, initialS
    * Deadhead (avoids "complete" + charge-failed toast contradiction).
    */
   const handleChargeDriverForDeadhead = async (tx: FinancialTransaction, match: MatchResult) => {
-      const driverId = match.trip.driverId || tx.driverId;
-      if (!driverId) {
-          toast.error('Cannot charge deadhead toll — no driver on this trip');
-          return;
-      }
-      if (!(await confirmChargeSyncOrAbort())) {
-          toast.message('Charge cancelled — turn on driver charge sync for Expenses/Cash Wallet parity.');
-          return;
-      }
-
-      let linked = false;
-      try {
-          await reconcile(tx, match.trip);
-          linked = true;
-          const tollCost = Math.abs(tx.amount);
-          await createClaim({
-              transactionId: tx.id,
-              driverId,
-              amount: tollCost,
-              expectedAmount: tollCost,
-              paidAmount: 0,
-              status: 'Resolved',
-              type: 'Toll_Refund',
-              resolutionReason: 'Charge Driver',
-              subject: 'Deadhead Toll - Charged to Driver',
-              message: `Enroute-to-pickup toll charged to driver for trip ${match.trip.id}.`,
-              tripId: match.trip.id,
-              tripDate: match.trip.requestTime || match.trip.date,
-              pickup: match.trip.pickupLocation,
-              dropoff: match.trip.dropoffLocation,
-              platform: match.trip.platform,
-              vehicleId: tx.vehicleId,
-              driverName: match.trip.driverName || tx.driverName,
-              createdAt: new Date().toISOString(),
-              updatedAt: new Date().toISOString(),
-              date: tx.date,
-          });
-          await Promise.all([refresh(), refreshClaims()]);
-          toast.success('Deadhead toll charged to driver');
-      } catch (e) {
-          console.error(e);
-          if (linked) {
-              try {
-                  // Put the toll back in Deadhead — charge never landed.
-                  await unreconcile({ ...tx, tripId: match.trip.id, isReconciled: true });
-                  await refresh();
-              } catch (rollbackErr) {
-                  console.error('Deadhead charge rollback failed', rollbackErr);
-                  toast.error('Charge failed and could not undo the trip link — unmatch this toll manually', {
-                      description: e instanceof Error ? e.message : undefined,
-                  });
-                  return;
-              }
-          }
-          toast.error('Failed to charge driver for deadhead toll', {
-              description: e instanceof Error ? e.message : undefined,
-          });
-      }
+      await runDeadheadCharge(tx, match.trip, {
+          confirmChargeSyncOrAbort,
+          reconcile,
+          unreconcile,
+          createClaim: async (payload) => {
+              await createClaim(payload as any);
+          },
+          refresh,
+          refreshClaims,
+          onNoDriver: () => toast.error('Cannot charge deadhead toll — no driver on this trip'),
+          onCancelled: () =>
+              toast.message('Charge cancelled — turn on driver charge sync for Expenses/Cash Wallet parity.'),
+          onSuccess: () => toast.success('Deadhead toll charged to driver'),
+          onError: (e) =>
+              toast.error('Failed to charge driver for deadhead toll', {
+                  description: e instanceof Error ? e.message : undefined,
+              }),
+          onRollbackFailed: (e) =>
+              toast.error('Charge failed and could not undo the trip link — unmatch this toll manually', {
+                  description: e instanceof Error ? e.message : undefined,
+              }),
+      });
   };
 
   const activeState = gatedStates.find(s => s.id === activeStepId) ?? gatedStates[0];
@@ -1225,26 +1148,32 @@ function ReconciliationWizardInner({ period, driverId, drivers, onExit, initialS
   };
 
   const handleFinish = async () => {
-    if (loadError) {
+    const block = finishBlockReason({
+      loadError,
+      dataTruncated,
+      platformFilter,
+      identityResidual,
+      allPlatformActionable: STEP_ORDER.reduce((sum, id) => sum + (stepCounts[id]?.actionable || 0), 0),
+    });
+    if (block === 'load_error') {
       toast.error('Week data failed to load', {
         description: 'Retry loading before marking this week reviewed.',
       });
       return;
     }
-    if (dataTruncated) {
+    if (block === 'truncated') {
       toast.error('Period data is truncated', {
         description: 'Narrow the scope or raise fetch caps before marking this week reviewed.',
       });
       return;
     }
-    if (platformFilter === 'all' && identityResidual != null && Math.abs(identityResidual) > 0.01) {
+    if (block === 'identity_residual') {
       toast.error('Money cards do not reconcile', {
-        description: `Cards vs ledger events differ by $${Math.abs(identityResidual).toFixed(2)}. Resolve the gap before finishing.`,
+        description: `Cards vs ledger events differ by $${Math.abs(identityResidual!).toFixed(2)}. Resolve the gap before finishing.`,
       });
       return;
     }
-    const allPlatformActionable = STEP_ORDER.reduce((sum, id) => sum + (stepCounts[id]?.actionable || 0), 0);
-    if (allPlatformActionable > 0) {
+    if (block === 'cross_platform_actionable') {
       toast.error('Still open items on other platforms', {
         description: 'Clear the platform filter to All and finish remaining steps before closing this period.',
       });

@@ -33,12 +33,13 @@ export type DerivedPeriodStatus = {
 };
 
 export function tollsClearFromGate(tolls: TollGateInput): boolean {
-  const tollStatus = String(tolls.tollStatus || "n/a");
-  const statusOk = tollStatus === "reconciled" || tollStatus === "n/a";
-  if (!statusOk) return false;
+  // TR-C1a: readiness is authoritative when present — consult before legacy statusOk.
   if (tolls.readinessActionableTotal != null) {
     return Number(tolls.readinessActionableTotal) === 0;
   }
+  const tollStatus = String(tolls.tollStatus || "n/a");
+  const statusOk = tollStatus === "reconciled" || tollStatus === "n/a";
+  if (!statusOk) return false;
   return (
     Number(tolls.tollWorkflowActionable || 0) === 0 &&
     Number(tolls.tollUnmatchedCount || 0) === 0
@@ -72,13 +73,17 @@ export function derivePeriodStatus(input: PeriodStatusInput): DerivedPeriodStatu
     payoutStatus = "awaiting_cash";
   }
 
-  const periodStatus: "open" | "closed" | "reopened" =
-    Number(input.tolls.tollWorkflowActionable || 0) > 0 ||
-    Number(input.tolls.tollUnmatchedCount || 0) > 0
-      ? "open"
-      : input.fuelFinalized && tollsClear
-        ? "closed"
-        : "open";
+  // TR-C1a: when readiness is present, open/closed follows readiness — not legacy counters.
+  const tollsStillOpen =
+    input.tolls.readinessActionableTotal != null
+      ? Number(input.tolls.readinessActionableTotal) > 0
+      : Number(input.tolls.tollWorkflowActionable || 0) > 0 ||
+        Number(input.tolls.tollUnmatchedCount || 0) > 0;
+  const periodStatus: "open" | "closed" | "reopened" = tollsStillOpen
+    ? "open"
+    : input.fuelFinalized && tollsClear
+      ? "closed"
+      : "open";
 
   return {
     settlementStatus,

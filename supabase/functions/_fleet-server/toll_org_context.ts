@@ -16,14 +16,61 @@ import { getOrgId } from "./org_scope.ts";
 
 const tollRequestStore = new AsyncLocalStorage<Context>();
 
+/** TR-M1: one ledger load per (from,to) per request — wizard opens hit ~5 endpoints. */
+type LedgerBundle = { tollTx: any[]; trips: any[] };
+type LedgerCacheState = {
+  pageOpenId: string;
+  loads: number;
+  cache: Map<string, Promise<LedgerBundle>>;
+};
+const ledgerCacheStore = new AsyncLocalStorage<LedgerCacheState>();
+
 /** Run the rest of the request with `c` available to shared toll loaders. */
 export function runWithTollContext<T>(c: Context, fn: () => T | Promise<T>): T | Promise<T> {
-  return tollRequestStore.run(c, fn);
+  const ledgerState: LedgerCacheState = {
+    pageOpenId:
+      typeof crypto !== "undefined" && "randomUUID" in crypto
+        ? crypto.randomUUID()
+        : `page-${Date.now()}`,
+    loads: 0,
+    cache: new Map(),
+  };
+  return tollRequestStore.run(c, () => ledgerCacheStore.run(ledgerState, fn));
 }
 
 /** Current request Context, if inside toll_controller middleware. */
 export function getTollContext(): Context | undefined {
   return tollRequestStore.getStore();
+}
+
+/**
+ * Memoize loadTollLedgerWithTrips within a single request (TR-M1).
+ * Returns null when not inside runWithTollContext (tests / CLI).
+ */
+export function getRequestLedgerCache(): LedgerCacheState | undefined {
+  return ledgerCacheStore.getStore();
+}
+
+export async function cachedTollLedgerLoad(
+  from: string | undefined,
+  to: string | undefined,
+  loader: (from?: string, to?: string) => Promise<LedgerBundle>,
+): Promise<LedgerBundle> {
+  const state = ledgerCacheStore.getStore();
+  if (!state) return loader(from, to);
+  const key = `${from ?? ""}|${to ?? ""}`;
+  const hit = state.cache.get(key);
+  if (hit) return hit;
+  state.loads += 1;
+  const pending = loader(from, to);
+  state.cache.set(key, pending);
+  return pending;
+}
+
+export function snapshotLedgerLoads(): { pageOpenId: string; loads: number } | null {
+  const state = ledgerCacheStore.getStore();
+  if (!state) return null;
+  return { pageOpenId: state.pageOpenId, loads: state.loads };
 }
 
 /**

@@ -31,7 +31,10 @@ import {
   getTollContext,
   resolveTollOrgId,
   tollOrgSqlFilters,
+  cachedTollLedgerLoad,
+  snapshotLedgerLoads,
 } from "./toll_org_context.ts";
+import { logTollReconLedgerLoads } from "./toll_recon_metrics.ts";
 import {
   loadAllByPrefix,
   loadDisputeRefundRecords,
@@ -197,6 +200,38 @@ async function refuseSealedForTollId(
   if (!tollId) return null;
   const weekKey = await weekKeyForTollId(String(tollId));
   return refuseIfTollPeriodSealed(c, weekKey, route);
+}
+
+/** TR-C2a: Monday week key from a trip's dropoff/pickup/date. */
+async function weekKeyForTripId(tripId: string): Promise<string | null> {
+  const trip = await kv.get(`trip:${tripId}`);
+  const tripDate = trip?.dropoffTime || trip?.pickupTime || trip?.date;
+  if (!tripDate) return null;
+  const tz = await getFleetTimezone();
+  return mondayWeekKeyFromCalendarDay(fleetCalendarDay(String(tripDate), tz));
+}
+
+async function refuseSealedForTripId(
+  c: Context,
+  tripId: string | null | undefined,
+  route: string,
+): Promise<Response | null> {
+  if (!tripId) return null;
+  const weekKey = await weekKeyForTripId(String(tripId));
+  return refuseIfTollPeriodSealed(c, weekKey, route);
+}
+
+/** TR-C2a: refuse if any distinct week key in the set is sealed. */
+async function refuseSealedForWeekKeys(
+  c: Context,
+  weekKeys: Iterable<string>,
+  route: string,
+): Promise<Response | null> {
+  for (const wk of new Set([...weekKeys].filter(Boolean))) {
+    const sealed = await refuseIfTollPeriodSealed(c, wk, route);
+    if (sealed) return sealed;
+  }
+  return null;
 }
 
 // ─── Shared Helpers ────────────────────────────────────────────────────
@@ -1455,13 +1490,15 @@ async function loadAllTollLedgerWithTrips(): Promise<{ tollTx: any[]; trips: any
 
 // moved to toll_period_inputs.ts (range loaders)
 
-/** Prefer week-scoped SQL when the wizard passes from/to. */
+/** Prefer week-scoped SQL when the wizard passes from/to. TR-M1: request-memoized. */
 async function loadTollLedgerWithTrips(
   from?: string,
   to?: string,
 ): Promise<{ tollTx: any[]; trips: any[] }> {
-  if (from || to) return loadTollLedgerWithTripsInRange(from, to);
-  return loadAllTollLedgerWithTrips();
+  return cachedTollLedgerLoad(from, to, async (f, t) => {
+    if (f || t) return loadTollLedgerWithTripsInRange(f, t);
+    return loadAllTollLedgerWithTrips();
+  });
 }
 
 /** Support adjustments (`dispute-refund:*`), excluding dedup index keys. */
@@ -2178,6 +2215,15 @@ app.get(`${BASE}/unreconciled`, async (c) => {
     console.log(
       `[TollReconciliation] GET /unreconciled: total=${total} page=${page.length} durationMs=${durationMs}`,
     );
+    const snap = snapshotLedgerLoads();
+    if (snap) {
+      logTollReconLedgerLoads({
+        pageOpenId: snap.pageOpenId,
+        loads: snap.loads,
+        from,
+        to,
+      });
+    }
 
     return c.json({
       success: true,
@@ -2223,7 +2269,17 @@ app.post(`${BASE}/auto-match`, requirePermission('toll.manage'), async (c) => {
       });
       unreconciled = await filterByDateRange(unreconciled, from, to);
 
+      // TR-C2a: refuse before writing any PERFECT_MATCH into a sealed week.
       const timezone = await getFleetTimezone();
+      const weekKeys = unreconciled
+        .map((tx: any) => {
+          const d = tx?.date ? String(tx.date) : "";
+          return d ? mondayWeekKeyFromCalendarDay(fleetCalendarDay(d, timezone)) : "";
+        })
+        .filter(Boolean);
+      const sealed = await refuseSealedForWeekKeys(c, weekKeys, "POST /auto-match");
+      if (sealed) return { status: sealed.status as number, body: await sealed.json().catch(() => ({ error: "period_sealed" })) };
+
       // Resolve ledger deps at call time (declared later in this module).
       const result = await runPerfectMatchAutoMatch(
         {
@@ -2352,6 +2408,22 @@ app.post(`${BASE}/auto-resolve-refunds`, requirePermission('toll.manage'), async
         from,
         to,
       );
+
+      // TR-C2a: refuse before auto-resolving into a sealed week.
+      const timezone = await getFleetTimezone();
+      const weekKeys = candidates
+        .map((t: any) => {
+          const d = t?.dropoffTime || t?.pickupTime || t?.date;
+          return d ? mondayWeekKeyFromCalendarDay(fleetCalendarDay(String(d), timezone)) : "";
+        })
+        .filter(Boolean);
+      const sealed = await refuseSealedForWeekKeys(c, weekKeys, "POST /auto-resolve-refunds");
+      if (sealed) {
+        return {
+          status: sealed.status as number,
+          body: await sealed.json().catch(() => ({ error: "period_sealed" })),
+        };
+      }
 
       let autoResolved = 0;
       const errors: string[] = [];
@@ -4228,6 +4300,9 @@ app.post(`${BASE}/toll-ledger/:id/plaza`, requirePermission('toll.manage'), asyn
 export async function voidTollLedgerEntryHandler(c: Context) {
   try {
     const id = c.req.param("id");
+    // TR-C2a: sealed weeks cannot soft-void ledger amounts.
+    const sealed = await refuseSealedForTollId(c, id, "POST /toll-ledger/:id/void");
+    if (sealed) return sealed;
     const body = await c.req.json().catch(() => ({}));
     const reason = typeof body?.reason === "string" ? body.reason.trim() : "";
     const force = body?.force === true;
@@ -9243,6 +9318,9 @@ app.post(`${BASE}/unlinked-refunds/undo-apply`, requirePermission('toll.manage')
     const body = await c.req.json();
     const tripId = body?.tripId;
     if (!tripId) return c.json({ error: "tripId is required" }, 400);
+    // TR-C2a
+    const sealed = await refuseSealedForTripId(c, tripId, "POST /unlinked-refunds/undo-apply");
+    if (sealed) return sealed;
     const result = await undoApplyUnlinkedRefundToClaim(tripId, c);
     if (!result.ok) return c.json({ error: result.error }, result.status);
     return c.json({ success: true, data: result.data });
@@ -9259,6 +9337,11 @@ app.post(`${BASE}/repair-dispute-partial-claims`, requirePermission('toll.manage
     const body = await c.req.json().catch(() => ({}));
     const dryRun = body?.dryRun !== false;
     const driverId = body?.driverId as string | undefined;
+    // TR-C2a: live repairs must not mutate sealed weeks (dry-run stays open).
+    if (!dryRun && body?.tripId) {
+      const sealed = await refuseSealedForTripId(c, String(body.tripId), "POST /repair-dispute-partial-claims");
+      if (sealed) return sealed;
+    }
     const result = await repairDisputeCoveredPartialClaims(c, { dryRun, driverId });
     return c.json({
       success: true,
@@ -9281,6 +9364,9 @@ app.post(`${BASE}/unlinked-refunds/repair-split`, requirePermission('toll.manage
     const tripId = body?.tripId as string | undefined;
     const driverId = body?.driverId as string | undefined;
     if (tripId) {
+      // TR-C2a
+      const sealed = await refuseSealedForTripId(c, tripId, "POST /unlinked-refunds/repair-split");
+      if (sealed) return sealed;
       const result = await repairUnlinkedApplySplitForTrip(tripId, c);
       return c.json({
         success: true,
@@ -9304,6 +9390,9 @@ app.post(`${BASE}/resolve-refund`, requirePermission('toll.manage'), async (c) =
     if (!tripId || !resolution || !valid.includes(resolution)) {
       return c.json({ error: `tripId and a valid resolution (${valid.join(", ")}) are required` }, 400);
     }
+    // TR-C2a: shortest path to silently changing a sealed week's readiness.
+    const sealed = await refuseSealedForTripId(c, tripId, "POST /resolve-refund");
+    if (sealed) return sealed;
     const result = await applyRefundResolution({ tripId, resolution, notes, driverId, auto: false });
     return c.json({ success: true, data: result });
   } catch (e: any) {
@@ -9321,6 +9410,12 @@ app.post(`${BASE}/resolve-refund/bulk`, requirePermission('toll.manage'), async 
     if (items.length === 0) return c.json({ error: "items[] is required" }, 400);
 
     const valid: RefundResolutionStatus[] = ["cash_wash", "phantom", "expense_logged", "pending"];
+    // TR-C2a: refuse before any write if any item's week is sealed.
+    for (const it of items) {
+      if (!it.tripId) continue;
+      const sealed = await refuseSealedForTripId(c, it.tripId, "POST /resolve-refund/bulk");
+      if (sealed) return sealed;
+    }
     let resolved = 0;
     const errors: Array<{ tripId: string; error: string }> = [];
     for (const it of items) {

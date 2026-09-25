@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, fetchFleetTimezone } from '../services/api';
 import { FinancialTransaction, Trip, DisputeRefund } from '../types/data';
 import { MatchResult } from '../utils/tollReconciliation';
@@ -8,6 +9,10 @@ import { fleetCalendarDay, ymdToLocalDate } from '../utils/timezoneDisplay';
 import { TOLL_RECON_CAPS, type TollReconTruncation } from '../utils/tollReconCaps';
 import { getTollTransactionDate } from '../utils/tollDate';
 import { toast } from 'sonner';
+import * as Sentry from '@sentry/react';
+
+/** TR-M1: shared React Query key for wizard period bundle. */
+export const TOLL_RECONCILIATION_WIZARD_KEY = 'toll-reconciliation-wizard';
 
 /** Shift yyyy-MM-dd by N days (local calendar). */
 function shiftYmd(ymd: string, days: number): string {
@@ -237,6 +242,18 @@ export interface ReconciliationPeriodScope {
 }
 
 export function useTollReconciliation(driverId?: string, period?: ReconciliationPeriodScope) {
+  const queryClient = useQueryClient();
+  const queryKey = useMemo(
+    () =>
+      [
+        TOLL_RECONCILIATION_WIZARD_KEY,
+        driverId ?? null,
+        period?.startDate ?? null,
+        period?.endDate ?? null,
+      ] as const,
+    [driverId, period?.startDate, period?.endDate],
+  );
+
   const [loading, setLoading] = useState(true);
   /** TR-M12: any hard load failure — never treat as empty-clean week. */
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -264,6 +281,7 @@ export function useTollReconciliation(driverId?: string, period?: Reconciliation
   const fetchGen = useRef(0);
   // TR-C5: one Idempotency-Key per period scope for mount auto-match (Strict Mode safe).
   const mountAutoMatchKeyRef = useRef<string | null>(null);
+  const wizardOpenStartedAt = useRef<number>(performance.now());
 
   const fetchData = useCallback(async (_opts?: { autoMatch?: boolean }) => {
     const blockUi = isInitialLoad.current;
@@ -272,6 +290,7 @@ export function useTollReconciliation(driverId?: string, period?: Reconciliation
     // Accept flash first, then orange Apply only after Accept/refresh.
     const shortfallGen = ++shortfallFetchGen.current;
     const gen = ++fetchGen.current;
+    const started = performance.now();
     try {
       // ±1 day pad: UTC timestamps just past midnight still belong to prior
       // fleet calendar day (period list uses fleet TZ; old API filter used UTC).
@@ -368,6 +387,23 @@ export function useTollReconciliation(driverId?: string, period?: Reconciliation
       }
 
       setLoadError(null);
+      // TR-M1: seed React Query cache so staleTime/refetch policies apply on remount.
+      queryClient.setQueryData(queryKey, {
+        unreconciled,
+        reconciled,
+        refunds,
+        at: Date.now(),
+      });
+      Sentry.addBreadcrumb({
+        category: 'toll_recon',
+        message: 'toll_recon.wizard_open.duration_ms',
+        level: 'info',
+        data: {
+          duration_ms: Math.round(performance.now() - (blockUi ? wizardOpenStartedAt.current : started)),
+          weekKey: period?.startDate ?? null,
+          driverId: driverId ?? null,
+        },
+      });
     } catch (error) {
       if (gen === fetchGen.current) {
         console.error("Failed to fetch reconciliation data", error);
@@ -393,7 +429,18 @@ export function useTollReconciliation(driverId?: string, period?: Reconciliation
         if (blockUi) setLoading(false);
       }
     }
-  }, [driverId, period?.startDate, period?.endDate]);
+  }, [driverId, period?.startDate, period?.endDate, queryClient, queryKey]);
+
+  // TR-M1: register the wizard bundle with TanStack Query (staleTime mirrors periods landing).
+  useQuery({
+    queryKey,
+    staleTime: 60_000,
+    refetchOnWindowFocus: false,
+    queryFn: async () => {
+      await fetchData();
+      return { loaded: true as const, at: Date.now() };
+    },
+  });
 
   /** TR-C5: POST /auto-match once (never via GET). */
   const runServerAutoMatch = useCallback(async (idempotencyKey: string) => {
@@ -425,24 +472,24 @@ export function useTollReconciliation(driverId?: string, period?: Reconciliation
 
   useEffect(() => {
     mountAutoMatchKeyRef.current = null;
+    wizardOpenStartedAt.current = performance.now();
+    isInitialLoad.current = true;
   }, [driverId, period?.startDate, period?.endDate]);
 
   useEffect(() => {
-    isInitialLoad.current = true;
-    setLoading(true);
-    void (async () => {
-      await fetchData();
-      // One auto-match per period open (reuse key across Strict Mode remount).
-      if (!mountAutoMatchKeyRef.current) {
-        mountAutoMatchKeyRef.current =
-          typeof crypto !== 'undefined' && crypto.randomUUID
-            ? `auto-match-mount:${crypto.randomUUID()}`
-            : `auto-match-mount:${Date.now()}`;
-      }
-      await runServerAutoMatch(mountAutoMatchKeyRef.current);
-    })();
-  }, [fetchData, runServerAutoMatch]);
-
+    // One auto-match per period open after Query-driven fetch (Strict Mode safe key).
+    if (!mountAutoMatchKeyRef.current) {
+      mountAutoMatchKeyRef.current =
+        typeof crypto !== 'undefined' && crypto.randomUUID
+          ? `auto-match-mount:${crypto.randomUUID()}`
+          : `auto-match-mount:${Date.now()}`;
+      const key = mountAutoMatchKeyRef.current;
+      const t = window.setTimeout(() => {
+        void runServerAutoMatch(key);
+      }, 50);
+      return () => window.clearTimeout(t);
+    }
+  }, [driverId, period?.startDate, period?.endDate, runServerAutoMatch]);
   const reconcile = async (transaction: FinancialTransaction, trip: Trip) => {
     try {
         // Phase 4: Use server endpoint (writes ledger entry)
@@ -734,6 +781,7 @@ export function useTollReconciliation(driverId?: string, period?: Reconciliation
   };
 
   const refresh = async (opts?: { autoMatch?: boolean }) => {
+    await queryClient.invalidateQueries({ queryKey });
     await fetchData();
     if (opts?.autoMatch) {
       const key =

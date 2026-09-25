@@ -674,7 +674,7 @@ function AppContent() {
         }}
       >
         {currentPage === 'dashboard' && (
-          <Dashboard onSelectDriver={(driverId) => openDriverDetail(driverId)} />
+          <Dashboard onSelectDriver={(driverId) => openDriverDetail(driverId)} onNavigate={handleNavigate} />
         )}
         {currentPage === 'imports' && (
           <PermissionGate permission="nav.imports" onNavigate={setCurrentPage}>

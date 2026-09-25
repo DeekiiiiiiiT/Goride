@@ -38,6 +38,8 @@ interface SettlementPeriod {
   status: string;
 }
 
+type CashTxType = 'payment' | 'float' | 'adjustment';
+
 interface LogCashPaymentModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -52,14 +54,18 @@ interface LogCashPaymentModalProps {
     notes: string;
     paymentMethod: string;
     referenceNumber?: string;
-    transactionType: 'payment' | 'float' | 'adjustment';
+    transactionType: CashTxType;
     workPeriodStart?: string;
     workPeriodEnd?: string;
   }) => Promise<void>;
   driverName: string;
   cashOwed: number;
   periods?: SettlementPeriod[];
+  /** Restrict type radios. Dashboard quick action passes `['payment']` only. */
+  allowedTypes?: CashTxType[];
 }
+
+const ALL_CASH_TX_TYPES: CashTxType[] = ['payment', 'float', 'adjustment'];
 
 export function LogCashPaymentModal({ 
     isOpen, 
@@ -71,13 +77,16 @@ export function LogCashPaymentModal({
     initialWorkPeriodEnd,
     initialAmount,
     initialTransaction,
-    periods = []
+    periods = [],
+    allowedTypes = ALL_CASH_TX_TYPES,
 }: LogCashPaymentModalProps) {
+  const typeOptions = allowedTypes.length > 0 ? allowedTypes : ALL_CASH_TX_TYPES;
+  const showTypePicker = typeOptions.length > 1;
   const [amount, setAmount] = useState('');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [notes, setNotes] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('Cash');
-  const [transactionType, setTransactionType] = useState<'payment' | 'float' | 'adjustment'>('payment');
+  const [transactionType, setTransactionType] = useState<CashTxType>(typeOptions[0] ?? 'payment');
   const [referenceNumber, setReferenceNumber] = useState('');
   const [workPeriodStart, setWorkPeriodStart] = useState('');
   const [workPeriodEnd, setWorkPeriodEnd] = useState('');
@@ -177,7 +186,7 @@ export function LogCashPaymentModal({
         setDate(new Date().toISOString().split('T')[0]);
         setNotes('');
         setPaymentMethod('Cash');
-        setTransactionType('payment');
+        setTransactionType(typeOptions[0] ?? 'payment');
         setReferenceNumber('');
 
         if (initialWorkPeriodStart) {
@@ -364,15 +373,17 @@ export function LogCashPaymentModal({
 
         <form onSubmit={handleSubmit} className="space-y-4">
           
-          {/* Transaction Type Selection */}
+          {/* Transaction Type Selection — hidden when payment-only (Dashboard quick action) */}
+          {showTypePicker ? (
           <div className="space-y-3">
              <Label>Transaction Type</Label>
              <RadioGroup 
                 defaultValue="payment" 
                 value={transactionType} 
-                onValueChange={(val) => setTransactionType(val as any)}
+                onValueChange={(val) => setTransactionType(val as CashTxType)}
                 className="grid grid-cols-1 sm:grid-cols-3 gap-2"
              >
+                {typeOptions.includes('payment') ? (
                 <div className="relative">
                     <RadioGroupItem value="payment" id="type-payment" className="peer sr-only" />
                     <Label
@@ -383,6 +394,8 @@ export function LogCashPaymentModal({
                         <span className="text-xs font-medium">Receive Payment</span>
                     </Label>
                 </div>
+                ) : null}
+                {typeOptions.includes('float') ? (
                 <div className="relative">
                     <RadioGroupItem value="float" id="type-float" className="peer sr-only" />
                     <Label
@@ -393,6 +406,8 @@ export function LogCashPaymentModal({
                         <span className="text-xs font-medium">Issue Float</span>
                     </Label>
                 </div>
+                ) : null}
+                {typeOptions.includes('adjustment') ? (
                 <div className="relative">
                     <RadioGroupItem value="adjustment" id="type-adjustment" className="peer sr-only" />
                     <Label
@@ -403,8 +418,10 @@ export function LogCashPaymentModal({
                         <span className="text-xs font-medium">Adjustment</span>
                     </Label>
                 </div>
+                ) : null}
              </RadioGroup>
           </div>
+          ) : null}
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2">

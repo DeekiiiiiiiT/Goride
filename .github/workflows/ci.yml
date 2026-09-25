@@ -146,6 +146,9 @@ jobs:
           supabase/functions/_fleet-server/toll_auto_match.test.ts
           supabase/functions/_fleet-server/toll_route_auth.test.ts
           supabase/functions/_fleet-server/toll_request_idempotency.test.ts
+          supabase/functions/_fleet-server/toll_period_seal_guard.test.ts
+          supabase/functions/_fleet-server/toll_ledger_request_cache.test.ts
+          supabase/functions/_fleet-server/period_projector.test.ts
 
       - name: Deno test remittance money + residual + pause routes
         run: >

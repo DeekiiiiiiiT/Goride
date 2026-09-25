@@ -1267,7 +1267,7 @@ export async function rebuildDriverFinancialPeriod(
     !!forceMeta.at ||
     !!priorMeta.forceReleasedAt;
 
-  const tollStatus =
+  const legacyTollStatus =
     weekTolls.length === 0 && tollReconciledCount === 0 && tollUnmatchedCount === 0
       ? "n/a"
       : tollUnmatchedCount > 0
@@ -1296,14 +1296,25 @@ export async function rebuildDriverFinancialPeriod(
     console.warn("[dfp] toll readiness authoritative probe skipped", e);
   }
 
+  // TR-C1a: when readiness is authoritative, derive tollStatus from it (downgrade unmatched→reconciled).
+  let tollStatus = legacyTollStatus;
+  if (readinessActionableTotal != null) {
+    if (readinessActionableTotal === 0) {
+      tollStatus =
+        weekTolls.length === 0 && tollReconciledCount === 0 && tollUnmatchedCount === 0
+          ? "n/a"
+          : "reconciled";
+    } else if (legacyTollStatus === "n/a") {
+      tollStatus = "unmatched";
+    }
+  }
+
   const derived = derivePeriodStatus({
     fuelFinalized,
     forceRelease,
     settled,
     tolls: {
-      tollStatus: readinessActionableTotal != null && readinessActionableTotal > 0
-        ? (tollStatus === "n/a" ? "unmatched" : tollStatus)
-        : tollStatus,
+      tollStatus,
       tollWorkflowActionable,
       tollUnmatchedCount,
       readinessActionableTotal,

@@ -105,7 +105,7 @@ export function GatedReconciliationStepper({ states, activeStepId, onSelect, lab
               )}
               {!step.complete && !step.locked && step.actionable > 0 && (
                 <span
-                  className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 rounded-full bg-amber-500 text-white text-[10px] font-bold flex items-center justify-center"
+                  className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 rounded-full bg-amber-500 text-white text-[11px] font-bold flex items-center justify-center"
                   title={`${step.actionable} need your action`}
                   aria-label={`${step.actionable} need your action`}
                 >
@@ -134,7 +134,7 @@ export function GatedReconciliationStepper({ states, activeStepId, onSelect, lab
         );
       })}
     </div>
-    <p className="text-center text-[10px] text-slate-500 px-2">
+    <p className="text-center text-xs text-slate-600 px-2">
       Amber = needs your action · Gray clock = waiting on driver or Uber
     </p>
     </div>

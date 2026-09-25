@@ -1,11 +1,78 @@
 import { assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
-import { derivePeriodStatus } from "./period_projector.ts";
+import { derivePeriodStatus, tollsClearFromGate } from "./period_projector.ts";
 
 const clearTolls = {
   tollStatus: "n/a",
   tollWorkflowActionable: 0,
   tollUnmatchedCount: 0,
 };
+
+/** TR-C1a three-row truth table: readiness=0 must clear regardless of legacy status. */
+Deno.test("TR-C1a: readiness=0 + unmatched → tollsClear true", () => {
+  assertEquals(
+    tollsClearFromGate({
+      tollStatus: "unmatched",
+      tollWorkflowActionable: 3,
+      tollUnmatchedCount: 3,
+      readinessActionableTotal: 0,
+    }),
+    true,
+  );
+});
+
+Deno.test("TR-C1a: readiness=0 + in_progress → tollsClear true", () => {
+  assertEquals(
+    tollsClearFromGate({
+      tollStatus: "in_progress",
+      tollWorkflowActionable: 2,
+      tollUnmatchedCount: 0,
+      readinessActionableTotal: 0,
+    }),
+    true,
+  );
+});
+
+Deno.test("TR-C1a: readiness=0 + reconciled → tollsClear true", () => {
+  assertEquals(
+    tollsClearFromGate({
+      tollStatus: "reconciled",
+      tollWorkflowActionable: 0,
+      tollUnmatchedCount: 0,
+      readinessActionableTotal: 0,
+    }),
+    true,
+  );
+});
+
+Deno.test("TR-C1a: readiness>0 blocks even when legacy status says reconciled", () => {
+  assertEquals(
+    tollsClearFromGate({
+      tollStatus: "reconciled",
+      tollWorkflowActionable: 0,
+      tollUnmatchedCount: 0,
+      readinessActionableTotal: 2,
+    }),
+    false,
+  );
+});
+
+Deno.test("TR-C1a: periodStatus closed when readiness=0 despite legacy unmatched", () => {
+  const d = derivePeriodStatus({
+    fuelFinalized: true,
+    forceRelease: false,
+    settled: { settlement: 0, adjCashBalance: 0 },
+    tolls: {
+      tollStatus: "unmatched",
+      tollWorkflowActionable: 5,
+      tollUnmatchedCount: 5,
+      readinessActionableTotal: 0,
+    },
+  });
+  assertEquals(d.tollsClear, true);
+  assertEquals(d.moneyUnlocked, true);
+  assertEquals(d.periodStatus, "closed");
+});
+
 
 Deno.test("settled residual finalizes payout even when cash_still_held > 0 (share applied)", () => {
   const d = derivePeriodStatus({

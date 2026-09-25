@@ -62,6 +62,10 @@ type Props = {
   onAssignVehicle?: (driverId: string) => void;
   onUnassignVehicle?: (driverId: string) => void;
   assignmentBusyDriverId?: string | null;
+  /** Rideshare collect — when set, row menus show Log cash. */
+  onLogCash?: (driverId: string, driverName: string) => void;
+  /** After queue loads: disable + tooltip when not collectable. */
+  logCashGateByDriver?: Record<string, { collectable: boolean; reason?: string }>;
 };
 
 function initials(name: string): string {
@@ -112,9 +116,19 @@ export function DashboardDriverTable({
   onAssignVehicle,
   onUnassignVehicle,
   assignmentBusyDriverId,
+  onLogCash,
+  logCashGateByDriver,
 }: Props) {
   const [contactRow, setContactRow] = useState<DashboardDriverRow | null>(null);
   const [actionsRowId, setActionsRowId] = useState<string | null>(null);
+
+  const logCashState = (row: DashboardDriverRow) => {
+    if (!onLogCash) return null;
+    const gate = logCashGateByDriver?.[row.id];
+    const disabled = gate ? !gate.collectable : false;
+    const title = gate && !gate.collectable ? gate.reason : undefined;
+    return { disabled, title };
+  };
 
   const rowMeta = (row: DashboardDriverRow) => {
     const displayName = row.name.trim() || 'Unknown Driver';
@@ -290,6 +304,26 @@ export function DashboardDriverTable({
                       >
                         Contact
                       </button>
+                      {onLogCash
+                        ? (() => {
+                            const gate = logCashState(row);
+                            return (
+                              <button
+                                type="button"
+                                disabled={gate?.disabled}
+                                title={gate?.title}
+                                className="rounded-lg px-3 py-2.5 text-left text-sm font-medium text-emerald-700 hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-50 dark:text-emerald-400 dark:hover:bg-emerald-950/40"
+                                onClick={() => {
+                                  if (gate?.disabled) return;
+                                  setActionsRowId(null);
+                                  onLogCash(row.id, displayName);
+                                }}
+                              >
+                                Log cash
+                              </button>
+                            );
+                          })()
+                        : null}
                     </div>
                   </div>
 
@@ -460,6 +494,24 @@ export function DashboardDriverTable({
                             <DropdownMenuItem onClick={() => setContactRow(row)}>
                               Contact
                             </DropdownMenuItem>
+                            {onLogCash
+                              ? (() => {
+                                  const gate = logCashState(row);
+                                  return (
+                                    <DropdownMenuItem
+                                      disabled={gate?.disabled}
+                                      title={gate?.title}
+                                      className="text-emerald-700 focus:text-emerald-800"
+                                      onClick={() => {
+                                        if (gate?.disabled) return;
+                                        onLogCash(row.id, displayName);
+                                      }}
+                                    >
+                                      Log cash
+                                    </DropdownMenuItem>
+                                  );
+                                })()
+                              : null}
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </TableCell>

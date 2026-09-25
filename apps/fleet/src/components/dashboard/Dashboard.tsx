@@ -48,6 +48,12 @@ import {
 import { DashboardFilterBar } from './DashboardFilterBar';
 import { DashboardMobileFiltersDrawer } from './DashboardMobileFiltersDrawer';
 import {
+  LogCashQuickActionHost,
+  LogCashTrigger,
+  type LogCashOpenRequest,
+} from './LogCashQuickAction';
+import { usePermissions } from '../../hooks/usePermissions';
+import {
   DOCUMENT_OPTIONS,
   STATUS_OPTIONS,
   courierRowMatchesSearch,
@@ -65,6 +71,7 @@ import {
 
 type Props = {
   onSelectDriver?: (driverId: string) => void;
+  onNavigate?: (page: string, opts?: { weekKey: string }) => void;
 };
 
 type DashboardLine = 'rideshare' | 'delivery';
@@ -144,9 +151,20 @@ function normalizeCourierRow(
   };
 }
 
-export function Dashboard({ onSelectDriver }: Props) {
+export function Dashboard({ onSelectDriver, onNavigate }: Props) {
   const queryClient = useQueryClient();
   const { rideshareVisible, rushVisible } = useServiceLineScope();
+  const { can } = usePermissions();
+  const canLogCash = can('settlements.collect');
+  const [logCashPickerOpen, setLogCashPickerOpen] = useState(false);
+  const [logCashOpenRequest, setLogCashOpenRequest] = useState<LogCashOpenRequest | null>(null);
+  const [logCashGateByDriver, setLogCashGateByDriver] = useState<
+    Record<string, { collectable: boolean; reason?: string }>
+  >({});
+
+  const requestLogCashForDriver = (driverId: string, driverName: string) => {
+    setLogCashOpenRequest({ driverId, driverName, nonce: Date.now() });
+  };
 
   const availableLines = useMemo((): DashboardLine[] => {
     const lines: DashboardLine[] = [];
@@ -550,8 +568,13 @@ export function Dashboard({ onSelectDriver }: Props) {
     />
   ) : (
     <>
-      {/* Desktop: original side-by-side actions */}
+      {/* Desktop: Log cash (outline) + matched add pair */}
       <div className="hidden flex-wrap items-center gap-2 md:flex">
+        <LogCashTrigger
+          variant="desktop"
+          visible={canLogCash}
+          onClick={() => setLogCashPickerOpen(true)}
+        />
         <Button
           type="button"
           className="h-10 rounded-lg bg-slate-900 px-4 text-white hover:bg-slate-800 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-white"
@@ -570,7 +593,12 @@ export function Dashboard({ onSelectDriver }: Props) {
         </Button>
       </div>
 
-      {/* Mobile: self-serve + menu */}
+      {/* Mobile: Log cash icon + add menu */}
+      <LogCashTrigger
+        variant="mobile"
+        visible={canLogCash}
+        onClick={() => setLogCashPickerOpen(true)}
+      />
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button
@@ -653,6 +681,8 @@ export function Dashboard({ onSelectDriver }: Props) {
         onAssignVehicle={(driverId) => setAssignDriverId(driverId)}
         onUnassignVehicle={handleUnassignVehicle}
         assignmentBusyDriverId={busyDriverId}
+        onLogCash={canLogCash ? requestLogCashForDriver : undefined}
+        logCashGateByDriver={logCashGateByDriver}
       />
     </>
   );
@@ -895,6 +925,17 @@ export function Dashboard({ onSelectDriver }: Props) {
           if (!open) setSelectedCourier(null);
         }}
       />
+
+      {!showDelivery ? (
+        <LogCashQuickActionHost
+          onNavigate={onNavigate}
+          pickerOpen={logCashPickerOpen}
+          onPickerOpenChange={setLogCashPickerOpen}
+          openRequest={logCashOpenRequest}
+          onOpenRequestHandled={() => setLogCashOpenRequest(null)}
+          onGateMapChange={setLogCashGateByDriver}
+        />
+      ) : null}
     </div>
   );
 }

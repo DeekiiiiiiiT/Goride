@@ -877,6 +877,10 @@ app.post(
       const user = c.get("rbacUser") as RbacUser | undefined;
       const actorId = user?.userId || null;
 
+      const ifMatchRaw = c.req.header("If-Match");
+      const expectedVersion =
+        ifMatchRaw != null && ifMatchRaw !== "" ? Number(ifMatchRaw) : null;
+
       const { readiness } = await buildWeekReadiness({ weekKey, orgId });
       const finishGate = decideTollFinishAllowed(readiness);
       if (!finishGate.allowed) {
@@ -891,14 +895,30 @@ app.post(
       }
 
       const now = new Date().toISOString();
-      const row = await upsertTollPeriodRow(orgId, weekKey, {
-        state: "ready",
-        readiness_hash: readiness.readinessHash,
-        reviewed_by: actorId,
-        reviewed_at: now,
-        finish_note: body.note ? String(body.note).slice(0, 2000) : null,
-        blockers: readiness.blockers,
-      });
+      let row: Record<string, unknown>;
+      try {
+        row = await upsertTollPeriodRow(
+          orgId,
+          weekKey,
+          {
+            state: "ready",
+            readiness_hash: readiness.readinessHash,
+            reviewed_by: actorId,
+            reviewed_at: now,
+            finish_note: body.note ? String(body.note).slice(0, 2000) : null,
+            blockers: readiness.blockers,
+          },
+          { expectedVersion: Number.isFinite(expectedVersion as number) ? expectedVersion : null },
+        );
+      } catch (ve: any) {
+        if (ve?.code === "version_conflict" || ve?.message === "version_conflict") {
+          return c.json(
+            { error: "version_conflict", currentVersion: ve.currentVersion ?? null },
+            409,
+          );
+        }
+        throw ve;
+      }
       await insertTollPeriodAudit(
         orgId,
         tollPeriodIdFor(orgId, weekKey),
@@ -947,15 +967,35 @@ app.post(
       const actorId = user?.userId || null;
       const now = new Date().toISOString();
 
-      const row = await upsertTollPeriodRow(orgId, weekKey, {
-        state: "reopened",
-        reopened_at: now,
-        reopened_by: actorId,
-        reopen_reason: reason.slice(0, 2000),
-        reviewed_by: null,
-        reviewed_at: null,
-        readiness_hash: null,
-      });
+      const ifMatchRaw = c.req.header("If-Match");
+      const expectedVersion =
+        ifMatchRaw != null && ifMatchRaw !== "" ? Number(ifMatchRaw) : null;
+
+      let row: Record<string, unknown>;
+      try {
+        row = await upsertTollPeriodRow(
+          orgId,
+          weekKey,
+          {
+            state: "reopened",
+            reopened_at: now,
+            reopened_by: actorId,
+            reopen_reason: reason.slice(0, 2000),
+            reviewed_by: null,
+            reviewed_at: null,
+            readiness_hash: null,
+          },
+          { expectedVersion: Number.isFinite(expectedVersion as number) ? expectedVersion : null },
+        );
+      } catch (ve: any) {
+        if (ve?.code === "version_conflict" || ve?.message === "version_conflict") {
+          return c.json(
+            { error: "version_conflict", currentVersion: ve.currentVersion ?? null },
+            409,
+          );
+        }
+        throw ve;
+      }
       await insertTollPeriodAudit(
         orgId,
         tollPeriodIdFor(orgId, weekKey),

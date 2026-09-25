@@ -177,17 +177,36 @@ export async function upsertTollPeriodRow(
   organizationId: string,
   weekKey: string,
   patch: Record<string, unknown>,
+  opts?: { expectedVersion?: number | null },
 ): Promise<Record<string, unknown>> {
   const sb = getServiceClient();
   const wk = String(weekKey).slice(0, 10);
   const id = tollPeriodIdFor(organizationId, wk);
   const now = new Date().toISOString();
+
+  const { data: existing } = await sb
+    .from("toll_reconciliation_period")
+    .select("version")
+    .eq("organization_id", organizationId)
+    .eq("week_key", wk)
+    .maybeSingle();
+
+  const currentVersion = Number((existing as any)?.version) || 1;
+  if (opts?.expectedVersion != null && opts.expectedVersion !== currentVersion) {
+    const err = new Error("version_conflict");
+    (err as any).code = "version_conflict";
+    (err as any).currentVersion = currentVersion;
+    throw err;
+  }
+
+  const nextVersion = existing ? currentVersion + 1 : 1;
   const row = {
     id,
     organization_id: organizationId,
     week_key: wk,
     updated_at: now,
     ...patch,
+    version: nextVersion,
   };
   const { data, error } = await sb
     .from("toll_reconciliation_period")
@@ -226,6 +245,16 @@ export async function refuseIfTollPeriodSealed(
     return null;
   } catch (e) {
     if (e instanceof TollPeriodSealedError) {
+      try {
+        const { logTollReconCommand } = await import("./toll_recon_metrics.ts");
+        logTollReconCommand({
+          name: route,
+          outcome: "PERIOD_SEALED",
+          weekKey: wk,
+        });
+      } catch {
+        /* metrics best-effort */
+      }
       return c.json(periodSealedBody(e), 409);
     }
     throw e;

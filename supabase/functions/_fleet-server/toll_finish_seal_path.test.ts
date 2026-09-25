@@ -97,6 +97,36 @@ Deno.test("Finish→readiness→seal: clear readiness allows Finish; sealed refu
   );
 });
 
+Deno.test("TR-C1a: blockers empty ⟺ tollsClear when readiness present (informational-only legacy)", () => {
+  const readiness = computeTollPeriodReadiness({
+    weekKey: "2026-09-07",
+    steps: zeroSteps(),
+    cardsNetLoss: 50,
+    eventsNetLoss: 50,
+  });
+  assertEquals(readiness.blockers.length, 0);
+  assertEquals(readiness.actionableTotal, 0);
+  // Legacy counters still non-zero (informational work) — readiness governs.
+  assertEquals(
+    tollsClearFromGate({
+      tollStatus: "unmatched",
+      tollWorkflowActionable: 4,
+      tollUnmatchedCount: 4,
+      readinessActionableTotal: readiness.actionableTotal,
+    }),
+    true,
+  );
+  assertEquals(
+    readiness.blockers.length === 0,
+    tollsClearFromGate({
+      tollStatus: "unmatched",
+      tollWorkflowActionable: 4,
+      tollUnmatchedCount: 4,
+      readinessActionableTotal: readiness.actionableTotal,
+    }),
+  );
+});
+
 Deno.test("Finish→readiness→seal: identity residual blocks Finish even with zero steps", () => {
   const readiness = computeTollPeriodReadiness({
     weekKey: "2026-09-07",
