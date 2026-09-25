@@ -3,7 +3,9 @@
  */
 import { describe, expect, it } from 'vitest';
 import {
+  isHollowOpenFuelPeriodRow,
   mergeServerFirstLandingPeriods,
+  serverLandingCoveringWeekStarts,
   serverRowsToLandingPeriods,
 } from './fuelPeriodServerMerge';
 import { emptyFuelStepCounts } from './fuelPeriodGating';
@@ -281,5 +283,46 @@ describe('fuelPeriodServerMerge landing SoT', () => {
     ]);
     expect(cards[0].status).toBe('completed');
     expect(cards[0].locked).toBe(true);
+  });
+
+  it('hollow open ensure shell is not a landing card and does not block derive gap-fill', () => {
+    const hollow = row({
+      weekStart: '2026-09-14',
+      weekEnd: '2026-09-20',
+      status: 'open',
+      lockedAt: null,
+      totalSpend: 0,
+      vehicleCount: 0,
+      unexplained: 0,
+      computedAt: null,
+    });
+    expect(isHollowOpenFuelPeriodRow(hollow)).toBe(true);
+    expect(serverRowsToLandingPeriods([hollow])).toHaveLength(0);
+    expect(serverLandingCoveringWeekStarts([hollow]).has('2026-09-14')).toBe(false);
+
+    const derived: FuelReconciliationPeriod[] = [
+      {
+        id: '2026-09-14',
+        startDate: '2026-09-14',
+        endDate: '2026-09-20',
+        label: 'Sep 14 – Sep 20',
+        status: 'outstanding',
+        locked: false,
+        vehicleCount: 1,
+        totalSpend: 49_690.8,
+        netLeakage: 49_690.8,
+        companyShare: 0,
+        driverShare: 0,
+        actionableTotal: 2,
+        exceptionCount: 0,
+        openFlaggedFillCount: 0,
+        dataQualityVehicleActionable: 0,
+        counts: emptyFuelStepCounts(),
+      },
+    ];
+    const merged = mergeServerFirstLandingPeriods([hollow], derived);
+    expect(merged).toHaveLength(1);
+    expect(merged[0].startDate).toBe('2026-09-14');
+    expect(merged[0].totalSpend).toBeCloseTo(49_690.8, 1);
   });
 });

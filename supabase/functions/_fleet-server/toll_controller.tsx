@@ -7,8 +7,10 @@
  *
  * Routes:
  *   GET  /toll-reconciliation/summary          – 4-card aggregates
- *   GET  /toll-reconciliation/unreconciled      – paginated unmatched tolls + suggestions
- *   GET  /toll-reconciliation/unclaimed-refunds – paginated trips with no matched expense
+ *   GET  /toll-reconciliation/unreconciled      – paginated unmatched tolls + suggestions (pure read)
+ *   POST /toll-reconciliation/auto-match       – explicit PERFECT_MATCH writes (Idempotency-Key)
+ *   GET  /toll-reconciliation/unclaimed-refunds – paginated trips with no matched expense (pure read)
+ *   POST /toll-reconciliation/auto-resolve-refunds – explicit cash-wash automation when flagged
  *   GET  /toll-reconciliation/reconciled        – paginated matched history
  *   GET  /toll-reconciliation/export            – all toll txns flattened for CSV export
  *   GET  /toll-reconciliation/unified-events     – IDEA 2 canonical multi-source toll financial events
@@ -16,6 +18,10 @@
  *   POST /toll-reconciliation/reset-for-reconciliation – pending + clear trip/match (re-queue for Unmatched)
  */
 
+import { withTollIdempotency } from "./toll_request_idempotency.ts";
+import { runPerfectMatchAutoMatch } from "./toll_auto_match.ts";
+
+import { pMap } from "./concurrency.ts";
 import { Hono, type Context } from "npm:hono@4.3.11";
 import * as kv from "./kv_store.tsx";
 import { requireAuth, requirePermission, type RbacUser, PLATFORM_RESOLVED_ROLES } from "./rbac_middleware.ts";
@@ -101,6 +107,10 @@ import {
   fleetCalendarDay,
 } from "./timezone_helper.tsx";
 import {
+  mondayWeekKeyFromCalendarDay,
+  refuseIfTollPeriodSealed,
+} from "./toll_period_writable.ts";
+import {
   buildDriverAliasMap,
   driverIdsReferToSamePerson,
   type DriverIdentityLike,
@@ -159,6 +169,25 @@ const supabase = getServiceClient();
 import { TOLL_HTTP_PREFIX } from "./toll_http_prefix.ts";
 
 const BASE = `${TOLL_HTTP_PREFIX}/toll-reconciliation`;
+
+/** TR-C2: Monday week key for a toll ledger row (fleet calendar day). */
+async function weekKeyForTollId(tollId: string): Promise<string | null> {
+  const entry = await getTollLedgerEntry(tollId);
+  const dateStr = entry?.date ? String(entry.date) : "";
+  if (!dateStr) return null;
+  const tz = await getFleetTimezone();
+  return mondayWeekKeyFromCalendarDay(fleetCalendarDay(dateStr, tz));
+}
+
+async function refuseSealedForTollId(
+  c: Context,
+  tollId: string | null | undefined,
+  route: string,
+): Promise<Response | null> {
+  if (!tollId) return null;
+  const weekKey = await weekKeyForTollId(String(tollId));
+  return refuseIfTollPeriodSealed(c, weekKey, route);
+}
 
 // ─── Shared Helpers ────────────────────────────────────────────────────
 
@@ -629,7 +658,11 @@ function isAmountMatch(a: number, b: number): boolean {
 }
 
 /** Official Toll Info cost for a ledger/tx row (hybrid: official when resolved). */
-async function resolveTollExpectedCost(tx: any): Promise<{
+async function resolveTollExpectedCost(
+  tx: any,
+  /** Preloaded rate store — hoist load outside candidate loops (TR-M3). */
+  rateStore?: Awaited<ReturnType<typeof import("./toll_rate_schedule.ts").loadTollRateStore>>,
+): Promise<{
   expectedCost: number;
   tagAmount: number;
   usedOfficialRate: boolean;
@@ -659,7 +692,7 @@ async function resolveTollExpectedCost(tx: any): Promise<{
 
   try {
     const { loadTollRateStore, resolveOfficialTollRate } = await import("./toll_rate_schedule.ts");
-    const store = await loadTollRateStore();
+    const store = rateStore ?? (await loadTollRateStore());
     let classId = "class1";
     const vehicleId = tx?.vehicleId;
     if (vehicleId) {
@@ -701,6 +734,22 @@ async function resolveTollExpectedCost(tx: any): Promise<{
     officialEffectiveFrom: null,
     fromStamp: false,
   };
+}
+
+/** Bounded parallel resolve for unreconciled page / auto-match scan (TR-M3). */
+const TOLL_COST_CONCURRENCY = 8;
+
+async function resolveTollExpectedCostsBatch(
+  txs: any[],
+): Promise<Awaited<ReturnType<typeof resolveTollExpectedCost>>[]> {
+  if (txs.length === 0) return [];
+  const { loadTollRateStore } = await import("./toll_rate_schedule.ts");
+  const rateStore = await loadTollRateStore();
+  return pMap(
+    txs,
+    (tx) => resolveTollExpectedCost(tx, rateStore),
+    { concurrency: TOLL_COST_CONCURRENCY },
+  );
 }
 
 /**
@@ -1473,11 +1522,63 @@ function parseUnreconciledQueryParams(c: any) {
     ? 50
     : Math.min(rawLimit, UNRECONCILED_MAX_PAGE_LIMIT);
   const offset = parseInt(c.req.query("offset") || "0", 10);
-  const autoMatch = c.req.query("autoMatch") === "1";
+  // TR-C5: autoMatch query param removed — use POST /auto-match.
   const from = c.req.query("from") || undefined;
   const to = c.req.query("to") || undefined;
-  return { driverId, limit, offset, autoMatch, from, to };
+  return { driverId, limit, offset, from, to };
 }
+
+/** Actor for ledger audit rows — never the literal "admin". */
+function resolveActorId(c: { get: (k: string) => unknown }): string {
+  const rbacUser = c.get("rbacUser") as RbacUser | undefined;
+  const id = String(rbacUser?.userId || "").trim();
+  return id || "unknown";
+}
+
+/** Thin idempotency gate for handlers that keep `return c.json(...)` style. */
+async function tollIdemGate(
+  c: Context,
+  route: string,
+): Promise<{ response: Response | null; key: string | null }> {
+  const { beginTollIdempotency, readIdempotencyKey } = await import("./toll_request_idempotency.ts");
+  const key = readIdempotencyKey(c);
+  const gate = await beginTollIdempotency(route, key);
+  if (gate.mode === "replay") {
+    return { response: c.json(gate.body as any, gate.httpStatus as any), key: null };
+  }
+  if (gate.mode === "conflict") {
+    return {
+      response: c.json(
+        {
+          error: "idempotency_in_progress",
+          code: "IDEMPOTENCY_IN_PROGRESS",
+          message: "A request with this Idempotency-Key is already in progress",
+        },
+        409,
+      ),
+      key: null,
+    };
+  }
+  return { response: null, key: gate.mode === "proceed" ? gate.key : null };
+}
+
+async function tollIdemComplete(
+  route: string,
+  key: string | null,
+  status: number,
+  body: unknown,
+): Promise<void> {
+  if (!key) return;
+  const { completeTollIdempotency } = await import("./toll_request_idempotency.ts");
+  await completeTollIdempotency(route, key, status, body);
+}
+
+async function tollIdemAbandon(route: string, key: string | null): Promise<void> {
+  if (!key) return;
+  const { abandonTollIdempotency } = await import("./toll_request_idempotency.ts");
+  await abandonTollIdempotency(route, key);
+}
+
 
 /**
  * Optional [from, to] (yyyy-MM-dd) scoping for the period-gated wizard.
@@ -1789,7 +1890,7 @@ app.get(`${BASE}/rematch-candidates`, async (c) => {
 // or any financial record. Use this once an admin has looked at a flagged
 // toll and decided the original resolution is correct (or has already fixed
 // it manually via the existing Edit/Claim flows).
-app.post(`${BASE}/rematch-candidates/:id/dismiss`, async (c) => {
+app.post(`${BASE}/rematch-candidates/:id/dismiss`, requirePermission('toll.manage'), async (c) => {
   try {
     const id = c.req.param("id");
     const existing = await getTollLedgerEntry(id);
@@ -1798,7 +1899,8 @@ app.post(`${BASE}/rematch-candidates/:id/dismiss`, async (c) => {
     const nextMetadata = { ...(existing.metadata || {}) };
     delete (nextMetadata as any).rematchCandidate;
 
-    await updateTollLedgerEntry(id, { metadata: nextMetadata }, "updated", "admin", "Rematch review dismissed");
+    const actorId = resolveActorId(c);
+    await updateTollLedgerEntry(id, { metadata: nextMetadata }, "updated", actorId, "Rematch review dismissed");
     return c.json({ success: true });
   } catch (e: any) {
     console.log(`[TollReconciliation] POST /rematch-candidates/:id/dismiss error: ${e.message}`);
@@ -1815,7 +1917,7 @@ app.get(`${BASE}/unreconciled`, async (c) => {
     if (fleetUsesTollBrain() || tollBrainShadowCompare()) {
       await loadTollBrainPolicy();
     }
-    const { driverId, limit, offset, autoMatch, from, to } = parseUnreconciledQueryParams(c);
+    const { driverId, limit, offset, from, to } = parseUnreconciledQueryParams(c);
 
     const loaded = await loadTollLedgerWithTrips(from, to);
     let tollTx = loaded.tollTx;
@@ -1849,130 +1951,11 @@ app.get(`${BASE}/unreconciled`, async (c) => {
 
     const timezone = await getFleetTimezone();
 
-    // ── Auto-confirm PERFECT_MATCH (opt-in only) ───────────────────────────
-    // Default GET must stay fast: scanning every unreconciled toll against all
-    // trips on each page load exceeded edge CPU limits (HTTP 546) and blanked
-    // the dashboard even though /toll-logs still returned data.
-    // Pass ?autoMatch=1 (Refresh Data button) to run server-side auto-match.
-    const AUTO_MATCH_SCAN_CAP = 3000;
-    let autoReconciled = 0;
-    const autoReconciledIds = new Set<string>();
+    // TR-C5: GET is pure — no auto-match writes. Use POST /auto-match.
+    const autoReconciled = 0;
 
-    if (autoMatch) {
-    const scanSet = unreconciled.slice(0, AUTO_MATCH_SCAN_CAP);
-    if (unreconciled.length > AUTO_MATCH_SCAN_CAP) {
-      console.log(
-        `[TollReconciliation] Auto-match scan capped at ${AUTO_MATCH_SCAN_CAP} of ${unreconciled.length} unreconciled tolls`,
-      );
-    }
-
-    for (const tx of scanSet) {
-      const txId = tx.id;
-
-      // Guard: skip if already reconciled (race condition protection)
-      if (tx.isReconciled && tx.tripId) continue;
-
-      // Guard: skip if admin previously un-matched this auto-match
-      if (tx.metadata?.autoMatchOverridden) continue;
-
-      const cost = await resolveTollExpectedCost(tx);
-      const matches = findTollMatchesServer(
-        tx,
-        trips,
-        timezone,
-        driverAliasMap,
-        cost.expectedCost,
-        {
-          officialAmount: cost.officialAmount,
-          tagAmount: cost.tagAmount,
-          usedOfficialRate: cost.usedOfficialRate,
-          rateDrift: cost.rateDrift,
-        },
-      );
-      const best = matches[0];
-      if (best?.isAmbiguous) continue;
-      if (best?.matchType !== "PERFECT_MATCH") continue;
-
-      const tripId = best.tripId;
-      const trip = trips.find((t: any) => t.id === tripId);
-      if (!trip) continue;
-
-      try {
-        // Phase 5: Update toll_ledger:* as primary store
-        // Phase 6: Write ONLY to toll_ledger (single source of truth)
-        await updateTollLedgerEntry(
-          txId,
-          {
-            status: "reconciled",
-            tripId,
-            isReconciled: true,
-            driverId: trip.driverId || tx.driverId,
-            driverName: trip.driverName || tx.driverName,
-            matchConfidence: best.confidenceScore,
-            matchedAt: new Date().toISOString(),
-            matchedBy: "system-auto",
-          },
-          "reconciled",
-          "system-auto"
-        );
-
-        await syncTripRefundOnTollLink({
-          transactionId: txId,
-          tripId,
-          auto: true,
-          source: "system:toll_reconcile_sync:auto_match",
-        });
-
-        // Update local tx object for response (not persisted to transaction:*)
-        tx.tripId = tripId;
-        tx.isReconciled = true;
-        tx.driverId = trip.driverId || tx.driverId;
-        tx.driverName = trip.driverName || tx.driverName;
-
-        // Write ledger entry for audit trail
-        await writeTollLedgerEntry({
-          eventType: "toll_reconciled",
-          category: "Toll Reconciliation",
-          description: `Auto-matched toll to trip: ${(trip.pickupLocation || "").substring(0, 30)} \u2192 ${(trip.dropoffLocation || "").substring(0, 30)}`,
-          grossAmount: Math.abs(Number(tx.amount) || 0),
-          netAmount: 0,
-          direction: "neutral",
-          sourceType: "reconciliation",
-          sourceId: txId,
-          driverId: tx.driverId || trip.driverId || "unknown",
-          driverName: tx.driverName || trip.driverName || "Unknown",
-          vehicleId: tx.vehicleId || trip.vehicleId,
-          date: tx.date,
-          metadata: {
-            tripId,
-            matchedAt: new Date().toISOString(),
-            matchedBy: "system-auto",
-            tollAmount: Math.abs(Number(tx.amount) || 0),
-            tripTollCharges: trip.tollCharges || 0,
-          },
-        });
-
-        autoReconciledIds.add(txId);
-        autoReconciled++;
-        console.log(
-          `[TollReconciliation] Auto-confirmed PERFECT_MATCH: tx ${txId} \u2192 trip ${tripId} (score: ${best.confidenceScore})`,
-        );
-      } catch (err: any) {
-        console.log(
-          `[TollReconciliation] Auto-confirm failed for tx ${txId}: ${err.message}`,
-        );
-      }
-    }
-
-    if (autoReconciled > 0) {
-      console.log(
-        `[TollReconciliation] Auto-confirmed ${autoReconciled} perfect match(es)`,
-      );
-    }
-    } // end autoMatch opt-in
-
-    // Paginate the REMAINING unreconciled tolls (after auto-confirm).
-    const remaining = unreconciled.filter((tx: any) => !autoReconciledIds.has(tx.id));
+    // Paginate unreconciled tolls (read-only).
+    const remaining = unreconciled;
     const total = remaining.length;
     const page = remaining.slice(offset, offset + limit);
 
@@ -1980,9 +1963,12 @@ app.get(`${BASE}/unreconciled`, async (c) => {
     const puSettings = await getRefundAutomationSettings();
 
     // Compute match suggestions for the current page (display only).
+    // TR-M3: batch expected-cost resolve before sync match scoring.
+    const pageCosts = await resolveTollExpectedCostsBatch(page);
     const suggestionsMap: Record<string, MatchResult[]> = {};
-    for (const tx of page) {
-      const cost = await resolveTollExpectedCost(tx);
+    for (let i = 0; i < page.length; i++) {
+      const tx = page[i];
+      const cost = pageCosts[i];
       // Stamp official cost onto the row for client financials / drift UI
       (tx as any).officialAmount = cost.officialAmount;
       (tx as any).tagAmount = cost.tagAmount;
@@ -2180,7 +2166,7 @@ app.get(`${BASE}/unreconciled`, async (c) => {
 
     const durationMs = Date.now() - t0;
     console.log(
-      `[TollReconciliation] GET /unreconciled: total=${total} page=${page.length} autoMatch=${autoMatch} autoReconciled=${autoReconciled} durationMs=${durationMs}`,
+      `[TollReconciliation] GET /unreconciled: total=${total} page=${page.length} durationMs=${durationMs}`,
     );
 
     return c.json({
@@ -2196,6 +2182,70 @@ app.get(`${BASE}/unreconciled`, async (c) => {
     console.log(
       `[TollReconciliation] GET /unreconciled error: ${e.message}`,
     );
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+// ─── POST /auto-match (TR-C5) — loop in toll_auto_match.ts ───────────────
+app.post(`${BASE}/auto-match`, requirePermission('toll.manage'), async (c) => {
+  try {
+    return await withTollIdempotency(c, "auto-match", async () => {
+      const body = await c.req.json().catch(() => ({}));
+      const driverId = body?.driverId ? String(body.driverId) : undefined;
+      const from = body?.from ? String(body.from) : undefined;
+      const to = body?.to ? String(body.to) : undefined;
+      const actorId = resolveActorId(c);
+
+      const loaded = await loadTollLedgerWithTrips(from, to);
+      let tollTx = loaded.tollTx;
+      let trips = loaded.trips;
+      const driverAliasMap = await getDriverAliasMap();
+      if (driverId) {
+        tollTx = filterByDriver(tollTx, driverId, driverAliasMap);
+        trips = filterByDriver(trips, driverId, driverAliasMap);
+      }
+
+      let unreconciled = tollTx.filter((tx: any) => {
+        if (!isReconcilableTollExpense(tx)) return false;
+        const isCashClaim = tx.paymentMethod === "Cash" || !!tx.receiptUrl;
+        if (isCashClaim) return tx.status === "Pending" && !tx.isReconciled;
+        return !tx.isReconciled || !tx.tripId;
+      });
+      unreconciled = await filterByDateRange(unreconciled, from, to);
+
+      const timezone = await getFleetTimezone();
+      // Resolve ledger deps at call time (declared later in this module).
+      const result = await runPerfectMatchAutoMatch(
+        {
+          unreconciled,
+          trips,
+          timezone,
+          driverAliasMap,
+          actorId,
+        },
+        {
+          resolveExpectedCostsBatch: resolveTollExpectedCostsBatch,
+          findMatches: findTollMatchesServer,
+          updateTollLedgerEntry,
+          syncTripRefundOnTollLink,
+          writeTollLedgerEntry,
+        },
+      );
+
+      console.log(
+        `[TollReconciliation] POST /auto-match: autoReconciled=${result.autoReconciled} errors=${result.errors.length}`,
+      );
+      return {
+        body: {
+          success: true,
+          autoReconciled: result.autoReconciled,
+          errors: result.errors.slice(0, 50),
+          failed: result.errors.length,
+        },
+      };
+    });
+  } catch (e: any) {
+    console.error(`[TollReconciliation] POST /auto-match error: ${e.message}`);
     return c.json({ error: e.message }, 500);
   }
 });
@@ -2223,49 +2273,9 @@ app.get(`${BASE}/unclaimed-refunds`, async (c) => {
       to,
     );
 
-    // ── Automation (flagged, default OFF): auto-apply integrity-safe cash washes ──
-    const automation = await getRefundAutomationSettings();
-    let autoResolved = 0;
-    const autoResolvedIds = new Set<string>();
-    if (automation.refundAutomationEnabled && candidates.length > 0) {
-      const plazas = await loadActivePlazaPoints();
-      for (const t of candidates) {
-        const nearest = nearestPlazaMetersForTrip(t, plazas);
-        const { amountMatchesAnyOfficialRate } = await import("./toll_rate_schedule.ts");
-        const matchesOfficialRate = await amountMatchesAnyOfficialRate(
-          Number(t.tollCharges) || 0,
-          t.date,
-        );
-        const cls = classifyRefundServer({
-          tollCharges: Number(t.tollCharges) || 0,
-          platform: t.platform,
-          paymentMethod: t.paymentMethod,
-          nearestPlazaMeters: nearest,
-          matchesOfficialRate,
-        });
-        if (isSafeAutoApplyServer(cls, automation.refundAutoMinConfidence)) {
-          try {
-            await applyRefundResolution({
-              tripId: t.id,
-              resolution: cls.status,
-              auto: true,
-              confidence: cls.confidence,
-              notes: "Auto-resolved: " + cls.reason,
-            });
-            autoResolvedIds.add(t.id);
-            autoResolved++;
-          } catch (err: any) {
-            console.log(`[TollReconciliation] Auto-resolve failed for trip ${t.id}: ${err.message}`);
-          }
-        }
-      }
-      if (autoResolved > 0) {
-        console.log(`[TollReconciliation] Auto-resolved ${autoResolved} refund(s) as cash wash`);
-      }
-    }
-
-    // Remaining unresolved after any automation pass.
-    const unclaimedRaw = candidates.filter((t: any) => !autoResolvedIds.has(t.id));
+    // TR-C5: GET is pure — no auto-resolve writes when automation flag is on.
+    // Use POST /auto-resolve-refunds (or a scheduled job) for that path.
+    const unclaimedRaw = candidates;
     // Defense: unordered historical pages could duplicate the same trip id.
     const seenUnclaimed = new Set<string>();
     const unclaimed = unclaimedRaw.filter((t: any) => {
@@ -2290,12 +2300,95 @@ app.get(`${BASE}/unclaimed-refunds`, async (c) => {
       total,
       limit,
       offset,
-      autoResolved,
+      autoResolved: 0,
     });
   } catch (e: any) {
     console.log(
       `[TollReconciliation] GET /unclaimed-refunds error: ${e.message}`,
     );
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+// ─── POST /auto-resolve-refunds (TR-C5 explicit; was GET write path) ─────
+app.post(`${BASE}/auto-resolve-refunds`, requirePermission('toll.manage'), async (c) => {
+  try {
+    return await withTollIdempotency(c, "auto-resolve-refunds", async () => {
+      const body = await c.req.json().catch(() => ({}));
+      const driverId = body?.driverId ? String(body.driverId) : undefined;
+      const from = body?.from ? String(body.from) : undefined;
+      const to = body?.to ? String(body.to) : undefined;
+      const actorId = resolveActorId(c);
+
+      const automation = await getRefundAutomationSettings();
+      if (!automation.refundAutomationEnabled) {
+        return {
+          status: 400,
+          body: {
+            success: false,
+            error: "refundAutomationEnabled must be ON",
+            code: "AUTOMATION_DISABLED",
+            autoResolved: 0,
+          },
+        };
+      }
+
+      const loaded = await loadTollLedgerWithTrips(from, to);
+      const tollTx = filterByDriver(loaded.tollTx, driverId);
+      let trips = filterByDriver(loaded.trips, driverId);
+      const linkedTripIds = collectLinkedTripIds(tollTx);
+      const candidates = await filterByDateRange(
+        trips.filter((t: any) => isUnresolvedRefund(t, linkedTripIds)),
+        from,
+        to,
+      );
+
+      let autoResolved = 0;
+      const errors: string[] = [];
+      const plazas = await loadActivePlazaPoints();
+      const { amountMatchesAnyOfficialRate } = await import("./toll_rate_schedule.ts");
+      for (const t of candidates) {
+        const nearest = nearestPlazaMetersForTrip(t, plazas);
+        const matchesOfficialRate = await amountMatchesAnyOfficialRate(
+          Number(t.tollCharges) || 0,
+          t.date,
+        );
+        const cls = classifyRefundServer({
+          tollCharges: Number(t.tollCharges) || 0,
+          platform: t.platform,
+          paymentMethod: t.paymentMethod,
+          nearestPlazaMeters: nearest,
+          matchesOfficialRate,
+        });
+        if (!isSafeAutoApplyServer(cls, automation.refundAutoMinConfidence)) continue;
+        try {
+          await applyRefundResolution({
+            tripId: t.id,
+            resolution: cls.status,
+            auto: true,
+            confidence: cls.confidence,
+            notes: "Auto-resolved: " + cls.reason,
+            actorId,
+          });
+          autoResolved++;
+        } catch (err: any) {
+          console.error(`[TollReconciliation] Auto-resolve failed for trip ${t.id}: ${err.message}`);
+          errors.push(`${t.id}: ${err.message}`);
+        }
+      }
+
+      console.log(`[TollReconciliation] POST /auto-resolve-refunds: autoResolved=${autoResolved}`);
+      return {
+        body: {
+          success: true,
+          autoResolved,
+          failed: errors.length,
+          errors: errors.slice(0, 50),
+        },
+      };
+    });
+  } catch (e: any) {
+    console.error(`[TollReconciliation] POST /auto-resolve-refunds error: ${e.message}`);
     return c.json({ error: e.message }, 500);
   }
 });
@@ -4096,7 +4189,7 @@ app.get(`${BASE}/toll-ledger/backup-ledger`, async (c) => {
  * Manual plaza link override for a toll ledger row (Phase 3).
  * Body: { plazaId: string | null }
  */
-app.post(`${BASE}/toll-ledger/:id/plaza`, async (c) => {
+app.post(`${BASE}/toll-ledger/:id/plaza`, requirePermission('toll.manage'), async (c) => {
   try {
     const id = c.req.param("id");
     const body = await c.req.json().catch(() => ({}));
@@ -4107,7 +4200,7 @@ app.post(`${BASE}/toll-ledger/:id/plaza`, async (c) => {
       id,
       { plazaId },
       "updated",
-      "admin",
+      resolveActorId(c),
       "Plaza link override",
     );
     if (!updated) return c.json({ error: "Toll not found" }, 404);
@@ -4257,7 +4350,7 @@ app.post(`${TOLL_HTTP_PREFIX}/toll-ledger/:id/void`, requirePermission('toll.man
  *  - dryRun?: boolean (default true)
  *  - batchSize?: number (default 200, max 500)
  */
-app.post(`${BASE}/toll-ledger/repair-dates`, async (c) => {
+app.post(`${BASE}/toll-ledger/repair-dates`, requirePermission('toll.manage'), async (c) => {
   try {
     const body = await c.req.json().catch(() => ({}));
     const results = await executeTollLedgerRepairDates(body);
@@ -4421,7 +4514,7 @@ app.get(`${BASE}/toll-ledger/backup`, async (c) => {
 // Migrates existing toll transactions from transaction:* to toll_ledger:*.
 // Supports dry-run mode and batch processing.
 
-app.post(`${BASE}/toll-ledger/backfill`, async (c) => {
+app.post(`${BASE}/toll-ledger/backfill`, requirePermission('toll.manage'), async (c) => {
   try {
     const body = await c.req.json();
     const dryRun = body.dryRun !== false; // Default to dry-run for safety
@@ -4913,7 +5006,7 @@ app.get(`${BASE}/toll-ledger/plaza-backfill/status`, async (c) => {
 });
 
 // ─── POST /toll-ledger/plaza-backfill ─── apply (dry-run by default) ──────
-app.post(`${BASE}/toll-ledger/plaza-backfill`, async (c) => {
+app.post(`${BASE}/toll-ledger/plaza-backfill`, requirePermission('toll.manage'), async (c) => {
   try {
     const body = await c.req.json().catch(() => ({}));
     const dryRun = body.dryRun !== false;
@@ -5010,7 +5103,7 @@ app.get(`${BASE}/toll-ledger/tag-backfill/status`, async (c) => {
 });
 
 // ─── POST /toll-ledger/tag-backfill ─── apply (dry-run by default) ────────
-app.post(`${BASE}/toll-ledger/tag-backfill`, async (c) => {
+app.post(`${BASE}/toll-ledger/tag-backfill`, requirePermission('toll.manage'), async (c) => {
   try {
     const body = await c.req.json().catch(() => ({}));
     const dryRun = body.dryRun !== false; // default to dry-run for safety
@@ -5077,7 +5170,7 @@ app.get(`${BASE}/match-index/status`, async (c) => {
 // batched, capped error samples, and — since additive fields are only
 // "harmless" if you can prove it — writes a small manifest of every id it
 // touched so a bad run has a concrete undo path.
-app.post(`${BASE}/match-index/backfill`, async (c) => {
+app.post(`${BASE}/match-index/backfill`, requirePermission('toll.manage'), async (c) => {
   try {
     const body = await c.req.json().catch(() => ({}));
     const dryRun = body?.dryRun !== false; // default to dry-run for safety
@@ -5238,7 +5331,7 @@ app.get(`${BASE}/toll-pnl-offset-backfill/status`, async (c) => {
 // capped error samples, manifest of every id touched for a concrete undo path
 // (reinstateTollCharge per id, same key each source already uses). Idempotent
 // — safe to re-run; already-offset sources are skipped automatically.
-app.post(`${BASE}/toll-pnl-offset-backfill/backfill`, async (c) => {
+app.post(`${BASE}/toll-pnl-offset-backfill/backfill`, requirePermission('toll.manage'), async (c) => {
   try {
     const body = await c.req.json().catch(() => ({}));
     const dryRun = body?.dryRun !== false; // default to dry-run for safety
@@ -5408,7 +5501,7 @@ app.get(`${BASE}/toll-pnl-offset-backfill/orphans-status`, async (c) => {
   }
 });
 
-app.post(`${BASE}/toll-pnl-offset-backfill/repair-orphans`, async (c) => {
+app.post(`${BASE}/toll-pnl-offset-backfill/repair-orphans`, requirePermission('toll.manage'), async (c) => {
   try {
     const body = await c.req.json().catch(() => ({}));
     const dryRun = body?.dryRun !== false; // default to dry-run for safety
@@ -5492,7 +5585,7 @@ app.get(`${BASE}/workflow-stage/status`, async (c) => {
 // transactionId→claim lookup otherwise) since claimId is only populated on
 // TollLedgerRecord going forward by the claim service (Phase B) — this is
 // the one place that index gets built from a full claims scan instead.
-app.post(`${BASE}/workflow-stage/backfill`, async (c) => {
+app.post(`${BASE}/workflow-stage/backfill`, requirePermission('toll.manage'), async (c) => {
   try {
     const body = await c.req.json().catch(() => ({}));
     const dryRun = body?.dryRun !== false; // default to dry-run for safety
@@ -5583,7 +5676,7 @@ app.post(`${BASE}/workflow-stage/backfill`, async (c) => {
 // Re-runs live match for open personal_use_pending / orphan_personal rows in a
 // date window and persists the result (clears stale personal pins when a trip
 // rematch wins). dryRun defaults true.
-app.post(`${BASE}/personal-rematch/backfill`, async (c) => {
+app.post(`${BASE}/personal-rematch/backfill`, requirePermission('toll.manage'), async (c) => {
   try {
     const body = await c.req.json().catch(() => ({}));
     const dryRun = body?.dryRun !== false;
@@ -5766,8 +5859,13 @@ app.post(`${BASE}/personal-rematch/backfill`, async (c) => {
 // Charges high-confidence personal orphans (no trip that day) to the driver.
 // Requires personalUseAutoChargeEnabled + driverTollChargeSyncEnabled.
 // dryRun defaults true. Never charges nearby / out-of-window / cash / no driver.
-app.post(`${BASE}/personal-use/auto-charge`, async (c) => {
+app.post(`${BASE}/personal-use/auto-charge`, requirePermission('toll.manage'), async (c) => {
+  let _idemKey: string | null = null;
   try {
+    const _idem = await tollIdemGate(c, "personal-use/auto-charge");
+    if (_idem.response) return _idem.response;
+    _idemKey = _idem.key;
+
     const body = await c.req.json().catch(() => ({}));
     const dryRun = body?.dryRun !== false;
     const batchSize = Math.max(1, Math.min(100, Number(body?.batchSize) || 25));
@@ -5776,6 +5874,14 @@ app.post(`${BASE}/personal-use/auto-charge`, async (c) => {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(startDate) || !/^\d{4}-\d{2}-\d{2}$/.test(endDate)) {
       return c.json({ error: "startDate and endDate (YYYY-MM-DD) are required" }, 400);
     }
+
+    // TR-C2: refuse when period sealed (use range start as week key).
+    const sealed = await refuseIfTollPeriodSealed(
+      c,
+      mondayWeekKeyFromCalendarDay(startDate),
+      "POST /personal-use/auto-charge",
+    );
+    if (sealed) return sealed;
 
     const settings = await getRefundAutomationSettings();
     if (!settings.personalUseAutoChargeEnabled || !settings.driverTollChargeSyncEnabled) {
@@ -5913,7 +6019,7 @@ app.post(`${BASE}/personal-use/auto-charge`, async (c) => {
     console.log(
       `[PersonalAutoCharge] charged=${chargedIds.length} remaining=${remaining} errors=${errors.length}`,
     );
-    return c.json({
+    const _okBody = {
       success: true,
       dryRun: false,
       startDate,
@@ -5926,8 +6032,11 @@ app.post(`${BASE}/personal-use/auto-charge`, async (c) => {
         remaining > 0
           ? `Charged ${chargedIds.length}. Re-run to continue with ${remaining} remaining.`
           : `Charged ${chargedIds.length}. Personal auto-charge complete for this range.`,
-    });
+    };
+    await tollIdemComplete("personal-use/auto-charge", _idemKey, 200, _okBody);
+    return c.json(_okBody);
   } catch (e: any) {
+    await tollIdemAbandon("personal-use/auto-charge", _idemKey);
     console.log(`[PersonalAutoCharge] error: ${e.message}`);
     return c.json({ error: e.message }, 500);
   }
@@ -5955,6 +6064,10 @@ async function writeTollLedgerEntry(params: {
   vehicleId?: string;
   date: string;
   metadata?: Record<string, any>;
+  /** TR-H5: real user id when available */
+  actorId?: string;
+  /** TR-H4: throw when canonical append fails (money paths) */
+  strict?: boolean;
 }): Promise<string> {
   const id = crypto.randomUUID();
   const date = params.date?.split("T")[0] || new Date().toISOString().split("T")[0];
@@ -5979,6 +6092,7 @@ async function writeTollLedgerEntry(params: {
       category: params.category,
       driverName: params.driverName,
       auditEntryId: id,
+      ...(params.actorId ? { actorId: params.actorId } : {}),
     },
   };
   
@@ -5997,6 +6111,11 @@ async function writeTollLedgerEntry(params: {
         `[TollLedger] Canonical event ${params.eventType} for tx ${params.sourceId} was rejected:`,
         result?.details,
       );
+      if (params.strict) {
+        throw new Error(
+          `Failed to write toll audit event ${params.eventType} for ${params.sourceId}`,
+        );
+      }
     } else {
       console.log(
         `[TollLedger] Written ${params.eventType} canonical event for tx ${params.sourceId}`,
@@ -6004,6 +6123,7 @@ async function writeTollLedgerEntry(params: {
     }
   } catch (err) {
     console.error(`[TollLedger] Failed to write canonical event:`, err);
+    if (params.strict) throw err;
   }
   
   return id;
@@ -6026,92 +6146,124 @@ async function safeSyncPlazaTollPnlOffset(
 
 app.post(`${BASE}/reconcile`, requirePermission('toll.manage'), async (c) => {
   try {
-    const { transactionId, tripId } = await c.req.json();
-    if (!transactionId || !tripId) {
-      return c.json(
-        { error: "Both transactionId and tripId are required" },
-        400,
-      );
-    }
+    return await withTollIdempotency(c, "reconcile", async () => {
+      const { transactionId, tripId } = await c.req.json();
+      if (!transactionId || !tripId) {
+        return {
+          status: 400,
+          body: { error: "Both transactionId and tripId are required" },
+        };
+      }
 
-    // Read from toll_ledger, promoting legacy transaction:* rows on demand
-    const tollEntry = await getTollLedgerEntryOrHydrate(transactionId);
-    if (!tollEntry) return c.json({ error: `Toll ${transactionId} not found` }, 404);
+      const sealed = await refuseSealedForTollId(c, transactionId, "POST /reconcile");
+      if (sealed) {
+        const sealedBody = await sealed.json().catch(() => ({ error: "period_sealed" }));
+        return { status: sealed.status as number, body: sealedBody };
+      }
 
-    // Convert to tx shape for response compatibility
-    const tx = tollLedgerToTxShape(tollEntry);
+      const actorId = resolveActorId(c);
 
-    if (tollEntry.status === "reconciled" && tollEntry.tripId) {
-      return c.json(
-        { error: `Toll ${transactionId} is already reconciled to trip ${tollEntry.tripId}` },
-        409,
-      );
-    }
+      const tollEntry = await getTollLedgerEntryOrHydrate(transactionId);
+      if (!tollEntry) {
+        return { status: 404, body: { error: `Toll ${transactionId} not found` } };
+      }
 
-    const trip = await kv.get(`trip:${tripId}`);
-    if (!trip) return c.json({ error: `Trip ${tripId} not found` }, 404);
+      const tx = tollLedgerToTxShape(tollEntry);
 
-    // Phase 6: Write ONLY to toll_ledger (single source of truth)
-    const reconciledRow = await updateTollLedgerEntry(
-      transactionId,
-      {
-        status: "reconciled",
-        tripId,
-        isReconciled: true,
-        driverId: trip.driverId || tx.driverId,
-        driverName: trip.driverName || tx.driverName,
-      },
-      "reconciled",
-      "admin"
-    );
-    await recomputeAndPersistWorkflowStage(transactionId);
-    await safeSyncPlazaTollPnlOffset(reconciledRow, c, "reconcile");
-    await syncTripRefundOnTollLink({
-      transactionId,
-      tripId,
-      auto: false,
-      source: "system:toll_reconcile_sync:reconcile",
-    });
+      if (tollEntry.status === "reconciled" && tollEntry.tripId) {
+        return {
+          status: 409,
+          body: {
+            error: `Toll ${transactionId} is already reconciled to trip ${tollEntry.tripId}`,
+          },
+        };
+      }
 
-    // Update local tx object for response (not persisted to transaction:*)
-    tx.tripId = tripId;
-    tx.isReconciled = true;
-    tx.driverId = trip.driverId || tx.driverId;
-    tx.driverName = trip.driverName || tx.driverName;
+      const trip = await kv.get(`trip:${tripId}`);
+      if (!trip) {
+        return { status: 404, body: { error: `Trip ${tripId} not found` } };
+      }
 
-    // Write ledger entry
-    await writeTollLedgerEntry({
-      eventType: "toll_reconciled",
-      category: "Toll Reconciliation",
-      description: `Toll matched to trip: ${(trip.pickupLocation || "").substring(0, 30)} → ${(trip.dropoffLocation || "").substring(0, 30)}`,
-      grossAmount: Math.abs(Number(tx.amount) || 0),
-      netAmount: 0, // net-zero: expense offset by refund
-      direction: "neutral",
-      sourceType: "reconciliation",
-      sourceId: transactionId,
-      driverId: tx.driverId || trip.driverId || "unknown",
-      driverName: tx.driverName || trip.driverName || "Unknown",
-      vehicleId: tx.vehicleId || trip.vehicleId,
-      date: tx.date,
-      metadata: {
-        tripId,
-        matchedAt: new Date().toISOString(),
-        matchedBy: "admin",
-        tollAmount: Math.abs(Number(tx.amount) || 0),
-        tripTollCharges: trip.tollCharges || 0,
-      },
-    });
+      let ledgerWritten = false;
+      try {
+        const reconciledRow = await updateTollLedgerEntry(
+          transactionId,
+          {
+            status: "reconciled",
+            tripId,
+            isReconciled: true,
+            driverId: trip.driverId || tx.driverId,
+            driverName: trip.driverName || tx.driverName,
+          },
+          "reconciled",
+          actorId,
+        );
+        ledgerWritten = true;
+        await recomputeAndPersistWorkflowStage(transactionId);
+        await safeSyncPlazaTollPnlOffset(reconciledRow, c, "reconcile");
+        await syncTripRefundOnTollLink({
+          transactionId,
+          tripId,
+          auto: false,
+          source: "system:toll_reconcile_sync:reconcile",
+          actorId,
+        });
 
-    console.log(
-      `[TollReconciliation] Reconciled tx ${transactionId} → trip ${tripId}`,
-    );
+        tx.tripId = tripId;
+        tx.isReconciled = true;
+        tx.driverId = trip.driverId || tx.driverId;
+        tx.driverName = trip.driverName || tx.driverName;
 
-    return c.json({
-      success: true,
-      data: {
-        transaction: tx,
-        trip,
-      },
+        await writeTollLedgerEntry({
+          eventType: "toll_reconciled",
+          category: "Toll Reconciliation",
+          description: `Toll matched to trip: ${(trip.pickupLocation || "").substring(0, 30)} → ${(trip.dropoffLocation || "").substring(0, 30)}`,
+          grossAmount: Math.abs(Number(tx.amount) || 0),
+          netAmount: 0,
+          direction: "neutral",
+          sourceType: "reconciliation",
+          sourceId: transactionId,
+          driverId: tx.driverId || trip.driverId || "unknown",
+          driverName: tx.driverName || trip.driverName || "Unknown",
+          vehicleId: tx.vehicleId || trip.vehicleId,
+          date: tx.date,
+          actorId,
+          strict: true,
+          metadata: {
+            tripId,
+            matchedAt: new Date().toISOString(),
+            matchedBy: actorId,
+            tollAmount: Math.abs(Number(tx.amount) || 0),
+            tripTollCharges: trip.tollCharges || 0,
+          },
+        });
+      } catch (err: any) {
+        if (ledgerWritten) {
+          try {
+            await updateTollLedgerEntry(
+              transactionId,
+              { status: "pending", tripId: null, isReconciled: false },
+              "unreconciled",
+              actorId,
+              "reconcile compensation",
+            );
+            await recomputeAndPersistWorkflowStage(transactionId);
+          } catch (compErr: any) {
+            console.error(
+              `[TollReconciliation] POST /reconcile compensation failed for ${transactionId}: ${compErr?.message}`,
+            );
+          }
+        }
+        throw err;
+      }
+
+      console.log(`[TollReconciliation] Reconciled tx ${transactionId} → trip ${tripId}`);
+      return {
+        body: {
+          success: true,
+          data: { transaction: tx, trip },
+        },
+      };
     });
   } catch (e: any) {
     console.log(`[TollReconciliation] POST /reconcile error: ${e.message}`);
@@ -6127,6 +6279,8 @@ app.post(`${BASE}/unreconcile`, requirePermission('toll.manage'), async (c) => {
     if (!transactionId) {
       return c.json({ error: "transactionId is required" }, 400);
     }
+    const sealed = await refuseSealedForTollId(c, transactionId, "POST /unreconcile");
+    if (sealed) return sealed;
 
     // Read from toll_ledger, promoting legacy transaction:* rows on demand
     const tollEntry = await getTollLedgerEntryOrHydrate(transactionId);
@@ -6157,7 +6311,7 @@ app.post(`${BASE}/unreconcile`, requirePermission('toll.manage'), async (c) => {
         metadata: wasAutoMatched ? { autoMatchOverridden: true } : undefined,
       },
       "unreconciled",
-      "admin"
+      resolveActorId(c)
     );
     await recomputeAndPersistWorkflowStage(transactionId);
     await safeSyncPlazaTollPnlOffset(unmatchedRow, c, "unreconcile");
@@ -6196,7 +6350,8 @@ app.post(`${BASE}/unreconcile`, requirePermission('toll.manage'), async (c) => {
           tripId: String(previousTripId),
           resolution: "pending",
           auto: false,
-          source: "admin",
+          source: resolveActorId(c),
+          actorId: resolveActorId(c),
         });
       } catch (err: any) {
         console.log(
@@ -6221,7 +6376,7 @@ app.post(`${BASE}/unreconcile`, requirePermission('toll.manage'), async (c) => {
 // ─── POST /backfill-linked-trip-resolutions ─────────────────────────────
 // One-time repair: toll linked + settled but trip credit still null/pending.
 
-app.post(`${BASE}/backfill-linked-trip-resolutions`, requirePermission("data.backfill"), async (c) => {
+app.post(`${BASE}/backfill-linked-trip-resolutions`, requirePermission('toll.manage'), async (c) => {
   try {
     const body = await c.req.json().catch(() => ({}));
     const dryRun = body?.dryRun !== false;
@@ -6286,7 +6441,7 @@ app.post(`${BASE}/backfill-linked-trip-resolutions`, requirePermission("data.bac
 // ─── PATCH /edit ───────────────────────────────────────────────────────
 // Edit toll transaction fields (date, time, amount, vehicle, driver, description)
 
-app.patch(`${BASE}/edit`, async (c) => {
+app.patch(`${BASE}/edit`, requirePermission('toll.manage'), async (c) => {
   try {
     const { transactionId, updates } = await c.req.json();
     if (!transactionId) {
@@ -6295,6 +6450,9 @@ app.patch(`${BASE}/edit`, async (c) => {
     if (!updates || typeof updates !== "object") {
       return c.json({ error: "updates object is required" }, 400);
     }
+
+    const sealed = await refuseSealedForTollId(c, transactionId, "PATCH /edit");
+    if (sealed) return sealed;
 
     // Read from toll_ledger, promoting legacy transaction:* rows on demand
     const tollEntry = await getTollLedgerEntryOrHydrate(transactionId);
@@ -6331,7 +6489,7 @@ app.patch(`${BASE}/edit`, async (c) => {
       transactionId,
       appliedUpdates,
       "updated",
-      "admin"
+      resolveActorId(c)
     );
 
     // Update local tx object for response (not persisted to transaction:*)
@@ -6353,6 +6511,7 @@ app.patch(`${BASE}/edit`, async (c) => {
 /** Core reset used by Toll Logs — also exposed on main Hono app to avoid nested-route 404s in production. */
 export async function executeTollResetForReconciliation(
   transactionId: string | undefined,
+  actorId: string = "unknown",
 ): Promise<{ success: true; data: { transaction: any } }> {
   if (!transactionId || String(transactionId).trim() === "") {
     const err = new Error("transactionId is required") as Error & { status?: number };
@@ -6414,7 +6573,7 @@ export async function executeTollResetForReconciliation(
       metadata: meta,
     },
     "edited",
-    "admin",
+    actorId,
   );
 
   const updated = await getTollLedgerEntry(id);
@@ -6457,9 +6616,11 @@ export async function executeTollResetForReconciliation(
   };
 }
 
-app.post(`${BASE}/reset-for-reconciliation`, async (c) => {
+app.post(`${BASE}/reset-for-reconciliation`, requirePermission('toll.manage'), async (c) => {
   try {
     const { transactionId } = await c.req.json();
+    const sealed = await refuseSealedForTollId(c, transactionId, "POST /reset-for-reconciliation");
+    if (sealed) return sealed;
     const result = await executeTollResetForReconciliation(transactionId);
     return c.json(result);
   } catch (e: any) {
@@ -6494,6 +6655,15 @@ app.post(`${BASE}/reset-period`, requirePermission('toll.manage'), async (c) => 
 
   try {
     const body = await c.req.json();
+    const startDate = String(body.startDate || "").slice(0, 10);
+    if (/^\d{4}-\d{2}-\d{2}$/.test(startDate)) {
+      const sealed = await refuseIfTollPeriodSealed(
+        c,
+        mondayWeekKeyFromCalendarDay(startDate),
+        "POST /reset-period",
+      );
+      if (sealed) return sealed;
+    }
     const { executePeriodReconciliationReset } = await import("./period_reset.ts");
     const result = await executePeriodReconciliationReset(
       {
@@ -6539,11 +6709,28 @@ app.post(`${BASE}/bulk-reconcile`, requirePermission('toll.manage'), async (c) =
     }, 429);
   }
 
+  let _idemKey: string | null = null;
   try {
+    const _idem = await tollIdemGate(c, "bulk-reconcile");
+    if (_idem.response) return _idem.response;
+    _idemKey = _idem.key;
+
     const { matches } = await c.req.json();
 
     if (!Array.isArray(matches) || matches.length === 0) {
       return c.json({ error: "matches array is required and must be non-empty" }, 400);
+    }
+
+    // TR-C2: refuse if any match's week is sealed.
+    const seenWeeks = new Set<string>();
+    for (const m of matches) {
+      const tid = m?.transactionId;
+      if (!tid) continue;
+      const wk = await weekKeyForTollId(String(tid));
+      if (!wk || seenWeeks.has(wk)) continue;
+      seenWeeks.add(wk);
+      const sealed = await refuseIfTollPeriodSealed(c, wk, "POST /bulk-reconcile");
+      if (sealed) return sealed;
     }
 
     console.log(
@@ -6650,7 +6837,7 @@ app.post(`${BASE}/bulk-reconcile`, requirePermission('toll.manage'), async (c) =
 
       // Phase 6: Update toll_ledger entries (primary store)
       for (const { id, updates, trip } of tollLedgerUpdates) {
-        const row = await updateTollLedgerEntry(id, updates, "reconciled", "admin_bulk");
+        const row = await updateTollLedgerEntry(id, updates, "reconciled", resolveActorId(c));
         await recomputeAndPersistWorkflowStage(id);
         await safeSyncPlazaTollPnlOffset(row, c, "bulk-reconcile");
         const tripId = updates.tripId ?? trip?.id;
@@ -6660,6 +6847,7 @@ app.post(`${BASE}/bulk-reconcile`, requirePermission('toll.manage'), async (c) =
             tripId: String(tripId),
             auto: false,
             source: "system:toll_reconcile_sync:bulk_reconcile",
+            actorId: resolveActorId(c),
           });
         }
       }
@@ -6669,8 +6857,11 @@ app.post(`${BASE}/bulk-reconcile`, requirePermission('toll.manage'), async (c) =
       `[TollReconciliation] Bulk reconcile complete: ${results.matched} matched, ${results.skipped} skipped, ${results.failed} failed`,
     );
 
-    return c.json({ success: true, ...results });
+    const _okBody = { success: true, ...results };
+    await tollIdemComplete("bulk-reconcile", _idemKey, 200, _okBody);
+    return c.json(_okBody);
   } catch (e: any) {
+    await tollIdemAbandon("bulk-reconcile", _idemKey);
     const clientIp = getClientIp(c);
     const rbacUser = c.get("rbacUser") as RbacUser | undefined;
     const userId = rbacUser?.userId || "unknown";
@@ -6683,12 +6874,20 @@ app.post(`${BASE}/bulk-reconcile`, requirePermission('toll.manage'), async (c) =
 // ─── POST /approve ─────────────────────────────────────────────────────
 // For cash toll claims — marks as approved + writes ledger entry
 
-app.post(`${BASE}/approve`, async (c) => {
+app.post(`${BASE}/approve`, requirePermission('toll.manage'), async (c) => {
+  let _idemKey: string | null = null;
   try {
+    const _idem = await tollIdemGate(c, "approve");
+    if (_idem.response) return _idem.response;
+    _idemKey = _idem.key;
+
     const { transactionId, notes } = await c.req.json();
     if (!transactionId) {
       return c.json({ error: "transactionId is required" }, 400);
     }
+
+    const sealed = await refuseSealedForTollId(c, transactionId, "POST /approve");
+    if (sealed) return sealed;
 
     // Read from toll_ledger, promoting legacy transaction:* rows on demand
     const tollEntry = await getTollLedgerEntryOrHydrate(transactionId);
@@ -6706,7 +6905,7 @@ app.post(`${BASE}/approve`, async (c) => {
         notes: notes || undefined,
       },
       "approved",
-      "admin"
+      resolveActorId(c)
     );
     await recomputeAndPersistWorkflowStage(transactionId);
 
@@ -6748,8 +6947,11 @@ app.post(`${BASE}/approve`, async (c) => {
 
     console.log(`[TollReconciliation] Approved toll claim ${transactionId}`);
 
-    return c.json({ success: true, data: tx });
+    const _okBody = { success: true, data: tx };
+    await tollIdemComplete("approve", _idemKey, 200, _okBody);
+    return c.json(_okBody);
   } catch (e: any) {
+    await tollIdemAbandon("approve", _idemKey);
     console.log(`[TollReconciliation] POST /approve error: ${e.message}`);
     return c.json({ error: e.message }, 500);
   }
@@ -6758,12 +6960,20 @@ app.post(`${BASE}/approve`, async (c) => {
 // ─── POST /reject ──────────────────────────────────────────────────────
 // For cash toll claims — marks as rejected + writes ledger entry
 
-app.post(`${BASE}/reject`, async (c) => {
+app.post(`${BASE}/reject`, requirePermission('toll.manage'), async (c) => {
+  let _idemKey: string | null = null;
   try {
+    const _idem = await tollIdemGate(c, "reject");
+    if (_idem.response) return _idem.response;
+    _idemKey = _idem.key;
+
     const { transactionId, reason } = await c.req.json();
     if (!transactionId) {
       return c.json({ error: "transactionId is required" }, 400);
     }
+
+    const sealed = await refuseSealedForTollId(c, transactionId, "POST /reject");
+    if (sealed) return sealed;
 
     // Read from toll_ledger, promoting legacy transaction:* rows on demand
     const tollEntry = await getTollLedgerEntryOrHydrate(transactionId);
@@ -6781,7 +6991,7 @@ app.post(`${BASE}/reject`, async (c) => {
         notes: reason || undefined,
       },
       "rejected",
-      "admin"
+      resolveActorId(c)
     );
     await recomputeAndPersistWorkflowStage(transactionId);
 
@@ -6821,8 +7031,11 @@ app.post(`${BASE}/reject`, async (c) => {
 
     console.log(`[TollReconciliation] Rejected toll claim ${transactionId}`);
 
-    return c.json({ success: true, data: tx });
+    const _okBody = { success: true, data: tx };
+    await tollIdemComplete("reject", _idemKey, 200, _okBody);
+    return c.json(_okBody);
   } catch (e: any) {
+    await tollIdemAbandon("reject", _idemKey);
     console.log(`[TollReconciliation] POST /reject error: ${e.message}`);
     return c.json({ error: e.message }, 500);
   }
@@ -6842,8 +7055,13 @@ app.post(`${BASE}/reject`, async (c) => {
 // callers get, which is an accepted limitation of this endpoint, not an
 // oversight. It DOES get the new isReconciled/claimId/workflowStage
 // bookkeeping (RWF-1) below, since those are local to this file.
-app.post(`${BASE}/resolve`, async (c) => {
+app.post(`${BASE}/resolve`, requirePermission('toll.manage'), async (c) => {
+  let _idemKey: string | null = null;
   try {
+    const _idem = await tollIdemGate(c, "resolve");
+    if (_idem.response) return _idem.response;
+    _idemKey = _idem.key;
+
     const { transactionId, resolution, notes, source, driverId: driverIdOverride } =
       await c.req.json();
     if (!transactionId || !resolution) {
@@ -6852,6 +7070,9 @@ app.post(`${BASE}/resolve`, async (c) => {
         400,
       );
     }
+
+    const sealed = await refuseSealedForTollId(c, transactionId, "POST /resolve");
+    if (sealed) return sealed;
 
     const validResolutions = ["Personal", "WriteOff", "Business"];
     if (!validResolutions.includes(resolution)) {
@@ -6921,7 +7142,9 @@ app.post(`${BASE}/resolve`, async (c) => {
       console.log(
         `[TollReconciliation] System-suggested tx ${transactionId} as ${resolution} (classify-only, no charge)`,
       );
-      return c.json({ success: true, data: { transaction: tx, claim: null, source: resolutionSource } });
+      const _okBody = { success: true, data: { transaction: tx, claim: null, source: resolutionSource } };
+    await tollIdemComplete("resolve", _idemKey, 200, _okBody);
+    return c.json(_okBody);
     }
 
     // Determine status and claim creation based on resolution type
@@ -6989,7 +7212,7 @@ app.post(`${BASE}/resolve`, async (c) => {
         notes: notes || undefined,
       },
       "resolved",
-      "admin"
+      resolveActorId(c)
     );
     await recomputeAndPersistWorkflowStage(transactionId, { claim });
 
@@ -7072,6 +7295,7 @@ app.post(`${BASE}/resolve`, async (c) => {
       data: { transaction: tx, claim },
     });
   } catch (e: any) {
+    await tollIdemAbandon("resolve", _idemKey);
     console.log(`[TollReconciliation] POST /resolve error: ${e.message}`);
     return c.json({ error: e.message }, 500);
   }
@@ -7256,7 +7480,7 @@ app.get(`${BASE}/claims-toll-sync/status`, async (c) => {
 });
 
 // ─── POST /claims-toll-sync/repair ─── apply (dry-run by default) ─────────
-app.post(`${BASE}/claims-toll-sync/repair`, async (c) => {
+app.post(`${BASE}/claims-toll-sync/repair`, requirePermission('toll.manage'), async (c) => {
   try {
     const body = await c.req.json().catch(() => ({}));
     const dryRun = body.dryRun !== false; // default to dry-run for safety
@@ -7605,6 +7829,7 @@ async function syncTripRefundOnTollLink(params: {
   tripId: string;
   auto: boolean;
   source?: string;
+  actorId?: string;
 }): Promise<void> {
   const trip = await kv.get(`trip:${params.tripId}`);
   if (!trip) return;
@@ -7616,6 +7841,7 @@ async function syncTripRefundOnTollLink(params: {
     existingLedgerId: params.transactionId,
     auto: params.auto,
     source: params.source ?? "system:toll_reconcile_sync:reconcile",
+    actorId: params.actorId,
   });
 }
 
@@ -7633,6 +7859,8 @@ async function applyRefundResolution(params: {
   /** Provenance tag stored on trip.tollRefundResolution.source. Defaults to
    *  "admin" so existing call sites are unaffected. */
   source?: string;
+  /** TR-H5: real user id when a human confirmed the resolution. */
+  actorId?: string;
   /** Persist Apply-to-Underpaid linkage for undo. */
   appliedToClaimId?: string | null;
   appliedToTollId?: string | null;
@@ -7680,7 +7908,7 @@ async function applyRefundResolution(params: {
         tripId,
         matchConfidence: null,
         matchedAt: now,
-        matchedBy: auto ? "system-auto" : "admin",
+        matchedBy: auto ? "system-auto" : (params.actorId || "admin"),
         batchId: null,
         batchName: null,
         importedAt: null,
@@ -7700,7 +7928,7 @@ async function applyRefundResolution(params: {
   // Persist the resolution on the trip (additive field only).
   trip.tollRefundResolution = {
     status: resolution,
-    resolvedBy: auto ? "system-auto" : "admin",
+    resolvedBy: auto ? "system-auto" : (params.actorId || "admin"),
     resolvedAt: now,
     notes: notes || undefined,
     auto,
@@ -7784,8 +8012,8 @@ async function applyRefundResolution(params: {
 
 /**
  * Suggestion status per unresolved unlinked-refund trip — used by GET /periods
- * so pending + cash_wash/phantom Accept stays actionable (mirrors client
- * isUnlinkedRefundActionableNow + refund suggestions).
+ * so Accept suggestions stay visible; pending-hold itself is actionable
+ * (product decision A / isUnlinkedRefundActionableNow).
  */
 async function buildUnresolvedRefundSuggestionStatuses(
   unresolvedTrips: any[],
@@ -8529,7 +8757,7 @@ async function applyUnlinkedRefundToClaim(
         amount: applied,
         tollCost: tollCostForAlloc,
         tollPeriodAnchor: String(claim.date || trip.date || "").slice(0, 10) || null,
-        actor: "admin",
+        actor: (typeof c?.get === "function" ? resolveActorId(c) : "admin"),
         notes: `Unlinked trip refund applied $${applied.toFixed(2)}`,
         metadata: { tripId, shareCap },
       });
@@ -8627,7 +8855,7 @@ async function applyUnlinkedRefundToClaim(
           unlinkedSourceTripId: tripId,
           unlinkedSourcePlatform: tripPlatform,
           unlinkedAppliedAt: new Date().toISOString(),
-          unlinkedAppliedBy: "admin",
+          unlinkedAppliedBy: (typeof c?.get === "function" ? resolveActorId(c) : "admin"),
           preUnlinkedTripId: existingToll?.tripId || existingToll?.preUnlinkedTripId || null,
         },
         "reconciled",
@@ -9017,7 +9245,7 @@ async function undoApplyUnlinkedRefundToClaim(
     ...trip,
     tollRefundResolution: {
       status: "pending",
-      resolvedBy: "admin",
+      resolvedBy: (typeof c?.get === "function" ? resolveActorId(c) : "admin"),
       resolvedAt: now,
       auto: false,
       notes: resolution.notes,
@@ -9079,8 +9307,13 @@ app.get(`${BASE}/unlinked-shortfall-suggestions`, async (c) => {
 });
 
 // ─── POST /unlinked-refunds/apply-to-claim ───────────────────────────────
-app.post(`${BASE}/unlinked-refunds/apply-to-claim`, async (c) => {
+app.post(`${BASE}/unlinked-refunds/apply-to-claim`, requirePermission('toll.manage'), async (c) => {
+  let _idemKey: string | null = null;
   try {
+    const _idem = await tollIdemGate(c, "unlinked-refunds/apply-to-claim");
+    if (_idem.response) return _idem.response;
+    _idemKey = _idem.key;
+
     const body = await c.req.json();
     const tripId = body?.tripId;
     const claimId = body?.claimId || null;
@@ -9089,6 +9322,26 @@ app.post(`${BASE}/unlinked-refunds/apply-to-claim`, async (c) => {
     if (!tripId) return c.json({ error: "tripId is required" }, 400);
     if ((!claimId && !tollId) && (!targets || targets.length === 0)) {
       return c.json({ error: "claimId, tollId, or targets is required" }, 400);
+    }
+
+    const tollIdsToGuard = [
+      ...(tollId ? [String(tollId)] : []),
+      ...((targets || []).map((t: any) => t?.tollId).filter(Boolean) as string[]),
+    ];
+    for (const tid of [...new Set(tollIdsToGuard)]) {
+      const sealed = await refuseSealedForTollId(c, tid, "POST /unlinked-refunds/apply-to-claim");
+      if (sealed) return sealed;
+    }
+    // Trip-only apply (no tollId): guard via trip dropoff week when possible.
+    if (tollIdsToGuard.length === 0) {
+      const trip = await kv.get(`trip:${tripId}`);
+      const tripDate = trip?.dropoffTime || trip?.pickupTime || trip?.date;
+      if (tripDate) {
+        const tz = await getFleetTimezone();
+        const wk = mondayWeekKeyFromCalendarDay(fleetCalendarDay(String(tripDate), tz));
+        const sealed = await refuseIfTollPeriodSealed(c, wk, "POST /unlinked-refunds/apply-to-claim");
+        if (sealed) return sealed;
+      }
     }
 
     const opts = {
@@ -9111,16 +9364,23 @@ app.post(`${BASE}/unlinked-refunds/apply-to-claim`, async (c) => {
               applyShare: targets?.[0]?.share ?? opts.applyShare,
             },
           );
-    if (!result.ok) return c.json({ error: result.error }, result.status);
-    return c.json({ success: true, data: result.data });
+    if (!result.ok) {
+      const errBody = { error: result.error };
+      await tollIdemComplete("unlinked-refunds/apply-to-claim", _idemKey, result.status, errBody);
+      return c.json(errBody, result.status);
+    }
+    const _okBody = { success: true, data: result.data };
+    await tollIdemComplete("unlinked-refunds/apply-to-claim", _idemKey, 200, _okBody);
+    return c.json(_okBody);
   } catch (e: any) {
+    await tollIdemAbandon("unlinked-refunds/apply-to-claim", _idemKey);
     console.log(`[TollReconciliation] POST /unlinked-refunds/apply-to-claim error: ${e.message}`);
     return c.json({ error: e.message }, 500);
   }
 });
 
 // ─── POST /unlinked-refunds/undo-apply ───────────────────────────────────
-app.post(`${BASE}/unlinked-refunds/undo-apply`, async (c) => {
+app.post(`${BASE}/unlinked-refunds/undo-apply`, requirePermission('toll.manage'), async (c) => {
   try {
     const body = await c.req.json();
     const tripId = body?.tripId;
@@ -9136,7 +9396,7 @@ app.post(`${BASE}/unlinked-refunds/undo-apply`, async (c) => {
 
 // ─── POST /repair-dispute-partial-claims ─────────────────────────────────
 /** Clear stale partial shortfall on claims already covered by dispute refunds. */
-app.post(`${BASE}/repair-dispute-partial-claims`, async (c) => {
+app.post(`${BASE}/repair-dispute-partial-claims`, requirePermission('toll.manage'), async (c) => {
   try {
     const body = await c.req.json().catch(() => ({}));
     const dryRun = body?.dryRun !== false;
@@ -9157,7 +9417,7 @@ app.post(`${BASE}/repair-dispute-partial-claims`, async (c) => {
 
 // ─── POST /unlinked-refunds/repair-split ─────────────────────────────────
 /** Auto-fix claims left Reimbursed after a partial (trip-only) undo. */
-app.post(`${BASE}/unlinked-refunds/repair-split`, async (c) => {
+app.post(`${BASE}/unlinked-refunds/repair-split`, requirePermission('toll.manage'), async (c) => {
   try {
     const body = await c.req.json().catch(() => ({}));
     const tripId = body?.tripId as string | undefined;
@@ -9179,7 +9439,7 @@ app.post(`${BASE}/unlinked-refunds/repair-split`, async (c) => {
 });
 
 // ─── POST /resolve-refund ────────────────────────────────────────────────
-app.post(`${BASE}/resolve-refund`, async (c) => {
+app.post(`${BASE}/resolve-refund`, requirePermission('toll.manage'), async (c) => {
   try {
     const { tripId, resolution, notes, driverId } = await c.req.json();
     const valid: RefundResolutionStatus[] = ["cash_wash", "phantom", "expense_logged", "pending"];
@@ -9195,7 +9455,7 @@ app.post(`${BASE}/resolve-refund`, async (c) => {
 });
 
 // ─── POST /resolve-refund/bulk ───────────────────────────────────────────
-app.post(`${BASE}/resolve-refund/bulk`, async (c) => {
+app.post(`${BASE}/resolve-refund/bulk`, requirePermission('toll.manage'), async (c) => {
   try {
     const body = await c.req.json();
     const items: Array<{ tripId: string; resolution: RefundResolutionStatus; notes?: string; driverId?: string }> =
@@ -9270,7 +9530,7 @@ app.get(`${BASE}/automation-settings`, async (c) => {
   }
 });
 
-app.put(`${BASE}/automation-settings`, async (c) => {
+app.put(`${BASE}/automation-settings`, requirePermission('toll.manage'), async (c) => {
   try {
     const body = await c.req.json();
     const current = await getRefundAutomationSettings();
@@ -9522,7 +9782,7 @@ async function bridgeRideTollCrossings(opts: { dryRun: boolean; limit: number })
 }
 
 // ─── POST /bridge-rides ──────────────────────────────────────────────────
-app.post(`${BASE}/bridge-rides`, async (c) => {
+app.post(`${BASE}/bridge-rides`, requirePermission('toll.manage'), async (c) => {
   try {
     const body = await c.req.json().catch(() => ({}));
     const dryRun = body?.dryRun === true;

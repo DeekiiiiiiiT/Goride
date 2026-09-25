@@ -76,6 +76,16 @@ export const FEATURE_FLAGS = {
    * Enable only after purge safety (F4) is deployed.
    */
   FUEL_STATEMENT_ADOPT: "fuel_statement_adopt",
+  /**
+   * Toll recon: wizard / landing / close gate consume server readiness (default ON).
+   * Set false to roll back to client counts with shadow mismatch logs.
+   */
+  TOLL_READINESS_SERVER_AUTHORITATIVE: "tollReadinessServerAuthoritative",
+  /**
+   * Documented alias for TOLL_PERIOD_WRITE_GUARD env (off|shadow|enforce).
+   * Env defaults to enforce; this KV name is reserved for future org overrides.
+   */
+  TOLL_PERIOD_WRITE_GUARD: "tollPeriodWriteGuard",
 } as const;
 
 export type FeatureFlagName = typeof FEATURE_FLAGS[keyof typeof FEATURE_FLAGS];
@@ -447,6 +457,12 @@ export async function initializeDefaultFlags(): Promise<void> {
       description:
         "Adopt / link / dismiss unmatched JAA approved_fuel statement rows into Transaction Logs. Also arms week-close drift gate.",
     },
+    {
+      name: FEATURE_FLAGS.TOLL_READINESS_SERVER_AUTHORITATIVE,
+      enabled: true,
+      description:
+        "Toll recon readiness is server-authoritative for Finish / landing / close. Default ON after enterprise enforce flip.",
+    },
   ];
 
   for (const def of defaults) {
@@ -459,6 +475,13 @@ export async function initializeDefaultFlags(): Promise<void> {
       console.log(`[FeatureFlags] Initialized default flag: ${def.name}`);
     }
   }
+
+  // Enforce flip: always arm server-authoritative readiness (idempotent upsert).
+  await setFeatureFlag(FEATURE_FLAGS.TOLL_READINESS_SERVER_AUTHORITATIVE, true, {
+    description:
+      "Toll recon readiness is server-authoritative for Finish / landing / close. Default ON after enterprise enforce flip.",
+    updatedBy: "toll_recon_enforce_flip",
+  });
 }
 
 /**

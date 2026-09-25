@@ -3,7 +3,13 @@ import { api } from '../../../services/api';
 import { PeriodLandingPage } from './PeriodLandingPage';
 import { ReconciliationWizard } from './ReconciliationWizard';
 import { ReconciliationPeriod, useTollReconciliationPeriods } from '../../../hooks/useTollReconciliationPeriods';
-import { isReconWeekSealed, reconWeekSealMessage } from '../../../utils/reconWeekSeal';
+import { isReconWeekNotYetOpen, reconWeekSealMessage } from '../../../utils/reconWeekSeal';
+import { STEP_ORDER, type StepId } from '../../../utils/tollPeriodGating';
+
+function parseTollDeepLinkStep(raw: string | null | undefined): StepId | undefined {
+  const step = String(raw || '').trim();
+  return (STEP_ORDER as string[]).includes(step) ? (step as StepId) : undefined;
+}
 
 /**
  * Period-first Toll Reconciliation entry point (Phase F3/F4). Replaces the
@@ -29,6 +35,7 @@ export function ReconciliationDashboard({
   const [drivers, setDrivers] = useState<any[]>([]);
   const [selectedDriverId, setSelectedDriverId] = useState<string>(initialDriverId || '');
   const [selectedPeriod, setSelectedPeriod] = useState<ReconciliationPeriod | null>(null);
+  const [initialStepId, setInitialStepId] = useState<StepId | undefined>();
   const [sealedMessage, setSealedMessage] = useState<string | null>(null);
   const [deepLinkConsumed, setDeepLinkConsumed] = useState(false);
   const periodData = useTollReconciliationPeriods(selectedDriverId || undefined);
@@ -50,7 +57,7 @@ export function ReconciliationDashboard({
   const trySelectPeriod = (period: ReconciliationPeriod) => {
     if (
       period.status !== 'reconciled' &&
-      isReconWeekSealed({ weekStart: period.startDate, periodEnd: period.endDate })
+      isReconWeekNotYetOpen({ weekStart: period.startDate, periodEnd: period.endDate })
     ) {
       setSealedMessage(
         reconWeekSealMessage({ weekStart: period.startDate, periodEnd: period.endDate }),
@@ -58,10 +65,18 @@ export function ReconciliationDashboard({
       return;
     }
     setSealedMessage(null);
+    setInitialStepId(undefined);
     setSelectedPeriod(period);
   };
 
-  // Deep-link from Close Week Review → open the exact Monday week in the wizard
+  const openCloseWeek = (weekKey: string) => {
+    if (typeof window === 'undefined') return;
+    const path = `/close-week?week=${encodeURIComponent(weekKey)}`;
+    window.history.pushState({ page: 'close-week', weekKey }, '', path);
+    window.dispatchEvent(new PopStateEvent('popstate'));
+  };
+
+  // Deep-link from Close Week Review → open the exact Monday week (+ optional step)
   useEffect(() => {
     if (deepLinkConsumed || periodData.loading || selectedPeriod) return;
     const fromQuery =
@@ -75,7 +90,7 @@ export function ReconciliationDashboard({
     setDeepLinkConsumed(true);
     if (
       period.status !== 'reconciled' &&
-      isReconWeekSealed({ weekStart: period.startDate, periodEnd: period.endDate })
+      isReconWeekNotYetOpen({ weekStart: period.startDate, periodEnd: period.endDate })
     ) {
       setSealedMessage(
         reconWeekSealMessage({ weekStart: period.startDate, periodEnd: period.endDate }),
@@ -83,6 +98,11 @@ export function ReconciliationDashboard({
       return;
     }
     setSealedMessage(null);
+    const stepRaw =
+      typeof window !== 'undefined'
+        ? String(new URLSearchParams(window.location.search).get('step') || '')
+        : '';
+    setInitialStepId(parseTollDeepLinkStep(stepRaw));
     setSelectedPeriod(period);
   }, [
     deepLinkConsumed,
@@ -98,8 +118,10 @@ export function ReconciliationDashboard({
         period={selectedPeriod}
         driverId={selectedDriverId || undefined}
         drivers={drivers}
+        initialStepId={initialStepId}
         onExit={() => {
           setSelectedPeriod(null);
+          setInitialStepId(undefined);
           void periodData.refresh();
         }}
       />
@@ -128,6 +150,7 @@ export function ReconciliationDashboard({
         onDriverChange={setSelectedDriverId}
         onSelectPeriod={trySelectPeriod}
         onPeriodsReset={() => void periodData.refresh()}
+        onCloseWeek={openCloseWeek}
         outstanding={periodData.outstanding}
         inProgress={periodData.inProgress}
         reconciled={periodData.reconciled}

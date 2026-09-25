@@ -477,24 +477,19 @@ export function getCrossPeriodCoverage(
 }
 
 /**
- * Toll IDs scoped to the active wizard week — date-filtered rows plus same-week
- * reconciled tolls the API date filter may drop. Never includes all-time history.
+ * Toll IDs scoped to the active wizard week (TR-H2: dead unscoped
+ * allReconciled fallback removed — callers pass period-trimmed lists).
  */
 export function buildPeriodTollIdSet(
   unreconciled: FinancialTransaction[],
   reconciled: FinancialTransaction[],
-  allReconciled: FinancialTransaction[],
   periodWeekKey: string,
   fleetTz: string,
 ): Set<string> {
   const ids = new Set<string>();
   for (const tx of [...unreconciled, ...reconciled]) {
-    if (tx?.id) ids.add(tx.id);
-  }
-  for (const tx of allReconciled) {
-    if (tx?.id && isTollInWizardPeriod(tx, periodWeekKey, fleetTz)) {
-      ids.add(tx.id);
-    }
+    if (!tx?.id) continue;
+    if (isTollInWizardPeriod(tx, periodWeekKey, fleetTz)) ids.add(tx.id);
   }
   return ids;
 }

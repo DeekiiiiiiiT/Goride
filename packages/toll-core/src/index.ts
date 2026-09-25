@@ -119,6 +119,8 @@ export * from './tollPeriodStepTypes.ts';
 export * from './tollPeriodDisputeHelpers.ts';
 export * from './tollPeriodCounts.ts';
 export * from './unlinkedShortfallEligibility.ts';
+export * from './tollSpend.ts';
+export * from './tollPeriodReadiness.ts';
 
 export {
   computeTollCardIdentityResidual,

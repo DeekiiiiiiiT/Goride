@@ -15,11 +15,14 @@ export interface TollFinancialOverviewCardsProps {
   chargedToDrivers: number;
   netTollLoss: number;
   /**
-   * Four-card identity residual (Spend − Reimbursed − Charged − NetTollLoss).
-   * When |residual| > 1¢ the cards do NOT reconcile to a clean P&L identity, so
-   * the Net Toll Loss tooltip drops its "same as Business Finance P&L" claim.
+   * Cards net vs independent events netting residual (TR-C4).
+   * When |residual| > 1¢ the cards do NOT reconcile to a clean P&L identity.
    */
   identityResidual?: number;
+  /**
+   * When true (platform filter active), never claim Business Finance P&L parity (TR-H8).
+   */
+  filteredView?: boolean;
   needsReviewCount: number;
   tollsNeedingReviewCount: number;
   refundsNeedingReviewCount: number;
@@ -78,19 +81,23 @@ export function TollFinancialOverviewCards({
   chargedToDrivers,
   netTollLoss,
   identityResidual,
+  filteredView = false,
   needsReviewCount,
   tollsNeedingReviewCount,
   refundsNeedingReviewCount,
   resolvedRefundsAmount,
   showNeedsReviewCard = true,
 }: TollFinancialOverviewCardsProps) {
-  // Only claim the P&L identity when the four cards actually reconcile.
-  const identityCloses = identityResidual == null || Math.abs(identityResidual) <= 0.01;
+  // Only claim the P&L identity when unfiltered and the residual control closes.
+  const identityCloses =
+    !filteredView && (identityResidual == null || Math.abs(identityResidual) <= 0.01);
   // C-3/C-4: Net Toll Loss is SIGNED — a negative value means the fleet
   // over-recovered (charged drivers / refunds exceed spend) → show it as a credit.
   const overRecovered = netTollLoss < -0.005;
   const netTollLossLabel = overRecovered ? 'Net Toll Recovery' : 'Net Toll Loss';
   const netTollLossValueClass = overRecovered ? 'text-emerald-600' : 'text-rose-600';
+  // TR-L2: Alert chip only when there is material net loss (not at $0).
+  const showNetAlert = !overRecovered && Math.abs(netTollLoss) > 0.01;
   const gridCols = showNeedsReviewCard
     ? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-5'
     : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-4';
@@ -180,10 +187,12 @@ export function TollFinancialOverviewCards({
             <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-rose-50 text-rose-600 transition-transform group-hover:scale-110">
               <DollarSign className="h-5 w-5" aria-hidden />
             </div>
-            <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-rose-600">
-              <AlertTriangle className="h-3.5 w-3.5" aria-hidden />
-              Alert
-            </span>
+            {showNetAlert && (
+              <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-rose-600">
+                <AlertTriangle className="h-3.5 w-3.5" aria-hidden />
+                Alert
+              </span>
+            )}
           </div>
           <div className="flex items-center gap-1.5">
             <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">{netTollLossLabel}</p>
@@ -192,7 +201,11 @@ export function TollFinancialOverviewCards({
                 <HelpCircle className="h-3.5 w-3.5 text-rose-400 transition-colors hover:text-rose-600" />
               </TooltipTrigger>
               <TooltipContent>
-                {identityCloses ? (
+                {filteredView ? (
+                  <p className="max-w-[240px] text-xs">
+                    Filtered platform view — this number is a subset, not the Business Finance P&amp;L figure.
+                  </p>
+                ) : identityCloses ? (
                   <p className="max-w-[240px] text-xs">
                     Fleet toll loss — same number as Business Finance → Profit &amp; Loss → Tolls
                     (canonical charges minus cash-washes, personal, and real refunds). Spend /
@@ -213,7 +226,9 @@ export function TollFinancialOverviewCards({
             {formatJMD(Math.abs(netTollLoss), 2)}
           </h4>
           <p className="mt-2 text-[11px] font-medium text-slate-500">
-            {overRecovered
+            {filteredView
+              ? 'Filtered view — not the P&L figure'
+              : overRecovered
               ? 'Fleet over-recovered — net credit vs. Business Finance P&L'
               : identityCloses
               ? 'Same as Business Finance P&L'

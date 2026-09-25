@@ -31,7 +31,8 @@ export function PeriodHistoryPanel(props: {
   resolvedRefundTrips: Trip[];
   onUndoRefund: (tripId: string) => Promise<void> | void;
   matchedTolls: FinancialTransaction[];
-  allReconciledTolls: FinancialTransaction[];
+  /** Same as matched/reconciled pool — kept for call-site naming. */
+  reconciledTolls: FinancialTransaction[];
   periodClaims: Claim[];
   allClaims: Claim[];
   fleetTz: string;
@@ -92,8 +93,8 @@ export function PeriodHistoryPanel(props: {
               const res = t.tollRefundResolution;
               const claimId = res?.appliedToClaimId;
               const claimPool = props.allClaims?.length ? props.allClaims : props.periodClaims;
-              const tollPool = props.allReconciledTolls?.length
-                ? props.allReconciledTolls
+              const tollPool = props.reconciledTolls?.length
+                ? props.reconciledTolls
                 : props.matchedTolls;
               const claim = claimId
                 ? claimPool.find((c) => c?.id === claimId)

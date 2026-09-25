@@ -22,7 +22,11 @@ import { StepId, STEP_ORDER } from '../../../utils/tollPeriodGating';
 import { TollFinancialOverviewCards } from './TollFinancialOverviewCards';
 import { BulkPeriodResetDialog } from './BulkPeriodResetDialog';
 import { TollReconBusyProvider } from './tollReconBusyLock';
-import { isReconWeekSealed, reconWeekSealMessage } from '../../../utils/reconWeekSeal';
+import { isReconWeekNotYetOpen, reconWeekSealMessage } from '../../../utils/reconWeekSeal';
+import {
+  TOLL_SEAL_CHIP_LABEL,
+  type TollSealChip,
+} from '../../../utils/tollSealChip';
 
 const STEP_ICONS: Record<StepId, LucideIcon> = {
   'needs-review': HelpCircle,
@@ -40,6 +44,8 @@ interface PeriodLandingPageProps {
   onDriverChange?: (driverId: string) => void;
   onSelectPeriod: (period: ReconciliationPeriod) => void;
   onPeriodsReset?: () => void;
+  /** TR-M9: deep-link into Close Week for this Monday week key. */
+  onCloseWeek?: (weekKey: string) => void;
   outstanding: ReconciliationPeriod[];
   inProgress: ReconciliationPeriod[];
   reconciled: ReconciliationPeriod[];
@@ -81,16 +87,25 @@ function StepChip({ stepId, counts }: { stepId: StepId; counts: ReconciliationPe
   );
 }
 
-function PeriodCard({ period, onSelect }: { period: ReconciliationPeriod; onSelect: () => void }) {
+function PeriodCard({
+  period,
+  onSelect,
+  onCloseWeek,
+}: {
+  period: ReconciliationPeriod;
+  onSelect: () => void;
+  onCloseWeek?: (weekKey: string) => void;
+}) {
   const f = period.financials;
   const badge = periodDateBadge(period.startDate);
-  const weekSealed =
+  const weekNotYetOpen =
     period.status !== 'reconciled' &&
-    isReconWeekSealed({ weekStart: period.startDate, periodEnd: period.endDate });
-  const sealMessage = weekSealed
+    isReconWeekNotYetOpen({ weekStart: period.startDate, periodEnd: period.endDate });
+  const sealMessage = weekNotYetOpen
     ? reconWeekSealMessage({ weekStart: period.startDate, periodEnd: period.endDate })
     : null;
-  const statusCta = weekSealed ? (
+  const sealChip = period.sealChip ?? null;
+  const statusCta = weekNotYetOpen ? (
     <span className="inline-flex min-h-[44px] items-center rounded-lg border border-amber-300 bg-amber-50 px-4 py-2 text-xs font-semibold text-amber-900">
       Opens after week ends
     </span>
@@ -108,18 +123,24 @@ function PeriodCard({ period, onSelect }: { period: ReconciliationPeriod; onSele
     </span>
   );
 
+  const sealChipClass: Record<TollSealChip, string> = {
+    reviewed: 'border-sky-200 bg-sky-50 text-sky-800',
+    sealed: 'border-indigo-200 bg-indigo-50 text-indigo-800',
+    closed: 'border-emerald-200 bg-emerald-50 text-emerald-800',
+  };
+
   return (
     <button
       type="button"
       onClick={() => {
-        if (weekSealed) return;
+        if (weekNotYetOpen) return;
         onSelect();
       }}
-      disabled={weekSealed}
-      aria-disabled={weekSealed}
+      disabled={weekNotYetOpen}
+      aria-disabled={weekNotYetOpen}
       title={sealMessage || undefined}
       className={`group w-full min-h-[72px] rounded-2xl border p-5 text-left shadow-sm backdrop-blur-sm transition-all duration-200 ease-in-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/40 ${
-        weekSealed
+        weekNotYetOpen
           ? 'cursor-not-allowed border-amber-200 bg-amber-50/60 opacity-90'
           : 'border-indigo-100/60 bg-white/70 hover:border-indigo-300/60 hover:bg-white hover:shadow-md'
       }`}
@@ -136,7 +157,16 @@ function PeriodCard({ period, onSelect }: { period: ReconciliationPeriod; onSele
             <span className="text-xl font-semibold leading-none text-indigo-700">{badge.day}</span>
           </div>
           <div className="min-w-0">
-            <h5 className="text-lg font-semibold tracking-tight text-slate-900">{period.label}</h5>
+            <div className="flex flex-wrap items-center gap-2">
+              <h5 className="text-lg font-semibold tracking-tight text-slate-900">{period.label}</h5>
+              {sealChip && (
+                <span
+                  className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-semibold ${sealChipClass[sealChip]}`}
+                >
+                  {TOLL_SEAL_CHIP_LABEL[sealChip]}
+                </span>
+              )}
+            </div>
             {f && (f.tollSpend > 0 || f.reimbursedByPlatform > 0 || f.chargedToDrivers > 0) && (
               <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-[12px]">
                 <span className="text-slate-500">
@@ -156,6 +186,21 @@ function PeriodCard({ period, onSelect }: { period: ReconciliationPeriod; onSele
                 <StepChip key={stepId} stepId={stepId} counts={period.counts} />
               ))}
             </div>
+            {!weekNotYetOpen && sealChip !== 'closed' && onCloseWeek && (
+              <div className="mt-2">
+                <a
+                  href={`/close-week?week=${encodeURIComponent(period.startDate)}`}
+                  className="text-xs font-semibold text-indigo-700 underline-offset-2 hover:underline"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    onCloseWeek(period.startDate);
+                  }}
+                >
+                  Close this week
+                </a>
+              </div>
+            )}
           </div>
         </div>
 
@@ -171,10 +216,12 @@ function PeriodList({
   periods,
   emptyMessage,
   onSelectPeriod,
+  onCloseWeek,
 }: {
   periods: ReconciliationPeriod[];
   emptyMessage: string;
   onSelectPeriod: (period: ReconciliationPeriod) => void;
+  onCloseWeek?: (weekKey: string) => void;
 }) {
   if (periods.length === 0) {
     return (
@@ -186,7 +233,12 @@ function PeriodList({
   return (
     <div className="space-y-4">
       {periods.map((period) => (
-        <PeriodCard key={period.id} period={period} onSelect={() => onSelectPeriod(period)} />
+        <PeriodCard
+          key={period.id}
+          period={period}
+          onSelect={() => onSelectPeriod(period)}
+          onCloseWeek={onCloseWeek}
+        />
       ))}
     </div>
   );
@@ -199,6 +251,7 @@ export function PeriodLandingPage({
   onDriverChange,
   onSelectPeriod,
   onPeriodsReset,
+  onCloseWeek,
   outstanding,
   inProgress,
   reconciled,
@@ -222,7 +275,7 @@ export function PeriodLandingPage({
 
   const sealedOpenBanner = useMemo(() => {
     const sealed = openWork.find((p) =>
-      isReconWeekSealed({ weekStart: p.startDate, periodEnd: p.endDate }),
+      isReconWeekNotYetOpen({ weekStart: p.startDate, periodEnd: p.endDate }),
     );
     if (!sealed) return null;
     return reconWeekSealMessage({ weekStart: sealed.startDate, periodEnd: sealed.endDate });
@@ -416,6 +469,7 @@ export function PeriodLandingPage({
               periods={outstanding}
               emptyMessage="No outstanding periods — everything is caught up or already in progress."
               onSelectPeriod={onSelectPeriod}
+              onCloseWeek={onCloseWeek}
             />
           </TabsContent>
 
@@ -424,6 +478,7 @@ export function PeriodLandingPage({
               periods={inProgress}
               emptyMessage="No in-progress periods — toll matching still open, or everything is completed."
               onSelectPeriod={onSelectPeriod}
+              onCloseWeek={onCloseWeek}
             />
           </TabsContent>
 
@@ -432,6 +487,7 @@ export function PeriodLandingPage({
               periods={reconciled}
               emptyMessage="No completed periods yet."
               onSelectPeriod={onSelectPeriod}
+              onCloseWeek={onCloseWeek}
             />
           </TabsContent>
         </Tabs>

@@ -138,6 +138,15 @@ jobs:
           supabase/functions/_fleet-server/fuel_week_n17_pa.test.ts
           supabase/functions/_fleet-server/fuel_week_phase4_server_cats.test.ts
 
+      - name: Deno test toll recon durability (Phase 8)
+        run: >
+          deno test --allow-read --allow-env --no-check
+          supabase/functions/_fleet-server/toll_period_writable.test.ts
+          supabase/functions/_fleet-server/toll_finish_seal_path.test.ts
+          supabase/functions/_fleet-server/toll_auto_match.test.ts
+          supabase/functions/_fleet-server/toll_route_auth.test.ts
+          supabase/functions/_fleet-server/toll_request_idempotency.test.ts
+
       - name: Deno test remittance money + residual + pause routes
         run: >
           deno test --allow-read --allow-env

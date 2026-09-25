@@ -203,7 +203,7 @@ describe('computeStepCounts', () => {
     expect(counts['unlinked-refunds']).toEqual({ actionable: 2, informational: 0 });
   });
 
-  it('unlinked-refunds: pending-hold alone is informational', () => {
+  it('unlinked-refunds: pending-hold alone is actionable (product decision A)', () => {
     const pending = {
       id: 't1',
       tollRefundResolution: { status: 'pending' },
@@ -214,7 +214,7 @@ describe('computeStepCounts', () => {
       disputeRefunds: [],
       unclaimedRefundTrips: [pending],
     });
-    expect(counts['unlinked-refunds']).toEqual({ actionable: 0, informational: 1 });
+    expect(counts['unlinked-refunds']).toEqual({ actionable: 1, informational: 0 });
   });
 
   it('unlinked-refunds: pending + Accept suggestion stays actionable', () => {

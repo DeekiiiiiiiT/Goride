@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useEffect, useCallback } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { TooltipProvider } from "../../ui/tooltip";
 import { DRIVER_FINANCIAL_PERIODS_KEY } from '../../../hooks/useDriverFinancialPeriods';
 import { TollBucketPanel } from "./TollBucketPanel";
@@ -17,7 +17,7 @@ import {
 import { Button } from "../../ui/button";
 import { runScenarioTest } from "../../../utils/testScenario";
 import { FinancialTransaction, Claim } from "../../../types/data";
-import { MatchResult, calculateTollFinancials, buildTollFinancialsContext, buildTripRefundAllocation, spentUnlinkedCreditsByTripId } from "../../../utils/tollReconciliation";
+import { MatchResult } from "../../../utils/tollReconciliation";
 import {
   resolveWizardBucket,
   isTollExcludedFromWizardBuckets,
@@ -87,6 +87,8 @@ interface ReconciliationWizardProps {
   driverId?: string;
   drivers: any[];
   onExit: () => void;
+  /** Deep-link from Close Week readiness (?step=). */
+  initialStepId?: StepId;
 }
 
 /**
@@ -107,8 +109,8 @@ export function ReconciliationWizard(props: ReconciliationWizardProps) {
   );
 }
 
-function ReconciliationWizardInner({ period, driverId, drivers, onExit }: ReconciliationWizardProps) {
-  const { runExclusive, busy: actionBusy } = useTollReconBusy();
+function ReconciliationWizardInner({ period, driverId, drivers, onExit, initialStepId }: ReconciliationWizardProps) {
+  const { runExclusive, busy: actionBusy, setMessage, setCancel } = useTollReconBusy();
   const handleRunTest = () => {
     if (!import.meta.env.DEV) return;
     const result = runScenarioTest();
@@ -118,13 +120,18 @@ function ReconciliationWizardInner({ period, driverId, drivers, onExit }: Reconc
 
   const [platformFilter, setPlatformFilter] = useState<PlatformFilter>('all');
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
+  /** TR-H7: charge-sync confirm via Dialog (not window.confirm); resolve(false) aborts. */
+  const [chargeSyncPrompt, setChargeSyncPrompt] = useState<{
+    resolve: (ok: boolean) => void;
+  } | null>(null);
   const fleetTz = useFleetTimezone();
+  const bulkAbortRef = React.useRef<AbortController | null>(null);
 
   const {
     loading: tollsLoading,
+    loadError,
     unreconciledTolls,
     reconciledTolls,
-    allReconciledTolls,
     unclaimedRefunds,
     resolvedRefunds,
     refundSuggestions,
@@ -151,6 +158,7 @@ function ReconciliationWizardInner({ period, driverId, drivers, onExit }: Reconc
   } = useTollReconciliation(driverId, { startDate: period.startDate, endDate: period.endDate });
 
   const truncationMessage = tollReconTruncationMessage(truncation || {});
+  const dataTruncated = Boolean(truncationMessage);
 
   const { claims, loading: claimsLoading, refresh: refreshClaims, createClaim, updateClaim, deleteClaim } = useClaims();
   const queryClient = useQueryClient();
@@ -163,7 +171,7 @@ function ReconciliationWizardInner({ period, driverId, drivers, onExit }: Reconc
     void queryClient.invalidateQueries({ queryKey: [DRIVER_FINANCIAL_PERIODS_KEY] });
     const ids = new Set<string>();
     if (driverId) ids.add(driverId);
-    for (const tx of [...unreconciledTolls, ...reconciledTolls, ...allReconciledTolls]) {
+    for (const tx of [...unreconciledTolls, ...reconciledTolls]) {
       if (!tx?.driverId) continue;
       if (!isTollInWizardPeriod(tx, period.startDate, fleetTz)) continue;
       ids.add(String(tx.driverId));
@@ -192,7 +200,6 @@ function ReconciliationWizardInner({ period, driverId, drivers, onExit }: Reconc
     fleetTz,
     unreconciledTolls,
     reconciledTolls,
-    allReconciledTolls,
   ]);
 
   const handleRefundMatchComplete = useCallback((event: DisputeMatchEvent) => {
@@ -217,7 +224,7 @@ function ReconciliationWizardInner({ period, driverId, drivers, onExit }: Reconc
     for (const t of trips) {
       if (t?.id) map.set(t.id, t);
     }
-    for (const tx of [...reconciledTolls, ...unreconciledTolls, ...allReconciledTolls] as TollWithLinkedTrip[]) {
+    for (const tx of [...reconciledTolls, ...unreconciledTolls] as TollWithLinkedTrip[]) {
       const lt = tx.linkedTrip;
       if (!lt?.id || map.has(lt.id)) continue;
       map.set(lt.id, {
@@ -229,26 +236,20 @@ function ReconciliationWizardInner({ period, driverId, drivers, onExit }: Reconc
       } as TripType);
     }
     return map;
-  }, [trips, reconciledTolls, unreconciledTolls, allReconciledTolls]);
+  }, [trips, reconciledTolls, unreconciledTolls]);
 
   /** Blocking confirm when charge sync is OFF — Expenses/Cash Wallet will not receive the debit. */
   const confirmChargeSyncOrAbort = useCallback(async (): Promise<boolean> => {
     try {
       const res = await api.getTollAutomationSettings();
       if (res.data?.driverTollChargeSyncEnabled) return true;
-      const proceed = window.confirm(
-        'Driver toll charge sync is OFF.\n\n' +
-          'This will record a claim only — it will NOT post to Expenses or Cash Wallet.\n\n' +
-          'Enable “Sync charges to driver financials” (and Unified toll settlement) in Automation Settings for production parity.\n\n' +
-          'Continue with claim-only?',
-      );
-      if (!proceed) return false;
-      toast.warning(
-        'Driver charge recorded as claim only — enable charge sync in Automation to post wallet debits.',
-      );
-      return true;
+      return await new Promise<boolean>((resolve) => {
+        setChargeSyncPrompt({ resolve });
+      });
     } catch {
-      return true; // don't block if settings fetch fails
+      // TR-H7: fail closed — never charge when we cannot verify sync settings.
+      toast.error('Could not verify charge sync settings — charge blocked. Try again or check Automation Settings.');
+      return false;
     }
   }, []);
 
@@ -486,10 +487,31 @@ function ReconciliationWizardInner({ period, driverId, drivers, onExit }: Reconc
   const handleBulkChargePersonal = useCallback(async (
     items: Array<{ tx: FinancialTransaction; match?: MatchResult }>,
   ) => {
-    for (const { tx, match } of items) {
-      await handleChargePersonal(tx, match);
+    const total = items.length;
+    if (total === 0) return;
+    const ac = new AbortController();
+    bulkAbortRef.current = ac;
+    setCancel(() => ac.abort());
+    let done = 0;
+    try {
+      for (const { tx, match } of items) {
+        if (ac.signal.aborted) {
+          toast.message(`Stopped after ${done} of ${total}`);
+          break;
+        }
+        setMessage(`Charging drivers… ${done + 1} of ${total}`);
+        await handleChargePersonal(tx, match);
+        done += 1;
+        setMessage(`Charging drivers… ${done} of ${total}`);
+      }
+      if (!ac.signal.aborted && done === total) {
+        toast.success(`Charged ${done} driver${done === 1 ? '' : 's'}`);
+      }
+    } finally {
+      bulkAbortRef.current = null;
+      setCancel(null);
     }
-  }, [handleChargePersonal]);
+  }, [handleChargePersonal, setMessage, setCancel]);
 
   const handleEditToll = async (transactionId: string, updates: Record<string, any>) => {
       try {
@@ -529,19 +551,18 @@ function ReconciliationWizardInner({ period, driverId, drivers, onExit }: Reconc
   // createdAt, which can bucket resolved claims into the wrong week). ───────
   const tollDateById = useMemo(() => {
     const map = new Map<string, string>();
-    [...unreconciledTolls, ...reconciledTolls, ...allReconciledTolls].forEach(tx => { if (tx?.id && tx?.date) map.set(tx.id, tx.date); });
+    [...unreconciledTolls, ...reconciledTolls].forEach(tx => { if (tx?.id && tx?.date) map.set(tx.id, tx.date); });
     return map;
-  }, [unreconciledTolls, reconciledTolls, allReconciledTolls]);
+  }, [unreconciledTolls, reconciledTolls]);
   const periodTollIds = useMemo(
     () =>
       buildPeriodTollIdSet(
         unreconciledTolls,
         reconciledTolls,
-        allReconciledTolls,
         period.startDate,
         fleetTz,
       ),
-    [unreconciledTolls, reconciledTolls, allReconciledTolls, period.startDate, fleetTz],
+    [unreconciledTolls, reconciledTolls, period.startDate, fleetTz],
   );
   const periodClaims = useMemo(
     () =>
@@ -568,14 +589,14 @@ function ReconciliationWizardInner({ period, driverId, drivers, onExit }: Reconc
   const underpaidReconciledTolls = useMemo(() => {
     const merged = mergeReconciledTollsForUnderpaid(
       pReconciledInPeriod,
-      allReconciledTolls.length ? allReconciledTolls : reconciledTolls,
+      reconciledTolls,
       period.startDate,
       fleetTz,
       claimTollIdsForPeriod,
     );
     const inPeriod = filterTollsToWizardPeriod(merged, period.startDate, fleetTz);
     return platformFilter === 'all' ? inPeriod : inPeriod.filter(tollInPlatform);
-  }, [pReconciledInPeriod, allReconciledTolls, reconciledTolls, period.startDate, fleetTz, claimTollIdsForPeriod, platformFilter]);
+  }, [pReconciledInPeriod, reconciledTolls, period.startDate, fleetTz, claimTollIdsForPeriod, platformFilter]);
 
   const periodClaimIds = useMemo(
     () => new Set(periodClaims.map((c) => c.id).filter(Boolean)),
@@ -669,7 +690,7 @@ function ReconciliationWizardInner({ period, driverId, drivers, onExit }: Reconc
     () => {
       const merged = mergeReconciledTollsForUnderpaid(
         pReconciledInPeriod,
-        allReconciledTolls.length ? allReconciledTolls : reconciledTolls,
+        reconciledTolls,
         period.startDate,
         fleetTz,
         claimTollIdsForPeriod,
@@ -683,14 +704,13 @@ function ReconciliationWizardInner({ period, driverId, drivers, onExit }: Reconc
         disputeRefunds: disputeRefunds || [],
         periodWeekKey: period.startDate,
         fleetTz,
-        // Fully covered pending (netLoss ~$0) do not block Finish — auto-cleared below.
+        // Fully covered pending (netLoss ~$0) do not block Finish — offer Clear covered banner.
         pendingUnderpaidTolls: classifiedAllPlatforms.underpaid,
         suggestions,
       });
     },
     [
       pReconciledInPeriod,
-      allReconciledTolls,
       reconciledTolls,
       period.startDate,
       fleetTz,
@@ -704,83 +724,59 @@ function ReconciliationWizardInner({ period, driverId, drivers, onExit }: Reconc
     ],
   );
 
-  // Auto-clear claimless underpaid leftovers already covered by trip refunds.
-  const coveredPendingClearKey = useMemo(() => {
-    if (isLoading) return '';
+  // TR-H3: preview fully covered underpaid leftovers — never auto-write on mount.
+  const coveredPendingRows = useMemo(() => {
+    if (isLoading) return [] as ReturnType<typeof listFullyCoveredPendingUnderpaid>;
     const tripMapLocal = new Map(trips.filter((t) => t?.id).map((t) => [t.id, t]));
     const claimByTollId = buildClaimByTollId(claims);
-    const covered = listFullyCoveredPendingUnderpaid({
+    return listFullyCoveredPendingUnderpaid({
       pendingUnderpaidTolls: classifiedAllPlatforms.underpaid,
       suggestions,
       tripMap: tripMapLocal,
       claimByTollId,
       partialByTollId: new Set(),
       reconciledTollById: new Map(
-        (allReconciledTolls.length ? allReconciledTolls : reconciledTolls).map((t) => [t.id, t]),
+        (reconciledTolls).map((t) => [t.id, t]),
       ),
       trips,
       disputeRefunds: disputeRefunds || [],
       periodWeekKey: period.startDate,
       fleetTz,
     });
-    return covered.map((c) => `${c.transaction.id}:${c.trip.id}`).sort().join('|');
   }, [
     isLoading,
     trips,
     claims,
     classifiedAllPlatforms.underpaid,
     suggestions,
-    allReconciledTolls,
     reconciledTolls,
     disputeRefunds,
     period.startDate,
     fleetTz,
   ]);
 
-  useEffect(() => {
-    if (!coveredPendingClearKey || isLoading) return;
-    let cancelled = false;
-    (async () => {
-      const tripMapLocal = new Map(trips.filter((t) => t?.id).map((t) => [t.id, t]));
-      const claimByTollId = buildClaimByTollId(claims);
-      const covered = listFullyCoveredPendingUnderpaid({
-        pendingUnderpaidTolls: classifiedAllPlatforms.underpaid,
-        suggestions,
-        tripMap: tripMapLocal,
-        claimByTollId,
-        partialByTollId: new Set(),
-        reconciledTollById: new Map(
-          (allReconciledTolls.length ? allReconciledTolls : reconciledTolls).map((t) => [t.id, t]),
-        ),
-        trips,
-        disputeRefunds: disputeRefunds || [],
-        periodWeekKey: period.startDate,
-        fleetTz,
-      });
-      if (covered.length === 0) return;
-      let cleared = 0;
-      for (const row of covered) {
-        if (cancelled) return;
-        try {
-          await reconcile(row.transaction, row.trip);
-          cleared++;
-        } catch {
-          /* best-effort */
-        }
+  const handleClearCoveredPending = useCallback(async () => {
+    if (coveredPendingRows.length === 0) return;
+    let cleared = 0;
+    for (const row of coveredPendingRows) {
+      try {
+        await reconcile(row.transaction, row.trip);
+        cleared++;
+      } catch {
+        /* best-effort per row */
       }
-      if (!cancelled && cleared > 0) {
-        toast.success(
-          cleared === 1
-            ? 'Cleared 1 fully covered toll from Underpaid'
-            : `Cleared ${cleared} fully covered tolls from Underpaid`,
-        );
-      }
-    })();
-    return () => { cancelled = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed by coveredPendingClearKey
-  }, [coveredPendingClearKey, isLoading, reconcile]);
+    }
+    if (cleared > 0) {
+      toast.success(
+        cleared === 1
+          ? 'Cleared 1 fully covered toll from Underpaid'
+          : `Cleared ${cleared} fully covered tolls from Underpaid`,
+      );
+      await refresh();
+    }
+  }, [coveredPendingRows, reconcile, refresh]);
 
-  // Unlinked: pending-hold alone is informational, but Apply / Accept still count.
+  // Unlinked step counts: pending-hold is actionable (policy A / TR-C1).
   const unlinkedSuggestionStatusByTripId = useMemo(() => {
     const m = new Map<string, string>();
     refundSuggestions.forEach((s, tripId) => {
@@ -800,7 +796,7 @@ function ReconciliationWizardInner({ period, driverId, drivers, onExit }: Reconc
   }, [shortfallSuggestions, unclaimedRefunds]);
 
   // ── Phase F4: hard-gate counts use ALL platforms (filter is display-only) ─
-  const stepCounts: Record<StepId, StepCounts> = useMemo(() => computeStepCounts({
+  const clientStepCounts: Record<StepId, StepCounts> = useMemo(() => computeStepCounts({
     classified: classifiedAllPlatforms,
     underpaidClaims: periodClaims,
     disputeRefunds: disputeRefunds || [],
@@ -829,6 +825,27 @@ function ReconciliationWizardInner({ period, driverId, drivers, onExit }: Reconc
     unlinkedRecommendedShortfallTripIds,
   ]);
 
+  const readinessQuery = useQuery({
+    queryKey: ['toll-period-readiness', period.startDate, driverId ?? null],
+    queryFn: () =>
+      api.getTollPeriodReadiness(period.startDate, {
+        driverId,
+        clientCounts: clientStepCounts,
+      }),
+    staleTime: 30_000,
+    enabled: !isLoading,
+  });
+
+  const stepCounts: Record<StepId, StepCounts> = useMemo(() => {
+    const serverSteps = readinessQuery.data?.readiness?.steps as
+      | Record<StepId, StepCounts>
+      | undefined;
+    if (readinessQuery.data?.authoritative && serverSteps) {
+      return serverSteps;
+    }
+    return clientStepCounts;
+  }, [clientStepCounts, readinessQuery.data]);
+
   const informationalWaitingTotal = useMemo(
     () => STEP_ORDER.reduce((sum, id) => sum + (stepCounts[id]?.informational || 0), 0),
     [stepCounts],
@@ -847,7 +864,9 @@ function ReconciliationWizardInner({ period, driverId, drivers, onExit }: Reconc
     [stepCounts],
   );
 
-  const [activeStepId, setActiveStepId] = useState<StepId>(STEP_ORDER[0]);
+  const [activeStepId, setActiveStepId] = useState<StepId>(() =>
+    initialStepId && STEP_ORDER.includes(initialStepId) ? initialStepId : STEP_ORDER[0],
+  );
   const hasInitializedRef = React.useRef(false);
   /** After an in-step action, stay on that step until it completes or the user picks another. */
   const holdStepRef = React.useRef<StepId | null>(null);
@@ -872,48 +891,44 @@ function ReconciliationWizardInner({ period, driverId, drivers, onExit }: Reconc
     }
   }, [undoApplyToUnderpaid, refreshClaims]);
 
-  // Auto-repair split state: trip pending in Unlinked but claim still Reimbursed.
-  // TODO(Wave 3 / Dev E): harden the integrity/ready gate — keep this effect callable;
-  // Dev E owns the full gate. Current early-return is a light signal only.
-  useEffect(() => {
+  // TR-H3: offer repair as an explicit action — never write on mount.
+  const showRepairSplitBanner = useMemo(() => {
     const unlinked = period.counts?.['unlinked-refunds'];
     const hasUnlinkedSignal =
       (unlinked?.actionable ?? 0) > 0 || (unlinked?.informational ?? 0) > 0;
-    if (unclaimedRefunds.length === 0 || !hasUnlinkedSignal) return;
+    return !isLoading && unclaimedRefunds.length > 0 && hasUnlinkedSignal;
+  }, [isLoading, period.counts, unclaimedRefunds.length]);
 
-    let cancelled = false;
-    (async () => {
-      try {
-        const res = await repairUnlinkedApplySplits({ driverId: driverId || undefined });
-        if (cancelled || !res.repaired) return;
-        await Promise.all([refresh(), refreshClaims()]);
-        toast.info(
-          res.repaired === 1
-            ? 'Repaired 1 claim that was out of sync with an unlinked refund.'
-            : `Repaired ${res.repaired} claims that were out of sync with unlinked refunds.`,
-        );
-      } catch {
-        // Non-fatal — manual undo still available on claim history rows.
+  const handleRepairUnlinkedSplits = useCallback(async () => {
+    try {
+      const res = await repairUnlinkedApplySplits({ driverId: driverId || undefined });
+      if (!res.repaired) {
+        toast.message('No out-of-sync claims to repair');
+        return;
       }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    driverId,
-    period.startDate,
-    period.endDate,
-    period.counts,
-    unclaimedRefunds.length,
-    repairUnlinkedApplySplits,
-    refresh,
-    refreshClaims,
-  ]);
+      await Promise.all([refresh(), refreshClaims()]);
+      toast.success(
+        res.repaired === 1
+          ? 'Repaired 1 claim that was out of sync with an unlinked refund.'
+          : `Repaired ${res.repaired} claims that were out of sync with unlinked refunds.`,
+      );
+    } catch (e: any) {
+      toast.error(e?.message || 'Failed to repair split state');
+    }
+  }, [driverId, repairUnlinkedApplySplits, refresh, refreshClaims]);
 
   useEffect(() => {
     if (isLoading) return;
     if (!hasInitializedRef.current) {
       hasInitializedRef.current = true;
+      // Close Week deep-link: land on requested step when unlocked.
+      if (initialStepId && STEP_ORDER.includes(initialStepId)) {
+        const target = gatedStates.find((s) => s.id === initialStepId);
+        if (target && !target.locked) {
+          setActiveStepId(initialStepId);
+          return;
+        }
+      }
       setActiveStepId(pickInitialStep(gatedStates));
       return;
     }
@@ -929,7 +944,7 @@ function ReconciliationWizardInner({ period, driverId, drivers, onExit }: Reconc
     if (activeState?.locked) {
       setActiveStepId(pickInitialStep(gatedStates));
     }
-  }, [isLoading, gatedStates, activeStepId]);
+  }, [isLoading, gatedStates, activeStepId, initialStepId]);
 
   const orphanNoTripAutoChargeCount = useMemo(() => {
     return (classified['personal-use'] || []).filter((tx) => {
@@ -942,117 +957,133 @@ function ReconciliationWizardInner({ period, driverId, drivers, onExit }: Reconc
     }).length;
   }, [classified, suggestions]);
 
+  // TR-M2: money block memoized; dead claimable/liability aggregates removed.
+  const moneySnapshot = useMemo(() => {
+    const {
+      total: tollSpend,
+      byPlatform: tollSpendByPlatform,
+    } = computeGrossTollSpendByPlatform({
+      tolls: filterTollsToWizardPeriod(
+        [...pUnreconciled, ...pReconciled] as TollWithLinkedTrip[],
+        period.startDate,
+        fleetTz,
+      ).filter(isTollIncludedInSpend),
+      resolvePlatform: platformOfToll,
+      unclaimedRefunds: pUnclaimed,
+      resolvedRefunds: pResolved,
+    });
+    const periodTolls = filterTollsToWizardPeriod(
+      [...pUnreconciled, ...pReconciled] as TollWithLinkedTrip[],
+      period.startDate,
+      fleetTz,
+    ).filter(isTollIncludedInSpend);
+    const reimbursedTrips = collectTripsForReimbursedCard({
+      trips: pTrips,
+      unclaimedRefunds: pUnclaimed,
+      resolvedRefunds: pResolved,
+      tolls: periodTolls,
+    });
+    const {
+      total: reimbursedByUber,
+      byPlatform: reimbursedByPlatform,
+      disputeRefundAmount: scopedDisputeFromCalc,
+    } = computeReimbursedTotals({
+      trips: reimbursedTrips,
+      disputeRefunds: disputeRefunds || [],
+      period: { startDate: period.startDate, endDate: period.endDate },
+      fleetTz,
+      platformFilter: platformFilter === 'all' ? 'all' : platformFilter,
+    });
+    const chargedToDrivers = pPeriodClaims
+      .filter(c => c.status === 'Resolved' && c.resolutionReason === 'Charge Driver')
+      .reduce((sum, c) => sum + Math.abs(c.amount || 0), 0);
+    const netTollLoss = Math.round((tollSpend - reimbursedByUber - chargedToDrivers) * 100) / 100;
+    const eventsNet =
+      typeof period.financials?.eventsNetTollLoss === 'number'
+        ? period.financials.eventsNetTollLoss
+        : null;
+    const identityResidual =
+      platformFilter !== 'all'
+        ? undefined
+        : eventsNet == null
+          ? 0
+          : Math.round((netTollLoss - eventsNet) * 100) / 100;
+    const resolvedRefundsAmount = pResolved.reduce((sum, t) => sum + (t.tollCharges || 0), 0);
+    return {
+      tollSpend,
+      tollSpendByPlatform,
+      reimbursedByUber,
+      reimbursedByPlatform,
+      scopedDisputeFromCalc,
+      chargedToDrivers,
+      netTollLoss,
+      identityResidual,
+      resolvedRefundsAmount,
+    };
+  }, [
+    pUnreconciled,
+    pReconciled,
+    pUnclaimed,
+    pResolved,
+    pTrips,
+    pPeriodClaims,
+    disputeRefunds,
+    period.startDate,
+    period.endDate,
+    period.financials,
+    fleetTz,
+    platformFilter,
+  ]);
+
   if (isLoading) {
     return (
-        <div className="flex h-64 items-center justify-center">
+        <div className="flex h-64 items-center justify-center" role="status" aria-live="polite">
             <Loader2 className="h-8 w-8 animate-spin text-slate-400" />
             <span className="ml-2 text-slate-500">Analyzing toll data...</span>
         </div>
     );
   }
 
-  // Calculate Financial Aggregates
-  let claimableAmount = 0;
-  let unreconciledPersonal = 0;
-  let unknownAmount = 0;
+  // TR-M12: never render an empty-clean week on hard load failure.
+  if (loadError) {
+    return (
+      <div className="space-y-4">
+        <Button variant="ghost" size="sm" onClick={onExit} className="-ml-2 text-slate-500 hover:text-slate-700">
+          <ArrowLeft className="h-4 w-4 mr-1.5" />
+          Back to Periods
+        </Button>
+        <div
+          className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-rose-200 bg-rose-50 py-16 text-rose-800"
+          role="alert"
+        >
+          <p className="text-sm font-medium">Could not load this week’s tolls.</p>
+          <p className="max-w-md text-center text-xs text-rose-600">
+            {loadError}. Finish is disabled until data loads successfully — this is not a clean week.
+          </p>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => void refresh()}
+            className="mt-1 border-rose-200 text-rose-700 hover:bg-rose-100"
+          >
+            <RefreshCw className="h-4 w-4 mr-2" aria-hidden /> Retry
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
-  filteredUnreconciledTolls.forEach(tx => {
-    const matches = suggestions.get(tx.id);
-    const bestMatch = matches?.[0];
-    const amount = Math.abs(tx.amount);
-
-    if (!bestMatch) {
-      unknownAmount += amount;
-      return;
-    }
-
-    switch (bestMatch.matchType) {
-      case 'AMOUNT_VARIANCE':
-        claimableAmount += (bestMatch.varianceAmount || amount);
-        break;
-      case 'PERSONAL_MATCH':
-        unreconciledPersonal += amount;
-        break;
-      default:
-        unknownAmount += amount;
-    }
-  });
-
-  let reconciledLiability = 0;
-  let recoveredAmount = 0;
-
-  // A trip's refund is a shared pool split across every toll linked to it
-  // (time order, each capped at its own cost) — prevents two tolls sharing
-  // one trip (e.g. two toll plazas on the same route) from each showing the
-  // full trip.tollCharges amount, which both double-counts the same money
-  // AND can show a refund bigger than the toll itself ever cost.
-  const tollRefundAllocation = buildTripRefundAllocation(
-    reconciledTolls,
-    tripMap,
-    spentUnlinkedCreditsByTripId({
-      claims,
-      disputeRefunds: disputeRefunds || [],
-      tolls: reconciledTolls,
-    }),
-  );
-  reconciledTolls.forEach(tx => {
-      const trip = tripMap.get(tx.tripId || '');
-      const claim = periodClaims.find(c => c.transactionId === tx.id);
-      const ctx = buildTollFinancialsContext(tx, trip, claim, trips, disputeRefunds || [], tollRefundAllocation);
-      const financials = calculateTollFinancials(tx, trip, claim, ctx);
-      recoveredAmount += financials.totalRecovered;
-      reconciledLiability += financials.netLoss;
-  });
-
-  const totalDriverLiability = unreconciledPersonal + reconciledLiability + unknownAmount;
-
-  const refundsAmount = unclaimedRefunds.reduce((sum, t) => sum + (t.tollCharges || 0), 0);
-  const resolvedRefundsAmount = pResolved.reduce((sum, t) => sum + (t.tollCharges || 0), 0);
-
-  const matchedDisputeRefundAmount = (disputeRefunds || [])
-    .filter(r => r.status === 'matched' || r.status === 'auto_resolved')
-    .reduce((sum, r) => sum + (r.amount || 0), 0);
-  const totalRecovered = recoveredAmount + matchedDisputeRefundAmount;
-
-  // Same week-key membership as pReconciledInPeriod / underpaid — not raw calendar trim.
-  const periodTolls = filterTollsToWizardPeriod(
-    [...pUnreconciled, ...pReconciled] as TollWithLinkedTrip[],
-    period.startDate,
-    fleetTz,
-  ).filter(isTollIncludedInSpend);
-  // Toll Spend = plaza ledger debits. Unmatched trip tolls stay on Reimbursed only.
   const {
-    total: tollSpend,
-    byPlatform: tollSpendByPlatform,
-  } = computeGrossTollSpendByPlatform({
-    tolls: periodTolls,
-    resolvePlatform: platformOfToll,
-    unclaimedRefunds: pUnclaimed,
-    resolvedRefunds: pResolved,
-  });
-  const reimbursedTrips = collectTripsForReimbursedCard({
-    trips: pTrips,
-    unclaimedRefunds: pUnclaimed,
-    resolvedRefunds: pResolved,
-    tolls: periodTolls,
-  });
-  const {
-    total: reimbursedByUber,
-    byPlatform: reimbursedByPlatform,
-    disputeRefundAmount: scopedDisputeFromCalc,
-  } = computeReimbursedTotals({
-    trips: reimbursedTrips,
-    disputeRefunds: disputeRefunds || [],
-    period: { startDate: period.startDate, endDate: period.endDate },
-    fleetTz,
-    platformFilter: platformFilter === 'all' ? 'all' : platformFilter,
-  });
-  const chargedToDrivers = pPeriodClaims
-    .filter(c => c.status === 'Resolved' && c.resolutionReason === 'Charge Driver')
-    .reduce((sum, c) => sum + Math.abs(c.amount || 0), 0);
-  // Cards identity: Spend − Reimbursed − Charged = Net (same rule as Close Week).
-  const netTollLoss = Math.round((tollSpend - reimbursedByUber - chargedToDrivers) * 100) / 100;
-  const identityResidual = 0;
+    tollSpend,
+    tollSpendByPlatform,
+    reimbursedByUber,
+    reimbursedByPlatform,
+    scopedDisputeFromCalc,
+    chargedToDrivers,
+    netTollLoss,
+    identityResidual,
+    resolvedRefundsAmount,
+  } = moneySnapshot;
 
   const needsReviewCount = STEP_ORDER.reduce(
     (sum, id) => sum + (stepCounts[id]?.actionable || 0),
@@ -1194,6 +1225,24 @@ function ReconciliationWizardInner({ period, driverId, drivers, onExit }: Reconc
   };
 
   const handleFinish = async () => {
+    if (loadError) {
+      toast.error('Week data failed to load', {
+        description: 'Retry loading before marking this week reviewed.',
+      });
+      return;
+    }
+    if (dataTruncated) {
+      toast.error('Period data is truncated', {
+        description: 'Narrow the scope or raise fetch caps before marking this week reviewed.',
+      });
+      return;
+    }
+    if (platformFilter === 'all' && identityResidual != null && Math.abs(identityResidual) > 0.01) {
+      toast.error('Money cards do not reconcile', {
+        description: `Cards vs ledger events differ by $${Math.abs(identityResidual).toFixed(2)}. Resolve the gap before finishing.`,
+      });
+      return;
+    }
     const allPlatformActionable = STEP_ORDER.reduce((sum, id) => sum + (stepCounts[id]?.actionable || 0), 0);
     if (allPlatformActionable > 0) {
       toast.error('Still open items on other platforms', {
@@ -1201,9 +1250,31 @@ function ReconciliationWizardInner({ period, driverId, drivers, onExit }: Reconc
       });
       return;
     }
+    try {
+      await api.finishTollReconciliationPeriod(period.startDate);
+    } catch (e: any) {
+      const blockers = e?.data?.readiness?.blockers;
+      const blockerHint =
+        Array.isArray(blockers) && blockers.length > 0
+          ? blockers.map((b: { code?: string }) => b.code).filter(Boolean).join(', ')
+          : e?.message || 'Server refused finish';
+      toast.error('Could not mark week reviewed', { description: String(blockerHint) });
+      return;
+    }
     await queryClient.invalidateQueries({ queryKey: [TOLL_RECONCILIATION_PERIODS_KEY] });
     invalidateSharedPeriods();
-    toast.success(`Period ${period.label} fully reconciled`);
+    toast.success(`Week ${period.label} marked reviewed`, {
+      description: 'Seal and unlock payouts from Close Week when ready.',
+      action: {
+        label: 'Close Week',
+        onClick: () => {
+          if (typeof window === 'undefined') return;
+          const path = `/close-week?week=${encodeURIComponent(period.startDate)}`;
+          window.history.pushState({ page: 'close-week', weekKey: period.startDate }, '', path);
+          window.dispatchEvent(new PopStateEvent('popstate'));
+        },
+      },
+    });
     onExit();
   };
 
@@ -1234,7 +1305,6 @@ function ReconciliationWizardInner({ period, driverId, drivers, onExit }: Reconc
     for (const tollId of checkIds) {
       const targetToll =
         reconciledTolls.find((t) => t.id === tollId) ||
-        allReconciledTolls.find((t) => t.id === tollId) ||
         unreconciledTolls.find((t) => t.id === tollId);
       if (targetToll) {
         const periodCheck = assertTollInWizardPeriod(targetToll, period.startDate, fleetTz);
@@ -1289,6 +1359,8 @@ function ReconciliationWizardInner({ period, driverId, drivers, onExit }: Reconc
   const lockedRefresh = lock('Refreshing…', async () => {
     await refresh({ autoMatch: true });
   });
+  const lockedClearCovered = lock('Clearing covered tolls…', handleClearCoveredPending);
+  const lockedRepairSplits = lock('Repairing claim sync…', handleRepairUnlinkedSplits);
 
   const lockedAutoChargePersonal = lock('Auto-charging personal…', async () => {
     try {
@@ -1340,6 +1412,39 @@ function ReconciliationWizardInner({ period, driverId, drivers, onExit }: Reconc
           {truncationMessage}
         </div>
       )}
+      {coveredPendingRows.length > 0 && (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900">
+          <span>
+            {coveredPendingRows.length === 1
+              ? '1 underpaid toll is already fully covered by a trip refund — review and clear it.'
+              : `${coveredPendingRows.length} underpaid tolls are already fully covered by trip refunds — review and clear them.`}
+          </span>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={actionBusy}
+            className="border-emerald-300 text-emerald-800 hover:bg-emerald-100"
+            onClick={() => void lockedClearCovered()}
+          >
+            Clear covered ({coveredPendingRows.length})
+          </Button>
+        </div>
+      )}
+      {showRepairSplitBanner && (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-800">
+          <span>
+            Some claims may be out of sync with unlinked refunds. Preview and repair before finishing.
+          </span>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={actionBusy}
+            onClick={() => void lockedRepairSplits()}
+          >
+            Repair claim sync
+          </Button>
+        </div>
+      )}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
             <Button variant="ghost" size="sm" onClick={onExit} disabled={actionBusy} className="-ml-2 mb-1 text-slate-500 hover:text-slate-700">
@@ -1350,10 +1455,17 @@ function ReconciliationWizardInner({ period, driverId, drivers, onExit }: Reconc
             <p className="text-slate-500">Match toll expenses with trip refunds to identify leakage.</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-            <div className="flex items-center rounded-md border border-slate-200 bg-white p-0.5 shadow-sm">
+            <div
+              className="flex items-center rounded-md border border-slate-200 bg-white p-0.5 shadow-sm"
+              role="radiogroup"
+              aria-label="Platform filter"
+            >
                 {PLATFORM_OPTIONS.map(p => (
                     <button
                         key={p}
+                        type="button"
+                        role="radio"
+                        aria-checked={platformFilter === p}
                         onClick={() => setPlatformFilter(p)}
                         className={`h-8 rounded px-2.5 text-xs font-medium transition-colors ${
                             platformFilter === p
@@ -1370,12 +1482,7 @@ function ReconciliationWizardInner({ period, driverId, drivers, onExit }: Reconc
                 Test
             </Button>
             )}
-            {highConfidenceCount > 0 && (
-                <Button variant="default" size="sm" onClick={() => void lockedAutoMatch()} disabled={actionBusy} className="bg-indigo-600 hover:bg-indigo-700">
-                    <Wand2 className="h-4 w-4 mr-2" />
-                    Link all ready {highConfidenceCount}
-                </Button>
-            )}
+            {/* TR-M7: Link-all lives in Suggestions panel only — header duplicate removed */}
             {activeStepId === 'personal-use' && orphanNoTripAutoChargeCount > 0 && (
                 <Button
                   variant="outline"
@@ -1406,7 +1513,8 @@ function ReconciliationWizardInner({ period, driverId, drivers, onExit }: Reconc
         </div>
       </div>
 
-      {/* Financial Overview Cards — Net Loss matches Business Finance P&L Tolls */}
+      {/* Financial Overview Cards — hidden when truncated (TR-M5) */}
+      {!dataTruncated && (
       <TollFinancialOverviewCards
         tollSpend={tollSpend}
         tollSpendByPlatform={tollSpendByPlatform}
@@ -1417,11 +1525,13 @@ function ReconciliationWizardInner({ period, driverId, drivers, onExit }: Reconc
         chargedToDrivers={chargedToDrivers}
         netTollLoss={netTollLoss}
         identityResidual={identityResidual}
+        filteredView={platformFilter !== 'all'}
         needsReviewCount={needsReviewCount}
         tollsNeedingReviewCount={tollsNeedingReviewCount}
         refundsNeedingReviewCount={refundsNeedingReviewCount}
         resolvedRefundsAmount={resolvedRefundsAmount}
       />
+      )}
 
       {autoReconciledCount > 0 && (
         <div className="flex items-center gap-2 px-4 py-2.5 bg-indigo-50 border border-indigo-200 rounded-lg text-sm text-indigo-700">
@@ -1543,7 +1653,7 @@ function ReconciliationWizardInner({ period, driverId, drivers, onExit }: Reconc
               reconciledTolls={underpaidReconciledTolls}
               pendingUnderpaidTolls={classified.underpaid}
               suggestions={suggestions}
-              tollLookup={allReconciledTolls.length ? allReconciledTolls : reconciledTolls}
+              tollLookup={reconciledTolls}
               trips={trips}
               disputeRefunds={disputeRefunds}
               unlinkedRefundTrips={unclaimedRefunds}
@@ -1566,7 +1676,7 @@ function ReconciliationWizardInner({ period, driverId, drivers, onExit }: Reconc
                 resolvedRefundTrips: pResolved,
                 onUndoRefund: lockedUndoRefund,
                 matchedTolls: pReconciledInPeriod,
-                allReconciledTolls: allReconciledTolls.length ? allReconciledTolls : reconciledTolls,
+                reconciledTolls: reconciledTolls,
                 onUnmatch: lockedUnreconcile,
                 selectedDriverId: driverId || '',
                 periodStartDate: period.startDate,
@@ -1618,6 +1728,50 @@ function ReconciliationWizardInner({ period, driverId, drivers, onExit }: Reconc
               }}
             >
               Charge driver
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={!!chargeSyncPrompt}
+        onOpenChange={(o) => {
+          if (!o && chargeSyncPrompt) {
+            chargeSyncPrompt.resolve(false);
+            setChargeSyncPrompt(null);
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Charge sync is off</DialogTitle>
+            <DialogDescription>
+              This will record a claim only — it will not post to Expenses or Cash Wallet.
+              Enable “Sync charges to driver financials” (and Unified toll settlement) in Automation
+              Settings for production parity.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                chargeSyncPrompt?.resolve(false);
+                setChargeSyncPrompt(null);
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              className="bg-indigo-600 hover:bg-indigo-700"
+              onClick={() => {
+                toast.warning(
+                  'Driver charge recorded as claim only — enable charge sync in Automation to post wallet debits.',
+                );
+                chargeSyncPrompt?.resolve(true);
+                setChargeSyncPrompt(null);
+              }}
+            >
+              Continue with claim-only
             </Button>
           </DialogFooter>
         </DialogContent>

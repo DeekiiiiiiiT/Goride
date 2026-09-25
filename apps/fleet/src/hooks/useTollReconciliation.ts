@@ -98,7 +98,7 @@ async function fetchTripsInRange(
 
 /** Paginate through all unreconciled tolls (larger pages = fewer round trips). */
 async function fetchAllUnreconciled(
-  params: { driverId?: string; autoMatch?: boolean; from?: string; to?: string },
+  params: { driverId?: string; from?: string; to?: string },
 ): Promise<{
   data: FinancialTransaction[];
   suggestions: Record<string, any[]>;
@@ -110,11 +110,11 @@ async function fetchAllUnreconciled(
   let offset = 0;
   const all: FinancialTransaction[] = [];
   const suggestions: Record<string, any[]> = {};
-  let autoReconciled = 0;
   let total = 0;
   let hasMore = false;
 
   for (let page = 0; page < MAX_FETCH_PAGES; page++) {
+    // TR-C5: GET is pure — never pass autoMatch.
     const res = await api.getTollUnreconciled({
       ...params,
       limit: PAGE_SIZE,
@@ -125,7 +125,6 @@ async function fetchAllUnreconciled(
     if (res.suggestions) {
       Object.assign(suggestions, res.suggestions);
     }
-    autoReconciled += res.autoReconciled || 0;
     total = res.total ?? all.length;
     if (batch.length < PAGE_SIZE || all.length >= total) {
       hasMore = false;
@@ -135,7 +134,7 @@ async function fetchAllUnreconciled(
     offset += PAGE_SIZE;
   }
 
-  return { data: all, suggestions, autoReconciled, total, hasMore };
+  return { data: all, suggestions, autoReconciled: 0, total, hasMore };
 }
 
 /**
@@ -239,10 +238,10 @@ export interface ReconciliationPeriodScope {
 
 export function useTollReconciliation(driverId?: string, period?: ReconciliationPeriodScope) {
   const [loading, setLoading] = useState(true);
+  /** TR-M12: any hard load failure — never treat as empty-clean week. */
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [unreconciledTolls, setUnreconciledTolls] = useState<FinancialTransaction[]>([]);
   const [reconciledTolls, setReconciledTolls] = useState<FinancialTransaction[]>([]);
-  /** Unscoped reconciled tolls — used to recover same-week rows the date filter drops. */
-  const [allReconciledTolls, setAllReconciledTolls] = useState<FinancialTransaction[]>([]);
   const [unclaimedRefunds, setUnclaimedRefunds] = useState<Trip[]>([]);
   // Phase 3: refund resolution
   const [resolvedRefunds, setResolvedRefunds] = useState<Trip[]>([]);
@@ -263,8 +262,10 @@ export function useTollReconciliation(driverId?: string, period?: Reconciliation
   const shortfallFetchGen = useRef(0);
   // Period switches / Refresh can overlap — only the newest fetch may write state.
   const fetchGen = useRef(0);
+  // TR-C5: one Idempotency-Key per period scope for mount auto-match (Strict Mode safe).
+  const mountAutoMatchKeyRef = useRef<string | null>(null);
 
-  const fetchData = useCallback(async (opts?: { autoMatch?: boolean }) => {
+  const fetchData = useCallback(async (_opts?: { autoMatch?: boolean }) => {
     const blockUi = isInitialLoad.current;
     if (blockUi) setLoading(true);
     // Keep prior shortfall chips until the new fetch lands — clearing here made
@@ -275,11 +276,12 @@ export function useTollReconciliation(driverId?: string, period?: Reconciliation
       // ±1 day pad: UTC timestamps just past midnight still belong to prior
       // fleet calendar day (period list uses fleet TZ; old API filter used UTC).
       const dateParams = period ? paddedPeriodDateParams(period) : {};
-      const filterParams = { ...(driverId ? { driverId } : {}), ...dateParams, autoMatch: opts?.autoMatch };
+      const filterParams = { ...(driverId ? { driverId } : {}), ...dateParams };
       const tripRange = period
         ? { startDate: shiftYmd(period.startDate, -2), endDate: shiftYmd(period.endDate, 2) }
         : null;
 
+      // TR-M12: every fetch must succeed — soft-empty made Finish wrongly available.
       const [fleetTz, unreconciledRes, reconciledRes, refundsRes, tripsRes, drRes, sugRes, resolvedRes, shortRes] = await Promise.all([
         fetchFleetTimezone(),
         fetchAllUnreconciled(filterParams),
@@ -298,27 +300,15 @@ export function useTollReconciliation(driverId?: string, period?: Reconciliation
           : Promise.resolve({ data: [] as Trip[], hasMore: false }),
         api.getDisputeRefunds(
           period ? { dateFrom: period.startDate, dateTo: period.endDate } : undefined,
-        ).catch((drErr) => {
-          console.error('[Reconciliation] Failed to fetch dispute refunds:', drErr);
-          return { data: [] as DisputeRefund[] };
-        }),
+        ),
         api.getRefundSuggestions({
           ...(driverId ? { driverId } : {}),
           ...dateParams,
-        }).catch((err) => {
-          console.error('[Reconciliation] Failed to fetch refund suggestions:', err);
-          return { suggestions: {} };
         }),
-        api.getResolvedRefunds(filterParams).catch((err) => {
-          console.error('[Reconciliation] Failed to fetch resolved refunds:', err);
-          return { data: [] as Trip[] };
-        }),
+        api.getResolvedRefunds(filterParams),
         api.getUnlinkedShortfallSuggestions({
           ...(driverId ? { driverId } : {}),
           ...(period ? { from: period.startDate, to: period.endDate } : {}),
-        }).catch((err) => {
-          console.error('[Reconciliation] Failed to fetch shortfall suggestions:', err);
-          return { suggestions: {} };
         }),
       ]);
       if (gen !== fetchGen.current) return;
@@ -341,7 +331,6 @@ export function useTollReconciliation(driverId?: string, period?: Reconciliation
 
       setUnreconciledTolls(unreconciled);
       setReconciledTolls(reconciled);
-      setAllReconciledTolls(reconciled);
       setUnclaimedRefunds(refunds);
       setTrips(tripsRes.data);
       const reconciledTotal = Number((reconciledRes as { total?: number }).total ?? reconciled.length);
@@ -361,15 +350,6 @@ export function useTollReconciliation(driverId?: string, period?: Reconciliation
         setSuggestions(new Map());
       }
 
-      const autoCount = unreconciledRes.autoReconciled;
-      setAutoReconciledCount(autoCount || 0);
-      if (autoCount && autoCount > 0) {
-        toast.info(`${autoCount} toll${autoCount === 1 ? '' : 's'} auto-matched to trips`, {
-          description: 'Perfect matches confirmed automatically. View in Matched History.',
-          duration: 5000,
-        });
-      }
-
       const sugMap = new Map<string, RefundSuggestion>();
       const rawSug = sugRes?.suggestions || {};
       for (const [tripId, s] of Object.entries(rawSug)) {
@@ -387,9 +367,25 @@ export function useTollReconciliation(driverId?: string, period?: Reconciliation
         setShortfallSuggestions(shortMap);
       }
 
+      setLoadError(null);
     } catch (error) {
       if (gen === fetchGen.current) {
         console.error("Failed to fetch reconciliation data", error);
+        const msg =
+          error instanceof Error ? error.message : 'Could not load toll reconciliation data';
+        setLoadError(msg);
+        // TR-M12: on initial failure, blank lists so UI cannot look like a clean week.
+        if (blockUi) {
+          setUnreconciledTolls([]);
+          setReconciledTolls([]);
+          setUnclaimedRefunds([]);
+          setResolvedRefunds([]);
+          setTrips([]);
+          setSuggestions(new Map());
+          setRefundSuggestions(new Map());
+          setShortfallSuggestions(new Map());
+          setDisputeRefunds([]);
+        }
       }
     } finally {
       if (gen === fetchGen.current) {
@@ -399,11 +395,53 @@ export function useTollReconciliation(driverId?: string, period?: Reconciliation
     }
   }, [driverId, period?.startDate, period?.endDate]);
 
+  /** TR-C5: POST /auto-match once (never via GET). */
+  const runServerAutoMatch = useCallback(async (idempotencyKey: string) => {
+    const dateParams = period ? paddedPeriodDateParams(period) : {};
+    try {
+      const res = await api.postTollAutoMatch({
+        ...(driverId ? { driverId } : {}),
+        ...dateParams,
+        idempotencyKey,
+      });
+      const autoCount = res.autoReconciled || 0;
+      setAutoReconciledCount(autoCount);
+      if (autoCount > 0) {
+        toast.info(`${autoCount} toll${autoCount === 1 ? '' : 's'} auto-matched to trips`, {
+          description: 'Perfect matches confirmed automatically. View in Matched History.',
+          duration: 5000,
+        });
+        await fetchData();
+      }
+      if (res.failed && res.failed > 0) {
+        console.error('[Reconciliation] Auto-match errors:', res.errors);
+        toast.error(`${res.failed} auto-match(es) failed — see console`);
+      }
+    } catch (err) {
+      console.error('[Reconciliation] POST /auto-match failed:', err);
+      toast.error('Auto-match failed');
+    }
+  }, [driverId, period?.startDate, period?.endDate, fetchData]);
+
+  useEffect(() => {
+    mountAutoMatchKeyRef.current = null;
+  }, [driverId, period?.startDate, period?.endDate]);
+
   useEffect(() => {
     isInitialLoad.current = true;
     setLoading(true);
-    fetchData();
-  }, [fetchData]);
+    void (async () => {
+      await fetchData();
+      // One auto-match per period open (reuse key across Strict Mode remount).
+      if (!mountAutoMatchKeyRef.current) {
+        mountAutoMatchKeyRef.current =
+          typeof crypto !== 'undefined' && crypto.randomUUID
+            ? `auto-match-mount:${crypto.randomUUID()}`
+            : `auto-match-mount:${Date.now()}`;
+      }
+      await runServerAutoMatch(mountAutoMatchKeyRef.current);
+    })();
+  }, [fetchData, runServerAutoMatch]);
 
   const reconcile = async (transaction: FinancialTransaction, trip: Trip) => {
     try {
@@ -461,16 +499,14 @@ export function useTollReconciliation(driverId?: string, period?: Reconciliation
               );
           });
 
-          // Do not seed thin client findTollMatches — wait for fetchData()
+          // Do not seed thin client findTollMatches — caller refresh() rebuilds
           // convertServerSuggestions so confidence/reason stay server-grade.
+          // TR-M1: no internal fetchData() — wizard always refresh()s after unreconcile.
           setSuggestions(prev => {
               const next = new Map(prev);
               next.delete(updatedTx.id);
               return next;
           });
-
-          // Refresh to ensure consistency (unclaimed refunds may change)
-          fetchData();
 
       } catch (error) {
           console.error("Unreconcile failed", error);
@@ -692,16 +728,27 @@ export function useTollReconciliation(driverId?: string, period?: Reconciliation
     return result;
   };
 
-  /** Repair trip-pending / claim-still-Reimbursed splits (also runs via wizard on load). */
+  /** Repair trip-pending / claim-still-Reimbursed splits (explicit action — never on mount). */
   const repairUnlinkedApplySplits = async (opts?: { tripId?: string; driverId?: string }) => {
     return api.repairUnlinkedApplySplits(opts);
   };
 
+  const refresh = async (opts?: { autoMatch?: boolean }) => {
+    await fetchData();
+    if (opts?.autoMatch) {
+      const key =
+        typeof crypto !== 'undefined' && crypto.randomUUID
+          ? `auto-match-refresh:${crypto.randomUUID()}`
+          : `auto-match-refresh:${Date.now()}`;
+      await runServerAutoMatch(key);
+    }
+  };
+
   return {
     loading,
+    loadError,
     unreconciledTolls,
     reconciledTolls,
-    allReconciledTolls,
     unclaimedRefunds,
     resolvedRefunds,
     refundSuggestions,
@@ -724,6 +771,6 @@ export function useTollReconciliation(driverId?: string, period?: Reconciliation
     applyUnlinkedToClaim,
     applyDisputeMatch,
     applyDisputeUnmatch,
-    refresh: fetchData
+    refresh,
   };
 }

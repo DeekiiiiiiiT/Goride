@@ -29,7 +29,12 @@ export function isReconWeekUnlocked(input: ReconWeekSealInput): boolean {
   return isSettlementPeriodEnded(gateInput(input));
 }
 
-export function isReconWeekSealed(input: ReconWeekSealInput): boolean {
+/**
+ * True while the Mon–Sun week is still in progress (recon must not start yet).
+ * TR-M10: renamed from isReconWeekSealed — that name collided with sealTollWeek /
+ * week_statements "sealed".
+ */
+export function isReconWeekNotYetOpen(input: ReconWeekSealInput): boolean {
   return isSettlementPeriodOpen(gateInput(input));
 }
 

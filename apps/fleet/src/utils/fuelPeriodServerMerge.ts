@@ -33,6 +33,33 @@ export function serverLockedWeekStarts(rows: FuelPeriodRow[]): Set<string> {
   return set;
 }
 
+/**
+ * Empty open SQL shells (ensure without materialize) — dropped from landing cards
+ * and must not block client gap-fill, or weeks with live fuel spend vanish.
+ */
+export function isHollowOpenFuelPeriodRow(row: {
+  status?: string | null;
+  lockedAt?: string | null;
+  totalSpend?: number | null;
+  vehicleCount?: number | null;
+}): boolean {
+  if (isFuelReconPeriodLocked({ status: row.status, lockedAt: row.lockedAt })) return false;
+  const totalSpend = Number(row.totalSpend) || 0;
+  const vehicleCount = Number(row.vehicleCount) || 0;
+  return totalSpend <= FUEL_SPEND_EPS && vehicleCount <= 0;
+}
+
+/** Weeks SQL may own on landing (excludes hollow open shells). */
+export function serverLandingCoveringWeekStarts(rows: FuelPeriodRow[]): Set<string> {
+  const set = new Set<string>();
+  for (const r of rows) {
+    if (isHollowOpenFuelPeriodRow(r)) continue;
+    const wk = weekStartYmd(r.weekStart);
+    if (wk) set.add(wk);
+  }
+  return set;
+}
+
 /** Weeks whose landing money can come from SQL (skip client week engines). */
 export function serverComputedWeekStarts(rows: FuelPeriodRow[]): Set<string> {
   const set = new Set<string>();
@@ -107,7 +134,8 @@ export function serverRowsToLandingPeriods(rows: FuelPeriodRow[]): FuelReconcili
     const totalSpend = Number(s.totalSpend) || 0;
     const unexplained = Number(s.unexplained) || 0;
     const vehicleCount = Number(s.vehicleCount) || 0;
-    if (!locked && totalSpend <= FUEL_SPEND_EPS && vehicleCount <= 0) continue;
+    // Hollow open shells are not landing cards — gap-fill may paint live spend instead.
+    if (isHollowOpenFuelPeriodRow(s)) continue;
 
     let endDate = weekStartYmd(s.weekEnd);
     let label: string;
@@ -170,8 +198,9 @@ export function serverRowsToLandingPeriods(rows: FuelPeriodRow[]): FuelReconcili
 }
 
 /**
- * P-3: server cards are SoT for any week present in SQL.
- * Derived only fills weeks with NO server row — never dual-merges money/chips over server.
+ * P-3: server cards are SoT for weeks SQL can paint (non-hollow).
+ * Derived fills weeks with no covering server card — including hollow open shells
+ * that ensure created without materialize (those rows are dropped above).
  */
 export function mergeServerFirstLandingPeriods(
   serverRows: FuelPeriodRow[],
@@ -182,7 +211,7 @@ export function mergeServerFirstLandingPeriods(
   for (const p of serverCards) byWeek.set(p.startDate, p);
 
   for (const d of derived) {
-    // Gap-fill only — do not overwrite or dual-merge server weeks.
+    // Gap-fill only — do not overwrite or dual-merge covering server weeks.
     if (byWeek.has(d.startDate)) continue;
     byWeek.set(d.startDate, d);
   }

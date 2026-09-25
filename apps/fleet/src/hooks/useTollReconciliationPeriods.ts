@@ -11,6 +11,9 @@ export interface ReconciliationPeriod {
   status: 'outstanding' | 'in_progress' | 'reconciled';
   actionableTotal: number;
   counts: Record<StepId, { actionable: number; informational: number }>;
+  /** TR-M9: Reviewed / Sealed / Closed from period row + week_statements + week freeze. */
+  sealChip?: 'reviewed' | 'sealed' | 'closed' | null;
+  periodState?: string | null;
   /** Same Reimbursed rule as the wizard cards (includes resolved trip credits). */
   financials?: {
     tollSpend: number;
@@ -19,6 +22,10 @@ export interface ReconciliationPeriod {
     chargedToDrivers: number;
     netTollLoss: number;
     resolvedRefundsAmount: number;
+    /** Independent events-ledger net (TR-C4). */
+    eventsNetTollLoss?: number;
+    /** cards.net − events.net */
+    identityResidual?: number;
   };
 }
 
@@ -67,6 +74,8 @@ export function useTollReconciliationPeriods(driverId?: string) {
 
   const query = useQuery({
     queryKey,
+    staleTime: 60_000,
+    refetchOnWindowFocus: false,
     queryFn: async (): Promise<PeriodsPayload> => {
       const res = await api.getTollReconciliationPeriods({ driverId });
       return {

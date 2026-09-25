@@ -2,6 +2,7 @@ import type { DisputeRefund, FinancialTransaction, Trip } from '../types/data';
 import { fleetCalendarDay, fleetTzDateKey } from './timezoneDisplay';
 import { normalizePlatform } from './normalizePlatform';
 import { isTollIncludedInSpend } from './tollLedgerIntegrity';
+import { cashWashTripSpendAmount } from '@roam/toll-core';
 
 export type RidesharePlatform = 'Uber' | 'InDrive' | 'Roam';
 export type PlatformBucket = RidesharePlatform | 'Unlinked';
@@ -105,10 +106,9 @@ export function collectTripOnlyTollSpend(input: {
   let total = 0;
 
   const add = (t: Trip | null | undefined) => {
-    if (!t?.id || seen.has(t.id) || linkedTripIds.has(t.id)) return;
-    // Cash at plaza, no tag debit. Uber credits on unmatched trips stay in Reimbursed only.
-    if (t.tollRefundResolution?.status !== 'cash_wash') return;
-    const amount = Math.abs(Number(t.tollCharges) || 0);
+    if (!t?.id || seen.has(t.id)) return;
+    // TR-H1: shared cash-wash spend rule (toll-core).
+    const amount = cashWashTripSpendAmount(t, linkedTripIds);
     if (amount <= 0) return;
     seen.add(t.id);
     total += amount;

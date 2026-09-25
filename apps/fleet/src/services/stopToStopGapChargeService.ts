@@ -28,20 +28,56 @@ export function gapChargeErrorMessage(codeOrBody: unknown, fallback: string): st
   return fallback;
 }
 
-async function resolvePeriodId(input: {
+function weekStartYmd(v: unknown): string {
+  return String(v || '').split('T')[0];
+}
+
+/** True for client placeholder ids like `week_2026-09-14_2026-09-20` (not SQL period ids). */
+function isPlaceholderPeriodId(periodId: string): boolean {
+  return !periodId || periodId.startsWith('week_') || !periodId.includes(':');
+}
+
+/**
+ * Read-only period lookup — never creates a shell.
+ * Gap-charge list used to call ensure and left empty open weeks that Fuel recon then hid.
+ */
+export async function lookupExistingPeriodId(input: {
+  periodId: string;
+  weekStart?: string;
+  weekEnd?: string;
+}): Promise<string | null> {
+  const weekStart = weekStartYmd(input.weekStart);
+  if (weekStart) {
+    const rows = await api.listFuelReconciliationPeriods({
+      from: weekStart,
+      to: weekStart,
+    });
+    const hit = (rows || []).find((r) => weekStartYmd(r?.weekStart) === weekStart);
+    if (hit?.id) return String(hit.id);
+  }
+  const pid = String(input.periodId || '');
+  if (!isPlaceholderPeriodId(pid)) {
+    const row = await api.getFuelReconciliationPeriod(pid).catch(() => null);
+    if (row?.id) return String(row.id);
+  }
+  return null;
+}
+
+/** Write-path resolve — create period only when recommending / approving. */
+async function ensurePeriodId(input: {
   periodId: string;
   weekStart?: string;
   weekEnd?: string;
 }): Promise<string> {
-  let periodId = input.periodId;
   if (input.weekStart && input.weekEnd) {
     const periodRow = await api.ensureFuelReconciliationPeriod({
       weekStart: input.weekStart,
       weekEnd: input.weekEnd,
     });
-    if (periodRow?.id) periodId = String(periodRow.id);
+    if (periodRow?.id) return String(periodRow.id);
   }
-  return periodId;
+  const existing = await lookupExistingPeriodId(input);
+  return existing || input.periodId;
 }
 
 export async function listGapCharges(input: {
@@ -50,7 +86,9 @@ export async function listGapCharges(input: {
   weekEnd?: string;
   status?: 'recommended' | 'approved' | 'posted' | 'blocked' | 'rejected';
 }): Promise<GapChargeRecommendation[]> {
-  const periodId = await resolvePeriodId(input);
+  // Read path: never ensure — empty shells hide weeks on Fuel recon landing.
+  const periodId = await lookupExistingPeriodId(input);
+  if (!periodId) return [];
   const res = await api.listFuelGapCharges({
     periodId,
     status: input.status,
@@ -72,7 +110,7 @@ export async function recommendGapCharge(input: {
   autoApprove?: boolean;
 }): Promise<GapChargeRecommendation & { needsSecondApprove?: boolean }> {
   const amount = Number(input.bucket.deductionRecommendation) || 0;
-  const periodId = await resolvePeriodId(input);
+  const periodId = await ensurePeriodId(input);
 
   try {
     const recommendRes = await api.recommendFuelGapCharge({
@@ -184,7 +222,7 @@ export async function approveGapCharge(input: {
   periodId: string;
   bucketId: string;
 }): Promise<GapChargeRecommendation & { sameActor?: boolean }> {
-  const periodId = await resolvePeriodId(input);
+  const periodId = await ensurePeriodId(input);
   try {
     const approveRes = await api.approveFuelGapCharge({
       periodId,

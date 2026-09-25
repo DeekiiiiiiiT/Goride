@@ -29,6 +29,9 @@
  *
  * Routes:
  *   GET /toll-reconciliation/periods?driverId= – per-period step counts
+ *   GET /toll-reconciliation/periods/:weekKey/readiness – TollPeriodReadiness (Phase 4b)
+ *   POST /toll-reconciliation/periods/:weekKey/finish – Reviewed stamp (state=ready)
+ *   POST /toll-reconciliation/periods/:weekKey/reopen – restore writability after seal
  */
 
 import { Hono, type Context } from "npm:hono@4.3.11";
@@ -76,6 +79,26 @@ import {
   isTollCoveredByDisputeRefund,
   isVisiblePartialShortfallClaim,
 } from "../../../packages/toll-core/src/tollPeriodDisputeHelpers.ts";
+import {
+  cashWashTripSpendAmount,
+  ledgerDebitSpendAmount,
+} from "../../../packages/toll-core/src/tollSpend.ts";
+import {
+  computeTollPeriodReadiness,
+  decideTollFinishAllowed,
+  diffClientServerStepCounts,
+} from "../../../packages/toll-core/src/tollPeriodReadiness.ts";
+import { isFeatureEnabled, FEATURE_FLAGS } from "./feature_flags.ts";
+import { periodEndForAnchor } from "../../../packages/finance-core/src/periodKey.ts";
+import {
+  insertTollPeriodAudit,
+  tollPeriodIdFor,
+  upsertTollPeriodRow,
+  deriveTollSealChip,
+} from "./toll_period_writable.ts";
+import { isPeriodFrozen } from "./settlement_period_freeze.ts";
+import type { TollPeriodReadiness } from "../../../packages/toll-core/src/tollPeriodReadiness.ts";
+import { buildWeekReadiness } from "./toll_period_readiness_build.ts";
 
 const app = new Hono();
 
@@ -476,11 +499,10 @@ app.get(`${BASE}/periods`, requirePermission('toll.view'), async (c) => {
     }
 
     // ── Per-period financials (same rule as wizard cards) ──────────────────
-    // Toll Spend = plaza ledger debits. Cash-wash trips with no linked tag
-    // are extra cash spend. Pending Unlinked Refunds are reimbursements only.
+    // TR-H1: toll-core ledgerDebitSpendAmount + cashWashTripSpendAmount.
     for (const tx of scopedTollTx) {
       if (!tx?.date) continue;
-      const amt = Number(tx.amount) < 0 ? Math.abs(Number(tx.amount)) : 0;
+      const amt = ledgerDebitSpendAmount(tx);
       if (amt <= 0) continue;
       const acc = getOrCreatePeriod(tx.date);
       acc.financials.tollSpend += amt;
@@ -497,9 +519,10 @@ app.get(`${BASE}/periods`, requirePermission('toll.view'), async (c) => {
       if (status && status !== "pending") {
         acc.financials.resolvedRefundsAmount += tc;
       }
-      // Cash at plaza (no tag debit). Do not add unmatched Uber credits — that doubled spend.
-      if (!linkedTripIds.has(String(t.id)) && status === "cash_wash") {
-        acc.financials.tollSpend += tc;
+      // TR-H1 shared cash-wash spend (no tag debit).
+      const cashWash = cashWashTripSpendAmount(t, linkedTripIds);
+      if (cashWash > 0) {
+        acc.financials.tollSpend += cashWash;
       }
       // Phantom = fake credit — never reimbursed.
       if (status === "phantom") continue;
@@ -550,9 +573,15 @@ app.get(`${BASE}/periods`, requirePermission('toll.view'), async (c) => {
       }),
     );
 
+    const orgIdForPeriods = getOrgId(c) || undefined;
+    const readinessAuthoritative = await isFeatureEnabled(
+      FEATURE_FLAGS.TOLL_READINESS_SERVER_AUTHORITATIVE,
+      orgIdForPeriods,
+    );
+
     const periodsOut = Array.from(periods.entries())
       .map(([id, acc]) => {
-        const actionableTotal = STEP_IDS.reduce((sum, stepId) => sum + acc.counts[stepId].actionable, 0);
+        const actionableTotalLegacy = STEP_IDS.reduce((sum, stepId) => sum + acc.counts[stepId].actionable, 0);
         const f = acc.financials;
         const reimbursedByPlatform = f.reimbursedFromTrips + f.matchedDisputeRefundAmount;
         const startDate = format(acc.weekStart, "yyyy-MM-dd");
@@ -574,9 +603,18 @@ app.get(`${BASE}/periods`, requirePermission('toll.view'), async (c) => {
               ? sumTollChargedToDriversFromEvents(weekEvents)
               : round2(f.chargedToDrivers);
         const netTollLoss = round2(tollSpend - reimbursedByPlatformNet - chargedToDrivers);
-        const identityResidual = round2(
-          tollSpend - reimbursedByPlatformNet - chargedToDrivers - netTollLoss,
-        );
+        // TR-C4: residual = cards net vs independent events netting (not algebraic tautology).
+        const eventsNetTollLoss = round2(weekNet.netLoss);
+        const identityResidual = round2(netTollLoss - eventsNetTollLoss);
+        const readiness = computeTollPeriodReadiness({
+          weekKey: id,
+          steps: acc.counts,
+          cardsNetLoss: netTollLoss,
+          eventsNetLoss: eventsNetTollLoss,
+        });
+        const actionableTotal = readinessAuthoritative
+          ? readiness.actionableTotal
+          : actionableTotalLegacy;
         return {
           id,
           startDate,
@@ -585,6 +623,8 @@ app.get(`${BASE}/periods`, requirePermission('toll.view'), async (c) => {
           status: classifyTollReconPeriodStatus(acc.counts, actionableTotal),
           actionableTotal,
           counts: acc.counts,
+          readinessAuthoritative,
+          blockers: readinessAuthoritative ? readiness.blockers : undefined,
           financials: {
             tollSpend,
             reimbursedByPlatform: reimbursedByPlatformNet,
@@ -600,12 +640,12 @@ app.get(`${BASE}/periods`, requirePermission('toll.view'), async (c) => {
             eventsReimbursedByPlatform: round2(
               weekNet.platformReimbursed + weekNet.disputeRecovered,
             ),
-            eventsNetTollLoss: round2(weekNet.netLoss),
+            eventsNetTollLoss,
             legacyTollSpend: round2(f.tollSpend),
             legacyReimbursedByPlatform: round2(reimbursedByPlatform),
           },
         };
-      })
+      }))
       // Lookback window + any computed period that still has actionable work.
       .filter((p) => p.startDate >= fromYmd || p.actionableTotal > 0)
       .sort((a, b) => (a.startDate < b.startDate ? 1 : a.startDate > b.startDate ? -1 : 0));
@@ -663,12 +703,92 @@ app.get(`${BASE}/periods`, requirePermission('toll.view'), async (c) => {
       if (!canonicalChargeSourceIds.has(id)) missingCanonicalChargeCount++;
     }
 
+    // TR-M9: seal chip from toll_reconciliation_period + week_statements + week freeze.
+    const orgId = getOrgId(c);
+    const weekKeys = periodsOut.map((p) => p.startDate);
+    const periodStateByWeek = new Map<string, string>();
+    const closedStmtWeeks = new Set<string>();
+    const weekClosedByWeek = new Map<string, boolean>();
+    if (orgId && weekKeys.length > 0) {
+      try {
+        const sb = getServiceClient();
+        const [{ data: periodRows }, { data: stmtRows }, { data: dfpRows }] = await Promise.all([
+          sb
+            .from("toll_reconciliation_period")
+            .select("week_key, state")
+            .eq("organization_id", orgId)
+            .in("week_key", weekKeys),
+          sb
+            .from("week_statements")
+            .select("week_key")
+            .eq("organization_id", orgId)
+            .eq("kind", "toll")
+            .eq("status", "closed")
+            .in("week_key", weekKeys),
+          sb
+            .from("driver_financial_periods")
+            .select("period_anchor, settlement_status, metadata, status, closed_at")
+            .eq("organization_id", orgId)
+            .in("period_anchor", weekKeys),
+        ]);
+        for (const row of periodRows || []) {
+          const wk = String((row as { week_key?: string }).week_key || "").slice(0, 10);
+          if (wk) periodStateByWeek.set(wk, String((row as { state?: string }).state || ""));
+        }
+        for (const row of stmtRows || []) {
+          const wk = String((row as { week_key?: string }).week_key || "").slice(0, 10);
+          if (wk) closedStmtWeeks.add(wk);
+        }
+        const totals = new Map<string, { total: number; frozen: number }>();
+        for (const row of dfpRows || []) {
+          const wk = String((row as { period_anchor?: string }).period_anchor || "").slice(0, 10);
+          if (!wk) continue;
+          const acc = totals.get(wk) || { total: 0, frozen: 0 };
+          acc.total += 1;
+          const frozen = isPeriodFrozen({
+            metadata: ((row as { metadata?: Record<string, unknown> }).metadata || null) as Record<
+              string,
+              unknown
+            > | null,
+            settlementStatus: (row as { settlement_status?: string }).settlement_status
+              ? String((row as { settlement_status?: string }).settlement_status)
+              : null,
+            status: (row as { status?: string }).status
+              ? String((row as { status?: string }).status)
+              : null,
+            closedAt: (row as { closed_at?: string }).closed_at
+              ? String((row as { closed_at?: string }).closed_at)
+              : null,
+          });
+          if (frozen) acc.frozen += 1;
+          totals.set(wk, acc);
+        }
+        for (const [wk, acc] of totals) {
+          weekClosedByWeek.set(wk, acc.total > 0 && acc.frozen === acc.total);
+        }
+      } catch (e) {
+        console.warn("[toll-periods] seal chip enrichment skipped", e);
+      }
+    }
+
+    const periodsWithSeal = periodsOut.map((p) => {
+      const periodState = periodStateByWeek.get(p.startDate) || null;
+      const hasClosedTollStatement = closedStmtWeeks.has(p.startDate);
+      const weekClosed = weekClosedByWeek.get(p.startDate) === true;
+      const sealChip = deriveTollSealChip({
+        periodState,
+        hasClosedTollStatement,
+        weekClosed,
+      });
+      return { ...p, periodState, sealChip };
+    });
+
     return c.json({
       success: true,
       timezone,
       generatedAt: new Date().toISOString(),
       workflowStageBackfillComplete: !anyMissingWorkflowStage,
-      periods: periodsOut,
+      periods: periodsWithSeal,
       totals: {
         tollSpend: round2(totalsAcc.tollSpend),
         reimbursedByPlatform: round2(totalsAcc.reimbursedByPlatform),
@@ -693,6 +813,163 @@ app.get(`${BASE}/periods`, requirePermission('toll.view'), async (c) => {
     return safeErrorResponse(c, e, "TollPeriodController.periods");
   }
 });
+
+/** Shared readiness compute lives in toll_period_readiness_build.ts (enforce flip). */
+
+// ─── GET /toll-reconciliation/periods/:weekKey/readiness ─────────────────────
+// Phase 4b: server readiness. When tollReadinessServerAuthoritative is ON,
+// consumers treat this as the SoT; when OFF, optional ?clientCounts= logs diffs.
+app.get(`${BASE}/periods/:weekKey/readiness`, async (c: Context) => {
+  try {
+    const weekKey = String(c.req.param("weekKey") || "").slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(weekKey)) {
+      return c.json({ error: "weekKey (YYYY-MM-DD Monday) is required" }, 400);
+    }
+    const orgId = getOrgId(c);
+    const driverId = c.req.query("driverId") || undefined;
+    const { readiness, counts } = await buildWeekReadiness({ weekKey, orgId, driverId });
+
+    const authoritative = await isFeatureEnabled(
+      FEATURE_FLAGS.TOLL_READINESS_SERVER_AUTHORITATIVE,
+      orgId,
+    );
+
+    const clientCountsRaw = c.req.query("clientCounts");
+    if (!authoritative && clientCountsRaw) {
+      try {
+        const clientCounts = JSON.parse(clientCountsRaw);
+        const mismatched = diffClientServerStepCounts(clientCounts, counts);
+        if (mismatched.length > 0) {
+          console.warn(
+            `[toll-readiness][shadow] week=${weekKey} client vs server mismatch steps=${mismatched.join(",")}`,
+            { client: clientCounts, server: counts },
+          );
+        }
+      } catch (e) {
+        console.warn("[toll-readiness] clientCounts parse failed", e);
+      }
+    }
+
+    return c.json({
+      success: true,
+      authoritative,
+      readiness,
+    });
+  } catch (e: any) {
+    return safeErrorResponse(c, e, "TollPeriodController.readiness");
+  }
+});
+
+// ─── POST /toll-reconciliation/periods/:weekKey/finish ───────────────────────
+// Finish = Reviewed (state=ready). Does NOT seal — seal remains Close Week.
+app.post(
+  `${BASE}/periods/:weekKey/finish`,
+  requirePermission("toll.manage"),
+  async (c: Context) => {
+    try {
+      const orgId = getOrgId(c);
+      if (!orgId) return c.json({ error: "ORG_REQUIRED" }, 400);
+      const weekKey = String(c.req.param("weekKey") || "").slice(0, 10);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(weekKey)) {
+        return c.json({ error: "weekKey (YYYY-MM-DD Monday) is required" }, 400);
+      }
+      const body = (await c.req.json().catch(() => ({}))) as { note?: string };
+      const user = c.get("rbacUser") as RbacUser | undefined;
+      const actorId = user?.userId || null;
+
+      const { readiness } = await buildWeekReadiness({ weekKey, orgId });
+      const finishGate = decideTollFinishAllowed(readiness);
+      if (!finishGate.allowed) {
+        return c.json(
+          {
+            error: "NOT_READY",
+            message: "Clear readiness blockers and identity residual (≤ $0.01) before marking reviewed.",
+            readiness,
+          },
+          409,
+        );
+      }
+
+      const now = new Date().toISOString();
+      const row = await upsertTollPeriodRow(orgId, weekKey, {
+        state: "ready",
+        readiness_hash: readiness.readinessHash,
+        reviewed_by: actorId,
+        reviewed_at: now,
+        finish_note: body.note ? String(body.note).slice(0, 2000) : null,
+        blockers: readiness.blockers,
+      });
+      await insertTollPeriodAudit(
+        orgId,
+        tollPeriodIdFor(orgId, weekKey),
+        "finish_reviewed",
+        {
+          readinessHash: readiness.readinessHash,
+          residual: readiness.identity.residual,
+          note: body.note || null,
+        },
+        actorId,
+      );
+
+      return c.json({
+        success: true,
+        weekKey,
+        state: "ready",
+        period: row,
+        readiness,
+        closeWeekHint: `/close-week?week=${weekKey}`,
+      });
+    } catch (e: any) {
+      return safeErrorResponse(c, e, "TollPeriodController.finish");
+    }
+  },
+);
+
+// ─── POST /toll-reconciliation/periods/:weekKey/reopen ───────────────────────
+// Explicit reopen restores writability (TR-C2). Audited; requires toll.manage.
+app.post(
+  `${BASE}/periods/:weekKey/reopen`,
+  requirePermission("toll.manage"),
+  async (c: Context) => {
+    try {
+      const orgId = getOrgId(c);
+      if (!orgId) return c.json({ error: "ORG_REQUIRED" }, 400);
+      const weekKey = String(c.req.param("weekKey") || "").slice(0, 10);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(weekKey)) {
+        return c.json({ error: "weekKey (YYYY-MM-DD Monday) is required" }, 400);
+      }
+      const body = (await c.req.json().catch(() => ({}))) as { reason?: string };
+      const reason = String(body.reason || "").trim();
+      if (!reason) {
+        return c.json({ error: "reason is required to reopen a sealed toll period" }, 400);
+      }
+      const user = c.get("rbacUser") as RbacUser | undefined;
+      const actorId = user?.userId || null;
+      const now = new Date().toISOString();
+
+      const row = await upsertTollPeriodRow(orgId, weekKey, {
+        state: "reopened",
+        reopened_at: now,
+        reopened_by: actorId,
+        reopen_reason: reason.slice(0, 2000),
+        reviewed_by: null,
+        reviewed_at: null,
+        readiness_hash: null,
+      });
+      await insertTollPeriodAudit(
+        orgId,
+        tollPeriodIdFor(orgId, weekKey),
+        "reopen",
+        { reason },
+        actorId,
+      );
+
+      return c.json({ success: true, weekKey, state: "reopened", period: row });
+    } catch (e: any) {
+      return safeErrorResponse(c, e, "TollPeriodController.reopen");
+    }
+  },
+);
 
 // ─── POST /toll/periods/:weekKey/seal ───────────────────────────────────────
 // Seal a toll week: publish immutable toll week_statements per active driver so
@@ -760,6 +1037,21 @@ app.post(`${TOLL_HTTP_PREFIX}/toll/periods/:weekKey/seal`, requirePermission("to
     } catch (rebuildErr: unknown) {
       const msg = rebuildErr instanceof Error ? rebuildErr.message : String(rebuildErr);
       rebuildErrors.push(`rebuild: ${msg}`);
+    }
+
+    // Phase 5: persist sealed on toll_reconciliation_period (TR-C2 SoT).
+    try {
+      await upsertTollPeriodRow(orgId, weekKey, { state: "sealed" });
+      await insertTollPeriodAudit(
+        orgId,
+        tollPeriodIdFor(orgId, weekKey),
+        "seal",
+        { published: (result as { published?: number })?.published ?? null },
+        user?.userId,
+      );
+    } catch (sealPersistErr: unknown) {
+      const msg = sealPersistErr instanceof Error ? sealPersistErr.message : String(sealPersistErr);
+      console.warn("[toll-seal] period row upsert failed", weekKey, msg);
     }
 
     return c.json({

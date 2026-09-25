@@ -51,7 +51,15 @@ const SHIMS = [
     mustMatch: /from\s+['"]@roam\/toll-core['"]/,
     forbidden: /function\s+resolveOfficialTollRate\s*\(/,
   },
+  {
+    rel: 'apps/fleet/src/utils/unlinkedShortfallEligibility.ts',
+    mustMatch: /packages\/toll-core\/src\/unlinkedShortfallEligibility/,
+    forbidden: /function\s+isUnlinkedRefundActionableNow\s*\(/,
+  },
 ];
+
+/** Package surface that must stay exported (Phase 4b / TR-H1). */
+const REQUIRED_PACKAGE_EXPORTS = ['tollSpend', 'tollPeriodReadiness'];
 
 let failed = false;
 
@@ -79,8 +87,56 @@ for (const shim of SHIMS) {
   }
 }
 
+const pkgPath = path.join(ROOT, 'packages/toll-core/package.json');
+const indexPath = path.join(ROOT, 'packages/toll-core/src/index.ts');
+const readinessPath = path.join(ROOT, 'packages/toll-core/src/tollPeriodReadiness.ts');
+const spendPath = path.join(ROOT, 'packages/toll-core/src/tollSpend.ts');
+
+if (!fs.existsSync(pkgPath) || !fs.existsSync(indexPath)) {
+  failed = true;
+  console.error('missing packages/toll-core package.json or src/index.ts');
+} else {
+  const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
+  const exportsMap = pkg.exports || {};
+  for (const name of REQUIRED_PACKAGE_EXPORTS) {
+    if (!exportsMap[`./${name}`]) {
+      failed = true;
+      console.error(`packages/toll-core must export "./${name}" (subpath)`);
+    }
+  }
+  const indexText = fs.readFileSync(indexPath, 'utf8');
+  if (!/from\s+['"]\.\/tollSpend\.ts['"]/.test(indexText)) {
+    failed = true;
+    console.error('packages/toll-core/src/index.ts must re-export ./tollSpend.ts');
+  }
+  if (!/from\s+['"]\.\/tollPeriodReadiness\.ts['"]/.test(indexText)) {
+    failed = true;
+    console.error('packages/toll-core/src/index.ts must re-export ./tollPeriodReadiness.ts');
+  }
+}
+
+if (!fs.existsSync(readinessPath) || !fs.existsSync(spendPath)) {
+  failed = true;
+  console.error('missing packages/toll-core/src/tollPeriodReadiness.ts or tollSpend.ts');
+} else {
+  const readinessText = fs.readFileSync(readinessPath, 'utf8');
+  if (!/export function decideTollFinishAllowed/.test(readinessText)) {
+    failed = true;
+    console.error('tollPeriodReadiness.ts must export decideTollFinishAllowed (Finish gate)');
+  }
+  if (!/export function computeTollPeriodReadiness/.test(readinessText)) {
+    failed = true;
+    console.error('tollPeriodReadiness.ts must export computeTollPeriodReadiness');
+  }
+  const spendText = fs.readFileSync(spendPath, 'utf8');
+  if (!/export function ledgerDebitSpendAmount/.test(spendText)) {
+    failed = true;
+    console.error('tollSpend.ts must export ledgerDebitSpendAmount');
+  }
+}
+
 if (failed) {
   console.error('toll-core parity check failed — restore thin re-exports from @roam/toll-core.');
   process.exit(1);
 }
-console.log('toll-core parity OK (%d shims).', SHIMS.length);
+console.log('toll-core parity OK (%d shims + package exports).', SHIMS.length);

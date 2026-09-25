@@ -96,7 +96,6 @@ describe('claim period scoping', () => {
     const tollMapOut = new Map([['toll-old', '2026-06-15']]);
     const periodTollIds = buildPeriodTollIdSet(
       [],
-      [],
       [tx('toll-old', '2026-06-15'), tx('toll-in', '2026-06-30')],
       periodWeekKey,
       tz,
@@ -131,7 +130,6 @@ describe('buildPeriodTollIdSet', () => {
   it('excludes Jun 15 toll when active week is Jun 29–Jul 5', () => {
     const ids = buildPeriodTollIdSet(
       [],
-      [],
       [tx('toll-jun15', '2026-06-15')],
       periodWeekKey,
       tz,
@@ -139,9 +137,8 @@ describe('buildPeriodTollIdSet', () => {
     expect(ids.has('toll-jun15')).toBe(false);
   });
 
-  it('includes same-week toll present only in allReconciled', () => {
+  it('includes same-week toll in reconciled pool', () => {
     const ids = buildPeriodTollIdSet(
-      [],
       [],
       [tx('toll-jun30', '2026-06-30')],
       periodWeekKey,
@@ -153,8 +150,7 @@ describe('buildPeriodTollIdSet', () => {
   it('always includes date-filtered unreconciled and reconciled tolls', () => {
     const ids = buildPeriodTollIdSet(
       [tx('unrec-1', '2026-07-01')],
-      [tx('rec-1', '2026-07-02')],
-      [tx('other-week', '2026-06-15')],
+      [tx('rec-1', '2026-07-02'), tx('other-week', '2026-06-15')],
       periodWeekKey,
       tz,
     );

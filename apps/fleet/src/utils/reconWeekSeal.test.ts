@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  isReconWeekSealed,
+  isReconWeekNotYetOpen,
   isReconWeekUnlocked,
   reconWeekSealMessage,
   reconWeekUnlockDay,
@@ -9,14 +9,14 @@ import {
 describe('reconWeekSeal — Sep 7–13 fixture', () => {
   const week = { weekStart: '2026-09-07', periodEnd: '2026-09-13' };
 
-  it('seals through Sunday Sep 13', () => {
-    expect(isReconWeekSealed({ ...week, now: '2026-09-09' })).toBe(true);
-    expect(isReconWeekSealed({ ...week, now: '2026-09-13' })).toBe(true);
+  it('not yet open through Sunday Sep 13', () => {
+    expect(isReconWeekNotYetOpen({ ...week, now: '2026-09-09' })).toBe(true);
+    expect(isReconWeekNotYetOpen({ ...week, now: '2026-09-13' })).toBe(true);
     expect(isReconWeekUnlocked({ ...week, now: '2026-09-13' })).toBe(false);
   });
 
   it('unlocks on Monday Sep 14', () => {
-    expect(isReconWeekSealed({ ...week, now: '2026-09-14' })).toBe(false);
+    expect(isReconWeekNotYetOpen({ ...week, now: '2026-09-14' })).toBe(false);
     expect(isReconWeekUnlocked({ ...week, now: '2026-09-14' })).toBe(true);
   });
 

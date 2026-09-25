@@ -9,6 +9,11 @@ export type TollGateInput = {
   tollStatus: string;
   tollWorkflowActionable: number;
   tollUnmatchedCount: number;
+  /**
+   * When set (server readiness authoritative), Finish/close use this instead of
+   * legacy unmatched/workflow counters (TR-C1).
+   */
+  readinessActionableTotal?: number | null;
 };
 
 export type PeriodStatusInput = {
@@ -29,8 +34,12 @@ export type DerivedPeriodStatus = {
 
 export function tollsClearFromGate(tolls: TollGateInput): boolean {
   const tollStatus = String(tolls.tollStatus || "n/a");
+  const statusOk = tollStatus === "reconciled" || tollStatus === "n/a";
+  if (!statusOk) return false;
+  if (tolls.readinessActionableTotal != null) {
+    return Number(tolls.readinessActionableTotal) === 0;
+  }
   return (
-    (tollStatus === "reconciled" || tollStatus === "n/a") &&
     Number(tolls.tollWorkflowActionable || 0) === 0 &&
     Number(tolls.tollUnmatchedCount || 0) === 0
   );

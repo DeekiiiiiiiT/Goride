@@ -1276,11 +1276,38 @@ export async function rebuildDriverFinancialPeriod(
           ? "in_progress"
           : "reconciled";
 
+  let readinessActionableTotal: number | null = null;
+  try {
+    const orgIdForReadiness = context.organizationId;
+    const authoritative = await isFeatureEnabled(
+      FEATURE_FLAGS.TOLL_READINESS_SERVER_AUTHORITATIVE,
+      orgIdForReadiness,
+    );
+    if (authoritative && orgIdForReadiness) {
+      const { buildWeekReadiness } = await import("./toll_period_readiness_build.ts");
+      const { readiness } = await buildWeekReadiness({
+        weekKey: periodAnchor,
+        orgId: orgIdForReadiness,
+        driverId,
+      });
+      readinessActionableTotal = readiness.actionableTotal;
+    }
+  } catch (e) {
+    console.warn("[dfp] toll readiness authoritative probe skipped", e);
+  }
+
   const derived = derivePeriodStatus({
     fuelFinalized,
     forceRelease,
     settled,
-    tolls: { tollStatus, tollWorkflowActionable, tollUnmatchedCount },
+    tolls: {
+      tollStatus: readinessActionableTotal != null && readinessActionableTotal > 0
+        ? (tollStatus === "n/a" ? "unmatched" : tollStatus)
+        : tollStatus,
+      tollWorkflowActionable,
+      tollUnmatchedCount,
+      readinessActionableTotal,
+    },
   });
   const cashStillHeld = derived.cashStillHeld;
   const settlementStatus = derived.settlementStatus;

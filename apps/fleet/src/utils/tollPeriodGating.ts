@@ -73,7 +73,8 @@ export function computeStepCounts(input: {
   periodTollIds?: ReadonlySet<string>;
   periodClaimIds?: ReadonlySet<string>;
   /**
-   * Optional Unlinked signals so pending-hold rows with Apply / Accept stay actionable.
+   * Optional Unlinked signals so pending-hold rows with Apply / Accept stay
+   * highlighted; pending alone is already actionable (product decision A).
    * Keys are trip ids.
    */
   unlinkedSuggestionStatusByTripId?: ReadonlyMap<string, string>;

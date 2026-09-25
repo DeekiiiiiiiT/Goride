@@ -5,6 +5,7 @@ import {
   remainingClaimShortfall,
   scoreUnlinkedShortfallMatch,
   isPendingOnlyRefundResolution,
+  isUnlinkedRefundActionableNow,
   isUnlinkedApplyResolution,
   isUnlinkedApplySplitState,
   hasBlockingUnlinkedRefund,
@@ -81,10 +82,13 @@ describe('unlinked shortfall eligibility', () => {
     expect(kept.map((c) => c.tollId)).toEqual(['same']);
   });
 
-  it('pending-only resolution is detected for informational gating', () => {
+  it('pending-only resolution is detected; pending-hold is actionable (decision A)', () => {
     expect(isPendingOnlyRefundResolution({ tollRefundResolution: { status: 'pending' } })).toBe(true);
     expect(isPendingOnlyRefundResolution({ tollRefundResolution: { status: 'cash_wash' } })).toBe(false);
     expect(isPendingOnlyRefundResolution({})).toBe(false);
+    expect(isUnlinkedRefundActionableNow({ tollRefundResolution: { status: 'pending' } })).toBe(true);
+    expect(isUnlinkedRefundActionableNow({ tollRefundResolution: null })).toBe(true);
+    expect(isUnlinkedRefundActionableNow({ tollRefundResolution: { status: 'cash_wash' } })).toBe(false);
   });
 
   it('blocks Charge Driver when driver has open unlinked refund', () => {

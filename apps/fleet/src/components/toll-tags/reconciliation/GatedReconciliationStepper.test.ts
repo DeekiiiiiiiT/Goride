@@ -80,7 +80,19 @@ describe('computeGatedStepStates', () => {
     // informational-only never blocks — needs-review is complete/unlocked despite informational=3
     expect(byId['needs-review'].complete).toBe(true);
     expect(byId['needs-review'].locked).toBe(false);
+    expect(byId['needs-review'].informational).toBe(3);
     expect(byId['personal-use'].locked).toBe(false);
+  });
+
+  it('TR-H6: informational>0 with actionable===0 still exposes counts for the gray clock badge', () => {
+    const states = computeGatedStepStates(
+      counts({ 'unlinked-refunds': { actionable: 0, informational: 2 } }),
+      ORDER,
+    );
+    const step = states.find((s) => s.id === 'unlinked-refunds')!;
+    expect(step.complete).toBe(true);
+    expect(step.actionable).toBe(0);
+    expect(step.informational).toBe(2);
   });
 
   it('the FIRST step with actionable items is current, not a later one', () => {

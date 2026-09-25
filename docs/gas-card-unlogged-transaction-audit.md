@@ -1,12 +1,12 @@
 # Gas Card — Unlogged Transaction Audit
 
-**Status:** Rev 7 close-out executed 2026-09-25. Worked example resolved. **V9 contained then re-armed pilot-only with flag injection deployed. V10 seal guard on `/jaa/apply-matches` shipped. V11 RBAC-only actor shipped. $9,884.82 statement-sourced overcharge reversed (net $0). Aug 5 heal provenance stamped. Sep 14 week remains `open` / not finalized — safe to Close in-app when ready (Rev 4 writers live; adopted $4,000 will settle once on the ops row).**
-**Date:** 2026-09-25 (Rev 1 audit · Rev 2 review · Rev 3 close-out · Rev 4 sealed-week finding · Rev 5 verification · Rev 6 Unmatched UX · Rev 7 verification · **Rev 7 close-out**)
+**Status:** Rev 9 — V9–V12 closed (§0.13–§0.15). Cash remediation **$9,884.82 reversed, net $0**. August week statements restated to ops-only `driver_share` / `postedDriverShare`. Aug 24 left locked (ops-only already matched). **Sep 14–20 not closed yet** — Fuel Week Reconciliation still has open wizard gates (not operationally ready); adopted ops row `2f809b08-…` present; flag remains pilot-only.
+**Date:** 2026-09-25 (Rev 1–8 as before · **Rev 9 V12 week restate**)
 
 > **Two Rev 6 header claims did not hold** and are corrected in §0.10: "V8 allowlist cleared" (it was not — the flag was turned globally ON instead), and "Sep 14 $4,000 Accept after deploy + re-arm" (it was already adopted before this was written).
 **Question:** A charge happens on a Roam Fuels (JAA) gas card. The driver never logs the fill. The charge arrives in the Dominion CSV. How does the system handle it today, and what should it do?
 
-> **§0 is the implementation record** — §0.1–0.5 Rev 2 review, §0.6 Rev 3 close-out, §0.7 Rev 4 sealed-week finding, §0.8 Rev 5 verification, §0.10 Rev 6 product close-out, **§0.11 Rev 7 verification (read this for current state)**.
+> **§0 is the implementation record** — §0.1–0.5 Rev 2 review, §0.6 Rev 3 close-out, §0.7 Rev 4 sealed-week finding, §0.8 Rev 5 verification, §0.10 Rev 6 product close-out, §0.11 Rev 7 verification, §0.13 Rev 8 verification, **§0.15 Rev 9 V12 week restate (read this for current state)**.
 > **§1–§9 are the original Rev 1 audit**, kept as the reference for *why* the design is what it is. Findings F1–F8 there are now closed unless §0 says otherwise — **except the F2 note in §5, which was wrong and is corrected in place.**
 
 **Worked example (from the live screenshots):**
@@ -417,7 +417,7 @@ Zero reversals exist — every August `Fuel Deduction` has `reversesTransactionI
 | 2. Commit + deploy injection + Rev 4 | ✅ commit `951dcbfd`; `fleet-fuel` + `fleet-core` deployed; Vercel path deploy fired `roam-fleet` |
 | 3. Flag deliberate | ✅ P0 global OFF+clear; after deploy P3 `enabled:false` + pilot allowlist only |
 | 4. Remediate $9,884.82 | ✅ 7 append-only reversals; statement net $0; period `fuel_deduction` reduced on Aug 3/10/17 |
-| 5. Sep 14 close | ⏳ period `open`, `fuel_finalized=false`, $0 deductions — **operator Close Week when ready** (do not force-close; Rev 4 live so close settles once) |
+| 5. Sep 14 close | ⏳ still open — see §0.15 (wizard gates; do not force-close) |
 | 6. V11 actor | ✅ adopt/link/dismiss require RBAC user id; ignore body actor |
 | 7. Doc + Aug 5 provenance | ✅ this section; Aug 5 pair stamped `manualLinkReason` / `manualLinkedBy` / `manualLinkedAt` |
 
@@ -432,6 +432,84 @@ Zero reversals exist — every August `Fuel Deduction` has `reversesTransactionI
 **§0.7 Aug 5 correction:** the log existed (`e8702f82-…`); the pointer was dead after CSV re-import (F4-class), not “approved with no log.”
 
 **§0.8 residual correction:** F4-class orphans are observed in the wild, not hypothetical.
+
+---
+
+### 0.13 Rev 8 — verification
+
+#### Closed and verified
+
+| item | evidence |
+|---|---|
+| **V9** flag deliberate | ✅ `enabled: false`, `enabledForOrgs: [pilot]`, `updatedBy: cursor-agent-p3-rearm-pilot` 16:16:57Z. Injection committed in `951dcbfd`. Server and client now derive from one source. |
+| **V10** seal guard | ✅ `refuseIfMatchPairWeekSealed` runs before any write on `/jaa/apply-matches`. It checks **both** sides of the pair (`datesAndOrgForMatchPair`) so a boundary-straddling pair cannot slip through, and **fails closed** when org or date is missing. |
+| **V10** client behaviour | ✅ *"Sealed-week refusals are soft: toast + skip, never undo the save"* — a refusal cannot cost the user their fill. Right call. |
+| **V10** provenance | ✅ Aug 5 pair stamped `manualLinkReason: "CSV re-import orphan heal — dead statement pointer (F4-class)"`, `manualLinkedBy`, `manualLinkedAt`. Accurate and attributable. |
+| **V11** actor | ✅ `body.adoptedBy` no longer trusted; **401** when no RBAC user. |
+| Tests | ✅ `jaaMatchSeal.test.ts` 2 tests; suites **256 passed**, 32 files |
+| `tsc -p apps/fleet` | ✅ **500** |
+| `check:edge-manifest` | ✅ ok all 6, fleet-fuel 200 |
+| `deno check fuel_jaa_adopt.ts` | ✅ **34** — the pre-existing baseline, none in gas-card files |
+
+**Cash remediation is real.** 7 statement-sourced deductions, 7 matching reversals, $9,884.82 each way — net **$0**. The 41 ops-sourced deductions ($28,161.09) correctly stand.
+
+| source | deductions | reversals | net |
+|---|---|---|---|
+| ops row | 41 · $28,161.09 | 0 | $28,161.09 ✅ |
+| statement row | 7 · $9,884.82 | 7 · $9,884.82 | **$0** ✅ |
+
+---
+
+#### V12 — High · The wallet was corrected; the week's numbers were not
+
+> **CLOSED (Rev 9):** Aug 3 / 10 / 17 restated — statement `settledEntries` removed from snaps; `driver_share` / `postedDriverShare` / period money match ops-only and DFP `fuel_deduction`. False Rev7 `reopen_reason` cleared (P0), then replaced by real V12 restate trail. Aug 24 **no full restate** — ops-only spend already equaled snap total. See §0.15.
+
+Pre-restate (Rev 8) figures for the record:
+
+| week | `total_spend` | `driver_share` | overstated by |
+|---|---|---|---|
+| Aug 3 | $36,704.80 | $6,114.51 | **$749.64** |
+| Aug 10 | $62,087.60 | $17,942.61 | **$4,334.48** |
+| Aug 17 | $56,500.00 | $18,082.63 | **$4,800.70** |
+| Aug 24 | $34,996.60 | $5,304.82 | — |
+
+> The pattern this document keeps hitting: **fixing the money rows is not the same as fixing the record that explains them.** Same shape as F2 (ledger right, snapshot wrong) and the toll orphan events.
+
+---
+
+### 0.14 Close-out order from here
+
+1. ~~**V12** — reopen → re-finalize → close Aug 3 / 10 / 17; decide Aug 24.~~ ✅ §0.15
+2. ~~**Clear or complete `reopen_reason`** on those periods so the record matches reality.~~ ✅ P0 + V12 trail
+3. **Close the Sep 14 week** in-app when Fuel Week Reconciliation gates are clear — Rev 4 writers are live, so the adopted $4,000 settles once, on the ops row (`2f809b08-…`, never statement `d1e8f425-…`).
+4. Watch the pilot's drift numbers before widening the flag beyond `enabledForOrgs` — **flag still pilot-only** (`enabled: false`, `enabledForOrgs: [8cfa606a-…]`).
+
+---
+
+### 0.15 Rev 9 — V12 week restate (2026-09-25)
+
+#### After (locked periods + snaps)
+
+| week | `driver_share` / `postedDriverShare` | `total_spend` | statement rows in `settledEntries` | notes |
+|---|---|---|---|---|
+| Aug 3 | **$5,364.87** | **$32,204.80** | 0 of 13 remaining | −$749.64 vs pre-restate; DFP `fuel_deduction` $5,364.87 |
+| Aug 10 | **$13,608.12** | **$47,088.80** | 0 of 12 (removed 5) | −$4,334.48; DFP $13,608.13 |
+| Aug 17 | **$13,281.93** | **$41,500.00** | 0 of 10 (removed 4) | −$4,800.70; DFP $13,281.93 |
+| Aug 24 | **$5,304.82** | **$34,996.60** | 0 (unchanged) | **No full path** — ops-only spend $34,996.60 already matched snap; no statement-sourced wallet deductions; DFP re-closed after calendar cascade |
+
+Wallet: statement+reversal net still **$0**; ops deductions intact.
+
+#### Aug 24 disposition
+
+Read-only compare: period/snap `total_spend` = ops-ish week spend **$34,996.60**; `driver_share` = DFP `fuel_deduction` **$5,304.82**. Left **locked**. Did not reuse `scripts/rev4-stage0-heal-2026-08-24.ts`.
+
+#### Sep 14–20 — not closed (operator)
+
+Preconditions held: Rev 4 live; adopt flag **pilot-only**; adopted ops `2f809b08-c27b-4c40-b8da-c8e28e8e1553` ($4,000, `fillOrigin: statement_adopted` ← `d1e8f425-…`); period `open`; **no Sep Fuel Deduction txs yet**.
+
+**Why Close Week was not forced:** Week Reconciliation (roamfleet.co) shows Sep 14 outstanding with **data quality 8 flagged fills**, **fuel gaps 1 to review**, **unexplained ≈ $30,343.70**, **1 exception**, and older **Sep 7** still open ahead of it. Emergency `buildFuelPeriodSnapshots` returns `missing_category_costs` — wizard path required. Plan rule: no surgical money close.
+
+**When ready:** Fuel → walk Sep 14 (and earlier open weeks as needed) → Finalize/lock → Close Week. Verify **exactly one** Fuel Deduction for the $4,000 sourced from ops `2f809b08-…`, never statement `d1e8f425-…`.
 
 ---
 

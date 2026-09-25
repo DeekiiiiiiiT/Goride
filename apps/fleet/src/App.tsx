@@ -203,7 +203,7 @@ function AppContent() {
   } | null>(null);
 
   type NavigateOpts =
-    | { startYmd: string; endYmd?: string; driverId?: string }
+    | { startYmd: string; endYmd?: string; driverId?: string; step?: string }
     | { weekKey: string }
     | { vehicleId?: string; driverId?: string; vehicleLabel?: string };
 
@@ -336,8 +336,12 @@ function AppContent() {
       clearDriverDetail();
       setCurrentPage('week-reconciliation');
       if (typeof window !== 'undefined') {
-        const nextPath = pathForPageId(page);
-        if (window.location.pathname !== nextPath) {
+        const qs = new URLSearchParams();
+        if (periodHint?.startYmd) qs.set('week', periodHint.startYmd);
+        if (opts && 'step' in opts && opts.step) qs.set('step', String(opts.step));
+        const base = pathForPageId(page);
+        const nextPath = qs.toString() ? `${base}?${qs.toString()}` : base;
+        if (`${window.location.pathname}${window.location.search}` !== nextPath) {
           window.history.pushState({ page: 'week-reconciliation', hubTab }, '', nextPath);
         }
       }

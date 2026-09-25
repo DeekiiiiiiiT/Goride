@@ -315,7 +315,9 @@ export function SuggestedMatchCard({
                 <div className="flex items-center text-xs text-slate-500 space-x-1">
                     <Clock className="h-3 w-3" />
                     <span>
-                        {timeDifferenceMinutes === 0 ? 'Exact time' : `${Math.abs(timeDifferenceMinutes).toFixed(1)} min diff`}
+                        {timeDifferenceMinutes === 0
+                          ? 'Within trip window'
+                          : `${Math.abs(timeDifferenceMinutes).toFixed(1)} min from window`}
                     </span>
                 </div>
                 )}

@@ -22,7 +22,9 @@
     "./tollPeriodStepTypes": "./src/tollPeriodStepTypes.ts",
     "./tollPeriodDisputeHelpers": "./src/tollPeriodDisputeHelpers.ts",
     "./tollPeriodCounts": "./src/tollPeriodCounts.ts",
-    "./unlinkedShortfallEligibility": "./src/unlinkedShortfallEligibility.ts"
+    "./unlinkedShortfallEligibility": "./src/unlinkedShortfallEligibility.ts",
+    "./tollSpend": "./src/tollSpend.ts",
+    "./tollPeriodReadiness": "./src/tollPeriodReadiness.ts"
   },
 
   "scripts": {

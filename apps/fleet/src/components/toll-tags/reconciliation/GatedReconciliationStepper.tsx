@@ -63,7 +63,11 @@ interface GatedReconciliationStepperProps {
 export function GatedReconciliationStepper({ states, activeStepId, onSelect, labels, icons }: GatedReconciliationStepperProps) {
   return (
     <div className="space-y-2">
-    <div className="flex items-start justify-between relative w-full overflow-x-auto pb-1">
+    <div
+      className="flex items-start justify-between relative w-full overflow-x-auto pb-1"
+      role="tablist"
+      aria-label="Toll reconciliation steps"
+    >
       <div className="absolute left-6 right-6 top-[22px] h-0.5 bg-slate-200 z-0" />
       {states.map((step) => {
         const isActive = step.id === activeStepId;
@@ -72,8 +76,10 @@ export function GatedReconciliationStepper({ states, activeStepId, onSelect, lab
           <button
             key={step.id}
             type="button"
+            role="tab"
             disabled={step.locked}
             aria-disabled={step.locked}
+            aria-current={isActive ? 'step' : undefined}
             onClick={() => { if (!step.locked) onSelect(step.id); }}
             className={`flex flex-col items-center gap-1.5 relative z-10 px-2 min-w-[84px] group ${
               step.locked ? 'cursor-not-allowed opacity-60' : ''
@@ -106,7 +112,8 @@ export function GatedReconciliationStepper({ states, activeStepId, onSelect, lab
                   {step.actionable > 99 ? '99+' : step.actionable}
                 </span>
               )}
-              {step.informational > 0 && step.actionable === 0 && !step.complete && (
+              {/* TR-H6: informational waiting badge — show even when step is "complete" (actionable===0) */}
+              {step.informational > 0 && step.actionable === 0 && (
                 <span
                   className="absolute -bottom-1.5 -right-1.5 min-w-[16px] h-[16px] px-1 rounded-full bg-slate-400 text-white text-[9px] font-bold flex items-center justify-center"
                   title={`${step.informational} waiting on driver or Uber`}

@@ -15,7 +15,7 @@ import {
   normalizeSparkSeriesToMax,
   unexplainedWowDelta,
 } from '../../../utils/fuelUnexplainedSparkSeries';
-import { isReconWeekSealed, reconWeekSealMessage } from '../../../utils/reconWeekSeal';
+import { isReconWeekNotYetOpen, reconWeekSealMessage } from '../../../utils/reconWeekSeal';
 
 /** Labeled step cell — clear at a glance; click opens that step (M3/M5). */
 function StepStatusCell({
@@ -168,7 +168,7 @@ function PeriodCard({
   const isOutstanding = period.status === 'outstanding';
   const isInProgress = period.status === 'in_progress';
   // Calendar seal: no recon until day after Sunday (locked weeks stay viewable).
-  const weekSealed = !period.locked && isReconWeekSealed({
+  const weekSealed = !period.locked && isReconWeekNotYetOpen({
     weekStart: period.startDate,
     periodEnd: period.endDate,
   });
@@ -448,11 +448,11 @@ export function FuelPeriodLandingPage({
     const unlockedOpen = open.filter(
       (p) =>
         p.locked ||
-        !isReconWeekSealed({ weekStart: p.startDate, periodEnd: p.endDate }),
+        !isReconWeekNotYetOpen({ weekStart: p.startDate, periodEnd: p.endDate }),
     );
     const sealedOpen = open.filter(
       (p) =>
-        !p.locked && isReconWeekSealed({ weekStart: p.startDate, periodEnd: p.endDate }),
+        !p.locked && isReconWeekNotYetOpen({ weekStart: p.startDate, periodEnd: p.endDate }),
     );
     return {
       openWeeks: open.length,

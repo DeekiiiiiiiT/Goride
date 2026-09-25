@@ -81,7 +81,7 @@ interface UnderpaidClaimsStepProps {
     resolvedRefundTrips: Trip[];
     onUndoRefund: (tripId: string) => Promise<void> | void;
     matchedTolls: FinancialTransaction[];
-    allReconciledTolls: FinancialTransaction[];
+    reconciledTolls: FinancialTransaction[];
     onUnmatch: (tx: FinancialTransaction) => Promise<any>;
     selectedDriverId: string;
     periodStartDate: string;
@@ -1053,7 +1053,7 @@ export function UnderpaidClaimsStep({
               resolvedRefundTrips={historyAudit.resolvedRefundTrips}
               onUndoRefund={historyAudit.onUndoRefund}
               matchedTolls={historyAudit.matchedTolls}
-              allReconciledTolls={historyAudit.allReconciledTolls}
+              reconciledTolls={historyAudit.reconciledTolls}
               periodClaims={claims}
               allClaims={allClaims}
               fleetTz={fleetTz}

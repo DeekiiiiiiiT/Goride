@@ -191,6 +191,10 @@ import {
   voidTollLedgerEntryHandler,
   applyTagIdentityBackfill,
 } from "./toll_controller.tsx";
+import {
+  mondayWeekKeyFromCalendarDay,
+  refuseIfTollPeriodSealed,
+} from "./toll_period_writable.ts";
 import { replayFleetTripsWithRoutes } from "./fleet_trip_toll_replay.ts";
 import { resolveDriverFromFleetRecords, collectDriverAliasIds } from "./driver_identity.ts";
 // RETIRED: disputeRefundApp / driverFinancialPeriodApp / settlementCommandsApp / paymentLedgerLineApp → fleet-pay (F4)
@@ -3868,7 +3872,18 @@ export function registerResidualMonolithRoutes(app: Hono) {
   app.post("/make-server-37f42386/toll-reconciliation/reset-for-reconciliation", requireAuth({ strict: true }), requirePermission('toll.manage'), async (c) => {
     try {
       const body = await c.req.json().catch(() => ({}));
-      const result = await executeTollResetForReconciliation(body.transactionId);
+      const transactionId = body.transactionId;
+      if (transactionId) {
+        // Resolve week via toll date (same as toll_controller).
+        const entry = await getTollLedgerEntry(String(transactionId));
+        if (entry?.date) {
+          const tz = await getFleetTimezone();
+          const wk = mondayWeekKeyFromCalendarDay(fleetCalendarDay(String(entry.date), tz));
+          const sealed = await refuseIfTollPeriodSealed(c, wk, "POST /reset-for-reconciliation");
+          if (sealed) return sealed;
+        }
+      }
+      const result = await executeTollResetForReconciliation(transactionId);
       return c.json(result);
     } catch (e: any) {
       const status =
@@ -3883,6 +3898,15 @@ export function registerResidualMonolithRoutes(app: Hono) {
   app.post("/make-server-37f42386/toll-reconciliation/reset-period", requireAuth({ strict: true }), requirePermission('toll.manage'), async (c) => {
     try {
       const body = await c.req.json().catch(() => ({}));
+      const startDate = String(body.startDate || "").slice(0, 10);
+      if (/^\d{4}-\d{2}-\d{2}$/.test(startDate)) {
+        const sealed = await refuseIfTollPeriodSealed(
+          c,
+          mondayWeekKeyFromCalendarDay(startDate),
+          "POST /reset-period",
+        );
+        if (sealed) return sealed;
+      }
       const { executePeriodReconciliationReset } = await import("./period_reset.ts");
       const result = await executePeriodReconciliationReset(
         {

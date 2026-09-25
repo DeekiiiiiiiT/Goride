@@ -203,11 +203,60 @@ export async function sealTollWeek(opts: {
     .eq("period_anchor", weekKey);
   if (error) throw new Error(error.message);
 
-  let published = 0;
-  for (const p of periods ?? []) {
-    const driverId = String(p.driver_id || "");
-    if (!driverId) continue;
+  // TR-H9: seal from union of period drivers + drivers with week toll activity.
+  const weekEnd = periodEndForAnchor(weekKey);
+  const [y, m, d] = weekEnd.split("-").map(Number);
+  const next = new Date(Date.UTC(y, m - 1, d + 1));
+  const nextMondayYmd = next.toISOString().slice(0, 10);
+  const activityDriverIds = new Set<string>();
+  try {
+    const { tollTx } = await loadTollLedgerWithTrips(weekKey, nextMondayYmd);
+    for (const tx of tollTx || []) {
+      if (!tx || !isTollIncludedInSpend(tx as never)) continue;
+      if (!ymdInWeek(tx.date, weekKey, weekEnd)) continue;
+      const did = String(tx.driverId || tx.driver_id || "");
+      if (did) activityDriverIds.add(did);
+    }
+  } catch (e) {
+    console.warn("[sealTollWeek] activity-driver scan failed", weekKey, e);
+  }
 
+  const periodByDriver = new Map<string, {
+    driver_id?: string | null;
+    toll_spend?: number | null;
+    toll_charged_to_driver?: number | null;
+    toll_reimbursed?: number | null;
+    toll_cash_spend?: number | null;
+    toll_tag_spend?: number | null;
+    metadata?: unknown;
+  }>();
+  for (const p of periods ?? []) {
+    const did = String(p.driver_id || "");
+    if (did) periodByDriver.set(did, p);
+  }
+  const periodDriverIds = new Set(periodByDriver.keys());
+  const missingFromPeriods = [...activityDriverIds].filter((id) => !periodDriverIds.has(id));
+  if (missingFromPeriods.length > 0) {
+    console.warn("[sealTollWeek] TOLL_SEAL_DRIVER_MISSING", {
+      weekKey,
+      organizationId,
+      missingFromPeriods,
+    });
+  }
+
+  const driverIdsToSeal = new Set<string>([...periodDriverIds, ...activityDriverIds]);
+
+  let published = 0;
+  for (const driverId of driverIdsToSeal) {
+    const p = periodByDriver.get(driverId) ?? {
+      driver_id: driverId,
+      toll_spend: 0,
+      toll_charged_to_driver: 0,
+      toll_reimbursed: 0,
+      toll_cash_spend: 0,
+      toll_tag_spend: 0,
+      metadata: null,
+    };
     let tollSpend = round2(Number(p.toll_spend) || 0);
     let reimbursed = round2(Number(p.toll_reimbursed) || 0);
     let cashWashSpend = round2(Number(p.toll_cash_spend) || 0);

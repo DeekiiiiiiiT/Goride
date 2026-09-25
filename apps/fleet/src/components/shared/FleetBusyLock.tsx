@@ -7,6 +7,7 @@ import React, {
   useState,
 } from 'react';
 import { Loader2 } from 'lucide-react';
+import { Button } from '../ui/button';
 
 type RunExclusive = <T>(label: string, work: () => Promise<T>) => Promise<T | undefined>;
 
@@ -17,6 +18,8 @@ export interface FleetBusyContextValue {
   message: string;
   /** Update the overlay message mid-batch (e.g. "Resetting week 2 of 6"). */
   setMessage: (message: string) => void;
+  /** Optional cancel handler shown on the overlay (TR-M11 bulk abort). */
+  setCancel: (fn: (() => void) | null) => void;
   /**
    * Run work exclusively. If another action is already running, returns undefined
    * so double-clicks cannot stack (queuing would reorder money moves).
@@ -34,6 +37,7 @@ export function useFleetBusy(): FleetBusyContextValue {
       busy: false,
       message: '',
       setMessage: () => {},
+      setCancel: () => {},
       runExclusive: async (_label, work) => work(),
     };
   }
@@ -43,10 +47,15 @@ export function useFleetBusy(): FleetBusyContextValue {
 export function FleetBusyProvider({ children }: { children: React.ReactNode }) {
   const [busy, setBusy] = useState(false);
   const [message, setMessageState] = useState('');
+  const [cancelFn, setCancelFn] = useState<(() => void) | null>(null);
   const depthRef = useRef(0);
 
   const setMessage = useCallback((next: string) => {
     setMessageState(next || 'Working…');
+  }, []);
+
+  const setCancel = useCallback((fn: (() => void) | null) => {
+    setCancelFn(() => fn);
   }, []);
 
   const runExclusive = useCallback<RunExclusive>(async (label, work) => {
@@ -62,12 +71,13 @@ export function FleetBusyProvider({ children }: { children: React.ReactNode }) {
       depthRef.current = 0;
       setBusy(false);
       setMessageState('');
+      setCancelFn(null);
     }
   }, []);
 
   const value = useMemo(
-    () => ({ busy, message, setMessage, runExclusive }),
-    [busy, message, setMessage, runExclusive],
+    () => ({ busy, message, setMessage, setCancel, runExclusive }),
+    [busy, message, setMessage, setCancel, runExclusive],
   );
 
   return (
@@ -86,9 +96,23 @@ export function FleetBusyProvider({ children }: { children: React.ReactNode }) {
               e.stopPropagation();
             }}
           >
-            <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 shadow-md">
+            <div className="flex items-center gap-3 rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 shadow-md">
               <Loader2 className="h-4 w-4 animate-spin text-indigo-600" />
-              {message || 'Working…'}
+              <span>{message || 'Working…'}</span>
+              {cancelFn ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-8"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    cancelFn();
+                  }}
+                >
+                  Cancel
+                </Button>
+              ) : null}
             </div>
           </div>
         )}

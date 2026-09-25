@@ -28,6 +28,24 @@ import {
 } from './preferencesClient';
 import { unwrapFuelEntriesPayload } from '@roam/fuel-core';
 
+/** Fresh Idempotency-Key for toll money POSTs (retries / double-clicks). */
+function newTollIdempotencyKey(prefix = 'toll'): string {
+  try {
+    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+      return `${prefix}:${crypto.randomUUID()}`;
+    }
+  } catch {
+    /* fall through */
+  }
+  return `${prefix}:${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+async function tollMoneyHeaders(idempotencyKey?: string): Promise<Record<string, string>> {
+  const headers = await requireAuthHeaders();
+  headers['Idempotency-Key'] = idempotencyKey || newTollIdempotencyKey();
+  return headers;
+}
+
 // Auth headers are centralized in utils/authHeaders (single source of truth for
 // session-JWT scoping + product-line headers; throws AuthRequiredError logged out).
 // `getHeaders` accepts a deprecated `{ requireAuth }` option for back-compat with
@@ -3460,12 +3478,11 @@ export const api = {
     return response.json();
   },
 
-  async getTollUnreconciled(params?: { driverId?: string; limit?: number; offset?: number; autoMatch?: boolean; from?: string; to?: string }) {
+  async getTollUnreconciled(params?: { driverId?: string; limit?: number; offset?: number; from?: string; to?: string }) {
     const qs = new URLSearchParams();
     if (params?.driverId) qs.set('driverId', params.driverId);
     if (params?.limit !== undefined) qs.set('limit', params.limit.toString());
     if (params?.offset !== undefined) qs.set('offset', params.offset.toString());
-    if (params?.autoMatch) qs.set('autoMatch', '1');
     if (params?.from) qs.set('from', params.from);
     if (params?.to) qs.set('to', params.to);
     const response = await fetchWithRetry(`${API_ENDPOINTS.toll}/toll-reconciliation/unreconciled?${qs.toString()}`, {
@@ -3473,6 +3490,33 @@ export const api = {
     });
     if (!response.ok) throw new Error("Failed to fetch unreconciled tolls");
     return response.json();
+  },
+
+  /** TR-C5: explicit auto-match (replaces GET ?autoMatch=1). Pass Idempotency-Key. */
+  async postTollAutoMatch(params?: {
+    driverId?: string;
+    from?: string;
+    to?: string;
+    idempotencyKey?: string;
+  }): Promise<{ success: boolean; autoReconciled: number; failed?: number; errors?: string[] }> {
+    const headers = await requireAuthHeaders();
+    if (params?.idempotencyKey) {
+      headers['Idempotency-Key'] = params.idempotencyKey;
+    }
+    const response = await fetchWithRetry(`${API_ENDPOINTS.toll}/toll-reconciliation/auto-match`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        driverId: params?.driverId,
+        from: params?.from,
+        to: params?.to,
+      }),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(data.error || data.message || 'Failed to auto-match tolls');
+    }
+    return data;
   },
 
   async getTollReconciled(params?: { driverId?: string; limit?: number; offset?: number; from?: string; to?: string }) {
@@ -3511,6 +3555,79 @@ export const api = {
     });
     if (!response.ok) throw new Error("Failed to fetch reconciliation periods");
     return response.json();
+  },
+
+  /** Phase 5: Finish = Reviewed (state=ready). Does not seal. */
+  async finishTollReconciliationPeriod(weekKey: string, opts?: { note?: string }) {
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.toll}/toll-reconciliation/periods/${encodeURIComponent(weekKey)}/finish`,
+      {
+        method: 'POST',
+        headers: await requireAuthHeaders(),
+        body: JSON.stringify({ note: opts?.note }),
+      },
+    );
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const msg = data?.message || data?.error || 'Failed to mark week reviewed';
+      throw Object.assign(new Error(msg), { status: response.status, data });
+    }
+    return data;
+  },
+
+  /** Phase 4b / Phase 7: server readiness blockers for Close Week deep links. */
+  async getTollPeriodReadiness(
+    weekKey: string,
+    opts?: { driverId?: string; clientCounts?: Record<string, { actionable: number; informational: number }> },
+  ) {
+    const qs = new URLSearchParams();
+    if (opts?.driverId) qs.set('driverId', opts.driverId);
+    if (opts?.clientCounts) qs.set('clientCounts', JSON.stringify(opts.clientCounts));
+    const q = qs.toString();
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.toll}/toll-reconciliation/periods/${encodeURIComponent(weekKey)}/readiness${q ? `?${q}` : ''}`,
+      { headers: await requireAuthHeaders(null) },
+    );
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(data?.error || data?.message || 'Failed to load toll readiness');
+    }
+    return data as {
+      success: boolean;
+      authoritative: boolean;
+      readiness: {
+        weekKey: string;
+        steps?: Record<string, { actionable: number; informational: number }>;
+        blockers: Array<{
+          code: string;
+          stepId?: string;
+          count: number;
+          amountMajor: number | null;
+          drillPath: string;
+        }>;
+        actionableTotal: number;
+        identity: { residual: number; withinTolerance: boolean };
+        seal: { state: string; publishedDrivers: number; missingDrivers: string[] };
+      };
+    };
+  },
+
+  /** Phase 5 / TR-C2: reopen a sealed toll week so mutations are allowed again. */
+  async reopenTollReconciliationPeriod(weekKey: string, reason: string) {
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.toll}/toll-reconciliation/periods/${encodeURIComponent(weekKey)}/reopen`,
+      {
+        method: 'POST',
+        headers: await requireAuthHeaders(),
+        body: JSON.stringify({ reason }),
+      },
+    );
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const msg = data?.message || data?.error || 'Failed to reopen toll period';
+      throw Object.assign(new Error(msg), { status: response.status, data });
+    }
+    return data;
   },
 
   async getResolvedRefunds(params?: { driverId?: string; limit?: number; offset?: number; from?: string; to?: string }) {
@@ -3586,7 +3703,7 @@ export const api = {
   }) {
     const response = await fetchWithRetry(`${API_ENDPOINTS.toll}/toll-reconciliation/unlinked-refunds/apply-to-claim`, {
       method: 'POST',
-      headers: await requireAuthHeaders(),
+      headers: await tollMoneyHeaders(),
       body: JSON.stringify(payload)
     });
     if (!response.ok) {
@@ -3653,7 +3770,7 @@ export const api = {
   }) {
     const response = await fetchWithRetry(`${API_ENDPOINTS.toll}/toll-reconciliation/resolve`, {
       method: 'POST',
-      headers: await requireAuthHeaders(),
+      headers: await tollMoneyHeaders(),
       body: JSON.stringify(payload)
     });
     if (!response.ok) {
@@ -3822,7 +3939,7 @@ export const api = {
   }> {
     const response = await fetchWithRetry(`${API_ENDPOINTS.toll}/toll-reconciliation/personal-use/auto-charge`, {
       method: 'POST',
-      headers: await requireAuthHeaders(),
+      headers: await tollMoneyHeaders(),
       body: JSON.stringify(payload),
     });
     const data = await response.json().catch(() => ({}));
@@ -4051,7 +4168,7 @@ export const api = {
   async serverReconcileToll(transactionId: string, tripId: string) {
     const response = await fetchWithRetry(`${API_ENDPOINTS.toll}/toll-reconciliation/reconcile`, {
       method: 'POST',
-      headers: await requireAuthHeaders(),
+      headers: await tollMoneyHeaders(),
       body: JSON.stringify({ transactionId, tripId })
     });
     if (!response.ok) {
@@ -4077,7 +4194,7 @@ export const api = {
   async bulkReconcileTolls(matches: Array<{ transactionId: string; tripId: string }>) {
     const response = await fetchWithRetry(`${API_ENDPOINTS.toll}/toll-reconciliation/bulk-reconcile`, {
       method: 'POST',
-      headers: await requireAuthHeaders(),
+      headers: await tollMoneyHeaders(),
       body: JSON.stringify({ matches })
     });
     if (!response.ok) {
@@ -4090,7 +4207,7 @@ export const api = {
   async approveToll(transactionId: string, notes?: string) {
     const response = await fetchWithRetry(`${API_ENDPOINTS.toll}/toll-reconciliation/approve`, {
       method: 'POST',
-      headers: await requireAuthHeaders(),
+      headers: await tollMoneyHeaders(),
       body: JSON.stringify({ transactionId, notes })
     });
     if (!response.ok) {
@@ -4104,7 +4221,7 @@ export const api = {
   async rejectToll(transactionId: string, reason?: string) {
     const response = await fetchWithRetry(`${API_ENDPOINTS.toll}/toll-reconciliation/reject`, {
       method: 'POST',
-      headers: await requireAuthHeaders(),
+      headers: await tollMoneyHeaders(),
       body: JSON.stringify({ transactionId, reason })
     });
     if (!response.ok) {

@@ -21,7 +21,7 @@ import type { Vehicle } from '../../../types/vehicle';
 import { ymdToLocalDate } from '../../../utils/timezoneDisplay';
 import type { DateRange } from 'react-day-picker';
 import type { FuelAutoCloseDualApprovalMode } from '../../../utils/fuelDualApproval';
-import { isReconWeekSealed, reconWeekSealMessage } from '../../../utils/reconWeekSeal';
+import { isReconWeekNotYetOpen, reconWeekSealMessage } from '../../../utils/reconWeekSeal';
 import { useFuelWeekDataset } from '../../../hooks/useFuelWeekDataset';
 
 export const FUEL_RECON_WIZARD_PRIMARY =
@@ -40,7 +40,7 @@ function parseDeepLinkStep(raw: string | null): FuelStepId | undefined {
 
 function periodAllowsReconWork(period: FuelReconciliationPeriod): boolean {
   if (period.locked) return true;
-  return !isReconWeekSealed({
+  return !isReconWeekNotYetOpen({
     weekStart: period.startDate,
     periodEnd: period.endDate,
   });
