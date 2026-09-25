@@ -285,7 +285,14 @@ export const fuelService = {
   /** Persist JAA↔driver links server-side (also auto GOD-station attach when merchant unique). */
   async applyJaaFuelMatches(pairs: unknown[]): Promise<{
     success: boolean;
-    results: Array<{ ok: boolean; statementId?: string; driverId?: string; stationHeal?: { attached?: boolean } }>;
+    results: Array<{
+      ok?: boolean;
+      code?: string;
+      error?: string;
+      statementId?: string;
+      driverId?: string;
+      stationHeal?: { attached?: boolean };
+    }>;
   }> {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/jaa/apply-matches`, {
       method: 'POST',

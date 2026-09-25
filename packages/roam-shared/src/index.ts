@@ -23,6 +23,11 @@ export {
   type StatementPurgePlan,
 } from './fuel/jaaStatementAdoption';
 export {
+  WEEK_SEALED_MATCH_CODE,
+  countSealedMatchRefusals,
+  datesAndOrgForMatchPair,
+} from './fuel/jaaMatchSeal';
+export {
   matchJaaStatementToDriverLogs,
   applyFuelMatchLinks,
   buildJaaMatchUpdates,

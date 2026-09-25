@@ -10,7 +10,13 @@ import {
   buildAdoptedOpsEntry,
   planStatementPurge,
   validateAdoptPreconditions,
+  validateConfirmAdoptFields,
+  type StationMode,
 } from "../../../packages/roam-shared/src/fuel/jaaStatementAdoption.ts";
+import {
+  WEEK_SEALED_MATCH_CODE,
+  datesAndOrgForMatchPair,
+} from "../../../packages/roam-shared/src/fuel/jaaMatchSeal.ts";
 import { persistFuelMatchPair } from "./fuel_jaa_match.ts";
 import { isFeatureEnabled, FEATURE_FLAGS } from "./feature_flags.ts";
 import { weekKeyForDateStr } from "./period_reset.ts";
@@ -18,6 +24,7 @@ import { getServiceClient } from "./service_client.ts";
 import { getFleetTimezone } from "./timezone_helper.tsx";
 
 export { unlinkOpsFromDeletedStatement } from "../../../packages/roam-shared/src/fuel/jaaStatementAdoption.ts";
+export { WEEK_SEALED_MATCH_CODE, datesAndOrgForMatchPair };
 
 function metaOf(entry: Record<string, unknown>): Record<string, unknown> {
   const m = entry?.metadata;
@@ -44,6 +51,42 @@ export async function isOrgFuelWeekSealed(orgId: string, dateYmd: string): Promi
     .maybeSingle();
   if (recon && (String(recon.status) === "locked" || recon.locked_at)) return true;
   return false;
+}
+
+/**
+ * Refuse match persist when either side lands in a sealed org week.
+ * Evaluated before any write — same lock as adopt/link/dismiss.
+ */
+export async function refuseIfMatchPairWeekSealed(
+  pair: {
+    statementEntry?: Record<string, unknown>;
+    driverEntry?: Record<string, unknown>;
+  },
+  fallbackOrgId: string,
+): Promise<
+  | { ok: true }
+  | { ok: false; status: 409; code: typeof WEEK_SEALED_MATCH_CODE; error: string }
+> {
+  const { orgId, datesYmd } = datesAndOrgForMatchPair(pair, fallbackOrgId);
+  if (!orgId || datesYmd.length === 0) {
+    return {
+      ok: false,
+      status: 409,
+      code: WEEK_SEALED_MATCH_CODE,
+      error: "Week is closed — rematch cannot modify sealed fuel weeks (missing org or date)",
+    };
+  }
+  for (const d of datesYmd) {
+    if (await isOrgFuelWeekSealed(orgId, d)) {
+      return {
+        ok: false,
+        status: 409,
+        code: WEEK_SEALED_MATCH_CODE,
+        error: "Week is closed — rematch cannot modify sealed fuel weeks",
+      };
+    }
+  }
+  return { ok: true };
 }
 
 async function assertAdoptFlag(orgId: string): Promise<void> {
@@ -84,6 +127,10 @@ export async function adoptUnlinkedStatement(input: {
   driverId?: string;
   vehicleId?: string;
   odometer?: number | null;
+  stationMode?: StationMode | null;
+  matchedStationId?: string | null;
+  stationName?: string | null;
+  stationAddress?: string | null;
 }): Promise<{
   ok: boolean;
   status?: number;
@@ -98,6 +145,17 @@ export async function adoptUnlinkedStatement(input: {
   if (!pre.ok) return pre;
   const statement = stmt as Record<string, unknown>;
 
+  // Confirm flow always sends stationMode; legacy callers without it keep optional odo.
+  const isConfirm = input.stationMode === "jaa_text" || input.stationMode === "verified";
+  if (isConfirm) {
+    const confirmPre = validateConfirmAdoptFields({
+      odometer: input.odometer,
+      stationMode: input.stationMode,
+      matchedStationId: input.matchedStationId,
+    });
+    if (!confirmPre.ok) return confirmPre;
+  }
+
   const orgId = String(input.organizationId || statement.organizationId || "");
   if (await isOrgFuelWeekSealed(orgId, ymd(statement.date))) {
     return {
@@ -110,6 +168,24 @@ export async function adoptUnlinkedStatement(input: {
   const driverId = String(input.driverId || statement.driverId || "").trim();
   if (!driverId) {
     return { ok: false, status: 400, error: "Driver is required (card was unassigned at transaction time)" };
+  }
+
+  let stationName = input.stationName ? String(input.stationName).trim() : "";
+  let stationAddress = input.stationAddress ? String(input.stationAddress).trim() : "";
+  const matchedStationId =
+    input.stationMode === "verified" ? String(input.matchedStationId || "").trim() : "";
+
+  if (input.stationMode === "verified") {
+    const station = await kv.get(`station:${matchedStationId}`);
+    if (!station || typeof station !== "object") {
+      return { ok: false, status: 400, error: "Verified station not found" };
+    }
+    const s = station as Record<string, unknown>;
+    stationName = String(s.name || stationName || "").trim();
+    stationAddress = String(s.address || stationAddress || "").trim();
+    if (!stationName) {
+      return { ok: false, status: 400, error: "Verified station has no name" };
+    }
   }
 
   // Re-read immediately before writing and persist the fresh copy, so a concurrent
@@ -127,6 +203,10 @@ export async function adoptUnlinkedStatement(input: {
     reason: String(input.reason).trim(),
     adoptedBy: input.adoptedBy,
     organizationId: orgId,
+    stationMode: isConfirm ? input.stationMode : null,
+    matchedStationId: matchedStationId || null,
+    stationName: stationName || null,
+    stationAddress: stationAddress || null,
   });
 
   await kv.set(`fuel_entry:${adopted.id}`, adopted);

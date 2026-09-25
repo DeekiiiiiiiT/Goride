@@ -58,6 +58,7 @@ import {
   splitEntriesHaveMismatch,
   splitRowLiters,
 } from './splitFillDisplay';
+import { isUnlinkedCardCharge } from '../../../utils/jaaFuelStatementMatcher';
 
 function AuditBreakdownItem({ label, value, max }: { label: string; value?: number; max: number }) {
   const percentage = ((value || 0) / max) * 100;
@@ -328,7 +329,19 @@ export function FuelTransactionsTable({
                 ? Number(row.pumpTotal) || 0
                 : Number(entry.amount) || 0;
               const paidByLabel = resolvePaymentLogLabel(entry, isSplit);
-              const locationStatus = entry.metadata?.locationStatus || entry.locationStatus;
+              const locationStatus = (() => {
+                const raw = entry.metadata?.locationStatus || entry.locationStatus;
+                // Operator Confirm / any linked verified station → show verified check, not Review Required
+                if (
+                  entry.matchedStationId ||
+                  (entry.metadata as { matchedStationId?: string; stationSource?: string })
+                    ?.matchedStationId ||
+                  (entry.metadata as { stationSource?: string })?.stationSource === 'verified'
+                ) {
+                  return 'verified';
+                }
+                return raw;
+              })();
               const confidenceScore = entry.metadata?.auditConfidenceScore;
               const isHighlyTrusted =
                 entry.metadata?.isHighlyTrusted ||
@@ -387,15 +400,6 @@ export function FuelTransactionsTable({
                             </Badge>
                           );
                         })()}
-                      {(entry.metadata as { fillOrigin?: string })?.fillOrigin ===
-                        'statement_adopted' && (
-                        <Badge
-                          variant="outline"
-                          className="h-4 w-fit px-1 py-0 text-[11px] font-bold border-amber-200 bg-amber-50 text-amber-900"
-                        >
-                          Statement adopted
-                        </Badge>
-                      )}
                     </div>
                   </TableCell>
                   <TableCell>
@@ -403,6 +407,15 @@ export function FuelTransactionsTable({
                       <div className="flex flex-wrap items-center gap-2">
                         {getTypeIcon(paidByLabel)}
                         <span className="text-xs">{paidByLabel}</span>
+                        {isUnlinkedCardCharge(entry) && (
+                          <Badge
+                            variant="outline"
+                            className="h-4 px-1 text-[9px] border-amber-200 bg-amber-100 text-amber-800"
+                            title="Approved card charge with no linked log — review and Accept"
+                          >
+                            Unmatched
+                          </Badge>
+                        )}
                         {(isSplit || pendingHalf) && (
                           <Badge
                             variant="outline"
@@ -606,9 +619,31 @@ export function FuelTransactionsTable({
                   </TableCell>
                   <TableCell className="hidden md:table-cell">
                     <span className="font-mono text-xs font-semibold text-slate-800">
-                      {entry.odometer != null && Number(entry.odometer) > 0
-                        ? Number(entry.odometer).toLocaleString()
-                        : '—'}
+                      {(() => {
+                        if (entry.odometer != null && Number(entry.odometer) > 0) {
+                          return Number(entry.odometer).toLocaleString();
+                        }
+                        // Unmatched statement: surface CSV mileage hint until Resolve
+                        if (isUnlinkedCardCharge(entry)) {
+                          const jaa = Number(
+                            (entry.metadata as { jaaMileage?: number })?.jaaMileage,
+                          );
+                          if (Number.isFinite(jaa) && jaa > 0) {
+                            return (
+                              <span
+                                className="text-amber-800"
+                                title="From card statement — confirm via Resolve"
+                              >
+                                {jaa.toLocaleString()}
+                                <span className="ml-1 text-[9px] font-sans font-semibold uppercase">
+                                  sug.
+                                </span>
+                              </span>
+                            );
+                          }
+                        }
+                        return '—';
+                      })()}
                     </span>
                   </TableCell>
                   <TableCell className="hidden md:table-cell">
@@ -761,7 +796,17 @@ export function FuelTransactionsTable({
                     </div>
                   </TableCell>
                   <TableCell className="text-right">
-                    <div className="flex justify-end">
+                    <div className="flex justify-end items-center gap-1">
+                      {onUnlinkedChargeAction && isUnlinkedCardCharge(entry) && canEdit ? (
+                        <Button
+                          size="sm"
+                          className="h-8 px-3 text-xs font-semibold bg-amber-600 hover:bg-amber-700 text-white shadow-sm"
+                          onClick={() => onUnlinkedChargeAction(entry, 'adopt')}
+                          title="Confirm odometer and fuel station"
+                        >
+                          Resolve
+                        </Button>
+                      ) : null}
                       <Button
                         variant="ghost"
                         size="icon"
@@ -796,24 +841,18 @@ export function FuelTransactionsTable({
                             <Eye className="h-3.5 w-3.5 text-slate-500" />
                             View Details
                           </DropdownMenuItem>
-                          {onUnlinkedChargeAction &&
-                          (entry.metadata as { jaaRowKind?: string })?.jaaRowKind ===
-                            'approved_fuel' &&
-                          !(entry.metadata as { jaaMatchedDriverEntryId?: string })
-                            ?.jaaMatchedDriverEntryId &&
-                          !(entry.metadata as { adoptionDismissedAt?: string })
-                            ?.adoptionDismissedAt ? (
+                          {onUnlinkedChargeAction && isUnlinkedCardCharge(entry) ? (
                             <>
                               <DropdownMenuSeparator />
                               <DropdownMenuLabel className="text-[11px] uppercase tracking-wider text-amber-700">
-                                Unlinked charge
+                                Unmatched charge
                               </DropdownMenuLabel>
                               <DropdownMenuItem
                                 onClick={() => onUnlinkedChargeAction(entry, 'adopt')}
                                 disabled={!canEdit}
                                 className="cursor-pointer gap-2 text-xs"
                               >
-                                Adopt into logs
+                                Resolve (odometer & station)
                               </DropdownMenuItem>
                               <DropdownMenuItem
                                 onClick={() => onUnlinkedChargeAction(entry, 'link')}

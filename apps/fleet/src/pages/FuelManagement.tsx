@@ -59,6 +59,7 @@ import { fetchTripsForFuelWeekPaged } from '../utils/fetchTripsForFuelWeek';
 import { useFuelPeriods, FUEL_PERIODS_KEY } from '../hooks/useFuelPeriods';
 import {
   mergeServerFirstLandingPeriods,
+  serverLandingCoveringWeekStarts,
   serverLeakageReviewedWeekStarts,
   serverLockedWeekStarts,
   weekStartYmd,
@@ -437,7 +438,9 @@ function FuelManagementInner({
   });
 
   // P-3: when SQL covers every week option, land server-only (no browser derive).
+  // Hollow open shells (ensure without materialize) do not count as covering.
   const fuelReconPeriods = useMemo(() => {
+    const coveringWeekStarts = serverLandingCoveringWeekStarts(serverFuelPeriods);
     const serverByWeek = new Map(
       serverFuelPeriods.map((r) => [weekStartYmd(r.weekStart), r] as const),
     );
@@ -454,7 +457,7 @@ function FuelManagementInner({
       if (ids.size) dataQualityReviewedByWeek.set(wk, ids);
     }
     const needDeriveGaps = reconciliationWeekOptions.some(
-      (w) => !serverByWeek.has(w.startDate),
+      (w) => !coveringWeekStarts.has(w.startDate),
     );
     if (!needDeriveGaps) {
       return enrichLandingPeriodsWithFlagCounts(
@@ -477,7 +480,7 @@ function FuelManagementInner({
             lockedWeekStarts: serverLockedWeekStarts(serverFuelPeriods),
             dataQualityReviewedByWeek,
             dispositions: flagDispositions,
-          }).filter((d) => !serverByWeek.has(d.startDate))
+          }).filter((d) => !coveringWeekStarts.has(d.startDate))
         : [];
     return enrichLandingPeriodsWithFlagCounts(
       mergeServerFirstLandingPeriods(serverFuelPeriods, derived),

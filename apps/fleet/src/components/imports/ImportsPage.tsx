@@ -1083,7 +1083,15 @@ function ImportsPageInner({ onNavigate }: ImportsPageProps) {
                   );
                   if (toApply.length > 0) {
                       try {
-                          await fuelService.applyJaaFuelMatches(toApply);
+                          const applied = await fuelService.applyJaaFuelMatches(toApply);
+                          const sealed = (applied.results || []).filter(
+                            (r) => r.ok === false && r.code === 'week_sealed',
+                          ).length;
+                          if (sealed > 0) {
+                            toast.warning(
+                              `Week is closed — rematch skipped for ${sealed} pair(s)`,
+                            );
+                          }
                       } catch (saveErr) {
                           console.warn('[Import] JAA match apply failed', saveErr);
                       }

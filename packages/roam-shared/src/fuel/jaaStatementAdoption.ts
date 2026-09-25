@@ -44,6 +44,37 @@ export function validateAdoptPreconditions(
   return { ok: true };
 }
 
+export type StationMode = 'jaa_text' | 'verified';
+
+/** Confirm-flow fields: odometer required; verified mode needs a station id. */
+export function validateConfirmAdoptFields(input: {
+  odometer?: number | null;
+  stationMode?: StationMode | null;
+  matchedStationId?: string | null;
+}): { ok: true } | AdoptionRefusal {
+  const odo = input.odometer != null ? Number(input.odometer) : NaN;
+  if (!Number.isFinite(odo) || odo <= 0) {
+    return { ok: false, status: 400, error: 'Odometer is required to confirm an unmatched charge' };
+  }
+  const mode =
+    input.stationMode === 'verified'
+      ? 'verified'
+      : input.stationMode === 'jaa_text'
+        ? 'jaa_text'
+        : null;
+  if (!mode) {
+    return { ok: false, status: 400, error: 'Station confirmation mode is required' };
+  }
+  if (mode === 'verified' && !String(input.matchedStationId || '').trim()) {
+    return {
+      ok: false,
+      status: 400,
+      error: 'Pick a verified station or keep the statement merchant',
+    };
+  }
+  return { ok: true };
+}
+
 export type BuildAdoptedOpsEntryInput = {
   statement: Entry;
   driverId: string;
@@ -52,6 +83,11 @@ export type BuildAdoptedOpsEntryInput = {
   reason: string;
   adoptedBy: string;
   organizationId: string;
+  /** Confirm flow: keep JAA merchant text or attach a verified station. */
+  stationMode?: StationMode | null;
+  matchedStationId?: string | null;
+  stationName?: string | null;
+  stationAddress?: string | null;
   /** Injectable for tests; defaults to crypto.randomUUID / now. */
   id?: string;
   nowIso?: string;
@@ -66,8 +102,67 @@ export function buildAdoptedOpsEntry(input: BuildAdoptedOpsEntryInput): Entry {
       ? Number(input.odometer)
       : null;
   const nowIso = input.nowIso || new Date().toISOString();
+  const jaaMileage = Number(stmtMeta.jaaMileage);
+  const odometerSource =
+    odo != null && Number.isFinite(jaaMileage) && jaaMileage > 0 && odo === jaaMileage
+      ? 'jaa_mileage'
+      : odo != null
+        ? 'operator'
+        : undefined;
 
-  return {
+  const stationMode =
+    input.stationMode === 'verified'
+      ? 'verified'
+      : input.stationMode === 'jaa_text'
+        ? 'jaa_text'
+        : null;
+  const verifiedId = String(input.matchedStationId || '').trim();
+  const verifiedName = String(input.stationName || '').trim();
+  const verifiedAddress = String(input.stationAddress || '').trim();
+  const location =
+    stationMode === 'verified' && verifiedName
+      ? verifiedName
+      : (stmt.location as string | undefined);
+
+  const metadata: Record<string, unknown> = {
+    awaitingCardStatement: true,
+    countsInFuelSpend: false,
+    countsInFuelVolume: false,
+    paymentSource: 'company_card',
+    fillOrigin: 'statement_adopted',
+    adoptedFromStatementId: stmt.id,
+    adoptedBy: input.adoptedBy,
+    adoptedAt: nowIso,
+    adoptionReason: input.reason,
+    odometerMissing: odo == null,
+    driverAttested: false,
+    entrySource: 'admin-manual',
+    isManual: true,
+    source: 'Manual',
+    // Never importSource / jaaImportId / jaaRowKind: purge deletes by those keys (F4)
+    // and jaaRowKind would classify this row as a statement row.
+    jaaCardCode: stmtMeta.jaaCardCode,
+  };
+  if (odometerSource) metadata.odometerSource = odometerSource;
+  if (Number.isFinite(jaaMileage) && jaaMileage > 0) metadata.jaaMileageSuggested = jaaMileage;
+
+  if (stationMode === 'verified' && verifiedId) {
+    metadata.stationSource = 'verified';
+    metadata.matchedStationId = verifiedId;
+    metadata.locationStatus = 'verified';
+    metadata.verificationMethod = 'operator_confirm';
+    metadata.stationAttestedAt = nowIso;
+    metadata.stationAttestedBy = input.adoptedBy;
+  } else if (stationMode === 'jaa_text') {
+    metadata.stationSource = 'jaa_merchant';
+    metadata.stationConfirmedAsJaa = true;
+    // Merchant text only — still needs a verified link later if ops wants the blue check.
+    metadata.locationStatus = 'unknown';
+    metadata.stationAttestedAt = nowIso;
+    metadata.stationAttestedBy = input.adoptedBy;
+  }
+
+  const row: Entry = {
     id: input.id || crypto.randomUUID(),
     date: stmt.date,
     time: stmt.time,
@@ -85,27 +180,17 @@ export function buildAdoptedOpsEntry(input: BuildAdoptedOpsEntryInput): Entry {
     usageCategory: undefined,
     reconciliationStatus: 'Pending',
     organizationId: input.organizationId || stmt.organizationId,
-    location: stmt.location,
-    metadata: {
-      awaitingCardStatement: true,
-      countsInFuelSpend: false,
-      countsInFuelVolume: false,
-      paymentSource: 'company_card',
-      fillOrigin: 'statement_adopted',
-      adoptedFromStatementId: stmt.id,
-      adoptedBy: input.adoptedBy,
-      adoptedAt: nowIso,
-      adoptionReason: input.reason,
-      odometerMissing: odo == null,
-      driverAttested: false,
-      entrySource: 'admin-manual',
-      isManual: true,
-      source: 'Manual',
-      // Never importSource / jaaImportId / jaaRowKind: purge deletes by those keys (F4)
-      // and jaaRowKind would classify this row as a statement row.
-      jaaCardCode: stmtMeta.jaaCardCode,
-    },
+    location,
+    metadata,
   };
+
+  if (stationMode === 'verified' && verifiedId) {
+    row.matchedStationId = verifiedId;
+    row.locationStatus = 'verified';
+    if (verifiedAddress) row.stationAddress = verifiedAddress;
+  }
+
+  return row;
 }
 
 /** Reverse money copied from a statement onto an ops log (CSV rollback). */

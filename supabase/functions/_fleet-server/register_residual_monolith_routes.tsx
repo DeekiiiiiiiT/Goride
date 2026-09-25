@@ -13081,6 +13081,12 @@ export function registerResidualMonolithRoutes(app: Hono) {
         orgId,
       );
 
+      // Gas-card Accept/Link/Dismiss — single source: KV flag (allowlist + global), not org JSON
+      effectiveModules.fuelStatementAdoptEnabled = await isFeatureEnabled(
+        FEATURE_FLAGS.FUEL_STATEMENT_ADOPT,
+        orgId,
+      );
+
       return c.json({
         orgId,
         productLine: org.product_line,

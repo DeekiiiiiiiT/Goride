@@ -5,8 +5,13 @@ import { FinancialTransaction } from '../types/data';
 import { API_ENDPOINTS } from './apiConfig';
 import { settlementService } from './settlementService';
 import { throwIfCatalogGateBlocked } from './api';
-import { currentFuelListWindow } from '../utils/fuelWeekPeriod';
+import { currentFuelListWindow, trailingDaysWindow, FUEL_ALERTS_TRAILING_DAYS } from '../utils/fuelWeekPeriod';
 import { resolveFuelUsageCategory } from '../utils/fuelUsageCategory';
+import { buildRematchApplyPairs } from '../utils/jaaGasCardRematch';
+import {
+  countSealedMatchRefusals,
+} from '../../../../packages/roam-shared/src/fuel/jaaMatchSeal';
+import { toast } from 'sonner';
 
 async function fetchWithRetry(url: string, options: RequestInit = {}, retries = 3, backoff = 500): Promise<Response> {
   try {
@@ -342,12 +347,53 @@ export const fuelService = {
     }
     // Soft-dedup reuses an existing row — callers must not toast "created"
     if (result.softDuplicateOf) {
-      return {
+      const soft = {
         ...(result.data || result),
         softDuplicateOf: String(result.softDuplicateOf),
       } as FuelEntry & { softDuplicateOf?: string };
+      await this.rematchGasCardLogAfterSave(soft).catch((err) => {
+        console.warn('[FuelService] Late JAA rematch after soft-dup failed', err);
+      });
+      return soft;
     }
-    return result.data || result;
+    const saved = (result.data || result) as FuelEntry;
+    await this.rematchGasCardLogAfterSave(saved).catch((err) => {
+      console.warn('[FuelService] Late JAA rematch after save failed', err);
+    });
+    return saved;
+  },
+
+  /**
+   * After a gas-card ops log is saved, try to link open Unmatched statement rows
+   * (CSV may have landed earlier). Failures are non-fatal — save already succeeded.
+   * Sealed-week refusals are soft: toast + skip, never undo the save (V10).
+   */
+  async rematchGasCardLogAfterSave(saved: FuelEntry): Promise<number> {
+    const [existing, inventory] = await Promise.all([
+      this.getFuelEntries({
+        ...trailingDaysWindow(FUEL_ALERTS_TRAILING_DAYS),
+        limit: 500,
+        vehicleId: saved.vehicleId || undefined,
+      }),
+      this.getFuelCards().catch(() => [] as FuelCard[]),
+    ]);
+    const toApply = buildRematchApplyPairs(saved, existing, inventory);
+    if (toApply.length === 0) return 0;
+    try {
+      const applied = await this.applyJaaFuelMatches(toApply);
+      const sealed = countSealedMatchRefusals(applied.results || []);
+      if (sealed > 0) {
+        toast.warning('Week is closed — rematch skipped');
+        console.warn('[FuelService] Late JAA rematch skipped sealed week', {
+          sealed,
+          savedId: saved.id,
+        });
+      }
+      return (applied.results || []).filter((r) => r.ok !== false).length;
+    } catch (err) {
+      console.warn('[FuelService] Late JAA rematch after save failed', err);
+      return 0;
+    }
   },
 
   /** Atomic Gas Card + Cash — one pump stop, two ledger rows (server stamps invariants). */
@@ -386,7 +432,14 @@ export const fuelService = {
   /** Persist JAA↔driver links server-side (also auto GOD-station attach when merchant unique). */
   async applyJaaFuelMatches(pairs: unknown[]): Promise<{
     success: boolean;
-    results: Array<{ ok: boolean; statementId?: string; driverId?: string; stationHeal?: { attached?: boolean } }>;
+    results: Array<{
+      ok?: boolean;
+      code?: string;
+      error?: string;
+      statementId?: string;
+      driverId?: string;
+      stationHeal?: { attached?: boolean };
+    }>;
   }> {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/jaa/apply-matches`, {
       method: 'POST',
@@ -406,6 +459,10 @@ export const fuelService = {
     driverId?: string;
     vehicleId?: string;
     odometer?: number | null;
+    stationMode?: 'jaa_text' | 'verified';
+    matchedStationId?: string | null;
+    stationName?: string | null;
+    stationAddress?: string | null;
   }): Promise<{ success: boolean; statementId?: string; driverEntryId?: string }> {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/jaa/adopt-statement`, {
       method: 'POST',

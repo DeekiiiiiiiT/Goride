@@ -476,7 +476,13 @@ export function AdminJaaGasCardsPage() {
         p.driverEntry,
     );
     if (toApply.length > 0) {
-      await fuelService.applyJaaFuelMatches(toApply);
+      const applied = await fuelService.applyJaaFuelMatches(toApply);
+      const sealed = (applied.results || []).filter(
+        (r: { ok?: boolean; code?: string }) => r.ok === false && r.code === 'week_sealed',
+      ).length;
+      if (sealed > 0) {
+        toast.warning(`Week is closed — rematch skipped for ${sealed} pair(s)`);
+      }
     }
     return summary;
   };

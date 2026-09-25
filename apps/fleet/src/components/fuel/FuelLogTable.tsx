@@ -52,7 +52,6 @@ import {
   isFuelServiceLineAllocationEnabled,
   projectUnattributedSpendByTripMix,
 } from '../../utils/fuelServiceLineAllocation';
-import { isFuelStatementAdoptEnabled } from '../../utils/fuelStatementAdoptFlag';
 import { useServiceLineScope } from '../../contexts/ServiceLineScopeContext';
 import { useFuelServiceLine } from '../../contexts/FuelServiceLineContext';
 import { useFeatureFlags } from '../auth/FeatureFlagContext';
@@ -119,14 +118,13 @@ export function FuelLogTable({
   const { apiFilter } = useFuelServiceLine();
   const { enabledModules } = useFeatureFlags();
   const allocationEnabled = isFuelServiceLineAllocationEnabled(enabledModules);
-  const adoptEnabled = isFuelStatementAdoptEnabled(enabledModules);
   const [unlinkedAction, setUnlinkedAction] = useState<{
     entry: FuelEntry;
     action: UnlinkedChargeAction;
   } | null>(null);
   const showLineColumn = rideshareVisible && rushVisible;
-  // KPI ≡ table when any line lens is active (incl. Unattributed chip → apiFilter unattributed).
-  const serviceLineLensActive = apiFilter !== 'all';
+  // KPI ≡ table when any line lens is active (incl. Unattributed / Unmatched chip).
+  const serviceLineLensActive = apiFilter !== 'all' || unlinkedCardChargesOnly;
   const conservation = useMemo(() => {
     const src = allEntriesForConservation ?? entries;
     return computeFuelLineConservation(src);
@@ -390,10 +388,10 @@ export function FuelLogTable({
     const term = searchTerm.toLowerCase();
     return entries
       .filter((entry) => {
-        // Dual ledger: statement rows hidden unless Unlinked card charges lens is on.
+        // Dual ledger: hide matched/fee/declined statement noise; always show Unmatched (unlinked) charges.
         if (unlinkedCardChargesOnly) {
           if (!isUnlinkedCardCharge(entry)) return false;
-        } else if (isJaaStatementLedgerRow(entry)) {
+        } else if (isJaaStatementLedgerRow(entry) && !isUnlinkedCardCharge(entry)) {
           return false;
         }
         if (filterCycleId) {
@@ -915,8 +913,8 @@ export function FuelLogTable({
           <div>
             {unlinkedCardChargesOnly ? (
               <div className="mb-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950">
-                Showing approved card charges with no matching Transaction Log. Money is on the
-                statement until you adopt, link, or dismiss.
+                Showing Unmatched card charges only — approved statement fuel with no linked log.
+                Accept, link, or dismiss to clear.
               </div>
             ) : null}
             {activeView === 'transactions' && summaryLoading && !hasExtraTxnFilters && !serverSummary ? (
@@ -1022,10 +1020,8 @@ export function FuelLogTable({
             onDelete={onDelete}
             onPageChange={setPage}
             showLineColumn={showLineColumn}
-            onUnlinkedChargeAction={
-              adoptEnabled && unlinkedCardChargesOnly
-                ? (entry, action) => setUnlinkedAction({ entry, action })
-                : undefined
+            onUnlinkedChargeAction={(entry, action) =>
+              setUnlinkedAction({ entry, action })
             }
           />
         ) : (
@@ -1103,14 +1099,20 @@ export function FuelLogTable({
         action={unlinkedAction?.action ?? null}
         statement={unlinkedAction?.entry ?? null}
         drivers={uniqueDrivers}
-        linkCandidates={entries.filter(
-          (e) =>
-            !isJaaStatementLedgerRow(e) &&
-            (e.paymentSource === 'Gas_Card' ||
-              (e.metadata as { paymentSource?: string })?.paymentSource === 'company_card') &&
-            !(e.metadata as { jaaMatchedStatementId?: string })?.jaaMatchedStatementId &&
-            !!(e.metadata as { awaitingCardStatement?: boolean })?.awaitingCardStatement,
-        )}
+        verifiedStations={verifiedStations}
+        linkCandidates={entries.filter((e) => {
+          if (isJaaStatementLedgerRow(e)) return false;
+          const m = (e.metadata || {}) as Record<string, unknown>;
+          const isGas =
+            e.paymentSource === 'Gas_Card' ||
+            String(m.paymentSource || '').toLowerCase() === 'company_card' ||
+            String(m.paymentSource || '').toLowerCase() === 'gas_card';
+          if (!isGas) return false;
+          // Include awaiting logs and stale-linked logs (matched id missing from entries).
+          const linkedId = m.jaaMatchedStatementId ? String(m.jaaMatchedStatementId) : '';
+          if (!linkedId) return true;
+          return !entries.some((s) => s.id === linkedId && isJaaStatementLedgerRow(s));
+        })}
         onDone={async () => {
           setUnlinkedAction(null);
           await onRefresh?.();

@@ -157,7 +157,7 @@ export function FuelLogToolbar({
               }
               aria-pressed={unlinkedCardChargesOnly}
             >
-              Unlinked card charges ({unlinkedCardChargesCount})
+              Unmatched ({unlinkedCardChargesCount})
             </button>
           ) : null}
         </div>

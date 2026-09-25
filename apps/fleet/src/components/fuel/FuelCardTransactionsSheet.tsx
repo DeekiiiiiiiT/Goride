@@ -100,18 +100,34 @@ function rowKindBadge(entry: FuelEntry) {
     kindBadge = <Badge variant="outline">Roam log</Badge>;
   }
 
-  if (!isMatched) return kindBadge;
+  const isUnmatchedApproved =
+    kind === 'approved_fuel' &&
+    !isMatched &&
+    !m.adoptionDismissedAt &&
+    (Number(entry.amount) || 0) > 0;
+
+  if (!isMatched && !isUnmatchedApproved) return kindBadge;
 
   return (
     <div className="flex flex-col gap-1 items-start">
       {kindBadge}
-      <Badge
-        variant="outline"
-        className="bg-sky-50 text-sky-800 border-sky-200"
-        title="Linked to a driver Gas Card log"
-      >
-        Matched
-      </Badge>
+      {isMatched ? (
+        <Badge
+          variant="outline"
+          className="bg-sky-50 text-sky-800 border-sky-200"
+          title="Linked to a driver Gas Card log"
+        >
+          Matched
+        </Badge>
+      ) : (
+        <Badge
+          variant="outline"
+          className="bg-amber-100 text-amber-800 border-amber-200"
+          title="Approved card charge with no linked Transaction Log — review and Accept"
+        >
+          Unmatched
+        </Badge>
+      )}
     </div>
   );
 }

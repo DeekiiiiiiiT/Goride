@@ -40,6 +40,7 @@ import {
   dismissUnlinkedStatement,
   linkStatementToExistingLog,
   prepareStatementPurge,
+  refuseIfMatchPairWeekSealed,
   requestDriverLogForStatement,
 } from "./fuel_jaa_adopt.ts";
 import { buildFuelEntryServiceLineFilters } from "./fuel_service_line_filters.ts";
@@ -2705,9 +2706,22 @@ app.post(`${BASE_PATH}/jaa/apply-matches`, requirePermission("fuel.edit_entry"),
     const body = await c.req.json();
     const pairs = Array.isArray(body.pairs) ? body.pairs : body.pair ? [body.pair] : [];
     if (!pairs.length) return c.json({ error: "pairs array required" }, 400);
+    const orgId = getOrgId(c) || String(body.organizationId || "");
 
     const results = [];
     for (const pair of pairs) {
+      // Period lock before any write — rematch must not mutate sealed weeks (V10).
+      const seal = await refuseIfMatchPairWeekSealed(pair, orgId);
+      if (!seal.ok) {
+        results.push({
+          ok: false,
+          code: seal.code,
+          error: seal.error,
+          statementId: pair?.statementEntry?.id,
+          driverId: pair?.driverEntry?.id,
+        });
+        continue;
+      }
       const result = await persistFuelMatchPair(pair);
       results.push(result);
     }
@@ -2722,7 +2736,9 @@ app.post(`${BASE_PATH}/jaa/adopt-statement`, requirePermission("fuel.edit_entry"
     const body = await c.req.json();
     const orgId = getOrgId(c) || String(body.organizationId || "");
     const rbac = c.get("rbacUser") as { userId?: string; id?: string } | undefined;
-    const userId = String(rbac?.userId || rbac?.id || body.adoptedBy || "unknown");
+    // V11: money actor from RBAC only — never trust body.adoptedBy (was recording org id).
+    const userId = String(rbac?.userId || rbac?.id || "").trim();
+    if (!userId) return c.json({ error: "Authenticated user required to adopt statement" }, 401);
     const result = await adoptUnlinkedStatement({
       statementId: String(body.statementId || ""),
       reason: String(body.reason || ""),
@@ -2731,6 +2747,13 @@ app.post(`${BASE_PATH}/jaa/adopt-statement`, requirePermission("fuel.edit_entry"
       driverId: body.driverId ? String(body.driverId) : undefined,
       vehicleId: body.vehicleId ? String(body.vehicleId) : undefined,
       odometer: body.odometer != null ? Number(body.odometer) : null,
+      stationMode:
+        body.stationMode === "verified" || body.stationMode === "jaa_text"
+          ? body.stationMode
+          : null,
+      matchedStationId: body.matchedStationId ? String(body.matchedStationId) : null,
+      stationName: body.stationName ? String(body.stationName) : null,
+      stationAddress: body.stationAddress ? String(body.stationAddress) : null,
     });
     if (!result.ok) return c.json({ error: result.error }, (result.status || 400) as any);
     return c.json({ success: true, ...result });
@@ -2745,7 +2768,8 @@ app.post(`${BASE_PATH}/jaa/link-statement`, requirePermission("fuel.edit_entry")
     const body = await c.req.json();
     const orgId = getOrgId(c) || String(body.organizationId || "");
     const rbac = c.get("rbacUser") as { userId?: string; id?: string } | undefined;
-    const userId = String(rbac?.userId || rbac?.id || body.linkedBy || "unknown");
+    const userId = String(rbac?.userId || rbac?.id || "").trim();
+    if (!userId) return c.json({ error: "Authenticated user required to link statement" }, 401);
     const result = await linkStatementToExistingLog({
       statementId: String(body.statementId || ""),
       driverEntryId: String(body.driverEntryId || ""),
@@ -2766,7 +2790,8 @@ app.post(`${BASE_PATH}/jaa/dismiss-statement`, requirePermission("fuel.edit_entr
     const body = await c.req.json();
     const orgId = getOrgId(c) || String(body.organizationId || "");
     const rbac = c.get("rbacUser") as { userId?: string; id?: string } | undefined;
-    const userId = String(rbac?.userId || rbac?.id || body.dismissedBy || "unknown");
+    const userId = String(rbac?.userId || rbac?.id || "").trim();
+    if (!userId) return c.json({ error: "Authenticated user required to dismiss statement" }, 401);
     const result = await dismissUnlinkedStatement({
       statementId: String(body.statementId || ""),
       reason: String(body.reason || ""),

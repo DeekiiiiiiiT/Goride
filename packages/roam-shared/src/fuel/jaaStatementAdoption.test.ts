@@ -4,6 +4,7 @@ import {
   planStatementPurge,
   unlinkOpsFromDeletedStatement,
   validateAdoptPreconditions,
+  validateConfirmAdoptFields,
 } from './jaaStatementAdoption';
 import { applyFuelMatchLinks, type FuelEntryLike } from './jaaFuelStatementMatcher';
 import { isJaaStatementLedgerRow } from './jaaStatementLedger';
@@ -274,5 +275,76 @@ describe('buildAdoptedOpsEntry', () => {
     expect(summary.statementFuelTotal).toBeCloseTo(4000, 5);
     expect(summary.opsGasCardTotal).toBeCloseTo(4000, 5);
     expect(gasCardStatementDriftBlocks(summary)).toBe(false);
+  });
+
+  it('Confirm: jaaMileage kept → odometerSource jaa_mileage; override → operator', () => {
+    const stmt = statement({
+      location: 'SUPER LUBE SERVICE CENTRE',
+      metadata: {
+        ...(statement().metadata as Record<string, unknown>),
+        jaaMileage: 186284,
+        jaaStation: 'SUPER LUBE SERVICE CENTRE',
+      },
+    });
+    const kept = buildAdoptedOpsEntry({
+      statement: stmt,
+      driverId: 'drv-kenny',
+      vehicleId: 'veh-1',
+      odometer: 186284,
+      reason: 'Confirmed',
+      adoptedBy: 'user-ops',
+      organizationId: 'org-1',
+      stationMode: 'jaa_text',
+      id: 'a1',
+      nowIso: '2026-09-25T12:00:00.000Z',
+    });
+    expect((kept.metadata as Record<string, unknown>).odometerSource).toBe('jaa_mileage');
+    expect((kept.metadata as Record<string, unknown>).stationSource).toBe('jaa_merchant');
+    expect((kept.metadata as Record<string, unknown>).stationConfirmedAsJaa).toBe(true);
+    expect(kept.location).toBe('SUPER LUBE SERVICE CENTRE');
+    expect(kept.matchedStationId).toBeUndefined();
+
+    const edited = buildAdoptedOpsEntry({
+      statement: stmt,
+      driverId: 'drv-kenny',
+      vehicleId: 'veh-1',
+      odometer: 186300,
+      reason: 'Confirmed',
+      adoptedBy: 'user-ops',
+      organizationId: 'org-1',
+      stationMode: 'verified',
+      matchedStationId: 'st-rubis-1',
+      stationName: 'RUBIS Old Harbour',
+      stationAddress: '34 Old Harbour Rd',
+      id: 'a2',
+      nowIso: '2026-09-25T12:00:00.000Z',
+    });
+    expect((edited.metadata as Record<string, unknown>).odometerSource).toBe('operator');
+    expect(edited.matchedStationId).toBe('st-rubis-1');
+    expect(edited.location).toBe('RUBIS Old Harbour');
+    expect(edited.stationAddress).toBe('34 Old Harbour Rd');
+    expect((edited.metadata as Record<string, unknown>).stationSource).toBe('verified');
+    expect((edited.metadata as Record<string, unknown>).locationStatus).toBe('verified');
+    expect((edited.metadata as Record<string, unknown>).verificationMethod).toBe('operator_confirm');
+    expect(edited.locationStatus).toBe('verified');
+  });
+});
+
+describe('validateConfirmAdoptFields', () => {
+  it('requires odometer > 0 and stationMode', () => {
+    expect(validateConfirmAdoptFields({ odometer: null, stationMode: 'jaa_text' }).ok).toBe(false);
+    expect(validateConfirmAdoptFields({ odometer: 0, stationMode: 'jaa_text' }).ok).toBe(false);
+    expect(validateConfirmAdoptFields({ odometer: 100, stationMode: null }).ok).toBe(false);
+    expect(
+      validateConfirmAdoptFields({ odometer: 100, stationMode: 'verified', matchedStationId: '' }).ok,
+    ).toBe(false);
+    expect(validateConfirmAdoptFields({ odometer: 100, stationMode: 'jaa_text' }).ok).toBe(true);
+    expect(
+      validateConfirmAdoptFields({
+        odometer: 100,
+        stationMode: 'verified',
+        matchedStationId: 'st-1',
+      }).ok,
+    ).toBe(true);
   });
 });
