@@ -1,7 +1,7 @@
 {
   "slug": "fleet-pay",
-  "generatedAt": "2026-09-21T07:38:57.113Z",
-  "routeCount": 103,
+  "generatedAt": "2026-09-25T17:34:20.515Z",
+  "routeCount": 105,
   "routes": [
     "GET ${BASE}/:anchor",
     "GET ${BASE}/automation-settings",
@@ -55,6 +55,8 @@
     "PATCH ${BASE}/edit",
     "POST ${BASE}/:movementId/approve",
     "POST ${BASE}/approve",
+    "POST ${BASE}/auto-match",
+    "POST ${BASE}/auto-resolve-refunds",
     "POST ${BASE}/backfill",
     "POST ${BASE}/backfill-linked-trip-resolutions",
     "POST ${BASE}/bridge-rides",

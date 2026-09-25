@@ -373,6 +373,15 @@ export function collectLinkedTripIds(tollTx: any[]): Set<string> {
   return ids;
 }
 
+/** A trip is still "unlinked" only if it has no linked toll AND is unresolved/pending. */
+export function isUnresolvedRefund(trip: any, linkedTripIds: Set<string>): boolean {
+  if (!(trip.tollCharges && trip.tollCharges > 0)) return false;
+  if (linkedTripIds.has(String(trip.id))) return false;
+  const res = trip.tollRefundResolution;
+  if (res && res.status && res.status !== "pending") return false; // resolved → hidden
+  return true;
+}
+
 /** Matcher windows are request−45 → dropoff+15; ±2 calendar days covers TZ edges. */
 const RECON_TRIP_MATCH_PAD_DAYS = 2;
 

@@ -1,4 +1,4 @@
-import { TripSession } from './tripSession';
+import { TripSession } from './tripSession.ts';
 
 export type OfflineActionType = 'SUBMIT_TRIP';
 

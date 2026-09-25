@@ -645,7 +645,7 @@ app.get(`${BASE}/periods`, requirePermission('toll.view'), async (c) => {
             legacyReimbursedByPlatform: round2(reimbursedByPlatform),
           },
         };
-      }))
+      })
       // Lookback window + any computed period that still has actionable work.
       .filter((p) => p.startDate >= fromYmd || p.actionableTotal > 0)
       .sort((a, b) => (a.startDate < b.startDate ? 1 : a.startDate > b.startDate ? -1 : 0));

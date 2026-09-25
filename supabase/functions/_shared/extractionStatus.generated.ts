@@ -6,12 +6,12 @@ export const extractionStatus = {
     "fuel": {
       "slug": "fleet-fuel",
       "cutover": "done",
-      "routeCount": 200
+      "routeCount": 202
     },
     "toll": {
       "slug": "fleet-toll",
       "cutover": "done",
-      "routeCount": 76
+      "routeCount": 81
     },
     "ops": {
       "slug": "fleet-ops",
@@ -21,12 +21,12 @@ export const extractionStatus = {
     "claims": {
       "slug": "fleet-claims",
       "cutover": "done",
-      "routeCount": 75
+      "routeCount": 77
     },
     "pay": {
       "slug": "fleet-pay",
       "cutover": "done",
-      "routeCount": 103
+      "routeCount": 105
     }
   }
 } as const;

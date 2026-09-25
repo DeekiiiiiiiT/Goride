@@ -1,7 +1,7 @@
 {
   "slug": "fleet-fuel",
-  "generatedAt": "2026-09-25T11:23:37.637Z",
-  "routeCount": 200,
+  "generatedAt": "2026-09-25T17:34:20.466Z",
+  "routeCount": 202,
   "routes": [
     "DELETE ${BASE_PATH}/admin/evidence-inbox/gate-held/:transactionId",
     "DELETE ${BASE_PATH}/finalized-reports/:weekStart/:identityId",
@@ -145,6 +145,8 @@
     "POST ${BASE_PATH}/stations/migrate-status",
     "POST ${BASE_PATH}/stations/promote-learnt",
     "POST ${BASE}/approve",
+    "POST ${BASE}/auto-match",
+    "POST ${BASE}/auto-resolve-refunds",
     "POST ${BASE}/backfill-linked-trip-resolutions",
     "POST ${BASE}/bridge-rides",
     "POST ${BASE}/bulk-reconcile",

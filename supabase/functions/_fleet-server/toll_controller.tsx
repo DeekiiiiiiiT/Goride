@@ -40,9 +40,19 @@ import {
   loadTollLedgerWithTripsForDrivers,
   loadTollLedgerWithTripsInRange,
   collectLinkedTripIds,
+  isUnresolvedRefund,
   tollLedgerToTxShape,
   mergeTollLedgerAndLegacyTx,
 } from "./toll_period_inputs.ts";
+import {
+  buildUnresolvedRefundSuggestionStatuses,
+  classifyRefundServer,
+  isSafeAutoApplyServer,
+  loadActivePlazaPoints,
+  nearestPlazaMetersForTrip,
+  type RefundClassification,
+  type RefundResolutionStatus,
+} from "./toll_refund_classify.ts";
 import { getServiceClient } from "./service_client.ts";
 import { fromKvStore } from "./fleet_sql_bridge.ts";
 import { checkRateLimit, recordFailedAttempt, getClientIp } from "./rate_limiter.ts";
@@ -7569,11 +7579,9 @@ app.post(`${BASE}/claims-toll-sync/repair`, requirePermission('toll.manage'), as
 // fare but no toll expense is linked. These endpoints classify and resolve
 // them. All writes are additive (trip.tollRefundResolution) and audited; the
 // automation only auto-applies integrity-safe, high-confidence cash washes.
-
-type RefundResolutionStatus = "cash_wash" | "phantom" | "expense_logged" | "pending";
+// Classifier / plaza helpers live in toll_refund_classify.ts (N-9b).
 
 const REFUND_SETTINGS_KEY = "toll_reconciliation:settings";
-const DEFAULT_PLAZA_RADIUS_M = 500;
 const REFUND_AUTO_APPLY_MIN_CONFIDENCE = 85;
 const DISPUTE_REFUND_AUTO_MIN_CONFIDENCE = 95;
 // Default proximity (minutes) that qualifies a toll as "orphan" (personal use).
@@ -7643,132 +7651,8 @@ async function getRefundAutomationSettings(): Promise<RefundAutomationSettings> 
   return base;
 }
 
-// ── Geo helper: nearest active toll plaza to a trip's endpoints ──────────
-function haversineMeters(aLat: number, aLng: number, bLat: number, bLng: number): number {
-  const R = 6371000;
-  const toRad = (d: number) => (d * Math.PI) / 180;
-  const dLat = toRad(bLat - aLat);
-  const dLng = toRad(bLng - aLng);
-  const lat1 = toRad(aLat);
-  const lat2 = toRad(bLat);
-  const h =
-    Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
-  return 2 * R * Math.asin(Math.sqrt(h));
-}
-
-interface ActivePlaza { lat: number; lng: number; }
-
-async function loadActivePlazaPoints(): Promise<ActivePlaza[]> {
-  const raw = await kv.getByPrefix("toll_plaza:");
-  const points: ActivePlaza[] = [];
-  for (const v of raw || []) {
-    if (!v || typeof v !== "object") continue;
-    if (v.status && v.status !== "active") continue;
-    const loc = v.location;
-    if (loc && typeof loc.lat === "number" && typeof loc.lng === "number") {
-      points.push({ lat: loc.lat, lng: loc.lng });
-    }
-  }
-  return points;
-}
-
-/** Min meters from a trip's pickup/dropoff coords to any active plaza, or null. */
-function nearestPlazaMetersForTrip(trip: any, plazas: ActivePlaza[]): number | null {
-  if (plazas.length === 0) return null;
-  const coords: Array<[number, number]> = [];
-  if (typeof trip.startLat === "number" && typeof trip.startLng === "number") {
-    coords.push([trip.startLat, trip.startLng]);
-  }
-  if (typeof trip.endLat === "number" && typeof trip.endLng === "number") {
-    coords.push([trip.endLat, trip.endLng]);
-  }
-  if (coords.length === 0) return null;
-  let min = Infinity;
-  for (const [lat, lng] of coords) {
-    for (const p of plazas) {
-      const d = haversineMeters(lat, lng, p.lat, p.lng);
-      if (d < min) min = d;
-    }
-  }
-  return isFinite(min) ? min : null;
-}
-
-// ── Ported classifier (mirrors src/utils/refundClassifier.ts) ────────────
-function isCashSettledServer(platform?: string, paymentMethod?: string): boolean {
-  const pm = (paymentMethod || "").toLowerCase();
-  const pf = (platform || "").toLowerCase();
-  return pm === "cash" || pf === "cash";
-}
-
-interface RefundClassification { status: RefundResolutionStatus; confidence: number; reason: string; }
-
-function classifyRefundServer(params: {
-  tollCharges: number;
-  platform?: string;
-  paymentMethod?: string;
-  nearestPlazaMeters: number | null;
-  plazaRadiusMeters?: number;
-  pendingTagImport?: boolean;
-  /** True when trip.tollCharges matches a Super Admin Toll Info rate. */
-  matchesOfficialRate?: boolean;
-}): RefundClassification {
-  const {
-    tollCharges,
-    platform,
-    paymentMethod,
-    nearestPlazaMeters,
-    plazaRadiusMeters = DEFAULT_PLAZA_RADIUS_M,
-    pendingTagImport = false,
-  } = params;
-
-  if (!(tollCharges > 0)) {
-    return { status: "pending", confidence: 0, reason: "No positive toll refund on this trip." };
-  }
-  if (pendingTagImport) {
-    return { status: "pending", confidence: 60, reason: "A tag statement for this period is expected; will auto-match on import." };
-  }
-  const cashSettled = isCashSettledServer(platform, paymentMethod);
-  const hasGeo = typeof nearestPlazaMeters === "number" && nearestPlazaMeters >= 0;
-  const nearPlaza = hasGeo && (nearestPlazaMeters as number) <= plazaRadiusMeters;
-
-  if (cashSettled && nearPlaza) {
-    return { status: "cash_wash", confidence: 92, reason: "Cash-settled fare and a toll plaza on-route — driver paid cash. No leakage." };
-  }
-  if (cashSettled && !hasGeo) {
-    return { status: "cash_wash", confidence: 80, reason: "Cash-settled fare reimbursed the toll — driver most likely paid cash." };
-  }
-  if (!cashSettled && nearPlaza) {
-    return { status: "cash_wash", confidence: 70, reason: "A toll plaza sits on this route; likely paid in cash and reimbursed." };
-  }
-  // Rate-card signal: refund amount matches an official plaza T-Tag/Cash rate
-  if (params.matchesOfficialRate) {
-    return {
-      status: "cash_wash",
-      confidence: 75,
-      reason: "Refund amount matches Super Admin Toll Info rate — likely cash wash.",
-    };
-  }
-  if (hasGeo && !nearPlaza) {
-    return { status: "phantom", confidence: 64, reason: "No toll plaza near this route — likely a platform fare estimate." };
-  }
-  return { status: "pending", confidence: 40, reason: "Insufficient signal; leaving pending for tag-statement import." };
-}
-
-function isSafeAutoApplyServer(c: RefundClassification, minConfidence: number): boolean {
-  return c.status === "cash_wash" && c.confidence >= minConfidence;
-}
-
-/** Trips already consuming a platform refund via a confirmed toll link (tripId). */
-// moved to toll_period_inputs.ts
-
-/** A trip is still "unlinked" only if it has no linked toll AND is unresolved/pending. */
-function isUnresolvedRefund(trip: any, linkedTripIds: Set<string>): boolean {
-  if (!(trip.tollCharges && trip.tollCharges > 0)) return false;
-  if (linkedTripIds.has(String(trip.id))) return false;
-  const res = trip.tollRefundResolution;
-  if (res && res.status && res.status !== "pending") return false; // resolved → hidden
-  return true;
-}
+// Geo / classifier / suggestion statuses → toll_refund_classify.ts (N-9b).
+// isUnresolvedRefund → toll_period_inputs.ts.
 
 /**
  * Trip whose platform refund already nets against this toll (Needs Review match).
@@ -8011,35 +7895,9 @@ async function applyRefundResolution(params: {
 }
 
 /**
- * Suggestion status per unresolved unlinked-refund trip — used by GET /periods
- * so Accept suggestions stay visible; pending-hold itself is actionable
- * (product decision A / isUnlinkedRefundActionableNow).
+ * Suggestion status per unresolved unlinked-refund trip — implemented in
+ * toll_refund_classify.ts (imported above).
  */
-async function buildUnresolvedRefundSuggestionStatuses(
-  unresolvedTrips: any[],
-): Promise<Map<string, string>> {
-  const out = new Map<string, string>();
-  if (!unresolvedTrips.length) return out;
-  const plazas = await loadActivePlazaPoints();
-  const { amountMatchesAnyOfficialRate } = await import("./toll_rate_schedule.ts");
-  for (const t of unresolvedTrips) {
-    if (!t?.id) continue;
-    const nearest = nearestPlazaMetersForTrip(t, plazas);
-    const matchesOfficialRate = await amountMatchesAnyOfficialRate(
-      Number(t.tollCharges) || 0,
-      t.date,
-    );
-    const cls = classifyRefundServer({
-      tollCharges: Number(t.tollCharges) || 0,
-      platform: t.platform,
-      paymentMethod: t.paymentMethod,
-      nearestPlazaMeters: nearest,
-      matchesOfficialRate,
-    });
-    out.set(String(t.id), cls.status);
-  }
-  return out;
-}
 
 // ─── GET /refund-suggestions ─────────────────────────────────────────────
 app.get(`${BASE}/refund-suggestions`, async (c) => {

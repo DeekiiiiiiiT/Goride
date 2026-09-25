@@ -1,7 +1,7 @@
 {
   "slug": "fleet-core",
-  "generatedAt": "2026-09-21T07:38:57.152Z",
-  "routeCount": 579,
+  "generatedAt": "2026-09-25T17:34:20.563Z",
+  "routeCount": 581,
   "routes": [
     "ALL /make-server-37f42386/webhooks/wipay-fleet-modules",
     "DELETE ${ADMIN_CAT}/:id",
@@ -308,6 +308,8 @@
     "POST ${BASE}/api-center/supabase/sync",
     "POST ${BASE}/api-center/supabase/sync-cron",
     "POST ${BASE}/approve",
+    "POST ${BASE}/auto-match",
+    "POST ${BASE}/auto-resolve-refunds",
     "POST ${BASE}/backfill-linked-trip-resolutions",
     "POST ${BASE}/bridge-rides",
     "POST ${BASE}/bulk-reconcile",

@@ -1,7 +1,7 @@
 {
   "slug": "fleet-claims",
-  "generatedAt": "2026-09-21T07:38:57.099Z",
-  "routeCount": 75,
+  "generatedAt": "2026-09-25T17:34:20.499Z",
+  "routeCount": 77,
   "routes": [
     "DELETE ${BASE}/claims/:id",
     "GET ${BASE}/automation-settings",
@@ -41,6 +41,8 @@
     "GET /ready",
     "PATCH ${BASE}/edit",
     "POST ${BASE}/approve",
+    "POST ${BASE}/auto-match",
+    "POST ${BASE}/auto-resolve-refunds",
     "POST ${BASE}/backfill-linked-trip-resolutions",
     "POST ${BASE}/bridge-rides",
     "POST ${BASE}/bulk-reconcile",
