@@ -23,6 +23,8 @@ export type FuelWeekClosableBlocker = {
     | 'odometer_chain_unusable'
     /** N-2: no-odometer fill spend beyond gate and not yet acknowledged. */
     | 'unattributed_unreviewed'
+    /** Approved card statement fuel not booked in Transaction Logs (drift). */
+    | 'card_statement_drift'
     /** Critical fill flags without a disposition record. */
     | 'undisposed_flags'
     /** Disposition table could not be loaded — infra, not data quality. */
@@ -55,6 +57,15 @@ export type EvaluateFuelWeekClosableInput = {
   odometerChainUnusable?: boolean;
   /** N-2: unattributed fill spend beyond gate and not wizard-accepted. */
   unattributedUnreviewed?: boolean;
+  /** Unlinked statement charges or orphan ops gas-card spend exist in the week. */
+  cardStatementDriftUnreviewed?: boolean;
+  /** Rows behind the card-statement blocker so the close screen can name them. */
+  cardStatementDriftDetail?: {
+    unlinkedEntryIds: string[];
+    orphanOpsEntryIds: string[];
+    unlinkedTotal: number;
+    orphanOpsTotal: number;
+  };
   /** Critical fill flags not dispositioned (desk + wizard shared). */
   undisposedCriticalFlags?: boolean;
   /** Disposition load failed (service client / SQL) — distinct from empty set. */
@@ -62,6 +73,30 @@ export type EvaluateFuelWeekClosableInput = {
   /** Data-quality flagged vehicles not marked reviewed. */
   dataQualityVehiclesUnreviewed?: boolean;
 };
+
+function fmtMoney(n: number): string {
+  return `$${(Number(n) || 0).toFixed(2)}`;
+}
+
+function cardStatementDriftMessage(
+  detail: EvaluateFuelWeekClosableInput['cardStatementDriftDetail'],
+): string {
+  if (!detail) {
+    return 'Unlinked card charges: adopt, link, or dismiss them before close.';
+  }
+  const parts: string[] = [];
+  if (detail.unlinkedEntryIds.length) {
+    parts.push(
+      `${detail.unlinkedEntryIds.length} unlinked card charge(s) totalling ${fmtMoney(detail.unlinkedTotal)} — adopt, link, or dismiss [${detail.unlinkedEntryIds.join(', ')}]`,
+    );
+  }
+  if (detail.orphanOpsEntryIds.length) {
+    parts.push(
+      `${detail.orphanOpsEntryIds.length} gas-card log(s) totalling ${fmtMoney(detail.orphanOpsTotal)} with no statement behind them — link or correct [${detail.orphanOpsEntryIds.join(', ')}]`,
+    );
+  }
+  return parts.join('; ');
+}
 
 export function evaluateFuelWeekClosable(
   input: EvaluateFuelWeekClosableInput,
@@ -172,6 +207,12 @@ export function evaluateFuelWeekClosable(
     blockers.push({
       code: 'unattributed_unreviewed',
       message: 'Fills without odometer need review',
+    });
+  }
+  if (input.cardStatementDriftUnreviewed) {
+    blockers.push({
+      code: 'card_statement_drift',
+      message: cardStatementDriftMessage(input.cardStatementDriftDetail),
     });
   }
   if (input.dataQualityVehiclesUnreviewed) {

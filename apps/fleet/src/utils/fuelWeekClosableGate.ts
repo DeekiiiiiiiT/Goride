@@ -184,6 +184,8 @@ export function fuelWeekClosableBlockerMessage(blocker: FuelWeekClosableBlocker)
       return 'Blocked — not enough odometered fills to measure tank timing';
     case 'unattributed_unreviewed':
       return 'Blocked — fills without odometer need review';
+    case 'card_statement_drift':
+      return 'Blocked — unlinked card charges (statement vs Transaction Logs drift)';
     case 'undisposed_flags':
       return 'Blocked — critical fill flags not dispositioned';
     case 'disposition_load_failed':

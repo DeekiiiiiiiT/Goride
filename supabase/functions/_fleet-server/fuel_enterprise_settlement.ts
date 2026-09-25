@@ -4,6 +4,7 @@
  */
 import * as kv from "./kv_store.tsx";
 import { blendedDriverShareRatioFromReport } from "./fuel_blended_ratio.ts";
+import { isJaaStatementLedgerRow } from "./fuel_jaa_ledger.ts";
 import {
   fuelPaymentSourceToMeta,
   isCashStyleFuelPaymentSource,
@@ -168,6 +169,8 @@ export async function settleEnterpriseFuelFromSnapshot(
     const entryId = String(stub.id || "");
     if (!entryId) continue;
     const live = ((await kv.get(`fuel_entry:${entryId}`)) || stub) as Record<string, any>;
+    // A statement row never moves driver money — its matched ops row does (Aug-2026 double deduction).
+    if (isJaaStatementLedgerRow(live)) continue;
     const amount = Number(live.amount ?? stub.amount) || 0;
     if (amount <= 0) continue;
 

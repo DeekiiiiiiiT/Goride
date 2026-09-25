@@ -72,6 +72,11 @@ export function entriesToWeekSnapEntries(
       driverId: e.driverId || report.driverId,
       vehicleId: e.vehicleId || report.vehicleId,
       driverShareRatio: Number.isFinite(stamped) ? stamped : null,
+      // Carried so entryCountsInSpend can exclude statement / fee / awaiting rows.
+      paymentSource: e.paymentSource ?? null,
+      type: e.type,
+      entrySource: e.entrySource,
+      metadata: e.metadata,
     };
   });
 }

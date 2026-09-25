@@ -281,6 +281,37 @@ describe('matchJaaStatementToDriverLogs', () => {
     expect(updates.find((u) => u.id === 'a-11')?.amount).toBe(6045);
     expect(updates.find((u) => u.id === 'a-14')?.metadata?.awaitingCardStatement).toBe(false);
   });
+
+  // F7: card + loose time without vehicle must not auto-match
+  it('rejects card-only match beyond 2h without vehicle agreement', () => {
+    const statements = [
+      entry({
+        id: 'stmt-far',
+        date: '2026-09-16T20:00:00',
+        cardId: 'card-1',
+        vehicleId: 'v-a',
+        amount: 4000,
+        liters: 17,
+        entrySource: 'fuel-card',
+        metadata: { importSource: 'jaa_raw', jaaRowKind: 'approved_fuel' },
+      }),
+    ];
+    const logs = [
+      entry({
+        id: 'log-far',
+        date: '2026-09-15T10:00:00', // ~34h earlier
+        cardId: 'card-1',
+        vehicleId: 'v-b',
+        amount: 0,
+        entrySource: 'driver-portal',
+        paymentSource: 'Gas_Card',
+        entryMode: 'Anchor',
+        metadata: { awaitingCardStatement: true },
+      }),
+    ];
+    const pairs = matchJaaStatementToDriverLogs(statements, logs);
+    expect(pairs[0]?.status).toBe('unmatched_statement');
+  });
 });
 
 describe('applyFuelMatchLinks split volume owner', () => {

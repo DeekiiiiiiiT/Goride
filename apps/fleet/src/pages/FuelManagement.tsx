@@ -120,6 +120,7 @@ import {
   computeFuelLineConservation,
   fuelEntryMatchesLineFilter,
 } from '../utils/fuelServiceLineFilter';
+import { countUnlinkedCardCharges } from '../utils/jaaFuelStatementMatcher';
 import { fuelCardMatchesLine } from '../utils/fuelCardServiceLine';
 import { integrityVehiclesForLine } from '../utils/fuelIntegrityServiceLine';
 
@@ -162,7 +163,7 @@ function FuelManagementInner({
     useFuelSettlementReopenGate();
   const { confirmIfMismatch: confirmForceClientMoney, dialog: forceClientMoneyDialog } =
     useFuelForceClientMoneyDialog();
-  const { apiFilter, showTabs, unattributedOnly, setUnattributedOnly, setLine, line } = useFuelServiceLine();
+  const { apiFilter, showTabs, unattributedOnly, setUnattributedOnly, setLine, line, unlinkedCardChargesOnly, setUnlinkedCardChargesOnly } = useFuelServiceLine();
   const [activeTab, setActiveTab] = useState(
     defaultTab === 'flags' ? 'integrity' : defaultTab,
   );
@@ -869,10 +870,12 @@ function FuelManagementInner({
   const lineConservation = useMemo(() => computeFuelLineConservation(logs), [logs]);
 
   const displayLogs = useMemo(() => {
+    // Unlinked lens needs statement rows — skip service-line server filter.
+    if (unlinkedCardChargesOnly) return logs;
     if (serverFilteredLogs && apiFilter !== 'all') return serverFilteredLogs;
     if (apiFilter === 'all') return logs;
     return logs.filter((e) => fuelEntryMatchesLineFilter(e, apiFilter));
-  }, [logs, apiFilter, serverFilteredLogs]);
+  }, [logs, apiFilter, serverFilteredLogs, unlinkedCardChargesOnly]);
 
   const serviceLineCounts = useMemo(() => {
     if (!showTabs) return undefined;
@@ -897,6 +900,10 @@ function FuelManagementInner({
     if (fuelDataTruncated) return undefined;
     return lineConservation.unattributedCount;
   }, [fuelDataTruncated, serverLineCounts, lineConservation.unattributedCount]);
+
+  const unlinkedCardChargesCountForUi = useMemo(() => {
+    return countUnlinkedCardCharges(logs);
+  }, [logs]);
 
   // Cards multi-home — do not expect tab counts to sum to All.
   const displayCards = useMemo(() => {
@@ -2622,7 +2629,9 @@ function FuelManagementInner({
                 unattributedCount={unattributedCountForUi ?? 0}
                 unattributedOnly={unattributedOnly}
                 onUnattributedOnlyChange={setUnattributedOnly}
-                deliveryEmpty={showTabs && apiFilter === 'rush_delivery' && displayLogs.length === 0}
+                unlinkedCardChargesCount={unlinkedCardChargesCountForUi}
+                unlinkedCardChargesOnly={unlinkedCardChargesOnly}
+                onUnlinkedCardChargesOnlyChange={setUnlinkedCardChargesOnly}
             />
         </div>
       )}

@@ -13,7 +13,11 @@ import { API_ENDPOINTS } from './apiConfig';
 import { requireAuthHeaders } from '../utils/authHeaders';
 import { pickScenarioForDriverMembership, resolveActiveFuelPolicyForDriverWeek } from '../utils/fuelPolicyVersion';
 import { reportWeekYmdBounds, toEntryYmd, addDaysYmd } from '../utils/fuelWeekPeriod';
-import { countsInGasCardSpend, isGasCardFuelEntry } from '../utils/fuelPaidByDriver';
+import {
+  countsInGasCardSpend,
+  isGasCardFuelEntry,
+  isJaaStatementLedgerRow,
+} from '../utils/fuelPaidByDriver';
 import {
   isCashStyleFuelPaymentSource,
   normalizeFuelPaymentSourceEnum,
@@ -193,6 +197,8 @@ export const settlementService = {
 
         // Only genuinely pending entries — Verified/Archived/Flagged/Observing skipped.
         const toSettle = entries.filter((entry) => {
+          // A statement row never moves driver money — its matched ops row does.
+          if (isJaaStatementLedgerRow(entry)) return false;
           const status = entry.reconciliationStatus;
           return !(
             status === 'Verified' ||

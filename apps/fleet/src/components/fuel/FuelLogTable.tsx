@@ -16,7 +16,7 @@ import { downloadBlob, jsonToCsv } from '../../utils/csv-helper';
 import { usePermissions } from '../../hooks/usePermissions';
 import { isEntryInInclusiveYmdRange, toEntryYmd } from '../../utils/fuelWeekPeriod';
 import { resolveFuelEntrySource } from '../../utils/fuelEntrySource';
-import { isJaaStatementLedgerRow } from '../../utils/jaaFuelStatementMatcher';
+import { isJaaStatementLedgerRow, isUnlinkedCardCharge } from '../../utils/jaaFuelStatementMatcher';
 import { isAdminKnownFillCashMeta } from '../../utils/adminKnownFillStamp';
 import { resolveGasCardLedgerIntegrity } from '../../utils/fuelLedgerIntegrity';
 import {
@@ -37,6 +37,10 @@ import { FuelTransactionsTable, resolvePaymentLabel } from './logs/FuelTransacti
 import { FuelCyclesPanel } from './logs/FuelCyclesPanel';
 import { fuelEntrySortMs } from './logs/fuelLogDisplay';
 import {
+  UnlinkedCardChargeActionDialog,
+  type UnlinkedChargeAction,
+} from './logs/UnlinkedCardChargeActionDialog';
+import {
   flattenFuelLogDisplayRows,
   groupFuelEntriesByFillGroup,
 } from './logs/groupFuelEntriesByFillGroup';
@@ -48,6 +52,7 @@ import {
   isFuelServiceLineAllocationEnabled,
   projectUnattributedSpendByTripMix,
 } from '../../utils/fuelServiceLineAllocation';
+import { isFuelStatementAdoptEnabled } from '../../utils/fuelStatementAdoptFlag';
 import { useServiceLineScope } from '../../contexts/ServiceLineScopeContext';
 import { useFuelServiceLine } from '../../contexts/FuelServiceLineContext';
 import { useFeatureFlags } from '../auth/FeatureFlagContext';
@@ -76,7 +81,9 @@ interface FuelLogTableProps {
   unattributedCount?: number;
   unattributedOnly?: boolean;
   onUnattributedOnlyChange?: (v: boolean) => void;
-  deliveryEmpty?: boolean;
+  unlinkedCardChargesCount?: number;
+  unlinkedCardChargesOnly?: boolean;
+  onUnlinkedCardChargesOnlyChange?: (v: boolean) => void;
 }
 
 export function FuelLogTable({
@@ -100,7 +107,9 @@ export function FuelLogTable({
   unattributedCount = 0,
   unattributedOnly = false,
   onUnattributedOnlyChange,
-  deliveryEmpty = false,
+  unlinkedCardChargesCount = 0,
+  unlinkedCardChargesOnly = false,
+  onUnlinkedCardChargesOnlyChange,
 }: FuelLogTableProps) {
   const { can } = usePermissions();
   const fleetTz = useFleetTimezone();
@@ -110,6 +119,11 @@ export function FuelLogTable({
   const { apiFilter } = useFuelServiceLine();
   const { enabledModules } = useFeatureFlags();
   const allocationEnabled = isFuelServiceLineAllocationEnabled(enabledModules);
+  const adoptEnabled = isFuelStatementAdoptEnabled(enabledModules);
+  const [unlinkedAction, setUnlinkedAction] = useState<{
+    entry: FuelEntry;
+    action: UnlinkedChargeAction;
+  } | null>(null);
   const showLineColumn = rideshareVisible && rushVisible;
   // KPI ≡ table when any line lens is active (incl. Unattributed chip → apiFilter unattributed).
   const serviceLineLensActive = apiFilter !== 'all';
@@ -376,7 +390,12 @@ export function FuelLogTable({
     const term = searchTerm.toLowerCase();
     return entries
       .filter((entry) => {
-        if (isJaaStatementLedgerRow(entry)) return false;
+        // Dual ledger: statement rows hidden unless Unlinked card charges lens is on.
+        if (unlinkedCardChargesOnly) {
+          if (!isUnlinkedCardCharge(entry)) return false;
+        } else if (isJaaStatementLedgerRow(entry)) {
+          return false;
+        }
         if (filterCycleId) {
           const cid = entry.metadata?.cycleId ? String(entry.metadata.cycleId) : '';
           if (cid !== filterCycleId) return false;
@@ -466,6 +485,7 @@ export function FuelLogTable({
     getDriverName,
     sortField,
     sortDir,
+    unlinkedCardChargesOnly,
   ]);
 
   const displayRows = useMemo(
@@ -883,6 +903,9 @@ export function FuelLogTable({
         unattributedCount={unattributedCount}
         unattributedOnly={unattributedOnly}
         onUnattributedOnlyChange={onUnattributedOnlyChange}
+        unlinkedCardChargesCount={unlinkedCardChargesCount}
+        unlinkedCardChargesOnly={unlinkedCardChargesOnly}
+        onUnlinkedCardChargesOnlyChange={onUnlinkedCardChargesOnlyChange}
         onClearFilters={clearFilters}
         periodStart={periodStart}
         periodEnd={periodEnd}
@@ -890,6 +913,12 @@ export function FuelLogTable({
         onAddFuel={onAddFuel}
         afterTabs={
           <div>
+            {unlinkedCardChargesOnly ? (
+              <div className="mb-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950">
+                Showing approved card charges with no matching Transaction Log. Money is on the
+                statement until you adopt, link, or dismiss.
+              </div>
+            ) : null}
             {activeView === 'transactions' && summaryLoading && !hasExtraTxnFilters && !serverSummary ? (
               <div
                 className={
@@ -937,16 +966,6 @@ export function FuelLogTable({
           </div>
         }
       />
-
-      {deliveryEmpty ? (
-        <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center">
-          <p className="text-sm font-medium text-slate-800">No delivery fuel recorded yet</p>
-          <p className="mt-1 text-xs text-slate-500">
-            Delivery fills will appear here once Rush couriers start logging against fleet vehicles
-            tagged for Delivery.
-          </p>
-        </div>
-      ) : null}
 
       {showLineColumn && unallocatedSpend > 0 ? (
         allocationEnabled && allocationProjection ? (
@@ -1003,6 +1022,11 @@ export function FuelLogTable({
             onDelete={onDelete}
             onPageChange={setPage}
             showLineColumn={showLineColumn}
+            onUnlinkedChargeAction={
+              adoptEnabled && unlinkedCardChargesOnly
+                ? (entry, action) => setUnlinkedAction({ entry, action })
+                : undefined
+            }
           />
         ) : (
           <FuelCyclesPanel
@@ -1069,6 +1093,28 @@ export function FuelLogTable({
               }
             : undefined
         }
+      />
+
+      <UnlinkedCardChargeActionDialog
+        open={!!unlinkedAction}
+        onOpenChange={(open) => {
+          if (!open) setUnlinkedAction(null);
+        }}
+        action={unlinkedAction?.action ?? null}
+        statement={unlinkedAction?.entry ?? null}
+        drivers={uniqueDrivers}
+        linkCandidates={entries.filter(
+          (e) =>
+            !isJaaStatementLedgerRow(e) &&
+            (e.paymentSource === 'Gas_Card' ||
+              (e.metadata as { paymentSource?: string })?.paymentSource === 'company_card') &&
+            !(e.metadata as { jaaMatchedStatementId?: string })?.jaaMatchedStatementId &&
+            !!(e.metadata as { awaitingCardStatement?: boolean })?.awaitingCardStatement,
+        )}
+        onDone={async () => {
+          setUnlinkedAction(null);
+          await onRefresh?.();
+        }}
       />
     </div>
   );

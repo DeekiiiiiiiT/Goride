@@ -37,7 +37,7 @@ import {
   generateFuelWeekOptions,
   toEntryYmd,
 } from '../../utils/fuelWeekPeriod';
-import { isJaaStatementLedgerRow } from '../../utils/jaaFuelStatementMatcher';
+import { isJaaStatementLedgerRow, computeGasCardStatementDriftSummary, isUnlinkedCardCharge } from '../../utils/jaaFuelStatementMatcher';
 import { resolveCardTransactionStation } from '../../utils/jaaStationDisplay';
 import { FuelCardAssignmentHistoryList } from './FuelCardAssignmentHistoryList';
 
@@ -132,6 +132,8 @@ export function FuelCardTransactionsSheet({
   const isMobile = useIsMobile();
   const [loading, setLoading] = useState(false);
   const [entries, setEntries] = useState<FuelEntry[]>([]);
+  /** Statement + ops rows for this card in the loaded window (drift control). */
+  const [cardPeriodEntries, setCardPeriodEntries] = useState<FuelEntry[]>([]);
   const [entryById, setEntryById] = useState<Map<string, FuelEntry>>(new Map());
   const [verifiedStations, setVerifiedStations] = useState<StationProfile[]>([]);
   // YMD strings — avoid Date identity churn / custom portal picker inside Sheet (freezes UI)
@@ -170,14 +172,15 @@ export function FuelCardTransactionsSheet({
         );
         setEntryById(new Map(all.map((e) => [e.id, e])));
         const needle = normalizeFuelCardCode(card.cardNumber);
-        const mine = all
-          .filter((e) => {
-            // Card Inventory shows statement ledger only — driver Gas Card logs stay in Transaction Logs
-            if (!isJaaStatementLedgerRow(e)) return false;
-            if (e.cardId && e.cardId === card.id) return true;
-            const code = normalizeFuelCardCode(String(meta(e).jaaCardCode || ''));
-            return !!needle && !!code && code === needle;
-          })
+        const belongsToCard = (e: FuelEntry) => {
+          if (e.cardId && e.cardId === card.id) return true;
+          const code = normalizeFuelCardCode(String(meta(e).jaaCardCode || ''));
+          return !!needle && !!code && code === needle;
+        };
+        const forCard = all.filter(belongsToCard);
+        setCardPeriodEntries(forCard);
+        const mine = forCard
+          .filter((e) => isJaaStatementLedgerRow(e))
           .sort((a, b) => {
             const ad = new Date(a.date.includes('T') ? a.date : `${a.date}T12:00:00`).getTime();
             const bd = new Date(b.date.includes('T') ? b.date : `${b.date}T12:00:00`).getTime();
@@ -189,6 +192,7 @@ export function FuelCardTransactionsSheet({
         console.error('[FuelCardTransactionsSheet] load failed', err);
         if (!cancelled) {
           setEntries([]);
+          setCardPeriodEntries([]);
           setEntryById(new Map());
           setVerifiedStations([]);
         }
@@ -219,12 +223,24 @@ export function FuelCardTransactionsSheet({
       if (m.countsInFuelSpend === false) return false;
       return (Number(e.amount) || 0) > 0;
     });
+    const periodForCard = cardPeriodEntries.filter((e) => {
+      if (!periodStart) return true;
+      const end = periodEnd || periodStart;
+      const d = entryYmd(e);
+      return d >= periodStart && d <= end;
+    });
+    const drift = computeGasCardStatementDriftSummary(periodForCard);
+    const unlinkedCount = periodForCard.filter((e) => isUnlinkedCardCharge(e)).length;
     return {
       spend: approved.reduce((s, e) => s + (Number(e.amount) || 0), 0),
       liters: approved.reduce((s, e) => s + (Number(e.liters) || 0), 0),
       count: filteredEntries.length,
+      statementFuelTotal: drift.statementFuelTotal,
+      opsGasCardTotal: drift.opsGasCardTotal,
+      unlinked: drift.unlinkedTotal,
+      unlinkedCount,
     };
-  }, [filteredEntries]);
+  }, [filteredEntries, cardPeriodEntries, periodStart, periodEnd]);
 
   const selectedWeekValue =
     weekOptions.find((w) => w.startDate === periodStart && w.endDate === periodEnd)?.id ??
@@ -326,6 +342,16 @@ export function FuelCardTransactionsSheet({
                   <div className="rounded-lg border bg-slate-50 px-2 py-1.5">
                     <p className="text-[10px] font-bold uppercase text-slate-400">Fuel spend</p>
                     <p className="text-base font-bold text-slate-800">${totals.spend.toFixed(0)}</p>
+                    <p className="mt-0.5 text-[10px] leading-tight text-slate-500">
+                      ${totals.statementFuelTotal.toFixed(0)} statement · $
+                      {totals.opsGasCardTotal.toFixed(0)} in logs
+                      {totals.unlinked > 0.009 ? (
+                        <span className="font-semibold text-amber-800">
+                          {' '}
+                          · ${totals.unlinked.toFixed(0)} unlinked
+                        </span>
+                      ) : null}
+                    </p>
                   </div>
                   <div className="rounded-lg border bg-slate-50 px-2 py-1.5">
                     <p className="text-[10px] font-bold uppercase text-slate-400">Liters</p>

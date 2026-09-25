@@ -400,6 +400,74 @@ export const fuelService = {
     return response.json();
   },
 
+  async adoptJaaStatement(input: {
+    statementId: string;
+    reason: string;
+    driverId?: string;
+    vehicleId?: string;
+    odometer?: number | null;
+  }): Promise<{ success: boolean; statementId?: string; driverEntryId?: string }> {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/jaa/adopt-statement`, {
+      method: 'POST',
+      headers: await requireAuthHeaders(),
+      body: JSON.stringify(input),
+    });
+    if (!response.ok) {
+      const errorBody = await response.json().catch(() => ({}));
+      throw new Error(errorBody.error || 'Failed to adopt statement');
+    }
+    return response.json();
+  },
+
+  async linkJaaStatement(input: {
+    statementId: string;
+    driverEntryId: string;
+    reason: string;
+  }): Promise<{ success: boolean }> {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/jaa/link-statement`, {
+      method: 'POST',
+      headers: await requireAuthHeaders(),
+      body: JSON.stringify(input),
+    });
+    if (!response.ok) {
+      const errorBody = await response.json().catch(() => ({}));
+      throw new Error(errorBody.error || 'Failed to link statement');
+    }
+    return response.json();
+  },
+
+  async dismissJaaStatement(input: {
+    statementId: string;
+    reason: string;
+  }): Promise<{ success: boolean }> {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/jaa/dismiss-statement`, {
+      method: 'POST',
+      headers: await requireAuthHeaders(),
+      body: JSON.stringify(input),
+    });
+    if (!response.ok) {
+      const errorBody = await response.json().catch(() => ({}));
+      throw new Error(errorBody.error || 'Failed to dismiss statement');
+    }
+    return response.json();
+  },
+
+  async requestDriverLogForJaaStatement(input: {
+    statementId: string;
+    message?: string;
+  }): Promise<{ success: boolean }> {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/jaa/request-driver-log`, {
+      method: 'POST',
+      headers: await requireAuthHeaders(),
+      body: JSON.stringify(input),
+    });
+    if (!response.ok) {
+      const errorBody = await response.json().catch(() => ({}));
+      throw new Error(errorBody.error || 'Failed to request driver log');
+    }
+    return response.json();
+  },
+
   /** Alias for ImportsPage fuel statement persistence */
   createFuelEntry(entry: FuelEntry): Promise<FuelEntry> {
     return this.saveFuelEntry(entry);

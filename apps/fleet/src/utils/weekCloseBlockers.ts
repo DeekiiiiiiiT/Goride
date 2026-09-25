@@ -67,6 +67,8 @@ const BLOCKER_LABELS: Record<string, string> = {
   TOLL_EVENT_AMOUNT_MISMATCH: 'Toll money event amount ≠ live ledger — repair before close',
   TOLL_PAYMENT_METHOD_UNKNOWN: 'Toll rows missing cash/tag payment method — set method and rebuild',
   FUEL_ENGINE_DRIFT: 'Fuel seal no longer matches Consumption — reseal before close',
+  FUEL_CARD_STATEMENT_DRIFT:
+    'Unlinked card charges — adopt, link, or dismiss before close',
   TOLL_ENGINE_DRIFT: 'Toll seal no longer matches event netting — reseal before close',
   TOLL_STALE_ZERO_SEAL: 'Late tolls after $0 seal — Refresh to re-seal',
   EARNINGS_ENGINE_DRIFT: 'Earnings seal no longer matches commission/cash engines — reseal before close',

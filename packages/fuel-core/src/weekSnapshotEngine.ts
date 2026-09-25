@@ -12,10 +12,13 @@ import {
   isGasCardFuelEntry,
   isOutOfPocketFuelEntry,
 } from './fuelPaymentSource.ts';
+import { isJaaStatementLedgerRow } from '../../roam-shared/src/fuel/jaaStatementLedger.ts';
 
-function entryCountsInSpend(e: WeekSnapEntry): boolean {
+/** Settleable ops spend only — statement ledger rows never count (F2 dual-ledger). */
+export function entryCountsInSpend(e: WeekSnapEntry): boolean {
   if (e.countsInFuelSpend === false) return false;
   const meta = e.metadata as Record<string, unknown> | undefined;
+  if (isJaaStatementLedgerRow({ entrySource: e.entrySource, metadata: meta })) return false;
   if (meta?.jaaRowKind === 'fee' || meta?.jaaRowKind === 'declined') return false;
   if (meta?.awaitingCardStatement) return false;
   if (meta?.countsInFuelSpend === false) return false;
@@ -61,6 +64,7 @@ export type WeekSnapEntry = {
   /** F-10 / F-6: payment partition fields for gas vs cash freeze. */
   paymentSource?: string | null;
   type?: string;
+  entrySource?: string;
   metadata?: unknown;
   /** When false, excluded from spend tiles (countsInFuelSpend). */
   countsInFuelSpend?: boolean;
@@ -197,9 +201,8 @@ export function assembleWeekSnapshotsFromCalcInput(input: {
     const rule = ctx.fuelRule || null;
     let totalGasCardCost = 0;
     for (const e of entries) {
-      const amt = Number(e.amount) || 0;
-      if (amt <= 0) continue;
-      totalGasCardCost += amt;
+      if (!entryCountsInSpend(e)) continue;
+      totalGasCardCost += Number(e.amount) || 0;
     }
     if (totalGasCardCost <= EPS) continue;
     let companyShare: number;
@@ -375,6 +378,7 @@ export function assembleWeekSnapshotsFromRawEntries(input: {
     driverShareRatio?: number | null;
     paymentSource?: string | null;
     type?: string;
+    entrySource?: string;
     metadata?: unknown;
   }>;
   /** Per-driver fuel rule; omit / null → 50% company default. */
@@ -405,6 +409,7 @@ export function assembleWeekSnapshotsFromRawEntries(input: {
       driverShareRatio: e.driverShareRatio,
       paymentSource: e.paymentSource,
       type: e.type,
+      entrySource: e.entrySource,
       metadata: e.metadata,
     }));
     entriesByDriver.set(driverId, snapEntries);

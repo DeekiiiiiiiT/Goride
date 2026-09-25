@@ -71,6 +71,11 @@ export const FEATURE_FLAGS = {
    * Reporting only — never splits driver-week settlement.
    */
   FUEL_SERVICE_LINE_ALLOCATION: "fuel_service_line_allocation",
+  /**
+   * Adopt / link / dismiss unmatched JAA approved_fuel statement rows (default OFF).
+   * Enable only after purge safety (F4) is deployed.
+   */
+  FUEL_STATEMENT_ADOPT: "fuel_statement_adopt",
 } as const;
 
 export type FeatureFlagName = typeof FEATURE_FLAGS[keyof typeof FEATURE_FLAGS];
@@ -435,6 +440,12 @@ export async function initializeDefaultFlags(): Promise<void> {
       enabled: false,
       description:
         "Project unattributed fuel spend by trip mix in reports (Phase 4). Settlement stays one per driver-week.",
+    },
+    {
+      name: FEATURE_FLAGS.FUEL_STATEMENT_ADOPT,
+      enabled: false,
+      description:
+        "Adopt / link / dismiss unmatched JAA approved_fuel statement rows into Transaction Logs. Also arms week-close drift gate.",
     },
   ];
 

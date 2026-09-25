@@ -6,6 +6,7 @@
 import * as kv from "./kv_store.tsx";
 import { filterRecordsByOrganizationId } from "./org_scope.ts";
 import { assembleWeekSnapshotsFromRawEntries } from "../_shared/fuelCore.ts";
+import { isJaaStatementLedgerRow } from "./fuel_jaa_ledger.ts";
 
 function ymd(v: unknown): string {
   return String(v || "").split("T")[0];
@@ -51,6 +52,10 @@ export async function loadWeekFuelEntries(
   const raw = ((await kv.getByPrefix("fuel_entry:")) || []) as Record<string, unknown>[];
   const scoped = filterRecordsByOrganizationId(raw, orgId);
   return scoped.filter((e) => {
+    // F2: statement ledger rows stay on Card Inventory — money lives on the ops row after match.
+    if (isJaaStatementLedgerRow(e as { entrySource?: string; metadata?: Record<string, unknown> })) {
+      return false;
+    }
     const d = ymd(e.date);
     if (!inWeek(d, weekStart, weekEnd)) return false;
     const status = String(e.reconciliationStatus || e.reconciliation_status || "Pending");
@@ -82,6 +87,7 @@ export function assembleSnapshotsFromEntries(
       driverShareRatio: entryDriverShareRatio(e),
       paymentSource: (e.paymentSource || e.payment_source || null) as string | null,
       type: String(e.type || ""),
+      entrySource: String(e.entrySource || e.entry_source || ""),
       metadata: e.metadata,
     })),
     builtBy: "fuel_period_build_snapshots",

@@ -16,6 +16,7 @@ import {
   sumPaidByDriverForReport,
   sumGasCardSpendForReport,
   entriesBelongingToDriverWeekReport,
+  isJaaStatementLedgerRow,
 } from '../utils/fuelPaidByDriver';
 import {
   assertCategoryCostsTieSpend,
@@ -220,7 +221,10 @@ export async function finalizeFuelWeekReports(
 
     try {
       // C2: decide what will re-post BEFORE reversing — never reverse then continue empty
-      const weekEntries = entriesBelongingToDriverWeekReport(fuelEntries, report, attrCtx);
+      // Card statement rows are Card Inventory-owned; money settles on the matched ops row only.
+      const weekEntries = entriesBelongingToDriverWeekReport(fuelEntries, report, attrCtx).filter(
+        (e) => !isJaaStatementLedgerRow(e),
+      );
       const relevantEntries = prior
         ? weekEntries
             .filter(

@@ -35,6 +35,13 @@ import {
 import { buildFleetCycleSnapshot } from "./fuel_cycle_snapshot.ts";
 import { summarizeFuelLogEntries } from "./fuel_log_summary.ts";
 import { persistFuelMatchPair } from "./fuel_jaa_match.ts";
+import {
+  adoptUnlinkedStatement,
+  dismissUnlinkedStatement,
+  linkStatementToExistingLog,
+  prepareStatementPurge,
+  requestDriverLogForStatement,
+} from "./fuel_jaa_adopt.ts";
 import { buildFuelEntryServiceLineFilters } from "./fuel_service_line_filters.ts";
 import { auditLogic } from "./audit_logic.ts";
 import { findMatchingStation, findMatchingStationSmart, calculateDistance } from "./geo_matcher.ts";
@@ -651,6 +658,13 @@ app.post(`${BASE_PATH}/jaa-csv-imports`, requirePlatformStaff(), async (c) => {
 /** Wipe JAA statement rows that pre-date import tracking (cards kept). */
 app.delete(`${BASE_PATH}/jaa-csv-imports/untracked`, requirePlatformStaff(), async (c) => {
   try {
+    const entries = await loadFuelEntriesPreferSql();
+    const targets = entries.filter(
+      (e: any) => e?.metadata?.importSource === "jaa_raw" && !e?.metadata?.jaaImportId,
+    );
+    const prep = await prepareStatementPurge(targets.map((e: any) => String(e.id)));
+    if (!prep.ok) return c.json({ error: prep.error }, prep.status as any);
+
     const { count: entriesDeleted } = await purgeFuelEntriesWhere(
       (e) => e?.metadata?.importSource === "jaa_raw" && !e?.metadata?.jaaImportId,
     );
@@ -674,6 +688,11 @@ app.delete(`${BASE_PATH}/jaa-csv-imports/:id`, requirePlatformStaff(), async (c)
       return c.json({ error: "Use /jaa-csv-imports/untracked" }, 400);
     }
     const existing = await kv.get(`jaa_csv_import:${id}`);
+    const entries = await loadFuelEntriesPreferSql();
+    const targets = entries.filter((e: any) => String(e?.metadata?.jaaImportId || "") === id);
+    const prep = await prepareStatementPurge(targets.map((e: any) => String(e.id)));
+    if (!prep.ok) return c.json({ error: prep.error }, prep.status as any);
+
     const { count: entriesDeleted } = await purgeFuelEntriesWhere(
       (e) => String(e?.metadata?.jaaImportId || "") === id,
     );
@@ -2695,6 +2714,90 @@ app.post(`${BASE_PATH}/jaa/apply-matches`, requirePermission("fuel.edit_entry"),
     return c.json({ success: true, results });
   } catch (e: any) {
     return c.json({ error: e.message }, 500);
+  }
+});
+
+app.post(`${BASE_PATH}/jaa/adopt-statement`, requirePermission("fuel.edit_entry"), async (c) => {
+  try {
+    const body = await c.req.json();
+    const orgId = getOrgId(c) || String(body.organizationId || "");
+    const rbac = c.get("rbacUser") as { userId?: string; id?: string } | undefined;
+    const userId = String(rbac?.userId || rbac?.id || body.adoptedBy || "unknown");
+    const result = await adoptUnlinkedStatement({
+      statementId: String(body.statementId || ""),
+      reason: String(body.reason || ""),
+      adoptedBy: userId,
+      organizationId: orgId,
+      driverId: body.driverId ? String(body.driverId) : undefined,
+      vehicleId: body.vehicleId ? String(body.vehicleId) : undefined,
+      odometer: body.odometer != null ? Number(body.odometer) : null,
+    });
+    if (!result.ok) return c.json({ error: result.error }, (result.status || 400) as any);
+    return c.json({ success: true, ...result });
+  } catch (e: any) {
+    const status = e?.status || 500;
+    return c.json({ error: e.message }, status);
+  }
+});
+
+app.post(`${BASE_PATH}/jaa/link-statement`, requirePermission("fuel.edit_entry"), async (c) => {
+  try {
+    const body = await c.req.json();
+    const orgId = getOrgId(c) || String(body.organizationId || "");
+    const rbac = c.get("rbacUser") as { userId?: string; id?: string } | undefined;
+    const userId = String(rbac?.userId || rbac?.id || body.linkedBy || "unknown");
+    const result = await linkStatementToExistingLog({
+      statementId: String(body.statementId || ""),
+      driverEntryId: String(body.driverEntryId || ""),
+      reason: String(body.reason || ""),
+      linkedBy: userId,
+      organizationId: orgId,
+    });
+    if (!result.ok) return c.json({ error: result.error }, (result.status || 400) as any);
+    return c.json({ success: true });
+  } catch (e: any) {
+    const status = e?.status || 500;
+    return c.json({ error: e.message }, status);
+  }
+});
+
+app.post(`${BASE_PATH}/jaa/dismiss-statement`, requirePermission("fuel.edit_entry"), async (c) => {
+  try {
+    const body = await c.req.json();
+    const orgId = getOrgId(c) || String(body.organizationId || "");
+    const rbac = c.get("rbacUser") as { userId?: string; id?: string } | undefined;
+    const userId = String(rbac?.userId || rbac?.id || body.dismissedBy || "unknown");
+    const result = await dismissUnlinkedStatement({
+      statementId: String(body.statementId || ""),
+      reason: String(body.reason || ""),
+      dismissedBy: userId,
+      organizationId: orgId,
+    });
+    if (!result.ok) return c.json({ error: result.error }, (result.status || 400) as any);
+    return c.json({ success: true });
+  } catch (e: any) {
+    const status = e?.status || 500;
+    return c.json({ error: e.message }, status);
+  }
+});
+
+app.post(`${BASE_PATH}/jaa/request-driver-log`, requirePermission("fuel.edit_entry"), async (c) => {
+  try {
+    const body = await c.req.json();
+    const orgId = getOrgId(c) || String(body.organizationId || "");
+    const rbac = c.get("rbacUser") as { userId?: string; id?: string } | undefined;
+    const userId = String(rbac?.userId || rbac?.id || body.requestedBy || "unknown");
+    const result = await requestDriverLogForStatement({
+      statementId: String(body.statementId || ""),
+      requestedBy: userId,
+      organizationId: orgId,
+      message: body.message ? String(body.message) : undefined,
+    });
+    if (!result.ok) return c.json({ error: result.error }, (result.status || 400) as any);
+    return c.json({ success: true });
+  } catch (e: any) {
+    const status = e?.status || 500;
+    return c.json({ error: e.message }, status);
   }
 });
 

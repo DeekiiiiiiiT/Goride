@@ -160,7 +160,8 @@ function vehicleIdsMatch(a?: string, b?: string): boolean {
   const na = normId(a);
   const nb = normId(b);
   if (!na || !nb) return false;
-  return na === nb || na.endsWith(nb) || nb.endsWith(na);
+  // Exact match only — endsWith fuzz allowed false positives (F7: 5179KZ ≈ 179KZ).
+  return na === nb;
 }
 
 /**
@@ -242,7 +243,14 @@ export function matchJaaStatementToDriverLogs<T extends FuelEntryLike>(
 
         return { d, score, notes, dayDelta };
       })
-      .filter((c) => c.score >= 55 && !c.notes.includes('date out of window'))
+      // F7: card match alone must not clear ≥55 without vehicle agreement or tight time (≤2h).
+      .filter((c) => {
+        if (c.score < 55 || c.notes.includes('date out of window')) return false;
+        const vehicleOk = vehicleIdsMatch(stmt.vehicleId, c.d.vehicleId);
+        const tightTime = c.dayDelta <= TWO_HOUR_MS;
+        if (!vehicleOk && !tightTime) return false;
+        return true;
+      })
       .sort((a, b) => b.score - a.score || a.dayDelta - b.dayDelta);
 
     if (candidates.length === 0) {

@@ -60,6 +60,28 @@ describe('evaluateFuelWeekClosable', () => {
     ).toContain('unattributed_unreviewed');
   });
 
+  it('blocks unlinked card statement drift', () => {
+    expect(
+      evaluateFuelWeekClosable({ cardStatementDriftUnreviewed: true }).map((x) => x.code),
+    ).toContain('card_statement_drift');
+  });
+
+  it('card statement blocker names the open rows', () => {
+    const [b] = evaluateFuelWeekClosable({
+      cardStatementDriftUnreviewed: true,
+      cardStatementDriftDetail: {
+        unlinkedEntryIds: ['stmt-1'],
+        orphanOpsEntryIds: ['log-orphan'],
+        unlinkedTotal: 4000,
+        orphanOpsTotal: 2500,
+      },
+    });
+    expect(b.code).toBe('card_statement_drift');
+    expect(b.message).toContain('stmt-1');
+    expect(b.message).toContain('$4000.00');
+    expect(b.message).toContain('log-orphan');
+  });
+
   it('R-1: unattributed reviewed clears blocker', () => {
     expect(evaluateFuelWeekClosable({ unattributedUnreviewed: false })).toEqual([]);
   });

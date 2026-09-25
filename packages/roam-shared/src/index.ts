@@ -5,6 +5,24 @@ export {
   type JaaLedgerEntryLike,
 } from './fuel/jaaStatementLedger';
 export {
+  isUnlinkedCardCharge,
+  countUnlinkedCardCharges,
+  computeGasCardStatementDriftByCard,
+  computeGasCardStatementDriftSummary,
+  gasCardStatementDriftBlocks,
+  isOrphanOpsGasCardSpend,
+  type UnlinkedCardChargeEntryLike,
+  type GasCardStatementDrift,
+  type GasCardStatementDriftSummary,
+} from './fuel/jaaUnlinkedCardCharge';
+export {
+  buildAdoptedOpsEntry,
+  planStatementPurge,
+  unlinkOpsFromDeletedStatement,
+  validateAdoptPreconditions,
+  type StatementPurgePlan,
+} from './fuel/jaaStatementAdoption';
+export {
   matchJaaStatementToDriverLogs,
   applyFuelMatchLinks,
   buildJaaMatchUpdates,

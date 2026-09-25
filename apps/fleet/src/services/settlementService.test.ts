@@ -181,6 +181,51 @@ describe('commitWeeklyStatement', () => {
     expect(mocks.saveTransaction).not.toHaveBeenCalled();
   });
 
+  it('never deducts for an unmatched Pending card statement row', async () => {
+    await settlementService.commitWeeklyStatement(
+      report,
+      [
+        gasEntry({
+          id: 'stmt-4000',
+          amount: 4000,
+          entrySource: 'fuel-card',
+          metadata: { importSource: 'jaa_raw', jaaRowKind: 'approved_fuel', countsInFuelSpend: true },
+        } as Partial<FuelEntry>),
+      ],
+      preloaded,
+    );
+    expect(mocks.saveTransaction).not.toHaveBeenCalled();
+  });
+
+  it('deducts a matched pair once — on the ops log, not the statement row', async () => {
+    await settlementService.commitWeeklyStatement(
+      report,
+      [
+        gasEntry({
+          id: 'stmt-m',
+          entrySource: 'fuel-card',
+          metadata: {
+            importSource: 'jaa_raw',
+            jaaRowKind: 'approved_fuel',
+            countsInFuelSpend: true,
+            jaaMatchedDriverEntryId: 'log-m',
+          },
+        } as Partial<FuelEntry>),
+        gasEntry({
+          id: 'log-m',
+          type: 'Manual_Entry',
+          entrySource: 'driver-portal',
+          metadata: { countsInFuelSpend: true, jaaMatchedStatementId: 'stmt-m' },
+        } as Partial<FuelEntry>),
+      ],
+      preloaded,
+    );
+    expect(mocks.saveTransaction).toHaveBeenCalledTimes(1);
+    expect(mocks.saveTransaction.mock.calls[0][0].metadata.idempotencyKey).toBe(
+      enterpriseFuelSyncIdempotencyKey(report.id, 'log-m', 'deduction'),
+    );
+  });
+
   it('deletes created txs if the entry Verified write fails', async () => {
     mocks.fetchWithRetry.mockRejectedValue(new Error('entry write failed'));
     await expect(

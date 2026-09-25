@@ -1,7 +1,7 @@
 {
   "slug": "fleet-fuel",
-  "generatedAt": "2026-09-21T07:38:57.070Z",
-  "routeCount": 196,
+  "generatedAt": "2026-09-25T11:23:37.637Z",
+  "routeCount": 200,
   "routes": [
     "DELETE ${BASE_PATH}/admin/evidence-inbox/gate-held/:transactionId",
     "DELETE ${BASE_PATH}/finalized-reports/:weekStart/:identityId",
@@ -128,7 +128,11 @@
     "POST ${BASE_PATH}/jaa-csv-imports",
     "POST ${BASE_PATH}/jaa-programs",
     "POST ${BASE_PATH}/jaa-unmatched",
+    "POST ${BASE_PATH}/jaa/adopt-statement",
     "POST ${BASE_PATH}/jaa/apply-matches",
+    "POST ${BASE_PATH}/jaa/dismiss-statement",
+    "POST ${BASE_PATH}/jaa/link-statement",
+    "POST ${BASE_PATH}/jaa/request-driver-log",
     "POST ${BASE_PATH}/learnt-locations/:id/reject",
     "POST ${BASE_PATH}/learnt-locations/merge",
     "POST ${BASE_PATH}/learnt-locations/promote",

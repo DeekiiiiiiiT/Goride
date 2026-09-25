@@ -19,6 +19,11 @@ import { isEntryInInclusiveYmdRange } from "../../../packages/fuel-core/src/fuel
 import { selectOdometerBucketsClosingInWeek } from "../../../packages/fuel-core/src/fuelWeekRange.ts";
 import type { FuelEntry } from "../../../packages/fuel-core/src/fuelTypes.ts";
 import { getServiceClient } from "./service_client.ts";
+import {
+  computeGasCardStatementDriftSummary,
+  gasCardStatementDriftBlocks,
+} from "../../../packages/roam-shared/src/fuel/jaaUnlinkedCardCharge.ts";
+import { FEATURE_FLAGS, isFeatureEnabled } from "./feature_flags.ts";
 
 function ymd(v: unknown): string {
   return String(v || "").split("T")[0];
@@ -544,6 +549,23 @@ export async function buildFuelWeekClosableInputForPeriod(
   const odometerChainReviewed = Boolean(period.odometer_chain_reviewed_at);
   const unattributedReviewed = Boolean(period.unattributed_reviewed_at);
 
+  // Live card statement vs Transaction Logs drift (never trust a cached field).
+  // Only arm when adopt escape hatch is enabled — otherwise weeks have no clear path.
+  const adoptArmed = await isFeatureEnabled(FEATURE_FLAGS.FUEL_STATEMENT_ADOPT, orgId);
+  const cardDrift = computeGasCardStatementDriftSummary(
+    weekEntries as Parameters<typeof computeGasCardStatementDriftSummary>[0],
+  );
+  // Matched pairs contribute nothing, so a pair straddling midnight cannot block (V3).
+  const cardStatementDriftUnreviewed = adoptArmed && gasCardStatementDriftBlocks(cardDrift);
+  const cardStatementDriftDetail = cardStatementDriftUnreviewed
+    ? {
+        unlinkedEntryIds: cardDrift.unlinkedEntryIds,
+        orphanOpsEntryIds: cardDrift.orphanOpsEntryIds,
+        unlinkedTotal: cardDrift.unlinkedTotal,
+        orphanOpsTotal: cardDrift.orphanOpsTotal,
+      }
+    : undefined;
+
   // DQ vehicle reviews — Amber/Red / odometerIncomplete vs period jsonb reviews.
   const reviews = Array.isArray(period.data_quality_vehicle_reviews)
     ? (period.data_quality_vehicle_reviews as Array<Record<string, unknown>>)
@@ -583,6 +605,8 @@ export async function buildFuelWeekClosableInputForPeriod(
     odometerChainUnusable: odometerChainUnusable && !odometerChainReviewed,
     unattributedUnreviewed:
       isUnattributedBeyondGate(totalSpend, unattributedCost) && !unattributedReviewed,
+    cardStatementDriftUnreviewed,
+    cardStatementDriftDetail,
     ...(hasFrozenBuckets
       ? {
           stopToStopVolumeFailed: s2sApplied.stopToStopVolumeFailed,

@@ -178,6 +178,11 @@ export type FuelTransactionsTableProps = {
   onPageChange: (page: number) => void;
   /** Show service-line badge column (dual-line orgs). */
   showLineColumn?: boolean;
+  /** When set, unlinked statement rows get Adopt/Link/Dismiss/Request actions. */
+  onUnlinkedChargeAction?: (
+    entry: FuelEntry,
+    action: 'adopt' | 'link' | 'dismiss' | 'request_driver',
+  ) => void;
 };
 
 export function FuelTransactionsTable({
@@ -207,6 +212,7 @@ export function FuelTransactionsTable({
   onDelete,
   onPageChange,
   showLineColumn = false,
+  onUnlinkedChargeAction,
 }: FuelTransactionsTableProps) {
   const sortIndicator = (field: 'date' | 'amount' | 'liters' | 'odometer') => {
     if (sortField !== field) return null;
@@ -381,6 +387,15 @@ export function FuelTransactionsTable({
                             </Badge>
                           );
                         })()}
+                      {(entry.metadata as { fillOrigin?: string })?.fillOrigin ===
+                        'statement_adopted' && (
+                        <Badge
+                          variant="outline"
+                          className="h-4 w-fit px-1 py-0 text-[11px] font-bold border-amber-200 bg-amber-50 text-amber-900"
+                        >
+                          Statement adopted
+                        </Badge>
+                      )}
                     </div>
                   </TableCell>
                   <TableCell>
@@ -781,6 +796,49 @@ export function FuelTransactionsTable({
                             <Eye className="h-3.5 w-3.5 text-slate-500" />
                             View Details
                           </DropdownMenuItem>
+                          {onUnlinkedChargeAction &&
+                          (entry.metadata as { jaaRowKind?: string })?.jaaRowKind ===
+                            'approved_fuel' &&
+                          !(entry.metadata as { jaaMatchedDriverEntryId?: string })
+                            ?.jaaMatchedDriverEntryId &&
+                          !(entry.metadata as { adoptionDismissedAt?: string })
+                            ?.adoptionDismissedAt ? (
+                            <>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuLabel className="text-[11px] uppercase tracking-wider text-amber-700">
+                                Unlinked charge
+                              </DropdownMenuLabel>
+                              <DropdownMenuItem
+                                onClick={() => onUnlinkedChargeAction(entry, 'adopt')}
+                                disabled={!canEdit}
+                                className="cursor-pointer gap-2 text-xs"
+                              >
+                                Adopt into logs
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                onClick={() => onUnlinkedChargeAction(entry, 'link')}
+                                disabled={!canEdit}
+                                className="cursor-pointer gap-2 text-xs"
+                              >
+                                Link to existing log
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                onClick={() => onUnlinkedChargeAction(entry, 'dismiss')}
+                                disabled={!canEdit}
+                                className="cursor-pointer gap-2 text-xs"
+                              >
+                                Dismiss
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                onClick={() => onUnlinkedChargeAction(entry, 'request_driver')}
+                                disabled={!canEdit}
+                                className="cursor-pointer gap-2 text-xs"
+                              >
+                                Request driver log
+                              </DropdownMenuItem>
+                              <DropdownMenuSeparator />
+                            </>
+                          ) : null}
                           {showResolve ? (
                             <DropdownMenuItem
                               onClick={() => onResolveSplitCash?.(entry, splitSiblings)}

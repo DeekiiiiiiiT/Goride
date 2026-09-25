@@ -168,4 +168,121 @@ describe('weekSnapshotEngine', () => {
     expect(snaps[0].driverSpend).toBe(23800);
     expect(snaps[0].netPay).toBe(23800 - snaps[0].driverShare);
   });
+
+  // F2: matched statement + ops log must not double gasCardSpend / totalGasCardCost
+  it('F2: matched statement+log pair counts gas-card amount once', () => {
+    const snaps = assembleWeekSnapshotsFromRawEntries({
+      weekStart: '2026-09-14',
+      weekEnd: '2026-09-20',
+      orgId: 'org1',
+      entries: [
+        {
+          id: 'stmt-1',
+          amount: 5343.7,
+          date: '2026-09-15',
+          driverId: 'd1',
+          vehicleId: 'v1',
+          paymentSource: 'Gas_Card',
+          type: 'Card_Transaction',
+          entrySource: 'fuel-card',
+          reconciliationStatus: 'Verified',
+          metadata: {
+            importSource: 'jaa_raw',
+            jaaRowKind: 'approved_fuel',
+            countsInFuelSpend: true,
+            jaaMatchedDriverEntryId: 'log-1',
+          },
+        },
+        {
+          id: 'log-1',
+          amount: 5343.7,
+          date: '2026-09-15',
+          driverId: 'd1',
+          vehicleId: 'v1',
+          paymentSource: 'Gas_Card',
+          type: 'Manual_Entry',
+          entrySource: 'driver-portal',
+          reconciliationStatus: 'Verified',
+          metadata: {
+            countsInFuelSpend: true,
+            jaaMatchedStatementId: 'stmt-1',
+          },
+        },
+      ],
+      fuelRuleByDriver: new Map([['d1', { coverageType: 'Full' }]]),
+    });
+    expect(snaps[0].gasCardSpend).toBe(5343.7);
+    expect(snaps[0].totalGasCardCost).toBe(5343.7);
+  });
+
+  it('F2: unmatched approved_fuel statement contributes zero to week snapshot', () => {
+    const snaps = assembleWeekSnapshotsFromRawEntries({
+      weekStart: '2026-09-14',
+      weekEnd: '2026-09-20',
+      orgId: 'org1',
+      entries: [
+        {
+          id: 'stmt-unmatched',
+          amount: 4000,
+          date: '2026-09-16',
+          driverId: 'd1',
+          vehicleId: 'v1',
+          paymentSource: 'Gas_Card',
+          type: 'Card_Transaction',
+          entrySource: 'fuel-card',
+          reconciliationStatus: 'Pending',
+          metadata: {
+            importSource: 'jaa_raw',
+            jaaRowKind: 'approved_fuel',
+            countsInFuelSpend: true,
+          },
+        },
+      ],
+      fuelRuleByDriver: new Map([['d1', { coverageType: 'Full' }]]),
+    });
+    expect(snaps).toHaveLength(0);
+  });
+
+  it('F2: fee and declined statement rows stay at zero spend', () => {
+    const snaps = assembleWeekSnapshotsFromRawEntries({
+      weekStart: '2026-09-14',
+      weekEnd: '2026-09-20',
+      orgId: 'org1',
+      entries: [
+        {
+          id: 'fee-1',
+          amount: 50,
+          date: '2026-09-16',
+          driverId: 'd1',
+          vehicleId: 'v1',
+          paymentSource: 'Gas_Card',
+          entrySource: 'fuel-card',
+          metadata: { importSource: 'jaa_raw', jaaRowKind: 'fee', countsInFuelSpend: false },
+        },
+        {
+          id: 'decl-1',
+          amount: 7001.7,
+          date: '2026-09-16',
+          driverId: 'd1',
+          vehicleId: 'v1',
+          paymentSource: 'Gas_Card',
+          entrySource: 'fuel-card',
+          metadata: { importSource: 'jaa_raw', jaaRowKind: 'declined', countsInFuelSpend: false },
+        },
+        {
+          id: 'cash-1',
+          amount: 3000,
+          date: '2026-09-16',
+          driverId: 'd1',
+          vehicleId: 'v1',
+          paymentSource: 'Cash',
+          type: 'Manual_Entry',
+        },
+      ],
+      fuelRuleByDriver: new Map([['d1', { coverageType: 'Full' }]]),
+    });
+    expect(snaps[0].gasCardSpend).toBe(0);
+    expect(snaps[0].driverSpend).toBe(3000);
+    expect(snaps[0].totalGasCardCost).toBe(3000);
+  });
 });
