@@ -513,6 +513,8 @@ export type SplitCashMatchTxInput = {
   date?: string;
   status?: string;
   amount?: number;
+  /** Ledger line shown to the driver; rewritten when split cash is approved. */
+  description?: string;
   metadata?: Record<string, unknown> | null;
   [key: string]: unknown;
 };
@@ -776,7 +778,7 @@ export function applySplitCashMatchToTx(args: {
       : {}),
   });
 
-  const posted = {
+  const posted: SplitCashMatchTxInput = {
     ...tx,
     amount: patch.amount,
     status: patch.status || tx.status,
