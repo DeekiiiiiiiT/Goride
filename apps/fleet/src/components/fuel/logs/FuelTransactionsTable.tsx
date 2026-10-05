@@ -356,13 +356,16 @@ export function FuelTransactionsTable({
               const editDisabled =
                 isLocked ||
                 !canEdit ||
-                editGate.kind === 'awaiting_card_readonly';
+                editGate.kind === 'awaiting_card_readonly' ||
+                editGate.kind === 'awaiting_cash_readonly';
               const editLabel =
                 editGate.kind === 'resolve_split_cash'
                   ? 'Resolve Cash'
-                  : editGate.kind === 'awaiting_card_readonly'
-                    ? 'Awaiting Statement'
-                    : 'Edit Log';
+                  : editGate.kind === 'awaiting_cash_readonly'
+                    ? 'Waiting for statement'
+                    : editGate.kind === 'awaiting_card_readonly'
+                      ? 'Awaiting Statement'
+                      : 'Edit Log';
 
               return (
                 <TableRow
@@ -440,11 +443,6 @@ export function FuelTransactionsTable({
                             : `Cash ${formatFuelMoney(Number(cashLeg?.amount) || 0)}`}
                           {' · '}
                           Card {formatFuelMoney(cardDisplayAmount(cardLeg))}
-                        </span>
-                      )}
-                      {pendingHalf && (
-                        <span className="text-[11px] text-amber-600">
-                          Cash approval or statement still open
                         </span>
                       )}
                     </div>

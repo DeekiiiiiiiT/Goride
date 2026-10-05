@@ -146,10 +146,16 @@ export function resolveFuelEntryStationDisplay(
   const addressOnly =
     String(e.stationAddress || '').trim() ||
     String(meta.stationLocation || '').trim();
+  const loc = meta.locationMetadata as { lat?: unknown; lng?: unknown } | undefined;
+  const lat = Number(loc?.lat ?? (e as { lat?: unknown }).lat ?? meta.lat);
+  const lng = Number(loc?.lng ?? (e as { lng?: unknown }).lng ?? meta.lng);
+  const gpsCaptured = Number.isFinite(lat) && lat !== 0 && Number.isFinite(lng) && lng !== 0;
   const subtitle =
     addressOnly && normalizeVendorName(addressOnly) !== normalizeVendorName(title)
       ? addressOnly
-      : 'No GPS metadata';
+      : gpsCaptured
+        ? 'GPS captured — not matched'
+        : 'No GPS metadata';
 
   return { title, subtitle };
 }

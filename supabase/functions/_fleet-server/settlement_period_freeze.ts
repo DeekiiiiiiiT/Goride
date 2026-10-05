@@ -55,11 +55,19 @@ export function assertMovementAllowed(opts: {
   /** Collect / batch-collect require unlock; pay/write-off/reverse/verify/approve skip. */
   requireMoneyUnlocked?: boolean;
   now?: Date | string;
+  /**
+   * Desk cash taken during the current week. Reconciliation still computes what
+   * is owed later, so this collect is not waiting on week-end or fuel unlock.
+   * A frozen week still refuses.
+   */
+  allowOpenWeekDeskCollect?: boolean;
 }): void {
-  assertPeriodEndedForSettlement(opts.weekAnchor, opts.now);
+  if (!opts.allowOpenWeekDeskCollect) {
+    assertPeriodEndedForSettlement(opts.weekAnchor, opts.now);
+  }
   assertPeriodNotFrozen(opts.period);
 
-  if (opts.requireMoneyUnlocked) {
+  if (opts.requireMoneyUnlocked && !opts.allowOpenWeekDeskCollect) {
     const fc = (opts.period?.metadata?.financeCore || {}) as Record<string, unknown>;
     const meta = opts.period?.metadata || {};
     const forceRelease = !!(meta.forceRelease || fc.forceRelease);

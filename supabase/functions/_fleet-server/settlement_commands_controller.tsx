@@ -22,7 +22,8 @@ import {
 import { getOrgId, stampOrg } from "./org_scope.ts";
 import { getServiceClient } from "./service_client.ts";
 import { safeErrorResponse } from "./safe_error.ts";
-import { periodEndForAnchor } from "../../../packages/finance-core/src/periodKey.ts";
+import { periodEndForAnchor, periodKeyFor } from "../../../packages/finance-core/src/periodKey.ts";
+import { isSettlementPeriodEnded } from "../../../packages/finance-core/src/settlementPeriodGate.ts";
 import {
   syncPeriodCashFromTransactions,
   getDriverFinancialPeriodDetail,
@@ -336,9 +337,12 @@ async function insertMovementAndDualWrite(
     metadata?: Record<string, unknown>;
     /** Version observed when residual/caps were computed — required for load-bearing CAS. */
     expectedRowVersion: number;
+    /** Current-week desk cash: record now, reconcile later. */
+    allowOpenWeekDeskCollect?: boolean;
   },
 ): Promise<{ movement: Record<string, unknown>; period: DriverFinancialPeriodRow | null }> {
   // C-1/C-5: single chokepoint — ended ∧ unlocked(collect) ∧ not-frozen ∧ hash intact.
+  // Current-week desk cash skips the ended/unlock checks; a frozen week still refuses.
   const periodForGate = await loadPeriodDb(opts.driverId, opts.weekAnchor, opts.organizationId);
   assertMovementAllowed({
     weekAnchor: opts.weekAnchor,
@@ -348,6 +352,7 @@ async function insertMovementAndDualWrite(
       signedAt: periodForGate?.signed_at ? String(periodForGate.signed_at) : null,
     },
     requireMoneyUnlocked: opts.kind === "collect",
+    allowOpenWeekDeskCollect: opts.allowOpenWeekDeskCollect,
   });
   if (periodForGate) {
     await assertFrozenPeriodHashIntact(
@@ -490,7 +495,28 @@ app.post(`${BASE}/collect`, requireSettlementPerm("settlements.collect"), async 
       return c.json({ success: true, idempotent: true, movement: mapMovement(existing), period: mapPeriod(period) });
     }
 
-    const periodDb = await loadPeriodDb(driverId, weekAnchor, organizationId);
+    const currentWeekAnchor = periodKeyFor(new Date().toISOString()) || "";
+    const deskCollectThisWeek =
+      weekAnchor === String(currentWeekAnchor) &&
+      !isSettlementPeriodEnded({ weekAnchor });
+
+    let periodDb = await loadPeriodDb(driverId, weekAnchor, organizationId);
+    if (!periodDb && deskCollectThisWeek) {
+      const { error: insErr } = await sb()
+        .from("driver_financial_periods")
+        .insert({
+          driver_id: driverId,
+          period_anchor: weekAnchor,
+          period_end: periodEndForAnchor(weekAnchor),
+          timezone: "America/Jamaica",
+          organization_id: organizationId,
+          metadata: { financeCore: { deskCash: true } },
+        });
+      if (insErr && !/duplicate|unique/i.test(insErr.message || "")) {
+        throw new Error(insErr.message);
+      }
+      periodDb = await loadPeriodDb(driverId, weekAnchor, organizationId);
+    }
     if (!periodDb) {
       return c.json({ error: "PERIOD_NOT_FOUND", message: "No financial period for this driver/week" }, 404);
     }
@@ -502,8 +528,10 @@ app.post(`${BASE}/collect`, requireSettlementPerm("settlements.collect"), async 
     await assertFrozenPeriodHashIntact(periodDb as Parameters<typeof assertFrozenPeriodHashIntact>[0]);
     const settlementAmount = Number(periodDb.settlement_amount) || 0;
     const owed = driverOwesResidual(settlementAmount);
-    assertExpectedOutstanding(owed, expectedOutstanding);
-    enforceCollectCap(owed, amount, allowOver, reason);
+    if (!deskCollectThisWeek) {
+      assertExpectedOutstanding(owed, expectedOutstanding);
+      enforceCollectCap(owed, amount, allowOver, reason);
+    }
     const observedVersion = Number(periodDb.row_version) || 1;
 
     const { movement, period } = await insertMovementAndDualWrite(c, {
@@ -518,6 +546,7 @@ app.post(`${BASE}/collect`, requireSettlementPerm("settlements.collect"), async 
       reason,
       idempotencyKey,
       expectedRowVersion: observedVersion,
+      allowOpenWeekDeskCollect: deskCollectThisWeek,
     });
     return c.json({ success: true, movement: mapMovement(movement), period: mapPeriod(period) });
   } catch (e) {

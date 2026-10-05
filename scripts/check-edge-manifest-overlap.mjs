@@ -142,7 +142,7 @@ if (overlaps.length) {
   // Intentional soak dual-door: fleet-core mounts the same residual registrar as
   // make-server-37f42386, so it is excluded from FLEET_SLUGS until the shim is retired.
   console.log(
-    `note D15: fleet-core excluded (intentional dual-serve with make-server-37f42386 during soak)`,
+    `note D15: fleet-core excluded (residual home; make-server-37f42386 retired)`,
   );
 }
 

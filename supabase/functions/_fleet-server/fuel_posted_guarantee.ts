@@ -106,7 +106,7 @@ export async function resolveCanonicalVehicleForFuel(
       return {
         vehicleId: resolved.vehicleId,
         vehiclePlate: plate ? String(plate) : hint || undefined,
-        vehicleName: vehicleName || undefined,
+        vehicleName: typeof vehicleName === "string" && vehicleName ? vehicleName : undefined,
         vehicle,
       };
     }

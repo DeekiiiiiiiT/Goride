@@ -281,6 +281,7 @@ export type Permission =
   | 'vehicles.bypass_catalog_gate'
   // Fuel
   | 'fuel.approve'
+  | 'fuel.split_cash_override'
   | 'fuel.reject'
   | 'fuel.create_entry'
   | 'fuel.edit_entry'
@@ -371,7 +372,7 @@ const ALL_CUSTOMER_PERMISSIONS: Permission[] = [
   'vehicles.create', 'vehicles.edit', 'vehicles.delete', 'vehicles.view',
   // NOTE: 'vehicles.bypass_catalog_gate' is intentionally NOT granted to fleet
   // roles — only platform_owner gets it (added explicitly below).
-  'fuel.approve', 'fuel.reject', 'fuel.create_entry', 'fuel.edit_entry', 'fuel.delete_entry', 'fuel.view', 'fuel.export',
+  'fuel.approve', 'fuel.split_cash_override', 'fuel.reject', 'fuel.create_entry', 'fuel.edit_entry', 'fuel.delete_entry', 'fuel.view', 'fuel.export',
   'fuel.finalize', 'fuel.reopen', 'fuel.accept_unexplained', 'fuel.second_approve',
   'toll.manage', 'toll.view',
   'transactions.approve', 'transactions.reject', 'transactions.edit', 'transactions.view', 'transactions.export',
@@ -392,7 +393,8 @@ const FLEET_MANAGER_PERMISSIONS: Permission[] = ALL_CUSTOMER_PERMISSIONS.filter(
     p !== 'users.invite' &&
     p !== 'users.edit_role' &&
     p !== 'users.remove' &&
-    p !== 'data.backfill'
+    p !== 'data.backfill' &&
+    p !== 'fuel.split_cash_override'
 );
 
 const FLEET_ACCOUNTANT_PERMISSIONS: Permission[] = [

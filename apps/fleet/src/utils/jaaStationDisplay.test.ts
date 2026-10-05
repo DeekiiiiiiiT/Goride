@@ -133,6 +133,18 @@ describe('resolveFuelEntryStationDisplay', () => {
     expect(d.subtitle).toBe('No GPS metadata');
   });
 
+  it('unmatched entry with GPS says the fix was captured', () => {
+    const entry = {
+      id: 'e3b',
+      date: '2026-09-26',
+      amount: 100,
+      vendor: 'Unknown Station',
+      metadata: { locationMetadata: { lat: 17.99, lng: -76.97, accuracy: 1.2 } },
+    } as FuelEntry;
+    const d = resolveFuelEntryStationDisplay(entry, ledger);
+    expect(d.subtitle).toBe('GPS captured — not matched');
+  });
+
   it('unmatched entry: prefers stationAddress on subtitle', () => {
     const entry = {
       id: 'e4',

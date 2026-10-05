@@ -36,6 +36,7 @@ import {
     isAwaitingCashTx,
     isStaleAwaitingCash,
     daysAwaitingCash,
+    awaitingStatementRowAction,
     describeSplitCashRehome,
     describeSplitCashRehomeBlocked,
     metaFlagOn,
@@ -210,6 +211,7 @@ interface FuelReimbursementTableProps {
     onLineFilterChange?: (v: 'all' | 'rideshare' | 'rush_delivery' | 'unattributed') => void;
     unattributedCount?: number;
     onBulkSetServiceLine?: (fuelEntryIds: string[], line: 'rideshare' | 'rush_delivery') => Promise<void> | void;
+    drivers?: Array<{ id?: string; driverId?: string; name?: string; firstName?: string; lastName?: string }>;
 }
 
 export function FuelReimbursementTable({ 
@@ -229,6 +231,7 @@ export function FuelReimbursementTable({
     onLineFilterChange,
     unattributedCount = 0,
     onBulkSetServiceLine,
+    drivers = [],
 }: FuelReimbursementTableProps) {
     const { can } = usePermissions();
     const [selectedTx, setSelectedTx] = useState<FinancialTransaction | null>(null);
@@ -385,8 +388,27 @@ export function FuelReimbursementTable({
         () => scopedTransactions.filter((t) => isUnresolvedSplitVariance(t)),
         [scopedTransactions],
     );
+    const driverNameById = useMemo(() => {
+        const map = new Map<string, string>();
+        for (const d of drivers) {
+            const id = d.id || d.driverId;
+            if (!id) continue;
+            const name = d.name || [d.firstName, d.lastName].filter(Boolean).join(' ') || '';
+            if (name) map.set(id, name);
+        }
+        return map;
+    }, [drivers]);
+
+    const driverLabel = (tx: FinancialTransaction) => {
+        const named = String(tx.driverName || '').trim();
+        if (named) return named;
+        const id = String(tx.driverId || '').trim();
+        if (id && driverNameById.has(id)) return driverNameById.get(id) as string;
+        return 'Unknown driver';
+    };
+
     const awaitingCashTxs = useMemo(
-        () => scopedTransactions.filter((t) => isAwaitingCashTx(t)),
+        () => scopedTransactions.filter((t) => isAwaitingCashTx(t) && !isUnresolvedSplitVariance(t)),
         [scopedTransactions],
     );
     const staleAwaitingCount = useMemo(
@@ -1235,7 +1257,7 @@ export function FuelReimbursementTable({
                                                     })()}
                                                 </TableCell>
                                                 <TableCell className="text-xs">
-                                                    {tx.driverName || tx.driverId || '—'}
+                                                    {driverLabel(tx)}
                                                 </TableCell>
                                                 <TableCell className="text-xs">
                                                     <div className="flex flex-col gap-0.5">
@@ -1288,18 +1310,21 @@ export function FuelReimbursementTable({
                 </TabsContent>
 
                 <TabsContent value="awaiting-statement" className="space-y-4">
+                    <p className="text-xs text-slate-500">
+                        Cash is calculated automatically when Roam uploads the gas card statement. No action needed unless a fill has waited 14+ days.
+                    </p>
                     {awaitingCashTxs.length === 0 ? (
                         <div className="rounded-md border bg-white p-8 text-center text-slate-500">
                             <p className="text-sm">All split cash is matched or resolved.</p>
                             <p className="text-xs text-slate-400 mt-1">
-                                Rows appear here after a split fill until the Dominion statement derives the cash amount.
+                                Rows appear here after a split fill until the gas card statement derives the cash amount.
                             </p>
                         </div>
                     ) : (
                         <div className="rounded-md border bg-white overflow-hidden">
                             {staleAwaitingCount > 0 && (
                                 <div className="border-b border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
-                                    {staleAwaitingCount} fill{staleAwaitingCount === 1 ? '' : 's'} waiting 14+ days — chase the statement or enter cash / void.
+                                    {staleAwaitingCount} fill{staleAwaitingCount === 1 ? '' : 's'} waiting 14+ days — a fleet owner can escalate.
                                 </div>
                             )}
                             {blockedRehomeCount > 0 && (
@@ -1340,7 +1365,7 @@ export function FuelReimbursementTable({
                                                     )}
                                                 </TableCell>
                                                 <TableCell className="text-xs">
-                                                    {tx.driverName || tx.driverId || '—'}
+                                                    {driverLabel(tx)}
                                                 </TableCell>
                                                 <TableCell className="text-xs">
                                                     {days != null ? (
@@ -1358,15 +1383,21 @@ export function FuelReimbursementTable({
                                                     )}
                                                 </TableCell>
                                                 <TableCell className="text-right">
-                                                    {can('fuel.approve') && onResolveSplitCash && (
+                                                    {awaitingStatementRowAction(tx, can('fuel.split_cash_override')) === 'escalate' && onResolveSplitCash ? (
                                                     <Button
                                                         size="sm"
                                                         variant="outline"
                                                         className="h-8 text-xs"
                                                         onClick={() => setSplitResolveTx(tx)}
                                                     >
-                                                        Resolve
+                                                        Escalate
                                                     </Button>
+                                                    ) : (
+                                                    <div className="flex flex-col items-end gap-1">
+                                                        <Badge variant="outline" className="border-slate-200 bg-slate-50 text-slate-600">
+                                                            pending
+                                                        </Badge>
+                                                    </div>
                                                     )}
                                                 </TableCell>
                                             </TableRow>

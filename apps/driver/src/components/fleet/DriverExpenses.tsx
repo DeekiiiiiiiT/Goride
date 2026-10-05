@@ -853,7 +853,7 @@ export function DriverExpenses({ defaultOpen = false, mode, onBack }: ExpenseLog
       const buildSplitPayloads = async (odometerProofUrl: string, receiptUrl: string) => {
         const vehicles = await api.getVehicles().catch(() => []);
         const resolvedVehicleId = resolveVehicleIdForDriver(driverRecord, vehicles, user?.id);
-        const { driverId: canonicalDriverId } = resolveCanonicalDriverIdentity(
+        const { driverId: canonicalDriverId, driverName: canonicalDriverName } = resolveCanonicalDriverIdentity(
           driverRecord,
           { id: user?.id, name: user?.user_metadata?.name, email: user?.email },
         );
@@ -873,6 +873,7 @@ export function DriverExpenses({ defaultOpen = false, mode, onBack }: ExpenseLog
             status: 'Pending',
             description: `Fuel (split — cash pending statement) — ${merchant || 'Pump'}`,
             driverId: canonicalDriverId || user?.id,
+            driverName: canonicalDriverName,
             vehicleId: resolvedVehicleId,
             notes,
           } as any,
@@ -888,6 +889,7 @@ export function DriverExpenses({ defaultOpen = false, mode, onBack }: ExpenseLog
           cardId: assignedGasCard.id,
           vehicleId: resolvedVehicleId,
           driverId: canonicalDriverId || user?.id,
+          driverName: canonicalDriverName,
           amount: 0,
           liters: 0,
           odometer: fuelEntry.odometerReading,

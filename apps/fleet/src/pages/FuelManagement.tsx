@@ -103,13 +103,6 @@ import {
 import { Checkbox } from '../components/ui/checkbox';
 import { Label } from '../components/ui/label';
 import { toast } from 'sonner';
-import {
-  resolveSplitCashAcceptDerived,
-  resolveSplitCashManual,
-  resolveSplitCashVoid,
-  stampSplitVarianceSiblingAudit,
-  assertSplitCashInvariant,
-} from '@roam/fuel-core';
 import { DateRange } from 'react-day-picker';
 import type { FuelCard, FuelEntry, FuelScenario, MileageAdjustment, FuelDispute, WeeklyFuelReport, FinalizedFuelReport, JaaProgram } from '../types/fuel';
 import type { FinancialTransaction } from '../types/data';
@@ -1551,62 +1544,20 @@ function FuelManagementInner({
           return;
       }
       try {
-          const actor = { reason, at: new Date().toISOString() };
-          let patch;
-          if (action === 'accept_derived') {
-              patch = resolveSplitCashAcceptDerived(
-                  tx.metadata as Record<string, unknown>,
-                  Number(cashAmount ?? tx.metadata?.splitDerivedCashAmount) || 0,
-                  actor,
-              );
-          } else if (action === 'enter_cash') {
-              patch = resolveSplitCashManual(
-                  tx.metadata as Record<string, unknown>,
-                  Number(cashAmount) || 0,
-                  actor,
-              );
-          } else {
-              patch = resolveSplitCashVoid(tx.metadata as Record<string, unknown>, actor);
+          const saved = await fuelService.resolveSplitFillCash({
+              fillGroupId,
+              action,
+              cashAmount,
+              reason,
+          });
+          const savedTx = saved.cashTransaction as unknown as FinancialTransaction;
+          if (savedTx?.id) {
+              setTransactions((prev) => prev.map((t) => (t.id === savedTx.id ? { ...t, ...savedTx } : t)));
           }
-
-          const patchedTx = {
-              ...tx,
-              amount: patch.amount,
-              status: patch.status || tx.status,
-              metadata: assertSplitCashInvariant(patch.metadata),
-          };
-          const savedTx = await api.saveTransaction(patchedTx);
-          setTransactions((prev) => prev.map((t) => (t.id === savedTx.id ? savedTx : t)));
-
-          const siblings = logs.filter(
-              (e) => String(e.metadata?.fillGroupId || '') === fillGroupId,
-          );
-          for (const entry of siblings) {
-              const isCash =
-                  entry.metadata?.splitRole === 'cash' || entry.metadata?.splitVolumeOwner === true;
-              const updated = await fuelService.saveFuelEntry({
-                  ...entry,
-                  ...(isCash
-                      ? {
-                            amount: Math.abs(Number(patch.amount) || 0),
-                            metadata: assertSplitCashInvariant({
-                                ...(entry.metadata || {}),
-                                ...patch.metadata,
-                            }),
-                        }
-                      : {
-                            metadata: stampSplitVarianceSiblingAudit(
-                                (entry.metadata || {}) as Record<string, unknown>,
-                                action === 'accept_derived'
-                                    ? 'accept_derived'
-                                    : action === 'enter_cash'
-                                      ? 'enter_cash'
-                                      : 'void',
-                                actor,
-                            ),
-                        }),
-              });
-              setLogs((prev) => prev.map((l) => (l.id === updated.id ? updated : l)));
+          for (const entry of saved.fuelEntries || []) {
+              const updated = entry as unknown as FuelEntry;
+              if (!updated?.id) continue;
+              setLogs((prev) => prev.map((l) => (l.id === updated.id ? { ...l, ...updated } : l)));
           }
           invalidateReviewQueueCounts();
           toast.success(
@@ -1616,13 +1567,18 @@ function FuelManagementInner({
           );
       } catch (e) {
           console.error(e);
-          const msg = e instanceof Error && e.message === 'split_cash_reason_required'
+          const code = e && typeof e === 'object' && 'code' in e ? String((e as { code?: string }).code) : '';
+          const msg = code === 'split_cash_reason_required' || (e instanceof Error && e.message === 'split_cash_reason_required')
               ? 'Reason required (at least 8 characters)'
-              : 'Failed to resolve split cash';
+              : code === 'SPLIT_CASH_AWAITING_STATEMENT'
+                ? 'This fill is still waiting on the gas card statement.'
+                : e instanceof Error && e.message
+                  ? e.message
+                  : 'Failed to resolve split cash';
           toast.error(msg);
           throw e;
       }
-  }, [logs, invalidateReviewQueueCounts]);
+  }, [invalidateReviewQueueCounts]);
 
   const openSplitResolveForEntry = useCallback(
     (entry: FuelEntry, splitSiblings?: FuelEntry[]) => {
@@ -2239,6 +2195,7 @@ function FuelManagementInner({
               onViewDriverLedger={onViewDriverLedger}
               onApproveLogReview={handleApproveLogReview}
               onResolveSplitCash={handleResolveSplitCash}
+              drivers={drivers}
               isRefreshing={isRefreshing}
               showServiceLineControls={showTabs}
               lineFilter={unattributedOnly ? 'unattributed' : apiFilter === 'rush_delivery' ? 'rush_delivery' : apiFilter === 'rideshare' ? 'rideshare' : 'all'}

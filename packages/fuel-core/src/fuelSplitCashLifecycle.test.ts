@@ -15,6 +15,9 @@ import {
   describeSplitCashRehome,
   describeSplitCashRehomeBlocked,
   classifySplitCashPeriodLanding,
+  applySplitCashMatchToTx,
+  splitCashAwaitingSaveBlocked,
+  awaitingStatementRowAction,
 } from './fuelSplitCashLifecycle';
 
 describe('split cash guardian resolve paths', () => {
@@ -246,5 +249,99 @@ describe('classifySplitCashPeriodLanding', () => {
     if (plan.action === 'blocked_no_open_target') {
       expect(plan.blockedReason).toBe('no_open_period');
     }
+  });
+});
+
+describe('statement must not change cash already set', () => {
+  const waitingMeta = {
+    fillGroupId: 'fg-1',
+    splitRole: 'cash',
+    awaitingCashStatement: true,
+    splitPumpTotal: 6000,
+  };
+  const plan = {
+    action: 'write_in_place' as const,
+    fillWeekKey: '2026-09-21',
+    originalFillDate: '2026-09-26',
+  };
+
+  it('keeps a manual amount and records the difference', () => {
+    const manual = resolveSplitCashManual(waitingMeta, 2000, { reason: 'Driver receipt shows 2000' });
+    const tx = {
+      id: 't1',
+      date: '2026-09-26',
+      status: 'Pending' as const,
+      amount: manual.amount,
+      metadata: manual.metadata,
+    };
+    const applied = applySplitCashMatchToTx({
+      tx,
+      plan,
+      derivedCashPositive: 3500,
+      drvMeta: { splitPumpTotal: 6000, splitStatementAmount: 2500 },
+      reconciled: true,
+    });
+    expect(applied.outcome).toBe('preserved_manual');
+    expect(applied.tx.amount).toBe(-2000);
+    expect(applied.tx.status).toBe('Pending');
+    expect(applied.tx.date).toBe('2026-09-26');
+    if (applied.outcome === 'preserved_manual') expect(applied.variance).toBe(true);
+    expect(applied.tx.metadata?.splitVariance).toBe(true);
+    expect(applied.tx.metadata?.awaitingCashStatement).toBe(false);
+
+    const again = applySplitCashMatchToTx({
+      tx: applied.tx,
+      plan,
+      derivedCashPositive: 3500,
+      drvMeta: { splitPumpTotal: 6000, splitStatementAmount: 2500 },
+      reconciled: true,
+    });
+    expect(again.tx.amount).toBe(-2000);
+    expect(again.tx.status).toBe('Pending');
+  });
+
+  it('sets cash from the statement when the row is still waiting', () => {
+    const applied = applySplitCashMatchToTx({
+      tx: {
+        id: 't2',
+        date: '2026-09-26',
+        status: 'Pending',
+        amount: 0,
+        metadata: waitingMeta,
+      },
+      plan,
+      derivedCashPositive: 1500,
+      drvMeta: { splitPumpTotal: 6000, splitStatementAmount: 4500 },
+      reconciled: true,
+    });
+    expect(applied.outcome).toBe('write_in_place');
+    expect(applied.tx.amount).toBe(-1500);
+  });
+
+  it('blocks a generic save from clearing or repricing awaiting cash', () => {
+    const prev = {
+      amount: 0,
+      status: 'Pending',
+      metadata: { fillGroupId: 'fg', splitRole: 'cash', awaitingCashStatement: true },
+    };
+    expect(splitCashAwaitingSaveBlocked(prev, { ...prev, amount: -100 }).blocked).toBe(true);
+    expect(
+      splitCashAwaitingSaveBlocked(prev, {
+        ...prev,
+        metadata: { ...prev.metadata, awaitingCashStatement: false },
+      }).blocked,
+    ).toBe(true);
+    expect(splitCashAwaitingSaveBlocked(prev, prev).blocked).toBe(false);
+  });
+
+  it('shows escalate only after 14 days for an owner', () => {
+    const fresh = {
+      date: new Date().toISOString().slice(0, 10),
+      metadata: { fillGroupId: 'fg', splitRole: 'cash', splitVolumeOwner: true, awaitingCashStatement: true },
+    };
+    expect(awaitingStatementRowAction(fresh, true)).toBe('waiting');
+    const stale = { ...fresh, date: '2020-01-01' };
+    expect(awaitingStatementRowAction(stale, false)).toBe('waiting');
+    expect(awaitingStatementRowAction(stale, true)).toBe('escalate');
   });
 });

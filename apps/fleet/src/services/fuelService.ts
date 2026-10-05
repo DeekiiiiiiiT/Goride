@@ -429,6 +429,41 @@ export const fuelService = {
     return result.data || result;
   },
 
+  /** Set split cash on the server. Fresh rows under 14 days are refused. */
+  async resolveSplitFillCash(args: {
+    fillGroupId: string;
+    action: 'accept_derived' | 'enter_cash' | 'void';
+    cashAmount?: number;
+    reason?: string;
+  }): Promise<{
+    cashTransaction: Record<string, unknown>;
+    fuelEntries: Record<string, unknown>[];
+  }> {
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.fuel}/fuel/split-fill/${encodeURIComponent(args.fillGroupId)}/resolve`,
+      {
+        method: 'POST',
+        headers: await requireAuthHeaders(),
+        body: JSON.stringify({
+          action: args.action,
+          cashAmount: args.cashAmount,
+          reason: args.reason,
+        }),
+      },
+    );
+    if (!response.ok) {
+      const errorBody = await response.json().catch(() => ({} as Record<string, unknown>));
+      const err = new Error(
+        String(errorBody.error || errorBody.message || `Failed to resolve split cash (${response.status})`),
+      ) as Error & { code?: string; status?: number };
+      err.code = typeof errorBody.code === 'string' ? errorBody.code : undefined;
+      err.status = response.status;
+      throw err;
+    }
+    const result = await response.json();
+    return result.data || result;
+  },
+
   /** Persist JAA↔driver links server-side (also auto GOD-station attach when merchant unique). */
   async applyJaaFuelMatches(pairs: unknown[]): Promise<{
     success: boolean;

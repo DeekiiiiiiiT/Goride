@@ -44,7 +44,7 @@ export type Permission =
   | 'drivers.location.view'
   | 'vehicles.create' | 'vehicles.edit' | 'vehicles.delete' | 'vehicles.view'
   | 'vehicles.bypass_catalog_gate'
-  | 'fuel.approve' | 'fuel.reject' | 'fuel.create_entry' | 'fuel.edit_entry'
+  | 'fuel.approve' | 'fuel.split_cash_override' | 'fuel.reject' | 'fuel.create_entry' | 'fuel.edit_entry'
   | 'fuel.delete_entry' | 'fuel.view' | 'fuel.export'
   | 'fuel.finalize' | 'fuel.reopen' | 'fuel.accept_unexplained' | 'fuel.second_approve'
   | 'toll.manage' | 'toll.view'
@@ -295,7 +295,7 @@ const ALL_CUSTOMER_PERMISSIONS: Permission[] = [
   'drivers.location.view',
   'vehicles.create', 'vehicles.edit', 'vehicles.delete', 'vehicles.view',
   // 'vehicles.bypass_catalog_gate' is platform-only (added below).
-  'fuel.approve', 'fuel.reject', 'fuel.create_entry', 'fuel.edit_entry',
+  'fuel.approve', 'fuel.split_cash_override', 'fuel.reject', 'fuel.create_entry', 'fuel.edit_entry',
   'fuel.delete_entry', 'fuel.view', 'fuel.export',
   'fuel.finalize', 'fuel.reopen', 'fuel.accept_unexplained', 'fuel.second_approve',
   'toll.manage', 'toll.view',
@@ -321,7 +321,8 @@ const FLEET_MANAGER_PERMISSIONS: Permission[] = ALL_CUSTOMER_PERMISSIONS.filter(
     p !== 'users.invite' &&
     p !== 'users.edit_role' &&
     p !== 'users.remove' &&
-    p !== 'data.backfill'
+    p !== 'data.backfill' &&
+    p !== 'fuel.split_cash_override'
 );
 
 const FLEET_ACCOUNTANT_PERMISSIONS: Permission[] = [

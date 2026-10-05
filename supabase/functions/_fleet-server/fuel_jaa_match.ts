@@ -272,7 +272,9 @@ export async function persistFuelMatchPair(
             reconciled: true,
           });
 
-          if (applied.outcome === "blocked") {
+          if (applied.outcome === "preserved_manual") {
+            await kv.set(`transaction:${tx.id}`, applied.tx);
+          } else if (applied.outcome === "blocked") {
             console.error(
               "[persistFuelMatchPair] split cash re-home blocked",
               {

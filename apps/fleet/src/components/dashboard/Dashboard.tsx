@@ -934,6 +934,7 @@ export function Dashboard({ onSelectDriver, onNavigate }: Props) {
           openRequest={logCashOpenRequest}
           onOpenRequestHandled={() => setLogCashOpenRequest(null)}
           onGateMapChange={setLogCashGateByDriver}
+          roster={rows.map((row) => ({ id: row.id, name: row.name }))}
         />
       ) : null}
     </div>

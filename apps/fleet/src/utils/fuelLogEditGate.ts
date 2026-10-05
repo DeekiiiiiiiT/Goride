@@ -3,7 +3,7 @@
  */
 import type { FuelEntry } from '../types/fuel';
 import type { FinancialTransaction } from '../types/data';
-import { isAwaitingCashStatement, isAwaitingCashTx } from '@roam/fuel-core';
+import { isAwaitingCashStatement, isAwaitingCashTx, isStaleAwaitingCash } from '@roam/fuel-core';
 
 function metaOf(e: FuelEntry): Record<string, unknown> {
   return (e.metadata || {}) as Record<string, unknown>;
@@ -21,7 +21,11 @@ function metaFlagOn(v: unknown): boolean {
 export type FuelLogEditGate =
   | { kind: 'edit' }
   | { kind: 'resolve_split_cash'; fillGroupId: string }
-  | { kind: 'awaiting_card_readonly'; reason: string };
+  | { kind: 'awaiting_card_readonly'; reason: string }
+  | { kind: 'awaiting_cash_readonly'; reason: string };
+
+const AWAITING_CASH_REASON =
+  'Cash is calculated automatically when Roam uploads the gas card statement. No action needed unless a fill has waited 14+ days.';
 
 /**
  * Classify what Edit should do for a Transaction Logs row.
@@ -39,7 +43,17 @@ export function classifyFuelLogEdit(
 
   if (cashLeg && isAwaitingCashStatement(metaOf(cashLeg))) {
     const gid = fillGroupIdOf(cashLeg) || fillGroupIdOf(entry);
-    if (gid) return { kind: 'resolve_split_cash', fillGroupId: gid };
+    if (gid) {
+      const m = metaOf(cashLeg);
+      const variance = metaFlagOn(m.splitVariance) && !metaFlagOn(m.splitReconciled);
+      const stale = isStaleAwaitingCash({
+        date: cashLeg.date,
+        amount: cashLeg.amount,
+        metadata: m,
+      });
+      if (variance || stale) return { kind: 'resolve_split_cash', fillGroupId: gid };
+      return { kind: 'awaiting_cash_readonly', reason: AWAITING_CASH_REASON };
+    }
   }
 
   const cardLeg =

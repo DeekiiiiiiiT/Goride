@@ -23,7 +23,8 @@ import { RadioGroup, RadioGroupItem } from "../ui/radio-group";
 import { toast } from "sonner";
 import { Loader2, DollarSign, Wallet, ArrowRightLeft, Calendar } from "lucide-react";
 import { FinancialTransaction } from '../../types/data';
-import { format } from "date-fns";
+import { format, parseISO } from "date-fns";
+import { DEFAULT_FLEET_TZ, periodEndForAnchor, periodKeyFor } from "@roam/finance-core";
 import {
   isSettlementPeriodEnded,
   settlementPeriodOpenMessage,
@@ -63,6 +64,8 @@ interface LogCashPaymentModalProps {
   periods?: SettlementPeriod[];
   /** Restrict type radios. Dashboard quick action passes `['payment']` only. */
   allowedTypes?: CashTxType[];
+  /** Dashboard desk already shows its own collected-amount confirmation. */
+  suppressSuccessToast?: boolean;
 }
 
 const ALL_CASH_TX_TYPES: CashTxType[] = ['payment', 'float', 'adjustment'];
@@ -79,6 +82,7 @@ export function LogCashPaymentModal({
     initialTransaction,
     periods = [],
     allowedTypes = ALL_CASH_TX_TYPES,
+    suppressSuccessToast = false,
 }: LogCashPaymentModalProps) {
   const typeOptions = allowedTypes.length > 0 ? allowedTypes : ALL_CASH_TX_TYPES;
   const showTypePicker = typeOptions.length > 1;
@@ -108,6 +112,13 @@ export function LogCashPaymentModal({
       periodAnchor: format(p.start, 'yyyy-MM-dd'),
     });
   });
+
+  const currentAnchor = String(periodKeyFor(new Date().toISOString(), DEFAULT_FLEET_TZ) || '');
+  const currentWeekEnd = currentAnchor ? periodEndForAnchor(currentAnchor) : '';
+  const currentPeriodKey = currentAnchor
+    ? parseISO(`${currentAnchor}T12:00:00`).toISOString()
+    : '';
+  const collectingThisWeek = workPeriodStart === currentAnchor;
 
   // Helper: find a period key that matches a given start date ISO string
   const findPeriodKey = (startIso: string): string => {
@@ -199,17 +210,16 @@ export function LogCashPaymentModal({
             setWorkPeriodEnd(initialWorkPeriodEnd ? initialWorkPeriodEnd.split('T')[0] : '');
             setSelectedPeriod('');
           }
+        } else if (currentAnchor) {
+          // Cash taken during this week is recorded now. Reconciliation works out what is owed.
+          setSelectedPeriod(currentPeriodKey);
+          setWorkPeriodStart(currentAnchor);
+          setWorkPeriodEnd(currentWeekEnd);
+          setAmount(initialAmount ? initialAmount.toFixed(2) : '');
         } else {
-          // Default to newest open collection gap week
-          const open = activePeriods.find(p => p.balance > 0.005) || activePeriods[0];
-          if (open) {
-            applyPeriodSelection(new Date(open.start).toISOString(), !!initialAmount);
-            if (initialAmount) setAmount(initialAmount.toFixed(2));
-          } else {
-            setSelectedPeriod('');
-            setWorkPeriodStart('');
-            setWorkPeriodEnd('');
-          }
+          setSelectedPeriod('');
+          setWorkPeriodStart('');
+          setWorkPeriodEnd('');
         }
       }
     }
@@ -219,6 +229,8 @@ export function LogCashPaymentModal({
   const selectedPeriodObj = selectedPeriod
     ? periods.find(p => new Date(p.start).toISOString() === selectedPeriod) 
     : null;
+
+  const cashCollectCreate = transactionType === 'payment' && !initialTransaction;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -237,7 +249,12 @@ export function LogCashPaymentModal({
           )
         : Infinity;
     const OVER_COLLECT_HARD_TOLERANCE = 0.005;
-    if (transactionType === "payment" && owedCap > 0 && parsed > owedCap + OVER_COLLECT_HARD_TOLERANCE) {
+    if (
+      transactionType === "payment" &&
+      !collectingThisWeek &&
+      owedCap > 0 &&
+      parsed > owedCap + OVER_COLLECT_HARD_TOLERANCE
+    ) {
       if (!overCollectReason.trim()) {
         toast.error(
           `Amount exceeds cash owed (${formatJMD(owedCap, 2)}). Enter a reason to allow over-collection, or lower the amount.`,
@@ -254,6 +271,7 @@ export function LogCashPaymentModal({
 
     if (
       transactionType === 'payment' &&
+      !collectingThisWeek &&
       workPeriodStart &&
       workPeriodEnd &&
       !isSettlementPeriodEnded({
@@ -270,10 +288,21 @@ export function LogCashPaymentModal({
       return;
     }
 
-    if ((paymentMethod === 'Bank Transfer' || paymentMethod === 'Mobile Money') && !referenceNumber) {
+    if (
+      transactionType !== 'payment' &&
+      (paymentMethod === 'Bank Transfer' || paymentMethod === 'Mobile Money') &&
+      !referenceNumber
+    ) {
       toast.error("Reference number is required for non-cash payments");
       return;
     }
+
+    const savedMethod = transactionType === 'payment'
+      ? (initialTransaction?.paymentMethod || 'Cash')
+      : paymentMethod;
+    const savedReference = transactionType === 'payment'
+      ? (initialTransaction?.referenceNumber || undefined)
+      : (referenceNumber || undefined);
 
     setIsSubmitting(true);
     try {
@@ -289,15 +318,18 @@ export function LogCashPaymentModal({
         amount: parsed,
         date: date, // Keep as YYYY-MM-DD string to avoid UTC shift in constructor
         notes: notesWithOver,
-        paymentMethod,
-        referenceNumber: referenceNumber || undefined,
+        paymentMethod: savedMethod,
+        referenceNumber: savedReference,
         transactionType,
         workPeriodStart: workPeriodStart ? `${workPeriodStart}T12:00:00.000Z` : undefined,
         workPeriodEnd: workPeriodEnd ? `${workPeriodEnd}T12:00:00.000Z` : undefined,
       });
-      toast.success(initialTransaction ? "Transaction updated successfully" : "Transaction recorded successfully");
+      if (!suppressSuccessToast) {
+        toast.success(initialTransaction ? "Transaction updated successfully" : "Transaction recorded successfully");
+      }
       onClose();
     } catch (error: any) {
+      if (error?.quiet) return;
       const msg = String(error?.message || error || "");
       if (/23514|cash_nonneg|check constraint/i.test(msg)) {
         toast.error(
@@ -453,6 +485,7 @@ export function LogCashPaymentModal({
           </div>
 
           {transactionType === 'payment' &&
+            !collectingThisWeek &&
             Number(amount) > Math.max(0, Number(selectedPeriodObj?.balance ?? cashOwed) || 0) + 0.005 && (
             <div className="space-y-2 rounded-md border border-amber-200 bg-amber-50 p-3">
               <Label htmlFor="over-collect-reason">Over-collection reason *</Label>
@@ -468,13 +501,49 @@ export function LogCashPaymentModal({
           
           {/* Settlement Week — required for Cash Collection */}
           <div className="space-y-2">
-            <Label htmlFor="settlement-period">
+            <Label htmlFor={cashCollectCreate ? 'earlier-week' : 'settlement-period'}>
               <span className="flex items-center gap-1.5">
                 <Calendar className="h-3.5 w-3.5 text-slate-400" />
-                Settlement Week{transactionType === 'payment' ? ' *' : ''}
+                {cashCollectCreate ? 'This cash is for' : `Settlement Week${transactionType === 'payment' ? ' *' : ''}`}
               </span>
             </Label>
-            {activePeriods.length > 0 ? (
+            {cashCollectCreate && currentAnchor ? (
+              <>
+                <div className="flex h-9 w-full items-center rounded-md border border-input bg-background px-3 text-sm">
+                  {collectingThisWeek || !selectedPeriodObj
+                    ? `${format(parseISO(`${currentAnchor}T12:00:00`), 'MMM d')} – ${format(parseISO(`${currentWeekEnd}T12:00:00`), 'MMM d, yyyy')}`
+                    : formatPeriodLabel(selectedPeriodObj)}
+                </div>
+                {activePeriods.length > 0 ? (
+                  <select
+                    id="earlier-week"
+                    value={collectingThisWeek ? '' : selectedPeriod}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      if (!value) {
+                        setSelectedPeriod(currentPeriodKey);
+                        setWorkPeriodStart(currentAnchor);
+                        setWorkPeriodEnd(currentWeekEnd);
+                        setAmount('');
+                        return;
+                      }
+                      applyPeriodSelection(value, false);
+                    }}
+                    className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                  >
+                    <option value="">This week</option>
+                    {activePeriods.map((period) => {
+                      const key = new Date(period.start).toISOString();
+                      return (
+                        <option key={key} value={key}>
+                          {formatPeriodLabel(period)} — {formatPeriodSublabel(period)}
+                        </option>
+                      );
+                    })}
+                  </select>
+                ) : null}
+              </>
+            ) : activePeriods.length > 0 ? (
               <select
                 id="settlement-period"
                 value={selectedPeriod}
@@ -560,13 +629,14 @@ export function LogCashPaymentModal({
                   </div>
                 )}
               </div>
-            ) : transactionType === 'payment' ? (
+            ) : transactionType === 'payment' && !cashCollectCreate ? (
               <p className="text-[11px] text-slate-500 leading-tight">
                 The Settlement Week you pick is where this cash counts as Cash Returned. Receipt date is only when you received it.
               </p>
             ) : null}
           </div>
 
+          {transactionType !== 'payment' ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2">
                 <Label htmlFor="method">Payment Method</Label>
@@ -595,6 +665,7 @@ export function LogCashPaymentModal({
                 />
             </div>
           </div>
+          ) : null}
           
           <div className="space-y-2">
             <Label htmlFor="notes">Notes</Label>

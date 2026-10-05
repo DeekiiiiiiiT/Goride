@@ -46,6 +46,11 @@ import {
 import { buildFuelEntryServiceLineFilters } from "./fuel_service_line_filters.ts";
 import { auditLogic } from "./audit_logic.ts";
 import { findMatchingStation, findMatchingStationSmart, calculateDistance } from "./geo_matcher.ts";
+import {
+  applyStationMatch,
+  extractEntryCoords,
+  extractEntryGpsAccuracyMeters,
+} from "./fuel_station_match.ts";
 import { trackedProviderCall, ProviderBlockedError } from "./api_usage_logger.ts";
 import {
   enrichRecordWithDriverVehicle,
@@ -98,7 +103,13 @@ import {
   pickFleetVisibleEntryId,
   resolveLinkedFuelEntryIdsUnion,
 } from "./fuel_entry_pair.ts";
-import { persistSplitFill, assertSplitFillAllowedAsync } from "./fuel_split_fill.ts";
+import {
+  persistSplitFill,
+  assertSplitFillAllowedAsync,
+  resolveSplitFillCash,
+  backfillUnmatchedSplitFills,
+} from "./fuel_split_fill.ts";
+import { splitCashAwaitingSaveBlocked } from "../../../packages/fuel-core/src/fuelSplitCashLifecycle.ts";
 
 const app = new Hono();
 
@@ -144,34 +155,6 @@ function stampFuelRecord<T extends Record<string, unknown>>(record: T, c: Contex
     return { ...fleetStamped, organizationId: explicit.trim() } as T;
   }
   return fleetStamped;
-}
-
-/** Bump visit + price stats on a station from a fuel entry (writes lastUpdated, not lastVisited). */
-function bumpStationPriceStats(
-  station: Record<string, any>,
-  entry: { date?: string; amount?: number; liters?: number },
-): void {
-  if (!station.stats) station.stats = {};
-  const stats = station.stats;
-  stats.totalVisits = (Number(stats.totalVisits) || 0) + 1;
-  const nowIso = entry.date || new Date().toISOString();
-  stats.lastUpdated = nowIso;
-  const liters = Number(entry.liters) || 0;
-  const amount = Number(entry.amount) || 0;
-  if (liters > 0 && amount > 0) {
-    const price = amount / liters;
-    const prev = Number(stats.lastPrice) || 0;
-    stats.lastPrice = price;
-    const visits = Number(stats.totalVisits) || 1;
-    const prevAvg = Number(stats.avgPrice) || 0;
-    stats.avgPrice = prevAvg > 0 ? (prevAvg * (visits - 1) + price) / visits : price;
-    if (prev > 0) {
-      const delta = (price - prev) / prev;
-      stats.priceTrend = delta > 0.02 ? "Up" : delta < -0.02 ? "Down" : "Stable";
-    } else {
-      stats.priceTrend = "Stable";
-    }
-  }
 }
 
 /** After org-scope filter, platform can narrow to one customer via query. */
@@ -242,6 +225,38 @@ app.post(`${BASE_PATH}/fuel/split-fill`, async (c) => {
   } catch (e: any) {
     console.error("[SplitFill] failed", e);
     return c.json({ error: e?.message || "Split fill failed" }, 500);
+  }
+});
+
+/** Set split cash after 14 days, or when a statement already mismatched. */
+app.post(`${BASE_PATH}/fuel/split-fill/:fillGroupId/resolve`, async (c) => {
+  try {
+    const body = await c.req.json().catch(() => ({}));
+    const result = await resolveSplitFillCash(c, c.req.param("fillGroupId"), body);
+    if (!result.ok) {
+      return c.json({ error: result.error, code: result.code }, result.status as 400 | 401 | 403 | 404 | 409 | 500);
+    }
+    return c.json({ success: true, data: result.data });
+  } catch (e: any) {
+    console.error("[SplitFill] resolve failed", e);
+    return c.json({ error: e?.message || "Resolve failed" }, 500);
+  }
+});
+
+/** Dry-run by default. Re-match split fills that have GPS and no station, and fill missing driver names. */
+app.post(`${BASE_PATH}/fuel/split-fill/backfill-station`, requirePermission("data.backfill"), async (c) => {
+  try {
+    const body = await c.req.json().catch(() => ({}));
+    const dryRun = body?.dryRun !== false;
+    const result = await backfillUnmatchedSplitFills({
+      dryRun,
+      orgId: getOrgId(c),
+      limit: Number(body?.limit) || 200,
+    });
+    return c.json({ success: true, ...result });
+  } catch (e: any) {
+    console.error("[SplitFill] backfill failed", e);
+    return c.json({ error: e?.message || "Backfill failed" }, 500);
   }
 });
 
@@ -3371,57 +3386,6 @@ async function deleteGateHeldEvidenceTransaction(
 /** ensureFuelEntryLinkedToTransaction — imported from station_attach.ts */
 
 /**
- * Robust coordinate extraction from a fuel entry.
- * 
- * Driver Portal entries store GPS in `geofenceMetadata.lat/lng`.
- * Seeder/import entries store GPS in `entry.lat/lng`.
- * Some entries may have coords in `entry.metadata.lat` or `entry.location.lat`.
- * Top-level `entry.locationMetadata.lat` comes from Driver Portal submissions.
- * `entry.metadata.location.lat` comes from entries with nested location objects.
- * 
- * This helper checks ALL known coordinate locations to ensure no entry is
- * invisible to the Evidence Bridge, reconciler, or spatial matching logic.
- * Must stay in parity with frontend coordinate extraction in GasStationAnalytics.tsx.
- */
-function extractEntryCoords(entry: any): { lat: number; lng: number } | null {
-    const lat = Number(
-        entry.lat || 
-        entry.location?.lat || 
-        entry.metadata?.lat || 
-        entry.geofenceMetadata?.lat || 
-        entry.metadata?.locationMetadata?.lat ||
-        entry.locationMetadata?.lat ||
-        entry.metadata?.location?.lat
-    );
-    const lng = Number(
-        entry.lng || 
-        entry.location?.lng || 
-        entry.metadata?.lng || 
-        entry.geofenceMetadata?.lng || 
-        entry.metadata?.locationMetadata?.lng ||
-        entry.locationMetadata?.lng ||
-        entry.metadata?.location?.lng
-    );
-    if (!lat || !lng || isNaN(lat) || isNaN(lng)) return null;
-    return { lat, lng };
-}
-
-/**
- * GPS accuracy in meters for smart matching (Phase 1 geofence buffer `A`).
- * Aligns with Driver Portal `geofenceMetadata.accuracy` and financial `locationMetadata.accuracy`.
- */
-function extractEntryGpsAccuracyMeters(entry: any): number {
-    const raw = Number(
-        entry.geofenceMetadata?.accuracy ??
-        entry.metadata?.geofenceMetadata?.accuracy ??
-        entry.metadata?.locationMetadata?.accuracy ??
-        entry.locationMetadata?.accuracy
-    );
-    if (!Number.isFinite(raw) || raw < 0) return 0;
-    return Math.min(raw, 500);
-}
-
-/**
  * Normalize a Plus Code for comparison.
  * Strips whitespace, uppercases, and removes compound locality (e.g., "X36X+5W Portmore" ? "X36X+5W").
  * Returns only the code portion.
@@ -4277,6 +4241,22 @@ app.post(`${BASE_PATH}/fuel-entries`, async (c: Context) => {
     const existingEntry = await kv.get(`fuel_entry:${entry.id}`);
     const isNewFuelEntry = !existingEntry;
 
+    if (existingEntry && typeof existingEntry === "object") {
+      const cashGuard = splitCashAwaitingSaveBlocked(
+        existingEntry as { amount?: number; status?: string; metadata?: Record<string, unknown> | null },
+        entry as { amount?: number; status?: string; metadata?: Record<string, unknown> | null },
+      );
+      if (cashGuard.blocked) {
+        return c.json(
+          {
+            error: "Split cash is waiting on the gas card statement. Use Escalate after 14 days, or wait for the CSV.",
+            code: cashGuard.code,
+          },
+          409,
+        );
+      }
+    }
+
     // A correction is only authorized when an EXISTING row is being modified, the
     // caller can edit fuel, AND a reason was given. This intentionally cannot be
     // triggered on brand-new rows (no existingEntry ⇒ no station-lock bypass).
@@ -4477,219 +4457,16 @@ app.post(`${BASE_PATH}/fuel-entries`, async (c: Context) => {
         }
     }
 
-    // --- COORDINATE NORMALIZATION ---
-    // Ensure top-level lat/lng are always set for downstream code (reconciler, proof-of-work, etc.)
-    const entryCoords = extractEntryCoords(entry);
-    if (entryCoords && !entry.lat) {
-        entry.lat = entryCoords.lat;
-        entry.lng = entryCoords.lng;
-    }
 
-    // --- PHASE 1: INTEGRITY SYNC - EVIDENCE BRIDGE HANDSHAKE ---
-    const entryLat = entryCoords?.lat || 0;
-    const entryLng = entryCoords?.lng || 0;
-
-    // --- MANUAL STATION OVERRIDE ---
-    // If the user explicitly selected a verified station in the modal dropdown,
-    // honor that selection and skip automatic GPS matching / gate-hold entirely.
-    let skipGpsMatching = false;
-    // Issuer statement rows (JAA Raw CSV) have no GPS ? must land as fuel_entry, not Learnt/gate-hold.
-    const metaImportSource = String(entry.metadata?.importSource || "");
-    const isJaaIssuerStatement =
-      metaImportSource === "jaa_raw" ||
-      !!(entry.metadata?.jaaImportId) ||
-      !!(entry.metadata?.jaaReceiptNumber && entry.type === "Card_Transaction" && entry.entrySource === "fuel-card");
-    if (isJaaIssuerStatement) {
-      skipGpsMatching = true;
-      entry.metadata = {
-        ...(entry.metadata || {}),
-        locationStatus: entry.metadata?.locationStatus || "statement_vendor",
-        verificationMethod: entry.metadata?.verificationMethod || "jaa_issuer_statement",
-        stationGateHold: false,
-      };
-      if (!entry.location && (entry.vendor || entry.metadata?.originalVendor)) {
-        entry.location = entry.vendor || entry.metadata.originalVendor;
-      }
-      // Prefer VENDOR_NAME from statement when gate path previously stripped it
-      const vendorFromMeta = String(entry.metadata?.stationLocation || entry.location || "").trim();
-      if (vendorFromMeta && (!entry.location || entry.location === "Unknown")) {
-        entry.location = vendorFromMeta;
-      }
-      // No automatic merchant attach — Dominion Silent Attach is manual-only.
-    }
-    if (entry.matchedStationId) {
-        const manualStation = await kv.get(`station:${entry.matchedStationId}`);
-        if (manualStation && manualStation.status === 'verified') {
-            skipGpsMatching = true;
-            bumpStationPriceStats(manualStation, entry);
-            await kv.set(`station:${manualStation.id}`, manualStation);
-
-            entry.vendor = manualStation.name;
-            entry.location = manualStation.name;
-            entry.stationAddress = manualStation.address || entry.stationAddress || '';
-            entry.metadata = {
-                ...entry.metadata,
-                locationStatus: 'verified',
-                verificationMethod: 'manual_admin_override',
-                matchedStationId: manualStation.id,
-                matchConfidence: 'manual',
-                stationGateHold: false,
-            };
-            entry.signature = await auditLogic.generateRecordHash(entry);
-            entry.signedAt = new Date().toISOString();
-
-            const confidence = fuelLogic.calculateConfidenceScore(entry, manualStation);
-            entry.metadata = {
-                ...entry.metadata,
-                auditConfidenceScore: confidence.score,
-                auditConfidenceBreakdown: confidence.breakdown,
-                isHighlyTrusted: confidence.isHighlyTrusted
-            };
-            console.log(`[ManualOverride] Entry ${entry.id} manually linked to verified station "${manualStation.name}" (${manualStation.id})`);
-        }
-    }
-
-    // Phase 8 Optimization: Load all stations ONCE and reuse across handshake + geofence verification
-    const allStationsForEntry = (!skipGpsMatching && entryCoords) ? (await kv.getByPrefix("station:") || []) : [];
-
-    if (!skipGpsMatching && entryCoords) {
-        const gpsAccuracyM = extractEntryGpsAccuracyMeters(entry);
-        const smartResult = findMatchingStationSmart(entryLat, entryLng, allStationsForEntry, 600, gpsAccuracyM);
-
-        if (smartResult.station && (smartResult.confidence === 'high' || smartResult.confidence === 'medium')) {
-            // --- Confident match: proceed with full handshake (same as before) ---
-            const matchedStation = smartResult.station as any;
-
-            bumpStationPriceStats(matchedStation, entry);
-            
-            const isVerified = matchedStation.status === 'verified';
-            await kv.set(`station:${matchedStation.id}`, matchedStation);
-
-            entry.matchedStationId = matchedStation.id;
-            entry.vendor = matchedStation.name;
-            entry.metadata = {
-                ...entry.metadata,
-                locationStatus: isVerified ? 'verified' : 'review_required',
-                verificationMethod: 'gps_handshake',
-                matchedStationId: matchedStation.id,
-                matchDistance: smartResult.distance,
-                matchConfidence: smartResult.confidence
-            };
-
-            if (isVerified) {
-                // Phase 8: Hardened forensic binding
-                entry.signature = await auditLogic.generateRecordHash(entry);
-                entry.signedAt = new Date().toISOString();
-            } else {
-                entry.auditStatus = 'Review Required';
-            }
-
-            const confidence = fuelLogic.calculateConfidenceScore(entry, matchedStation);
-            entry.metadata = {
-                ...entry.metadata,
-                auditConfidenceScore: confidence.score,
-                auditConfidenceBreakdown: confidence.breakdown,
-                isHighlyTrusted: confidence.isHighlyTrusted
-            };
-
-            if (confidence.isHighlyTrusted && isVerified && !entry.isLocked) {
-                entry.isLocked = true;
-                entry.lockedAt = new Date().toISOString();
-                entry.auditStatus = 'Auto-Locked';
-                // Final audit-ready signature for locked record
-                entry.signature = await auditLogic.generateRecordHash(entry);
-                console.log(`[Auto-Lock] Entry ${entry.id} locked and signed with score ${confidence.score}`);
-            }
-
-            console.log(`[SmartGeoMatch] POST entry ${entry.id} matched "${matchedStation.name}" (${matchedStation.id}) at ${smartResult.distance}m [${smartResult.confidence}]`);
-
-        } else if (smartResult.confidence === 'ambiguous') {
-            // --- Ambiguous: flag for review, do NOT sign/lock, do NOT create Learnt ---
-            entry.metadata = {
-                ...entry.metadata,
-                locationStatus: 'review_required',
-                verificationMethod: 'gps_ambiguous',
-                matchDistance: smartResult.distance,
-                matchConfidence: 'ambiguous',
-                ambiguityReason: smartResult.ambiguityReason
-            };
-            entry.auditStatus = 'Review Required';
-            const closestStation = smartResult.station as any;
-            if (closestStation) {
-                entry.matchedStationId = closestStation.id;
-                entry.vendor = closestStation.name;
-                entry.metadata = {
-                    ...entry.metadata,
-                    matchedStationId: closestStation.id
-                };
-                const confidence = fuelLogic.calculateConfidenceScore(entry, closestStation);
-                entry.metadata = {
-                    ...entry.metadata,
-                    auditConfidenceScore: confidence.score,
-                    auditConfidenceBreakdown: confidence.breakdown,
-                    isHighlyTrusted: confidence.isHighlyTrusted
-                };
-            }
-            console.log(`[SmartGeoMatch] Ambiguous match for entry ${entry.id}. ${smartResult.ambiguityReason}`);
-
-        } else {
-            // --- No match: Learnt Location funnel (preserved from original) ---
-            if (!entry.metadata) entry.metadata = {};
-            let learntId = entry.metadata.learntLocationId as string | undefined;
-            if (learntId) {
-                console.log(`[SmartGeoMatch] Reusing Learnt Location ${learntId} for entry ${entry.id} (no duplicate create)`);
-            } else {
-                learntId = crypto.randomUUID();
-                const learntLocation = {
-                    id: learntId,
-                    name: entry.vendor || entry.stationName || "Unknown Vendor",
-                    location: { lat: entryLat, lng: entryLng },
-                    status: 'learnt',
-                    firstSeen: entry.date || new Date().toISOString(),
-                    sourceEntryId: entry.id,
-                    driverId: entry.driverId,
-                    vehicleId: entry.vehicleId
-                };
-                await kv.set(`learnt_location:${learntId}`, learntLocation);
-                console.log(`[SmartGeoMatch] No match for entry ${entry.id} ? created Learnt Location: ${learntId}`);
-            }
-
-            entry.metadata = {
-                ...entry.metadata,
-                locationStatus: 'unknown',
-                verificationMethod: 'none',
-                learntLocationId: learntId
-            };
-        }
-
-        // No automatic merchant attach after GPS miss — Dominion Silent Attach is manual-only.
-    } else if (!skipGpsMatching) {
-        // --- NO GPS COORDINATES: STATION GATE HOLD ---
-        // Core rule: ALL fuel logs that don't match a verified gas station MUST go
-        // to the Learnt tab regardless of payment method ? no exceptions.
-        // Entries with no GPS cannot be matched, so they MUST be gate-held.
-        // NOTE: Skipped when admin has manually overridden with a verified station.
-        const learntId = crypto.randomUUID();
-        const learntLocation = {
-            id: learntId,
-            name: entry.vendor || entry.stationName || "Unknown Vendor",
-            location: { lat: null, lng: null },
-            status: 'learnt',
-            firstSeen: entry.date || new Date().toISOString(),
-            sourceEntryId: entry.id,
-            driverId: entry.driverId,
-            vehicleId: entry.vehicleId,
-            transactionId: entry.id,
-            gateReason: 'No GPS coordinates provided ? cannot verify station',
-        };
-        await kv.set(`learnt_location:${learntId}`, learntLocation);
-
-        // Save the entry data as a gate-held transaction (NOT as a fuel_entry)
+    const match = await applyStationMatch(entry);
+    const allStationsForEntry = match.stations;
+    if (match.outcome === "no_gps") {
+        const learntId = entry.metadata?.learntLocationId;
         const heldTransaction = {
             id: entry.id,
-            type: entry.type || 'Reimbursement',
+            type: entry.type || "Reimbursement",
             date: entry.date,
-            time: entry.time || '',
+            time: entry.time || "",
             amount: entry.amount || 0,
             quantity: entry.liters || 0,
             odometer: entry.odometer || 0,
@@ -4701,27 +4478,25 @@ app.post(`${BASE_PATH}/fuel-entries`, async (c: Context) => {
             metadata: {
                 ...entry.metadata,
                 stationGateHold: true,
-                locationStatus: 'unknown',
-                verificationMethod: 'none',
-                gateReason: 'No GPS coordinates ? station gate held',
+                locationStatus: "unknown",
+                verificationMethod: "none",
+                gateReason: entry.metadata?.gateReason || "No GPS coordinates ? station gate held",
                 learntLocationId: learntId,
                 pricePerLiter: entry.pricePerLiter || 0,
                 fuelVolume: entry.liters || 0,
-                stationLocation: entry.stationAddress || entry.location || '',
-                originalVendor: entry.vendor || entry.stationName || 'Unknown',
+                stationLocation: entry.stationAddress || entry.location || "",
+                originalVendor: entry.vendor || entry.stationName || "Unknown",
             },
         };
         await kv.set(`transaction:${entry.id}`, heldTransaction);
-
         console.log(`[StationGate-NoGPS] Entry ${entry.id} has no GPS ? gate-held as transaction, Learnt Location ${learntId} created.`);
-        return c.json({ 
-            success: true, 
-            gateHeld: true, 
+        return c.json({
+            success: true,
+            gateHeld: true,
             learntLocationId: learntId,
-            message: 'Fuel log has no GPS coordinates. It has been sent to the Learnt tab for admin review before it can be processed.'
+            message: "Fuel log has no GPS coordinates. It has been sent to the Learnt tab for admin review before it can be processed.",
         });
     }
-
     // --- PHASE 5: SERVER-SIDE FORENSIC VERIFICATION ---
     const geofence = entry.geofenceMetadata;
     const deviationReason = entry.deviationReason;
@@ -7739,4 +7514,4 @@ import { registerFuelPeriodRoutes } from "./fuel_period_routes.ts";
 
 registerFuelPeriodRoutes(app);
 
-export default app;
+export default app;

@@ -2,7 +2,7 @@
  * Split Cash Guardian — owns incomplete cash reimbursements waiting on Dominion.
  * Makes `splitReconciled && awaitingCashStatement` unrepresentable on write paths.
  */
-import { isAwaitingCashStatement, metaOfSplit } from './fuelSplitPayment.ts';
+import { isAwaitingCashStatement, metaOfSplit, splitReconTolerance } from './fuelSplitPayment.ts';
 
 /** Days without statement match before ops escalation. */
 export const AWAITING_CASH_STALE_DAYS = 14;
@@ -515,7 +515,98 @@ export type ApplySplitCashMatchResult =
       rehomeToWeek?: string;
       fuelEntryAmount: number;
       fuelEntryMeta: Record<string, unknown>;
+    }
+  | {
+      /** Staff or a prior statement already set the cash. Amount, status, and date stay. */
+      outcome: 'preserved_manual';
+      tx: SplitCashMatchTxInput;
+      variance: boolean;
     };
+
+const PRIOR_CASH_RESOLVE_ACTIONS = new Set([
+  'enter_cash',
+  'accept_derived',
+  'void',
+  'card_covered_full',
+  'statement_derived',
+]);
+
+function metaFlag(meta: Record<string, unknown>, key: string): boolean {
+  return metaFlagOn(meta[key]);
+}
+
+function asMeta(meta: Record<string, unknown> | null | undefined): Record<string, unknown> {
+  return meta && typeof meta === 'object' ? meta : {};
+}
+
+/** Cash was already decided — a later statement must not change the payout. */
+export function splitCashAlreadySet(
+  tx: { status?: string; amount?: number; metadata?: Record<string, unknown> | null },
+  meta?: Record<string, unknown> | null,
+): boolean {
+  const tm = asMeta(meta ?? (tx.metadata as Record<string, unknown> | null | undefined));
+  const action = String(tm.splitCashResolveAction || '');
+  if (PRIOR_CASH_RESOLVE_ACTIONS.has(action)) return true;
+  if (metaFlag(tm, 'splitCashVoided') || metaFlag(tm, 'splitCardCoveredFull')) return true;
+  if (metaFlag(tm, 'splitReconciled') && !metaFlag(tm, 'awaitingCashStatement')) return true;
+  const status = String(tx.status || '').toLowerCase();
+  return status === 'approved' || status === 'paid' || status === 'posted';
+}
+
+function manualCashPositive(
+  tx: { amount?: number },
+  meta: Record<string, unknown>,
+): number {
+  if (meta.splitManualCashAmount != null) return Math.abs(Number(meta.splitManualCashAmount) || 0);
+  if (meta.splitDerivedCashAmount != null && !metaFlag(meta, 'awaitingCashStatement')) {
+    return Math.abs(Number(meta.splitDerivedCashAmount) || 0);
+  }
+  return Math.abs(Number(tx.amount) || 0);
+}
+
+function isSplitCashAwaitingMeta(meta: Record<string, unknown>): boolean {
+  const gid = typeof meta.fillGroupId === 'string' && meta.fillGroupId.length > 0;
+  const cash =
+    meta.splitRole === 'cash' || meta.splitVolumeOwner === true || metaFlag(meta, 'awaitingCashStatement');
+  return gid && cash && metaFlag(meta, 'awaitingCashStatement');
+}
+
+/**
+ * Generic transaction / fuel-entry saves cannot clear or reprice a split cash row
+ * that is still waiting on the statement. The dedicated resolve endpoint is the writer.
+ */
+export function splitCashAwaitingSaveBlocked(
+  previous: { amount?: number; status?: string; metadata?: Record<string, unknown> | null } | null | undefined,
+  next: { amount?: number; status?: string; metadata?: Record<string, unknown> | null },
+): { blocked: boolean; code?: 'SPLIT_CASH_AWAITING_STATEMENT' } {
+  if (!previous) return { blocked: false };
+  const prevMeta = asMeta(previous.metadata as Record<string, unknown> | null | undefined);
+  if (!isSplitCashAwaitingMeta(prevMeta)) return { blocked: false };
+  const nextMeta = asMeta(next.metadata as Record<string, unknown> | null | undefined);
+  const cleared = metaFlag(prevMeta, 'awaitingCashStatement') && !metaFlag(nextMeta, 'awaitingCashStatement');
+  const amountChanged =
+    next.amount !== undefined && Number(next.amount) !== Number(previous.amount);
+  const statusChanged =
+    next.status !== undefined && String(next.status || '') !== String(previous.status || '');
+  if (cleared || amountChanged || statusChanged) {
+    return { blocked: true, code: 'SPLIT_CASH_AWAITING_STATEMENT' };
+  }
+  return { blocked: false };
+}
+
+/** Awaiting-statement tab: wait for the CSV, or escalate after 14 days. */
+export function awaitingStatementRowAction(
+  tx: SplitCashClassifyFields,
+  canOverride: boolean,
+  now: Date = new Date(),
+): 'waiting' | 'escalate' | 'none' {
+  if (!isAwaitingCashTx(tx)) return 'none';
+  const m = asMeta(tx.metadata as Record<string, unknown> | null | undefined);
+  const variance = metaFlag(m, 'splitVariance') && !metaFlag(m, 'splitReconciled');
+  if (variance) return 'none';
+  if (isStaleAwaitingCash(tx, now)) return canOverride ? 'escalate' : 'waiting';
+  return 'waiting';
+}
 
 /**
  * Pure persistFuelMatchPair cash-sibling apply — I/O stays at the edge.
@@ -533,6 +624,42 @@ export function applySplitCashMatchToTx(args: {
     tx.metadata && typeof tx.metadata === 'object' ? { ...tx.metadata } : ({} as Record<string, unknown>);
   const derivedCash = Math.abs(Number(args.derivedCashPositive) || 0);
   const outlier = priceOutlierCarry(drvMeta);
+
+  if (splitCashAlreadySet(tx, tm)) {
+    const manual = manualCashPositive(tx, tm);
+    const pump = Math.abs(Number(drvMeta.splitPumpTotal ?? tm.splitPumpTotal) || 0);
+    const tolerance = splitReconTolerance(pump);
+    const delta = Math.round((derivedCash - manual) * 100) / 100;
+    const conflict = !reconciled || Math.abs(delta) > tolerance;
+    const nextMeta = assertSplitCashInvariant({
+      ...tm,
+      splitStatementAmount: drvMeta.splitStatementAmount ?? tm.splitStatementAmount,
+      splitStatementDerivedCashAmount: derivedCash,
+      splitPumpTotal: drvMeta.splitPumpTotal ?? tm.splitPumpTotal,
+      ...(conflict
+        ? {
+            splitVariance: true,
+            splitReconciled: false,
+            awaitingCashStatement: false,
+            splitVarianceDelta: delta,
+            splitStatementCashConflict: true,
+            splitDerivedCashAmount: derivedCash,
+          }
+        : { splitStatementCashConflict: false }),
+      ...outlier,
+    });
+    return {
+      outcome: 'preserved_manual',
+      variance: conflict,
+      tx: {
+        ...tx,
+        amount: tx.amount,
+        status: tx.status,
+        date: tx.date,
+        metadata: nextMeta,
+      },
+    };
+  }
 
   if (!reconciled) {
     const nextMeta = assertSplitCashInvariant({

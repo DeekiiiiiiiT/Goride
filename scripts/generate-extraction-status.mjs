@@ -43,7 +43,7 @@ const coreManifest = path.join(
   "supabase/functions/fleet-core/src/main.ts",
 );
 const payload = {
-  shim: "make-server-37f42386",
+  shim: null,
   fleetCoreScaffolded: fs.existsSync(coreManifest),
   domains,
 };

@@ -16,6 +16,12 @@ import {
   enrichRecordWithDriverVehicle,
 } from "./driver_vehicle_assignment.ts";
 import {
+  applyStationMatch,
+  extractEntryCoords,
+  mirrorStationOntoCash,
+  signMatchedFuelEntry,
+} from "./fuel_station_match.ts";
+import {
   projectOdometerReading,
   resolveFuelRecordedAt,
 } from "./odometer_ledger.ts";
@@ -23,6 +29,16 @@ import { syncLinkedExpenseTransaction } from "./fuel_transaction_sync.ts";
 import type { RbacUser } from "./rbac_middleware.ts";
 import { hasPermission } from "./rbac_middleware.ts";
 import { isOrgModuleEnabled } from "./enterprise_modules.ts";
+import { queryFleet } from "./repos/baseRepo.ts";
+import {
+  AWAITING_CASH_STALE_DAYS,
+  assertSplitCashInvariant,
+  isStaleAwaitingCash,
+  resolveSplitCashAcceptDerived,
+  resolveSplitCashManual,
+  resolveSplitCashVoid,
+  stampSplitVarianceSiblingAudit,
+} from "../../../packages/fuel-core/src/fuelSplitCashLifecycle.ts";
 
 export type SplitFillBody = {
   fillGroupId: string;
@@ -41,6 +57,35 @@ export type SplitFillResult = {
 
 function markerKey(fillGroupId: string): string {
   return `fuel_split:${fillGroupId}`;
+}
+
+function driverNameOf(record: Record<string, unknown>): string {
+  return String(record.driverName || "").trim();
+}
+
+async function lookupDriverName(driverId: string): Promise<string | undefined> {
+  const id = driverId.trim();
+  if (!id) return undefined;
+  const driver = await kv.get(`driver:${id}`);
+  if (!driver || typeof driver !== "object") return undefined;
+  const d = driver as Record<string, unknown>;
+  const name = d.driverName || d.name || d.fullName || d.displayName;
+  const text = name != null ? String(name).trim() : "";
+  return text || undefined;
+}
+
+/** Stamp the driver's name on both halves when the client omitted it. */
+export async function stampSplitDriverNames(
+  cashTx: Record<string, unknown>,
+  cardEntry: Record<string, unknown>,
+  lookup: (driverId: string) => Promise<string | undefined> = lookupDriverName,
+): Promise<void> {
+  const driverId = String(cardEntry.driverId || cashTx.driverId || "").trim();
+  let name = driverNameOf(cardEntry) || driverNameOf(cashTx);
+  if (!name && driverId) name = (await lookup(driverId)) || "";
+  if (!name) return;
+  if (!driverNameOf(cashTx)) cashTx.driverName = name;
+  if (!driverNameOf(cardEntry)) cardEntry.driverName = name;
 }
 
 function ensureFillGroupMeta(
@@ -170,13 +215,26 @@ export async function persistSplitFill(
     );
     Object.assign(cardEntry, enriched);
   }
+  if (cashTx.driverId || cashTx.vehicleId) {
+    const enrichedCash = await enrichRecordWithDriverVehicle(
+      cashTx,
+      (cashTx.organizationId as string | undefined) ||
+        (cardEntry.organizationId as string | undefined),
+    );
+    Object.assign(cashTx, enrichedCash);
+  }
+  await stampSplitDriverNames(cashTx, cardEntry);
+
+  // Station match before retail stamp and soft-dedup (dedup compares vendor/location).
+  // Signature waits until both rows are stored so the hash covers the finished card half.
+  await applyStationMatch(cardEntry, { deferSignature: true });
+  mirrorStationOntoCash(cardEntry, cashTx);
 
   {
-    const paySrc = resolveFuelPaymentSource(
-      cardEntry.paymentSource ||
-        (cardEntry.metadata as Record<string, unknown>)?.paymentSource ||
-        "Gas_Card",
-    );
+    const rawPay =
+      cardEntry.paymentSource ??
+      (cardEntry.metadata as Record<string, unknown> | undefined)?.paymentSource;
+    const paySrc = resolveFuelPaymentSource(typeof rawPay === "string" && rawPay ? rawPay : "Gas_Card");
     cardEntry.paymentSource = paySrc.enum;
     cardEntry.metadata = {
       ...(cardEntry.metadata as Record<string, unknown>),
@@ -213,6 +271,12 @@ export async function persistSplitFill(
 
   try {
     await kv.set(`fuel_entry:${cardEntry.id}`, cardEntry);
+    try {
+      await signMatchedFuelEntry(cardEntry);
+      await kv.set(`fuel_entry:${cardEntry.id}`, cardEntry);
+    } catch (signErr) {
+      console.error("[SplitFill] Card signature failed (non-fatal):", signErr);
+    }
     // One odometer projection per fillGroupId (cash owns volume; card never projects).
     try {
       const odo = Number(cardEntry.odometer);
@@ -360,4 +424,235 @@ export async function assertSplitFillAllowedAsync(
     };
   }
   return { allowed: true };
+}
+
+function metaRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" ? (value as Record<string, unknown>) : {};
+}
+
+function flagOn(value: unknown): boolean {
+  return value === true || value === "true";
+}
+
+async function loadSplitCashTx(fillGroupId: string): Promise<Record<string, unknown> | null> {
+  const marker = (await kv.get(markerKey(fillGroupId))) as Record<string, unknown> | null;
+  const cashId = marker && typeof marker.cashTransactionId === "string" ? marker.cashTransactionId : "";
+  if (!cashId) return null;
+  const tx = await kv.get(`transaction:${cashId}`);
+  return tx && typeof tx === "object" ? (tx as Record<string, unknown>) : null;
+}
+
+export type SplitCashResolveBody = {
+  action?: string;
+  cashAmount?: number;
+  reason?: string;
+};
+
+/** Owner escalate, or staff deciding a statement mismatch. Refuses fresh awaiting rows. */
+export async function resolveSplitFillCash(
+  c: Context,
+  fillGroupId: string,
+  body: SplitCashResolveBody,
+): Promise<
+  | { ok: true; data: { cashTransaction: Record<string, unknown>; fuelEntries: Record<string, unknown>[] } }
+  | { ok: false; status: number; error: string; code?: string }
+> {
+  const rbacUser = c.get("rbacUser") as RbacUser | undefined;
+  if (!rbacUser) return { ok: false, status: 401, error: "Unauthorized" };
+
+  const gid = String(fillGroupId || "").trim();
+  if (!gid) return { ok: false, status: 400, error: "fillGroupId is required", code: "MISSING_FILL_GROUP" };
+
+  const tx = await loadSplitCashTx(gid);
+  if (!tx) return { ok: false, status: 404, error: "Split cash reimbursement was not found", code: "SPLIT_CASH_NOT_FOUND" };
+
+  const meta = metaRecord(tx.metadata);
+  const awaiting = flagOn(meta.awaitingCashStatement);
+  const hasStatement = meta.splitStatementAmount != null && Number(meta.splitStatementAmount) > 0;
+  const variance = flagOn(meta.splitVariance) && !flagOn(meta.splitReconciled);
+  const stale = isStaleAwaitingCash({
+    date: String(tx.date || ""),
+    status: tx.status as string | undefined,
+    amount: Number(tx.amount),
+    metadata: meta,
+  });
+
+  const canOverride = hasPermission(rbacUser.resolvedRole, "fuel.split_cash_override");
+  const canApprove = hasPermission(rbacUser.resolvedRole, "fuel.approve");
+  const statementDecision = variance || hasStatement;
+
+  if (awaiting && !hasStatement && !variance && !stale) {
+    if (!canOverride && !canApprove) {
+      return { ok: false, status: 403, error: "Forbidden", code: "FORBIDDEN" };
+    }
+    return {
+      ok: false,
+      status: 409,
+      error: `Cash waits for the gas card statement until this fill is ${AWAITING_CASH_STALE_DAYS} days old.`,
+      code: "SPLIT_CASH_AWAITING_STATEMENT",
+    };
+  }
+
+  if (!canOverride && !(canApprove && statementDecision)) {
+    return {
+      ok: false,
+      status: 403,
+      error: "Only a fleet owner can set cash before the statement matches.",
+      code: "FORBIDDEN",
+    };
+  }
+
+  const action = String(body.action || "");
+  const actor = {
+    actorId: rbacUser.userId,
+    reason: body.reason,
+    at: new Date().toISOString(),
+  };
+  let patch;
+  try {
+    if (action === "accept_derived") {
+      patch = resolveSplitCashAcceptDerived(meta, Number(body.cashAmount ?? meta.splitDerivedCashAmount) || 0, actor);
+    } else if (action === "enter_cash") {
+      patch = resolveSplitCashManual(meta, Number(body.cashAmount) || 0, actor);
+    } else if (action === "void") {
+      patch = resolveSplitCashVoid(meta, actor);
+    } else {
+      return { ok: false, status: 400, error: "Unknown resolve action", code: "BAD_ACTION" };
+    }
+  } catch (e) {
+    const message = e instanceof Error ? e.message : "Resolve failed";
+    const status = message === "split_cash_reason_required" ? 400 : 500;
+    return { ok: false, status, error: message, code: message };
+  }
+
+  const nextTx: Record<string, unknown> = {
+    ...tx,
+    amount: patch.amount,
+    status: patch.status || tx.status,
+    metadata: assertSplitCashInvariant(patch.metadata),
+  };
+  await kv.set(`transaction:${tx.id}`, nextTx);
+
+  const entriesRes = await queryFleet("fuel_entries", {
+    filters: [{ op: "eq", col: "value->metadata->>fillGroupId", value: gid }],
+    limit: 10,
+  });
+  const fuelEntries: Record<string, unknown>[] = [];
+  if (!entriesRes.error && Array.isArray(entriesRes.data)) {
+    for (const raw of entriesRes.data as Record<string, unknown>[]) {
+      const em = metaRecord(raw.metadata);
+      const isCash = em.splitRole === "cash" || em.splitVolumeOwner === true;
+      const updated = isCash
+        ? {
+            ...raw,
+            amount: Math.abs(Number(patch.amount) || 0),
+            metadata: assertSplitCashInvariant({ ...em, ...patch.metadata }),
+          }
+        : {
+            ...raw,
+            metadata: stampSplitVarianceSiblingAudit(
+              em,
+              action as "accept_derived" | "enter_cash" | "void",
+              actor,
+            ),
+          };
+      if (raw.id) await kv.set(`fuel_entry:${raw.id}`, updated);
+      fuelEntries.push(updated);
+    }
+  }
+
+  return { ok: true, data: { cashTransaction: nextTx, fuelEntries } };
+}
+
+export type SplitBackfillRow = {
+  fillGroupId: string;
+  cardFuelEntryId: string;
+  cashTransactionId: string | null;
+  driverName: string | null;
+  vendor: string | null;
+  matchedStationId: string | null;
+  locationStatus: string | null;
+  applied: boolean;
+};
+
+/**
+ * Preview or apply station match + missing driver names on split card rows.
+ * Dry-run does not write stations, learnt locations, or ledger rows.
+ */
+export async function backfillUnmatchedSplitFills(opts: {
+  dryRun: boolean;
+  orgId?: string | null;
+  limit?: number;
+}): Promise<{ dryRun: boolean; rows: SplitBackfillRow[] }> {
+  const res = await queryFleet("fuel_entries", {
+    org: opts.orgId || undefined,
+    filters: [{ op: "eq", col: "value->metadata->>splitRole", value: "card" }],
+    limit: Math.min(opts.limit ?? 200, 500),
+    order: { col: "date", ascending: false },
+  });
+  if (res.error) throw res.error;
+
+  const rows: SplitBackfillRow[] = [];
+  for (const raw of (res.data || []) as Record<string, unknown>[]) {
+    const meta = metaRecord(raw.metadata);
+    const fillGroupId = String(meta.fillGroupId || "");
+    if (!fillGroupId) continue;
+    const matched = String(raw.matchedStationId || meta.matchedStationId || "");
+    const hasGps = extractEntryCoords(raw) != null;
+    const missingName = !String(raw.driverName || "").trim();
+    if (matched && !missingName) continue;
+    if (!matched && !hasGps && !missingName) continue;
+
+    const card: Record<string, unknown> = { ...raw, metadata: { ...meta } };
+    const cash = await loadSplitCashTx(fillGroupId);
+    const cashCopy: Record<string, unknown> | null = cash
+      ? { ...cash, metadata: { ...metaRecord(cash.metadata) } }
+      : null;
+
+    if (!opts.dryRun) {
+      if (!matched && hasGps) {
+        await applyStationMatch(card, { deferSignature: true });
+        await signMatchedFuelEntry(card);
+        if (cashCopy) mirrorStationOntoCash(card, cashCopy);
+      }
+      await stampSplitDriverNames(cashCopy || {}, card);
+      if (card.id) await kv.set(`fuel_entry:${card.id}`, card);
+      if (cashCopy?.id) await kv.set(`transaction:${cashCopy.id}`, cashCopy);
+    } else if (!matched && hasGps) {
+      const memory = new Map<string, unknown>();
+      const clone = (value: unknown) =>
+        value && typeof value === "object" ? JSON.parse(JSON.stringify(value)) : value;
+      await applyStationMatch(card, {
+        deferSignature: true,
+        deps: {
+          get: async (key) => (key.startsWith("station:") ? clone(await kv.get(key)) : memory.get(key)),
+          getByPrefix: async (prefix) => {
+            if (prefix !== "station:") return [];
+            const rows = (await kv.getByPrefix(prefix)) || [];
+            return rows.map((row: unknown) => clone(row));
+          },
+          set: async (key, value) => {
+            memory.set(key, value);
+          },
+        },
+      });
+      if (cashCopy) mirrorStationOntoCash(card, cashCopy);
+      await stampSplitDriverNames(cashCopy || {}, card);
+    } else {
+      await stampSplitDriverNames(cashCopy || {}, card);
+    }
+
+    const nextMeta = metaRecord(card.metadata);
+    rows.push({
+      fillGroupId,
+      cardFuelEntryId: String(card.id || ""),
+      cashTransactionId: cashCopy?.id ? String(cashCopy.id) : null,
+      driverName: card.driverName ? String(card.driverName) : null,
+      vendor: card.vendor ? String(card.vendor) : null,
+      matchedStationId: card.matchedStationId ? String(card.matchedStationId) : null,
+      locationStatus: nextMeta.locationStatus ? String(nextMeta.locationStatus) : null,
+      applied: !opts.dryRun,
+    });
+  }
+  return { dryRun: opts.dryRun, rows };
 }

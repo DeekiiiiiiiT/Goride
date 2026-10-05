@@ -3,7 +3,7 @@
  * See docs/fleet-edge-5mb-split-plan.md Phase A0.
  *
  * Usage:
- *   node scripts/build-edge-bundle.mjs              # make-server only
+ *   node scripts/build-edge-bundle.mjs              # fleet-core only
  *   node scripts/build-edge-bundle.mjs --all         # all TARGETS with existing entry
  *   node scripts/build-edge-bundle.mjs fleet-fuel
  */
@@ -31,10 +31,6 @@ const externalRemotePlugin = {
 };
 
 const TARGETS = {
-  "make-server-37f42386": {
-    entry: path.join(ROOT, "supabase/functions/_fleet-server/index.tsx"),
-    outfile: path.join(ROOT, "supabase/functions/make-server-37f42386/index.ts"),
-  },
   "fleet-fuel": {
     entry: path.join(ROOT, "supabase/functions/fleet-fuel/src/main.ts"),
     outfile: path.join(ROOT, "supabase/functions/fleet-fuel/index.ts"),
@@ -119,7 +115,7 @@ let names;
 if (args.includes("--all")) {
   names = Object.keys(TARGETS).filter((n) => fs.existsSync(TARGETS[n].entry));
 } else if (args.length === 0) {
-  names = ["make-server-37f42386"];
+  names = ["fleet-core"];
 } else {
   names = args;
 }

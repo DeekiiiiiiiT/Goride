@@ -88,7 +88,7 @@
     "smoke:edge-fn": "node scripts/smoke-edge-fn.mjs",
     "build:edge": "node scripts/build-edge-bundle.mjs",
     "build:edge:all": "node scripts/build-edge-bundle.mjs --all",
-    "deploy:edge": "node scripts/assert-ledger-view-invoker.mjs && node scripts/assert-fleet-view-invoker.mjs && node scripts/check-fleet-edge-duplicates.mjs && node scripts/build-edge-bundle.mjs && npx supabase functions deploy make-server-37f42386 --use-api --project-ref csfllzzastacofsvcdsc && node scripts/smoke-fleet-health.mjs",
+    "deploy:edge": "node scripts/assert-ledger-view-invoker.mjs && node scripts/assert-fleet-view-invoker.mjs && node scripts/check-fleet-edge-duplicates.mjs && node scripts/build-edge-bundle.mjs fleet-core && npx supabase functions deploy fleet-core --use-api --project-ref csfllzzastacofsvcdsc && node scripts/smoke-edge-fn.mjs fleet-core",
     "deploy:fleet-fuel": "node scripts/build-edge-bundle.mjs fleet-fuel && npx supabase functions deploy fleet-fuel --use-api --project-ref csfllzzastacofsvcdsc && node scripts/smoke-edge-fn.mjs fleet-fuel",
     "deploy:fleet-toll": "node scripts/build-edge-bundle.mjs fleet-toll && npx supabase functions deploy fleet-toll --use-api --project-ref csfllzzastacofsvcdsc && node scripts/smoke-edge-fn.mjs fleet-toll",
     "deploy:fleet-claims": "node scripts/build-edge-bundle.mjs fleet-claims && npx supabase functions deploy fleet-claims --use-api --project-ref csfllzzastacofsvcdsc && node scripts/smoke-edge-fn.mjs fleet-claims",

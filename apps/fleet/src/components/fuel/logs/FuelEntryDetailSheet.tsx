@@ -152,6 +152,7 @@ export function FuelEntryDetailSheet({
   const editBlocked =
     isSealed ||
     editGate.kind === 'awaiting_card_readonly' ||
+    editGate.kind === 'awaiting_cash_readonly' ||
     (editGate.kind === 'resolve_split_cash' && !onResolveSplitCash);
   const fuelType =
     entry.fuelType ||
@@ -433,7 +434,7 @@ export function FuelEntryDetailSheet({
 
         {/* Footer actions */}
         <div className="flex flex-col gap-2 border-t border-slate-100 bg-slate-50/50 p-4">
-          {editGate.kind === 'awaiting_card_readonly' ? (
+          {editGate.kind === 'awaiting_card_readonly' || editGate.kind === 'awaiting_cash_readonly' ? (
             <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
               {editGate.reason}
             </div>
@@ -465,7 +466,7 @@ export function FuelEntryDetailSheet({
                 className="gap-1.5 text-xs"
                 disabled={editBlocked}
                 title={
-                  editGate.kind === 'awaiting_card_readonly'
+                  editGate.kind === 'awaiting_card_readonly' || editGate.kind === 'awaiting_cash_readonly'
                     ? editGate.reason
                     : editBlocked
                       ? 'Locked seal — edit disabled'

@@ -12,6 +12,7 @@ import { countBy, listByBatch, queryFleet, fleetDb, fleetTable, rowToKvValue } f
 import OpenAI from "npm:openai";
 import { GoogleGenerativeAI } from "npm:@google/generative-ai";
 import * as kv from "./kv_store.tsx";
+import { splitCashAwaitingSaveBlocked } from "../../../packages/fuel-core/src/fuelSplitCashLifecycle.ts";
 import * as cache from "./cache.ts";
 import { trackedProviderCall, logProviderCall, checkProviderGuards, ProviderBlockedError } from "./api_usage_logger.ts";
 import * as memCache from "./memory_cache.ts";
@@ -2657,6 +2658,22 @@ export function registerResidualMonolithRoutes(app: Hono) {
       const previousTransaction = await kv.get(`transaction:${transaction.id}`);
       if (!transaction.timestamp) {
           transaction.timestamp = new Date().toISOString();
+      }
+
+      if (previousTransaction && typeof previousTransaction === "object") {
+        const cashGuard = splitCashAwaitingSaveBlocked(
+          previousTransaction as { amount?: number; status?: string; metadata?: Record<string, unknown> | null },
+          transaction as { amount?: number; status?: string; metadata?: Record<string, unknown> | null },
+        );
+        if (cashGuard.blocked) {
+          return c.json(
+            {
+              error: "Split cash is waiting on the gas card statement. Use Escalate after 14 days, or wait for the CSV.",
+              code: cashGuard.code,
+            },
+            409,
+          );
+        }
       }
 
       // Drivers submit Fuel/expenses from the Play Store app; fleet staff use transactions.edit.

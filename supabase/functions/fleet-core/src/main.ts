@@ -1,7 +1,7 @@
 /**
  * fleet-core — ADR-0021 residual home (successor name for make-server-37f42386).
  * Mounts the same residual registrar; pathStyle maps /fleet-core → /make-server-37f42386.
- * Keep make-server slug live until N-day zero-traffic soak (ADR-0022).
+ * Public slug make-server-37f42386 is retired. Internal /make-server-37f42386 paths stay.
  */
 import { createFleetFunction } from "../../_shared/edgeKernel.ts";
 import { assertRequiredEnv } from "../../_fleet-server/env_boot.ts";

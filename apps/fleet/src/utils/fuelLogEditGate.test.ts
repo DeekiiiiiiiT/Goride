@@ -30,6 +30,25 @@ describe('classifyFuelLogEdit', () => {
       },
     } as FuelEntry;
     expect(classifyFuelLogEdit(card, [cash, card])).toEqual({
+      kind: 'awaiting_cash_readonly',
+      reason:
+        'Cash is calculated automatically when Roam uploads the gas card statement. No action needed unless a fill has waited 14+ days.',
+    });
+  });
+
+  it('routes a stale awaiting cash split to resolve', () => {
+    const cash = {
+      id: 'c1',
+      date: '2020-01-01',
+      paymentSource: 'Personal',
+      metadata: {
+        fillGroupId: 'fg-1',
+        splitRole: 'cash',
+        awaitingCashStatement: true,
+        splitVolumeOwner: true,
+      },
+    } as FuelEntry;
+    expect(classifyFuelLogEdit(cash, [cash])).toEqual({
       kind: 'resolve_split_cash',
       fillGroupId: 'fg-1',
     });
