@@ -33,6 +33,7 @@ export type OrderHistoryEntry = {
   processingFee?: number;
   tax?: number;
   tip?: number;
+  refunds?: Array<{ id: string; amount: number; status: string; reason?: string }>;
 };
 
 export function isLiveOrderStatus(status: string): boolean {
@@ -215,6 +216,14 @@ export function mapApiOrderToDetails(order: Record<string, unknown>): OrderHisto
     processingFee: Number(order.processing_fee ?? 0),
     tax: Number(order.tax ?? 0),
     tip: Number(order.tip ?? 0),
+    refunds: Array.isArray(order.refunds)
+      ? (order.refunds as Array<Record<string, unknown>>).map((row) => ({
+          id: String(row.id || ''),
+          amount: Number(row.amount || 0),
+          status: String(row.status || ''),
+          reason: row.reason ? String(row.reason) : undefined,
+        }))
+      : [],
   };
 }
 

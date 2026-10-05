@@ -1,19 +1,10 @@
 /**
- * Admin order refund orchestration — one money path via payments.refunds.
- * Queues pending row always; provider execution via POST /payments/refunds when called with auth.
+ * One refund path. The same row is retried. The ledger posts only after the provider confirms.
  */
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import type { ProductAdminUser } from "../../_shared/productAdmin.ts";
 import { getDb, writeKvAudit } from "./merchantAdminShared.ts";
 import { maybeClawbackGrowthGuarantee } from "../growthGuarantee.ts";
-
-function getPaymentsDb() {
-  return createClient(
-    Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-    { db: { schema: "payments" } },
-  );
-}
+import { queueAndExecuteRefund } from "../../_shared/rushMoney/executeRefund.ts";
 
 export type RefundOrchestratorResult =
   | {
@@ -25,10 +16,6 @@ export type RefundOrchestratorResult =
     }
   | { ok: false; status: number; error: string };
 
-function roundMoney(n: number) {
-  return Math.round(n * 100) / 100;
-}
-
 /** Resolve eligible refund amount and create/execute refund for an order. */
 export async function orchestrateOrderRefund(opts: {
   orderId: string;
@@ -36,14 +23,15 @@ export async function orchestrateOrderRefund(opts: {
   reason: string;
   admin: ProductAdminUser;
   authHeader: string;
+  idempotencyKey?: string;
+  fault?: string | null;
 }): Promise<RefundOrchestratorResult> {
-  const { orderId, reason, admin, authHeader } = opts;
+  const { orderId, reason, admin } = opts;
   const db = getDb();
-  const pdb = getPaymentsDb();
 
   const { data: order, error: orderErr } = await db
     .from("orders")
-    .select("id, payment_status, total, customer_id, status")
+    .select("id, payment_status, status")
     .eq("id", orderId)
     .maybeSingle();
 
@@ -52,128 +40,19 @@ export async function orchestrateOrderRefund(opts: {
   }
 
   const priorOrderStatus = String((order as { status?: string }).status ?? "");
-  const paymentStatus = String(order.payment_status || "");
-  if (!["paid", "refund_pending", "partially_refunded"].includes(paymentStatus)) {
-    return {
-      ok: false,
-      status: 400,
-      error: `Cannot refund order with payment_status=${paymentStatus || "unknown"}`,
-    };
-  }
+  const queued = await queueAndExecuteRefund({
+    orderId,
+    amount: opts.amount,
+    reason,
+    fault: opts.fault ?? null,
+    initiatedBy: admin.id,
+    idempotencyKey: opts.idempotencyKey
+      ?? `refund:${orderId}:${opts.amount ?? "full"}:${reason}`.slice(0, 180),
+  });
+  if (!queued.ok) return queued;
 
-  const { data: txn } = await pdb
-    .from("transactions")
-    .select("id, amount, currency, status")
-    .eq("order_id", orderId)
-    .eq("status", "completed")
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  if (!txn?.id) {
-    return { ok: false, status: 400, error: "No completed payment transaction for this order" };
-  }
-
-  const paidAmount = Number(txn.amount) || 0;
-  const { data: priorRefunds } = await pdb
-    .from("refunds")
-    .select("amount, status")
-    .eq("order_id", orderId)
-    .in("status", ["pending", "completed"]);
-
-  const alreadyRefunded = (priorRefunds || []).reduce(
-    (sum, r) => sum + Number((r as { amount?: number }).amount || 0),
-    0,
-  );
-  const eligible = roundMoney(Math.max(0, paidAmount - alreadyRefunded));
-  if (eligible <= 0) {
-    return { ok: false, status: 400, error: "Order has no remaining refundable amount" };
-  }
-
-  const requested = opts.amount != null ? roundMoney(Number(opts.amount)) : eligible;
-  if (!Number.isFinite(requested) || requested <= 0) {
-    return { ok: false, status: 400, error: "Refund amount must be positive" };
-  }
-  if (requested > eligible + 0.001) {
-    return {
-      ok: false,
-      status: 400,
-      error: `Refund amount exceeds eligible ${eligible.toFixed(2)}`,
-    };
-  }
-
-  const refundAmount = requested;
-  const isFull = refundAmount >= eligible - 0.001;
-
-  // Prefer payments edge for provider execution (forwards admin JWT)
-  const paymentsUrl = `${Deno.env.get("SUPABASE_URL")}/functions/v1/payments/refunds`;
-  let refundRow: Record<string, unknown> | null = null;
-  let providerCompleted = false;
-  let providerError: string | undefined;
-
-  try {
-    const res = await fetch(paymentsUrl, {
-      method: "POST",
-      headers: {
-        Authorization: authHeader,
-        apikey: Deno.env.get("SUPABASE_ANON_KEY") || Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "",
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        transactionId: txn.id,
-        amount: refundAmount,
-        reason,
-      }),
-    });
-    const json = await res.json().catch(() => ({})) as {
-      refund?: Record<string, unknown>;
-      error?: string;
-    };
-    if (json.refund) {
-      refundRow = json.refund;
-      providerCompleted = String(json.refund.status) === "completed";
-      if (!res.ok && json.error) providerError = json.error;
-    } else if (!res.ok) {
-      // Fall through to direct queue insert
-      providerError = json.error || `payments/refunds ${res.status}`;
-    }
-  } catch (e) {
-    providerError = e instanceof Error ? e.message : "payments/refunds unreachable";
-  }
-
-  // Queue-first honesty: if payments call did not create a row, insert pending locally
-  if (!refundRow) {
-    const { data: inserted, error: insertErr } = await pdb
-      .from("refunds")
-      .insert({
-        transaction_id: txn.id,
-        order_id: orderId,
-        amount: refundAmount,
-        currency: (txn as { currency?: string }).currency || "JMD",
-        reason,
-        status: "pending",
-        initiated_by: admin.id,
-      })
-      .select()
-      .single();
-    if (insertErr || !inserted) {
-      return {
-        ok: false,
-        status: 500,
-        error: insertErr?.message || providerError || "Failed to queue refund",
-      };
-    }
-    refundRow = inserted as Record<string, unknown>;
-  }
-
-  const nextPaymentStatus = providerCompleted
-    ? (isFull ? "refunded" : "partially_refunded")
-    : "refund_pending";
-
-  await db
-    .from("orders")
-    .update({ payment_status: nextPaymentStatus, updated_at: new Date().toISOString() })
-    .eq("id", orderId);
+  const refundAmount = Number(queued.refund.amount ?? opts.amount ?? 0);
+  const nextPaymentStatus = queued.payment_status;
 
   await db.from("order_events").insert({
     order_id: orderId,
@@ -191,8 +70,7 @@ export async function orchestrateOrderRefund(opts: {
     `amount=${refundAmount} status=${nextPaymentStatus} reason=${reason}`,
   );
 
-  // Full refund of a delivered/completed order — claw GG share if period was credited
-  if (isFull && nextPaymentStatus === "refunded") {
+  if (nextPaymentStatus === "refunded") {
     try {
       await maybeClawbackGrowthGuarantee(db, {
         orderId,
@@ -205,33 +83,35 @@ export async function orchestrateOrderRefund(opts: {
 
   return {
     ok: true,
-    refund: refundRow,
+    refund: queued.refund,
     payment_status: nextPaymentStatus,
-    providerCompleted,
-    providerError,
+    providerCompleted: queued.providerCompleted,
+    providerError: queued.providerError,
   };
 }
 
-/** System/customer-initiated refund without admin JWT (queues via service role). */
+/** System/customer-initiated refund without admin JWT. */
 export async function orchestrateSystemOrderRefund(opts: {
   orderId: string;
   amount?: number | null;
   reason: string;
   initiatedBy: "customer" | "system";
   actorId?: string | null;
+  idempotencyKey?: string;
+  fault?: string | null;
 }): Promise<RefundOrchestratorResult> {
   const syntheticAdmin = {
     id: opts.actorId || "system",
     email: opts.initiatedBy === "customer" ? "customer-self-serve" : "system-auto",
     roles: [] as string[],
   };
-  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
-  const authHeader = `Bearer ${serviceKey}`;
   return orchestrateOrderRefund({
     orderId: opts.orderId,
     amount: opts.amount,
-    reason: opts.reason,
+    reason: opts.    reason,
+    fault: opts.fault ?? null,
     admin: syntheticAdmin as ProductAdminUser,
-    authHeader,
+    authHeader: "",
+    idempotencyKey: opts.idempotencyKey ?? `cancel:${opts.orderId}`,
   });
 }

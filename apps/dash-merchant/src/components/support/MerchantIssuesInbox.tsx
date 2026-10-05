@@ -12,6 +12,7 @@ type MerchantSupportCase = {
   order_id?: string;
   fault_attribution?: string;
   merchant_contested?: boolean;
+  chargeWords?: string;
   created_at: string;
 };
 
@@ -90,6 +91,7 @@ export default function MerchantIssuesInbox() {
                 {item.status.replace(/_/g, ' ')}
                 {item.fault_attribution ? ` · ${item.fault_attribution.replace(/_/g, ' ')}` : ''}
               </p>
+              <p className="text-body-sm text-on-surface">{item.chargeWords || 'You are not charged for this issue.'}</p>
               {!item.merchant_contested && item.status !== 'closed' ? (
                 contestId === item.id ? (
                   <div className="mt-inset-sm space-y-inset-xs">

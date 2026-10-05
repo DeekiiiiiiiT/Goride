@@ -52,6 +52,8 @@ export default function ReportIssuePage({
   const [submissionResult, setSubmissionResult] = useState<Awaited<
     ReturnType<typeof submitCustomerOrderIssue>
   > | null>(null);
+  const [selectedItems, setSelectedItems] = useState<string[]>([]);
+  const [orderItems, setOrderItems] = useState<Array<{ id: string; name: string; price: number; quantity: number }>>([]);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const { data, isLoading } = useQuery({
@@ -92,9 +94,44 @@ export default function ReportIssuePage({
     onNavigate(returnTo);
   };
 
+  useEffect(() => {
+    if (!selectedOrder || (issueType !== 'missing' && issueType !== 'wrong')) {
+      setOrderItems([]);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+      const res = await fetch(`${API_ENDPOINTS.delivery}/orders/${selectedOrder}`, {
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
+      if (!res.ok || cancelled) return;
+      const body = await res.json();
+      const raw = (body.order?.items ?? []) as Array<Record<string, unknown>>;
+      setOrderItems(raw.map((item, index) => ({
+        id: String(item.id || item.menu_item_id || index),
+        name: String(item.name || item.label || 'Item'),
+        price: Number(item.price || item.unit_price || 0),
+        quantity: Number(item.quantity || 1),
+      })));
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedOrder, issueType]);
+
   const handleSubmit = async () => {
     if (!selectedOrder) {
       toast.error('Select an order');
+      return;
+    }
+    if ((issueType === 'missing' || issueType === 'wrong') && selectedItems.length === 0) {
+      toast.error('Choose the items');
+      return;
+    }
+    if ((issueType === 'missing' || issueType === 'wrong') && !photoPath) {
+      toast.error('Add a photo of the order');
       return;
     }
     if (details.trim().length < 8) {
@@ -108,6 +145,7 @@ export default function ReportIssuePage({
         issueType,
         notes: details.trim(),
         photoPath: photoPath || undefined,
+        itemIds: selectedItems,
       });
       setSubmissionResult(result);
       setSubmitted(true);
@@ -276,6 +314,27 @@ export default function ReportIssuePage({
           </div>
         </section>
 
+        {(issueType === 'missing' || issueType === 'wrong') && (
+          <section className="flex flex-col gap-2">
+            <h3 className="text-label-md font-semibold uppercase tracking-wider">Which items</h3>
+            {orderItems.length === 0 && <p className="text-body-sm text-on-surface-variant">Select the order to see its items.</p>}
+            {orderItems.map((item) => {
+              const checked = selectedItems.includes(item.id);
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => setSelectedItems((current) => checked ? current.filter((id) => id !== item.id) : [...current, item.id])}
+                  className={`flex justify-between items-center rounded-lg border p-3 text-left ${checked ? 'border-primary' : 'border-outline-variant'}`}
+                >
+                  <span className="text-body-md">{item.quantity}x {item.name}</span>
+                  <span className="text-body-sm text-on-surface-variant">J${(item.price * item.quantity).toFixed(2)}</span>
+                </button>
+              );
+            })}
+          </section>
+        )}
+
         <section className="flex flex-col gap-2">
           <h3 className="text-label-md font-semibold uppercase tracking-wider">Details</h3>
           <textarea
@@ -287,7 +346,9 @@ export default function ReportIssuePage({
         </section>
 
         <section className="flex flex-col gap-2">
-          <h3 className="text-label-md font-semibold uppercase tracking-wider">Photo (optional)</h3>
+          <h3 className="text-label-md font-semibold uppercase tracking-wider">
+            {issueType === 'missing' || issueType === 'wrong' ? 'Photo' : 'Photo (optional)'}
+          </h3>
           <input
             ref={fileRef}
             type="file"

@@ -34,7 +34,7 @@ import { RemittancePausedScreen } from '@/pages/remittance/RemittancePausedScree
 import { hydrateCourierSettingsFromCloud } from '@/lib/courierSettingsSync';
 import { buildStackedRouteFromLegs, buildStackedOfferFromPending } from '@/lib/stackedRouteBuilder';
 import { isCourierStackedEnabled } from '@/lib/courierFeatureFlags';
-import { commitCancel, commitDelivered, commitPickup, commitUnassign } from '@/lib/orderMutation';
+import { commitDelivered, commitPickup, commitUnassign } from '@/lib/orderMutation';
 import { loadOnlineSince, persistOnlineSince } from '@/lib/courierStorage';
 import { supabase } from '@/lib/supabase';
 import type { StackedRouteStop } from '@/lib/mockStackedRoute';
@@ -78,6 +78,7 @@ import {
   fetchCourierStack,
   patchCourierLocation,
   putCourierAvailability,
+  collectCash,
   submitCourierIssue,
   type AvailableOrder,
 } from '@/lib/courierApi';
@@ -499,25 +500,18 @@ export function CourierHomePage({ onSignOut }: CourierHomePageProps) {
     async (issueId: string, notes?: string, photoUrl?: string) => {
       const orderId = realDispatchProvider.activeOrderId || delivery.orderId;
       setMutationSubmitting(true);
-      const issueOk = await submitCourierIssue(orderId, issueId, notes, photoUrl);
-      if (!issueOk) {
+      const issue = await submitCourierIssue(orderId, issueId, notes, photoUrl);
+      if (!issue.ok) {
         setMutationSubmitting(false);
         toast.error('Could not report issue', 'Check your connection and try again.');
         return;
       }
-      if (issueId === 'restaurant_closed' || issueId === 'customer_unavailable') {
-        const cancelResult = await commitCancel(orderId, issueId);
-        setMutationSubmitting(false);
-        if (!cancelResult.ok) {
-          toast.error('Cancel failed', cancelResult.error);
-          return;
-        }
-        setReportIssueOpen(false);
-        dispatch.setDeliveryPhase('order-cancelled');
-        return;
-      }
-      setMutationSubmitting(false);
+      toast.success(issue.review ? 'Sent for review' : 'Delivery update', issue.words || 'Saved.');
       setReportIssueOpen(false);
+      setMutationSubmitting(false);
+      if (!issue.review && (issueId === 'customer_unavailable' || issueId === 'wrong_address' || issueId === 'restaurant_closed')) {
+        dispatch.setDeliveryPhase('order-cancelled');
+      }
     },
     [dispatch, delivery.orderId],
   );
@@ -594,8 +588,20 @@ export function CourierHomePage({ onSignOut }: CourierHomePageProps) {
     [dispatch, delivery.vertical_type, delivery.orderId],
   );
 
-  const handleConfirmHandoff = useCallback(async () => {
+  const handleConfirmHandoff = useCallback(async (cashReceived?: number) => {
     const orderId = realDispatchProvider.activeOrderId || delivery.orderId;
+    if (cashReceived != null) {
+      if (!Number.isFinite(cashReceived) || cashReceived < 0) {
+        toast.error('Enter the cash you received');
+        return;
+      }
+      const cash = await collectCash(orderId, cashReceived);
+      if (!cash.ok) {
+        toast.error('Cash not recorded', cash.error);
+        return;
+      }
+      toast.success('Cash recorded', cash.words);
+    }
     setMutationSubmitting(true);
     const result = await commitDelivered(orderId);
     setMutationSubmitting(false);
@@ -606,17 +612,34 @@ export function CourierHomePage({ onSignOut }: CourierHomePageProps) {
     dispatch.setDeliveryPhase('complete');
   }, [dispatch, delivery.orderId]);
 
-  const handleLeaveAtSafeLocation = useCallback(
+  const handleSafeDrop = useCallback(
     async (photoPath: string) => {
       const orderId = realDispatchProvider.activeOrderId || delivery.orderId;
       setMutationSubmitting(true);
-      const result = await commitDelivered(orderId, photoPath);
+      const result = await commitDelivered(orderId, photoPath, 'Left at a safe spot');
       setMutationSubmitting(false);
       if (!result.ok) {
         toast.error('Delivery failed', result.error);
         return;
       }
+      toast.success('Left at a safe spot', 'The customer is charged and you are paid for this trip.');
       dispatch.setDeliveryPhase('complete');
+    },
+    [dispatch, delivery.orderId],
+  );
+  const handleCantDeliver = useCallback(
+    async (photoPath: string) => {
+      const orderId = realDispatchProvider.activeOrderId || delivery.orderId;
+      setMutationSubmitting(true);
+      const issue = await submitCourierIssue(orderId, 'customer_unavailable', undefined, photoPath);
+      setMutationSubmitting(false);
+      if (!issue.ok) {
+        toast.error('Could not finish', 'Check your connection and try again.');
+        return;
+      }
+      toast.success('Delivery update', issue.words || 'A person will decide.');
+      if (issue.review) return;
+      dispatch.setDeliveryPhase('order-cancelled');
     },
     [dispatch, delivery.orderId],
   );
@@ -879,16 +902,20 @@ export function CourierHomePage({ onSignOut }: CourierHomePageProps) {
       {deliveryPhase === 'confirm-handoff' && !acceptedStacked && hasActiveDeliveryData && (
         <ConfirmHandoffPage
           onBack={() => dispatch.setDeliveryPhase('at-customer')}
-          onComplete={() => void handleConfirmHandoff()}
+          showCash={delivery.paymentMethod === 'cash' || delivery.paymentMethod === 'cod'}
+          cashDue={delivery.cashDue}
+          onComplete={(cashReceived) => void handleConfirmHandoff(cashReceived)}
           onCustomerUnavailable={() => dispatch.setDeliveryPhase('customer-unavailable')}
         />
       )}
 
       {deliveryPhase === 'customer-unavailable' && !acceptedStacked && hasActiveDeliveryData && (
         <CustomerUnavailablePage
+          orderId={realDispatchProvider.activeOrderId || delivery.orderId}
           customerPhone={delivery.customerPhone}
           onClose={() => dispatch.setDeliveryPhase('at-customer')}
-          onLeaveAtSafeLocation={(photoPath) => void handleLeaveAtSafeLocation(photoPath)}
+          onCantDeliver={(photoPath) => void handleCantDeliver(photoPath)}
+          onSafeDrop={(photoPath) => void handleSafeDrop(photoPath)}
         />
       )}
 

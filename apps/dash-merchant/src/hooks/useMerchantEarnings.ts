@@ -13,6 +13,8 @@ export interface MerchantEarningsData {
   weeklySummary: WeeklyEarningsSummary;
   weeklyBars: WeeklyEarningsBar[];
   transactions: EarningsTransaction[];
+  books?: { availableWords: string; waitingWords: string; heldWords: string };
+  statement?: Array<{ orderId: string; words: string }>;
 }
 
 export function useMerchantEarnings() {

@@ -70,9 +70,9 @@ export function ShopAndPickPage({
   const handleCantFind = async (item: { id: string; label: string }) => {
     const orderId = realDispatchProvider.activeOrderId || delivery.orderId;
     setReportingId(item.id);
-    const ok = await submitCourierIssue(orderId, 'wrong_items', `cant_find:${item.label}`);
+    const reported = await submitCourierIssue(orderId, 'wrong_items', `cant_find:${item.label}`);
     setReportingId(null);
-    if (ok) {
+    if (reported.ok) {
       toast.success("Can't find logged", item.label);
     } else {
       toast.error('Could not log item', 'Try Report issue instead.');

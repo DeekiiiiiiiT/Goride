@@ -2,12 +2,15 @@ import React, { useEffect, useRef, useState } from 'react';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
 import { openPhoneCall, toDialablePhone } from '@/lib/contactLinks';
 import { uploadAndGetProofUrl } from '@/lib/courierFileUpload';
+import { logDeliveryAttempt } from '@/lib/courierApi';
 import { toast } from '@/lib/toast';
 
 type CustomerUnavailablePageProps = {
+  orderId: string;
   customerPhone?: string | null;
   onClose: () => void;
-  onLeaveAtSafeLocation: (photoPath: string) => void;
+  onCantDeliver: (photoPath: string) => void;
+  onSafeDrop: (photoPath: string) => void;
 };
 
 const INITIAL_SECONDS = 300;
@@ -18,18 +21,44 @@ function formatTime(seconds: number): string {
   return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
 }
 
+function readPosition(): Promise<{ latitude?: number; longitude?: number }> {
+  return new Promise((resolve) => {
+    if (!navigator.geolocation) return resolve({});
+    navigator.geolocation.getCurrentPosition(
+      (pos) => resolve({ latitude: pos.coords.latitude, longitude: pos.coords.longitude }),
+      () => resolve({}),
+      { enableHighAccuracy: true, timeout: 8000 },
+    );
+  });
+}
+
 export function CustomerUnavailablePage({
+  orderId,
   customerPhone,
   onClose,
-  onLeaveAtSafeLocation,
+  onCantDeliver,
+  onSafeDrop,
 }: CustomerUnavailablePageProps) {
   const [secondsLeft, setSecondsLeft] = useState(INITIAL_SECONDS);
   const [photoPath, setPhotoPath] = useState<string | null>(null);
+  const [photoFor, setPhotoFor] = useState<'cancel' | 'safe' | null>(null);
   const [uploading, setUploading] = useState(false);
   const [showPhotoStep, setShowPhotoStep] = useState(false);
+  const [place, setPlace] = useState<{ latitude?: number; longitude?: number }>({});
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const waitLogged = useRef(false);
   const timerExpired = secondsLeft <= 0;
   const dialable = toDialablePhone(customerPhone);
+
+  useEffect(() => {
+    void readPosition().then(setPlace);
+  }, []);
+
+  useEffect(() => {
+    if (!timerExpired || waitLogged.current) return;
+    waitLogged.current = true;
+    void logDeliveryAttempt(orderId, 'wait', { waitSeconds: INITIAL_SECONDS, ...place });
+  }, [timerExpired, orderId, place]);
 
   useEffect(() => {
     if (secondsLeft <= 0) return;
@@ -48,6 +77,7 @@ export function CustomerUnavailablePage({
       return;
     }
     setPhotoPath(path);
+    void logDeliveryAttempt(orderId, 'photo', { photoUrl: path, ...place });
   };
 
   return (
@@ -88,11 +118,25 @@ export function CustomerUnavailablePage({
           <section className="grid grid-cols-1 gap-4">
             <button
               type="button"
-              onClick={() => openPhoneCall(dialable)}
+              onClick={() => {
+                void logDeliveryAttempt(orderId, 'call', place);
+                openPhoneCall(dialable);
+              }}
               className="flex flex-col items-center justify-center bg-primary text-on-primary rounded-xl py-4 px-2 shadow-primary active:scale-95 min-h-20"
             >
               <MaterialIcon name="call" className="mb-2" />
               <span className="text-xs font-semibold uppercase tracking-wide">Call Customer</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                void logDeliveryAttempt(orderId, 'sms', place);
+                window.location.href = `sms:${dialable}`;
+              }}
+              className="flex flex-col items-center justify-center bg-surface text-primary rounded-xl py-4 px-2 border border-outline-variant active:scale-95 min-h-20"
+            >
+              <MaterialIcon name="sms" className="mb-2" />
+              <span className="text-xs font-semibold uppercase tracking-wide">Text Customer</span>
             </button>
           </section>
         )}
@@ -105,29 +149,48 @@ export function CustomerUnavailablePage({
           </h3>
 
           {!showPhotoStep ? (
-            <button
-              type="button"
-              onClick={() => timerExpired && setShowPhotoStep(true)}
-              disabled={!timerExpired}
-              className={`flex items-center justify-between w-full bg-surface p-4 rounded-xl shadow-soft text-left border border-transparent ${
-                timerExpired
-                  ? 'hover:border-outline-variant active:scale-95'
-                  : 'opacity-50 cursor-not-allowed'
-              }`}
-            >
-              <div className="flex items-center gap-4">
-                <div className="bg-surface-container-low p-2 rounded-full text-primary">
-                  <MaterialIcon name="place" filled />
+            <>
+              <button
+                type="button"
+                onClick={() => {
+                  setPhotoFor('safe');
+                  setShowPhotoStep(true);
+                }}
+                className="flex items-center justify-between w-full bg-surface p-4 rounded-xl shadow-soft text-left border border-transparent hover:border-outline-variant active:scale-95"
+              >
+                <div className="flex items-center gap-4">
+                  <div className="bg-surface-container-low p-2 rounded-full text-primary">
+                    <MaterialIcon name="door_front" />
+                  </div>
+                  <div>
+                    <span className="block text-base font-semibold text-on-surface">Leave at a safe spot</span>
+                    <span className="block text-sm text-muted">Photo and your location. The customer is still charged.</span>
+                  </div>
                 </div>
-                <div>
-                  <span className="block text-base font-semibold text-on-surface">
-                    Leave at safe location
-                  </span>
-                  <span className="block text-sm text-muted">Requires a photo</span>
+                <MaterialIcon name="chevron_right" className="text-muted" />
+              </button>
+              <button
+                type="button"
+                onClick={() => timerExpired && (setPhotoFor('cancel'), setShowPhotoStep(true))}
+                disabled={!timerExpired}
+                className={`flex items-center justify-between w-full bg-surface p-4 rounded-xl shadow-soft text-left border border-transparent ${
+                  timerExpired
+                    ? 'hover:border-outline-variant active:scale-95'
+                    : 'opacity-50 cursor-not-allowed'
+                }`}
+              >
+                <div className="flex items-center gap-4">
+                  <div className="bg-surface-container-low p-2 rounded-full text-primary">
+                    <MaterialIcon name="place" filled />
+                  </div>
+                  <div>
+                    <span className="block text-base font-semibold text-on-surface">Can't deliver</span>
+                    <span className="block text-sm text-muted">Wait five minutes, then take a photo</span>
+                  </div>
                 </div>
-              </div>
-              <MaterialIcon name="chevron_right" className="text-muted" />
-            </button>
+                <MaterialIcon name="chevron_right" className="text-muted" />
+              </button>
+            </>
           ) : (
             <div className="bg-surface p-4 rounded-xl shadow-soft space-y-4">
               <input
@@ -149,10 +212,14 @@ export function CustomerUnavailablePage({
               <button
                 type="button"
                 disabled={!photoPath || uploading}
-                onClick={() => photoPath && onLeaveAtSafeLocation(photoPath)}
+                onClick={() => {
+                  if (!photoPath) return;
+                  if (photoFor === 'safe') onSafeDrop(photoPath);
+                  else onCantDeliver(photoPath);
+                }}
                 className="w-full min-h-12 bg-primary text-on-primary rounded-xl font-semibold disabled:opacity-50"
               >
-                Complete delivery
+                {photoFor === 'safe' ? 'Complete delivery' : 'Customer still unavailable'}
               </button>
             </div>
           )}

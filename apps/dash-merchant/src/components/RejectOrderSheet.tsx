@@ -154,7 +154,7 @@ export default function RejectOrderSheet({
               size={20}
             />
             <p className="text-body-sm text-on-error-container">
-              Frequent rejections may affect your store&apos;s visibility to customers.
+              The customer will be fully refunded. After 5 rejections in 30 days a fee can apply. A real stock-out with a substitute offered is not counted the same way.
             </p>
           </div>
         </div>

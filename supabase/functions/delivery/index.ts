@@ -36,9 +36,9 @@ import {
 } from "./merchantRestaurantRoutes.ts";
 import { assertMerchantAcceptingOrders } from "./merchantOpenCheck.ts";
 import { registerMerchantInventoryRoutes } from "./merchantInventoryRoutes.ts";
+import { registerRushMoneyRoutes } from "./rushMoney/routes.ts";
 import { registerCustomerOrderRoutes } from "./customerOrderRoutes.ts";
 import { registerMerchantSupportRoutes } from "./merchantSupportRoutes.ts";
-import { reverseOrderOutputTax } from "../_shared/gctLedger.ts";
 import { registerCustomerAccountRoutes } from "./customerAccountRoutes.ts";
 import { registerCustomerDiscoveryRoutes } from "./customerDiscoveryRoutes.ts";
 import { registerRushPassRoutes } from "./rushPassRoutes.ts";
@@ -47,7 +47,6 @@ import {
   requireActiveCourier,
   COURIER_TRANSITIONS,
   dispatchOffersForOrder,
-  applyCancelCompensation,
   completeStackLeg,
 } from "./courierConsumerRoutes.ts";
 import { registerDashHealthRoutes } from "./dashHealthRoutes.ts";
@@ -55,7 +54,6 @@ import { registerBankPayoutRoutes } from "./bankPayoutRoutes.ts";
 import { notifyCustomerOrderStatus } from "../_shared/dashOrderSms.ts";
 import { handleOrderDelivered } from "./courierCashLedger.ts";
 import { syncOrderToFleetKv } from "../_shared/orderToFleetTrip.ts";
-import { maybeClawbackGrowthGuarantee } from "./growthGuarantee.ts";
 import {
   aggregateAnalyticsByDay,
   ANALYTICS_CACHE_CONTROL,
@@ -1157,31 +1155,6 @@ app.put("/merchant/menu/reorder", async (c) => {
 // Orders (customer place/detail/history → customerOrderRoutes.ts)
 // ============================================================================
 
-// Update order status
-/** When any actor cancels an assigned order, free the courier's availability slot. */
-async function clearCourierActiveOrderOnCancel(
-  serviceSb: ReturnType<typeof getServiceSupabase>,
-  status: string,
-  courierId: string | null | undefined,
-  orderId?: string,
-) {
-  if (status !== "cancelled") return;
-  // Clear by driver_id when known
-  if (courierId) {
-    await serviceSb
-      .from("courier_availability")
-      .update({ active_order_id: null })
-      .eq("driver_id", courierId);
-  }
-  // Also clear by active_order_id so a mismatched courier_id cannot leave a dangling slot
-  if (orderId) {
-    await serviceSb
-      .from("courier_availability")
-      .update({ active_order_id: null })
-      .eq("active_order_id", orderId);
-  }
-}
-
 app.put("/orders/:id/status", async (c) => {
   const deviceToken = c.req.header("X-Station-Device-Token");
   const authHeader = c.req.header("Authorization");
@@ -1216,17 +1189,23 @@ app.put("/orders/:id/status", async (c) => {
       return c.json({ error: `Invalid status transition from ${orderRow.status} to ${status}` }, 400);
     }
 
+    if (status === "cancelled") {
+      const { cancelOrder } = await import("./rushMoney/cancelOrder.ts");
+      const result = await cancelOrder(serviceSb, {
+        orderId: id,
+        actor: "merchant",
+        reason: String(notes || "Restaurant cancelled the order"),
+      });
+      if (!result.ok) return c.json({ error: result.error }, result.status as 400);
+      return c.json({ order: result.order, quote: result.quote });
+    }
+
     const updateData: Record<string, unknown> = { status };
     if (status === "accepted") updateData.accepted_at = new Date().toISOString();
     if (status === "preparing") updateData.preparing_at = new Date().toISOString();
     if (status === "ready") updateData.ready_at = new Date().toISOString();
     if (status === "picked_up") updateData.picked_up_at = new Date().toISOString();
     if (status === "delivered") updateData.delivered_at = new Date().toISOString();
-    if (status === "cancelled") {
-      updateData.cancelled_at = new Date().toISOString();
-      updateData.cancelled_by = actorType;
-      updateData.cancellation_reason = notes;
-    }
     if (estimatedPrepTimeMins != null) {
       updateData.estimated_prep_time_mins = estimatedPrepTimeMins;
     }
@@ -1239,25 +1218,6 @@ app.put("/orders/:id/status", async (c) => {
       .single();
 
     if (updateError) return c.json({ error: updateError.message }, 500);
-
-    await clearCourierActiveOrderOnCancel(
-      serviceSb,
-      status,
-      orderRow.courier_id as string | null | undefined,
-      id,
-    );
-    if (status === "cancelled") {
-      await applyCancelCompensation(serviceSb, id, String(actorType));
-      await reverseOrderOutputTax(serviceSb, id);
-      try {
-        await maybeClawbackGrowthGuarantee(serviceSb, {
-          orderId: id,
-          priorStatus: String(orderRow.status ?? ""),
-        });
-      } catch (e) {
-        console.error("[gg-clawback] device cancel", e);
-      }
-    }
 
     const shiftHeader = c.req.header("X-Staff-Shift-Token");
     let teamMemberId: string | null = null;
@@ -1314,16 +1274,38 @@ app.put("/orders/:id/status", async (c) => {
       return c.json({ error: `Invalid status transition from ${orderRow.status} to ${status}` }, 400);
     }
 
+    if (status === "cancelled") {
+      const { cancelOrder } = await import("./rushMoney/cancelOrder.ts");
+      const result = await cancelOrder(serviceSb, {
+        orderId: id,
+        actor: "courier",
+        reason: String(notes || "Courier cancelled the order"),
+        actorId: user.id,
+      });
+      if (!result.ok) return c.json({ error: result.error }, result.status as 400);
+      return c.json({ order: result.order, quote: result.quote });
+    }
+
+    if (status === "delivered") {
+      const { data: payRow } = await serviceSb
+        .from("orders")
+        .select("payment_status, cash_collected_minor")
+        .eq("id", id)
+        .maybeSingle();
+      if (
+        String(payRow?.payment_status || "") === "pending_collection"
+        && (payRow as { cash_collected_minor?: number | null } | null)?.cash_collected_minor == null
+      ) {
+        return c.json({
+          error: "Enter the cash you collected before completing this delivery",
+          code: "cash_collection_required",
+        }, 409);
+      }
+    }
+
     const updateData: Record<string, unknown> = { status };
     if (status === "picked_up") updateData.picked_up_at = new Date().toISOString();
     if (status === "delivered") updateData.delivered_at = new Date().toISOString();
-    if (status === "cancelled") {
-      updateData.cancelled_at = new Date().toISOString();
-      updateData.cancelled_by = "courier";
-      updateData.cancellation_reason = notes;
-      updateData.courier_compensation_amount = 0;
-    }
-
     const { data: updatedOrder, error: updateError } = await serviceSb
       .from("orders")
       .update(updateData)
@@ -1342,26 +1324,13 @@ app.put("/orders/:id/status", async (c) => {
       notes,
     });
 
-    if (status === "delivered" || status === "cancelled") {
+    if (status === "delivered") {
       await serviceSb
         .from("courier_availability")
         .update({ active_order_id: null })
         .eq("driver_id", user.id);
-      if (status === "delivered") {
-        await completeStackLeg(serviceSb, user.id, id);
-        await handleOrderDelivered(serviceSb, id, user.id);
-      }
-      if (status === "cancelled") {
-        await reverseOrderOutputTax(serviceSb, id);
-        try {
-          await maybeClawbackGrowthGuarantee(serviceSb, {
-            orderId: id,
-            priorStatus: String(orderRow.status ?? ""),
-          });
-        } catch (e) {
-          console.error("[gg-clawback] courier cancel", e);
-        }
-      }
+      await completeStackLeg(serviceSb, user.id, id);
+      await handleOrderDelivered(serviceSb, id, user.id);
     }
 
     await notifyCustomerOrderStatus(serviceSb, id, status);
@@ -1391,7 +1360,19 @@ app.put("/orders/:id/status", async (c) => {
   if (!allowed.includes(status)) {
     return c.json({ error: `Invalid status transition from ${order.status} to ${status}` }, 400);
   }
-  
+
+  if (status === "cancelled") {
+    const { cancelOrder } = await import("./rushMoney/cancelOrder.ts");
+    const result = await cancelOrder(serviceSb, {
+      orderId: id,
+      actor: "merchant",
+      reason: String(notes || "Restaurant cancelled the order"),
+      actorId: user?.id ?? null,
+    });
+    if (!result.ok) return c.json({ error: result.error }, result.status as 400);
+    return c.json({ order: result.order, quote: result.quote });
+  }
+
   // Update order
   const updateData: Record<string, any> = { status };
   if (status === "accepted") updateData.accepted_at = new Date().toISOString();
@@ -1400,11 +1381,6 @@ app.put("/orders/:id/status", async (c) => {
   if (status === "assigned") updateData.assigned_at = new Date().toISOString();
   if (status === "picked_up") updateData.picked_up_at = new Date().toISOString();
   if (status === "delivered") updateData.delivered_at = new Date().toISOString();
-  if (status === "cancelled") {
-    updateData.cancelled_at = new Date().toISOString();
-    updateData.cancelled_by = actorType;
-    updateData.cancellation_reason = notes;
-  }
   if (estimatedPrepTimeMins != null) {
     updateData.estimated_prep_time_mins = estimatedPrepTimeMins;
   }
@@ -1418,26 +1394,6 @@ app.put("/orders/:id/status", async (c) => {
   
   if (updateError) return c.json({ error: updateError.message }, 500);
 
-  await clearCourierActiveOrderOnCancel(
-    serviceSb,
-    status,
-    (order as { courier_id?: string | null }).courier_id,
-    id,
-  );
-  if (status === "cancelled") {
-    await applyCancelCompensation(serviceSb, id, String(actorType));
-    const courierId = (order as { courier_id?: string | null }).courier_id;
-    if (courierId) await completeStackLeg(serviceSb, String(courierId), id);
-    await reverseOrderOutputTax(serviceSb, id);
-    try {
-      await maybeClawbackGrowthGuarantee(serviceSb, {
-        orderId: id,
-        priorStatus: String(order.status ?? ""),
-      });
-    } catch (e) {
-      console.error("[gg-clawback] merchant cancel", e);
-    }
-  }
   if (status === "delivered") {
     const courierId = (order as { courier_id?: string | null }).courier_id;
     if (courierId) await completeStackLeg(serviceSb, String(courierId), id);
@@ -2265,7 +2221,7 @@ app.get("/merchant/earnings", async (c) => {
     .from("orders")
     .select("*")
     .eq("merchant_id", merchantId)
-    .eq("status", "delivered");
+    .in("status", ["delivered", "completed"]);
 
   if (ordersError) return c.json({ error: ordersError.message }, 500);
 
@@ -2287,8 +2243,67 @@ app.get("/merchant/earnings", async (c) => {
     .filter((p) => p.status === "pending")
     .reduce((sum, p) => sum + Number(p.net_amount || 0), 0);
 
-  const lifetimeNet = delivered.reduce((sum, o) => sum + orderMerchantNet(o), 0);
+  const orderIds = delivered.map((o) => o.id).filter(Boolean);
+  const { data: completedRefunds } = orderIds.length
+    ? await paymentsSb.from("refunds").select("order_id, amount, status").in("order_id", orderIds).eq("status", "completed")
+    : { data: [] as Array<{ order_id?: string; amount?: number }> };
+  const refundShare = new Map<string, number>();
+  for (const refund of completedRefunds || []) {
+    const id = String(refund.order_id || "");
+    refundShare.set(id, (refundShare.get(id) || 0) + Number(refund.amount || 0));
+  }
+  const lifetimeNet = delivered.reduce((sum, o) => {
+    const net = orderMerchantNet(o);
+    const total = Number(o.total || 0);
+    const refunded = refundShare.get(String(o.id)) || 0;
+    const foodRefund = total > 0 ? Math.min(net, Math.round(refunded * (net / total) * 100) / 100) : 0;
+    return sum + Math.max(0, net - foodRefund);
+  }, 0);
   const currentBalance = Math.max(0, lifetimeNet - completedPayoutTotal - pendingPayoutTotal);
+
+  const { data: partyNet } = await sb.schema("rush_money").from("v_party_net")
+    .select("net_owed_minor, payable_minor, receivable_minor")
+    .eq("party_id", merchantId)
+    .maybeSingle();
+  const { data: heldRow } = await sb.schema("rush_money").from("v_party_held")
+    .select("held_minor")
+    .eq("party_id", merchantId)
+    .maybeSingle();
+  const { count: waitingCount } = await sb.schema("rush_money").from("v_orders_missing_settle")
+    .select("id", { count: "exact", head: true })
+    .eq("merchant_id", merchantId);
+  const netMinor = Number(partyNet?.net_owed_minor || 0);
+  const heldMinor = Number(heldRow?.held_minor || 0);
+  const money = (minor: number) => `J$${(Math.abs(minor) / 100).toFixed(2)}`;
+  const books = {
+    availableWords: netMinor > 0
+      ? `Available to pay out: ${money(netMinor)}. This is what Roam owes you after what you owe Roam.`
+      : netMinor < 0
+        ? `You owe Roam ${money(netMinor)}. It comes out of a later payout.`
+        : "Nothing is waiting to be paid out.",
+    waitingWords: waitingCount
+      ? `${waitingCount} delivered ${waitingCount === 1 ? "order is" : "orders are"} waiting to be added to the books.`
+      : "Every delivered order is already on the books.",
+    heldWords: heldMinor > 0
+      ? `${money(heldMinor)} is held until that payout is sent.`
+      : "Nothing is held.",
+  };
+  const { data: foodCharges } = orderIds.length
+    ? await paymentsSb.from("refunds").select("order_id, amount").in("order_id", orderIds).eq("fault", "merchant")
+    : { data: [] as Array<{ order_id?: string; amount?: number }> };
+  const chargeLines = (foodCharges || []).slice(0, 20).map((row) => {
+    const match = delivered.find((order) => String(order.id) === String(row.order_id));
+    const number = match ? String((match as { order_number?: string }).order_number || row.order_id) : String(row.order_id || "");
+    return {
+      orderId: String(row.order_id || ""),
+      words: `Order ${number}: you were charged J$${Number(row.amount || 0).toFixed(2)} for the food, not the customer's whole bill.`,
+    };
+  });
+  const saleLines = delivered.slice(0, 15).map((order) => ({
+    orderId: String(order.id),
+    words: `Order ${String((order as { order_number?: string }).order_number || order.id)}: Roam owes you J$${orderMerchantNet(order).toFixed(2)} for the food after the fee.`,
+  }));
+  const statement = [...chargeLines, ...saleLines];
 
   const now = new Date();
   const weekStart = startOfWeek(now);
@@ -2372,6 +2387,8 @@ app.get("/merchant/earnings", async (c) => {
       isToday: bar.isToday,
     })),
     transactions,
+    books,
+    statement,
   });
 });
 
@@ -2802,6 +2819,7 @@ import { registerSupportAdminRoutes } from "./admin/supportRoutes.ts";
 import { registerOrderChatRoutes } from "./orderChat.ts";
 import { registerAdminOrderChatRoutes } from "./admin/orderChatRoutes.ts";
 registerCustomerOrderRoutes(app, { getSupabase, getServiceSupabase });
+registerRushMoneyRoutes(app, { getSupabase, getServiceSupabase });
 registerOrderChatRoutes(app, { getSupabase, getServiceSupabase, getPublicServiceSupabase });
 registerAdminOrderChatRoutes(app);
 registerCustomerAccountRoutes(app, { getSupabase, getServiceSupabase });

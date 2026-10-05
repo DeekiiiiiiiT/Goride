@@ -200,6 +200,7 @@ export async function submitCustomerOrderIssue(input: {
   issueType: string;
   notes: string;
   photoPath?: string;
+  itemIds?: string[];
 }): Promise<IssueSubmissionResult> {
   const headers = await authHeaders();
   if (!headers) throw new Error('Sign in required');
@@ -210,6 +211,7 @@ export async function submitCustomerOrderIssue(input: {
       issueType: input.issueType,
       notes: input.notes,
       photoPath: input.photoPath || undefined,
+      itemIds: input.itemIds,
     }),
   });
   if (!res.ok) {

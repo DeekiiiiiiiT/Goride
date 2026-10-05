@@ -10,8 +10,6 @@ import { getDb } from "./merchantAdminShared.ts";
 import { orchestrateOrderRefund } from "./orderRefund.ts";
 import { ORDER_CUSTOMER_EMBED } from "../orderSelectEmbeds.ts";
 import { handleOrderDelivered } from "../courierCashLedger.ts";
-import { reverseOrderOutputTax } from "../../_shared/gctLedger.ts";
-import { maybeClawbackGrowthGuarantee } from "../growthGuarantee.ts";
 
 async function requireDashOrCourierAdmin(c: { req: { header: (n: string) => string | undefined } }) {
   const dash = await requireProductAdmin(c, "dash");
@@ -171,92 +169,21 @@ export function registerOrderAdminRoutes(app: Hono) {
     const body = await c.req.json().catch(() => ({})) as { reason?: string; notes?: string };
     const reason = (body.reason ?? body.notes ?? "Cancelled by support").trim();
     const db = getDb();
-    const now = new Date().toISOString();
-
-    const { data: existing } = await db.from("orders")
-      .select("courier_id, payment_status, status")
-      .eq("id", orderId)
-      .maybeSingle();
-
-    const priorStatus = String(
-      (existing as { status?: string } | null)?.status ?? "",
-    );
-
-    const { data: order, error } = await db.from("orders")
-      .update({
-        status: "cancelled",
-        cancelled_at: now,
-        cancellation_reason: reason,
-        cancelled_by: "admin",
-        updated_at: now,
-      })
-      .eq("id", orderId)
-      .select()
-      .maybeSingle();
-
-    if (error || !order) return c.json({ error: error?.message ?? "not_found" }, 404);
-
-    const courierId = (existing as { courier_id?: string | null } | null)?.courier_id
-      ?? (order as { courier_id?: string | null }).courier_id;
-    if (courierId) {
-      await db
-        .from("courier_availability")
-        .update({ active_order_id: null })
-        .eq("driver_id", courierId);
-    }
-    await db
-      .from("courier_availability")
-      .update({ active_order_id: null })
-      .eq("active_order_id", orderId);
-
-    await db.from("order_events").insert({
-      order_id: orderId,
-      status: "cancelled",
-      actor_type: "admin",
-      actor_id: adminUser.id,
-      notes: reason,
+    const { cancelOrder } = await import("../rushMoney/cancelOrder.ts");
+    const cancelled = await cancelOrder(db, {
+      orderId,
+      actor: "admin",
+      reason,
+      actorId: adminUser.id,
     });
-
-    await reverseOrderOutputTax(db, orderId);
-
-    try {
-      await maybeClawbackGrowthGuarantee(db, {
-        orderId,
-        priorStatus,
-      });
-    } catch (e) {
-      console.error("[gg-clawback] admin cancel", e);
-    }
-
-    let refund: RefundOrchestratorResultSummary | null = null;
-    const payStatus = String(
-      (existing as { payment_status?: string } | null)?.payment_status
-        ?? (order as { payment_status?: string }).payment_status
-        ?? "",
-    );
-    if (product === "dash" && payStatus === "paid") {
-      const authHeader = c.req.header("Authorization") || "";
-      const result = await orchestrateOrderRefund({
-        orderId,
-        amount: null,
-        reason: `Admin cancel: ${reason}`,
-        admin: adminUser,
-        authHeader,
-      });
-      if (result.ok) {
-        refund = {
-          payment_status: result.payment_status,
-          providerCompleted: result.providerCompleted,
-          providerError: result.providerError ?? null,
-          refund_id: String(result.refund.id || ""),
-        };
-      } else {
-        refund = { error: result.error };
-      }
-    }
-
+    if (!cancelled.ok) return c.json({ error: cancelled.error }, cancelled.status as 400);
     const { data: refreshed } = await db.from("orders").select("*").eq("id", orderId).maybeSingle();
-    return c.json({ ok: true, order: refreshed || order, refund });
+    return c.json({
+      ok: true,
+      order: refreshed || cancelled.order,
+      words: cancelled.quote.summary,
+      quote: cancelled.quote,
+    });
   });
 
   orders.post("/:orderId/complete", async (c) => {
@@ -292,11 +219,3 @@ export function registerOrderAdminRoutes(app: Hono) {
 
   app.route("/admin/orders", orders);
 }
-
-type RefundOrchestratorResultSummary = {
-  payment_status?: string;
-  providerCompleted?: boolean;
-  providerError?: string | null;
-  refund_id?: string;
-  error?: string;
-};

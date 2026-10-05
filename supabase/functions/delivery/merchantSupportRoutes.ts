@@ -43,7 +43,25 @@ export function registerMerchantSupportRoutes(app: Hono, deps: Deps) {
       .limit(50);
 
     if (error) return c.json({ error: error.message }, 500);
-    return c.json({ cases: cases ?? [] });
+    const { data: charges } = await serviceSb.schema("payments").from("refunds")
+      .select("order_id, amount, fault")
+      .in("order_id", ids)
+      .eq("fault", "merchant");
+    const charged = new Map<string, number>();
+    for (const row of charges || []) {
+      const key = String(row.order_id || "");
+      charged.set(key, (charged.get(key) || 0) + Number(row.amount || 0));
+    }
+    const withWords = (cases ?? []).map((row) => {
+      const amount = charged.get(String(row.order_id || "")) || 0;
+      return {
+        ...row,
+        chargeWords: amount > 0
+          ? `You are charged J$${amount.toFixed(2)} for the food on this order, not the customer's whole bill.`
+          : "You are not charged for this issue.",
+      };
+    });
+    return c.json({ cases: withWords });
   });
 
   app.get("/merchant/support/cases/:id", async (c) => {

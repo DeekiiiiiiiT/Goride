@@ -58,6 +58,8 @@ export default function CheckoutPage({ onNavigate, session }: Props) {
   const [checkoutPricing, setCheckoutPricing] = useState<CheckoutPricing | null>(null);
   const [pricingError, setPricingError] = useState<string | null>(null);
   const [accountSuspended, setAccountSuspended] = useState(false);
+  const [walletWords, setWalletWords] = useState('');
+  const [orderingBlocked, setOrderingBlocked] = useState(false);
   const [instructionsOpen, setInstructionsOpen] = useState(false);
 
   const resolvedAddress = resolveCheckoutAddress(savedAddress);
@@ -103,6 +105,23 @@ export default function CheckoutPage({ onNavigate, session }: Props) {
       onNavigate('cart');
     }
   }, [items.length, onNavigate]);
+
+  useEffect(() => {
+    if (!session?.access_token) return;
+    let cancelled = false;
+    void (async () => {
+      const res = await fetch(`${API_ENDPOINTS.delivery}/customer/wallet`, {
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
+      if (!res.ok || cancelled) return;
+      const body = await res.json();
+      setWalletWords(String(body.words || ''));
+      setOrderingBlocked(body.orderingAllowed === false);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [session?.access_token]);
 
   useEffect(() => {
     if (!merchantId) {
@@ -565,6 +584,9 @@ export default function CheckoutPage({ onNavigate, session }: Props) {
               <div>
                 <h2 className="text-headline-sm font-semibold text-on-surface">Payment Method</h2>
                 <p className="text-body-md text-on-surface-variant mt-1">{paymentLabel}</p>
+                {walletWords && walletWords !== 'No balance' && (
+                  <p className="text-body-sm text-on-surface mt-1">{walletWords}{orderingBlocked ? '. Pay this before ordering.' : ''}</p>
+                )}
               </div>
             </div>
             <button
@@ -753,7 +775,7 @@ export default function CheckoutPage({ onNavigate, session }: Props) {
         <button
           type="button"
           onClick={() => void handlePlaceOrder()}
-          disabled={isPlacingOrder || accountSuspended || !deliveryAddress || !hasLivePricing || belowMinOrder}
+          disabled={isPlacingOrder || accountSuspended || orderingBlocked || !deliveryAddress || !hasLivePricing || belowMinOrder}
           className="w-full max-w-2xl mx-auto bg-primary text-on-primary text-headline-sm font-semibold py-4 rounded-xl flex justify-between items-center px-6 active:scale-[0.98] transition-transform disabled:opacity-50"
         >
           <span>{isPlacingOrder ? 'Processing...' : 'Place Order'}</span>

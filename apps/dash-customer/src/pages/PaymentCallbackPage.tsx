@@ -127,9 +127,9 @@ export default function PaymentCallbackPage({ onNavigate, session, provider }: P
       <div className="min-h-dvh flex flex-col items-center justify-center p-4">
         <Loader2 className="w-16 h-16 text-emerald-500 animate-spin mb-4" />
         <h1 className="text-xl font-semibold text-gray-900">
-          {status === 'pending_confirmation' ? 'Confirming your payment...' : 'Processing your payment...'}
+          We're confirming your payment — don't pay again
         </h1>
-        <p className="text-gray-500 mt-2">Please wait while we confirm your payment</p>
+        <p className="text-gray-500 mt-2">This page only checks the result. It cannot charge you a second time.</p>
       </div>
     );
   }
@@ -161,9 +161,9 @@ export default function PaymentCallbackPage({ onNavigate, session, provider }: P
   return (
     <div className="min-h-dvh flex flex-col items-center justify-center p-4">
       <XCircle className="w-20 h-20 text-red-500 mb-4" />
-      <h1 className="text-2xl font-bold text-gray-900 mb-2">Payment Failed</h1>
+      <h1 className="text-2xl font-bold text-gray-900 mb-2">We're still confirming</h1>
       <p className="text-gray-500 mb-8">
-        We could not confirm payment yet. If you were charged, refresh in a moment or check Orders.
+        Don't pay again. If this window expired and nothing was charged, start a new order. If you were charged, the refund starts on its own.
       </p>
       <div className="flex gap-4">
         <button

@@ -27,6 +27,7 @@ export default function OrderTrackingPage({ orderId, demoPhase, onNavigate }: Pr
   const mocksOk = allowMocks();
   const [cancelPending, setCancelPending] = useState(false);
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
+  const [cancelQuote, setCancelQuote] = useState('You can only cancel before the restaurant starts preparing.');
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['order', orderId],
     queryFn: async () => {
@@ -107,8 +108,18 @@ export default function OrderTrackingPage({ orderId, demoPhase, onNavigate }: Pr
 
   const handleClose = () => onNavigate('home');
 
-  const handleCancelOrder = () => {
+  const handleCancelOrder = async () => {
     if (!orderId || cancelPending) return;
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.access_token) {
+      toast.error('Sign in to cancel this order');
+      return;
+    }
+    const res = await fetch(`${API_ENDPOINTS.delivery}/orders/${orderId}/cancel-quote`, {
+      headers: { Authorization: `Bearer ${session.access_token}` },
+    });
+    const body = (await res.json().catch(() => ({}))) as { quote?: { summary?: string } };
+    setCancelQuote(body.quote?.summary || 'You can only cancel before the restaurant starts preparing.');
     setShowCancelConfirm(true);
   };
 
@@ -207,7 +218,7 @@ export default function OrderTrackingPage({ orderId, demoPhase, onNavigate }: Pr
           Cancel this order?
         </h2>
         <p className="mt-2 text-body-md text-on-surface-variant">
-          You can only cancel before the restaurant starts preparing.
+          {cancelQuote}
         </p>
         <div className="mt-6 flex gap-3">
           <button

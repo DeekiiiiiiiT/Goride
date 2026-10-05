@@ -7,6 +7,7 @@ import { requireDashWrite } from "./dashPermissions.ts";
 import { getDb, writeKvAudit } from "./merchantAdminShared.ts";
 import { orchestrateOrderRefund } from "./orderRefund.ts";
 import { applyMerchantFaultDebit } from "../disputeResolution/merchantDebit.ts";
+import { merchantFundedAmount, reverseSplit } from "../../_shared/rushMoney/reverseSplit.ts";
 import { notifyCaseStatusChange } from "../disputeResolution/notifications.ts";
 
 const CASE_STATUSES = new Set(["open", "pending", "resolved", "closed"]);
@@ -95,10 +96,13 @@ export function registerSupportAdminRoutes(app: Hono) {
 
     if (refundAmount != null && refundAmount > 0 && existing.order_id) {
       const authHeader = c.req.header("Authorization") || "";
+      const faultRaw = String(body.fault_attribution || existing.fault_attribution || "");
+      const fault = faultRaw === "merchant_fault" ? "merchant" : faultRaw === "courier_fault" ? "courier" : null;
       const result = await orchestrateOrderRefund({
         orderId: String(existing.order_id),
         amount: refundAmount,
         reason: String(body.resolution_notes || existing.resolution_notes || "Support case refund"),
+        fault,
         admin: adminUser,
         authHeader,
       });
@@ -113,18 +117,25 @@ export function registerSupportAdminRoutes(app: Hono) {
       updates.status = "resolved";
       updates.resolution_action = "full_refund";
 
-      const fault = String(body.fault_attribution || existing.fault_attribution || "undetermined");
-      if (fault === "merchant_fault") {
+      if (fault === "merchant") {
         const { data: order } = await db
           .from("orders")
-          .select("merchant_id")
+          .select("merchant_id, total, platform_fee, service_fee, processing_fee, delivery_fee, tip, courier_tip_net, subtotal, discount, merchant_commission_amount, delivery_fee_platform_amount, delivery_fee_courier_amount, peak_pay_amount, tax_food_jmd, tax_platform_jmd, small_order_fee")
           .eq("id", existing.order_id)
           .maybeSingle();
         if (order?.merchant_id) {
+          const food = merchantFundedAmount(reverseSplit({
+            order,
+            captureAmount: Number(order.total || refundAmount),
+            refundAmount,
+            courierAtFault: false,
+            merchantAtFault: true,
+          }));
           await applyMerchantFaultDebit(db, {
             merchantId: String(order.merchant_id),
             orderId: String(existing.order_id),
-            amount: refundAmount,
+            amount: food,
+            skipLedger: true,
             reason: `Support refund: case ${caseId}`,
             createdBy: adminUser.id,
           });

@@ -1,7 +1,7 @@
 import type { PromoCode } from './orderPricing';
 import { PROMO_CODES } from './orderPricing';
 
-/** Soft-launch: WiPay card rail + cash (coming soon). PayPal permanently removed. */
+/** WiPay card and cash on delivery. PayPal permanently removed. */
 export type PaymentMethodId = 'wipay' | 'cash';
 
 export type CheckoutPreferences = {
@@ -29,7 +29,7 @@ const DEFAULTS: CheckoutPreferences = {
 /** Map legacy paypal prefs → wipay so old localStorage/profiles keep working. */
 export function normalizePaymentMethodId(id: unknown): PaymentMethodId {
   if (id === 'wipay') return 'wipay';
-  if (id === 'cash') return 'wipay'; // cash not selectable until DASH_ALLOW_CASH_ORDERS
+  if (id === 'cash') return 'cash';
   // paypal and anything else → wipay
   return 'wipay';
 }
@@ -85,17 +85,10 @@ export type LivePaymentOption = {
 
 export const LIVE_PAYMENT_OPTIONS: LivePaymentOption[] = [
   { id: 'wipay', label: 'WiPay', icon: 'credit_card', description: 'Pay securely with WiPay' },
+  { id: 'cash', label: 'Cash on delivery', icon: 'payments', description: 'Pay the courier in cash' },
 ];
 
-export const COMING_SOON_PAYMENT_OPTIONS: LivePaymentOption[] = [
-  {
-    id: 'cash',
-    label: 'Cash on delivery',
-    icon: 'payments',
-    description: 'Pay the courier in cash',
-    comingSoon: true,
-  },
-];
+export const COMING_SOON_PAYMENT_OPTIONS: LivePaymentOption[] = [];
 
 /** All rails shown in payment UI (selectable + coming soon). */
 export const PAYMENT_OPTIONS: LivePaymentOption[] = [
@@ -108,15 +101,15 @@ export function getSelectablePaymentOptions(): LivePaymentOption[] {
 }
 
 export function isSelectablePaymentMethod(id: PaymentMethodId): boolean {
-  return id === 'wipay';
+  return id === 'wipay' || id === 'cash';
 }
 
 export function getPaymentLabel(id: PaymentMethodId): string {
   return PAYMENT_OPTIONS.find((o) => o.id === id)?.label ?? 'WiPay';
 }
 
-export function getApiPaymentMethod(id: PaymentMethodId): 'wipay' {
-  return 'wipay';
+export function getApiPaymentMethod(id: PaymentMethodId): 'wipay' | 'cash' {
+  return id === 'cash' ? 'cash' : 'wipay';
 }
 
 /** Apply a server-saved default rail to local checkout prefs. */

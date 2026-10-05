@@ -3,7 +3,6 @@
  */
 import type { Hono } from "https://deno.land/x/hono@v4.3.11/mod.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { dualWriteDashPayment } from "../_shared/unifiedLedger/dualWriteDash.ts";
 import { getCourierRouteEstimate } from "../_shared/directionsRoute.ts";
 import { computeCourierCancelCompensation } from "../_shared/courierCancelCompensation.ts";
 import { courierDeliveryEarnings, courierTipEarnings } from "../_shared/dashMoneySplit.ts";
@@ -880,7 +879,7 @@ export function registerCourierConsumerRoutes(app: Hono, deps: Deps) {
     const serviceSb = getServiceSupabase();
     const { data: order } = await serviceSb
       .from("orders")
-      .select("id, courier_id")
+      .select("id, courier_id, status, picked_up_at, payment_status, delivery_lat, delivery_lng")
       .eq("id", orderId)
       .maybeSingle();
 
@@ -960,37 +959,69 @@ export function registerCourierConsumerRoutes(app: Hono, deps: Deps) {
       });
     }
 
+    const prePickupProblem = issueType === "vehicle_issue" || issueType === "accident";
+    if (prePickupProblem && !order.picked_up_at) {
+      const released = await releaseCourierFromOrder(serviceSb, auth.userId, orderId);
+      if (released) {
+        return c.json({ issue: data, aborted: false, redispatched: true });
+      }
+    }
+
+    // After pickup, the failed-delivery steps decide the outcome. A skipped protocol refunds the customer.
+    if (shouldAbort && order.picked_up_at) {
+      const { protocolReady } = await import("../_shared/rushMoney/protocol.ts");
+      const { data: attempts } = await serviceSb.from("delivery_attempts")
+        .select("attempt_type, at, wait_seconds, photo_url, latitude, longitude")
+        .eq("order_id", orderId);
+      const { cancelOrder } = await import("./rushMoney/cancelOrder.ts");
+      const cancelled = await cancelOrder(serviceSb, {
+        orderId,
+        actor: "courier",
+        reason: notes || issueType,
+        actorId: auth.userId,
+        protocolValidated: protocolReady(attempts || [], {
+          latitude: order.delivery_lat,
+          longitude: order.delivery_lng,
+        }),
+      });
+      if (!cancelled.ok) {
+        return c.json({
+          issue: data,
+          aborted: false,
+          review: true,
+          words: cancelled.error,
+        }, cancelled.status as 400);
+      }
+      return c.json({
+        issue: data,
+        aborted: true,
+        review: false,
+        words: cancelled.quote.summary,
+        quote: cancelled.quote,
+      });
+    }
+
     // Abort-class issues cancel the order and free the courier
     if (shouldAbort) {
-      await serviceSb
-        .from("orders")
-        .update({
-          status: "cancelled",
-          cancelled_by: "courier",
-          cancellation_reason: notes || issueType,
-          cancelled_at: new Date().toISOString(),
-          courier_compensation_amount: 0,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", orderId)
-        .eq("courier_id", auth.userId);
-
+      const { cancelOrder } = await import("./rushMoney/cancelOrder.ts");
+      const cancelled = await cancelOrder(serviceSb, {
+        orderId,
+        actor: "courier",
+        reason: notes || issueType,
+        actorId: auth.userId,
+      });
+      if (!cancelled.ok) return c.json({ error: cancelled.error, issue: data }, cancelled.status as 400);
+      if (cancelled.quote.redispatch) {
+        const released = await releaseCourierFromOrder(serviceSb, auth.userId, orderId);
+        return c.json({ issue: data, aborted: false, redispatched: Boolean(released), quote: cancelled.quote });
+      }
       await completeStackLeg(serviceSb, auth.userId, orderId);
-
-      await serviceSb
-        .from("courier_availability")
-        .update({
-          active_order_id: null,
-          status: "online",
-          updated_at: new Date().toISOString(),
-        })
-        .eq("active_order_id", orderId);
-
-      await serviceSb
-        .from("courier_offers")
-        .update({ status: "superseded", updated_at: new Date().toISOString() })
-        .eq("order_id", orderId)
-        .in("status", ["pending", "offered", "sent"]);
+      await serviceSb.from("courier_availability").update({
+        active_order_id: null,
+        status: "online",
+        updated_at: new Date().toISOString(),
+      }).eq("active_order_id", orderId);
+      return c.json({ issue: data, aborted: true, quote: cancelled.quote });
     }
 
     await serviceSb.from("order_events").insert({
@@ -1145,93 +1176,12 @@ export function registerCourierConsumerRoutes(app: Hono, deps: Deps) {
   app.post("/courier/payouts/close-period", async (c) => {
     const auth = await requireCourierUser(c.req.header("Authorization"), getSupabase);
     if (auth instanceof Response) return auth;
-    const body = await c.req.json().catch(() => ({}));
-    const periodStart = String(body.periodStart || body.period_start || "");
-    const periodEnd = String(body.periodEnd || body.period_end || "");
-    if (!periodStart || !periodEnd) {
-      return c.json({ error: "periodStart and periodEnd required" }, 400);
-    }
-
-    const periodStartDate = periodStart.slice(0, 10);
-    const periodEndDate = periodEnd.slice(0, 10);
-    const paymentsSb = createPaymentsClient();
-
-    // Idempotency: return existing row for this exact period instead of inserting again
-    const { data: existing } = await paymentsSb
-      .from("courier_payouts")
-      .select("*")
-      .eq("courier_id", auth.userId)
-      .eq("period_start", periodStartDate)
-      .eq("period_end", periodEndDate)
-      .maybeSingle();
-
-    if (existing) {
-      return c.json({ payout: existing, idempotent: true });
-    }
-
-    const serviceSb = getServiceSupabase();
-    const { data: orders, error } = await serviceSb
-      .from("orders")
-      .select("id, delivery_fee, delivery_fee_courier_amount, courier_base_pay_jmd, courier_distance_pay_jmd, tip, courier_tip_net, peak_pay_amount, delivered_at")
-      .eq("courier_id", auth.userId)
-      .in("status", ["delivered", "completed"])
-      .gte("delivered_at", periodStart)
-      .lte("delivered_at", periodEnd);
-
-    if (error) return c.json({ error: error.message }, 500);
-    const rows = orders || [];
-    const amount = rows.reduce(
-      (sum, o) =>
-        sum +
-        courierDeliveryEarnings(o as Record<string, unknown>) +
-        courierTipEarnings(o as Record<string, unknown>) +
-        Number(o.peak_pay_amount || 0),
-      0,
-    );
-
-    const { data: payout, error: payoutError } = await paymentsSb
-      .from("courier_payouts")
-      .insert({
-        courier_id: auth.userId,
-        amount,
-        currency: "JMD",
-        status: "pending",
-        period_start: periodStartDate,
-        period_end: periodEndDate,
-        delivery_count: rows.length,
-      })
-      .select()
-      .single();
-
-    // Race: unique index may reject a concurrent insert — return the winner
-    if (payoutError) {
-      const msg = String(payoutError.message || "");
-      if (/unique|duplicate/i.test(msg)) {
-        const { data: raced } = await paymentsSb
-          .from("courier_payouts")
-          .select("*")
-          .eq("courier_id", auth.userId)
-          .eq("period_start", periodStartDate)
-          .eq("period_end", periodEndDate)
-          .maybeSingle();
-        if (raced) return c.json({ payout: raced, idempotent: true });
-      }
-      return c.json({ error: payoutError.message }, 500);
-    }
-    try {
-      await dualWriteDashPayment({
-        transactionId: String(payout.id),
-        orderId: String(payout.id),
-        courierId: auth.userId,
-        amount: Number(payout.amount ?? amount),
-        currency: String(payout.currency ?? "JMD"),
-        kind: "courier_payout",
-      });
-    } catch (dwErr) {
-      console.error("[courier payout] unified dual-write failed:", dwErr);
-    }
-    return c.json({ payout });
+    return c.json({
+      error: "payouts_are_weekly",
+      message: "Roam prepares your weekly payout. You no longer close a period yourself.",
+    }, 410);
   });
+
 
   // Turn-by-turn route segment (Google Directions with haversine fallback)
   app.get("/courier/route", async (c) => {
@@ -1573,4 +1523,4 @@ function createPaymentsClient() {
 }
 
 // Re-export for status handler use
-export { COURIER_TRANSITIONS, requireActiveCourier, dispatchOffersForOrder, redispatchExpiredOffers, applyCancelCompensation, completeStackLeg, attachStackLeg };
+export { COURIER_TRANSITIONS, requireCourierUser, requireActiveCourier, dispatchOffersForOrder, redispatchExpiredOffers, applyCancelCompensation, completeStackLeg, attachStackLeg };

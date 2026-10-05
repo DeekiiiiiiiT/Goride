@@ -19,7 +19,8 @@ import {
   updateRemittancePauseThreshold,
   writeOffRemittance,
 } from '@roam/dash-admin-client';
-import { canWriteDashAdmin } from '../../utils/dashAdminRoles';
+import { API_ENDPOINTS } from '@roam/api-client';
+import { canApproveFinance, canWriteDashAdmin } from '../../utils/dashAdminRoles';
 import type { AdminOutletContext } from '../../DashAdminPortal';
 
 function fmtMinor(minor: number): string {
@@ -56,6 +57,7 @@ const WRITE_OFF_REASONS = [
 export function RemittanceDeskPage() {
   const { session } = useOutletContext<AdminOutletContext>();
   const canWrite = canWriteDashAdmin(session.user);
+  const canMoveMoney = canApproveFinance(session.user);
   const token = session.access_token;
 
   const [accounts, setAccounts] = useState<Array<Record<string, unknown>>>([]);
@@ -89,6 +91,7 @@ export function RemittanceDeskPage() {
   );
   const [lastWriteOffEventId, setLastWriteOffEventId] = useState<string | null>(null);
   const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [reports, setReports] = useState<Array<Record<string, unknown>>>([]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -101,6 +104,11 @@ export function RemittanceDeskPage() {
       setAccounts(a.accounts ?? []);
       setExceptions(e.exceptions ?? []);
       setRecon(r);
+      const reported = await fetch(`${API_ENDPOINTS.delivery}/admin/rush-money/remittance-reports`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const reportedBody = await reported.json().catch(() => ({}));
+      setReports(reported.ok ? reportedBody.reports || [] : []);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to load remittance desk');
     } finally {
@@ -163,6 +171,32 @@ export function RemittanceDeskPage() {
   const refreshAfterMoneyMove = async () => {
     await load();
     if (selectedId) await loadEvents(selectedId);
+  };
+
+  const decideReport = async (report: Record<string, unknown>, decision: 'confirm' | 'reject') => {
+    if (!canMoveMoney) return;
+    setBusy(true);
+    try {
+      const res = await fetch(`${API_ENDPOINTS.delivery}/admin/rush-money/remittance-reports/${report.id}/decide`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          decision,
+          expectedBalanceMinor: Number(report.balance_minor ?? 0),
+        }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast.error(body.words || body.error || 'Could not update this report');
+        return;
+      }
+      toast.success(body.words || (decision === 'confirm' ? 'Payment confirmed' : 'Report rejected'));
+      await load();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not update this report');
+    } finally {
+      setBusy(false);
+    }
   };
 
   const handleSettle = async () => {
@@ -352,6 +386,25 @@ export function RemittanceDeskPage() {
           Pricing rules (defaults) →
         </Link>
       </div>
+
+      <section className="rounded-xl border border-slate-800 bg-slate-900/40 p-4 space-y-2">
+        <h2 className="text-sm font-medium text-slate-300">Courier reports: I've paid</h2>
+        <p className="text-sm text-slate-400">Confirming a report is what moves the balance. The report itself does not.</p>
+        {reports.length === 0 && <p className="text-sm text-slate-500">No reports waiting.</p>}
+        {reports.map((report) => (
+          <div key={String(report.id)} className="flex flex-wrap items-center gap-3 text-sm text-slate-300">
+            <span>J${(Number(report.amount_minor || 0) / 100).toFixed(2)} via {String(report.method || 'payment')}</span>
+            {canMoveMoney ? (
+              <>
+                <button type="button" className="text-amber-400" disabled={busy} onClick={() => void decideReport(report, 'confirm')}>Confirm</button>
+                <button type="button" className="text-slate-400" disabled={busy} onClick={() => void decideReport(report, 'reject')}>Reject</button>
+              </>
+            ) : (
+              <span className="text-slate-500">A finance approver decides this</span>
+            )}
+          </div>
+        ))}
+      </section>
 
       {recon && (
         <div className="grid gap-3 sm:grid-cols-4 text-sm">

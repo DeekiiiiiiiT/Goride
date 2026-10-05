@@ -38,6 +38,14 @@ export function canForceApproveMerchant(
   return hasAnyJwtRole(user, JWT_FORCE_APPROVE_FALLBACK);
 }
 
+export function canApproveFinance(
+  user: User | { app_metadata?: Record<string, unknown>; user_metadata?: Record<string, unknown> },
+  permissions?: string[],
+): boolean {
+  if (checkPermission(permissions, 'finance.approve')) return true;
+  return hasAnyJwtRole(user, new Set(['finance_approver', 'platform_owner', 'superadmin']));
+}
+
 export function canDeleteDashAdmin(
   user: User | { app_metadata?: Record<string, unknown>; user_metadata?: Record<string, unknown> },
   permissions?: string[],

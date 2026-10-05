@@ -10,6 +10,7 @@ import {
 import { classifyRemittanceError, parkException } from "./exceptions.ts";
 import { postRemittanceCollected, getRemittanceAccount, toMinor } from "./remittanceLedger.ts";
 import { toMinor as toMinorMoney } from "./money.ts";
+import { scaleShortCollection } from "../../_shared/rushMoney/shortCollection.ts";
 import { resolvePricingLayers } from "../pricingLayers.ts";
 import { needsThresholdSeed } from "./needsThresholdSeed.ts";
 
@@ -140,6 +141,15 @@ export async function collectOnDelivery(
       merchantDueJmd: split.merchantDueJmd,
     });
 
+    const collectedMinor = row.cash_collected_minor != null ? Number(row.cash_collected_minor) : bagTotalMinor;
+    const scaled = scaleShortCollection({
+      bagMinor: bagTotalMinor,
+      platformMinor: platformDueMinor,
+      merchantMinor: merchantDueMinor,
+      courierMinor: courierRetainedMinor,
+      collectedMinor,
+    });
+
     const acct = await getRemittanceAccount(sb, courierId);
     let pauseThresholdMinor: number | undefined;
     if (needsThresholdSeed(acct)) {
@@ -149,11 +159,11 @@ export async function collectOnDelivery(
     await postRemittanceCollected(sb, {
       courierId,
       orderId,
-      bagTotalMinor,
-      platformDueMinor,
-      merchantDueMinor,
-      courierRetainedMinor,
-      metadata: remitMinor <= 0 ? { non_positive_remittance: true } : {},
+      bagTotalMinor: scaled.bagMinor,
+      platformDueMinor: scaled.platformMinor,
+      merchantDueMinor: scaled.merchantMinor,
+      courierRetainedMinor: scaled.courierMinor,
+      metadata: remitMinor <= 0 ? { non_positive_remittance: true } : { collected_minor: collectedMinor },
       ...(pauseThresholdMinor != null ? { pauseThresholdMinor } : {}),
     });
     return { ok: true };

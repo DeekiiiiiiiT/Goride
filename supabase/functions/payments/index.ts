@@ -13,6 +13,9 @@ import { getFlag } from "../_shared/featureFlags.ts";
 import { fetchWithTimeout } from "../_shared/fetchWithTimeout.ts";
 import { validateBody, z } from "../_shared/validateBody.ts";
 import { isWipayDemoMode } from "../_shared/wipayDemo.ts";
+import { wipayAmountMatches, wipayCurrencyOk, wipayStatusAccepted } from "../_shared/rushMoney/wipayContract.ts";
+import { queueAndExecuteRefund } from "../_shared/rushMoney/executeRefund.ts";
+import { captureLines } from "../_shared/rushMoney/journalLines.ts";
 
 const PaymentIntentBody = z.object({
   orderId: z.string().uuid(),
@@ -48,7 +51,7 @@ function isSandboxWipay(): boolean {
   return env !== "live" && env !== "production";
 }
 
-/** WiPay sandbox public test merchant — live must use real secrets. */
+/** WiPay sandbox public test merchant - live must use real secrets. */
 function wipayAccountNumber(): string | null {
   const fromEnv = Deno.env.get("WIPAY_ACCOUNT_NUMBER")?.trim();
   if (fromEnv) return fromEnv;
@@ -101,8 +104,7 @@ function paymentsPublicUrl(): string {
 }
 
 function wipaySuccess(status: unknown): boolean {
-  const s = String(status ?? "").trim().toLowerCase();
-  return s === "success" || s === "successful" || s === "completed" || s === "paid" || s === "ok" || s === "approved" || s === "1" || s === "true";
+  return wipayStatusAccepted(status);
 }
 
 function payloadString(payload: Record<string, unknown>, ...keys: string[]): string {
@@ -187,7 +189,8 @@ async function completeWipayIntent(
   const isRushPass = String(pd.purpose || "") === "rush_pass" || !intent.order_id;
 
   const alreadyPaid = String(intent.status) === "completed";
-  if (!alreadyPaid) {
+  const isOrderCapture = Boolean(intent.order_id) && String(pd.purpose || "") !== "rush_pass";
+  if (!alreadyPaid && !isOrderCapture) {
     await serviceSupabase
       .schema("payments")
       .from("payment_intents")
@@ -199,7 +202,7 @@ async function completeWipayIntent(
       .eq("id", intent.id);
   }
 
-  // Phase 3 Rush Pass — activate membership; skip order capture split
+  // Phase 3 Rush Pass - activate membership; skip order capture split
   if (isRushPass && String(pd.purpose || "") === "rush_pass") {
     const transactionId = payloadString(payload, "transaction_id", "transactionId", "transactionid")
       || String(intent.provider_intent_id ?? "");
@@ -258,51 +261,97 @@ async function completeWipayIntent(
     const split = computeDashCaptureSplit(order || {}, Number(intent.amount));
     const transactionId = payloadString(payload, "transaction_id", "transactionId", "transactionid")
       || String(intent.provider_intent_id ?? "");
-
-    const { data: txn } = await serviceSupabase
-      .schema("payments")
-      .from("transactions")
-      .insert({
+    const reportedAmount = payloadString(payload, "total", "amount");
+    const reportedCurrency = payloadString(payload, "currency") || "JMD";
+    const amountMismatch = !isWipayDemoMode() && reportedAmount && !wipayAmountMatches(Number(intent.amount), reportedAmount);
+    const currencyMismatch = !wipayCurrencyOk(reportedCurrency);
+    const { data: priorCapture } = await serviceSupabase.schema("payments").from("transactions")
+      .select("id")
+      .eq("order_id", intent.order_id)
+      .eq("status", "completed")
+      .limit(1)
+      .maybeSingle();
+    if (priorCapture?.id) {
+      const { data: extra } = await serviceSupabase.schema("payments").from("transactions").insert({
         intent_id: intent.id,
         order_id: intent.order_id,
-        customer_id: intent.customer_id,
-        amount: intent.amount,
-        net_amount: split.merchantReceivable,
+        amount: Number(intent.amount),
         currency: "JMD",
-        status: "completed",
+        status: "duplicate_superseded",
         provider: "wipay",
-        provider_transaction_id: transactionId,
-        provider_data: { ...payload, money_split: split },
-        payment_method: "credit_card",
-      })
-      .select("id")
-      .maybeSingle();
-
-    if (txn?.id) {
-      try {
-        const { dualWriteDashPayment } = await import("../_shared/unifiedLedger/dualWriteDash.ts");
-        await dualWriteDashPayment({
-          transactionId: String(txn.id),
-          orderId: String(intent.order_id),
-          merchantId: split.merchantId,
-          courierId: split.courierId,
-          amount: split.merchantReceivable,
+        provider_transaction_id: transactionId || `extra:${intent.id}`,
+        failure_reason: "second_capture",
+      }).select("id").maybeSingle();
+      if (extra?.id) {
+        await serviceSupabase.schema("payments").from("refunds").insert({
+          transaction_id: extra.id,
+          order_id: intent.order_id,
+          amount: Number(intent.amount),
           currency: "JMD",
-          kind: "order_capture",
-          split,
+          reason: "Duplicate capture refund",
+          status: "pending",
+          idempotency_key: `dup-capture:${extra.id}`,
+        });
+      }
+      return "";
+    }
+
+    if (amountMismatch || currencyMismatch) {
+      await serviceSupabase.schema("payments").from("payment_intents").update({
+        status: "review",
+        provider_data: { ...(intent.provider_data as Record<string, unknown> | null ?? {}), callback: payload, review: amountMismatch ? "amount_mismatch" : "currency_mismatch" },
+      }).eq("id", intent.id);
+      await serviceSupabase.schema("rush_money").from("recon_exceptions").upsert({
+        source: "wipay",
+        reference: String(intent.id),
+        detail: amountMismatch ? "Amount did not match the payment" : "Currency did not match the payment",
+      }, { onConflict: "source,reference" });
+      return "";
+    }
+
+    const { data: completion, error: completionError } = await serviceSupabase.schema("payments").rpc(
+      "complete_payment_intent",
+      {
+        p_intent_id: intent.id,
+        p_provider: "wipay",
+        p_provider_transaction_id: transactionId,
+        p_amount: Number(intent.amount),
+        p_currency: "JMD",
+        p_net_amount: split.merchantReceivable,
+        p_provider_data: { ...payload, money_split: split },
+      },
+    );
+    if (completionError) {
+      console.error("[payments/wipay] complete_payment_intent", completionError.message);
+      return "";
+    }
+    const result = (completion ?? {}) as { action?: string; transaction_id?: string; refund_id?: string };
+    if (result.action === "captured" && result.transaction_id) {
+      try {
+        await serviceSupabase.rpc("rush_post_journal", {
+          p_idempotency_key: `capture:${result.transaction_id}`,
+          p_event_type: "capture",
+          p_order_id: intent.order_id,
+          p_correlation_id: result.transaction_id,
+          p_lines: captureLines(String(intent.order_id), Number(intent.amount)),
+          p_actor_type: "system",
+          p_reason: "Card captured",
+          p_evidence: {},
+          p_policy_version: null,
+        });
+        await serviceSupabase.rpc("rush_transition_money_state", {
+          p_order_id: intent.order_id,
+          p_to: "captured",
         });
       } catch (e) {
-        console.error("[payments/wipay] unified dual-write failed:", e);
+        console.error("[payments/wipay] capture journal", e);
       }
     }
+    if ((result.action === "duplicate_refund_required" || result.action === "late_capture_refund_required") && result.refund_id) {
+      const { executeRefundById } = await import("../_shared/rushMoney/executeRefund.ts");
+      await executeRefundById(String(result.refund_id));
+    }
   }
-
-  // Keep kitchen status as placed — "confirmed" is not a valid orders.status.
-  await serviceSupabase
-    .schema("delivery")
-    .from("orders")
-    .update({ payment_status: "paid" })
-    .eq("id", intent.order_id);
 
   return String(intent.order_id);
 }
@@ -310,7 +359,7 @@ async function completeWipayIntent(
 function verifyWipayCallbackSecret(c: { req: { header: (n: string) => string | undefined; url: string } }): boolean {
   const expected = wipayCallbackSecret();
   if (!expected) {
-    console.error("[payments] WIPAY_CALLBACK_SECRET is not set — rejecting webhook");
+    console.error("[payments] WIPAY_CALLBACK_SECRET is not set - rejecting webhook");
     return false;
   }
   const fromHeader = c.req.header("X-WiPay-Callback-Secret") ?? "";
@@ -365,7 +414,7 @@ async function assertCustomerOwnsOrder(
   return { ok: true, order: order as Record<string, unknown>, customerId: String(customer.id) };
 }
 
-/** Jamaica Payments API host — https://docs.wipayfinancial.com/platforms-and-environments */
+/** Jamaica Payments API host - https://docs.wipayfinancial.com/platforms-and-environments */
 function wipayGatewayUrl(): string {
   if (isSandboxWipay()) {
     return "https://jmsb.wipayfinancial.com/plugins/payments/request";
@@ -490,6 +539,14 @@ app.post("/intents", async (c) => {
     return c.json({ error: "Unsupported payment provider" }, 400);
   }
   
+  await serviceSupabase
+    .schema("payments")
+    .from("payment_intents")
+    .update({ status: "expired" })
+    .eq("order_id", orderId)
+    .eq("provider", provider)
+    .in("status", ["pending", "created"]);
+
   const { data: intent, error } = await serviceSupabase
     .schema("payments")
     .from("payment_intents")
@@ -550,7 +607,10 @@ async function createWiPayIntent(order: any, returnBase: string, customerEmail: 
   
   const callbackSecret = wipayCallbackSecret();
   if (!callbackSecret) {
-    return { error: "WiPay callback secret not configured — set WIPAY_CALLBACK_SECRET" };
+    return { error: "WiPay callback secret not configured. Set WIPAY_CALLBACK_SECRET" };
+  }
+  if (!isWipayDemoMode() && !isSandboxWipay() && !Deno.env.get("WIPAY_STATUS_URL")) {
+    return { error: "Card checkout is paused until payment confirmation is configured" };
   }
   const responseUrl = new URL(`${paymentsPublicUrl()}/webhooks/wipay`);
   responseUrl.searchParams.set("secret", callbackSecret);
@@ -609,7 +669,7 @@ async function createWiPayIntent(order: any, returnBase: string, customerEmail: 
   }
 }
 
-// WiPay webhook — no user JWT; verified with WIPAY_CALLBACK_SECRET.
+// WiPay webhook - no user JWT; verified with WIPAY_CALLBACK_SECRET.
 app.all("/webhooks/wipay", async (c) => {
   if (!verifyWipayCallbackSecret(c)) {
     return c.json({ error: "Unauthorized" }, 401);
@@ -622,7 +682,24 @@ app.all("/webhooks/wipay", async (c) => {
     return c.json({ error: "Intent not found" }, 404);
   }
 
-  const success = wipaySuccess(payload.status ?? payload.payment_status);
+  const success = wipaySuccess(payload.status);
+  if (success && !isWipayDemoMode() && !isSandboxWipay()) {
+    const statusUrl = Deno.env.get("WIPAY_STATUS_URL");
+    if (!statusUrl) {
+      console.error("[payments/wipay] live capture refused: WIPAY_STATUS_URL is not set");
+      return c.json({ error: "provider_status_unconfirmed" }, 409);
+    }
+    const transactionId = payloadString(payload, "transaction_id", "transactionId", "transactionid");
+    const confirmed = await fetch(statusUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${wipayApiKey() ?? ""}` },
+      body: JSON.stringify({ transaction_id: transactionId }),
+    }).then(async (res) => {
+      const body = await res.json().catch(() => ({})) as { status?: string };
+      return res.ok && wipayStatusAccepted(body.status);
+    }).catch(() => false);
+    if (!confirmed) return c.json({ error: "provider_status_unconfirmed" }, 409);
+  }
   let orderId = String(intent.order_id);
   if (success) {
     orderId = await completeWipayIntent(serviceSupabase, intent as Record<string, unknown>, payload);
@@ -659,12 +736,12 @@ app.all("/webhooks/wipay", async (c) => {
 const WipayCompleteBody = z.object({
   orderId: z.string().min(1),
   transactionId: z.string().optional(),
-  /** Ignored for money-marking — client status is not trusted (Finding K). */
+  /** Ignored for money-marking - client status is not trusted (Finding K). */
   status: z.string().optional(),
 });
 
 /**
- * Customer return from WiPay hosted page — poll-only.
+ * Customer return from WiPay hosted page - poll-only.
  * Only the secret-verified webhook may mark an intent completed.
  * This endpoint reports whether the webhook (or prior path) already completed payment.
  */
@@ -691,7 +768,7 @@ app.post("/wipay/complete", async (c) => {
     : null);
   if (!intent) return c.json({ error: "Payment not found" }, 404);
 
-  // Rush Pass uses /customer/rush-pass/confirm — refuse order-complete for null order intents
+  // Rush Pass uses /customer/rush-pass/confirm - refuse order-complete for null order intents
   if (!intent.order_id) {
     return c.json({
       error: "Not an order payment",
@@ -706,6 +783,9 @@ app.post("/wipay/complete", async (c) => {
   if (status === "completed" || status === "paid") {
     return c.json({ success: true, orderId: String(intent.order_id), status });
   }
+  if (status === "review") {
+    return c.json({ success: false, error: "We're still confirming this payment", code: "payment_review" }, 409);
+  }
   if (status === "failed" || status === "cancelled" || status === "expired") {
     return c.json({
       success: false,
@@ -716,7 +796,7 @@ app.post("/wipay/complete", async (c) => {
     }, 400);
   }
 
-  // Pending — webhook has not completed yet; client must poll (do NOT trust body.status)
+  // Pending - webhook has not completed yet; client must poll (do NOT trust body.status)
   return c.json({
     success: false,
     code: "pending_confirmation",
@@ -733,7 +813,7 @@ app.post("/refunds", async (c) => {
   const admin = await requireProductAdmin(c, "dash");
   if (admin instanceof Response) return admin;
 
-  // Align with Dash write bar — dash_ops cannot move money
+  // Align with Dash write bar - dash_ops cannot move money
   const DASH_REFUND_ROLES = new Set([
     "dash_admin",
     "platform_owner",
@@ -753,153 +833,35 @@ app.post("/refunds", async (c) => {
   });
   if (limited) return limited;
   
-  const body = await c.req.json();
-  const { transactionId, amount, reason } = body;
-  
+  const body = await c.req.json().catch(() => null);
+  const parsed = z.object({
+    transactionId: z.string().uuid(),
+    amount: z.number().positive(),
+    reason: z.string().min(1).max(500),
+    orderId: z.string().uuid().optional(),
+  }).safeParse(body);
+  if (!parsed.success) return c.json({ error: "Invalid refund request" }, 400);
+  const { transactionId, amount, reason } = parsed.data;
+
   const serviceSupabase = getServiceSupabase();
-  
   const { data: transaction } = await serviceSupabase
     .schema("payments")
     .from("transactions")
-    .select("*")
+    .select("id, order_id, amount")
     .eq("id", transactionId)
     .single();
-  
-  if (!transaction) {
-    return c.json({ error: "Transaction not found" }, 404);
-  }
+  if (!transaction?.order_id) return c.json({ error: "Transaction not found" }, 404);
 
-  // Get merchant_id from order
-  const { data: order } = await serviceSupabase
-    .schema("delivery")
-    .from("orders")
-    .select("merchant_id, total, payment_status")
-    .eq("id", transaction.order_id)
-    .single();
-  
-  const refundAmount = amount || transaction.amount;
-  
-  const { data: refund, error } = await serviceSupabase
-    .schema("payments")
-    .from("refunds")
-    .insert({
-      transaction_id: transactionId,
-      order_id: transaction.order_id,
-      amount: refundAmount,
-      currency: transaction.currency,
-      reason,
-      status: "pending",
-      initiated_by: admin.id,
-    })
-    .select()
-    .single();
-  
-  if (error) return c.json({ error: error.message }, 500);
-
-  // Dual-write refund to unified ledger
-  if (refund?.id) {
-    try {
-      const { dualWriteDashPayment } = await import("../_shared/unifiedLedger/dualWriteDash.ts");
-      await dualWriteDashPayment({
-        transactionId: `refund:${refund.id}`,
-        orderId: String(transaction.order_id),
-        merchantId: order?.merchant_id ? String(order.merchant_id) : null,
-        amount: refundAmount,
-        currency: transaction.currency,
-        kind: "order_refund",
-      });
-    } catch (e) {
-      console.error("[payments/refund] unified dual-write failed:", e);
-    }
-  }
-  
-  // Process refund with payment provider when configured
-  let providerRefundId: string | null = null;
-  let refundStatus = "pending";
-  const provider = String(transaction.provider || "").toLowerCase();
-
-  try {
-    if (provider === "paypal") {
-      return c.json({
-        error: "PayPal is no longer supported — refund historical PayPal captures manually",
-        refund,
-      }, 502);
-    } else if (provider === "wipay") {
-      // WiPay refund API varies by account — fail closed until WIPAY_REFUND_URL is set
-      const refundUrl = Deno.env.get("WIPAY_REFUND_URL");
-      const apiKey = Deno.env.get("WIPAY_API_KEY");
-      if (!refundUrl || !apiKey) {
-        return c.json({
-          error: "WiPay refund not configured (set WIPAY_REFUND_URL + WIPAY_API_KEY)",
-          refund,
-        }, 502);
-      }
-      const wipayRes = await fetch(refundUrl, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          transaction_id: transaction.provider_transaction_id,
-          amount: refundAmount,
-          reason,
-        }),
-      });
-      const wipayJson = await wipayRes.json().catch(() => ({}));
-      if (!wipayRes.ok) {
-        return c.json({ error: "WiPay refund failed", details: wipayJson, refund }, 502);
-      }
-      providerRefundId = String(wipayJson.id || wipayJson.refund_id || "");
-      refundStatus = "completed";
-    } else {
-      return c.json({
-        error: `Refund provider '${provider || "unknown"}' not supported`,
-        refund,
-      }, 400);
-    }
-
-    const { data: updated } = await serviceSupabase
-      .schema("payments")
-      .from("refunds")
-      .update({
-        status: refundStatus,
-        provider_refund_id: providerRefundId,
-        completed_at: new Date().toISOString(),
-      })
-      .eq("id", refund.id)
-      .select()
-      .single();
-
-    // Sync delivery order payment_status when provider completes
-    if (refundStatus === "completed" && transaction.order_id) {
-      const paidAmt = Number(transaction.amount) || 0;
-      const { data: allRefunds } = await serviceSupabase
-        .schema("payments")
-        .from("refunds")
-        .select("amount, status")
-        .eq("order_id", transaction.order_id)
-        .in("status", ["pending", "completed"]);
-      const refundedSum = (allRefunds || []).reduce(
-        (s, r) => s + Number((r as { amount?: number }).amount || 0),
-        0,
-      );
-      const nextStatus = refundedSum >= paidAmt - 0.001 ? "refunded" : "partially_refunded";
-      await serviceSupabase
-        .schema("delivery")
-        .from("orders")
-        .update({ payment_status: nextStatus, updated_at: new Date().toISOString() })
-        .eq("id", transaction.order_id);
-    }
-
-    return c.json({ refund: updated || refund }, 201);
-  } catch (e) {
-    console.error("[payments/refund] provider error:", e);
-    return c.json({
-      error: e instanceof Error ? e.message : "Refund provider error",
-      refund,
-    }, 502);
-  }
+  const queued = await queueAndExecuteRefund({
+    orderId: String(transaction.order_id),
+    transactionId,
+    amount,
+    reason,
+    initiatedBy: admin.id,
+    idempotencyKey: `admin-refund:${transactionId}:${amount}:${reason}`.slice(0, 180),
+  });
+  if (!queued.ok) return c.json({ error: queued.error }, queued.status as 400);
+  return c.json({ refund: queued.refund, providerError: queued.providerError ?? null }, queued.providerCompleted ? 201 : 202);
 });
 
 // ============================================================================
@@ -918,7 +880,7 @@ app.post("/payouts/merchant", async (c) => {
 });
 
 // ============================================================================
-// Courier Payouts — DEPRECATED (use /delivery/courier/payouts/close-period)
+// Courier Payouts - DEPRECATED (use /delivery/courier/payouts/close-period)
 // ============================================================================
 
 app.post("/payouts/courier", async (c) => {
@@ -932,7 +894,7 @@ app.post("/payouts/courier", async (c) => {
   );
 });
 
-/* LEGACY payout bodies removed — see git history if needed.
+/* LEGACY payout bodies removed - see git history if needed.
 app.post("/payouts/merchant_LEGACY_REMOVED", async () => {});
 app.post("/payouts/courier_LEGACY_REMOVED", async () => {});
 */
@@ -973,7 +935,7 @@ app.get("/methods", async (c) => {
 
 /**
  * Store tokenized card metadata only.
- * Requires provider_token from WiPay (or other processor) — never accepts raw PAN.
+ * Requires provider_token from WiPay (or other processor) - never accepts raw PAN.
  * Production card vault needs real WiPay tokenization before customers can save cards.
  */
 const SaveMethodBody = z.object({

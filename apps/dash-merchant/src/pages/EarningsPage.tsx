@@ -237,6 +237,29 @@ export default function EarningsPage({ onNavigate, onOpenMobileNav }: EarningsPa
           <p className="mb-inset-md text-body-sm text-on-surface-variant">
             Next payout: {data.nextPayoutDate}
           </p>
+          {data.books && (
+            <div className="w-full max-w-xl space-y-2 text-left text-body-sm text-on-surface">
+              <p>{data.books.availableWords}</p>
+              <p>{data.books.waitingWords}</p>
+              <p>{data.books.heldWords}</p>
+            </div>
+          )}
+          <div className="w-full max-w-xl text-left">
+            <h3 className="mb-2 text-label-md font-semibold text-on-surface">Statement</h3>
+            {(data.statement || []).length === 0 ? (
+              <p className="text-body-sm text-on-surface-variant">No statement lines yet.</p>
+            ) : (
+              <ul className="space-y-2">
+                {(data.statement || []).map((line) => (
+                  <li key={`${line.orderId}-${line.words}`}>
+                    <button type="button" className="text-left text-body-sm text-primary" onClick={() => onNavigate('orders')}>
+                      {line.words}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
         </section>
 
         <section className="flex flex-col gap-inset-sm rounded-xl border border-outline-variant bg-surface-container-lowest p-inset-md shadow-sm">

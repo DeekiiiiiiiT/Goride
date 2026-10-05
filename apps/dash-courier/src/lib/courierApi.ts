@@ -40,6 +40,7 @@ export type AvailableOrder = {
   id: string;
   order_number?: string;
   status: string;
+  payment_method?: string | null;
   delivery_fee?: number;
   /** Courier share of delivery fee (Model B). */
   delivery_fee_courier_amount?: number;
@@ -313,15 +314,47 @@ export async function submitCourierIssue(
   issueType: string,
   notes?: string,
   photoUrl?: string,
-): Promise<boolean> {
+): Promise<{ ok: boolean; review?: boolean; words?: string }> {
   const headers = await authHeaders();
-  if (!headers) return false;
+  if (!headers) return { ok: false };
   const res = await fetch(`${BASE}/orders/${orderId}/courier-issue`, {
     method: 'POST',
     headers,
     body: JSON.stringify({ issueType, notes, photoUrl }),
   });
+  const body = (await res.json().catch(() => ({}))) as { review?: boolean; words?: string };
+  return { ok: res.ok, review: body.review, words: body.words };
+}
+
+export async function logDeliveryAttempt(
+  orderId: string,
+  attemptType: 'call' | 'sms' | 'wait' | 'photo',
+  extra?: { waitSeconds?: number; photoUrl?: string; latitude?: number; longitude?: number },
+): Promise<boolean> {
+  const headers = await authHeaders();
+  if (!headers) return false;
+  const res = await fetch(`${BASE}/orders/${orderId}/delivery-attempt`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ attemptType, ...extra }),
+  });
   return res.ok;
+}
+
+export async function collectCash(
+  orderId: string,
+  amountReceived: number,
+): Promise<{ ok: true; words: string } | { ok: false; error: string }> {
+  const headers = await authHeaders();
+  if (!headers) return { ok: false, error: 'Sign in again' };
+  const res = await fetch(`${BASE}/orders/${orderId}/collect-cash`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ amountReceived }),
+  });
+  const body = (await res.json().catch(() => ({}))) as { words?: string; error?: string };
+  if (!res.ok) return { ok: false, error: body.error || 'Could not record the cash' };
+  return { ok: true, words: body.words || 'Paid in full' };
 }
 
 export type CourierPayout = {

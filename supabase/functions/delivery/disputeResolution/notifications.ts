@@ -1,5 +1,4 @@
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { orchestrateSystemOrderRefund } from "../admin/orderRefund.ts";
 
 /** Best-effort customer notification via order_events audit trail. */
 export async function notifyDisputeResolution(
@@ -81,18 +80,14 @@ export async function processPendingRefunds(
   let processed = 0;
   let failed = 0;
 
+  const { executeRefundById } = await import("../../_shared/rushMoney/executeRefund.ts");
   for (const row of pending ?? []) {
-    const orderId = String(row.order_id || "");
-    if (!orderId) {
+    const refundId = String(row.id || "");
+    if (!refundId) {
       failed += 1;
       continue;
     }
-    const result = await orchestrateSystemOrderRefund({
-      orderId,
-      amount: Number(row.amount),
-      reason: String(row.reason || "Pending refund retry"),
-      initiatedBy: "system",
-    });
+    const result = await executeRefundById(refundId);
     if (result.ok) processed += 1;
     else failed += 1;
   }

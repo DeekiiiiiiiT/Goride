@@ -1,6 +1,9 @@
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { orchestrateSystemOrderRefund } from "../admin/orderRefund.ts";
 import { applyMerchantFaultDebit } from "./merchantDebit.ts";
+import { merchantFundedAmount, reverseSplit } from "../../_shared/rushMoney/reverseSplit.ts";
+import { AUTO_REFUND_BUDGET_COUNT, AUTO_REFUND_BUDGET_JMD } from "../../_shared/rushMoney/cancelPolicy.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { notifyDisputeResolution } from "./notifications.ts";
 import { createLinkedSupportCase, createOrderDispute } from "./supportCase.ts";
 import type { FaultAttribution, ProcessDisputeResult, ResolutionAction } from "./types.ts";
@@ -10,6 +13,19 @@ function autoRefundCapJmd(): number {
   const raw = Deno.env.get("DASH_AUTO_DISPUTE_MAX_REFUND_JMD");
   if (raw) return Number(raw) || 0;
   return 4000;
+}
+
+async function customerOverRefundBudget(serviceSb: SupabaseClient, customerId: string | null): Promise<boolean> {
+  if (!customerId) return false;
+  const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+  const { data: orders } = await serviceSb.from("orders").select("id").eq("customer_id", customerId);
+  const ids = (orders || []).map((row: { id: string }) => row.id);
+  if (!ids.length) return false;
+  const pdb = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, { db: { schema: "payments" } });
+  const { data: refunds } = await pdb.from("refunds").select("amount, reason").in("order_id", ids).gte("created_at", since).in("status", ["pending", "submitted", "completed", "succeeded"]);
+  const autos = (refunds || []).filter((row: { reason?: string }) => String(row.reason || "").toLowerCase().startsWith("auto"));
+  const sum = autos.reduce((total: number, row: { amount?: number }) => total + Number(row.amount || 0), 0);
+  return autos.length >= AUTO_REFUND_BUDGET_COUNT || sum >= AUTO_REFUND_BUDGET_JMD;
 }
 
 function isAutoDisputeEnabled(): boolean {
@@ -92,6 +108,7 @@ export type ProcessDisputeInput = {
   contactEmail?: string | null;
   createdBy?: string | null;
   photoPath?: string | null;
+  itemIds?: string[];
 };
 
 /** Evaluate dispute rules and optionally auto-resolve. */
@@ -100,7 +117,7 @@ export async function processDispute(input: ProcessDisputeInput): Promise<Proces
 
   const { data: order } = await serviceSb
     .from("orders")
-    .select("id, status, order_number, merchant_id, customer_id, total, payment_status, courier_id, ready_at")
+    .select("id, status, order_number, merchant_id, customer_id, total, payment_status, courier_id, ready_at, subtotal, discount, merchant_commission_amount, delivery_fee_courier_amount, delivery_fee_platform_amount, service_fee, platform_fee, processing_fee, small_order_fee, tip, courier_tip_net, peak_pay_amount, tax_food_jmd, tax_platform_jmd, items")
     .eq("id", orderId)
     .maybeSingle();
 
@@ -120,11 +137,12 @@ export async function processDispute(input: ProcessDisputeInput): Promise<Proces
     if (shouldEvaluateForgottenRule(issueType, String(order.status), waitMinutes) && !await hasRuleRun(serviceSb, orderId, ruleId)) {
       const refundAmount = Number(order.total || 0);
       const cap = autoRefundCapJmd();
-      if (refundAmount > 0 && refundAmount <= cap && String(order.payment_status) === "paid") {
+      if (refundAmount > 0 && refundAmount <= cap && String(order.payment_status) === "paid" && !await customerOverRefundBudget(serviceSb, order.customer_id)) {
         const refundResult = await orchestrateSystemOrderRefund({
           orderId,
           amount: refundAmount,
-          reason: `Auto: forgotten order — courier waited ${waitMinutes}min`,
+          reason: `Auto: merchant fault forgotten order — courier waited ${waitMinutes}min`,
+          fault: "merchant",
           initiatedBy: "system",
           actorId: input.createdBy,
         });
@@ -165,9 +183,17 @@ export async function processDispute(input: ProcessDisputeInput): Promise<Proces
             await applyMerchantFaultDebit(serviceSb, {
               merchantId: String(order.merchant_id),
               orderId,
-              amount: refundAmount,
-              reason: `Chargeback: forgotten order ${orderRef}`,
+              skipLedger: true,
+              amount: merchantFundedAmount(reverseSplit({
+                order,
+                captureAmount: Number(order.total || 0),
+                refundAmount,
+                courierAtFault: false,
+                merchantAtFault: true,
+              })),
+              reason: `Merchant fault adjustment: forgotten order ${orderRef}`,
               createdBy: input.createdBy,
+              idempotencyKey: `fault_debit:${orderId}:${sourceId}`,
             });
           }
 
@@ -217,17 +243,28 @@ export async function processDispute(input: ProcessDisputeInput): Promise<Proces
     issueType === "missing" &&
     ["delivered", "completed"].includes(String(order.status)) &&
     input.photoPath &&
-    String(order.payment_status) === "paid"
+    String(order.payment_status) === "paid" &&
+    !await customerOverRefundBudget(serviceSb, order.customer_id)
   ) {
     const ruleId = "R6_missing_items_partial";
     if (!await hasRuleRun(serviceSb, orderId, ruleId)) {
-      const orderTotal = Number(order.total || 0);
-      const partialCap = Math.min(orderTotal * 0.5, autoRefundCapJmd());
+      const items = Array.isArray((order as { items?: unknown }).items) ? (order as { items: Array<Record<string, unknown>> }).items : [];
+      const wanted = new Set((input.itemIds || []).map(String));
+      const food = items.reduce((sum, item, index) => {
+        const id = String(item.id || item.menu_item_id || index);
+        const menuId = String(item.menu_item_id || "");
+        if (!wanted.has(id) && !wanted.has(menuId)) return sum;
+        return sum + Number(item.price || item.unit_price || 0) * Number(item.quantity || 1);
+      }, 0);
+      const subtotal = Number(order.subtotal || 0);
+      const taxShare = subtotal > 0 ? Number(order.tax_food_jmd || 0) * (food / subtotal) : 0;
+      const partialCap = Math.min(food + taxShare, autoRefundCapJmd());
       if (partialCap > 0) {
         const refundResult = await orchestrateSystemOrderRefund({
           orderId,
           amount: partialCap,
-          reason: "Auto: partial refund missing items (photo provided)",
+          reason: "Auto: merchant fault missing item and its tax",
+          fault: "merchant",
           initiatedBy: "system",
           actorId: input.createdBy,
         });
@@ -261,9 +298,17 @@ export async function processDispute(input: ProcessDisputeInput): Promise<Proces
             await applyMerchantFaultDebit(serviceSb, {
               merchantId: String(order.merchant_id),
               orderId,
-              amount: partialCap,
-              reason: `Partial chargeback: missing items ${orderRef}`,
+              skipLedger: true,
+              amount: merchantFundedAmount(reverseSplit({
+                order,
+                captureAmount: Number(order.total || 0),
+                refundAmount: partialCap,
+                courierAtFault: false,
+                merchantAtFault: true,
+              })),
+              reason: `Merchant fault adjustment: missing items ${orderRef}`,
               createdBy: input.createdBy,
+              idempotencyKey: `fault_debit:${orderId}:${sourceId}`,
             });
           }
           await serviceSb

@@ -14,6 +14,7 @@ type OrderLike = AvailableOrder & {
   tip?: number;
   peak_pay_amount?: number;
   total?: number;
+  payment_method?: string | null;
   status?: string;
   picked_up_at?: string | null;
   delivered_at?: string | null;
@@ -171,6 +172,8 @@ export function mapOrderToActiveDelivery(
     customerName,
     customerFirstName: customerName.split(/\s+/)[0] || customerName,
     customerPhone: customerPhone || undefined,
+    paymentMethod: order.payment_method ? String(order.payment_method) : undefined,
+    cashDue: Number(order.total || 0),
     storePhone,
     dropoffAddress: dropoff,
     dropoffLat,

@@ -163,6 +163,14 @@ jobs:
           supabase/functions/delivery/remittance/reseedSeededThresholds.test.ts
           supabase/functions/delivery/remittance/needsThresholdSeed.test.ts
 
+      - name: Deno test Rush money rules
+        run: >
+          deno test --allow-env
+          supabase/functions/_shared/rushMoney/refundEligibility.test.ts
+          supabase/functions/_shared/rushMoney/wipayContract.test.ts
+          supabase/functions/_shared/rushMoney/rushMoney.test.ts
+          supabase/functions/_shared/rushMoney/postJournal.test.ts
+
       - name: Typecheck fleet Rush spine
         env:
           VITE_SUPABASE_URL: https://ci-placeholder.supabase.co

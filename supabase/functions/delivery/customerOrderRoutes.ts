@@ -16,11 +16,9 @@ import {
 import { resolveOrderFloorJmd } from "../_shared/dashPricing.ts";
 import { assertSameMarketCoverage, resolveDashOrderPricing } from "./pricingResolver.ts";
 import { resolveMerchantFoodGctRate } from "../_shared/gctRate.ts";
-import { reverseOrderOutputTax } from "../_shared/gctLedger.ts";
 import { assertMerchantAcceptingOrders } from "./merchantOpenCheck.ts";
 import { ORDER_CUSTOMER_EMBED_WITH_USER } from "./orderSelectEmbeds.ts";
 import { processDispute } from "./disputeResolution/processDispute.ts";
-import { orchestrateSystemOrderRefund } from "./admin/orderRefund.ts";
 
 function asCoord(value: unknown): number | null {
   if (value == null || value === "") return null;
@@ -273,6 +271,35 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
         error: "Cash on delivery is not available yet. Please pay with card via WiPay.",
         code: "cash_not_available",
       }, 400);
+    }
+    {
+      const { walletDecision } = await import("../_shared/rushMoney/walletRules.ts");
+      const books = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+      const { data: wallet } = await books.schema("rush_money").from("accounts")
+        .select("balance_minor, created_at")
+        .eq("kind", "customer_wallet")
+        .eq("party_id", customer.id)
+        .eq("component", "")
+        .maybeSingle();
+      const { data: walletFlag } = await books.schema("rush_money").from("runtime_flags").select("enabled").eq("key", "wallet_live").maybeSingle();
+      const { count } = await serviceSb.from("orders").select("id", { count: "exact", head: true })
+        .eq("customer_id", customer.id)
+        .eq("payment_status", "paid")
+        .in("status", ["delivered", "completed"]);
+      const balanceMajor = Number(wallet?.balance_minor || 0) / 100;
+      const createdAt = wallet?.created_at ? Date.parse(String(wallet.created_at)) : NaN;
+      const decision = walletDecision({
+        balanceMajor,
+        debtAgeDays: balanceMajor > 0 && Number.isFinite(createdAt) ? Math.floor((Date.now() - createdAt) / 86_400_000) : 0,
+        completedCardOrders: count || 0,
+        walletLive: Boolean(walletFlag?.enabled),
+      });
+      if (!decision.orderingAllowed) {
+        return c.json({ error: decision.reason, code: "balance_due" }, 400);
+      }
+      if (paymentMethod === "cash" && !decision.codAllowed) {
+        return c.json({ error: decision.reason || "Cash isn't available on this account.", code: "cash_not_allowed" }, 400);
+      }
     }
 
     // Model B only — market already validated via same-town gate
@@ -542,6 +569,7 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
       delivery_instructions: body.deliveryInstructions,
       payment_method: paymentMethod,
       payment_status: isCash ? "pending_collection" : "pending",
+      money_state: isCash ? "awaiting_collection" : "awaiting_payment",
       ...(appliedPromoCode ? { promo_code: appliedPromoCode } : {}),
       ...(v2Pricing.rushPassMembershipId
         ? { rush_pass_membership_id: v2Pricing.rushPassMembershipId }
@@ -657,7 +685,12 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
       }
     }
 
-    return c.json({ order: { ...order, courier }, events: events || [] });
+    const { data: refunds } = await serviceSb.schema("payments").from("refunds")
+      .select("id, amount, status, reason, created_at")
+      .eq("order_id", id)
+      .order("created_at");
+
+    return c.json({ order: { ...order, courier, refunds: refunds || [] }, events: events || [] });
   });
 
   // Customer order history
@@ -821,34 +854,14 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
       );
     }
 
-    const now = new Date().toISOString();
-    const { data: updated, error: updateError } = await serviceSb
-      .from("orders")
-      .update({
-        status: "cancelled",
-        cancelled_at: now,
-        cancelled_by: "customer",
-        cancellation_reason: reason,
-      })
-      .eq("id", id)
-      .eq("customer_id", customer.id)
-      .in("status", ["placed", "accepted"])
-      .select()
-      .single();
-
-    if (updateError || !updated) {
-      return c.json({ error: updateError?.message ?? "Cancel failed" }, 500);
-    }
-
-    await serviceSb.from("order_events").insert({
-      order_id: id,
-      status: "cancelled",
-      actor_type: "customer",
-      actor_id: user.id,
-      notes: reason,
+    const { cancelOrder } = await import("./rushMoney/cancelOrder.ts");
+    const cancelled = await cancelOrder(serviceSb, {
+      orderId: id,
+      actor: "customer",
+      reason,
+      actorId: user.id,
     });
-
-    await reverseOrderOutputTax(serviceSb, id);
+    if (!cancelled.ok) return c.json({ error: cancelled.error }, cancelled.status as 400);
 
     if (order.courier_id) {
       await serviceSb
@@ -861,18 +874,7 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
       .update({ active_order_id: null })
       .eq("active_order_id", id);
 
-    let refundQueued = false;
-    if (String(order.payment_status || "") === "paid") {
-      const refundResult = await orchestrateSystemOrderRefund({
-        orderId: id,
-        reason,
-        initiatedBy: "customer",
-        actorId: user.id,
-      });
-      refundQueued = refundResult.ok;
-    }
-
-    return c.json({ order: updated, refundQueued });
+    return c.json({ order: cancelled.order, quote: cancelled.quote, refundQueued: cancelled.quote.customerRefundJmd > 0 });
   });
 
   const CUSTOMER_ISSUE_TYPES = new Set([
@@ -912,8 +914,16 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
     if (notes.length < 8) {
       return c.json({ error: "Please describe what happened (at least a short sentence)." }, 400);
     }
+    const itemIds = Array.isArray(body.itemIds)
+      ? body.itemIds.map((id: unknown) => String(id)).filter(Boolean).slice(0, 40)
+      : Array.isArray(body.item_ids)
+      ? body.item_ids.map((id: unknown) => String(id)).filter(Boolean).slice(0, 40)
+      : [];
     if (photoPath && !photoPath.startsWith(`${user.id}/issues/`)) {
       return c.json({ error: "Invalid photo" }, 400);
+    }
+    if ((issueType === "missing" || issueType === "wrong") && itemIds.length === 0) {
+      return c.json({ error: "Choose the items that were missing or wrong." }, 400);
     }
 
     const serviceSb = getServiceSupabase();
@@ -967,6 +977,7 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
       contactEmail: (customer.email as string | null) || user.email || null,
       createdBy: user.id,
       photoPath: photoPath || null,
+      itemIds,
     });
 
     return c.json({

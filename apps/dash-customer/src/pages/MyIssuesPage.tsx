@@ -21,6 +21,21 @@ function statusLabel(status: string): string {
   }
 }
 
+function moneyOutcome(item: { status: string; auto_resolved?: boolean; resolution_action?: string; created_at: string }): string {
+  const deadline = new Date(new Date(item.created_at).getTime() + 48 * 60 * 60 * 1000);
+  const deadlineWords = deadline.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+  if (item.status === 'open' || item.status === 'pending') {
+    return `A person replies by ${deadlineWords}.`;
+  }
+  if (item.auto_resolved || item.resolution_action === 'refund') {
+    return 'The money was returned to the card used on this order.';
+  }
+  if (item.status === 'resolved' || item.status === 'closed') {
+    return 'This issue is closed. No further charge or refund is waiting.';
+  }
+  return `Update expected by ${deadlineWords}.`;
+}
+
 export default function MyIssuesPage({ onNavigate }: Props) {
   const { data, isLoading, error } = useQuery({
     queryKey: ['customer-support-cases'],
@@ -70,9 +85,7 @@ export default function MyIssuesPage({ onNavigate }: Props) {
                 Ref #{item.id.slice(0, 8).toUpperCase()} ·{' '}
                 {new Date(item.created_at).toLocaleDateString()}
               </p>
-              {item.auto_resolved ? (
-                <p className="text-body-sm text-primary">Auto-resolved</p>
-              ) : null}
+              <p className="text-body-sm text-on-surface">{moneyOutcome(item)}</p>
             </button>
           ))
         )}

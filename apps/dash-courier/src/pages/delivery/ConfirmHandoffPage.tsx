@@ -1,17 +1,35 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
 
 type ConfirmHandoffPageProps = {
+  showCash?: boolean;
+  cashDue?: number;
   onBack: () => void;
-  onComplete: () => void;
+  onComplete: (cashReceived?: number) => void;
   onCustomerUnavailable: () => void;
 };
 
+function moneyWords(amount: number): string {
+  return `J$${amount.toFixed(2)}`;
+}
+
 export function ConfirmHandoffPage({
+  showCash = false,
+  cashDue = 0,
   onBack,
   onComplete,
   onCustomerUnavailable,
 }: ConfirmHandoffPageProps) {
+  const [cash, setCash] = useState('');
+  const received = Number(cash);
+  const due = Math.max(0, cashDue);
+  let cashWords = 'Enter what the customer handed you.';
+  if (cash.trim() && Number.isFinite(received)) {
+    if (received <= 0) cashWords = 'The customer refused to pay. They still owe this order.';
+    else if (received + 0.009 < due) cashWords = `Short by ${moneyWords(due - received)}. You keep your full share. The customer still owes the rest.`;
+    else if (received > due + 0.009) cashWords = `Give ${moneyWords(received - due)} change.`;
+    else cashWords = 'Exact amount. No change.';
+  }
   return (
     <div className="fixed inset-0 z-[70] bg-background flex flex-col">
       <header className="bg-surface shadow-sm fixed top-0 w-full z-50 flex justify-between items-center px-[var(--spacing-edge)] h-14 pt-safe safe-x">
@@ -40,6 +58,30 @@ export function ConfirmHandoffPage({
               You selected hand to customer. Ensure you have given the order to the correct person.
             </p>
           </div>
+          {showCash && (
+            <div className="w-full text-left space-y-3">
+              <p className="text-base text-on-surface">Amount due {moneyWords(due)}</p>
+              <label className="block space-y-2">
+                <span className="text-sm font-semibold text-on-surface">Amount received</span>
+                <input
+                  inputMode="decimal"
+                  value={cash}
+                  onChange={(e) => setCash(e.target.value)}
+                  placeholder="0.00"
+                  className="w-full h-14 rounded-lg border border-outline-variant bg-surface px-4 text-2xl"
+                />
+              </label>
+              <p className="text-sm text-on-surface">{cashWords}</p>
+              <div className="flex gap-2">
+                <button type="button" className="min-h-11 flex-1 rounded-lg border border-outline-variant text-sm font-semibold" onClick={() => setCash(due.toFixed(2))}>
+                  No change
+                </button>
+                <button type="button" className="min-h-11 flex-1 rounded-lg border border-outline-variant text-sm font-semibold" onClick={() => setCash('0')}>
+                  Refused
+                </button>
+              </div>
+            </div>
+          )}
           <button
             type="button"
             onClick={onCustomerUnavailable}
@@ -54,7 +96,7 @@ export function ConfirmHandoffPage({
       <div className="fixed bottom-0 left-0 w-full bg-surface shadow-[0_-4px_12px_rgba(0,0,0,0.04)] px-[var(--spacing-edge)] pt-4 pb-safe z-50">
         <button
           type="button"
-          onClick={onComplete}
+          onClick={() => onComplete(cash.trim() ? Number(cash) : undefined)}
           className="w-full max-w-md mx-auto h-14 bg-primary text-on-primary rounded-lg text-xl font-semibold flex items-center justify-center shadow-primary active:scale-[0.98] gap-2"
         >
           <MaterialIcon name="check_circle" />

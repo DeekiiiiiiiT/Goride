@@ -35,6 +35,8 @@ export type ActiveDelivery = {
   customerName: string;
   customerFirstName: string;
   customerPhone?: string;
+  paymentMethod?: string;
+  cashDue?: number;
   storePhone?: string;
   dropoffAddress: string;
   dropoffLat?: number;

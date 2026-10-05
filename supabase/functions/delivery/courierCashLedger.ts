@@ -245,6 +245,13 @@ export async function handleOrderDelivered(
       console.error("[COD] remittance/ledger collect parked/failed:", e);
     }
   }
+
+  try {
+    const { settleDeliveredOrder } = await import("./rushMoney/settleOrder.ts");
+    await settleDeliveredOrder(sb, orderId);
+  } catch (e) {
+    console.error("[rush-money] settle", e);
+  }
 }
 
 export function computeCodLedgerAmounts(order: Record<string, unknown>): CodTrialBalance {

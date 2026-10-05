@@ -8,6 +8,7 @@ import { dualWriteDashPayment } from "../../_shared/unifiedLedger/dualWriteDash.
 import { requireDashWrite } from "./dashPermissions.ts";
 import { getDb } from "./merchantAdminShared.ts";
 import { applyMerchantFaultDebit } from "../disputeResolution/merchantDebit.ts";
+import { merchantFundedAmount, reverseSplit } from "../../_shared/rushMoney/reverseSplit.ts";
 
 function getPaymentsDb() {
   return createClient(
@@ -70,44 +71,10 @@ export function registerFinanceAdminRoutes(app: Hono) {
   });
 
   admin.post("/payouts", async (c) => {
-    const admin = c.get("adminUser") as ProductAdminUser;
-    const denied = requireDashWrite(admin);
-    if (denied) return denied;
-    const body = await c.req.json().catch(() => ({}));
-    const merchantId = body.merchant_id as string;
-    const amountNum = Number(body.amount);
-    const feeNum = Number(body.fee ?? 0) || 0;
-    if (!merchantId || Number.isNaN(amountNum) || amountNum <= 0) {
-      return c.json({ error: "merchant_id and positive amount required" }, 400);
-    }
-    const pdb = getPaymentsDb();
-    const { data, error } = await pdb.from("merchant_payouts").insert({
-      merchant_id: merchantId,
-      amount: amountNum,
-      fee: feeNum,
-      net_amount: amountNum - feeNum,
-      currency: body.currency ?? "JMD",
-      status: "pending",
-      period_start: body.period_start ?? null,
-      period_end: body.period_end ?? null,
-      order_count: Number(body.order_count ?? 0) || 0,
-      bank_account_last4: body.bank_account_last4 ?? null,
-      notes: body.notes ?? body.reference ?? null,
-    }).select().single();
-    if (error) return c.json({ error: error.message }, 500);
-    try {
-      await dualWriteDashPayment({
-        transactionId: String(data.id),
-        orderId: String(data.id),
-        merchantId,
-        amount: Number(data.net_amount ?? amountNum - feeNum),
-        currency: String(data.currency ?? "JMD"),
-        kind: "merchant_payout",
-      });
-    } catch (dwErr) {
-      console.error("[dash finance] merchant_payout dual-write failed:", dwErr);
-    }
-    return c.json({ payout: data }, 201);
+    return c.json({
+      error: "payouts_are_weekly",
+      message: "Use the weekly payout batch. Hand-typed payouts are closed.",
+    }, 410);
   });
 
   admin.post("/payouts/:id/hold", async (c) => {
@@ -220,13 +187,22 @@ export function registerFinanceAdminRoutes(app: Hono) {
       : (existing.refund_amount != null ? Number(existing.refund_amount) : null);
 
     let refundResult: Record<string, unknown> | null = null;
+    if (nextStatus === "refunded" && refundAmount != null && refundAmount > 10000) {
+      const second = String(body.secondApproverId || "");
+      if (!second || second === adminUser.id) {
+        return c.json({ error: "A second finance person must approve a refund above J$10,000." }, 400);
+      }
+    }
     if (nextStatus === "refunded" && refundAmount != null && refundAmount > 0) {
       const { orchestrateOrderRefund } = await import("./orderRefund.ts");
       const authHeader = c.req.header("Authorization") || "";
+      const faultRaw = String(body.fault_attribution || existing.fault_attribution || "");
+      const fault = faultRaw === "merchant_fault" ? "merchant" : faultRaw === "courier_fault" ? "courier" : null;
       const result = await orchestrateOrderRefund({
         orderId: String(existing.order_id),
         amount: refundAmount,
         reason: String(body.resolution_notes || existing.resolution_notes || "Dispute refund"),
+        fault,
         admin: adminUser,
         authHeader,
       });
@@ -243,20 +219,28 @@ export function registerFinanceAdminRoutes(app: Hono) {
         refund: result.refund,
       };
 
-      const fault = String(body.fault_attribution || existing.fault_attribution || "undetermined");
-      if (fault === "merchant_fault") {
+      if (fault === "merchant") {
         const { data: order } = await db
           .from("orders")
-          .select("merchant_id")
+          .select("merchant_id, total, platform_fee, service_fee, processing_fee, delivery_fee, tip, courier_tip_net, subtotal, discount, merchant_commission_amount, delivery_fee_platform_amount, delivery_fee_courier_amount, peak_pay_amount, tax_food_jmd, tax_platform_jmd, small_order_fee")
           .eq("id", existing.order_id)
           .maybeSingle();
         if (order?.merchant_id) {
+          const food = merchantFundedAmount(reverseSplit({
+            order,
+            captureAmount: Number(order.total || refundAmount),
+            refundAmount,
+            courierAtFault: fault === "courier",
+            merchantAtFault: fault === "merchant",
+          }));
           await applyMerchantFaultDebit(db, {
             merchantId: String(order.merchant_id),
+            skipLedger: true,
             orderId: String(existing.order_id),
-            amount: refundAmount,
-            reason: `Dispute refund: ${c.req.param("id")}`,
+            amount: food,
+            reason: `Merchant fault adjustment: ${c.req.param("id")}`,
             createdBy: adminUser.id,
+            idempotencyKey: `fault_debit:${existing.order_id}:${c.req.param("id")}`,
           });
         }
       }

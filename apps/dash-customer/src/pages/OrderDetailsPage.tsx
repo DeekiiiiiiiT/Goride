@@ -304,6 +304,23 @@ export default function OrderDetailsPage({ orderId, onNavigate }: Props) {
             />
           )}
 
+          {(order.refunds || []).length > 0 && (
+            <div className="mt-6 border-t border-surface-container-high pt-6">
+              <h4 className="mb-2 text-label-md font-semibold text-on-surface-variant uppercase">Refunds</h4>
+              <ul className="flex flex-col gap-2">
+                {(order.refunds || []).map((refund) => (
+                  <li key={refund.id} className="text-body-sm text-on-surface">
+                    {refund.status === 'completed' || refund.status === 'succeeded'
+                      ? `${formatJmd(refund.amount)} is back on your card for this order.`
+                      : refund.status === 'failed'
+                        ? `A refund of ${formatJmd(refund.amount)} on this order needs a person to finish it.`
+                        : `A refund of ${formatJmd(refund.amount)} on this order has started and is on its way back to your card.`}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
           {order.paymentMethod && (
             <div className="mt-6 border-t border-surface-container-high pt-6">
               <h4 className="mb-2 text-label-md font-semibold text-on-surface-variant uppercase">Payment Method</h4>
