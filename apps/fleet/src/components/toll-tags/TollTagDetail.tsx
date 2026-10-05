@@ -79,7 +79,7 @@ export function TollTagDetail({
   onRequestAssign,
 }: TollTagDetailProps) {
   const [lowBalanceThreshold, setLowBalanceThreshold] = useState<number>(
-    resolveLowBalanceThreshold(tag.lowBalanceThreshold),
+    resolveLowBalanceThreshold(tag.lowBalanceThreshold, tag.resolvedLowBalanceThreshold),
   );
   const [isEditingThreshold, setIsEditingThreshold] = useState(false);
   const [thresholdInput, setThresholdInput] = useState('');

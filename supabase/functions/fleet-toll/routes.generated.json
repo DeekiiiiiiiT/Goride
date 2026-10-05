@@ -1,7 +1,7 @@
 {
   "slug": "fleet-toll",
-  "generatedAt": "2026-10-05T22:57:02.773Z",
-  "routeCount": 98,
+  "generatedAt": "2026-10-05T23:50:33.703Z",
+  "routeCount": 99,
   "routes": [
     "DELETE /toll-plazas/:id",
     "DELETE /toll-tags/:id",
@@ -47,6 +47,7 @@
     "GET /toll-plazas",
     "GET /toll-plazas/:id",
     "GET /toll-tags",
+    "GET /toll-tags/:id",
     "GET /toll-tags/low-balance",
     "PATCH ${BASE}/edit",
     "PATCH /toll-tags/:id",

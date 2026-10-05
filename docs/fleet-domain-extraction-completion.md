@@ -100,7 +100,7 @@ Verified separately: **no live server-side caller targets the shim URL** — a s
 
 All six slugs PASS on logged-in `roamfleet.co` with per-row evidence: fuel `X-Total-Count: 24`; toll logs 200 (`/toll-tags` 404 noted, non-CORS — that note is history; the October 2026 toll-tag audit reopened it because the screens were empty); ops maintenance hub 200; claims export **215 = API 215**; pay Settlements **2 of 2**; core drivers list 200. No CORS errors anywhere. Notes: [`docs/phase-i-cors-browser-checklist.md`](./phase-i-cors-browser-checklist.md).
 
-A later browser close-out fails if the page’s main load returns 404 or 5xx. A missing route is not a pass, even when CORS is quiet and the screen renders an empty list.
+A later browser close-out fails if the page’s main load returns 401, 403, 404, or 5xx. A missing route or a rejected sign-in is not a pass, even when CORS is quiet and the screen renders an empty list.
 
 **Rollback (ADR-0022):** code remount + revert timed at **14 ms**; single-domain edge redeploy (`fleet-toll`) **~6.1 s** + smoke green. Full RTO is dominated by the client app ship, which was not timed — **≤4h stays a planning ceiling, not a measured number**.
 
@@ -120,7 +120,7 @@ The bar for any future extraction. D1–D11 are the original fuel gates; D12–D
 | D6 | Dedicated `API_ENDPOINTS.<domain>` + full client sweep | Generated manifest: called prefixes ⊆ served routes |
 | D7 | Money couplings are HTTP + retry/timeout + **block on hard failure** | Seal failure fails close |
 | D8 | Auth proof with a real user JWT: missing path 404, real path 200 (or 403 — never 404) | Smoke green |
-| D9 | **Browser** soak in devtools: list screens load, totals real if `X-Total-Count` used | No CORS blocks, no silent null totals. A 404 or 5xx on a page’s main load fails the pass |
+| D9 | **Browser** soak in devtools: list screens load, totals real if `X-Total-Count` used | No CORS blocks, no silent null totals. A 401, 403, 404, or 5xx on a page’s main load fails the pass |
 | D10 | CI: function in deploy list; path triggers include bundler + domain packages | Workflow updated |
 | D11 | Execution log row filled; extraction-status agrees | Docs + status endpoint agree |
 | D12 | Built by `createFleetFunction` — maintenance gate, error boundary, correlation ID, path normalization | Kernel lint green |

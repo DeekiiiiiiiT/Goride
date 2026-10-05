@@ -60,16 +60,21 @@ export function TollLiveMonitorPage({ onNavigate }: { onNavigate?: (page: string
   const [drawerCrossings, setDrawerCrossings] = useState<TollCrossingDto[]>([]);
   const [drawerTotal, setDrawerTotal] = useState(0);
   const [healthBanner, setHealthBanner] = useState<string | null>(null);
+  const [plazasUnavailable, setPlazasUnavailable] = useState(false);
 
   const load = useCallback(async () => {
     if (!token) return;
     setRefreshing(true);
     try {
-      const [next, settings, plazas] = await Promise.all([
+      const plazaResult = await api.getTollPlazas()
+        .then((rows) => ({ ok: true as const, rows }))
+        .catch(() => ({ ok: false as const, rows: [] }));
+      const [next, settings] = await Promise.all([
         listActiveRidesForTollMonitor(token),
         getTollDispatchSettings(token).catch(() => null),
-        api.getTollPlazas().catch(() => []),
       ]);
+      setPlazasUnavailable(!plazaResult.ok);
+      const plazas = plazaResult.rows;
       setRides(next as ActiveRideWithTollMeta[]);
       const health = assessTollDetectionHealth({
         settings: settings ?? { toll_detection_enabled: false },
@@ -134,6 +139,13 @@ export function TollLiveMonitorPage({ onNavigate }: { onNavigate?: (page: string
           Refresh
         </button>
       </div>
+
+      {plazasUnavailable && (
+        <div role="alert" className="flex items-center justify-between gap-3 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+          <span>Plaza names unavailable. Active trips are still listed.</span>
+          <button type="button" className="font-medium underline" onClick={() => void load()}>Retry</button>
+        </div>
+      )}
 
       {healthBanner && (
         <div

@@ -25,6 +25,11 @@ export type TollTagWriteResult =
 const PROVIDERS = new Set<string>(TOLL_TAG_PROVIDERS);
 const STATUSES = new Set<string>(TOLL_TAG_STATUSES);
 
+function canonicalStatus(value: string): string {
+  const match = TOLL_TAG_STATUSES.find((status) => status.toLowerCase() === value.toLowerCase());
+  return match ?? value;
+}
+
 function cleanString(value: unknown, max = 200): string | null {
   if (typeof value !== 'string') return null;
   const trimmed = value.trim();
@@ -58,7 +63,7 @@ export function parseTollTagCreate(body: unknown): TollTagWriteResult {
   const raw = body as Record<string, unknown>;
   const provider = cleanString(raw.provider, 40);
   const tagNumber = cleanString(raw.tagNumber, 64);
-  const status = cleanString(raw.status, 40) ?? 'Active';
+  const status = canonicalStatus(cleanString(raw.status, 40) ?? 'Active');
   if (!provider || !PROVIDERS.has(provider)) return { ok: false, error: 'Choose a provider' };
   if (!tagNumber) return { ok: false, error: 'Tag number is required' };
   if (!STATUSES.has(status)) return { ok: false, error: 'Choose a valid status' };
@@ -90,7 +95,7 @@ export function parseTollTagPatch(body: unknown): TollTagWriteResult | { ok: tru
     fields.tagNumber = tagNumber;
   }
   if (raw.status != null) {
-    const status = cleanString(raw.status, 40);
+    const status = canonicalStatus(cleanString(raw.status, 40) ?? '');
     if (!status || !STATUSES.has(status)) return { ok: false, error: 'Choose a valid status' };
     fields.status = status as TollTagWritableStatus;
   }

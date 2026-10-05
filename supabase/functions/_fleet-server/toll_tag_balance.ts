@@ -10,7 +10,7 @@ export async function refreshTagBalanceForLedgerWrite(entry: Record<string, unkn
   const orgId = String(entry.organizationId || "").trim();
   if (!tagId || !orgId) return;
 
-  const { data, error } = await getServiceClient().rpc("fleet_toll_tag_balance_rows", { p_org: orgId });
+  const { data, error } = await getServiceClient().rpc("fleet_toll_tag_balance_rows", { p_org: orgId, p_tag_id: tagId });
   if (error || !Array.isArray(data)) return;
   const row = (data as Array<{ tag_id?: string; ledger_count?: number; balance?: number }>).find(
     (r) => String(r.tag_id) === tagId,

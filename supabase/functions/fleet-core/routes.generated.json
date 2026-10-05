@@ -1,6 +1,6 @@
 {
   "slug": "fleet-core",
-  "generatedAt": "2026-10-05T22:57:02.857Z",
+  "generatedAt": "2026-10-05T23:50:33.806Z",
   "routeCount": 567,
   "routes": [
     "ALL /make-server-37f42386/webhooks/wipay-fleet-modules",

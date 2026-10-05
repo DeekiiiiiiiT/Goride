@@ -274,9 +274,8 @@ export function TollLowBalanceQueue({
                             variant="ghost"
                             size="sm"
                             onClick={() => {
-                              void api.getTollTags().then((tags: TollTag[]) => {
-                                const tag = (tags || []).find((item) => item.id === row.id);
-                                if (tag) onOpenTag(tag);
+                              void api.getTollTag(row.id).then((tag: TollTag) => {
+                                if (tag?.id) onOpenTag(tag);
                                 else toast.error('That tag is no longer in the inventory');
                               }).catch((e) => toast.error(tollErrorMessage(e, 'Could not open this tag')));
                             }}

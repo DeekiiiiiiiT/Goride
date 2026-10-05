@@ -2704,6 +2704,14 @@ export const api = {
     return tags;
   },
 
+  async getTollTag(id: string) {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.toll}/toll-tags/${encodeURIComponent(id)}`, {
+      headers: await requireAuthHeaders(null),
+    });
+    if (!response.ok) throw await tollApiErrorFromResponse(response, 'Could not open this tag');
+    return response.json();
+  },
+
   async getTollLowBalance() {
     const response = await fetchWithRetry(`${API_ENDPOINTS.toll}/toll-tags/low-balance`, {
       headers: await requireAuthHeaders(null),
@@ -6594,6 +6602,7 @@ export const api = {
       uberOrganizationUuid: string | null;
       roamOrganizationUuid: string | null;
       inDriveOrganizationUuid: string | null;
+      tollLowBalanceDefaultJmd: number | null;
     };
   }> {
     const params = new URLSearchParams();
@@ -6615,6 +6624,7 @@ export const api = {
     uberOrganizationUuid?: string | null;
     roamOrganizationUuid?: string | null;
     inDriveOrganizationUuid?: string | null;
+    tollLowBalanceDefaultJmd?: number | null;
   }): Promise<{ success: boolean; data: Record<string, unknown> }> {
     const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/organization-settings`, {
       method: 'PUT',

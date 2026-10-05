@@ -9,6 +9,7 @@ vi.mock('../../services/api', () => ({
   api: {
     getTollLowBalance: vi.fn().mockRejectedValue(new Error('404')),
     getTollTags: vi.fn().mockRejectedValue(new Error('404')),
+    getOrganizationSettings: vi.fn().mockResolvedValue({ data: { tollLowBalanceDefaultJmd: 500 } }),
   },
 }));
 

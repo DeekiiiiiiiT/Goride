@@ -19,7 +19,15 @@ import {
   readOptionalClientId,
 } from "../../../packages/toll-core/src/tollTagWrite.ts";
 
-const app = new Hono();
+type TollInventoryEnv = {
+  Variables: {
+    rbacUser?: RbacUser;
+    __cachedRequestBody?: Record<string, unknown> | null;
+  };
+};
+type TollCtx = Context<TollInventoryEnv>;
+
+const app = new Hono<TollInventoryEnv>();
 app.use("*", requireAuth({ strict: true }));
 
 const PAGE = 200;
@@ -35,12 +43,12 @@ type BalanceRow = {
   span_days: number | null;
 };
 
-function platformUser(c: Context): boolean {
+function platformUser(c: TollCtx): boolean {
   const user = c.get("rbacUser") as RbacUser | undefined;
   return Boolean(user && PLATFORM_RESOLVED_ROLES.has(user.resolvedRole));
 }
 
-function orgOrForbid(c: Context): string | null | Response {
+function orgOrForbid(c: TollCtx): string | null | Response {
   const orgId = getOrgId(c);
   if (!orgId && !platformUser(c)) return c.json({ error: "Organization required" }, 403);
   return orgId;
@@ -81,10 +89,12 @@ async function orgDefaultThreshold(orgId: string | null): Promise<number | null>
   return Number.isFinite(n) && n > 0 ? n : null;
 }
 
-async function balanceMap(orgId: string | null): Promise<Map<string, BalanceRow>> {
+async function balanceMap(orgId: string | null, tagId?: string): Promise<Map<string, BalanceRow>> {
   const map = new Map<string, BalanceRow>();
   if (!orgId) return map;
-  const { data, error } = await getServiceClient().rpc("fleet_toll_tag_balance_rows", { p_org: orgId });
+  const args: { p_org: string; p_tag_id?: string } = { p_org: orgId };
+  if (tagId) args.p_tag_id = tagId;
+  const { data, error } = await getServiceClient().rpc("fleet_toll_tag_balance_rows", args);
   if (error || !Array.isArray(data)) return map;
   for (const row of data as BalanceRow[]) {
     if (row?.tag_id) map.set(String(row.tag_id), row);
@@ -92,7 +102,21 @@ async function balanceMap(orgId: string | null): Promise<Map<string, BalanceRow>
   return map;
 }
 
-function presentTag(tag: Record<string, unknown>, row: BalanceRow | undefined, orgDefault: number | null) {
+type PresentedTag = Record<string, unknown> & {
+  id?: unknown;
+  status?: unknown;
+  tagNumber?: unknown;
+  provider?: unknown;
+  assignedVehicleId?: unknown;
+  assignedVehicleName?: unknown;
+  updatedAt?: unknown;
+  lastCalculatedBalance: number | null;
+  lastBalanceSyncedAt: string | null;
+  resolvedLowBalanceThreshold: number;
+  balanceStale: boolean;
+};
+
+function presentTag(tag: Record<string, unknown>, row: BalanceRow | undefined, orgDefault: number | null): PresentedTag {
   const cached = typeof tag.lastCalculatedBalance === "number" ? tag.lastCalculatedBalance : null;
   const fromLedger = row && Number(row.ledger_count) > 0 ? Number(row.balance) : null;
   const balance = fromLedger != null && Number.isFinite(fromLedger) ? fromLedger : cached;
@@ -104,10 +128,15 @@ function presentTag(tag: Record<string, unknown>, row: BalanceRow | undefined, o
     lastBalanceSyncedAt: asOf,
     resolvedLowBalanceThreshold: thresholdFor(tag, orgDefault),
     balanceStale: stale,
-  };
+  } as PresentedTag;
 }
 
-async function listTags(c: Context, orgId: string | null, offsetOverride?: number) {
+async function listTags(
+  c: TollCtx,
+  orgId: string | null,
+  offsetOverride?: number,
+  shared?: { balances: Map<string, BalanceRow>; orgDefault: number | null },
+) {
   const offset = offsetOverride ?? (Math.max(0, Number(c.req.query("cursor") || 0) || 0));
   const res = await queryFleet("toll_tags", {
     ...(orgId ? { org: orgId } : {}),
@@ -118,14 +147,14 @@ async function listTags(c: Context, orgId: string | null, offsetOverride?: numbe
   });
   if (res.error) throw res.error;
   const tags = (res.data as Record<string, unknown>[]).filter((tag) => belongsToOrgStrict(tag, c) || platformUser(c));
-  const balances = await balanceMap(orgId);
-  const orgDefault = await orgDefaultThreshold(orgId);
+  const balances = shared?.balances ?? await balanceMap(orgId);
+  const orgDefault = shared ? shared.orgDefault : await orgDefaultThreshold(orgId);
   const presented = tags.map((tag) => presentTag(tag, balances.get(String(tag.id)), orgDefault));
   const nextCursor = tags.length === PAGE ? String(offset + PAGE) : null;
   return { tags: presented, nextCursor, orgDefault };
 }
 
-function rpcError(error: { message?: string } | null): { status: number; error: string; reason: string } | null {
+function rpcError(error: { message?: string } | null): { status: 404 | 409; error: string; reason: string } | null {
   const msg = error?.message || "";
   if (!msg) return null;
   if (msg.includes("tag_not_found") || msg.includes("vehicle_not_found")) {
@@ -156,13 +185,14 @@ app.get("/toll-tags/low-balance", requirePermission("toll.view"), async (c) => {
   try {
     const org = orgOrForbid(c);
     if (org instanceof Response) return org;
+    const balances = await balanceMap(org);
+    const orgDefault = await orgDefaultThreshold(org);
     const tags = [];
     for (let offset = 0; offset < PAGE * 50; offset += PAGE) {
-      const page = await listTags(c, org, offset);
+      const page = await listTags(c, org, offset, { balances, orgDefault });
       tags.push(...page.tags);
       if (!page.nextCursor) break;
     }
-    const balances = await balanceMap(org);
     const items = [];
     for (const tag of tags) {
       const status = String(tag.status || "");
@@ -210,6 +240,21 @@ app.get("/toll-tags/low-balance", requirePermission("toll.view"), async (c) => {
   }
 });
 
+app.get("/toll-tags/:id", requirePermission("toll.view"), async (c) => {
+  try {
+    const id = c.req.param("id");
+    const existing = await kv.get(`toll_tag:${id}`) as Record<string, unknown> | null;
+    if (!existing || !belongsToOrgStrict(existing, c)) return c.json({ error: "Toll tag not found" }, 404);
+    const org = getOrgId(c);
+    const balances = await balanceMap(org, id);
+    const orgDefault = await orgDefaultThreshold(org);
+    return c.json(presentTag(existing, balances.get(id), orgDefault));
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
+    return c.json({ error: message }, 500);
+  }
+});
+
 app.get("/toll-tags", requirePermission("toll.view"), async (c) => {
   try {
     const org = orgOrForbid(c);
@@ -240,7 +285,7 @@ app.post("/toll-tags", requirePermission("toll.manage"), async (c) => {
 
     const dup = await queryFleet("toll_tags", {
       org,
-      filters: [{ op: "ilike", col: "tag_number", value: parsed.fields.tagNumber }],
+      filters: [{ op: "eq", col: "tag_number", value: parsed.fields.tagNumber }],
       limit: 20,
     });
     const clash = (dup.data as Record<string, unknown>[]).find((row) =>
@@ -289,7 +334,7 @@ app.patch("/toll-tags/:id", requirePermission("toll.manage"), async (c) => {
       if (org) {
         const dup = await queryFleet("toll_tags", {
           org,
-          filters: [{ op: "ilike", col: "tag_number", value: parsed.fields.tagNumber }],
+          filters: [{ op: "eq", col: "tag_number", value: parsed.fields.tagNumber }],
           limit: 20,
         });
         const clash = (dup.data as Record<string, unknown>[]).find((row) =>

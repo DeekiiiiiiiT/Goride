@@ -59,7 +59,10 @@ function BulkImportTagsModalInner({ isOpen, onClose, onImportComplete }: BulkImp
         const parts = line.split(',').map(p => p.trim());
         const provider = parts[0];
         const tagNumber = parts[1];
-        const status = parts[2] || 'Active';
+        const rawStatus = (parts[2] || 'Active').trim();
+        const status = rawStatus
+          ? rawStatus.charAt(0).toUpperCase() + rawStatus.slice(1).toLowerCase()
+          : 'Active';
 
         let isValid = true;
         let error = '';

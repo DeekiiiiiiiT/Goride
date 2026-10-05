@@ -843,7 +843,7 @@ export const api = {
   // ── Toll Info ──────────────────────────────────────────────────────────
   async getTollInfo() {
     const response = await fetchWithRetry(`${API_ENDPOINTS.toll}/toll-info`, {
-        headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+        headers: await getHeaders(null)
     });
     if (!response.ok) throw new Error("Failed to fetch toll info");
     return response.json();
@@ -852,10 +852,7 @@ export const api = {
   async saveTollInfo(schedule: any) {
     const response = await fetchWithRetry(`${API_ENDPOINTS.toll}/toll-info`, {
         method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${publicAnonKey}`
-        },
+        headers: await getHeaders(),
         body: JSON.stringify(schedule)
     });
     if (!response.ok) throw new Error("Failed to save toll info");
@@ -1490,7 +1487,7 @@ export const api = {
     for (let page = 0; page < 50; page++) {
       const qs = cursor ? `?cursor=${encodeURIComponent(cursor)}` : '';
       const response = await fetchWithRetry(`${API_ENDPOINTS.toll}/toll-tags${qs}`, {
-        headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+        headers: await getHeaders(null)
       });
       if (!response.ok) throw new Error("Failed to fetch toll tags");
       const body = await response.json();
@@ -1509,10 +1506,7 @@ export const api = {
       isUpdate ? `${API_ENDPOINTS.toll}/toll-tags/${encodeURIComponent(tag.id)}` : `${API_ENDPOINTS.toll}/toll-tags`,
       {
         method: isUpdate ? 'PATCH' : 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${publicAnonKey}`
-        },
+        headers: await getHeaders(),
         body: JSON.stringify(isUpdate ? { ...tag, expectedUpdatedAt: token } : tag)
     });
     if (!response.ok) {
@@ -1525,7 +1519,7 @@ export const api = {
   async deleteTollTag(id: string) {
     const response = await fetchWithRetry(`${API_ENDPOINTS.toll}/toll-tags/${id}`, {
         method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+        headers: await getHeaders(null)
     });
     if (!response.ok) throw new Error("Failed to delete toll tag");
     return response.json();
@@ -1537,7 +1531,7 @@ export const api = {
 
   async getTollPlazas(): Promise<TollPlaza[]> {
     const response = await fetchWithRetry(`${API_ENDPOINTS.toll}/toll-plazas`, {
-        headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+        headers: await getHeaders(null)
     });
     if (!response.ok) throw new Error("Failed to fetch toll plazas");
     return response.json();
@@ -1545,7 +1539,7 @@ export const api = {
 
   async getTollPlaza(id: string): Promise<TollPlaza> {
     const response = await fetchWithRetry(`${API_ENDPOINTS.toll}/toll-plazas/${id}`, {
-        headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+        headers: await getHeaders(null)
     });
     if (!response.ok) throw new Error("Failed to fetch toll plaza");
     return response.json();
@@ -1554,10 +1548,7 @@ export const api = {
   async saveTollPlaza(plaza: Partial<TollPlaza>): Promise<{ success: boolean; data: TollPlaza }> {
     const response = await fetchWithRetry(`${API_ENDPOINTS.toll}/toll-plazas`, {
         method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${publicAnonKey}`
-        },
+        headers: await getHeaders(),
         body: JSON.stringify(plaza)
     });
     if (!response.ok) throw new Error("Failed to save toll plaza");
@@ -1567,7 +1558,7 @@ export const api = {
   async deleteTollPlaza(id: string): Promise<void> {
     const response = await fetchWithRetry(`${API_ENDPOINTS.toll}/toll-plazas/${id}`, {
         method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+        headers: await getHeaders(null)
     });
     if (!response.ok) throw new Error("Failed to delete toll plaza");
   },

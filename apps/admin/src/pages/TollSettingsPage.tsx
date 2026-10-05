@@ -61,16 +61,21 @@ export function TollSettingsPage({ onNavigate }: Props) {
   const [loading, setLoading] = useState(true);
   const [settings, setSettings] = useState<TollDispatchSettings | null>(null);
   const [health, setHealth] = useState<TollDetectionHealth | null>(null);
+  const [plazasUnavailable, setPlazasUnavailable] = useState(false);
 
   const load = useCallback(async () => {
     if (!token) return;
     setLoading(true);
     try {
-      const [next, plazas, tollLogs] = await Promise.all([
+      const plazaResult = await api.getTollPlazas()
+        .then((rows) => ({ ok: true as const, rows }))
+        .catch(() => ({ ok: false as const, rows: [] }));
+      const [next, tollLogs] = await Promise.all([
         getTollDispatchSettings(token),
-        api.getTollPlazas().catch(() => []),
         api.getTollLogs({ limit: 500 }).catch(() => ({ data: [] })),
       ]);
+      setPlazasUnavailable(!plazaResult.ok);
+      const plazas = plazaResult.rows;
       setSettings(next);
       setHealth(
         assessTollDetectionHealth({
@@ -141,6 +146,13 @@ export function TollSettingsPage({ onNavigate }: Props) {
           Platform toll detection and quote estimation flags for Roam Rides and fleet route replay.
         </p>
       </div>
+
+      {plazasUnavailable && (
+        <div role="alert" className="flex items-center justify-between gap-3 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+          <span>Plaza names unavailable. The rest of this page still works.</span>
+          <button type="button" className="font-medium underline" onClick={() => void load()}>Retry</button>
+        </div>
+      )}
 
       {showHealthAlarm && health && (
         <div

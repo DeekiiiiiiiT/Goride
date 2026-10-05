@@ -59,6 +59,8 @@ function TagInventoryInner({
     isOpen: false,
     tag: null
   });
+  const [fleetAlert, setFleetAlert] = useState('500');
+  const [savingAlert, setSavingAlert] = useState(false);
 
   const fetchTags = async () => {
     setIsLoading(true);
@@ -79,7 +81,29 @@ function TagInventoryInner({
 
   useEffect(() => {
     fetchTags();
+    void api.getOrganizationSettings().then((res) => {
+      const amount = res.data?.tollLowBalanceDefaultJmd;
+      if (typeof amount === 'number' && amount > 0) setFleetAlert(String(amount));
+    }).catch(() => {});
   }, []);
+
+  const saveFleetAlert = async () => {
+    const amount = Number(fleetAlert);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      toast.error('Enter an alert amount above zero');
+      return;
+    }
+    setSavingAlert(true);
+    try {
+      await api.upsertOrganizationSettings({ tollLowBalanceDefaultJmd: amount });
+      toast.success('Fleet alert saved');
+      void fetchTags();
+    } catch (error) {
+      toast.error(tollErrorMessage(error, 'Could not save the fleet alert'));
+    } finally {
+      setSavingAlert(false);
+    }
+  };
 
   const handleSaveTag = async (data: { provider: TollProvider; tagNumber: string; status: TollTagStatus; dateAdded?: string }) => {
     try {
@@ -262,6 +286,21 @@ function TagInventoryInner({
                 Add New Tag
             </Button>
         </div>
+      </div>
+
+      <div className="flex flex-wrap items-end gap-2">
+        <label className="text-sm text-slate-600">
+          Fleet alert (J$)
+          <Input
+            className="mt-1 w-36"
+            inputMode="decimal"
+            value={fleetAlert}
+            onChange={(e) => setFleetAlert(e.target.value)}
+          />
+        </label>
+        <Button variant="outline" onClick={() => void saveFleetAlert()} disabled={savingAlert}>
+          {savingAlert ? 'Saving…' : 'Save alert'}
+        </Button>
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">

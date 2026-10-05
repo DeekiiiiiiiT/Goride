@@ -24,6 +24,13 @@ describe('parseTollTagCreate', () => {
     });
   });
 
+  it('accepts a lowercase status from a spreadsheet', () => {
+    const parsed = parseTollTagCreate({ provider: 'T-Tag', tagNumber: '1', status: 'active' });
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    expect(parsed.fields.status).toBe('Active');
+  });
+
   it('refuses a missing tag number and an unknown provider', () => {
     expect(parseTollTagCreate({ provider: 'T-Tag', status: 'Active' }).ok).toBe(false);
     expect(parseTollTagCreate({ provider: 'Nope', tagNumber: '1' }).ok).toBe(false);
