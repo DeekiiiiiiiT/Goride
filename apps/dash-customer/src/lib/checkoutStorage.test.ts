@@ -31,8 +31,8 @@ describe('normalizePaymentMethodId', () => {
     expect(normalizePaymentMethodId('paypal')).toBe('wipay');
   });
 
-  it('maps cash and legacy card ids to WiPay', () => {
-    expect(normalizePaymentMethodId('cash')).toBe('wipay');
+  it('keeps cash and maps legacy card ids to WiPay', () => {
+    expect(normalizePaymentMethodId('cash')).toBe('cash');
     expect(normalizePaymentMethodId('visa_1212')).toBe('wipay');
   });
 });
@@ -44,7 +44,7 @@ describe('hydratePreferredPaymentMethod', () => {
 
   it('writes the account default into local checkout prefs', () => {
     saveCheckoutPreferences({ paymentMethodId: 'wipay' });
-    expect(hydratePreferredPaymentMethod('cash')).toBe('wipay');
-    expect(getCheckoutPreferences().paymentMethodId).toBe('wipay');
+    expect(hydratePreferredPaymentMethod('cash')).toBe('cash');
+    expect(getCheckoutPreferences().paymentMethodId).toBe('cash');
   });
 });
