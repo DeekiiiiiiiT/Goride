@@ -27,6 +27,7 @@ const MUTATING = new Set(["post", "put", "patch", "delete"]);
 const CONTROLLER_FILES = [
   "./toll_controller.tsx",
   "./toll_period_controller.tsx",
+  "./toll_inventory_controller.tsx",
 ] as const;
 
 interface Route {
@@ -200,8 +201,14 @@ Deno.test("the guard actually sees the toll routes it claims to cover", async ()
  * this list — which forces the author to also satisfy the toll.manage check above.
  */
 const MUTATING_ROUTE_INVENTORY = [
+  "DELETE /toll-plazas/:id",
+  "DELETE /toll-tags/:id",
   "PATCH /toll-reconciliation/edit",
+  "PATCH /toll-tags/:id",
+  "POST /toll-info",
+  "POST /toll-info/impact-preview",
   "POST /toll-ledger/:id/void",
+  "POST /toll-plazas",
   "POST /toll-reconciliation/approve",
   "POST /toll-reconciliation/auto-match",
   "POST /toll-reconciliation/auto-resolve-refunds",
@@ -237,6 +244,10 @@ const MUTATING_ROUTE_INVENTORY = [
   "POST /toll-reconciliation/unlinked-refunds/undo-apply",
   "POST /toll-reconciliation/unreconcile",
   "POST /toll-reconciliation/workflow-stage/backfill",
+  "POST /toll-tags",
+  "POST /toll-tags/:id/topup-requested",
+  "POST /toll-tags/assign",
+  "POST /toll-tags/unassign",
   "POST /toll/periods/:weekKey/ineligible-usage-report",
   "POST /toll/periods/:weekKey/repair-orphan-events",
   "POST /toll/periods/:weekKey/seal",

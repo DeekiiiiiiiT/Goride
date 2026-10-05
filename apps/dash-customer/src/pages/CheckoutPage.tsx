@@ -60,6 +60,7 @@ export default function CheckoutPage({ onNavigate, session }: Props) {
   const [accountSuspended, setAccountSuspended] = useState(false);
   const [walletWords, setWalletWords] = useState('');
   const [orderingBlocked, setOrderingBlocked] = useState(false);
+  const [balanceDue, setBalanceDue] = useState(0);
   const [instructionsOpen, setInstructionsOpen] = useState(false);
 
   const resolvedAddress = resolveCheckoutAddress(savedAddress);
@@ -117,6 +118,7 @@ export default function CheckoutPage({ onNavigate, session }: Props) {
       const body = await res.json();
       setWalletWords(String(body.words || ''));
       setOrderingBlocked(body.orderingAllowed === false);
+      setBalanceDue(Math.max(0, Number(body.balanceMajor || 0)));
     })();
     return () => {
       cancelled = true;
@@ -585,7 +587,17 @@ export default function CheckoutPage({ onNavigate, session }: Props) {
                 <h2 className="text-headline-sm font-semibold text-on-surface">Payment Method</h2>
                 <p className="text-body-md text-on-surface-variant mt-1">{paymentLabel}</p>
                 {walletWords && walletWords !== 'No balance' && (
-                  <p className="text-body-sm text-on-surface mt-1">{walletWords}{orderingBlocked ? '. Pay this before ordering.' : ''}</p>
+                  <p className="text-body-sm text-on-surface mt-1">
+                    {walletWords}{orderingBlocked ? '. Pay this before ordering.' : ''}
+                    {!orderingBlocked && balanceDue > 0 && (
+                      <>
+                        {' '}
+                        <button type="button" className="font-semibold text-primary" onClick={() => onNavigate('wallet')}>
+                          Pay balance
+                        </button>
+                      </>
+                    )}
+                  </p>
                 )}
               </div>
             </div>
@@ -774,12 +786,18 @@ export default function CheckoutPage({ onNavigate, session }: Props) {
         )}
         <button
           type="button"
-          onClick={() => void handlePlaceOrder()}
-          disabled={isPlacingOrder || accountSuspended || orderingBlocked || !deliveryAddress || !hasLivePricing || belowMinOrder}
+          onClick={() => {
+            if (orderingBlocked) {
+              onNavigate('wallet');
+              return;
+            }
+            void handlePlaceOrder();
+          }}
+          disabled={isPlacingOrder || accountSuspended || (!orderingBlocked && (!deliveryAddress || !hasLivePricing || belowMinOrder))}
           className="w-full max-w-2xl mx-auto bg-primary text-on-primary text-headline-sm font-semibold py-4 rounded-xl flex justify-between items-center px-6 active:scale-[0.98] transition-transform disabled:opacity-50"
         >
-          <span>{isPlacingOrder ? 'Processing...' : 'Place Order'}</span>
-          <span>{formatJmd(totals.total)}</span>
+          <span>{isPlacingOrder ? 'Processing...' : orderingBlocked ? 'Pay balance' : 'Place Order'}</span>
+          <span>{orderingBlocked ? formatJmd(balanceDue) : formatJmd(totals.total)}</span>
         </button>
       </div>
 

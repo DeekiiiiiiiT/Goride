@@ -16,6 +16,7 @@ interface PayoutSetupSheetProps {
 
 export default function PayoutSetupSheet({ open, onClose, onSaved }: PayoutSetupSheetProps) {
   const [bankName, setBankName] = useState('');
+  const [branch, setBranch] = useState('');
   const [accountHolderName, setAccountHolderName] = useState('');
   const [accountNumber, setAccountNumber] = useState('');
   const [routingNumber, setRoutingNumber] = useState('');
@@ -26,6 +27,7 @@ export default function PayoutSetupSheet({ open, onClose, onSaved }: PayoutSetup
 
   const canSave =
     bankName !== '' &&
+    branch.trim().length >= 2 &&
     accountHolderName.trim().length >= 2 &&
     accountNumber.trim().length >= 4;
 
@@ -35,6 +37,7 @@ export default function PayoutSetupSheet({ open, onClose, onSaved }: PayoutSetup
     try {
       const input: MerchantBankAccountInput = {
         bankName,
+        branch: branch.trim(),
         accountHolderName: accountHolderName.trim(),
         accountNumber: accountNumber.trim(),
         routingNumber: routingNumber.trim(),
@@ -111,6 +114,20 @@ export default function PayoutSetupSheet({ open, onClose, onSaved }: PayoutSetup
           </div>
 
           <div className="flex flex-col gap-inset-base">
+            <label className="text-label-md font-semibold text-on-surface" htmlFor="payout-branch">
+              Branch
+            </label>
+            <input
+              id="payout-branch"
+              type="text"
+              className={fieldClass}
+              placeholder="Branch name"
+              value={branch}
+              onChange={(e) => setBranch(e.target.value)}
+            />
+          </div>
+
+          <div className="flex flex-col gap-inset-base">
             <label className="text-label-md font-semibold text-on-surface" htmlFor="payout-holder">
               Account holder name
             </label>
@@ -177,9 +194,8 @@ export default function PayoutSetupSheet({ open, onClose, onSaved }: PayoutSetup
           <div className="flex items-start gap-inset-xs rounded bg-surface-container-low p-inset-sm text-on-surface-variant">
             <MaterialIcon name="lock" size={16} className="mt-0.5 shrink-0" />
             <p className="text-body-sm">
-              We store only the last 4 digits of your account for display. Full bank details are not
-              kept in our database. Payouts will move through Stripe Connect once your account is
-              fully onboarded — until then, this form only confirms payout contact details.
+              After you save, this screen shows only the last four digits. Finance uses the full
+              number to pay you, and a new account waits until someone marks it ready.
             </p>
           </div>
         </form>

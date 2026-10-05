@@ -285,7 +285,7 @@ export default function LoginPage({
                   <a href={ABOUT_LINKS[1].href} target="_blank" rel="noopener noreferrer" className="text-primary font-semibold">
                     Privacy Policy
                   </a>
-                  . Roam does not match this phone or device to another account unless that notice says so.
+                  . Roam may match this phone or device to another account to stop fraud.
                 </span>
               </label>
             )}

@@ -174,11 +174,13 @@ export function FuelLogTable({
   useEffect(() => {
     let cancelled = false;
     fuelService
-      .getStations()
+      .getAllStations({ fields: 'list' })
       .then((stations) => {
         if (cancelled) return;
         setVerifiedStations(
-          ((stations || []) as StationProfile[]).filter((s) => s.status === 'verified'),
+          ((stations || []) as StationProfile[]).filter(
+            (s) => !s.status || s.status === 'verified',
+          ),
         );
       })
       .catch(() => {
@@ -1100,6 +1102,7 @@ export function FuelLogTable({
         statement={unlinkedAction?.entry ?? null}
         drivers={uniqueDrivers}
         verifiedStations={verifiedStations}
+        logEntries={entries}
         linkCandidates={entries.filter((e) => {
           if (isJaaStatementLedgerRow(e)) return false;
           const m = (e.metadata || {}) as Record<string, unknown>;

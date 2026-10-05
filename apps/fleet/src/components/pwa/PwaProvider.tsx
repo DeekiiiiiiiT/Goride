@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRegisterSW } from 'virtual:pwa-register/react';
 import {
   getPwaAppName,
@@ -15,6 +15,9 @@ export { usePwa } from './pwaContext';
 const DISMISS_INSTALL_KEY = IS_ENTERPRISE_PRODUCT
   ? 'roam-enterprise-pwa-install-dismissed'
   : 'roam-fleet-pwa-install-dismissed';
+
+/** Stops a fresh open from reloading forever if the new version never takes over. */
+const AUTO_UPDATE_GUARD_KEY = 'roam-fleet-auto-update-at';
 
 function wasInstallDismissed(): boolean {
   try {
@@ -40,6 +43,10 @@ export function PwaProvider({ children }: { children: React.ReactNode }) {
   const [installing, setInstalling] = useState(false);
   const [dismissed, setDismissed] = useState(wasInstallDismissed);
   const standalone = isStandaloneDisplay();
+  // False while this visit is still the open that should take an update quietly.
+  // Flips true only when a later check runs because the app was already open.
+  const askBeforeUpdateRef = useRef(false);
+  const [promptForUpdate, setPromptForUpdate] = useState(false);
 
   const {
     needRefresh: [needRefresh, setNeedRefresh],
@@ -55,6 +62,8 @@ export function PwaProvider({ children }: { children: React.ReactNode }) {
       if (registration) {
         const intervalMs = 60 * 60 * 1000;
         window.setInterval(() => {
+          // Already in use — the next version should wait for the person to tap Update.
+          askBeforeUpdateRef.current = true;
           void registration.update();
         }, intervalMs);
       }
@@ -141,6 +150,50 @@ export function PwaProvider({ children }: { children: React.ReactNode }) {
     void updateServiceWorker(true);
   }, [updateServiceWorker]);
 
+  // Fleet: a version found while opening reloads on its own. A version found
+  // later, while the app is already open, shows the Update banner.
+  useEffect(() => {
+    if (!installAllowed || IS_ENTERPRISE_PRODUCT) return;
+    if (!needRefresh) {
+      setPromptForUpdate(false);
+      return;
+    }
+    if (askBeforeUpdateRef.current) {
+      setPromptForUpdate(true);
+      return;
+    }
+
+    let recentlyTried = false;
+    try {
+      const last = Number(sessionStorage.getItem(AUTO_UPDATE_GUARD_KEY) || 0);
+      recentlyTried = Number.isFinite(last) && Date.now() - last < 20_000;
+    } catch {
+      recentlyTried = false;
+    }
+    if (recentlyTried) {
+      setPromptForUpdate(true);
+      return;
+    }
+    try {
+      sessionStorage.setItem(AUTO_UPDATE_GUARD_KEY, String(Date.now()));
+    } catch {
+      /* ignore */
+    }
+
+    setPromptForUpdate(false);
+    let cancelled = false;
+    const fallback = window.setTimeout(() => {
+      if (!cancelled) setPromptForUpdate(true);
+    }, 8_000);
+    void updateServiceWorker(true).catch(() => {
+      if (!cancelled) setPromptForUpdate(true);
+    });
+    return () => {
+      cancelled = true;
+      window.clearTimeout(fallback);
+    };
+  }, [installAllowed, needRefresh, updateServiceWorker]);
+
   // Enterprise only: recover installs where the Update CTA was invisible / dismissed.
   useEffect(() => {
     if (!installAllowed || !IS_ENTERPRISE_PRODUCT || !needRefresh) return;
@@ -171,7 +224,7 @@ export function PwaProvider({ children }: { children: React.ReactNode }) {
       installing,
       promptInstall,
       dismissInstall,
-      needRefresh: installAllowed && needRefresh,
+      needRefresh: installAllowed && (IS_ENTERPRISE_PRODUCT ? needRefresh : promptForUpdate),
       applyUpdate,
       dismissUpdate,
     }),
@@ -185,6 +238,7 @@ export function PwaProvider({ children }: { children: React.ReactNode }) {
       promptInstall,
       dismissInstall,
       needRefresh,
+      promptForUpdate,
       applyUpdate,
       dismissUpdate,
     ],

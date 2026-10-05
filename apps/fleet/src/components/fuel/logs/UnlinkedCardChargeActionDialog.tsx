@@ -23,7 +23,7 @@ import type { StationProfile } from '../../../types/station';
 import { fuelService } from '../../../services/fuelService';
 import { toast } from 'sonner';
 import { isJaaStatementLedgerRow } from '../../../utils/jaaFuelStatementMatcher';
-import { matchVendorToVerifiedStation } from '../../../utils/jaaStationDisplay';
+import { resolveVerifiedStationForFuelEntry } from '../../../utils/jaaStationDisplay';
 import { formatFuelMoney } from '../../../utils/formatFuelMoney';
 
 export type UnlinkedChargeAction = 'adopt' | 'link' | 'dismiss' | 'request_driver';
@@ -40,6 +40,8 @@ type Props = {
   drivers: { id: string; name: string }[];
   /** Verified Dominion stations for Confirm station pick. */
   verifiedStations?: StationProfile[];
+  /** Other logs used only to suggest a station. The user still confirms the pick. */
+  logEntries?: FuelEntry[];
   onDone: () => void | Promise<void>;
 };
 
@@ -59,6 +61,14 @@ function merchantLabel(statement: FuelEntry | null): string {
   return String(m.jaaStation || statement?.location || m.jaaVendorRaw || '').trim() || '—';
 }
 
+function stationHintLabel(station: StationProfile | null): string {
+  if (!station) return '';
+  const name = String(station.name || '').trim();
+  const address = String(station.address || '').trim();
+  if (name && address) return `${name} · ${address}`;
+  return name || address;
+}
+
 export function UnlinkedCardChargeActionDialog({
   open,
   onOpenChange,
@@ -67,6 +77,7 @@ export function UnlinkedCardChargeActionDialog({
   linkCandidates,
   drivers,
   verifiedStations = [],
+  logEntries = [],
   onDone,
 }: Props) {
   const [reason, setReason] = useState('');
@@ -97,7 +108,12 @@ export function UnlinkedCardChargeActionDialog({
     );
   }, [verifiedStations, selectedBrand]);
 
-  // Prefill when opening Confirm (adopt)
+  const selectedStation = useMemo(
+    () => verifiedStations.find((s) => s.id === selectedStationId) ?? null,
+    [verifiedStations, selectedStationId],
+  );
+
+  // Prefill when opening Confirm (adopt). A nearby driver pin is only a suggestion.
   useEffect(() => {
     if (!open || action !== 'adopt' || !statement) return;
     const suggested = suggestedMileage(statement);
@@ -108,13 +124,13 @@ export function UnlinkedCardChargeActionDialog({
     setSelectedBrand('');
     setSelectedStationId('');
 
-    const hint = matchVendorToVerifiedStation(merchantLabel(statement), verifiedStations, 0.65);
+    const hint = resolveVerifiedStationForFuelEntry(statement, verifiedStations, logEntries);
     if (hint) {
       setStationMode('verified');
       setSelectedBrand(hint.brand || '');
       setSelectedStationId(hint.id);
     }
-  }, [open, action, statement, verifiedStations]);
+  }, [open, action, statement, verifiedStations, logEntries]);
 
   const title = useMemo(() => {
     switch (action) {
@@ -223,6 +239,7 @@ export function UnlinkedCardChargeActionDialog({
   const amount = Number(statement?.amount) || 0;
   const needsDriverPick = action === 'adopt' && !statement?.driverId;
   const receipt = String(stmtMeta(statement).jaaReceiptNumber || '');
+  const verifiedHint = stationHintLabel(selectedStation);
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -309,7 +326,12 @@ export function UnlinkedCardChargeActionDialog({
                       checked={stationMode === 'verified'}
                       onChange={() => setStationMode('verified')}
                     />
-                    <span className="font-medium">Use verified station</span>
+                    <span>
+                      <span className="font-medium">Use verified station</span>
+                      {verifiedHint ? (
+                        <span className="mt-0.5 block text-[11px] text-slate-600">{verifiedHint}</span>
+                      ) : null}
+                    </span>
                   </label>
                 </div>
 

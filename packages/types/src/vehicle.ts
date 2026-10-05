@@ -17,7 +17,7 @@ export type ServiceStatus = 'OK' | 'Due Soon' | 'Overdue';
 export type VehicleCatalogStatus = 'matched' | 'pending_catalog' | 'needs_info';
 
 export type TollProvider = 'JRC' | 'T-Tag' | 'Other';
-export type TollTagStatus = 'Active' | 'Inactive' | 'Lost' | 'Damaged';
+export type TollTagStatus = 'Active' | 'Inactive' | 'Lost' | 'Damaged' | 'Retired';
 
 export interface TollTag {
   id: string;
@@ -29,9 +29,18 @@ export interface TollTag {
   dateAdded?: string; // Date added to inventory/fleet
   providerBalance?: number;       // Phase 5: Manually entered balance from provider portal
   providerBalanceDate?: string;   // Phase 5: When the provider balance was last checked
-  lowBalanceThreshold?: number;   // Phase 6: Alert when balance drops below this (default: 500)
-  lastCalculatedBalance?: number; // Phase 6: Cached calculated balance for list-view badges
+  lowBalanceThreshold?: number;   // Per-tag alert. Falls back to the fleet default, then J$500.
+  /** Server sum of the tag ledger. Missing means Unknown — never treat as J$0. */
+  lastCalculatedBalance?: number | null;
   lastBalanceSyncedAt?: string;
+  /** Fleet default applied when this tag has no override. */
+  resolvedLowBalanceThreshold?: number;
+  balanceStale?: boolean;
+  topupRequestedAt?: string | null;
+  retiredAt?: string;
+  retiredReason?: string;
+  notes?: string;
+  updatedAt?: string;
   /** @deprecated Tag view is now tag-only (Option A); tag-vs-cash utilization is no longer computed or shown. Retained for backward compat with stored records. */
   lastUtilizationPercent?: number; // Phase 7: Cached tag utilization % for list-view badges
   assignmentHistory?: Array<{     // Phase 8: Tag assignment audit trail

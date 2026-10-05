@@ -2490,7 +2490,43 @@ app.get("/merchant/earnings/payouts/:id", async (c) => {
       reason: String(adj.reason || ""),
       createdAt: String(adj.created_at || ""),
     })),
+    orderLines: periodOrders.map((order) => ({
+      orderId: String(order.id),
+      orderNumber: String(order.order_number || order.id),
+      net: orderMerchantNet(order),
+    })),
   });
+});
+
+app.post("/merchant/earnings/disputes", async (c) => {
+  const authHeader = c.req.header("Authorization");
+  if (!authHeader) return c.json({ error: "Unauthorized" }, 401);
+  const supabase = getSupabase(authHeader);
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return c.json({ error: "Unauthorized" }, 401);
+  const access = await requireResolvedMerchantWithPermission(user.id, user.email, "payouts");
+  if (!access.ok) return c.json({ error: access.message }, access.status);
+  const merchantId = access.resolved.merchant.id as string;
+  const body = await c.req.json().catch(() => ({}));
+  const orderId = String(body.orderId || "");
+  if (!orderId) return c.json({ error: "Choose an order" }, 400);
+  const sb = getServiceSupabase();
+  const { data: order } = await sb.from("orders").select("id, merchant_id").eq("id", orderId).maybeSingle();
+  if (!order || String(order.merchant_id) !== String(merchantId)) return c.json({ error: "Order not found" }, 404);
+  const { data: existing } = await sb.from("order_disputes").select("id, status")
+    .eq("order_id", orderId)
+    .eq("raised_by", "merchant")
+    .in("status", ["open", "investigating"])
+    .maybeSingle();
+  if (existing) return c.json({ disputeId: existing.id, words: "This order is already with a person." });
+  const { data: created, error } = await sb.from("order_disputes").insert({
+    order_id: orderId,
+    raised_by: "merchant",
+    reason: "Payout line dispute",
+    status: "open",
+  }).select("id").single();
+  if (error) return c.json({ error: error.message }, 500);
+  return c.json({ disputeId: created.id, words: "Dispute opened. A person will look at this line." });
 });
 
 // ============================================================================

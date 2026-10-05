@@ -38,7 +38,7 @@ const drvMeta = {
 };
 
 describe('applySplitCashMatchToTx (persistFuelMatchPair glue)', () => {
-  it('write_in_place — amount set, date unchanged, awaiting cleared, pending-ready', () => {
+  it('write_in_place — amount set, date unchanged, awaiting cleared, auto-approved', () => {
     const plan = classifySplitCashPeriodLanding({
       orgId: 'org',
       driverId: 'd1',
@@ -58,14 +58,14 @@ describe('applySplitCashMatchToTx (persistFuelMatchPair glue)', () => {
     if (result.outcome !== 'write_in_place') return;
     expect(result.tx.amount).toBe(-4000);
     expect(result.tx.date).toBe('2026-09-01');
-    expect(result.tx.status).toBe('Pending');
+    expect(result.tx.status).toBe('Approved');
     expect(result.tx.metadata?.awaitingCashStatement).toBe(false);
     expect(result.tx.metadata?.splitReconciled).toBe(true);
-    expect(isPendingReadyForReview(result.tx as never)).toBe(true);
+    expect(isPendingReadyForReview(result.tx as never)).toBe(false);
     expect(result.fuelEntryAmount).toBe(4000);
   });
 
-  it('rehome — date moves to open week, originalFillDate stamped, pending-ready', () => {
+  it('rehome — date moves to open week, originalFillDate stamped, auto-approved', () => {
     const plan = classifySplitCashPeriodLanding({
       orgId: 'org',
       driverId: 'd1',
@@ -89,7 +89,8 @@ describe('applySplitCashMatchToTx (persistFuelMatchPair glue)', () => {
     expect(result.tx.metadata?.originalFillDate).toBe('2026-09-01');
     expect(result.tx.metadata?.cashRehomedFromWeek).toBe('2026-08-31');
     expect(describeSplitCashRehome(result.tx.metadata)).toMatch(/Moved from fill/);
-    expect(isPendingReadyForReview(result.tx as never)).toBe(true);
+    expect(result.tx.status).toBe('Approved');
+    expect(isPendingReadyForReview(result.tx as never)).toBe(false);
   });
 
   it('blocked no open period — amount stays 0, sealed date unchanged, never money-write', () => {

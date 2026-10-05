@@ -1,4 +1,4 @@
-/** Short cash: the courier keeps their full share. Platform and restaurant share what is left. */
+/** Short cash: the courier keeps their full share. A negative platform share is a subsidy and is not taken from the courier. */
 
 export type ShortCollection = {
   bagMinor: number;
@@ -15,7 +15,7 @@ export function scaleShortCollection(input: {
   collectedMinor: number;
 }): ShortCollection {
   const bag = Math.max(0, Math.round(input.bagMinor));
-  const platform = Math.max(0, Math.round(input.platformMinor));
+  const platform = Math.round(input.platformMinor);
   const merchant = Math.max(0, Math.round(input.merchantMinor));
   const courier = Math.max(0, Math.round(input.courierMinor));
   const collected = Math.max(0, Math.min(bag, Math.round(input.collectedMinor)));

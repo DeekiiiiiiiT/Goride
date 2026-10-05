@@ -304,22 +304,35 @@ export default function OrderDetailsPage({ orderId, onNavigate }: Props) {
             />
           )}
 
-          {(order.refunds || []).length > 0 && (
+          {(order.charges || []).length > 0 || (order.refunds || []).length > 0 ? (
             <div className="mt-6 border-t border-surface-container-high pt-6">
-              <h4 className="mb-2 text-label-md font-semibold text-on-surface-variant uppercase">Refunds</h4>
-              <ul className="flex flex-col gap-2">
-                {(order.refunds || []).map((refund) => (
-                  <li key={refund.id} className="text-body-sm text-on-surface">
-                    {refund.status === 'completed' || refund.status === 'succeeded'
-                      ? `${formatJmd(refund.amount)} is back on your card for this order.`
-                      : refund.status === 'failed'
-                        ? `A refund of ${formatJmd(refund.amount)} on this order needs a person to finish it.`
-                        : `A refund of ${formatJmd(refund.amount)} on this order has started and is on its way back to your card.`}
+              <h4 className="mb-3 text-label-md font-semibold text-on-surface-variant uppercase">Money</h4>
+              <ol className="flex flex-col gap-3">
+                {(order.charges || []).map((charge) => (
+                  <li key={charge.id} className="text-body-sm text-on-surface">
+                    <p className="font-medium">Payment received</p>
+                    <p className="text-on-surface-variant">{formatJmd(charge.amount)} was charged to your card.</p>
                   </li>
                 ))}
-              </ul>
+                {(order.refunds || []).map((refund) => {
+                  const needsPerson = refund.lastError === 'Needs a person' || refund.status === 'failed';
+                  const done = refund.status === 'completed' || refund.status === 'succeeded';
+                  return (
+                    <li key={refund.id} className="text-body-sm text-on-surface">
+                      <p className="font-medium">{done ? 'Back on your card' : needsPerson ? 'Needs a person' : 'On its way'}</p>
+                      <p className="text-on-surface-variant">
+                        {done
+                          ? `${formatJmd(refund.amount)} is back on your card.`
+                          : needsPerson
+                            ? `A refund of ${formatJmd(refund.amount)} needs a person to finish it.`
+                            : `A refund of ${formatJmd(refund.amount)} has started and is on its way back to your card.`}
+                      </p>
+                    </li>
+                  );
+                })}
+              </ol>
             </div>
-          )}
+          ) : null}
 
           {order.paymentMethod && (
             <div className="mt-6 border-t border-surface-container-high pt-6">

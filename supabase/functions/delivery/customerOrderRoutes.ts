@@ -273,24 +273,18 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
       }, 400);
     }
     {
+      const { loadCustomerWallet } = await import("../_shared/rushMoney/customerWallet.ts");
       const { walletDecision } = await import("../_shared/rushMoney/walletRules.ts");
       const books = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
-      const { data: wallet } = await books.schema("rush_money").from("accounts")
-        .select("balance_minor, created_at")
-        .eq("kind", "customer_wallet")
-        .eq("party_id", customer.id)
-        .eq("component", "")
-        .maybeSingle();
+      const wallet = await loadCustomerWallet(books, String(customer.id));
       const { data: walletFlag } = await books.schema("rush_money").from("runtime_flags").select("enabled").eq("key", "wallet_live").maybeSingle();
       const { count } = await serviceSb.from("orders").select("id", { count: "exact", head: true })
         .eq("customer_id", customer.id)
         .eq("payment_status", "paid")
         .in("status", ["delivered", "completed"]);
-      const balanceMajor = Number(wallet?.balance_minor || 0) / 100;
-      const createdAt = wallet?.created_at ? Date.parse(String(wallet.created_at)) : NaN;
       const decision = walletDecision({
-        balanceMajor,
-        debtAgeDays: balanceMajor > 0 && Number.isFinite(createdAt) ? Math.floor((Date.now() - createdAt) / 86_400_000) : 0,
+        balanceMajor: wallet.balanceMajor,
+        debtAgeDays: wallet.debtAgeDays,
         completedCardOrders: count || 0,
         walletLive: Boolean(walletFlag?.enabled),
       });
@@ -686,11 +680,16 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
     }
 
     const { data: refunds } = await serviceSb.schema("payments").from("refunds")
-      .select("id, amount, status, reason, created_at")
+      .select("id, amount, status, reason, created_at, last_error, completed_at")
       .eq("order_id", id)
       .order("created_at");
+    const { data: charges } = await serviceSb.schema("payments").from("transactions")
+      .select("id, amount, status, created_at")
+      .eq("order_id", id)
+      .eq("status", "completed")
+      .order("created_at");
 
-    return c.json({ order: { ...order, courier, refunds: refunds || [] }, events: events || [] });
+    return c.json({ order: { ...order, courier, refunds: refunds || [], charges: charges || [] }, events: events || [] });
   });
 
   // Customer order history

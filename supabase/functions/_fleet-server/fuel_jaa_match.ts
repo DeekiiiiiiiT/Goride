@@ -11,9 +11,12 @@ import {
 } from "./fuel_jaa_station_heal.ts";
 import {
   applySplitCashMatchToTx,
+  isStatementSettledSplitCash,
   splitPumpPriceOutlierPatch,
 } from "../../../packages/fuel-core/src/fuelSplitCashLifecycle.ts";
 import { planSplitCashPeriodLanding } from "./fuel_split_cash_rehome.ts";
+import { ensureFuelEntryForApprovedTx } from "./fuel_posted_guarantee.ts";
+import { fromKvStore } from "./fleet_sql_bridge.ts";
 
 function metaOf(entry: Record<string, unknown>): Record<string, unknown> {
   const m = entry?.metadata;
@@ -201,6 +204,81 @@ async function loadCashSiblingTx(
   return null;
 }
 
+/**
+ * Clean split cash (pump minus card statement) posts itself.
+ * If the vehicle is missing, it stays Pending so Review Queue can still show it.
+ */
+export async function commitSplitCashAutoApproval(
+  tx: Record<string, unknown>,
+  stamp?: (record: any) => any,
+): Promise<"approved" | "blocked"> {
+  const result = await ensureFuelEntryForApprovedTx(tx, {
+    source: "Split cash statement",
+    decisionReason: "SPLIT_CASH_STATEMENT",
+    stamp,
+  });
+  if (result.blockedNoVehicle || !result.fuelEntry) {
+    tx.status = "Pending";
+    tx.isReconciled = false;
+    tx.metadata = {
+      ...(metaOf(tx)),
+      autoApprovedSplitCash: false,
+      decisionReason: result.blockedNoVehicle ? "BLOCKED_NO_VEHICLE" : "FUEL_ENTRY_MISSING",
+    };
+    const saved = stamp ? stamp(tx) : tx;
+    await kv.set(`transaction:${tx.id}`, saved);
+    return "blocked";
+  }
+
+  tx.status = "Approved";
+  tx.isReconciled = true;
+  const desc = String(tx.description || "");
+  if (desc.includes("cash pending statement")) {
+    tx.description = desc.replace("cash pending statement", "split cash");
+  }
+  tx.metadata = {
+    ...metaOf(tx),
+    approvedAt: (metaOf(tx).approvedAt as string) || new Date().toISOString(),
+    decisionReason: "SPLIT_CASH_STATEMENT",
+    autoApprovedSplitCash: true,
+    needsLogReview: undefined,
+  };
+  const saved = stamp ? stamp(tx) : tx;
+  await kv.set(`transaction:${tx.id}`, saved);
+  return "approved";
+}
+
+/** Existing rows already settled by a statement but left Pending for a human click. */
+export async function healStatementSettledSplitCash(
+  limit = 40,
+  stamp?: (record: any) => any,
+): Promise<{ approved: number; blocked: number }> {
+  const { data } = await fromKvStore()
+    .select("key, value")
+    .like("key", "transaction:%")
+    .eq("value->>status", "Pending")
+    .in("value->>category", ["Fuel", "Fuel Reimbursement"])
+    .order("value->>date", { ascending: false })
+    .limit(Math.min(limit * 8, 400));
+
+  let approved = 0;
+  let blocked = 0;
+  for (const row of data || []) {
+    if (approved + blocked >= limit) break;
+    const tx = row.value as Record<string, unknown> | null;
+    if (!tx?.id || !isStatementSettledSplitCash(tx)) continue;
+    try {
+      const outcome = await commitSplitCashAutoApproval(tx, stamp);
+      if (outcome === "approved") approved++;
+      else blocked++;
+    } catch (e) {
+      console.error(`[SplitCashAuto] failed for tx ${tx.id}:`, e);
+      blocked++;
+    }
+  }
+  return { approved, blocked };
+}
+
 /** Persist linked pair + re-stamp cycle metadata; auto GOD attach when merchant unique. */
 export async function persistFuelMatchPair(
   pair: FuelMatchPair,
@@ -289,7 +367,11 @@ export async function persistFuelMatchPair(
             if (applied.outcome === "rehome" && applied.rehomeToWeek) {
               splitCashRehome = applied.rehomeToWeek;
             }
-            await kv.set(`transaction:${tx.id}`, applied.tx);
+            if (String(applied.tx.status) === "Approved") {
+              await commitSplitCashAutoApproval(applied.tx);
+            } else {
+              await kv.set(`transaction:${tx.id}`, applied.tx);
+            }
 
             // Sync linked cash fuel_entry amount (physical date stays on fill)
             const linkedEntryId =

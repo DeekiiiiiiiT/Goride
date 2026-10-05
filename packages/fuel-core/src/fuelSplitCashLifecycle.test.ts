@@ -316,6 +316,7 @@ describe('statement must not change cash already set', () => {
     });
     expect(applied.outcome).toBe('write_in_place');
     expect(applied.tx.amount).toBe(-1500);
+    expect(applied.tx.status).toBe('Approved');
   });
 
   it('blocks a generic save from clearing or repricing awaiting cash', () => {

@@ -97,6 +97,46 @@ export function estimateDaysToEmpty(
 
 export type BalanceRingState = 'healthy' | 'watch' | 'low' | 'empty';
 
+/** Last-resort alert when the tag and the fleet have no threshold of their own. */
+export const DEFAULT_TOLL_LOW_BALANCE_JMD = 500;
+
+/** Per-tag override wins. Then the fleet default. Then the product default. */
+export function resolveLowBalanceThreshold(
+  tagThreshold?: number | null,
+  orgDefault?: number | null,
+): number {
+  if (typeof tagThreshold === 'number' && Number.isFinite(tagThreshold) && tagThreshold > 0) {
+    return tagThreshold;
+  }
+  if (typeof orgDefault === 'number' && Number.isFinite(orgDefault) && orgDefault > 0) {
+    return orgDefault;
+  }
+  return DEFAULT_TOLL_LOW_BALANCE_JMD;
+}
+
+export type TagBalanceAttention = BalanceRingState | 'unknown';
+
+/**
+ * Missing balance is Unknown. A real zero is Empty. Never treat "we don't know"
+ * as J$0 — that is how a new tag looked like an empty-tag emergency.
+ */
+export function classifyTagBalance(
+  balance: number | null | undefined,
+  threshold: number,
+): TagBalanceAttention {
+  if (balance == null || !Number.isFinite(balance)) return 'unknown';
+  return balanceRingState(balance, threshold);
+}
+
+/** Shared by Tag Inventory and the low-balance queue. Unknown is not "low". */
+export function isLowBalance(
+  balance: number | null | undefined,
+  threshold: number,
+): boolean {
+  const ring = classifyTagBalance(balance, threshold);
+  return ring === 'low' || ring === 'empty';
+}
+
 /**
  * B8 ring: green ≥ 2× threshold, watch between threshold and 2×,
  * amber below threshold, red at or below zero.
@@ -105,8 +145,8 @@ export function balanceRingState(
   balance: number,
   threshold: number,
 ): BalanceRingState {
-  if (!(Number.isFinite(balance)) || balance <= 0) return 'empty';
-  const t = Number.isFinite(threshold) && threshold > 0 ? threshold : 500;
+  if (!Number.isFinite(balance) || balance <= 0) return 'empty';
+  const t = resolveLowBalanceThreshold(threshold);
   if (balance < t) return 'low';
   if (balance < t * 2) return 'watch';
   return 'healthy';

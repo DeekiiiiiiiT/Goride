@@ -92,6 +92,14 @@ export const set = async (key: string, value: any): Promise<void> => {
     }
   }
   await afterUpsert(key, stamped);
+  if (key.startsWith("toll_ledger:") && stamped && typeof stamped === "object") {
+    try {
+      const { refreshTagBalanceForLedgerWrite } = await import("./toll_tag_balance.ts");
+      await refreshTagBalanceForLedgerWrite(stamped as Record<string, unknown>);
+    } catch (e) {
+      console.error("[kv] toll tag balance refresh failed:", key, e);
+    }
+  }
   if (key.startsWith("transaction:") && stamped && typeof stamped === "object") {
     try {
       const { mirrorSettlementTransaction } = await import("./settlement_transactions.ts");

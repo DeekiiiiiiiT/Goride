@@ -181,6 +181,9 @@ export function registerFleetBankRoutes(app: Hono) {
           uberOrganizationUuid: String((existing as any).uberOrganizationUuid || "").trim() || null,
           roamOrganizationUuid: String((existing as any).roamOrganizationUuid || "").trim() || null,
           inDriveOrganizationUuid: String((existing as any).inDriveOrganizationUuid || "").trim() || null,
+          tollLowBalanceDefaultJmd: Number((existing as any).tollLowBalanceDefaultJmd) > 0
+            ? Number((existing as any).tollLowBalanceDefaultJmd)
+            : null,
         },
       });
     } catch (e: any) {
@@ -211,6 +214,10 @@ export function registerFleetBankRoutes(app: Hono) {
             body?.inDriveOrganizationUuid != null
               ? String(body.inDriveOrganizationUuid).trim() || null
               : (prev as any).inDriveOrganizationUuid ?? null,
+          tollLowBalanceDefaultJmd:
+            body?.tollLowBalanceDefaultJmd != null && Number(body.tollLowBalanceDefaultJmd) > 0
+              ? Number(body.tollLowBalanceDefaultJmd)
+              : (prev as any).tollLowBalanceDefaultJmd ?? null,
           updatedAt: new Date().toISOString(),
         },
         c,

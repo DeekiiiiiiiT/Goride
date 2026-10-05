@@ -10,6 +10,7 @@
  */
 import {
   isAwaitingCashTx,
+  isStatementSettledSplitCash,
   isStaleAwaitingCash,
   AWAITING_CASH_STALE_DAYS,
 } from './fuelSplitCashLifecycle.ts';
@@ -138,6 +139,7 @@ export function isAdminManualFuelWithProvidedOdometer(t: FuelClassifyFields): bo
 export function isLogReviewEligible(t: FuelClassifyFields): boolean {
   if (!isPendingFuelQueueRow(t)) return false;
   if (isStationGateHeld(t)) return false;
+  if (isAwaitingCashTx(t) || isStatementSettledSplitCash(t)) return false;
   if (isAdminManualFuelWithProvidedOdometer(t)) return false;
   if (t.metadata?.needsLogReview) return true;
   const method = t.metadata?.odometerMethod;
@@ -152,6 +154,7 @@ export function isPendingReadyForReview(t: FuelClassifyFields): boolean {
   // Card-covered or voided $0 split cash must not clog the approval queue (M3)
   if (metaFlagOn(t.metadata?.splitCardCoveredFull)) return false;
   if (metaFlagOn(t.metadata?.splitCashVoided)) return false;
+  if (isStatementSettledSplitCash(t)) return false;
   const amt = Math.abs(Number(t.amount) || 0);
   if (
     amt < 0.005 &&

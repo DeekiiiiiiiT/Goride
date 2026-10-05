@@ -16,6 +16,7 @@ export default function PaymentCallbackPage({ onNavigate, session, provider }: P
   const [status, setStatus] = useState<'processing' | 'success' | 'failed' | 'pending_confirmation'>('processing');
   const [orderId, setOrderId] = useState<string | null>(null);
   const [isRushPass, setIsRushPass] = useState(false);
+  const [isWalletDebt, setIsWalletDebt] = useState(false);
 
   useEffect(() => {
     if (provider !== 'wipay') {
@@ -28,7 +29,9 @@ export default function PaymentCallbackPage({ onNavigate, session, provider }: P
     const transactionId = params.get('transaction_id') || params.get('transactionId') || '';
     const purpose = params.get('purpose') || '';
     const rushPass = purpose === 'rush_pass';
+    const walletDebt = purpose === 'wallet_debt';
     setIsRushPass(rushPass);
+    setIsWalletDebt(walletDebt);
 
     if (!session) {
       setStatus('failed');
@@ -61,6 +64,44 @@ export default function PaymentCallbackPage({ onNavigate, session, provider }: P
             const data = (await res.json().catch(() => ({}))) as { status?: string };
             // Payment not completed in DB yet — wait for webhook
             if (res.status === 400 && String(data.status || '').toLowerCase() !== 'failed') {
+              await new Promise((r) => setTimeout(r, POLL_MS));
+              continue;
+            }
+            setStatus('failed');
+            return;
+          }
+          setStatus('failed');
+        } catch {
+          setStatus('failed');
+        }
+      })();
+      return;
+    }
+
+    if (walletDebt) {
+      const intentId = params.get('intent_id') || params.get('intentId') || '';
+      void (async () => {
+        setStatus('pending_confirmation');
+        if (!intentId) {
+          setStatus('failed');
+          return;
+        }
+        try {
+          for (let i = 0; i < POLL_ATTEMPTS; i++) {
+            const res = await fetch(`${API_ENDPOINTS.payments}/wipay/complete`, {
+              method: 'POST',
+              headers: supabaseAnonFunctionHeaders({
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${session.access_token}`,
+              }),
+              body: JSON.stringify({ intentId }),
+            });
+            const data = (await res.json().catch(() => ({}))) as { success?: boolean; code?: string };
+            if (res.ok && data.success) {
+              setStatus('success');
+              return;
+            }
+            if (res.status === 202 || data.code === 'pending_confirmation') {
               await new Promise((r) => setTimeout(r, POLL_MS));
               continue;
             }
@@ -140,19 +181,19 @@ export default function PaymentCallbackPage({ onNavigate, session, provider }: P
         <CheckCircle className="w-20 h-20 text-emerald-500 mb-4" />
         <h1 className="text-2xl font-bold text-gray-900 mb-2">Payment Successful!</h1>
         <p className="text-gray-500 mb-8">
-          {isRushPass ? 'Your Rush Pass is activating' : 'Your order has been confirmed'}
+          {isRushPass ? 'Your Rush Pass is activating' : isWalletDebt ? 'Your balance is paid. You can order again.' : 'Your order has been confirmed'}
         </p>
         <button
           type="button"
           onClick={() =>
             onNavigate(
-              isRushPass ? 'rush-pass' : orderId ? 'tracking' : 'orders',
-              !isRushPass && orderId ? { orderId } : undefined,
+              isRushPass ? 'rush-pass' : isWalletDebt ? 'checkout' : orderId ? 'tracking' : 'orders',
+              !isRushPass && !isWalletDebt && orderId ? { orderId } : undefined,
             )
           }
           className="px-8 py-3 bg-emerald-500 text-white rounded-lg font-medium hover:bg-emerald-600"
         >
-          {isRushPass ? 'View Rush Pass' : 'Track Your Order'}
+          {isRushPass ? 'View Rush Pass' : isWalletDebt ? 'Back to checkout' : 'Track Your Order'}
         </button>
       </div>
     );

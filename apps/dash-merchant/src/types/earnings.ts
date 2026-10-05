@@ -26,6 +26,7 @@ export interface PayoutDetail {
   platformFeePercent: number;
   platformFee: number;
   netAmount: number;
+  orderLines?: Array<{ orderId: string; orderNumber: string; net: number }>;
 }
 
 export interface WeeklyEarningsSummary {

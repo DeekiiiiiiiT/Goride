@@ -3,6 +3,9 @@ import {
   computeTagBurnRate,
   estimateTripsRemaining,
   balanceRingState,
+  classifyTagBalance,
+  isLowBalance,
+  resolveLowBalanceThreshold,
 } from './tollTagBurnRate';
 
 function usage(date: string, amount: number) {
@@ -77,5 +80,28 @@ describe('estimateTripsRemaining / balanceRingState', () => {
     expect(balanceRingState(700, 500)).toBe('watch');
     expect(balanceRingState(400, 500)).toBe('low');
     expect(balanceRingState(0, 500)).toBe('empty');
+  });
+});
+
+describe('low balance rule', () => {
+  it('treats a missing balance as unknown, never empty or low', () => {
+    expect(classifyTagBalance(null, 500)).toBe('unknown');
+    expect(classifyTagBalance(undefined, 500)).toBe('unknown');
+    expect(isLowBalance(null, 500)).toBe(false);
+    expect(classifyTagBalance(0, 500)).toBe('empty');
+    expect(isLowBalance(0, 500)).toBe(true);
+  });
+
+  it('uses the tag override, then the fleet default, then J$500', () => {
+    expect(resolveLowBalanceThreshold(800, 500)).toBe(800);
+    expect(resolveLowBalanceThreshold(null, 750)).toBe(750);
+    expect(resolveLowBalanceThreshold(null, null)).toBe(500);
+  });
+
+  it('keeps J$550 on a J$500 alert as watch, not low', () => {
+    const threshold = resolveLowBalanceThreshold(null, 500);
+    expect(classifyTagBalance(550, threshold)).toBe('watch');
+    expect(isLowBalance(550, threshold)).toBe(false);
+    expect(isLowBalance(400, threshold)).toBe(true);
   });
 });

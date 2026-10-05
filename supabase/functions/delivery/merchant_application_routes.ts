@@ -720,13 +720,14 @@ export function registerMerchantApplicationRoutes(app: Hono) {
 
     const body = await c.req.json().catch(() => ({}));
     const bankName = String(body.bankName || "").trim();
+    const branch = String(body.branch || "").trim();
     const accountHolderName = String(body.accountHolderName || "").trim();
     const accountNumber = String(body.accountNumber || "").replace(/\D/g, "");
     const routingNumber = String(body.routingNumber || "").replace(/\D/g, "");
     const accountType = body.accountType === "savings" ? "savings" : "checking";
 
-    if (!bankName || !accountHolderName || accountNumber.length < 4) {
-      return c.json({ error: "Invalid bank account details" }, 400);
+    if (!bankName || !branch || !accountHolderName || accountNumber.length < 4) {
+      return c.json({ error: "Enter the bank, branch, name, and account number" }, 400);
     }
 
     const accountLast4 = accountNumber.slice(-4);
@@ -743,7 +744,9 @@ export function registerMerchantApplicationRoutes(app: Hono) {
       .insert({
         merchant_id: merchant.id,
         bank_name: bankName,
+        branch,
         account_holder_name: accountHolderName,
+        account_number: accountNumber,
         account_last4: accountLast4,
         routing_number_last4: routingLast4,
         account_type: accountType,

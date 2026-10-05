@@ -1,8 +1,10 @@
 {
   "slug": "fleet-toll",
-  "generatedAt": "2026-09-25T17:34:20.481Z",
-  "routeCount": 81,
+  "generatedAt": "2026-10-05T22:57:02.773Z",
+  "routeCount": 98,
   "routes": [
+    "DELETE /toll-plazas/:id",
+    "DELETE /toll-tags/:id",
     "GET ${BASE}/automation-settings",
     "GET ${BASE}/claims-toll-sync/status",
     "GET ${BASE}/driver-toll-charges",
@@ -39,7 +41,15 @@
     "GET /health",
     "GET /make-server-37f42386/admin/evidence-storage/summary",
     "GET /ready",
+    "GET /toll-info",
+    "GET /toll-info/rate",
+    "GET /toll-info/versions",
+    "GET /toll-plazas",
+    "GET /toll-plazas/:id",
+    "GET /toll-tags",
+    "GET /toll-tags/low-balance",
     "PATCH ${BASE}/edit",
+    "PATCH /toll-tags/:id",
     "POST ${BASE}/approve",
     "POST ${BASE}/auto-match",
     "POST ${BASE}/auto-resolve-refunds",
@@ -83,6 +93,13 @@
     "POST /make-server-37f42386/admin/evidence-storage/audit-legacy",
     "POST /make-server-37f42386/admin/evidence-storage/purge-legacy",
     "POST /make-server-37f42386/internal/evidence-cleanup",
+    "POST /toll-info",
+    "POST /toll-info/impact-preview",
+    "POST /toll-plazas",
+    "POST /toll-tags",
+    "POST /toll-tags/:id/topup-requested",
+    "POST /toll-tags/assign",
+    "POST /toll-tags/unassign",
     "PUT ${BASE}/automation-settings"
   ]
 }

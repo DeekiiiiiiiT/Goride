@@ -14,7 +14,7 @@ import {
  * Pure helpers mirror persistFuelMatchPair outcomes (write_in_place / rehome / blocked).
  */
 describe('split cash re-home sequence (C1)', () => {
-  it('write_in_place when fill week open — date stays, amount set, pending-ready', () => {
+  it('write_in_place when fill week open — date stays, amount set, auto-approved', () => {
     const fillDate = '2026-09-15';
     const plan = classifySplitCashPeriodLanding({
       orgId: 'org',
@@ -53,10 +53,11 @@ describe('split cash re-home sequence (C1)', () => {
     expect(landed.amount).toBe(-2400);
     expect(landed.date).toBe(fillDate);
     expect(landed.metadata.awaitingCashStatement).toBe(false);
-    expect(isPendingReadyForReview(landed)).toBe(true);
+    expect(landed.status).toBe('Approved');
+    expect(isPendingReadyForReview(landed)).toBe(false);
   });
 
-  it('rehome when sealed — tx.date moves, originalFillDate preserved, pending-ready', () => {
+  it('rehome when sealed — tx.date moves, originalFillDate preserved, auto-approved', () => {
     const fillDate = '2026-09-01';
     const plan = classifySplitCashPeriodLanding({
       orgId: 'org',
@@ -107,7 +108,8 @@ describe('split cash re-home sequence (C1)', () => {
     expect(landed.metadata.cashRehomedToWeek).toBe('2026-09-14');
     expect(landed.date).toBe('2026-09-14');
     expect(describeSplitCashRehome(landed.metadata)).toMatch(/Moved from fill/);
-    expect(isPendingReadyForReview(landed)).toBe(true);
+    expect(landed.status).toBe('Approved');
+    expect(isPendingReadyForReview(landed)).toBe(false);
   });
 
   it('blocked no open period — amount stays 0, awaiting true, reason stamped', () => {

@@ -102,7 +102,7 @@ export function TollLogsPage() {
 function TollLogsPageInner() {
   const { runExclusive, setMessage } = useFleetBusy();
   const fleetTz = useFleetTimezone();
-  const { logs, loading, refresh, vehicles, drivers, plazas } = useTollLogs();
+  const { logs, loading, refresh, vehicles, drivers, plazas, plazasUnavailable } = useTollLogs();
   const [selectedLog, setSelectedLog] = useState<TollLogEntry | null>(null);
   const [logToEdit, setLogToEdit] = useState<TollLogEntry | null>(null);
   const [filters, setFilters] = useState<TollLogFiltersState>(() =>
@@ -420,6 +420,12 @@ function TollLogsPageInner() {
           </Button>
         </div>
       </div>
+
+      {plazasUnavailable && (
+        <p role="status" className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+          Plaza names unavailable. Toll charges are still listed.
+        </p>
+      )}
 
       {/* Summary Stat Chips — driven by filtered data */}
       {!loading && <TollLogStats logs={filteredLogs} />}

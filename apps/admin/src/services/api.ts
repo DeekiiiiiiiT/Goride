@@ -1485,21 +1485,35 @@ export const api = {
   },
 
   async getTollTags() {
-    const response = await fetchWithRetry(`${API_ENDPOINTS.toll}/toll-tags`, {
+    const tags: any[] = [];
+    let cursor: string | null = null;
+    for (let page = 0; page < 50; page++) {
+      const qs = cursor ? `?cursor=${encodeURIComponent(cursor)}` : '';
+      const response = await fetchWithRetry(`${API_ENDPOINTS.toll}/toll-tags${qs}`, {
         headers: { 'Authorization': `Bearer ${publicAnonKey}` }
-    });
-    if (!response.ok) throw new Error("Failed to fetch toll tags");
-    return response.json();
+      });
+      if (!response.ok) throw new Error("Failed to fetch toll tags");
+      const body = await response.json();
+      if (Array.isArray(body)) return body;
+      tags.push(...(Array.isArray(body?.tags) ? body.tags : []));
+      cursor = typeof body?.nextCursor === 'string' && body.nextCursor ? body.nextCursor : null;
+      if (!cursor) return tags;
+    }
+    return tags;
   },
 
   async saveTollTag(tag: any) {
-    const response = await fetchWithRetry(`${API_ENDPOINTS.toll}/toll-tags`, {
-        method: 'POST',
+    const token = tag?.expectedUpdatedAt || tag?.updatedAt;
+    const isUpdate = Boolean(tag?.id && token);
+    const response = await fetchWithRetry(
+      isUpdate ? `${API_ENDPOINTS.toll}/toll-tags/${encodeURIComponent(tag.id)}` : `${API_ENDPOINTS.toll}/toll-tags`,
+      {
+        method: isUpdate ? 'PATCH' : 'POST',
         headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${publicAnonKey}`
         },
-        body: JSON.stringify(tag)
+        body: JSON.stringify(isUpdate ? { ...tag, expectedUpdatedAt: token } : tag)
     });
     if (!response.ok) {
       await throwIfCatalogGateBlocked(response, "Cannot assign toll tag — vehicle is pending catalog approval");

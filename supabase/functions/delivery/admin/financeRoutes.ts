@@ -253,6 +253,10 @@ export function registerFinanceAdminRoutes(app: Hono) {
     if (body.status) updates.status = body.status;
     if (body.resolution_notes != null) updates.resolution_notes = body.resolution_notes;
     if (body.refund_amount != null) updates.refund_amount = Number(body.refund_amount);
+    const faultValue = String(body.fault_attribution || "");
+    if (["merchant_fault", "courier_fault", "platform_fault", "customer_fault"].includes(faultValue)) {
+      updates.fault_attribution = faultValue;
+    }
     const { data, error } = await db.from("order_disputes")
       .update(updates).eq("id", c.req.param("id")).select().single();
     if (error) return c.json({ error: error.message }, 500);

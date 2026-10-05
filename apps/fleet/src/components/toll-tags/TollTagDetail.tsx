@@ -23,6 +23,7 @@ import {
   avgCostPerPassage,
   estimateTripsRemaining,
   balanceRingState,
+  resolveLowBalanceThreshold,
   type BalanceRingState,
 } from "../../utils/tollTagBurnRate";
 import { cn } from "../ui/utils";
@@ -77,7 +78,9 @@ export function TollTagDetail({
   onNavigateToReconciliation,
   onRequestAssign,
 }: TollTagDetailProps) {
-  const [lowBalanceThreshold, setLowBalanceThreshold] = useState<number>(tag.lowBalanceThreshold ?? 500);
+  const [lowBalanceThreshold, setLowBalanceThreshold] = useState<number>(
+    resolveLowBalanceThreshold(tag.lowBalanceThreshold),
+  );
   const [isEditingThreshold, setIsEditingThreshold] = useState(false);
   const [thresholdInput, setThresholdInput] = useState('');
   const [isSavingThreshold, setIsSavingThreshold] = useState(false);
@@ -132,38 +135,7 @@ export function TollTagDetail({
     });
   };
 
-  const syncBalanceIfNeeded = async (calculatedBalance: number) => {
-    if (!tag.assignedVehicleId) return;
-    try {
-      const vehicles = await api.getVehicles();
-      const vehicle = vehicles.find((v: any) => v.id === tag.assignedVehicleId);
-      const currentBalance = vehicle?.tollBalance || 0;
-      if (Math.abs(currentBalance - calculatedBalance) > 0.01 && vehicle) {
-        await api.saveVehicle({
-          ...vehicle,
-          tollBalance: calculatedBalance,
-          expectedUpdatedAt: vehicle.updatedAt,
-        });
-      }
-      if (tag.lastCalculatedBalance === undefined || Math.abs((tag.lastCalculatedBalance || 0) - calculatedBalance) > 0.01) {
-        await api.saveTollTag({
-          ...tag,
-          lastCalculatedBalance: calculatedBalance,
-          lastBalanceSyncedAt: new Date().toISOString(),
-          expectedUpdatedAt: tag.updatedAt,
-          updatedAt: new Date().toISOString(),
-        });
-      }
-    } catch (e: any) {
-      if (e?.name === 'TollTagConflictError' || e?.name === 'VehicleConflictError') {
-        toast.error('This record was updated in another tab — refresh and recalculate again.');
-        return;
-      }
-      console.error("Failed to sync calculated balance:", e);
-    }
-  };
-
-  const fetchLedger = async (opts?: { syncBalance?: boolean }) => {
+  const fetchLedger = async () => {
     if (!tag.assignedVehicleId) {
       setLedgerAll([]);
       setLedgerLoading(false);
@@ -180,12 +152,6 @@ export function TollTagDetail({
       setLedgerAll(tagLedgerAll);
       setClaims(allClaims || []);
       setDisputeRefunds(disputesRes?.data || []);
-      const calculatedBalance = tagLedgerAll
-        .filter((tx) => !isVoidedTx(tx))
-        .reduce((sum, tx) => sum + tx.amount, 0);
-      if (opts?.syncBalance) {
-        await syncBalanceIfNeeded(calculatedBalance);
-      }
     } catch (error) {
       console.error("Failed to fetch tag stats", error);
       throw error;
@@ -195,7 +161,7 @@ export function TollTagDetail({
   };
 
   useEffect(() => {
-    void fetchLedger({ syncBalance: false }).catch(() => {});
+    void fetchLedger().catch(() => {});
   }, [tag.assignedVehicleId, tag.id]);
 
   const scopedLedger = useMemo(() => {
@@ -316,7 +282,7 @@ export function TollTagDetail({
   const handleRefresh = async () => {
     setIsRefreshing(true);
     try {
-      await fetchLedger({ syncBalance: true });
+      await fetchLedger();
       setHistoryRefresh((n) => n + 1);
       toast.success('Tag data refreshed');
     } catch {
@@ -748,7 +714,7 @@ export function TollTagDetail({
                   claimsList={claims}
                   disputeRefunds={disputeRefunds}
                   onTransactionChange={() => {
-                    void fetchLedger({ syncBalance: true }).catch(() => {});
+                    void fetchLedger().catch(() => {});
                     setHistoryRefresh((n) => n + 1);
                   }}
                 />
@@ -825,7 +791,7 @@ export function TollTagDetail({
           tollTagUuid={tag.id}
           onSuccess={() => {
             setTopupOpen(false);
-            void fetchLedger({ syncBalance: true }).catch(() => {});
+            void fetchLedger().catch(() => {});
             setHistoryRefresh((n) => n + 1);
           }}
         />

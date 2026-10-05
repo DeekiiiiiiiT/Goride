@@ -229,7 +229,7 @@ export const FLEET_DOMAINS: FleetDomainDef[] = [
     mapRow: (key, v) =>
       base(key, v, "toll_tag:", {
         tag_number: str(v.tagNumber) ?? str(v.number),
-        vehicle_id: str(v.vehicleId),
+        vehicle_id: str(v.assignedVehicleId) ?? str(v.vehicleId),
       }),
   },
   {

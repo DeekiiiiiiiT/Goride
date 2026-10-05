@@ -15,13 +15,26 @@ import { validateBody, z } from "../_shared/validateBody.ts";
 import { isWipayDemoMode } from "../_shared/wipayDemo.ts";
 import { wipayAmountMatches, wipayCurrencyOk, wipayStatusAccepted } from "../_shared/rushMoney/wipayContract.ts";
 import { queueAndExecuteRefund } from "../_shared/rushMoney/executeRefund.ts";
-import { captureLines } from "../_shared/rushMoney/journalLines.ts";
+import { captureLines, walletDebtPayLines } from "../_shared/rushMoney/journalLines.ts";
+import { loadCustomerWallet } from "../_shared/rushMoney/customerWallet.ts";
 
 const PaymentIntentBody = z.object({
   orderId: z.string().uuid(),
   provider: z.enum(["wipay"]).optional(),
   returnOrigin: z.string().url().optional(),
 });
+
+const WalletDebtBody = z.object({
+  returnOrigin: z.string().url().optional(),
+});
+
+const WipayCompleteBody = z.object({
+  orderId: z.string().min(1).optional(),
+  intentId: z.string().uuid().optional(),
+  transactionId: z.string().optional(),
+  /** Ignored for money-marking - client status is not trusted (Finding K). */
+  status: z.string().optional(),
+}).refine((value) => Boolean(value.orderId || value.intentId), { message: "Order or payment is required" });
 
 const app = new Hono().basePath("/payments");
 
@@ -180,12 +193,79 @@ async function findWipayIntent(
   return intents?.[0] ?? null;
 }
 
+async function completeWalletDebt(
+  serviceSupabase: ReturnType<typeof getServiceSupabase>,
+  intent: Record<string, unknown>,
+  payload: Record<string, unknown>,
+): Promise<string> {
+  const customerId = String(intent.customer_id || "");
+  const amount = Number(intent.amount);
+  if (!customerId || !Number.isFinite(amount) || amount <= 0) return "";
+  const transactionId = payloadString(payload, "transaction_id", "transactionId", "transactionid")
+    || String(intent.provider_intent_id ?? "");
+  const reportedAmount = payloadString(payload, "total", "amount");
+  const reportedCurrency = payloadString(payload, "currency") || "JMD";
+  const amountMismatch = !isWipayDemoMode() && reportedAmount && !wipayAmountMatches(amount, reportedAmount);
+  const currencyMismatch = !wipayCurrencyOk(reportedCurrency);
+  if (amountMismatch || currencyMismatch) {
+    await serviceSupabase.schema("payments").from("payment_intents").update({
+      status: "review",
+      provider_data: { ...(intent.provider_data as Record<string, unknown> | null ?? {}), callback: payload, review: amountMismatch ? "amount_mismatch" : "currency_mismatch" },
+    }).eq("id", intent.id);
+    return "";
+  }
+  const { data: completion, error: completionError } = await serviceSupabase.schema("payments").rpc(
+    "complete_payment_intent",
+    {
+      p_intent_id: intent.id,
+      p_provider: "wipay",
+      p_provider_transaction_id: transactionId,
+      p_amount: amount,
+      p_currency: "JMD",
+      p_net_amount: amount,
+      p_provider_data: { ...payload, purpose: "wallet_debt" },
+    },
+  );
+  if (completionError) {
+    console.error("[payments/wipay] wallet debt complete", completionError.message);
+    return "";
+  }
+  const result = (completion ?? {}) as { action?: string };
+  if (result.action === "replay") {
+    const { data: fresh } = await serviceSupabase.schema("payments").from("payment_intents")
+      .select("status")
+      .eq("id", intent.id)
+      .maybeSingle();
+    if (String(fresh?.status || "") === "superseded") return "";
+  }
+  if (result.action !== "captured" && result.action !== "replay") return "";
+  const { error: journalError } = await serviceSupabase.rpc("rush_post_journal", {
+    p_idempotency_key: `wallet-pay:${intent.id}`,
+    p_event_type: "wallet_payment",
+    p_order_id: null,
+    p_correlation_id: intent.id,
+    p_lines: walletDebtPayLines(customerId, amount),
+    p_actor_type: "system",
+    p_reason: "Balance paid",
+    p_evidence: {},
+    p_policy_version: null,
+  });
+  if (journalError) {
+    console.error("[payments/wipay] wallet debt journal", journalError.message);
+    return "";
+  }
+  return "wallet_debt";
+}
+
 async function completeWipayIntent(
   serviceSupabase: ReturnType<typeof getServiceSupabase>,
   intent: Record<string, unknown>,
   payload: Record<string, unknown>,
 ) {
   const pd = (intent.provider_data ?? {}) as Record<string, unknown>;
+  if (String(pd.purpose || "") === "wallet_debt") {
+    return completeWalletDebt(serviceSupabase, intent, payload);
+  }
   const isRushPass = String(pd.purpose || "") === "rush_pass" || !intent.order_id;
 
   const alreadyPaid = String(intent.status) === "completed";
@@ -425,6 +505,116 @@ function wipayGatewayUrl(): string {
 // Health check
 app.get("/health", (c) => c.json({ service: "payments", status: "ok", providers: ["wipay"] }));
 
+app.post("/wallet-debt", async (c) => {
+  const authHeader = c.req.header("Authorization");
+  if (!authHeader) return c.json({ error: "Unauthorized" }, 401);
+  const supabase = getSupabase(authHeader);
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return c.json({ error: "Unauthorized" }, 401);
+  if (!(await getFlag("PAYMENTS_INTENTS_ENABLED", true))) {
+    return c.json({ error: "payments_disabled" }, 503);
+  }
+  const limited = await assertRateLimit(c, `payments:wallet-debt:${user.id}`, { max: 10, windowMs: 60_000 });
+  if (limited) return limited;
+  const body = await validateBody(c, WalletDebtBody);
+  if (body instanceof Response) return body;
+  const customer = await getCustomerForUser(user.id);
+  if (!customer) return c.json({ error: "Forbidden" }, 403);
+  if (String(customer.account_status || "active") === "suspended") {
+    return c.json({ error: "Account suspended" }, 403);
+  }
+  const serviceSupabase = getServiceSupabase();
+  const wallet = await loadCustomerWallet(serviceSupabase, customer.id);
+  const owed = Math.round(Math.max(0, wallet.balanceMajor) * 100) / 100;
+  if (owed <= 0) return c.json({ error: "Nothing to pay" }, 409);
+  const returnBase = resolvePayReturnBase(c.req.header("origin"), body.returnOrigin);
+  const nowIso = new Date().toISOString();
+  const { data: openIntents } = await serviceSupabase.schema("payments").from("payment_intents")
+    .select("*")
+    .eq("customer_id", customer.id)
+    .is("order_id", null)
+    .eq("provider", "wipay")
+    .in("status", ["pending", "created"])
+    .gt("expires_at", nowIso)
+    .order("created_at", { ascending: false });
+  const reusable = (openIntents || []).find((row) => {
+    const purpose = String((row.provider_data as { purpose?: string } | null)?.purpose || "");
+    return purpose === "wallet_debt" && Math.abs(Number(row.amount) - owed) < 0.001;
+  });
+  if (reusable) {
+    if (isWipayDemoMode()) {
+      const done = await completeWipayIntent(serviceSupabase, reusable as Record<string, unknown>, {
+        status: "success",
+        transaction_id: String(reusable.provider_intent_id || `DEMO-BAL-${reusable.id}`),
+        demo: true,
+      });
+      if (!done) return c.json({ error: "Could not record the payment" }, 500);
+      return c.json({ intentId: reusable.id, demoPaid: true, purpose: "wallet_debt", amount: reusable.amount, currency: "JMD" });
+    }
+    return c.json({
+      intentId: reusable.id,
+      paymentRedirectUrl: reusable.client_secret,
+      amount: reusable.amount,
+      currency: reusable.currency,
+      purpose: "wallet_debt",
+    });
+  }
+  for (const row of openIntents || []) {
+    const purpose = String((row.provider_data as { purpose?: string } | null)?.purpose || "");
+    if (purpose === "wallet_debt") {
+      await serviceSupabase.schema("payments").from("payment_intents").update({ status: "expired" }).eq("id", row.id);
+    }
+  }
+  const charge = {
+    id: customer.id,
+    order_number: `BAL${customer.id.replace(/-/g, "").slice(0, 12)}`,
+    total: owed,
+    purpose: "wallet_debt",
+  };
+  let clientSecret: string | null = null;
+  let providerIntentId: string | null = null;
+  let providerData: Record<string, unknown> = { purpose: "wallet_debt", returnBase, customer_id: customer.id };
+  if (isWipayDemoMode()) {
+    providerIntentId = `DEMO-BAL-${customer.id.slice(0, 8)}-${Date.now()}`;
+    clientSecret = `demo://${providerIntentId}`;
+    providerData = { ...providerData, demo: true, mode: "wipay_demo" };
+  } else {
+    const wipayResult = await createWiPayIntent(charge, returnBase, user.email ?? "");
+    if (wipayResult.error) return c.json({ error: wipayResult.error }, 500);
+    clientSecret = wipayResult.paymentUrl ?? null;
+    providerIntentId = wipayResult.transactionId ?? null;
+    providerData = { ...providerData, ...wipayResult, purpose: "wallet_debt", returnBase };
+  }
+  const { data: intent, error } = await serviceSupabase.schema("payments").from("payment_intents").insert({
+    order_id: null,
+    customer_id: customer.id,
+    amount: owed,
+    currency: "JMD",
+    provider: "wipay",
+    provider_intent_id: providerIntentId,
+    provider_data: providerData,
+    client_secret: clientSecret,
+    expires_at: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
+  }).select().single();
+  if (error || !intent) return c.json({ error: error?.message || "Could not start the payment" }, 500);
+  if (isWipayDemoMode()) {
+    const done = await completeWipayIntent(serviceSupabase, intent as Record<string, unknown>, {
+      status: "success",
+      transaction_id: String(providerIntentId),
+      demo: true,
+    });
+    if (!done) return c.json({ error: "Could not record the payment" }, 500);
+    return c.json({ intentId: intent.id, demoPaid: true, purpose: "wallet_debt", amount: intent.amount, currency: "JMD" }, 201);
+  }
+  return c.json({
+    intentId: intent.id,
+    paymentRedirectUrl: intent.client_secret,
+    amount: intent.amount,
+    currency: intent.currency,
+    purpose: "wallet_debt",
+  }, 201);
+});
+
 // ============================================================================
 // Payment Intents
 // ============================================================================
@@ -630,7 +820,7 @@ async function createWiPayIntent(order: any, returnBase: string, customerEmail: 
         avs: "0",
         country_code: "JM",
         currency: "JMD",
-        data: JSON.stringify({ orderId: order.id, returnBase }),
+        data: JSON.stringify({ orderId: order.id, returnBase, purpose: order.purpose || "order" }),
         email: customerEmail || "customer@roamrush.app",
         environment: isSandboxWipay() ? "sandbox" : "live",
         fee_structure: "merchant_absorb",
@@ -719,9 +909,11 @@ app.all("/webhooks/wipay", async (c) => {
   const returnBase = isAllowedPayReturnOrigin(String(providerData.returnBase ?? ""))
     ? String(providerData.returnBase)
     : (Deno.env.get("APP_URL") ?? "https://roamrush.app");
-  const isPass = String(providerData.purpose || "") === "rush_pass";
-  const customerReturn = isPass
+  const purpose = String(providerData.purpose || "");
+  const customerReturn = purpose === "rush_pass"
     ? `${returnBase}/payment/callback/wipay?status=${success ? "success" : "failed"}&purpose=rush_pass`
+    : purpose === "wallet_debt"
+    ? `${returnBase}/payment/callback/wipay?status=${success ? "success" : "failed"}&purpose=wallet_debt&intent_id=${encodeURIComponent(String(intent.id))}`
     : `${returnBase}/payment/callback/wipay?status=${success ? "success" : "failed"}&order_id=${encodeURIComponent(orderId)}`;
 
   const accept = c.req.header("accept") ?? "";
@@ -731,13 +923,6 @@ app.all("/webhooks/wipay", async (c) => {
     return c.json({ received: true, success, orderId });
   }
   return c.redirect(customerReturn, 302);
-});
-
-const WipayCompleteBody = z.object({
-  orderId: z.string().min(1),
-  transactionId: z.string().optional(),
-  /** Ignored for money-marking - client status is not trusted (Finding K). */
-  status: z.string().optional(),
 });
 
 /**
@@ -757,6 +942,30 @@ app.post("/wipay/complete", async (c) => {
   if (body instanceof Response) return body;
 
   const serviceSupabase = getServiceSupabase();
+  if (body.intentId) {
+    const { data: debtIntent } = await serviceSupabase.schema("payments").from("payment_intents")
+      .select("*")
+      .eq("id", body.intentId)
+      .maybeSingle();
+    const debtPurpose = String((debtIntent?.provider_data as { purpose?: string } | null)?.purpose || "");
+    if (!debtIntent || debtPurpose !== "wallet_debt") {
+      return c.json({ error: "Payment not found" }, 404);
+    }
+    const customer = await getCustomerForUser(user.id);
+    if (!customer || String(debtIntent.customer_id) !== String(customer.id)) {
+      return c.json({ error: "Forbidden" }, 403);
+    }
+    const debtStatus = String(debtIntent.status ?? "").toLowerCase();
+    if (debtStatus === "completed" || debtStatus === "paid") {
+      return c.json({ success: true, purpose: "wallet_debt", status: debtStatus });
+    }
+    if (debtStatus === "failed" || debtStatus === "cancelled" || debtStatus === "expired" || debtStatus === "superseded") {
+      return c.json({ success: false, error: "Payment failed", code: "payment_failed", status: debtStatus }, 400);
+    }
+    return c.json({ success: false, code: "pending_confirmation", status: debtStatus || "pending", purpose: "wallet_debt" }, 202);
+  }
+
+  if (!body.orderId) return c.json({ error: "Payment not found" }, 404);
   // Prefer order_id match for customer poll (avoid loose transaction_id alone)
   const byOrder = await findWipayIntent(
     serviceSupabase,

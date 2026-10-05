@@ -195,6 +195,7 @@ export function ExportCenter() {
     tollTransactions: null,
   });
   const [vehiclesTruncated, setVehiclesTruncated] = useState(false);
+  const [plazasUnavailable, setPlazasUnavailable] = useState(false);
 
   // Export All / exclusive export busy lock
   const [isExportingAll, setIsExportingAll] = useState(false);
@@ -247,15 +248,16 @@ export function ExportCenter() {
   useEffect(() => {
     let cancelled = false;
 
-    const safeCount = async (key: keyof RecordCounts, fn: () => Promise<any>) => {
+    const safeCount = async (key: keyof RecordCounts, fn: () => Promise<any>, opts?: { plazaNames?: boolean }) => {
       try {
         const result = await fn();
         if (!cancelled) {
           const count = Array.isArray(result) ? result.length : (result?.total ?? result?.totalTrips ?? null);
           setCounts(prev => ({ ...prev, [key]: count }));
+          if (opts?.plazaNames) setPlazasUnavailable(false);
         }
       } catch {
-        // Non-critical — leave as null
+        if (!cancelled && opts?.plazaNames) setPlazasUnavailable(true);
       }
     };
 
@@ -271,7 +273,7 @@ export function ExportCenter() {
     safeCount('vehicleMetrics', () => api.getVehicleMetrics());
     safeCount('transactions', () => api.getTransactions());
     safeCount('tollTags', () => api.getTollTags());
-    safeCount('tollPlazas', () => api.getTollPlazas());
+    safeCount('tollPlazas', () => api.getTollPlazas(), { plazaNames: true });
     // Gas station master DB is Super Admin only — not exported from fleet customer app
     safeCount('claims', () => api.getClaims());
     safeCount('equipment', async () => {
@@ -774,7 +776,7 @@ export function ExportCenter() {
             {isInActiveGroup('tollPlazas') && matchesSearch(CATEGORY_SEARCH_TERMS.tollPlazas) && (
             <ExportCategoryCard
               title="Toll Plazas"
-              description="Verified toll plaza database with highways, GPS coordinates, and rates."
+              description={plazasUnavailable ? 'Plaza names unavailable. Counts and the rest of this export still work.' : 'Verified toll plaza database with highways, GPS coordinates, and rates.'}
               icon={<CreditCard className="h-5 w-5" />}
               recordCount={counts.tollPlazas}
               badge="Database"

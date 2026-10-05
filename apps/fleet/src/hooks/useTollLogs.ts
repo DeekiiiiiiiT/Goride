@@ -21,6 +21,7 @@ export function useTollLogs() {
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [drivers, setDrivers] = useState<DriverRecord[]>([]);
   const [plazas, setPlazas] = useState<TollPlaza[]>([]);
+  const [plazasUnavailable, setPlazasUnavailable] = useState(false);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -29,18 +30,21 @@ export function useTollLogs() {
         api.getTollLogs(),
         api.getVehicles(),
         api.getDrivers(),
-        api.getTollPlazas().catch(() => [] as TollPlaza[]),
+        api.getTollPlazas()
+          .then((rows) => ({ ok: true as const, rows }))
+          .catch(() => ({ ok: false as const, rows: [] as TollPlaza[] })),
       ]);
 
       setVehicles(allVehicles);
       setDrivers(allDrivers);
-      setPlazas(allPlazas);
+      setPlazas(allPlazas.rows);
+      setPlazasUnavailable(!allPlazas.ok);
 
       const enriched = enrichTollLogEntries({
         transactions: (tollResponse?.data || []) as any[],
         vehicles: allVehicles || [],
         drivers: allDrivers || [],
-        plazas: (allPlazas || []) as any[],
+        plazas: allPlazas.rows as any[],
       }) as TollLogEntry[];
 
       setLogs(enriched);
@@ -65,6 +69,7 @@ export function useTollLogs() {
     vehicles,
     drivers,
     plazas,
+    plazasUnavailable,
     refresh: fetchData,
   };
 }

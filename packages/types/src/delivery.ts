@@ -261,6 +261,7 @@ export interface MerchantApplicationPayload {
 
 export interface MerchantBankAccountInput {
   bankName: string;
+  branch: string;
   accountHolderName: string;
   accountNumber: string;
   routingNumber?: string;

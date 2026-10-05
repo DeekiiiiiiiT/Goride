@@ -34,7 +34,7 @@ import {
 } from "./fuel_cycle_stamp.ts";
 import { buildFleetCycleSnapshot } from "./fuel_cycle_snapshot.ts";
 import { summarizeFuelLogEntries } from "./fuel_log_summary.ts";
-import { persistFuelMatchPair } from "./fuel_jaa_match.ts";
+import { healStatementSettledSplitCash, persistFuelMatchPair } from "./fuel_jaa_match.ts";
 import {
   adoptUnlinkedStatement,
   dismissUnlinkedStatement,
@@ -198,10 +198,13 @@ app.post(`${BASE_PATH}/fuel/ensure-posted-entries`, requirePermission("fuel.view
     const pendingHeal = await healFuelEntriesMissingPendingStatus(limit, (rec) =>
       stampOrg(rec, c),
     );
-    console.log(
-      `[EnsurePosted] org=${orgId || "none"} healed=${result.healed} blocked=${result.blocked} debitHeal=${debitHeal.healed} pendingHeal=${pendingHeal.healed}`,
+    const splitCashHeal = await healStatementSettledSplitCash(limit, (rec) =>
+      stampOrg(rec, c),
     );
-    return c.json({ success: true, ...result, debitHeal, pendingHeal });
+    console.log(
+      `[EnsurePosted] org=${orgId || "none"} healed=${result.healed} blocked=${result.blocked} debitHeal=${debitHeal.healed} pendingHeal=${pendingHeal.healed} splitCash=${splitCashHeal.approved}`,
+    );
+    return c.json({ success: true, ...result, debitHeal, pendingHeal, splitCashHeal });
   } catch (e: any) {
     console.error("[EnsurePosted] failed", e);
     return c.json({ error: e?.message || "Ensure failed" }, 500);
@@ -5911,6 +5914,7 @@ app.get(`${BASE_PATH}/stations`, async (c) => {
             status: s.status,
             isPreferred: !!s.isPreferred,
             location: s.location,
+            aliases: s.aliases,
             stats: s.stats
               ? {
                   totalVisits: s.stats.totalVisits,

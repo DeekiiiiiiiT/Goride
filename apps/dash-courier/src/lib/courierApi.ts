@@ -397,6 +397,67 @@ export async function fetchCourierEarnings(period: 'today' | 'week' | 'month') {
   };
 }
 
+export async function fetchCourierDeductions() {
+  const headers = await authHeaders(false);
+  if (!headers) return [];
+  const res = await fetch(`${BASE}/courier/deductions`, { headers });
+  if (!res.ok) return [];
+  const body = await res.json();
+  return (body.deductions || []) as Array<{
+    id: string;
+    orderId?: string;
+    reason: string;
+    appealUntil?: string | null;
+    amountMajor: number;
+    appealed: boolean;
+    appealStatus?: string | null;
+  }>;
+}
+
+export async function fetchCourierBankAccount() {
+  const headers = await authHeaders(false);
+  if (!headers) return null;
+  const res = await fetch(`${BASE}/courier/bank-account`, { headers });
+  if (!res.ok) return null;
+  const body = await res.json();
+  return (body.bankAccount || null) as {
+    bank_name?: string;
+    branch?: string;
+    account_holder_name?: string;
+    account_last4?: string;
+    account_type?: string;
+    is_verified?: boolean;
+  } | null;
+}
+
+export async function saveCourierBankAccount(input: {
+  bankName: string;
+  branch: string;
+  accountHolderName: string;
+  accountNumber: string;
+  accountType: 'checking' | 'savings';
+}) {
+  const headers = await authHeaders(true);
+  if (!headers) throw new Error('Sign in again');
+  const res = await fetch(`${BASE}/courier/bank-account`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(input),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error((body as { error?: string }).error || 'Could not save the bank account');
+  return String((body as { words?: string }).words || 'Bank account saved');
+}
+
+export async function appealCourierDeduction(id: string) {
+  const headers = await authHeaders(true);
+  if (!headers) throw new Error('Sign in again');
+  const res = await fetch(`${BASE}/courier/deductions/${id}/appeal`, { method: 'POST', headers });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error((body as { error?: string }).error || 'Could not appeal');
+  return String((body as { words?: string }).words || 'Appeal parked');
+}
+
 export type CourierHistoryRow = {
   id: string;
   orderNumber?: string;

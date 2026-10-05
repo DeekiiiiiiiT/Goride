@@ -722,6 +722,7 @@ function DeleteCenterInner() {
   const [deleteGroup, setDeleteGroup] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeModal, setActiveModal] = useState<string | null>(null);
+  const [plazasUnavailable, setPlazasUnavailable] = useState(false);
   const [counts, setCounts] = useState<RecordCounts>({
     trips: null, drivers: null, driverMetrics: null,
     vehicles: null, vehicleMetrics: null, fuel: null,
@@ -759,15 +760,16 @@ function DeleteCenterInner() {
   useEffect(() => {
     let cancelled = false;
 
-    const safeCount = async (key: keyof RecordCounts, fn: () => Promise<any>) => {
+    const safeCount = async (key: keyof RecordCounts, fn: () => Promise<any>, opts?: { plazaNames?: boolean }) => {
       try {
         const result = await fn();
+        if (!cancelled && opts?.plazaNames) setPlazasUnavailable(false);
         if (!cancelled) {
           const count = Array.isArray(result) ? result.length : (result?.total ?? result?.totalTrips ?? result?.totalCount ?? null);
           setCounts(prev => ({ ...prev, [key]: count }));
         }
       } catch {
-        // Non-critical — leave as null
+        if (!cancelled && opts?.plazaNames) setPlazasUnavailable(true);
       }
     };
 
@@ -790,7 +792,7 @@ function DeleteCenterInner() {
     safeCount('vehicleMetrics', () => api.getVehicleMetrics());
     safeCount('transactions', () => api.getTransactions());
     safeCount('tollTags', () => api.getTollTags());
-    safeCount('tollPlazas', () => api.getTollPlazas());
+    safeCount('tollPlazas', () => api.getTollPlazas(), { plazaNames: true });
     safeCount('stations', () => api.getStations());
     safeCount('claims', () => api.getClaims());
     safeCount('equipment', async () => {
@@ -842,6 +844,7 @@ function DeleteCenterInner() {
           api.bulkDeletePreview({ prefix: 'odometer_reading:', fields: ['id'] }).catch(() => null),
           api.bulkDeletePreview({ prefix: 'checkin:', fields: ['id'] }).catch(() => null),
         ]);
+        setPlazasUnavailable(tollPlazas == null);
         const tollMergedCount = await countTollTransactionsMerged().catch(() => null);
         if (vehicles && typeof vehicles.truncated === 'boolean') {
           setVehiclesTruncated(vehicles.truncated);
@@ -1092,7 +1095,7 @@ function DeleteCenterInner() {
     if (deleteGroup === 'toll') {
       return renderCardGrid([
         { key: 'tollTags', title: 'Toll Tags', description: 'Delete toll tag inventory and assignments', icon: <Tag className="h-5 w-5" />, recordCount: counts.tollTags, modalId: 'deleteTollTags' },
-        { key: 'tollPlazas', title: 'Toll Plazas', description: 'Delete toll plaza database with GPS coordinates and rates', icon: <Building2 className="h-5 w-5" />, recordCount: counts.tollPlazas, modalId: 'deleteTollPlazas' },
+        { key: 'tollPlazas', title: 'Toll Plazas', description: plazasUnavailable ? 'Plaza names unavailable. The rest of this page still works.' : 'Delete toll plaza database with GPS coordinates and rates', icon: <Building2 className="h-5 w-5" />, recordCount: counts.tollPlazas, modalId: 'deleteTollPlazas' },
         { key: 'tollTransactions', title: 'Toll Transactions', description: 'Delete toll usage, top-up, and deduction records', icon: <CreditCard className="h-5 w-5" />, recordCount: counts.tollTransactions, modalId: 'deleteTollTransactions' },
       ]);
     }

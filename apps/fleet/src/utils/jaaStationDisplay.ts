@@ -1,5 +1,6 @@
 import type { FuelEntry } from '../types/fuel';
 import type { StationProfile } from '../types/station';
+import { calculateDistance } from './geoUtils';
 
 function normalizeVendorName(name: string): string {
   if (!name) return '';
@@ -43,6 +44,57 @@ function calculateSimilarity(str1: string, str2: string): number {
   return Math.max(0, 1 - levenshteinDistance(a, b) / maxLen);
 }
 
+const MERCHANT_STOPWORDS = new Set([
+  'service',
+  'centre',
+  'center',
+  'station',
+  'ltd',
+  'limited',
+  'gas',
+  'fuel',
+  'the',
+  'and',
+  'petroleum',
+  'company',
+]);
+
+function significantTokens(name: string): string[] {
+  return normalizeVendorName(name)
+    .split(' ')
+    .filter((token) => token.length >= 3 && !MERCHANT_STOPWORDS.has(token));
+}
+
+/** "SUPER LUBE SERVICE CENTRE" and "Super Lube Fairview" share the real name. */
+function tokenSubsetScore(a: string, b: string): number {
+  const left = significantTokens(a);
+  const right = significantTokens(b);
+  if (!left.length || !right.length) return 0;
+  const [shorter, longer] = left.length <= right.length ? [left, right] : [right, left];
+  const covered = shorter.every((token) => longer.includes(token));
+  if (!covered) return 0;
+  if (shorter.length >= 2 || shorter[0].length >= 5) return 0.9;
+  return 0;
+}
+
+function scoreVendorAgainstStation(vendorName: string, station: StationProfile): number {
+  let score = Math.max(
+    calculateSimilarity(vendorName, station.name || ''),
+    calculateSimilarity(vendorName, station.brand || ''),
+    tokenSubsetScore(vendorName, station.name || ''),
+    tokenSubsetScore(vendorName, station.brand || ''),
+  );
+  for (const alias of station.aliases || []) {
+    const label = alias.label || '';
+    score = Math.max(
+      score,
+      calculateSimilarity(vendorName, label),
+      tokenSubsetScore(vendorName, label),
+    );
+  }
+  return score;
+}
+
 /** Best verified station for a JAA/vendor string (name, brand, aliases). */
 export function matchVendorToVerifiedStation(
   vendorName: string,
@@ -55,17 +107,37 @@ export function matchVendorToVerifiedStation(
   let best: { station: StationProfile; score: number } | null = null;
   for (const station of stations) {
     if (station.status && station.status !== 'verified') continue;
-    let score = Math.max(
-      calculateSimilarity(raw, station.name || ''),
-      calculateSimilarity(raw, station.brand || ''),
-    );
-    for (const alias of station.aliases || []) {
-      score = Math.max(score, calculateSimilarity(raw, alias.label || ''));
-    }
+    const score = scoreVendorAgainstStation(raw, station);
     if (score < minConfidence) continue;
     if (!best || score > best.score) best = { station, score };
   }
   return best?.station ?? null;
+}
+
+/**
+ * Same as matchVendorToVerifiedStation, but refuses a close tie so two
+ * Super Lube branches are not silently swapped.
+ */
+export function matchUniqueVendorToVerifiedStation(
+  vendorName: string,
+  stations: StationProfile[],
+  minConfidence = 0.65,
+): StationProfile | null {
+  const raw = String(vendorName || '').trim();
+  if (!raw || !stations.length) return null;
+  const scored: { station: StationProfile; score: number }[] = [];
+  for (const station of stations) {
+    if (station.status && station.status !== 'verified') continue;
+    const score = scoreVendorAgainstStation(raw, station);
+    if (score < minConfidence) continue;
+    scored.push({ station, score });
+  }
+  scored.sort((a, b) => b.score - a.score);
+  const top = scored[0];
+  if (!top) return null;
+  const runner = scored[1];
+  if (runner && top.score - runner.score < 0.08) return null;
+  return top.station;
 }
 
 export type StationDisplayResult = {
@@ -109,7 +181,7 @@ export function resolveCardTransactionStation(
   }
 
   if (jaaRaw && jaaRaw !== '—') {
-    const matched = matchVendorToVerifiedStation(jaaRaw, verifiedStations);
+    const matched = matchUniqueVendorToVerifiedStation(jaaRaw, verifiedStations);
     if (matched) return { label: matched.name, fromVerified: true, jaaRaw };
   }
 
@@ -128,19 +200,113 @@ function isIndependentBrand(brand?: string | null): boolean {
   return !b || b.toLowerCase() === 'independent';
 }
 
-function resolveStationForFuelEntry(
-  entry: FuelEntry,
+function stationById(stations: StationProfile[], id: string): StationProfile | null {
+  const hit = stations.find((s) => s.id === id);
+  if (!hit) return null;
+  if (hit.status && hit.status !== 'verified') return null;
+  return hit;
+}
+
+const GPS_SIBLING_WINDOW_MS = 10 * 60 * 1000;
+
+function entryMeta(entry: FuelEntry): Record<string, unknown> {
+  return (entry.metadata || {}) as Record<string, unknown>;
+}
+
+/** Driver GPS lives on locationMetadata. Card-file rows usually have none. */
+function gpsFix(entry: FuelEntry): { lat: number; lng: number } | null {
+  const meta = entryMeta(entry);
+  const loc = (entry.locationMetadata || meta.locationMetadata) as
+    | { lat?: unknown; lng?: unknown }
+    | undefined;
+  const lat = Number(loc?.lat);
+  const lng = Number(loc?.lng);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng) || lat === 0 || lng === 0) return null;
+  return { lat, lng };
+}
+
+/** Local wall-clock on the log. Both sides parsed the same way so UTC stamps are not mixed in. */
+function localInstant(entry: FuelEntry): number | null {
+  const date = String(entry.date || '').slice(0, 10);
+  const time = String(entry.time || '').slice(0, 8);
+  if (!date || !time) return null;
+  const ms = Date.parse(`${date}T${time}`);
+  return Number.isFinite(ms) ? ms : null;
+}
+
+function fenceRadius(station: StationProfile): number {
+  const raw = Number(station.geofenceRadius || station.location?.radius || 75);
+  return Number.isFinite(raw) && raw > 0 ? raw : 75;
+}
+
+/** Verified station whose fence contains this point. Closest pin wins if two overlap. */
+function stationContainingGps(
+  lat: number,
+  lng: number,
   stations: StationProfile[],
 ): StationProfile | null {
+  let best: { station: StationProfile; distance: number } | null = null;
+  for (const station of stations) {
+    if (station.status && station.status !== 'verified') continue;
+    const slat = Number(station.location?.lat);
+    const slng = Number(station.location?.lng);
+    if (!Number.isFinite(slat) || !Number.isFinite(slng) || (slat === 0 && slng === 0)) continue;
+    const distance = calculateDistance(lat, lng, slat, slng);
+    if (distance > fenceRadius(station)) continue;
+    if (!best || distance < best.distance) best = { station, distance };
+  }
+  return best?.station ?? null;
+}
+
+/**
+ * Card statement rows do not carry GPS. The driver fill on the same vehicle,
+ * a few minutes either side, does. Use that pin only when it sits inside a fence.
+ */
+function stationFromSiblingGps(
+  entry: FuelEntry,
+  stations: StationProfile[],
+  logs: FuelEntry[],
+): StationProfile | null {
+  const at = localInstant(entry);
+  const vehicleId = String(entry.vehicleId || '').trim();
+  if (at == null || !vehicleId) return null;
+  let best: { station: StationProfile; gap: number } | null = null;
+  for (const sibling of logs) {
+    if (!sibling || sibling.id === entry.id) continue;
+    if (String(sibling.vehicleId || '').trim() !== vehicleId) continue;
+    const siblingAt = localInstant(sibling);
+    const fix = gpsFix(sibling);
+    if (siblingAt == null || !fix) continue;
+    const gap = Math.abs(siblingAt - at);
+    if (gap > GPS_SIBLING_WINDOW_MS) continue;
+    const station = stationContainingGps(fix.lat, fix.lng, stations);
+    if (!station) continue;
+    if (!best || gap < best.gap) best = { station, gap };
+  }
+  return best?.station ?? null;
+}
+
+export function resolveVerifiedStationForFuelEntry(
+  entry: FuelEntry,
+  stations: StationProfile[],
+  logs: FuelEntry[] = [],
+): StationProfile | null {
   if (!stations.length) return null;
-  const meta = (entry.metadata || {}) as Record<string, unknown>;
+  const meta = entryMeta(entry);
   const stationId = String(
     entry.matchedStationId || meta.matchedStationId || meta.bridgedStationId || '',
   ).trim();
   if (stationId) {
-    const byId = stations.find((s) => s.id === stationId);
+    const byId = stationById(stations, stationId);
     if (byId) return byId;
   }
+  const own = gpsFix(entry);
+  if (own) {
+    const hit = stationContainingGps(own.lat, own.lng, stations);
+    if (hit) return hit;
+  }
+  const fromSibling = stationFromSiblingGps(entry, stations, logs);
+  if (fromSibling) return fromSibling;
   const candidates = [
     entry.vendor,
     meta.stationName,
@@ -150,7 +316,7 @@ function resolveStationForFuelEntry(
     .map((v) => String(v || '').trim())
     .filter((v) => v && v.toLowerCase() !== 'manual entry');
   for (const raw of candidates) {
-    const hit = matchVendorToVerifiedStation(raw, stations);
+    const hit = matchUniqueVendorToVerifiedStation(raw, stations);
     if (hit) return hit;
   }
   return null;
@@ -158,14 +324,15 @@ function resolveStationForFuelEntry(
 
 /**
  * Transaction Logs Station column: brand (or independent station name) + street address.
- * Joins verified Dominion ledger via matchedStationId, else fuzzy vendor match.
+ * Joins verified Dominion ledger via matched station, the driver's GPS fence, else a unique name match.
  */
 export function resolveFuelEntryStationDisplay(
   entry: FuelEntry,
   stations: StationProfile[],
+  logs: FuelEntry[] = [],
 ): FuelEntryStationDisplay {
   const meta = (entry.metadata || {}) as Record<string, unknown>;
-  const station = resolveStationForFuelEntry(entry, stations);
+  const station = resolveVerifiedStationForFuelEntry(entry, stations, logs);
 
   if (station) {
     const title = isIndependentBrand(station.brand)

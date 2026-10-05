@@ -23,6 +23,7 @@ export default function PayoutSetupSheet({
   mode = 'first-order',
 }: PayoutSetupSheetProps) {
   const [bankName, setBankName] = useState('');
+  const [branch, setBranch] = useState('');
   const [accountHolderName, setAccountHolderName] = useState('');
   const [accountNumber, setAccountNumber] = useState('');
   const [routingNumber, setRoutingNumber] = useState('');
@@ -33,6 +34,7 @@ export default function PayoutSetupSheet({
 
   const canSave =
     bankName !== '' &&
+    branch.trim().length >= 2 &&
     accountHolderName.trim().length >= 2 &&
     accountNumber.trim().length >= 4;
 
@@ -42,6 +44,7 @@ export default function PayoutSetupSheet({
     try {
       const input: MerchantBankAccountInput = {
         bankName,
+        branch: branch.trim(),
         accountHolderName: accountHolderName.trim(),
         accountNumber: accountNumber.trim(),
         routingNumber: routingNumber.trim(),
@@ -120,6 +123,20 @@ export default function PayoutSetupSheet({
           </div>
 
           <div className="flex flex-col gap-inset-base">
+            <label className="text-label-md font-semibold text-on-surface" htmlFor="payout-branch">
+              Branch
+            </label>
+            <input
+              id="payout-branch"
+              type="text"
+              className={fieldClass}
+              placeholder="Branch name"
+              value={branch}
+              onChange={(e) => setBranch(e.target.value)}
+            />
+          </div>
+
+          <div className="flex flex-col gap-inset-base">
             <label className="text-label-md font-semibold text-on-surface" htmlFor="payout-holder">
               Account holder name
             </label>
@@ -186,9 +203,8 @@ export default function PayoutSetupSheet({
           <div className="flex items-start gap-inset-xs rounded bg-surface-container-low p-inset-sm text-on-surface-variant">
             <MaterialIcon name="lock" size={16} className="mt-0.5 shrink-0" />
             <p className="text-body-sm">
-              We store only the last 4 digits of your account for display. Full bank details are not
-              kept in our database. Payouts are sent to your Jamaican bank account via Roam&apos;s
-              WiPay and local bank rails after orders are delivered.
+              After you save, this screen shows only the last four digits. Finance uses the full
+              number to pay you, and a new account waits until someone marks it ready.
             </p>
           </div>
         </form>

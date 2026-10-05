@@ -4,6 +4,7 @@
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { isWipayDemoMode } from "../wipayDemo.ts";
 import { assertRefundAmount, refundableRemaining, orderRefundState, type RefundSlice } from "./refundEligibility.ts";
+import { interpretRefundStatus } from "./wipayContract.ts";
 import { refundUnwindLines } from "./journalLines.ts";
 import { merchantFundedAmount, reverseSplit } from "./reverseSplit.ts";
 
@@ -115,17 +116,60 @@ export async function executeRefundById(refundId: string): Promise<{
   if (refund.status === "completed" || refund.status === "succeeded") {
     return { ok: true, status: "completed", refund };
   }
+  if (String(refund.last_error || "") === "Needs a person") {
+    return { ok: false, status: "pending", error: "Refund needs a person", refund };
+  }
 
   const { data: txn } = await pdb.from("transactions").select("*").eq("id", refund.transaction_id).maybeSingle();
   if (!txn) return { ok: false, status: "failed", error: "Transaction not found" };
 
+  let confirmedByQuery = false;
   if (refund.status === "submitted") {
     const age = Date.now() - new Date(String(refund.submitted_at || 0)).getTime();
     if (age < 15 * 60 * 1000) {
       return { ok: false, status: "submitted", error: "Refund is already being sent", refund };
     }
-    await pdb.from("refunds").update({ status: "pending", last_error: "Retrying a stuck send" }).eq("id", refundId).eq("status", "submitted");
-    refund.status = "pending";
+    const demo = isWipayDemoMode() || txn.provider_data?.demo === true || String(txn.provider_data?.demo || "") === "true";
+    if (!demo && String(txn.provider) === "wipay") {
+      const statusUrl = Deno.env.get("WIPAY_REFUND_STATUS_URL");
+      if (!statusUrl) {
+        await pdb.from("refunds").update({ status: "pending", last_error: "Needs a person" }).eq("id", refundId);
+        return { ok: false, status: "pending", error: "Refund needs a person", refund };
+      }
+      let verdict: "paid" | "missing" | "unknown" = "unknown";
+      try {
+        const res = await fetch(statusUrl, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${Deno.env.get("WIPAY_API_KEY") || ""}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            transaction_id: txn.provider_transaction_id,
+            refund_id: refund.provider_refund_id || null,
+            idempotency_key: refund.idempotency_key || refundId,
+          }),
+        });
+        const body = await res.json().catch(() => ({})) as { status?: string; found?: boolean };
+        verdict = interpretRefundStatus(res.ok, body);
+      } catch {
+        verdict = "unknown";
+      }
+      if (verdict === "paid") {
+        confirmedByQuery = true;
+        await pdb.from("refunds").update({ status: "pending", last_error: null }).eq("id", refundId).eq("status", "submitted");
+        refund.status = "pending";
+      } else if (verdict === "missing" && Number(refund.attempt_count || 0) < 2) {
+        await pdb.from("refunds").update({ status: "pending", last_error: "WiPay has no record. Sending once." }).eq("id", refundId).eq("status", "submitted");
+        refund.status = "pending";
+      } else {
+        await pdb.from("refunds").update({ status: "pending", last_error: "Needs a person" }).eq("id", refundId);
+        return { ok: false, status: "pending", error: "Refund needs a person", refund };
+      }
+    } else {
+      await pdb.from("refunds").update({ status: "pending", last_error: "Retrying a stuck send" }).eq("id", refundId).eq("status", "submitted");
+      refund.status = "pending";
+    }
   }
 
   const { data: siblings } = await pdb.from("refunds").select("id, amount, status").eq("transaction_id", refund.transaction_id);
@@ -139,7 +183,7 @@ export async function executeRefundById(refundId: string): Promise<{
   }
 
   const attempts = Number(refund.attempt_count || 0);
-  if (attempts >= 8) {
+  if (!confirmedByQuery && attempts >= 8) {
     await pdb.from("refunds").update({ last_error: "Needs a person" }).eq("id", refundId);
     return { ok: false, status: "pending", error: "Refund needs a person", refund };
   }
@@ -156,7 +200,9 @@ export async function executeRefundById(refundId: string): Promise<{
   let providerRefundId: string | null = null;
   let providerError: string | undefined;
 
-  if (isWipayDemoMode() || String(txn.provider_data?.demo || "") === "true" || txn.provider_data?.demo === true) {
+  if (confirmedByQuery) {
+    providerRefundId = String(refund.provider_refund_id || refundId);
+  } else if (isWipayDemoMode() || String(txn.provider_data?.demo || "") === "true" || txn.provider_data?.demo === true) {
     providerRefundId = `demo-refund-${refundId}`;
   } else if (String(txn.provider) === "wipay") {
     const refundUrl = Deno.env.get("WIPAY_REFUND_URL");

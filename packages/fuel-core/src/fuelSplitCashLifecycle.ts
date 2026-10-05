@@ -97,7 +97,7 @@ export function cashExpenseAmount(positiveCash: number): number {
 export type SplitCashTxPatch = {
   amount: number;
   /** Only statuses a cash resolution can produce. */
-  status?: 'Pending' | 'Rejected';
+  status?: 'Pending' | 'Approved' | 'Rejected';
   date?: string;
   metadata: Record<string, unknown>;
 };
@@ -199,10 +199,14 @@ export function resolveSplitCashFromStatement(
   }
   return {
     amount: cashExpenseAmount(cash),
-    status: 'Pending',
+    status: 'Approved',
     metadata: normalizeSplitCashResolvedMeta(meta, {
       ...resolveStamp('statement_derived', actor),
       splitDerivedCashAmount: cash,
+      autoApprovedSplitCash: true,
+      approvedAt: actor.at || new Date().toISOString(),
+      decisionReason: 'SPLIT_CASH_STATEMENT',
+      needsLogReview: false,
     }),
   };
 }
@@ -255,6 +259,25 @@ function isSplitCashRow(t: SplitCashClassifyFields): boolean {
 
 export function isAwaitingCashTx(t: SplitCashClassifyFields): boolean {
   return isSplitCashRow(t) && isAwaitingCashStatement(t.metadata);
+}
+
+/**
+ * Statement already proved the card charge and the cash is pump minus card.
+ * That row should post on its own — not sit in Review Queue.
+ * A missing vehicle stays in the queue so someone can fix it.
+ */
+export function isStatementSettledSplitCash(t: SplitCashClassifyFields): boolean {
+  const status = String(t.status || '');
+  if (status !== 'Pending' && status !== 'Approved') return false;
+  if (!isSplitCashRow(t)) return false;
+  if (isAwaitingCashStatement(t.metadata)) return false;
+  if (metaFlagOn(t.metadata?.stationGateHold)) return false;
+  if (metaFlagOn(t.metadata?.splitCashVoided) || metaFlagOn(t.metadata?.splitCardCoveredFull)) return false;
+  if (metaFlagOn(t.metadata?.splitVariance) && !metaFlagOn(t.metadata?.splitReconciled)) return false;
+  if (!metaFlagOn(t.metadata?.splitReconciled)) return false;
+  if (String(t.metadata?.decisionReason || '') === 'BLOCKED_NO_VEHICLE') return false;
+  const amt = Math.abs(Number(t.amount) || 0);
+  return amt >= 0.005;
 }
 
 export function isCardCoveredClosedTx(t: SplitCashClassifyFields): boolean {
@@ -753,17 +776,25 @@ export function applySplitCashMatchToTx(args: {
       : {}),
   });
 
+  const posted = {
+    ...tx,
+    amount: patch.amount,
+    status: patch.status || tx.status,
+    date: nextDate,
+    metadata: nextMeta,
+  };
+  if (String(posted.status) === 'Approved') {
+    const desc = String(posted.description || '');
+    if (desc.includes('cash pending statement')) {
+      posted.description = desc.replace('cash pending statement', 'split cash');
+    }
+  }
+
   return {
     outcome,
     rehomeToWeek,
     fuelEntryAmount: derivedCash,
     fuelEntryMeta,
-    tx: {
-      ...tx,
-      amount: patch.amount,
-      status: patch.status || tx.status,
-      date: nextDate,
-      metadata: nextMeta,
-    },
+    tx: posted,
   };
 }

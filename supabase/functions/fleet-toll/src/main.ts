@@ -5,6 +5,7 @@
 import { createFleetFunction } from "../../_shared/edgeKernel.ts";
 import tollApp from "../../_fleet-server/toll_controller.tsx";
 import tollPeriodApp from "../../_fleet-server/toll_period_controller.tsx";
+import tollInventoryApp from "../../_fleet-server/toll_inventory_controller.tsx";
 import { sealTollWeek } from "../../_fleet-server/toll_week_seal.ts";
 import { beginSealAttempt, completeSealAttempt } from "../../_fleet-server/week_seal_log.ts";
 
@@ -14,6 +15,7 @@ const app = createFleetFunction({
   domainApp: tollApp,
   registerParentRoutes: (parent) => {
     parent.route("/", tollPeriodApp);
+    parent.route("/", tollInventoryApp);
 
     parent.post("/internal/seal-toll-week", async (c) => {
       const body = await c.req.json();

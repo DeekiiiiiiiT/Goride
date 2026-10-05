@@ -15,6 +15,7 @@ import {
 } from './fuelReviewQueue';
 import {
   resolveSplitCashAcceptDerived,
+  resolveSplitCashFromStatement,
   resolveSplitCashVoid,
   acknowledgeSplitVarianceMeta,
 } from './index';
@@ -155,6 +156,36 @@ describe('countFuelReviewQueueWork', () => {
     expect(c.total).toBeGreaterThanOrEqual(1);
   });
 
+  it('does not queue statement-settled split cash for another approval', () => {
+    const money = resolveSplitCashFromStatement(
+      {
+        fillGroupId: 'fg-1',
+        splitRole: 'cash',
+        awaitingCashStatement: true,
+        splitPumpTotal: 6000,
+      },
+      1000,
+    );
+    const settled = tx({
+      id: 'cash',
+      amount: money.amount,
+      status: money.status,
+      odometer: 187719,
+      metadata: {
+        ...money.metadata,
+        needsLogReview: true,
+        odometerMethod: 'photo_review',
+      },
+    });
+    expect(settled.status).toBe('Approved');
+    expect(isLogReviewEligible(settled)).toBe(false);
+    expect(isPendingReadyForReview(settled)).toBe(false);
+
+    const stillPending = { ...settled, status: 'Pending' as const };
+    expect(isLogReviewEligible(stillPending)).toBe(false);
+    expect(isPendingReadyForReview(stillPending)).toBe(false);
+  });
+
   it('excludes awaiting-cash statement from pending ready and finalize blockers', () => {
     const awaiting = tx({
       id: 'await',
@@ -206,7 +237,7 @@ describe('countFuelReviewQueueWork', () => {
       },
     };
     expect(isUnresolvedSplitVariance(resolved)).toBe(false);
-    expect(isPendingReadyForReview(resolved)).toBe(true);
+    expect(isPendingReadyForReview(resolved)).toBe(false);
     expect(listAwaitingCashStatement([resolved])).toHaveLength(0);
   });
 

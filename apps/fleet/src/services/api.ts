@@ -7,6 +7,7 @@ import type { AppendCanonicalLedgerResult, CanonicalLedgerEventInput } from '../
 import { OdometerReading } from '../types/vehicle';
 import { TollPlaza } from '../types/toll';
 import { API_ENDPOINTS } from './apiConfig';
+import { tollApiErrorFromResponse } from './tollApiError';
 import type { CompatiblePartsResponse } from '../types/partSourcing';
 import type {
   MaintenanceInspectionFinding,
@@ -1860,7 +1861,7 @@ export const api = {
     const response = await fetchWithRetry(`${API_ENDPOINTS.toll}/toll-info`, {
         headers: await requireAuthHeaders(null)
     });
-    if (!response.ok) throw new Error("Failed to fetch toll info");
+    if (!response.ok) throw await tollApiErrorFromResponse(response, "Failed to fetch toll info");
     return response.json();
   },
 
@@ -1870,12 +1871,7 @@ export const api = {
         headers: await requireAuthHeaders(),
         body: JSON.stringify(schedule)
     });
-    if (!response.ok) {
-        // The server rejects back-dated, duplicate-date and unlinked-plaza publishes
-        // with an explanation the user can act on; a generic message would hide it.
-        const detail = await response.json().catch(() => null);
-        throw new Error(detail?.error || "Failed to save toll rates");
-    }
+    if (!response.ok) throw await tollApiErrorFromResponse(response, "Failed to save toll rates");
     return response.json();
   },
 
@@ -1900,7 +1896,7 @@ export const api = {
       `${API_ENDPOINTS.toll}/toll-info/rate?${qs.toString()}`,
       { headers: await requireAuthHeaders(null) },
     );
-    if (!response.ok) throw new Error("Failed to resolve official toll rate");
+    if (!response.ok) throw await tollApiErrorFromResponse(response, "Failed to resolve official toll rate");
     return response.json() as Promise<{ success: boolean; rate: any | null }>;
   },
 
@@ -1911,10 +1907,7 @@ export const api = {
       headers: await requireAuthHeaders(),
       body: JSON.stringify(draft),
     });
-    if (!response.ok) {
-      const detail = await response.json().catch(() => null);
-      throw new Error(detail?.error || 'Failed to preview rate impact');
-    }
+    if (!response.ok) throw await tollApiErrorFromResponse(response, 'Failed to preview rate impact');
     return response.json();
   },
 
@@ -1922,7 +1915,7 @@ export const api = {
     const response = await fetchWithRetry(`${API_ENDPOINTS.toll}/toll-info/versions`, {
       headers: await requireAuthHeaders(null),
     });
-    if (!response.ok) throw new Error("Failed to fetch toll info versions");
+    if (!response.ok) throw await tollApiErrorFromResponse(response, "Failed to fetch toll info versions");
     return response.json();
   },
 
@@ -2694,38 +2687,70 @@ export const api = {
   },
 
   async getTollTags() {
-    const response = await fetchWithRetry(`${API_ENDPOINTS.toll}/toll-tags`, {
-        headers: await requireAuthHeaders(null)
+    const tags: any[] = [];
+    let cursor: string | null = null;
+    for (let page = 0; page < 50; page++) {
+      const qs = cursor ? `?cursor=${encodeURIComponent(cursor)}` : '';
+      const response = await fetchWithRetry(`${API_ENDPOINTS.toll}/toll-tags${qs}`, {
+        headers: await requireAuthHeaders(null),
+      });
+      if (!response.ok) throw await tollApiErrorFromResponse(response, 'Failed to fetch toll tags');
+      const body = await response.json();
+      if (Array.isArray(body)) return body;
+      tags.push(...(Array.isArray(body?.tags) ? body.tags : []));
+      cursor = typeof body?.nextCursor === 'string' && body.nextCursor ? body.nextCursor : null;
+      if (!cursor) return tags;
+    }
+    return tags;
+  },
+
+  async getTollLowBalance() {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.toll}/toll-tags/low-balance`, {
+      headers: await requireAuthHeaders(null),
     });
-    if (!response.ok) throw new Error("Failed to fetch toll tags");
+    if (!response.ok) throw await tollApiErrorFromResponse(response, 'Could not load toll tags');
     return response.json();
   },
 
   async saveTollTag(tag: any) {
-    const response = await fetchWithRetry(`${API_ENDPOINTS.toll}/toll-tags`, {
-        method: 'POST',
-        headers: await requireAuthHeaders(),
-        body: JSON.stringify(tag)
+    const isUpdate = Boolean(tag?.id && tag?.expectedUpdatedAt);
+    const url = isUpdate
+      ? `${API_ENDPOINTS.toll}/toll-tags/${encodeURIComponent(tag.id)}`
+      : `${API_ENDPOINTS.toll}/toll-tags`;
+    const response = await fetchWithRetry(url, {
+      method: isUpdate ? 'PATCH' : 'POST',
+      headers: await requireAuthHeaders(),
+      body: JSON.stringify(tag),
     });
-    if (response.status === 409) {
-      const detail = await response.json().catch(() => null);
-      const err = new Error(detail?.error || 'Tag was updated in another tab') as Error & { name: string };
-      err.name = 'TollTagConflictError';
-      throw err;
-    }
     if (!response.ok) {
-      await throwIfCatalogGateBlocked(response, "Cannot assign toll tag — vehicle is pending catalog approval");
-      throw new Error("Failed to save toll tag");
+      await throwIfCatalogGateBlocked(response, 'Cannot assign toll tag — vehicle is pending catalog approval');
+      const err = await tollApiErrorFromResponse(response, 'Failed to save toll tag');
+      if (response.status === 409) err.name = 'TollTagConflictError';
+      throw err;
     }
     return response.json();
   },
 
-  async deleteTollTag(id: string) {
-    const response = await fetchWithRetry(`${API_ENDPOINTS.toll}/toll-tags/${id}`, {
-        method: 'DELETE',
-        headers: await requireAuthHeaders(null)
+  async deleteTollTag(id: string, opts?: { reason?: string; expectedUpdatedAt?: string }) {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.toll}/toll-tags/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+      headers: await requireAuthHeaders(),
+      body: JSON.stringify({
+        reason: opts?.reason || '',
+        expectedUpdatedAt: opts?.expectedUpdatedAt,
+      }),
     });
-    if (!response.ok) throw new Error("Failed to delete toll tag");
+    if (!response.ok) throw await tollApiErrorFromResponse(response, 'Failed to retire toll tag');
+    return response.json();
+  },
+
+  async markTollTopupRequested(id: string, expectedUpdatedAt?: string) {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.toll}/toll-tags/${encodeURIComponent(id)}/topup-requested`, {
+      method: 'POST',
+      headers: await requireAuthHeaders(),
+      body: JSON.stringify({ expectedUpdatedAt }),
+    });
+    if (!response.ok) throw await tollApiErrorFromResponse(response, 'Could not mark this tag as requested');
     return response.json();
   },
 
@@ -2736,9 +2761,8 @@ export const api = {
       body: JSON.stringify({ tagId, vehicleId }),
     });
     if (!response.ok) {
-      await throwIfCatalogGateBlocked(response, "Cannot assign toll tag — vehicle is pending catalog approval");
-      const err = await response.json().catch(() => ({}));
-      throw new Error(err.error || "Failed to assign toll tag");
+      await throwIfCatalogGateBlocked(response, 'Cannot assign toll tag — vehicle is pending catalog approval');
+      throw await tollApiErrorFromResponse(response, 'Failed to assign toll tag');
     }
     return response.json();
   },
@@ -2749,10 +2773,7 @@ export const api = {
       headers: await requireAuthHeaders(),
       body: JSON.stringify({ tagId }),
     });
-    if (!response.ok) {
-      const err = await response.json().catch(() => ({}));
-      throw new Error(err.error || "Failed to unassign toll tag");
-    }
+    if (!response.ok) throw await tollApiErrorFromResponse(response, 'Failed to unassign toll tag');
     return response.json();
   },
 
@@ -2786,15 +2807,16 @@ export const api = {
     const response = await fetchWithRetry(`${API_ENDPOINTS.toll}/toll-plazas`, {
         headers: await requireAuthHeaders(null)
     });
-    if (!response.ok) throw new Error("Failed to fetch toll plazas");
-    return response.json();
+    if (!response.ok) throw await tollApiErrorFromResponse(response, 'Failed to fetch toll plazas');
+    const body = await response.json();
+    return Array.isArray(body) ? body : (body?.plazas || []);
   },
 
   async getTollPlaza(id: string): Promise<TollPlaza> {
     const response = await fetchWithRetry(`${API_ENDPOINTS.toll}/toll-plazas/${id}`, {
         headers: await requireAuthHeaders(null)
     });
-    if (!response.ok) throw new Error("Failed to fetch toll plaza");
+    if (!response.ok) throw await tollApiErrorFromResponse(response, 'Failed to fetch toll plaza');
     return response.json();
   },
 
@@ -2804,7 +2826,7 @@ export const api = {
         headers: await requireAuthHeaders(),
         body: JSON.stringify(plaza)
     });
-    if (!response.ok) throw new Error("Failed to save toll plaza");
+    if (!response.ok) throw await tollApiErrorFromResponse(response, 'Failed to save toll plaza');
     return response.json();
   },
 
@@ -2813,7 +2835,7 @@ export const api = {
         method: 'DELETE',
         headers: await requireAuthHeaders(null)
     });
-    if (!response.ok) throw new Error("Failed to delete toll plaza");
+    if (!response.ok) throw await tollApiErrorFromResponse(response, 'Failed to delete toll plaza');
   },
 
   async getUsers() {

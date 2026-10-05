@@ -1,6 +1,8 @@
 import { useState } from 'react';
+import { toast } from 'sonner';
 import { MaterialIcon } from '../signup/components/MaterialIcon';
 import { formatJmd, formatSignedJmd, PartnerTab } from '../lib/partner-utils';
+import { deliveryFetch } from '../lib/partner-api';
 import { useMerchantEarnings, useMerchantPayoutDetail } from '../hooks/useMerchantEarnings';
 import EarningsSubNav from '../components/earnings/EarningsSubNav';
 import PayoutDetailView from '../components/earnings/PayoutDetailView';
@@ -245,15 +247,52 @@ export default function EarningsPage({ onNavigate, onOpenMobileNav }: EarningsPa
             </div>
           )}
           <div className="w-full max-w-xl text-left">
-            <h3 className="mb-2 text-label-md font-semibold text-on-surface">Statement</h3>
+            <div className="mb-2 flex items-center justify-between">
+              <h3 className="text-label-md font-semibold text-on-surface">Statement</h3>
+              {(data.statement || []).length > 0 && (
+                <button
+                  type="button"
+                  className="text-label-md text-primary"
+                  onClick={() => {
+                    const rows = ['order_id,line', ...(data.statement || []).map((line) => `${line.orderId},"${line.words.replace(/"/g, '""')}"`)];
+                    const blob = new Blob([rows.join('\n')], { type: 'text/csv' });
+                    const url = URL.createObjectURL(blob);
+                    const link = document.createElement('a');
+                    link.href = url;
+                    link.download = 'earnings-statement.csv';
+                    link.click();
+                    URL.revokeObjectURL(url);
+                  }}
+                >
+                  Download statement
+                </button>
+              )}
+            </div>
             {(data.statement || []).length === 0 ? (
               <p className="text-body-sm text-on-surface-variant">No statement lines yet.</p>
             ) : (
               <ul className="space-y-2">
                 {(data.statement || []).map((line) => (
-                  <li key={`${line.orderId}-${line.words}`}>
+                  <li key={`${line.orderId}-${line.words}`} className="flex items-start justify-between gap-3">
                     <button type="button" className="text-left text-body-sm text-primary" onClick={() => onNavigate('orders')}>
                       {line.words}
+                    </button>
+                    <button
+                      type="button"
+                      className="shrink-0 text-body-sm text-primary"
+                      onClick={() => {
+                      void deliveryFetch('/merchant/earnings/disputes', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ orderId: line.orderId }),
+                      }).then((body) => {
+                        toast.success((body as { words?: string }).words || 'Dispute opened');
+                      }).catch((error) => {
+                        toast.error(error instanceof Error ? error.message : 'Could not open the dispute');
+                      });
+                      }}
+                    >
+                      Dispute
                     </button>
                   </li>
                 ))}

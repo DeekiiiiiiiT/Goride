@@ -19,6 +19,16 @@ import {
   DialogTitle as DialogTitle2,
 } from "../ui/dialog";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "../ui/alert-dialog";
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -187,6 +197,7 @@ export function VehicleDetail({ vehicle, trips, onBack, onAssignDriver, onUpdate
   // Drawer state for the read-only pending-requests queue. Triggered from
   // both the parked banner and the "review in progress" banner.
   const [pendingDrawerOpen, setPendingDrawerOpen] = useState(false);
+  const [unassignOpen, setUnassignOpen] = useState(false);
 
   const [alignModalOpen, setAlignModalOpen] = useState(false);
   /** Local form state for picker disambiguator inputs (seeded from vehicle hints on open). */
@@ -794,30 +805,26 @@ export function VehicleDetail({ vehicle, trips, onBack, onAssignDriver, onUpdate
         .catch(console.error);
   };
 
-  const handleUnassignTag = async () => {
-    if (!window.confirm("Are you sure you want to unlink this toll tag?")) return;
+  const handleUnassignTag = () => {
+    if (!vehicle.tollTagUuid) {
+      toast.error("This vehicle has no toll tag to unlink");
+      return;
+    }
+    setUnassignOpen(true);
+  };
+
+  const confirmUnassignTag = async () => {
+    if (!vehicle.tollTagUuid) return;
     try {
+        await api.unassignTollTag(vehicle.tollTagUuid);
         const updatedVehicle = {
             ...vehicle,
             tollTagId: undefined,
             tollTagUuid: undefined,
             tollTagProvider: undefined
         };
-        await api.saveVehicle(updatedVehicle);
-        if (vehicle.tollTagUuid) {
-             const tags = await api.getTollTags();
-             const tag = tags.find((t: any) => t.id === vehicle.tollTagUuid);
-             if (tag) {
-                 await api.saveTollTag({
-                     ...tag,
-                     assignedVehicleId: undefined,
-                     assignedVehicleName: undefined,
-                      assignmentHistory: (tag.assignmentHistory || []).map((e: any) => e.vehicleId === vehicle.id && !e.unassignedAt ? { ...e, unassignedAt: new Date().toISOString() } : e),
-                      updatedAt: new Date().toISOString()
-                 });
-             }
-        }
         toast.success("Toll tag unlinked");
+        setUnassignOpen(false);
         if (onUpdate) onUpdate(updatedVehicle);
     } catch (error) {
         toast.error("Failed to unlink tag");
@@ -1245,6 +1252,21 @@ export function VehicleDetail({ vehicle, trips, onBack, onAssignDriver, onUpdate
               </div>
           </DialogContent>
       </Dialog>
+
+      <AlertDialog open={unassignOpen} onOpenChange={setUnassignOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Unlink this toll tag?</AlertDialogTitle>
+            <AlertDialogDescription>
+              The tag stays in inventory and comes off this vehicle.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={() => void confirmUnassignTag()}>Unlink</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
     </div>
   );

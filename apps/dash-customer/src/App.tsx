@@ -38,6 +38,7 @@ import PaymentMethodsPage from './pages/PaymentMethodsPage';
 import AddCardPage from './pages/AddCardPage';
 import LoginPage from './pages/LoginPage';
 import PaymentCallbackPage from './pages/PaymentCallbackPage';
+import WalletPage from './pages/WalletPage';
 import { loadDeliveryZones } from './lib/deliveryZones';
 import { CartProvider, useCart } from './hooks/useCart';
 import { useImmersiveMode } from './hooks/useImmersiveMode';
@@ -95,6 +96,7 @@ type StackPage =
   | 'tracking'
   | 'login'
   | 'payment-callback-wipay'
+  | 'wallet'
 
 type AppPhase =
   | 'splash'
@@ -124,6 +126,7 @@ const IMMERSIVE_STACK_PAGES: StackPage[] = [
   'out-of-delivery',
   'saved-addresses',
   'payment-callback-wipay',
+  'wallet',
 ];
 
 const DashAdminPortal = React.lazy(async () => {
@@ -863,6 +866,9 @@ function DashCustomerShell() {
         return <LoginPage onNavigate={navigate} onSignInSuccess={() => navigate('home')} fullScreen />;
       case 'payment-callback-wipay':
         return <PaymentCallbackPage onNavigate={navigate} session={session} provider="wipay" />;
+      case 'wallet':
+        if (!session) return <LoginPage onNavigate={navigate} onSignInSuccess={() => navigate('wallet')} />;
+        return <WalletPage onNavigate={navigate} session={session} />;
       default:
         return null;
     }

@@ -1,7 +1,21 @@
 import React, { useState, useEffect } from 'react';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "../components/ui/card";
 import { Button } from "../components/ui/button";
-import { Plus } from "lucide-react";
+import { Plus, Upload } from "lucide-react";
+import { Input } from "../components/ui/input";
+import { tollErrorMessage } from "../services/tollApiError";
+import { TollLoadError } from "../components/toll-tags/TollLoadError";
+import { classifyTagBalance, isLowBalance, resolveLowBalanceThreshold } from "../utils/tollTagBurnRate";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "../components/ui/alert-dialog";
 import { TollTagList } from "../components/toll-tags/TollTagList";
 import { TollTagDetail } from "../components/toll-tags/TollTagDetail";
 import { AddTollTagModal } from "../components/toll-tags/AddTollTagModal";
@@ -31,6 +45,12 @@ function TagInventoryInner({
 }) {
   const [tags, setTags] = useState<TollTag[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
+  const [provider, setProvider] = useState('all');
+  const [unassignTag, setUnassignTag] = useState<TollTag | null>(null);
+  const [retireTag, setRetireTag] = useState<TollTag | null>(null);
+  const [retireReason, setRetireReason] = useState('');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [selectedTag, setSelectedTag] = useState<TollTag | null>(null);
@@ -42,12 +62,16 @@ function TagInventoryInner({
 
   const fetchTags = async () => {
     setIsLoading(true);
+    setLoadError(null);
     try {
       const data = await api.getTollTags();
-      setTags(data);
+      setTags(Array.isArray(data) ? data : []);
     } catch (error) {
       console.error("Failed to fetch tags:", error);
-      toast.error("Failed to load toll tags");
+      const message = tollErrorMessage(error, "Failed to load toll tags");
+      setTags([]);
+      setLoadError(message);
+      toast.error(message);
     } finally {
       setIsLoading(false);
     }
@@ -59,14 +83,16 @@ function TagInventoryInner({
 
   const handleSaveTag = async (data: { provider: TollProvider; tagNumber: string; status: TollTagStatus; dateAdded?: string }) => {
     try {
-      const payload = editingTag ? { ...data, id: editingTag.id, createdAt: editingTag.createdAt } : data;
+      const payload = editingTag
+        ? { ...data, id: editingTag.id, createdAt: editingTag.createdAt, expectedUpdatedAt: editingTag.updatedAt }
+        : data;
       await api.saveTollTag(payload);
       toast.success(editingTag ? "Toll tag updated" : "Toll tag added successfully");
       fetchTags();
       setEditingTag(null);
     } catch (error) {
       console.error("Failed to save tag:", error);
-      toast.error("Failed to save toll tag");
+      toast.error(tollErrorMessage(error, "Failed to save toll tag"));
       throw error; 
     }
   };
@@ -76,15 +102,31 @@ function TagInventoryInner({
     setIsAddModalOpen(true);
   };
 
-  const handleDeleteTag = async (id: string) => {
+  const handleDeleteTag = (id: string) => {
+    const tag = tags.find((item) => item.id === id);
+    if (!tag) return;
+    setRetireReason('');
+    setRetireTag(tag);
+  };
+
+  const confirmRetire = async () => {
+    if (!retireTag) return;
+    if (!retireReason.trim()) {
+      toast.error('Add a reason for retiring this tag');
+      return;
+    }
     try {
-      await api.deleteTollTag(id);
-      toast.success("Toll tag deleted");
-      setTags(prev => prev.filter(t => t.id !== id));
-      if (selectedTag?.id === id) setSelectedTag(null);
+      await api.deleteTollTag(retireTag.id, {
+        reason: retireReason.trim(),
+        expectedUpdatedAt: retireTag.updatedAt,
+      });
+      toast.success("Toll tag retired");
+      setTags(prev => prev.filter(t => t.id !== retireTag.id));
+      if (selectedTag?.id === retireTag.id) setSelectedTag(null);
+      setRetireTag(null);
     } catch (error) {
-      console.error("Failed to delete tag:", error);
-      toast.error("Failed to delete toll tag");
+      console.error("Failed to retire tag:", error);
+      toast.error(tollErrorMessage(error, "Failed to retire toll tag"));
     }
   };
 
@@ -92,18 +134,22 @@ function TagInventoryInner({
     setAssignModalState({ isOpen: true, tag });
   };
 
-  const handleUnassignClick = async (tag: TollTag) => {
-    if (!window.confirm(`Are you sure you want to unassign this tag from ${tag.assignedVehicleName}?`)) return;
+  const handleUnassignClick = (tag: TollTag) => {
+    setUnassignTag(tag);
+  };
 
+  const confirmUnassign = async () => {
+    if (!unassignTag) return;
     try {
-      const res = await api.unassignTollTag(tag.id);
-      const updatedTag = res?.data || { ...tag, assignedVehicleId: undefined, assignedVehicleName: undefined };
+      const res = await api.unassignTollTag(unassignTag.id);
+      const updatedTag = res?.data || { ...unassignTag, assignedVehicleId: undefined, assignedVehicleName: undefined };
       toast.success("Tag unassigned successfully");
+      setUnassignTag(null);
       fetchTags();
-      if (selectedTag?.id === tag.id) setSelectedTag(updatedTag);
+      if (selectedTag?.id === unassignTag.id) setSelectedTag(updatedTag);
     } catch (error) {
       console.error("Failed to unassign tag:", error);
-      toast.error(error instanceof Error ? error.message : "Failed to unassign tag");
+      toast.error(tollErrorMessage(error, "Failed to unassign tag"));
     }
   };
 
@@ -160,6 +206,39 @@ function TagInventoryInner({
       );
   }
 
+  const liveTags = tags.filter((tag) => tag.status !== 'Retired');
+  const countOf = (pick: (tag: TollTag) => boolean) => (loadError || isLoading ? '—' : String(liveTags.filter(pick).length));
+  const thresholdOf = (tag: TollTag) => resolveLowBalanceThreshold(tag.lowBalanceThreshold, tag.resolvedLowBalanceThreshold);
+  const providers = [...new Set(liveTags.map((tag) => tag.provider).filter(Boolean))].sort();
+  const query = search.trim().toLowerCase();
+  const visibleTags = liveTags.filter((tag) => {
+    if (provider !== 'all' && tag.provider !== provider) return false;
+    if (!query) return true;
+    return `${tag.tagNumber} ${tag.provider} ${tag.assignedVehicleName || ''}`.toLowerCase().includes(query);
+  });
+
+  const exportCsv = () => {
+    const lines = [
+      ['Provider', 'Tag number', 'Status', 'Vehicle', 'Balance', 'Alert at'],
+      ...visibleTags.map((tag) => [
+        tag.provider,
+        tag.tagNumber,
+        tag.status,
+        tag.assignedVehicleName || '',
+        tag.lastCalculatedBalance == null ? '' : String(tag.lastCalculatedBalance),
+        String(thresholdOf(tag)),
+      ]),
+    ];
+    const csv = lines.map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'toll-tags.csv';
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between gap-3">
@@ -173,11 +252,33 @@ function TagInventoryInner({
         </div>
         
         <div className="flex gap-2 shrink-0">
+            <Button variant="outline" onClick={exportCsv} disabled={!visibleTags.length}>Export</Button>
+            <Button variant="outline" onClick={() => setIsImportModalOpen(true)}>
+                <Upload className="mr-2 h-4 w-4" />
+                Import
+            </Button>
             <Button onClick={() => { setEditingTag(null); setIsAddModalOpen(true); }}>
                 <Plus className="mr-2 h-4 w-4" />
                 Add New Tag
             </Button>
         </div>
+      </div>
+
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+        {[
+          ['Total', countOf(() => true)],
+          ['Assigned', countOf((tag) => Boolean(tag.assignedVehicleId))],
+          ['Unassigned', countOf((tag) => !tag.assignedVehicleId)],
+          ['Low', countOf((tag) => isLowBalance(tag.lastCalculatedBalance, thresholdOf(tag)))],
+          ['Unknown', countOf((tag) => classifyTagBalance(tag.lastCalculatedBalance, thresholdOf(tag)) === 'unknown')],
+        ].map(([label, value]) => (
+          <Card key={label}>
+            <CardContent className="p-4">
+              <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">{label}</p>
+              <p className="mt-1 text-2xl font-bold tabular-nums">{value}</p>
+            </CardContent>
+          </Card>
+        ))}
       </div>
 
       <Card>
@@ -187,16 +288,29 @@ function TagInventoryInner({
               A centralized list of all toll tags owned by the fleet.
           </CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-4">
+          <div className="flex flex-col sm:flex-row gap-2">
+            <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search tag or vehicle" aria-label="Search tags" />
+            <select className="h-9 rounded-md border border-slate-200 bg-white px-3 text-sm" value={provider} aria-label="Provider" onChange={(e) => setProvider(e.target.value)}>
+              <option value="all">All providers</option>
+              {providers.map((name) => <option key={name} value={name}>{name}</option>)}
+            </select>
+          </div>
+          {loadError ? (
+            <TollLoadError message={loadError} onRetry={() => void fetchTags()} />
+          ) : (
           <TollTagList 
-              tags={tags} 
-              isLoading={isLoading} 
+              tags={visibleTags} 
+              isLoading={isLoading}
+              emptyTitle={liveTags.length === 0 ? 'No tags found' : 'No tags match'}
+              emptyDescription={liveTags.length === 0 ? 'Get started by adding your first toll tag.' : 'Try a different search or provider.'}
               onDelete={handleDeleteTag} 
               onAssign={handleAssignClick}
               onUnassign={handleUnassignClick}
               onViewHistory={setSelectedTag}
               onEdit={handleEditTag}
           />
+          )}
           </CardContent>
       </Card>
 
@@ -214,6 +328,37 @@ function TagInventoryInner({
             fetchTags();
         }}
       />
+
+      <AlertDialog open={!!unassignTag} onOpenChange={(open) => { if (!open) setUnassignTag(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Unassign this tag?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {unassignTag?.tagNumber} will come off {unassignTag?.assignedVehicleName || 'its vehicle'}.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={() => void confirmUnassign()}>Unassign</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={!!retireTag} onOpenChange={(open) => { if (!open) setRetireTag(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Retire this tag?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {retireTag?.tagNumber} stays on past toll charges and must be unassigned first.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <Input value={retireReason} onChange={(e) => setRetireReason(e.target.value)} placeholder="Reason" aria-label="Retire reason" />
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={() => void confirmRetire()}>Retire tag</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {assignModalState.tag && (
         <AssignTagModal

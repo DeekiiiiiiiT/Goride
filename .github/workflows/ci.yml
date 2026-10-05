@@ -64,6 +64,9 @@ jobs:
       - name: Check toll org-scope
         run: node scripts/check-toll-org-scope.mjs
 
+      - name: Check client route contract
+        run: node scripts/check-client-route-contract.mjs
+
       - name: Check fuel org-scope
         run: node scripts/check-fuel-org-scope.mjs
 

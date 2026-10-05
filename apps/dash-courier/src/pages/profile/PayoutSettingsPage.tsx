@@ -1,9 +1,7 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
 import { SubPageHeader } from '@/components/layout/SubPageHeader';
-import { closeCourierPayoutPeriod } from '@/lib/courierApi';
-import { API_ENDPOINTS } from '@roam/api-client';
-import { supabase } from '@/lib/supabase';
+import { fetchCourierBankAccount, saveCourierBankAccount } from '@/lib/courierApi';
 import { toast } from '@/lib/toast';
 
 type PayoutSettingsPageProps = {
@@ -11,54 +9,44 @@ type PayoutSettingsPageProps = {
   onViewHistory?: () => void;
 };
 
-function weekPeriodBounds(): { start: string; end: string } {
-  const now = new Date();
-  const start = new Date(now);
-  start.setHours(0, 0, 0, 0);
-  start.setDate(start.getDate() - start.getDay());
-  return { start: start.toISOString(), end: now.toISOString() };
-}
-
 export function PayoutSettingsPage({ onBack, onViewHistory }: PayoutSettingsPageProps) {
   const [busy, setBusy] = useState(false);
+  const [bankName, setBankName] = useState('');
+  const [branch, setBranch] = useState('');
+  const [accountHolderName, setAccountHolderName] = useState('');
+  const [accountNumber, setAccountNumber] = useState('');
+  const [accountType, setAccountType] = useState<'checking' | 'savings'>('checking');
+  const [savedLast4, setSavedLast4] = useState<string | null>(null);
+  const [ready, setReady] = useState(false);
 
-  const startConnect = async () => {
+  useEffect(() => {
+    void fetchCourierBankAccount().then((account) => {
+      if (!account) return;
+      setBankName(account.bank_name || '');
+      setBranch(account.branch || '');
+      setAccountHolderName(account.account_holder_name || '');
+      setSavedLast4(account.account_last4 || null);
+      setAccountType(account.account_type === 'savings' ? 'savings' : 'checking');
+      setReady(Boolean(account.is_verified));
+    });
+  }, []);
+
+  const saveBank = async () => {
     setBusy(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) throw new Error('Sign in required');
-      const res = await fetch(`${API_ENDPOINTS.delivery}/courier/connect/onboard`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${session.access_token}`,
-        },
-        body: JSON.stringify({ returnUrl: window.location.href }),
+      const words = await saveCourierBankAccount({
+        bankName: bankName.trim(),
+        branch: branch.trim(),
+        accountHolderName: accountHolderName.trim(),
+        accountNumber,
+        accountType,
       });
-      const body = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(body.error || 'Connect onboarding failed');
-      if (body.url) {
-        window.location.href = String(body.url);
-        return;
-      }
-      toast.error('No onboarding URL returned');
+      setSavedLast4(accountNumber.replace(/\D/g, '').slice(-4));
+      setAccountNumber('');
+      setReady(false);
+      toast.success(words);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Could not start payout setup');
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const requestPayout = async () => {
-    setBusy(true);
-    try {
-      const { start, end } = weekPeriodBounds();
-      const result = await closeCourierPayoutPeriod(start, end);
-      if (!result) throw new Error('Could not close payout period');
-      toast.success('Payout period recorded', 'Pending until Connect payouts are enabled.');
-      onViewHistory?.();
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Payout request failed');
+      toast.error(err instanceof Error ? err.message : 'Could not save the bank account');
     } finally {
       setBusy(false);
     }
@@ -73,30 +61,33 @@ export function PayoutSettingsPage({ onBack, onViewHistory }: PayoutSettingsPage
           <h2 className="text-xl font-semibold text-on-background">Payout Method</h2>
           <div className="bg-surface rounded-xl p-4 shadow-soft border border-surface-variant space-y-3">
             <p className="text-sm text-on-surface-variant">
-              Bank payouts run through Stripe Connect. No bank account is stored in Roam until you
-              finish Connect onboarding. Weekly standard payouts only at launch (no instant payout).
+              {savedLast4
+                ? `Account ending ${savedLast4}${ready ? ' is ready to be paid.' : ' is waiting for finance to mark it ready.'}`
+                : 'Add the account Roam should pay. After you save, only the last four digits stay on this screen.'}
             </p>
+            <input value={bankName} onChange={(e) => setBankName(e.target.value)} placeholder="Bank" className="w-full min-h-12 rounded-xl border border-outline px-3" />
+            <input value={branch} onChange={(e) => setBranch(e.target.value)} placeholder="Branch" className="w-full min-h-12 rounded-xl border border-outline px-3" />
+            <input value={accountHolderName} onChange={(e) => setAccountHolderName(e.target.value)} placeholder="Name on the account" className="w-full min-h-12 rounded-xl border border-outline px-3" />
+            <input value={accountNumber} onChange={(e) => setAccountNumber(e.target.value)} placeholder="Account number" type="password" className="w-full min-h-12 rounded-xl border border-outline px-3" />
+            <div className="flex gap-2">
+              {(['checking', 'savings'] as const).map((type) => (
+                <button key={type} type="button" onClick={() => setAccountType(type)} className={`flex-1 min-h-12 rounded-xl border ${accountType === type ? 'border-primary text-primary' : 'border-outline'}`}>
+                  {type === 'checking' ? 'Chequing' : 'Savings'}
+                </button>
+              ))}
+            </div>
             <button
               type="button"
               disabled={busy}
-              onClick={() => void startConnect()}
+              onClick={() => void saveBank()}
               className="w-full min-h-12 rounded-xl bg-primary text-on-primary font-semibold disabled:opacity-50"
             >
-              {busy ? 'Working…' : 'Set up payouts with Stripe Connect'}
+              {busy ? 'Saving…' : 'Save bank account'}
             </button>
           </div>
         </section>
 
         <section className="space-y-3">
-          <h2 className="text-xl font-semibold text-on-background">This week</h2>
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() => void requestPayout()}
-            className="w-full min-h-12 rounded-xl border border-outline font-medium disabled:opacity-50"
-          >
-            Request weekly payout
-          </button>
           {onViewHistory && (
             <button
               type="button"
@@ -110,10 +101,7 @@ export function PayoutSettingsPage({ onBack, onViewHistory }: PayoutSettingsPage
 
         <div className="flex items-start gap-2 text-sm text-muted">
           <MaterialIcon name="info" className="text-base shrink-0 mt-0.5" />
-          <p>
-            Closing a payout period is idempotent — requesting the same week twice will not create
-            duplicate payout rows.
-          </p>
+          <p>Weekly pay is a bank file. An account that is not ready waits until the next week.</p>
         </div>
       </main>
     </div>

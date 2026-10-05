@@ -183,6 +183,7 @@ export {
   resolveSplitCashVoid,
   closeCardCoveredSplitCash,
   resolveSplitCashFromStatement,
+  isStatementSettledSplitCash,
   stampCashRehomed,
   stampSplitVarianceSiblingAudit,
   isAwaitingCashTx,

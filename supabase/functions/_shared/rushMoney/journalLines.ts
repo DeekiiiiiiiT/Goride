@@ -18,6 +18,14 @@ export function linesBalance(lines: JournalLine[]): boolean {
   return lines.reduce((sum, line) => sum + line.amount_minor, 0) === 0 && lines.length >= 2;
 }
 
+export function walletDebtPayLines(customerId: string, amountMajor: number): JournalLine[] {
+  const minor = toMinor(amountMajor);
+  return [
+    { kind: "gateway_clearing", party_type: "platform", party_id: null, component: "wipay", amount_minor: minor },
+    { kind: "customer_wallet", party_type: "customer", party_id: customerId, component: "", amount_minor: -minor },
+  ];
+}
+
 export function captureLines(orderId: string, amountMajor: number): JournalLine[] {
   const minor = toMinor(amountMajor);
   return [
@@ -57,8 +65,8 @@ export function codShortLines(customerId: string, orderId: string, shortfallMajo
   ];
 }
 
-/** Cash the courier already kept is not courier earnings, so a later payout does not pay it again. */
-export function cashSettleLines(order: DashOrderFeeFields & { total?: number | null }, orderId: string, collectedMajor: number): JournalLine[] {
+/** Cash the courier is holding. The remittance book uses this. The ledger does not scale the restaurant. */
+export function allocatedCash(order: DashOrderFeeFields & { total?: number | null }, collectedMajor: number) {
   const fullTotal = Number(order.total ?? collectedMajor);
   const split = computeDashCaptureSplit(order, fullTotal);
   const bag = toMinor(fullTotal);
@@ -76,6 +84,16 @@ export function cashSettleLines(order: DashOrderFeeFields & { total?: number | n
   const courierKept = scaled.courierMinor;
   const collected = scaled.bagMinor;
   const platform = collected - merchant - courierKept;
+  return { split, collected, merchant, courierKept, platform };
+}
+
+/** Cash the courier already kept is not courier earnings, so a later payout does not pay it again.
+ *  The restaurant is credited its full food share. Roam's line is whatever is left, and may be negative.
+ */
+export function cashSettleLines(order: DashOrderFeeFields & { total?: number | null }, orderId: string, collectedMajor: number): JournalLine[] {
+  const { split, collected, courierKept } = allocatedCash(order, collectedMajor);
+  const merchant = toMinor(split.merchantReceivable);
+  const platform = collected - merchant - courierKept;
   const lines: JournalLine[] = [
     { kind: "cod_clearing", party_type: "order", party_id: orderId, component: "collected", amount_minor: collected },
     { kind: "merchant_payable", party_type: "merchant", party_id: split.merchantId, component: "food", amount_minor: -merchant },
@@ -91,6 +109,44 @@ export function cashSettleLines(order: DashOrderFeeFields & { total?: number | n
     });
   }
   return lines.filter((line) => line.amount_minor !== 0);
+}
+
+/** Top up a restaurant that was credited less than its full food share on a short cash order. */
+export function merchantShortTopUpLines(
+  order: DashOrderFeeFields & { total?: number | null },
+  alreadyCreditedMinor: number,
+): JournalLine[] {
+  const split = computeDashCaptureSplit(order, Number(order.total ?? 0));
+  const gap = toMinor(split.merchantReceivable) - Math.round(alreadyCreditedMinor);
+  if (gap <= 0 || !split.merchantId) return [];
+  return [
+    { kind: "platform_cost", party_type: "platform", party_id: null, component: "subsidy", amount_minor: gap },
+    { kind: "merchant_payable", party_type: "merchant", party_id: split.merchantId, component: "food", amount_minor: -gap },
+  ];
+}
+
+/** Pay the party back. The dispute reserve stays closed, and Roam takes the cost. */
+export function deductionReversalLines(original: JournalLine[]): JournalLine[] {
+  return original.flatMap((row) => {
+    const amount = -Number(row.amount_minor || 0);
+    if (!row.kind || !amount) return [];
+    if (row.kind === "chargeback_reserve") {
+      return [{
+        kind: "platform_cost",
+        party_type: "platform" as const,
+        party_id: null,
+        component: "appeal",
+        amount_minor: amount,
+      }];
+    }
+    return [{
+      kind: row.kind,
+      party_type: row.party_type,
+      party_id: row.party_id,
+      component: row.component || "",
+      amount_minor: amount,
+    }];
+  });
 }
 
 /** After delivery, a refund reduces what each party was already granted. */

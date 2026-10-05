@@ -4,7 +4,7 @@ import { PullToRefresh } from '@/components/ui/PullToRefresh';
 import { SkeletonEarnings } from '@/components/ui/Skeleton';
 import { ErrorScreen } from '@/components/ui/ErrorScreen';
 import { usePullToRefresh } from '@/hooks/usePullToRefresh';
-import { fetchCourierEarnings } from '@/lib/courierApi';
+import { fetchCourierDeductions, fetchCourierEarnings, appealCourierDeduction } from '@/lib/courierApi';
 import { formatJmd } from '@/lib/formatMoney';
 import { toast } from '@/lib/toast';
 import { RemittanceCard } from '@/pages/remittance/RemittanceCard';
@@ -38,6 +38,9 @@ export function EarningsPage({
   const [deliveries, setDeliveries] = useState<
     Array<{ id: string; restaurant: string; dropoff: string; amount: number; time?: string }>
   >([]);
+  const [deductions, setDeductions] = useState<
+    Array<{ id: string; reason: string; appealUntil?: string | null; amountMajor: number; appealed: boolean; appealStatus?: string | null }>
+  >([]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -51,6 +54,7 @@ export function EarningsPage({
     setTotal(data.total);
     setDeliveryCount(data.deliveryCount);
     setDeliveries(data.deliveries);
+    setDeductions(await fetchCourierDeductions());
   }, [period]);
 
   useEffect(() => {
@@ -140,6 +144,53 @@ export function EarningsPage({
                 <span className="text-2xl font-semibold">J${avg}</span>
                 <span className="text-[11px] text-muted mt-1 uppercase tracking-wider">Avg/Delivery</span>
               </div>
+            </section>
+
+            <section className="bg-surface rounded-xl shadow-soft overflow-hidden">
+              <div className="px-4 py-3 border-b border-surface-variant">
+                <h3 className="text-sm font-semibold">Deductions</h3>
+              </div>
+              {deductions.length === 0 ? (
+                <p className="p-4 text-sm text-muted">No deductions.</p>
+              ) : (
+                deductions.map((row) => (
+                  <div key={row.id} className="flex items-center justify-between gap-3 p-4 border-b border-surface-variant last:border-0">
+                    <div>
+                      <p className="text-sm font-medium">{row.reason}</p>
+                      <p className="text-[11px] text-muted">
+                        {row.appealStatus === 'reversed'
+                          ? 'Reversed'
+                          : row.appealStatus === 'upheld'
+                            ? 'Upheld'
+                            : row.appealed
+                              ? 'With a person'
+                              : row.appealUntil
+                                ? `Appeal until ${new Date(row.appealUntil).toLocaleDateString()}`
+                                : 'Appeal window closed'}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-semibold">J${formatJmd(row.amountMajor)}</p>
+                      {!row.appealed && row.appealUntil && new Date(row.appealUntil).getTime() > Date.now() && (
+                        <button
+                          type="button"
+                          className="text-xs text-primary font-semibold"
+                          onClick={() => {
+                            void appealCourierDeduction(row.id)
+                              .then((words) => {
+                                toast.success(words);
+                                return load();
+                              })
+                              .catch((error) => toast.error(error instanceof Error ? error.message : 'Could not appeal'));
+                          }}
+                        >
+                          Appeal
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))
+              )}
             </section>
 
             <section className="bg-surface rounded-xl shadow-soft overflow-hidden">

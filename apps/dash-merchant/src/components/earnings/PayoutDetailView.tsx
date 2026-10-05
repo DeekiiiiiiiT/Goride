@@ -2,6 +2,7 @@ import { toast } from 'sonner';
 import { MaterialIcon } from '../../signup/components/MaterialIcon';
 import { PayoutDetail } from '../../types/earnings';
 import { formatJmd, formatSignedJmd } from '../../lib/partner-utils';
+import { deliveryFetch } from '../../lib/partner-api';
 
 interface PayoutDetailViewProps {
   payout: PayoutDetail;
@@ -99,12 +100,54 @@ export default function PayoutDetailView({ payout, onBack }: PayoutDetailViewPro
             </div>
           </div>
         </section>
+        {(payout.orderLines || []).length > 0 && (
+          <section className="rounded-lg border border-outline-variant bg-surface-container-lowest p-inset-md">
+            <h3 className="mb-2 text-label-md font-semibold text-on-surface">Orders in this payout</h3>
+            <ul className="space-y-2">
+              {payout.orderLines?.map((line) => (
+                <li key={line.orderId} className="flex items-center justify-between gap-3 text-body-sm">
+                  <span>Order {line.orderNumber} · {formatJmd(line.net)}</span>
+                  <button
+                    type="button"
+                    className="text-primary"
+                    onClick={() => {
+                      void deliveryFetch('/merchant/earnings/disputes', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ orderId: line.orderId }),
+                      }).then((body) => {
+                        toast.success((body as { words?: string }).words || 'Dispute opened');
+                      }).catch((error) => {
+                        toast.error(error instanceof Error ? error.message : 'Could not open the dispute');
+                      });
+                    }}
+                  >
+                    Dispute
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
       </main>
 
       <div className="fixed bottom-0 left-0 z-40 w-full border-t border-outline-variant bg-surface-container-lowest p-margin-mobile pb-safe md:static md:border-none md:bg-transparent md:p-0">
         <button
           type="button"
-          onClick={() => toast.info('Statement download is coming soon')}
+          onClick={() => {
+            const lines = [
+              'order,net_jmd',
+              ...(payout.orderLines || []).map((line) => `${line.orderNumber},${line.net.toFixed(2)}`),
+              `net,${payout.netAmount.toFixed(2)}`,
+            ];
+            const blob = new Blob([lines.join('\n')], { type: 'text/csv' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `statement-${payout.id}.csv`;
+            link.click();
+            URL.revokeObjectURL(url);
+          }}
           className="flex h-inset-xl w-full items-center justify-center gap-inset-sm rounded-lg bg-primary-container text-label-md text-on-primary-container shadow-sm transition-all hover:opacity-90 active:scale-95"
         >
           <MaterialIcon name="download" />

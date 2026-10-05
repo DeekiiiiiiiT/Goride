@@ -70,18 +70,25 @@ export async function processPendingRefunds(
     { db: { schema: "payments" } },
   );
 
+  const cutoff = new Date(Date.now() - 15 * 60 * 1000).toISOString();
   const { data: pending } = await pdb
     .from("refunds")
-    .select("id, order_id, amount, reason")
-    .eq("status", "pending")
+    .select("id, order_id, amount, reason, status, submitted_at, last_error")
+    .in("status", ["pending", "submitted"])
     .order("created_at", { ascending: true })
     .limit(limit);
 
   let processed = 0;
   let failed = 0;
 
+  const due = (pending ?? []).filter((row) => {
+    if (String(row.last_error || "") === "Needs a person") return false;
+    if (row.status === "pending") return true;
+    return String(row.submitted_at || "") < cutoff;
+  });
+
   const { executeRefundById } = await import("../../_shared/rushMoney/executeRefund.ts");
-  for (const row of pending ?? []) {
+  for (const row of due) {
     const refundId = String(row.id || "");
     if (!refundId) {
       failed += 1;

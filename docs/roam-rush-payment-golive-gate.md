@@ -1,49 +1,35 @@
 # Roam Rush — Payment Go-Live Gate
 
-**Status:** Deferred until a payment gateway provider is chosen.  
-**Current rail:** WiPay remains available for **testing / soft-launch only**. Do not treat card checkout as production-hardened money flow until this checklist is complete.
+**Status:** Engineering items below are built. Card checkout stays in test until the human boxes are signed.  
+**Payout rail:** a bank payment file. Export, mark sent, then a different person marks paid. A later bank connection replaces only the file.
 
-## Preconditions
+## Built
 
-- [ ] Choose and contract the live provider (WiPay or alternative)
-- [ ] Confirm Jamaica settlement currency (JMD) and fee model
-- [ ] Secrets provisioned in Supabase for live + sandbox with distinct env flags
+- [x] One completion path. The WiPay webhook is the only way an order or a balance payment becomes paid.
+- [x] Pay balance. A locked-out customer can pay what they owe and order again.
+- [x] Stuck refunds are not sent again until WiPay says it has no record. If that question cannot be asked, a person handles them.
+- [x] Morning books check matches the settle key.
+- [x] Payout file: name, bank, branch, account number, and account type. Someone who is not ready waits until next week.
+- [x] Duplicate card confirmation marks the intent superseded.
+- [x] Each morning recon run is saved.
+- [x] Short cash, including a free-delivery subsidy, uses the courier's real share on both books. Roam's share may be negative.
+- [x] Privacy sentence says this phone or device may be matched to stop fraud.
+- [x] Dispute evidence, refund timeline, payout statement, and courier appeal are on the existing screens. Finance can uphold or reverse an appeal.
 
-## Engineering checklist
+## Still needs a person
 
-1. **One completion path**  
-   Provider webhook (secret-verified) is the only way an order becomes `paid`. Browser return URL may poll/read an already-completed intent — it must **never** mark paid from query-string `status` alone.
-
-2. **Pin the callback contract**  
-   Document exact query/body field names from the provider. Remove multi-alias guessing (`status` / `payment_status`, etc.).
-
-3. **Provider adapter**  
-   Implement `createIntent` / `handleWebhook` / `refund` behind one module in `supabase/functions/payments` so swapping providers does not rewrite checkout.
-
-4. **Pending confirmation UI**  
-   Replace false “payment failed” on client timeout with “We’re still confirming — check Orders.” Avoid double-charge retries.
-
-5. **Fail closed on env**  
-   Live vs sandbox must be an explicit enum (`live` | `sandbox`). Missing/misspelled value refuses to start intents in production.
-
-6. **Reconciliation job**  
-   Daily compare `payments.transactions` against provider settlements; alert on mismatches.
-
-7. **FX / multi-currency**  
-   Only if the chosen provider requires a non-JMD charge currency — persist rate + assert capture amount.
-
-8. **Ops docs**  
-   Update soft-launch gate docs: card pay is live only after this checklist is signed off.
-
-## Explicitly out of scope until then
-
-- Deep WiPay verification theater beyond keeping the existing webhook secret path
-- PayPal (permanently removed)
+- [ ] **Legal sign-off** for holding a customer balance, collecting a debt, and taking a courier deduction.
+- [ ] **WiPay in writing**
+  - [ ] Confirm the status-query address and the refund address.
+  - [ ] Confirm WiPay honors `Idempotency-Key`.
+  - Until those answers exist, set `WIPAY_REFUND_STATUS_URL` only after they are confirmed. Without it, a stuck refund waits for a person.
+- [ ] **Payout rail sign-off.** The bank file is the rail until a provider is contracted. Product confirms that choice.
 
 ## Sign-off
 
 | Role | Name | Date |
 |------|------|------|
 | Product owner | | |
+| Legal | | |
 | Engineering | | |
 | Ops / finance | | |

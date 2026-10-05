@@ -10,7 +10,7 @@ import {
 import { classifyRemittanceError, parkException } from "./exceptions.ts";
 import { postRemittanceCollected, getRemittanceAccount, toMinor } from "./remittanceLedger.ts";
 import { toMinor as toMinorMoney } from "./money.ts";
-import { scaleShortCollection } from "../../_shared/rushMoney/shortCollection.ts";
+import { allocatedCash } from "../../_shared/rushMoney/journalLines.ts";
 import { resolvePricingLayers } from "../pricingLayers.ts";
 import { needsThresholdSeed } from "./needsThresholdSeed.ts";
 
@@ -129,26 +129,13 @@ export async function collectOnDelivery(
     });
     assertCodTrialBalance(split, Number(row.total ?? 0));
 
-    const {
-      bagTotalMinor,
-      platformDueMinor,
-      merchantDueMinor,
-      courierRetainedMinor,
-      remitMinor,
-    } = remittanceMinorsFromSplit({
-      totalJmd: Number(row.total ?? 0),
-      platformDueJmd: split.platformDueJmd,
-      merchantDueJmd: split.merchantDueJmd,
-    });
-
-    const collectedMinor = row.cash_collected_minor != null ? Number(row.cash_collected_minor) : bagTotalMinor;
-    const scaled = scaleShortCollection({
-      bagMinor: bagTotalMinor,
-      platformMinor: platformDueMinor,
-      merchantMinor: merchantDueMinor,
-      courierMinor: courierRetainedMinor,
-      collectedMinor,
-    });
+    const collectedMajor = row.cash_collected_minor != null
+      ? Number(row.cash_collected_minor) / 100
+      : Number(row.total ?? 0);
+    const shares = allocatedCash(row, collectedMajor);
+    const platformDueMinor = shares.platform;
+    const merchantDueMinor = shares.merchant;
+    const courierRetainedMinor = shares.courierKept;
 
     const acct = await getRemittanceAccount(sb, courierId);
     let pauseThresholdMinor: number | undefined;
@@ -159,11 +146,13 @@ export async function collectOnDelivery(
     await postRemittanceCollected(sb, {
       courierId,
       orderId,
-      bagTotalMinor: scaled.bagMinor,
-      platformDueMinor: scaled.platformMinor,
-      merchantDueMinor: scaled.merchantMinor,
-      courierRetainedMinor: scaled.courierMinor,
-      metadata: remitMinor <= 0 ? { non_positive_remittance: true } : { collected_minor: collectedMinor },
+      bagTotalMinor: shares.collected,
+      platformDueMinor,
+      merchantDueMinor,
+      courierRetainedMinor,
+      metadata: platformDueMinor + merchantDueMinor <= 0
+        ? { non_positive_remittance: true }
+        : { collected_minor: shares.collected },
       ...(pauseThresholdMinor != null ? { pauseThresholdMinor } : {}),
     });
     return { ok: true };

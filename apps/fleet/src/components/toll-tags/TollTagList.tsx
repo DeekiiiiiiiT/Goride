@@ -21,6 +21,7 @@ import { Trash2, Link as LinkIcon, History, Pencil, MoreHorizontal, UserPlus, Us
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 import { TollTag } from "../../types/vehicle";
 import { formatJMD } from "../../utils/formatJMD";
+import { classifyTagBalance, isLowBalance, resolveLowBalanceThreshold } from "../../utils/tollTagBurnRate";
 import { useIsMobile } from "../ui/use-mobile";
 
 interface TollTagListProps {
@@ -31,6 +32,8 @@ interface TollTagListProps {
   onUnassign: (tag: TollTag) => void;
   onViewHistory: (tag: TollTag) => void;
   onEdit: (tag: TollTag) => void;
+  emptyTitle?: string;
+  emptyDescription?: string;
 }
 
 function getStatusColor(status: string) {
@@ -39,6 +42,7 @@ function getStatusColor(status: string) {
     case 'Inactive': return 'bg-slate-100 text-slate-700 hover:bg-slate-100';
     case 'Lost': return 'bg-red-100 text-red-700 hover:bg-red-100';
     case 'Damaged': return 'bg-amber-100 text-amber-700 hover:bg-amber-100';
+    case 'Retired': return 'bg-slate-200 text-slate-600 hover:bg-slate-200';
     default: return 'bg-slate-100 text-slate-700 hover:bg-slate-100';
   }
 }
@@ -98,11 +102,7 @@ function TagRowActions({
         <DropdownMenuSeparator />
         <DropdownMenuItem
           className="text-rose-600 focus:text-rose-600"
-          onClick={() => {
-            if (window.confirm('Are you sure you want to delete this tag?')) {
-              onDelete(tag.id);
-            }
-          }}
+          onClick={() => onDelete(tag.id)}
         >
           <Trash2 className="mr-2 h-4 w-4" />
           Delete
@@ -112,7 +112,7 @@ function TagRowActions({
   );
 }
 
-export function TollTagList({ tags, isLoading, onDelete, onAssign, onUnassign, onViewHistory, onEdit }: TollTagListProps) {
+export function TollTagList({ tags, isLoading, onDelete, onAssign, onUnassign, onViewHistory, onEdit, emptyTitle = 'No tags found', emptyDescription = 'Get started by adding your first toll tag.' }: TollTagListProps) {
   const isMobile = useIsMobile();
 
   if (isLoading) {
@@ -125,8 +125,8 @@ export function TollTagList({ tags, isLoading, onDelete, onAssign, onUnassign, o
         <div className="bg-slate-100 p-3 rounded-full mb-4">
           <LinkIcon className="h-6 w-6 text-slate-400" />
         </div>
-        <h3 className="text-lg font-medium text-slate-900">No tags found</h3>
-        <p className="text-slate-500 text-sm mt-1">Get started by adding your first toll tag.</p>
+        <h3 className="text-lg font-medium text-slate-900">{emptyTitle}</h3>
+        <p className="text-slate-500 text-sm mt-1">{emptyDescription}</p>
       </div>
     );
   }
@@ -216,19 +216,30 @@ export function TollTagList({ tags, isLoading, onDelete, onAssign, onUnassign, o
                   <Badge variant="outline" className={`border-0 ${getStatusColor(tag.status)}`}>
                     {tag.status}
                   </Badge>
-                  {tag.assignedVehicleId && tag.lastCalculatedBalance !== undefined && 
-                   tag.lastCalculatedBalance < (tag.lowBalanceThreshold ?? 500) && (
+                  {(() => {
+                    const threshold = resolveLowBalanceThreshold(tag.lowBalanceThreshold, tag.resolvedLowBalanceThreshold);
+                    const attention = classifyTagBalance(tag.lastCalculatedBalance, threshold);
+                    if (attention === 'unknown') {
+                      return (
+                        <Badge variant="outline" className="border-0 bg-slate-100 text-slate-600 text-[10px] px-1.5">
+                          Unknown balance
+                        </Badge>
+                      );
+                    }
+                    if (!isLowBalance(tag.lastCalculatedBalance, threshold)) return null;
+                    return (
                     <Tooltip>
                       <TooltipTrigger>
                         <Badge variant="outline" className="border-0 bg-red-100 text-red-700 hover:bg-red-100 text-[10px] px-1.5">
-                          Low Balance
+                          {attention === 'empty' ? 'Empty' : 'Low Balance'}
                         </Badge>
                       </TooltipTrigger>
                       <TooltipContent>
-                        <p>Balance: {formatJMD(tag.lastCalculatedBalance, 2)} (below {formatJMD(tag.lowBalanceThreshold ?? 500)} threshold)</p>
+                        <p>Balance: {formatJMD(tag.lastCalculatedBalance ?? 0, 2)} (below {formatJMD(threshold)} threshold)</p>
                       </TooltipContent>
                     </Tooltip>
-                  )}
+                    );
+                  })()}
                 </div>
               </TableCell>
               <TableCell>
@@ -288,11 +299,7 @@ export function TollTagList({ tags, isLoading, onDelete, onAssign, onUnassign, o
                     variant="ghost"  
                     size="icon" 
                     className="h-8 w-8 text-slate-400 hover:text-red-600"
-                    onClick={() => {
-                      if (window.confirm('Are you sure you want to delete this tag?')) {
-                        onDelete(tag.id);
-                      }
-                    }}
+                    onClick={() => onDelete(tag.id)}
                   >
                     <Trash2 className="h-4 w-4" />
                   </Button>

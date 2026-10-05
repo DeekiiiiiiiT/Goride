@@ -752,6 +752,10 @@ function FuelManagementInner({
     // R6: Review Queue backlog is not week-bounded — same lookback as the nav badge.
     const txRange =
       activeTab === 'reimbursements' ? fuelReviewQueueLookbackRange() : { startDate, endDate };
+    if (activeTab === 'reimbursements') {
+      // Post split cash that the statement already settled, before the queue paints.
+      await fuelService.ensurePostedEntries(40).catch(() => ({ healed: 0, blocked: 0 }));
+    }
     try {
       const [logsData, txData] = await Promise.all([
         // Paged fetch loads the whole date window (not a single 1500-row page) under

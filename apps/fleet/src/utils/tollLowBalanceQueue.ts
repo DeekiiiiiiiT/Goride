@@ -6,8 +6,9 @@ import {
   estimateDaysToEmpty,
   estimateTripsRemaining,
   avgCostPerPassage,
-  balanceRingState,
-  type BalanceRingState,
+  classifyTagBalance,
+  resolveLowBalanceThreshold,
+  type TagBalanceAttention,
   type BurnRateRow,
 } from './tollTagBurnRate';
 
@@ -18,9 +19,10 @@ export interface LowBalanceTagInput {
   status: string;
   assignedVehicleId?: string;
   assignedVehicleName?: string;
-  /** Prefer live calculated balance; fall back to last cached. */
-  balance: number;
+  /** Null when the server has never calculated a balance. */
+  balance: number | null;
   lowBalanceThreshold?: number;
+  orgDefaultThreshold?: number | null;
   usageRows?: BurnRateRow[];
 }
 
@@ -29,12 +31,12 @@ export interface LowBalanceQueueItem {
   tagNumber: string;
   provider: string;
   vehicleLabel: string;
-  balance: number;
+  balance: number | null;
   threshold: number;
-  ring: BalanceRingState;
+  ring: TagBalanceAttention;
   tripsRemaining: number | null;
   daysToEmpty: number | null;
-  shortfall: number;
+  shortfall: number | null;
 }
 
 export function buildLowBalanceQueue(
@@ -43,20 +45,18 @@ export function buildLowBalanceQueue(
   const items: LowBalanceQueueItem[] = [];
 
   for (const tag of tags) {
-    if (String(tag.status).toLowerCase() === 'inactive') continue;
-    const threshold =
-      Number.isFinite(tag.lowBalanceThreshold) && (tag.lowBalanceThreshold as number) > 0
-        ? (tag.lowBalanceThreshold as number)
-        : 500;
-    const balance = Number.isFinite(tag.balance) ? tag.balance : 0;
-    const ring = balanceRingState(balance, threshold);
-    if (ring !== 'low' && ring !== 'empty' && ring !== 'watch') continue;
-    // Queue only tags that are at/under threshold (or empty), not the 2× "watch" band.
-    if (ring === 'watch') continue;
+    const status = String(tag.status).toLowerCase();
+    if (status === 'inactive' || status === 'retired') continue;
+    const threshold = resolveLowBalanceThreshold(tag.lowBalanceThreshold, tag.orgDefaultThreshold);
+    const balance = typeof tag.balance === 'number' && Number.isFinite(tag.balance) ? tag.balance : null;
+    const ring = classifyTagBalance(balance, threshold);
+    // Watch (at or above the alert, under 2×) is healthy enough to stay off this queue.
+    if (ring === 'healthy' || ring === 'watch') continue;
 
     const usage = tag.usageRows || [];
     const burn = computeTagBurnRate(usage);
     const avg = avgCostPerPassage(usage);
+    const known = balance != null;
 
     items.push({
       id: tag.id,
@@ -66,15 +66,21 @@ export function buildLowBalanceQueue(
       balance,
       threshold,
       ring,
-      tripsRemaining: estimateTripsRemaining(balance, avg),
-      daysToEmpty: estimateDaysToEmpty(balance, burn),
-      shortfall: Math.max(0, threshold - balance),
+      tripsRemaining: known ? estimateTripsRemaining(balance, avg) : null,
+      daysToEmpty: known ? estimateDaysToEmpty(balance, burn) : null,
+      shortfall: known ? Math.max(0, threshold - balance) : null,
     });
   }
 
+  const rank = (ring: TagBalanceAttention) => (ring === 'empty' ? 0 : ring === 'low' ? 1 : 2);
   return items.sort((a, b) => {
-    if (a.ring === 'empty' && b.ring !== 'empty') return -1;
-    if (b.ring === 'empty' && a.ring !== 'empty') return 1;
-    return a.balance - b.balance;
+    const byRing = rank(a.ring) - rank(b.ring);
+    if (byRing !== 0) return byRing;
+    const aDays = a.daysToEmpty;
+    const bDays = b.daysToEmpty;
+    if (aDays != null && bDays != null && aDays !== bDays) return aDays - bDays;
+    if (aDays == null && bDays != null) return 1;
+    if (aDays != null && bDays == null) return -1;
+    return (a.balance ?? Number.POSITIVE_INFINITY) - (b.balance ?? Number.POSITIVE_INFINITY);
   });
 }
