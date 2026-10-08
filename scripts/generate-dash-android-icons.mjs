@@ -16,7 +16,7 @@ import { fileURLToPath } from 'node:url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 
-/** @type {{ id: string; appDir: string; brand: string; logoCandidates: string[] }[]} */
+/** @type {{ id: string; appDir: string; brand: string; logoCandidates: string[]; solidSplash?: boolean }[]} */
 const APPS = [
   {
     id: 'rush',
@@ -35,6 +35,13 @@ const APPS = [
     appDir: 'apps/dash-courier',
     brand: '#006d43',
     logoCandidates: ['public/images/logo.png', 'public/images/courier-avatar.png'],
+  },
+  {
+    id: 'fleet',
+    appDir: 'apps/fleet',
+    brand: '#030213',
+    logoCandidates: ['public/icons/icon-512.png'],
+    solidSplash: true,
   },
 ];
 
@@ -138,7 +145,41 @@ for (const app of APPS) {
   }
 
   await writeMipmaps(sharp, logo, app.appDir);
+  if (app.solidSplash && sharp) {
+    await writeSolidSplash(sharp, app.appDir, app.brand);
+    console.log(`[${app.id}] solid splash ${app.brand}`);
+  }
   console.log(`[${app.id}] branded icons from ${logo.replace(root, '')} (${app.brand})`);
+}
+
+async function writeSolidSplash(sharp, appDir, brand) {
+  const hex = brand.replace('#', '');
+  const r = Number.parseInt(hex.slice(0, 2), 16);
+  const g = Number.parseInt(hex.slice(2, 4), 16);
+  const b = Number.parseInt(hex.slice(4, 6), 16);
+  const resRoot = join(root, appDir, 'android/app/src/main/res');
+  const targets = [
+    { folder: 'drawable', width: 480, height: 800 },
+    { folder: 'drawable-port-mdpi', width: 320, height: 480 },
+    { folder: 'drawable-port-hdpi', width: 480, height: 800 },
+    { folder: 'drawable-port-xhdpi', width: 720, height: 1280 },
+    { folder: 'drawable-port-xxhdpi', width: 960, height: 1600 },
+    { folder: 'drawable-port-xxxhdpi', width: 1280, height: 1920 },
+    { folder: 'drawable-land-mdpi', width: 480, height: 320 },
+    { folder: 'drawable-land-hdpi', width: 800, height: 480 },
+    { folder: 'drawable-land-xhdpi', width: 1280, height: 720 },
+    { folder: 'drawable-land-xxhdpi', width: 1600, height: 960 },
+    { folder: 'drawable-land-xxxhdpi', width: 1920, height: 1280 },
+  ];
+  for (const { folder, width, height } of targets) {
+    const dir = join(resRoot, folder);
+    mkdirSync(dir, { recursive: true });
+    await sharp({
+      create: { width, height, channels: 4, background: { r, g, b, alpha: 1 } },
+    })
+      .png()
+      .toFile(join(dir, 'splash.png'));
+  }
 }
 
 console.log('Done. Regenerate adaptive icons via Asset Studio / @capacitor/assets before store submit.');

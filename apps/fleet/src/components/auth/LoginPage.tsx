@@ -325,9 +325,11 @@ export function LoginPage() {
           
           {/* Top: Logo */}
           <div className="flex items-center gap-2.5">
-            <div className="h-9 w-9 rounded-lg bg-white/10 backdrop-blur-sm flex items-center justify-center border border-white/10">
-              <Car className="h-5 w-5 text-white" />
-            </div>
+            <img
+              src="/icons/mark-128.png"
+              alt=""
+              className="h-9 w-9 rounded-lg"
+            />
             <span className="text-xl font-bold tracking-tight text-white">{platformDisplayName}</span>
           </div>
 

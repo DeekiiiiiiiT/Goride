@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Loader2 } from 'lucide-react';
+import { isNativeCapacitorPlatform } from '@roam/types';
 import { supabase } from '../../../utils/supabase/client';
 import { FLEET_OAUTH_INTENT_KEY, FLEET_OAUTH_INTENT_VALUE, fleetSignupRedirectUrl } from '../../../utils/fleetAuthSignup';
 
@@ -28,14 +29,20 @@ export function FleetGoogleSignupButton({
     setLoading(true);
     try {
       sessionStorage.setItem(FLEET_OAUTH_INTENT_KEY, FLEET_OAUTH_INTENT_VALUE);
-      const { error } = await supabase.auth.signInWithOAuth({
+      const native = isNativeCapacitorPlatform();
+      const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
           redirectTo: fleetSignupRedirectUrl(),
+          skipBrowserRedirect: native,
           queryParams: { prompt: 'select_account' },
         },
       });
       if (error) throw error;
+      if (native && data?.url) {
+        const { Browser } = await import('@capacitor/browser');
+        await Browser.open({ url: data.url });
+      }
     } catch (err: unknown) {
       sessionStorage.removeItem(FLEET_OAUTH_INTENT_KEY);
       onError(err instanceof Error ? err.message : 'Google sign-up failed.');

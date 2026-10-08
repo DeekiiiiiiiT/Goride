@@ -54,6 +54,14 @@ apps/dash-merchant/android/local.properties
 apps/dash-merchant/android/.idea/
 apps/dash-merchant/android/capacitor-cordova-android-plugins/build/
 
+# Capacitor / Android (fleet)
+apps/fleet/android/.gradle/
+apps/fleet/android/app/build/
+apps/fleet/android/build/
+apps/fleet/android/local.properties
+apps/fleet/android/.idea/
+apps/fleet/android/capacitor-cordova-android-plugins/build/
+
 # Capacitor / Android (dash-courier)
 apps/dash-courier/android/.gradle/
 apps/dash-courier/android/app/build/

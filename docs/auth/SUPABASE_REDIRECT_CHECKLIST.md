@@ -16,6 +16,7 @@ Include **scheme + host + port + path** where your apps handle the post-auth lan
 |-----|---------------|-------------------------|
 | Fleet (rideshare) | `http://localhost:3000/` | `https://roamfleet.co/` |
 | Fleet owner signup | `http://localhost:3000/signup` | `https://roamfleet.co/signup` |
+| Fleet (Android app) | — | `co.roamenterprise.fleet://login` |
 | Enterprise (apex / marketing) | `http://localhost:3003/` | `https://roamenterprise.co/` |
 | Enterprise Courier door | `http://courier.localhost:3003/` | `https://courier.roamenterprise.co/` |
 | Enterprise Freight Forwarder door | `http://freight-forwarder.localhost:3003/` | `https://freight-forwarder.roamenterprise.co/` |

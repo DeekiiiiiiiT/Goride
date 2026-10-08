@@ -1,5 +1,5 @@
 import React from 'react';
-import { Car, ChevronDown, LogOut } from 'lucide-react';
+import { ChevronDown, LogOut } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
 import { Button } from '../ui/button';
 import {
@@ -161,17 +161,11 @@ export function AppTopNav({
     <header className="sticky top-0 z-40 border-b border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-950">
       <div className="flex h-14 items-center gap-3 px-4 lg:px-6">
         <div className="flex min-w-0 shrink-0 items-center gap-2.5">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-600 text-white shadow-sm shadow-indigo-600/25">
-            <Car className="h-4 w-4" aria-hidden />
-          </div>
-          <div className="min-w-0 leading-tight">
-            <div className="truncate text-sm font-semibold tracking-tight text-slate-900 dark:text-slate-50">
-              Roam
-            </div>
-            <div className="truncate text-[10px] font-medium uppercase tracking-wider text-slate-400">
-              Fleet
-            </div>
-          </div>
+          <img
+            src="/icons/mark-128.png"
+            alt="Roam Fleet"
+            className="h-9 w-9 shrink-0 rounded-lg"
+          />
           {fleetName ? (
             <div className="ml-1 hidden max-w-[160px] items-center gap-1.5 truncate rounded-full border border-indigo-100 bg-indigo-50 px-2.5 py-1 text-indigo-700 xl:flex dark:border-indigo-800 dark:bg-indigo-900/20 dark:text-indigo-300">
               <span className="truncate text-xs font-medium uppercase tracking-wide">

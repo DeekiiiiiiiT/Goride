@@ -1,5 +1,6 @@
 /// <reference types="vite-plugin-pwa/client" />
 
+import { isNativeCapacitorPlatform } from '@roam/types';
 import { IS_ENTERPRISE_PRODUCT } from '../config/productLine';
 
 function enterpriseDoorAppName(): string {
@@ -42,6 +43,7 @@ export function isEnterpriseOpsDoorHost(
 
 /** Whether this build/host may show install UI / register as an installable PWA. */
 export function isPwaInstallAllowed(): boolean {
+  if (isNativeCapacitorPlatform()) return false;
   if (!IS_ENTERPRISE_PRODUCT) return true;
   return isEnterpriseOpsDoorHost();
 }

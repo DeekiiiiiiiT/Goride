@@ -3,7 +3,10 @@ import './instrument';
 import { createRoot } from 'react-dom/client';
 import * as Sentry from '@sentry/react';
 import App from './App';
+import { initFleetNative } from './capacitor-native';
 import './index.css';
+
+void initFleetNative();
 
 createRoot(document.getElementById('root')!).render(
   <Sentry.ErrorBoundary fallback={<p>Something went wrong. Please refresh the page.</p>}>

@@ -7,6 +7,12 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
+    "build:mobile": "node ../../scripts/assert-vite-supabase-env.mjs && vite build",
+    "cap:sync": "pnpm run build:mobile && cap sync android",
+    "cap:release": "node scripts/bump-android-version.mjs && pnpm run cap:sync",
+    "cap:aab": "node scripts/build-android-aab.mjs",
+    "cap:open:android": "cap open android",
+    "cap:run:android": "pnpm run cap:sync && cap run android",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit -p tsconfig.json",
@@ -16,6 +22,12 @@
     "icons:generate": "node scripts/generate-pwa-icons.mjs"
   },
   "dependencies": {
+    "@capacitor/android": "^7.6.5",
+    "@capacitor/app": "^7.1.2",
+    "@capacitor/browser": "^7.0.5",
+    "@capacitor/core": "^7.6.5",
+    "@capacitor/splash-screen": "^7.0.5",
+    "@capacitor/status-bar": "^7.0.6",
     "@google/generative-ai": "*",
     "@jsr/supabase__supabase-js": "^2.49.8",
     "@radix-ui/react-accordion": "^1.2.3",
@@ -93,6 +105,7 @@
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
+    "@capacitor/cli": "^7.6.5",
     "@tailwindcss/vite": "4.1.12",
     "@testing-library/jest-dom": "^7.0.1",
     "@testing-library/react": "^16.3.3",
