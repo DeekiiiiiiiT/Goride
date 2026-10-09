@@ -711,6 +711,9 @@ importers:
       '@capacitor/geolocation':
         specifier: ^7.1.8
         version: 7.1.8(@capacitor/core@7.6.5)
+      '@capacitor/ios':
+        specifier: ^7.6.8
+        version: 7.6.8(@capacitor/core@7.6.5)
       '@capacitor/keyboard':
         specifier: ^7.0.6
         version: 7.0.6(@capacitor/core@7.6.5)
@@ -1148,6 +1151,9 @@ importers:
       '@capacitor/core':
         specifier: ^7.6.5
         version: 7.6.5
+      '@capacitor/ios':
+        specifier: ^7.6.8
+        version: 7.6.8(@capacitor/core@7.6.5)
       '@capacitor/splash-screen':
         specifier: ^7.0.5
         version: 7.0.5(@capacitor/core@7.6.5)
@@ -1519,6 +1525,9 @@ importers:
       '@capacitor/geolocation':
         specifier: ^7.1.8
         version: 7.1.8(@capacitor/core@7.6.5)
+      '@capacitor/ios':
+        specifier: ^7.6.8
+        version: 7.6.8(@capacitor/core@7.6.5)
       '@capacitor/keyboard':
         specifier: ^7.0.6
         version: 7.0.6(@capacitor/core@7.6.5)

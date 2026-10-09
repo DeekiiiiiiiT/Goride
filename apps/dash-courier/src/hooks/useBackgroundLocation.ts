@@ -47,12 +47,13 @@ export function useBackgroundLocation(enabled: boolean) {
     };
 
     const startNativeWatch = async () => {
-      const { Geolocation } = await import('@capacitor/geolocation');
-      const perm = await Geolocation.requestPermissions();
-      if (perm.location !== 'granted' && perm.location !== 'limited') {
+      const { requestCourierPermission } = await import('@/lib/courierPermissions');
+      const state = await requestCourierPermission('location');
+      if (state !== 'granted') {
         onError();
         return;
       }
+      const { Geolocation } = await import('@capacitor/geolocation');
       watchId = await Geolocation.watchPosition(
         { enableHighAccuracy: true, timeout: 20000 },
         (pos, err) => {

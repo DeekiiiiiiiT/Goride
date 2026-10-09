@@ -1,5 +1,6 @@
 import type { PermissionGrantState } from '@roam/types';
 import { isCourierNativePlatform } from '@/capacitor-native';
+import { requestLocationConsent } from '@/lib/locationConsent';
 
 export type { PermissionGrantState };
 
@@ -25,6 +26,11 @@ async function checkNativeGeolocation(): Promise<PermissionGrantState> {
 
 async function requestNativeGeolocation(): Promise<PermissionGrantState> {
   try {
+    const existing = await checkNativeGeolocation();
+    if (existing === 'granted') return 'granted';
+    const accepted = await requestLocationConsent();
+    if (!accepted) return 'prompt';
+
     const { Geolocation } = await import('@capacitor/geolocation');
     let perm = await Geolocation.checkPermissions();
     if (perm.location !== 'granted' && perm.location !== 'limited') {
@@ -63,6 +69,10 @@ async function checkWebGeolocation(): Promise<PermissionGrantState> {
 
 async function requestWebGeolocation(): Promise<PermissionGrantState> {
   if (typeof navigator === 'undefined' || !navigator.geolocation) return 'unsupported';
+  const existing = await checkWebGeolocation();
+  if (existing === 'granted') return 'granted';
+  const accepted = await requestLocationConsent();
+  if (!accepted) return 'prompt';
   return new Promise((resolve) => {
     navigator.geolocation.getCurrentPosition(
       () => resolve('granted'),
@@ -155,11 +165,20 @@ export async function checkCourierPermission(
   return checkCameraGranted();
 }
 
+let locationRequest: Promise<PermissionGrantState> | null = null;
+
 export async function requestCourierPermission(
   id: CourierPermissionId,
 ): Promise<PermissionGrantState> {
   if (id === 'location') {
-    return isCourierNativePlatform() ? requestNativeGeolocation() : requestWebGeolocation();
+    if (!locationRequest) {
+      locationRequest = (
+        isCourierNativePlatform() ? requestNativeGeolocation() : requestWebGeolocation()
+      ).finally(() => {
+        locationRequest = null;
+      });
+    }
+    return locationRequest;
   }
   if (id === 'notifications') {
     return isCourierNativePlatform() ? requestNativeNotifications() : requestWebNotifications();

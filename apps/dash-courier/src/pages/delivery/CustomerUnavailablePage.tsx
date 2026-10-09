@@ -3,6 +3,7 @@ import { MaterialIcon } from '@/components/icons/MaterialIcon';
 import { openPhoneCall, toDialablePhone } from '@/lib/contactLinks';
 import { uploadAndGetProofUrl } from '@/lib/courierFileUpload';
 import { logDeliveryAttempt } from '@/lib/courierApi';
+import { checkCourierPermission } from '@/lib/courierPermissions';
 import { toast } from '@/lib/toast';
 
 type CustomerUnavailablePageProps = {
@@ -21,7 +22,9 @@ function formatTime(seconds: number): string {
   return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
 }
 
-function readPosition(): Promise<{ latitude?: number; longitude?: number }> {
+async function readPosition(): Promise<{ latitude?: number; longitude?: number }> {
+  const permission = await checkCourierPermission('location');
+  if (permission !== 'granted') return {};
   return new Promise((resolve) => {
     if (!navigator.geolocation) return resolve({});
     navigator.geolocation.getCurrentPosition(

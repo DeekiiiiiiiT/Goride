@@ -1,5 +1,6 @@
 import React from 'react';
 import { AuthRecoveryGate } from '@roam/auth-client';
+import { LocationConsentDialog } from '@/components/permissions/LocationConsentDialog';
 import { CourierConsumerApp } from '@/CourierConsumerApp';
 import CourierAdminRemovedPage from './pages/CourierAdminRemovedPage';
 
@@ -17,6 +18,7 @@ export default function App() {
       signInHref="/"
     >
       <CourierConsumerApp />
+      <LocationConsentDialog />
     </AuthRecoveryGate>
   );
 }
