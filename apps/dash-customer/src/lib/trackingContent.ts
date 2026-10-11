@@ -56,6 +56,7 @@ export type TrackingOrder = {
   deliveredAt?: string | null;
   /** Approximate map until live courier GPS (Phase 3) */
   locationApproximate?: boolean;
+  readyEta?: string | null;
 };
 
 export const MOCK_TRACKING_ORDER: TrackingOrder = {

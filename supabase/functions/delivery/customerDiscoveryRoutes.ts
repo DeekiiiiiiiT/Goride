@@ -249,7 +249,7 @@ export function registerCustomerDiscoveryRoutes(app: Hono, deps: CustomerDiscove
 
     let merchantQuery = serviceSb
       .from("merchants")
-      .select("id, name, logo_url, cover_image_url, cuisine_type, rating, avg_prep_time_mins, delivery_fee, min_order_amount, market_id, lat, lng, delivery_radius_km, pricing_tier_id, pricing_tier:merchant_tiers(search_boost, slug, default_delivery_radius_km, auto_ads)")
+      .select("id, name, logo_url, cover_image_url, cuisine_type, rating, avg_prep_time_mins, delivery_fee, min_order_amount, market_id, lat, lng, delivery_radius_km, pricing_tier_id, procurement_mode, in_house_live, pricing_tier:merchant_tiers(search_boost, slug, default_delivery_radius_km, auto_ads)")
       .eq("is_active", true)
       .eq("is_accepting_orders", true)
       .or(`name.ilike."${pattern}",cuisine_type.ilike."${pattern}"`)
@@ -275,6 +275,8 @@ export function registerCustomerDiscoveryRoutes(app: Hono, deps: CustomerDiscove
 
     if (merchantsRes.error) return c.json({ error: merchantsRes.error.message }, 500);
     if (itemsRes.error) return c.json({ error: itemsRes.error.message }, 500);
+    const { filterDiscoveryMerchants } = await import("./inHouse/visibility.ts");
+    const visibleMerchantRows = await filterDiscoveryMerchants(serviceSb, merchantsRes.data || []);
 
     const { resolveDeliveryFee, haversineKm, roundDistanceKm } = await import("../_shared/dashPricing.ts");
     const { resolvePricingLayers } = await import("./pricingLayers.ts");
@@ -285,7 +287,7 @@ export function registerCustomerDiscoveryRoutes(app: Hono, deps: CustomerDiscove
     const pinLng = Number(lng);
     const hasPin = Number.isFinite(pinLat) && Number.isFinite(pinLng);
 
-    const merchants = (merchantsRes.data || [])
+    const merchants = visibleMerchantRows
       .map((m: Record<string, unknown>) => {
         const tier = m.pricing_tier as Record<string, unknown> | null;
         const boost = tier?.search_boost != null ? Number(tier.search_boost) : 0;
@@ -333,6 +335,7 @@ export function registerCustomerDiscoveryRoutes(app: Hono, deps: CustomerDiscove
           auto_ads: autoAds,
           is_promoted: isPromoted,
           promoted: isPromoted,
+          avg_prep_time_mins: m.avg_prep_time_mins ?? null,
         };
       })
       .filter((m): m is NonNullable<typeof m> => m != null)

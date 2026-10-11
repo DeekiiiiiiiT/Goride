@@ -134,11 +134,35 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
 
     const { data: menuRows, error: menuErr } = await serviceSb
       .from("menu_items")
-      .select("id, name, price, marketplace_price, in_store_price, is_available, merchant_id")
+      .select("id, name, price, marketplace_price, in_store_price, is_available, merchant_id, source_price_checked_at")
       .eq("merchant_id", body.merchantId)
       .in("id", menuItemIds);
 
     if (menuErr) return c.json({ error: menuErr.message }, 500);
+    const { data: procurementMerchant } = await serviceSb.from("merchants")
+      .select("id, procurement_mode, in_house_live")
+      .eq("id", body.merchantId)
+      .maybeSingle();
+    if (String(procurementMerchant?.procurement_mode || "") === "in_house") {
+      const { assertInHouseCheckout } = await import("./inHouse/checkout.ts");
+      const quantities = new Map<string, number>();
+      for (const item of rawItems) {
+        const id = String(item.menuItemId || item.id || item.item_id || "");
+        quantities.set(id, (quantities.get(id) || 0) + Math.max(1, Math.floor(Number(item.quantity) || 1)));
+      }
+      const gate = await assertInHouseCheckout(serviceSb, {
+        merchant: {
+          id: body.merchantId,
+          procurement_mode: procurementMerchant?.procurement_mode,
+          in_house_live: procurementMerchant?.in_house_live,
+        },
+        paymentMethod: String(body.paymentMethod || "wipay"),
+        customerId: String(customer.id),
+        menuRows: menuRows || [],
+        quantities,
+      });
+      if (!gate.ok) return c.json({ error: gate.error, code: gate.code }, gate.status);
+    }
     const menuById = new Map((menuRows || []).map((row) => [String(row.id), row]));
 
     const pricedLines: Array<{
@@ -161,9 +185,11 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
       const unitPrice = Number(
         (menuRow as { marketplace_price?: number }).marketplace_price ?? menuRow.price,
       );
-      const inStorePrice = Number(
-        (menuRow as { in_store_price?: number }).in_store_price ?? menuRow.price,
-      );
+      const rawInStore = (menuRow as { in_store_price?: number | null }).in_store_price;
+      if (String(procurementMerchant?.procurement_mode || "") === "in_house" && (rawInStore == null || !Number.isFinite(Number(rawInStore)))) {
+        return c.json({ error: "Unavailable menu item" }, 400);
+      }
+      const inStorePrice = Number(rawInStore ?? menuRow.price);
       const modifiers = Array.isArray(item.modifiers)
         ? item.modifiers.map((m: { name?: string; priceAdjustment?: number }) => ({
             name: String(m.name || ""),
@@ -615,7 +641,7 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
       .from("orders")
       .select(`
       *,
-      merchant:merchants(id, name, logo_url, phone, address, avg_prep_time_mins),
+      merchant:merchants(id, name, logo_url, phone, address, avg_prep_time_mins, procurement_mode),
       ${ORDER_CUSTOMER_EMBED_WITH_USER}
     `)
       .eq("id", id)

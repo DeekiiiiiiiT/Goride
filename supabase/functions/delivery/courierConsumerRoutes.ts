@@ -262,17 +262,20 @@ async function dispatchOffersForOrder(
     .maybeSingle();
   if (!order || order.status !== "ready" || order.courier_id) return 0;
 
-  let originLat = Number(order.delivery_lat);
-  let originLng = Number(order.delivery_lng);
-  if (!Number.isFinite(originLat) || !Number.isFinite(originLng)) {
-    const { data: merchant } = await serviceSb
-      .from("merchants")
-      .select("lat, lng")
-      .eq("id", order.merchant_id)
-      .maybeSingle();
-    originLat = Number(merchant?.lat);
-    originLng = Number(merchant?.lng);
-  }
+  const { data: merchant } = await serviceSb
+    .from("merchants")
+    .select("lat, lng")
+    .eq("id", order.merchant_id)
+    .maybeSingle();
+  const { courierSearchOrigin } = await import("./inHouse/dispatchOrigin.ts");
+  const origin = courierSearchOrigin({
+    merchantLat: merchant?.lat,
+    merchantLng: merchant?.lng,
+    deliveryLat: order.delivery_lat,
+    deliveryLng: order.delivery_lng,
+  });
+  const originLat = origin?.lat ?? Number.NaN;
+  const originLng = origin?.lng ?? Number.NaN;
 
   const useH3 = (await import("../_shared/h3/geoIndex.ts")).isRushH3DispatchEnabled();
   let online: Array<{
@@ -926,6 +929,32 @@ export function registerCourierConsumerRoutes(app: Hono, deps: Deps) {
           wait_minutes: waitMinutes,
           issue_id: data.id,
         });
+      }
+      const { data: task } = await serviceSb.from("procurement_tasks").select("id, state").eq("order_id", orderId).maybeSingle();
+      if (task) {
+        const { transitionOrThrow } = await import("./inHouse/orderStatus.ts");
+        try {
+          const next = transitionOrThrow(String(task.state), "exception");
+          const now = new Date().toISOString();
+          const { data: updated } = await serviceSb.from("procurement_tasks").update({
+            state: next,
+            exception_code: "not_ready_at_pickup",
+            exception_note: notes,
+            updated_at: now,
+          }).eq("id", task.id).eq("state", task.state).select("id");
+          if (updated?.length) {
+            await serviceSb.from("procurement_events").insert({
+              task_id: task.id,
+              from_state: task.state,
+              to_state: next,
+              actor_type: "courier",
+              actor_id: auth.userId,
+              payload: { code: "not_ready_at_pickup" },
+            });
+          }
+        } catch {
+          /* Already bought-or-closed orders stay where they are. */
+        }
       }
     }
 

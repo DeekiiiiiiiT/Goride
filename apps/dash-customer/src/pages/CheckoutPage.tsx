@@ -272,13 +272,11 @@ export default function CheckoutPage({ onNavigate, session }: Props) {
       /* server still enforces on POST /orders */
     }
 
-    // Synchronous lock so double-taps can't trigger another request before React re-renders.
     if (submitLockRef.current) return;
+    const paymentMethod = getApiPaymentMethod(getCheckoutPreferences().paymentMethodId);
     submitLockRef.current = true;
     if (!idempotencyKeyRef.current) idempotencyKeyRef.current = crypto.randomUUID();
-
     setIsPlacingOrder(true);
-    const paymentMethod = getApiPaymentMethod(getCheckoutPreferences().paymentMethodId);
 
     try {
       const res = await fetch(`${API_ENDPOINTS.delivery}/orders`, {
@@ -585,7 +583,9 @@ export default function CheckoutPage({ onNavigate, session }: Props) {
               <MaterialIcon name="credit_card" className="text-primary" filled />
               <div>
                 <h2 className="text-headline-sm font-semibold text-on-surface">Payment Method</h2>
-                <p className="text-body-md text-on-surface-variant mt-1">{paymentLabel}</p>
+                <p className="text-body-md text-on-surface-variant mt-1">
+                  {paymentLabel}
+                </p>
                 {walletWords && walletWords !== 'No balance' && (
                   <p className="text-body-sm text-on-surface mt-1">
                     {walletWords}{orderingBlocked ? '. Pay this before ordering.' : ''}

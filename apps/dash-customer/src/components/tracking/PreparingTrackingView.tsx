@@ -15,6 +15,9 @@ type Props = {
 };
 
 export function PreparingTrackingView({ order, onClose, onCancel, cancelPending, onHelp, onNavigate }: Props) {
+  const readyLabel = order.readyEta
+    ? new Date(order.readyEta).toLocaleTimeString('en-JM', { hour: 'numeric', minute: '2-digit' })
+    : null;
   const prepEta = formatPrepEta(
     remainingPrepMinutes({
       nowMs: Date.now(),
@@ -60,23 +63,31 @@ export function PreparingTrackingView({ order, onClose, onCancel, cancelPending,
             <MaterialIcon name="skillet" className="text-secondary text-[32px]" filled />
           </div>
           <div>
-            <h2 className="text-headline-lg-mobile font-bold text-on-surface">Preparing your food</h2>
+            <h2 className="text-headline-lg-mobile font-bold text-on-surface">
+              Preparing your food
+            </h2>
             <p className="text-body-lg text-on-surface-variant mt-1">
-              {order.merchantName} is getting your order ready.
+              {`${order.merchantName} is getting your order ready.`}
             </p>
           </div>
           <div className="bg-surface-container px-4 py-2 rounded-xl w-full">
             <span className="text-label-md font-semibold text-on-surface-variant uppercase tracking-wider">
               Estimated Ready
             </span>
-            <p className="text-headline-md font-bold text-primary">{prepEta}</p>
+            <p className="text-headline-md font-bold text-primary">{readyLabel || prepEta}</p>
           </div>
         </section>
 
         <section className="rounded-xl overflow-hidden shadow-[0px_4px_20px_rgba(0,0,0,0.04)] bg-surface-container-lowest h-48 relative">
           <img src={TRACKING_MAP_IMAGES.preparing} alt="Map" className="w-full h-full object-cover" />
           <div className="absolute bottom-4 left-4 right-4 bg-surface-container-lowest/90 backdrop-blur-md rounded-lg p-2 shadow-sm flex items-center gap-2">
-            <img src={order.merchantImage} alt={order.merchantName} className="w-10 h-10 rounded-full object-cover" />
+            {order.merchantImage ? (
+              <img src={order.merchantImage} alt="" className="w-10 h-10 rounded-full object-cover" />
+            ) : (
+              <div className="w-10 h-10 rounded-full bg-surface-container flex items-center justify-center">
+                <MaterialIcon name="restaurant" />
+              </div>
+            )}
             <div className="flex-1 min-w-0">
               <p className="text-label-md font-semibold text-on-surface truncate">{order.merchantName}</p>
               <p className="text-body-sm text-on-surface-variant truncate">{order.merchantAddress}</p>
