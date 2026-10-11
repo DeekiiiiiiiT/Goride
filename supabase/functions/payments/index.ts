@@ -426,6 +426,12 @@ async function completeWipayIntent(
       } catch (e) {
         console.error("[payments/wipay] capture journal", e);
       }
+      try {
+        const { ensureProcurementTask } = await import("../delivery/inHouse/createTask.ts");
+        await ensureProcurementTask(serviceSupabase.schema("delivery"), String(intent.order_id));
+      } catch (e) {
+        console.error("[payments/wipay] procurement task", e);
+      }
     }
     if ((result.action === "duplicate_refund_required" || result.action === "late_capture_refund_required") && result.refund_id) {
       const { executeRefundById } = await import("../_shared/rushMoney/executeRefund.ts");

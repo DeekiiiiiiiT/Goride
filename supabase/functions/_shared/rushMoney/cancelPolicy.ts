@@ -217,3 +217,41 @@ export function quoteCancel(input: {
     summary: stage === "s3" ? "No refund after pickup." : "Full refund.",
   };
 }
+
+/** In-House: the restaurant is never paid through Roam. After the buy, only delivery and service come back. */
+export function quoteInHouseCancel(input: {
+  order: PolicyOrder;
+  foodPurchased: boolean;
+  deskFault: boolean;
+}): CancelQuote {
+  const total = roundMoney(Math.max(0, Number(input.order.total ?? 0)));
+  const delivery = roundMoney(Math.max(0, Number(input.order.delivery_fee ?? 0)));
+  const service = roundMoney(Math.max(0, Number(input.order.service_fee ?? input.order.platform_fee ?? 0)));
+  const base: CancelQuote = {
+    policyVersion: POLICY_VERSION,
+    stage: stageFromStatus(String(input.order.status || "placed"), input.order.picked_up_at),
+    fault: input.deskFault ? "platform" : "customer",
+    redispatch: false,
+    customerRefundJmd: total,
+    customerDebtJmd: 0,
+    merchantReceivesJmd: 0,
+    courierReceivesJmd: 0,
+    cancelFeeJmd: 0,
+    platformAbsorbsJmd: 0,
+    summary: "Full refund. Roam has not placed the restaurant order.",
+  };
+  if (!input.foodPurchased || input.deskFault) {
+    return {
+      ...base,
+      summary: input.deskFault
+        ? "Full refund. The In-House desk could not complete the order."
+        : base.summary,
+    };
+  }
+  const refund = roundMoney(Math.min(total, delivery + service));
+  return {
+    ...base,
+    customerRefundJmd: refund,
+    summary: "The restaurant order is already placed, so the food is not refunded. Delivery and service fees are returned.",
+  };
+}

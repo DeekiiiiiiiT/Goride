@@ -38,6 +38,7 @@ export const PRIVILEGED_METADATA_ROLES = new Set([
   'haul_ops',
   'courier_admin',
   'courier_ops',
+  'dash_concierge',
 ]);
 
 /**

@@ -26,6 +26,7 @@ const JWT_ROLE_LEVELS: Record<string, number> = {
   haul_ops: 700,
   courier_admin: 800,
   courier_ops: 700,
+  dash_concierge: 500,
 };
 
 export type LevelAuthenticatedUser = {

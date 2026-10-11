@@ -22,6 +22,7 @@ interface TeamMember {
 const ROLE_OPTIONS: { value: DashTeamRole; label: string }[] = [
   { value: 'dash_admin', label: 'Dash Admin' },
   { value: 'dash_ops', label: 'Dash Ops' },
+  { value: 'dash_concierge', label: 'In-House Buyer' },
   { value: 'courier_admin', label: 'Courier Admin' },
   { value: 'courier_ops', label: 'Courier Ops' },
   { value: 'support_agent', label: 'Support Agent' },

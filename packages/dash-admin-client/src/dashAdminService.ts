@@ -632,6 +632,7 @@ export type DashTeamRole =
   | 'dash_ops'
   | 'courier_admin'
   | 'courier_ops'
+  | 'dash_concierge'
   | 'support_agent'
   | 'identity_admin';
 

@@ -26,6 +26,11 @@ export async function applyMerchantFaultDebit(
   if (!opts.merchantId || amount <= 0) return;
 
   const idempotencyKey = opts.idempotencyKey ?? `fault_debit:${opts.orderId}:${opts.reason}`;
+  const { data: merchantMode } = await serviceSb.from("merchants")
+    .select("procurement_mode")
+    .eq("id", opts.merchantId)
+    .maybeSingle();
+  const inHouse = String(merchantMode?.procurement_mode || "") === "in_house";
   const pdb = getPaymentsDb();
 
   const { data: existing } = await pdb
@@ -36,6 +41,7 @@ export async function applyMerchantFaultDebit(
 
   if (existing?.id) return;
 
+  if (!inHouse) {
   await pdb.from("merchant_adjustments").insert({
     merchant_id: opts.merchantId,
     amount: -amount,
@@ -52,6 +58,7 @@ export async function applyMerchantFaultDebit(
     p_period: periodKey,
     p_amount: amount,
   });
+  }
 
   if (opts.skipLedger) return;
 
@@ -60,13 +67,16 @@ export async function applyMerchantFaultDebit(
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
   );
   const minor = Math.round(amount * 100);
+  const foodLine = inHouse
+    ? { kind: "platform_cost", party_type: "platform", party_id: null, component: "procurement_refund", amount_minor: minor }
+    : { kind: "merchant_receivable", party_type: "merchant", party_id: opts.merchantId, component: "fault", amount_minor: minor };
   await publicDb.rpc("rush_post_journal", {
     p_idempotency_key: idempotencyKey,
     p_event_type: "merchant_fault",
     p_order_id: opts.orderId,
     p_correlation_id: null,
     p_lines: [
-      { kind: "merchant_receivable", party_type: "merchant", party_id: opts.merchantId, component: "fault", amount_minor: minor },
+      foodLine,
       { kind: "platform_revenue", party_type: "platform", party_id: null, component: "fault", amount_minor: -minor },
     ],
     p_actor_type: "admin",

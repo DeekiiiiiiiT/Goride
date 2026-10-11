@@ -69,6 +69,12 @@ export async function requireProductAdmin(
   }
 
   const roles = await resolveEffectiveRoleNames(user.id, user);
+  if (product === "dash" && isInHouseBuyerOnly(roles)) {
+    return c.json(
+      { error: "Forbidden", message: "dash admin role required" },
+      403,
+    );
+  }
   const allowedRoles = PRODUCT_ADMIN_ROLES[product];
   const matchedProduct = roles.find((r) => allowedRoles.has(r) && !PLATFORM_ROLES.has(r));
   const matchedPlatform = roles.find((r) => PLATFORM_ROLES.has(r));
@@ -100,6 +106,54 @@ export async function requireProductAdmin(
 
   const permissions = await resolveUserPermissions(user.id, user);
 
+  return {
+    id: user.id,
+    email: user.email || "",
+    role: effectiveRole,
+    roles,
+    permissions,
+    isPlatformRole: PLATFORM_ROLES.has(effectiveRole),
+  };
+}
+
+/** A buyer can open the desk. They cannot open the rest of the ops console. */
+export function isInHouseBuyerOnly(roles: string[]): boolean {
+  if (!roles.includes("dash_concierge")) return false;
+  const elevated = new Set([
+    "dash_admin",
+    "dash_ops",
+    "courier_admin",
+    "courier_ops",
+    ...PLATFORM_ROLES,
+  ]);
+  return !roles.some((role) => elevated.has(role));
+}
+
+/**
+ * Authenticate and allow an explicit role set.
+ * Used by the In-House desk so buyers are not dash admins.
+ */
+export async function requireRoleSet(
+  c: {
+    req: { header: (n: string) => string | undefined };
+    json: (b: unknown, s?: number) => Response;
+  },
+  allowed: Set<string>,
+): Promise<ProductAdminUser | Response> {
+  const authHeader = c.req.header("Authorization");
+  if (!authHeader?.startsWith("Bearer ")) {
+    return c.json({ error: "Unauthorized: missing Authorization header" }, 401);
+  }
+  const { data: { user }, error } = await authClient(authHeader).auth.getUser();
+  if (error || !user) {
+    return c.json({ error: "Unauthorized: invalid token" }, 401);
+  }
+  const roles = await resolveEffectiveRoleNames(user.id, user);
+  if (!roles.some((role) => allowed.has(role))) {
+    return c.json({ error: "Forbidden", message: "desk role required" }, 403);
+  }
+  const permissions = await resolveUserPermissions(user.id, user);
+  const effectiveRole = roles.find((role) => allowed.has(role)) ?? roles[0] ?? "";
   return {
     id: user.id,
     email: user.email || "",

@@ -52,6 +52,10 @@ async function postRefundJournal(orderId: string, amountMajor: number, refundId:
   if (minor <= 0) return;
   const delivery = deliveryDb();
   const { data: order } = await delivery.from("orders").select("money_state, merchant_id, courier_id, total, platform_fee, service_fee, processing_fee, delivery_fee, tip, courier_tip_net, subtotal, discount, merchant_commission_amount, delivery_fee_platform_amount, delivery_fee_courier_amount, peak_pay_amount, tax_food_jmd, tax_platform_jmd, small_order_fee").eq("id", orderId).maybeSingle();
+  const { data: merchantMode } = order?.merchant_id
+    ? await delivery.from("merchants").select("procurement_mode").eq("id", order.merchant_id).maybeSingle()
+    : { data: null };
+  const inHouse = String(merchantMode?.procurement_mode || "") === "in_house";
   const settled = order && ["settled", "partially_refunded", "collected", "short_collected"].includes(String(order.money_state || ""));
   let lines = [
     { kind: "order_clearing", party_type: "order", party_id: orderId, component: "holding", amount_minor: minor },
@@ -75,6 +79,7 @@ async function postRefundJournal(orderId: string, amountMajor: number, refundId:
       foodMinor: food,
       courierMinor: courier,
       platformMinor: platform,
+      inHouse,
     });
   }
   const { error } = await publicDb().rpc("rush_post_journal", {

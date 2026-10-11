@@ -5,6 +5,7 @@
 import type { Context } from "https://deno.land/x/hono@v4.3.11/mod.ts";
 import type { Hono } from "https://deno.land/x/hono@v4.3.11/mod.ts";
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { getJwtRoles } from "../_shared/authEdge.ts";
 import { getFlag } from "../_shared/featureFlags.ts";
 import {
   requireMerchantPermission,
@@ -86,12 +87,12 @@ type OrderChatDeps = {
 async function requireAuthUser(
   deps: OrderChatDeps,
   authHeader: string | undefined,
-): Promise<{ user: { id: string; email?: string } } | { error: string; status: 401 }> {
+): Promise<{ user: { id: string; email?: string; app_metadata?: Record<string, unknown> } } | { error: string; status: 401 }> {
   if (!authHeader) return { error: "Unauthorized", status: 401 };
   const supabase = deps.getSupabase(authHeader);
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Unauthorized", status: 401 };
-  return { user: { id: user.id, email: user.email } };
+  return { user: { id: user.id, email: user.email, app_metadata: user.app_metadata } };
 }
 
 async function loadOrderForChat(
@@ -130,10 +131,12 @@ async function loadOrderForChat(
 }
 
 async function resolveViewerRole(
+  serviceSb: SupabaseClient,
   order: OrderChatOrderProps & { customer_user_id: string | null; merchant_id: string },
-  userId: string,
-  userEmail?: string | null,
+  user: { id: string; email?: string | null; app_metadata?: Record<string, unknown> },
 ): Promise<{ role: OrderChatViewerRole | null; membership: MerchantMembership | null }> {
+  const userId = user.id;
+  const userEmail = user.email;
   if (order.customer_user_id && order.customer_user_id === userId) {
     return { role: "customer", membership: null };
   }
@@ -147,6 +150,21 @@ async function resolveViewerRole(
     requireMerchantPermission(resolved.membership, "orders")
   ) {
     return { role: "merchant", membership: resolved.membership };
+  }
+  const roles = getJwtRoles(user);
+  const platformSupport = new Set(["platform_owner", "platform_support", "superadmin"]);
+  if (roles.some((role) => platformSupport.has(role))) {
+    return { role: "support", membership: null };
+  }
+  const desk = new Set(["dash_concierge", "dash_ops", "dash_admin"]);
+  if (roles.some((role) => desk.has(role))) {
+    const { data: merchant } = await serviceSb.from("merchants")
+      .select("procurement_mode")
+      .eq("id", order.merchant_id)
+      .maybeSingle();
+    if (String(merchant?.procurement_mode || "") === "in_house") {
+      return { role: "merchant", membership: null };
+    }
   }
   return { role: null, membership: null };
 }
@@ -213,7 +231,7 @@ export function registerOrderChatRoutes(app: Hono, deps: OrderChatDeps) {
     const order = await loadOrderForChat(serviceSb, orderId);
     if (!order) return c.json({ error: "not_found" }, 404);
 
-    const { role } = await resolveViewerRole(order, auth.user.id, auth.user.email);
+    const { role } = await resolveViewerRole(deps.getServiceSupabase(), order, auth.user);
     if (!role) return c.json({ error: "forbidden" }, 403);
 
     const pairEnabled = await isPairFlagEnabled(pair);
@@ -326,7 +344,7 @@ export function registerOrderChatRoutes(app: Hono, deps: OrderChatDeps) {
     const order = await loadOrderForChat(serviceSb, orderId);
     if (!order) return c.json({ error: "not_found" }, 404);
 
-    const { role } = await resolveViewerRole(order, auth.user.id, auth.user.email);
+    const { role } = await resolveViewerRole(deps.getServiceSupabase(), order, auth.user);
     if (!role) return c.json({ error: "forbidden" }, 403);
 
     const pairEnabled = await isPairFlagEnabled(pair);
@@ -413,7 +431,7 @@ export function registerOrderChatRoutes(app: Hono, deps: OrderChatDeps) {
     const order = await loadOrderForChat(serviceSb, orderId);
     if (!order) return c.json({ error: "not_found" }, 404);
 
-    const { role } = await resolveViewerRole(order, auth.user.id, auth.user.email);
+    const { role } = await resolveViewerRole(deps.getServiceSupabase(), order, auth.user);
     if (!role) return c.json({ error: "forbidden" }, 403);
 
     const publicSb = deps.getPublicServiceSupabase();
@@ -474,7 +492,7 @@ export function registerOrderChatRoutes(app: Hono, deps: OrderChatDeps) {
     const order = await loadOrderForChat(serviceSb, orderId);
     if (!order) return c.json({ error: "not_found" }, 404);
 
-    const { role } = await resolveViewerRole(order, auth.user.id, auth.user.email);
+    const { role } = await resolveViewerRole(deps.getServiceSupabase(), order, auth.user);
     if (!role) return c.json({ error: "forbidden" }, 403);
 
     const { data: supportCase, error } = await serviceSb.from("support_cases").insert({

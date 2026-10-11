@@ -38,6 +38,7 @@ import { assertMerchantAcceptingOrders } from "./merchantOpenCheck.ts";
 import { registerMerchantInventoryRoutes } from "./merchantInventoryRoutes.ts";
 import { registerRushMoneyRoutes } from "./rushMoney/routes.ts";
 import { registerCustomerOrderRoutes } from "./customerOrderRoutes.ts";
+import { registerInHouseRoutes } from "./inHouse/routes.ts";
 import { registerMerchantSupportRoutes } from "./merchantSupportRoutes.ts";
 import { registerCustomerAccountRoutes } from "./customerAccountRoutes.ts";
 import { registerCustomerDiscoveryRoutes } from "./customerDiscoveryRoutes.ts";
@@ -231,6 +232,9 @@ app.get("/merchants", async (c) => {
 
   if (error) return c.json({ error: error.message }, 500);
 
+  const { filterDiscoveryMerchants } = await import("./inHouse/visibility.ts");
+  const visibleMerchants = await filterDiscoveryMerchants(supabase, data ?? []);
+
   const { resolveDeliveryFee, haversineKm, roundDistanceKm } = await import("../_shared/dashPricing.ts");
   const { resolvePricingLayers } = await import("./pricingLayers.ts");
   const layered = await resolvePricingLayers(supabase, {
@@ -241,7 +245,7 @@ app.get("/merchants", async (c) => {
   const pinLng = Number(lng);
   const hasPin = Number.isFinite(pinLat) && Number.isFinite(pinLng);
 
-  const enriched = (data ?? []).map((row: Record<string, unknown>) => {
+  const enriched = visibleMerchants.map((row: Record<string, unknown>) => {
     const tier = row.pricing_tier as Record<string, unknown> | null;
     const boost = tier?.search_boost != null ? Number(tier.search_boost) : 0;
     const autoAds = Boolean(tier?.auto_ads);
@@ -385,15 +389,38 @@ app.get("/merchants", async (c) => {
     };
 
     const acceptingNow = await assertMerchantAcceptingOrders(supabase, merchantId);
+    let responseItems = items || [];
+    let responseMerchant = enrichedMerchant;
+    let deskClosed = false;
+    if (String(merchant.procurement_mode || "") === "in_house") {
+      const { inHouseStoreIsVisible } = await import("./inHouse/visibility.ts");
+      const { priceIsFresh } = await import("./inHouse/pricing.ts");
+      const visible = await inHouseStoreIsVisible(supabase, {
+        id: merchantId,
+        procurement_mode: String(merchant.procurement_mode),
+        in_house_live: Boolean(merchant.in_house_live),
+      });
+      responseItems = responseItems.filter((item: { source_price_checked_at?: string | null; in_store_price?: number | null }) =>
+        item.in_store_price != null && priceIsFresh(item.source_price_checked_at)
+      );
+      deskClosed = !visible;
+      if (deskClosed) {
+        responseMerchant = {
+          ...enrichedMerchant,
+          is_accepting_orders: false,
+        };
+      }
+    }
+    const accepting = acceptingNow.ok && !deskClosed;
 
     return c.json({
-      merchant: enrichedMerchant,
+      merchant: responseMerchant,
       categories: categories || [],
-      items: items || [],
+      items: responseItems,
       hours: hours || [],
       platform_fee_rate: feeResolved.rate,
-      is_accepting_orders_now: acceptingNow.ok,
-      accepting_orders_error: acceptingNow.ok ? undefined : acceptingNow.error,
+      is_accepting_orders_now: accepting,
+      accepting_orders_error: accepting ? undefined : (acceptingNow.ok ? "This store is not accepting orders right now" : acceptingNow.error),
     });
   });
 
@@ -1303,6 +1330,20 @@ app.put("/orders/:id/status", async (c) => {
       }
     }
 
+    if (status === "picked_up") {
+      const { data: task } = await serviceSb.from("procurement_tasks").select("id, state").eq("order_id", id).maybeSingle();
+      if (task && task.state === "ready_for_pickup") {
+        const { transitionOrThrow } = await import("./inHouse/orderStatus.ts");
+        const next = transitionOrThrow(String(task.state), "pickup");
+        const now = new Date().toISOString();
+        await serviceSb.from("procurement_tasks").update({
+          state: next,
+          picked_up_at: now,
+          updated_at: now,
+        }).eq("id", task.id).eq("state", "ready_for_pickup");
+      }
+    }
+
     const updateData: Record<string, unknown> = { status };
     if (status === "picked_up") updateData.picked_up_at = new Date().toISOString();
     if (status === "delivered") updateData.delivered_at = new Date().toISOString();
@@ -1335,6 +1376,22 @@ app.put("/orders/:id/status", async (c) => {
 
     await notifyCustomerOrderStatus(serviceSb, id, status);
     return c.json({ order: updatedOrder });
+  }
+
+  if (actorType === "concierge") {
+    const { CONCIERGE_ROLES } = await import("./inHouse/access.ts");
+    const { requireRoleSet } = await import("../_shared/productAdmin.ts");
+    const desk = await requireRoleSet(c, CONCIERGE_ROLES);
+    if (desk instanceof Response) return desk;
+    const { applyConciergeOrderStatus } = await import("./inHouse/applyStatus.ts");
+    const moved = await applyConciergeOrderStatus(getServiceSupabase(), {
+      orderId: id,
+      status: String(status || ""),
+      actorId: desk.id,
+      notes: notes ? String(notes) : null,
+    });
+    if (!moved.ok) return c.json({ error: moved.error }, moved.status as 400);
+    return c.json({ ok: true });
   }
   
   // Merchant writes use service role — orders UPDATE RLS WITH CHECK subqueries
@@ -2855,6 +2912,7 @@ import { registerSupportAdminRoutes } from "./admin/supportRoutes.ts";
 import { registerOrderChatRoutes } from "./orderChat.ts";
 import { registerAdminOrderChatRoutes } from "./admin/orderChatRoutes.ts";
 registerCustomerOrderRoutes(app, { getSupabase, getServiceSupabase });
+registerInHouseRoutes(app, { getServiceSupabase });
 registerRushMoneyRoutes(app, { getSupabase, getServiceSupabase });
 registerOrderChatRoutes(app, { getSupabase, getServiceSupabase, getPublicServiceSupabase });
 registerAdminOrderChatRoutes(app);

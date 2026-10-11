@@ -182,6 +182,12 @@ jobs:
           supabase/functions/_shared/rushMoney/wipayContract.test.ts
           supabase/functions/_shared/rushMoney/rushMoney.test.ts
           supabase/functions/_shared/rushMoney/postJournal.test.ts
+          supabase/functions/_shared/rushMoney/journalLines.inHouse.test.ts
+          supabase/functions/delivery/inHouse/taskMachine.test.ts
+          supabase/functions/delivery/inHouse/pricing.test.ts
+          supabase/functions/delivery/inHouse/deskRules.test.ts
+          supabase/functions/delivery/inHouse/dispatchOrigin.test.ts
+          tools/in-house-worker/guard.test.ts
 
       - name: Typecheck fleet Rush spine
         env:

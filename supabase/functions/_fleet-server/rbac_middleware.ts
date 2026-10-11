@@ -81,7 +81,7 @@ const VALID_ROLES = new Set<string>([
 /** Product-scoped admin roles — must not override platform superadmin for RBAC. */
 const PRODUCT_ADMIN_ROLES = new Set([
   'fleet_admin', 'fleet_ops', 'driver_admin', 'driver_ops',
-  'rides_admin', 'rides_ops', 'dash_admin', 'dash_ops',
+  'rides_admin', 'rides_ops', 'dash_admin', 'dash_ops', 'dash_concierge',
   'enterprise_admin', 'enterprise_ops',
 ]);
 

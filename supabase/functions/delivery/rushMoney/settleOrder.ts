@@ -1,5 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { cashSettleLines, settleLines } from "../../_shared/rushMoney/journalLines.ts";
+import { cashSettleLines, inHouseSettleLines, settleLines } from "../../_shared/rushMoney/journalLines.ts";
 import type { DashOrderFeeFields } from "../../_shared/dashMoneySplit.ts";
 
 // deno-lint-ignore no-explicit-any
@@ -39,9 +39,27 @@ export async function settleDeliveredOrder(sb: Sb, orderId: string): Promise<voi
     await publicDb().rpc("rush_transition_money_state", { p_order_id: orderId, p_to: "settled" });
     return;
   }
-  const lines = cash
-    ? cashSettleLines(order as DashOrderFeeFields, orderId, collectedMajor || Number(order.total || 0))
-    : settleLines(order as DashOrderFeeFields, orderId, collectedMajor);
+  const { data: merchantMode } = await sb.from("merchants").select("procurement_mode").eq("id", order.merchant_id).maybeSingle();
+  const inHouse = String(merchantMode?.procurement_mode || "") === "in_house";
+  let lines;
+  if (inHouse) {
+    if (cash) {
+      console.error("[rush-money] in-house cash settle refused", orderId);
+      return;
+    }
+    const { data: task } = await sb.from("procurement_tasks").select("actual_total_minor, state").eq("order_id", orderId).maybeSingle();
+    const foodMinor = Number(task?.actual_total_minor || 0);
+    if (!foodMinor) {
+      console.error("[rush-money] in-house settle missing receipt total", orderId);
+      return;
+    }
+    lines = inHouseSettleLines(order as DashOrderFeeFields, orderId, collectedMajor, foodMinor);
+    await sb.from("procurement_tasks").update({ state: "closed", updated_at: new Date().toISOString() }).eq("order_id", orderId);
+  } else {
+    lines = cash
+      ? cashSettleLines(order as DashOrderFeeFields, orderId, collectedMajor || Number(order.total || 0))
+      : settleLines(order as DashOrderFeeFields, orderId, collectedMajor);
+  }
   const db = publicDb();
   const { error } = await db.rpc("rush_post_journal", {
     p_idempotency_key: `settle:${orderId}`,

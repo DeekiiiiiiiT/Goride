@@ -157,12 +157,16 @@ export function refundUnwindLines(input: {
   foodMinor: number;
   courierMinor: number;
   platformMinor: number;
+  /** Roam bought the food. The food share is a platform cost, not a restaurant payable. */
+  inHouse?: boolean;
 }): JournalLine[] {
   const lines: JournalLine[] = [
     { kind: "gateway_clearing", party_type: "platform", party_id: null, component: "wipay", amount_minor: -(input.foodMinor + input.courierMinor + input.platformMinor) },
   ];
   if (input.foodMinor) {
-    lines.push({ kind: "merchant_payable", party_type: "merchant", party_id: input.merchantId, component: "food", amount_minor: input.foodMinor });
+    lines.push(input.inHouse
+      ? { kind: "platform_cost", party_type: "platform", party_id: null, component: "procurement_refund", amount_minor: input.foodMinor }
+      : { kind: "merchant_payable", party_type: "merchant", party_id: input.merchantId, component: "food", amount_minor: input.foodMinor });
   }
   if (input.courierMinor) {
     lines.push({ kind: "courier_earnings", party_type: "courier", party_id: input.courierId, component: "delivery", amount_minor: input.courierMinor });
@@ -175,4 +179,64 @@ export function refundUnwindLines(input: {
     lines.push({ kind: "platform_cost", party_type: "platform", party_id: null, component: "refund_rounding", amount_minor: -sum });
   }
   return lines.filter((line) => line.amount_minor !== 0);
+}
+
+/** Roam paid the restaurant with the company card. Food sits as prepaid until delivery. */
+export function procurementPurchaseLines(orderId: string, actualMinor: number, cardLast4: string): JournalLine[] {
+  const amount = Math.round(actualMinor);
+  return [
+    { kind: "vendor_prepaid", party_type: "order", party_id: orderId, component: "food", amount_minor: amount },
+    { kind: "procurement_card_payable", party_type: "platform", party_id: null, component: `card:${cardLast4}`, amount_minor: -amount },
+  ];
+}
+
+/**
+ * In-House delivery settlement. Roam's line is the residual on purpose.
+ * Partner settlement must never do this: there the restaurant leg is not the residual.
+ * Do not credit merchant_payable. The restaurant was already paid on the company card.
+ */
+export function inHouseSettleLines(
+  order: DashOrderFeeFields,
+  orderId: string,
+  captureMajor: number,
+  actualFoodMinor: number,
+): JournalLine[] {
+  const split = computeDashCaptureSplit(order, captureMajor);
+  const capture = toMinor(split.captureAmount);
+  const courier = toMinor(split.courierPayable);
+  const food = Math.round(actualFoodMinor);
+  const platform = capture - food - courier;
+  const lines: JournalLine[] = [
+    { kind: "order_clearing", party_type: "order", party_id: orderId, component: "holding", amount_minor: capture },
+    { kind: "vendor_prepaid", party_type: "order", party_id: orderId, component: "food", amount_minor: -food },
+    { kind: "courier_earnings", party_type: "courier", party_id: split.courierId, component: "delivery", amount_minor: -courier },
+  ];
+  if (platform !== 0) {
+    lines.push({
+      kind: platform > 0 ? "platform_revenue" : "platform_cost",
+      party_type: "platform",
+      party_id: null,
+      component: platform > 0 ? "fees" : "procurement_loss",
+      amount_minor: -platform,
+    });
+  }
+  return lines.filter((line) => line.amount_minor !== 0);
+}
+
+/** Bank statement line matched to the purchase. Clears the card payable. */
+export function procurementCardReconLines(actualMinor: number, cardLast4: string): JournalLine[] {
+  const amount = Math.round(actualMinor);
+  return [
+    { kind: "procurement_card_payable", party_type: "platform", party_id: null, component: `card:${cardLast4}`, amount_minor: amount },
+    { kind: "bank", party_type: "platform", party_id: null, component: `card:${cardLast4}`, amount_minor: -amount },
+  ];
+}
+
+/** Food was bought and cannot be recovered. The cost becomes a Roam loss. */
+export function procurementWriteoffLines(orderId: string, actualMinor: number): JournalLine[] {
+  const amount = Math.round(actualMinor);
+  return [
+    { kind: "platform_cost", party_type: "platform", party_id: null, component: "procurement_loss", amount_minor: amount },
+    { kind: "vendor_prepaid", party_type: "order", party_id: orderId, component: "food", amount_minor: -amount },
+  ];
 }

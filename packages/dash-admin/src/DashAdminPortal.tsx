@@ -2,6 +2,7 @@ import React, { Suspense, useEffect, useState } from 'react';
 import { Routes, Route, Outlet, useLocation, useNavigate, Navigate } from 'react-router-dom';
 import {
   supabaseDashAdmin as supabase,
+  getJwtRoles,
   hasProductAdminRole,
   jwtPrimaryRole,
   usePermissions,
@@ -45,6 +46,15 @@ import { ComplianceManager } from './pages/couriers/ComplianceManager';
 import { CourierPresenceManager } from './pages/couriers/CourierPresenceManager';
 import { DeliveryLedgerPage } from './pages/couriers/DeliveryLedgerPage';
 import { LiveOpsPage } from './pages/liveops/LiveOpsPage';
+import { InHouseQueuePage } from './pages/inhouse/InHouseQueuePage';
+import { InHouseWorkspacePage } from './pages/inhouse/InHouseWorkspacePage';
+import {
+  InHouseCardsPage,
+  InHouseExceptionsPage,
+  InHouseMenuPage,
+  InHouseReportsPage,
+  InHouseStoresPage,
+} from './pages/inhouse/InHouseDeskPages';
 import { UsersAuditPage } from './pages/users/UsersAuditPage';
 import { MerchantStaffDirectoryPage } from './pages/users/MerchantStaffDirectoryPage';
 import { useAdminSessionPolicy } from './hooks/useAdminSessionPolicy';
@@ -152,7 +162,9 @@ export function DashAdminPortal() {
 
   const hasJwtAccess =
     !!session &&
-    (hasProductAdminRole(session.user, 'dash') || hasProductAdminRole(session.user, 'courier'));
+    (hasProductAdminRole(session.user, 'dash') ||
+      hasProductAdminRole(session.user, 'courier') ||
+      getJwtRoles(session.user).includes('dash_concierge'));
   const hasDbAccess = !!session && !permsLoading && hasPermission('dash.portal.access');
   const accessResolved = !session || hasJwtAccess || !permsLoading;
   const hasAccess = hasJwtAccess || hasDbAccess;
@@ -207,6 +219,13 @@ export function DashAdminPortal() {
               <Route path=":id" element={<MerchantDetailPage />} />
             </Route>
             <Route path="live-ops" element={<LiveOpsPage />} />
+            <Route path="in-house" element={<InHouseQueuePage />} />
+            <Route path="in-house/task/:id" element={<InHouseWorkspacePage />} />
+            <Route path="in-house/exceptions" element={<InHouseExceptionsPage />} />
+            <Route path="in-house/stores" element={<InHouseStoresPage />} />
+            <Route path="in-house/menu" element={<InHouseMenuPage />} />
+            <Route path="in-house/cards" element={<InHouseCardsPage />} />
+            <Route path="in-house/reports" element={<InHouseReportsPage />} />
             <Route path="orders" element={<OrdersListPage />} />
             <Route path="orders/:id" element={<OrderDetailPage />} />
             <Route path="couriers" element={<Navigate to="/users?persona=courier" replace />} />

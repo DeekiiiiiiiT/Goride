@@ -957,8 +957,18 @@ export function registerRushMoneyRoutes(app: Hono, deps: Deps) {
       });
     }
     if (outcome === "lost" && minor > 0) {
+      let merchantIsInHouse = false;
+      if (fault === "merchant" && body.merchantId) {
+        const { data: merchantMode } = await deps.getServiceSupabase().from("merchants")
+          .select("procurement_mode")
+          .eq("id", body.merchantId)
+          .maybeSingle();
+        merchantIsInHouse = String(merchantMode?.procurement_mode || "") === "in_house";
+      }
       const charge = fault === "merchant" && body.merchantId
-        ? { kind: "merchant_receivable", party_type: "merchant", party_id: body.merchantId, component: "fault", amount_minor: minor }
+        ? (merchantIsInHouse
+          ? { kind: "platform_cost", party_type: "platform", party_id: null, component: "procurement_refund", amount_minor: minor }
+          : { kind: "merchant_receivable", party_type: "merchant", party_id: body.merchantId, component: "fault", amount_minor: minor })
         : fault === "courier" && body.courierId
           ? { kind: "courier_earnings", party_type: "courier", party_id: body.courierId, component: "delivery", amount_minor: minor }
           : { kind: "platform_cost", party_type: "platform", party_id: null, component: "subsidy", amount_minor: minor };
@@ -1084,6 +1094,10 @@ export function registerRushMoneyRoutes(app: Hono, deps: Deps) {
           });
           if (!posted.error) {
             backfilled += 1;
+            if (txn.order_id) {
+              const { ensureProcurementTask } = await import("../inHouse/createTask.ts");
+              await ensureProcurementTask(deps.getServiceSupabase(), String(txn.order_id));
+            }
             continue;
           }
         }
@@ -1156,16 +1170,30 @@ export function registerRushMoneyRoutes(app: Hono, deps: Deps) {
       else mismatches += 1;
     }
     const summary = { mismatches, backfilled, captureFound, settleFound, settleFixed, restaurantsToppedUp };
+    const inHouseViews = [
+      "v_in_house_placed_without_purchase_journal",
+      "v_in_house_vendor_prepaid_open",
+      "v_in_house_card_unmatched_7d",
+      "v_in_house_merchant_payable",
+      "v_in_house_variance_outliers",
+      "v_in_house_paid_without_task",
+    ];
+    const inHouse: Record<string, number> = {};
+    for (const name of inHouseViews) {
+      const { count } = await deps.getServiceSupabase().from(name).select("*", { count: "exact", head: true });
+      inHouse[name] = count || 0;
+      if ((count || 0) > 0) mismatches += 1;
+    }
     const { error: reconError } = await db.schema("rush_money").from("recon_runs").insert({
       capture_found: captureFound,
       settle_found: settleFound,
       settle_fixed: settleFixed,
       mismatches,
       backfilled,
-      detail: summary,
+      detail: { ...summary, mismatches, inHouse },
     });
     if (reconError) console.error("[rush-money] recon run", reconError.message);
-    return c.json(summary);
+    return c.json({ ...summary, mismatches, inHouse });
   });
 
   app.get("/admin/rush-money/orders/:id/evidence", async (c) => {

@@ -27,7 +27,8 @@ export type ProductAdminRole =
   | 'haul_admin'      // Full Roam Haul admin access
   | 'haul_ops'        // Roam Haul operations
   | 'courier_admin'   // Full Dash Courier admin access
-  | 'courier_ops';    // Dash Courier operations
+  | 'courier_ops'
+  | 'dash_concierge';    // In-House buyer desk
 
 /** All roles that can access product admin portals */
 export type AdminRole = typeof PLATFORM_ROLES[number] | ProductAdminRole;
@@ -108,6 +109,10 @@ export const PRODUCT_ROLE_META: Record<ProductAdminRole, { label: string; descri
   dash_ops: {
     label: 'Dash Operations',
     description: 'Manage merchants and orders in Roam Rush',
+  },
+  dash_concierge: {
+    label: 'In-House Buyer',
+    description: 'Place In-House orders. Cannot refund, edit prices, cards, or markup.',
   },
   rides_admin: {
     label: 'Rides Admin',

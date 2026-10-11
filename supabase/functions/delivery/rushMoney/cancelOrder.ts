@@ -1,6 +1,6 @@
 /** The only way an order becomes cancelled. */
-import { quoteCancel, type CancelQuote } from "../../_shared/rushMoney/cancelPolicy.ts";
-import { codShortLines, settleLines } from "../../_shared/rushMoney/journalLines.ts";
+import { quoteCancel, quoteInHouseCancel, type CancelQuote } from "../../_shared/rushMoney/cancelPolicy.ts";
+import { codShortLines, procurementWriteoffLines, settleLines } from "../../_shared/rushMoney/journalLines.ts";
 import { postRushJournal, publicJournalClient, type JournalRpc } from "../../_shared/rushMoney/postJournal.ts";
 import { reverseOrderOutputTax } from "../../_shared/gctLedger.ts";
 import { notifyCustomerOrderStatus } from "../../_shared/dashOrderSms.ts";
@@ -32,13 +32,23 @@ export async function cancelOrder(
   }
 
   const tender = String(order.payment_method || "") === "cash" ? "cod" : "card";
-  const quote = quoteCancel({
-    order,
-    actor: input.actor,
-    reason: input.reason,
-    protocolValidated: input.protocolValidated,
-    tender,
-  });
+  const { data: merchantMode } = await sb.from("merchants").select("procurement_mode").eq("id", order.merchant_id).maybeSingle();
+  const inHouse = String(merchantMode?.procurement_mode || "") === "in_house";
+  const { data: procurement } = inHouse
+    ? await sb.from("procurement_tasks").select("id, state, actual_total_minor").eq("order_id", input.orderId).maybeSingle()
+    : { data: null };
+  const { foodWasPurchased } = await import("../inHouse/orderStatus.ts");
+  const foodPurchased = Boolean(procurement && foodWasPurchased(String(procurement.state)));
+  const deskFault = /desk|unstaffed|platform/.test(input.reason.toLowerCase());
+  const quote = inHouse
+    ? quoteInHouseCancel({ order, foodPurchased, deskFault })
+    : quoteCancel({
+      order,
+      actor: input.actor,
+      reason: input.reason,
+      protocolValidated: input.protocolValidated,
+      tender,
+    });
 
   if (quote.redispatch) {
     return { ok: true, order, quote, review: false };
@@ -114,7 +124,19 @@ export async function cancelOrder(
     }
     return lines;
   };
-  const keepCard = tender === "card"
+  if (inHouse && foodPurchased && Number(procurement?.actual_total_minor || 0) > 0) {
+    await postRushJournal(books, {
+      ...journalBase,
+      p_idempotency_key: `procure-writeoff:${input.orderId}`,
+      p_event_type: "procurement_writeoff",
+      p_lines: procurementWriteoffLines(input.orderId, Number(procurement.actual_total_minor)),
+    });
+    await sb.from("procurement_tasks").update({ state: "abandoned", updated_at: now }).eq("order_id", input.orderId);
+  } else if (inHouse && procurement?.id) {
+    await sb.from("procurement_tasks").update({ state: "abandoned", updated_at: now }).eq("id", procurement.id);
+  }
+
+  const keepCard = !inHouse && tender === "card"
     && quote.customerRefundJmd === 0
     && quote.merchantReceivesJmd > 0
     && ["paid", "refund_pending"].includes(String(order.payment_status || ""));
@@ -144,7 +166,7 @@ export async function cancelOrder(
     });
   }
 
-  if (!keepCard && quote.merchantReceivesJmd > 0 && order.merchant_id && (quote.customerRefundJmd > 0 || tender === "cod")) {
+  if (!inHouse && !keepCard && quote.merchantReceivesJmd > 0 && order.merchant_id && (quote.customerRefundJmd > 0 || tender === "cod")) {
     const minor = Math.round(quote.merchantReceivesJmd * 100);
     await postRushJournal(books, {
       ...journalBase,

@@ -18,6 +18,7 @@ const VALID_ROLES = new Set([
   "haul_ops",
   "courier_admin",
   "courier_ops",
+  "dash_concierge",
   "fleet_admin",
   "fleet_ops",
   "enterprise_admin",

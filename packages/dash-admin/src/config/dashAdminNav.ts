@@ -20,6 +20,7 @@ import {
   DollarSign,
   Tag,
   Library,
+  ShoppingBag,
 } from 'lucide-react';
 import type { AdminConfig } from '@roam/admin-core';
 import { isCourierOnlyRole } from '../utils/isCourierOnlyRole';
@@ -33,6 +34,7 @@ export const ALLOWED_DASH_ADMIN_ROLES = [
   'dash_ops',
   'courier_admin',
   'courier_ops',
+  'dash_concierge',
 ];
 
 /** Nav ids visible to courier-only roles (courier_admin / courier_ops) */
@@ -51,6 +53,19 @@ export const DASH_ADMIN_CONFIG: AdminConfig = {
   title: 'Roam Rush',
   subtitle: 'Ops Console',
   sections: [
+    {
+      id: 'in-house',
+      label: 'In-House',
+      icon: ShoppingBag,
+      children: [
+        { id: 'in-house-queue', label: 'Queue', icon: Radio },
+        { id: 'in-house-exceptions', label: 'Exceptions', icon: Activity },
+        { id: 'in-house-stores', label: 'Stores', icon: Store },
+        { id: 'in-house-menu', label: 'Menu prices', icon: ClipboardList },
+        { id: 'in-house-cards', label: 'Cards and spend', icon: Wallet },
+        { id: 'in-house-reports', label: 'Reports', icon: ScrollText },
+      ],
+    },
     {
       id: 'merchants',
       label: 'Merchants',
@@ -139,6 +154,19 @@ const COURIER_ALLOWED_SECTION_CHILD_IDS = new Set([
  * Platform + dash roles get the full config unchanged.
  */
 export function filterConfigForRole(role: string | null | undefined): AdminConfig {
+  if (role === 'dash_concierge') {
+    return {
+      ...DASH_ADMIN_CONFIG,
+      sections: DASH_ADMIN_CONFIG.sections
+        .filter((section) => section.id === 'in-house')
+        .map((section) => ({
+          ...section,
+          children: (section.children ?? []).filter((child) => child.id === 'in-house-queue'),
+        })),
+      topNavItems: [],
+      pinSectionsAfter: undefined,
+    };
+  }
   if (!isCourierOnlyRole(role)) return DASH_ADMIN_CONFIG;
   return {
     ...DASH_ADMIN_CONFIG,
@@ -158,6 +186,13 @@ export function filterConfigForRole(role: string | null | undefined): AdminConfi
 /** Map pathname to AdminShell nav id */
 export function pathnameToNavId(pathname: string): string {
   if (pathname === '/' || pathname === '') return 'dashboard';
+  if (pathname.startsWith('/in-house/task/')) return 'in-house-queue';
+  if (pathname.startsWith('/in-house/exceptions')) return 'in-house-exceptions';
+  if (pathname.startsWith('/in-house/stores')) return 'in-house-stores';
+  if (pathname.startsWith('/in-house/menu')) return 'in-house-menu';
+  if (pathname.startsWith('/in-house/cards')) return 'in-house-cards';
+  if (pathname.startsWith('/in-house/reports')) return 'in-house-reports';
+  if (pathname.startsWith('/in-house')) return 'in-house-queue';
   if (pathname.startsWith('/live-ops')) return 'live-ops';
   if (pathname.startsWith('/merchants/onboarding/business-types')) return 'merchants-business-types';
   if (pathname.startsWith('/merchants')) return 'merchants-applications';
@@ -190,6 +225,18 @@ export function pathnameToNavId(pathname: string): string {
 /** Map AdminShell nav id to route path */
 export function navIdToPath(navId: string): string {
   switch (navId) {
+    case 'in-house-queue':
+      return '/in-house';
+    case 'in-house-exceptions':
+      return '/in-house/exceptions';
+    case 'in-house-stores':
+      return '/in-house/stores';
+    case 'in-house-menu':
+      return '/in-house/menu';
+    case 'in-house-cards':
+      return '/in-house/cards';
+    case 'in-house-reports':
+      return '/in-house/reports';
     case 'dashboard':
       return '/';
     case 'live-ops':

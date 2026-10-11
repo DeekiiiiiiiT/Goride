@@ -18,6 +18,7 @@ const ROLE_LEVELS: Record<string, number> = {
   dash_ops: 700,
   courier_ops: 700,
   support_agent: 600,
+  dash_concierge: 500,
   platform_analyst: 500,
 };
 

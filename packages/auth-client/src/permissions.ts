@@ -35,6 +35,7 @@ export type Role =
   | 'haul_ops'
   | 'courier_admin'
   | 'courier_ops'
+  | 'dash_concierge'
   | 'fleet_admin'
   | 'fleet_ops'
   | 'enterprise_admin'
@@ -147,6 +148,12 @@ export const ROLE_META: Record<Role, RoleMeta> = {
     level: 600,
     label: 'Courier Operations',
     description: 'Manage courier compliance and delivery support tools.',
+    tier: 'platform',
+  },
+  dash_concierge: {
+    level: 500,
+    label: 'In-House Buyer',
+    description: 'Place In-House orders from the ops desk.',
     tier: 'platform',
   },
   fleet_admin: {
@@ -457,6 +464,7 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
   haul_ops: [],
   courier_admin: [],
   courier_ops: [],
+  dash_concierge: [],
 
   // Customer
   fleet_owner: ALL_CUSTOMER_PERMISSIONS,

@@ -54,14 +54,14 @@ async function assertCanGrantRole(adminUser: ProductAdminUser, targetRoleName: s
 }
 
 const MANAGED_ROLE_NAMES = [
-  "dash_admin", "dash_ops", "courier_admin", "courier_ops", "support_agent", "identity_admin",
+  "dash_admin", "dash_ops", "dash_concierge", "courier_admin", "courier_ops", "support_agent", "identity_admin",
 ] as const;
 const PLATFORM_GRANT_ROLES = [
   "platform_owner", "platform_support", "platform_analyst", "identity_admin", "superadmin",
 ] as const;
 const LISTABLE_CONSOLE_ROLES = [
   "platform_owner", "platform_support", "platform_analyst", "identity_admin",
-  "dash_admin", "dash_ops", "courier_admin", "courier_ops", "support_agent", "superadmin",
+  "dash_admin", "dash_ops", "dash_concierge", "courier_admin", "courier_ops", "support_agent", "superadmin",
 ] as const;
 const MANAGED_ROLE_SET = new Set<string>([...MANAGED_ROLE_NAMES, ...PLATFORM_GRANT_ROLES]);
 
