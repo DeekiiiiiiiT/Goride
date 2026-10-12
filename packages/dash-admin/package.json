@@ -20,6 +20,8 @@
     "@roam/dash-coverage": "workspace:*",
     "@roam/dash-pricing": "workspace:*",
     "@roam/location": "workspace:*",
+    "@roam/merchant-ops": "workspace:*",
+    "@roam/platform-ops-ui": "workspace:*",
     "@roam/play-store-launch": "workspace:*",
     "@roam/spatial": "workspace:*",
     "@roam/types": "workspace:*",

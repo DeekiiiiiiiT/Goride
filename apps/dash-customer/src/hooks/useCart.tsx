@@ -1,6 +1,9 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 
+import type { PizzaPick } from '@roam/merchant-ops/pizzaMenu';
+
 interface ModifierSelection {
+  id?: string;
   name: string;
   priceAdjustment: number;
 }
@@ -18,6 +21,7 @@ export interface CartItem {
   price: number;
   quantity: number;
   options?: ItemOption[];
+  pizza?: PizzaPick;
   imageUrl?: string;
 }
 
@@ -42,12 +46,13 @@ const CART_STORAGE_KEY = 'roam-dash-cart';
 
 const generateCartItemId = () => Math.random().toString(36).substring(2, 11);
 
-const getOptionsHash = (options?: ItemOption[]) => {
-  if (!options || options.length === 0) return '';
-  return JSON.stringify(options.map(o => ({
+const getOptionsHash = (options?: ItemOption[], pizza?: PizzaPick) => {
+  const pizzaKey = pizza ? JSON.stringify(pizza) : '';
+  if ((!options || options.length === 0) && !pizzaKey) return '';
+  return JSON.stringify(options?.map(o => ({
     name: o.name,
     selections: o.selections.map(s => s.name).sort(),
-  })));
+  })) || []) + pizzaKey;
 };
 
 type StoredCart = {
@@ -114,9 +119,9 @@ export function CartProvider({ children }: { children: ReactNode }) {
     }
 
     setItems(prev => {
-      const newOptionsHash = getOptionsHash(item.options);
+      const newOptionsHash = getOptionsHash(item.options, item.pizza);
       const existing = prev.find(i =>
-        i.itemId === item.itemId && getOptionsHash(i.options) === newOptionsHash
+        i.itemId === item.itemId && getOptionsHash(i.options, i.pizza) === newOptionsHash
       );
 
       if (existing) {

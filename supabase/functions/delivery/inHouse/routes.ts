@@ -17,8 +17,18 @@ import {
 import { postRushJournal, publicJournalClient } from "../../_shared/rushMoney/postJournal.ts";
 import { ADMIN_ROLES, CONCIERGE_ROLES, OPS_ROLES, hasAnyRole } from "./access.ts";
 import { cartPayload, manualChecklist } from "./adapter.ts";
-import { canReplaceReceipt, partnerConversionBlocked, pickStatementTask } from "./deskRules.ts";
-import { jamaicaDayStartIso, TWO_PERSON_MINOR, withinAbsorbCap } from "./pricing.ts";
+import {
+  abandonMoment,
+  canReplaceReceipt,
+  lastClaimer,
+  partnerConversionBlocked,
+  pickStatementTask,
+  purchaseRecording,
+  receiptFollowsAbandon,
+} from "./deskRules.ts";
+import { customerPriceFromCost, jamaicaDayStartIso, TWO_PERSON_MINOR, weekOfferWindow, withinAbsorbCap } from "./pricing.ts";
+import { listChoiceLists, saveChoiceList, stampSectionChoiceLists } from "../menuChoiceLibrary.ts";
+import { cheapestPizzaPrice, parsePizzaMenu, parsePizzaRecipe, validatePizzaMenu } from "../../../../packages/merchant-ops/src/pizzaMenu.ts";
 import { runInHouseSweep, dispatchAtFromReady } from "./sweep.ts";
 import { foodWasPurchased, transitionOrThrow } from "./orderStatus.ts";
 import { applyConciergeOrderStatus } from "./applyStatus.ts";
@@ -27,7 +37,7 @@ import { retryAllowed } from "./taskMachine.ts";
 // deno-lint-ignore no-explicit-any
 type Sb = SupabaseClient | { from: (table: string) => any; schema?: (name: string) => any };
 
-type Admin = { id: string; roles: string[] };
+type Admin = { id: string; roles: string[]; email?: string };
 
 function gate(admin: Admin, allowed: Set<string>): Response | null {
   if (hasAnyRole(admin.roles, allowed)) return null;
@@ -52,8 +62,16 @@ async function logEvent(sb: Sb, taskId: string, from: string | null, to: string,
     to_state: to,
     actor_id: actor?.id ?? null,
     actor_type: actor ? "concierge" : "system",
-    payload,
+    payload: { ...payload, ...(actor?.email ? { actor_email: actor.email } : {}) },
   });
+}
+
+async function taskEvents(sb: Sb, taskId: string) {
+  const { data, error } = await sb.from("procurement_events")
+    .select("to_state, actor_id, payload, at")
+    .eq("task_id", taskId);
+  if (error) return { ok: false as const, error: error.message };
+  return { ok: true as const, events: data || [] };
 }
 
 async function updateIfState(sb: Sb, id: string, fromState: string, patch: Record<string, unknown>) {
@@ -83,6 +101,77 @@ function minuteToTime(minute: number): string {
   return `${String(hours).padStart(2, "0")}:${String(mins).padStart(2, "0")}:00`;
 }
 
+type DayInput = { dayOfWeek: number; open: string; close: string; isClosed: boolean };
+
+function normalizeWeek(raw: unknown): DayInput[] | null {
+  if (!Array.isArray(raw)) return null;
+  const byDay = new Map<number, DayInput>();
+  for (const entry of raw) {
+    const row = entry as { dayOfWeek?: number; day_of_week?: number; open?: string; close?: string; isClosed?: boolean; is_closed?: boolean };
+    const day = Number(row.dayOfWeek ?? row.day_of_week);
+    if (!Number.isInteger(day) || day < 0 || day > 6) continue;
+    byDay.set(day, {
+      dayOfWeek: day,
+      open: String(row.open || "11:00").slice(0, 5),
+      close: String(row.close || "21:00").slice(0, 5),
+      isClosed: Boolean(row.isClosed ?? row.is_closed),
+    });
+  }
+  if (!byDay.size) return null;
+  return [0, 1, 2, 3, 4, 5, 6].map((day) => byDay.get(day) || { dayOfWeek: day, open: "11:00", close: "21:00", isClosed: false });
+}
+
+function defaultWeek(): DayInput[] {
+  return [0, 1, 2, 3, 4, 5, 6].map((day) => ({ dayOfWeek: day, open: "11:00", close: "21:00", isClosed: false }));
+}
+
+async function saveWeek(sb: Sb, merchantId: string, week: DayInput[]) {
+  await sb.from("merchant_hours").delete().eq("merchant_id", merchantId);
+  const { error } = await sb.from("merchant_hours").insert(week.map((day) => ({
+    merchant_id: merchantId,
+    day_of_week: day.dayOfWeek,
+    open_time: minuteToTime(Number(day.open.slice(0, 2)) * 60 + Number(day.open.slice(3, 5))),
+    close_time: minuteToTime(Number(day.close.slice(0, 2)) * 60 + Number(day.close.slice(3, 5))),
+    is_closed: day.isClosed,
+  })));
+  return error;
+}
+
+function pricedOptions(options: unknown, markupBps: number) {
+  if (!Array.isArray(options)) return [];
+  return options.map((group) => {
+    const row = group as Record<string, unknown>;
+    const nested = Array.isArray(row.options) ? row.options : [];
+    const name = String(row.name || row.title || "Options");
+    const maxRaw = Number(row.maxSelections);
+    const maxSelections = Number.isFinite(maxRaw) ? maxRaw : (row.required ? 1 : 0);
+    return {
+      id: String(row.id || crypto.randomUUID()),
+      name,
+      title: String(row.title || name),
+      kind: row.kind === "included" || row.kind === "extra" || row.kind === "priced" ? row.kind : undefined,
+      ...(row.kind === "priced" || row.priceMode === "replace" ? { priceMode: "replace" } : {}),
+      required: Boolean(row.required),
+      minSelections: row.required ? 1 : 0,
+      maxSelections,
+      ...(row.libraryGroupId ? { libraryGroupId: String(row.libraryGroupId) } : {}),
+      options: nested.map((option) => {
+        const item = option as Record<string, unknown>;
+        const extra = Math.max(0, Number(item.priceAdjustment) || 0);
+        const label = String(item.name || item.label || "Option");
+        return {
+          id: String(item.id || crypto.randomUUID()),
+          name: label,
+          label,
+          priceAdjustment: extra,
+          marketplaceAdjustment: customerPriceFromCost(extra, markupBps),
+          isAvailable: item.isAvailable !== false,
+        };
+      }),
+    };
+  });
+}
+
 export function registerInHouseRoutes(app: Hono, deps: { getServiceSupabase: () => SupabaseClient }) {
   app.post("/internal/in-house/sweep", async (c) => {
     const auth = await authorizeCronOrServiceRole(c.req.raw);
@@ -96,14 +185,15 @@ export function registerInHouseRoutes(app: Hono, deps: { getServiceSupabase: () 
     if (admin instanceof Response) return admin;
     const sb = deps.getServiceSupabase();
     const { data, error } = await sb.from("procurement_tasks")
-      .select("id, order_id, merchant_id, state, claimed_by, pickup_code, expected_cost_minor, actual_total_minor, exception_code, sla_due_at, sla_warned_at, created_at, external_ready_eta, attempt, second_approved_at, chat_seen_at")
+      .select("id, order_id, merchant_id, state, claimed_by, pickup_code, expected_cost_minor, actual_total_minor, exception_code, sla_due_at, sla_warned_at, sla_paged_at, created_at, external_ready_eta, attempt, second_approved_at, chat_seen_at")
       .not("state", "in", "(closed,abandoned)")
       .order("created_at", { ascending: true })
       .limit(200);
     if (error) return c.json({ error: error.message }, 500);
+    const taskIds = (data || []).map((row) => String(row.id));
     const orderIds = (data || []).map((row) => String(row.order_id));
     const merchantIds = [...new Set((data || []).map((row) => String(row.merchant_id)))];
-    const [{ data: orders }, { data: merchants }, { data: messages }] = await Promise.all([
+    const [{ data: orders }, { data: merchants }, { data: messages }, claimEventsResult] = await Promise.all([
       orderIds.length
         ? sb.from("orders").select("id, order_number, status, payment_status, money_state, total, items, customer_id").in("id", orderIds)
         : Promise.resolve({ data: [] }),
@@ -117,9 +207,20 @@ export function registerInHouseRoutes(app: Hono, deps: { getServiceSupabase: () 
           .eq("pair", "customer_merchant")
           .eq("sender_role", "customer")
         : Promise.resolve({ data: [] }),
+      taskIds.length
+        ? sb.from("procurement_events").select("task_id, to_state, actor_id, payload, at").in("task_id", taskIds).in("to_state", ["claimed", "placing"])
+        : Promise.resolve({ data: [], error: null }),
     ]);
+    if (claimEventsResult.error) return c.json({ error: claimEventsResult.error.message }, 500);
     const orderById = new Map((orders || []).map((row) => [String(row.id), row]));
     const merchantById = new Map((merchants || []).map((row) => [String(row.id), row]));
+    const eventsByTask = new Map<string, Array<{ to_state?: string; actor_id?: string; payload?: { actor_email?: string }; at?: string }>>();
+    for (const event of claimEventsResult.data || []) {
+      const id = String(event.task_id);
+      const list = eventsByTask.get(id) || [];
+      list.push(event);
+      eventsByTask.set(id, list);
+    }
     const tasks = (data || []).map((task) => {
       const order = orderById.get(String(task.order_id)) as { items?: unknown[]; total?: number; order_number?: string; payment_status?: string; money_state?: string; status?: string } | undefined;
       const items = Array.isArray(order?.items) ? order.items : [];
@@ -135,7 +236,8 @@ export function registerInHouseRoutes(app: Hono, deps: { getServiceSupabase: () 
         paymentStatus: order?.payment_status ?? "",
         moneyState: order?.money_state ?? "",
         customerTotal: order?.total ?? 0,
-        itemCount: items.reduce((sum, item) => sum + Math.max(1, Number((item as { quantity?: number }).quantity) || 1), 0),
+        itemCount: items.reduce((sum: number, item) => sum + Math.max(1, Number((item as { quantity?: number }).quantity) || 1), 0),
+        buyerName: lastClaimer(eventsByTask.get(String(task.id)) || [])?.email || null,
         unreadCount,
         needsApproval: Number(task.expected_cost_minor) > TWO_PERSON_MINOR && !task.second_approved_at,
       };
@@ -153,6 +255,47 @@ export function registerInHouseRoutes(app: Hono, deps: { getServiceSupabase: () 
     });
     if (error) return c.json({ error: error.message }, 500);
     return c.json({ ok: true });
+  });
+
+  app.get("/admin/in-house/audience", async (c) => {
+    const admin = await requireDesk(c, ADMIN_ROLES);
+    if (admin instanceof Response) return admin;
+    const sb = deps.getServiceSupabase();
+    const [{ data: customers }, { data: phones }] = await Promise.all([
+      sb.from("in_house_beta_customers").select("customer_id, email, added_at").order("added_at"),
+      sb.from("in_house_alert_phones").select("phone").order("phone"),
+    ]);
+    return c.json({ customers: customers || [], phones: (phones || []).map((row) => String(row.phone)) });
+  });
+
+  app.post("/admin/in-house/audience", async (c) => {
+    const admin = await requireDesk(c, ADMIN_ROLES);
+    if (admin instanceof Response) return admin;
+    const body = await c.req.json().catch(() => ({}));
+    const sb = deps.getServiceSupabase();
+    if (Array.isArray(body.phones)) {
+      const phones = [...new Set(body.phones.map((phone: unknown) => String(phone || "").trim()).filter(Boolean))].slice(0, 2);
+      await sb.from("in_house_alert_phones").delete().neq("phone", "");
+      if (phones.length) {
+        const { error } = await sb.from("in_house_alert_phones").insert(phones.map((phone) => ({ phone })));
+        if (error) return c.json({ error: error.message }, 500);
+      }
+      return c.json({ ok: true, phones });
+    }
+    if (body.remove && body.customerId) {
+      await sb.from("in_house_beta_customers").delete().eq("customer_id", String(body.customerId));
+      return c.json({ ok: true });
+    }
+    const email = String(body.email || "").trim().toLowerCase();
+    if (!email) return c.json({ error: "Enter the customer's email" }, 400);
+    const { data: customer } = await sb.from("customers").select("id, email").ilike("email", email).maybeSingle();
+    if (!customer?.id) return c.json({ error: "No customer account uses that email" }, 404);
+    const { error } = await sb.from("in_house_beta_customers").upsert({
+      customer_id: customer.id,
+      email: String(customer.email || email),
+    });
+    if (error) return c.json({ error: error.message }, 500);
+    return c.json({ ok: true, customerId: customer.id });
   });
 
   app.post("/admin/in-house/tasks/:id/claim", async (c) => {
@@ -281,7 +424,17 @@ export function registerInHouseRoutes(app: Hono, deps: { getServiceSupabase: () 
     const sb = deps.getServiceSupabase();
     const { data: task } = await sb.from("procurement_tasks").select("id, state, claimed_by").eq("id", c.req.param("id")).maybeSingle();
     if (!task) return c.json({ error: "Task not found" }, 404);
-    if (!canReplaceReceipt(String(task.state), task.claimed_by ? String(task.claimed_by) : null, admin.id)) {
+    const loaded = await taskEvents(sb, task.id);
+    if (!loaded.ok) return c.json({ error: loaded.error }, 500);
+    const events = loaded.events;
+    const claimer = lastClaimer(events);
+    if (!canReplaceReceipt({
+      state: String(task.state),
+      claimedBy: task.claimed_by ? String(task.claimed_by) : null,
+      actorId: admin.id,
+      lastClaimerId: claimer?.id || null,
+      isOps: hasAnyRole(admin.roles, OPS_ROLES),
+    })) {
       return c.json({ error: "Only the buyer who is placing this order can change the receipt" }, 403);
     }
     const body = await c.req.json().catch(() => ({}));
@@ -301,7 +454,12 @@ export function registerInHouseRoutes(app: Hono, deps: { getServiceSupabase: () 
     const storage = publicJournalClient();
     const { error } = await storage.storage.from("in-house-receipts").upload(path, bytes, { contentType: mime, upsert: false });
     if (error) return c.json({ error: error.message }, 500);
-    const saved = await updateIfState(sb, task.id, "placing", { receipt_path: path, updated_at: new Date().toISOString() });
+    const now = new Date().toISOString();
+    const saved = await updateIfState(sb, task.id, String(task.state), {
+      receipt_path: path,
+      receipt_uploaded_at: now,
+      updated_at: now,
+    });
     if (!saved.ok) return c.json({ error: "Someone else took this order" }, 409);
     return c.json({ path, scan: scan.clean ? "clean" : "unconfigured" });
   });
@@ -310,7 +468,7 @@ export function registerInHouseRoutes(app: Hono, deps: { getServiceSupabase: () 
     const admin = await requireDesk(c, OPS_ROLES);
     if (admin instanceof Response) return admin;
     const sb = deps.getServiceSupabase();
-    const { data: task } = await sb.from("procurement_tasks").select("id, claimed_by, expected_cost_minor").eq("id", c.req.param("id")).maybeSingle();
+    const { data: task } = await sb.from("procurement_tasks").select("id, state, claimed_by, expected_cost_minor").eq("id", c.req.param("id")).maybeSingle();
     if (!task) return c.json({ error: "Task not found" }, 404);
     if (task.claimed_by === admin.id) return c.json({ error: "A different person must approve this purchase" }, 403);
     if (Number(task.expected_cost_minor) <= TWO_PERSON_MINOR) return c.json({ ok: true, skipped: true });
@@ -318,7 +476,7 @@ export function registerInHouseRoutes(app: Hono, deps: { getServiceSupabase: () 
       second_approved_by: admin.id,
       second_approved_at: new Date().toISOString(),
     }).eq("id", task.id);
-    await logEvent(sb, task.id, null, "claimed", admin, { approval: "second_person" });
+    await logEvent(sb, task.id, String(task.state), String(task.state), admin, { approval: "second_person" });
     return c.json({ ok: true });
   });
 
@@ -329,7 +487,21 @@ export function registerInHouseRoutes(app: Hono, deps: { getServiceSupabase: () 
     const sb = deps.getServiceSupabase();
     const { data: task } = await sb.from("procurement_tasks").select("*").eq("id", c.req.param("id")).maybeSingle();
     if (!task) return c.json({ error: "Task not found" }, 404);
-    if (task.claimed_by !== admin.id && task.state !== "abandoned") return c.json({ error: "Claim this order first" }, 403);
+    const loaded = await taskEvents(sb, task.id);
+    if (!loaded.ok) return c.json({ error: loaded.error }, 500);
+    const events = loaded.events;
+    const claimer = lastClaimer(events);
+    const recording = purchaseRecording({
+      state: String(task.state),
+      actorId: admin.id,
+      claimedBy: task.claimed_by ? String(task.claimed_by) : null,
+      lastClaimerId: claimer?.id || null,
+      isOps: hasAnyRole(admin.roles, OPS_ROLES),
+    });
+    if (recording === "denied") return c.json({ error: "Claim this order first" }, 403);
+    if (String(task.state) === "abandoned" && !receiptFollowsAbandon(task.receipt_uploaded_at, abandonMoment(events))) {
+      return c.json({ error: "Upload the receipt after this order was abandoned" }, 400);
+    }
     const { data: order } = await sb.from("orders").select("id, money_state, merchant_id, status").eq("id", task.order_id).maybeSingle();
     if (String(order?.money_state || "") !== "captured") {
       return c.json({ error: "The customer's payment is not captured" }, 409);
@@ -353,7 +525,8 @@ export function registerInHouseRoutes(app: Hono, deps: { getServiceSupabase: () 
     if (spent + actualMinor > Number(card.daily_limit_minor)) {
       return c.json({ error: "This card is over its daily limit" }, 409);
     }
-    if (Number(task.expected_cost_minor) > TWO_PERSON_MINOR && !task.second_approved_by) {
+    const writeoff = recording === "writeoff" || String(order?.status) === "cancelled";
+    if (!writeoff && Number(task.expected_cost_minor) > TWO_PERSON_MINOR && !task.second_approved_by) {
       return c.json({ error: "A second person must approve this purchase before you buy" }, 409);
     }
     const { data: store } = await sb.from("in_house_stores")
@@ -366,13 +539,16 @@ export function registerInHouseRoutes(app: Hono, deps: { getServiceSupabase: () 
       Number(store?.price_tolerance_bps ?? 1000),
       Number(store?.absorb_cap_minor ?? 50000),
     );
-    if (!absorbed && !task.customer_price_approved_at && task.state !== "abandoned") {
+    if (!writeoff && !absorbed && !task.customer_price_approved_at) {
       return c.json({ error: "The price is above what Roam can absorb. Swap the item or refund the customer." }, 409);
     }
     const readyDate = new Date(readyEta);
     if (!Number.isFinite(readyDate.getTime())) return c.json({ error: "Ready time is not valid" }, 400);
+    const movedOn = writeoff && String(task.state) !== "abandoned" && String(order?.status) !== "cancelled";
+    const purchaseKey = movedOn ? `procure-late:${task.id}:${admin.id}` : `procure:${task.id}`;
+    const writeoffKey = movedOn ? `procure-writeoff-late:${task.id}:${admin.id}` : `procure-writeoff:${task.order_id}`;
     const posted = await postRushJournal(publicJournalClient(), {
-      p_idempotency_key: `procure:${task.id}`,
+      p_idempotency_key: purchaseKey,
       p_event_type: "procurement_purchase",
       p_order_id: task.order_id,
       p_correlation_id: null,
@@ -395,9 +571,9 @@ export function registerInHouseRoutes(app: Hono, deps: { getServiceSupabase: () 
       placed_at: now,
       updated_at: now,
     };
-    if (task.state === "abandoned" || String(order?.status) === "cancelled") {
+    if (writeoff) {
       await postRushJournal(publicJournalClient(), {
-        p_idempotency_key: `procure-writeoff:${task.order_id}`,
+        p_idempotency_key: writeoffKey,
         p_event_type: "procurement_writeoff",
         p_order_id: task.order_id,
         p_correlation_id: null,
@@ -408,9 +584,9 @@ export function registerInHouseRoutes(app: Hono, deps: { getServiceSupabase: () 
         p_evidence: { external_order_ref: externalRef },
         p_policy_version: null,
       });
-      await sb.from("procurement_tasks").update(evidence).eq("id", task.id).eq("state", "abandoned");
-      await logEvent(sb, task.id, "abandoned", "abandoned", admin, { actual_total_minor: actualMinor, writeoff: true });
-      return c.json({ ok: true, state: "abandoned", writeoff: true });
+      await sb.from("procurement_tasks").update(evidence).eq("id", task.id).eq("state", String(task.state));
+      await logEvent(sb, task.id, String(task.state), String(task.state), admin, { actual_total_minor: actualMinor, writeoff: true });
+      return c.json({ ok: true, state: task.state, writeoff: true });
     }
     let next: string;
     try {
@@ -490,10 +666,11 @@ export function registerInHouseRoutes(app: Hono, deps: { getServiceSupabase: () 
       : action === "redispatch"
       ? "redispatch"
       : "retry";
+    const confirmedNothingBought = body.confirmedNothingBought === true;
     if (machineAction === "retry") {
       const bought = await purchaseJournalExists(String(task.id));
-      if (!retryAllowed(String(task.state) as "exception_before_purchase", bought)) {
-        return c.json({ error: "This order was already bought. It cannot be placed again." }, 409);
+      if (!retryAllowed(String(task.state) as "exception_before_purchase", bought, confirmedNothingBought)) {
+        return c.json({ error: "Confirm with the buyer that nothing was bought before trying again." }, 409);
       }
     }
     let next: string;
@@ -513,9 +690,18 @@ export function registerInHouseRoutes(app: Hono, deps: { getServiceSupabase: () 
       patch.exception_code = null;
     }
     if (machineAction === "substitute") patch.exception_code = null;
+    let claimer: { id: string; email: string | null } | null = null;
+    if (machineAction === "retry") {
+      const loaded = await taskEvents(sb, task.id);
+      if (!loaded.ok) return c.json({ error: loaded.error }, 500);
+      claimer = lastClaimer(loaded.events);
+    }
     const saved = await updateIfState(sb, task.id, String(task.state), patch);
     if (!saved.ok) return c.json({ error: saved.conflict ? "Someone else took this order" : saved.error }, saved.conflict ? 409 : 500);
-    await logEvent(sb, task.id, task.state, next, admin, { action });
+    await logEvent(sb, task.id, task.state, next, admin, {
+      action,
+      ...(confirmedNothingBought ? { confirmed_nothing_bought: true, buyer: claimer?.email || claimer?.id || null } : {}),
+    });
     if (machineAction === "abandon") {
       const { cancelOrder } = await import("../rushMoney/cancelOrder.ts");
       await cancelOrder(sb, { orderId: String(task.order_id), actor: "system", reason: "desk_failed", actorId: admin.id });
@@ -667,9 +853,10 @@ export function registerInHouseRoutes(app: Hono, deps: { getServiceSupabase: () 
     const { data: stores } = await sb.from("in_house_stores").select("*");
     const ids = (stores || []).map((row) => String(row.merchant_id));
     const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
-    const [{ data: merchants }, { data: tasks }] = await Promise.all([
+    const [{ data: merchants }, { data: tasks }, { data: hours }] = await Promise.all([
       ids.length ? sb.from("merchants").select("id, name, address, phone, lat, lng, logo_url, cover_image_url, market_id, avg_prep_time_mins, cuisine_type, procurement_mode, in_house_live, is_accepting_orders, gct_registered").in("id", ids) : Promise.resolve({ data: [] }),
       ids.length ? sb.from("procurement_tasks").select("merchant_id, expected_cost_minor, created_at").in("merchant_id", ids).gte("created_at", since) : Promise.resolve({ data: [] }),
+      ids.length ? sb.from("merchant_hours").select("merchant_id, day_of_week, open_time, close_time, is_closed").in("merchant_id", ids).order("day_of_week") : Promise.resolve({ data: [] }),
     ]);
     const demand = new Map<string, { orders: number; cost: number }>();
     for (const task of tasks || []) {
@@ -685,6 +872,7 @@ export function registerInHouseRoutes(app: Hono, deps: { getServiceSupabase: () 
       stores: (stores || []).map((store) => ({
         ...store,
         merchant: (merchants || []).find((row) => String(row.id) === String(store.merchant_id)) || null,
+        hours: (hours || []).filter((row) => String(row.merchant_id) === String(store.merchant_id)),
         demand30d: demand.get(String(store.merchant_id)) || { orders: 0, cost: 0 },
       })),
     });
@@ -726,6 +914,7 @@ export function registerInHouseRoutes(app: Hono, deps: { getServiceSupabase: () 
         procurement_mode: "in_house",
         in_house_live: false,
         onboarding_status: "submitted",
+        submitted_at: new Date().toISOString(),
         operational_status: "active",
         verification_status: "approved",
         business_type: "restaurant",
@@ -734,15 +923,6 @@ export function registerInHouseRoutes(app: Hono, deps: { getServiceSupabase: () 
       }).select("id").single();
       if (error || !merchant) return c.json({ error: error?.message || "Could not create the restaurant" }, 500);
       merchantId = String(merchant.id);
-      const open = minuteToTime(Number(body.offerStartMinute ?? 660));
-      const close = minuteToTime(Number(body.offerEndMinute ?? 1260));
-      await sb.from("merchant_hours").insert([0, 1, 2, 3, 4, 5, 6].map((day) => ({
-        merchant_id: merchantId,
-        day_of_week: day,
-        open_time: open,
-        close_time: close,
-        is_closed: false,
-      })));
     } else {
       if (!merchantId) return c.json({ error: "Choose a store" }, 400);
       const { data: merchant } = await sb.from("merchants").select("id, owner_id, procurement_mode").eq("id", merchantId).maybeSingle();
@@ -769,6 +949,12 @@ export function registerInHouseRoutes(app: Hono, deps: { getServiceSupabase: () 
       }
     }
 
+    const week = normalizeWeek(body.hours) || (creating ? defaultWeek() : null);
+    if (week) {
+      const hoursError = await saveWeek(sb, merchantId, week);
+      if (hoursError) return c.json({ error: hoursError.message }, 500);
+    }
+    const window = week ? weekOfferWindow(week) : null;
     const markupBps = Number(body.markupBps ?? 1500);
     const { error } = await sb.from("in_house_stores").upsert({
       merchant_id: merchantId,
@@ -783,14 +969,14 @@ export function registerInHouseRoutes(app: Hono, deps: { getServiceSupabase: () 
       price_tolerance_bps: Number(body.priceToleranceBps ?? 1000),
       absorb_cap_minor: Number(body.absorbCapMinor ?? 50000),
       max_order_minor: body.maxOrderMinor == null ? null : Number(body.maxOrderMinor),
-      offer_start_minute: Number(body.offerStartMinute ?? 660),
-      offer_end_minute: Number(body.offerEndMinute ?? 1260),
+      ...(window ? { offer_start_minute: window.start, offer_end_minute: window.end } : {}),
       partnership_status: body.partnershipStatus || "none",
       automation_level: "L0",
       adapter_key: "manual",
       tos_reviewed_at: body.tosReviewed ? new Date().toISOString() : null,
       tos_allows_automation: false,
       notes: body.notes || null,
+      ...(body.audience === "public" || body.audience === "beta" ? { audience: body.audience } : {}),
       updated_at: new Date().toISOString(),
     });
     if (error) return c.json({ error: error.message }, 500);
@@ -803,6 +989,10 @@ export function registerInHouseRoutes(app: Hono, deps: { getServiceSupabase: () 
       ...(body.phone ? { phone: String(body.phone) } : {}),
       ...(body.logoUrl ? { logo_url: String(body.logoUrl) } : {}),
       ...(body.coverImageUrl ? { cover_image_url: String(body.coverImageUrl) } : {}),
+      ...(body.cuisineType != null ? { cuisine_type: String(body.cuisineType) } : {}),
+      ...(body.marketId ? { market_id: String(body.marketId) } : {}),
+      ...(body.lat != null && body.lat !== "" ? { lat: Number(body.lat) } : {}),
+      ...(body.lng != null && body.lng !== "" ? { lng: Number(body.lng) } : {}),
       ...(body.avgPrepMinutes ? { avg_prep_time_mins: Number(body.avgPrepMinutes) } : {}),
       updated_at: new Date().toISOString(),
     }).eq("id", merchantId).eq("procurement_mode", creating ? "in_house" : "in_house");
@@ -816,7 +1006,33 @@ export function registerInHouseRoutes(app: Hono, deps: { getServiceSupabase: () 
       const saved = await saveMenuItems(sb, merchantId, items);
       if (!saved.ok) return c.json({ error: saved.error }, 400);
     }
+    if (body.markupBps != null) {
+      const { data: optionRows } = await sb.from("menu_items").select("id, options").eq("merchant_id", merchantId);
+      for (const row of optionRows || []) {
+        if (!Array.isArray(row.options) || row.options.length === 0) continue;
+        await sb.from("menu_items").update({
+          options: pricedOptions(row.options, Number(body.markupBps)),
+        }).eq("id", row.id);
+      }
+    }
     return c.json({ ok: true, merchantId });
+  });
+
+  app.get("/admin/in-house/stores/:id/choice-lists", async (c) => {
+    const admin = await requireDesk(c, OPS_ROLES);
+    if (admin instanceof Response) return admin;
+    const result = await listChoiceLists(deps.getServiceSupabase(), c.req.param("id"));
+    if (!result.ok) return c.json({ error: result.error }, 500);
+    return c.json({ lists: result.lists });
+  });
+
+  app.post("/admin/in-house/stores/:id/choice-lists", async (c) => {
+    const admin = await requireDesk(c, OPS_ROLES);
+    if (admin instanceof Response) return admin;
+    const body = await c.req.json().catch(() => ({}));
+    const saved = await saveChoiceList(deps.getServiceSupabase(), c.req.param("id"), body, body.id ? String(body.id) : undefined);
+    if (!saved.ok) return c.json({ error: saved.error }, saved.status);
+    return c.json({ list: saved.list });
   });
 
   app.post("/admin/in-house/stores/:id/menu", async (c) => {
@@ -827,17 +1043,70 @@ export function registerInHouseRoutes(app: Hono, deps: { getServiceSupabase: () 
     const sb = deps.getServiceSupabase();
     const merchantId = c.req.param("id");
     const now = new Date().toISOString();
+    const { data: storeRow } = await sb.from("in_house_stores").select("markup_bps").eq("merchant_id", merchantId).maybeSingle();
+    const markupBps = Number(storeRow?.markup_bps ?? 1500);
+    const categories = Array.isArray(body.categories) ? body.categories : [];
+    const stampIds = new Set<string>();
+    for (const category of categories) {
+      const name = String(category.name || "").trim();
+      if (category.remove && category.id) {
+        const categoryId = String(category.id);
+        const { data: dishes } = await sb.from("menu_items").select("id").eq("merchant_id", merchantId).eq("category_id", categoryId).limit(1);
+        if (dishes?.length) return c.json({ error: "Move the dishes out of this section before removing it" }, 400);
+        await sb.from("menu_categories").update({ is_active: false }).eq("id", categoryId).eq("merchant_id", merchantId);
+        continue;
+      }
+      if (category.id && Array.isArray(category.choiceListIds)) {
+        await sb.from("menu_categories").update({ choice_list_ids: category.choiceListIds }).eq("id", String(category.id)).eq("merchant_id", merchantId);
+        stampIds.add(String(category.id));
+      }
+      if (category.id && category.pizzaMenu) {
+        const priced = await savePizzaMenu(sb, merchantId, String(category.id), category.pizzaMenu);
+        if (!priced.ok) return c.json({ error: priced.error }, 400);
+      }
+      if (!name) continue;
+      if (category.id) {
+        await sb.from("menu_categories").update({ name }).eq("id", String(category.id)).eq("merchant_id", merchantId);
+      } else {
+        const { data: existingSection } = await sb.from("menu_categories").select("id").eq("merchant_id", merchantId).eq("name", name).eq("is_active", true).limit(1);
+        if (!existingSection?.length) {
+          await sb.from("menu_categories").insert({ merchant_id: merchantId, name, is_active: true });
+        }
+      }
+    }
     for (const item of items) {
       const id = String(item.id || "");
       if (!id) continue;
-      if (item.inStorePrice == null || !Number.isFinite(Number(item.inStorePrice)) || Number(item.inStorePrice) <= 0) {
+      const fullDish = Boolean(String(item.name || "").trim());
+      const drink = /drink/i.test(String(item.category || ""));
+      const pizza = /pizza/i.test(String(item.category || ""));
+      const prep = Math.round(Number(item.prepMinutes));
+      if (fullDish && !drink && (!Number.isFinite(prep) || prep <= 0)) {
+        return c.json({ error: "Every dish needs how many minutes it takes" }, 400);
+      }
+      const baked = pizza && item.pizzaRecipe
+        ? await pizzaDishPrice(sb, merchantId, String(item.categoryId || ""), item.pizzaRecipe)
+        : null;
+      if (baked && !baked.ok) return c.json({ error: baked.error }, 400);
+      const restaurantPrice = baked?.ok ? baked.price : Number(item.inStorePrice);
+      if (restaurantPrice == null || !Number.isFinite(restaurantPrice) || restaurantPrice <= 0) {
         return c.json({ error: "Every item needs the restaurant price" }, 400);
       }
       await sb.from("menu_items").update({
-        in_store_price: Number(item.inStorePrice),
-        source_sku: item.sourceSku || null,
-        source_url: item.sourceUrl || null,
+        in_store_price: restaurantPrice,
+        ...(item.sourceSku != null ? { source_sku: item.sourceSku || null } : {}),
+        ...(item.sourceUrl != null ? { source_url: item.sourceUrl || null } : {}),
         source_price_checked_at: body.confirm ? now : item.checkedAt || now,
+        ...(fullDish ? {
+          name: String(item.name),
+          description: item.description || null,
+          image_url: item.imageUrl || null,
+          options: pricedOptions(item.options, markupBps),
+          is_available: item.isAvailable !== false,
+          prep_time_mins: drink ? null : prep,
+          ...(baked?.ok ? { pizza_recipe: baked.recipe } : {}),
+          ...(item.categoryId ? { category_id: String(item.categoryId) } : {}),
+        } : {}),
       }).eq("id", id).eq("merchant_id", merchantId);
     }
     const created = Array.isArray(body.create) ? body.create : [];
@@ -845,18 +1114,35 @@ export function registerInHouseRoutes(app: Hono, deps: { getServiceSupabase: () 
       const saved = await saveMenuItems(sb, merchantId, created);
       if (!saved.ok) return c.json({ error: saved.error }, 400);
     }
+    const touched = new Set<string>(stampIds);
+    for (const item of [...items, ...created]) {
+      if (item.categoryId) touched.add(String(item.categoryId));
+    }
+    for (const categoryId of touched) {
+      if (!stampIds.has(categoryId)) {
+        const { data: row } = await sb.from("menu_categories").select("choice_list_ids").eq("id", categoryId).eq("merchant_id", merchantId).maybeSingle();
+        const ids = Array.isArray(row?.choice_list_ids) ? row.choice_list_ids : [];
+        if (!ids.length) continue;
+      }
+      await stampSectionChoiceLists(sb, merchantId, categoryId);
+    }
     return c.json({ ok: true });
   });
 
   app.get("/admin/in-house/stores/:id/menu", async (c) => {
     const admin = await requireDesk(c, OPS_ROLES);
     if (admin instanceof Response) return admin;
-    const { data, error } = await deps.getServiceSupabase().from("menu_items")
-      .select("id, name, description, in_store_price, marketplace_price, source_sku, source_url, source_price_checked_at, is_available, category_id")
-      .eq("merchant_id", c.req.param("id"))
-      .order("name");
+    const merchantId = c.req.param("id");
+    const sb = deps.getServiceSupabase();
+    const [{ data, error }, { data: categories }] = await Promise.all([
+      sb.from("menu_items")
+        .select("id, name, description, image_url, in_store_price, marketplace_price, options, source_sku, source_url, source_price_checked_at, is_available, category_id, prep_time_mins, pizza_recipe")
+        .eq("merchant_id", merchantId)
+        .order("name"),
+      sb.from("menu_categories").select("id, name, choice_list_ids, pizza_menu").eq("merchant_id", merchantId).eq("is_active", true).order("name"),
+    ]);
     if (error) return c.json({ error: error.message }, 500);
-    return c.json({ items: data || [] });
+    return c.json({ items: data || [], categories: categories || [] });
   });
 
   app.get("/admin/in-house/reports", async (c) => {
@@ -884,39 +1170,103 @@ export function registerInHouseRoutes(app: Hono, deps: { getServiceSupabase: () 
   });
 }
 
+async function savePizzaMenu(sb: Sb, merchantId: string, categoryId: string, raw: unknown) {
+  const menu = parsePizzaMenu(raw);
+  if (!menu) return { ok: false as const, error: "The pizza prices are incomplete" };
+  const invalid = validatePizzaMenu(menu);
+  if (invalid) return { ok: false as const, error: invalid };
+  const { error } = await sb.from("menu_categories").update({ pizza_menu: menu }).eq("id", categoryId).eq("merchant_id", merchantId);
+  if (error) return { ok: false as const, error: error.message };
+  const { data: items } = await sb.from("menu_items").select("id, pizza_recipe").eq("merchant_id", merchantId).eq("category_id", categoryId);
+  for (const item of items || []) {
+    const recipe = parsePizzaRecipe(item.pizza_recipe);
+    if (!recipe) continue;
+    const price = cheapestPizzaPrice(menu, recipe);
+    if (price == null) return { ok: false as const, error: "A pizza uses a crust that is not sold on any size" };
+    const { error: priceError } = await sb.from("menu_items").update({ in_store_price: price }).eq("id", item.id);
+    if (priceError) return { ok: false as const, error: priceError.message };
+  }
+  return { ok: true as const };
+}
+
+async function pizzaDishPrice(sb: Sb, merchantId: string, categoryId: string, raw: unknown) {
+  const recipe = parsePizzaRecipe(raw);
+  if (!recipe) return { ok: false as const, error: "This pizza needs a crust, sauce, and cheese amount" };
+  const { data } = await sb.from("menu_categories").select("pizza_menu").eq("id", categoryId).eq("merchant_id", merchantId).maybeSingle();
+  const menu = parsePizzaMenu(data?.pizza_menu);
+  if (!menu) return { ok: false as const, error: "Save the pizza prices before saving this pizza" };
+  const price = cheapestPizzaPrice(menu, recipe);
+  if (price == null) return { ok: false as const, error: "That crust is not sold on a size" };
+  return { ok: true as const, price, recipe };
+}
+
+async function sectionForNewDish(
+  sb: Sb,
+  merchantId: string,
+  item: Record<string, unknown>,
+  cache: Map<string, string>,
+): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
+  const chosen = String(item.categoryId || "").trim();
+  if (chosen) return { ok: true, id: chosen };
+  const categoryName = String(item.category || "Menu").trim() || "Menu";
+  const cached = cache.get(categoryName);
+  if (cached) return { ok: true, id: cached };
+  const { data: existing } = await sb.from("menu_categories").select("id").eq("merchant_id", merchantId).eq("name", categoryName).eq("is_active", true).limit(1);
+  const found = existing?.[0]?.id ? String(existing[0].id) : "";
+  if (found) {
+    cache.set(categoryName, found);
+    return { ok: true, id: found };
+  }
+  const { data: created, error } = await sb.from("menu_categories").insert({
+    merchant_id: merchantId,
+    name: categoryName,
+    is_active: true,
+  }).select("id").single();
+  if (error || !created) return { ok: false, error: error?.message || "Could not add the menu section" };
+  const id = String(created.id);
+  cache.set(categoryName, id);
+  return { ok: true, id };
+}
+
 async function saveMenuItems(sb: Sb, merchantId: string, items: Array<Record<string, unknown>>) {
   const now = new Date().toISOString();
+  const { data: storeRow } = await sb.from("in_house_stores").select("markup_bps").eq("merchant_id", merchantId).maybeSingle();
+  const markupBps = Number(storeRow?.markup_bps ?? 1500);
   const categories = new Map<string, string>();
   for (const item of items) {
     const name = String(item.name || "").trim();
     const price = Number(item.inStorePrice);
-    if (!name || !Number.isFinite(price) || price <= 0) {
+    const drink = /drink/i.test(String(item.category || ""));
+    const pizza = /pizza/i.test(String(item.category || ""));
+    const prep = Math.round(Number(item.prepMinutes));
+    if (!name || (!pizza && (!Number.isFinite(price) || price <= 0))) {
       return { ok: false as const, error: "Every item needs a name and the restaurant price" };
     }
-    const categoryName = String(item.category || "Menu");
-    let categoryId = categories.get(categoryName);
-    if (!categoryId) {
-      const { data: existing } = await sb.from("menu_categories").select("id").eq("merchant_id", merchantId).eq("name", categoryName).maybeSingle();
-      if (existing?.id) categoryId = String(existing.id);
-      else {
-        const { data: created, error } = await sb.from("menu_categories").insert({
-          merchant_id: merchantId,
-          name: categoryName,
-          is_active: true,
-        }).select("id").single();
-        if (error || !created) return { ok: false as const, error: error?.message || "Could not add the menu section" };
-        categoryId = String(created.id);
-      }
-      categories.set(categoryName, categoryId);
+    if (!drink && (!Number.isFinite(prep) || prep <= 0)) {
+      return { ok: false as const, error: "Every dish needs how many minutes it takes" };
+    }
+    const categoryId = await sectionForNewDish(sb, merchantId, item, categories);
+    if (!categoryId.ok) return categoryId;
+    const baked = pizza && item.pizzaRecipe
+      ? await pizzaDishPrice(sb, merchantId, categoryId.id, item.pizzaRecipe)
+      : null;
+    if (baked && !baked.ok) return baked;
+    const restaurantPrice = baked?.ok ? baked.price : price;
+    if (!Number.isFinite(restaurantPrice) || restaurantPrice <= 0) {
+      return { ok: false as const, error: "Every item needs a name and the restaurant price" };
     }
     const { error } = await sb.from("menu_items").insert({
       merchant_id: merchantId,
-      category_id: categoryId,
+      category_id: categoryId.id,
       name,
       description: item.description || null,
-      price,
-      in_store_price: price,
-      is_available: true,
+      image_url: item.imageUrl || null,
+      options: pricedOptions(item.options, markupBps),
+      price: restaurantPrice,
+      in_store_price: restaurantPrice,
+      is_available: item.isAvailable !== false,
+      prep_time_mins: drink ? null : prep,
+      ...(baked?.ok ? { pizza_recipe: baked.recipe } : {}),
       source_price_checked_at: now,
       source_sku: item.sourceSku || null,
     });

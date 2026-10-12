@@ -266,7 +266,7 @@ export function registerCustomerDiscoveryRoutes(app: Hono, deps: CustomerDiscove
       serviceSb
         .from("menu_items")
         .select(
-          "id, name, description, price, marketplace_price, in_store_price, image_url, merchant_id, merchant:merchants!inner(id, name, logo_url, is_active, is_accepting_orders, market_id)",
+          "id, name, description, price, marketplace_price, image_url, merchant_id, merchant:merchants!inner(id, name, logo_url, is_active, is_accepting_orders, market_id)",
         )
         .eq("is_available", true)
         .ilike("name", pattern)
@@ -275,8 +275,14 @@ export function registerCustomerDiscoveryRoutes(app: Hono, deps: CustomerDiscove
 
     if (merchantsRes.error) return c.json({ error: merchantsRes.error.message }, 500);
     if (itemsRes.error) return c.json({ error: itemsRes.error.message }, 500);
-    const { filterDiscoveryMerchants } = await import("./inHouse/visibility.ts");
-    const visibleMerchantRows = await filterDiscoveryMerchants(serviceSb, merchantsRes.data || []);
+    const { customerIdFromAuth, filterDiscoveryMerchants } = await import("./inHouse/visibility.ts");
+    const authHeader = c.req.header("Authorization");
+    const customerId = authHeader ? await customerIdFromAuth(getSupabase(authHeader), serviceSb).catch(() => null) : null;
+    const visibleMerchantRows = await filterDiscoveryMerchants(serviceSb, merchantsRes.data || [], customerId);
+    const { data: inHouseMerchants } = await serviceSb.from("merchants").select("id, procurement_mode, in_house_live").eq("procurement_mode", "in_house");
+    const visibleInHouse = await filterDiscoveryMerchants(serviceSb, inHouseMerchants || [], customerId);
+    const visibleInHouseIds = new Set(visibleInHouse.map((row) => String(row.id)));
+    const hiddenInHouseIds = new Set((inHouseMerchants || []).map((row) => String(row.id)).filter((id) => !visibleInHouseIds.has(id)));
 
     const { resolveDeliveryFee, haversineKm, roundDistanceKm } = await import("../_shared/dashPricing.ts");
     const { resolvePricingLayers } = await import("./pricingLayers.ts");
@@ -350,6 +356,7 @@ export function registerCustomerDiscoveryRoutes(app: Hono, deps: CustomerDiscove
       .filter((row: Record<string, unknown>) => {
         const merchant = row.merchant as Record<string, unknown> | null;
         return merchant?.is_active && merchant?.is_accepting_orders &&
+          !hiddenInHouseIds.has(String(row.merchant_id || "")) &&
           merchantMatchesDiscoveryPin(
             merchant?.market_id != null ? String(merchant.market_id) : null,
             pin,

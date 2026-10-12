@@ -266,6 +266,7 @@ export default function MenuPage({ merchant, onNavigate, onOpenMobileNav, setupB
     return (
       <EditItemView
         item={editingItem}
+        merchantId={merchant.id}
         categories={categories}
         defaultCategoryId={selectedCategoryId || undefined}
         onBack={() => {

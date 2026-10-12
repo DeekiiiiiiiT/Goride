@@ -4,34 +4,15 @@
  */
 import { ORDER_CUSTOMER_EMBED_WITH_USER } from "../delivery/orderSelectEmbeds.ts";
 
-export async function sendDashOrderStatusSms(input: {
-  to: string;
-  orderNumber: string;
-  status: string;
-  merchantName?: string | null;
-}): Promise<boolean> {
-  const to = String(input.to || "").trim();
-  if (!to) return false;
-
-  const label = input.merchantName ? ` from ${input.merchantName}` : "";
-  const orderRef = input.orderNumber || "your order";
-  const statusMessages: Record<string, string> = {
-    accepted: `Roam Rush: ${orderRef}${label} was accepted and is being prepared.`,
-    preparing: `Roam Rush: ${orderRef}${label} is being prepared.`,
-    ready: `Roam Rush: ${orderRef}${label} is ready for pickup.`,
-    picked_up: `Roam Rush: Your courier picked up ${orderRef}. Track in the app.`,
-    in_transit: `Roam Rush: ${orderRef} is on the way.`,
-    delivered: `Roam Rush: ${orderRef} was delivered. Enjoy!`,
-    completed: `Roam Rush: ${orderRef} is complete. Thanks for ordering.`,
-    cancelled: `Roam Rush: ${orderRef} was cancelled.`,
-  };
-  const message = statusMessages[input.status] ||
-    `Roam Rush: ${orderRef} update — status is now ${input.status}.`;
+/** Same carrier path as customer order texts. */
+export async function sendDashText(to: string, message: string): Promise<boolean> {
+  const destination = String(to || "").trim();
+  if (!destination || !message) return false;
 
   const stub = Deno.env.get("SMS_HOOK_STUB_LOG_OK") === "1" ||
     Deno.env.get("DASH_SMS_STUB_LOG_OK") === "1";
   if (stub) {
-    console.log(JSON.stringify({ svc: "dash_order_sms", to, message }));
+    console.log(JSON.stringify({ svc: "dash_order_sms", to: destination, message }));
     return true;
   }
 
@@ -45,7 +26,7 @@ export async function sendDashOrderStatusSms(input: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${digicelKey}`,
         },
-        body: JSON.stringify({ to, message }),
+        body: JSON.stringify({ to: destination, message }),
       });
       return res.ok;
     } catch (e) {
@@ -63,7 +44,7 @@ export async function sendDashOrderStatusSms(input: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${flowKey}`,
         },
-        body: JSON.stringify({ to, message }),
+        body: JSON.stringify({ to: destination, message }),
       });
       return res.ok;
     } catch (e) {
@@ -71,9 +52,31 @@ export async function sendDashOrderStatusSms(input: {
     }
   }
 
-  // Fail soft — log intent so ops can see missing carrier config
-  console.warn("[dash_order_sms] No SMS carrier configured; message not sent:", { to, status: input.status });
+  console.warn("[dash_order_sms] No SMS carrier configured; message not sent:", { to: destination });
   return false;
+}
+
+export async function sendDashOrderStatusSms(input: {
+  to: string;
+  orderNumber: string;
+  status: string;
+  merchantName?: string | null;
+}): Promise<boolean> {
+  const label = input.merchantName ? ` from ${input.merchantName}` : "";
+  const orderRef = input.orderNumber || "your order";
+  const statusMessages: Record<string, string> = {
+    accepted: `Roam Rush: ${orderRef}${label} was accepted and is being prepared.`,
+    preparing: `Roam Rush: ${orderRef}${label} is being prepared.`,
+    ready: `Roam Rush: ${orderRef}${label} is ready for pickup.`,
+    picked_up: `Roam Rush: Your courier picked up ${orderRef}. Track in the app.`,
+    in_transit: `Roam Rush: ${orderRef} is on the way.`,
+    delivered: `Roam Rush: ${orderRef} was delivered. Enjoy!`,
+    completed: `Roam Rush: ${orderRef} is complete. Thanks for ordering.`,
+    cancelled: `Roam Rush: ${orderRef} was cancelled.`,
+  };
+  const message = statusMessages[input.status] ||
+    `Roam Rush: ${orderRef} update — status is now ${input.status}.`;
+  return sendDashText(input.to, message);
 }
 
 async function notifyCustomerOrderPush(input: {

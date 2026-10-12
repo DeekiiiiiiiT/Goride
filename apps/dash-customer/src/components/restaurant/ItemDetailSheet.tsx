@@ -4,6 +4,8 @@ import { BottomSheet } from '../ui/BottomSheet';
 import { QuantityStepper } from '../ui/QuantityStepper';
 import type { MenuItem, MenuModifierGroup } from '../../lib/restaurantContent';
 import { formatJmd } from '../../lib/restaurantContent';
+import { pizzaRestaurantPrice, type PizzaPick } from '@roam/merchant-ops/pizzaMenu';
+import { PizzaOrder, startingPizzaPick } from './PizzaOrder';
 
 type Selections = Record<string, string | string[]>;
 
@@ -22,6 +24,7 @@ type Props = {
     instructions: string;
     unitPrice: number;
     optionsLabel: string;
+    pizza?: PizzaPick;
   }) => void;
 };
 
@@ -58,20 +61,23 @@ function buildOptionsLabel(item: MenuItem, selections: Selections): string {
 
 function calcUnitPrice(item: MenuItem, selections: Selections): number {
   let total = item.price;
+  let extras = 0;
   for (const group of item.modifiers) {
     const value = selections[group.id];
     if (!value) continue;
+    const add = (id: string) => {
+      const opt = group.options.find((option) => option.id === id);
+      return opt ? opt.price : 0;
+    };
     if (Array.isArray(value)) {
-      for (const id of value) {
-        const opt = group.options.find(o => o.id === id);
-        if (opt) total += opt.price;
-      }
+      for (const id of value) extras += add(id);
+    } else if (group.priceMode === 'replace') {
+      total = add(value);
     } else {
-      const opt = group.options.find(o => o.id === value);
-      if (opt) total += opt.price;
+      extras += add(value);
     }
   }
-  return total;
+  return total + extras;
 }
 
 function validateRequired(item: MenuItem, selections: Selections): string | null {
@@ -83,6 +89,17 @@ function validateRequired(item: MenuItem, selections: Selections): string | null
     }
   }
   return null;
+}
+
+function pizzaLabel(item: MenuItem, pick: PizzaPick): string {
+  const menu = item.pizza?.menu;
+  if (!menu) return '';
+  const size = menu.sizes.find((entry) => entry.id === pick.sizeId)?.name || 'Size';
+  const crust = menu.crusts.find((entry) => entry.id === pick.crustId)?.name || 'Crust';
+  const sauce = menu.sauces.find((entry) => entry.id === pick.sauceId)?.name || 'Sauce';
+  const names = new Map([...menu.meats, ...menu.nonMeats].map((topping) => [topping.id, topping.name]));
+  const toppings = pick.toppings.map((topping) => `${names.get(topping.id) || 'Topping'}${topping.portion === 'extra' ? ' extra' : ''}`);
+  return [size, crust, pick.cheese === 'extra' ? 'Extra cheese' : 'Cheese', sauce, ...toppings].join(', ');
 }
 
 export function ItemDetailSheet({
@@ -100,12 +117,16 @@ export function ItemDetailSheet({
   const [selections, setSelections] = useState<Selections>({});
   const [instructions, setInstructions] = useState('');
   const [errorGroupId, setErrorGroupId] = useState<string | null>(null);
+  const [pizzaPick, setPizzaPick] = useState<PizzaPick | null>(null);
+  const [pizzaError, setPizzaError] = useState('');
   const [shake, setShake] = useState(false);
 
   useEffect(() => {
     if (item && open) {
       setQuantity(initialQuantity);
       setSelections(getDefaultSelections(item));
+      setPizzaPick(item.pizza ? startingPizzaPick(item.pizza.menu, item.pizza.recipe) : null);
+      setPizzaError('');
       setInstructions(initialInstructions);
       setErrorGroupId(null);
     }
@@ -113,10 +134,14 @@ export function ItemDetailSheet({
 
   const actionLabel = submitLabel ?? (mode === 'edit' ? 'Update Item' : 'Add to Cart');
 
-  const unitPrice = useMemo(
-    () => (item ? calcUnitPrice(item, selections) : 0),
-    [item, selections]
-  );
+  const pizzaTotal = item?.pizza && pizzaPick ? pizzaRestaurantPrice(item.pizza.menu, pizzaPick) : null;
+  const unitPrice = useMemo(() => {
+    if (item?.pizza && pizzaTotal && pizzaTotal.ok) {
+      const raw = pizzaTotal.restaurant * (1 + item.pizza.markupBps / 10000);
+      return Number.isFinite(raw) && raw > 0 ? Math.ceil(raw / 10) * 10 : 0;
+    }
+    return item ? calcUnitPrice(item, selections) : 0;
+  }, [item, selections, pizzaTotal]);
 
   if (!open || !item) return null;
 
@@ -128,12 +153,32 @@ export function ItemDetailSheet({
   const handleCheckbox = (groupId: string, optionId: string, checked: boolean) => {
     setSelections(prev => {
       const current = (prev[groupId] as string[]) ?? [];
-      const next = checked ? [...current, optionId] : current.filter(id => id !== optionId);
-      return { ...prev, [groupId]: next };
+      if (!checked) return { ...prev, [groupId]: current.filter(id => id !== optionId) };
+      const group = item?.modifiers.find((entry) => entry.id === groupId);
+      const max = group?.maxSelections ?? 0;
+      const capped = max > 0 && max < 99;
+      if (capped && current.length >= max) return prev;
+      return { ...prev, [groupId]: [...current, optionId] };
     });
   };
 
   const handleAdd = () => {
+    if (item.pizza) {
+      if (!pizzaPick || !pizzaTotal || !pizzaTotal.ok) {
+        setPizzaError(pizzaTotal && !pizzaTotal.ok ? pizzaTotal.error : 'Choose a size, crust, and sauce');
+        return;
+      }
+      onAdd({
+        quantity,
+        selections,
+        instructions,
+        unitPrice,
+        optionsLabel: pizzaLabel(item, pizzaPick),
+        pizza: pizzaPick,
+      });
+      onClose();
+      return;
+    }
     const missing = validateRequired(item, selections);
     if (missing) {
       setErrorGroupId(missing);
@@ -170,12 +215,18 @@ export function ItemDetailSheet({
           <div className="px-margin-mobile pt-inset-lg pb-inset-md">
             <div className="flex justify-between items-start mb-2">
               <h1 className="font-headline-lg-mobile text-headline-lg-mobile text-on-surface pr-8">{item.name}</h1>
-              <span className="font-headline-md text-headline-md text-primary shrink-0">{formatJmd(item.price)}</span>
+              <span className="font-headline-md text-headline-md text-primary shrink-0">{formatJmd(item.pizza ? unitPrice : item.price)}</span>
             </div>
             <p className="font-body-md text-body-md text-on-surface-variant">{item.description}</p>
+            {item.prepMins ? <p className="mt-2 font-body-md text-body-md text-on-surface">{item.prepMins} min to prepare</p> : null}
           </div>
 
-          {item.modifiers.map((group, idx) => (
+          {item.pizza && pizzaPick ? (
+            <>
+              {pizzaError ? <p className="px-margin-mobile text-error">{pizzaError}</p> : null}
+              <PizzaOrder markupBps={item.pizza.markupBps} menu={item.pizza.menu} money={formatJmd} pick={pizzaPick} onChange={(pick) => { setPizzaPick(pick); setPizzaError(''); }} />
+            </>
+          ) : item.modifiers.map((group, idx) => (
             <ModifierSection
               key={group.id}
               group={group}
@@ -252,7 +303,7 @@ function ModifierSection({
               : 'text-on-surface-variant'
           }`}
         >
-          {group.required ? 'Required' : 'Optional'}
+          {group.required ? 'Required' : group.maxSelections && group.maxSelections > 1 && group.maxSelections < 99 ? `Up to ${group.maxSelections}` : 'Optional'}
         </span>
       </div>
 
@@ -309,7 +360,7 @@ function ModifierSection({
                     {opt.label}
                   </span>
                   {opt.price > 0 && (
-                    <span className="font-body-sm text-body-sm text-on-surface-variant">+{formatJmd(opt.price)}</span>
+                    <span className="font-body-sm text-body-sm text-on-surface-variant">{group.priceMode === 'replace' ? formatJmd(opt.price) : `+${formatJmd(opt.price)}`}</span>
                   )}
                 </div>
                 {isRadio ? (

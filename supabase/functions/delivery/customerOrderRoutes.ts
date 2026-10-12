@@ -27,6 +27,43 @@ function asCoord(value: unknown): number | null {
   return n;
 }
 
+async function pricePizzaLine(
+  sb: SupabaseClient,
+  menuRow: { pizza_recipe?: unknown; category_id?: string; merchant_id?: string },
+  rawPick: unknown,
+  _mode: string,
+) {
+  const { parsePizzaMenu, parsePizzaPick, parsePizzaRecipe, pizzaRestaurantPrice } = await import("../../../packages/merchant-ops/src/pizzaMenu.ts");
+  const { customerPriceFromCost } = await import("./inHouse/pricing.ts");
+  const recipe = parsePizzaRecipe(menuRow.pizza_recipe);
+  if (!recipe) return null;
+  const pick = parsePizzaPick(rawPick);
+  if (!pick) return { ok: false as const, error: "Choose a size, crust, and sauce" };
+  const { data: category } = await sb.from("menu_categories").select("pizza_menu").eq("id", String(menuRow.category_id || "")).maybeSingle();
+  const menu = parsePizzaMenu(category?.pizza_menu);
+  if (!menu) return { ok: false as const, error: "This pizza is not available" };
+  const priced = pizzaRestaurantPrice(menu, pick);
+  if (!priced.ok) return { ok: false as const, error: priced.error };
+  const { data: store } = await sb.from("in_house_stores").select("markup_bps").eq("merchant_id", String(menuRow.merchant_id || "")).maybeSingle();
+  const names = new Map([...menu.meats, ...menu.nonMeats].map((topping) => [topping.id, topping.name]));
+  const markupBps = _mode === "in_house" && store ? Number(store.markup_bps ?? 1500) : 0;
+  return {
+    ok: true as const,
+    restaurant: priced.restaurant,
+    customer: customerPriceFromCost(priced.restaurant, markupBps),
+    modifiers: [
+      { name: menu.sizes.find((size) => size.id === pick.sizeId)?.name || "Size", priceAdjustment: 0 },
+      { name: menu.crusts.find((crust) => crust.id === pick.crustId)?.name || "Crust", priceAdjustment: 0 },
+      { name: pick.cheese === "extra" ? "Extra cheese" : "Cheese", priceAdjustment: 0 },
+      { name: menu.sauces.find((sauce) => sauce.id === pick.sauceId)?.name || "Sauce", priceAdjustment: 0 },
+      ...pick.toppings.map((topping) => ({
+        name: `${names.get(topping.id) || "Topping"}${topping.portion === "extra" ? " extra" : ""}`,
+        priceAdjustment: 0,
+      })),
+    ],
+  };
+}
+
 const ORDER_ID_UUID =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -123,6 +160,7 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
       item_id?: string;
       quantity?: number;
       modifiers?: unknown[];
+      pizza?: unknown;
     }>;
 
     // Server-side prices from menu_items — never trust client unit prices / discount
@@ -134,7 +172,7 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
 
     const { data: menuRows, error: menuErr } = await serviceSb
       .from("menu_items")
-      .select("id, name, price, marketplace_price, in_store_price, is_available, merchant_id, source_price_checked_at")
+      .select("id, name, price, marketplace_price, in_store_price, is_available, merchant_id, category_id, source_price_checked_at, options, pizza_recipe")
       .eq("merchant_id", body.merchantId)
       .in("id", menuItemIds);
 
@@ -160,10 +198,13 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
         customerId: String(customer.id),
         menuRows: menuRows || [],
         quantities,
+        rawItems,
       });
       if (!gate.ok) return c.json({ error: gate.error, code: gate.code }, gate.status);
     }
     const menuById = new Map((menuRows || []).map((row) => [String(row.id), row]));
+    const { pickedOptions, appliedMenuPrice, kitchenModifiers } = await import("./inHouse/pricing.ts");
+    const { orderChoiceError } = await import("./menuChoiceLibrary.ts");
 
     const pricedLines: Array<{
       menuItemId: string;
@@ -182,6 +223,10 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
       }
       const quantity = Math.max(1, Math.floor(Number(item.quantity) || 0));
       if (!quantity) return c.json({ error: "Invalid quantity" }, 400);
+      const choiceError = orderChoiceError((menuRow as { options?: unknown }).options, pickedOptions(item));
+      if (choiceError) return c.json({ error: choiceError }, 400);
+      const pizzaLine = await pricePizzaLine(serviceSb, menuRow, item.pizza, String(procurementMerchant?.procurement_mode || ""));
+      if (pizzaLine && !pizzaLine.ok) return c.json({ error: pizzaLine.error }, 400);
       const unitPrice = Number(
         (menuRow as { marketplace_price?: number }).marketplace_price ?? menuRow.price,
       );
@@ -190,16 +235,19 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
         return c.json({ error: "Unavailable menu item" }, 400);
       }
       const inStorePrice = Number(rawInStore ?? menuRow.price);
-      const modifiers = Array.isArray(item.modifiers)
-        ? item.modifiers.map((m: { name?: string; priceAdjustment?: number }) => ({
-            name: String(m.name || ""),
-            priceAdjustment: Math.max(0, Number(m.priceAdjustment) || 0),
-          }))
-        : undefined;
+      const picked = pickedOptions(item);
+      const applied = pizzaLine?.ok
+        ? { restaurant: pizzaLine.restaurant, customer: pizzaLine.customer }
+        : appliedMenuPrice((menuRow as { options?: unknown }).options, picked, {
+          restaurant: inStorePrice,
+          customer: unitPrice,
+        });
+      const modifiers = pizzaLine?.ok ? pizzaLine.modifiers : kitchenModifiers(picked);
+      const charged = applied.customer;
       pricedLines.push({
         menuItemId,
         name: String(menuRow.name),
-        unitPrice,
+        unitPrice: charged,
         quantity,
         modifiers,
       });
@@ -207,9 +255,9 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
         id: menuItemId,
         menuItemId,
         name: menuRow.name,
-        price: unitPrice,
-        marketplace_price: unitPrice,
-        in_store_price: inStorePrice,
+        price: charged,
+        marketplace_price: charged,
+        in_store_price: applied.restaurant,
         quantity,
         ...(modifiers ? { modifiers } : {}),
       });
@@ -641,7 +689,7 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
       .from("orders")
       .select(`
       *,
-      merchant:merchants(id, name, logo_url, phone, address, avg_prep_time_mins, procurement_mode),
+      merchant:merchants(id, name, logo_url, phone, address, avg_prep_time_mins),
       ${ORDER_CUSTOMER_EMBED_WITH_USER}
     `)
       .eq("id", id)

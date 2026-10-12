@@ -9,7 +9,9 @@ const allowed: Array<[TaskState, TaskAction, TaskState]> = [
   ["placed_external", "dispatch", "ready_for_pickup"],
   ["ready_for_pickup", "pickup", "picked_up"],
   ["picked_up", "close", "closed"],
-  ["placing", "exception", "exception_before_purchase"],
+  ["placing", "exception", "exception_purchase_unknown"],
+  ["exception_purchase_unknown", "abandon", "abandoned"],
+  ["exception_purchase_unknown", "record_purchase", "placed_external"],
   ["placed_external", "exception", "exception_after_purchase"],
   ["exception_before_purchase", "retry", "queued"],
   ["exception_before_purchase", "substitute", "placing"],
@@ -28,7 +30,7 @@ Deno.test("procurement task machine allows the desk path", () => {
 
 Deno.test("procurement task machine rejects closed and double purchase", () => {
   for (const state of TASK_STATES) {
-    if (state === "placing") continue;
+    if (state === "placing" || state === "exception_purchase_unknown") continue;
     assertEquals(nextTaskState(state, "record_purchase"), null);
   }
   assertEquals(nextTaskState("closed", "exception"), null);
@@ -39,4 +41,7 @@ Deno.test("procurement task machine rejects closed and double purchase", () => {
   assertEquals(retryAllowed("exception_before_purchase", true), false);
   assertEquals(retryAllowed("exception_before_purchase", false), true);
   assertEquals(retryAllowed("exception_after_purchase", false), false);
+  assertEquals(retryAllowed("exception_purchase_unknown", false, false), false);
+  assertEquals(retryAllowed("exception_purchase_unknown", false, true), true);
+  assertEquals(retryAllowed("exception_purchase_unknown", true, true), false);
 });

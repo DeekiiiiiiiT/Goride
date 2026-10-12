@@ -20,6 +20,7 @@ export function customerStatusForTask(state: TaskState): "accepted" | "preparing
     state === "placed_external" ||
     state === "awaiting_customer" ||
     state === "exception_before_purchase" ||
+    state === "exception_purchase_unknown" ||
     state === "exception_after_purchase"
   ) {
     return "preparing";

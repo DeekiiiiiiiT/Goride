@@ -30,6 +30,7 @@
     "@roam/dash-admin-client": "workspace:*",
     "@roam/dash-coverage": "workspace:*",
     "@roam/api-client": "workspace:*",
+    "@roam/merchant-ops": "workspace:*",
     "@roam/auth-client": "workspace:*",
     "@roam/business-config": "workspace:*",
     "@roam/location": "workspace:*",

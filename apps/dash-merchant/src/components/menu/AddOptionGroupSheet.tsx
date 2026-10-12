@@ -1,10 +1,13 @@
 import { useEffect, useState } from 'react';
 import { MaterialIcon } from '../../signup/components/MaterialIcon';
+import { groupFromList, type ChoiceList } from '@roam/merchant-ops';
 import { ModifierGroup, ModifierOption, generateMenuId } from '../../types/menu';
 
 interface AddOptionGroupSheetProps {
   open: boolean;
   initialGroup?: ModifierGroup | null;
+  kind?: 'included' | 'priced' | 'extra';
+  lists?: ChoiceList[];
   onClose: () => void;
   onSave: (group: ModifierGroup) => void;
 }
@@ -13,36 +16,36 @@ function createEmptyOption(): ModifierOption {
   return { id: generateMenuId(), name: '', priceAdjustment: 0 };
 }
 
-function createEmptyGroup(): ModifierGroup {
+function createEmptyGroup(kind: 'included' | 'priced' | 'extra'): ModifierGroup {
+  const priced = kind === 'priced';
+  const included = kind === 'included';
   return {
     id: generateMenuId(),
-    name: '',
-    required: true,
-    minSelections: 1,
-    maxSelections: 1,
-    options: [createEmptyOption(), createEmptyOption(), createEmptyOption()],
+    name: included ? 'Choose your side' : priced ? 'Size' : 'Add extras',
+    required: included || priced,
+    minSelections: included || priced ? 1 : 0,
+    maxSelections: included || priced ? 1 : 0,
+    kind,
+    options: [createEmptyOption(), createEmptyOption()],
   };
 }
 
 export default function AddOptionGroupSheet({
   open,
   initialGroup,
+  kind = 'extra',
+  lists = [],
   onClose,
   onSave,
 }: AddOptionGroupSheetProps) {
-  const [group, setGroup] = useState<ModifierGroup>(createEmptyGroup());
-  const [selectionType, setSelectionType] = useState<'single' | 'multi'>('single');
+  const [group, setGroup] = useState<ModifierGroup>(createEmptyGroup(kind));
+  const activeKind = group.kind || kind;
 
   useEffect(() => {
     if (!open) return;
-    if (initialGroup) {
-      setGroup(initialGroup);
-      setSelectionType(initialGroup.maxSelections === 1 ? 'single' : 'multi');
-    } else {
-      setGroup(createEmptyGroup());
-      setSelectionType('single');
-    }
-  }, [open, initialGroup]);
+    if (initialGroup) setGroup({ ...initialGroup, kind: initialGroup.kind || kind });
+    else setGroup(createEmptyGroup(kind));
+  }, [open, initialGroup, kind]);
 
   useEffect(() => {
     if (!open) return;
@@ -57,16 +60,7 @@ export default function AddOptionGroupSheet({
     };
   }, [open, onClose]);
 
-  const updateSelectionType = (type: 'single' | 'multi') => {
-    setSelectionType(type);
-    setGroup((prev) => ({
-      ...prev,
-      minSelections: type === 'single' ? 1 : 0,
-      maxSelections: type === 'single' ? 1 : 99,
-    }));
-  };
-
-  const updateOption = (optionId: string, field: keyof ModifierOption, value: string | number) => {
+  const updateOption = (optionId: string, field: keyof ModifierOption, value: string | number | boolean) => {
     setGroup((prev) => ({
       ...prev,
       options: prev.options.map((option) =>
@@ -83,10 +77,20 @@ export default function AddOptionGroupSheet({
   };
 
   const handleSave = () => {
-    if (!group.name.trim()) return;
-    const validOptions = group.options.filter((option) => option.name.trim());
-    if (validOptions.length === 0) return;
-    onSave({ ...group, name: group.name.trim(), options: validOptions });
+    if (!group.name.trim() || group.options.length === 0 || group.options.some((option) => !option.name.trim())) return;
+    const validOptions = group.options;
+    const included = activeKind === 'included';
+    const priced = activeKind === 'priced';
+    const required = included || priced;
+    onSave({
+      ...group,
+      name: group.name.trim(),
+      kind: activeKind,
+      required,
+      minSelections: required ? 1 : 0,
+      maxSelections: required ? 1 : Math.max(0, Number(group.maxSelections) || 0),
+      options: validOptions.map((option) => ({ ...option, priceAdjustment: included ? 0 : option.priceAdjustment })),
+    });
     onClose();
   };
 
@@ -106,7 +110,7 @@ export default function AddOptionGroupSheet({
       >
         <header className="flex items-center justify-between border-b border-outline-variant px-inset-md py-inset-sm">
           <h1 className="text-headline-md text-on-surface">
-            {initialGroup ? 'Edit Option Group' : 'Add Option Group'}
+            {activeKind === 'included' ? 'Included choice' : activeKind === 'priced' ? 'Required price' : 'Extras'}
           </h1>
           <button
             type="button"
@@ -133,62 +137,64 @@ export default function AddOptionGroupSheet({
               />
             </div>
 
-            <div className="grid grid-cols-1 gap-inset-md md:grid-cols-2">
-              <div className="space-y-inset-xs">
-                <span className="block text-label-md text-on-surface-variant">Selection Type</span>
-                <div className="flex rounded bg-surface-container p-inset-base">
-                  <button
-                    type="button"
-                    onClick={() => updateSelectionType('single')}
-                    className={`flex flex-1 items-center justify-center gap-inset-xs rounded px-inset-sm py-inset-xs text-label-md ${
-                      selectionType === 'single'
-                        ? 'border border-outline-variant bg-surface-container-lowest text-on-surface shadow-sm'
-                        : 'text-on-surface-variant hover:bg-surface-container-highest'
-                    }`}
-                  >
-                    <MaterialIcon name="radio_button_checked" className="text-[18px]" />
-                    Single (Radio)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => updateSelectionType('multi')}
-                    className={`flex flex-1 items-center justify-center gap-inset-xs rounded px-inset-sm py-inset-xs text-label-md ${
-                      selectionType === 'multi'
-                        ? 'border border-outline-variant bg-surface-container-lowest text-on-surface shadow-sm'
-                        : 'text-on-surface-variant hover:bg-surface-container-highest'
-                    }`}
-                  >
-                    <MaterialIcon name="check_box_outline_blank" className="text-[18px]" />
-                    Multi (Checkbox)
-                  </button>
-                </div>
-              </div>
-
-              <div className="flex h-full items-center justify-between pt-6">
-                <label className="flex cursor-pointer items-center gap-inset-xs text-body-lg text-on-surface">
-                  Required Field
-                  <MaterialIcon
-                    name="info"
-                    className="text-[18px] text-on-surface-variant"
-                  />
-                </label>
-                <button
-                  type="button"
-                  role="switch"
-                  aria-checked={group.required}
-                  onClick={() => setGroup((prev) => ({ ...prev, required: !prev.required }))}
-                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 ${
-                    group.required ? 'bg-primary-container' : 'bg-surface-container-high'
-                  }`}
-                >
-                  <span
-                    className={`inline-block h-4 w-4 transform rounded-full bg-surface-container-lowest transition-transform ${
-                      group.required ? 'translate-x-6' : 'translate-x-1'
-                    }`}
-                  />
-                </button>
-              </div>
-            </div>
+            <label className="block text-label-md text-on-surface-variant">
+              Use a saved list
+              <select
+                className="mt-1 w-full rounded border border-outline-variant bg-transparent p-inset-sm text-body-lg text-on-surface"
+                value={group.libraryGroupId || ''}
+                onChange={(event) => {
+                  const list = lists.find((item) => item.id === event.target.value);
+                  if (!list) {
+                    setGroup((prev) => ({ ...prev, libraryGroupId: undefined }));
+                    return;
+                  }
+                  const attached = groupFromList(list, group.id);
+                  setGroup({
+                    ...group,
+                    name: attached.name,
+                    kind: attached.kind,
+                    libraryGroupId: attached.libraryGroupId,
+                    required: attached.kind !== 'extra',
+                    minSelections: attached.kind !== 'extra' ? 1 : 0,
+                    maxSelections: attached.maxSelections,
+                    options: attached.options.map((option) => ({
+                      id: option.id,
+                      name: option.name,
+                      priceAdjustment: option.priceModifier,
+                      isAvailable: option.isAvailable,
+                    })),
+                  });
+                }}
+              >
+                <option value="">Type a new list</option>
+                {lists.filter((list) => list.kind === activeKind).map((list) => (
+                  <option key={list.id} value={list.id}>{list.name}</option>
+                ))}
+              </select>
+            </label>
+            {activeKind === 'included' ? (
+              <p className="text-body-md text-on-surface-variant">The customer must pick one. Each choice stays free.</p>
+            ) : activeKind === 'priced' ? (
+              <p className="text-body-md text-on-surface-variant">The customer must pick one. Each option is the restaurant price.</p>
+            ) : (
+              <label className="block text-label-md text-on-surface-variant">
+                Customer can add up to
+                <input
+                  type="number"
+                  min={1}
+                  placeholder="Any"
+                  value={group.maxSelections > 0 && group.maxSelections < 99 ? group.maxSelections : ''}
+                  onChange={(event) => setGroup((prev) => ({ ...prev, maxSelections: Number(event.target.value) || 0 }))}
+                  className="mt-1 w-full rounded border border-outline-variant bg-transparent p-inset-sm text-body-lg text-on-surface"
+                />
+              </label>
+            )}
+            {!group.libraryGroupId ? (
+              <label className="flex items-center gap-2 text-body-md text-on-surface">
+                <input type="checkbox" checked={Boolean(group.saveForLibrary)} onChange={(event) => setGroup((prev) => ({ ...prev, saveForLibrary: event.target.checked }))} />
+                Save for other dishes
+              </label>
+            ) : <p className="text-body-sm text-on-surface-variant">Used on other dishes. Saving updates every dish that uses this list.</p>}
           </section>
 
           <hr className="border-outline-variant" />
@@ -212,18 +218,20 @@ export default function AddOptionGroupSheet({
                       placeholder="Option Name"
                       className="col-span-2 border-b border-outline-variant bg-transparent py-inset-xs text-body-lg text-on-surface outline-none placeholder:text-on-surface-variant focus:border-primary"
                     />
-                    <div className="relative flex items-center">
-                      <span className="absolute left-0 text-body-lg text-on-surface-variant">+J$</span>
-                      <input
-                        type="number"
-                        value={option.priceAdjustment || ''}
-                        onChange={(event) =>
-                          updateOption(option.id, 'priceAdjustment', parseFloat(event.target.value) || 0)
-                        }
-                        placeholder="Price"
-                        className="w-full border-b border-outline-variant bg-transparent py-inset-xs pl-8 text-body-lg text-on-surface outline-none focus:border-primary"
-                      />
-                    </div>
+                    {activeKind === 'included' ? <span className="self-center text-body-md text-on-surface-variant">J$0</span> : (
+                      <div className="relative flex items-center">
+                        <span className="absolute left-0 text-body-lg text-on-surface-variant">+J$</span>
+                        <input
+                          type="number"
+                          value={option.priceAdjustment || ''}
+                          onChange={(event) =>
+                            updateOption(option.id, 'priceAdjustment', parseFloat(event.target.value) || 0)
+                          }
+                          placeholder="Price"
+                          className="w-full border-b border-outline-variant bg-transparent py-inset-xs pl-8 text-body-lg text-on-surface outline-none focus:border-primary"
+                        />
+                      </div>
+                    )}
                   </div>
                   <button
                     type="button"

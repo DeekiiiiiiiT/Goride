@@ -171,6 +171,8 @@ export function InHouseWorkspacePage() {
         </section>
         <section className="space-y-3 rounded-lg border border-slate-800 p-4">
           <h2 className="font-medium">2. Record the purchase</h2>
+          {String(detail.task.state) === 'exception_purchase_unknown' ? <p className="text-amber-200">If you already paid the restaurant, mark this placed. If you did not pay, go back to Exceptions.</p> : null}
+          {String(detail.task.state) !== 'placing' && String(detail.task.state) !== 'claimed' && String(detail.task.state) !== 'exception_purchase_unknown' ? <p className="text-amber-200">This order has moved on. Saving records the card spend as a Roam cost.</p> : null}
           <label className="block">External order number<input className="mt-1 w-full rounded bg-slate-900 p-2" value={externalOrderRef} onChange={(event) => setExternalOrderRef(event.target.value)} /></label>
           <label className="block">Total charged J$<input className="mt-1 w-full rounded bg-slate-900 p-2" value={totalMajor} onChange={(event) => setTotalMajor(event.target.value)} /></label>
           {over ? <p className="text-amber-300">This is above what Roam can absorb. Swap the item or refund the customer.</p> : null}
@@ -181,7 +183,7 @@ export function InHouseWorkspacePage() {
           </label>
           <label className="block">Ready time<input type="time" className="mt-1 w-full rounded bg-slate-900 p-2" value={readyTime} onChange={(event) => setReadyTime(event.target.value)} /></label>
           <label className="block">Receipt<input type="file" accept="image/*,application/pdf" className="mt-1 block" onChange={(event) => { const file = event.target.files?.[0]; if (file) void onReceipt(file); }} /></label>
-          <button type="button" disabled={!canPlace || busy} className="rounded bg-emerald-700 px-4 py-2 disabled:opacity-40" onClick={() => void save()}>Mark placed</button>
+          <button type="button" disabled={!canPlace || busy} className="rounded bg-emerald-700 px-4 py-2 disabled:opacity-40" onClick={() => void save()}>{String(detail.task.state) === 'placing' || String(detail.task.state) === 'exception_purchase_unknown' ? 'Mark placed' : 'Record the spend'}</button>
           <h2 className="pt-4 font-medium">3. Something wrong?</h2>
           <div className="flex flex-wrap gap-2">
             {EXCEPTIONS.map(([code, label]) => (

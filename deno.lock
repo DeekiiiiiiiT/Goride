@@ -6677,6 +6677,7 @@
             "npm:@capacitor/cli@^7.6.5",
             "npm:@capacitor/core@^7.6.5",
             "npm:@capacitor/geolocation@^7.1.8",
+            "npm:@capacitor/ios@^7.6.8",
             "npm:@capacitor/keyboard@^7.0.6",
             "npm:@capacitor/splash-screen@^7.0.5",
             "npm:@capacitor/status-bar@^7.0.6",
@@ -6806,6 +6807,14 @@
       "apps/fleet": {
         "packageJson": {
           "dependencies": [
+            "npm:@capacitor/android@^7.6.5",
+            "npm:@capacitor/app@^7.1.2",
+            "npm:@capacitor/browser@^7.0.5",
+            "npm:@capacitor/cli@^7.6.5",
+            "npm:@capacitor/core@^7.6.5",
+            "npm:@capacitor/ios@^7.6.8",
+            "npm:@capacitor/splash-screen@^7.0.5",
+            "npm:@capacitor/status-bar@^7.0.6",
             "npm:@google/generative-ai@*",
             "npm:@jsr/supabase__supabase-js@^2.49.8",
             "npm:@radix-ui/react-accordion@^1.2.3",
@@ -6918,6 +6927,7 @@
             "npm:@capacitor/cli@^7.6.5",
             "npm:@capacitor/core@^7.6.5",
             "npm:@capacitor/geolocation@^7.1.8",
+            "npm:@capacitor/ios@^7.6.8",
             "npm:@capacitor/keyboard@^7.0.6",
             "npm:@capacitor/share@^7.0.4",
             "npm:@capacitor/splash-screen@^7.0.5",

@@ -186,6 +186,7 @@ jobs:
           supabase/functions/delivery/inHouse/taskMachine.test.ts
           supabase/functions/delivery/inHouse/pricing.test.ts
           supabase/functions/delivery/inHouse/deskRules.test.ts
+          supabase/functions/delivery/inHouse/customerMenu.test.ts
           supabase/functions/delivery/inHouse/dispatchOrigin.test.ts
           tools/in-house-worker/guard.test.ts
 
@@ -197,6 +198,9 @@ jobs:
 
       - name: Ban Figma-style package@version imports
         run: node scripts/check-no-versioned-imports.mjs
+
+      - name: Procurement events use column at
+        run: node scripts/check-procurement-event-column.mjs
 
       - name: Ban bare @roam imports in fleet edge graph
         run: node scripts/check-fleet-edge-roam-imports.mjs

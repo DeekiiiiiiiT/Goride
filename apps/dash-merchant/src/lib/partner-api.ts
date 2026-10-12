@@ -311,6 +311,20 @@ export function importMerchantCatalog(
   });
 }
 
+export function listChoiceLists(merchantId: string) {
+  return deliveryFetch<{ lists: Array<{ id: string; name: string; kind: 'included' | 'extra'; maxSelections: number; options: Array<{ id: string; name: string; priceModifier: number; isAvailable: boolean }> }> }>(
+    `/merchants/${merchantId}/choice-lists`,
+  );
+}
+
+export function saveChoiceList(merchantId: string, list: Record<string, unknown>) {
+  const id = typeof list.id === 'string' ? list.id : '';
+  return deliveryFetch<{ list: { id: string } }>(
+    id ? `/merchants/${merchantId}/choice-lists/${id}` : `/merchants/${merchantId}/choice-lists`,
+    { method: id ? 'PATCH' : 'POST', body: JSON.stringify(list) },
+  );
+}
+
 export function saveOnboardingDraft(opts: {
   wizardStepKey: string;
   wizardStep?: number;

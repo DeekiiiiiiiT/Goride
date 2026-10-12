@@ -2,6 +2,7 @@ export interface ModifierOption {
   id: string;
   name: string;
   priceAdjustment: number;
+  isAvailable?: boolean;
 }
 
 export interface ModifierGroup {
@@ -11,6 +12,9 @@ export interface ModifierGroup {
   minSelections: number;
   maxSelections: number;
   options: ModifierOption[];
+  kind?: 'included' | 'priced' | 'extra';
+  libraryGroupId?: string;
+  saveForLibrary?: boolean;
 }
 
 export interface MenuItem {
@@ -66,7 +70,8 @@ export function createEmptyMenuItem(categoryId = ''): MenuItem {
 }
 
 export function getModifierGroupLabel(group: ModifierGroup) {
-  const selection =
-    group.maxSelections === 1 ? 'Choose 1' : 'Multi-select';
-  return `${group.required ? 'Required' : 'Optional'} • ${selection}`;
+  if (group.kind === 'priced') return 'Required price · customer picks one';
+  if (group.kind === 'included' || (group.required && group.maxSelections <= 1 && !group.options.some((option) => option.priceAdjustment > 0))) return 'Included · customer picks one';
+  if (group.maxSelections > 1 && group.maxSelections < 99) return `Extras · up to ${group.maxSelections}`;
+  return 'Extras · customer can add any';
 }

@@ -1,3 +1,5 @@
+import type { PizzaMenu, PizzaRecipe } from '@roam/merchant-ops/pizzaMenu';
+
 export type MenuModifierOption = {
   id: string;
   label: string;
@@ -9,6 +11,10 @@ export type MenuModifierGroup = {
   title: string;
   required: boolean;
   type: 'radio' | 'checkbox' | 'chips';
+  /** 0 or 99 means the customer may pick any. 1 is a single choice. */
+  maxSelections?: number;
+  /** replace: the chosen option is the dish price. add: the option is added on top. */
+  priceMode?: 'add' | 'replace';
   options: MenuModifierOption[];
 };
 
@@ -21,7 +27,15 @@ export type MenuItem = {
   categoryId: string;
   badge?: string;
   featured?: boolean;
+  /** Minutes this dish takes to prepare. Shown to the customer on the dish. */
+  prepMins?: number;
   modifiers: MenuModifierGroup[];
+  /** Present only on a pizza that has shared section prices and a starting recipe. */
+  pizza?: {
+    menu: PizzaMenu;
+    recipe: PizzaRecipe;
+    markupBps: number;
+  };
 };
 
 export type RestaurantProfile = {

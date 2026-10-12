@@ -13,11 +13,18 @@ export type CartLine = {
   options: string[];
 };
 
+function optionLabel(mod: { name?: string; priceAdjustment?: number }): string {
+  const name = String(mod.name || "");
+  const extra = Number(mod.priceAdjustment) || 0;
+  if (!name) return "";
+  return extra > 0 ? `${name} (+J$${extra})` : name;
+}
+
 type OrderItem = {
   name?: string;
   quantity?: number;
   source_sku?: string | null;
-  modifiers?: Array<{ name?: string }>;
+  modifiers?: Array<{ name?: string; priceAdjustment?: number }>;
   note?: string;
 };
 
@@ -35,7 +42,7 @@ export function manualChecklist(input: {
   if (input.phone) steps.push({ id: "phone", label: "Phone", copyText: input.phone });
   input.orderItems.forEach((item, index) => {
     const qty = Math.max(1, Number(item.quantity) || 1);
-    const options = (item.modifiers ?? []).map((mod) => String(mod.name || "")).filter(Boolean);
+    const options = (item.modifiers ?? []).map((mod) => optionLabel(mod)).filter(Boolean);
     const label = `${qty}× ${item.name || "Item"}${options.length ? ` — ${options.join(", ")}` : ""}`;
     steps.push({ id: `item-${index}`, label, copyText: label });
   });
@@ -56,6 +63,6 @@ export function cartPayload(orderItems: OrderItem[]): CartLine[] {
     name: String(item.name || ""),
     quantity: Math.max(1, Number(item.quantity) || 1),
     sku: item.source_sku ? String(item.source_sku) : null,
-    options: (item.modifiers ?? []).map((mod) => String(mod.name || "")).filter(Boolean),
+    options: (item.modifiers ?? []).map((mod) => optionLabel(mod)).filter(Boolean),
   }));
 }

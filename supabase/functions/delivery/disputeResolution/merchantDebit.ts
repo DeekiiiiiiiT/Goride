@@ -1,4 +1,5 @@
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { merchantFaultJournal } from "../inHouse/deskRules.ts";
 
 function getPaymentsDb() {
   return createClient(
@@ -39,9 +40,8 @@ export async function applyMerchantFaultDebit(
     .eq("idempotency_key", idempotencyKey)
     .maybeSingle();
 
-  if (existing?.id) return;
+  if (existing?.id || inHouse) return;
 
-  if (!inHouse) {
   await pdb.from("merchant_adjustments").insert({
     merchant_id: opts.merchantId,
     amount: -amount,
@@ -58,27 +58,22 @@ export async function applyMerchantFaultDebit(
     p_period: periodKey,
     p_amount: amount,
   });
-  }
 
   if (opts.skipLedger) return;
+
+  const lines = merchantFaultJournal(false, opts.merchantId, Math.round(amount * 100));
+  if (!lines) return;
 
   const publicDb = createClient(
     Deno.env.get("SUPABASE_URL")!,
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
   );
-  const minor = Math.round(amount * 100);
-  const foodLine = inHouse
-    ? { kind: "platform_cost", party_type: "platform", party_id: null, component: "procurement_refund", amount_minor: minor }
-    : { kind: "merchant_receivable", party_type: "merchant", party_id: opts.merchantId, component: "fault", amount_minor: minor };
   await publicDb.rpc("rush_post_journal", {
     p_idempotency_key: idempotencyKey,
     p_event_type: "merchant_fault",
     p_order_id: opts.orderId,
     p_correlation_id: null,
-    p_lines: [
-      foodLine,
-      { kind: "platform_revenue", party_type: "platform", party_id: null, component: "fault", amount_minor: -minor },
-    ],
+    p_lines: lines,
     p_actor_type: "admin",
     p_actor_id: opts.createdBy ?? null,
     p_reason: opts.reason,

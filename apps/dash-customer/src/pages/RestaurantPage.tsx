@@ -93,7 +93,7 @@ export default function RestaurantPage({ merchantId, itemId, onNavigate }: Props
 
   const handleQuickAdd = (item: MenuItem) => {
     if (!restaurant) return;
-    if (item.modifiers.length > 0) {
+    if (item.pizza || item.modifiers.length > 0) {
       openItem(item);
       return;
     }
@@ -117,20 +117,28 @@ export default function RestaurantPage({ merchantId, itemId, onNavigate }: Props
     instructions: string;
     unitPrice: number;
     optionsLabel: string;
+    pizza?: import('@roam/merchant-ops/pizzaMenu').PizzaPick;
   }) => {
+    void data.optionsLabel;
     if (!selectedItem || !restaurant) return;
 
-    const options =
-      data.optionsLabel || data.instructions
-        ? [
-            ...(data.optionsLabel
-              ? [{ name: 'Customizations', selections: [{ name: data.optionsLabel, priceAdjustment: 0 }] }]
-              : []),
-            ...(data.instructions
-              ? [{ name: 'Instructions', selections: [{ name: data.instructions, priceAdjustment: 0 }] }]
-              : []),
-          ]
-        : undefined;
+    const options = data.pizza
+      ? [{ name: 'Pizza', selections: [{ name: data.optionsLabel, priceAdjustment: 0 }] }]
+      : [
+      ...selectedItem.modifiers.flatMap((group) => {
+        const value = data.selections[group.id];
+        const ids = Array.isArray(value) ? value : value ? [value] : [];
+        const selections = ids.flatMap((id) => {
+          const option = group.options.find((entry) => entry.id === id);
+          if (!option) return [];
+          return [{ id: option.id, name: option.label, priceAdjustment: option.price }];
+        });
+        return selections.length ? [{ name: group.title, selections }] : [];
+      }),
+      ...(data.instructions
+        ? [{ name: 'Instructions', selections: [{ name: data.instructions, priceAdjustment: 0 }] }]
+        : []),
+    ];
 
     tryAddToCart(
       {
@@ -141,6 +149,7 @@ export default function RestaurantPage({ merchantId, itemId, onNavigate }: Props
         quantity: data.quantity,
         imageUrl: selectedItem.image,
         options,
+        ...(data.pizza ? { pizza: data.pizza } : {}),
       },
       selectedItem.name,
     );
@@ -340,6 +349,7 @@ export default function RestaurantPage({ merchantId, itemId, onNavigate }: Props
                         <button type="button" onClick={() => openItem(item)} className="text-left">
                           <h3 className="text-headline-md font-bold text-on-surface">{item.name}</h3>
                           <p className="mt-1 line-clamp-2 text-body-md text-on-surface-variant">{item.description}</p>
+                          {item.prepMins ? <p className="mt-1 text-body-md text-on-surface-variant">{item.prepMins} min</p> : null}
                         </button>
                         <div className="mt-4 flex items-center justify-between">
                           <span className="text-headline-md font-bold text-primary">{formatJmd(item.price)}</span>

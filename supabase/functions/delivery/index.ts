@@ -38,6 +38,7 @@ import { assertMerchantAcceptingOrders } from "./merchantOpenCheck.ts";
 import { registerMerchantInventoryRoutes } from "./merchantInventoryRoutes.ts";
 import { registerRushMoneyRoutes } from "./rushMoney/routes.ts";
 import { registerCustomerOrderRoutes } from "./customerOrderRoutes.ts";
+import { registerMerchantChoiceRoutes } from "./menuChoiceLibrary.ts";
 import { registerInHouseRoutes } from "./inHouse/routes.ts";
 import { registerMerchantSupportRoutes } from "./merchantSupportRoutes.ts";
 import { registerCustomerAccountRoutes } from "./customerAccountRoutes.ts";
@@ -232,8 +233,10 @@ app.get("/merchants", async (c) => {
 
   if (error) return c.json({ error: error.message }, 500);
 
-  const { filterDiscoveryMerchants } = await import("./inHouse/visibility.ts");
-  const visibleMerchants = await filterDiscoveryMerchants(supabase, data ?? []);
+  const { customerIdFromAuth, filterDiscoveryMerchants } = await import("./inHouse/visibility.ts");
+  const authHeader = c.req.header("Authorization");
+  const customerId = authHeader ? await customerIdFromAuth(getSupabase(authHeader), supabase).catch(() => null) : null;
+  const visibleMerchants = await filterDiscoveryMerchants(supabase, data ?? [], customerId);
 
   const { resolveDeliveryFee, haversineKm, roundDistanceKm } = await import("../_shared/dashPricing.ts");
   const { resolvePricingLayers } = await import("./pricingLayers.ts");
@@ -279,8 +282,9 @@ app.get("/merchants", async (c) => {
       return null;
     }
 
+    const { procurement_mode: _procurementMode, in_house_live: _inHouseLive, ...publicRow } = row;
     return {
-      ...row,
+      ...publicRow,
       delivery_fee: deliveryFee,
       search_boost: boost,
       auto_ads: autoAds,
@@ -393,8 +397,15 @@ app.get("/merchants", async (c) => {
     let responseMerchant = enrichedMerchant;
     let deskClosed = false;
     if (String(merchant.procurement_mode || "") === "in_house") {
-      const { inHouseStoreIsVisible } = await import("./inHouse/visibility.ts");
+      const { customerIdFromAuth, inHouseAudienceAllows, inHouseStoreIsVisible } = await import("./inHouse/visibility.ts");
       const { priceIsFresh } = await import("./inHouse/pricing.ts");
+      const authHeader = c.req.header("Authorization");
+      const customerId = authHeader ? await customerIdFromAuth(getSupabase(authHeader), supabase).catch(() => null) : null;
+      const allowed = await inHouseAudienceAllows(supabase, {
+        id: merchantId,
+        procurement_mode: String(merchant.procurement_mode),
+      }, customerId);
+      if (!allowed) return c.json({ error: "Merchant not found" }, 404);
       const visible = await inHouseStoreIsVisible(supabase, {
         id: merchantId,
         procurement_mode: String(merchant.procurement_mode),
@@ -412,10 +423,27 @@ app.get("/merchants", async (c) => {
       }
     }
     const accepting = acceptingNow.ok && !deskClosed;
+    let responseCategories = categories || [];
+    if (String(merchant.procurement_mode || "") === "in_house") {
+      const { customerMenuItem } = await import("./inHouse/customerMenu.ts");
+      responseItems = responseItems.map((item: Record<string, unknown>) => customerMenuItem(item));
+      const { data: store } = await supabase.from("in_house_stores").select("markup_bps").eq("merchant_id", merchantId).maybeSingle();
+      if (store) {
+        const { parsePizzaMenu } = await import("../../../packages/merchant-ops/src/pizzaMenu.ts");
+        const { pizzaMenuForCustomer } = await import("./inHouse/customerMenu.ts");
+        const markupBps = Number(store.markup_bps ?? 1500);
+        responseCategories = responseCategories.map((category: { pizza_menu?: unknown }) => {
+          const menu = parsePizzaMenu(category.pizza_menu);
+          if (!menu) return category;
+          return { ...category, pizza_menu: pizzaMenuForCustomer(menu, markupBps) };
+        });
+      }
+    }
+    const { procurement_mode: _procurementMode, in_house_live: _inHouseLive, ...customerMerchant } = responseMerchant;
 
     return c.json({
-      merchant: responseMerchant,
-      categories: categories || [],
+      merchant: customerMerchant,
+      categories: responseCategories,
       items: responseItems,
       hours: hours || [],
       platform_fee_rate: feeResolved.rate,
@@ -2912,6 +2940,7 @@ import { registerSupportAdminRoutes } from "./admin/supportRoutes.ts";
 import { registerOrderChatRoutes } from "./orderChat.ts";
 import { registerAdminOrderChatRoutes } from "./admin/orderChatRoutes.ts";
 registerCustomerOrderRoutes(app, { getSupabase, getServiceSupabase });
+registerMerchantChoiceRoutes(app, { getServiceSupabase, requireMerchant: requireMerchantForId });
 registerInHouseRoutes(app, { getServiceSupabase });
 registerRushMoneyRoutes(app, { getSupabase, getServiceSupabase });
 registerOrderChatRoutes(app, { getSupabase, getServiceSupabase, getPublicServiceSupabase });

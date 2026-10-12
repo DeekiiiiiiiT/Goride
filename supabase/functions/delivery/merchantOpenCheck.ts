@@ -4,6 +4,7 @@
  */
 
 import { findJamaicaHolidayByDate } from "./jamaicaHolidays.ts";
+import { isOpenAt, jamaicaWeekday } from "./inHouse/pricing.ts";
 
 export type MerchantOpenCheckResult =
   | { ok: true }
@@ -11,32 +12,13 @@ export type MerchantOpenCheckResult =
 
 const JAMAICA_TZ = "America/Jamaica";
 
-function parseTimeToMinutes(time: string): number {
-  const [hours, minutes] = time.split(":").map(Number);
-  return hours * 60 + (minutes || 0);
-}
-
 function isWithinDayHours(
   openTime: string | null | undefined,
   closeTime: string | null | undefined,
   isClosed: boolean,
   now: Date,
 ): boolean {
-  if (isClosed || !openTime || !closeTime) return false;
-  const nowMinutes = now.getHours() * 60 + now.getMinutes();
-  const openMinutes = parseTimeToMinutes(String(openTime).slice(0, 5));
-  const closeMinutes = parseTimeToMinutes(String(closeTime).slice(0, 5));
-  if (closeMinutes > openMinutes) {
-    return nowMinutes >= openMinutes && nowMinutes < closeMinutes;
-  }
-  return nowMinutes >= openMinutes || nowMinutes < closeMinutes;
-}
-
-function todayDateString(now: Date): string {
-  const y = now.getFullYear();
-  const m = String(now.getMonth() + 1).padStart(2, "0");
-  const d = String(now.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
+  return isOpenAt(String(openTime || ""), String(closeTime || ""), isClosed, now);
 }
 
 /** Calendar YYYY-MM-DD in America/Jamaica. */
@@ -130,7 +112,7 @@ export async function assertMerchantAcceptingOrders(
     return { ok: false, status: 409, error: "This store is not accepting orders right now" };
   }
 
-  const today = todayDateString(now);
+  const today = jamaicaDateString(now);
   const { data: specialRows } = await serviceSb
     .from("merchant_special_hours")
     .select("special_date, is_closed, open_time, close_time, label")
@@ -187,7 +169,7 @@ export async function assertMerchantAcceptingOrders(
     return assertDailyCapacity(serviceSb, merchantId, now);
   }
 
-  const day = now.getDay();
+  const day = jamaicaWeekday(now);
   const dayHours = hoursList.find((h) => Number(h.day_of_week) === day);
   if (
     !dayHours ||

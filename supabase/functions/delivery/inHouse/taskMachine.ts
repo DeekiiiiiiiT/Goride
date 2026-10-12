@@ -9,6 +9,7 @@ export const TASK_STATES = [
   "picked_up",
   "closed",
   "exception_before_purchase",
+  "exception_purchase_unknown",
   "exception_after_purchase",
   "awaiting_customer",
   "abandoned",
@@ -33,7 +34,7 @@ export type TaskAction =
   | "redispatch"
   | "price_approved";
 
-const BEFORE = new Set<TaskState>(["queued", "claimed", "placing", "awaiting_customer"]);
+const BEFORE = new Set<TaskState>(["queued", "claimed", "awaiting_customer"]);
 const AFTER = new Set<TaskState>(["placed_external", "ready_for_pickup", "picked_up"]);
 
 const EDGES: Record<TaskState, Partial<Record<TaskAction, TaskState>>> = {
@@ -51,6 +52,11 @@ const EDGES: Record<TaskState, Partial<Record<TaskAction, TaskState>>> = {
     abandon: "abandoned",
     price_approved: "placing",
   },
+  exception_purchase_unknown: {
+    retry: "queued",
+    abandon: "abandoned",
+    record_purchase: "placed_external",
+  },
   exception_after_purchase: {
     wait: "ready_for_pickup",
     redispatch: "ready_for_pickup",
@@ -67,6 +73,7 @@ const EDGES: Record<TaskState, Partial<Record<TaskAction, TaskState>>> = {
 
 export function nextTaskState(from: TaskState, action: TaskAction): TaskState | null {
   if (action === "exception") {
+    if (from === "placing") return "exception_purchase_unknown";
     if (BEFORE.has(from)) return "exception_before_purchase";
     if (AFTER.has(from)) return "exception_after_purchase";
     return null;
@@ -80,8 +87,13 @@ export function assertTaskTransition(from: TaskState, action: TaskAction): TaskS
   return next;
 }
 
-/** A purchase journal means the food was bought. Retry must not run. */
-export function retryAllowed(from: TaskState, purchaseJournalExists: boolean): boolean {
+/** A purchase journal means the food was bought. A timed-out placing task needs ops to confirm nothing was bought. */
+export function retryAllowed(
+  from: TaskState,
+  purchaseJournalExists: boolean,
+  confirmedNothingBought = false,
+): boolean {
   if (purchaseJournalExists) return false;
+  if (from === "exception_purchase_unknown" && !confirmedNothingBought) return false;
   return nextTaskState(from, "retry") === "queued";
 }

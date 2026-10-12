@@ -296,6 +296,7 @@ export default function CheckoutPage({ onNavigate, session }: Props) {
             price: item.price,
             quantity: item.quantity,
             options: item.options,
+            ...(item.pizza ? { pizza: item.pizza } : {}),
           })),
           deliveryAddress,
           deliveryAddressLine2: savedAddress?.line2?.trim() || undefined,

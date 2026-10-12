@@ -427,6 +427,9 @@ importers:
       '@roam/location':
         specifier: workspace:*
         version: link:../../packages/location
+      '@roam/merchant-ops':
+        specifier: workspace:*
+        version: link:../../packages/merchant-ops
       '@roam/play-store-launch':
         specifier: workspace:*
         version: link:../../packages/play-store-launch
@@ -1898,6 +1901,12 @@ importers:
       '@roam/location':
         specifier: workspace:*
         version: link:../location
+      '@roam/merchant-ops':
+        specifier: workspace:*
+        version: link:../merchant-ops
+      '@roam/platform-ops-ui':
+        specifier: workspace:*
+        version: link:../platform-ops-ui
       '@roam/play-store-launch':
         specifier: workspace:*
         version: link:../play-store-launch

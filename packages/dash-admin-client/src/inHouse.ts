@@ -24,6 +24,8 @@ export type InHouseTaskCard = {
   needsApproval?: boolean;
   second_approved_at?: string | null;
   sla_warned_at?: string | null;
+  sla_paged_at?: string | null;
+  buyerName?: string | null;
 };
 
 export function listInHouseQueue(token: string) {
@@ -87,11 +89,24 @@ export function raiseInHouseException(token: string, id: string, code: string, n
   });
 }
 
-export function resolveInHouseTask(token: string, id: string, action: string) {
+export function resolveInHouseTask(
+  token: string,
+  id: string,
+  action: string,
+  extra?: { confirmedNothingBought?: boolean },
+) {
   return dashAdminFetch<{ ok: boolean }>(token, `/in-house/tasks/${id}/resolve`, {
     method: 'POST',
-    body: JSON.stringify({ action }),
+    body: JSON.stringify({ action, ...extra }),
   });
+}
+
+export function getInHouseAudience(token: string) {
+  return dashAdminFetch<{ customers: Array<{ customer_id: string; email: string }>; phones: string[] }>(token, '/in-house/audience');
+}
+
+export function saveInHouseAudience(token: string, body: { email?: string; customerId?: string; remove?: boolean; phones?: string[] }) {
+  return dashAdminFetch<{ ok: boolean }>(token, '/in-house/audience', { method: 'POST', body: JSON.stringify(body) });
 }
 
 export function approveInHousePurchase(token: string, id: string) {
@@ -121,11 +136,22 @@ export function sendInHouseChat(token: string, orderId: string, body: string) {
 }
 
 export function saveInHouseStore(token: string, body: Record<string, unknown>) {
-  return dashAdminFetch<{ ok: boolean }>(token, '/in-house/stores', { method: 'POST', body: JSON.stringify(body) });
+  return dashAdminFetch<{ ok: boolean; merchantId?: string }>(token, '/in-house/stores', { method: 'POST', body: JSON.stringify(body) });
+}
+
+export function listInHouseChoiceLists(token: string, merchantId: string) {
+  return dashAdminFetch<{ lists: Array<{ id: string; name: string; kind: 'included' | 'extra'; maxSelections: number; options: Array<{ id: string; name: string; priceModifier: number; isAvailable: boolean }> }> }>(token, `/in-house/stores/${merchantId}/choice-lists`);
+}
+
+export function saveInHouseChoiceList(token: string, merchantId: string, list: Record<string, unknown>) {
+  return dashAdminFetch<{ list: { id: string } }>(token, `/in-house/stores/${merchantId}/choice-lists`, {
+    method: 'POST',
+    body: JSON.stringify(list),
+  });
 }
 
 export function listInHouseMenu(token: string, merchantId: string) {
-  return dashAdminFetch<{ items: Array<Record<string, unknown>> }>(token, `/in-house/stores/${merchantId}/menu`);
+  return dashAdminFetch<{ items: Array<Record<string, unknown>>; categories: Array<{ id: string; name: string; choice_list_ids?: string[]; pizza_menu?: unknown }> }>(token, `/in-house/stores/${merchantId}/menu`);
 }
 
 export function saveInHouseMenu(
@@ -134,11 +160,23 @@ export function saveInHouseMenu(
   items: Array<Record<string, unknown>>,
   confirm: boolean,
   create?: Array<Record<string, unknown>>,
+  categories?: Array<{ id?: string; name: string; remove?: boolean; choiceListIds?: string[]; pizzaMenu?: unknown }>,
 ) {
   return dashAdminFetch<{ ok: boolean }>(token, `/in-house/stores/${merchantId}/menu`, {
     method: 'POST',
-    body: JSON.stringify({ items, confirm, create }),
+    body: JSON.stringify({ items, confirm, create, categories }),
   });
+}
+
+export function uploadDeskImage(token: string, file: File, folder: string) {
+  const body = new FormData();
+  body.append('file', file);
+  body.append('folder', folder);
+  return fetch(`${API_ENDPOINTS.delivery}/merchant-assets/upload`, {
+    method: 'POST',
+    headers: dashAdminHeaders(token),
+    body,
+  }).then((res) => parseDashAdminJson<{ publicUrl: string; path: string }>(res));
 }
 
 export function listInHouseCards(token: string) {

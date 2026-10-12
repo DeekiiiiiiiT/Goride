@@ -1,6 +1,7 @@
 import { foodWasPurchased, transitionOrThrow } from "./orderStatus.ts";
-import { slaLevel } from "./deskRules.ts";
-import { deskIsStaffed, inHouseGloballyEnabled, storeOpenNow } from "./visibility.ts";
+import { refundMissingTask, slaLevel } from "./deskRules.ts";
+import { storeOpenNow, type WeekHourRow } from "./pricing.ts";
+import { deskIsStaffed, inHouseGloballyEnabled } from "./visibility.ts";
 
 // deno-lint-ignore no-explicit-any
 type Sb = { from: (table: string) => any };
@@ -87,6 +88,7 @@ export async function runInHouseSweep(sb: Sb, now = new Date()): Promise<Record<
           payload: { code: "other", reason: "placing_sla" },
         });
         paged += 1;
+        await pageInHouseDesk(sb, "In-House desk: a buyer left an order while placing. Check Exceptions.");
       }
     }
   }
@@ -120,11 +122,25 @@ export async function runInHouseSweep(sb: Sb, now = new Date()): Promise<Record<
     if (moved.ok) dispatched += 1;
   }
 
-  const { data: missing } = await sb.from("v_in_house_paid_without_task").select("order_id");
+  const { data: missing } = await sb.from("v_in_house_paid_without_task").select("order_id, created_at");
   const { ensureProcurementTask } = await import("./createTask.ts");
   for (const row of missing || []) {
-    await ensureProcurementTask(sb, String(row.order_id));
-    tasksCreated += 1;
+    const result = await ensureProcurementTask(sb, String(row.order_id));
+    if (result.outcome === "created") {
+      tasksCreated += 1;
+      continue;
+    }
+    if (!refundMissingTask(String(row.created_at), now, result.outcome)) continue;
+    const { cancelOrder } = await import("../rushMoney/cancelOrder.ts");
+    const cancelled = await cancelOrder(sb, {
+      orderId: String(row.order_id),
+      actor: "system",
+      reason: "desk_failed",
+    });
+    if (cancelled.ok) {
+      refunded += 1;
+      await pageInHouseDesk(sb, "In-House desk: a paid order had no buyer task and was refunded.");
+    }
   }
 
   await syncInHouseAccepting(sb, now);
@@ -139,24 +155,42 @@ async function syncInHouseAccepting(sb: Sb, now: Date) {
     .select("id, in_house_live, is_accepting_orders")
     .eq("procurement_mode", "in_house");
   const ids = (merchants || []).map((row: { id: string }) => String(row.id));
-  const { data: stores } = ids.length
-    ? await sb.from("in_house_stores").select("merchant_id, offer_start_minute, offer_end_minute").in("merchant_id", ids)
-    : { data: [] };
-  const storeById = new Map((stores || []).map((row: { merchant_id: string }) => [String(row.merchant_id), row]));
+  const [{ data: stores }, { data: hourRows }] = ids.length
+    ? await Promise.all([
+      sb.from("in_house_stores").select("merchant_id").in("merchant_id", ids),
+      sb.from("merchant_hours").select("merchant_id, day_of_week, open_time, close_time, is_closed").in("merchant_id", ids),
+    ])
+    : [{ data: [] }, { data: [] }];
+  const storeIds = new Set((stores || []).map((row: { merchant_id: string }) => String(row.merchant_id)));
+  const hoursByMerchant = new Map<string, WeekHourRow[]>();
+  for (const row of hourRows || []) {
+    const id = String((row as { merchant_id: string }).merchant_id);
+    const list = hoursByMerchant.get(id) || [];
+    list.push(row as WeekHourRow);
+    hoursByMerchant.set(id, list);
+  }
   for (const merchant of merchants || []) {
-    const store = storeById.get(String(merchant.id)) as { offer_start_minute?: number; offer_end_minute?: number } | undefined;
+    const id = String(merchant.id);
     const open = Boolean(
       enabled &&
       merchant.in_house_live &&
       staffed &&
-      store &&
-      storeOpenNow(store, now),
+      storeIds.has(id) &&
+      storeOpenNow(hoursByMerchant.get(id) || [], now),
     );
     if (Boolean(merchant.is_accepting_orders) === open) continue;
     await sb.from("merchants").update({
       is_accepting_orders: open,
       updated_at: now.toISOString(),
     }).eq("id", merchant.id);
+  }
+}
+
+export async function pageInHouseDesk(sb: Sb, message: string) {
+  const { data } = await sb.from("in_house_alert_phones").select("phone").limit(2);
+  const { sendDashText } = await import("../../_shared/dashOrderSms.ts");
+  for (const row of data || []) {
+    await sendDashText(String((row as { phone?: string }).phone || ""), message);
   }
 }
 

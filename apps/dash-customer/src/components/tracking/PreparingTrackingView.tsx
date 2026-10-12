@@ -15,9 +15,6 @@ type Props = {
 };
 
 export function PreparingTrackingView({ order, onClose, onCancel, cancelPending, onHelp, onNavigate }: Props) {
-  const readyLabel = order.readyEta
-    ? new Date(order.readyEta).toLocaleTimeString('en-JM', { hour: 'numeric', minute: '2-digit' })
-    : null;
   const prepEta = formatPrepEta(
     remainingPrepMinutes({
       nowMs: Date.now(),
@@ -74,7 +71,7 @@ export function PreparingTrackingView({ order, onClose, onCancel, cancelPending,
             <span className="text-label-md font-semibold text-on-surface-variant uppercase tracking-wider">
               Estimated Ready
             </span>
-            <p className="text-headline-md font-bold text-primary">{readyLabel || prepEta}</p>
+            <p className="text-headline-md font-bold text-primary">{prepEta}</p>
           </div>
         </section>
 

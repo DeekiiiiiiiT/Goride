@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
+import { toast } from 'sonner';
 import ImageUpload from '../ImageUpload';
 import { MaterialIcon } from '../../signup/components/MaterialIcon';
+import { groupsFromStored, groupsToStored, listFromGroup, validateDishChoices, type ChoiceList } from '@roam/merchant-ops';
 import {
   MenuCategory,
   MenuItem,
@@ -8,10 +10,12 @@ import {
   createEmptyMenuItem,
   getModifierGroupLabel,
 } from '../../types/menu';
+import { listChoiceLists, saveChoiceList } from '../../lib/partner-api';
 import AddOptionGroupSheet from './AddOptionGroupSheet';
 
 interface EditItemViewProps {
   item: MenuItem | null;
+  merchantId: string;
   categories: MenuCategory[];
   defaultCategoryId?: string;
   onBack: () => void;
@@ -22,6 +26,7 @@ interface EditItemViewProps {
 
 export default function EditItemView({
   item,
+  merchantId,
   categories,
   defaultCategoryId,
   onBack,
@@ -35,6 +40,8 @@ export default function EditItemView({
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [optionGroupSheetOpen, setOptionGroupSheetOpen] = useState(false);
   const [editingGroup, setEditingGroup] = useState<ModifierGroup | null>(null);
+  const [sheetKind, setSheetKind] = useState<'included' | 'priced' | 'extra'>('included');
+  const [lists, setLists] = useState<ChoiceList[]>([]);
   const mainRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
@@ -53,6 +60,10 @@ export default function EditItemView({
     }
     mainRef.current?.scrollTo({ top: 0, behavior: 'instant' });
   }, [item, defaultCategoryId]);
+
+  useEffect(() => {
+    void listChoiceLists(merchantId).then((result) => setLists(result.lists || [])).catch(() => undefined);
+  }, [merchantId]);
 
   const toggleGroup = (groupId: string) => {
     setExpandedGroups((prev) => {
@@ -78,7 +89,25 @@ export default function EditItemView({
 
   const handleSubmit = () => {
     if (!formData.name.trim() || (formData.in_store_price ?? formData.price) <= 0) return;
-    onSave(formData);
+    const groups = groupsFromStored(formData.options);
+    const invalid = validateDishChoices(Number(formData.in_store_price ?? formData.price), groups);
+    if (invalid) {
+      toast.error(invalid);
+      return;
+    }
+    void (async () => {
+      const synced = [];
+      for (const group of groups) {
+        if (!group.libraryGroupId && !group.saveForLibrary) {
+          synced.push(group);
+          continue;
+        }
+        const list = listFromGroup(group, group.libraryGroupId);
+        const saved = await saveChoiceList(merchantId, { ...list, id: group.libraryGroupId });
+        synced.push({ ...group, libraryGroupId: saved.list.id, saveForLibrary: false });
+      }
+      onSave({ ...formData, options: groupsToStored(synced) as unknown as ModifierGroup[] });
+    })().catch((error: Error) => toast.error(error.message));
   };
 
   const isNew = !item?.id;
@@ -219,19 +248,13 @@ export default function EditItemView({
         </section>
 
         <section className="flex flex-col gap-6 rounded-xl border border-outline-variant bg-surface-container-lowest p-6 shadow-sm">
-          <div className="mb-2 flex items-center justify-between">
-            <h2 className="text-headline-md text-on-surface">Modifiers &amp; Options</h2>
-            <button
-              type="button"
-              onClick={() => {
-                setEditingGroup(null);
-                setOptionGroupSheetOpen(true);
-              }}
-              className="flex items-center gap-1 text-label-md text-primary hover:underline"
-            >
-              <MaterialIcon name="add" className="text-sm" />
-              Add Group
-            </button>
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+            <h2 className="text-headline-md text-on-surface">Choices</h2>
+            <div className="flex gap-3">
+              <button type="button" onClick={() => { setEditingGroup(null); setSheetKind('included'); setOptionGroupSheetOpen(true); }} className="text-label-md text-primary hover:underline">Add included choice</button>
+              <button type="button" onClick={() => { setEditingGroup(null); setSheetKind('priced'); setOptionGroupSheetOpen(true); }} className="text-label-md text-primary hover:underline">Add price choice</button>
+              <button type="button" onClick={() => { setEditingGroup(null); setSheetKind('extra'); setOptionGroupSheetOpen(true); }} className="text-label-md text-primary hover:underline">Add extras</button>
+            </div>
           </div>
 
           {formData.options.map((group) => {
@@ -273,6 +296,7 @@ export default function EditItemView({
                       type="button"
                       onClick={() => {
                         setEditingGroup(group);
+                        setSheetKind(group.kind || (group.required ? 'included' : 'extra'));
                         setOptionGroupSheetOpen(true);
                       }}
                       className="mt-2 text-left text-body-sm text-primary hover:underline"
@@ -371,6 +395,8 @@ export default function EditItemView({
       <AddOptionGroupSheet
         open={optionGroupSheetOpen}
         initialGroup={editingGroup}
+        kind={sheetKind}
+        lists={lists}
         onClose={() => {
           setOptionGroupSheetOpen(false);
           setEditingGroup(null);
