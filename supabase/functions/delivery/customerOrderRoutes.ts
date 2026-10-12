@@ -33,8 +33,8 @@ async function pricePizzaLine(
   rawPick: unknown,
   _mode: string,
 ) {
-  const { parsePizzaMenu, parsePizzaPick, parsePizzaRecipe, pizzaRestaurantPrice } = await import("../../../packages/merchant-ops/src/pizzaMenu.ts");
-  const { customerPriceFromCost } = await import("./inHouse/pricing.ts");
+  const { parsePizzaMenu, parsePizzaPick, parsePizzaRecipe } = await import("../../../packages/merchant-ops/src/pizzaMenu.ts");
+  const { pizzaLinePrices } = await import("./inHouse/customerMenu.ts");
   const recipe = parsePizzaRecipe(menuRow.pizza_recipe);
   if (!recipe) return null;
   const pick = parsePizzaPick(rawPick);
@@ -42,15 +42,15 @@ async function pricePizzaLine(
   const { data: category } = await sb.from("menu_categories").select("pizza_menu").eq("id", String(menuRow.category_id || "")).maybeSingle();
   const menu = parsePizzaMenu(category?.pizza_menu);
   if (!menu) return { ok: false as const, error: "This pizza is not available" };
-  const priced = pizzaRestaurantPrice(menu, pick);
-  if (!priced.ok) return { ok: false as const, error: priced.error };
   const { data: store } = await sb.from("in_house_stores").select("markup_bps").eq("merchant_id", String(menuRow.merchant_id || "")).maybeSingle();
-  const names = new Map([...menu.meats, ...menu.nonMeats].map((topping) => [topping.id, topping.name]));
   const markupBps = _mode === "in_house" && store ? Number(store.markup_bps ?? 1500) : 0;
+  const priced = pizzaLinePrices(menu, pick, markupBps);
+  if (!priced.ok) return { ok: false as const, error: priced.error };
+  const names = new Map([...menu.meats, ...menu.nonMeats].map((topping) => [topping.id, topping.name]));
   return {
     ok: true as const,
     restaurant: priced.restaurant,
-    customer: customerPriceFromCost(priced.restaurant, markupBps),
+    customer: priced.customer,
     modifiers: [
       { name: menu.sizes.find((size) => size.id === pick.sizeId)?.name || "Size", priceAdjustment: 0 },
       { name: menu.crusts.find((crust) => crust.id === pick.crustId)?.name || "Crust", priceAdjustment: 0 },

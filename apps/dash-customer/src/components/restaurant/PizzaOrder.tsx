@@ -1,11 +1,5 @@
 import { crustFee, type PizzaMenu, type PizzaPick, type PizzaPortion, type PizzaRecipe } from '@roam/merchant-ops/pizzaMenu';
 
-function customerPrice(restaurant: number, markupBps: number) {
-  const raw = restaurant * (1 + markupBps / 10000);
-  if (!Number.isFinite(raw) || raw <= 0) return 0;
-  return Math.ceil(raw / 10) * 10;
-}
-
 export function startingPizzaPick(menu: PizzaMenu, recipe: PizzaRecipe): PizzaPick {
   const size = menu.sizes.find((entry) => crustFee(menu, recipe.crustId, entry.id) != null) || menu.sizes[0];
   const crusts = menu.crusts.filter((crust) => size && crustFee(menu, crust.id, size.id) != null);
@@ -16,13 +10,11 @@ export function startingPizzaPick(menu: PizzaMenu, recipe: PizzaRecipe): PizzaPi
 export function PizzaOrder({
   menu,
   pick,
-  markupBps,
   money,
   onChange,
 }: {
   menu: PizzaMenu;
   pick: PizzaPick;
-  markupBps: number;
   money: (amount: number) => string;
   onChange: (pick: PizzaPick) => void;
 }) {
@@ -31,7 +23,7 @@ export function PizzaOrder({
   const toppings = [...menu.meats.map((topping) => ({ ...topping, group: 'Meats' })), ...menu.nonMeats.map((topping) => ({ ...topping, group: 'Non-meats' }))];
   function feeLabel(amount: number) {
     if (amount <= 0) return 'Included';
-    return `+${money(customerPrice(amount, markupBps))}`;
+    return `+${money(amount)}`;
   }
   function setSize(sizeId: string) {
     const stillThere = crustFee(menu, pick.crustId, sizeId) != null;

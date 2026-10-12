@@ -1,6 +1,7 @@
 import { assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
 import { calculateOrderPricing } from "../../_shared/orderPricing.ts";
-import { pizzaRestaurantPrice, type PizzaMenu } from "../../../../packages/merchant-ops/src/pizzaMenu.ts";
+import { pizzaRestaurantPrice, type PizzaMenu, type PizzaPick } from "../../../../packages/merchant-ops/src/pizzaMenu.ts";
+import { pizzaLinePrices, pizzaMenuForCustomer } from "./customerMenu.ts";
 import { appliedMenuPrice, customerPriceFromCost, isOpenAt, jamaicaDayStartIso, jamaicaWeekday, kitchenModifiers, priceWithinTolerance, storeOpenNow, withinAbsorbCap } from "./pricing.ts";
 
 function chargedSubtotal(unitPrice: number, modifiers?: Array<{ name: string; priceAdjustment: number }>) {
@@ -65,21 +66,50 @@ Deno.test("a paid add-on is charged once for a partner, an In-House store, and a
   assertEquals(inHouse.customer, 1380);
   assertEquals(chargedSubtotal(inHouse.customer, kitchenModifiers(partnerPick)), 1380);
 
-  const pizza = pizzaRestaurantPrice(pizzaMenu, {
+  const pizzaPick: PizzaPick = {
     sizeId: "medium",
     crustId: "tossed",
     cheese: "normal",
     sauceId: "pizza",
     toppings: [{ id: "pepperoni", portion: "normal" }],
-  });
+  };
+  const pizza = pizzaLinePrices(pizzaMenu, pizzaPick, 1500);
   if (!pizza.ok) throw new Error(pizza.error);
-  const pizzaCustomer = customerPriceFromCost(pizza.restaurant, 1500);
   const pizzaModifiers = [
     { name: "Medium", priceAdjustment: 0 },
     { name: "Pepperoni", priceAdjustment: 0 },
   ];
-  assertEquals(pizzaCustomer, 1380);
-  assertEquals(chargedSubtotal(pizzaCustomer, pizzaModifiers), pizzaCustomer);
+  assertEquals(pizza.restaurant, 1200);
+  assertEquals(pizza.customer, 1380);
+  assertEquals(chargedSubtotal(pizza.customer, pizzaModifiers), pizza.customer);
+});
+
+Deno.test("a pizza with several toppings charges the same total the item sheet shows", () => {
+  const menu: PizzaMenu = {
+    sizes: [{ id: "medium", name: "Medium", basePrice: 1010 }],
+    crusts: [{ id: "tossed", name: "Hand Tossed", description: "", fees: { medium: 0 } }],
+    extraCheese: { medium: 120 },
+    sauces: [{ id: "pizza", name: "Pizza Sauce" }],
+    meats: [{ id: "pepperoni", name: "Pepperoni", prices: { medium: 85 } }],
+    nonMeats: [],
+  };
+  const pick: PizzaPick = {
+    sizeId: "medium",
+    crustId: "tossed",
+    cheese: "extra",
+    sauceId: "pizza",
+    toppings: [{ id: "pepperoni", portion: "normal" }],
+  };
+  const sheet = pizzaRestaurantPrice(pizzaMenuForCustomer(menu, 1500), pick);
+  const charged = pizzaLinePrices(menu, pick, 1500);
+  const raw = pizzaRestaurantPrice(menu, pick);
+  if (!sheet.ok || !charged.ok || !raw.ok) throw new Error("pizza price failed");
+  const roundedOnce = customerPriceFromCost(raw.restaurant, 1500);
+  assertEquals(raw.restaurant, 1215);
+  assertEquals(roundedOnce, 1400);
+  assertEquals(sheet.restaurant, 1410);
+  assertEquals(charged.customer, sheet.restaurant);
+  assertEquals(charged.restaurant, raw.restaurant);
 });
 
 Deno.test("the card day starts at Jamaica midnight", () => {

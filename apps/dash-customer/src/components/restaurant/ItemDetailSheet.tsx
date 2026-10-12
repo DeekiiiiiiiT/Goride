@@ -136,10 +136,7 @@ export function ItemDetailSheet({
 
   const pizzaTotal = item?.pizza && pizzaPick ? pizzaRestaurantPrice(item.pizza.menu, pizzaPick) : null;
   const unitPrice = useMemo(() => {
-    if (item?.pizza && pizzaTotal && pizzaTotal.ok) {
-      const raw = pizzaTotal.restaurant * (1 + item.pizza.markupBps / 10000);
-      return Number.isFinite(raw) && raw > 0 ? Math.ceil(raw / 10) * 10 : 0;
-    }
+    if (item?.pizza && pizzaTotal && pizzaTotal.ok) return pizzaTotal.restaurant;
     return item ? calcUnitPrice(item, selections) : 0;
   }, [item, selections, pizzaTotal]);
 
@@ -224,7 +221,7 @@ export function ItemDetailSheet({
           {item.pizza && pizzaPick ? (
             <>
               {pizzaError ? <p className="px-margin-mobile text-error">{pizzaError}</p> : null}
-              <PizzaOrder markupBps={item.pizza.markupBps} menu={item.pizza.menu} money={formatJmd} pick={pizzaPick} onChange={(pick) => { setPizzaPick(pick); setPizzaError(''); }} />
+              <PizzaOrder menu={item.pizza.menu} money={formatJmd} pick={pizzaPick} onChange={(pick) => { setPizzaPick(pick); setPizzaError(''); }} />
             </>
           ) : item.modifiers.map((group, idx) => (
             <ModifierSection

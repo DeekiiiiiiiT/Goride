@@ -1,4 +1,4 @@
-import type { PizzaMenu } from "../../../../packages/merchant-ops/src/pizzaMenu.ts";
+import { pizzaRestaurantPrice, type PizzaMenu, type PizzaPick } from "../../../../packages/merchant-ops/src/pizzaMenu.ts";
 import { customerPriceFromCost } from "./pricing.ts";
 
 /** Customer store payload. Restaurant cost and source notes stay on the server. */
@@ -27,7 +27,7 @@ function customerOptions(raw: unknown): unknown {
   });
 }
 
-/** Menu prices the customer sees. Checkout still recalculates from the restaurant price. */
+/** Menu prices the customer sees. Each part is already marked up and rounded. */
 export function pizzaMenuForCustomer(menu: PizzaMenu, markupBps: number): PizzaMenu {
   const lift = (amount: number) => customerPriceFromCost(amount, markupBps);
   const fees = (row: Record<string, number | null>) => Object.fromEntries(
@@ -44,4 +44,13 @@ export function pizzaMenuForCustomer(menu: PizzaMenu, markupBps: number): PizzaM
     meats: menu.meats.map((topping) => ({ ...topping, prices: prices(topping.prices) })),
     nonMeats: menu.nonMeats.map((topping) => ({ ...topping, prices: prices(topping.prices) })),
   };
+}
+
+/** Charge is the sum of the marked-up parts. The restaurant total stays unmarked. */
+export function pizzaLinePrices(menu: PizzaMenu, pick: PizzaPick, markupBps: number) {
+  const restaurant = pizzaRestaurantPrice(menu, pick);
+  if (!restaurant.ok) return restaurant;
+  const customer = pizzaRestaurantPrice(pizzaMenuForCustomer(menu, markupBps), pick);
+  if (!customer.ok) return customer;
+  return { ok: true as const, restaurant: restaurant.restaurant, customer: customer.restaurant };
 }
