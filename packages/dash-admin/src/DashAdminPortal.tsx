@@ -1,4 +1,4 @@
-import React, { Suspense, useEffect, useState } from 'react';
+import React, { Suspense, useCallback, useEffect, useState } from 'react';
 import { Routes, Route, Outlet, useLocation, useNavigate, useOutletContext, Navigate } from 'react-router-dom';
 import {
   supabaseDashAdmin as supabase,
@@ -12,52 +12,45 @@ import { Session } from '@supabase/supabase-js';
 import { Loader2 } from 'lucide-react';
 import { Toaster } from 'sonner';
 import { AdminShell } from '@roam/admin-core';
+import { getAttention, type AttentionQueue } from '@roam/dash-admin-client';
+import type { AdminNavBadge } from '@roam/admin-core';
 import { AdminLoginForm } from './components/AdminLoginForm';
 import { AdminMfaGate } from './components/AdminMfaGate';
 import { requiresAdminMfaFromRoles } from './utils/adminMfa';
 import { AdminConfirmProvider } from './contexts/AdminConfirmContext';
 import { DashAdminAccessProvider } from './hooks/useDashAdminAccess';
 import {
-  DASH_ADMIN_CONFIG,
+  applyNavBadges,
+  breadcrumbsFor,
   filterConfigForRole,
   navIdToPath,
   pathnameToNavId,
 } from './config/dashAdminNav';
-import { DashAdminDashboard } from './pages/DashAdminDashboard';
-import { MerchantManager } from './pages/MerchantManager';
-import { MerchantDetailPage } from './pages/merchants/MerchantDetailPage';
-import {
-  MerchantsIndexRedirect,
-  MerchantsOnboardingIndexRedirect,
-  MerchantsSectionLayout,
-} from './pages/merchants/MerchantsSectionLayout';
-import { MerchantsOnboardingLayout } from './pages/merchants/MerchantsOnboardingLayout';
-import { BusinessTypesPage } from './pages/merchants/onboarding/BusinessTypesPage';
+import { canOpenPath } from './config/dashAdminCapabilities';
+import { AccessDenied } from './components/AccessDenied';
+import { CommandPalette } from './components/CommandPalette';
+import { HomePage } from './pages/HomePage';
 import { OrdersListPage } from './pages/orders/OrdersListPage';
+import { MerchantDetailPage } from './pages/merchants/MerchantDetailPage';
+import { MerchantsHubPage } from './pages/merchants/MerchantsHubPage';
 import { OrderDetailPage } from './pages/orders/OrderDetailPage';
 import { SupportToolsPage } from './pages/SupportToolsPage';
-import { PlatformSettingsPage } from './pages/PlatformSettingsPage';
-import { DashTeamPage } from './pages/users/DashTeamPage';
-import { IdentityDirectoryPage } from './pages/users/IdentityDirectoryPage';
-import { IdentityDetailPage } from './pages/users/IdentityDetailPage';
 import { CustomerDetailPage } from './pages/customers/CustomerDetailPage';
 import { CourierDetailPage } from './pages/couriers/CourierDetailPage';
-import { ComplianceManager } from './pages/couriers/ComplianceManager';
-import { CourierPresenceManager } from './pages/couriers/CourierPresenceManager';
-import { DeliveryLedgerPage } from './pages/couriers/DeliveryLedgerPage';
-import { LiveOpsPage } from './pages/liveops/LiveOpsPage';
+import { DispatchPage } from './pages/dispatch/DispatchPage';
+import { CouriersHubPage } from './pages/couriers/CouriersHubPage';
+import { CustomersHubPage } from './pages/customers/CustomersHubPage';
+import { TeamAccessPage } from './pages/team/TeamAccessPage';
+import { AuditHubPage } from './pages/audit/AuditHubPage';
+import { SettingsHubPage } from './pages/settings/SettingsHubPage';
+import { ReportsPage } from './pages/reports/ReportsPage';
+import { IdentityPersonaRedirect } from './pages/users/IdentityPersonaRedirect';
+import { MarketsHubPage } from './pages/markets/MarketsHubPage';
+import { PromotionsHubPage } from './pages/promotions/PromotionsHubPage';
+import { CourierCashPage } from './pages/finance/CourierCashPage';
 import { InHouseTeamPage } from './pages/inhouse/InHouseTeamPage';
 import { InHouseWorkspacePage } from './pages/inhouse/InHouseWorkspacePage';
-import {
-  InHouseCardsPage,
-  InHouseMenuPage,
-  InHouseReportsPage,
-  InHouseStoresPage,
-} from './pages/inhouse/InHouseDeskPages';
-import { UsersAuditPage } from './pages/users/UsersAuditPage';
-import { MerchantStaffDirectoryPage } from './pages/users/MerchantStaffDirectoryPage';
 import { useAdminSessionPolicy } from './hooks/useAdminSessionPolicy';
-import { ReviewsPage } from './pages/reviews/ReviewsPage';
 
 const DASH_ADMIN_BASENAME = '/admin';
 
@@ -73,17 +66,8 @@ const CoverageHealthPage = React.lazy(() =>
 const FinancePage = React.lazy(() =>
   import('./pages/finance/FinancePage').then((m) => ({ default: m.FinancePage })),
 );
-const PromotionsPage = React.lazy(() =>
-  import('./pages/promotions/PromotionsPage').then((m) => ({ default: m.PromotionsPage })),
-);
 const PricingHubPage = React.lazy(() =>
   import('./pages/pricing/PricingHubPage').then((m) => ({ default: m.PricingHubPage })),
-);
-const RemittanceDeskPage = React.lazy(() =>
-  import('./pages/remittance/RemittanceDeskPage').then((m) => ({ default: m.RemittanceDeskPage })),
-);
-const DashPlayStoreLaunchPage = React.lazy(() =>
-  import('./pages/PlayStoreLaunchPage').then((m) => ({ default: m.DashPlayStoreLaunchPage })),
 );
 
 function AdminRouteFallback() {
@@ -94,14 +78,101 @@ function AdminRouteFallback() {
   );
 }
 
-export type AdminOutletContext = { session: Session };
+export type AdminOutletContext = {
+  session: Session;
+  setDetailLabel?: (label: string | null) => void;
+  attention?: AttentionQueue[] | null;
+};
+
+export function useDetailCrumb(label: string | null | undefined) {
+  const { setDetailLabel } = useOutletContext<AdminOutletContext>();
+  useEffect(() => {
+    setDetailLabel?.(label?.trim() || null);
+    return () => setDetailLabel?.(null);
+  }, [label, setDetailLabel]);
+}
+
+function environmentLabel() {
+  const meta = import.meta as { env?: { VITE_APP_ENV?: string; PROD?: boolean } };
+  const named = meta.env?.VITE_APP_ENV;
+  if (named && named.toLowerCase() !== 'production') return named.toUpperCase();
+  if (meta.env?.PROD === false) return 'DEVELOPMENT';
+  return null;
+}
+
+function badgesFromQueues(queues: AttentionQueue[]): Record<string, AdminNavBadge> {
+  const byNav: Record<string, { count: number; tone: 'waiting' | 'breach' }> = {};
+  const navFor: Record<string, string> = {
+    applications: 'merchants',
+    compliance: 'couriers',
+    cases: 'support',
+    unassigned: 'dispatch',
+    disputes: 'finance',
+    banks: 'finance',
+    cash: 'courier-cash',
+    'in-house': 'in-house',
+  };
+  let home = 0;
+  let homeBreach = false;
+  for (const queue of queues) {
+    home += queue.count;
+    if (queue.breached) homeBreach = true;
+    const nav = navFor[queue.id];
+    if (!nav) continue;
+    const current = byNav[nav] ?? { count: 0, tone: 'waiting' as const };
+    current.count += queue.count;
+    if (queue.breached) current.tone = 'breach';
+    byNav[nav] = current;
+  }
+    if (home > 0) byNav.home = { count: home, tone: homeBreach ? 'breach' : 'waiting' };
+  return byNav;
+}
 
 function AdminLayoutShell({ session }: { session: Session }) {
   const location = useLocation();
   const navigate = useNavigate();
+  const roles = getJwtRoles(session.user);
   const userRole = jwtPrimaryRole(session.user);
-  const config = filterConfigForRole(userRole);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [queues, setQueues] = useState<AttentionQueue[] | null>(null);
+  const [bellOpen, setBellOpen] = useState(false);
+  const [detailLabel, setDetailLabelState] = useState<string | null>(null);
+  const setDetailLabel = useCallback((label: string | null) => setDetailLabelState(label), []);
+  const allowed = canOpenPath(roles, location.pathname);
+  const baseConfig = filterConfigForRole(roles);
+  const config = applyNavBadges(baseConfig, badgesFromQueues(queues ?? []));
   const currentPage = pathnameToNavId(location.pathname);
+  const pages = baseConfig.groups.flatMap((group) => group.items.map((item) => ({
+    id: item.id,
+    label: item.label,
+    path: navIdToPath(item.id),
+  })));
+
+  useEffect(() => {
+    let stop = false;
+    const load = () => {
+      void getAttention(session.access_token)
+        .then((res) => { if (!stop) setQueues(res.queues ?? []); })
+        .catch(() => { if (!stop) setQueues(null); });
+    };
+    load();
+    const timer = window.setInterval(load, 60_000);
+    return () => {
+      stop = true;
+      window.clearInterval(timer);
+    };
+  }, [session.access_token]);
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
+        event.preventDefault();
+        setSearchOpen(true);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
@@ -118,6 +189,22 @@ function AdminLayoutShell({ session }: { session: Session }) {
       config={config}
       currentPage={currentPage}
       onNavigate={(page) => navigate(navIdToPath(page))}
+      onCrumb={(to) => navigate(to)}
+      breadcrumbs={breadcrumbsFor(location.pathname, location.search, detailLabel)}
+      onOpenSearch={() => setSearchOpen(true)}
+      notificationCount={(queues ?? []).reduce((sum, queue) => sum + queue.count, 0)}
+      onOpenNotifications={() => setBellOpen((open) => !open)}
+      notificationsOpen={bellOpen}
+      notifications={queues == null ? <p className="text-sm text-slate-400">The attention feed is not available yet.</p> : queues.length === 0 ? <p className="text-sm text-emerald-300">All clear</p> : (
+        <div className="space-y-1">
+          {queues.map((queue) => (
+            <button key={queue.id} type="button" className="block w-full rounded-lg px-2 py-2 text-left text-sm text-amber-200 hover:bg-slate-800" onClick={() => { navigate(queue.href); setBellOpen(false); }}>
+              {queue.count} {queue.label}{queue.breached ? ' · past the limit' : ''}
+            </button>
+          ))}
+        </div>
+      )}
+      environmentLabel={environmentLabel()}
       user={{
         name: userName,
         email: session.user.email,
@@ -125,17 +212,36 @@ function AdminLayoutShell({ session }: { session: Session }) {
       }}
       onSignOut={handleSignOut}
     >
-      <Outlet context={{ session }} />
+      {allowed ? <Outlet context={{ session, setDetailLabel, attention: queues }} /> : <AccessDenied />}
+      <CommandPalette
+        open={searchOpen}
+        onClose={() => setSearchOpen(false)}
+        pages={pages}
+        accessToken={session.access_token}
+        onGo={(path) => navigate(path)}
+      />
     </AdminShell>
   );
 }
 
 function DashAdminHome() {
   const { session } = useOutletContext<AdminOutletContext>();
-  const role = jwtPrimaryRole(session.user);
-  if (role === 'dash_concierge') return <Navigate to="/in-house" replace />;
-  if (role === 'dash_ops') return <Navigate to="/in-house?tab=ops" replace />;
-  return <DashAdminDashboard />;
+  const roles = getJwtRoles(session.user);
+  if (roles.includes('dash_concierge') && !roles.some((role) => role !== 'dash_concierge' && role !== 'authenticated')) {
+    return <Navigate to="/in-house" replace />;
+  }
+  return <HomePage />;
+}
+
+function RedirectKeep({ to }: { to: string }) {
+  const location = useLocation();
+  const dest = new URL(to, 'http://local');
+  const incoming = new URLSearchParams(location.search);
+  incoming.forEach((value, key) => {
+    if (!dest.searchParams.has(key)) dest.searchParams.set(key, value);
+  });
+  const search = dest.searchParams.toString();
+  return <Navigate to={`${dest.pathname}${search ? `?${search}` : ''}${location.hash}`} replace />;
 }
 
 export function DashAdminPortal() {
@@ -216,108 +322,61 @@ export function DashAdminPortal() {
         <Routes>
           <Route element={<AdminLayoutShell session={session} />}>
             <Route index element={<DashAdminHome />} />
-            <Route path="dashboard" element={<DashAdminDashboard />} />
-            <Route path="merchants" element={<MerchantsSectionLayout />}>
-              <Route index element={<MerchantsIndexRedirect />} />
-              <Route path="onboarding" element={<MerchantsOnboardingLayout />}>
-                <Route index element={<MerchantsOnboardingIndexRedirect />} />
-                <Route path="applications" element={<MerchantManager />} />
-                <Route path="business-types" element={<BusinessTypesPage />} />
-              </Route>
-              <Route path=":id" element={<MerchantDetailPage />} />
-            </Route>
-            <Route path="live-ops" element={<LiveOpsPage />} />
-            <Route path="in-house" element={<InHouseTeamPage />} />
+            <Route path="dashboard" element={<RedirectKeep to="/" />} />
+            <Route path="reports" element={<ReportsPage />} />
+            <Route path="merchants/onboarding/applications" element={<RedirectKeep to="/merchants?tab=applications" />} />
+            <Route path="merchants/onboarding/business-types" element={<RedirectKeep to="/merchants?tab=business-types" />} />
+            <Route path="merchants/onboarding" element={<RedirectKeep to="/merchants?tab=applications" />} />
+            <Route path="merchants/:id" element={<MerchantDetailPage />} />
+            <Route path="merchants" element={<MerchantsHubPage />} />
+            <Route path="dispatch" element={<DispatchPage />} />
+            <Route path="live-ops" element={<RedirectKeep to="/dispatch" />} />
             <Route path="in-house/task/:id" element={<InHouseWorkspacePage />} />
-            <Route path="in-house/exceptions" element={<Navigate to="/in-house?tab=ops" replace />} />
-            <Route path="in-house/stores" element={<InHouseStoresPage />} />
-            <Route path="in-house/menu" element={<InHouseMenuPage />} />
-            <Route path="in-house/cards" element={<InHouseCardsPage />} />
-            <Route path="in-house/reports" element={<InHouseReportsPage />} />
-            <Route path="orders" element={<OrdersListPage />} />
+            <Route path="in-house/exceptions" element={<RedirectKeep to="/in-house?tab=ops" />} />
+            <Route path="in-house/stores" element={<RedirectKeep to="/in-house?tab=stores" />} />
+            <Route path="in-house/menu" element={<RedirectKeep to="/in-house?tab=menu" />} />
+            <Route path="in-house/cards" element={<RedirectKeep to="/in-house?tab=cards" />} />
+            <Route path="in-house/reports" element={<RedirectKeep to="/in-house?tab=reports" />} />
+            <Route path="in-house" element={<InHouseTeamPage />} />
             <Route path="orders/:id" element={<OrderDetailPage />} />
-            <Route path="couriers" element={<Navigate to="/users?persona=courier" replace />} />
-            <Route path="couriers/compliance" element={<Navigate to="/users/compliance" replace />} />
-            <Route path="couriers/presence" element={<CourierPresenceManager />} />
-            <Route path="couriers/ledger" element={<DeliveryLedgerPage />} />
+            <Route path="orders" element={<OrdersListPage />} />
+            <Route path="couriers/compliance" element={<RedirectKeep to="/couriers?tab=compliance" />} />
+            <Route path="couriers/presence" element={<RedirectKeep to="/dispatch?tab=map" />} />
+            <Route path="couriers/ledger" element={<RedirectKeep to="/orders?view=all&type=courier" />} />
             <Route path="couriers/:userId" element={<CourierDetailPage />} />
-            <Route
-              path="markets/boundaries"
-              element={
-                <Suspense fallback={<AdminRouteFallback />}>
-                  <BoundaryLibraryPage />
-                </Suspense>
-              }
-            />
-            <Route
-              path="markets/coverage-health"
-              element={
-                <Suspense fallback={<AdminRouteFallback />}>
-                  <CoverageHealthPage />
-                </Suspense>
-              }
-            />
+            <Route path="couriers" element={<CouriersHubPage />} />
+            <Route path="markets/boundaries" element={<RedirectKeep to="/markets?tab=boundaries" />} />
+            <Route path="markets/coverage-health" element={<RedirectKeep to="/markets?tab=health" />} />
             <Route
               path="markets"
               element={
-                <Suspense fallback={<AdminRouteFallback />}>
-                  <MarketsPage />
-                </Suspense>
+                <MarketsHubPage
+                  markets={<Suspense fallback={<AdminRouteFallback />}><MarketsPage embedded /></Suspense>}
+                  boundaries={<Suspense fallback={<AdminRouteFallback />}><BoundaryLibraryPage embedded /></Suspense>}
+                  health={<Suspense fallback={<AdminRouteFallback />}><CoverageHealthPage embedded /></Suspense>}
+                />
               }
             />
-            <Route path="users" element={<IdentityDirectoryPage />} />
-            <Route path="users/operators" element={<DashTeamPage />} />
-            <Route path="users/audit" element={<UsersAuditPage />} />
-            <Route path="users/merchant-staff" element={<MerchantStaffDirectoryPage />} />
-            <Route path="users/compliance" element={<ComplianceManager />} />
-            <Route path="users/:userId" element={<IdentityDetailPage />} />
-            <Route path="team" element={<Navigate to="/users/operators" replace />} />
-            <Route path="activity" element={<Navigate to="/users/audit" replace />} />
-            <Route path="customers" element={<Navigate to="/users?persona=customer" replace />} />
+            <Route path="users/operators" element={<RedirectKeep to="/team?tab=operators" />} />
+            <Route path="users/audit" element={<RedirectKeep to="/audit" />} />
+            <Route path="users/merchant-staff" element={<RedirectKeep to="/team?tab=merchant-staff" />} />
+            <Route path="users/compliance" element={<RedirectKeep to="/couriers?tab=compliance" />} />
+            <Route path="users/:userId" element={<IdentityPersonaRedirect />} />
+            <Route path="users" element={<RedirectKeep to="/team?tab=all-users" />} />
+            <Route path="team" element={<TeamAccessPage />} />
+            <Route path="activity" element={<RedirectKeep to="/audit" />} />
+            <Route path="audit" element={<AuditHubPage />} />
             <Route path="customers/:id" element={<CustomerDetailPage />} />
-            <Route
-              path="finance"
-              element={
-                <Suspense fallback={<AdminRouteFallback />}>
-                  <FinancePage />
-                </Suspense>
-              }
-            />
-            <Route
-              path="promotions"
-              element={
-                <Suspense fallback={<AdminRouteFallback />}>
-                  <PromotionsPage />
-                </Suspense>
-              }
-            />
-            <Route
-              path="pricing"
-              element={
-                <Suspense fallback={<AdminRouteFallback />}>
-                  <PricingHubPage />
-                </Suspense>
-              }
-            />
-            <Route
-              path="remittance"
-              element={
-                <Suspense fallback={<AdminRouteFallback />}>
-                  <RemittanceDeskPage />
-                </Suspense>
-              }
-            />
-            <Route path="reviews" element={<ReviewsPage />} />
+            <Route path="customers" element={<CustomersHubPage />} />
+            <Route path="finance" element={<Suspense fallback={<AdminRouteFallback />}><FinancePage /></Suspense>} />
+            <Route path="courier-cash" element={<CourierCashPage />} />
+            <Route path="promotions" element={<PromotionsHubPage />} />
+            <Route path="pricing" element={<Suspense fallback={<AdminRouteFallback />}><PricingHubPage /></Suspense>} />
+            <Route path="remittance" element={<RedirectKeep to="/courier-cash" />} />
+            <Route path="reviews" element={<RedirectKeep to="/support?tab=reviews" />} />
             <Route path="support" element={<SupportToolsPage />} />
-            <Route
-              path="play-store"
-              element={
-                <Suspense fallback={<AdminRouteFallback />}>
-                  <DashPlayStoreLaunchPage />
-                </Suspense>
-              }
-            />
-            <Route path="settings" element={<PlatformSettingsPage session={session} />} />
+            <Route path="play-store" element={<RedirectKeep to="/settings?tab=app-releases" />} />
+            <Route path="settings" element={<SettingsHubPage />} />
           </Route>
         </Routes>
         </DashAdminAccessProvider>

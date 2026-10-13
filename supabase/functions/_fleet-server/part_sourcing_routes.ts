@@ -7,6 +7,9 @@ import * as kv from "./kv_store.tsx";
 import { requireAuth, requirePermission, assertPlatformStaffResponse } from "./rbac_middleware.ts";
 import { filterByOrg, getOrgId } from "./org_scope.ts";
 import { resolveCatalogIdForKvVehicle } from "./vehicle_catalog_resolve.ts";
+import { FEATURE_FLAGS, isFeatureEnabled } from "./feature_flags.ts";
+import { loadTieredCompatibleParts } from "./parts_match.ts";
+import { registerPartsEnterpriseRoutes } from "./parts_enterprise_routes.ts";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -68,7 +71,7 @@ function parseVehicleYear(v: Record<string, unknown>): number | null {
 }
 
 const FITMENT_SELECT =
-  "id, part_id, vehicle_catalog_id, chassis_code, engine_code, year_from, year_to, part_master ( id, category_id, name, oem_part_number, description, metadata, part_category ( id, slug, label, parent_id, sort_order ) )";
+  "id, part_id, vehicle_catalog_id, chassis_code, engine_code, year_from, year_to, part_master ( id, category_id, maintenance_component_id, name, oem_part_number, description, metadata, manufacturer, part_kind, part_category ( id, slug, label, parent_id, sort_order ) )";
 
 export function registerPartSourcingRoutes(
   app: { get: unknown; post: unknown; patch: unknown; delete: unknown },
@@ -102,6 +105,27 @@ export function registerPartSourcingRoutes(
         }
 
         const categoryId = c.req.query("category_id")?.trim() || "";
+        const componentId = c.req.query("component_id")?.trim() || "";
+
+        if (await isFeatureEnabled(FEATURE_FLAGS.PARTS_TIERED_SEARCH)) {
+          const orgId = String((v as { organizationId?: string }).organizationId || "");
+          let downtime = 0;
+          if (orgId) {
+            const settings = await kv.get(`organization_settings:${orgId}`);
+            downtime = Number((settings as { downtimeCostPerDayJmd?: number } | null)?.downtimeCostPerDayJmd) || 0;
+          }
+          const tieredResult = await loadTieredCompatibleParts(
+            supabase,
+            catalogId,
+            componentId && isUuid(componentId) ? componentId : null,
+            orgId || null,
+            downtime,
+          );
+          const items = categoryId && isUuid(categoryId)
+            ? tieredResult.items.filter((item) => (item.part as { category_id?: string }).category_id === categoryId)
+            : tieredResult.items;
+          return c.json({ catalogMatched: true, catalogId, items, count: items.length, tiered: true });
+        }
 
         const { data: catRow, error: catErr } = await supabase
           .from("vehicle_catalog")
@@ -134,6 +158,7 @@ export function registerPartSourcingRoutes(
           part_master: {
             id: string;
             category_id: string;
+            maintenance_component_id?: string | null;
             name: string;
             oem_part_number?: string | null;
             description?: string | null;
@@ -146,6 +171,7 @@ export function registerPartSourcingRoutes(
         for (const raw of fitRows || []) {
           const row = raw as FitRow;
           if (!row.part_master) continue;
+          if (componentId && isUuid(componentId) && row.part_master.maintenance_component_id !== componentId) continue;
           if (categoryId && isUuid(categoryId) && row.part_master.category_id !== categoryId) continue;
           if (
             !yearInFitmentRange(row.year_from, row.year_to, vehicleYear) ||
@@ -344,6 +370,14 @@ export function registerPartSourcingRoutes(
           ? String(body.description).trim()
           : null,
         metadata: typeof body.metadata === "object" && body.metadata !== null ? body.metadata : {},
+        manufacturer: body.manufacturer != null && String(body.manufacturer).trim() !== "" ? String(body.manufacturer).trim() : null,
+        part_kind: body.part_kind != null && String(body.part_kind).trim() !== "" ? String(body.part_kind).trim() : "oem",
+        maintenance_component_id: body.maintenance_component_id && isUuid(String(body.maintenance_component_id))
+          ? String(body.maintenance_component_id)
+          : null,
+        interchange_group_id: body.interchange_group_id && isUuid(String(body.interchange_group_id))
+          ? String(body.interchange_group_id)
+          : null,
         updated_at: new Date().toISOString(),
       };
       const { data, error } = await supabase.from("part_master").insert(row).select("*").single();
@@ -380,6 +414,18 @@ export function registerPartSourcingRoutes(
           : String(body.description).trim();
       }
       if (body.metadata !== undefined) row.metadata = body.metadata;
+      if (body.manufacturer !== undefined) {
+        row.manufacturer = body.manufacturer === null || body.manufacturer === "" ? null : String(body.manufacturer).trim();
+      }
+      if (body.part_kind !== undefined) row.part_kind = String(body.part_kind).trim();
+      if (body.maintenance_component_id !== undefined) {
+        const cid = body.maintenance_component_id;
+        row.maintenance_component_id = cid === null || cid === "" ? null : String(cid);
+      }
+      if (body.interchange_group_id !== undefined) {
+        const gid = body.interchange_group_id;
+        row.interchange_group_id = gid === null || gid === "" ? null : String(gid);
+      }
       const keys = Object.keys(row).filter((k) => k !== "updated_at");
       if (keys.length === 0) return c.json({ error: "No fields to update" }, 400);
       const { data, error } = await supabase.from("part_master").update(row).eq("id", id).select("*").single();
@@ -551,6 +597,17 @@ export function registerPartSourcingRoutes(
           : null,
         url: body.url != null && String(body.url).trim() !== "" ? String(body.url).trim() : null,
         is_active: body.is_active === false ? false : true,
+        price_observed_at: body.price_observed_at ? String(body.price_observed_at) : new Date().toISOString(),
+        source: body.source != null && String(body.source).trim() !== "" ? String(body.source).trim() : "manual",
+        core_charge: body.core_charge != null && body.core_charge !== "" ? Number(body.core_charge) : null,
+        warranty_months: body.warranty_months != null && body.warranty_months !== "" ? Number(body.warranty_months) : null,
+        warranty_km: body.warranty_km != null && body.warranty_km !== "" ? Number(body.warranty_km) : null,
+        organization_id: body.organization_id != null && String(body.organization_id).trim() !== ""
+          ? String(body.organization_id).trim()
+          : null,
+        freight_estimate: body.freight_estimate != null && body.freight_estimate !== "" ? Number(body.freight_estimate) : null,
+        duty_rate: body.duty_rate != null && body.duty_rate !== "" ? Number(body.duty_rate) : null,
+        fx_rate_to_jmd: body.fx_rate_to_jmd != null && body.fx_rate_to_jmd !== "" ? Number(body.fx_rate_to_jmd) : null,
         updated_at: new Date().toISOString(),
       };
       const { data, error } = await supabase.from("supplier_part_offer").insert(row).select("*").single();
@@ -583,6 +640,17 @@ export function registerPartSourcingRoutes(
       }
       if (body.is_active !== undefined) row.is_active = Boolean(body.is_active);
       if (body.supplier_sku !== undefined) row.supplier_sku = String(body.supplier_sku).trim();
+      if (body.price_observed_at !== undefined) row.price_observed_at = String(body.price_observed_at);
+      if (body.source !== undefined) row.source = String(body.source).trim();
+      if (body.core_charge !== undefined) row.core_charge = body.core_charge === null || body.core_charge === "" ? null : Number(body.core_charge);
+      if (body.warranty_months !== undefined) row.warranty_months = body.warranty_months === null || body.warranty_months === "" ? null : Number(body.warranty_months);
+      if (body.warranty_km !== undefined) row.warranty_km = body.warranty_km === null || body.warranty_km === "" ? null : Number(body.warranty_km);
+      if (body.organization_id !== undefined) {
+        row.organization_id = body.organization_id === null || body.organization_id === "" ? null : String(body.organization_id);
+      }
+      if (body.freight_estimate !== undefined) row.freight_estimate = body.freight_estimate === null || body.freight_estimate === "" ? null : Number(body.freight_estimate);
+      if (body.duty_rate !== undefined) row.duty_rate = body.duty_rate === null || body.duty_rate === "" ? null : Number(body.duty_rate);
+      if (body.fx_rate_to_jmd !== undefined) row.fx_rate_to_jmd = body.fx_rate_to_jmd === null || body.fx_rate_to_jmd === "" ? null : Number(body.fx_rate_to_jmd);
       const keys = Object.keys(row).filter((k) => k !== "updated_at");
       if (keys.length === 0) return c.json({ error: "No fields to update" }, 400);
       const { data, error } = await supabase.from("supplier_part_offer").update(row).eq("id", id).select("*").single();
@@ -735,6 +803,11 @@ export function registerPartSourcingRoutes(
         if (catErr) throw catErr;
         if (!catRow) return c.json({ error: "Catalog row not found" }, 404);
 
+        if (await isFeatureEnabled(FEATURE_FLAGS.PARTS_TIERED_SEARCH)) {
+          const tieredResult = await loadTieredCompatibleParts(supabase, vehicleCatalogId, null, null, 0);
+          return c.json({ catalogId: vehicleCatalogId, items: tieredResult.items, count: tieredResult.items.length, tiered: true });
+        }
+
         const catalogChassis = String((catRow as { chassis_code?: string }).chassis_code ?? "");
         const catalogEngine = String((catRow as { engine_code?: string }).engine_code ?? "");
         const vehicleYear = (catRow as { production_start_year?: number }).production_start_year != null
@@ -838,6 +911,14 @@ export function registerPartSourcingRoutes(
             need_text: needText.slice(0, 2000),
             status: "open",
             created_by: rbacUser?.id ?? null,
+            maintenance_component_id: body.maintenanceComponentId && isUuid(String(body.maintenanceComponentId))
+              ? String(body.maintenanceComponentId)
+              : null,
+            platform_id: body.platformId && isUuid(String(body.platformId)) ? String(body.platformId) : null,
+            engine_family_id: body.engineFamilyId && isUuid(String(body.engineFamilyId)) ? String(body.engineFamilyId) : null,
+            urgency: body.urgency ? String(body.urgency) : null,
+            qty: body.qty != null && body.qty !== "" ? Number(body.qty) : null,
+            photo_url: body.photoUrl ? String(body.photoUrl).slice(0, 2000) : null,
           })
           .select("*")
           .single();
@@ -893,6 +974,10 @@ export function registerPartSourcingRoutes(
         if (status === "resolved" || status === "rejected") {
           patch.resolved_at = new Date().toISOString();
         }
+        if (body.resolvedPartId !== undefined) {
+          const partId = body.resolvedPartId;
+          patch.resolved_part_id = partId === null || partId === "" ? null : String(partId);
+        }
         const { data, error } = await supabase
           .from("parts_sourcing_requests")
           .update(patch)
@@ -907,4 +992,6 @@ export function registerPartSourcingRoutes(
       }
     },
   );
+
+  registerPartsEnterpriseRoutes(route, supabase);
 }

@@ -33,7 +33,7 @@ function roleLabel(role: string) {
   return ROLE_OPTIONS.find((r) => r.value === role)?.label ?? role;
 }
 
-export function DashTeamPage() {
+export function DashTeamPage({ courierOnly = false, embedded = false }: { courierOnly?: boolean; embedded?: boolean } = {}) {
   const { session } = useOutletContext<AdminOutletContext>();
   const { prompt } = useAdminConfirm();
   const canWrite = canWriteDashAdmin(session.user);
@@ -43,7 +43,10 @@ export function DashTeamPage() {
   const [members, setMembers] = useState<TeamMember[]>([]);
 
   const [inviteEmail, setInviteEmail] = useState('');
-  const [inviteRole, setInviteRole] = useState<DashTeamRole>('dash_ops');
+  const roleChoices = courierOnly
+    ? ROLE_OPTIONS.filter((r) => r.value === 'courier_admin' || r.value === 'courier_ops')
+    : ROLE_OPTIONS;
+  const [inviteRole, setInviteRole] = useState<DashTeamRole>(courierOnly ? 'courier_ops' : 'dash_ops');
   const [inviting, setInviting] = useState(false);
   const [savingRoleId, setSavingRoleId] = useState<string | null>(null);
 
@@ -51,13 +54,13 @@ export function DashTeamPage() {
     setLoading(true);
     try {
       const res = await listDashTeam(session.access_token);
-      setMembers(res.members);
+      setMembers(courierOnly ? res.members.filter((member) => member.role === 'courier_admin' || member.role === 'courier_ops') : res.members);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Failed to load team');
     } finally {
       setLoading(false);
     }
-  }, [session.access_token]);
+  }, [session.access_token, courierOnly]);
 
   useEffect(() => {
     void load();
@@ -143,10 +146,12 @@ export function DashTeamPage() {
 
   return (
     <div className="space-y-6">
+      {!embedded && (
       <div>
         <h2 className="text-xl font-semibold text-white">Team</h2>
         <p className="text-sm text-slate-400">Dash and courier admins for the Rush Ops console.</p>
       </div>
+      )}
 
       {canWrite && (
         <section className="rounded-xl border border-slate-800 bg-slate-900/40 p-4 space-y-3">
@@ -167,7 +172,7 @@ export function DashTeamPage() {
               onChange={(e) => setInviteRole(e.target.value as DashTeamRole)}
               className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white"
             >
-              {ROLE_OPTIONS.map((r) => (
+              {roleChoices.map((r) => (
                 <option key={r.value} value={r.value}>
                   {r.label}
                 </option>
@@ -216,7 +221,7 @@ export function DashTeamPage() {
                           {!ROLE_OPTIONS.some((r) => r.value === m.role) && (
                             <option value="">{roleLabel(m.role)}</option>
                           )}
-                          {ROLE_OPTIONS.map((r) => (
+                          {roleChoices.map((r) => (
                             <option key={r.value} value={r.value}>
                               {r.label}
                             </option>

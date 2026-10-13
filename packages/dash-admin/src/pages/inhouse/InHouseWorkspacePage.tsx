@@ -154,7 +154,7 @@ export function InHouseWorkspacePage() {
       <div className="grid gap-4 p-4 lg:grid-cols-2">
         <section className="space-y-3 rounded-lg border border-slate-800 p-4">
           <h2 className="font-medium">1. Place the order</h2>
-          {orderUrl ? <a className="inline-block rounded bg-emerald-800 px-3 py-2" href={orderUrl} target="_blank" rel="noreferrer">Open restaurant ordering</a> : null}
+          {orderUrl ? <a className="inline-block rounded-xl bg-amber-500 px-3 py-2 text-slate-950" href={orderUrl} target="_blank" rel="noreferrer">Open restaurant ordering</a> : null}
           <button
             type="button"
             className="ml-2 rounded bg-slate-800 px-3 py-2"
@@ -188,7 +188,7 @@ export function InHouseWorkspacePage() {
           </label>
           <label className="block">Ready time<input type="time" className="mt-1 w-full rounded bg-slate-900 p-2" value={readyTime} onChange={(event) => setReadyTime(event.target.value)} /></label>
           <label className="block">Receipt<input type="file" accept="image/*,application/pdf" className="mt-1 block" onChange={(event) => { const file = event.target.files?.[0]; if (file) void onReceipt(file); }} /></label>
-          <button type="button" disabled={!canPlace || busy} className="rounded bg-emerald-700 px-4 py-2 disabled:opacity-40" onClick={() => void save()}>{String(detail.task.state) === 'placing' || String(detail.task.state) === 'exception_purchase_unknown' ? 'Mark placed' : 'Record the spend'}</button>
+          <button type="button" disabled={!canPlace || busy} className="rounded-xl bg-amber-500 px-4 py-2 text-slate-950 disabled:opacity-40" onClick={() => void save()}>{String(detail.task.state) === 'placing' || String(detail.task.state) === 'exception_purchase_unknown' ? 'Mark placed' : 'Record the spend'}</button>
           <h2 className="pt-4 font-medium">3. Something wrong?</h2>
           <div className="flex flex-wrap gap-2">
             {EXCEPTIONS.map(([code, label]) => (

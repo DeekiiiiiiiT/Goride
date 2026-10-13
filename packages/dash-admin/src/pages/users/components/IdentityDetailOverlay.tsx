@@ -152,7 +152,7 @@ export function IdentityDetailPanel({
             <IdentityStatusBadge status={String(detail.customer.account_status || 'active')} />
           </div>
           <p className="text-slate-300">Phone: {String(detail.customer.phone || '—')}</p>
-          <Link to={`/customers/${detail.customer.id}`} className="text-emerald-400 hover:underline text-xs">
+          <Link to={`/customers/${detail.customer.id}`} className="text-amber-300 hover:underline text-xs">
             Full customer record →
           </Link>
         </div>
@@ -164,7 +164,7 @@ export function IdentityDetailPanel({
             <span className="text-slate-400">Status</span>
             <IdentityStatusBadge status={String(detail.courier.status || 'pending')} />
           </div>
-          <Link to={`/couriers/${userId}`} className="text-emerald-400 hover:underline text-xs">
+          <Link to={`/couriers/${userId}`} className="text-amber-300 hover:underline text-xs">
             Full courier record →
           </Link>
         </div>
@@ -178,7 +178,7 @@ export function IdentityDetailPanel({
               <ul className="space-y-1 text-slate-300">
                 {detail.ownedMerchants.map((m) => (
                   <li key={String(m.id)} className="flex items-center gap-2">
-                    <Link to={`/merchants/${m.id}`} className="text-emerald-400 hover:underline">
+                    <Link to={`/merchants/${m.id}`} className="text-amber-300 hover:underline">
                       {String(m.name)}
                     </Link>
                     <IdentityStatusBadge status={String(m.operational_status || 'active')} />
@@ -216,7 +216,7 @@ export function IdentityDetailPanel({
       {tab === 'access' && (
         <div className="rounded-xl border border-slate-800 p-4 text-sm text-slate-300 space-y-2">
           <p>Console roles: {(detail.consoleRoles ?? []).join(', ') || 'None'}</p>
-          <Link to="/users/operators" className="text-emerald-400 hover:underline text-xs">
+          <Link to="/users/operators" className="text-amber-300 hover:underline text-xs">
             Manage operators →
           </Link>
         </div>

@@ -14,6 +14,7 @@ import {
   clearIdentityGlobalRestrict,
 } from "./identityState.ts";
 import { normalizeJmPhone } from "./identityPhone.ts";
+import { sanitizeSearchToken } from "./consoleAccess.ts";
 
 function platformDb() {
   return createClient(
@@ -47,10 +48,6 @@ function maskPhone(phone: string | null | undefined): string {
   const digits = phone.replace(/\D/g, "");
   if (digits.length < 4) return "***";
   return `***${digits.slice(-4)}`;
-}
-
-function sanitizeSearchToken(raw: string): string {
-  return raw.replace(/[%_,().]/g, "").trim();
 }
 
 function maskIdentityRow(
@@ -152,36 +149,32 @@ export function registerIdentityAdminRoutes(app: Hono) {
     const canViewPii = hasPermission(adminUser, "identity.pii.read");
 
     const pdb = platformDb();
-    let query = pdb.from("identities").select("*", { count: "exact" })
-      .order(sort === "display_name" ? "display_name" : "updated_at", { ascending: order === "asc" });
-
+    const q = qRaw ? sanitizeSearchToken(qRaw.toLowerCase()) : "";
+    const phoneDigits = q ? normalizeJmPhone(q).replace(/\D/g, "") : "";
+    let orderUserId: string | null = null;
     if (qRaw) {
-      const q = sanitizeSearchToken(qRaw.toLowerCase());
-      if (q) {
-        const phoneNorm = normalizeJmPhone(q);
-        const phoneDigits = phoneNorm.replace(/\D/g, "");
-        const filters = [
-          `primary_email.ilike.%${q}%`,
-          `display_name.ilike.%${q}%`,
-        ];
-        if (phoneDigits.length >= 4) {
-          filters.push(`primary_phone.ilike.%${phoneDigits}%`);
-        }
-        query = query.or(filters.join(","));
-      }
       const delivery = getDb();
       const { data: orderMatch } = await delivery.from("orders")
         .select("customer_id, customers(user_id)")
         .eq("order_number", qRaw.toUpperCase())
         .maybeSingle();
-      const orderUserId = (orderMatch as { customers?: { user_id?: string } } | null)?.customers?.user_id;
-      if (orderUserId) {
-        query = pdb.from("identities").select("*", { count: "exact" }).eq("user_id", orderUserId);
-      }
+      orderUserId = (orderMatch as { customers?: { user_id?: string } } | null)?.customers?.user_id ?? null;
     }
 
-    const { data: identities, error, count } = await query.range(offset, offset + limit - 1);
+    const { data: pageData, error } = await pdb.rpc("admin_identity_page", {
+      p_persona: persona || null,
+      p_q: orderUserId ? null : (q || null),
+      p_phone: !orderUserId && phoneDigits.length >= 4 ? phoneDigits : null,
+      p_user_id: orderUserId,
+      p_sort: sort === "display_name" ? "display_name" : "updated_at",
+      p_asc: order === "asc",
+      p_limit: limit,
+      p_offset: offset,
+    });
     if (error) return c.json({ error: error.message }, 500);
+    const parsed = (pageData ?? {}) as { identities?: Array<Record<string, unknown>>; total?: number };
+    const identities = parsed.identities ?? [];
+    const count = Number(parsed.total ?? identities.length);
 
     const userIds = (identities ?? []).map((i) => String((i as { user_id: string }).user_id));
     const { data: personas } = userIds.length > 0
@@ -206,11 +199,6 @@ export function registerIdentityAdminRoutes(app: Hono) {
           ({ persona, ref_id, status, market_id })),
       };
     });
-
-    if (persona) {
-      rows = rows.filter((r) =>
-        (r.personas as PersonaRow[]).some((p) => p.persona === persona));
-    }
 
     return c.json({ identities: rows, total: count ?? rows.length, page, limit });
   });

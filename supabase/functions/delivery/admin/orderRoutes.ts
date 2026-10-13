@@ -9,6 +9,9 @@ import { requireWrite as requireCourierWrite } from "./permissions.ts";
 import { getDb } from "./merchantAdminShared.ts";
 import { orchestrateOrderRefund } from "./orderRefund.ts";
 import { ORDER_CUSTOMER_EMBED } from "../orderSelectEmbeds.ts";
+import { sanitizeSearchToken } from "./consoleAccess.ts";
+
+const LIVE_ORDER_STATUSES = ["placed", "accepted", "preparing", "ready", "picked_up", "in_transit"];
 import { handleOrderDelivered } from "../courierCashLedger.ts";
 
 async function requireDashOrCourierAdmin(c: { req: { header: (n: string) => string | undefined } }) {
@@ -50,27 +53,61 @@ export function registerOrderAdminRoutes(app: Hono) {
     const page = Math.max(parseInt(c.req.query("page") || "1", 10) || 1, 1);
     const offset = (page - 1) * limit;
 
-    let query = db.from("orders").select("*", { count: "exact" }).order("placed_at", { ascending: false });
+    let query = db.from("orders")
+      .select(`*, merchant:merchants(id, name, market_id), ${ORDER_CUSTOMER_EMBED}`, { count: "exact" })
+      .order("placed_at", { ascending: false });
     if (status && status !== "all") {
       if (status === "live") {
-        query = query.in("status", ["placed", "accepted", "preparing", "ready", "picked_up", "in_transit"]);
+        query = query.in("status", LIVE_ORDER_STATUSES);
       } else {
         query = query.eq("status", status);
       }
     }
+    if (c.req.query("attention") === "true") {
+      const cutoff = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+      query = query.is("courier_id", null).lt("placed_at", cutoff).in("status", LIVE_ORDER_STATUSES);
+    } else if (c.req.query("unassigned") === "true") {
+      query = query.is("courier_id", null);
+    }
+    if (c.req.query("has_courier") === "true") query = query.not("courier_id", "is", null);
     if (merchant_id) query = query.eq("merchant_id", merchant_id);
     if (customer_id) query = query.eq("customer_id", customer_id);
     if (courier_id) query = query.eq("courier_id", courier_id);
     if (from) query = query.gte("placed_at", from);
     if (to) query = query.lte("placed_at", to);
-    if (q?.trim()) {
-      const pattern = `%${q.trim()}%`;
+    const safeQ = sanitizeSearchToken(q || "");
+    if (safeQ) {
+      const pattern = `%${safeQ}%`;
       query = query.or(`order_number.ilike.${pattern},delivery_address.ilike.${pattern}`);
     }
 
     const { data, error, count } = await query.range(offset, offset + limit - 1);
     if (error) return c.json({ error: error.message }, 500);
-    return c.json({ orders: data ?? [], total: count ?? 0, page, limit });
+    const rows = (data ?? []) as Array<Record<string, unknown>>;
+    const courierIds = [...new Set(rows.map((row) => String(row.courier_id || "")).filter(Boolean))];
+    const marketIds = [...new Set(rows.map((row) => {
+      const merchant = row.merchant as { market_id?: string } | null;
+      return String(merchant?.market_id || "");
+    }).filter(Boolean))];
+    const [{ data: couriers }, { data: markets }] = await Promise.all([
+      courierIds.length
+        ? db.from("courier_profiles").select("user_id, display_name").in("user_id", courierIds)
+        : Promise.resolve({ data: [] as Array<{ user_id: string; display_name?: string }> }),
+      marketIds.length
+        ? db.from("service_markets").select("id, name").in("id", marketIds)
+        : Promise.resolve({ data: [] as Array<{ id: string; name?: string }> }),
+    ]);
+    const courierName = new Map((couriers ?? []).map((row) => [String((row as { user_id: string }).user_id), String((row as { display_name?: string }).display_name || "")]));
+    const marketName = new Map((markets ?? []).map((row) => [String((row as { id: string }).id), String((row as { name?: string }).name || "")]));
+    const orders = rows.map((row) => {
+      const merchant = row.merchant as { market_id?: string } | null;
+      return {
+        ...row,
+        courier_display_name: courierName.get(String(row.courier_id || "")) || null,
+        market_name: marketName.get(String(merchant?.market_id || "")) || null,
+      };
+    });
+    return c.json({ orders, total: count ?? 0, page, limit });
   });
 
   orders.get("/:orderId", async (c) => {

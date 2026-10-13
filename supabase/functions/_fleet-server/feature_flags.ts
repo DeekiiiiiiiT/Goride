@@ -86,6 +86,10 @@ export const FEATURE_FLAGS = {
    * Env defaults to enforce; this KV name is reserved for future org overrides.
    */
   TOLL_PERIOD_WRITE_GUARD: "tollPeriodWriteGuard",
+  /** Tiered parts search (OEM / sister / engine / aftermarket). Default off. */
+  PARTS_TIERED_SEARCH: "parts_tiered_search",
+  /** Live supplier price/stock adapter. Default off until a vendor feed exists. */
+  PARTS_SUPPLIER_API: "parts_supplier_api",
 } as const;
 
 export type FeatureFlagName = typeof FEATURE_FLAGS[keyof typeof FEATURE_FLAGS];
@@ -462,6 +466,16 @@ export async function initializeDefaultFlags(): Promise<void> {
       enabled: true,
       description:
         "Toll recon readiness is server-authoritative for Finish / landing / close. Default ON after enterprise enforce flip.",
+    },
+    {
+      name: FEATURE_FLAGS.PARTS_TIERED_SEARCH,
+      enabled: false,
+      description: "Fleet compatible-parts uses interchange tiers. Off keeps exact catalog fitment.",
+    },
+    {
+      name: FEATURE_FLAGS.PARTS_SUPPLIER_API,
+      enabled: false,
+      description: "Live supplier price and stock adapter. Off until a Jamaican or JDM feed is confirmed.",
     },
   ];
 

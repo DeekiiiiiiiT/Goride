@@ -37,7 +37,7 @@ type Props = {
   parishId?: string;
 };
 
-export function BoundaryLibraryPage({ parishId }: Props = {}) {
+export function BoundaryLibraryPage({ parishId, embedded = false }: Props & { embedded?: boolean } = {}) {
   const { session } = useOutletContext<AdminOutletContext>();
   const canWrite = canWriteDashAdmin(session.user);
   const [level, setLevel] = useState<number | null>(null);
@@ -84,15 +84,17 @@ export function BoundaryLibraryPage({ parishId }: Props = {}) {
   return (
     <div className="space-y-6 text-slate-200">
       <div className="flex flex-wrap items-start justify-between gap-4">
+        {!embedded && (
         <div>
           <h2 className="text-xl font-semibold text-white flex items-center gap-2">
-            <Library className="w-5 h-5 text-emerald-400" />
+            <Library className="w-5 h-5 text-amber-400" />
             Boundary Library
           </h2>
           <p className="text-sm text-slate-400 mt-1">
             Official admin0–admin3 catalog. Copy a pcode, then promote from Delivery Markets.
           </p>
         </div>
+        )}
         {canWrite && (
           <button
             type="button"

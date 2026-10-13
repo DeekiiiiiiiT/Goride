@@ -11,6 +11,7 @@ import {
   redispatchOrder,
   type LiveOrderRow,
 } from '@roam/dash-admin-client';
+import { StatusBadge } from '../../components/ui/StatusBadge';
 import type { AdminOutletContext } from '../../DashAdminPortal';
 
 const REFRESH_MS = 20_000;
@@ -37,22 +38,10 @@ function when(iso: string) {
 }
 
 function StatusPill({ status }: { status: string }) {
-  const tone =
-    status === 'in_transit' || status === 'picked_up'
-      ? 'bg-amber-500/15 text-amber-300 border-amber-500/30'
-      : status === 'ready'
-        ? 'bg-sky-500/15 text-sky-300 border-sky-500/30'
-        : status === 'pending'
-          ? 'bg-slate-500/15 text-slate-300 border-slate-500/30'
-          : 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30';
-  return (
-    <span className={`inline-flex px-2 py-0.5 rounded-md text-xs font-medium border capitalize ${tone}`}>
-      {status.replace(/_/g, ' ')}
-    </span>
-  );
+  return <StatusBadge value={status} />;
 }
 
-export function LiveOpsPage() {
+export function LiveOpsPage({ embedded = false }: { embedded?: boolean } = {}) {
   const { session } = useOutletContext<AdminOutletContext>();
   const navigate = useNavigate();
   const { prompt, confirm } = useAdminConfirm();
@@ -154,15 +143,17 @@ export function LiveOpsPage() {
   return (
     <div className="space-y-6 text-slate-200">
       <div className="flex flex-wrap items-start justify-between gap-4">
+        {!embedded && (
         <div>
           <h2 className="text-xl font-semibold text-white flex items-center gap-2">
-            <Radio className="w-5 h-5 text-emerald-400" />
+            <Radio className="w-5 h-5 text-amber-400" />
             Live Ops
           </h2>
           <p className="text-sm text-slate-400 mt-1">
             Active deliveries in flight. {lastUpdated ? `Updated ${when(lastUpdated.toISOString())}` : ''}
           </p>
         </div>
+        )}
         <button
           type="button"
           onClick={() => void load()}

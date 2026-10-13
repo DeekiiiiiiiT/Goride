@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Link, useOutletContext } from 'react-router-dom';
+import { Link, useOutletContext, useSearchParams } from 'react-router-dom';
 import { ChevronRight, HelpCircle, Loader2, X } from 'lucide-react';
 import { toast } from 'sonner';
 import {
@@ -85,12 +85,10 @@ type TabId = 'overview' | 'market' | 'tiers' | 'rush-pass' | 'simulator' | 'audi
 type RulesScope = 'global' | 'parish' | 'market';
 
 const TABS: { id: TabId; label: string }[] = [
-  { id: 'overview', label: 'Overview' },
-  { id: 'market', label: 'Market Rules' },
-  { id: 'tiers', label: 'Merchant Tiers' },
-  { id: 'rush-pass', label: 'Rush Pass' },
+  { id: 'market', label: 'Market rules' },
+  { id: 'tiers', label: 'Merchant tiers' },
   { id: 'simulator', label: 'Simulator' },
-  { id: 'audit', label: 'Audit Log' },
+  { id: 'audit', label: 'Change log' },
 ];
 
 const PASS_TIER_OPTIONS = [
@@ -150,10 +148,29 @@ function groupMarketsByParish(markets: PricingMarketSummary[]) {
     .sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name));
 }
 
-export function PricingHubPage() {
+export function PricingHubPage({ onlyTab }: { onlyTab?: TabId } = {}) {
   const { session } = useOutletContext<AdminOutletContext>();
   const canWrite = canWriteDashAdmin(session.user);
-  const [tab, setTab] = useState<TabId>('overview');
+  const [params, setParams] = useSearchParams();
+  const [tab, setTabState] = useState<TabId>(onlyTab ?? 'market');
+  const setTab = (id: TabId) => {
+    setTabState(id);
+    if (onlyTab) return;
+    const next = new URLSearchParams(params);
+    next.set('tab', id === 'market' ? 'market-rules' : id === 'audit' ? 'changes' : id);
+    setParams(next, { replace: false });
+  };
+
+  useEffect(() => {
+    if (onlyTab) {
+      setTabState(onlyTab);
+      return;
+    }
+    const raw = params.get('tab');
+    const mapped = raw === 'market-rules' ? 'market' : raw === 'changes' ? 'audit' : raw;
+    const allowed: TabId[] = ['overview', 'market', 'tiers', 'rush-pass', 'simulator', 'audit'];
+    if (mapped && allowed.includes(mapped as TabId)) setTabState(mapped as TabId);
+  }, [onlyTab, params]);
   const [loading, setLoading] = useState(true);
   const [markets, setMarkets] = useState<PricingMarketSummary[]>([]);
   const [parishes, setParishes] = useState<PricingParishSummary[]>([]);
@@ -354,7 +371,7 @@ export function PricingHubPage() {
 
   useEffect(() => {
     if (tab === 'audit') {
-      void fetchPricingAudit(session.access_token, selectedMarketId || undefined)
+      void fetchPricingAudit(session.access_token, selectedMarketId ? { marketId: selectedMarketId } : undefined)
         .then((r) => setAuditEntries(r.entries ?? []))
         .catch(console.error);
     }
@@ -1027,19 +1044,22 @@ export function PricingHubPage() {
   }
 
   return (
-    <div className="space-y-6 p-4 md:p-6">
+    <div className="space-y-6">
+      {!onlyTab && (
       <div>
-        <h1 className="text-xl font-semibold text-white">Pricing & Commission</h1>
+        <h1 className="text-xl font-semibold text-white">Pricing</h1>
         <p className="text-sm text-slate-400 mt-1">
-          Configure market fees, merchant tiers, driver splits, and COD controls.
-          High-risk delivery zones are managed under{' '}
-          <a href={`${DASH_ADMIN_BASENAME}/markets`} className="text-amber-400 hover:underline">
-            Markets → exclude polygons
-          </a>
-          .
+          Market rules, merchant tiers, and the simulator.
+          Exclusion zones live under{' '}
+          <Link to="/markets?tab=exclusions" className="text-amber-400 hover:underline">
+            Markets
+          </Link>
+          . Rush Pass lives under Promotions.
         </p>
       </div>
+      )}
 
+      {!onlyTab && (
       <div className="flex flex-wrap gap-2 border-b border-slate-800 pb-2">
         {TABS.map((t) => (
           <button
@@ -1056,216 +1076,6 @@ export function PricingHubPage() {
           </button>
         ))}
       </div>
-
-      {tab === 'overview' && (
-        <div className="space-y-6">
-          <div className="rounded-xl border border-amber-800/40 bg-amber-950/20 px-4 py-3 flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <p className="text-sm text-amber-100 font-medium">COD remittance</p>
-              <p className="text-xs text-slate-400 mt-0.5">
-                Courier cash owed to Roam is managed on the Remittance Desk — not here.
-              </p>
-            </div>
-            <Link
-              to="/remittance"
-              className="inline-flex px-3 py-1.5 rounded-lg bg-amber-600 text-white text-sm font-medium"
-            >
-              Open Remittance Desk
-            </Link>
-          </div>
-          {revenue && (
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-4">
-                <p className="text-xs text-slate-500">Commission recorded</p>
-                <p className="text-lg font-semibold text-white mt-1">
-                  {formatJmd(revenue.commission_total_jmd)}
-                </p>
-              </div>
-              <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-4">
-                <p className="text-xs text-slate-500">Service fees</p>
-                <p className="text-lg font-semibold text-white mt-1">
-                  {formatJmd(revenue.service_fee_total_jmd)}
-                </p>
-              </div>
-              <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-4">
-                <p className="text-xs text-slate-500">Take rate (commission / food)</p>
-                <p className="text-lg font-semibold text-white mt-1">
-                  {revenue.take_rate_percent}%
-                </p>
-              </div>
-              <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-4">
-                <p className="text-xs text-slate-500">Orders</p>
-                <p className="text-lg font-semibold text-white mt-1">
-                  {revenue.order_count ?? revenue.v2_order_count}
-                </p>
-              </div>
-              <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-4">
-                <p className="text-xs text-slate-500">Distance fee attach</p>
-                <p className="text-lg font-semibold text-white mt-1">
-                  {revenue.distance_fee_attach_rate_percent ?? 0}%
-                  <span className="text-xs text-slate-500 font-normal ml-1">
-                    {formatJmd(revenue.distance_fee_total_jmd ?? 0)}
-                  </span>
-                </p>
-              </div>
-              <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-4">
-                <p className="text-xs text-slate-500">Growth Guarantee credits (90d)</p>
-                <p className="text-lg font-semibold text-white mt-1">
-                  {revenue.growth_guarantee_credit_count_90d ?? 0}
-                  <span className="text-xs text-slate-500 font-normal ml-1">
-                    {formatJmd(revenue.growth_guarantee_credit_total_jmd_90d ?? 0)}
-                  </span>
-                </p>
-              </div>
-              <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-4">
-                <p className="text-xs text-slate-500">GG clawbacks (90d)</p>
-                <p className="text-lg font-semibold text-white mt-1">
-                  {revenue.growth_guarantee_clawback_count_90d ?? 0}
-                  <span className="text-xs text-slate-500 font-normal ml-1">
-                    {formatJmd(revenue.growth_guarantee_clawback_total_jmd_90d ?? 0)}
-                  </span>
-                </p>
-              </div>
-            </div>
-          )}
-          <div className="rounded-xl border border-slate-700 bg-slate-900/60 px-4 py-3 text-xs text-slate-300">
-            Growth Guarantee: math green; claw-backs armed. Keep live GG cron off until ≥1 Jamaica
-            calendar month of delivered/completed Dominant volume — see docs/RUSH_PASS_PRICING_OPS.md.
-            Rush Pass settings live under the{' '}
-            <button
-              type="button"
-              className="text-amber-400 hover:underline"
-              onClick={() => setTab('rush-pass')}
-            >
-              Rush Pass
-            </button>{' '}
-            tab.
-          </div>
-          <div className="space-y-2">
-            {parishGroups.map((parish) => (
-              <button
-                key={parish.key}
-                type="button"
-                onClick={() => setOverviewParishKey(parish.key)}
-                className="w-full flex items-center justify-between gap-3 rounded-xl border border-slate-800 bg-slate-900/50 px-4 py-3 text-left hover:border-slate-600 hover:bg-slate-900 transition-colors"
-              >
-                <div className="min-w-0">
-                  <p className="font-medium text-white truncate">{parish.name}</p>
-                  <p className="text-xs text-slate-500 mt-0.5">
-                    {parish.activeMarkets.length} active
-                    {parish.markets.length !== parish.activeMarkets.length
-                      ? ` · ${parish.markets.length} total towns`
-                      : ''}
-                  </p>
-                </div>
-                <ChevronRight className="w-4 h-4 text-slate-500 shrink-0" />
-              </button>
-            ))}
-          </div>
-          <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-4">
-            <h3 className="font-medium text-white mb-3">Recent pricing changes</h3>
-            {recentChanges.length === 0 ? (
-              <p className="text-sm text-slate-500">No changes logged yet.</p>
-            ) : (
-              <ul className="space-y-2 text-sm text-slate-400">
-                {recentChanges.map((e) => (
-                  <li key={String(e.id)}>
-                    {String(e.scope ?? 'market')} ·{' '}
-                    {e.created_at ? new Date(String(e.created_at)).toLocaleString() : '—'}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-          <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-4">
-            <h3 className="font-medium text-white mb-3">Merchant Tiers</h3>
-            <ul className="space-y-2">
-              {tiers.map((t) => (
-                <li key={t.id} className="flex justify-between text-sm text-slate-300">
-                  <span>
-                    {t.name}
-                    <span className="text-slate-500 ml-2">
-                      ({t.merchant_count ?? 0} merchants)
-                    </span>
-                  </span>
-                  <span>{Math.round(t.commission_rate * 100)}% commission</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          {overviewParish && (
-            <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-3 sm:p-6">
-              <button
-                type="button"
-                aria-label="Close"
-                className="absolute inset-0 bg-slate-950/80 backdrop-blur-[2px]"
-                onClick={() => setOverviewParishKey(null)}
-              />
-              <div
-                role="dialog"
-                aria-modal="true"
-                aria-labelledby="pricing-parish-overlay-title"
-                className="relative w-full max-w-2xl max-h-[88vh] overflow-hidden rounded-xl border border-slate-700 bg-slate-900 shadow-2xl flex flex-col"
-              >
-                <div className="flex items-start justify-between gap-3 border-b border-slate-800 px-4 py-3">
-                  <div>
-                    <h2
-                      id="pricing-parish-overlay-title"
-                      className="text-base font-semibold text-white"
-                    >
-                      {overviewParish.name}
-                    </h2>
-                    <p className="text-xs text-slate-400 mt-0.5">
-                      Active delivery towns only — same as the green toggle on Markets.
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setOverviewParishKey(null)}
-                    className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-800 hover:text-white"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                </div>
-                <div className="overflow-y-auto flex-1 p-4">
-                  {overviewParish.activeMarkets.length === 0 ? (
-                    <p className="text-sm text-slate-400 py-8 text-center">
-                      No active towns in this parish yet. Activate a town under Markets first.
-                    </p>
-                  ) : (
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      {overviewParish.activeMarkets.map((m) => (
-                        <div
-                          key={m.market.id}
-                          className="rounded-xl border border-slate-800 bg-slate-950/60 p-4"
-                        >
-                          <div className="flex items-center justify-between gap-2">
-                            <h3 className="font-medium text-white">{m.market.name}</h3>
-                          </div>
-                          <p className="text-sm text-slate-400 mt-2">
-                            Profile v{(m.profile as { version?: number })?.version ?? '—'}
-                          </p>
-                          <button
-                            type="button"
-                            className="mt-3 text-sm text-amber-400 hover:underline"
-                            onClick={() => {
-                              openRulesView('market', m.market.id);
-                              setOverviewParishKey(null);
-                              setTab('market');
-                            }}
-                          >
-                            Edit rules →
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
       )}
 
       {tab === 'market' && (
@@ -2296,6 +2106,7 @@ export function PricingHubPage() {
 
       {tab === 'audit' && (
         <div className="space-y-2 max-h-96 overflow-y-auto">
+          <Link to="/audit?source=pricing" className="text-sm text-amber-300">Open the full change log</Link>
           {auditEntries.length === 0 ? (
             <p className="text-sm text-slate-500">No pricing changes logged yet.</p>
           ) : (

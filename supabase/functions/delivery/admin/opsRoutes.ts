@@ -36,7 +36,7 @@ export function registerOpsAdminRoutes(app: Hono) {
     const statusFilter = c.req.query("status");
     const statuses = statusFilter ? [statusFilter] : [...LIVE_STATUSES];
 
-    const { data: orders, error } = await db
+    let liveQuery = db
       .from("orders")
       .select(`
         id, order_number, status, payment_status, total, placed_at, ready_at,
@@ -49,6 +49,10 @@ export function registerOpsAdminRoutes(app: Hono) {
       .in("status", statuses)
       .order("placed_at", { ascending: true })
       .limit(200);
+    if (c.req.query("unassigned") === "true") {
+      liveQuery = liveQuery.is("courier_id", null);
+    }
+    const { data: orders, error } = await liveQuery;
     if (error) return c.json({ error: error.message }, 500);
 
     // Attach courier email (auth) best-effort for assigned orders.

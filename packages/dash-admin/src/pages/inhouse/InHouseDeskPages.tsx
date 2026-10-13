@@ -25,7 +25,7 @@ function money(amount: number) {
   return `J$${amount.toLocaleString('en-JM', { maximumFractionDigits: 2 })}`;
 }
 
-export function InHouseCardsPage() {
+export function InHouseCardsPage({ embedded = false }: { embedded?: boolean } = {}) {
   const token = useToken();
   const [tab, setTab] = useState<'transactions' | 'cards'>('transactions');
   const [cards, setCards] = useState<Array<Record<string, unknown>>>([]);
@@ -76,10 +76,10 @@ export function InHouseCardsPage() {
   }
   return (
     <div className="space-y-4 p-4 text-slate-100">
-      <h1 className="text-xl font-semibold">Cards and spend</h1>
+      {!embedded && <h1 className="text-xl font-semibold">Cards and spend</h1>}
       <div className="flex gap-2">
-        <button type="button" className={`rounded px-3 py-1 ${tab === 'transactions' ? 'bg-emerald-800' : 'bg-slate-800'}`} onClick={() => setTab('transactions')}>Transactions</button>
-        <button type="button" className={`rounded px-3 py-1 ${tab === 'cards' ? 'bg-emerald-800' : 'bg-slate-800'}`} onClick={() => setTab('cards')}>Cards</button>
+        <button type="button" className={`rounded px-3 py-1 ${tab === 'transactions' ? 'bg-amber-500 text-slate-950' : 'bg-slate-800'}`} onClick={() => setTab('transactions')}>Transactions</button>
+        <button type="button" className={`rounded px-3 py-1 ${tab === 'cards' ? 'bg-amber-500 text-slate-950' : 'bg-slate-800'}`} onClick={() => setTab('cards')}>Cards</button>
       </div>
       {tab === 'transactions' ? (
         <div className="space-y-4">
@@ -132,7 +132,7 @@ export function InHouseCardsPage() {
         </div>
       ) : (
         <div className="space-y-3">
-          <button type="button" className="rounded bg-emerald-800 px-3 py-2" onClick={() => setAdding(true)}>Add card</button>
+          <button type="button" className="rounded bg-amber-500 text-slate-950 px-3 py-2" onClick={() => setAdding(true)}>Add card</button>
           {cards.map((card) => {
             const id = String(card.id);
             const editing = editingId === id;
@@ -148,7 +148,7 @@ export function InHouseCardsPage() {
                     <input className="rounded bg-slate-900 p-2" value={editLabel} onChange={(event) => setEditLabel(event.target.value)} />
                     <input className="rounded bg-slate-900 p-2" value={editLast4} maxLength={4} onChange={(event) => setEditLast4(event.target.value)} />
                     <input className="rounded bg-slate-900 p-2" placeholder="Daily limit J$" value={editLimit} onChange={(event) => setEditLimit(event.target.value)} />
-                    <button className="rounded bg-emerald-800 px-3" type="submit">Save</button>
+                    <button className="rounded bg-amber-500 text-slate-950 px-3" type="submit">Save</button>
                     <button className="rounded bg-slate-800 px-3" type="button" onClick={() => setEditingId(null)}>Cancel</button>
                   </form>
                 ) : (
@@ -188,7 +188,7 @@ export function InHouseCardsPage() {
             <input className="w-full rounded bg-slate-900 p-2" placeholder="Last 4" value={last4} maxLength={4} onChange={(event) => setLast4(event.target.value)} />
             <input className="w-full rounded bg-slate-900 p-2" placeholder="Daily limit J$" value={limit} onChange={(event) => setLimit(event.target.value)} />
             <div className="flex gap-2">
-              <button className="rounded bg-emerald-800 px-3 py-2" type="submit">Save</button>
+              <button className="rounded bg-amber-500 text-slate-950 px-3 py-2" type="submit">Save</button>
               <button className="rounded bg-slate-800 px-3 py-2" type="button" onClick={() => setAdding(false)}>Cancel</button>
             </div>
           </form>
@@ -198,7 +198,7 @@ export function InHouseCardsPage() {
   );
 }
 
-export function InHouseReportsPage() {
+export function InHouseReportsPage({ embedded = false }: { embedded?: boolean } = {}) {
   const token = useToken();
   const [report, setReport] = useState<Record<string, number> | null>(null);
   const [recon, setRecon] = useState<Record<string, number> | null>(null);
@@ -208,7 +208,7 @@ export function InHouseReportsPage() {
   }, [token]);
   return (
     <div className="space-y-3 p-4 text-slate-100">
-      <h1 className="text-xl font-semibold">In-House reports</h1>
+      {!embedded && <h1 className="text-xl font-semibold">In-House reports</h1>}
       {report ? (
         <ul className="space-y-1 text-sm">
           <li>Orders, 30 days: {report.orders}</li>

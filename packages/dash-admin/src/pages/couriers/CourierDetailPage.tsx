@@ -16,8 +16,10 @@ import {
   deleteCourier,
 } from '@roam/dash-admin-client';
 import { useAdminConfirm } from '../../contexts/AdminConfirmContext';
+import { SegmentTabs, useUrlTab } from '../../components/SegmentTabs';
 import { BlockerChips } from '../../courier-shared/components/ComplianceChecklist';
 import { formatBlockersList } from '../../utils/complianceLabels';
+import { useDetailCrumb } from '../../DashAdminPortal';
 
 interface OutletContext {
   session: Session;
@@ -49,11 +51,13 @@ export function CourierDetailPage() {
   const { confirm, prompt } = useAdminConfirm();
   const navigate = useNavigate();
   const token = session.access_token;
+  const [detailTab, setDetailTab] = useUrlTab('overview', ['overview', 'documents', 'deliveries', 'cash', 'access'] as const);
 
   const [loading, setLoading] = useState(true);
   const [courier, setCourier] = useState<CourierDetailDto | null>(null);
   const [permissions, setPermissions] = useState<CourierAdminPermissions | null>(null);
   const [deliveries, setDeliveries] = useState<Array<Record<string, unknown>>>([]);
+  useDetailCrumb(courier?.display_name || null);
 
   const load = useCallback(async () => {
     if (!token || !userId) return;
@@ -88,7 +92,7 @@ export function CourierDetailPage() {
     return (
       <div className="text-center py-16 text-slate-400">
         <p>Courier not found.</p>
-        <Link to="/couriers" className="text-emerald-400 text-sm mt-2 inline-block">
+        <Link to="/couriers" className="text-amber-300 text-sm mt-2 inline-block">
           Back to directory
         </Link>
       </div>
@@ -208,16 +212,29 @@ export function CourierDetailPage() {
         </button>
       </div>
 
-      {courier.compliance && courier.compliance.blockers.length > 0 && (
+      <SegmentTabs
+        tabs={[
+          { id: 'overview', label: 'Overview' },
+          { id: 'documents', label: 'Documents' },
+          { id: 'deliveries', label: 'Deliveries' },
+          { id: 'cash', label: 'Cash' },
+          { id: 'access', label: 'Access' },
+        ]}
+        active={detailTab}
+        onChange={setDetailTab}
+      />
+
+      {detailTab === 'overview' && courier.compliance && courier.compliance.blockers.length > 0 && (
         <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4">
           <p className="text-sm text-amber-200 mb-2">{formatBlockersList(courier.compliance.blockers)}</p>
           <BlockerChips blockers={courier.compliance.blockers} />
-          <Link to={`/couriers/compliance?review=${courier.user_id}`} className="text-xs text-emerald-400 mt-2 inline-block">
+          <Link to={`/couriers/compliance?review=${courier.user_id}`} className="text-xs text-amber-300 mt-2 inline-block">
             Open in compliance →
           </Link>
         </div>
       )}
 
+      {detailTab === 'overview' ? (
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="rounded-xl border border-slate-800 p-4 space-y-2 text-sm">
           <h3 className="font-medium text-white">Profile</h3>
@@ -238,8 +255,28 @@ export function CourierDetailPage() {
           )}
         </div>
       </div>
+      ) : null}
 
-      {canWrite && (
+      {detailTab === 'documents' && (
+        <section className="rounded-xl border border-slate-800 p-4 space-y-2 text-sm">
+          <h3 className="font-medium text-white">Documents</h3>
+          {courier.documents.length === 0 ? <p className="text-slate-400">No documents on file.</p> : courier.documents.map((doc) => (
+            <p key={doc.id} className="flex justify-between gap-3 text-slate-200">
+              <span>{doc.doc_type.replace(/_/g, ' ')}</span>
+              <span className="text-slate-400">{doc.status}{doc.expiry_date ? ` · expires ${doc.expiry_date}` : ''}</span>
+            </p>
+          ))}
+        </section>
+      )}
+
+      {detailTab === 'cash' && (
+        <section className="rounded-xl border border-slate-800 p-4 text-sm text-slate-300">
+          <p>Cash this courier still owes is on the courier cash desk.</p>
+          <Link to={`/courier-cash?tab=balances&courier=${courier.user_id}`} className="text-amber-300 mt-2 inline-block">Open this courier's balance</Link>
+        </section>
+      )}
+
+      {detailTab === 'access' && canWrite && (
         <div className="flex flex-wrap gap-2">
           {courier.status === 'active' && (
             <button
@@ -308,6 +345,7 @@ export function CourierDetailPage() {
         </div>
       )}
 
+      {detailTab === 'deliveries' && (
       <div className="rounded-xl border border-slate-800 overflow-hidden">
         <div className="px-4 py-3 border-b border-slate-800 bg-slate-900/50">
           <h3 className="font-medium text-white">Recent deliveries</h3>
@@ -326,6 +364,7 @@ export function CourierDetailPage() {
           )}
         </ul>
       </div>
+      )}
     </div>
   );
 }

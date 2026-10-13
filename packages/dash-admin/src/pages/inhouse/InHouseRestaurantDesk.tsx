@@ -121,15 +121,15 @@ function formFromStore(store: StoreRow): FormState {
 
 const field = 'rounded bg-slate-900 p-2';
 
-export function InHouseStoresPage() {
-  return <InHouseRestaurantDesk mode="stores" />;
+export function InHouseStoresPage({ embedded = false }: { embedded?: boolean } = {}) {
+  return <InHouseRestaurantDesk mode="stores" embedded={embedded} />;
 }
 
-export function InHouseMenuPage() {
-  return <InHouseRestaurantDesk mode="menu" />;
+export function InHouseMenuPage({ embedded = false }: { embedded?: boolean } = {}) {
+  return <InHouseRestaurantDesk mode="menu" embedded={embedded} />;
 }
 
-function InHouseRestaurantDesk({ mode }: { mode: 'stores' | 'menu' }) {
+function InHouseRestaurantDesk({ mode, embedded = false }: { mode: 'stores' | 'menu'; embedded?: boolean }) {
   const { session } = useOutletContext<AdminOutletContext>();
   const token = session.access_token;
   const [stores, setStores] = useState<StoreRow[]>([]);
@@ -350,18 +350,18 @@ function InHouseRestaurantDesk({ mode }: { mode: 'stores' | 'menu' }) {
   const menuDesk = mode === 'menu' && showEditor && tab === 'menu';
   return (
     <div className={menuDesk ? 'text-slate-100' : 'space-y-4 p-4 text-slate-100'}>
-      {menuDesk ? null : <h1 className="text-xl font-semibold">{mode === 'menu' ? (showEditor && tab === 'details' ? 'Restaurant details' : showEditor && tab === 'hours' ? 'Hours' : 'Menu prices') : 'In-House stores'}</h1>}
+      {menuDesk || (embedded && mode === 'stores' && !showEditor) ? null : <h1 className="text-xl font-semibold">{mode === 'menu' ? (showEditor && tab === 'details' ? 'Restaurant details' : showEditor && tab === 'hours' ? 'Hours' : 'Menu prices') : 'In-House stores'}</h1>}
       {mode === 'stores' ? (
         <p className="text-sm text-slate-400">{enabled ? 'The public switch is on.' : 'The public switch is off. A store can be saved, but it cannot go live.'} Tax stays off until the accountant answers. If a brand objects, turn that store off the same day.</p>
       ) : null}
 
       {!showEditor && mode === 'stores' ? (
         <div className="flex gap-2">
-          <button type="button" className={`rounded px-3 py-1 ${section === 'create' ? 'bg-emerald-800' : 'bg-slate-800'}`} onClick={() => {
+          <button type="button" className={`rounded-lg px-3 py-1 ${section === 'create' ? 'bg-amber-500 text-slate-950' : 'bg-slate-800'}`} onClick={() => {
             setSection('create');
             if (draftId && drafts.some((item) => item.id === draftId)) startFresh();
           }}>Create restaurant</button>
-          <button type="button" className={`rounded px-3 py-1 ${section === 'pending' ? 'bg-emerald-800' : 'bg-slate-800'}`} onClick={() => setSection('pending')}>Pending{drafts.length ? ` (${drafts.length})` : ''}</button>
+          <button type="button" className={`rounded-lg px-3 py-1 ${section === 'pending' ? 'bg-amber-500 text-slate-950' : 'bg-slate-800'}`} onClick={() => setSection('pending')}>Pending{drafts.length ? ` (${drafts.length})` : ''}</button>
         </div>
       ) : null}
 
@@ -402,7 +402,7 @@ function InHouseRestaurantDesk({ mode }: { mode: 'stores' | 'menu' }) {
             <form className="grid gap-2 md:grid-cols-2" onSubmit={(event) => { event.preventDefault(); void save(false).catch((error: Error) => toast.error(error.message)); }}>
               {tab === 'details' ? <DetailsFields form={form} setForm={setForm} markets={markets} finding={finding} onFind={() => void locate()} uploading={uploading} onUpload={upload} /> : null}
               {tab === 'hours' ? <InHouseHoursFields hours={form.hours} onChange={(hours) => setForm({ ...form, hours })} /> : null}
-              <button className="rounded bg-emerald-800 px-3 py-2 md:col-span-2" type="submit">Save restaurant</button>
+              <button className="rounded-xl bg-amber-500 text-slate-950 px-3 py-2 md:col-span-2" type="submit">Save restaurant</button>
             </form>
           ) : null}
         </div>
@@ -481,7 +481,7 @@ function InHouseRestaurantDesk({ mode }: { mode: 'stores' | 'menu' }) {
           <div className="flex gap-2 md:col-span-2">
             {step > 0 ? <button type="button" className="rounded bg-slate-800 px-3 py-2" onClick={() => setStep(step - 1)}>Back</button> : null}
             <button type="button" className="rounded bg-slate-800 px-3 py-2" onClick={() => void saveStep().catch((error: Error) => toast.error(error.message))}>Save</button>
-            <button className="rounded bg-emerald-800 px-3 py-2" type="submit">{step === STEPS.length - 1 ? 'Add restaurant' : 'Next'}</button>
+            <button className="rounded-xl bg-amber-500 text-slate-950 px-3 py-2" type="submit">{step === STEPS.length - 1 ? 'Add restaurant' : 'Next'}</button>
           </div>
         </form>
       ) : null}

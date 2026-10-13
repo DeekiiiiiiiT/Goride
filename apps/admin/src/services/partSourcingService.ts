@@ -89,6 +89,10 @@ export async function createPartMaster(
     oem_part_number?: string | null;
     description?: string | null;
     metadata?: Record<string, unknown>;
+    manufacturer?: string | null;
+    part_kind?: string | null;
+    maintenance_component_id?: string | null;
+    interchange_group_id?: string | null;
   },
 ): Promise<PartMasterRecord> {
   const res = await fetch(`${base()}/part-parts`, {
@@ -110,6 +114,10 @@ export async function updatePartMaster(
     oem_part_number: string | null;
     description: string | null;
     metadata: Record<string, unknown>;
+    manufacturer: string | null;
+    part_kind: string | null;
+    maintenance_component_id: string | null;
+    interchange_group_id: string | null;
   }>,
 ): Promise<PartMasterRecord> {
   const res = await fetch(`${base()}/part-parts/${id}`, {
@@ -212,6 +220,15 @@ export async function createPartOffer(
     lead_time_days?: number | null;
     url?: string | null;
     is_active?: boolean;
+    source?: string;
+    core_charge?: number | null;
+    warranty_months?: number | null;
+    warranty_km?: number | null;
+    organization_id?: string | null;
+    freight_estimate?: number | null;
+    duty_rate?: number | null;
+    fx_rate_to_jmd?: number | null;
+    price_observed_at?: string | null;
   },
 ): Promise<SupplierPartOfferRecord> {
   const res = await fetch(`${base()}/part-offers`, {
@@ -359,13 +376,54 @@ export async function updatePartsSourcingRequest(
   id: string,
   status: string,
   adminNote?: string,
+  resolvedPartId?: string | null,
 ): Promise<PartsSourcingRequestRow> {
   const res = await fetch(`${API_ENDPOINTS.admin}/admin/parts-sourcing-requests/${id}`, {
     method: "PATCH",
     headers: edgeHeaders(accessToken, "application/json"),
-    body: JSON.stringify({ status, adminNote }),
+    body: JSON.stringify({ status, adminNote, resolvedPartId }),
   });
   if (!res.ok) throw new Error(await parseError(res));
   const data = await res.json();
   return data.item as PartsSourcingRequestRow;
 }
+
+async function adminGet(accessToken: string, path: string): Promise<Record<string, unknown>> {
+  const res = await fetch(`${base()}/${path}`, { headers: edgeHeaders(accessToken) });
+  if (!res.ok) throw new Error(await parseError(res));
+  return await res.json();
+}
+
+async function adminSend(accessToken: string, path: string, method: string, body?: unknown): Promise<Record<string, unknown>> {
+  const res = await fetch(`${base()}/${path}`, {
+    method,
+    headers: edgeHeaders(accessToken, "application/json"),
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+  return await res.json();
+}
+
+export const partsEnterpriseApi = {
+  platforms: (token: string) => adminGet(token, "vehicle-platforms"),
+  engines: (token: string) => adminGet(token, "engine-families"),
+  coverage: (token: string) => adminGet(token, "parts-coverage"),
+  groups: (token: string) => adminGet(token, "part-groups"),
+  createGroup: (token: string, body: Record<string, unknown>) => adminSend(token, "part-groups", "POST", body),
+  rules: (token: string) => adminGet(token, "part-rules"),
+  createRule: (token: string, body: Record<string, unknown>) => adminSend(token, "part-rules", "POST", body),
+  importRows: (token: string, rows: unknown[]) => adminSend(token, "part-import", "POST", { rows }),
+  undoImport: (token: string, batchId: string) => adminSend(token, "part-import/undo", "POST", { batchId }),
+  linkReviews: (token: string) => adminGet(token, "part-link-reviews"),
+  resolveLink: (token: string, id: string, body: Record<string, unknown>) => adminSend(token, `part-link-reviews/${id}`, "PATCH", body),
+  cores: (token: string) => adminGet(token, "part-cores"),
+  updateCore: (token: string, id: string, status: string) => adminSend(token, `part-cores/${id}`, "PATCH", { status }),
+  claims: (token: string) => adminGet(token, "part-warranty-claims"),
+  alerts: (token: string) => adminGet(token, "part-repeat-alerts"),
+  dismissAlert: (token: string, id: string) => adminSend(token, `part-repeat-alerts/${id}`, "PATCH", {}),
+  refreshAlerts: (token: string) => adminSend(token, "part-repeat-alerts/refresh", "POST", {}),
+  quotes: (token: string) => adminGet(token, "part-quotes"),
+  feedback: (token: string) => adminGet(token, "part-fit-feedback"),
+  stock: (token: string) => adminGet(token, "org-part-stock"),
+  supplierSearch: (token: string, partNumber: string) => adminSend(token, "part-supplier-search", "POST", { partNumber }),
+};

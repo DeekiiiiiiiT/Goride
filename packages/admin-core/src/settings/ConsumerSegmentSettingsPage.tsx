@@ -4,13 +4,14 @@
 import React from 'react';
 import { ProductLineSettingsPage, type ProductLineSettingsPageProps } from './ProductLineSettingsPage';
 
-export type ConsumerSegment = 'rides' | 'driver' | 'haul' | 'dash';
+export type ConsumerSegment = 'rides' | 'driver' | 'haul' | 'dash' | 'courier';
 
 const SEGMENT_LABELS: Record<ConsumerSegment, string> = {
   rides: 'Roam Rides',
   driver: 'Roam Driver',
   haul: 'Roam Haul',
   dash: 'Roam Rush',
+  courier: 'Courier',
 };
 
 export type ConsumerSegmentSettingsPageProps = Omit<

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Link, useOutletContext } from 'react-router-dom';
+import { Link, useOutletContext, useSearchParams } from 'react-router-dom';
 import { ChevronLeft, ChevronRight, Loader2, Download } from 'lucide-react';
 import { toast } from 'sonner';
 import { listIdentityAuditEvents, type AuditEvent } from '@roam/dash-admin-client';
@@ -7,24 +7,28 @@ import type { AdminOutletContext } from '../../DashAdminPortal';
 
 const PAGE_SIZE = 50;
 
-export function UsersAuditPage() {
+export function UsersAuditPage({ embedded = false }: { embedded?: boolean } = {}) {
   const { session } = useOutletContext<AdminOutletContext>();
   const [events, setEvents] = useState<AuditEvent[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
+  const [params] = useSearchParams();
   const [actionFilter, setActionFilter] = useState('');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
+  const person = embedded ? (params.get('q') || '') : actionFilter;
+  const from = embedded ? (params.get('from') || '') : dateFrom;
+  const to = embedded ? (params.get('to') || '') : dateTo;
 
   useEffect(() => {
     setLoading(true);
     void listIdentityAuditEvents(session.access_token, {
       page,
       limit: PAGE_SIZE,
-      action: actionFilter || undefined,
-      date_from: dateFrom || undefined,
-      date_to: dateTo || undefined,
+      action: person || undefined,
+      date_from: from || undefined,
+      date_to: to || undefined,
     })
       .then((res) => {
         setEvents(res.events ?? []);
@@ -32,7 +36,7 @@ export function UsersAuditPage() {
       })
       .catch((e) => toast.error(e instanceof Error ? e.message : 'Failed to load audit'))
       .finally(() => setLoading(false));
-  }, [session.access_token, page, actionFilter, dateFrom, dateTo]);
+  }, [session.access_token, page, person, from, to]);
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
@@ -58,12 +62,14 @@ export function UsersAuditPage() {
 
   return (
     <div className="space-y-4">
+      {!embedded && (
       <div>
         <h2 className="text-xl font-semibold text-white">Audit log</h2>
         <p className="text-sm text-slate-400">Unified permission audit trail for admin actions.</p>
       </div>
+      )}
 
-      <div className="flex flex-wrap gap-3">
+      {!embedded && <div className="flex flex-wrap gap-3">
         <input
           value={actionFilter}
           onChange={(e) => { setActionFilter(e.target.value); setPage(1); }}
@@ -89,7 +95,7 @@ export function UsersAuditPage() {
         >
           <Download className="w-4 h-4" /> Export
         </button>
-      </div>
+      </div>}
 
       <p className="text-xs text-slate-500">{total} events · page {page} of {totalPages}</p>
 

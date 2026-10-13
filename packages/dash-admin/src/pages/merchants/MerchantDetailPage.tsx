@@ -32,7 +32,8 @@ import {
   type DashMarketRow,
   revokeMerchantStaff,
 } from '@roam/dash-admin-client';
-import type { AdminOutletContext } from '../../DashAdminPortal';
+import { SegmentTabs, useUrlTab } from '../../components/SegmentTabs';
+import { useDetailCrumb, type AdminOutletContext } from '../../DashAdminPortal';
 
 function marketLockDisplay(merchant: DashMerchant): {
   label: string;
@@ -85,9 +86,11 @@ export function MerchantDetailPage() {
   const token = session.access_token;
   const canWrite = canWriteDashAdmin(session.user);
   const canDelete = canDeleteDashAdmin(session.user);
+  const [detailTab, setDetailTab] = useUrlTab('overview', ['overview', 'verification', 'coverage', 'pricing', 'team', 'activity'] as const);
 
   const [loading, setLoading] = useState(true);
   const [merchant, setMerchant] = useState<DashMerchant | null>(null);
+  useDetailCrumb(merchant?.name);
   const [auditLog, setAuditLog] = useState<MerchantAuditEntry[]>([]);
   const [ownerEmail, setOwnerEmail] = useState('');
   const [documents, setDocuments] = useState<MerchantDocumentDetail[]>([]);
@@ -511,7 +514,7 @@ export function MerchantDetailPage() {
         confirm_name: values.confirm_name,
       });
       toast.success(res.message || 'Merchant deleted');
-      navigate('/merchants/onboarding/applications');
+      navigate('/merchants');
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Delete failed');
     }
@@ -536,7 +539,7 @@ export function MerchantDetailPage() {
     <div className="space-y-6 max-w-4xl">
       <button
         type="button"
-        onClick={() => navigate('/merchants/onboarding/applications')}
+        onClick={() => navigate('/merchants')}
         className="inline-flex items-center gap-2 text-sm text-slate-400 hover:text-white"
       >
         <ArrowLeft className="w-4 h-4" />
@@ -654,7 +657,20 @@ export function MerchantDetailPage() {
         )}
       </div>
 
-      {merchant.onboarding_status === 'draft' && (
+      <SegmentTabs
+        tabs={[
+          { id: 'overview', label: 'Overview' },
+          { id: 'verification', label: 'Verification' },
+          { id: 'coverage', label: 'Coverage' },
+          { id: 'pricing', label: 'Pricing' },
+          { id: 'team', label: 'Team' },
+          { id: 'activity', label: 'Activity' },
+        ]}
+        active={detailTab}
+        onChange={setDetailTab}
+      />
+
+      {detailTab === 'overview' && merchant.onboarding_status === 'draft' && (
         <section className="rounded-xl border border-sky-500/30 bg-sky-500/10 p-4">
           <h3 className="text-sm font-medium text-sky-200">Application in progress</h3>
           <p className="text-sm text-sky-100/80 mt-1">
@@ -665,7 +681,7 @@ export function MerchantDetailPage() {
         </section>
       )}
 
-      {merchant.onboarding_status !== 'draft' && (
+      {detailTab === 'verification' && merchant.onboarding_status !== 'draft' && (
       <section className="rounded-xl border border-slate-800 bg-slate-900/50 p-4 space-y-3">
         <h3 className="text-sm font-medium text-white">Verification checklist</h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -701,7 +717,7 @@ export function MerchantDetailPage() {
       </section>
       )}
 
-      {documents.length > 0 && (
+      {detailTab === 'verification' && documents.length > 0 && (
         <section className="rounded-xl border border-slate-800 bg-slate-900/50 p-4 space-y-3">
           <h3 className="text-sm font-medium text-white">Documents</h3>
           {documents.map((doc) => (
@@ -721,6 +737,7 @@ export function MerchantDetailPage() {
         </section>
       )}
 
+      {detailTab === 'coverage' && (
       <section className="rounded-xl border border-slate-800 bg-slate-900/50 p-4 space-y-3">
         <h3 className="text-sm font-medium text-white">Delivery coverage</h3>
         <p className="text-sm text-slate-400">
@@ -754,7 +771,9 @@ export function MerchantDetailPage() {
           <p className="text-sm text-slate-300">{merchant.delivery_radius_km ?? 5} km</p>
         )}
       </section>
+      )}
 
+      {detailTab === 'pricing' && (
       <section className="rounded-xl border border-slate-800 bg-slate-900/50 p-4 space-y-3">
         <h3 className="text-sm font-medium text-white">Menu inflation</h3>
         <p className="text-sm text-slate-400">
@@ -790,7 +809,9 @@ export function MerchantDetailPage() {
           </p>
         )}
       </section>
+      )}
 
+      {detailTab === 'coverage' && (
       <section className="rounded-xl border border-slate-800 bg-slate-900/50 p-4 space-y-3">
         <h3 className="text-sm font-medium text-white">Delivery town</h3>
         <p className="text-sm text-slate-400">
@@ -878,7 +899,10 @@ export function MerchantDetailPage() {
           </div>
         )}
       </section>
+      )}
 
+      {detailTab === 'pricing' && (
+      <>
       <section className="rounded-xl border border-slate-800 bg-slate-900/50 p-4 space-y-3">
         <h3 className="text-sm font-medium text-white">GCT registration</h3>
         <p className="text-sm text-slate-400">
@@ -1008,8 +1032,10 @@ export function MerchantDetailPage() {
           )}
         </div>
       </section>
+      </>
+      )}
 
-      {(team.length > 0 || pendingInvites.length > 0) && (
+      {detailTab === 'team' && (team.length > 0 || pendingInvites.length > 0) && (
         <section className="rounded-xl border border-slate-800 bg-slate-900/50 p-4">
           <h3 className="text-sm font-medium text-white mb-3">Store team</h3>
           <ul className="space-y-2 text-sm">
@@ -1049,8 +1075,12 @@ export function MerchantDetailPage() {
         </section>
       )}
 
+      {detailTab === 'activity' && (
       <section className="rounded-xl border border-slate-800 bg-slate-900/50 p-4">
-        <h3 className="text-sm font-medium text-white mb-3">Audit log</h3>
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-sm font-medium text-white">Recent activity</h3>
+          <button type="button" className="text-xs text-amber-300" onClick={() => navigate('/audit?source=merchant')}>Full log</button>
+        </div>
         <div className="space-y-2 max-h-64 overflow-y-auto">
           {auditLog.map((entry) => (
             <div key={entry.id} className="text-xs text-slate-400 border-b border-slate-800 pb-2">
@@ -1063,8 +1093,9 @@ export function MerchantDetailPage() {
           ))}
         </div>
       </section>
+      )}
 
-      {canDelete && (
+      {detailTab === 'overview' && canDelete && (
         <section className="rounded-xl border border-red-500/30 bg-red-500/5 p-4 space-y-3">
           <h3 className="text-sm font-medium text-red-200">Danger zone</h3>
           <p className="text-sm text-red-100/70">
@@ -1087,7 +1118,9 @@ export function MerchantDetailPage() {
         targetStatus={actionStatus}
         merchantName={merchant.name}
         busy={actionBusy}
-        onConfirm={(payload) => actionStatus && submitAction(actionStatus, payload)}
+        onConfirm={(payload) => {
+          if (actionStatus) return submitAction(actionStatus, payload);
+        }}
       />
     </div>
   );

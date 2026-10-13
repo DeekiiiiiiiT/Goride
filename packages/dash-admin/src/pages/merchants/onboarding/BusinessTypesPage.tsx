@@ -23,6 +23,7 @@ import type { AdminOutletContext } from '../../../DashAdminPortal';
 
 type BusinessTypesPageProps = {
   onBusinessTypesChanged?: () => void;
+  embedded?: boolean;
 };
 
 const TYPE_TEMPLATES: { value: VerticalType | 'custom'; label: string }[] = [
@@ -35,7 +36,7 @@ const TYPE_TEMPLATES: { value: VerticalType | 'custom'; label: string }[] = [
   { value: 'custom', label: 'Custom (restaurant defaults)' },
 ];
 
-export function BusinessTypesPage({ onBusinessTypesChanged }: BusinessTypesPageProps = {}) {
+export function BusinessTypesPage({ onBusinessTypesChanged, embedded = false }: BusinessTypesPageProps = {}) {
   const { session } = useOutletContext<AdminOutletContext>();
   const { confirm } = useAdminConfirm();
   const token = session.access_token;
@@ -330,12 +331,14 @@ export function BusinessTypesPage({ onBusinessTypesChanged }: BusinessTypesPageP
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
+        {!embedded && (
         <div>
           <h2 className="text-xl font-semibold text-white">Business Types</h2>
           <p className="text-sm text-slate-400 mt-1">
             Sections and types shown on the partner setup form. Changes apply immediately.
           </p>
         </div>
+        )}
         <label className="flex items-center gap-2 text-sm text-slate-400 cursor-pointer">
           <input
             type="checkbox"

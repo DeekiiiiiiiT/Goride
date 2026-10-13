@@ -16,6 +16,10 @@ export interface PartMasterRecord {
   oem_part_number: string | null;
   description: string | null;
   metadata: Record<string, unknown>;
+  manufacturer?: string | null;
+  part_kind?: string | null;
+  maintenance_component_id?: string | null;
+  interchange_group_id?: string | null;
   created_at?: string;
   updated_at?: string;
   part_category?: { id: string; slug: string; label: string };
@@ -43,6 +47,15 @@ export interface SupplierPartOfferRecord {
   lead_time_days: number | null;
   url: string | null;
   is_active: boolean;
+  price_observed_at?: string | null;
+  source?: string | null;
+  core_charge?: number | null;
+  warranty_months?: number | null;
+  warranty_km?: number | null;
+  organization_id?: string | null;
+  freight_estimate?: number | null;
+  duty_rate?: number | null;
+  fx_rate_to_jmd?: number | null;
   created_at?: string;
   updated_at?: string;
   supplier?: { id: string; name: string; default_lead_time_days?: number | null };
@@ -78,10 +91,25 @@ export interface CompatiblePartOffer {
 
 export interface CompatiblePartsItem {
   fitmentId: string;
+  tier?: number;
+  tierLabel?: string;
+  matchReason?: string;
+  confirmedFit?: boolean;
+  confirmedInstalls?: number;
+  position?: string | null;
+  ruleSource?: string | null;
+  alsoKnownAs?: string[];
+  stockQty?: number;
   part: PartMasterRecord & {
     part_category?: { id: string; slug: string; label: string; parent_id?: string | null; sort_order?: number };
   };
-  offers: CompatiblePartOffer[];
+  offers: Array<CompatiblePartOffer & {
+    landedCostJmd?: number;
+    totalImpactJmd?: number;
+    priceStale?: boolean;
+    core_charge?: number | null;
+    warranty_months?: number | null;
+  }>;
 }
 
 export interface CompatiblePartsResponse {
@@ -90,4 +118,5 @@ export interface CompatiblePartsResponse {
   items: CompatiblePartsItem[];
   count?: number;
   message?: string;
+  tiered?: boolean;
 }

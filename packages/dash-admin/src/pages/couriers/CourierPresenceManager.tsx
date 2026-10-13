@@ -23,7 +23,7 @@ function courierLabel(c: CourierPresenceRow): string {
   return c.display_name?.trim() || c.email?.trim() || c.phone?.trim() || `Courier ${c.courier_id.slice(0, 8)}`;
 }
 
-export function CourierPresenceManager() {
+export function CourierPresenceManager({ embedded = false }: { embedded?: boolean } = {}) {
   const { session } = useOutletContext<{ session: Session }>();
   const token = session.access_token;
 
@@ -64,15 +64,17 @@ export function CourierPresenceManager() {
   return (
     <div className="space-y-6 text-slate-200">
       <div className="flex flex-wrap items-start justify-between gap-4">
+        {!embedded && (
         <div>
           <h2 className="text-xl font-semibold text-white flex items-center gap-2">
-            <MapPin className="w-5 h-5 text-emerald-400" />
+            <MapPin className="w-5 h-5 text-amber-400" />
             Courier Presence
           </h2>
           <p className="text-sm text-slate-400 mt-1">
             Live map from courier_availability GPS. {lastUpdated ? `Updated ${formatWhen(lastUpdated.toISOString())}` : ''}
           </p>
         </div>
+        )}
         <button
           type="button"
           onClick={() => void load()}

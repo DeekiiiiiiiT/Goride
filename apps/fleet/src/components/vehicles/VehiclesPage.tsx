@@ -10,6 +10,7 @@ import { DriverAssignmentModal } from './DriverAssignmentModal';
 import { FuelLogForm } from '../driver-portal/FuelLogForm';
 import { LogMaintenanceServiceDialog } from './LogMaintenanceServiceDialog';
 import { AddVehicleModal } from './AddVehicleModal';
+import { FrameDecodeButton } from './FrameDecodeDialog';
 import type { CatalogMaintenanceTaskOption, VehicleMaintenanceScheduleRowApi } from '../../types/maintenance';
 import { catalogOptionsFromScheduleRows } from '../../utils/maintenanceCatalogOptions';
 import { Toaster, toast } from 'sonner';
@@ -672,10 +673,13 @@ export function VehiclesPage({
                       <p className="text-slate-500">{v('vehiclesPageSubtitle')}</p>
                   </div>
                   {can('vehicles.create') && (
+                  <div className="flex gap-2">
+                  <FrameDecodeButton />
                   <Button className="bg-indigo-600 hover:bg-indigo-700" onClick={() => setIsAddModalOpen(true)}>
                       <Plus className="h-4 w-4 mr-2" />
                       Add Vehicle
                   </Button>
+                  </div>
                   )}
               </div>
 

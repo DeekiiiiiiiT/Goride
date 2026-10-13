@@ -260,6 +260,10 @@ export function registerRushMoneyRoutes(app: Hono, deps: Deps) {
   app.get("/admin/rush-money/deduction-appeals", async (c) => {
     const admin = await requireProductAdmin(c, "dash");
     if (admin instanceof Response) return admin;
+    const financeReader = admin.roles.some((role) =>
+      ["platform_owner", "superadmin", "dash_admin", "platform_analyst", "finance_approver"].includes(role)
+    );
+    if (!financeReader) return c.json({ error: "forbidden" }, 403);
     const { data: appeals } = await publicDb().schema("rush_money").from("deduction_appeals")
       .select("id, journal_id, courier_id, status, created_at")
       .eq("status", "parked")

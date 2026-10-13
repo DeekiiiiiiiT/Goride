@@ -1,29 +1,23 @@
 import {
+  BadgeDollarSign,
+  Bike,
+  HandCoins,
+  Headphones,
+  Landmark,
   LayoutDashboard,
-  Store,
-  ClipboardList,
-  Settings,
-  Users,
-  UserCircle,
-  Wallet,
-  HeadphonesIcon,
-  Star,
-  Layers,
-  Smartphone,
-  Radio,
-  Truck,
-  ShieldCheck,
-  MapPin,
-  ScrollText,
   Map,
-  Activity,
-  DollarSign,
-  Tag,
-  Library,
+  Radar,
+  ReceiptText,
+  ScrollText,
+  Settings,
+  ShieldCheck,
   ShoppingBag,
+  Store,
+  TicketPercent,
+  UserRound,
 } from 'lucide-react';
-import type { AdminConfig } from '@roam/admin-core';
-import { isCourierOnlyRole } from '../utils/isCourierOnlyRole';
+import type { AdminConfig, AdminNavBadge } from '@roam/admin-core';
+import { canOpenCapabilityForRoles, type DashCapability } from './dashAdminCapabilities';
 
 export const ALLOWED_DASH_ADMIN_ROLES = [
   'platform_owner',
@@ -37,258 +31,219 @@ export const ALLOWED_DASH_ADMIN_ROLES = [
   'dash_concierge',
 ];
 
-/** Nav ids visible to courier-only roles (courier_admin / courier_ops) */
-export const COURIER_ONLY_NAV_IDS = [
-  'live-ops',
-  'orders',
-  'support',
-  'users-directory',
-  'couriers-compliance',
-  'couriers-presence',
-  'couriers-ledger',
+const NAV: Array<{ group: string; label?: string; items: Array<{ id: string; label: string; icon: AdminConfig['groups'][number]['items'][number]['icon']; capability: DashCapability }> }> = [
+  {
+    group: 'home',
+    items: [{ id: 'home', label: 'Home', icon: LayoutDashboard, capability: 'home' }],
+  },
+  {
+    group: 'operations',
+    label: 'Operations',
+    items: [
+      { id: 'dispatch', label: 'Dispatch', icon: Radar, capability: 'dispatch' },
+      { id: 'orders', label: 'Orders', icon: ReceiptText, capability: 'orders' },
+      { id: 'support', label: 'Support', icon: Headphones, capability: 'support' },
+      { id: 'in-house', label: 'In-House desk', icon: ShoppingBag, capability: 'in-house' },
+    ],
+  },
+  {
+    group: 'network',
+    label: 'Network',
+    items: [
+      { id: 'merchants', label: 'Merchants', icon: Store, capability: 'merchants' },
+      { id: 'couriers', label: 'Couriers', icon: Bike, capability: 'couriers' },
+      { id: 'customers', label: 'Customers', icon: UserRound, capability: 'customers' },
+    ],
+  },
+  {
+    group: 'coverage',
+    label: 'Coverage',
+    items: [{ id: 'markets', label: 'Markets', icon: Map, capability: 'markets' }],
+  },
+  {
+    group: 'money',
+    label: 'Money',
+    items: [
+      { id: 'finance', label: 'Finance', icon: Landmark, capability: 'finance' },
+      { id: 'courier-cash', label: 'Courier cash', icon: HandCoins, capability: 'courier-cash' },
+    ],
+  },
+  {
+    group: 'growth',
+    label: 'Growth',
+    items: [
+      { id: 'pricing', label: 'Pricing', icon: BadgeDollarSign, capability: 'pricing' },
+      { id: 'promotions', label: 'Promotions', icon: TicketPercent, capability: 'promotions' },
+    ],
+  },
+  {
+    group: 'admin',
+    label: 'Admin',
+    items: [
+      { id: 'team', label: 'Team and access', icon: ShieldCheck, capability: 'team' },
+      { id: 'audit', label: 'Audit log', icon: ScrollText, capability: 'audit' },
+      { id: 'settings', label: 'Settings', icon: Settings, capability: 'settings' },
+    ],
+  },
 ];
 
 export const DASH_ADMIN_CONFIG: AdminConfig = {
   product: 'dash',
   title: 'Roam Rush',
-  subtitle: 'Ops Console',
-  sections: [
-    {
-      id: 'in-house',
-      label: 'In-House',
-      icon: ShoppingBag,
-      children: [
-        { id: 'in-house-team', label: 'Team', icon: Users },
-        { id: 'in-house-stores', label: 'Stores', icon: Store },
-        { id: 'in-house-menu', label: 'Menu prices', icon: ClipboardList },
-        { id: 'in-house-cards', label: 'Cards and spend', icon: Wallet },
-        { id: 'in-house-reports', label: 'Reports', icon: ScrollText },
-      ],
-    },
-    {
-      id: 'merchants',
-      label: 'Merchants',
-      icon: Store,
-      children: [],
-      groups: [
-        {
-          id: 'merchants-onboarding',
-          label: 'Onboarding',
-          children: [
-            { id: 'merchants-applications', label: 'Applications', icon: ClipboardList },
-            { id: 'merchants-business-types', label: 'Business Types', icon: Layers },
-          ],
-        },
-      ],
-    },
-    {
-      id: 'couriers',
-      label: 'Couriers',
-      icon: Truck,
-      children: [
-        { id: 'couriers-compliance', label: 'Compliance', icon: ShieldCheck },
-        { id: 'couriers-presence', label: 'Presence', icon: MapPin },
-        { id: 'couriers-ledger', label: 'Delivery Ledger', icon: ScrollText },
-      ],
-    },
-    {
-      id: 'markets',
-      label: 'Markets',
-      icon: Map,
-      children: [
-        { id: 'markets', label: 'Delivery Markets', icon: Map },
-        { id: 'markets-boundaries', label: 'Boundary Library', icon: Library },
-        { id: 'markets-coverage-health', label: 'Coverage Health', icon: Activity },
-      ],
-    },
-    {
-      id: 'users',
-      label: 'Users',
-      icon: UserCircle,
-      children: [
-        { id: 'users-directory', label: 'Directory', icon: Users },
-        { id: 'users-operators', label: 'Operators', icon: ShieldCheck },
-        { id: 'users-merchant-staff', label: 'Merchant staff', icon: Store },
-        { id: 'users-compliance', label: 'Compliance', icon: ShieldCheck },
-        { id: 'users-audit', label: 'Audit', icon: Activity },
-      ],
-    },
-  ],
-  topNavItems: [
-    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    { id: 'live-ops', label: 'Live Ops', icon: Radio },
-    { id: 'orders', label: 'Orders', icon: ClipboardList },
-    { id: 'finance', label: 'Finance', icon: Wallet },
-    { id: 'promotions', label: 'Promotions', icon: Tag },
-    { id: 'pricing', label: 'Pricing', icon: DollarSign },
-    { id: 'remittance', label: 'Remittance', icon: Wallet },
-    { id: 'reviews', label: 'Reviews', icon: Star },
-    { id: 'support', label: 'Support', icon: HeadphonesIcon },
-    { id: 'play-store', label: 'Play Store', icon: Smartphone },
-    { id: 'settings', label: 'Platform Settings', icon: Settings },
-  ],
+  subtitle: 'Ops',
+  groups: NAV.map((group) => ({
+    id: group.group,
+    label: group.label,
+    items: group.items.map((item) => ({
+      id: item.id,
+      label: item.label,
+      icon: item.icon,
+      capability: item.capability,
+    })),
+  })),
   allowedRoles: ALLOWED_DASH_ADMIN_ROLES,
-  pinSectionsAfter: 'dashboard',
   backToAppUrl: '/',
   backToAppLabel: 'Back to Roam Rush',
 };
 
-/** Top nav ids a courier-only role may see */
-const COURIER_ALLOWED_TOP_NAV = new Set(['dashboard', 'live-ops', 'orders', 'support', 'settings', 'play-store']);
-
-/** Section ids a courier-only role may see */
-const COURIER_ALLOWED_SECTIONS = new Set(['couriers', 'users']);
-
-/** Child nav ids courier-only roles may see under allowed sections */
-const COURIER_ALLOWED_SECTION_CHILD_IDS = new Set([
-  'users-directory',
-  'couriers-compliance',
-  'couriers-presence',
-  'couriers-ledger',
-]);
-
-/**
- * Return a config scoped to the given role. Courier-only roles (courier_admin /
- * courier_ops) get a reduced console: Couriers, Users Directory, Orders, Support, Live Ops.
- * Platform + dash roles get the full config unchanged.
- */
-export function filterConfigForRole(role: string | null | undefined): AdminConfig {
-  if (role === 'dash_concierge') {
-    return {
-      ...DASH_ADMIN_CONFIG,
-      sections: DASH_ADMIN_CONFIG.sections
-        .filter((section) => section.id === 'in-house')
-        .map((section) => ({
-          ...section,
-          children: (section.children ?? []).filter((child) => child.id === 'in-house-team'),
-        })),
-      topNavItems: [],
-      pinSectionsAfter: undefined,
-    };
-  }
-  if (!isCourierOnlyRole(role)) return DASH_ADMIN_CONFIG;
+export function filterConfigForRole(role: string | string[] | null | undefined): AdminConfig {
+  const roles = Array.isArray(role) ? role : [role];
   return {
     ...DASH_ADMIN_CONFIG,
-    sections: DASH_ADMIN_CONFIG.sections
-      .filter((s) => COURIER_ALLOWED_SECTIONS.has(s.id))
-      .map((s) => ({
-        ...s,
-        children: (s.children ?? []).filter((c) => COURIER_ALLOWED_SECTION_CHILD_IDS.has(c.id)),
-      })),
-    topNavItems: (DASH_ADMIN_CONFIG.topNavItems ?? []).filter((i) =>
-      COURIER_ALLOWED_TOP_NAV.has(i.id),
-    ),
-    pinSectionsAfter: undefined,
+    groups: DASH_ADMIN_CONFIG.groups
+      .map((group) => ({
+        ...group,
+        items: group.items.filter((item) => canOpenCapabilityForRoles(roles, item.id as DashCapability)),
+      }))
+      .filter((group) => group.items.length > 0),
   };
 }
 
-/** Map pathname to AdminShell nav id */
-export function pathnameToNavId(pathname: string): string {
-  if (pathname === '/' || pathname === '') return 'dashboard';
-  if (pathname.startsWith('/dashboard')) return 'dashboard';
-  if (pathname.startsWith('/in-house/task/')) return 'in-house-team';
-  if (pathname.startsWith('/in-house/exceptions')) return 'in-house-team';
-  if (pathname.startsWith('/in-house/stores')) return 'in-house-stores';
-  if (pathname.startsWith('/in-house/menu')) return 'in-house-menu';
-  if (pathname.startsWith('/in-house/cards')) return 'in-house-cards';
-  if (pathname.startsWith('/in-house/reports')) return 'in-house-reports';
-  if (pathname.startsWith('/in-house')) return 'in-house-team';
-  if (pathname.startsWith('/live-ops')) return 'live-ops';
-  if (pathname.startsWith('/merchants/onboarding/business-types')) return 'merchants-business-types';
-  if (pathname.startsWith('/merchants')) return 'merchants-applications';
-  if (pathname.startsWith('/orders')) return 'orders';
-  if (pathname.startsWith('/couriers/compliance')) return 'couriers-compliance';
-  if (pathname.startsWith('/couriers/presence')) return 'couriers-presence';
-  if (pathname.startsWith('/couriers/ledger')) return 'couriers-ledger';
-  // Legacy /couriers list redirects to unified Users Directory
-  if (pathname.startsWith('/couriers')) return 'users-directory';
-  if (pathname.startsWith('/customers')) return 'users-directory';
-  if (pathname.startsWith('/markets/boundaries')) return 'markets-boundaries';
-  if (pathname.startsWith('/markets/coverage-health')) return 'markets-coverage-health';
-  if (pathname.startsWith('/markets')) return 'markets';
-  if (pathname.startsWith('/users/compliance')) return 'users-compliance';
-  if (pathname.startsWith('/users/merchant-staff')) return 'users-merchant-staff';
-  if (pathname.startsWith('/users/operators') || pathname.startsWith('/team')) return 'users-operators';
-  if (pathname.startsWith('/users/audit') || pathname.startsWith('/activity')) return 'users-audit';
-  if (pathname.startsWith('/users')) return 'users-directory';
-  if (pathname.startsWith('/finance') || pathname.startsWith('/disputes')) return 'finance';
-  if (pathname.startsWith('/promotions')) return 'promotions';
-  if (pathname.startsWith('/pricing')) return 'pricing';
-  if (pathname.startsWith('/remittance')) return 'remittance';
-  if (pathname.startsWith('/reviews')) return 'reviews';
-  if (pathname.startsWith('/support')) return 'support';
-  if (pathname.startsWith('/play-store')) return 'play-store';
-  if (pathname.startsWith('/settings')) return 'settings';
-  return 'dashboard';
+export function applyNavBadges(
+  config: AdminConfig,
+  badges: Partial<Record<string, AdminNavBadge>>,
+): AdminConfig {
+  return {
+    ...config,
+    groups: config.groups.map((group) => ({
+      ...group,
+      items: group.items.map((item) => (
+        badges[item.id] ? { ...item, badge: badges[item.id] } : item
+      )),
+    })),
+  };
 }
 
-/** Map AdminShell nav id to route path */
+/** Which sidebar item stays lit, including detail pages. */
+export function pathnameToNavId(pathname: string): string {
+  const path = pathname.split('?')[0] || '/';
+  if (path === '/' || path === '' || path.startsWith('/dashboard')) return 'home';
+  if (path.startsWith('/dispatch') || path.startsWith('/live-ops') || path.startsWith('/couriers/presence')) return 'dispatch';
+  if (path.startsWith('/orders') || path.startsWith('/couriers/ledger')) return 'orders';
+  if (path.startsWith('/support') || path.startsWith('/reviews')) return 'support';
+  if (path.startsWith('/in-house')) return 'in-house';
+  if (path.startsWith('/merchants')) return 'merchants';
+  if (path.startsWith('/couriers')) return 'couriers';
+  if (path.startsWith('/customers')) return 'customers';
+  if (path.startsWith('/markets')) return 'markets';
+  if (path.startsWith('/finance') || path.startsWith('/disputes') || path.startsWith('/reports')) return 'finance';
+  if (path.startsWith('/courier-cash') || path.startsWith('/remittance')) return 'courier-cash';
+  if (path.startsWith('/pricing')) return 'pricing';
+  if (path.startsWith('/promotions')) return 'promotions';
+  if (path.startsWith('/team') || path.startsWith('/users')) return 'team';
+  if (path.startsWith('/audit') || path.startsWith('/activity')) return 'audit';
+  if (path.startsWith('/settings') || path.startsWith('/play-store')) return 'settings';
+  return 'home';
+}
+
 export function navIdToPath(navId: string): string {
   switch (navId) {
+    case 'home':
+    case 'dashboard':
+      return '/';
+    case 'dispatch':
+    case 'live-ops':
+      return '/dispatch';
+    case 'orders':
+      return '/orders';
+    case 'support':
+    case 'reviews':
+      return '/support';
+    case 'in-house':
     case 'in-house-team':
     case 'in-house-queue':
       return '/in-house';
     case 'in-house-exceptions':
       return '/in-house?tab=ops';
     case 'in-house-stores':
-      return '/in-house/stores';
+      return '/in-house?tab=stores';
     case 'in-house-menu':
-      return '/in-house/menu';
+      return '/in-house?tab=menu';
     case 'in-house-cards':
-      return '/in-house/cards';
+      return '/in-house?tab=cards';
     case 'in-house-reports':
-      return '/in-house/reports';
-    case 'dashboard':
-      return '/dashboard';
-    case 'live-ops':
-      return '/live-ops';
+      return '/in-house?tab=reports';
+    case 'merchants':
     case 'merchants-applications':
-      return '/merchants/onboarding/applications';
+      return '/merchants';
     case 'merchants-business-types':
-      return '/merchants/onboarding/business-types';
-    case 'orders':
-      return '/orders';
+      return '/merchants?tab=business-types';
+    case 'couriers':
     case 'couriers-compliance':
-      return '/users/compliance';
+    case 'users-compliance':
+      return navId === 'couriers' ? '/couriers' : '/couriers?tab=compliance';
     case 'couriers-presence':
-      return '/couriers/presence';
+      return '/dispatch?tab=map';
     case 'couriers-ledger':
-      return '/couriers/ledger';
+      return '/orders?view=all&type=courier';
+    case 'customers':
+    case 'users-directory':
+      return navId === 'customers' ? '/customers' : '/team?tab=all-users';
     case 'markets':
       return '/markets';
     case 'markets-boundaries':
-      return '/markets/boundaries';
+      return '/markets?tab=boundaries';
     case 'markets-coverage-health':
-      return '/markets/coverage-health';
-    case 'users-directory':
-      return '/users';
-    case 'users-operators':
-      return '/users/operators';
-    case 'users-merchant-staff':
-      return '/users/merchant-staff';
-    case 'users-compliance':
-      return '/users/compliance';
-    case 'users-audit':
-      return '/users/audit';
-    case 'customers':
-      return '/users?persona=customer';
+      return '/markets?tab=health';
     case 'finance':
       return '/finance';
-    case 'promotions':
-      return '/promotions';
+    case 'courier-cash':
+    case 'remittance':
+      return '/courier-cash';
     case 'pricing':
       return '/pricing';
-    case 'remittance':
-      return '/remittance';
-    case 'reviews':
-      return '/reviews';
-    case 'support':
-      return '/support';
-    case 'play-store':
-      return '/play-store';
+    case 'promotions':
+      return '/promotions';
+    case 'team':
+    case 'users-operators':
+      return '/team?tab=operators';
+    case 'users-merchant-staff':
+      return '/team?tab=merchant-staff';
+    case 'users-audit':
+      return '/audit';
+    case 'audit':
+      return '/audit';
     case 'settings':
-      return '/settings';
+    case 'play-store':
+      return navId === 'play-store' ? '/settings?tab=app-releases' : '/settings';
     default:
       return '/';
   }
+}
+
+export function breadcrumbsFor(pathname: string, search: string, detailLabel?: string | null): Array<{ label: string; to?: string }> {
+  const params = new URLSearchParams(search);
+  const id = pathnameToNavId(pathname);
+  const item = DASH_ADMIN_CONFIG.groups.flatMap((group) => group.items).find((entry) => entry.id === id);
+  const page = item?.label ?? 'Home';
+  const crumbs: Array<{ label: string; to?: string }> = [{ label: page, to: navIdToPath(id) }];
+  const tab = params.get('tab') || params.get('view');
+  if (tab) {
+    crumbs.push({ label: tab.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()) });
+  }
+  const parts = pathname.split('/').filter(Boolean);
+  const last = parts[parts.length - 1];
+  const detail = last && last !== parts[0] && !['boundaries', 'coverage-health', 'task'].includes(last) && parts.length > 1;
+  if (detail && detailLabel) crumbs.push({ label: detailLabel });
+  return crumbs;
 }

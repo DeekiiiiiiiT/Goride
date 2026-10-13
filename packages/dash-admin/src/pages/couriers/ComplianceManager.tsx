@@ -16,7 +16,7 @@ import {
   updateComplianceStatus,
 } from '@roam/dash-admin-client';
 
-export function ComplianceManager() {
+export function ComplianceManager({ embedded = false }: { embedded?: boolean } = {}) {
   const { session } = useOutletContext<{ session: Session }>();
   const { confirm } = useAdminConfirm();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -157,13 +157,15 @@ export function ComplianceManager() {
   return (
     <div className="space-y-6 text-slate-200">
       <div className="flex items-start justify-between gap-4">
+        {!embedded && (
         <div>
           <h2 className="text-xl font-semibold text-white flex items-center gap-2">
-            <ShieldCheck className="w-5 h-5 text-emerald-400" />
+            <ShieldCheck className="w-5 h-5 text-amber-400" />
             Courier Compliance
           </h2>
           <p className="text-sm text-slate-400 mt-1">Review courier onboarding and approve activation.</p>
         </div>
+        )}
         <button
           type="button"
           onClick={() => void refreshAll()}

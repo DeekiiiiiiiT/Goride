@@ -265,17 +265,38 @@ export function registerFinanceAdminRoutes(app: Hono) {
 
   admin.get("/reviews", async (c) => {
     const merchantId = c.req.query("merchant_id");
-    const flagged = c.req.query("flagged") === "true";
+    const rating = c.req.query("rating");
+    const hidden = c.req.query("hidden");
+    const page = Math.max(parseInt(c.req.query("page") || "1", 10) || 1, 1);
+    const limit = Math.min(parseInt(c.req.query("limit") || "25", 10) || 25, 100);
+    const offset = (page - 1) * limit;
     const db = getDb();
     let query = db.from("orders")
-      .select("id, order_number, merchant_id, customer_rating, customer_review, review_hidden, placed_at")
+      .select("id, order_number, merchant_id, courier_id, customer_rating, customer_review, review_hidden, placed_at, merchant:merchants(id, name)", { count: "exact" })
       .not("customer_review", "is", null)
       .order("placed_at", { ascending: false });
     if (merchantId) query = query.eq("merchant_id", merchantId);
-    if (flagged) query = query.eq("review_hidden", true);
-    const { data, error } = await query.limit(100);
+    if (rating && /^[1-5]$/.test(rating)) query = query.eq("customer_rating", Number(rating));
+    if (hidden === "hidden") query = query.eq("review_hidden", true);
+    if (hidden === "visible") query = query.eq("review_hidden", false);
+    const { data, error, count } = await query.range(offset, offset + limit - 1);
     if (error) return c.json({ error: error.message }, 500);
-    return c.json({ reviews: data ?? [] });
+    const rows = (data ?? []) as Array<Record<string, unknown>>;
+    const courierIds = [...new Set(rows.map((row) => String(row.courier_id || "")).filter(Boolean))];
+    const { data: couriers } = courierIds.length
+      ? await db.from("courier_profiles").select("user_id, display_name").in("user_id", courierIds)
+      : { data: [] as Array<{ user_id: string; display_name?: string }> };
+    const courierName = new Map((couriers ?? []).map((row) => [String((row as { user_id: string }).user_id), String((row as { display_name?: string }).display_name || "")]));
+    return c.json({
+      reviews: rows.map((row) => ({
+        ...row,
+        store_name: (row.merchant as { name?: string } | null)?.name || null,
+        courier_name: courierName.get(String(row.courier_id || "")) || null,
+      })),
+      total: count ?? 0,
+      page,
+      limit,
+    });
   });
 
   admin.patch("/reviews/:orderId", async (c) => {

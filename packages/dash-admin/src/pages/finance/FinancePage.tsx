@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Link, useOutletContext } from 'react-router-dom';
+import { Link, useOutletContext, useSearchParams } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAdminConfirm } from '../../contexts/AdminConfirmContext';
@@ -15,27 +15,42 @@ import {
   resolveDispute,
   type AdjustmentRow,
 } from '@roam/dash-admin-client';
+import { PolicyChips } from '../../components/ui/bits';
+import { PageHeader } from '../../components/ui/PageHeader';
+import { formatMoney } from '../../components/ui/format';
+import { fetchPricingOverview, type PricingRevenueSummary } from '@roam/dash-admin-client';
+
 import type { AdminOutletContext } from '../../DashAdminPortal';
 
-type TabId = 'payouts' | 'disputes' | 'adjustments';
+type TabId = 'overview' | 'payouts' | 'disputes' | 'adjustments' | 'risk';
 
 const TABS: { id: TabId; label: string }[] = [
+  { id: 'overview', label: 'Overview' },
   { id: 'payouts', label: 'Payouts' },
   { id: 'disputes', label: 'Disputes' },
   { id: 'adjustments', label: 'Adjustments' },
+  { id: 'risk', label: 'Risk' },
 ];
 
-export function FinancePage() {
+export function FinancePage({ appealsOnly = false }: { appealsOnly?: boolean } = {}) {
   const { session } = useOutletContext<AdminOutletContext>();
   const { prompt } = useAdminConfirm();
   const canWrite = canWriteDashAdmin(session.user);
   const canApprove = canApproveFinance(session.user);
-  const [tab, setTab] = useState<TabId>('payouts');
+  const [params, setParams] = useSearchParams();
+  const requested = params.get('tab') as TabId | null;
+  const tab: TabId = TABS.some((item) => item.id === requested) ? requested! : 'overview';
+  const setTab = (id: TabId) => {
+    const next = new URLSearchParams(params);
+    next.set('tab', id);
+    setParams(next, { replace: false });
+  };
 
   const [payouts, setPayouts] = useState<Array<Record<string, unknown>>>([]);
   const [disputes, setDisputes] = useState<Array<Record<string, unknown>>>([]);
   const [adjustments, setAdjustments] = useState<AdjustmentRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [revenue, setRevenue] = useState<PricingRevenueSummary | null>(null);
 
   const [creating, setCreating] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
@@ -75,6 +90,9 @@ export function FinancePage() {
     void loadBatches().catch(() => setBatches([]));
     void loadWaitingBanks().catch(() => setWaitingBanks([]));
     void loadAppeals().catch(() => setAppeals([]));
+    void fetchPricingOverview(session.access_token)
+      .then((overview) => setRevenue(overview.revenue ?? null))
+      .catch(() => setRevenue(null));
     void fetch(`${API_ENDPOINTS.delivery}/admin/rush-money/risk`, {
       headers: { Authorization: `Bearer ${session.access_token}` },
     })
@@ -235,8 +253,8 @@ export function FinancePage() {
       setOrderMoney(body.error || 'Order not found');
       return;
     }
-    const paid = (body.transactions || []).map((row: { amount?: number; status?: string }) => `Charge J$${Number(row.amount || 0).toFixed(2)} (${row.status})`).join('. ');
-    const refunded = (body.refunds || []).map((row: { amount?: number; status?: string; reason?: string }) => `Refund J$${Number(row.amount || 0).toFixed(2)} (${row.status})`).join('. ');
+    const paid = (body.transactions || []).map((row: { amount?: number; status?: string }) => `Charge ${formatMoney(row.amount || 0)} (${row.status})`).join('. ');
+    const refunded = (body.refunds || []).map((row: { amount?: number; status?: string; reason?: string }) => `Refund ${formatMoney(row.amount || 0)} (${row.status})`).join('. ');
     setOrderMoney([paid, refunded].filter(Boolean).join(' ') || 'No card charges on this order yet.');
   };
 
@@ -352,13 +370,81 @@ export function FinancePage() {
 
   if (loading) return <Loader2 className="w-8 h-8 animate-spin text-amber-400" />;
 
+  if (appealsOnly) {
+    return (
+      <section className="rounded-xl border border-slate-800 bg-slate-900/40 p-4 space-y-2">
+        <h3 className="text-sm font-medium text-slate-300">Deduction appeals</h3>
+        {appeals.length === 0 ? <p className="text-sm text-slate-400">No appeals are waiting.</p> : appeals.map((row) => (
+          <div key={row.id} className="flex flex-wrap items-center gap-3 text-sm text-slate-200">
+            <span>{formatMoney(row.amountMajor || 0)} · {row.reason || 'Deduction'}</span>
+            {row.appealUntil && (
+              <span className="text-slate-400">Reply by {new Date(row.appealUntil).toLocaleString('en-JM', { timeZone: 'America/Jamaica' })}</span>
+            )}
+            {canApprove && (
+              <>
+                <button type="button" className="text-amber-300" onClick={() => void decideAppeal(row.id, 'upheld')}>Uphold</button>
+                <button type="button" className="text-red-300" onClick={() => void decideAppeal(row.id, 'reversed')}>Reverse</button>
+              </>
+            )}
+          </div>
+        ))}
+      </section>
+    );
+  }
+
   return (
     <div className="space-y-6">
-      <h2 className="text-xl font-semibold text-white">Finance</h2>
+      <PageHeader
+        title="Finance"
+        description="Today's sales, payouts, disputes, and the people waiting on a decision."
+        tabs={TABS}
+        activeTab={tab}
+        onTab={(id) => setTab(id as TabId)}
+      />
+      <PolicyChips chips={[
+        { label: 'Payouts: on', hint: 'Two different finance people must approve a week before anything is sent.' },
+        { label: 'Bank change hold: 48–72h', hint: 'A changed account waits before it can be paid.' },
+        { label: 'Dual approval: on', hint: 'A large refund needs a second finance person.' },
+      ]} />
+      {tab === 'overview' && revenue && (
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-4">
+            <p className="text-xs text-slate-500">Commission recorded</p>
+            <p className="text-lg font-semibold text-white mt-1">{formatMoney(revenue.commission_total_jmd)}</p>
+          </div>
+          <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-4">
+            <p className="text-xs text-slate-500">Service fees</p>
+            <p className="text-lg font-semibold text-white mt-1">{formatMoney(revenue.service_fee_total_jmd)}</p>
+          </div>
+          <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-4">
+            <p className="text-xs text-slate-500">Take rate</p>
+            <p className="text-lg font-semibold text-white mt-1">{revenue.take_rate_percent}%</p>
+          </div>
+          <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-4">
+            <p className="text-xs text-slate-500">Orders</p>
+            <p className="text-lg font-semibold text-white mt-1">{revenue.order_count ?? revenue.v2_order_count}</p>
+          </div>
+          <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-4">
+            <p className="text-xs text-slate-500">Distance fee</p>
+            <p className="text-lg font-semibold text-white mt-1">{formatMoney(revenue.distance_fee_total_jmd ?? 0)} · {revenue.distance_fee_attach_rate_percent ?? 0}%</p>
+          </div>
+          <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-4">
+            <p className="text-xs text-slate-500">Growth Guarantee credits (90d)</p>
+            <p className="text-lg font-semibold text-white mt-1">{revenue.growth_guarantee_credit_count_90d ?? 0} · {formatMoney(revenue.growth_guarantee_credit_total_jmd_90d ?? 0)}</p>
+          </div>
+        </div>
+      )}
+      {tab === 'overview' && (
+        <div className="flex flex-wrap gap-4 text-sm">
+          <button type="button" className="text-amber-300" onClick={() => setTab('risk')}>{riskCases.length} people to review</button>
+          <button type="button" className="text-amber-300" onClick={() => setTab('disputes')}>{chargebacks.length} chargebacks</button>
+        </div>
+      )}
+      {tab === 'risk' && (
       <section className="rounded-xl border border-slate-800 bg-slate-900/40 p-4 space-y-2">
         <h3 className="text-sm font-medium text-slate-300">People to review</h3>
         {riskCases.length === 0 ? (
-          <p className="text-sm text-slate-400">No open risk cases. Cash orders, the wallet, and payout sending stay off.</p>
+          <p className="text-sm text-slate-400">No open risk cases.</p>
         ) : (
           riskCases.map((row) => (
             <p key={String(row.id)} className="text-sm text-slate-200">
@@ -367,27 +453,8 @@ export function FinancePage() {
           ))
         )}
       </section>
-      <section className="rounded-xl border border-slate-800 bg-slate-900/40 p-4 space-y-2">
-        <h3 className="text-sm font-medium text-slate-300">Courier deduction appeals</h3>
-        {appeals.length === 0 ? (
-          <p className="text-sm text-slate-400">No appeals are waiting.</p>
-        ) : (
-          appeals.map((row) => (
-            <div key={row.id} className="flex flex-wrap items-center gap-3 text-sm text-slate-200">
-              <span>
-                J${Number(row.amountMajor || 0).toFixed(2)} · {row.reason || 'Deduction'}
-                {row.appealUntil ? ` · window ends ${new Date(row.appealUntil).toLocaleDateString()}` : ''}
-              </span>
-              {canApprove && (
-                <>
-                  <button type="button" className="text-xs text-slate-300" onClick={() => void decideAppeal(row.id, 'upheld')}>Uphold</button>
-                  <button type="button" className="text-xs text-amber-400" onClick={() => void decideAppeal(row.id, 'reversed')}>Reverse</button>
-                </>
-              )}
-            </div>
-          ))
-        )}
-      </section>
+      )}
+      {tab === 'disputes' && (
       <section className="rounded-xl border border-slate-800 bg-slate-900/40 p-4 space-y-2">
         <h3 className="text-sm font-medium text-slate-300">Chargebacks</h3>
         <p className="text-sm text-slate-200">{chargebackWords || 'No chargebacks were decided this month.'}</p>
@@ -397,7 +464,7 @@ export function FinancePage() {
           chargebacks.map((row) => (
             <div key={String(row.id)} className="space-y-2 text-sm text-slate-200">
               <p>
-                Order {String(row.order_id || '').slice(0, 8)} · J${(Number(row.amount_minor || 0) / 100).toFixed(2)} · {String(row.status)}
+                Order {String(row.order_id || '').slice(0, 8)} · {formatMoney(Number(row.amount_minor || 0) / 100)} · {String(row.status)}
                 {row.deadline ? ` · reply by ${String(row.deadline)}` : ' · no deadline set'}
               </p>
               {canApprove && ['open', 'fighting'].includes(String(row.status)) && (
@@ -414,27 +481,12 @@ export function FinancePage() {
           ))
         )}
       </section>
-
-      <div className="flex gap-1 border-b border-slate-800">
-        {TABS.map((t) => (
-          <button
-            key={t.id}
-            type="button"
-            onClick={() => setTab(t.id)}
-            className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
-              tab === t.id ? 'border-amber-400 text-amber-300' : 'border-transparent text-slate-400 hover:text-white'
-            }`}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
+      )}
 
       {tab === 'payouts' && (
         <div className="space-y-6">
           <section className="rounded-xl border border-slate-800 bg-slate-900/40 p-4 space-y-3">
             <h3 className="text-sm font-medium text-slate-300">This week's restaurant payout</h3>
-            <p className="text-sm text-slate-400">Hand-typed payouts are closed. Two different finance people must approve a week before anything is sent. Payouts are on. The name on the bank account must match the restaurant. A changed account waits 48 to 72 hours. A payment that comes back stays on this list until it is returned to the book.</p>
             {formError && <p className="text-sm text-red-400">{formError}</p>}
             {canWrite && (
               <button type="button" disabled={creating} onClick={() => void prepareWeek()} className="rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-slate-950 disabled:opacity-50">
@@ -457,7 +509,7 @@ export function FinancePage() {
             <ul className="space-y-2 text-sm text-slate-300">
               {batches.map((batch) => (
                 <li key={String(batch.id)} className="flex flex-wrap items-center gap-3">
-                  <span>J${(Number(batch.total_minor || 0) / 100).toFixed(2)} · {String(batch.status)} · {String(batch.period_start)} to {String(batch.period_end)}</span>
+                  <span>{formatMoney(Number(batch.total_minor || 0) / 100)} · {String(batch.status)} · {String(batch.period_start)} to {String(batch.period_end)}</span>
                   {canApprove && batch.status === 'prepared' && (
                     <button type="button" className="text-xs text-amber-400" onClick={() => void approveBatch(String(batch.id))}>Approve</button>
                   )}
@@ -503,7 +555,7 @@ export function FinancePage() {
                 {payouts.map((p) => (
                   <tr key={String(p.id)}>
                     <td className="px-4 py-3 text-slate-300 font-mono text-xs">{String(p.merchant_id).slice(0, 8)}…</td>
-                    <td className="px-4 py-3 text-white">${Number(p.amount ?? 0).toFixed(2)}</td>
+                    <td className="px-4 py-3 text-white">{formatMoney(Number(p.amount ?? 0))}</td>
                     <td className="px-4 py-3 text-slate-400">{String(p.status)}</td>
                     <td className="px-4 py-3 space-x-2">
                       {canWrite && String(p.status) === 'pending' && (
@@ -619,7 +671,7 @@ export function FinancePage() {
                   <tr key={a.id}>
                     <td className="px-4 py-3 text-slate-300 font-mono text-xs">{a.merchant_id ? `${a.merchant_id.slice(0, 8)}…` : '—'}</td>
                     <td className="px-4 py-3 text-slate-400 capitalize">{a.type}</td>
-                    <td className={`px-4 py-3 ${a.type === 'debit' ? 'text-red-300' : 'text-emerald-300'}`}>${a.amount.toFixed(2)}</td>
+                    <td className={`px-4 py-3 ${a.type === 'debit' ? 'text-red-300' : 'text-emerald-300'}`}>{formatMoney(a.amount)}</td>
                     <td className="px-4 py-3 text-slate-400">{a.reason}</td>
                     <td className="px-4 py-3 text-slate-500">{new Date(a.created_at).toLocaleDateString()}</td>
                   </tr>

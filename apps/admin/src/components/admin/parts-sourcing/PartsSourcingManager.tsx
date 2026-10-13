@@ -20,9 +20,11 @@ import {
   listPartOffers,
   listPartsSourcingRequests,
   listSuppliers,
+  updatePartMaster,
   updatePartsSourcingRequest,
   type PartsSourcingRequestRow,
 } from "../../../services/partSourcingService";
+import { PartsGroupsPanel, PartsImportPanel, PartsQueuePanel, PartsVehiclesPanel } from "./PartsEnterprisePanels";
 import type {
   PartCategoryRecord,
   PartFitmentRecord,
@@ -91,12 +93,14 @@ const adminTableWrap = cn(
   "dark:border-slate-700 dark:bg-slate-900/90",
 );
 
-type MainTab = "categories" | "parts" | "suppliers" | "fitment" | "offers";
+type MainTab = "categories" | "parts" | "suppliers" | "fitment" | "offers" | "groups" | "import";
+type Area = "catalog" | "vehicles" | "supply" | "queue";
 
 export function PartsSourcingManager() {
   const { session } = useAuth();
   const token = session?.access_token;
 
+  const [area, setArea] = useState<Area>("catalog");
   const [mainTab, setMainTab] = useState<MainTab>("categories");
   const [busy, setBusy] = useState(false);
 
@@ -115,8 +119,9 @@ export function PartsSourcingManager() {
     if (!token) return;
     try {
       setFleetRequests(await listPartsSourcingRequests(token, "open"));
-    } catch {
+    } catch (err) {
       setFleetRequests([]);
+      toast.error(err instanceof Error ? err.message : "Could not load fleet requests");
     }
   }, [token]);
 
@@ -214,6 +219,7 @@ export function PartsSourcingManager() {
   };
 
   // --- Part dialog ---
+  const [partEditingId, setPartEditingId] = useState<string | null>(null);
   const [partOpen, setPartOpen] = useState(false);
   const [partCategoryId, setPartCategoryId] = useState("");
   const [partName, setPartName] = useState("");
@@ -221,6 +227,7 @@ export function PartsSourcingManager() {
   const [partDesc, setPartDesc] = useState("");
 
   const openNewPart = () => {
+    setPartEditingId(null);
     setPartCategoryId(categories[0]?.id ?? "");
     setPartName("");
     setPartOem("");
@@ -235,13 +242,15 @@ export function PartsSourcingManager() {
       return;
     }
     try {
-      await createPartMaster(token, {
+      const payload = {
         category_id: partCategoryId,
         name: partName.trim(),
         oem_part_number: partOem.trim() || null,
         description: partDesc.trim() || null,
-      });
-      toast.success("Part created");
+      };
+      if (partEditingId) await updatePartMaster(token, partEditingId, payload);
+      else await createPartMaster(token, payload);
+      toast.success(partEditingId ? "Part updated" : "Part created");
       setPartOpen(false);
       await reloadParts();
     } catch (e: unknown) {
@@ -402,8 +411,7 @@ export function PartsSourcingManager() {
             Parts sourcing
           </h1>
           <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">
-            Master catalog: categories, parts, suppliers, fitment to motor vehicles, and offers. Fleet apps read compatible
-            parts via the catalog link on each vehicle.
+            Catalog, vehicles, supply, and the fleet queue. One fitment rule can cover a whole engine or platform.
           </p>
         </div>
         <Button type="button" variant="outline" size="sm" onClick={() => void refreshTab()} disabled={busy} className="gap-2">
@@ -412,7 +420,25 @@ export function PartsSourcingManager() {
         </Button>
       </div>
 
-      {fleetRequests.length > 0 && (
+      <div className="flex flex-wrap gap-2">
+        {([
+          ["catalog", "Catalog"],
+          ["vehicles", "Vehicles"],
+          ["supply", "Supply"],
+          ["queue", "Queue"],
+        ] as const).map(([id, label]) => (
+          <Button key={id} type="button" size="sm" variant={area === id ? "default" : "outline"} onClick={() => {
+            setArea(id);
+            if (id === "catalog") setMainTab("parts");
+            if (id === "supply") setMainTab("suppliers");
+          }}>{label}{id === "queue" ? ` (${fleetRequests.length})` : ""}</Button>
+        ))}
+      </div>
+
+      {area === "vehicles" && token ? <PartsVehiclesPanel token={token} /> : null}
+      {area === "queue" && token ? <PartsQueuePanel token={token} /> : null}
+
+      {(area === "catalog" || area === "supply") && fleetRequests.length > 0 && (
         <div className="rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50/60 dark:bg-amber-950/20 p-4 space-y-3">
           <div className="flex items-center justify-between gap-2">
             <h2 className="font-semibold text-sm">Fleet parts requests ({fleetRequests.length} open)</h2>
@@ -455,25 +481,31 @@ export function PartsSourcingManager() {
         </div>
       )}
 
-      <Tabs value={mainTab} onValueChange={(v) => setMainTab(v as MainTab)} className="w-full">
+      <Tabs value={mainTab} onValueChange={(v) => setMainTab(v as MainTab)} className={area === "vehicles" || area === "queue" ? "hidden" : "w-full"}>
         <TabsList className="flex flex-wrap h-auto gap-1 bg-slate-100 dark:bg-slate-900/70 p-1 rounded-xl border border-slate-200 dark:border-slate-700">
-          <TabsTrigger value="categories" className="gap-1.5 data-[state=active]:bg-amber-500/20 data-[state=active]:text-amber-950 dark:data-[state=active]:text-amber-50">
+          <TabsTrigger value="groups" className={area === "catalog" ? "gap-1.5 data-[state=active]:bg-amber-500/20" : "hidden"}>
+            Groups
+          </TabsTrigger>
+          <TabsTrigger value="import" className={area === "catalog" ? "gap-1.5 data-[state=active]:bg-amber-500/20" : "hidden"}>
+            Import
+          </TabsTrigger>
+          <TabsTrigger value="categories" className={area === "catalog" ? "gap-1.5 data-[state=active]:bg-amber-500/20 data-[state=active]:text-amber-950 dark:data-[state=active]:text-amber-50" : "hidden"}>
             <Tags className="w-4 h-4" />
             Categories
           </TabsTrigger>
-          <TabsTrigger value="parts" className="gap-1.5 data-[state=active]:bg-amber-500/20 data-[state=active]:text-amber-950 dark:data-[state=active]:text-amber-50">
+          <TabsTrigger value="parts" className={area === "catalog" ? "gap-1.5 data-[state=active]:bg-amber-500/20 data-[state=active]:text-amber-950 dark:data-[state=active]:text-amber-50" : "hidden"}>
             <Package className="w-4 h-4" />
             Parts
           </TabsTrigger>
-          <TabsTrigger value="suppliers" className="gap-1.5 data-[state=active]:bg-amber-500/20 data-[state=active]:text-amber-950 dark:data-[state=active]:text-amber-50">
+          <TabsTrigger value="suppliers" className={area === "supply" ? "gap-1.5 data-[state=active]:bg-amber-500/20 data-[state=active]:text-amber-950 dark:data-[state=active]:text-amber-50" : "hidden"}>
             <Truck className="w-4 h-4" />
             Suppliers
           </TabsTrigger>
-          <TabsTrigger value="fitment" className="gap-1.5 data-[state=active]:bg-amber-500/20 data-[state=active]:text-amber-950 dark:data-[state=active]:text-amber-50">
+          <TabsTrigger value="fitment" className={area === "catalog" ? "gap-1.5 data-[state=active]:bg-amber-500/20 data-[state=active]:text-amber-950 dark:data-[state=active]:text-amber-50" : "hidden"}>
             <Link2 className="w-4 h-4" />
             Fitment
           </TabsTrigger>
-          <TabsTrigger value="offers" className="gap-1.5 data-[state=active]:bg-amber-500/20 data-[state=active]:text-amber-950 dark:data-[state=active]:text-amber-50">
+          <TabsTrigger value="offers" className={area === "supply" ? "gap-1.5 data-[state=active]:bg-amber-500/20 data-[state=active]:text-amber-950 dark:data-[state=active]:text-amber-50" : "hidden"}>
             <ShoppingCart className="w-4 h-4" />
             Offers
           </TabsTrigger>
@@ -565,12 +597,32 @@ export function PartsSourcingManager() {
                 </TableRow>
               </TableHeader>
               <TableBody>
+                {parts.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={4} className="text-center text-slate-500 py-8">No parts yet. Add one or import a CSV.</TableCell>
+                  </TableRow>
+                ) : null}
                 {parts.map((p) => (
                   <TableRow key={p.id}>
                     <TableCell className="font-medium text-slate-900 dark:text-slate-100">{p.name}</TableCell>
                     <TableCell className="text-sm text-slate-600 dark:text-slate-400">{p.part_category?.label ?? "—"}</TableCell>
                     <TableCell className="text-sm text-slate-800 dark:text-slate-200">{p.oem_part_number ?? "—"}</TableCell>
-                    <TableCell>
+                    <TableCell className="flex gap-1">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          setPartEditingId(p.id);
+                          setPartCategoryId(p.category_id);
+                          setPartName(p.name);
+                          setPartOem(p.oem_part_number ?? "");
+                          setPartDesc(p.description ?? "");
+                          setPartOpen(true);
+                        }}
+                      >
+                        Edit
+                      </Button>
                       <Button
                         type="button"
                         variant="ghost"
@@ -781,6 +833,13 @@ export function PartsSourcingManager() {
               </TableBody>
             </Table>
           </div>
+        </TabsContent>
+
+        <TabsContent value="groups" className="mt-4">
+          {token ? <PartsGroupsPanel token={token} /> : null}
+        </TabsContent>
+        <TabsContent value="import" className="mt-4">
+          {token ? <PartsImportPanel token={token} /> : null}
         </TabsContent>
       </Tabs>
 

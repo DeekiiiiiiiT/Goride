@@ -14,9 +14,11 @@ import {
   type CustomerDevice,
   type CustomerTrust,
 } from '@roam/dash-admin-client';
-import type { AdminOutletContext } from '../../DashAdminPortal';
+import { useDetailCrumb, type AdminOutletContext } from '../../DashAdminPortal';
+import { formatMoney } from '../../components/ui/format';
+import { useUrlTab } from '../../components/SegmentTabs';
 
-type TabId = 'overview' | 'addresses' | 'orders' | 'trust' | 'devices';
+type TabId = 'overview' | 'addresses' | 'orders' | 'trust' | 'devices' | 'access';
 
 const TABS: { id: TabId; label: string }[] = [
   { id: 'overview', label: 'Overview' },
@@ -24,11 +26,8 @@ const TABS: { id: TabId; label: string }[] = [
   { id: 'orders', label: 'Orders' },
   { id: 'trust', label: 'Trust' },
   { id: 'devices', label: 'Devices' },
+  { id: 'access', label: 'Access' },
 ];
-
-function money(n: number) {
-  return `$${n.toFixed(2)}`;
-}
 
 function when(iso: string | null | undefined) {
   if (!iso) return '—';
@@ -44,7 +43,7 @@ export function CustomerDetailPage() {
   const canDelete = canDeleteDashAdmin(session.user);
 
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState<TabId>('overview');
+  const [tab, setTab] = useUrlTab<TabId>('overview', TABS.map((item) => item.id));
   const [customer, setCustomer] = useState<Record<string, unknown> | null>(null);
   const [orders, setOrders] = useState<Array<Record<string, unknown>>>([]);
   const [orderCount, setOrderCount] = useState(0);
@@ -54,6 +53,8 @@ export function CustomerDetailPage() {
   const [trust, setTrust] = useState<CustomerTrust | null>(null);
   const [notes, setNotes] = useState('');
   const [notesSaving, setNotesSaving] = useState(false);
+  const customerName = String(customer?.display_name || customer?.full_name || customer?.name || '');
+  useDetailCrumb(customerName || null);
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -171,7 +172,7 @@ export function CustomerDetailPage() {
           </p>
           {customer.phone ? <p className="text-sm text-slate-400">Phone: {String(customer.phone)}</p> : null}
           <p className="text-sm text-slate-400 mt-1">
-            Status: {status} · {orderCount} orders · Lifetime {money(lifetimeSpend)}
+            Status: {status} · {orderCount} orders · Lifetime {formatMoney(lifetimeSpend)}
           </p>
         </div>
         {trust?.flagged && (
@@ -313,7 +314,7 @@ export function CustomerDetailPage() {
                 onClick={() => navigate(`/orders/${o.id}`)}
                 className="block w-full text-left text-sm text-slate-400 py-1.5 hover:text-amber-300"
               >
-                {String(o.order_number)} — {String(o.status)} — {money(Number(o.total))}
+                {String(o.order_number)} — {String(o.status)} — {formatMoney(Number(o.total))}
                 {o.merchant_name ? ` · ${String(o.merchant_name)}` : ''}
               </button>
             ))
@@ -332,7 +333,7 @@ export function CustomerDetailPage() {
               <p className="text-slate-500">Chargebacks</p>
               <p>{trust.chargebacks ?? 0}</p>
               <p className="text-slate-500">Refunds</p>
-              <p>{trust.refunds_count ?? 0}{trust.refunds_amount != null ? ` · ${money(trust.refunds_amount)}` : ''}</p>
+              <p>{trust.refunds_count ?? 0}{trust.refunds_amount != null ? ` · ${formatMoney(trust.refunds_amount)}` : ''}</p>
               <p className="text-slate-500">Cancelled orders</p>
               <p>{trust.cancelled_orders ?? 0}</p>
               {trust.flags && trust.flags.length > 0 && (
@@ -368,6 +369,13 @@ export function CustomerDetailPage() {
               ))}
             </ul>
           )}
+        </section>
+      )}
+
+      {tab === 'access' && (
+        <section className="rounded-xl border border-slate-800 bg-slate-900/50 p-4 space-y-2 text-sm text-slate-300">
+          <p>Sign-in and role changes for this person are on Team and access.</p>
+          <button type="button" className="text-amber-300" onClick={() => navigate(`/team?tab=all-users&id=${String(customer?.user_id || '')}`)}>Open their account</button>
         </section>
       )}
     </div>

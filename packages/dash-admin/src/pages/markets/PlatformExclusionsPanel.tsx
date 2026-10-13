@@ -123,24 +123,24 @@ export function PlatformExclusionsPanel({ accessToken, parishes, canWrite }: Pro
   };
 
   return (
-    <section className="mb-6 rounded-xl border border-zinc-800 bg-zinc-900/40 p-4">
+    <section className="mb-6 rounded-xl border border-slate-800 bg-slate-900/40 p-4">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <div>
-          <h2 className="text-sm font-semibold text-zinc-100">Platform exclusions</h2>
-          <p className="text-xs text-zinc-500">One polygon for global or whole-parish no-delivery areas</p>
+          <h2 className="text-sm font-semibold text-slate-100">Platform exclusions</h2>
+          <p className="text-xs text-slate-500">One polygon for global or whole-parish no-delivery areas</p>
         </div>
         <div className="flex gap-2">
           <button
             type="button"
             onClick={() => setTab('global')}
-            className={`rounded-md px-3 py-1 text-xs ${tab === 'global' ? 'bg-zinc-700 text-white' : 'text-zinc-400'}`}
+            className={`rounded-md px-3 py-1 text-xs ${tab === 'global' ? 'bg-slate-700 text-white' : 'text-slate-400'}`}
           >
             Global
           </button>
           <button
             type="button"
             onClick={() => setTab('parish')}
-            className={`rounded-md px-3 py-1 text-xs ${tab === 'parish' ? 'bg-zinc-700 text-white' : 'text-zinc-400'}`}
+            className={`rounded-md px-3 py-1 text-xs ${tab === 'parish' ? 'bg-slate-700 text-white' : 'text-slate-400'}`}
           >
             Parish
           </button>
@@ -157,18 +157,18 @@ export function PlatformExclusionsPanel({ accessToken, parishes, canWrite }: Pro
         </div>
       </div>
       {loading ? (
-        <div className="flex items-center gap-2 text-xs text-zinc-500">
+        <div className="flex items-center gap-2 text-xs text-slate-500">
           <Loader2 className="h-3 w-3 animate-spin" /> Loading…
         </div>
       ) : filtered.length === 0 ? (
-        <p className="text-xs text-zinc-500">No {tab} exclusions yet.</p>
+        <p className="text-xs text-slate-500">No {tab} exclusions yet.</p>
       ) : (
         <ul className="space-y-2">
           {filtered.map((z) => (
-            <li key={z.id} className="flex items-center justify-between rounded-lg border border-zinc-800 px-3 py-2">
+            <li key={z.id} className="flex items-center justify-between rounded-lg border border-slate-800 px-3 py-2">
               <div>
-                <p className="text-sm text-zinc-200">{z.name}</p>
-                <p className="text-[10px] text-zinc-500">
+                <p className="text-sm text-slate-200">{z.name}</p>
+                <p className="text-[10px] text-slate-500">
                   {z.scope} · priority {z.priority ?? 10}
                   {z.category ? ` · ${z.category}` : ' · no category'}
                 </p>
@@ -177,7 +177,7 @@ export function PlatformExclusionsPanel({ accessToken, parishes, canWrite }: Pro
                 <div className="flex gap-1">
                   <button
                     type="button"
-                    className="rounded p-1 text-zinc-400 hover:text-zinc-100"
+                    className="rounded p-1 text-slate-400 hover:text-slate-100"
                     onClick={() => setEditZone(z)}
                   >
                     Edit

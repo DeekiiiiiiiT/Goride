@@ -35,7 +35,9 @@ export { useAdminAuth } from './hooks/useAdminAuth';
 // Types
 export type {
   AdminNavItem,
+  AdminNavBadge,
   AdminNavGroup,
+  AdminLinkGroup,
   AdminSection,
   AdminPage,
   AdminProduct,

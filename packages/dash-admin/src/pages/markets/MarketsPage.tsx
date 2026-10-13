@@ -80,7 +80,6 @@ import {
   formFromZone,
   type ExclusionFormValues,
 } from './ExclusionDetailSheet';
-import { PlatformExclusionsPanel } from './PlatformExclusionsPanel';
 import {
   downloadTextFile,
   parsePolygonCsv,
@@ -2041,7 +2040,7 @@ function ParishMapOverlay({
   );
 }
 
-export function MarketsPage() {
+export function MarketsPage({ embedded = false }: { embedded?: boolean } = {}) {
   const { session } = useOutletContext<AdminOutletContext>();
   const canWrite = canWriteDashAdmin(session.user);
   const { confirm } = useAdminConfirm();
@@ -2710,22 +2709,16 @@ export function MarketsPage() {
 
   return (
     <div className="space-y-6 text-slate-200">
-      <PlatformExclusionsPanel
-        accessToken={session.access_token}
-        parishes={parishes}
-        canWrite={canWrite}
-      />
       <div className="flex flex-wrap items-start justify-between gap-4">
+        {!embedded && (
         <div>
-          <h2 className="text-xl font-semibold text-white flex items-center gap-2">
-            <Map className="w-5 h-5 text-emerald-400" />
-            Delivery Markets
-          </h2>
+          <h2 className="text-xl font-semibold text-white">Markets</h2>
           <p className="text-sm text-slate-400 mt-1">
             Parish border sets the outer limit or whole-parish launch. Town borders apply when a
             parish uses town zones mode.
           </p>
         </div>
+        )}
         <div className="flex flex-wrap items-center gap-2">
           <input
             value={listSearch}
@@ -2733,44 +2726,35 @@ export function MarketsPage() {
             placeholder="Search parishes / towns…"
             className="px-3 py-2 rounded-lg bg-slate-950 border border-slate-700 text-sm text-white min-w-[180px]"
           />
-          <button
-            type="button"
-            onClick={() => setShowJamaicaOverview(true)}
-            className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-emerald-500/40 bg-emerald-500/10 text-sm text-emerald-100"
-          >
-            <Map className="w-4 h-4" />
-            Jamaica overview
-          </button>
-          {canWrite && (
-            <button
-              type="button"
-              onClick={() => setShowImportBoundaries(true)}
-              className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-amber-500/40 bg-amber-500/10 text-sm text-amber-100"
-            >
-              <Upload className="w-4 h-4" />
-              Import boundaries
-            </button>
-          )}
           {canWrite && (
             <button
               type="button"
               onClick={() => setShowCreateParish((v) => !v)}
-              className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-700 text-sm"
+              className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-amber-500 text-sm font-semibold text-slate-950"
             >
               <Plus className="w-4 h-4" />
               New parish
             </button>
           )}
+          <details className="relative">
+            <summary className="list-none cursor-pointer px-3 py-2 rounded-lg border border-slate-700 text-sm text-slate-300">More</summary>
+            <div className="absolute right-0 z-10 mt-1 w-48 rounded-lg border border-slate-700 bg-slate-900 p-1 shadow-xl">
+              <button type="button" onClick={() => setShowJamaicaOverview(true)} className="block w-full text-left px-3 py-2 text-sm text-slate-200 hover:bg-slate-800 rounded-md">Jamaica overview</button>
+              {canWrite && (
+                <button type="button" onClick={() => setShowImportBoundaries(true)} className="block w-full text-left px-3 py-2 text-sm text-slate-200 hover:bg-slate-800 rounded-md">Import boundaries</button>
+              )}
+            </div>
+          </details>
         </div>
       </div>
 
-      <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm text-amber-100">
-        <p className="font-medium text-amber-200">Ops playbook</p>
-        <p className="mt-1 text-amber-100/80">
-          Open parish map → set parish border → choose coverage mode → Open town map → set town
-          border (town zones mode) → add non-delivery zones → Publish coverage → Activate.
+      <details className="rounded-xl border border-slate-800 bg-slate-900/60 p-4 text-sm text-slate-300">
+        <summary className="cursor-pointer font-medium text-slate-100">How this works</summary>
+        <p className="mt-2 text-slate-400">
+          Open the parish map, set the parish border, choose coverage mode, then set town borders
+          when a parish uses town zones. Add non-delivery zones, publish coverage, then activate.
         </p>
-      </div>
+      </details>
 
       {showCreateParish && (
         <div className="rounded-xl border border-slate-700 bg-slate-900/60 p-4 flex flex-wrap items-end gap-3">

@@ -1206,12 +1206,18 @@ export function registerPricingAdminRoutes(app: Hono) {
   admin.get("/pricing/audit", async (c) => {
     const db = getDb();
     const marketId = c.req.query("market_id");
+    const from = c.req.query("from");
+    const to = c.req.query("to");
+    const q = (c.req.query("q") || "").trim();
     let query = db
       .from("pricing_change_log")
       .select("*")
       .order("created_at", { ascending: false })
       .limit(100);
     if (marketId) query = query.eq("market_id", marketId);
+    if (from) query = query.gte("created_at", `${from}T00:00:00.000Z`);
+    if (to) query = query.lte("created_at", `${to}T23:59:59.999Z`);
+    if (q) query = query.or(`action.ilike.%${q.replace(/[%_,().]/g, "")}%,actor_email.ilike.%${q.replace(/[%_,().]/g, "")}%`);
     const { data, error } = await query;
     if (error) return c.json({ error: error.message }, 500);
     return c.json({ entries: data ?? [] });

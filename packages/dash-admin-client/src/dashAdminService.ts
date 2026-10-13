@@ -228,6 +228,13 @@ export interface DashOrderRow {
   merchant_id: string;
   customer_id: string;
   delivery_address: string;
+  courier_id?: string | null;
+  courier_display_name?: string | null;
+  market_name?: string | null;
+  payment_method?: string | null;
+  payment_status?: string | null;
+  merchant?: { id?: string; name?: string; market_id?: string } | null;
+  customer?: { id?: string; name?: string; phone?: string } | null;
 }
 
 const deliveryFetch = dashAdminFetch;
@@ -473,13 +480,25 @@ export function listOrders(
     q?: string;
     page?: number;
     limit?: number;
+    from?: string;
+    to?: string;
+    courier_id?: string;
+    unassigned?: boolean;
+    has_courier?: boolean;
+    attention?: boolean;
   } = {},
 ): Promise<{ orders: DashOrderRow[]; total: number; page: number; limit: number }> {
   const sp = new URLSearchParams();
   if (opts.status) sp.set('status', opts.status);
   if (opts.merchant_id) sp.set('merchant_id', opts.merchant_id);
   if (opts.customer_id) sp.set('customer_id', opts.customer_id);
+  if (opts.courier_id) sp.set('courier_id', opts.courier_id);
   if (opts.q) sp.set('q', opts.q);
+  if (opts.from) sp.set('from', opts.from);
+  if (opts.to) sp.set('to', opts.to);
+  if (opts.unassigned) sp.set('unassigned', 'true');
+  if (opts.has_courier) sp.set('has_courier', 'true');
+  if (opts.attention) sp.set('attention', 'true');
   if (opts.page != null) sp.set('page', String(opts.page));
   if (opts.limit != null) sp.set('limit', String(opts.limit));
   return deliveryFetch(accessToken, `/admin/orders?${sp}`);
@@ -1448,7 +1467,10 @@ export interface SupportCaseRow {
   priority?: string | null;
   order_id?: string | null;
   customer_id?: string | null;
+  assigned_to?: string | null;
+  assignee_name?: string | null;
   assignee_email?: string | null;
+  fault_attribution?: string | null;
   created_at: string;
   updated_at?: string | null;
 }
@@ -1460,11 +1482,11 @@ export function listSupportCases(accessToken: string, status?: string) {
 
 export function createSupportCase(
   accessToken: string,
-  payload: { subject: string; priority?: string; order_id?: string; customer_id?: string; notes?: string },
+  payload: { subject: string; priority?: string; order_id?: string; customer_id?: string; notes?: string; body?: string },
 ) {
   return deliveryFetch<{ case: SupportCaseRow }>(accessToken, '/admin/support/cases', {
     method: 'POST',
-    body: JSON.stringify(payload),
+    body: JSON.stringify({ ...payload, body: payload.body ?? payload.notes }),
   });
 }
 
@@ -1477,6 +1499,7 @@ export function patchSupportCase(
     refund_amount?: number;
     fault_attribution?: string;
     priority?: string;
+    assigned_to?: string | null;
   },
 ) {
   return deliveryFetch<{ case: SupportCaseRow; refund?: Record<string, unknown> | null }>(
@@ -1584,9 +1607,20 @@ export function resolveDispute(
   });
 }
 
-export function listReviews(accessToken: string, merchantId?: string) {
-  const sp = merchantId ? `?merchant_id=${merchantId}` : '';
-  return deliveryFetch(accessToken, `/admin/finance/reviews${sp}`);
+export function listReviews(
+  accessToken: string,
+  filters?: { merchantId?: string; rating?: string; hidden?: string; page?: number },
+) {
+  const sp = new URLSearchParams();
+  if (filters?.merchantId) sp.set('merchant_id', filters.merchantId);
+  if (filters?.rating) sp.set('rating', filters.rating);
+  if (filters?.hidden) sp.set('hidden', filters.hidden);
+  if (filters?.page) sp.set('page', String(filters.page));
+  const q = sp.toString();
+  return deliveryFetch<{ reviews: Array<Record<string, unknown>>; total: number; page: number; limit: number }>(
+    accessToken,
+    `/admin/finance/reviews${q ? `?${q}` : ''}`,
+  );
 }
 
 export function hideReview(accessToken: string, orderId: string, hidden: boolean) {
@@ -2110,11 +2144,16 @@ export function previewPricing(
   });
 }
 
-export function fetchPricingAudit(accessToken: string, marketId?: string) {
-  const sp = marketId ? `?market_id=${encodeURIComponent(marketId)}` : '';
+export function fetchPricingAudit(accessToken: string, filters?: { marketId?: string; q?: string; from?: string; to?: string }) {
+  const sp = new URLSearchParams();
+  if (filters?.marketId) sp.set('market_id', filters.marketId);
+  if (filters?.q) sp.set('q', filters.q);
+  if (filters?.from) sp.set('from', filters.from);
+  if (filters?.to) sp.set('to', filters.to);
+  const q = sp.toString();
   return deliveryFetch<{ entries: Array<Record<string, unknown>> }>(
     accessToken,
-    `/admin/pricing/audit${sp}`,
+    `/admin/pricing/audit${q ? `?${q}` : ''}`,
   );
 }
 
@@ -2375,4 +2414,84 @@ export function updateRushPassPlan(
     '/admin/rush-pass/plan',
     { method: 'PUT', body: JSON.stringify(payload) },
   );
+}
+
+export type AttentionQueue = {
+  id: string;
+  label: string;
+  count: number;
+  oldestAt: string | null;
+  breached: boolean;
+  href: string;
+};
+
+export type ConsoleSearchHit = {
+  kind: string;
+  id: string;
+  title: string;
+  subtitle: string;
+  href: string;
+};
+
+export function getAttention(accessToken: string) {
+  return deliveryFetch<{ queues: AttentionQueue[] }>(accessToken, '/admin/console/attention');
+}
+
+export function searchConsole(accessToken: string, q: string) {
+  return deliveryFetch<{ results: ConsoleSearchHit[] }>(
+    accessToken,
+    `/admin/console/search?q=${encodeURIComponent(q)}`,
+  );
+}
+
+export type ConsoleSummary = {
+  salesVisible: boolean;
+  from?: string;
+  to?: string;
+  ordersToday: number | null;
+  ordersPrevious: number | null;
+  gmvToday: number | null;
+  gmvPrevious: number | null;
+  liveNow: number;
+  couriersOnline: number;
+  couriersBusy: number;
+  avgEtaMin: number | null;
+  byHour: Array<{ hour: number; today: number; lastWeek: number }>;
+  byMarket: Array<{ name: string; orders: number; gmv: number; ordersPrevious?: number; gmvPrevious?: number }>;
+};
+
+export function getConsoleSummary(accessToken: string, range?: { from?: string; to?: string }) {
+  const sp = new URLSearchParams();
+  if (range?.from) sp.set('from', range.from);
+  if (range?.to) sp.set('to', range.to);
+  const q = sp.toString();
+  return deliveryFetch<ConsoleSummary>(accessToken, `/admin/console/summary${q ? `?${q}` : ''}`);
+}
+
+export function listMerchantAudit(accessToken: string, filters?: { q?: string; from?: string; to?: string }) {
+  const sp = new URLSearchParams();
+  if (filters?.q) sp.set('q', filters.q);
+  if (filters?.from) sp.set('from', filters.from);
+  if (filters?.to) sp.set('to', filters.to);
+  const q = sp.toString();
+  return deliveryFetch<{ entries: Array<Record<string, unknown>> }>(
+    accessToken,
+    `/admin/console/merchant-audit${q ? `?${q}` : ''}`,
+  );
+}
+
+export function getMerchantHealth(accessToken: string, ids: string[]) {
+  const sp = new URLSearchParams();
+  if (ids.length) sp.set('ids', ids.join(','));
+  return deliveryFetch<{ health: Record<string, { orders7d: number }> }>(
+    accessToken,
+    `/admin/console/merchant-health?${sp}`,
+  );
+}
+
+export function getSystemStatus(accessToken: string) {
+  return deliveryFetch<{
+    flags: Array<{ name: string; on: boolean }>;
+    integrations: Array<{ name: string; state: string }>;
+  }>(accessToken, '/admin/console/system');
 }

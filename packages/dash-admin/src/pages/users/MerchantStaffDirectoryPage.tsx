@@ -19,7 +19,7 @@ type StaffRow = {
   identities?: { display_name?: string; primary_email?: string } | null;
 };
 
-export function MerchantStaffDirectoryPage() {
+export function MerchantStaffDirectoryPage({ embedded = false }: { embedded?: boolean } = {}) {
   const { session } = useOutletContext<AdminOutletContext>();
   const { prompt } = useAdminConfirm();
   const { hasPermission } = useDashAdminAccess();
@@ -75,10 +75,12 @@ export function MerchantStaffDirectoryPage() {
 
   return (
     <div className="space-y-4">
+      {!embedded && (
       <div>
         <h2 className="text-xl font-semibold text-white">Merchant staff</h2>
         <p className="text-sm text-slate-400">Cross-store staff visibility and revoke.</p>
       </div>
+      )}
       <input
         value={q}
         onChange={(e) => setQ(e.target.value)}

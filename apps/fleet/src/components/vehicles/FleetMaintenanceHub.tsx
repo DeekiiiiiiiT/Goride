@@ -122,6 +122,10 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
   const [partsLoading, setPartsLoading] = useState(false);
   const [partsData, setPartsData] = useState<CompatiblePartsResponse | null>(null);
   const [partsNeedText, setPartsNeedText] = useState("");
+  const [partsUrgency, setPartsUrgency] = useState("normal");
+  const [partsQty, setPartsQty] = useState("1");
+  const [myRequests, setMyRequests] = useState<Array<Record<string, unknown>>>([]);
+  const [myRequestsError, setMyRequestsError] = useState("");
   const [partsRequestBusy, setPartsRequestBusy] = useState(false);
   const [hubTab, setHubTab] = useState<"by-vehicle" | "service-ledger">("by-vehicle");
 
@@ -265,6 +269,11 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
     setPartsVehicleId(items[0]?.vehicleId ?? "");
     setPartsData(null);
     setPartsDialogOpen(true);
+    setMyRequestsError("");
+    void api.listMyPartsRequests().then((res) => setMyRequests(res.items || [])).catch((err) => {
+      setMyRequests([]);
+      setMyRequestsError(err instanceof Error ? err.message : "Could not load your requests");
+    });
   }, [items]);
 
   const handleLoadCompatibleParts = useCallback(async () => {
@@ -299,15 +308,24 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
     }
     setPartsRequestBusy(true);
     try {
-      await api.requestPartsSourcing(partsVehicleId, need);
+      await api.requestPartsSourcing(partsVehicleId, need, {
+        urgency: partsUrgency,
+        qty: Number(partsQty) || 1,
+      });
       toast.success("Request sent to Dominion Parts Sourcing");
       setPartsNeedText("");
+      try {
+        const mine = await api.listMyPartsRequests();
+        setMyRequests(mine.items || []);
+      } catch {
+        /* list refresh is best-effort after a successful send */
+      }
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : "Failed to submit request");
     } finally {
       setPartsRequestBusy(false);
     }
-  }, [partsVehicleId, partsNeedText]);
+  }, [partsVehicleId, partsNeedText, partsUrgency, partsQty]);
 
   return (
     <div className="space-y-4">
@@ -708,6 +726,14 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
                   value={partsNeedText}
                   onChange={(e) => setPartsNeedText(e.target.value)}
                 />
+                <div className="flex gap-2">
+                  <select className="h-9 rounded-md border px-2 text-sm" value={partsUrgency} onChange={(e) => setPartsUrgency(e.target.value)}>
+                    <option value="low">Low</option>
+                    <option value="normal">Normal</option>
+                    <option value="urgent">Urgent</option>
+                  </select>
+                  <input className="h-9 w-20 rounded-md border px-2 text-sm" value={partsQty} onChange={(e) => setPartsQty(e.target.value)} inputMode="decimal" aria-label="Quantity" />
+                </div>
                 <Button
                   type="button"
                   size="sm"
@@ -747,18 +773,48 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
                           )
                           .join(" · ")
                       : "—";
+                    const best = offers[0] as { landedCostJmd?: number; totalImpactJmd?: number; priceStale?: boolean; lead_time_days?: number | null; core_charge?: number | null } | undefined;
                     return (
                       <TableRow key={row.fitmentId}>
-                        <TableCell className="font-medium">{row.part?.name ?? "—"}</TableCell>
+                        <TableCell className="font-medium">
+                          <div>{row.tierLabel ? `${row.tierLabel}: ` : ""}{row.part?.name ?? "—"}</div>
+                          {row.matchReason ? <p className="text-xs text-slate-500">{row.matchReason}</p> : null}
+                          {row.confirmedFit ? <p className="text-xs text-emerald-700">Confirmed on {row.confirmedInstalls} installs</p> : null}
+                          {row.alsoKnownAs?.length ? <p className="text-xs text-slate-500">Also known as {row.alsoKnownAs.join(", ")}</p> : null}
+                          {row.stockQty ? <p className="text-xs">In your stock — {row.stockQty} on the shelf.</p> : null}
+                        </TableCell>
                         <TableCell className="text-sm text-slate-600 dark:text-slate-400">{cat}</TableCell>
                         <TableCell className="text-sm font-mono">{row.part?.oem_part_number ?? "—"}</TableCell>
-                        <TableCell className="text-sm max-w-md">{offerLine}</TableCell>
+                        <TableCell className="text-sm max-w-md">
+                          <div className={best?.priceStale ? "text-slate-400" : ""}>{offerLine}</div>
+                          {best?.totalImpactJmd != null ? <p className="text-xs">Total impact J$ {best.totalImpactJmd.toFixed(2)}{best.priceStale ? " · price is old" : ""}</p> : null}
+                          {best?.core_charge ? <p className="text-xs">Core charge {best.core_charge}</p> : null}
+                          <Button type="button" size="sm" variant="ghost" className="h-7 px-2 mt-1" onClick={async () => {
+                            try {
+                              await api.requestPartQuote({ vehicleId: partsVehicleId, partId: row.part?.id, partNumber: row.part?.oem_part_number, qty: 1 });
+                              toast.success("Quote requested");
+                            } catch (err) {
+                              toast.error(err instanceof Error ? err.message : "Quote failed");
+                            }
+                          }}>Request quote</Button>
+                        </TableCell>
                       </TableRow>
                     );
                   })
                 )}
               </TableBody>
             </Table>
+          </div>
+          <div className="text-sm space-y-1">
+            <p className="font-medium">My requests</p>
+            {myRequestsError ? <p className="text-red-600">{myRequestsError}</p> : null}
+            {myRequests.length === 0 && !myRequestsError ? <p className="text-slate-500">No parts requests yet.</p> : null}
+            {myRequests.slice(0, 8).map((r) => (
+              <p key={String(r.id)} className="text-slate-600">
+                {String(r.status)} — {String(r.need_text)}
+                {(r.part_master as { name?: string } | null)?.name ? ` · ${String((r.part_master as { name?: string }).name)}` : ""}
+              </p>
+            ))}
           </div>
           <DialogFooter className="shrink-0">
             <Button type="button" variant="outline" onClick={() => setPartsDialogOpen(false)}>

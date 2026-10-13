@@ -320,6 +320,11 @@ export function LogMaintenanceServiceDialog({
   const [markPackageComplete, setMarkPackageComplete] = useState(true);
   const [formQueue, setFormQueue] = useState<MaintenanceServiceCategory[]>([]);
 
+  const [followUp, setFollowUp] = useState<null | {
+    kind: "fit" | "warranty";
+    partId: string;
+    supplierId?: string | null;
+  }>(null);
   const [compatibleParts, setCompatibleParts] = useState<CompatiblePartsItem[]>([]);
   const [partsLoading, setPartsLoading] = useState(false);
 
@@ -850,8 +855,16 @@ export function LogMaintenanceServiceDialog({
             : "Service log saved",
         );
       }
-      onOpenChange(false);
       onSaved?.();
+      const prompts = (result as { warrantyPrompts?: Array<{ partId?: string; supplierId?: string | null }> }).warrantyPrompts;
+      const linked = lines.find((l) => l.partId && !l.declined);
+      if (prompts?.length && prompts[0]?.partId) {
+        setFollowUp({ kind: "warranty", partId: String(prompts[0].partId), supplierId: prompts[0].supplierId });
+      } else if (linked?.partId) {
+        setFollowUp({ kind: "fit", partId: linked.partId });
+      } else {
+        onOpenChange(false);
+      }
     } catch (error) {
       console.error(error);
       toast.error("Failed to save service log");
@@ -992,6 +1005,62 @@ export function LogMaintenanceServiceDialog({
 
   const categoryHasLine = (cat: MaintenanceServiceCategory) =>
     lines.some((l) => categoryMatchLine(cat, l));
+
+  const answerFit = async (outcome: "fit" | "no_fit" | "modified") => {
+    if (!followUp) return;
+    try {
+      await api.submitPartFitFeedback({ partId: followUp.partId, outcome });
+      toast.success("Fit recorded");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not save");
+    } finally {
+      setFollowUp(null);
+      onOpenChange(false);
+    }
+  };
+
+  if (followUp) {
+    return (
+      <ResponsiveDialog open={open} onOpenChange={onOpenChange}>
+        <ResponsiveDialogContent>
+          <ResponsiveDialogHeader>
+            <ResponsiveDialogTitle>
+              {followUp.kind === "warranty" ? "Claim warranty?" : "Did the part fit?"}
+            </ResponsiveDialogTitle>
+            <ResponsiveDialogDescription>
+              {followUp.kind === "warranty"
+                ? "This component was replaced again inside the previous part’s warranty. Claim it instead of buying another."
+                : "This is how Dominion learns which parts actually fit your vehicles."}
+            </ResponsiveDialogDescription>
+          </ResponsiveDialogHeader>
+          <div className="flex flex-wrap gap-2 py-2">
+            {followUp.kind === "warranty" ? (
+              <>
+                <Button type="button" onClick={async () => {
+                  try {
+                    await api.createWarrantyClaim({ partId: followUp.partId, supplierId: followUp.supplierId, vehicleId });
+                    toast.success("Warranty claim opened");
+                  } catch (err) {
+                    toast.error(err instanceof Error ? err.message : "Could not open the claim");
+                  } finally {
+                    setFollowUp(null);
+                    onOpenChange(false);
+                  }
+                }}>Claim warranty</Button>
+                <Button type="button" variant="outline" onClick={() => setFollowUp({ kind: "fit", partId: followUp.partId })}>It was a new buy</Button>
+              </>
+            ) : (
+              <>
+                <Button type="button" onClick={() => void answerFit("fit")}>Yes</Button>
+                <Button type="button" variant="outline" onClick={() => void answerFit("no_fit")}>No</Button>
+                <Button type="button" variant="outline" onClick={() => void answerFit("modified")}>Had to modify</Button>
+              </>
+            )}
+          </div>
+        </ResponsiveDialogContent>
+      </ResponsiveDialog>
+    );
+  }
 
   return (
     <ResponsiveDialog open={open} onOpenChange={onOpenChange}>

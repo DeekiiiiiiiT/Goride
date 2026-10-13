@@ -3,7 +3,7 @@
  * Order: health → queues → courier → history → actions.
  */
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link, useOutletContext } from 'react-router-dom';
+import { Link, useOutletContext, useSearchParams } from 'react-router-dom';
 import { Loader2, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
 import {
@@ -21,13 +21,11 @@ import {
 } from '@roam/dash-admin-client';
 import { API_ENDPOINTS } from '@roam/api-client';
 import { canApproveFinance, canWriteDashAdmin } from '../../utils/dashAdminRoles';
+import { formatMoney } from '../../components/ui/format';
 import type { AdminOutletContext } from '../../DashAdminPortal';
 
 function fmtMinor(minor: number): string {
-  return `J$${(minor / 100).toLocaleString(undefined, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`;
+  return formatMoney(minor / 100);
 }
 
 function eventLabel(type: string): string {
@@ -54,8 +52,16 @@ const WRITE_OFF_REASONS = [
   { value: 'other', label: 'Other' },
 ] as const;
 
-export function RemittanceDeskPage() {
+export function RemittanceDeskPage({
+  section = 'all',
+  embedded = false,
+}: {
+  section?: 'all' | 'reports' | 'balances';
+  embedded?: boolean;
+} = {}) {
   const { session } = useOutletContext<AdminOutletContext>();
+  const [params] = useSearchParams();
+  const courierFilter = params.get('courier') || '';
   const canWrite = canWriteDashAdmin(session.user);
   const canMoveMoney = canApproveFinance(session.user);
   const token = session.access_token;
@@ -146,11 +152,19 @@ export function RemittanceDeskPage() {
     void loadEvents(selectedId);
   }, [selectedId, loadEvents]);
 
+  useEffect(() => {
+    if (courierFilter) setSelectedId(courierFilter);
+  }, [courierFilter]);
+
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return accounts;
-    return accounts.filter((a) => String(a.courier_id).toLowerCase().includes(q));
-  }, [accounts, query]);
+    return accounts.filter((account) => {
+      const id = String(account.courier_id);
+      if (courierFilter && id !== courierFilter) return false;
+      if (!q) return true;
+      return id.toLowerCase().includes(q);
+    });
+  }, [accounts, query, courierFilter]);
 
   const selected = accounts.find((a) => String(a.courier_id) === selectedId) ?? null;
   const expectedMinor = selected ? Number(selected.balance_minor ?? 0) : 0;
@@ -374,26 +388,29 @@ export function RemittanceDeskPage() {
   };
 
   return (
-    <div className="space-y-6 p-4 md:p-6 max-w-6xl mx-auto">
+    <div className="space-y-6">
+      {!embedded && (
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-white">Remittance Desk</h1>
           <p className="text-sm text-slate-400 mt-1">
-            The only place to settle COD cash couriers owe Roam — never Driver Settlements Collect.
+            Cash a courier has handed in, and what they still owe.
           </p>
         </div>
         <Link to="/pricing" className="text-sm text-slate-400 hover:text-amber-400 hover:underline">
           Pricing rules (defaults) →
         </Link>
       </div>
+      )}
 
+      {section !== 'balances' && (
       <section className="rounded-xl border border-slate-800 bg-slate-900/40 p-4 space-y-2">
         <h2 className="text-sm font-medium text-slate-300">Courier reports: I've paid</h2>
         <p className="text-sm text-slate-400">Confirming a report is what moves the balance. The report itself does not.</p>
         {reports.length === 0 && <p className="text-sm text-slate-500">No reports waiting.</p>}
         {reports.map((report) => (
           <div key={String(report.id)} className="flex flex-wrap items-center gap-3 text-sm text-slate-300">
-            <span>J${(Number(report.amount_minor || 0) / 100).toFixed(2)} via {String(report.method || 'payment')}</span>
+            <span>{formatMoney(Number(report.amount_minor || 0) / 100)} via {String(report.method || 'payment')}</span>
             {canMoveMoney ? (
               <>
                 <button type="button" className="text-amber-400" disabled={busy} onClick={() => void decideReport(report, 'confirm')}>Confirm</button>
@@ -405,8 +422,9 @@ export function RemittanceDeskPage() {
           </div>
         ))}
       </section>
+      )}
 
-      {recon && (
+      {section !== 'reports' && recon && (
         <div className="grid gap-3 sm:grid-cols-4 text-sm">
           {[
             {
@@ -503,7 +521,7 @@ export function RemittanceDeskPage() {
         </div>
       )}
 
-      {loading ? (
+      {section !== 'reports' && (loading ? (
         <div className="flex justify-center py-16">
           <Loader2 className="h-8 w-8 animate-spin text-amber-400" />
         </div>
@@ -868,7 +886,7 @@ export function RemittanceDeskPage() {
             )}
           </div>
         </div>
-      )}
+      ))}
     </div>
   );
 }

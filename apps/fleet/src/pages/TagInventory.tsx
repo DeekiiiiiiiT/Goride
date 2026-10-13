@@ -61,6 +61,8 @@ function TagInventoryInner({
   });
   const [fleetAlert, setFleetAlert] = useState('500');
   const [savingAlert, setSavingAlert] = useState(false);
+  const [downtimeCost, setDowntimeCost] = useState('');
+  const [savingDowntime, setSavingDowntime] = useState(false);
 
   const fetchTags = async () => {
     setIsLoading(true);
@@ -84,6 +86,8 @@ function TagInventoryInner({
     void api.getOrganizationSettings().then((res) => {
       const amount = res.data?.tollLowBalanceDefaultJmd;
       if (typeof amount === 'number' && amount > 0) setFleetAlert(String(amount));
+      const downtime = res.data?.downtimeCostPerDayJmd;
+      if (typeof downtime === 'number' && downtime > 0) setDowntimeCost(String(downtime));
     }).catch(() => {});
   }, []);
 
@@ -102,6 +106,23 @@ function TagInventoryInner({
       toast.error(tollErrorMessage(error, 'Could not save the fleet alert'));
     } finally {
       setSavingAlert(false);
+    }
+  };
+
+  const saveDowntime = async () => {
+    const amount = Number(downtimeCost);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      toast.error('Enter a daily cost above zero');
+      return;
+    }
+    setSavingDowntime(true);
+    try {
+      await api.upsertOrganizationSettings({ downtimeCostPerDayJmd: amount });
+      toast.success('Downtime cost saved');
+    } catch (error) {
+      toast.error(tollErrorMessage(error, 'Could not save the downtime cost'));
+    } finally {
+      setSavingDowntime(false);
     }
   };
 
@@ -300,6 +321,18 @@ function TagInventoryInner({
         </label>
         <Button variant="outline" onClick={() => void saveFleetAlert()} disabled={savingAlert}>
           {savingAlert ? 'Saving…' : 'Save alert'}
+        </Button>
+        <label className="text-sm text-slate-600">
+          Vehicle off the road (J$ / day)
+          <Input
+            className="mt-1 w-36"
+            inputMode="decimal"
+            value={downtimeCost}
+            onChange={(e) => setDowntimeCost(e.target.value)}
+          />
+        </label>
+        <Button variant="outline" onClick={() => void saveDowntime()} disabled={savingDowntime}>
+          {savingDowntime ? 'Saving…' : 'Save downtime cost'}
         </Button>
       </div>
 

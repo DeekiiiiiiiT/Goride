@@ -42,7 +42,7 @@ function statusBadgeClass(status: string) {
   return 'bg-slate-700 text-slate-300';
 }
 
-export function PromotionsPage() {
+export function PromotionsPage({ embedded = false }: { embedded?: boolean } = {}) {
   const { session } = useOutletContext<AdminOutletContext>();
   const canWrite = canWriteDashAdmin(session.user);
   const [promos, setPromos] = useState<PromoRow[]>([]);
@@ -152,6 +152,7 @@ export function PromotionsPage() {
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
+        {!embedded && (
         <div>
           <h2 className="text-xl font-semibold text-white flex items-center gap-2">
             <Tag className="w-5 h-5 text-amber-400" />
@@ -163,6 +164,7 @@ export function PromotionsPage() {
             trips beyond the cap pay delivery.
           </p>
         </div>
+        )}
         <Link to="/pricing" className="text-sm text-amber-400 hover:underline">
           Launch free-delivery rules → Pricing Hub
         </Link>

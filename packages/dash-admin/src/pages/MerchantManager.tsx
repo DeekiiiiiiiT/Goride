@@ -1,9 +1,10 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { useNavigate, useOutletContext } from 'react-router-dom';
+import { useNavigate, useOutletContext, useSearchParams } from 'react-router-dom';
 import { Loader2, RefreshCw, Search } from 'lucide-react';
 import { toast } from 'sonner';
 import { MerchantStatusBadge } from '../components/MerchantStatusBadge';
 import {
+  getMerchantHealth,
   listIncompleteSetup,
   listMerchants,
   type DashMerchant,
@@ -12,15 +13,28 @@ import {
 } from '@roam/dash-admin-client';
 import type { AdminOutletContext } from '../DashAdminPortal';
 
-type TabId = 'all' | MerchantVerificationStatus | 'incomplete_setup' | 'regulated';
+type TabId = 'all' | MerchantVerificationStatus | 'incomplete_setup' | 'regulated' | 'live' | 'suspended' | 'deactivated';
 
-export function MerchantManager() {
+export function MerchantManager({ mode = 'applications' }: { mode?: 'directory' | 'applications' }) {
   const { session } = useOutletContext<AdminOutletContext>();
   const navigate = useNavigate();
   const accessToken = session.access_token;
 
-  const [tab, setTab] = useState<TabId>('pending');
-  const [searchInput, setSearchInput] = useState('');
+  const [params, setParams] = useSearchParams();
+  const defaultTab: TabId = mode === 'directory' ? 'live' : 'pending';
+  const tab = (params.get('status') as TabId | null) || defaultTab;
+  const searchInput = params.get('q') || '';
+  const setTab = (id: TabId) => {
+    const next = new URLSearchParams(params);
+    next.set('status', id);
+    setParams(next, { replace: true });
+  };
+  const setSearchInput = (value: string) => {
+    const next = new URLSearchParams(params);
+    if (value) next.set('q', value);
+    else next.delete('q');
+    setParams(next, { replace: true });
+  };
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [items, setItems] = useState<DashMerchant[]>([]);
   const [incompleteItems, setIncompleteItems] = useState<IncompleteSetupRow[]>([]);
@@ -29,6 +43,7 @@ export function MerchantManager() {
   const [counts, setCounts] = useState({
     pending: 0, in_review: 0, docs_requested: 0, approved: 0, rejected: 0,
   });
+  const [orders7d, setOrders7d] = useState<Record<string, number>>({});
   const [incompleteCount, setIncompleteCount] = useState(0);
 
   useEffect(() => {
@@ -56,7 +71,8 @@ export function MerchantManager() {
         setItems([]);
       } else {
         const res = await listMerchants(accessToken, {
-          status: tab === 'regulated' ? 'all' : tab,
+          status: tab === 'regulated' || tab === 'live' || tab === 'deactivated' || tab === 'suspended' ? (tab === 'live' || tab === 'deactivated' || tab === 'suspended' ? 'approved' : 'all') : tab,
+          operational_status: tab === 'suspended' ? 'suspended' : tab === 'deactivated' ? 'deactivated' : tab === 'live' ? 'active' : undefined,
           vertical_in: tab === 'regulated' ? 'pharmacy,alcohol' : undefined,
           search: debouncedSearch || undefined,
           limit: 100,
@@ -77,16 +93,31 @@ export function MerchantManager() {
     void load();
   }, [load]);
 
-  const tabs: { id: TabId; label: string }[] = [
-    { id: 'incomplete_setup', label: 'Unfinished setup' },
-    { id: 'regulated', label: 'Regulated' },
-    { id: 'pending', label: 'Pending' },
-    { id: 'in_review', label: 'In Review' },
-    { id: 'docs_requested', label: 'Docs Requested' },
-    { id: 'approved', label: 'Approved' },
-    { id: 'rejected', label: 'Rejected' },
-    { id: 'all', label: 'All' },
-  ];
+  useEffect(() => {
+    if (mode !== 'directory' || items.length === 0) return;
+    void getMerchantHealth(accessToken, items.map((item) => item.id))
+      .then((res) => {
+        const next: Record<string, number> = {};
+        for (const [id, row] of Object.entries(res.health || {})) next[id] = row.orders7d;
+        setOrders7d(next);
+      })
+      .catch(() => setOrders7d({}));
+  }, [accessToken, items, mode]);
+
+  const tabs: { id: TabId; label: string }[] = mode === 'directory'
+    ? [
+        { id: 'live', label: 'Live' },
+        { id: 'suspended', label: 'Suspended' },
+        { id: 'deactivated', label: 'Deactivated' },
+      ]
+    : [
+        { id: 'incomplete_setup', label: 'Unfinished setup' },
+        { id: 'regulated', label: 'Regulated' },
+        { id: 'pending', label: 'Pending' },
+        { id: 'in_review', label: 'In review' },
+        { id: 'docs_requested', label: 'Docs requested' },
+        { id: 'rejected', label: 'Rejected' },
+      ];
 
   const formatDate = (iso: string | null) => {
     if (!iso) return '—';
@@ -97,7 +128,6 @@ export function MerchantManager() {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="text-xl font-semibold text-white">Applications</h2>
           <p className="text-sm text-slate-400">{total} total</p>
         </div>
         <button
@@ -226,6 +256,14 @@ export function MerchantManager() {
                 <th className="px-4 py-3 font-medium">Verification</th>
                 <th className="px-4 py-3 font-medium">Operations</th>
                 <th className="px-4 py-3 font-medium">Submitted</th>
+                {mode === 'directory' && (
+                  <>
+                    <th className="px-4 py-3 font-medium">Online</th>
+                    <th className="px-4 py-3 font-medium">Prep</th>
+                    <th className="px-4 py-3 font-medium">Orders 7d</th>
+                    <th className="px-4 py-3 font-medium">Rating</th>
+                  </>
+                )}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800 bg-slate-950">
@@ -261,6 +299,14 @@ export function MerchantManager() {
                   <td className="px-4 py-3 text-slate-400">
                     {m.submitted_at ? new Date(m.submitted_at).toLocaleDateString() : '—'}
                   </td>
+                  {mode === 'directory' && (
+                    <>
+                      <td className="px-4 py-3 text-slate-300">{m.is_accepting_orders ? 'Yes' : 'No'}</td>
+                      <td className="px-4 py-3 text-slate-300">{m.avg_prep_time_mins != null ? `${m.avg_prep_time_mins} min` : '—'}</td>
+                      <td className="px-4 py-3 text-slate-300">{orders7d[m.id] ?? '—'}</td>
+                      <td className="px-4 py-3 text-slate-300">{m.rating != null ? Number(m.rating).toFixed(1) : '—'}</td>
+                    </>
+                  )}
                 </tr>
               ))}
             </tbody>

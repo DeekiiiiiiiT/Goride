@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 
 type SegmentTabProps<T extends string> = {
   tabs: Array<{ id: T; label: string }>;
@@ -29,11 +29,25 @@ export function SegmentTabs<T extends string>({ tabs, active, onChange }: Segmen
   );
 }
 
-export function useSegmentTab<T extends string>(
-  tabs: Array<{ id: T; label: string }>,
-  defaultId: T,
-): [T, React.Dispatch<React.SetStateAction<T>>] {
-  const [active, setActive] = useState<T>(defaultId);
-  const visible = tabs.some((t) => t.id === active) ? active : tabs[0]?.id ?? defaultId;
-  return [visible, setActive];
+/** Filters replace the address. Tabs push, so Back returns to the previous tab. */
+export function useUrlParam<T extends string>(
+  key: string,
+  fallback: T,
+  allowed?: readonly T[],
+  history: 'push' | 'replace' = 'replace',
+): [T, (next: T) => void] {
+  const [params, setParams] = useSearchParams();
+  const raw = params.get(key) as T | null;
+  const value = raw && (!allowed || allowed.includes(raw)) ? raw : fallback;
+  const setValue = (next: T) => {
+    const updated = new URLSearchParams(params);
+    if (!next) updated.delete(key);
+    else updated.set(key, next);
+    setParams(updated, { replace: history === 'replace' });
+  };
+  return [value, setValue];
+}
+
+export function useUrlTab<T extends string>(fallback: T, allowed: readonly T[], key = 'tab'): [T, (next: T) => void] {
+  return useUrlParam(key, fallback, allowed, 'push');
 }

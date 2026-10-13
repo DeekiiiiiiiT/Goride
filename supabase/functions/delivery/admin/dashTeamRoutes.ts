@@ -6,6 +6,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { type ProductAdminUser } from "../../_shared/productAdmin.ts";
 import { requireDashDelete, requireDashWrite } from "./dashPermissions.ts";
 import { writeAdminAudit } from "./adminAuditWriter.ts";
+import { courierGrantAllowed } from "./consoleAccess.ts";
 
 function getPlatformDb() {
   return createClient(
@@ -154,6 +155,9 @@ export function mountDashTeamRoutes(admin: Hono) {
     if (!MANAGED_ROLE_SET.has(roleName)) {
       return c.json({ error: `role must be one of managed console roles` }, 400);
     }
+    if (!courierGrantAllowed(adminUser.roles ?? [adminUser.role], roleName)) {
+      return c.json({ error: "forbidden", message: "Courier staff can only grant courier roles" }, 403);
+    }
     const grantDenied = await assertCanGrantRole(adminUser, roleName);
     if (grantDenied) return grantDenied;
 
@@ -220,6 +224,9 @@ export function mountDashTeamRoutes(admin: Hono) {
     const expiresAt = body.expires_at ? String(body.expires_at) : null;
     if (!MANAGED_ROLE_SET.has(roleName)) {
       return c.json({ error: "invalid role" }, 400);
+    }
+    if (!courierGrantAllowed(adminUser.roles ?? [adminUser.role], roleName)) {
+      return c.json({ error: "forbidden", message: "Courier staff can only grant courier roles" }, 403);
     }
     const userId = c.req.param("userId");
     if (userId === adminUser.id) {

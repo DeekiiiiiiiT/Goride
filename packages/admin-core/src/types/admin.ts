@@ -1,6 +1,9 @@
 import type { LucideIcon } from 'lucide-react';
 import type { ComponentType } from 'react';
 
+/** Waiting count on a sidebar link. A number is amber; an object can turn red when the oldest item is past its limit. */
+export type AdminNavBadge = number | { count: number; tone?: 'waiting' | 'breach' };
+
 /** A navigation item in the admin sidebar */
 export interface AdminNavItem {
   id: string;
@@ -8,6 +11,16 @@ export interface AdminNavItem {
   icon: LucideIcon;
   /** External link - if set, clicking opens this URL instead of navigating internally */
   href?: string;
+  badge?: AdminNavBadge;
+  /** Capability key. The console decides who can see it. */
+  capability?: string;
+}
+
+/** Labelled group of flat links. Headings are not pages. */
+export interface AdminLinkGroup {
+  id: string;
+  label?: string;
+  items: AdminNavItem[];
 }
 
 /** Nested group inside a collapsible sidebar section (e.g. Onboarding under Merchants) */
@@ -45,9 +58,11 @@ export interface AdminConfig {
   title: string;
   /** Subtitle shown below title */
   subtitle?: string;
-  /** Sidebar sections with their nav items */
-  sections: AdminSection[];
-  /** Top-level nav items (not in a section) */
+  /** Labelled groups of flat links. This is the sidebar. */
+  groups: AdminLinkGroup[];
+  /** @deprecated Accordions. Unused once `groups` is set. */
+  sections?: AdminSection[];
+  /** @deprecated Flat list mixed with sections. Unused once `groups` is set. */
   topNavItems?: AdminNavItem[];
   /** Roles allowed to access this admin */
   allowedRoles: string[];
@@ -87,6 +102,16 @@ export interface AdminShellProps {
   };
   /** Sign out handler */
   onSignOut?: () => void;
+  /** Page › tab › record. The page itself owns the title. */
+  breadcrumbs?: Array<{ label: string; to?: string }>;
+  onCrumb?: (to: string) => void;
+  onOpenSearch?: () => void;
+  notificationCount?: number;
+  onOpenNotifications?: () => void;
+  notificationsOpen?: boolean;
+  notifications?: React.ReactNode;
+  /** Shown only when this is not production. */
+  environmentLabel?: string | null;
 }
 
 /** Props for AdminSidebar component */
@@ -106,6 +131,7 @@ export interface AdminSidebarProps {
   /** Mobile drawer state */
   mobileOpen?: boolean;
   onMobileClose?: () => void;
+  onOpenSearch?: () => void;
 }
 
 /** Props for AdminAuthGate component */

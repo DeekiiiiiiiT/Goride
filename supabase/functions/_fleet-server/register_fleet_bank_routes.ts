@@ -184,6 +184,9 @@ export function registerFleetBankRoutes(app: Hono) {
           tollLowBalanceDefaultJmd: Number((existing as any).tollLowBalanceDefaultJmd) > 0
             ? Number((existing as any).tollLowBalanceDefaultJmd)
             : null,
+          downtimeCostPerDayJmd: Number((existing as any).downtimeCostPerDayJmd) > 0
+            ? Number((existing as any).downtimeCostPerDayJmd)
+            : null,
         },
       });
     } catch (e: any) {
@@ -218,6 +221,10 @@ export function registerFleetBankRoutes(app: Hono) {
             body?.tollLowBalanceDefaultJmd != null && Number(body.tollLowBalanceDefaultJmd) > 0
               ? Number(body.tollLowBalanceDefaultJmd)
               : (prev as any).tollLowBalanceDefaultJmd ?? null,
+          downtimeCostPerDayJmd:
+            body?.downtimeCostPerDayJmd != null && Number(body.downtimeCostPerDayJmd) > 0
+              ? Number(body.downtimeCostPerDayJmd)
+              : (prev as any).downtimeCostPerDayJmd ?? null,
           updatedAt: new Date().toISOString(),
         },
         c,

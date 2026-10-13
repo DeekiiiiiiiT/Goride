@@ -19,7 +19,7 @@ function rowFlags(r: DashCoverageHealthParish): string[] {
   return flags;
 }
 
-export function CoverageHealthPage() {
+export function CoverageHealthPage({ embedded = false }: { embedded?: boolean } = {}) {
   const { session } = useOutletContext<AdminOutletContext>();
   const [rows, setRows] = useState<DashCoverageHealthParish[]>([]);
   const [catalogCount, setCatalogCount] = useState(0);
@@ -47,15 +47,17 @@ export function CoverageHealthPage() {
 
   return (
     <div className="space-y-6 text-slate-200">
+      {!embedded && (
       <div>
         <h2 className="text-xl font-semibold text-white flex items-center gap-2">
-          <Activity className="w-5 h-5 text-emerald-400" />
+          <Activity className="w-5 h-5 text-amber-400" />
           Coverage Health
         </h2>
         <p className="text-sm text-slate-400 mt-1">
           Parish foundation geom, town catalog linkage, and official source vintage.
         </p>
       </div>
+      )}
 
       <div className="flex flex-wrap gap-3 text-xs">
         <span className="rounded-lg border border-slate-700 bg-slate-900/50 px-3 py-2 text-slate-300">

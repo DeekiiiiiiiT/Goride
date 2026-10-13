@@ -37,6 +37,7 @@ import {
 import { deleteCanonicalLedgerBySource } from "./ledger_canonical.ts";
 import { isMaintenanceLedgerEligible } from "../../../packages/finance-core/src/canonicalMaintenanceLedger.ts";
 import { projectFromMaintenanceLog, voidOdometerReading } from "./odometer_ledger.ts";
+import { commitPartsUsage } from "./parts_match.ts";
 
 // Wave 5: DRY — use shared assertPlatformStaffResponse from rbac_middleware
 const assertVehicleCatalogPlatformAccess = assertPlatformStaffResponse;
@@ -1493,12 +1494,13 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
                     vehicle_id: vehicleId,
                     used_at: new Date().toISOString(),
                   }));
-                if (usageRows.length) {
-                  const { error: usageErr } = await supabase
-                    .from("maintenance_parts_usage")
-                    .insert(usageRows);
-                  if (usageErr) {
-                    console.warn("[maintenance-logs] parts usage bridge failed:", usageErr.message);
+                const needsUsage = lineRows.some((r) => r.part_id || (r.part_number && String(r.part_number).trim()));
+                if (needsUsage) {
+                  try {
+                    await commitPartsUsage(supabase, woId);
+                  } catch (usageErr) {
+                    await supabase.from("maintenance_work_orders").delete().eq("id", woId);
+                    throw usageErr;
                   }
                 }
               }
@@ -2814,31 +2816,29 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
         };
         const ledgerResult = await appendCanonicalMaintenanceIfEligible(ledgerInput, c);
 
-        const usageRows = lineRows
-          .filter((r) => r.part_id && isUuid(String(r.part_id)) && r.declined !== true)
-          .map((r) => ({
-            organization_id: orgId,
-            work_order_id: id,
-            line_id: r.id != null ? String(r.id) : null,
-            part_id: String(r.part_id),
-            qty: r.qty != null ? Number(r.qty) : 1,
-            unit_cost: r.unit_price != null ? Number(r.unit_price) : null,
-            currency,
-            vehicle_id: vehicleId,
-            used_at: new Date().toISOString(),
-          }));
-        if (usageRows.length) {
-          const { error: usageErr } = await supabase
-            .from("maintenance_parts_usage")
-            .insert(usageRows);
-          if (usageErr) {
-            console.warn("[maintenance-wo] parts usage insert failed:", usageErr.message);
+        const needsUsage = lineRows.some((r) =>
+          (r.part_id && isUuid(String(r.part_id)) && r.declined !== true)
+          || (r.part_number && String(r.part_number).trim() && r.declined !== true)
+        );
+        let warrantyPrompts: unknown[] = [];
+        if (needsUsage) {
+          try {
+            const usageResult = await commitPartsUsage(supabase, id);
+            warrantyPrompts = Array.isArray(usageResult.warrantyPrompts) ? usageResult.warrantyPrompts as unknown[] : [];
+          } catch (usageErr) {
+            await supabase.from("maintenance_work_orders").update({
+              status: "in_progress",
+              closed_at: null,
+              updated_at: new Date().toISOString(),
+            }).eq("id", id);
+            throw usageErr;
           }
         }
 
         return c.json({
           item: mapDbWorkOrderToApi(completedWo as Record<string, unknown>, lineRows),
           record,
+          warrantyPrompts,
           ledgerPosted: ledgerResult.posted,
           ledgerWarning: ledgerResult.failed
             ? "Work order completed but not posted to books — contact support if this persists"

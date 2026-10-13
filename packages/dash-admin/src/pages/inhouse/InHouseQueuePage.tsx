@@ -45,7 +45,7 @@ function beep() {
   tone.stop(ctx.currentTime + 0.15);
 }
 
-export function InHouseQueuePage() {
+export function InHouseQueuePage({ embedded = false }: { embedded?: boolean } = {}) {
   const { session } = useOutletContext<AdminOutletContext>();
   const navigate = useNavigate();
   const [tasks, setTasks] = useState<InHouseTaskCard[]>([]);
@@ -97,7 +97,7 @@ export function InHouseQueuePage() {
     <div className="space-y-4 text-slate-100">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold">Orders</h1>
+          {!embedded && <h1 className="text-xl font-semibold">Orders</h1>}
           <p className="text-sm text-slate-400">Claim an order, place it on the restaurant site as Roam plus the order number, save the receipt, then mark it placed.</p>
         </div>
         {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : null}
@@ -126,7 +126,7 @@ export function InHouseQueuePage() {
                     </button>
                   ) : null}
                   {task.state === 'queued' ? (
-                    <button type="button" className="mt-2 w-full rounded bg-emerald-700 px-2 py-1" onClick={() => void claim(task.id)}>
+                    <button type="button" className="mt-2 w-full rounded-xl bg-amber-500 px-2 py-1 text-slate-950" onClick={() => void claim(task.id)}>
                       Claim
                     </button>
                   ) : (

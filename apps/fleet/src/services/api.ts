@@ -2649,8 +2649,8 @@ export const api = {
       }>;
   },
 
-  async getCompatibleParts(vehicleId: string, categoryId?: string) {
-      const q = categoryId ? `?category_id=${encodeURIComponent(categoryId)}` : "";
+  async getCompatibleParts(vehicleId: string, componentId?: string) {
+      const q = componentId ? `?component_id=${encodeURIComponent(componentId)}` : "";
       const response = await fetchWithRetry(
         `${API_ENDPOINTS.fleetCore}/vehicles/${encodeURIComponent(vehicleId)}/compatible-parts${q}`,
         { headers: await getHeaders(null) },
@@ -2662,17 +2662,65 @@ export const api = {
       return response.json() as Promise<CompatiblePartsResponse>;
   },
 
-  async requestPartsSourcing(vehicleId: string, needText: string) {
+  async requestPartsSourcing(vehicleId: string, needText: string, extra?: Record<string, unknown>) {
       const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/parts-sourcing-requests`, {
         method: "POST",
         headers: await getHeaders(),
-        body: JSON.stringify({ vehicleId, needText }),
+        body: JSON.stringify({ vehicleId, needText, ...extra }),
       });
       if (!response.ok) {
         const body = await response.json().catch(() => ({}));
         throw new Error((body as { error?: string }).error || "Failed to submit parts request");
       }
       return response.json();
+  },
+
+  async listMyPartsRequests() {
+      const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/parts-sourcing-requests`, {
+        headers: await getHeaders(null),
+      });
+      if (!response.ok) throw new Error("Failed to load parts requests");
+      return response.json() as Promise<{ items: Array<Record<string, unknown>> }>;
+  },
+
+  async submitPartFitFeedback(body: { partId: string; outcome: "fit" | "no_fit" | "modified"; catalogId?: string | null; notes?: string }) {
+      const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/part-fit-feedback`, {
+        method: "POST",
+        headers: await getHeaders(),
+        body: JSON.stringify(body),
+      });
+      if (!response.ok) throw new Error("Failed to save fit feedback");
+      return response.json();
+  },
+
+  async requestPartQuote(body: Record<string, unknown>) {
+      const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/part-quotes`, {
+        method: "POST",
+        headers: await getHeaders(),
+        body: JSON.stringify(body),
+      });
+      if (!response.ok) throw new Error("Failed to request a quote");
+      return response.json();
+  },
+
+  async createWarrantyClaim(body: Record<string, unknown>) {
+      const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/part-warranty-claims`, {
+        method: "POST",
+        headers: await getHeaders(),
+        body: JSON.stringify(body),
+      });
+      if (!response.ok) throw new Error("Failed to open warranty claim");
+      return response.json();
+  },
+
+  async decodeFrameNumbers(text: string, engineNumber?: string) {
+      const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/vehicles/decode-frames`, {
+        method: "POST",
+        headers: await getHeaders(),
+        body: JSON.stringify({ text, engineNumber }),
+      });
+      if (!response.ok) throw new Error("Failed to decode frame numbers");
+      return response.json() as Promise<{ items: Array<Record<string, unknown>>; enginePrefix: string | null }>;
   },
 
   async bootstrapMaintenanceFleet() {
@@ -6610,6 +6658,7 @@ export const api = {
       roamOrganizationUuid: string | null;
       inDriveOrganizationUuid: string | null;
       tollLowBalanceDefaultJmd: number | null;
+      downtimeCostPerDayJmd: number | null;
     };
   }> {
     const params = new URLSearchParams();
@@ -6632,6 +6681,7 @@ export const api = {
     roamOrganizationUuid?: string | null;
     inDriveOrganizationUuid?: string | null;
     tollLowBalanceDefaultJmd?: number | null;
+    downtimeCostPerDayJmd?: number | null;
   }): Promise<{ success: boolean; data: Record<string, unknown> }> {
     const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/organization-settings`, {
       method: 'PUT',

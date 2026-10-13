@@ -2,6 +2,7 @@
  * Rush Ops admin — support case desk + structured audit event history.
  */
 import { Hono } from "https://deno.land/x/hono@v4.3.11/mod.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { requireProductAdmin, type ProductAdminUser } from "../../_shared/productAdmin.ts";
 import { requireDashWrite } from "./dashPermissions.ts";
 import { getDb, writeKvAudit } from "./merchantAdminShared.ts";
@@ -32,7 +33,27 @@ export function registerSupportAdminRoutes(app: Hono) {
     if (status && CASE_STATUSES.has(status)) query = query.eq("status", status);
     const { data, error, count } = await query.range(offset, offset + limit - 1);
     if (error) return c.json({ error: error.message }, 500);
-    return c.json({ cases: data ?? [], total: count ?? 0, page, limit });
+    const rows = (data ?? []) as Array<Record<string, unknown>>;
+    const assigneeIds = [...new Set(rows.map((row) => String(row.assigned_to || "")).filter(Boolean))];
+    const pdb = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, {
+      db: { schema: "platform" },
+    });
+    const { data: people } = assigneeIds.length
+      ? await pdb.from("identities").select("user_id, display_name, primary_email").in("user_id", assigneeIds)
+      : { data: [] as Array<{ user_id: string; display_name?: string; primary_email?: string }> };
+    const names = new Map((people ?? []).map((row) => [
+      String((row as { user_id: string }).user_id),
+      String((row as { display_name?: string; primary_email?: string }).display_name || (row as { primary_email?: string }).primary_email || ""),
+    ]));
+    return c.json({
+      cases: rows.map((row) => ({
+        ...row,
+        assignee_name: names.get(String(row.assigned_to || "")) || null,
+      })),
+      total: count ?? 0,
+      page,
+      limit,
+    });
   });
 
   support.get("/cases/:id", async (c) => {

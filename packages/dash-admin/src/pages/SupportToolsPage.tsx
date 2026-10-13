@@ -1,346 +1,174 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import { FormEvent, useEffect, useState } from 'react';
 import { Link, useOutletContext } from 'react-router-dom';
-import { Loader2, Search } from 'lucide-react';
 import { toast } from 'sonner';
-import { useAdminConfirm } from '../contexts/AdminConfirmContext';
-import { canWriteDashAdmin } from '../utils/dashAdminRoles';
 import {
-  cancelOrder,
   createSupportCase,
-  getOrderDetail,
   getSupportCaseDetail,
   listSupportCases,
   patchSupportCase,
-  refundOrder,
   type SupportCaseRow,
 } from '@roam/dash-admin-client';
+import { canWriteDashAdmin } from '../utils/dashAdminRoles';
+import { useUrlTab } from '../components/SegmentTabs';
+import { PageHeader } from '../components/ui/PageHeader';
+import { StatusBadge } from '../components/ui/StatusBadge';
+import { EmptyState } from '../components/ui/bits';
+import { ReviewsPage } from './reviews/ReviewsPage';
 import type { AdminOutletContext } from '../DashAdminPortal';
 
+const TABS = ['cases', 'reviews'] as const;
+const PRIORITIES = ['low', 'normal', 'high', 'urgent'] as const;
+const FAULTS = ['merchant_fault', 'courier_fault', 'platform_fault', 'customer_fault', 'shared_fault', 'undetermined'] as const;
+
 export function SupportToolsPage() {
+  const [tab, setTab] = useUrlTab('cases', TABS);
+  return (
+    <div className="space-y-4">
+      <PageHeader
+        title="Support"
+        description="Open cases, and reviews that should come down."
+        tabs={[{ id: 'cases', label: 'Cases' }, { id: 'reviews', label: 'Reviews' }]}
+        activeTab={tab}
+        onTab={(id) => setTab(id as typeof TABS[number])}
+      />
+      {tab === 'reviews' ? <ReviewsPage /> : <CaseInbox />}
+    </div>
+  );
+}
+
+function CaseInbox() {
   const { session } = useOutletContext<AdminOutletContext>();
-  const { confirm, prompt } = useAdminConfirm();
   const canWrite = canWriteDashAdmin(session.user);
   const token = session.access_token;
-
-  const [lookup, setLookup] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [order, setOrder] = useState<Record<string, unknown> | null>(null);
-  const [events, setEvents] = useState<Array<Record<string, unknown>>>([]);
-  const [transaction, setTransaction] = useState<Record<string, unknown> | null>(null);
-
+  const [status, setStatus] = useState('open');
   const [cases, setCases] = useState<SupportCaseRow[]>([]);
-  const [casesLoading, setCasesLoading] = useState(true);
-  const [caseStatus, setCaseStatus] = useState('open');
-  const [selectedCaseId, setSelectedCaseId] = useState<string | null>(null);
-  const [caseDetail, setCaseDetail] = useState<Record<string, unknown> | null>(null);
-  const [caseDetailLoading, setCaseDetailLoading] = useState(false);
-
-  const loadCases = useCallback(async () => {
-    setCasesLoading(true);
-    try {
-      const res = await listSupportCases(token, caseStatus || undefined);
-      setCases(res.cases);
-    } catch {
-      setCases([]);
-    } finally {
-      setCasesLoading(false);
-    }
-  }, [token, caseStatus]);
+  const [loading, setLoading] = useState(true);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [detail, setDetail] = useState<Record<string, unknown> | null>(null);
+  const [creating, setCreating] = useState(false);
+  const [subject, setSubject] = useState('');
+  const [priority, setPriority] = useState<(typeof PRIORITIES)[number]>('normal');
+  const [body, setBody] = useState('');
+  const [fault, setFault] = useState<(typeof FAULTS)[number]>('undetermined');
+  const [notes, setNotes] = useState('');
 
   useEffect(() => {
-    void loadCases();
-  }, [loadCases]);
-
-  const loadCaseDetail = async (caseId: string) => {
-    setSelectedCaseId(caseId);
-    setCaseDetailLoading(true);
-    try {
-      const res = await getSupportCaseDetail(token, caseId);
-      setCaseDetail(res as unknown as Record<string, unknown>);
-    } catch {
-      setCaseDetail(null);
-      toast.error('Could not load case detail');
-    } finally {
-      setCaseDetailLoading(false);
-    }
-  };
-
-  const runResolveCase = async () => {
-    if (!selectedCaseId || !canWrite) return;
-    const values = await prompt({
-      title: 'Resolve case',
-      description: 'Optionally issue a refund. Leave amount blank to resolve without refund.',
-      confirmLabel: 'Resolve',
-      fields: [
-        { key: 'amount', label: 'Refund amount (optional)', required: false },
-        { key: 'fault', label: 'Fault (merchant_fault | customer_fault | undetermined)', placeholder: 'undetermined', required: false },
-        { key: 'notes', label: 'Resolution notes', required: true, multiline: true },
-      ],
-    });
-    if (!values) return;
-    const amountRaw = values.amount?.trim();
-    const amount = amountRaw ? Number(amountRaw) : undefined;
-    try {
-      await patchSupportCase(token, selectedCaseId, {
-        status: 'resolved',
-        resolution_notes: values.notes,
-        fault_attribution: values.fault?.trim() || 'undetermined',
-        ...(amount != null && amount > 0 ? { refund_amount: amount } : {}),
-      });
-      toast.success('Case resolved');
-      void loadCases();
-      void loadCaseDetail(selectedCaseId);
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Resolve failed');
-    }
-  };
-
-  const runCreateCase = async () => {
-    if (!canWrite) return;
-    const values = await prompt({
-      title: 'New support case',
-      description: 'Log a support case for follow-up.',
-      confirmLabel: 'Create case',
-      fields: [
-        { key: 'subject', label: 'Subject', required: true },
-        { key: 'priority', label: 'Priority (low | normal | high | urgent)', placeholder: 'normal', required: false },
-        { key: 'order_id', label: 'Related order ID (optional)', required: false },
-        { key: 'customer_id', label: 'Related customer ID (optional)', required: false },
-        { key: 'notes', label: 'Notes', required: false, multiline: true },
-      ],
-    });
-    if (!values) return;
-    try {
-      await createSupportCase(token, {
-        subject: values.subject,
-        priority: values.priority?.trim() || undefined,
-        order_id: values.order_id?.trim() || undefined,
-        customer_id: values.customer_id?.trim() || undefined,
-        notes: values.notes?.trim() || undefined,
-      });
-      toast.success('Case created');
-      void loadCases();
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Create failed');
-    }
-  };
-
-  const doLookup = async () => {
-    const id = lookup.trim();
-    if (!id) return;
     setLoading(true);
-    try {
-      const res = await getOrderDetail(token, id);
-      setOrder(res.order);
-      setEvents(res.events);
-      setTransaction(res.transaction ?? null);
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Order not found');
-      setOrder(null);
-      setEvents([]);
-      setTransaction(null);
-    } finally {
-      setLoading(false);
-    }
-  };
+    void listSupportCases(token, status || undefined)
+      .then((res) => setCases(res.cases))
+      .catch(() => setCases([]))
+      .finally(() => setLoading(false));
+  }, [token, status]);
 
-  const runCancel = async () => {
-    if (!order?.id || !canWrite) return;
-    const ok = await confirm({
-      title: 'Cancel order?',
-      description: `Cancel order ${String(order.order_number ?? order.id)}? Paid orders will queue a refund.`,
-      confirmLabel: 'Cancel order',
-      variant: 'danger',
+  useEffect(() => {
+    if (!selectedId) {
+      setDetail(null);
+      return;
+    }
+    void getSupportCaseDetail(token, selectedId)
+      .then((res) => setDetail(res as unknown as Record<string, unknown>))
+      .catch(() => setDetail(null));
+  }, [selectedId, token]);
+
+  const selected = cases.find((row) => row.id === selectedId) ?? null;
+  const caseRow = (detail?.case as SupportCaseRow | undefined) ?? selected;
+
+  async function createCase(event: FormEvent) {
+    event.preventDefault();
+    if (!canWrite || !subject.trim()) return;
+    try {
+      await createSupportCase(token, { subject: subject.trim(), priority, body: body.trim() });
+      toast.success('Case opened');
+      setCreating(false);
+      setSubject('');
+      setBody('');
+      const res = await listSupportCases(token, status || undefined);
+      setCases(res.cases);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Could not open the case');
+    }
+  }
+
+  async function assignMe() {
+    if (!selectedId || !canWrite) return;
+    await patchSupportCase(token, selectedId, { assigned_to: session.user.id });
+    toast.success('Assigned to you');
+  }
+
+  async function resolve() {
+    if (!selectedId || !canWrite || !notes.trim()) return;
+    await patchSupportCase(token, selectedId, {
+      status: 'resolved',
+      resolution_notes: notes.trim(),
+      fault_attribution: fault,
     });
-    if (!ok) return;
-    try {
-      await cancelOrder(token, String(order.id), 'Support cancellation');
-      toast.success('Order cancelled');
-      void doLookup();
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Cancel failed');
-    }
-  };
-
-  const runRefund = async () => {
-    if (!order?.id || !canWrite) return;
-    const values = await prompt({
-      title: 'Refund order',
-      description: 'Leave amount blank for full remaining balance.',
-      confirmLabel: 'Issue refund',
-      variant: 'danger',
-      fields: [
-        { key: 'amount', label: 'Amount (optional)', placeholder: 'Full if blank', required: false },
-        { key: 'reason', label: 'Reason', placeholder: 'Why?', required: true, multiline: true },
-      ],
-    });
-    if (!values) return;
-    const amountRaw = values.amount?.trim();
-    const amount = amountRaw ? Number(amountRaw) : undefined;
-    try {
-      const res = await refundOrder(token, String(order.id), {
-        reason: values.reason,
-        ...(amount != null ? { amount } : {}),
-      }) as { payment_status?: string; providerCompleted?: boolean; providerError?: string | null };
-      if (res.providerCompleted) toast.success('Refund completed');
-      else {
-        toast.success(`Refund queued (${res.payment_status || 'pending'})`);
-        if (res.providerError) toast.message(res.providerError);
-      }
-      void doLookup();
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Refund failed');
-    }
-  };
-
-  const paymentStatus = String(order?.payment_status || '');
-  const canRefund = !!order && ['paid', 'refund_pending', 'partially_refunded'].includes(paymentStatus) && !!transaction;
-  const customer = order?.customer as { id?: string; name?: string } | null;
+    toast.success('Case resolved');
+    setNotes('');
+    const res = await listSupportCases(token, status || undefined);
+    setCases(res.cases);
+  }
 
   return (
-    <div className="space-y-8 max-w-2xl">
-      <h2 className="text-xl font-semibold text-white">Support tools</h2>
-      <p className="text-sm text-slate-400">Look up an order by ID.</p>
-
-      <div className="flex gap-2">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
-          <input
-            value={lookup}
-            onChange={(e) => setLookup(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && void doLookup()}
-            placeholder="Order ID..."
-            className="w-full pl-10 pr-4 py-2.5 bg-slate-900 border border-slate-700 rounded-lg text-white"
-          />
-        </div>
-        <button type="button" onClick={() => void doLookup()} className="px-4 py-2.5 rounded-lg bg-amber-600 text-white text-sm font-medium">
-          Lookup
-        </button>
-      </div>
-
-      {loading && <Loader2 className="w-6 h-6 animate-spin text-amber-400" />}
-
-      {order && (
-        <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-4 space-y-3">
-          <p className="text-white font-medium">{String(order.order_number)}</p>
-          <p className="text-sm text-slate-400">Status: {String(order.status)} · Payment: {paymentStatus || '—'}</p>
-          {customer?.id && (
-            <Link to={`/customers/${customer.id}`} className="text-sm text-amber-400 hover:text-amber-300 block">
-              Customer: {customer.name || customer.id}
-            </Link>
-          )}
-          <Link to={`/orders/${String(order.id)}`} className="text-sm text-slate-400 hover:text-white block">
-            Open full order detail
-          </Link>
-          {canWrite && (
-            <div className="flex flex-wrap gap-3">
-              {String(order.status) !== 'cancelled' && (
-                <button type="button" onClick={() => void runCancel()} className="text-sm text-red-400 hover:text-red-300">
-                  Cancel order
-                </button>
-              )}
-              {canRefund && (
-                <button type="button" onClick={() => void runRefund()} className="text-sm text-amber-400 hover:text-amber-300">
-                  Refund
-                </button>
-              )}
-            </div>
-          )}
-          <div className="space-y-1 pt-2 border-t border-slate-800">
-            {events.map((ev) => (
-              <p key={String(ev.id)} className="text-xs text-slate-500">{String(ev.status)} — {new Date(String(ev.created_at)).toLocaleString()}</p>
-            ))}
-          </div>
-        </div>
-      )}
-
-      <section className="space-y-3">
-        <div className="flex items-center justify-between gap-4">
-          <h3 className="text-lg font-semibold text-white">Support cases</h3>
-          {canWrite && (
-            <button type="button" onClick={() => void runCreateCase()} className="px-3 py-1.5 rounded-lg bg-amber-600 text-white text-sm font-medium">
-              New case
-            </button>
-          )}
-        </div>
+    <div className="grid gap-4 lg:grid-cols-[320px_1fr]">
+      <div className="space-y-3">
         <div className="flex gap-2">
-          {(['open', 'pending', 'resolved', ''] as const).map((s) => (
-            <button
-              key={s || 'all'}
-              type="button"
-              onClick={() => setCaseStatus(s)}
-              className={`px-3 py-1.5 rounded-lg text-xs capitalize ${
-                caseStatus === s ? 'bg-slate-700 text-white' : 'bg-slate-900 text-slate-400 border border-slate-800'
-              }`}
-            >
-              {s ? s.replace(/_/g, ' ') : 'all'}
-            </button>
-          ))}
+          <select value={status} onChange={(e) => setStatus(e.target.value)} className="rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-white">
+            {['open', 'pending', 'resolved', 'closed'].map((item) => <option key={item} value={item}>{item}</option>)}
+          </select>
+          {canWrite && (
+            <button type="button" onClick={() => setCreating((v) => !v)} className="rounded-lg bg-amber-500 px-3 py-2 text-sm font-semibold text-slate-950">New case</button>
+          )}
         </div>
-        {casesLoading ? (
-          <Loader2 className="w-6 h-6 animate-spin text-amber-400" />
-        ) : cases.length === 0 ? (
-          <p className="text-sm text-slate-500">No cases.</p>
-        ) : (
-          <div className="rounded-xl border border-slate-800 overflow-hidden">
-            <table className="w-full text-sm">
-              <thead className="bg-slate-900/80 text-slate-400 text-left">
-                <tr>
-                  <th className="px-4 py-3">Subject</th>
-                  <th className="px-4 py-3">Priority</th>
-                  <th className="px-4 py-3">Status</th>
-                  <th className="px-4 py-3">Opened</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-800">
-                {cases.map((c) => (
-                  <tr
-                    key={c.id}
-                    className="cursor-pointer hover:bg-slate-900/60"
-                    onClick={() => void loadCaseDetail(c.id)}
-                  >
-                    <td className="px-4 py-3 text-white">{c.subject}</td>
-                    <td className="px-4 py-3 text-slate-400 capitalize">{c.priority ?? '—'}</td>
-                    <td className="px-4 py-3 text-slate-400 capitalize">{c.status.replace(/_/g, ' ')}</td>
-                    <td className="px-4 py-3 text-slate-500">{new Date(c.created_at).toLocaleDateString()}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+        {creating && (
+          <form onSubmit={(event) => void createCase(event)} className="space-y-2 rounded-xl border border-slate-800 p-3">
+            <input value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="Subject" className="w-full rounded-lg bg-slate-950 border border-slate-700 px-3 py-2 text-sm text-white" />
+            <select value={priority} onChange={(e) => setPriority(e.target.value as typeof priority)} className="w-full rounded-lg bg-slate-950 border border-slate-700 px-3 py-2 text-sm text-white">
+              {PRIORITIES.map((item) => <option key={item} value={item}>{item}</option>)}
+            </select>
+            <textarea value={body} onChange={(e) => setBody(e.target.value)} placeholder="What happened" className="w-full rounded-lg bg-slate-950 border border-slate-700 px-3 py-2 text-sm text-white" rows={3} />
+            <button type="submit" className="rounded-lg bg-amber-500 px-3 py-2 text-sm font-semibold text-slate-950">Open case</button>
+          </form>
         )}
-        {selectedCaseId && (
-          <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-4 space-y-3">
-            <div className="flex items-center justify-between">
-              <h4 className="text-white font-medium">Case detail</h4>
-              {canWrite && (
-                <button type="button" onClick={() => void runResolveCase()} className="text-sm text-amber-400">
-                  Resolve
+        {loading ? <p className="text-sm text-slate-400">Loading…</p> : cases.length === 0 ? <EmptyState title="No cases" /> : (
+          <ul className="divide-y divide-slate-800 rounded-xl border border-slate-800">
+            {cases.map((row) => (
+              <li key={row.id}>
+                <button type="button" onClick={() => setSelectedId(row.id)} className={`w-full text-left px-3 py-3 ${selectedId === row.id ? 'bg-amber-500/10' : 'hover:bg-slate-900'}`}>
+                  <p className="text-sm text-white">{row.subject}</p>
+                  <p className="text-xs text-slate-500 mt-1">{row.priority || 'normal'}</p>
+                  {row.status === 'open' && Date.now() - new Date(row.created_at).getTime() > 4 * 60 * 60 * 1000 && (
+                    <span className="mt-1 inline-flex rounded-full bg-rose-500/15 px-2 py-0.5 text-[11px] text-rose-300">Past 4 hours</span>
+                  )}
                 </button>
-              )}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+      <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-4 min-h-64">
+        {!caseRow ? <EmptyState title="Select a case" /> : (
+          <div className="space-y-4">
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="text-lg font-semibold text-white">{caseRow.subject}</h2>
+              <StatusBadge value={caseRow.status} />
+              <StatusBadge value={caseRow.priority || 'normal'} />
             </div>
-            {caseDetailLoading ? (
-              <Loader2 className="w-5 h-5 animate-spin text-amber-400" />
-            ) : caseDetail ? (
-              <>
-                <p className="text-sm text-slate-300">{String((caseDetail.case as Record<string, unknown>)?.body || '')}</p>
-                {(caseDetail.customer_issues as Array<Record<string, unknown>>)?.length ? (
-                  <p className="text-xs text-slate-500">
-                    Customer issue: {String((caseDetail.customer_issues as Array<Record<string, unknown>>)[0]?.issue_type)}
-                  </p>
-                ) : null}
-                {(caseDetail.wait_events as Array<Record<string, unknown>>)?.length ? (
-                  <p className="text-xs text-slate-500">
-                    Courier wait: {String((caseDetail.wait_events as Array<Record<string, unknown>>)[0]?.wait_minutes)} min
-                  </p>
-                ) : null}
-              </>
-            ) : (
-              <p className="text-sm text-slate-500">No detail loaded.</p>
+            {caseRow.order_id && <Link className="text-sm text-amber-300" to={`/orders/${caseRow.order_id}`}>Open order</Link>}
+            {caseRow.customer_id && <Link className="block text-sm text-amber-300" to={`/customers/${caseRow.customer_id}`}>Open customer</Link>}
+            <p className="text-sm text-slate-400">Assignee: {caseRow.assignee_name || 'Nobody'}</p>
+            {canWrite && (
+              <div className="space-y-2">
+                <button type="button" onClick={() => void assignMe()} className="rounded-lg border border-slate-700 px-3 py-2 text-sm text-slate-200">Assign to me</button>
+                <select value={fault} onChange={(e) => setFault(e.target.value as typeof fault)} className="block rounded-lg bg-slate-950 border border-slate-700 px-3 py-2 text-sm text-white">
+                  {FAULTS.map((item) => <option key={item} value={item}>{item.replace(/_/g, ' ')}</option>)}
+                </select>
+                <textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Resolution notes" className="w-full rounded-lg bg-slate-950 border border-slate-700 px-3 py-2 text-sm text-white" rows={3} />
+                <button type="button" onClick={() => void resolve()} className="rounded-lg bg-amber-500 px-3 py-2 text-sm font-semibold text-slate-950">Resolve</button>
+              </div>
             )}
           </div>
         )}
-      </section>
+      </div>
     </div>
   );
 }

@@ -12623,6 +12623,10 @@ export function registerResidualMonolithRoutes(app: Hono) {
         FEATURE_FLAGS.FUEL_STATEMENT_ADOPT,
         orgId,
       );
+      effectiveModules.partsTieredSearch = await isFeatureEnabled(
+        FEATURE_FLAGS.PARTS_TIERED_SEARCH,
+        orgId,
+      );
 
       return c.json({
         orgId,

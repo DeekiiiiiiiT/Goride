@@ -29,7 +29,7 @@ function timerClass(iso: string) {
   return 'text-emerald-300';
 }
 
-export function InHouseOpsBoard() {
+export function InHouseOpsBoard({ embedded = false }: { embedded?: boolean } = {}) {
   const { session } = useOutletContext<AdminOutletContext>();
   const navigate = useNavigate();
   const roles = getJwtRoles(session.user);
@@ -84,7 +84,7 @@ export function InHouseOpsBoard() {
   return (
     <div className="space-y-4 text-slate-100">
       <div>
-        <h1 className="text-xl font-semibold">Desk</h1>
+        {!embedded && <h1 className="text-xl font-semibold">Desk</h1>}
         <p className="text-sm text-slate-400">Watch every order and step in when something stalls. You can also claim an order and place it yourself.</p>
       </div>
       <p className={`rounded px-3 py-2 text-sm ${staffed ? 'bg-emerald-950 text-emerald-100' : 'bg-red-950 text-red-100'}`}>
@@ -102,7 +102,7 @@ export function InHouseOpsBoard() {
 
       <OrderGroup title="Waiting for a buyer" empty="No orders waiting.">
         {waiting.map((task) => (
-          <OrderRow key={task.id} task={task} action={<button type="button" className="rounded bg-emerald-700 px-3 py-1" onClick={() => void claim(task.id)}>Claim</button>} />
+          <OrderRow key={task.id} task={task} action={<button type="button" className="rounded-lg bg-amber-500 px-3 py-1 text-slate-950" onClick={() => void claim(task.id)}>Claim</button>} />
         ))}
       </OrderGroup>
 

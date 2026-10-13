@@ -10,7 +10,8 @@ import {
   getOrderDetail,
   refundOrder,
 } from '@roam/dash-admin-client';
-import type { AdminOutletContext } from '../../DashAdminPortal';
+import { formatMoney } from '../../components/ui/format';
+import { useDetailCrumb, type AdminOutletContext } from '../../DashAdminPortal';
 
 export function OrderDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -24,6 +25,7 @@ export function OrderDetailPage() {
   const [events, setEvents] = useState<Array<Record<string, unknown>>>([]);
   const [transaction, setTransaction] = useState<Record<string, unknown> | null>(null);
   const [refunds, setRefunds] = useState<Array<Record<string, unknown>>>([]);
+  useDetailCrumb(order ? String(order.order_number || '') : null);
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -141,7 +143,7 @@ export function OrderDetailPage() {
           <h2 className="text-xl font-semibold text-white">{String(order.order_number)}</h2>
           <p className="text-sm text-slate-400 mt-1">Status: {String(order.status)}</p>
           <p className="text-sm text-slate-400">Payment: {paymentStatus}</p>
-          <p className="text-sm text-slate-400">Total: ${Number(order.total).toFixed(2)}</p>
+          <p className="text-sm text-slate-400">Total: {formatMoney(Number(order.total))}</p>
           {customer?.id && (
             <button
               type="button"
@@ -176,7 +178,7 @@ export function OrderDetailPage() {
         <section className="rounded-xl border border-slate-800 bg-slate-900/50 p-4 space-y-1 text-sm">
           <h3 className="text-sm font-medium text-white mb-2">Payment transaction</h3>
           <p className="text-slate-400 font-mono text-xs">{String(transaction.id)}</p>
-          <p className="text-slate-300">${Number(transaction.amount).toFixed(2)} · {String(transaction.provider || '—')} · {String(transaction.status)}</p>
+          <p className="text-slate-300">{formatMoney(Number(transaction.amount))} · {String(transaction.provider || '—')} · {String(transaction.status)}</p>
         </section>
       )}
 
@@ -186,7 +188,7 @@ export function OrderDetailPage() {
           <div className="space-y-2">
             {refunds.map((r) => (
               <div key={String(r.id)} className="text-xs text-slate-400">
-                <span className="text-slate-300">${Number(r.amount).toFixed(2)}</span>
+                <span className="text-slate-300">{formatMoney(Number(r.amount))}</span>
                 {' · '}{String(r.status)}
                 {r.reason ? ` — ${String(r.reason)}` : ''}
               </div>

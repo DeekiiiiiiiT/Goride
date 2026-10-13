@@ -18,13 +18,28 @@ const TABS = [
 export type ConsumerSegmentSettingsShellProps = Omit<
   ConsumerSegmentSettingsPageProps,
   'activeTab'
->;
+> & {
+  activeTab?: string;
+  onTabChange?: (id: string) => void;
+  hideTabs?: boolean;
+};
 
-export function ConsumerSegmentSettingsShell(props: ConsumerSegmentSettingsShellProps) {
-  const [activeTab, setActiveTab] = useState<string>('general');
+export function ConsumerSegmentSettingsShell({
+  activeTab: controlled,
+  onTabChange,
+  hideTabs,
+  ...props
+}: ConsumerSegmentSettingsShellProps) {
+  const [internal, setInternal] = useState<string>('general');
+  const activeTab = controlled ?? internal;
+  const setActiveTab = (id: string) => {
+    onTabChange?.(id);
+    if (controlled == null) setInternal(id);
+  };
 
   return (
     <div className="space-y-6">
+      {hideTabs ? null : (
       <nav className="flex flex-wrap gap-1 border-b border-slate-200 dark:border-slate-800 pb-px">
         {TABS.map(({ id, label, icon: Icon }) => {
           const selected = activeTab === id;
@@ -45,6 +60,7 @@ export function ConsumerSegmentSettingsShell(props: ConsumerSegmentSettingsShell
           );
         })}
       </nav>
+      )}
       <ConsumerSegmentSettingsPage {...props} activeTab={activeTab} />
     </div>
   );

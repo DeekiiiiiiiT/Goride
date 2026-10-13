@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useOutletContext, useSearchParams } from 'react-router-dom';
+import { useNavigate, useOutletContext, useSearchParams } from 'react-router-dom';
 import { ChevronLeft, ChevronRight, Loader2, Search, Download } from 'lucide-react';
 import { toast } from 'sonner';
 import { listIdentities, type IdentityListRow } from '@roam/dash-admin-client';
@@ -32,18 +32,19 @@ function directoryActionScope(persona: string): IdentityActionScope {
 
 const PAGE_SIZE = 50;
 
-export function IdentityDirectoryPage() {
+export function IdentityDirectoryPage({ lockedPersona, embedded = false }: { lockedPersona?: string; embedded?: boolean } = {}) {
   const { session } = useOutletContext<AdminOutletContext>();
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { hasPermission } = useDashAdminAccess();
   const [q, setQ] = useState('');
-  const [persona, setPersona] = useState<string>(() => searchParams.get('persona') || 'all');
+  const [persona, setPersona] = useState<string>(() => lockedPersona || searchParams.get('persona') || 'all');
   const [rows, setRows] = useState<IdentityListRow[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
+  const [selectedUserId, setSelectedUserId] = useState<string | null>(() => lockedPersona ? null : searchParams.get('id'));
   const [listKey, setListKey] = useState(0);
 
   useEffect(() => {
@@ -100,12 +101,14 @@ export function IdentityDirectoryPage() {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
+        {!embedded && !lockedPersona && (
         <div>
           <h2 className="text-xl font-semibold text-white">Users</h2>
           <p className="text-sm text-slate-400">
             All people across Rush, Courier, and Partner — one directory.
           </p>
         </div>
+        )}
         {hasPermission('identity.pii.read') && rows.length > 0 && (
           <button
             type="button"
@@ -117,6 +120,7 @@ export function IdentityDirectoryPage() {
         )}
       </div>
 
+      {lockedPersona ? null : (
       <div className="flex flex-wrap gap-2">
         {PERSONA_FILTERS.map((p) => (
           <button
@@ -140,6 +144,7 @@ export function IdentityDirectoryPage() {
           </button>
         ))}
       </div>
+      )}
 
       <div className="relative">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
@@ -184,7 +189,18 @@ export function IdentityDirectoryPage() {
               {rows.map((row) => (
                 <tr
                   key={row.user_id}
-                  onClick={() => setSelectedUserId(row.user_id)}
+                  onClick={() => {
+                    if (lockedPersona === 'customer') {
+                      const ref = row.personas?.find((p) => p.persona === 'customer')?.ref_id;
+                      if (ref) navigate(`/customers/${ref}`);
+                      return;
+                    }
+                    if (lockedPersona === 'courier') {
+                      navigate(`/couriers/${row.user_id}`);
+                      return;
+                    }
+                    setSelectedUserId(row.user_id);
+                  }}
                   className="hover:bg-slate-800/50 cursor-pointer"
                 >
                   <td className="px-4 py-3 text-white">{row.display_name || '—'}</td>
