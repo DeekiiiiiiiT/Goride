@@ -29,7 +29,7 @@ export type InHouseTaskCard = {
 };
 
 export function listInHouseQueue(token: string) {
-  return dashAdminFetch<{ tasks: InHouseTaskCard[] }>(token, '/in-house/queue');
+  return dashAdminFetch<{ tasks: InHouseTaskCard[]; desk?: { staffed: boolean; people: number } }>(token, '/in-house/queue');
 }
 
 export function inHouseHeartbeat(token: string) {
@@ -188,6 +188,32 @@ export function createInHouseCard(token: string, body: { label: string; last4: s
     method: 'POST',
     body: JSON.stringify(body),
   });
+}
+
+export function updateInHouseCard(token: string, id: string, body: { label: string; last4: string; dailyLimitMinor: number }) {
+  return dashAdminFetch<{ card: Record<string, unknown> }>(token, `/in-house/cards/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(body),
+  });
+}
+
+export function deleteInHouseCard(token: string, id: string) {
+  return dashAdminFetch<{ ok: boolean }>(token, `/in-house/cards/${id}`, { method: 'DELETE' });
+}
+
+export type InHouseCardTransaction = {
+  taskId: string;
+  orderNumber: string;
+  paidAt: string;
+  customerTotal: number;
+  bank: { postedOn: string; amountMinor: number; merchantText: string } | null;
+};
+
+export function listInHouseCardTransactions(token: string) {
+  return dashAdminFetch<{
+    orders: InHouseCardTransaction[];
+    unmatched: Array<{ id: string; postedOn: string; amountMinor: number; merchantText: string }>;
+  }>(token, '/in-house/cards/transactions');
 }
 
 export function importInHouseStatement(token: string, lines: Array<Record<string, unknown>>) {

@@ -2,120 +2,198 @@ import { useEffect, useState } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { toast } from 'sonner';
 import {
-  approveInHousePurchase,
   createInHouseCard,
+  deleteInHouseCard,
   getInHouseRecon,
   getInHouseReports,
   importInHouseStatement,
+  listInHouseCardTransactions,
   listInHouseCards,
-  listInHouseQueue,
-  resolveInHouseTask,
+  updateInHouseCard,
 } from '@roam/dash-admin-client';
-import { getJwtRoles, jwtPrimaryRole } from '@roam/auth-client';
 import type { AdminOutletContext } from '../../DashAdminPortal';
+import { readStatementFile } from './statementCharges';
 
 function useToken() {
   const { session } = useOutletContext<AdminOutletContext>();
   return session.access_token;
 }
 
-const OPS = new Set(['dash_ops', 'dash_admin', 'platform_owner', 'platform_support', 'superadmin']);
-
-export function InHouseExceptionsPage() {
-  const { session } = useOutletContext<AdminOutletContext>();
-  const token = session.access_token;
-  const isOps = getJwtRoles(session.user).some((role) => OPS.has(role)) || OPS.has(jwtPrimaryRole(session.user));
-  const [rows, setRows] = useState<Array<{ id: string; storeName: string; state: string; exception_code: string | null; needsApproval?: boolean; buyerName?: string | null }>>([]);
-  const [confirmed, setConfirmed] = useState<Record<string, boolean>>({});
-  function load() {
-    void listInHouseQueue(token).then((result) => {
-      setRows(result.tasks.filter((task) => task.state.includes('exception')) as typeof rows);
-    }).catch((error: Error) => toast.error(error.message));
-  }
-  useEffect(() => { load(); }, [token]);
-  return (
-    <div className="space-y-3 p-4 text-slate-100">
-      <h1 className="text-xl font-semibold">Exceptions</h1>
-      {rows.map((row) => {
-        const after = row.state === 'exception_after_purchase';
-        const unknown = row.state === 'exception_purchase_unknown';
-        const buyer = row.buyerName || 'the buyer';
-        return (
-          <article key={row.id} className="rounded border border-slate-800 p-3">
-            <div>{row.storeName} · {unknown ? 'Did they pay?' : (row.exception_code || row.state)}</div>
-            {unknown ? <p className="text-sm text-amber-200">{buyer}</p> : null}
-            <div className="mt-2 flex flex-wrap items-center gap-2">
-              {unknown ? (
-                <>
-                  <label className="flex items-center gap-2 text-sm">
-                    <input type="checkbox" checked={Boolean(confirmed[row.id])} onChange={(event) => setConfirmed((current) => ({ ...current, [row.id]: event.target.checked }))} />
-                    I confirmed with {buyer} that nothing was bought
-                  </label>
-                  <button type="button" disabled={!confirmed[row.id]} className="rounded bg-slate-800 px-3 py-1 disabled:opacity-40" onClick={() => void resolveInHouseTask(token, row.id, 'retry', { confirmedNothingBought: true }).then(load)}>Try again</button>
-                  <button type="button" className="rounded bg-red-900 px-3 py-1" onClick={() => void resolveInHouseTask(token, row.id, 'abandon').then(load)}>Refund</button>
-                </>
-              ) : after ? (
-                <>
-                  <button type="button" className="rounded bg-slate-800 px-3 py-1" onClick={() => void resolveInHouseTask(token, row.id, 'wait').then(load)}>Wait</button>
-                  <button type="button" className="rounded bg-slate-800 px-3 py-1" onClick={() => void resolveInHouseTask(token, row.id, 'redispatch').then(load)}>Send courier again</button>
-                  <button type="button" className="rounded bg-red-900 px-3 py-1" onClick={() => void resolveInHouseTask(token, row.id, 'abandon').then(load)}>Write off and refund</button>
-                </>
-              ) : (
-                <>
-                  <button type="button" className="rounded bg-slate-800 px-3 py-1" onClick={() => void resolveInHouseTask(token, row.id, 'retry').then(load)}>Try again</button>
-                  <button type="button" className="rounded bg-slate-800 px-3 py-1" onClick={() => void resolveInHouseTask(token, row.id, 'substitute').then(load)}>Substitute</button>
-                  <button type="button" className="rounded bg-red-900 px-3 py-1" onClick={() => void resolveInHouseTask(token, row.id, 'abandon').then(load)}>Refund</button>
-                </>
-              )}
-              {isOps && row.needsApproval ? (
-                <button type="button" className="rounded bg-amber-700 px-3 py-1" onClick={() => void approveInHousePurchase(token, row.id).then(load)}>Approve purchase</button>
-              ) : null}
-            </div>
-          </article>
-        );
-      })}
-      {rows.length === 0 ? <p>No open exceptions.</p> : null}
-    </div>
-  );
-}
-
 export { InHouseMenuPage, InHouseStoresPage } from './InHouseRestaurantDesk';
+
+function money(amount: number) {
+  return `J$${amount.toLocaleString('en-JM', { maximumFractionDigits: 2 })}`;
+}
 
 export function InHouseCardsPage() {
   const token = useToken();
+  const [tab, setTab] = useState<'transactions' | 'cards'>('transactions');
   const [cards, setCards] = useState<Array<Record<string, unknown>>>([]);
+  const [orders, setOrders] = useState<Array<{ taskId: string; orderNumber: string; paidAt: string; customerTotal: number; bank: { postedOn: string; amountMinor: number; merchantText: string } | null }>>([]);
+  const [unmatched, setUnmatched] = useState<Array<{ id: string; postedOn: string; amountMinor: number; merchantText: string }>>([]);
+  const [statementCardId, setStatementCardId] = useState('');
+  const [adding, setAdding] = useState(false);
   const [label, setLabel] = useState('');
   const [last4, setLast4] = useState('');
-  const [limit, setLimit] = useState('5000000');
-  const [statement, setStatement] = useState('');
+  const [limit, setLimit] = useState('');
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editLabel, setEditLabel] = useState('');
+  const [editLast4, setEditLast4] = useState('');
+  const [editLimit, setEditLimit] = useState('');
+  function loadCards() {
+    return listInHouseCards(token).then((result) => setCards(result.cards));
+  }
+  function loadTransactions() {
+    return listInHouseCardTransactions(token).then((result) => {
+      setOrders(result.orders);
+      setUnmatched(result.unmatched);
+    });
+  }
   useEffect(() => {
-    void listInHouseCards(token).then((result) => setCards(result.cards)).catch((error: Error) => toast.error(error.message));
+    void loadCards().catch((error: Error) => toast.error(error.message));
+    void loadTransactions().catch((error: Error) => toast.error(error.message));
   }, [token]);
+  function startEdit(card: Record<string, unknown>) {
+    setEditingId(String(card.id));
+    setEditLabel(String(card.label || ''));
+    setEditLast4(String(card.last4 || ''));
+    setEditLimit(String(Math.round(Number(card.daily_limit_minor || 0) / 100)));
+  }
+  async function onStatement(file: File) {
+    if (!statementCardId) {
+      toast.error('Choose the card this statement belongs to.');
+      return;
+    }
+    const charges = await readStatementFile(file);
+    const result = await importInHouseStatement(token, charges.map((charge) => ({
+      cardId: statementCardId,
+      postedOn: charge.postedOn,
+      amountMinor: charge.amountMinor,
+      merchantText: charge.merchantText,
+    })));
+    await loadTransactions();
+    toast.success(`${result.matched} matched`);
+  }
   return (
     <div className="space-y-4 p-4 text-slate-100">
       <h1 className="text-xl font-semibold">Cards and spend</h1>
-      <form className="flex flex-wrap gap-2" onSubmit={(event) => {
-        event.preventDefault();
-        void createInHouseCard(token, { label, last4, dailyLimitMinor: Number(limit) }).then(() => listInHouseCards(token)).then((result) => setCards(result.cards)).catch((error: Error) => toast.error(error.message));
-      }}>
-        <input className="rounded bg-slate-900 p-2" placeholder="Label" value={label} onChange={(event) => setLabel(event.target.value)} />
-        <input className="rounded bg-slate-900 p-2" placeholder="Last 4" value={last4} onChange={(event) => setLast4(event.target.value)} maxLength={4} />
-        <input className="rounded bg-slate-900 p-2" placeholder="Daily limit cents" value={limit} onChange={(event) => setLimit(event.target.value)} />
-        <button className="rounded bg-emerald-800 px-3" type="submit">Add card</button>
-      </form>
-      {cards.map((card) => (
-        <article key={String(card.id)} className="rounded border border-slate-800 p-3">
-          {String(card.label)} ·· {String(card.last4)} · today J${Math.round(Number(card.spentTodayMinor || 0) / 100)} / J${Math.round(Number(card.daily_limit_minor || 0) / 100)}
-        </article>
-      ))}
-      <textarea className="h-32 w-full rounded bg-slate-900 p-2" placeholder="cardId,YYYY-MM-DD,amountMinor,merchant text" value={statement} onChange={(event) => setStatement(event.target.value)} />
-      <button type="button" className="rounded bg-slate-800 px-3 py-2" onClick={() => {
-        const lines = statement.split('\n').map((line) => line.trim()).filter(Boolean).map((line) => {
-          const [cardId, postedOn, amountMinor, merchantText] = line.split(',');
-          return { cardId, postedOn, amountMinor: Number(amountMinor), merchantText };
-        });
-        void importInHouseStatement(token, lines).then((result) => toast.success(`${result.matched} matched`)).catch((error: Error) => toast.error(error.message));
-      }}>Import statement</button>
+      <div className="flex gap-2">
+        <button type="button" className={`rounded px-3 py-1 ${tab === 'transactions' ? 'bg-emerald-800' : 'bg-slate-800'}`} onClick={() => setTab('transactions')}>Transactions</button>
+        <button type="button" className={`rounded px-3 py-1 ${tab === 'cards' ? 'bg-emerald-800' : 'bg-slate-800'}`} onClick={() => setTab('cards')}>Cards</button>
+      </div>
+      {tab === 'transactions' ? (
+        <div className="space-y-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <select className="rounded bg-slate-900 p-2" value={statementCardId} onChange={(event) => setStatementCardId(event.target.value)}>
+              <option value="">Which card is this statement for?</option>
+              {cards.map((card) => <option key={String(card.id)} value={String(card.id)}>{String(card.label)} ·· {String(card.last4)}</option>)}
+            </select>
+            <label className="rounded bg-slate-800 px-3 py-2 text-sm">
+              Upload statement
+              <input className="ml-2 text-sm" type="file" accept=".csv,.pdf,text/csv,application/pdf" onChange={(event) => {
+                const file = event.target.files?.[0];
+                event.target.value = '';
+                if (!file) return;
+                void onStatement(file).catch((error: Error) => toast.error(error.message));
+              }} />
+            </label>
+          </div>
+          <div className="overflow-x-auto rounded border border-slate-800">
+            <table className="w-full text-left text-sm">
+              <thead className="text-slate-400">
+                <tr>
+                  <th className="p-3">Order</th>
+                  <th className="p-3">Date</th>
+                  <th className="p-3">Customer paid</th>
+                  <th className="p-3">Bank charge</th>
+                </tr>
+              </thead>
+              <tbody>
+                {orders.map((order) => (
+                  <tr key={order.taskId} className="border-t border-slate-800">
+                    <td className="p-3">{order.orderNumber || 'Order'}</td>
+                    <td className="p-3">{order.paidAt ? new Date(order.paidAt).toLocaleDateString('en-JM') : ''}</td>
+                    <td className="p-3">{money(order.customerTotal)}</td>
+                    <td className="p-3">{order.bank ? `${money(order.bank.amountMinor / 100)} · ${order.bank.postedOn} · ${order.bank.merchantText}` : 'Waiting for the statement'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {orders.length === 0 ? <p className="p-3">No paid orders yet.</p> : null}
+          </div>
+          {unmatched.length ? (
+            <div className="space-y-2">
+              <h2 className="font-medium">Bank charges with no order</h2>
+              {unmatched.map((line) => (
+                <p key={line.id} className="rounded border border-amber-900 p-3 text-sm">{money(line.amountMinor / 100)} · {line.postedOn} · {line.merchantText}</p>
+              ))}
+            </div>
+          ) : null}
+        </div>
+      ) : (
+        <div className="space-y-3">
+          <button type="button" className="rounded bg-emerald-800 px-3 py-2" onClick={() => setAdding(true)}>Add card</button>
+          {cards.map((card) => {
+            const id = String(card.id);
+            const editing = editingId === id;
+            return (
+              <article key={id} className="flex flex-wrap items-center justify-between gap-3 rounded border border-slate-800 p-3">
+                {editing ? (
+                  <form className="flex flex-wrap gap-2" onSubmit={(event) => {
+                    event.preventDefault();
+                    void updateInHouseCard(token, id, { label: editLabel, last4: editLast4, dailyLimitMinor: Math.round(Number(editLimit) * 100) })
+                      .then(() => { setEditingId(null); return loadCards(); })
+                      .catch((error: Error) => toast.error(error.message));
+                  }}>
+                    <input className="rounded bg-slate-900 p-2" value={editLabel} onChange={(event) => setEditLabel(event.target.value)} />
+                    <input className="rounded bg-slate-900 p-2" value={editLast4} maxLength={4} onChange={(event) => setEditLast4(event.target.value)} />
+                    <input className="rounded bg-slate-900 p-2" placeholder="Daily limit J$" value={editLimit} onChange={(event) => setEditLimit(event.target.value)} />
+                    <button className="rounded bg-emerald-800 px-3" type="submit">Save</button>
+                    <button className="rounded bg-slate-800 px-3" type="button" onClick={() => setEditingId(null)}>Cancel</button>
+                  </form>
+                ) : (
+                  <>
+                    <p>{String(card.label)} ·· {String(card.last4)} · today J${Math.round(Number(card.spentTodayMinor || 0) / 100)} / J${Math.round(Number(card.daily_limit_minor || 0) / 100)}</p>
+                    <div className="flex gap-2">
+                      <button className="rounded bg-slate-800 px-3 py-1" type="button" onClick={() => startEdit(card)}>Edit</button>
+                      <button className="rounded bg-slate-800 px-3 py-1" type="button" onClick={() => {
+                        if (!window.confirm(`Delete ${String(card.label)} ·· ${String(card.last4)}?`)) return;
+                        void deleteInHouseCard(token, id).then(() => loadCards()).catch((error: Error) => toast.error(error.message));
+                      }}>Delete</button>
+                    </div>
+                  </>
+                )}
+              </article>
+            );
+          })}
+        </div>
+      )}
+      {adding ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={() => setAdding(false)}>
+          <form className="w-full max-w-md space-y-3 rounded border border-slate-700 bg-slate-950 p-4" onClick={(event) => event.stopPropagation()} onSubmit={(event) => {
+            event.preventDefault();
+            void createInHouseCard(token, { label, last4, dailyLimitMinor: Math.round(Number(limit) * 100) })
+              .then(() => {
+                setAdding(false);
+                setLabel('');
+                setLast4('');
+                setLimit('');
+                setTab('cards');
+                return loadCards();
+              })
+              .catch((error: Error) => toast.error(error.message));
+          }}>
+            <h2 className="text-lg font-semibold">Add card</h2>
+            <input className="w-full rounded bg-slate-900 p-2" placeholder="Name" value={label} onChange={(event) => setLabel(event.target.value)} />
+            <input className="w-full rounded bg-slate-900 p-2" placeholder="Last 4" value={last4} maxLength={4} onChange={(event) => setLast4(event.target.value)} />
+            <input className="w-full rounded bg-slate-900 p-2" placeholder="Daily limit J$" value={limit} onChange={(event) => setLimit(event.target.value)} />
+            <div className="flex gap-2">
+              <button className="rounded bg-emerald-800 px-3 py-2" type="submit">Save</button>
+              <button className="rounded bg-slate-800 px-3 py-2" type="button" onClick={() => setAdding(false)}>Cancel</button>
+            </div>
+          </form>
+        </div>
+      ) : null}
     </div>
   );
 }

@@ -19,6 +19,14 @@ const DISMISS_INSTALL_KEY = IS_ENTERPRISE_PRODUCT
 /** Stops a fresh open from reloading forever if the new version never takes over. */
 const AUTO_UPDATE_GUARD_KEY = 'roam-fleet-auto-update-at';
 
+/** Firefox rejects update/unregister once a registration is no longer usable. */
+function settleServiceWorker(work: Promise<unknown>) {
+  void work.catch((error: unknown) => {
+    if (error instanceof DOMException && error.name === 'InvalidStateError') return;
+    console.error('[pwa] service worker call failed', error);
+  });
+}
+
 function wasInstallDismissed(): boolean {
   try {
     return localStorage.getItem(DISMISS_INSTALL_KEY) === '1';
@@ -56,7 +64,7 @@ export function PwaProvider({ children }: { children: React.ReactNode }) {
     immediate: installAllowed,
     onRegisteredSW(swUrl, registration) {
       if (!installAllowed) {
-        if (registration) void registration.unregister();
+        if (registration) void settleServiceWorker(registration.unregister());
         return;
       }
       if (registration) {
@@ -64,7 +72,7 @@ export function PwaProvider({ children }: { children: React.ReactNode }) {
         window.setInterval(() => {
           // Already in use — the next version should wait for the person to tap Update.
           askBeforeUpdateRef.current = true;
-          void registration.update();
+          settleServiceWorker(registration.update());
         }, intervalMs);
       }
       if (import.meta.env.DEV) {
@@ -88,7 +96,7 @@ export function PwaProvider({ children }: { children: React.ReactNode }) {
       .forEach((el) => el.remove());
     if ('serviceWorker' in navigator) {
       void navigator.serviceWorker.getRegistrations().then((regs) => {
-        for (const reg of regs) void reg.unregister();
+        for (const reg of regs) settleServiceWorker(reg.unregister());
       });
     }
   }, [installAllowed]);

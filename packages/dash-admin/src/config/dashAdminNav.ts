@@ -58,8 +58,7 @@ export const DASH_ADMIN_CONFIG: AdminConfig = {
       label: 'In-House',
       icon: ShoppingBag,
       children: [
-        { id: 'in-house-queue', label: 'Queue', icon: Radio },
-        { id: 'in-house-exceptions', label: 'Exceptions', icon: Activity },
+        { id: 'in-house-team', label: 'Team', icon: Users },
         { id: 'in-house-stores', label: 'Stores', icon: Store },
         { id: 'in-house-menu', label: 'Menu prices', icon: ClipboardList },
         { id: 'in-house-cards', label: 'Cards and spend', icon: Wallet },
@@ -161,7 +160,7 @@ export function filterConfigForRole(role: string | null | undefined): AdminConfi
         .filter((section) => section.id === 'in-house')
         .map((section) => ({
           ...section,
-          children: (section.children ?? []).filter((child) => child.id === 'in-house-queue'),
+          children: (section.children ?? []).filter((child) => child.id === 'in-house-team'),
         })),
       topNavItems: [],
       pinSectionsAfter: undefined,
@@ -186,13 +185,14 @@ export function filterConfigForRole(role: string | null | undefined): AdminConfi
 /** Map pathname to AdminShell nav id */
 export function pathnameToNavId(pathname: string): string {
   if (pathname === '/' || pathname === '') return 'dashboard';
-  if (pathname.startsWith('/in-house/task/')) return 'in-house-queue';
-  if (pathname.startsWith('/in-house/exceptions')) return 'in-house-exceptions';
+  if (pathname.startsWith('/dashboard')) return 'dashboard';
+  if (pathname.startsWith('/in-house/task/')) return 'in-house-team';
+  if (pathname.startsWith('/in-house/exceptions')) return 'in-house-team';
   if (pathname.startsWith('/in-house/stores')) return 'in-house-stores';
   if (pathname.startsWith('/in-house/menu')) return 'in-house-menu';
   if (pathname.startsWith('/in-house/cards')) return 'in-house-cards';
   if (pathname.startsWith('/in-house/reports')) return 'in-house-reports';
-  if (pathname.startsWith('/in-house')) return 'in-house-queue';
+  if (pathname.startsWith('/in-house')) return 'in-house-team';
   if (pathname.startsWith('/live-ops')) return 'live-ops';
   if (pathname.startsWith('/merchants/onboarding/business-types')) return 'merchants-business-types';
   if (pathname.startsWith('/merchants')) return 'merchants-applications';
@@ -225,10 +225,11 @@ export function pathnameToNavId(pathname: string): string {
 /** Map AdminShell nav id to route path */
 export function navIdToPath(navId: string): string {
   switch (navId) {
+    case 'in-house-team':
     case 'in-house-queue':
       return '/in-house';
     case 'in-house-exceptions':
-      return '/in-house/exceptions';
+      return '/in-house?tab=ops';
     case 'in-house-stores':
       return '/in-house/stores';
     case 'in-house-menu':
@@ -238,7 +239,7 @@ export function navIdToPath(navId: string): string {
     case 'in-house-reports':
       return '/in-house/reports';
     case 'dashboard':
-      return '/';
+      return '/dashboard';
     case 'live-ops':
       return '/live-ops';
     case 'merchants-applications':

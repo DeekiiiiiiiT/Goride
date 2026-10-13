@@ -295,8 +295,8 @@ function ReconciliationWizardInner({ period, driverId, drivers, onExit, initialS
       });
       if (result === 'ok' || result === 'cancelled' || result === 'need_driver') return;
     } catch (error) {
-      // onError already toasted when saga failed after a queue mutation.
-      throw error;
+      // Saga already told the operator. Swallow so a locked week is not an unhandled crash.
+      console.error('Personal charge failed', error);
     }
   }, [reconcile, reject, unreconcile, createClaim, refresh, refreshClaims, confirmChargeSyncOrAbort]);
 

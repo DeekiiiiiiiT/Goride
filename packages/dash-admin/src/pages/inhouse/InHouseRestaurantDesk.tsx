@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { toast } from 'sonner';
-import { getInHouseAudience, listInHouseStores, listMarkets, saveInHouseAudience, saveInHouseStore, uploadDeskImage } from '@roam/dash-admin-client';
+import { getInHouseAudience, listInHouseMarkets, listInHouseStores, saveInHouseAudience, saveInHouseStore, uploadDeskImage } from '@roam/dash-admin-client';
 import type { AdminOutletContext } from '../../DashAdminPortal';
 import { CUISINE_OPTIONS } from './cuisineOptions';
 import { defaultWeek, InHouseHoursFields, weekFromRows, type DayHours } from './InHouseHoursFields';
 import { InHouseMenuEditor } from './InHouseMenuEditor';
+import { parkDraft, shouldResumeOpen } from './pendingDrafts';
 import { resolveStorePin } from './resolveStorePin';
 
 type StoreRow = Record<string, unknown> & {
@@ -55,6 +56,8 @@ type WizardDraft = {
   merchantId?: string;
   updatedAt: string;
 };
+
+type OpenDraft = WizardDraft & { resume?: boolean };
 
 function readJson<T>(key: string): T | null {
   try {
@@ -156,8 +159,11 @@ function InHouseRestaurantDesk({ mode }: { mode: 'stores' | 'menu' }) {
     if (mode !== 'stores') return;
     const pending = readJson<WizardDraft[]>(DRAFTS_KEY) || [];
     setDrafts(pending);
-    const open = readJson<WizardDraft>(OPEN_KEY);
-    if (!open) return;
+    const open = readJson<OpenDraft>(OPEN_KEY);
+    if (!shouldResumeOpen(open, pending)) {
+      if (open) localStorage.removeItem(OPEN_KEY);
+      return;
+    }
     setDraftId(open.id);
     setStep(Math.min(Math.max(open.step || 0, 0), STEPS.length - 1));
     setForm(normalizeForm(open.form));
@@ -169,25 +175,26 @@ function InHouseRestaurantDesk({ mode }: { mode: 'stores' | 'menu' }) {
     if (!draftId && !form.name.trim() && step === 0) return;
     const id = draftId || crypto.randomUUID();
     if (!draftId) setDraftId(id);
+    const previous = readJson<OpenDraft>(OPEN_KEY);
     localStorage.setItem(OPEN_KEY, JSON.stringify({
       id,
       step,
       form,
       merchantId: savedId,
       updatedAt: new Date().toISOString(),
+      resume: previous?.id === id && previous.resume === true,
     }));
   }, [mode, editingId, draftId, step, form, savedId]);
 
   useEffect(() => {
     void load();
-    void listMarkets(token).then((result) => {
+    void listInHouseMarkets(token).then((result) => {
       const seen = new Set<string>();
-      const active = (result.markets || []).filter((town) => {
-        if (!town.is_active || seen.has(town.id)) return false;
+      setMarkets((result.markets || []).filter((town) => {
+        if (seen.has(town.id)) return false;
         seen.add(town.id);
         return true;
-      }).map((town) => ({ id: town.id, name: town.name }));
-      setMarkets(active);
+      }).map((town) => ({ id: town.id, name: town.name })));
     }).catch((error: Error) => toast.error(error.message));
     if (mode === 'stores') {
       void getInHouseAudience(token).then((result) => setBetaPeople(result.customers)).catch(() => undefined);
@@ -203,13 +210,19 @@ function InHouseRestaurantDesk({ mode }: { mode: 'stores' | 'menu' }) {
     setCreating(false);
   }
 
-  function rememberDraft(draft: WizardDraft) {
-    const next = [draft, ...drafts.filter((item) => item.id !== draft.id)];
-    setDrafts(next);
+  function upsertDraft(draft: WizardDraft) {
+    const stored = readJson<WizardDraft[]>(DRAFTS_KEY) || [];
+    const next = parkDraft(stored, draft);
     writeDrafts(next);
-    localStorage.setItem(OPEN_KEY, JSON.stringify(draft));
-    setDraftId(draft.id);
-    setSavedId(draft.merchantId || '');
+    setDrafts(next);
+  }
+
+  function startFresh() {
+    setDraftId('');
+    setSavedId('');
+    setStep(0);
+    setForm(blankForm());
+    localStorage.removeItem(OPEN_KEY);
   }
 
   function continueDraft(draft: WizardDraft) {
@@ -220,7 +233,7 @@ function InHouseRestaurantDesk({ mode }: { mode: 'stores' | 'menu' }) {
     setSavedId(draft.merchantId || '');
     setStep(Math.min(Math.max(draft.step || 0, 0), STEPS.length - 1));
     setForm(normalizeForm(draft.form));
-    localStorage.setItem(OPEN_KEY, JSON.stringify(draft));
+    localStorage.setItem(OPEN_KEY, JSON.stringify({ ...draft, resume: true }));
   }
 
   function storePayload(create: boolean) {
@@ -302,7 +315,8 @@ function InHouseRestaurantDesk({ mode }: { mode: 'stores' | 'menu' }) {
   }
 
   function clearDraft(id: string) {
-    const next = drafts.filter((item) => item.id !== id);
+    const stored = readJson<WizardDraft[]>(DRAFTS_KEY) || [];
+    const next = stored.filter((item) => item.id !== id);
     setDrafts(next);
     writeDrafts(next);
     localStorage.removeItem(OPEN_KEY);
@@ -310,28 +324,26 @@ function InHouseRestaurantDesk({ mode }: { mode: 'stores' | 'menu' }) {
   }
 
   async function saveStep() {
+    if (!form.name.trim()) {
+      toast.error('Add a restaurant name first');
+      return;
+    }
     const id = draftId || crypto.randomUUID();
     let merchantId = savedId;
-    rememberDraft({
+    if (readyToStore(form)) {
+      const result = await saveInHouseStore(token, { ...storePayload(!merchantId), merchantId: merchantId || undefined, create: !merchantId });
+      merchantId = result.merchantId || merchantId;
+      await load();
+    }
+    upsertDraft({
       id,
       step,
       form,
       merchantId: merchantId || undefined,
       updatedAt: new Date().toISOString(),
     });
-    if (readyToStore(form)) {
-      const result = await saveInHouseStore(token, { ...storePayload(!merchantId), merchantId: merchantId || undefined, create: !merchantId });
-      merchantId = result.merchantId || merchantId;
-      rememberDraft({
-        id,
-        step,
-        form,
-        merchantId: merchantId || undefined,
-        updatedAt: new Date().toISOString(),
-      });
-      await load();
-    }
-    toast.success('Saved. It is under Pending.');
+    startFresh();
+    toast.success('Saved under Pending. This form is ready for the next restaurant.');
   }
 
   const showEditor = Boolean(editingId);
@@ -345,7 +357,10 @@ function InHouseRestaurantDesk({ mode }: { mode: 'stores' | 'menu' }) {
 
       {!showEditor && mode === 'stores' ? (
         <div className="flex gap-2">
-          <button type="button" className={`rounded px-3 py-1 ${section === 'create' ? 'bg-emerald-800' : 'bg-slate-800'}`} onClick={() => setSection('create')}>Create restaurant</button>
+          <button type="button" className={`rounded px-3 py-1 ${section === 'create' ? 'bg-emerald-800' : 'bg-slate-800'}`} onClick={() => {
+            setSection('create');
+            if (draftId && drafts.some((item) => item.id === draftId)) startFresh();
+          }}>Create restaurant</button>
           <button type="button" className={`rounded px-3 py-1 ${section === 'pending' ? 'bg-emerald-800' : 'bg-slate-800'}`} onClick={() => setSection('pending')}>Pending{drafts.length ? ` (${drafts.length})` : ''}</button>
         </div>
       ) : null}
@@ -474,7 +489,7 @@ function InHouseRestaurantDesk({ mode }: { mode: 'stores' | 'menu' }) {
       {mode === 'stores' && !showEditor ? (
         <section className="rounded border border-slate-800 p-3 text-sm">
           <h2 className="font-medium">Who can order</h2>
-          <p className="mt-1 text-slate-400">Only these people see a Staff and friends restaurant. Everyone else does not see it in search, on the store page, or at checkout.</p>
+          <p className="mt-1 text-slate-400">Only these people see a closed test restaurant. Everyone else does not see it in search, on the store page, or at checkout.</p>
           <form className="mt-2 flex gap-2" onSubmit={(event) => {
             event.preventDefault();
             void saveInHouseAudience(token, { email: betaEmail }).then(() => getInHouseAudience(token)).then((result) => {
@@ -505,7 +520,7 @@ function InHouseRestaurantDesk({ mode }: { mode: 'stores' | 'menu' }) {
           <article key={String(store.merchant_id)} className="rounded border border-slate-800 p-3">
             <div className="font-medium">{merchant?.name || String(store.merchant_id || '')}</div>
             <div className="text-sm text-slate-400">{demand?.orders || 0} orders / 30 days · J${Math.round(Number(demand?.cost || 0) / 100)}</div>
-            <div className="text-sm">Markup {Number(store.markup_bps || 0) / 100}% · {live ? 'Live' : 'Paused'} · {audience === 'public' ? 'Everyone' : 'Staff and friends'}</div>
+            <div className="text-sm">Markup {Number(store.markup_bps || 0) / 100}% · {live ? 'Live' : 'Paused'} · {audience === 'public' ? 'Everyone' : 'Closed test'}</div>
             <div className="mt-2 flex gap-2">
               <button type="button" className="rounded bg-slate-800 px-3 py-1" onClick={() => openStore(store, mode === 'menu' ? 'menu' : 'details')}>{mode === 'menu' ? 'Open menu' : 'Edit'}</button>
               {mode === 'stores' ? (
@@ -531,7 +546,7 @@ function InHouseRestaurantDesk({ mode }: { mode: 'stores' | 'menu' }) {
                   priceToleranceBps: store.price_tolerance_bps,
                   absorbCapMinor: store.absorb_cap_minor,
                 }).then(load).catch((error: Error) => toast.error(error.message))}>
-                  {audience === 'public' ? 'Staff and friends only' : 'Everyone'}
+                  {audience === 'public' ? 'Closed test only' : 'Everyone'}
                 </button>
               ) : null}
             </div>

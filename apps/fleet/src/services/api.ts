@@ -143,6 +143,13 @@ export async function throwIfCatalogGateBlocked(response: Response, fallbackMess
   throw err;
 }
 
+function tollMoneyErrorMessage(code: unknown, fallback: string): string {
+  if (code === 'PERIOD_SEALED') {
+    return 'This week is locked. Reopen it before changing this toll.';
+  }
+  return typeof code === 'string' && code.trim() ? code : fallback;
+}
+
 export const api = {
   async getOdometerHistory(vehicleId: string): Promise<OdometerReading[]> {
     // Phase 1: Use JWT for proper org scoping
@@ -4256,7 +4263,7 @@ export const api = {
     });
     if (!response.ok) {
       const err = await response.json().catch(() => ({}));
-      throw new Error(err.error || "Failed to reject toll");
+      throw new Error(tollMoneyErrorMessage(err.error, "Failed to reject toll"));
     }
     const result = await response.json();
     return result.data || result;

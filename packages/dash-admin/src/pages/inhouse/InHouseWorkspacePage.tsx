@@ -6,6 +6,7 @@ import {
   listInHouseChat,
   placeInHouseTask,
   raiseInHouseException,
+  inHouseHeartbeat,
   releaseInHouseTask,
   sendInHouseChat,
   touchInHouseTask,
@@ -15,11 +16,11 @@ import {
 import type { AdminOutletContext } from '../../DashAdminPortal';
 
 const EXCEPTIONS = [
-  ['item_unavailable', 'Item unavailable'],
-  ['price_increase_over_tolerance', 'Price changed'],
-  ['store_closed', 'Store closed'],
+  ['item_unavailable', 'Item missing'],
+  ['price_increase_over_tolerance', 'Price jumped'],
+  ['store_closed', 'Site is down'],
   ['card_declined', 'Card declined'],
-  ['other', 'Other'],
+  ['other', 'Something else'],
 ] as const;
 
 function money(minor: number) {
@@ -57,7 +58,9 @@ export function InHouseWorkspacePage() {
     void load().catch((error: Error) => toast.error(error.message));
     const beat = window.setInterval(() => {
       void touchInHouseTask(session.access_token, id).catch(() => undefined);
-    }, 60000);
+      void inHouseHeartbeat(session.access_token).catch(() => undefined);
+    }, 30000);
+    void inHouseHeartbeat(session.access_token).catch(() => undefined);
     return () => window.clearInterval(beat);
   }, [id, load, session.access_token]);
 
@@ -142,9 +145,11 @@ export function InHouseWorkspacePage() {
   return (
     <div className="fixed inset-0 z-40 overflow-auto bg-slate-950 text-slate-100">
       <header className="flex items-center justify-between border-b border-slate-800 px-4 py-3">
-        <button type="button" onClick={() => navigate('/in-house')}>Queue</button>
+        <button type="button" onClick={() => navigate('/in-house')}>Team</button>
         <div className="font-semibold">{storeName} · {String(detail.order?.order_number || '')}</div>
-        <button type="button" onClick={() => void releaseInHouseTask(session.access_token, id).then(() => navigate('/in-house'))}>Release</button>
+        {detail.task.state === 'claimed' || detail.task.state === 'placing' ? (
+          <button type="button" onClick={() => void releaseInHouseTask(session.access_token, id).then(() => navigate('/in-house'))}>Let go</button>
+        ) : <span />}
       </header>
       <div className="grid gap-4 p-4 lg:grid-cols-2">
         <section className="space-y-3 rounded-lg border border-slate-800 p-4">

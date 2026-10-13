@@ -1,5 +1,5 @@
 import React, { Suspense, useEffect, useState } from 'react';
-import { Routes, Route, Outlet, useLocation, useNavigate, Navigate } from 'react-router-dom';
+import { Routes, Route, Outlet, useLocation, useNavigate, useOutletContext, Navigate } from 'react-router-dom';
 import {
   supabaseDashAdmin as supabase,
   getJwtRoles,
@@ -46,11 +46,10 @@ import { ComplianceManager } from './pages/couriers/ComplianceManager';
 import { CourierPresenceManager } from './pages/couriers/CourierPresenceManager';
 import { DeliveryLedgerPage } from './pages/couriers/DeliveryLedgerPage';
 import { LiveOpsPage } from './pages/liveops/LiveOpsPage';
-import { InHouseQueuePage } from './pages/inhouse/InHouseQueuePage';
+import { InHouseTeamPage } from './pages/inhouse/InHouseTeamPage';
 import { InHouseWorkspacePage } from './pages/inhouse/InHouseWorkspacePage';
 import {
   InHouseCardsPage,
-  InHouseExceptionsPage,
   InHouseMenuPage,
   InHouseReportsPage,
   InHouseStoresPage,
@@ -131,6 +130,14 @@ function AdminLayoutShell({ session }: { session: Session }) {
   );
 }
 
+function DashAdminHome() {
+  const { session } = useOutletContext<AdminOutletContext>();
+  const role = jwtPrimaryRole(session.user);
+  if (role === 'dash_concierge') return <Navigate to="/in-house" replace />;
+  if (role === 'dash_ops') return <Navigate to="/in-house?tab=ops" replace />;
+  return <DashAdminDashboard />;
+}
+
 export function DashAdminPortal() {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
@@ -208,7 +215,8 @@ export function DashAdminPortal() {
         <DashAdminAccessProvider session={session}>
         <Routes>
           <Route element={<AdminLayoutShell session={session} />}>
-            <Route index element={<DashAdminDashboard />} />
+            <Route index element={<DashAdminHome />} />
+            <Route path="dashboard" element={<DashAdminDashboard />} />
             <Route path="merchants" element={<MerchantsSectionLayout />}>
               <Route index element={<MerchantsIndexRedirect />} />
               <Route path="onboarding" element={<MerchantsOnboardingLayout />}>
@@ -219,9 +227,9 @@ export function DashAdminPortal() {
               <Route path=":id" element={<MerchantDetailPage />} />
             </Route>
             <Route path="live-ops" element={<LiveOpsPage />} />
-            <Route path="in-house" element={<InHouseQueuePage />} />
+            <Route path="in-house" element={<InHouseTeamPage />} />
             <Route path="in-house/task/:id" element={<InHouseWorkspacePage />} />
-            <Route path="in-house/exceptions" element={<InHouseExceptionsPage />} />
+            <Route path="in-house/exceptions" element={<Navigate to="/in-house?tab=ops" replace />} />
             <Route path="in-house/stores" element={<InHouseStoresPage />} />
             <Route path="in-house/menu" element={<InHouseMenuPage />} />
             <Route path="in-house/cards" element={<InHouseCardsPage />} />

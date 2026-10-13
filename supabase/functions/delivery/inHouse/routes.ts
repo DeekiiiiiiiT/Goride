@@ -26,7 +26,7 @@ import {
   purchaseRecording,
   receiptFollowsAbandon,
 } from "./deskRules.ts";
-import { customerPriceFromCost, jamaicaDayStartIso, TWO_PERSON_MINOR, weekOfferWindow, withinAbsorbCap } from "./pricing.ts";
+import { customerPriceFromCost, DESK_FRESH_MS, jamaicaDayStartIso, TWO_PERSON_MINOR, weekOfferWindow, withinAbsorbCap } from "./pricing.ts";
 import { listChoiceLists, saveChoiceList, stampSectionChoiceLists } from "../menuChoiceLibrary.ts";
 import { cheapestPizzaPrice, parsePizzaMenu, parsePizzaRecipe, validatePizzaMenu } from "../../../../packages/merchant-ops/src/pizzaMenu.ts";
 import { runInHouseSweep, dispatchAtFromReady } from "./sweep.ts";
@@ -242,7 +242,15 @@ export function registerInHouseRoutes(app: Hono, deps: { getServiceSupabase: () 
         needsApproval: Number(task.expected_cost_minor) > TWO_PERSON_MINOR && !task.second_approved_at,
       };
     });
-    return c.json({ tasks });
+    const since = new Date(Date.now() - DESK_FRESH_MS).toISOString();
+    const { count, error: deskError } = await sb.from("in_house_desk_presence")
+      .select("user_id", { count: "exact", head: true })
+      .gte("last_seen_at", since);
+    const people = Number(count || 0);
+    return c.json({
+      tasks,
+      desk: deskError ? undefined : { staffed: people > 0, people },
+    });
   });
 
   app.post("/admin/in-house/heartbeat", async (c) => {
@@ -755,6 +763,41 @@ export function registerInHouseRoutes(app: Hono, deps: { getServiceSupabase: () 
     return c.json({ card: data });
   });
 
+  app.patch("/admin/in-house/cards/:id", async (c) => {
+    const admin = await requireDesk(c, ADMIN_ROLES);
+    if (admin instanceof Response) return admin;
+    const body = await c.req.json().catch(() => ({}));
+    const last4 = String(body.last4 || "");
+    if (!/^[0-9]{4}$/.test(last4)) return c.json({ error: "Enter the last 4 digits only" }, 400);
+    const dailyLimitMinor = Math.round(Number(body.dailyLimitMinor));
+    if (!Number.isFinite(dailyLimitMinor) || dailyLimitMinor < 0) return c.json({ error: "Enter a daily limit" }, 400);
+    const { data, error } = await deps.getServiceSupabase().from("in_house_cards").update({
+      label: String(body.label || `Card ${last4}`),
+      last4,
+      daily_limit_minor: dailyLimitMinor,
+    }).eq("id", c.req.param("id")).select("id, label, last4, daily_limit_minor, active").maybeSingle();
+    if (error) return c.json({ error: error.message }, 500);
+    if (!data) return c.json({ error: "Card not found" }, 404);
+    return c.json({ card: data });
+  });
+
+  app.delete("/admin/in-house/cards/:id", async (c) => {
+    const admin = await requireDesk(c, ADMIN_ROLES);
+    if (admin instanceof Response) return admin;
+    const sb = deps.getServiceSupabase();
+    const id = c.req.param("id");
+    const [{ count: tasks }, { count: lines }] = await Promise.all([
+      sb.from("procurement_tasks").select("id", { count: "exact", head: true }).eq("card_id", id),
+      sb.from("in_house_card_statement_lines").select("id", { count: "exact", head: true }).eq("card_id", id),
+    ]);
+    if ((tasks || 0) + (lines || 0) > 0) {
+      return c.json({ error: "This card has already been used on an order, so it cannot be deleted." }, 409);
+    }
+    const { error } = await sb.from("in_house_cards").delete().eq("id", id);
+    if (error) return c.json({ error: error.message }, 500);
+    return c.json({ ok: true });
+  });
+
   app.get("/admin/in-house/cards", async (c) => {
     const admin = await requireDesk(c, ADMIN_ROLES);
     if (admin instanceof Response) return admin;
@@ -769,6 +812,63 @@ export function registerInHouseRoutes(app: Hono, deps: { getServiceSupabase: () 
     }
     return c.json({
       cards: (cards || []).map((card) => ({ ...card, spentTodayMinor: totals.get(String(card.id)) || 0 })),
+    });
+  });
+
+  app.get("/admin/in-house/cards/transactions", async (c) => {
+    const admin = await requireDesk(c, ADMIN_ROLES);
+    if (admin instanceof Response) return admin;
+    const sb = deps.getServiceSupabase();
+    const { data: tasks, error } = await sb.from("procurement_tasks")
+      .select("id, order_id, created_at")
+      .order("created_at", { ascending: false })
+      .limit(200);
+    if (error) return c.json({ error: error.message }, 500);
+    const orderIds = (tasks || []).map((row) => String(row.order_id));
+    const [{ data: orders, error: orderError }, { data: lines, error: lineError }] = await Promise.all([
+      orderIds.length
+        ? sb.from("orders").select("id, order_number, total, created_at").in("id", orderIds)
+        : Promise.resolve({ data: [], error: null }),
+      sb.from("in_house_card_statement_lines")
+        .select("id, task_id, posted_on, amount_minor, merchant_text")
+        .order("posted_on", { ascending: false })
+        .limit(500),
+    ]);
+    if (orderError) return c.json({ error: orderError.message }, 500);
+    if (lineError) return c.json({ error: lineError.message }, 500);
+    const orderById = new Map((orders || []).map((row) => [String(row.id), row]));
+    const lineByTask = new Map<string, { posted_on: string; amount_minor: number; merchant_text: string }>();
+    const unmatched: Array<{ id: string; postedOn: string; amountMinor: number; merchantText: string }> = [];
+    for (const line of lines || []) {
+      if (line.task_id) {
+        const taskId = String(line.task_id);
+        if (!lineByTask.has(taskId)) {
+          lineByTask.set(taskId, line);
+        }
+      } else {
+        unmatched.push({
+          id: String(line.id),
+          postedOn: String(line.posted_on),
+          amountMinor: Number(line.amount_minor),
+          merchantText: String(line.merchant_text || ""),
+        });
+      }
+    }
+    return c.json({
+      orders: (tasks || []).map((task) => {
+        const order = orderById.get(String(task.order_id)) as { order_number?: string; total?: number; created_at?: string } | undefined;
+        const bank = lineByTask.get(String(task.id));
+        return {
+          taskId: String(task.id),
+          orderNumber: order?.order_number ?? "",
+          paidAt: order?.created_at ?? task.created_at,
+          customerTotal: Number(order?.total ?? 0),
+          bank: bank
+            ? { postedOn: bank.posted_on, amountMinor: Number(bank.amount_minor), merchantText: bank.merchant_text }
+            : null,
+        };
+      }),
+      unmatched,
     });
   });
 

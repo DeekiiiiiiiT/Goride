@@ -6,10 +6,7 @@ import { getJwtRoles, jwtPrimaryRole, supabaseDashAdmin as supabase } from '@roa
 import {
   approveInHousePurchase,
   claimInHouseTask,
-  getInHouseAudience,
-  inHouseHeartbeat,
   listInHouseQueue,
-  saveInHouseAudience,
   type InHouseTaskCard,
 } from '@roam/dash-admin-client';
 import type { AdminOutletContext } from '../../DashAdminPortal';
@@ -56,7 +53,6 @@ export function InHouseQueuePage() {
   const seen = useRef<Set<string>>(new Set());
   const warned = useRef<Set<string>>(new Set());
   const paged = useRef<Set<string>>(new Set());
-  const [alertPhones, setAlertPhones] = useState('');
   const isOps = getJwtRoles(session.user).some((role) => OPS.has(role)) || OPS.has(jwtPrimaryRole(session.user));
 
   const load = useCallback(async () => {
@@ -76,11 +72,6 @@ export function InHouseQueuePage() {
   useEffect(() => {
     void load().catch((error: Error) => toast.error(error.message));
     const poll = window.setInterval(() => void load().catch(() => undefined), 8000);
-    const beat = window.setInterval(() => {
-      void inHouseHeartbeat(session.access_token).catch(() => undefined);
-    }, 30000);
-    void inHouseHeartbeat(session.access_token).catch(() => undefined);
-    void getInHouseAudience(session.access_token).then((result) => setAlertPhones(result.phones.join(', '))).catch(() => undefined);
     const channel = supabase
       .channel('in-house-queue')
       .on('postgres_changes', { event: '*', schema: 'delivery', table: 'procurement_tasks' }, () => {
@@ -89,10 +80,9 @@ export function InHouseQueuePage() {
       .subscribe();
     return () => {
       window.clearInterval(poll);
-      window.clearInterval(beat);
       void supabase.removeChannel(channel);
     };
-  }, [load, session.access_token]);
+  }, [load]);
 
   async function claim(id: string) {
     try {
@@ -104,20 +94,14 @@ export function InHouseQueuePage() {
   }
 
   return (
-    <div className="space-y-4 p-4 text-slate-100">
+    <div className="space-y-4 text-slate-100">
       <div className="flex items-center justify-between gap-3">
-        <h1 className="text-xl font-semibold">In-House queue</h1>
+        <div>
+          <h1 className="text-xl font-semibold">Orders</h1>
+          <p className="text-sm text-slate-400">Claim an order, place it on the restaurant site as Roam plus the order number, save the receipt, then mark it placed.</p>
+        </div>
         {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : null}
       </div>
-      <form className="flex flex-wrap items-center gap-2 text-sm" onSubmit={(event) => {
-        event.preventDefault();
-        const phones = alertPhones.split(',').map((phone) => phone.trim()).filter(Boolean).slice(0, 2);
-        void saveInHouseAudience(session.access_token, { phones }).then(() => toast.success('Late-order texts saved')).catch((error: Error) => toast.error(error.message));
-      }}>
-        <label className="text-slate-300" htmlFor="alert-phones">Who gets the late-order text</label>
-        <input id="alert-phones" className="min-w-56 rounded bg-slate-900 p-2" placeholder="876..." value={alertPhones} onChange={(event) => setAlertPhones(event.target.value)} />
-        <button className="rounded bg-slate-800 px-3 py-2" type="submit">Save</button>
-      </form>
       {tasks.some((task) => task.sla_warned_at) ? (
         <p className="rounded bg-red-950 px-3 py-2 text-sm text-red-100">An order needs a person. Open the red timer.</p>
       ) : null}

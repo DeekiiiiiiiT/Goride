@@ -129,7 +129,7 @@ export function refundMissingTask(
   return Number.isFinite(age) && age >= MISSING_TASK_REFUND_MS;
 }
 
-/** Staff and friends stores are invisible to everyone else. A public store stays visible. */
+/** Closed-test stores are invisible to everyone else. A public store stays visible. */
 export function audienceAllows(audience: string | null | undefined, onBetaList: boolean): boolean {
   if (audience !== "beta") return true;
   return onBetaList;

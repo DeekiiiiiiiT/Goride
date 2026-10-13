@@ -142,7 +142,7 @@ export function StitchMenuScreens(props: Props) {
   );
 
   return (
-    <div className="stitch-menu -m-4 min-h-[calc(100vh-2rem)] bg-[#070e1d] text-[#dde5ff] lg:-m-8">
+    <div className="stitch-menu -m-4 flex h-[calc(100vh-4rem)] min-h-0 flex-col overflow-hidden bg-[#070e1d] text-[#dde5ff] lg:-m-8">
       {desk === 'cash' ? (
         <CashDesk {...props} editor={editor} helpOpen={helpOpen} setHelpOpen={setHelpOpen} staleCount={staleCount} visible={visible} />
       ) : null}
@@ -187,8 +187,8 @@ function CalmDesk(props: Props & {
 }) {
   const pizzaDesk = props.categories.some((category) => category.id === props.sectionFilter && /pizza/i.test(category.name));
   return (
-    <div className="flex min-h-[calc(100vh-2rem)] flex-col">
-      <header className="sticky top-0 z-40 flex w-full items-center justify-between border-b border-[#314775]/30 bg-[#070e1d] px-6 py-2.5">
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+      <header className="flex w-full shrink-0 items-center justify-between border-b border-[#314775]/30 bg-[#070e1d] px-6 py-2.5">
         <div className="flex items-center gap-6">
           <div className="flex items-center gap-3">
             <span className="font-headline text-base font-bold uppercase tracking-wider text-[#ffba3e]">Roam Rush Ops</span>
@@ -217,7 +217,7 @@ function CalmDesk(props: Props & {
           <div className="ml-2 flex h-7 w-7 items-center justify-center rounded-full border border-[#314775]/50 bg-[#092450] text-xs font-bold text-[#ffba3e]" title={props.restaurantName}>{props.initials}</div>
         </div>
       </header>
-      <section className="flex w-full flex-wrap items-center justify-between gap-3 border-b border-[#314775]/20 bg-[#081328] px-6 py-2 text-xs">
+      <section className="flex w-full shrink-0 flex-wrap items-center justify-between gap-3 border-b border-[#314775]/20 bg-[#081328] px-6 py-2 text-xs">
         <div className="flex items-center gap-3">
           <button className="text-[11px] text-[#95abdf] hover:text-[#ffba3e]" type="button" onClick={props.onBack}>Restaurants</button>
           <span className="text-[#314775]">|</span>
@@ -246,7 +246,7 @@ function CalmDesk(props: Props & {
         </aside>
       ) : null}
       {props.loadError ? <p className="bg-[#7e2b17] px-6 py-2 text-xs text-[#ff9b82]">{props.loadError}</p> : null}
-      <main className="mx-auto grid w-full max-w-[1720px] flex-1 grid-cols-12 items-start gap-5 p-5">
+      <main className="mx-auto grid min-h-0 w-full max-w-[1720px] flex-1 grid-cols-12 items-start gap-5 overflow-y-auto p-5">
         <div className={`${pizzaDesk ? 'col-span-8' : 'col-span-7 rounded-lg border border-[#314775]/30 bg-[#081328] p-4'} flex min-h-[calc(100vh-180px)] flex-col gap-4`}>
           <div className={`flex flex-col items-center gap-2 border-b border-[#314775]/20 pb-3 ${pizzaDesk ? 'rounded-lg border border-[#314775]/30 bg-[#081328] p-4' : ''}`}>
             <h2 className="font-headline text-sm font-bold tracking-tight">Active Menu Sections</h2>
@@ -565,8 +565,8 @@ function DishEditor(props: Props & { selected: { id: string; name: string } | nu
 
 function CashDesk(props: Props & { visible: Row[]; staleCount: number; editor: ReactNode; helpOpen: boolean; setHelpOpen: (open: boolean) => void }) {
   return (
-    <main className="mx-auto flex min-h-screen w-full max-w-[390px] flex-col bg-[#070e1d] pb-12">
-      <header className="sticky top-0 z-40 border-b border-[#314775]/30 bg-[#081328] px-3.5 py-2.5">
+    <main className="mx-auto flex min-h-0 w-full max-w-[390px] flex-1 flex-col overflow-y-auto bg-[#070e1d] pb-12">
+      <header className="sticky top-0 z-10 border-b border-[#314775]/30 bg-[#081328] px-3.5 py-2.5">
         <div className="mb-2 flex items-center justify-between">
           <div className="flex items-center gap-1.5">
             <button className="font-headline text-xs font-bold uppercase tracking-wider text-[#ffba3e]" type="button" onClick={props.onBack}>Roam Rush Ops</button>
@@ -653,7 +653,7 @@ function CashDesk(props: Props & { visible: Row[]; staleCount: number; editor: R
 
 function TabletDesk(props: Props & { visible: Row[]; staleCount: number; editor: ReactNode; setHelpOpen: (open: boolean) => void }) {
   return (
-    <div className="flex min-h-screen flex-col">
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
       <header className="flex h-14 w-full items-center justify-between border-b border-[#314775] bg-[#081328] px-4">
         <div className="flex items-center gap-3">
           <button className="inline-flex items-center gap-1.5 rounded px-2 py-1 text-xs font-semibold text-[#95abdf] hover:text-[#ffba3e]" type="button" onClick={props.onBack}><Icon name="arrow_back" /> Restaurants</button>
