@@ -27,8 +27,9 @@ export function canSee(roles: string[], capability: string): boolean {
   return map[capability] ?? false;
 }
 
+/** Customer directory only. Courier staff already get courier search. */
 export function canSeePeople(roles: string[]): boolean {
-  return canSee(roles, "customers") || canSee(roles, "team");
+  return canSee(roles, "customers");
 }
 
 /** Strip characters that would split a PostgREST or() filter. */
@@ -45,7 +46,9 @@ export function personHref(
   const courier = personas.find((row) => row.persona === "courier");
   if (customer?.ref_id && canSee(roles, "customers")) return `/customers/${customer.ref_id}`;
   if (courier && canSee(roles, "couriers")) return `/couriers/${userId}`;
-  if (canSee(roles, "team")) return `/team?tab=all-users&id=${userId}`;
+  const named = roles.filter((role) => role && role !== "authenticated");
+  const courierOnly = named.length > 0 && named.every((role) => role === "courier_admin" || role === "courier_ops");
+  if (canSee(roles, "team") && !courierOnly) return `/team?tab=all-users&id=${userId}`;
   return null;
 }
 

@@ -1,7 +1,7 @@
 /// <reference lib="deno.ns" />
 import { assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
 import { jamaicaDayStartIso } from "../inHouse/pricing.ts";
-import { canSee, courierGrantAllowed, personHref, sanitizeSearchToken } from "./consoleAccess.ts";
+import { canSee, canSeePeople, courierGrantAllowed, personHref, sanitizeSearchToken } from "./consoleAccess.ts";
 
 Deno.test("search sanitizer strips filter breakers", () => {
   assertEquals(sanitizeSearchToken("a%,_()."), "a");
@@ -16,18 +16,19 @@ Deno.test("sales stay with finance roles", () => {
   assertEquals(canSee(["dash_admin"], "finance"), true);
 });
 
-Deno.test("people search follows customers or team", () => {
-  assertEquals(canSee(["dash_ops"], "customers"), true);
-  assertEquals(canSee(["courier_admin"], "customers"), false);
+Deno.test("people search follows customers only", () => {
+  assertEquals(canSeePeople(["dash_ops"]), true);
+  assertEquals(canSeePeople(["platform_support"]), true);
+  assertEquals(canSeePeople(["courier_admin"]), false);
+  assertEquals(canSeePeople(["courier_ops"]), false);
   assertEquals(canSee(["courier_admin"], "team"), true);
-  assertEquals(canSee(["platform_support"], "team"), false);
 });
 
 Deno.test("person links open a page that role can open", () => {
   const both = [{ persona: "customer", ref_id: "cust-1" }, { persona: "courier", ref_id: "user-1" }];
   assertEquals(personHref(["dash_ops"], "user-1", both), "/customers/cust-1");
   assertEquals(personHref(["courier_admin"], "user-1", both), "/couriers/user-1");
-  assertEquals(personHref(["courier_admin"], "user-1", [{ persona: "customer", ref_id: "cust-1" }]), "/team?tab=all-users&id=user-1");
+  assertEquals(personHref(["courier_admin"], "user-1", [{ persona: "customer", ref_id: "cust-1" }]), null);
   assertEquals(personHref(["platform_support"], "user-1", []), null);
 });
 

@@ -350,14 +350,31 @@ export function registerConsoleAdminRoutes(app: Hono) {
     const roles = user.roles ?? [user.role];
     const db = getDb();
     const today = jamYmd();
-    const from = /^\d{4}-\d{2}-\d{2}$/.test(c.req.query("from") || "") ? String(c.req.query("from")) : today;
-    const to = /^\d{4}-\d{2}-\d{2}$/.test(c.req.query("to") || "") ? String(c.req.query("to")) : from;
-    const current = jamRange(from <= to ? from : to, from <= to ? to : from);
-    const lengthMs = Date.parse(current.end) - Date.parse(current.start);
-    const previous = {
-      start: new Date(Date.parse(current.start) - lengthMs).toISOString(),
-      end: current.start,
-    };
+    const fromQuery = c.req.query("from") || "";
+    const toQuery = c.req.query("to") || "";
+    const hasRange = /^\d{4}-\d{2}-\d{2}$/.test(fromQuery) && /^\d{4}-\d{2}-\d{2}$/.test(toQuery);
+    const weekMs = 7 * 24 * 60 * 60 * 1000;
+    let from = today;
+    let to = today;
+    let current: { start: string; end: string };
+    let previous: { start: string; end: string };
+    if (!hasRange) {
+      const now = new Date();
+      current = { start: jamRange(today, today).start, end: now.toISOString() };
+      previous = {
+        start: new Date(Date.parse(current.start) - weekMs).toISOString(),
+        end: new Date(now.getTime() - weekMs).toISOString(),
+      };
+    } else {
+      from = fromQuery <= toQuery ? fromQuery : toQuery;
+      to = fromQuery <= toQuery ? toQuery : fromQuery;
+      current = jamRange(from, to);
+      const lengthMs = Date.parse(current.end) - Date.parse(current.start);
+      previous = {
+        start: new Date(Date.parse(current.start) - lengthMs).toISOString(),
+        end: current.start,
+      };
+    }
     const sales = canSee(roles, "finance");
     let currentStats: DayStats | null = null;
     let previousStats: DayStats | null = null;
@@ -373,8 +390,7 @@ export function registerConsoleAdminRoutes(app: Hono) {
     }
     const hourToday = new Map((currentStats?.by_hour ?? []).map((row) => [Number(row.hour), Number(row.orders)]));
     const hourPrev = new Map((previousStats?.by_hour ?? []).map((row) => [Number(row.hour), Number(row.orders)]));
-    const singleDay = current.end === jamRange(from <= to ? from : to, from <= to ? from : to).end
-      && lengthMs <= 24 * 60 * 60 * 1000;
+    const singleDay = from === to;
     const prevMarkets = new Map((previousStats?.by_market ?? []).map((row) => [row.name, row]));
     const { count: liveNow } = await db.from("orders").select("id", { count: "exact", head: true }).in("status", LIVE);
     const { data: availability } = await db.from("courier_availability").select("is_online, active_order_id, last_location_update");
@@ -443,8 +459,7 @@ export function registerConsoleAdminRoutes(app: Hono) {
   admin.get("/merchant-audit", async (c) => {
     const user = c.get("adminUser") as ProductAdminUser;
     const roles = user.roles ?? [user.role];
-    const courierAudit = roles.some((role) => role === "courier_admin" || role === "courier_ops");
-    if (!canSee(roles, "merchants") && !courierAudit) return c.json({ error: "forbidden" }, 403);
+    if (!canSee(roles, "merchants")) return c.json({ error: "forbidden" }, 403);
     const db = getDb();
     const from = c.req.query("from");
     const to = c.req.query("to");
@@ -453,8 +468,10 @@ export function registerConsoleAdminRoutes(app: Hono) {
       .select("id, merchant_id, actor_id, actor_email, action, from_status, to_status, notes, created_at, merchant:merchants(name)")
       .order("created_at", { ascending: false })
       .limit(100);
-    if (from) query = query.gte("created_at", `${from}T00:00:00.000Z`);
-    if (to) query = query.lte("created_at", `${to}T23:59:59.999Z`);
+    const fromDay = from && /^\d{4}-\d{2}-\d{2}$/.test(from) ? from : "";
+    const toDay = to && /^\d{4}-\d{2}-\d{2}$/.test(to) ? to : "";
+    if (fromDay) query = query.gte("created_at", jamRange(fromDay, fromDay).start);
+    if (toDay) query = query.lt("created_at", jamRange(toDay, toDay).end);
     if (q) query = query.or(`action.ilike.%${q}%,actor_email.ilike.%${q}%,notes.ilike.%${q}%`);
     const { data, error } = await query;
     if (error) return c.json({ error: error.message }, 500);

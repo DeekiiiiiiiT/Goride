@@ -188,6 +188,7 @@ jobs:
           supabase/functions/delivery/inHouse/deskRules.test.ts
           supabase/functions/delivery/inHouse/customerMenu.test.ts
           supabase/functions/delivery/inHouse/dispatchOrigin.test.ts
+          supabase/functions/delivery/admin/consoleAccess.test.ts
           tools/in-house-worker/guard.test.ts
 
       - name: Typecheck fleet Rush spine
