@@ -142,13 +142,23 @@ export type ReadinessCheck = {
   detail?: string;
 };
 
+/** Wider than this needs an explicit "I reviewed this border" before going live. */
+export const WIDE_BORDER_SQKM = 50;
+
 export function buildReadinessChecks(opts: {
   publishedZones: ZoneRow[];
   draftDirty: boolean;
   merchantCount: number;
+  /** Island-wide active couriers. Shown as context; not a per-town count. */
   courierCount: number;
   merchantsMin: number;
   couriersMin: number;
+  couriersConfirmed?: boolean;
+  borderAreaSqKm?: number | null;
+  borderReviewed?: boolean;
+  splitBorder?: boolean;
+  splitBorderOk?: boolean;
+  splitBorderDetail?: string | null;
 }): { ready: boolean; checks: ReadinessCheck[] } {
   const checks: ReadinessCheck[] = [];
   const hasInclude = hasValidInclude(opts.publishedZones);
@@ -171,20 +181,44 @@ export function buildReadinessChecks(opts: {
     label: "Draft published",
     detail: opts.draftDirty ? "Unpublished draft changes — publish before activating" : "No unpublished changes",
   });
-  const merchantsOk = opts.merchantCount >= opts.merchantsMin;
+  const requiredMerchants = Math.max(1, opts.merchantsMin);
+  const merchantsOk = opts.merchantCount >= requiredMerchants;
   checks.push({
     id: "merchants_ready",
     ok: merchantsOk,
-    label: `Merchants ready (≥${opts.merchantsMin})`,
-    detail: `${opts.merchantCount} merchant(s) matched`,
+    label: `Stores in this town (≥${requiredMerchants})`,
+    detail: merchantsOk
+      ? `${opts.merchantCount} approved store(s) in this town`
+      : `${opts.merchantCount} approved store(s) in this town. Sign at least ${requiredMerchants} before going live.`,
   });
-  const couriersOk = opts.courierCount >= opts.couriersMin;
   checks.push({
-    id: "couriers_ready",
-    ok: couriersOk,
-    label: `Couriers ready (≥${opts.couriersMin})`,
-    detail: `${opts.courierCount} courier(s) matched`,
+    id: "couriers_confirmed",
+    ok: opts.couriersConfirmed === true,
+    label: "Couriers can serve this town",
+    detail: `${opts.courierCount} active courier(s) on the island. Confirm they can cover this town.`,
   });
+  const area = opts.borderAreaSqKm;
+  if (area != null && Number.isFinite(area) && area > WIDE_BORDER_SQKM) {
+    checks.push({
+      id: "border_reviewed",
+      ok: opts.borderReviewed === true,
+      label: "Wide border reviewed",
+      detail: `The official border is ${area.toFixed(1)} km². Draw a smaller service area inside it before going live. Spanish Town delivers about 12 km² inside a 345 km² district.`,
+    });
+  }
+  if (opts.splitBorder) {
+    const ok = opts.splitBorderOk === true;
+    checks.push({
+      id: "split_border_coverage",
+      ok,
+      label: "Full border covers every piece",
+      detail: opts.splitBorderDetail
+        ?? (ok
+          ? "Extra pieces are covered by the full border, not the short ring."
+          : "Coverage is still using the short border. This town stays off."),
+    });
+  }
+  void opts.couriersMin;
   return { ready: checks.every((c) => c.ok), checks };
 }
 

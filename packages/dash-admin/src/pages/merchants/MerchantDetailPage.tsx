@@ -28,12 +28,19 @@ import {
   fetchPricingTiers,
   type MerchantTierRow,
   listMarkets,
+  townWithParish,
   type MerchantTeamMemberRow,
   type DashMarketRow,
   revokeMerchantStaff,
 } from '@roam/dash-admin-client';
 import { SegmentTabs, useUrlTab } from '../../components/SegmentTabs';
 import { useDetailCrumb, type AdminOutletContext } from '../../DashAdminPortal';
+
+function assignedTownLabel(markets: DashMarketRow[], marketId?: string | null) {
+  if (!marketId) return 'Unassigned';
+  const assigned = markets.find((m) => m.id === marketId);
+  return assigned ? townWithParish(assigned.name, assigned.parish_name) : 'Assigned';
+}
 
 function marketLockDisplay(merchant: DashMerchant): {
   label: string;
@@ -149,7 +156,15 @@ export function MerchantDetailPage() {
         listMarkets(token),
       ]);
       setPricingTiers(tiersRes.tiers ?? []);
-      setMarkets(marketsRes.markets ?? []);
+      const parishName = new Map(
+        (marketsRes.parishes ?? []).map((p) => [p.id, p.name]),
+      );
+      setMarkets(
+        (marketsRes.markets ?? []).map((m) => ({
+          ...m,
+          parish_name: m.parish_name ?? parishName.get(m.parish_id ?? '') ?? null,
+        })),
+      );
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Failed to load merchant');
     } finally {
@@ -825,9 +840,7 @@ export function MerchantDetailPage() {
                 : 'bg-amber-500/15 text-amber-300'
             }`}
           >
-            {merchant.market_id
-              ? markets.find((m) => m.id === merchant.market_id)?.name ?? 'Assigned'
-              : 'Unassigned'}
+            {assignedTownLabel(markets, merchant.market_id)}
           </span>
           <span
             className={`text-xs px-2 py-0.5 rounded-full ${
@@ -851,9 +864,15 @@ export function MerchantDetailPage() {
                 className="px-3 py-1.5 text-sm rounded-lg bg-slate-950 border border-slate-700 text-white min-w-[12rem]"
               >
                 <option value="">— Unassigned —</option>
-                {markets.map((m) => (
+                {[...markets]
+                  .sort((a, b) =>
+                    townWithParish(a.name, a.parish_name).localeCompare(
+                      townWithParish(b.name, b.parish_name),
+                    ),
+                  )
+                  .map((m) => (
                   <option key={m.id} value={m.id}>
-                    {m.name}
+                    {townWithParish(m.name, m.parish_name)}
                     {m.is_active ? '' : ' (inactive)'}
                   </option>
                 ))}

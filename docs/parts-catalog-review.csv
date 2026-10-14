@@ -1,0 +1,61 @@
+decision,kind,fleet,car,chassis,engine,op_code,part_name,manufacturer,part_number,where_checked,note
+,catalog_number,,,,,BELT-SERP,Drive belt,Toyota,90916-02664,Seeded catalog,Not checked against the maker catalog. Engine was 1NZ-FE. No platform rule yet.
+,catalog_number,,,,,ENG-COIL,Ignition coil,Toyota,90919-02239,Seeded catalog,Not checked against the maker catalog. Engine 2AZ-FE.
+,catalog_number,,,,,ENG-COIL,Ignition coil,Toyota,90919-02248,Seeded catalog,Not checked against the maker catalog. Engine 1NZ-FE.
+,catalog_number,,,,,ENG-COIL,Ignition coil,Toyota,90919-02259,Seeded catalog,Not checked against the maker catalog. Engine 2ZR-FXE.
+,catalog_number,,,,,ENG-O2,Oxygen sensor,Toyota,89465-02380,Seeded catalog,Not checked against the maker catalog. Needs a platform rule before it can match. Engine was 1NZ-FE.
+,catalog_number,,,,,ENG-OIL,Oil filter,Toyota,04152-YZZA1,Seeded catalog,Not checked against the maker catalog. Engine 2ZR-FXE.
+,catalog_number,,,,,ENG-OIL,Oil filter,Denso,1501004,Seeded catalog,OE supplier. Does not raise coverage. Not checked against the maker catalog.
+,catalog_number,,,,,ENG-OIL,Oil filter,Nissan,15208-65F0E,Seeded catalog,Not checked against the maker catalog. Engine HR15DE.
+,catalog_number,,,,,ENG-OIL,Oil filter,Honda,15400-PLM-A02,Seeded catalog,Not checked against the maker catalog. Engine L15B.
+,catalog_number,,,,,ENG-OIL,Oil filter,Suzuki,16510-82703,Seeded catalog,Not checked against the maker catalog. Engine R06A.
+,catalog_number,,,,,ENG-OIL,Oil filter,Toyota,90915-10003,Seeded catalog,Not checked against the maker catalog. Engine 1KR-FE. This is the Roomy's oil filter if you confirm it.
+,catalog_number,,,,,ENG-OIL,Oil filter,Toyota,90915-YZZD1,Seeded catalog,Not checked against the maker catalog. Engine 2AZ-FE.
+,catalog_number,,,,,ENG-OIL,Oil filter,Toyota,90915-YZZD2,Seeded catalog,Not checked against the maker catalog. Engine 1NZ-FE.
+,catalog_number,,,,,ENG-OIL,Oil filter,Toyota,90915-YZZD4,Seeded catalog,Not checked against the maker catalog. Engine 1NZ-FXE.
+,catalog_number,,,,,ENG-SPARK,Spark plug,Suzuki,09482-00615,Seeded catalog,Not checked against the maker catalog. Engine R06A.
+,catalog_number,,,,,ENG-SPARK,Spark plug,Honda,12290-5R0-003,Seeded catalog,Not checked against the maker catalog. Engine L15B.
+,catalog_number,,,,,ENG-SPARK,Spark plug,Nissan,22401-CK81A,Seeded catalog,Not checked against the maker catalog. Engine HR15DE.
+,catalog_number,,,,,ENG-SPARK,Spark plug,Toyota,90919-01164,Seeded catalog,Not checked against the maker catalog. Engine 1NZ-FXE.
+,catalog_number,,,,,ENG-SPARK,Spark plug,Toyota,90919-01191,Seeded catalog,Not checked against the maker catalog. Engine 2AZ-FE.
+,catalog_number,,,,,ENG-SPARK,Spark plug,Toyota,90919-01210,Seeded catalog,Not checked against the maker catalog. Engine 1NZ-FE.
+,catalog_number,,,,,ENG-SPARK,Spark plug,Toyota,90919-01235,Seeded catalog,Not checked against the maker catalog. Engine 1KR-FE. This is the Roomy's spark plug if you confirm it.
+,catalog_number,,,,,ENG-SPARK,Spark plug,Toyota,90919-01247,Seeded catalog,Not checked against the maker catalog. Engine 2ZR-FXE.
+,catalog_number,,,,,ENG-THERM,Thermostat,Toyota,90916-03100,Seeded catalog,Not checked against the maker catalog. Engine 1NZ-FE.
+,catalog_number,,,,,ENG-THERM,Thermostat,Toyota,90916-03129,Seeded catalog,Not checked against the maker catalog. Engine 2ZR-FXE.
+,catalog_number,,,,,ENG-WPUMP,Water pump,Toyota,16100-29085,Seeded catalog,Not checked against the maker catalog. Needs a platform rule. Engine was 1NZ-FE.
+,catalog_number,,,,,ENG-WPUMP,Water pump,Toyota,16100-29415,Seeded catalog,Not checked against the maker catalog. Needs a platform rule. Engine was 2AZ-FE.
+,catalog_number,,,,,ENG-WPUMP,Water pump,Toyota,16100-39465,Seeded catalog,Not checked against the maker catalog. Needs a platform rule. Engine was 2ZR-FXE.
+,catalog_number,,,,,ENG-WPUMP,Water pump,Toyota,16100-BZ040,Seeded catalog,Not checked against the maker catalog. Needs a platform rule. Engine was 1KR-FE.
+,catalog_number,,,,,FILT-AIR,Air filter,Suzuki,13780-68K00,Seeded catalog,Not checked against the maker catalog. Needs a platform rule. Engine was R06A.
+,catalog_number,,,,,FILT-AIR,Air filter,Nissan,16546-ED000,Seeded catalog,Not checked against the maker catalog. Needs a platform rule. Engine was HR15DE.
+,catalog_number,,,,,FILT-AIR,Air filter,Honda,17220-5R0-A00,Seeded catalog,Not checked against the maker catalog. Needs a platform rule. Engine was L15B.
+,catalog_number,,,,,FILT-AIR,Air filter,Toyota,17801-0H050,Seeded catalog,Not checked against the maker catalog. Needs a platform rule. Engine was 1KR-FE.
+,catalog_number,,,,,FILT-AIR,Air filter,Toyota,17801-0T020,Seeded catalog,Not checked against the maker catalog. Needs a platform rule. Engine was 2ZR-FXE.
+,catalog_number,,,,,FILT-AIR,Air filter,Toyota,17801-21040,Seeded catalog,Not checked against the maker catalog. Needs a platform rule. Engine was 1NZ-FXE.
+,catalog_number,,,,,FILT-AIR,Air filter,Toyota,17801-21050,Seeded catalog,Not checked against the maker catalog. Needs a platform rule. Engine was 1NZ-FE.
+,catalog_number,,,,,FILT-AIR,Air filter,Toyota,17801-28030,Seeded catalog,Not checked against the maker catalog. Needs a platform rule. Engine was 2AZ-FE.
+,fleet_gap,deekiiiiiii's Fleet,Toyota Roomy,M900A,1KR-FE,ENG-OIL,Oil filter,Toyota,90915-10003,Existing seeded number,Confirm in admin if this is the right oil filter. Do not attach it as a chassis rule.
+,fleet_gap,deekiiiiiii's Fleet,Toyota Roomy,M900A,1KR-FE,ENG-SPARK,Spark plug,Toyota,90919-01235,Existing seeded number,Confirm in admin if this is the right plug.
+,fleet_gap,deekiiiiiii's Fleet,Toyota Roomy,M900A,1KR-FE,ENG-THERM,Thermostat,,,Maker catalog not checked,Leave blank until you enter a verified number.
+,fleet_gap,deekiiiiiii's Fleet,Toyota Roomy,M900A,1KR-FE,FILT-AIR,Air filter,Toyota,17801-0H050,Existing seeded number,Attach to M900A only after you confirm the number.
+,fleet_gap,deekiiiiiii's Fleet,Toyota Roomy,M900A,1KR-FE,HVAC-CABIN,Cabin filter,,,Maker catalog not checked,Leave blank until you enter a verified number.
+,fleet_gap,deekiiiiiii's Fleet,Toyota Roomy,M900A,1KR-FE,BRK-PADS,Brake pads,,,Maker catalog not checked,Leave blank until you enter a verified number.
+,fleet_gap,deekiiiiiii's Fleet,Toyota Roomy,M900A,1KR-FE,BELT-SERP,Drive belt,,,Maker catalog not checked,The seeded belt is for 1NZ-FE only. Leave blank for the Roomy.
+,fleet_gap,deekiiiiiii's Fleet,Toyota Roomy,M900A,1KR-FE,LGT-WIPER,Wipers,,,Maker catalog not checked,Leave blank until you enter a verified number.
+,fleet_gap,deekiiiiiii's Fleet,Toyota Roomy,M900A,1KR-FE,BRK-ROTOR,Brake rotor,,,Maker catalog not checked,Leave blank until you enter a verified number.
+,fleet_gap,deekiiiiiii's Fleet,Toyota Roomy,M900A,1KR-FE,SUS-SHOCK,Shock absorber,,,Maker catalog not checked,Leave blank until you enter a verified number.
+,fleet_gap,deekiiiiiii's Fleet,Toyota Roomy,M900A,1KR-FE,ENG-O2,Oxygen sensor,,,Maker catalog not checked,Not one of the ten coverage parts. Leave blank until you enter a verified number.
+,fleet_gap,deekiiiiiii's Fleet,Toyota Roomy,M900A,1KR-FE,ENG-WPUMP,Water pump,Toyota,16100-BZ040,Existing seeded number,Not one of the ten coverage parts. Attach to M900A only after you confirm the number.
+,fleet_gap,deekiiiiiii's Fleet,Honda Fit,GP5,LEB,ENG-OIL,Oil filter,,,Maker catalog not checked,No seeded number for LEB. Leave blank until you enter a verified number.
+,fleet_gap,deekiiiiiii's Fleet,Honda Fit,GP5,LEB,ENG-SPARK,Spark plug,,,Maker catalog not checked,No seeded number for LEB. Leave blank until you enter a verified number.
+,fleet_gap,deekiiiiiii's Fleet,Honda Fit,GP5,LEB,ENG-THERM,Thermostat,,,Maker catalog not checked,Leave blank until you enter a verified number.
+,fleet_gap,deekiiiiiii's Fleet,Honda Fit,GP5,LEB,FILT-AIR,Air filter,,,Maker catalog not checked,Leave blank until you enter a verified number.
+,fleet_gap,deekiiiiiii's Fleet,Honda Fit,GP5,LEB,HVAC-CABIN,Cabin filter,,,Maker catalog not checked,Leave blank until you enter a verified number.
+,fleet_gap,deekiiiiiii's Fleet,Honda Fit,GP5,LEB,BRK-PADS,Brake pads,,,Maker catalog not checked,Leave blank until you enter a verified number.
+,fleet_gap,deekiiiiiii's Fleet,Honda Fit,GP5,LEB,BELT-SERP,Drive belt,,,Maker catalog not checked,Leave blank until you enter a verified number.
+,fleet_gap,deekiiiiiii's Fleet,Honda Fit,GP5,LEB,LGT-WIPER,Wipers,,,Maker catalog not checked,Leave blank until you enter a verified number.
+,fleet_gap,deekiiiiiii's Fleet,Honda Fit,GP5,LEB,BRK-ROTOR,Brake rotor,,,Maker catalog not checked,Leave blank until you enter a verified number.
+,fleet_gap,deekiiiiiii's Fleet,Honda Fit,GP5,LEB,SUS-SHOCK,Shock absorber,,,Maker catalog not checked,Leave blank until you enter a verified number.
+,fleet_gap,deekiiiiiii's Fleet,Honda Fit,GP5,LEB,ENG-O2,Oxygen sensor,,,Maker catalog not checked,Leave blank until you enter a verified number.
+,fleet_gap,deekiiiiiii's Fleet,Honda Fit,GP5,LEB,ENG-WPUMP,Water pump,,,Maker catalog not checked,Leave blank until you enter a verified number.

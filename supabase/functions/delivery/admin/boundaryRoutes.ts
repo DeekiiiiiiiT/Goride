@@ -5,6 +5,7 @@ import { Hono } from "https://deno.land/x/hono@v4.3.11/mod.ts";
 import { requireProductAdmin, type ProductAdminUser } from "../../_shared/productAdmin.ts";
 import { requireDashWrite } from "./dashPermissions.ts";
 import { getDb, writeKvAudit } from "./merchantAdminShared.ts";
+import { marketSlugFromBoundary } from "./marketSlug.ts";
 
 type BoundaryUpsertRow = {
   admin_level: number;
@@ -121,6 +122,18 @@ export function attachBoundaryAdminRoutes(admin: Hono) {
     return c.json({ boundaries: rows, count: rows.length });
   });
 
+  admin.get("/overview-shapes", async (c) => {
+    const db = getDb();
+    const [townsRes, parishesRes] = await Promise.all([
+      db.rpc("overview_town_shapes"),
+      db.rpc("overview_parish_shapes"),
+    ]);
+    if (townsRes.error) return c.json({ error: townsRes.error.message }, 500);
+    const towns = Array.isArray(townsRes.data) ? townsRes.data : [];
+    const parishes = parishesRes.error || !Array.isArray(parishesRes.data) ? [] : parishesRes.data;
+    return c.json({ towns, parishes });
+  });
+
   admin.get("/coverage-health", async (c) => {
     const db = getDb();
     const { data, error } = await db.from("coverage_health_summary").select("*");
@@ -128,7 +141,12 @@ export function attachBoundaryAdminRoutes(admin: Hono) {
     const { count: boundaryCount } = await db
       .from("admin_boundaries")
       .select("id", { count: "exact", head: true });
-    return c.json({ parishes: data ?? [], catalog_boundary_count: boundaryCount ?? 0 });
+    const driftRes = await db.rpc("legacy_jsonb_zone_drift");
+    return c.json({
+      parishes: data ?? [],
+      catalog_boundary_count: boundaryCount ?? 0,
+      legacy_jsonb_drift: driftRes.error || !Array.isArray(driftRes.data) ? [] : driftRes.data,
+    });
   });
 
   admin.post("/boundaries/import", async (c) => {
@@ -336,43 +354,59 @@ export function attachBoundaryAdminRoutes(admin: Hono) {
       }, 400);
     }
 
-    const { data: existing } = await db.from("service_markets").select("id").eq("pcode", pcode).maybeSingle();
-    if (existing) {
-      return c.json({ error: "Town already exists for this pcode", market_id: existing.id }, 409);
+    const parishSlug = String(parish.slug ?? "").trim();
+    const boundarySlug = String(boundary.slug ?? "").trim();
+    const slug = marketSlugFromBoundary(boundarySlug, parishSlug);
+    if (!slug) {
+      return c.json({ error: "Parish and town need a web name before this town can be created" }, 400);
     }
 
-    const { data: market, error } = await db
-      .from("service_markets")
-      .insert({
-        name: boundary.name,
-        slug: boundary.slug,
-        parish_id: parishId,
-        is_active: false,
-        waitlist_enabled: true,
-        pcode,
-        parent_pcode: boundary.parent_pcode,
-        boundary_source: boundary.source,
-        draft_dirty: true,
-      })
-      .select()
-      .single();
-    if (error) return c.json({ error: error.message }, 500);
-
-    const { data: zoneResult, error: zoneErr } = await db.rpc("promote_boundary_to_market_zone", {
-      p_market_id: market.id,
+    const { data: created, error } = await db.rpc("create_inactive_town_from_boundary", {
+      p_parish_id: parishId,
       p_pcode: pcode,
-      p_zone_name: boundary.name,
+      p_slug: slug,
     });
-    if (zoneErr) return c.json({ market, warning: zoneErr.message }, 200);
+    if (error) {
+      const msg = [error.message, error.details, error.hint].filter(Boolean).join(" ");
+      const townExists = msg.match(/TOWN_EXISTS:([0-9a-f-]{36})/i);
+      if (townExists || msg.includes("TOWN_EXISTS")) {
+        return c.json(
+          { error: "Town already exists for this pcode", market_id: townExists?.[1] ?? null },
+          409,
+        );
+      }
+      if (msg.includes("SLUG_EXISTS")) {
+        const taken = msg.split("SLUG_EXISTS:")[1]?.trim().split(/\s/)[0] || slug;
+        return c.json({ error: `Town web name already exists: ${taken}` }, 409);
+      }
+      if (msg.includes("PARENT_MISMATCH")) {
+        return c.json({ error: msg.replace(/^.*PARENT_MISMATCH:/, "Boundary parent ") }, 400);
+      }
+      if (msg.includes("PARISH_NOT_FOUND")) return c.json({ error: "Parish not found" }, 404);
+      if (msg.includes("BOUNDARY_NOT_FOUND")) return c.json({ error: "admin2 boundary not found" }, 404);
+      return c.json({ error: error.message }, 500);
+    }
+
+    let raw: unknown = created;
+    if (typeof created === "string") {
+      try {
+        raw = JSON.parse(created);
+      } catch {
+        raw = null;
+      }
+    }
+    const payload = (raw ?? {}) as { market?: Record<string, unknown>; zone?: unknown };
+    const market = payload.market;
+    if (!market?.id) return c.json({ error: "Town was not created" }, 500);
 
     await writeKvAudit(
       adminUser,
       "roam_dash.town_from_boundary",
       String(market.id),
       pcode,
-      JSON.stringify({ zoneResult }),
+      JSON.stringify({ zone: payload.zone, slug }),
     );
-    return c.json({ market, zone: zoneResult });
+    return c.json({ market, zone: payload.zone });
   });
 
   admin.get("/parishes/:parishId/outline-versions", async (c) => {

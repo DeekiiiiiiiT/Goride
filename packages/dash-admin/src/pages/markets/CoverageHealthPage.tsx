@@ -16,6 +16,11 @@ function rowFlags(r: DashCoverageHealthParish): string[] {
   if (!r.has_foundation_geom) flags.push('missing geom');
   if (r.town_count > 0 && r.towns_with_pcode === 0) flags.push('towns without pcode');
   if (r.town_count > 0 && r.towns_with_pcode < r.town_count) flags.push('partial town pcodes');
+  const missing = r.towns_missing_border ?? 0;
+  if (missing > 0) {
+    const names = (r.towns_missing_border_names ?? '').trim();
+    flags.push(names ? `missing border: ${names}` : `missing border (${missing})`);
+  }
   return flags;
 }
 
@@ -23,6 +28,7 @@ export function CoverageHealthPage({ embedded = false }: { embedded?: boolean } 
   const { session } = useOutletContext<AdminOutletContext>();
   const [rows, setRows] = useState<DashCoverageHealthParish[]>([]);
   const [catalogCount, setCatalogCount] = useState(0);
+  const [drift, setDrift] = useState<{ pcode: string; name: string; drift: string }[]>([]);
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
@@ -31,9 +37,11 @@ export function CoverageHealthPage({ embedded = false }: { embedded?: boolean } 
       const res = await listCoverageHealth(session.access_token);
       setRows(res.parishes ?? []);
       setCatalogCount(res.catalog_boundary_count ?? 0);
+      setDrift(res.legacy_jsonb_drift ?? []);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Failed to load coverage health');
       setRows([]);
+      setDrift([]);
     } finally {
       setLoading(false);
     }
@@ -44,6 +52,9 @@ export function CoverageHealthPage({ embedded = false }: { embedded?: boolean } 
   }, [load]);
 
   const flagged = rows.filter((r) => rowFlags(r).length > 0).length;
+  const townTotal = rows.reduce((n, r) => n + (r.town_count ?? 0), 0);
+  const liveTotal = rows.reduce((n, r) => n + (r.active_town_count ?? 0), 0);
+  const missingBorders = rows.reduce((n, r) => n + (r.towns_missing_border ?? 0), 0);
 
   return (
     <div className="space-y-6 text-slate-200">
@@ -64,7 +75,28 @@ export function CoverageHealthPage({ embedded = false }: { embedded?: boolean } 
           Catalog boundaries: <span className="text-white font-medium">{catalogCount}</span>
         </span>
         <span className="rounded-lg border border-slate-700 bg-slate-900/50 px-3 py-2 text-slate-300">
-          Parishes: <span className="text-white font-medium">{rows.length}</span>
+          Towns: <span className="text-white font-medium">{townTotal}</span>
+        </span>
+        <span className="rounded-lg border border-slate-700 bg-slate-900/50 px-3 py-2 text-slate-300">
+          Live: <span className="text-white font-medium">{liveTotal}</span>
+        </span>
+        <span
+          className={`rounded-lg border px-3 py-2 ${
+            missingBorders > 0
+              ? 'border-amber-500/40 bg-amber-500/10 text-amber-100'
+              : 'border-slate-700 bg-slate-900/50 text-slate-300'
+          }`}
+        >
+          Missing borders: <span className="font-medium">{missingBorders}</span>
+        </span>
+        <span
+          className={`rounded-lg border px-3 py-2 ${
+            drift.length > 0
+              ? 'border-red-500/40 bg-red-500/10 text-red-100'
+              : 'border-slate-700 bg-slate-900/50 text-slate-300'
+          }`}
+        >
+          Split-border list: <span className="font-medium">{drift.length === 0 ? 'Matches' : `${drift.length} changed`}</span>
         </span>
         <span
           className={`rounded-lg border px-3 py-2 ${
@@ -93,6 +125,7 @@ export function CoverageHealthPage({ embedded = false }: { embedded?: boolean } 
                   <th className="px-3 py-2.5 font-medium">Has geom</th>
                   <th className="px-3 py-2.5 font-medium">Vertices</th>
                   <th className="px-3 py-2.5 font-medium">Towns</th>
+                  <th className="px-3 py-2.5 font-medium">Live</th>
                   <th className="px-3 py-2.5 font-medium">With pcode</th>
                   <th className="px-3 py-2.5 font-medium">Catalog admin2</th>
                   <th className="px-3 py-2.5 font-medium">Source / vintage</th>
@@ -125,6 +158,7 @@ export function CoverageHealthPage({ embedded = false }: { embedded?: boolean } 
                         {r.foundation_vertex_count.toLocaleString()}
                       </td>
                       <td className="px-3 py-2">{r.town_count}</td>
+                      <td className="px-3 py-2">{r.active_town_count ?? 0}</td>
                       <td className="px-3 py-2">{r.towns_with_pcode}</td>
                       <td className="px-3 py-2">{r.catalog_admin2_count}</td>
                       <td className="px-3 py-2 text-xs text-slate-400">

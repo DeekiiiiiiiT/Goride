@@ -438,4 +438,10 @@ export const partsEnterpriseApi = {
   catalogVariants: (token: string, q: string) => adminGet(token, `catalog-variants?q=${encodeURIComponent(q)}`),
   setFamily: (token: string, body: { family: string; chassisCodes: string[]; shareBodyParts: boolean }) => adminSend(token, "vehicle-platform-families", "POST", body),
   setTieredSearch: (token: string, organizationId: string, enabled: boolean) => adminSend(token, "parts-tiered-search", "POST", { organizationId, enabled }),
+  familyReview: (token: string) => adminGet(token, "platform-family-review"),
+  catalogReview: (token: string) => adminGet(token, "part-catalog-review"),
+  decidePart: (token: string, partId: string, decision: "confirmed" | "rejected") => adminSend(token, "part-catalog-decision", "POST", { partId, decision }),
+  attachPart: (token: string, partId: string, chassisCode: string) => adminSend(token, "part-catalog-attach", "POST", { partId, chassisCode }),
+  addCatalogPart: (token: string, body: Record<string, unknown>) => adminSend(token, "part-catalog-add", "POST", body),
+  compare: (token: string, organizationId: string) => adminGet(token, `parts-compare?organizationId=${encodeURIComponent(organizationId)}`),
 };

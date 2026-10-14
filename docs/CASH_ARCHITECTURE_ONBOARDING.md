@@ -557,6 +557,7 @@ If any answer is unclear, stop and ask. Cash bugs are expensive and hard to reve
 | 2026-09-15 | Part 33: AB-1/AA-1 closed — COD pause is platform Default + desk override only; seed and reseed share the global Default; town/parish pause knobs removed from Pricing UI |
 | 2026-09-15 | Round 10 independently verified — **Delivery Remittance closed, no open findings**. Added Part 34 with the final-state summary. Note: `@roam/fleet` CI is red on 2 **fuel** tests from the concurrent fuel workstream, unrelated to remittance |
 | 2026-09-15 | Remittance freeze: TOC → Part 23 + Part 34; Part 30 town-seed ops struck; Part 23 Q2 widened; Part 33/34 labels; workstream frozen (no Part 35) |
+| 2026-10-14 | **Correction:** Y-1 "Landed" was true in code, not in production. `threshold_source` and `courier_fleet_id` migrations were never applied, so the Remittance Desk failed. Applied 2026-10-14. See [courier-cash-schema-drift-audit.md](courier-cash-schema-drift-audit.md) |
 
 **Owners:** Platform / Fleet finance engineering + product  
 **Source analysis:** Cross-repo review of rides cashSettlement, fleet settlements, delivery courier cash ledger, and existing money docs

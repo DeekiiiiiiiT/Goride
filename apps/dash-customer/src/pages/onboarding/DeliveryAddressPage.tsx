@@ -24,7 +24,10 @@ export type AddressSelection = {
 type DeliveryAddressPageProps = {
   onBack: () => void;
   onConfirm: (address: AddressSelection) => void;
-  onOutOfZone?: (address: AddressSelection) => void;
+  onOutOfZone?: (
+    address: AddressSelection,
+    coverage?: { townName?: string; marketId?: string },
+  ) => void;
 };
 
 function labelIcon(label: SavedAddress['label']): string {
@@ -76,7 +79,7 @@ export function DeliveryAddressPage({ onBack, onConfirm, onOutOfZone }: Delivery
         lng: selected.lng,
       });
       if (!zone.inZone) {
-        onOutOfZone?.(selected);
+        onOutOfZone?.(selected, { townName: zone.townName, marketId: zone.marketId });
         return;
       }
       onConfirm(selected);
@@ -128,7 +131,7 @@ export function DeliveryAddressPage({ onBack, onConfirm, onOutOfZone }: Delivery
         lng: resolved.lng,
       });
       if (!zone.inZone) {
-        onOutOfZone?.(resolved);
+        onOutOfZone?.(resolved, { townName: zone.townName, marketId: zone.marketId });
         return;
       }
       toast.success('Location pinned — you’re in our delivery area');

@@ -19,6 +19,11 @@ async function courierStamp(
   return assignment;
 }
 
+/**
+ * Throws when the exception row cannot be written. A parked exception is the
+ * only record of a failed COD collection, so a failed park must never look
+ * like a successful one (schema drift once dropped these silently).
+ */
 export async function parkException(
   sb: Sb,
   orderId: string,
@@ -32,13 +37,16 @@ export async function parkException(
     name: err instanceof Error ? err.name : "Error",
   };
   const assignment = await courierStamp(sb, courierId);
-  const { data: existing } = await db
+  const { data: existing, error: readErr } = await db
     .from("courier_remittance_exceptions")
     .select("id, attempts")
     .eq("order_id", orderId)
     .maybeSingle();
+  if (readErr) {
+    throw new Error(`park_exception_read_failed: ${readErr.message}`);
+  }
   if (existing?.id) {
-    await db
+    const { error: updErr } = await db
       .from("courier_remittance_exceptions")
       .update({
         attempts: Number(existing.attempts ?? 1) + 1,
@@ -47,14 +55,20 @@ export async function parkException(
         ...assignment,
       })
       .eq("id", existing.id);
+    if (updErr) {
+      throw new Error(`park_exception_update_failed: ${updErr.message}`);
+    }
     return;
   }
-  await db.from("courier_remittance_exceptions").insert({
+  const { error: insErr } = await db.from("courier_remittance_exceptions").insert({
     order_id: orderId,
     ...assignment,
     reason,
     detail,
   });
+  if (insErr) {
+    throw new Error(`park_exception_insert_failed: ${insErr.message}`);
+  }
 }
 
 export function classifyRemittanceError(err: unknown): string {

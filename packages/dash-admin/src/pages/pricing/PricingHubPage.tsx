@@ -40,6 +40,7 @@ import {
   type PricingLayerResponse,
   type PricingParty,
   type PricingRevenueSummary,
+  townWithParish,
 } from '@roam/dash-admin-client';
 import { getPlaceDetails, searchAddresses, type AddressSuggestion } from '@roam/location';
 import { canWriteDashAdmin } from '../../utils/dashAdminRoles';
@@ -106,6 +107,10 @@ const RULES_SCOPES: { id: RulesScope; label: string; hint: string }[] = [
 
 function formatJmd(n: number) {
   return formatMoney(n);
+}
+
+function pricingTownLabel(m: PricingMarketSummary) {
+  return townWithParish(m.market.name, m.parish?.name);
 }
 
 /** Parish rows for Pricing Overview — parish sort_order, then town name. */
@@ -752,12 +757,16 @@ export function PricingHubPage({ onlyTab }: { onlyTab?: TabId } = {}) {
   const townRulesParishOverrides = (townRulesParish?.markets ?? []).filter(
     (m) => m.has_town_override,
   );
+  const selectedTown = markets.find((m) => m.market.id === selectedMarketId) ?? null;
+  const focusedTown = markets.find((m) => m.market.id === townRulesFocusId) ?? null;
   const activeRulesTitle =
     rulesScope === 'global'
       ? 'Platform default'
       : rulesScope === 'parish'
         ? parishes.find((p) => p.id === selectedParishId)?.name ?? 'Parish'
-        : markets.find((m) => m.market.id === selectedMarketId)?.market.name ?? 'Town';
+        : selectedTown
+          ? pricingTownLabel(selectedTown)
+          : 'Town';
 
   const handleBulkClearTownOverrides = async (ids: string[]) => {
     if (!canWrite || ids.length === 0) return;
@@ -1405,7 +1414,7 @@ export function PricingHubPage({ onlyTab }: { onlyTab?: TabId } = {}) {
                 ← All towns
               </button>
               <p className="text-sm font-medium text-white">
-                {markets.find((m) => m.market.id === townRulesFocusId)?.market.name ?? 'Town'} — by
+                {focusedTown ? pricingTownLabel(focusedTown) : 'Town'} — by
                 party
               </p>
               {renderPartyCards('market', townRulesFocusId)}
@@ -1557,7 +1566,7 @@ export function PricingHubPage({ onlyTab }: { onlyTab?: TabId } = {}) {
                               <optgroup key={parish.key} label={parish.name}>
                                 {parish.markets.map((m) => (
                                   <option key={m.market.id} value={m.market.id}>
-                                    {m.market.name}
+                                    {pricingTownLabel(m)}
                                     {m.has_town_override ? ' · has override' : ''}
                                   </option>
                                 ))}
@@ -1717,7 +1726,7 @@ export function PricingHubPage({ onlyTab }: { onlyTab?: TabId } = {}) {
                 onChange={setSelectedMarketId}
                 options={markets.map((m) => ({
                   value: m.market.id,
-                  label: m.market.name,
+                  label: pricingTownLabel(m),
                 }))}
               />
             </div>

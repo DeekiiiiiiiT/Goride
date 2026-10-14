@@ -257,6 +257,26 @@ BEGIN
   IF engine_rules IS DISTINCT FROM 0 THEN
     RAISE EXCEPTION 'Air, belt, oxygen sensor and water pump rules must not be engine rules, found %', engine_rules;
   END IF;
+
+  IF EXISTS (
+    SELECT 1 FROM public.maintenance_service_categories
+    WHERE op_code = 'BRK-ROTOR'
+      AND (parent_id IS DISTINCT FROM 'b1000000-0000-4000-8000-000000000004'::uuid OR icon_key IS DISTINCT FROM 'brakes')
+  ) OR NOT EXISTS (
+    SELECT 1 FROM public.maintenance_service_categories WHERE op_code = 'BRK-ROTOR'
+  ) THEN
+    RAISE EXCEPTION 'Brake rotor must sit under Brakes with the brakes icon';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1 FROM public.maintenance_service_categories
+    WHERE op_code = 'SUS-SHOCK'
+      AND (parent_id IS DISTINCT FROM 'b1000000-0000-4000-8000-000000000008'::uuid OR icon_key IS DISTINCT FROM 'suspension')
+  ) OR NOT EXISTS (
+    SELECT 1 FROM public.maintenance_service_categories WHERE op_code = 'SUS-SHOCK'
+  ) THEN
+    RAISE EXCEPTION 'Shock absorber must sit under Suspension with the suspension icon';
+  END IF;
 END $$;
 
 ROLLBACK;

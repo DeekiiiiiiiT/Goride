@@ -779,7 +779,17 @@ export interface DashMarketRow {
   published_version_id?: string | null;
   readiness_merchants_min?: number;
   readiness_couriers_min?: number;
+  parish_name?: string | null;
   created_at?: string;
+}
+
+/** Five towns share a name. A list with no parish heading must show both. */
+export function townWithParish(name: string, parishName?: string | null): string {
+  const town = name.trim();
+  const parish = (parishName ?? '').trim();
+  if (!town) return parish || 'Town';
+  if (!parish) return town;
+  return `${town} · ${parish}`;
 }
 
 export interface DashParishTownPin {
@@ -845,6 +855,32 @@ export interface DashCoverageHealthParish {
   town_count: number;
   towns_with_pcode: number;
   catalog_admin2_count: number;
+  active_town_count?: number;
+  towns_missing_border?: number;
+  towns_missing_border_names?: string | null;
+}
+
+export interface DashOverviewRing {
+  kind: 'include' | 'exclude';
+  polygon: DashZoneVertex[];
+}
+
+export interface DashOverviewTownShape {
+  market_id: string;
+  name: string;
+  parish_id?: string | null;
+  parish_name?: string | null;
+  is_active?: boolean;
+  pcode?: string | null;
+  center_lat?: number | null;
+  center_lng?: number | null;
+  rings?: DashOverviewRing[];
+}
+
+export interface DashOverviewParishShape {
+  parish_id: string;
+  name?: string;
+  rings?: DashOverviewRing[];
 }
 
 export interface DashBoundaryImportReport {
@@ -996,10 +1032,18 @@ export function importAdminBoundaries(
   );
 }
 
+export function listOverviewShapes(accessToken: string) {
+  return deliveryFetch<{ towns: DashOverviewTownShape[]; parishes?: DashOverviewParishShape[] }>(
+    accessToken,
+    '/admin/markets/overview-shapes',
+  );
+}
+
 export function listCoverageHealth(accessToken: string) {
   return deliveryFetch<{
     parishes: DashCoverageHealthParish[];
     catalog_boundary_count: number;
+    legacy_jsonb_drift?: { pcode: string; name: string; drift: string }[];
   }>(accessToken, '/admin/markets/coverage-health');
 }
 
@@ -1082,6 +1126,8 @@ export function updateMarket(
     waitlist_enabled?: boolean;
     parish_id?: string | null;
     force?: boolean;
+    couriers_confirmed?: boolean;
+    border_reviewed?: boolean;
     readiness_merchants_min?: number;
     readiness_couriers_min?: number;
   },

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   applyCategoryListFilters,
   filterMerchantsByCategory,
+  interpretDiscoveryPayload,
   type DiscoverMerchant,
 } from './merchantDiscovery';
 
@@ -79,5 +80,40 @@ describe('applyCategoryListFilters', () => {
       new Set(['grill']),
     );
     expect(offered.map((m) => m.id)).toEqual(['grill']);
+  });
+});
+
+describe('interpretDiscoveryPayload', () => {
+  it('names an inactive town instead of an empty store list', () => {
+    expect(
+      interpretDiscoveryPayload(
+        {
+          out_of_coverage: true,
+          coming_soon: true,
+          town_name: 'Highgate',
+          market_id: 'town-highgate',
+        },
+        false,
+      ),
+    ).toEqual({
+      outOfCoverage: true,
+      missingPin: false,
+      comingSoon: true,
+      townName: 'Highgate',
+      marketId: 'town-highgate',
+    });
+  });
+
+  it('asks for an address when the pin is missing', () => {
+    expect(interpretDiscoveryPayload({ missing_pin: true }, false).missingPin).toBe(true);
+  });
+
+  it('does not treat a live town with stores as coming soon', () => {
+    expect(
+      interpretDiscoveryPayload(
+        { coming_soon: true, town_name: 'Highgate', out_of_coverage: true },
+        true,
+      ).outOfCoverage,
+    ).toBe(false);
   });
 });

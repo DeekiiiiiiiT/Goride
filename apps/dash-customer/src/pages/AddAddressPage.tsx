@@ -96,7 +96,12 @@ export default function AddAddressPage({ addressId, returnTo = 'saved-addresses'
         lng,
       });
       if (!zone.inZone) {
-        onNavigate('out-of-delivery', { returnTo: 'add-address', attemptedAddress: guessed });
+        onNavigate('out-of-delivery', {
+          returnTo: 'add-address',
+          attemptedAddress: guessed,
+          townName: zone.townName,
+          marketId: zone.marketId,
+        });
         return;
       }
       toast.success('Location pinned — you’re in our delivery area');
@@ -115,7 +120,12 @@ export default function AddAddressPage({ addressId, returnTo = 'saved-addresses'
       lng: coords.lng,
     });
     if (!zone.inZone) {
-      onNavigate('out-of-delivery', { returnTo: 'add-address', attemptedAddress: line1 });
+      onNavigate('out-of-delivery', {
+        returnTo: 'add-address',
+        attemptedAddress: line1,
+        townName: zone.townName,
+        marketId: zone.marketId,
+      });
       return;
     }
     if (coords.lat == null || coords.lng == null) {

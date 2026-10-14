@@ -287,9 +287,17 @@ function DashCustomerShell() {
     setPhase('app');
   }, []);
 
-  const goOutOfDelivery = useCallback((returnTo: string) => {
+  const goOutOfDelivery = useCallback((
+    returnTo: string,
+    extra?: { address?: string; townName?: string; marketId?: string },
+  ) => {
     setOutOfZoneReturnTo(returnTo);
-    setPageData({ returnTo });
+    setPageData({
+      returnTo,
+      attemptedAddress: extra?.address,
+      townName: extra?.townName,
+      marketId: extra?.marketId,
+    });
     if (phase === 'app') {
       setStackPage('out-of-delivery');
     } else {
@@ -297,8 +305,15 @@ function DashCustomerShell() {
     }
   }, [phase]);
 
-  const handleOutOfZoneFromOnboarding = useCallback(() => {
-    goOutOfDelivery('delivery-address');
+  const handleOutOfZoneFromOnboarding = useCallback((
+    address?: { line1?: string },
+    coverage?: { townName?: string; marketId?: string },
+  ) => {
+    goOutOfDelivery('delivery-address', {
+      address: address?.line1,
+      townName: coverage?.townName,
+      marketId: coverage?.marketId,
+    });
   }, [goOutOfDelivery]);
 
   const goToAddressSetup = useCallback(() => {
@@ -584,6 +599,9 @@ function DashCustomerShell() {
     return (
       <OutOfDeliveryPage
         returnTo={outOfZoneReturnTo}
+        address={pageData?.attemptedAddress as string | undefined}
+        townName={pageData?.townName as string | undefined}
+        marketId={pageData?.marketId as string | undefined}
         onReturn={() => setPhase('delivery-address')}
         onNavigate={navigate}
       />
@@ -841,6 +859,9 @@ function DashCustomerShell() {
           <OutOfDeliveryPage
             onNavigate={navigate}
             returnTo={(pageData?.returnTo as string | undefined) ?? 'saved-addresses'}
+            address={pageData?.attemptedAddress as string | undefined}
+            townName={pageData?.townName as string | undefined}
+            marketId={pageData?.marketId as string | undefined}
             onReturn={() => {
               const returnTo = (pageData?.returnTo as string | undefined) ?? 'saved-addresses';
               if (returnTo === 'delivery-address') {

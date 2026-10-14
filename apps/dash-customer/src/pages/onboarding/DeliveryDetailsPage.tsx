@@ -17,7 +17,10 @@ type DeliveryDetailsPageProps = {
     lat?: number;
     lng?: number;
   }) => void;
-  onOutOfZone?: (address: AddressSelection) => void;
+  onOutOfZone?: (
+    address: AddressSelection,
+    coverage?: { townName?: string; marketId?: string },
+  ) => void;
 };
 
 const LABEL_OPTIONS: { value: AddressLabel; icon: string; label: string }[] = [
@@ -46,7 +49,10 @@ export function DeliveryDetailsPage({ address, onBack, onSave, onOutOfZone }: De
         lng: address.lng,
       });
       if (!zone.inZone) {
-        onOutOfZone?.({ line1, line2, lat: address.lat, lng: address.lng });
+        onOutOfZone?.(
+          { line1, line2, lat: address.lat, lng: address.lng },
+          { townName: zone.townName, marketId: zone.marketId },
+        );
         return;
       }
       onSave({

@@ -9,9 +9,18 @@ type Props = {
   returnTo?: string;
   onReturn?: () => void;
   address?: string;
+  townName?: string;
+  marketId?: string;
 };
 
-export default function OutOfDeliveryPage({ onNavigate, returnTo = 'saved-addresses', onReturn, address }: Props) {
+export default function OutOfDeliveryPage({
+  onNavigate,
+  returnTo = 'saved-addresses',
+  onReturn,
+  address,
+  townName,
+  marketId,
+}: Props) {
   const [email, setEmail] = useState('');
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -33,6 +42,7 @@ export default function OutOfDeliveryPage({ onNavigate, returnTo = 'saved-addres
         body: JSON.stringify({
           email: value,
           attempted_address: address || undefined,
+          market_id: marketId || undefined,
           source: 'out-of-delivery',
         }),
       });
@@ -68,10 +78,12 @@ export default function OutOfDeliveryPage({ onNavigate, returnTo = 'saved-addres
         </div>
 
         <h1 className="text-headline-lg-mobile font-bold text-on-surface mb-2">
-          We don&apos;t deliver here yet
+          {townName ? `${townName} is coming soon` : "We don't deliver here yet"}
         </h1>
         <p className="text-body-lg text-on-surface-variant mb-8 px-4">
-          We&apos;re expanding soon! Enter your email to be notified when we arrive in your neighborhood.
+          {townName
+            ? "Join the waitlist and we'll email you when we launch."
+            : "We're expanding soon! Enter your email to be notified when we arrive in your neighborhood."}
         </p>
 
         {submitted ? (

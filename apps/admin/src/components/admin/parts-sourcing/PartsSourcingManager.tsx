@@ -838,6 +838,11 @@ export function PartsSourcingManager() {
         </TabsContent>
 
         <TabsContent value="offers" className="mt-4 space-y-3">
+          {offers.length === 0 ? (
+            <p className="text-sm text-slate-600 dark:text-slate-400">
+              Price, landed cost, downtime ranking, and core returns show up here only after a real supplier quote is entered.
+            </p>
+          ) : null}
           <div className="flex justify-end">
             <Button type="button" size="sm" onClick={() => void openNewOffer()} className="gap-1">
               <Plus className="w-4 h-4" />

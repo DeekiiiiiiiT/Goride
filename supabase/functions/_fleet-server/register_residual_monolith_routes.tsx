@@ -12726,6 +12726,17 @@ export function registerResidualMonolithRoutes(app: Hono) {
         }
       }
 
+      if (flagName === FEATURE_FLAGS.PARTS_TIERED_SEARCH && Array.isArray(enabledForOrgs)) {
+        const { secondFleetBlocked } = await import("../../../packages/types/src/partsResolution.ts");
+        const current = await getFeatureFlag(flagName);
+        for (const orgId of enabledForOrgs as string[]) {
+          if ((current?.enabledForOrgs ?? []).includes(orgId)) continue;
+          if (secondFleetBlocked(current?.enabledForOrgs ?? [], current?.orgEnabledAt ?? {}, String(orgId), Date.now())) {
+            return c.json({ error: "Another fleet is still in its first week of tiered search. Turn a second fleet on after that week." }, 400);
+          }
+        }
+      }
+
       await setFeatureFlag(flagName, enabled, {
         enabledForOrgs,
         disabledForOrgs,
@@ -12765,6 +12776,19 @@ export function registerResidualMonolithRoutes(app: Hono) {
       const auth = canMutateFeatureFlag(rbacUser, flagName, orgId);
       if (!auth.allowed) {
         return c.json({ error: auth.reason || "Forbidden" }, 403);
+      }
+
+      if (flagName === FEATURE_FLAGS.PARTS_TIERED_SEARCH) {
+        const { loadFleetCoverage } = await import("./parts_fleet_coverage.ts");
+        const { secondFleetBlocked, tieredSearchReady } = await import("../../../packages/types/src/partsResolution.ts");
+        const coverage = await loadFleetCoverage(supabase, String(orgId));
+        if (!tieredSearchReady(coverage.coveragePct)) {
+          return c.json({ error: `This fleet is at ${coverage.coveragePct}% coverage. Tiered search unlocks at 60%.` }, 400);
+        }
+        const current = await getFeatureFlag(flagName);
+        if (secondFleetBlocked(current?.enabledForOrgs ?? [], current?.orgEnabledAt ?? {}, String(orgId), Date.now())) {
+          return c.json({ error: "Another fleet is still in its first week of tiered search. Turn a second fleet on after that week." }, 400);
+        }
       }
 
       await enableFlagForOrg(flagName, orgId, rbacUser.email || rbacUser.userId);

@@ -5,10 +5,15 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Loader2, Satellite, X } from 'lucide-react';
 import { loadPartnerMapsApi } from '@roam/location';
-import type { DashParishRow, DashZoneVertex } from '@roam/dash-admin-client';
+import type { DashOverviewParishShape, DashOverviewTownShape, DashParishRow, DashZoneVertex } from '@roam/dash-admin-client';
+import { shapeIntersectsView, type LatLngBox } from './overviewViewport';
 
 type Props = {
   parishes: DashParishRow[];
+  /** Simplified catalog rings. The full official border stays on the town editor. */
+  shapes?: DashOverviewTownShape[];
+  /** Simplified parish outlines. Falls back to the stored parish ring when missing. */
+  parishShapes?: DashOverviewParishShape[];
   onClose: () => void;
   /** Toggle parish foundation polygons (default on). */
   showParishes?: boolean;
@@ -21,46 +26,39 @@ function foundationVerts(p: DashParishRow): DashZoneVertex[] {
   return poly.filter((v) => v && Number.isFinite(v.lat) && Number.isFinite(v.lng));
 }
 
-function includeZones(town: { zones?: Array<{ kind?: string; polygon?: DashZoneVertex[] }> }) {
-  return (town.zones ?? []).filter(
-    (z) => z.kind === 'include' && Array.isArray(z.polygon) && z.polygon.length >= 3,
-  );
+function parishRings(
+  parish: DashParishRow,
+  display?: DashOverviewParishShape,
+): DashZoneVertex[][] {
+  const simplified = (display?.rings ?? [])
+    .filter((ring) => ring.kind !== 'exclude')
+    .map((ring) => (ring.polygon ?? []).filter((v) => v && Number.isFinite(v.lat) && Number.isFinite(v.lng)))
+    .filter((path) => path.length >= 3);
+  if (simplified.length > 0) return simplified;
+  const fallback = foundationVerts(parish);
+  return fallback.length >= 3 ? [fallback] : [];
 }
 
-function excludeZones(town: { zones?: Array<{ kind?: string; polygon?: DashZoneVertex[] }> }) {
-  return (town.zones ?? []).filter(
-    (z) => z.kind === 'exclude' && Array.isArray(z.polygon) && z.polygon.length >= 3,
-  );
-}
-
-function townMarkerPos(town: {
-  name?: string;
-  center_lat?: number | null;
-  center_lng?: number | null;
-  zones?: Array<{ kind?: string; polygon?: DashZoneVertex[]; center_lat?: number | null; center_lng?: number | null }>;
-}): { lat: number; lng: number; name: string } | null {
-  const name = String(town.name ?? 'Town');
-  if (Number.isFinite(town.center_lat) && Number.isFinite(town.center_lng)) {
-    return { lat: Number(town.center_lat), lng: Number(town.center_lng), name };
-  }
-  const inc = includeZones(town)[0];
-  if (inc && Number.isFinite(inc.center_lat) && Number.isFinite(inc.center_lng)) {
-    return { lat: Number(inc.center_lat), lng: Number(inc.center_lng), name };
-  }
-  const ring = inc?.polygon ?? [];
-  if (ring.length >= 3) {
-    let lat = 0;
-    let lng = 0;
-    for (const v of ring) {
-      lat += v.lat;
-      lng += v.lng;
-    }
-    return { lat: lat / ring.length, lng: lng / ring.length, name };
-  }
-  return null;
+function viewBox(bounds: google.maps.LatLngBounds): LatLngBox {
+  const ne = bounds.getNorthEast();
+  const sw = bounds.getSouthWest();
+  return { south: sw.lat(), north: ne.lat(), west: sw.lng(), east: ne.lng() };
 }
 
 const JAMAICA_CENTER = { lat: 18.15, lng: -77.3 };
+
+function applyTownNames(show: boolean, names: HTMLElement[], markers: google.maps.Marker[]) {
+  for (const el of names) el.style.display = show ? 'block' : 'none';
+  for (const marker of markers) {
+    const title = marker.getTitle() ?? '';
+    if (!show || !title) {
+      marker.setLabel(null);
+      continue;
+    }
+    const text = title.length > 28 ? `${title.slice(0, 27)}…` : title;
+    marker.setLabel({ text, color: '#0c4a6e', fontSize: '10px', fontWeight: '600' });
+  }
+}
 
 type OverlayHandle = {
   setMap: (map: google.maps.Map | null) => void;
@@ -68,6 +66,8 @@ type OverlayHandle = {
 
 export function JamaicaOverviewMap({
   parishes,
+  shapes = [],
+  parishShapes = [],
   onClose,
   showParishes = true,
   showTowns = true,
@@ -76,6 +76,8 @@ export function JamaicaOverviewMap({
   const mapRef = useRef<google.maps.Map | null>(null);
   const overlaysRef = useRef<OverlayHandle[]>([]);
   const townPolysRef = useRef<google.maps.Polygon[]>([]);
+  const nameNodesRef = useRef<HTMLElement[]>([]);
+  const classicMarkersRef = useRef<google.maps.Marker[]>([]);
   const [ready, setReady] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [mapType, setMapType] = useState<'roadmap' | 'hybrid'>('roadmap');
@@ -149,7 +151,8 @@ export function JamaicaOverviewMap({
     void (async () => {
       for (const o of overlaysRef.current) o.setMap(null);
       overlaysRef.current = [];
-      townPolysRef.current = [];
+      nameNodesRef.current = [];
+      classicMarkersRef.current = [];
 
       const bounds = new google.maps.LatLngBounds();
       let hasGeom = false;
@@ -174,12 +177,60 @@ export function JamaicaOverviewMap({
       }
       if (cancelled) return;
       const canUseAdvancedMarker = Boolean(mapId && AdvancedMarkerCtor);
+      const fitFromCenters = shapes.some(
+        (s) => Number.isFinite(Number(s.center_lat)) && Number.isFinite(Number(s.center_lng)),
+      );
+
+      const addDot = (lat: number, lng: number, title: string) => {
+        bounds.extend({ lat, lng });
+        hasGeom = true;
+        if (canUseAdvancedMarker && AdvancedMarkerCtor) {
+          const wrap = document.createElement('div');
+          wrap.style.cssText = 'display:flex;flex-direction:column;align-items:center;';
+          const dot = document.createElement('div');
+          dot.style.cssText =
+            'width:10px;height:10px;border-radius:50%;background:#38bdf8;border:1.5px solid #0c4a6e;';
+          const label = document.createElement('div');
+          label.textContent = title;
+          label.style.cssText =
+            'display:none;margin-top:2px;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:10px;font-weight:600;color:#0c4a6e;background:rgba(255,255,255,0.92);padding:0 4px;border-radius:4px;';
+          wrap.append(dot, label);
+          nameNodesRef.current.push(label);
+          const marker = new AdvancedMarkerCtor({
+            map,
+            position: { lat, lng },
+            title,
+            content: wrap,
+          });
+          overlaysRef.current.push({
+            setMap: (m) => {
+              marker.map = m;
+            },
+          });
+          return;
+        }
+        const marker = new google.maps.Marker({
+          map,
+          position: { lat, lng },
+          title,
+          icon: {
+            path: google.maps.SymbolPath.CIRCLE,
+            scale: 5,
+            fillColor: '#38bdf8',
+            fillOpacity: 1,
+            strokeColor: '#0c4a6e',
+            strokeWeight: 1,
+          },
+        });
+        classicMarkersRef.current.push(marker);
+        overlaysRef.current.push(marker);
+      };
 
       for (const parish of parishes) {
         if (layerParishes) {
-          const foundation = foundationVerts(parish);
-          if (foundation.length >= 3) {
-            extend(foundation);
+          const display = parishShapes.find((s) => s.parish_id === parish.id);
+          for (const foundation of parishRings(parish, display)) {
+            if (!fitFromCenters) extend(foundation);
             const poly = new google.maps.Polygon({
               map,
               paths: foundation,
@@ -195,112 +246,20 @@ export function JamaicaOverviewMap({
           }
         }
 
-        // Prefer catalog/market centers; legacy town_pins only when no market markers exist.
-        const marketMarkers: Array<{ lat: number; lng: number; name: string }> = [];
-        for (const town of parish.towns ?? []) {
-          const pos = townMarkerPos(town);
-          if (pos) marketMarkers.push(pos);
-        }
-        const markerSource =
-          marketMarkers.length > 0
-            ? marketMarkers
-            : (parish.town_pins ?? [])
-                .filter((pin) => Number.isFinite(pin.lat) && Number.isFinite(pin.lng))
-                .map((pin) => ({
-                  lat: pin.lat,
-                  lng: pin.lng,
-                  name: `${pin.name} (legacy pin)`,
-                }));
-
-        for (const pin of markerSource) {
-          bounds.extend({ lat: pin.lat, lng: pin.lng });
-          hasGeom = true;
-          if (canUseAdvancedMarker && AdvancedMarkerCtor) {
-            const el = document.createElement('div');
-            el.style.cssText =
-              'width:10px;height:10px;border-radius:50%;background:#38bdf8;border:1.5px solid #0c4a6e;';
-            el.title = `${pin.name} (${parish.name})`;
-            const marker = new AdvancedMarkerCtor({
-              map,
-              position: { lat: pin.lat, lng: pin.lng },
-              title: `${pin.name} (${parish.name})`,
-              content: el,
-            });
-            overlaysRef.current.push({
-              setMap: (m) => {
-                marker.map = m;
-              },
-            });
-          } else {
-            // Fallback: classic Marker until a Cloud mapId is configured (AdvancedMarker requires mapId).
-            const marker = new google.maps.Marker({
-              map,
-              position: { lat: pin.lat, lng: pin.lng },
-              title: `${pin.name} (${parish.name})`,
-              label: {
-                text: pin.name.length > 12 ? `${pin.name.slice(0, 11)}…` : pin.name,
-                color: '#0c4a6e',
-                fontSize: '10px',
-                fontWeight: '600',
-              },
-              icon: {
-                path: google.maps.SymbolPath.CIRCLE,
-                scale: 5,
-                fillColor: '#38bdf8',
-                fillOpacity: 1,
-                strokeColor: '#0c4a6e',
-                strokeWeight: 1,
-              },
-            });
-            overlaysRef.current.push(marker);
+        const parishHasShapes = shapes.some((s) => s.parish_id === parish.id);
+        if (!parishHasShapes) {
+          for (const pin of parish.town_pins ?? []) {
+            if (!Number.isFinite(pin.lat) || !Number.isFinite(pin.lng)) continue;
+            addDot(pin.lat, pin.lng, `${pin.name} · ${parish.name}`);
           }
         }
+      }
 
-        if (layerTowns) {
-          for (const town of parish.towns ?? []) {
-            const active = Boolean(town.is_active);
-            for (const z of includeZones(town)) {
-              const path = (z.polygon ?? []).filter(
-                (v) => Number.isFinite(v.lat) && Number.isFinite(v.lng),
-              );
-              if (path.length < 3) continue;
-              extend(path);
-              const poly = new google.maps.Polygon({
-                map: null,
-                paths: path,
-                strokeColor: active ? '#34d399' : '#fbbf24',
-                fillColor: active ? '#10b981' : '#f59e0b',
-                fillOpacity: active ? 0.22 : 0.12,
-                strokeWeight: active ? 2.5 : 2,
-                strokeOpacity: 1,
-                clickable: false,
-                zIndex: active ? 30 : 20,
-              });
-              townPolysRef.current.push(poly);
-              overlaysRef.current.push(poly);
-            }
-            for (const z of excludeZones(town)) {
-              const path = (z.polygon ?? []).filter(
-                (v) => Number.isFinite(v.lat) && Number.isFinite(v.lng),
-              );
-              if (path.length < 3) continue;
-              extend(path);
-              const poly = new google.maps.Polygon({
-                map: null,
-                paths: path,
-                strokeColor: '#f87171',
-                fillColor: '#ef4444',
-                fillOpacity: 0.28,
-                strokeWeight: 2,
-                strokeOpacity: 0.9,
-                clickable: false,
-                zIndex: 40,
-              });
-              townPolysRef.current.push(poly);
-              overlaysRef.current.push(poly);
-            }
-          }
-        }
+      for (const shape of shapes) {
+        const title = shape.parish_name ? `${shape.name} · ${shape.parish_name}` : shape.name;
+        const lat = Number(shape.center_lat);
+        const lng = Number(shape.center_lng);
+        if (Number.isFinite(lat) && Number.isFinite(lng)) addDot(lat, lng, title);
       }
 
       if (cancelled) return;
@@ -314,29 +273,72 @@ export function JamaicaOverviewMap({
 
       const z = map.getZoom() ?? 9;
       setZoom(z);
-      const showTownPolys = layerTowns && z > 9;
-      for (const poly of townPolysRef.current) {
-        poly.setMap(showTownPolys ? map : null);
-      }
+      applyTownNames(layerTowns && z > 9, nameNodesRef.current, classicMarkersRef.current);
     })();
 
     return () => {
       cancelled = true;
       for (const o of overlaysRef.current) o.setMap(null);
       overlaysRef.current = [];
-      townPolysRef.current = [];
+      nameNodesRef.current = [];
+      classicMarkersRef.current = [];
     };
-  }, [parishes, ready, layerParishes, layerTowns]);
+  }, [parishes, parishShapes, shapes, ready, layerParishes, layerTowns]);
 
-  // Cull town polygons until zoomed in (zoom > 9).
+  // Town borders are created only after zooming in, and only for towns on screen.
   useEffect(() => {
     const map = mapRef.current;
-    if (!map) return;
-    const show = layerTowns && zoom > 9;
-    for (const poly of townPolysRef.current) {
-      poly.setMap(show ? map : null);
-    }
-  }, [zoom, layerTowns, parishes, ready, layerParishes]);
+    if (!map || !ready) return;
+
+    const clearTowns = () => {
+      for (const poly of townPolysRef.current) poly.setMap(null);
+      townPolysRef.current = [];
+    };
+
+    const sync = () => {
+      const z = map.getZoom() ?? 9;
+      const show = layerTowns && z > 9;
+      applyTownNames(show, nameNodesRef.current, classicMarkersRef.current);
+      clearTowns();
+      if (!show) return;
+      const bounds = map.getBounds();
+      if (!bounds) return;
+      const view = viewBox(bounds);
+      for (const shape of shapes) {
+        const lat = Number(shape.center_lat);
+        const lng = Number(shape.center_lng);
+        const center = Number.isFinite(lat) && Number.isFinite(lng) ? { lat, lng } : null;
+        if (!shapeIntersectsView(shape.rings, center, view)) continue;
+        const active = Boolean(shape.is_active);
+        for (const ring of shape.rings ?? []) {
+          const path = (ring.polygon ?? []).filter(
+            (v) => v && Number.isFinite(v.lat) && Number.isFinite(v.lng),
+          );
+          if (path.length < 3) continue;
+          const cutout = ring.kind === 'exclude';
+          const poly = new google.maps.Polygon({
+            map,
+            paths: path,
+            strokeColor: cutout ? '#f87171' : active ? '#34d399' : '#fbbf24',
+            fillColor: cutout ? '#ef4444' : active ? '#10b981' : '#f59e0b',
+            fillOpacity: cutout ? 0.28 : active ? 0.22 : 0.12,
+            strokeWeight: active && !cutout ? 2.5 : 2,
+            strokeOpacity: cutout ? 0.9 : 1,
+            clickable: false,
+            zIndex: cutout ? 40 : active ? 30 : 20,
+          });
+          townPolysRef.current.push(poly);
+        }
+      }
+    };
+
+    const listener = map.addListener('idle', sync);
+    sync();
+    return () => {
+      google.maps.event.removeListener(listener);
+      clearTowns();
+    };
+  }, [shapes, ready, layerTowns]);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6">
@@ -359,7 +361,7 @@ export function JamaicaOverviewMap({
             </h3>
             <p className="text-xs text-slate-300">
               Read-only view of every parish border, town delivery area, cutout, and town pin
-              {zoom <= 9 ? ' · zoom in to show town polygons' : ''}
+              {zoom <= 9 ? ' · zoom in to show town borders and names' : ''}
             </p>
           </div>
           <label className="inline-flex items-center gap-1.5 text-xs text-slate-300 cursor-pointer">

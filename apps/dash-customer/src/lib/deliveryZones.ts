@@ -17,6 +17,9 @@ export type { ActiveCoverageZone, LatLng } from '@roam/dash-coverage';
 export type DeliveryZoneResult = {
   inZone: boolean;
   reason?: string;
+  comingSoon?: boolean;
+  townName?: string;
+  marketId?: string;
 };
 
 export type DeliveryAddressInput = {
@@ -205,6 +208,37 @@ export function checkDeliveryZone(address: DeliveryAddressInput): DeliveryZoneRe
   };
 }
 
+async function lookupPinStatus(lat: number, lng: number): Promise<DeliveryZoneResult | null> {
+  try {
+    const { API_ENDPOINTS, supabaseAnonFunctionHeaders } = await import('@roam/api-client');
+    const res = await fetch(
+      `${API_ENDPOINTS.delivery}/geo/pin-status?lat=${encodeURIComponent(String(lat))}&lng=${encodeURIComponent(String(lng))}`,
+      { headers: supabaseAnonFunctionHeaders() },
+    );
+    if (!res.ok) return null;
+    const body = (await res.json()) as {
+      covered?: boolean;
+      coming_soon?: boolean;
+      town_name?: string | null;
+      market_id?: string | null;
+    };
+    if (body.covered) return { inZone: true };
+    const townName = body.town_name?.trim();
+    if (body.coming_soon && townName) {
+      return {
+        inZone: false,
+        comingSoon: true,
+        townName,
+        marketId: body.market_id ?? undefined,
+        reason: `${townName} is coming soon.`,
+      };
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 export async function checkDeliveryZoneAsync(
   address: DeliveryAddressInput,
 ): Promise<DeliveryZoneResult> {
@@ -212,5 +246,16 @@ export async function checkDeliveryZoneAsync(
   if (zoneLoader.getActiveZones().length === 0) {
     await loadDeliveryZones();
   }
-  return checkDeliveryZone(address);
+  const local = checkDeliveryZone(address);
+  if (
+    !local.inZone &&
+    address.lat != null &&
+    address.lng != null &&
+    Number.isFinite(address.lat) &&
+    Number.isFinite(address.lng)
+  ) {
+    const remote = await lookupPinStatus(address.lat, address.lng);
+    if (remote) return remote;
+  }
+  return local;
 }

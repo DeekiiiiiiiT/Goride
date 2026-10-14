@@ -233,7 +233,7 @@ export function registerCustomerDiscoveryRoutes(app: Hono, deps: CustomerDiscove
     const serviceSb = getServiceSupabase();
     const lat = c.req.query("lat");
     const lng = c.req.query("lng");
-    const { resolveActiveMarketIdFromPin, merchantMatchesDiscoveryPin } = await import(
+    const { resolveActiveMarketIdFromPin, merchantMatchesDiscoveryPin, uncoveredPinPayload } = await import(
       "./discoveryMarketFilter.ts"
     );
     const pin = await resolveActiveMarketIdFromPin(serviceSb, lat, lng);
@@ -242,8 +242,7 @@ export function registerCustomerDiscoveryRoutes(app: Hono, deps: CustomerDiscove
         merchants: [],
         items: [],
         query: q,
-        out_of_coverage: !pin.missingPin,
-        missing_pin: pin.missingPin,
+        ...uncoveredPinPayload(pin),
       });
     }
 

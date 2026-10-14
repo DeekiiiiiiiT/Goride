@@ -1,0 +1,47 @@
+# Parts catalog checks. Database only, no Studio, Auth, Storage, or seed.
+# A local run on 2026-10-14 died in 20260718164000_rls_wave4_latent_rls.sql
+# because public.toll_settlement_allocations is created later, in
+# 20260805120000. The parts file never started. Pull requests stay off
+# until that replay gets past the toll table. The full-stack replay in
+# verify-migrations-replay.yml stays manual for the same reason.
+name: Parts SQL checks
+
+on:
+  # pull_request:
+  #   paths:
+  #     - 'supabase/migrations/**'
+  #     - 'supabase/tests/parts_rev2_checks.sql'
+  #     - '.github/workflows/parts-sql-checks.yml'
+  workflow_dispatch:
+
+jobs:
+  parts-sql:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Supabase CLI
+        env:
+          SUPABASE_CLI_VERSION: "2.99.0"
+        run: |
+          set -euo pipefail
+          url="https://github.com/supabase/cli/releases/download/v${SUPABASE_CLI_VERSION}/supabase_${SUPABASE_CLI_VERSION}_linux_amd64.tar.gz"
+          curl -fsSL "$url" -o /tmp/supabase.tar.gz
+          sudo tar -xzf /tmp/supabase.tar.gz -C /usr/local/bin
+          supabase --version
+
+      - name: Start the database
+        run: |
+          set -euo pipefail
+          supabase db start
+
+      - name: Apply migrations without seed data
+        run: |
+          set -euo pipefail
+          supabase db reset --no-seed
+
+      - name: Parts sourcing SQL checks
+        run: |
+          set -euo pipefail
+          supabase db query --local -f supabase/tests/parts_rev2_checks.sql

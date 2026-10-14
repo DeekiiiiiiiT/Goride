@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { toast } from 'sonner';
-import { getInHouseAudience, listInHouseMarkets, listInHouseStores, saveInHouseAudience, saveInHouseStore, uploadDeskImage } from '@roam/dash-admin-client';
+import { getInHouseAudience, listInHouseStores, listMarkets, saveInHouseAudience, saveInHouseStore, townWithParish, uploadDeskImage } from '@roam/dash-admin-client';
 import { formatMoney } from '../../components/ui/format';
 import type { AdminOutletContext } from '../../DashAdminPortal';
 import { CUISINE_OPTIONS } from './cuisineOptions';
@@ -189,13 +189,17 @@ function InHouseRestaurantDesk({ mode, embedded = false }: { mode: 'stores' | 'm
 
   useEffect(() => {
     void load();
-    void listInHouseMarkets(token).then((result) => {
+    void listMarkets(token).then((result) => {
+      const parishName = new Map((result.parishes ?? []).map((parish) => [parish.id, parish.name]));
       const seen = new Set<string>();
-      setMarkets((result.markets || []).filter((town) => {
-        if (seen.has(town.id)) return false;
+      setMarkets((result.markets ?? []).filter((town) => {
+        if (!town.is_active || seen.has(town.id)) return false;
         seen.add(town.id);
         return true;
-      }).map((town) => ({ id: town.id, name: town.name })));
+      }).map((town) => ({
+        id: town.id,
+        name: townWithParish(town.name, town.parish_name ?? parishName.get(town.parish_id ?? '') ?? null),
+      })));
     }).catch((error: Error) => toast.error(error.message));
     if (mode === 'stores') {
       void getInHouseAudience(token).then((result) => setBetaPeople(result.customers)).catch(() => undefined);

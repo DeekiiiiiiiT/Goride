@@ -8,7 +8,8 @@ import { FEATURE_FLAGS, isFeatureEnabled, enableFlagForOrg, disableFlagForOrg, g
 import { decodeFrameBatch, decodeFrameNumber, engineFamilyPrefix } from "../../../packages/types/src/frameNumberDecode.ts";
 import { CacheOnlySupplierAdapter } from "./parts_supplier_adapter.ts";
 import { loadFleetCoverage } from "./parts_fleet_coverage.ts";
-import { tieredSearchReady } from "../../../packages/types/src/partsResolution.ts";
+import { attachCatalogPart, decideCatalogPart, loadCatalogReview, loadPartsCompare, saveCatalogPart } from "./parts_catalog_review.ts";
+import { secondFleetBlocked, tieredSearchReady } from "../../../packages/types/src/partsResolution.ts";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 function isUuid(s: string): boolean {
@@ -23,7 +24,12 @@ type RouteApp = {
 };
 
 function fail(c: Context, e: unknown) {
-  return c.json({ error: e instanceof Error ? e.message : String(e) }, 500);
+  const message = e instanceof Error
+    ? e.message
+    : e && typeof e === "object" && "message" in e && typeof (e as { message?: unknown }).message === "string"
+      ? (e as { message: string }).message
+      : "Could not load parts.";
+  return c.json({ error: message }, 500);
 }
 
 export function registerPartsEnterpriseRoutes(route: RouteApp, supabase: SupabaseClient) {
@@ -87,6 +93,7 @@ export function registerPartsEnterpriseRoutes(route: RouteApp, supabase: Supabas
           ...coverage,
           readyAt: 60,
           tieredOnFor: flag?.enabledForOrgs ?? [],
+          orgEnabledAt: flag?.orgEnabledAt ?? {},
           globallyOn: flag?.enabled === true,
         },
       });
@@ -113,6 +120,9 @@ export function registerPartsEnterpriseRoutes(route: RouteApp, supabase: Supabas
         const flag = await getFeatureFlag(FEATURE_FLAGS.PARTS_TIERED_SEARCH);
         if (flag?.enabled === true) {
           return c.json({ error: "Tiered search is already on for every fleet. Turn that off before choosing one fleet." }, 400);
+        }
+        if (secondFleetBlocked(flag?.enabledForOrgs ?? [], flag?.orgEnabledAt ?? {}, organizationId, Date.now())) {
+          return c.json({ error: "Another fleet is still in its first week of tiered search. Turn a second fleet on after that week." }, 400);
         }
         await enableFlagForOrg(FEATURE_FLAGS.PARTS_TIERED_SEARCH, organizationId, "parts-sourcing");
       } else {
@@ -148,7 +158,93 @@ export function registerPartsEnterpriseRoutes(route: RouteApp, supabase: Supabas
         }).eq("id", childId);
         if (error) throw error;
       }
+      if (body.shareBodyParts === true || body.shareBodyParts === false) {
+        const { error: reviewErr } = await supabase
+          .from("platform_family_review")
+          .update({ share_body_parts: body.shareBodyParts === true })
+          .in("chassis_code", codes);
+        if (reviewErr) throw reviewErr;
+      }
       return c.json({ ok: true, family, shareBodyParts: body.shareBodyParts === true });
+    } catch (e) {
+      return fail(c, e);
+    }
+  });
+
+  route.get("/make-server-37f42386/admin/platform-family-review", requireAuth(), async (c: Context) => {
+    const denied = staff(c);
+    if (denied) return denied;
+    try {
+      const { data, error } = await supabase.from("platform_family_review").select("*").order("chassis_code");
+      if (error) throw error;
+      return c.json({ items: data || [] });
+    } catch (e) {
+      return fail(c, e);
+    }
+  });
+
+  route.get("/make-server-37f42386/admin/part-catalog-review", requireAuth(), async (c: Context) => {
+    const denied = staff(c);
+    if (denied) return denied;
+    try {
+      return c.json(await loadCatalogReview(supabase));
+    } catch (e) {
+      return fail(c, e);
+    }
+  });
+
+  route.post("/make-server-37f42386/admin/part-catalog-decision", requireAuth(), async (c: Context) => {
+    const denied = staff(c);
+    if (denied) return denied;
+    try {
+      const body = await c.req.json() as { partId?: string; decision?: string };
+      const decision = body.decision === "confirmed" || body.decision === "rejected" ? body.decision : "";
+      if (!body.partId || !decision) return c.json({ error: "Pick confirm or reject." }, 400);
+      return c.json(await decideCatalogPart(supabase, body.partId, decision));
+    } catch (e) {
+      return fail(c, e);
+    }
+  });
+
+  route.post("/make-server-37f42386/admin/part-catalog-attach", requireAuth(), async (c: Context) => {
+    const denied = staff(c);
+    if (denied) return denied;
+    try {
+      const body = await c.req.json() as { partId?: string; chassisCode?: string };
+      if (!body.partId || !body.chassisCode) return c.json({ error: "A part and a chassis are required." }, 400);
+      return c.json(await attachCatalogPart(supabase, body.partId, body.chassisCode));
+    } catch (e) {
+      return fail(c, e);
+    }
+  });
+
+  route.post("/make-server-37f42386/admin/part-catalog-add", requireAuth(), async (c: Context) => {
+    const denied = staff(c);
+    if (denied) return denied;
+    try {
+      const body = await c.req.json() as {
+        opCode?: string; chassisCode?: string; engineCode?: string; manufacturer?: string; partNumber?: string; partName?: string;
+      };
+      return c.json(await saveCatalogPart(supabase, {
+        opCode: String(body.opCode ?? ""),
+        chassisCode: String(body.chassisCode ?? ""),
+        engineCode: String(body.engineCode ?? ""),
+        manufacturer: String(body.manufacturer ?? ""),
+        partNumber: String(body.partNumber ?? ""),
+        partName: body.partName,
+      }));
+    } catch (e) {
+      return fail(c, e);
+    }
+  });
+
+  route.get("/make-server-37f42386/admin/parts-compare", requireAuth(), async (c: Context) => {
+    const denied = staff(c);
+    if (denied) return denied;
+    try {
+      const organizationId = c.req.query("organizationId")?.trim() || "";
+      if (!organizationId) return c.json({ error: "Pick one fleet." }, 400);
+      return c.json(await loadPartsCompare(supabase, organizationId));
     } catch (e) {
       return fail(c, e);
     }

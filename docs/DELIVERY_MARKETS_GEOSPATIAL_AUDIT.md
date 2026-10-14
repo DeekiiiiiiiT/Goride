@@ -287,12 +287,28 @@ The appendix guard *"parishes whose legacy jsonb is a truncated view of their re
 returns **2 rows (Kingston, St. Catherine)** and **that is now correct behaviour, not a failure**.
 
 It was written before OPEN-11 to detect the bug. Post-fix, truncated jsonb is the accepted
-dual-write contract; the property that matters is that **nothing reads it for coverage**. Guards 2
-and 3 (zone truncation, multi-part parish in `parish_boundary` mode) remain true 0-row invariants.
+dual-write contract; the property that matters is that **nothing reads it for coverage**. Guard 3
+(multi-part parish in `parish_boundary` mode) remains a true 0-row invariant.
 
-Do not "fix" guard 1 by backfilling all parts into the jsonb — flat `{lat,lng}[]` cannot represent
-multi-part geometry, which was BUG-4. Re-interpret it as an inventory of parishes whose jsonb must
-never be used for coverage.
+**Guard 2 is an inventory as of 2026-10-14**, same contract as guard 1. Promoting all 131 admin2
+towns wrote full MultiPolygons to `geom` and only the first ring to legacy `polygon`. That is
+expected for these eight pcodes, stored in `delivery.legacy_jsonb_zone_inventory`:
+
+| Town | pcode |
+|---|---|
+| Junction | JM1006 |
+| Downtown | JM0603 |
+| Greater Montego Bay | JM1005 |
+| Grange Hill | JM1406 |
+| Port Antonio Urban Centre | JM0506 |
+| Hopewell | JM0203 |
+| Highgate | JM1106 |
+| Portmore | JM0805 |
+
+`delivery.legacy_jsonb_zone_drift()` must return **0 rows**. A missing pcode or a ninth truncated
+town is a failure. Do not backfill parts into the jsonb — flat `{lat,lng}[]` cannot represent
+multi-part geometry (BUG-4). Coverage reads `geom`. Before any of these eight is activated,
+`delivery.market_launch_facts()` must report `split_border_ok`.
 
 ---
 
@@ -735,8 +751,10 @@ select * from delivery.coverage_health_summary;
 
 ### OPEN-11 regression guards
 
-> **Guards 2 and 3 must return 0 rows. Guard 1 is expected to return 2** (Kingston, St. Catherine) —
-> see the design-contract note in §2c. It is an inventory, not a failure.
+> **Guard 3 must return 0 rows. Guard 1 is expected to return 2** (Kingston, St. Catherine).
+> **Guard 2 is expected to return the eight pcodes in `delivery.legacy_jsonb_zone_inventory`.**
+> The failure check is `SELECT * FROM delivery.legacy_jsonb_zone_drift()` — that must return 0 rows.
+> See the design-contract note in §2c. These are inventories, not failures.
 
 ```sql
 -- 1. INVENTORY (expect 2): parishes whose legacy jsonb is a first-ring-only projection.
@@ -748,12 +766,8 @@ from delivery.service_parishes
 where st_numgeometries(foundation_geom) > 1
   and jsonb_array_length(foundation_polygon) < st_npoints(foundation_geom) - 1;
 
--- 2. same check for town zones (fires once a multi-part admin2 is promoted)
-select z.id, z.name, jsonb_array_length(z.polygon) as jsonb_pts,
-       st_npoints(z.geom) as geom_pts, st_numgeometries(z.geom) as parts
-from delivery.service_zone_polygons z
-where st_numgeometries(z.geom) > 1
-  and jsonb_array_length(z.polygon) < st_npoints(z.geom) - 1;
+-- 2. INVENTORY (expect the 8 pcodes). Failure is drift, not the list itself.
+select * from delivery.legacy_jsonb_zone_drift();
 
 -- 3. multi-part parishes currently in parish_boundary mode (was: live truncation risk)
 select slug, name, st_numgeometries(foundation_geom) as parts

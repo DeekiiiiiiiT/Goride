@@ -7,17 +7,35 @@ import { Textarea } from "../../ui/textarea";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../../ui/table";
 import { partsEnterpriseApi, listPartsSourcingRequests, updatePartsSourcingRequest, type PartsSourcingRequestRow } from "../../../services/partSourcingService";
 import { parsePartsCatalogCsv } from "@roam/types/partsCatalogCsvImport";
+import { secondFleetBlocked } from "@roam/types/partsResolution";
 
 function itemsOf(data: Record<string, unknown> | null): Record<string, unknown>[] {
   const items = data?.items;
   return Array.isArray(items) ? items as Record<string, unknown>[] : [];
 }
 
+const OP_LABEL: Record<string, string> = {
+  "ENG-OIL": "Oil filter",
+  "ENG-SPARK": "Spark plugs",
+  "ENG-THERM": "Thermostat",
+  "FILT-AIR": "Air filter",
+  "HVAC-CABIN": "Cabin filter",
+  "BRK-PADS": "Brake pads",
+  "BELT-SERP": "Drive belt",
+  "LGT-WIPER": "Wipers",
+  "BRK-ROTOR": "Brake rotors",
+  "SUS-SHOCK": "Shocks",
+  "ENG-O2": "Oxygen sensor",
+  "ENG-WPUMP": "Water pump",
+};
+
 export function PartsVehiclesPanel({ token }: { token: string }) {
   const [platforms, setPlatforms] = useState<Record<string, unknown>[]>([]);
   const [engines, setEngines] = useState<Record<string, unknown>[]>([]);
   const [coverage, setCoverage] = useState<Record<string, unknown> | null>(null);
   const [error, setError] = useState("");
+  const [compareFor, setCompareFor] = useState("");
+  const [compare, setCompare] = useState<Record<string, unknown> | null>(null);
 
   const load = useCallback(async () => {
     setError("");
@@ -39,7 +57,11 @@ export function PartsVehiclesPanel({ token }: { token: string }) {
 
   const pct = Number(coverage?.coveragePct ?? 0);
   const byOrg = Array.isArray(coverage?.byOrg) ? coverage.byOrg as Record<string, unknown>[] : [];
-  const tieredOn = new Set(Array.isArray(coverage?.tieredOnFor) ? coverage.tieredOnFor as string[] : []);
+  const tieredOn = Array.isArray(coverage?.tieredOnFor) ? coverage.tieredOnFor as string[] : [];
+  const tieredSet = new Set(tieredOn);
+  const enabledAt = (coverage?.orgEnabledAt && typeof coverage.orgEnabledAt === "object")
+    ? coverage.orgEnabledAt as Record<string, string>
+    : {};
   const components = Array.isArray(coverage?.components) ? coverage.components as Record<string, unknown>[] : [];
   const nameByCode = new Map(components.map((item) => [String(item.opCode ?? ""), String(item.name ?? item.opCode ?? "")]));
   const missing = Array.isArray(coverage?.missing) ? coverage.missing as Record<string, unknown>[] : [];
@@ -47,42 +69,59 @@ export function PartsVehiclesPanel({ token }: { token: string }) {
   return (
     <div className="space-y-4">
       <div className="rounded-xl border border-slate-200 dark:border-slate-700 p-4 space-y-3">
-        <p className="text-sm text-slate-500">Active vehicles with a real match on all 10 parts: oil filter, spark plugs, thermostat, air filter, cabin filter, brake pads, drive belt, wipers, brake rotors, and shocks.</p>
+        <p className="text-sm text-slate-500">Active vehicles with a confirmed match on all 10 parts: oil filter, spark plugs, thermostat, air filter, cabin filter, brake pads, drive belt, wipers, brake rotors, and shocks.</p>
         <p className="text-3xl font-semibold">{String(pct)}%</p>
         <p className="text-sm text-slate-500">
-          {String(coverage?.coveredCount ?? 0)} of {String(coverage?.vehicleCount ?? 0)} active vehicles. Tiered search unlocks for a fleet at 60%. Turn on one fleet, compare it with the old search, then widen.
+          {String(coverage?.coveredCount ?? 0)} of {String(coverage?.vehicleCount ?? 0)} active vehicles. Tiered search unlocks for a fleet at 60%. Compare first, turn on one fleet, then wait a week.
         </p>
         {missingNames.length > 0 ? (
           <p className="text-sm text-slate-500">Still missing a match: {missingNames.join(", ")}.</p>
         ) : null}
         {byOrg.length === 0 ? <p className="text-sm text-slate-500">No active fleets in this sample yet.</p> : byOrg.map((org) => {
           const id = String(org.organizationId ?? "");
+          const name = String(org.organizationName || id);
           const orgPct = Number(org.coveragePct ?? 0);
-          const on = tieredOn.has(id);
+          const on = tieredSet.has(id);
+          const waiting = !on && secondFleetBlocked(tieredOn, enabledAt, id, Date.now());
           return (
-            <div key={id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border px-3 py-2">
-              <div>
-                <p className="text-sm font-medium">{id}</p>
-                <p className="text-xs text-slate-500">{orgPct}% · {String(org.coveredCount ?? 0)} of {String(org.vehicleCount ?? 0)} vehicles</p>
-                {Array.isArray(org.missingOpCodes) && (org.missingOpCodes as string[]).length > 0 ? (
-                  <p className="text-xs text-slate-500">Missing: {(org.missingOpCodes as string[]).map((code) => nameByCode.get(code) || code).join(", ")}</p>
-                ) : null}
+            <div key={id} className="space-y-2 rounded-lg border px-3 py-2">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <p className="text-sm font-medium">{name}</p>
+                  <p className="text-xs text-slate-500">{orgPct}% · {String(org.coveredCount ?? 0)} of {String(org.vehicleCount ?? 0)} vehicles</p>
+                  {Array.isArray(org.missingOpCodes) && (org.missingOpCodes as string[]).length > 0 ? (
+                    <p className="text-xs text-slate-500">Missing: {(org.missingOpCodes as string[]).map((code) => nameByCode.get(code) || code).join(", ")}</p>
+                  ) : null}
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Button type="button" size="sm" variant="outline" onClick={async () => {
+                    try {
+                      const next = compareFor === id ? "" : id;
+                      setCompareFor(next);
+                      setCompare(next ? await partsEnterpriseApi.compare(token, id) : null);
+                    } catch (err) {
+                      toast.error(err instanceof Error ? err.message : "Could not compare");
+                    }
+                  }}>{compareFor === id ? "Hide compare" : "Compare with the old list"}</Button>
+                  <Button type="button" size="sm" variant={on ? "outline" : "default"} disabled={!on && (orgPct < 60 || waiting)} onClick={async () => {
+                    try {
+                      await partsEnterpriseApi.setTieredSearch(token, id, !on);
+                      toast.success(on ? "Tiered search off for this fleet" : "Tiered search on for this fleet");
+                      await load();
+                    } catch (err) {
+                      toast.error(err instanceof Error ? err.message : "Could not change tiered search");
+                    }
+                  }}>{on ? "Turn off" : waiting ? "Wait one week" : orgPct < 60 ? "Needs 60%" : "Turn on for this fleet"}</Button>
+                </div>
               </div>
-              <Button type="button" size="sm" variant={on ? "outline" : "default"} disabled={!on && orgPct < 60} onClick={async () => {
-                try {
-                  await partsEnterpriseApi.setTieredSearch(token, id, !on);
-                  toast.success(on ? "Tiered search off for this fleet" : "Tiered search on for this fleet");
-                  await load();
-                } catch (err) {
-                  toast.error(err instanceof Error ? err.message : "Could not change tiered search");
-                }
-              }}>{on ? "Turn off" : orgPct < 60 ? "Needs 60%" : "Turn on for this fleet"}</Button>
+              {compareFor === id && compare ? <PartsCompare compare={compare} /> : null}
             </div>
           );
         })}
         {error ? <p className="text-sm text-red-600 mt-2">{error}</p> : null}
       </div>
-      <PlatformFamilies token={token} platforms={platforms} onSaved={load} />
+      <CatalogReview token={token} onChanged={load} />
+      <PlatformFamilies token={token} onSaved={load} />
       <h3 className="font-medium">Platforms (one per exact chassis code)</h3>
       <div className="rounded-lg border overflow-hidden max-h-64 overflow-auto">
         <Table>
@@ -109,43 +148,176 @@ export function PartsVehiclesPanel({ token }: { token: string }) {
   );
 }
 
-const PLATFORM_FAMILIES = [
-  { family: "NZE141", codes: ["NZE141", "NZE141G"], note: "Confirm these share body parts before grouping." },
-  { family: "NKE165", codes: ["NKE165", "NKE165G"], note: "" },
-  { family: "NZE151", codes: ["NZE151H", "NZE151N"], note: "" },
-  { family: "CV1", codes: ["CV1", "CV1W"], note: "" },
-  { family: "R80", codes: ["ZRR80G", "ZRR80W"], note: "Gas Noah. The hybrid stays separate." },
-  { family: "R80", codes: ["ZWR80G"], note: "Hybrid Noah. Leave this off unless body parts truly match the gas Noah." },
-];
+function PartsCompare({ compare }: { compare: Record<string, unknown> }) {
+  const vehicle = (compare.vehicle && typeof compare.vehicle === "object") ? compare.vehicle as Record<string, unknown> : null;
+  const legacy = Array.isArray(compare.legacy) ? compare.legacy as Record<string, unknown>[] : [];
+  const tiered = Array.isArray(compare.tiered) ? compare.tiered as Record<string, unknown>[] : [];
+  const line = (row: Record<string, unknown>) => `${String(row.name || "Part")} ${row.partNumber ? `(${String(row.partNumber)})` : ""}`.trim();
+  return (
+    <div className="grid gap-3 sm:grid-cols-2 text-sm">
+      <p className="sm:col-span-2 text-xs text-slate-500">
+        {vehicle ? `${String(vehicle.make ?? "")} ${String(vehicle.model ?? "")} ${vehicle.year ?? ""} · ${String(vehicle.chassisCode ?? "")}`.trim() : "No catalog vehicle in this fleet yet."} The fleet app keeps the old list until you turn tiered search on.
+      </p>
+      <div>
+        <p className="font-medium mb-1">Old list</p>
+        {legacy.length === 0 ? <p className="text-xs text-slate-500">Nothing on the old list.</p> : <ul className="space-y-1">{legacy.map((row, i) => <li key={i}>{line(row)}</li>)}</ul>}
+      </div>
+      <div>
+        <p className="font-medium mb-1">Tiered list</p>
+        {tiered.length === 0 ? <p className="text-xs text-slate-500">Nothing on the tiered list yet.</p> : <ul className="space-y-1">{tiered.map((row, i) => <li key={i}>{line(row)} · tier {String(row.tier ?? "")}</li>)}</ul>}
+      </div>
+    </div>
+  );
+}
 
-function PlatformFamilies({ token, platforms, onSaved }: { token: string; platforms: Record<string, unknown>[]; onSaved: () => Promise<void> }) {
-  const parentByCode = new Map(platforms.map((p) => [String(p.code), p.parent_id ? String(p.parent_id) : ""]));
-  const idByCode = new Map(platforms.map((p) => [String(p.code), String(p.id)]));
+type FamilyReviewRow = {
+  chassis_code: string;
+  group_key: string;
+  suggested_family: string;
+  car_name: string;
+  share_body_parts: boolean | null;
+  notes: string;
+};
+
+function PlatformFamilies({ token, onSaved }: { token: string; onSaved: () => Promise<void> }) {
+  const [rows, setRows] = useState<FamilyReviewRow[]>([]);
+  const load = useCallback(async () => {
+    const data = await partsEnterpriseApi.familyReview(token);
+    setRows((Array.isArray(data.items) ? data.items : []) as FamilyReviewRow[]);
+  }, [token]);
+  useEffect(() => { void load().catch(() => setRows([])); }, [load]);
+  const groups = new Map<string, FamilyReviewRow[]>();
+  for (const row of rows) {
+    const list = groups.get(row.group_key) ?? [];
+    list.push(row);
+    groups.set(row.group_key, list);
+  }
   return (
     <div className="space-y-2">
       <h3 className="font-medium">Families that can share body parts</h3>
-      <p className="text-sm text-slate-500">Nothing is grouped until you turn a family on. Pads, rotors, and cabin parts should be added after that, one rule for the family.</p>
-      {PLATFORM_FAMILIES.map((row) => {
-        const parentId = idByCode.get(row.family) ?? "";
-        const shared = row.codes.every((code) => code === row.family || (parentByCode.get(code) && parentByCode.get(code) === parentId && parentId));
+      <p className="text-sm text-slate-500">Nothing is grouped until you turn a family on. Accord and the Delica stay separate. The hybrid Noah stays separate from the gas Noah.</p>
+      {[...groups.entries()].map(([key, list]) => {
+        const family = list[0]?.suggested_family ?? "";
+        const canShare = list.length > 1 || key === "r80-hybrid";
+        const shared = canShare && list.every((row) => row.share_body_parts === true);
+        const note = list.map((row) => row.notes).find(Boolean) ?? "";
         return (
-          <div key={`${row.family}-${row.codes.join("-")}`} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border px-3 py-2">
+          <div key={key} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border px-3 py-2">
             <div>
-              <p className="text-sm font-medium">{row.codes.join(", ")} → {row.family}</p>
-              {row.note ? <p className="text-xs text-slate-500">{row.note}</p> : null}
+              <p className="text-sm font-medium">{list.map((row) => `${row.car_name} (${row.chassis_code})`).join(", ")}</p>
+              {note ? <p className="text-xs text-slate-500">{note}</p> : null}
             </div>
-            <Button type="button" size="sm" variant={shared ? "default" : "outline"} onClick={async () => {
-              try {
-                await partsEnterpriseApi.setFamily(token, { family: row.family, chassisCodes: row.codes, shareBodyParts: !shared });
-                toast.success(shared ? "Family ungrouped" : "These codes now share body parts");
-                await onSaved();
-              } catch (err) {
-                toast.error(err instanceof Error ? err.message : "Could not update the family");
-              }
-            }}>{shared ? "Sharing body parts" : "These share body parts"}</Button>
+            {canShare ? (
+              <Button type="button" size="sm" variant={shared ? "default" : "outline"} onClick={async () => {
+                try {
+                  await partsEnterpriseApi.setFamily(token, {
+                    family,
+                    chassisCodes: list.map((row) => row.chassis_code),
+                    shareBodyParts: !shared,
+                  });
+                  toast.success(shared ? "Family ungrouped" : "These cars now share body parts");
+                  await load();
+                  await onSaved();
+                } catch (err) {
+                  toast.error(err instanceof Error ? err.message : "Could not update the family");
+                }
+              }}>{shared ? "Sharing body parts" : key === "r80-hybrid" ? "Shares with the gas Noah" : "These share body parts"}</Button>
+            ) : (
+              <p className="text-xs text-slate-500">Stays on its own</p>
+            )}
           </div>
         );
       })}
+    </div>
+  );
+}
+
+type ReviewPart = { id: string; name: string; partNumber: string | null; manufacturer: string | null; opCode: string; decision: string };
+type GapRow = { opCode: string; action: "confirm" | "attach" | "enter"; partNumber: string; manufacturer: string; partId: string | null; partName?: string; decision: string; done: boolean };
+type GapFleet = { organizationName: string; chassisCode: string; engineCode: string; carName: string; vehicleCount: number; rows: GapRow[] };
+
+function CatalogReview({ token, onChanged }: { token: string; onChanged: () => Promise<void> }) {
+  const [parts, setParts] = useState<ReviewPart[]>([]);
+  const [gaps, setGaps] = useState<GapFleet[]>([]);
+  const [drafts, setDrafts] = useState<Record<string, { manufacturer: string; partNumber: string }>>({});
+  const [reviewError, setReviewError] = useState("");
+  const load = useCallback(async () => {
+    const data = await partsEnterpriseApi.catalogReview(token);
+    setParts((Array.isArray(data.parts) ? data.parts : []) as ReviewPart[]);
+    setGaps((Array.isArray(data.gaps) ? data.gaps : []) as GapFleet[]);
+    setReviewError("");
+  }, [token]);
+  useEffect(() => {
+    void load().catch((err) => {
+      setParts([]);
+      setGaps([]);
+      setReviewError(err instanceof Error ? err.message : "Could not load the catalog check.");
+    });
+  }, [load]);
+  const pending = parts.filter((part) => part.decision === "pending");
+  const act = async (work: () => Promise<unknown>, done: string) => {
+    try {
+      await work();
+      toast.success(done);
+      await load();
+      await onChanged();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not save");
+    }
+  };
+  return (
+    <div className="space-y-3">
+      <h3 className="font-medium">Catalog numbers to check</h3>
+      <p className="text-sm text-slate-500">A number counts toward the 60% gate only after you confirm it. Reject hides it from search. Nothing here is guessed.</p>
+      {reviewError ? <p className="text-sm text-red-600">{reviewError}</p> : null}
+      {pending.length === 0 ? <p className="text-sm text-slate-500">No unconfirmed numbers.</p> : pending.map((part) => (
+        <div key={part.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border px-3 py-2">
+          <p className="text-sm">{OP_LABEL[part.opCode] || part.name} · {part.manufacturer} {part.partNumber}</p>
+          <div className="flex gap-2">
+            <Button type="button" size="sm" onClick={() => void act(() => partsEnterpriseApi.decidePart(token, part.id, "confirmed"), "Number confirmed")}>Confirm</Button>
+            <Button type="button" size="sm" variant="outline" onClick={() => void act(() => partsEnterpriseApi.decidePart(token, part.id, "rejected"), "Number hidden from search")}>Reject</Button>
+          </div>
+        </div>
+      ))}
+      {gaps.map((fleet) => (
+        <div key={`${fleet.organizationName}-${fleet.chassisCode}`} className="space-y-2">
+          <h3 className="font-medium">{fleet.carName} · {fleet.chassisCode} · {fleet.organizationName}</h3>
+          <p className="text-xs text-slate-500">{fleet.vehicleCount} vehicle{fleet.vehicleCount === 1 ? "" : "s"} · engine {fleet.engineCode || "unknown"}</p>
+          {fleet.rows.filter((row) => !row.done).map((row) => {
+            const draftKey = `${fleet.chassisCode}:${row.opCode}`;
+            const draft = drafts[draftKey] ?? { manufacturer: "", partNumber: "" };
+            return (
+              <div key={draftKey} className="flex flex-wrap items-end justify-between gap-2 rounded-lg border px-3 py-2">
+                <div>
+                  <p className="text-sm">{OP_LABEL[row.opCode] || row.opCode}</p>
+                  {row.action === "enter" ? (
+                    <div className="flex flex-wrap gap-2 mt-2">
+                      <Input value={draft.manufacturer} placeholder="Maker" onChange={(e) => setDrafts((prev) => ({ ...prev, [draftKey]: { ...draft, manufacturer: e.target.value } }))} />
+                      <Input value={draft.partNumber} placeholder="Part number from the maker catalog" onChange={(e) => setDrafts((prev) => ({ ...prev, [draftKey]: { ...draft, partNumber: e.target.value } }))} />
+                    </div>
+                  ) : (
+                    <p className="text-xs text-slate-500">{row.manufacturer} {row.partNumber}{row.action === "attach" ? ` · attach to ${fleet.chassisCode}` : " · already follows this engine"}</p>
+                  )}
+                </div>
+                {row.action === "enter" ? (
+                  <Button type="button" size="sm" onClick={() => void act(() => partsEnterpriseApi.addCatalogPart(token, {
+                    opCode: row.opCode,
+                    chassisCode: fleet.chassisCode,
+                    engineCode: fleet.engineCode,
+                    manufacturer: draft.manufacturer,
+                    partNumber: draft.partNumber,
+                    partName: OP_LABEL[row.opCode] || row.opCode,
+                  }), "Number saved")}>Save this number</Button>
+                ) : row.action === "attach" && row.partId ? (
+                  <Button type="button" size="sm" onClick={() => void act(() => partsEnterpriseApi.attachPart(token, row.partId as string, fleet.chassisCode), "Attached to this chassis")}>Attach</Button>
+                ) : row.partId ? (
+                  <Button type="button" size="sm" onClick={() => void act(() => partsEnterpriseApi.decidePart(token, row.partId as string, "confirmed"), "Number confirmed")}>Confirm</Button>
+                ) : null}
+              </div>
+            );
+          })}
+        </div>
+      ))}
     </div>
   );
 }

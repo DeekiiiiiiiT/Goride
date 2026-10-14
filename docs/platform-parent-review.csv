@@ -1,12 +1,12 @@
-chassis_code,suggested_family,share_body_parts,notes
-NZE141,NZE141,,Leave blank until Dominion confirms these codes share body parts.
-NZE141G,NZE141,,Do not group until share_body_parts is yes.
-NKE165,NKE165,,
-NKE165G,NKE165,,
-NZE151H,NZE151,,
-NZE151N,NZE151,,
-CV1,CV1,,
-CV1W,CV1,,
-ZRR80G,R80,,Gas Noah. Do not merge with the hybrid.
-ZRR80W,R80,,
-ZWR80G,R80,,Hybrid Noah. Stays separate until this row is marked yes.
+chassis_code,suggested_family,share_body_parts,car_name,notes
+NZE141,NZE141,,Toyota Corolla Axio,Leave blank until these codes share body parts.
+NZE141G,NZE141,,Toyota Corolla Fielder,Do not group until share is yes.
+NKE165,NKE165,,Toyota Corolla Axio hybrid,
+NKE165G,NKE165,,Toyota Corolla Fielder hybrid,
+NZE151H,NZE151,,Toyota Auris,
+NZE151N,NZE151,,Toyota Rumion,
+CV1,CV1,,Honda Accord,Stays on its own. Does not share body parts with the Delica.
+CV1W,CV1W,,Mitsubishi Delica D5,Stays on its own. Does not share body parts with the Accord.
+ZRR80G,R80,,Toyota Noah gas,Gas Noah. Do not merge with the hybrid.
+ZRR80W,R80,,Toyota Voxy gas,
+ZWR80G,R80,,Toyota Noah hybrid,Hybrid Noah. Stays separate until this row is marked yes.

@@ -265,6 +265,8 @@ export default function CheckoutPage({ onNavigate, session }: Props) {
         onNavigate('out-of-delivery', {
           returnTo: 'checkout',
           attemptedAddress: deliveryAddress,
+          townName: zone.townName,
+          marketId: zone.marketId,
         });
         return;
       }

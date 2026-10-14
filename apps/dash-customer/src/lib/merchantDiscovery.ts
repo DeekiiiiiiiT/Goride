@@ -99,10 +99,41 @@ function mockMerchants(vertical?: VerticalType): DiscoverMerchant[] {
   return deduped.filter((m) => m.vertical_type === vertical);
 }
 
+export type DiscoveryCoverage = {
+  outOfCoverage: boolean;
+  missingPin: boolean;
+  comingSoon: boolean;
+  townName?: string;
+  marketId?: string;
+};
+
+export function interpretDiscoveryPayload(
+  data: {
+    out_of_coverage?: boolean;
+    missing_pin?: boolean;
+    coming_soon?: boolean;
+    town_name?: string | null;
+    market_id?: string | null;
+  },
+  hasRows: boolean,
+): DiscoveryCoverage {
+  if (hasRows) {
+    return { outOfCoverage: false, missingPin: false, comingSoon: false };
+  }
+  const townName = data.town_name?.trim() || undefined;
+  return {
+    outOfCoverage: Boolean(data.out_of_coverage || data.coming_soon),
+    missingPin: Boolean(data.missing_pin),
+    comingSoon: Boolean(data.coming_soon && townName),
+    townName,
+    marketId: data.market_id ?? undefined,
+  };
+}
+
 export async function fetchDiscoverMerchants(
   vertical?: VerticalType,
   options?: { limit?: number; offset?: number; lat?: number; lng?: number },
-): Promise<{ merchants: DiscoverMerchant[]; hasMore: boolean; outOfCoverage?: boolean }> {
+): Promise<{ merchants: DiscoverMerchant[]; hasMore: boolean } & DiscoveryCoverage> {
   const params = new URLSearchParams();
   if (vertical) params.set('vertical', vertical);
   if (options?.limit != null) params.set('limit', String(options.limit));
@@ -133,23 +164,29 @@ export async function fetchDiscoverMerchants(
     merchants?: Record<string, unknown>[];
     hasMore?: boolean;
     out_of_coverage?: boolean;
+    missing_pin?: boolean;
+    coming_soon?: boolean;
+    town_name?: string | null;
+    market_id?: string | null;
   };
   const rows = data.merchants ?? [];
+  const coverage = interpretDiscoveryPayload(data, rows.length > 0);
   if (!rows.length) {
     // Never fall back to Kingston mocks when geo-filtering is in play
     if (allowMocks() && lat == null && lng == null) {
       const mocked = mockMerchants(vertical);
-      return { merchants: mocked, hasMore: false };
+      return { merchants: mocked, hasMore: false, ...interpretDiscoveryPayload({}, true) };
     }
     return {
       merchants: [],
       hasMore: false,
-      outOfCoverage: Boolean(data.out_of_coverage),
+      ...coverage,
     };
   }
   return {
     merchants: rows.map(mapApiMerchant),
     hasMore: Boolean(data.hasMore),
+    ...coverage,
   };
 }
 

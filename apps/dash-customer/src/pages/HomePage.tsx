@@ -20,6 +20,7 @@ import { getSavedAddress, selectSavedAddress } from '@/lib/addressStorage';
 import { getProfile, PROFILE_AVATAR } from '@/lib/accountContent';
 import { fetchCustomerOrders } from '@/lib/customerApi';
 import { isLiveOrderStatus } from '@/lib/ordersContent';
+import OutOfDeliveryPage from './OutOfDeliveryPage';
 
 type HomePageProps = {
   onNavigate: (page: string, data?: Record<string, unknown>) => void;
@@ -42,6 +43,10 @@ export default function HomePage({
   const [merchants, setMerchants] = useState<DiscoverMerchant[]>([]);
   const [loading, setLoading] = useState(true);
   const [discoveryError, setDiscoveryError] = useState<string | null>(null);
+  const [outOfCoverage, setOutOfCoverage] = useState(false);
+  const [missingPin, setMissingPin] = useState(false);
+  const [comingSoonTown, setComingSoonTown] = useState<string | undefined>();
+  const [comingSoonMarketId, setComingSoonMarketId] = useState<string | undefined>();
   const [addressOpen, setAddressOpen] = useState(false);
   const [addressTick, setAddressTick] = useState(0);
   const savedAddress = useMemo(() => getSavedAddress(), [addressTick]);
@@ -72,10 +77,19 @@ export default function HomePage({
     setLoading(true);
     setDiscoveryError(null);
     try {
-      const { merchants: data } = await fetchDiscoverMerchants(vertical);
+      const { merchants: data, outOfCoverage: uncovered, missingPin: noPin, townName, marketId } =
+        await fetchDiscoverMerchants(vertical);
       setMerchants(data);
+      setOutOfCoverage(Boolean(uncovered));
+      setMissingPin(Boolean(noPin));
+      setComingSoonTown(townName);
+      setComingSoonMarketId(marketId);
     } catch {
       setMerchants([]);
+      setOutOfCoverage(false);
+      setMissingPin(false);
+      setComingSoonTown(undefined);
+      setComingSoonMarketId(undefined);
       setDiscoveryError('Could not load stores. Check your connection and try again.');
     } finally {
       setLoading(false);
@@ -84,7 +98,7 @@ export default function HomePage({
 
   useEffect(() => {
     void loadMerchants(selectedVertical);
-  }, [loadMerchants, selectedVertical]);
+  }, [loadMerchants, selectedVertical, addressTick]);
 
   const handleRefresh = useCallback(async () => {
     await loadMerchants(selectedVertical);
@@ -102,6 +116,58 @@ export default function HomePage({
       verticalType: merchant.vertical_type,
     });
   };
+
+  const addressSheet = (
+    <AddressPickerSheet
+      open={addressOpen}
+      onClose={() => setAddressOpen(false)}
+      onSelect={(address) => {
+        void selectSavedAddress(address).then(() => {
+          setAddressTick((n) => n + 1);
+          setAddressOpen(false);
+        });
+      }}
+      onAdd={() => {
+        setAddressOpen(false);
+        onNavigate('add-address', { returnTo: 'home' });
+      }}
+    />
+  );
+
+  if (!loading && !discoveryError && missingPin && !outOfCoverage) {
+    return (
+      <>
+        <div className="min-h-full bg-surface">
+          <EmptyState
+            icon="location_on"
+            title="Set your delivery address"
+            description="We'll show stores, or a waitlist, once we know where to deliver."
+            actionLabel="Set address"
+            onAction={() => setAddressOpen(true)}
+          />
+        </div>
+        {addressSheet}
+      </>
+    );
+  }
+
+  if (!loading && !discoveryError && outOfCoverage) {
+    const line = savedAddress
+      ? `${savedAddress.line1}${savedAddress.line2 ? `, ${savedAddress.line2}` : ''}`
+      : undefined;
+    return (
+      <>
+        <OutOfDeliveryPage
+          onNavigate={onNavigate}
+          address={line}
+          townName={comingSoonTown}
+          marketId={comingSoonMarketId}
+          onReturn={() => setAddressOpen(true)}
+        />
+        {addressSheet}
+      </>
+    );
+  }
 
   return (
     <PullToRefresh onRefresh={handleRefresh} className="min-h-full bg-surface">
@@ -228,8 +294,8 @@ export default function HomePage({
             ) : filteredPopular.length === 0 ? (
               <EmptyState
                 icon="storefront"
-                title="No stores found"
-                description="Try another category or pull to refresh."
+                title="No stores in this category yet"
+                description="This town is open. Try another category."
                 actionLabel="Show all food"
                 onAction={() => setSelectedVertical('restaurant')}
               />
@@ -245,20 +311,7 @@ export default function HomePage({
           </div>
         </section>
       </main>
-      <AddressPickerSheet
-        open={addressOpen}
-        onClose={() => setAddressOpen(false)}
-        onSelect={(address) => {
-          void selectSavedAddress(address).then(() => {
-            setAddressTick((n) => n + 1);
-            setAddressOpen(false);
-          });
-        }}
-        onAdd={() => {
-          setAddressOpen(false);
-          onNavigate('add-address', { returnTo: 'home' });
-        }}
-      />
+      {addressSheet}
     </PullToRefresh>
   );
 }

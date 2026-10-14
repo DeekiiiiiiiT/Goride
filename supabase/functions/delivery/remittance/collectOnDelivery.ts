@@ -157,7 +157,19 @@ export async function collectOnDelivery(
     });
     return { ok: true };
   } catch (err) {
-    await parkException(sb, orderId, courierId, classifyRemittanceError(err), err);
+    try {
+      await parkException(sb, orderId, courierId, classifyRemittanceError(err), err);
+    } catch (parkErr) {
+      // Neither the ledger nor the exception queue holds this collection.
+      // Log both errors so the order can be found and replayed by hand.
+      console.error("[COD] collection lost — park failed", {
+        orderId,
+        courierId,
+        collectError: err instanceof Error ? err.message : String(err),
+        parkError: parkErr instanceof Error ? parkErr.message : String(parkErr),
+      });
+      return { ok: false, reason: "park_failed" };
+    }
     return { ok: false, reason: "parked" };
   }
 }

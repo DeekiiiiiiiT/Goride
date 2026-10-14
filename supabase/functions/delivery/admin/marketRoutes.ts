@@ -272,6 +272,123 @@ async function markDraftDirty(db: ReturnType<typeof getDb>, marketId: string) {
   await db.from("service_markets").update({ draft_dirty: true }).eq("id", marketId);
 }
 
+type LaunchFacts = {
+  border_area_sqkm: number | null;
+  split_border: boolean;
+  split_border_ok: boolean;
+  split_border_detail: string | null;
+};
+
+const LAUNCH_FACTS_UNAVAILABLE: LaunchFacts = {
+  border_area_sqkm: null,
+  split_border: true,
+  split_border_ok: false,
+  split_border_detail: "Could not verify the full border. This town stays off.",
+};
+
+async function loadMarketLaunchFacts(
+  db: ReturnType<typeof getDb>,
+  marketId: string,
+): Promise<LaunchFacts> {
+  const { data, error } = await db.rpc("market_launch_facts", { p_market_id: marketId });
+  if (error || data == null || typeof data !== "object" || Array.isArray(data)) {
+    return LAUNCH_FACTS_UNAVAILABLE;
+  }
+  const row = data as Record<string, unknown>;
+  const areaRaw = row.border_area_sqkm == null ? null : Number(row.border_area_sqkm);
+  return {
+    border_area_sqkm: areaRaw != null && Number.isFinite(areaRaw) ? areaRaw : null,
+    split_border: row.split_border === true,
+    split_border_ok: row.split_border_ok === true,
+    split_border_detail: row.split_border_detail != null ? String(row.split_border_detail) : null,
+  };
+}
+
+async function countApprovedMerchantsInTown(
+  db: ReturnType<typeof getDb>,
+  marketId: string,
+): Promise<number> {
+  try {
+    const { count } = await db
+      .from("merchants")
+      .select("id", { count: "exact", head: true })
+      .eq("verification_status", "approved")
+      .eq("market_id", marketId);
+    return count ?? 0;
+  } catch {
+    return 0;
+  }
+}
+
+async function countIslandCouriers(db: ReturnType<typeof getDb>): Promise<number> {
+  try {
+    const { count } = await db
+      .from("courier_profiles")
+      .select("user_id", { count: "exact", head: true })
+      .eq("status", "active");
+    return count ?? 0;
+  } catch {
+    return 0;
+  }
+}
+
+async function assembleMarketReadiness(
+  db: ReturnType<typeof getDb>,
+  market: Record<string, unknown>,
+  acks: { couriersConfirmed: boolean; borderReviewed: boolean },
+) {
+  const marketId = String(market.id);
+  const published = await loadPublishedZonesForMarket(db, market);
+  const facts = await loadMarketLaunchFacts(db, marketId);
+  const result = buildReadinessChecks({
+    publishedZones: published,
+    draftDirty: Boolean(market.draft_dirty),
+    merchantCount: await countApprovedMerchantsInTown(db, marketId),
+    courierCount: await countIslandCouriers(db),
+    merchantsMin: Number(market.readiness_merchants_min ?? 0) || 0,
+    couriersMin: Number(market.readiness_couriers_min ?? 0) || 0,
+    couriersConfirmed: acks.couriersConfirmed,
+    borderAreaSqKm: facts.border_area_sqkm,
+    borderReviewed: acks.borderReviewed,
+    splitBorder: facts.split_border,
+    splitBorderOk: facts.split_border_ok,
+    splitBorderDetail: facts.split_border_detail,
+  });
+  return {
+    market_id: marketId,
+    ready: result.ready,
+    checks: result.checks,
+    draft_dirty: Boolean(market.draft_dirty),
+    published_version_id: market.published_version_id ?? null,
+    border_area_sqkm: facts.border_area_sqkm,
+  };
+}
+
+const NON_OVERRIDABLE_CHECKS = new Set(["delivery_area", "draft_clean", "split_border_coverage"]);
+
+function activationBlock(
+  readiness: { checks: { id: string; ok: boolean; label: string; detail?: string }[] },
+  force: boolean,
+) {
+  const failed = readiness.checks.filter((ch) => !ch.ok);
+  const hard = failed.filter((ch) => NON_OVERRIDABLE_CHECKS.has(ch.id));
+  if (hard.length > 0) {
+    return {
+      error: hard.map((ch) => ch.detail || ch.label).join(" "),
+      failed_checks: hard,
+      checks: readiness.checks,
+    };
+  }
+  if (failed.length > 0 && !force) {
+    return {
+      error: failed.map((ch) => ch.detail || ch.label).join(" "),
+      failed_checks: failed,
+      checks: readiness.checks,
+    };
+  }
+  return null;
+}
+
 export function registerMarketAdminRoutes(app: Hono) {
   const admin = new Hono();
 
@@ -318,13 +435,24 @@ export function registerMarketAdminRoutes(app: Hono) {
       }, new Map<string, unknown[]>());
     }
 
+    const parishNameById = new Map(
+      (parishes ?? []).map((p) => [
+        String((p as Record<string, unknown>).id),
+        String((p as Record<string, unknown>).name ?? ""),
+      ]),
+    );
     const enrichedMarkets = [];
     for (const m of markets ?? []) {
       const market = m as Record<string, unknown>;
       const id = String(market.id);
       const zones = zonesByMarket.get(id) ?? [];
+      const parishId = market.parish_id == null ? "" : String(market.parish_id);
       // Do not auto-seed demo circle fences — towns stay empty until ops draws/imports a border.
-      enrichedMarkets.push({ ...market, zones });
+      enrichedMarkets.push({
+        ...market,
+        zones,
+        parish_name: parishNameById.get(parishId) || null,
+      });
     }
 
     const townsByParish = new Map<string, typeof enrichedMarkets>();
@@ -613,49 +741,11 @@ export function registerMarketAdminRoutes(app: Hono) {
     const { data: market, error } = await db.from("service_markets").select("*").eq("id", marketId).maybeSingle();
     if (error) return c.json({ error: error.message }, 500);
     if (!market) return c.json({ error: "Market not found" }, 404);
-    const m = market as Record<string, unknown>;
-    const published = await loadPublishedZonesForMarket(db, m);
-
-    const merchantsMin = Number(m.readiness_merchants_min ?? 0) || 0;
-    const couriersMin = Number(m.readiness_couriers_min ?? 0) || 0;
-
-    let merchantCount = 0;
-    let courierCount = 0;
-    try {
-      const { count: mc } = await db
-        .from("merchants")
-        .select("id", { count: "exact", head: true })
-        .eq("verification_status", "approved")
-        .eq("market_id", marketId);
-      merchantCount = mc ?? 0;
-    } catch {
-      merchantCount = 0;
-    }
-    try {
-      const { count: cc } = await db
-        .from("courier_profiles")
-        .select("user_id", { count: "exact", head: true })
-        .eq("status", "active");
-      courierCount = cc ?? 0;
-    } catch {
-      courierCount = 0;
-    }
-
-    const result = buildReadinessChecks({
-      publishedZones: published,
-      draftDirty: Boolean(m.draft_dirty),
-      merchantCount,
-      courierCount,
-      merchantsMin,
-      couriersMin,
+    const readiness = await assembleMarketReadiness(db, market as Record<string, unknown>, {
+      couriersConfirmed: false,
+      borderReviewed: false,
     });
-    return c.json({
-      market_id: marketId,
-      ready: result.ready,
-      checks: result.checks,
-      draft_dirty: Boolean(m.draft_dirty),
-      published_version_id: m.published_version_id ?? null,
-    });
+    return c.json(readiness);
   });
 
   admin.get("/:id/versions", async (c) => {
@@ -1164,41 +1254,13 @@ export function registerMarketAdminRoutes(app: Hono) {
       const marketId = c.req.param("id");
       const { data: market } = await dbCheck.from("service_markets").select("*").eq("id", marketId).maybeSingle();
       if (!market) return c.json({ error: "Market not found" }, 404);
-      const published = await loadPublishedZonesForMarket(dbCheck, market as Record<string, unknown>);
-      let merchantCount = 0;
-      let courierCount = 0;
-      try {
-        const { count: mc } = await dbCheck
-          .from("merchants")
-          .select("id", { count: "exact", head: true })
-          .eq("verification_status", "approved");
-        merchantCount = mc ?? 0;
-      } catch { /* ignore */ }
-      try {
-        const { count: cc } = await dbCheck
-          .from("courier_profiles")
-          .select("user_id", { count: "exact", head: true })
-          .eq("status", "active");
-        courierCount = cc ?? 0;
-      } catch { /* ignore */ }
-
-      const m = market as Record<string, unknown>;
-      const readiness = buildReadinessChecks({
-        publishedZones: published,
-        draftDirty: Boolean(m.draft_dirty),
-        merchantCount,
-        courierCount,
-        merchantsMin: Number(m.readiness_merchants_min ?? 0) || 0,
-        couriersMin: Number(m.readiness_couriers_min ?? 0) || 0,
+      const readiness = await assembleMarketReadiness(dbCheck, market as Record<string, unknown>, {
+        couriersConfirmed: body.couriers_confirmed === true,
+        borderReviewed: body.border_reviewed === true,
       });
       const force = body.force === true && canForceApproveMerchant(adminUser);
-      if (!readiness.ready && !force) {
-        return c.json({
-          error: "Town is not ready to activate",
-          failed_checks: readiness.checks.filter((ch) => !ch.ok),
-          checks: readiness.checks,
-        }, 400);
-      }
+      const blocked = activationBlock(readiness, force);
+      if (blocked) return c.json(blocked, 400);
     }
 
     const db = getDb();
@@ -1441,6 +1503,18 @@ export function registerPublicGeoRoutes(
   app: Hono,
   deps: { getServiceSupabase: () => ReturnType<typeof getDb> },
 ) {
+  app.get("/geo/pin-status", async (c) => {
+    const { resolveActiveMarketIdFromPin, uncoveredPinPayload } = await import(
+      "../discoveryMarketFilter.ts"
+    );
+    const pin = await resolveActiveMarketIdFromPin(
+      deps.getServiceSupabase(),
+      c.req.query("lat"),
+      c.req.query("lng"),
+    );
+    return c.json({ covered: pin.covered, ...uncoveredPinPayload(pin) });
+  });
+
   app.get("/geo/delivery-zones", async (c) => {
     const db = deps.getServiceSupabase();
     const { data: markets, error } = await db

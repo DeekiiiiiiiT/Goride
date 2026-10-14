@@ -192,7 +192,7 @@ app.get("/merchants", async (c) => {
   const limit = Math.min(Math.max(Number.parseInt(String(limitRaw ?? "50"), 10) || 50, 1), 100);
   const offset = Math.max(Number.parseInt(String(offsetRaw ?? "0"), 10) || 0, 0);
 
-  const { resolveActiveMarketIdFromPin } = await import("./discoveryMarketFilter.ts");
+  const { resolveActiveMarketIdFromPin, uncoveredPinPayload } = await import("./discoveryMarketFilter.ts");
   const pin = await resolveActiveMarketIdFromPin(supabase, lat, lng);
   if (pin.missingPin || !pin.covered || pin.marketIds.length === 0) {
     return c.json({
@@ -200,8 +200,7 @@ app.get("/merchants", async (c) => {
       limit,
       offset,
       hasMore: false,
-      out_of_coverage: !pin.missingPin,
-      missing_pin: pin.missingPin,
+      ...uncoveredPinPayload(pin),
     });
   }
 

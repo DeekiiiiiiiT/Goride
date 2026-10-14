@@ -23,6 +23,8 @@ export interface FeatureFlagValue {
   enabled: boolean;
   enabledForOrgs?: string[];
   disabledForOrgs?: string[];
+  /** When each org was first turned on. Used for the parts tiered-search week. */
+  orgEnabledAt?: Record<string, string>;
   updatedAt: string;
   updatedBy?: string;
   description?: string;
@@ -179,13 +181,20 @@ export async function setFeatureFlag(
   
   // Get existing flag to preserve org lists if not specified
   const existing = await kv.get(key) as FeatureFlagValue | null;
+  const enabledForOrgs = options?.enabledForOrgs ?? existing?.enabledForOrgs;
+  const nowIso = new Date().toISOString();
+  const orgEnabledAt: Record<string, string> = {};
+  for (const id of enabledForOrgs ?? []) {
+    orgEnabledAt[id] = existing?.orgEnabledAt?.[id] ?? nowIso;
+  }
 
   const flag: FeatureFlagValue = {
     enabled,
-    enabledForOrgs: options?.enabledForOrgs ?? existing?.enabledForOrgs,
+    enabledForOrgs,
     disabledForOrgs: options?.disabledForOrgs ?? existing?.disabledForOrgs,
+    orgEnabledAt,
     description: options?.description ?? existing?.description,
-    updatedAt: new Date().toISOString(),
+    updatedAt: nowIso,
     updatedBy: options?.updatedBy,
   };
 

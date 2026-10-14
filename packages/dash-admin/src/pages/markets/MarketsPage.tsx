@@ -40,6 +40,7 @@ import {
   listAdminBoundaries,
   listCoverageVersions,
   listMarkets,
+  listOverviewShapes,
   publishMarketCoverage,
   previewMarketCoverageDiff,
   fetchMarketCoverageCells,
@@ -56,6 +57,8 @@ import {
   type CoverageVersionRow,
   type DashAdminBoundary,
   type DashMarketRow,
+  type DashOverviewParishShape,
+  type DashOverviewTownShape,
   type DashParishRow,
   type DashParishTownPin,
   type DashZoneRow,
@@ -63,6 +66,7 @@ import {
   type MarketReadiness,
   type ParishModeSuggestion,
   type ReadinessCheck,
+  townWithParish,
 } from '@roam/dash-admin-client';
 import { sanitizeVertices, createAdminCoverageLayers, filterLiveCoverageZones, marketHasServiceAreas, type ActiveCoverageZone } from '@roam/dash-coverage';
 import type { AdminOutletContext } from '../../DashAdminPortal';
@@ -235,6 +239,29 @@ type EditorTarget =
   | { mode: 'service'; marketId: string }
   | { mode: 'adjust'; marketId: string; zone: DashZoneRow; openCoordinates?: boolean };
 
+const SPLIT_BORDER_PCODES = new Set([
+  'JM1006',
+  'JM0603',
+  'JM1005',
+  'JM1406',
+  'JM0506',
+  'JM0203',
+  'JM1106',
+  'JM0805',
+]);
+
+function checksWithLaunchAcks(
+  checks: ReadinessCheck[],
+  couriersConfirmed: boolean,
+  borderReviewed: boolean,
+): ReadinessCheck[] {
+  return checks.map((ch) => {
+    if (ch.id === 'couriers_confirmed') return { ...ch, ok: couriersConfirmed };
+    if (ch.id === 'border_reviewed') return { ...ch, ok: borderReviewed };
+    return ch;
+  });
+}
+
 type TownCardProps = {
   town: DashMarketRow;
   canWrite: boolean;
@@ -356,7 +383,17 @@ function TownCard({
                 Uses parish border
               </span>
             ) : null}
+            {SPLIT_BORDER_PCODES.has(String(m.pcode ?? '')) ? (
+              <span className="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-200">
+                Split official border
+              </span>
+            ) : null}
           </h4>
+          {SPLIT_BORDER_PCODES.has(String(m.pcode ?? '')) ? (
+            <p className="text-[11px] text-amber-200/90 mt-0.5">
+              Full border is what customers use. Confirm before going live.
+            </p>
+          ) : null}
           <p className="text-xs text-slate-500">
             Town · {m.is_active ? 'Active' : 'Inactive'}
             {' · '}
@@ -2040,6 +2077,104 @@ function ParishMapOverlay({
   );
 }
 
+function LaunchTownDialog({
+  townName,
+  checks,
+  couriersConfirmed,
+  borderReviewed,
+  needsCouriers,
+  needsBorderReview,
+  onCouriersConfirmed,
+  onBorderReviewed,
+  onClose,
+  onConfirm,
+}: {
+  townName: string;
+  checks: ReadinessCheck[];
+  couriersConfirmed: boolean;
+  borderReviewed: boolean;
+  needsCouriers: boolean;
+  needsBorderReview: boolean;
+  onCouriersConfirmed: (value: boolean) => void;
+  onBorderReviewed: (value: boolean) => void;
+  onClose: () => void;
+  onConfirm: () => void;
+}) {
+  const blocked = checks.some((ch) => !ch.ok);
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <button type="button" className="absolute inset-0 bg-black/70" aria-label="Close" onClick={onClose} />
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="launch-town-title"
+        className="relative z-10 w-full max-w-lg rounded-xl border border-slate-700 bg-slate-950 p-4 shadow-2xl"
+      >
+        <h3 id="launch-town-title" className="text-base font-semibold text-white">
+          Go live in {townName}?
+        </h3>
+        <p className="mt-1 text-xs text-slate-400">
+          Publish the border first, then confirm stores and couriers. A wide or split border must be checked before customers can order.
+        </p>
+        <ul className="mt-3 space-y-1.5">
+          {checks.map((ch) => (
+            <li
+              key={ch.id}
+              className={`text-xs rounded px-2 py-1.5 border ${
+                ch.ok
+                  ? 'border-emerald-500/20 bg-emerald-500/5 text-emerald-200'
+                  : 'border-red-500/20 bg-red-500/5 text-red-200'
+              }`}
+            >
+              <span className="font-medium">{ch.ok ? '✓' : '✗'} {ch.label}</span>
+              {ch.detail ? <span className="block text-[11px] mt-0.5 opacity-95">{ch.detail}</span> : null}
+            </li>
+          ))}
+        </ul>
+        {needsCouriers && (
+          <label className="mt-3 flex items-start gap-2 text-xs text-slate-200">
+            <input
+              type="checkbox"
+              checked={couriersConfirmed}
+              onChange={(e) => onCouriersConfirmed(e.target.checked)}
+              className="mt-0.5"
+            />
+            Couriers can serve this town
+          </label>
+        )}
+        {needsBorderReview && (
+          <label className="mt-2 flex items-start gap-2 text-xs text-slate-200">
+            <input
+              type="checkbox"
+              checked={borderReviewed}
+              onChange={(e) => onBorderReviewed(e.target.checked)}
+              className="mt-0.5"
+            />
+            The smaller service area is what should go live
+          </label>
+        )}
+        <div className="mt-4 flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-3 py-1.5 rounded-lg border border-slate-700 text-xs text-slate-300"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            disabled={blocked}
+            onClick={onConfirm}
+            className="px-3 py-1.5 rounded-lg bg-emerald-500 text-xs font-semibold text-slate-950 disabled:opacity-40"
+          >
+            Go live
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function MarketsPage({ embedded = false }: { embedded?: boolean } = {}) {
   const { session } = useOutletContext<AdminOutletContext>();
   const canWrite = canWriteDashAdmin(session.user);
@@ -2052,6 +2187,14 @@ export function MarketsPage({ embedded = false }: { embedded?: boolean } = {}) {
   const [saving, setSaving] = useState(false);
   const [showCreateParish, setShowCreateParish] = useState(false);
   const [showJamaicaOverview, setShowJamaicaOverview] = useState(false);
+  const [overviewShapes, setOverviewShapes] = useState<DashOverviewTownShape[]>([]);
+  const [overviewParishShapes, setOverviewParishShapes] = useState<DashOverviewParishShape[]>([]);
+  const [launchPrompt, setLaunchPrompt] = useState<{
+    town: DashMarketRow;
+    checks: ReadinessCheck[];
+    couriersConfirmed: boolean;
+    borderReviewed: boolean;
+  } | null>(null);
   const [newParishName, setNewParishName] = useState('');
   const [addTownParishId, setAddTownParishId] = useState<string | null>(null);
   const [newTownName, setNewTownName] = useState('');
@@ -2193,15 +2336,48 @@ export function MarketsPage({ embedded = false }: { embedded?: boolean } = {}) {
 
   const toggleActive = async (m: DashMarketRow) => {
     if (!canWrite) return;
-    const next = !m.is_active;
+    if (m.is_active) {
+      try {
+        await updateMarket(session.access_token, m.id, { is_active: false });
+        toast.success(`${townWithParish(m.name, parishes.find((p) => p.id === m.parish_id)?.name)} paused`);
+        await load();
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : 'Update failed');
+      }
+      return;
+    }
     try {
-      await updateMarket(session.access_token, m.id, { is_active: next });
-      toast.success(`${m.name} ${next ? 'activated' : 'paused'}`);
+      const readiness = await getMarketReadiness(session.access_token, m.id);
+      setLaunchPrompt({
+        town: m,
+        checks: readiness.checks,
+        couriersConfirmed: false,
+        borderReviewed: false,
+      });
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not check if this town is ready');
+    }
+  };
+
+  const confirmLaunch = async () => {
+    if (!launchPrompt || !canWrite) return;
+    const shown = checksWithLaunchAcks(
+      launchPrompt.checks,
+      launchPrompt.couriersConfirmed,
+      launchPrompt.borderReviewed,
+    );
+    if (shown.some((ch) => !ch.ok)) return;
+    try {
+      await updateMarket(session.access_token, launchPrompt.town.id, {
+        is_active: true,
+        couriers_confirmed: launchPrompt.couriersConfirmed,
+        border_reviewed: launchPrompt.borderReviewed,
+      });
+      toast.success(`${townWithParish(launchPrompt.town.name, launchPrompt.town.parish_name ?? parishes.find((p) => p.id === launchPrompt.town.parish_id)?.name)} activated`);
+      setLaunchPrompt(null);
       await load();
     } catch (e) {
-      const msg = e instanceof Error ? e.message : 'Update failed';
-      toast.error(msg);
-      if (next) openTownMap(m.id);
+      toast.error(e instanceof Error ? e.message : 'Update failed');
     }
   };
 
@@ -2254,6 +2430,11 @@ export function MarketsPage({ embedded = false }: { embedded?: boolean } = {}) {
     setSaving(true);
     try {
       const res = await createTownFromBoundary(session.access_token, parishId, catalogPcode);
+      if (res.warning) {
+        toast.error(`Town was not given a border: ${res.warning}`);
+        await load();
+        return;
+      }
       toast.success(`Town created from catalog (${res.market.name})`);
       setAddTownParishId(null);
       setCatalogPcode('');
@@ -2487,9 +2668,20 @@ export function MarketsPage({ embedded = false }: { embedded?: boolean } = {}) {
     onCommunitiesUnioned: () => void load(),
   });
 
+  const searchQ = listSearch.trim().toLowerCase();
+
   const renderParishBlock = (p: DashParishRow) => {
-    const isCollapsed = collapsed[p.id] !== false;
-    const towns = p.towns ?? [];
+    const allTowns = p.towns ?? [];
+    const parishNameHit =
+      !searchQ ||
+      p.name.toLowerCase().includes(searchQ) ||
+      p.slug.toLowerCase().includes(searchQ);
+    const townHit = (t: DashMarketRow) =>
+      t.name.toLowerCase().includes(searchQ) ||
+      String(t.slug ?? '').toLowerCase().includes(searchQ) ||
+      String(t.pcode ?? '').toLowerCase().includes(searchQ);
+    const towns = !searchQ || parishNameHit ? allTowns : allTowns.filter(townHit);
+    const isCollapsed = searchQ ? false : collapsed[p.id] !== false;
     const hasParishBorder = parishFoundationVerts(p).length >= 3;
     const parishBoundaryMode = p.coverage_mode === 'parish_boundary';
     return (
@@ -2508,8 +2700,8 @@ export function MarketsPage({ embedded = false }: { embedded?: boolean } = {}) {
               <ProvenanceBadge source={p.boundary_source} validOn={p.boundary_valid_on} />
             </div>
             <p className="text-xs text-slate-500">
-              Parish · {hasParishBorder ? 'border set' : 'no border yet'} · {towns.length} town
-              {towns.length === 1 ? '' : 's'}
+              Parish · {hasParishBorder ? 'border set' : 'no border yet'} · {allTowns.length} town
+              {allTowns.length === 1 ? '' : 's'}
               {parishBoundaryMode ? ' · parish border delivery' : ' · town zones + parish gate'}
               {p.pcode ? ` · ${p.pcode}` : ''}
             </p>
@@ -2694,14 +2886,14 @@ export function MarketsPage({ embedded = false }: { embedded?: boolean } = {}) {
 
   const parishesWithTowns = parishes.filter((p) => (p.towns ?? []).length > 0);
   const emptyParishes = parishes.filter((p) => (p.towns ?? []).length === 0);
-  const searchQ = listSearch.trim().toLowerCase();
   const matchesSearch = (p: DashParishRow) => {
     if (!searchQ) return true;
     if (p.name.toLowerCase().includes(searchQ) || p.slug.toLowerCase().includes(searchQ)) return true;
     return (p.towns ?? []).some(
       (t) =>
         t.name.toLowerCase().includes(searchQ) ||
-        String(t.slug ?? '').toLowerCase().includes(searchQ),
+        String(t.slug ?? '').toLowerCase().includes(searchQ) ||
+        String(t.pcode ?? '').toLowerCase().includes(searchQ),
     );
   };
   const filteredWithTowns = parishesWithTowns.filter(matchesSearch);
@@ -2739,7 +2931,19 @@ export function MarketsPage({ embedded = false }: { embedded?: boolean } = {}) {
           <details className="relative">
             <summary className="list-none cursor-pointer px-3 py-2 rounded-lg border border-slate-700 text-sm text-slate-300">More</summary>
             <div className="absolute right-0 z-10 mt-1 w-48 rounded-lg border border-slate-700 bg-slate-900 p-1 shadow-xl">
-              <button type="button" onClick={() => setShowJamaicaOverview(true)} className="block w-full text-left px-3 py-2 text-sm text-slate-200 hover:bg-slate-800 rounded-md">Jamaica overview</button>
+              <button type="button" onClick={() => {
+                setShowJamaicaOverview(true);
+                void listOverviewShapes(session.access_token)
+                  .then((res) => {
+                    setOverviewShapes(res.towns ?? []);
+                    setOverviewParishShapes(res.parishes ?? []);
+                  })
+                  .catch((e) => {
+                    setOverviewShapes([]);
+                    setOverviewParishShapes([]);
+                    toast.error(e instanceof Error ? e.message : 'Could not load the island map');
+                  });
+              }} className="block w-full text-left px-3 py-2 text-sm text-slate-200 hover:bg-slate-800 rounded-md">Jamaica overview</button>
               {canWrite && (
                 <button type="button" onClick={() => setShowImportBoundaries(true)} className="block w-full text-left px-3 py-2 text-sm text-slate-200 hover:bg-slate-800 rounded-md">Import boundaries</button>
               )}
@@ -3089,9 +3293,37 @@ export function MarketsPage({ embedded = false }: { embedded?: boolean } = {}) {
         />
       )}
 
+      {launchPrompt && (
+        <LaunchTownDialog
+          townName={townWithParish(
+            launchPrompt.town.name,
+            launchPrompt.town.parish_name ?? parishes.find((p) => p.id === launchPrompt.town.parish_id)?.name,
+          )}
+          checks={checksWithLaunchAcks(
+            launchPrompt.checks,
+            launchPrompt.couriersConfirmed,
+            launchPrompt.borderReviewed,
+          )}
+          couriersConfirmed={launchPrompt.couriersConfirmed}
+          borderReviewed={launchPrompt.borderReviewed}
+          needsCouriers={launchPrompt.checks.some((ch) => ch.id === 'couriers_confirmed')}
+          needsBorderReview={launchPrompt.checks.some((ch) => ch.id === 'border_reviewed')}
+          onCouriersConfirmed={(value) =>
+            setLaunchPrompt((current) => (current ? { ...current, couriersConfirmed: value } : current))
+          }
+          onBorderReviewed={(value) =>
+            setLaunchPrompt((current) => (current ? { ...current, borderReviewed: value } : current))
+          }
+          onClose={() => setLaunchPrompt(null)}
+          onConfirm={() => void confirmLaunch()}
+        />
+      )}
+
       {showJamaicaOverview && (
         <JamaicaOverviewMap
           parishes={parishes}
+          shapes={overviewShapes}
+          parishShapes={overviewParishShapes}
           onClose={() => setShowJamaicaOverview(false)}
         />
       )}
