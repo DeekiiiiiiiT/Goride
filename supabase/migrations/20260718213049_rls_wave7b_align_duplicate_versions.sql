@@ -1,2 +1,2 @@
-﻿-- History alignment stub
+-- History alignment stub
 SELECT 1;
