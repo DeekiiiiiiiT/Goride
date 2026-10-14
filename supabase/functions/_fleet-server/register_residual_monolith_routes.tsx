@@ -12708,6 +12708,24 @@ export function registerResidualMonolithRoutes(app: Hono) {
         return c.json({ error: "enabled (boolean) is required" }, 400);
       }
 
+      if (flagName === FEATURE_FLAGS.PARTS_TIERED_SEARCH) {
+        if (enabled === true) {
+          return c.json({ error: "Turn tiered search on for one fleet from Parts sourcing, after that fleet reaches 60% coverage." }, 400);
+        }
+        const { loadFleetCoverage } = await import("./parts_fleet_coverage.ts");
+        const { tieredSearchReady } = await import("../../../packages/types/src/partsResolution.ts");
+        const existingFlag = await getFeatureFlag(flagName);
+        const already = new Set(existingFlag?.enabledForOrgs ?? []);
+        const incoming = Array.isArray(enabledForOrgs) ? enabledForOrgs as string[] : [];
+        for (const orgId of incoming) {
+          if (already.has(orgId)) continue;
+          const coverage = await loadFleetCoverage(supabase, orgId);
+          if (!tieredSearchReady(coverage.coveragePct)) {
+            return c.json({ error: `Fleet ${orgId} is at ${coverage.coveragePct}% coverage. Tiered search unlocks at 60%.` }, 400);
+          }
+        }
+      }
+
       await setFeatureFlag(flagName, enabled, {
         enabledForOrgs,
         disabledForOrgs,

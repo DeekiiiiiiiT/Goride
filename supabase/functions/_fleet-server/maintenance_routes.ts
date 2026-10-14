@@ -65,6 +65,14 @@ function lineNeedsPartsUsage(row: Record<string, unknown>): boolean {
   return num.length > 0;
 }
 
+async function reverseAndDeleteWorkOrder(
+  supabase: SupabaseClient,
+  workOrderId: string,
+): Promise<void> {
+  await supabase.rpc("reverse_parts_usage_for_work_order", { p_work_order_id: workOrderId });
+  await supabase.from("maintenance_work_orders").delete().eq("id", workOrderId);
+}
+
 async function commitUsageOrDiscardNewWorkOrder(
   supabase: SupabaseClient,
   workOrderId: string,
@@ -74,10 +82,45 @@ async function commitUsageOrDiscardNewWorkOrder(
     const usageResult = await commitPartsUsage(supabase, workOrderId);
     return Array.isArray(usageResult.warrantyPrompts) ? usageResult.warrantyPrompts as unknown[] : [];
   } catch (err) {
-    if (createdHere) {
-      await supabase.from("maintenance_work_orders").delete().eq("id", workOrderId);
-    }
+    if (createdHere) await reverseAndDeleteWorkOrder(supabase, workOrderId);
     throw err;
+  }
+}
+
+function stampLineIds(rows: Record<string, unknown>[]): void {
+  for (const row of rows) {
+    if (row.id == null || !isUuid(String(row.id))) row.id = crypto.randomUUID();
+  }
+}
+
+async function syncWorkOrderLines(
+  supabase: SupabaseClient,
+  workOrderId: string,
+  editLines: Record<string, unknown>[],
+): Promise<void> {
+  stampLineIds(editLines);
+  const { data: existing, error: exErr } = await supabase
+    .from("maintenance_work_order_lines")
+    .select("id")
+    .eq("work_order_id", workOrderId);
+  if (exErr) throw exErr;
+  const existingIds = new Set((existing || []).map((r) => String((r as { id: string }).id)));
+  const incomingIds = new Set(editLines.map((r) => String(r.id)));
+  const toDelete = [...existingIds].filter((id) => !incomingIds.has(id));
+  if (toDelete.length) {
+    const { error } = await supabase.from("maintenance_work_order_lines").delete().in("id", toDelete);
+    if (error) throw error;
+  }
+  for (const row of editLines) {
+    const id = String(row.id);
+    const payload = { ...row, id, work_order_id: workOrderId };
+    if (existingIds.has(id)) {
+      const { error } = await supabase.from("maintenance_work_order_lines").update(payload).eq("id", id);
+      if (error) throw error;
+    } else {
+      const { error } = await supabase.from("maintenance_work_order_lines").insert(payload);
+      if (error) throw error;
+    }
   }
 }
 
@@ -1389,11 +1432,22 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
         const currencyRaw = log.currency != null ? String(log.currency).trim().toUpperCase() : "JMD";
         const currency = currencyRaw || "JMD";
         const status = log.status != null ? String(log.status) : "Completed";
+        const jobCompleted = status.trim().toLowerCase() === "completed";
 
         // Auto-sum line items when present; otherwise use explicit cost
         const cost = Array.isArray(log.lines) && log.lines.length
           ? sumLogLines(log.lines)
           : (log.cost != null ? Number(log.cost) : null);
+
+        const savedLines: Record<string, unknown>[] = [];
+        const lineRows: Record<string, unknown>[] = [];
+        for (const raw of Array.isArray(log.lines) ? log.lines as unknown[] : []) {
+          if (!raw || typeof raw !== "object") continue;
+          const row = mapApiLineToDb(raw as Record<string, unknown>, lineRows.length);
+          if (row.id == null || !isUuid(String(row.id))) row.id = crypto.randomUUID();
+          lineRows.push(row);
+          savedLines.push({ ...(raw as Record<string, unknown>), id: row.id });
+        }
 
         const rowInsert = {
           id,
@@ -1410,34 +1464,28 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
           invoice_url: log.invoiceUrl != null ? String(log.invoiceUrl) : null,
           status,
           legacy_kv_id: null as string | null,
-          payload_json: { ...log, id, vehicleId, currency, status, cost } as Record<string, unknown>,
+          payload_json: { ...log, id, vehicleId, currency, status, cost, lines: savedLines } as Record<string, unknown>,
           updated_at: new Date().toISOString(),
         };
 
         // Parts usage before the service record and the ledger charge. A usage failure deletes only this work order.
         let workOrderId: string | undefined;
         let warrantyPrompts: unknown[] = [];
-        const lineRows = (Array.isArray(log.lines) ? log.lines as unknown[] : [])
-          .map((raw, i) => {
-            if (!raw || typeof raw !== "object") return null;
-            return mapApiLineToDb(raw as Record<string, unknown>, i);
-          })
-          .filter((r): r is Record<string, unknown> => r != null);
         const needsUsage = lineRows.some(lineNeedsPartsUsage);
-        let usageCommitted = !needsUsage;
+        let usageCommitted = !needsUsage || !jobCompleted;
         if (lineRows.length) {
           const woId = crypto.randomUUID();
           const rowsForWo = lineRows.map((r) => ({ ...r, work_order_id: woId }));
-          const lineSum = rowsForWo.reduce((s, r) => s + (Number(r.line_total) || 0), 0);
+          const lineSum = rowsForWo.reduce((s, r) => s + (Number((r as { line_total?: unknown }).line_total) || 0), 0);
           const logModeDb = logMode === "package" ? "package" : "quick_job";
           const packageComplete = logModeDb === "package" && !!templateId;
           const { error: woErr } = await supabase.from("maintenance_work_orders").insert({
             id: woId,
             organization_id: orgId,
             vehicle_id: vehicleId,
-            status: "completed",
+            status: jobCompleted ? "completed" : "in_progress",
             opened_at: new Date().toISOString(),
-            closed_at: new Date().toISOString(),
+            closed_at: jobCompleted ? new Date().toISOString() : null,
             performed_at_date,
             odometer: performed_at_miles,
             provider: rowInsert.provider,
@@ -1456,16 +1504,16 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
           workOrderId = woId;
           const { error: lineErr } = await supabase.from("maintenance_work_order_lines").insert(rowsForWo);
           if (lineErr) {
-            await supabase.from("maintenance_work_orders").delete().eq("id", woId);
+            await reverseAndDeleteWorkOrder(supabase, woId);
             throw lineErr;
           }
-          if (needsUsage) {
+          if (needsUsage && jobCompleted) {
             warrantyPrompts = await commitUsageOrDiscardNewWorkOrder(supabase, woId, true);
             usageCommitted = true;
           }
         }
-        if (!ledgerAllowedAfterParts({ needsUsage, usageCommitted })) {
-          if (workOrderId) await supabase.from("maintenance_work_orders").delete().eq("id", workOrderId);
+        if (!ledgerAllowedAfterParts({ needsUsage: needsUsage && jobCompleted, usageCommitted })) {
+          if (workOrderId) await reverseAndDeleteWorkOrder(supabase, workOrderId);
           throw new Error("Parts usage was not saved");
         }
 
@@ -1475,7 +1523,7 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
           .select()
           .single();
         if (insErr) {
-          if (workOrderId) await supabase.from("maintenance_work_orders").delete().eq("id", workOrderId);
+          if (workOrderId) await reverseAndDeleteWorkOrder(supabase, workOrderId);
           throw insErr;
         }
 
@@ -1557,6 +1605,7 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
           success: true,
           data: inserted,
           workOrderId,
+          lines: savedLines,
           warrantyPrompts,
           ledgerPosted: ledgerResult.posted,
           ledgerWarning: ledgerResult.failed
@@ -1638,16 +1687,21 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
           ? String(body.logMode)
           : (prevPayload.logMode != null ? String(prevPayload.logMode) : null);
 
-        const editLines = (Array.isArray(lines) ? lines as unknown[] : [])
-          .map((raw, i) => {
-            if (!raw || typeof raw !== "object") return null;
-            return mapApiLineToDb(raw as Record<string, unknown>, i);
-          })
-          .filter((r): r is Record<string, unknown> => r != null);
+        const jobCompleted = nextStatusLc === "completed";
+        const savedLines: Record<string, unknown>[] = [];
+        const editLines: Record<string, unknown>[] = [];
+        for (const raw of Array.isArray(lines) ? lines as unknown[] : []) {
+          if (!raw || typeof raw !== "object") continue;
+          const row = mapApiLineToDb(raw as Record<string, unknown>, editLines.length);
+          if (row.id == null || !isUuid(String(row.id))) row.id = crypto.randomUUID();
+          editLines.push(row);
+          savedLines.push({ ...(raw as Record<string, unknown>), id: row.id });
+        }
         const needsUsage = editLines.some(lineNeedsPartsUsage);
-        let usageCommitted = !needsUsage;
+        let usageCommitted = !needsUsage || !jobCompleted;
         let editWorkOrderId = prevPayload.workOrderId != null ? String(prevPayload.workOrderId) : "";
-        if (needsUsage) {
+        let warrantyPrompts: unknown[] = [];
+        if (editLines.length || isUuid(editWorkOrderId)) {
           let createdHere = false;
           if (!isUuid(editWorkOrderId)) {
             editWorkOrderId = crypto.randomUUID();
@@ -1657,9 +1711,9 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
               id: editWorkOrderId,
               organization_id: orgId,
               vehicle_id: vehicleId,
-              status: nextStatusLc === "completed" ? "completed" : "in_progress",
+              status: jobCompleted ? "completed" : "in_progress",
               opened_at: new Date().toISOString(),
-              closed_at: nextStatusLc === "completed" ? new Date().toISOString() : null,
+              closed_at: jobCompleted ? new Date().toISOString() : null,
               performed_at_date,
               odometer: performed_at_miles,
               provider,
@@ -1675,14 +1729,29 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
             if (woErr) throw woErr;
             const { error: lineErr } = await supabase.from("maintenance_work_order_lines").insert(rowsForWo);
             if (lineErr) {
-              await supabase.from("maintenance_work_orders").delete().eq("id", editWorkOrderId);
+              await reverseAndDeleteWorkOrder(supabase, editWorkOrderId);
               throw lineErr;
             }
+          } else {
+            await syncWorkOrderLines(supabase, editWorkOrderId, editLines);
+            if (jobCompleted) {
+              const { error: woUpErr } = await supabase.from("maintenance_work_orders").update({
+                status: "completed",
+                closed_at: new Date().toISOString(),
+                performed_at_date,
+                odometer: performed_at_miles,
+                total_cost: cost,
+                updated_at: new Date().toISOString(),
+              }).eq("id", editWorkOrderId);
+              if (woUpErr) throw woUpErr;
+            }
           }
-          await commitUsageOrDiscardNewWorkOrder(supabase, editWorkOrderId, createdHere);
-          usageCommitted = true;
+          if (jobCompleted) {
+            warrantyPrompts = await commitUsageOrDiscardNewWorkOrder(supabase, editWorkOrderId, createdHere);
+            usageCommitted = true;
+          }
         }
-        if (!ledgerAllowedAfterParts({ needsUsage, usageCommitted })) {
+        if (!ledgerAllowedAfterParts({ needsUsage: needsUsage && jobCompleted, usageCommitted })) {
           throw new Error("Parts usage was not saved");
         }
 
@@ -1701,7 +1770,7 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
           invoiceUrl: invoice_url,
           templateId: templateId || undefined,
           status: nextStatus,
-          lines,
+          lines: savedLines,
           logMode: logMode || undefined,
           workOrderId: editWorkOrderId || prevPayload.workOrderId,
         };
@@ -1799,6 +1868,8 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
         return c.json({
           success: true,
           data: updated,
+          lines: savedLines,
+          warrantyPrompts,
           ledgerPosted,
           ledgerWarning,
         });
@@ -2857,6 +2928,12 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
           .select()
           .single();
         if (upErr) throw upErr;
+
+        await supabase.rpc("refresh_repeat_part_alerts", {
+          p_km: 10000,
+          p_days: 90,
+          p_vehicle_id: vehicleId,
+        });
 
         // Service ledger + component schedules; package clock when members satisfied
         await recordCompletedServiceLines({

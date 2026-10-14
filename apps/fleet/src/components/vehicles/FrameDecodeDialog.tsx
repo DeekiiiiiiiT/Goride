@@ -29,6 +29,8 @@ export function FrameDecodeDialog({ open, onOpenChange }: { open: boolean; onOpe
   const [rows, setRows] = useState<Decoded[]>([]);
   const [busy, setBusy] = useState(false);
   const [vehicleId, setVehicleId] = useState("");
+  const [engineNumber, setEngineNumber] = useState("");
+  const [engineFamily, setEngineFamily] = useState<string | null>(null);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -39,19 +41,23 @@ export function FrameDecodeDialog({ open, onOpenChange }: { open: boolean; onOpe
         <div className="space-y-3">
           <Label>Vehicle id to save onto</Label>
           <Textarea className="min-h-[40px] font-mono" placeholder="Paste the vehicle id, then confirm a single match" value={vehicleId} onChange={(e) => setVehicleId(e.target.value)} />
+          <Label>Engine number, if you have it</Label>
+          <Textarea className="min-h-[40px] font-mono" placeholder="1NZ-1234567" value={engineNumber} onChange={(e) => setEngineNumber(e.target.value)} />
           <Label>Paste up to 50 frame numbers</Label>
           <Textarea className="min-h-[120px] font-mono" placeholder={"ZRR80-0123456\nM900A-001234"} value={text} onChange={(e) => setText(e.target.value)} />
           <Button type="button" disabled={busy} onClick={async () => {
             setBusy(true);
             try {
-              const res = await api.decodeFrameNumbers(text);
+              const res = await api.decodeFrameNumbers(text, engineNumber.trim() || undefined);
               setRows((res.items || []) as Decoded[]);
+              setEngineFamily(res.engineFamily?.code ?? null);
             } catch (err) {
               toast.error(err instanceof Error ? err.message : "Decode failed");
             } finally {
               setBusy(false);
             }
           }}>{busy ? "Decoding…" : "Decode"}</Button>
+          {engineFamily ? <p className="text-sm">Engine family: <span className="font-mono">{engineFamily}</span></p> : null}
           {rows.length > 0 ? (
             <ul className="max-h-64 overflow-auto text-sm space-y-2">
               {rows.map((row, i) => (

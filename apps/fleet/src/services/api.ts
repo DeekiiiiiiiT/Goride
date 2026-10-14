@@ -2713,6 +2713,28 @@ export const api = {
       return response.json();
   },
 
+  async listPartRepeatAlerts() {
+      const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/part-repeat-alerts`, { headers: await getHeaders() });
+      if (!response.ok) throw new Error("Failed to load repeat part alerts");
+      return response.json() as Promise<{ items: Array<Record<string, unknown>> }>;
+  },
+
+  async dismissPartRepeatAlert(id: string) {
+      const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/part-repeat-alerts/${encodeURIComponent(id)}`, {
+        method: "PATCH",
+        headers: await getHeaders(),
+        body: JSON.stringify({}),
+      });
+      if (!response.ok) throw new Error("Failed to dismiss the alert");
+      return response.json();
+  },
+
+  async listWarrantyClaims() {
+      const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/part-warranty-claims`, { headers: await getHeaders() });
+      if (!response.ok) throw new Error("Failed to load warranty claims");
+      return response.json() as Promise<{ items: Array<Record<string, unknown>> }>;
+  },
+
   async listPartCores() {
       const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/part-cores`, { headers: await getHeaders() });
       if (!response.ok) throw new Error("Failed to load core returns");
@@ -2736,7 +2758,7 @@ export const api = {
         body: JSON.stringify({ text, engineNumber }),
       });
       if (!response.ok) throw new Error("Failed to decode frame numbers");
-      return response.json() as Promise<{ items: Array<Record<string, unknown>>; enginePrefix: string | null }>;
+      return response.json() as Promise<{ items: Array<Record<string, unknown>>; enginePrefix: string | null; engineFamily: { id: string; code: string } | null }>;
   },
 
   async bootstrapMaintenanceFleet() {

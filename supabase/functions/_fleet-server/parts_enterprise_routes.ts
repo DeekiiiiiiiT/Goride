@@ -4,9 +4,11 @@ import { requireAuth, requirePermission, assertPlatformStaffResponse } from "./r
 import { getOrgId } from "./org_scope.ts";
 import * as kv from "./kv_store.tsx";
 import { resolveCatalogIdForKvVehicle } from "./vehicle_catalog_resolve.ts";
-import { FEATURE_FLAGS, isFeatureEnabled } from "./feature_flags.ts";
+import { FEATURE_FLAGS, isFeatureEnabled, enableFlagForOrg, disableFlagForOrg, getFeatureFlag } from "./feature_flags.ts";
 import { decodeFrameBatch, decodeFrameNumber, engineFamilyPrefix } from "../../../packages/types/src/frameNumberDecode.ts";
 import { CacheOnlySupplierAdapter } from "./parts_supplier_adapter.ts";
+import { loadFleetCoverage } from "./parts_fleet_coverage.ts";
+import { tieredSearchReady } from "../../../packages/types/src/partsResolution.ts";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 function isUuid(s: string): boolean {
@@ -77,60 +79,76 @@ export function registerPartsEnterpriseRoutes(route: RouteApp, supabase: Supabas
     const denied = staff(c);
     if (denied) return denied;
     try {
-      const { data, error } = await supabase.rpc("parts_catalog_coverage");
-      if (error) throw error;
-      const vehicles = await kv.getByPrefix("vehicle:");
-      const active = (vehicles || []).filter((v) => {
-        if (!v || typeof v !== "object") return false;
-        const status = String((v as { status?: string }).status ?? "active").toLowerCase();
-        return !["retired", "sold", "inactive", "archived"].includes(status);
-      }).slice(0, 400);
-      const { data: comps } = await supabase
-        .from("part_master")
-        .select("maintenance_component_id")
-        .not("maintenance_component_id", "is", null);
-      const componentIds = [...new Set((comps || []).map((r) => String((r as { maintenance_component_id: string }).maintenance_component_id)))].slice(0, 10);
-      let covered = 0;
-      if (componentIds.length === 0) {
-        return c.json({
-          coverage: {
-            coveragePct: 0,
-            vehicleCount: active.length,
-            coveredCount: 0,
-            componentsWithParts: 0,
-            catalogCoverage: data,
-          },
-        });
-      }
-      for (const vehicle of active) {
-        const catalogId = await resolveCatalogIdForKvVehicle(supabase, vehicle as Record<string, unknown>);
-        if (!catalogId || componentIds.length === 0) continue;
-        let ok = true;
-        for (const comp of componentIds.slice(0, 10)) {
-          const { data: hits } = await supabase.rpc("parts_for_vehicle", {
-            p_catalog_id: catalogId,
-            p_component_id: comp,
-            p_vehicle_year: Number((vehicle as { year?: number }).year) || null,
-          });
-          const tierHit = (hits || []).some((h) => {
-            const tier = Number((h as { tier?: number }).tier);
-            return tier >= 1 && tier <= 3;
-          });
-          if (!tierHit) { ok = false; break; }
-        }
-        if (ok) covered += 1;
-      }
-      const fleetCount = active.length;
-      const fleetPct = fleetCount ? Math.round((covered / fleetCount) * 1000) / 10 : 0;
+      const orgId = c.req.query("organizationId")?.trim() || null;
+      const coverage = await loadFleetCoverage(supabase, orgId);
+      const flag = await getFeatureFlag(FEATURE_FLAGS.PARTS_TIERED_SEARCH);
       return c.json({
         coverage: {
-          ...(typeof data === "object" && data ? data as Record<string, unknown> : {}),
-          coveragePct: fleetPct,
-          vehicleCount: fleetCount,
-          coveredCount: covered,
-          catalogCoverage: data,
+          ...coverage,
+          readyAt: 60,
+          tieredOnFor: flag?.enabledForOrgs ?? [],
+          globallyOn: flag?.enabled === true,
         },
       });
+    } catch (e) {
+      return fail(c, e);
+    }
+  });
+
+  route.post("/make-server-37f42386/admin/parts-tiered-search", requireAuth(), async (c: Context) => {
+    const denied = staff(c);
+    if (denied) return denied;
+    try {
+      const body = await c.req.json() as { organizationId?: string; enabled?: boolean };
+      const organizationId = String(body.organizationId ?? "").trim();
+      if (!organizationId) return c.json({ error: "Pick one fleet." }, 400);
+      if (body.enabled === true) {
+        const coverage = await loadFleetCoverage(supabase, organizationId);
+        if (!tieredSearchReady(coverage.coveragePct)) {
+          return c.json({
+            error: `This fleet is at ${coverage.coveragePct}% coverage. Tiered search unlocks at 60%.`,
+            coveragePct: coverage.coveragePct,
+          }, 400);
+        }
+        const flag = await getFeatureFlag(FEATURE_FLAGS.PARTS_TIERED_SEARCH);
+        if (flag?.enabled === true) {
+          return c.json({ error: "Tiered search is already on for every fleet. Turn that off before choosing one fleet." }, 400);
+        }
+        await enableFlagForOrg(FEATURE_FLAGS.PARTS_TIERED_SEARCH, organizationId, "parts-sourcing");
+      } else {
+        await disableFlagForOrg(FEATURE_FLAGS.PARTS_TIERED_SEARCH, organizationId, "parts-sourcing");
+      }
+      return c.json({ ok: true, organizationId, enabled: body.enabled === true });
+    } catch (e) {
+      return fail(c, e);
+    }
+  });
+
+  route.post("/make-server-37f42386/admin/vehicle-platform-families", requireAuth(), async (c: Context) => {
+    const denied = staff(c);
+    if (denied) return denied;
+    try {
+      const body = await c.req.json() as { family?: string; chassisCodes?: string[]; shareBodyParts?: boolean };
+      const family = String(body.family ?? "").trim().toUpperCase();
+      const codes = (body.chassisCodes ?? []).map((code) => String(code).trim().toUpperCase()).filter(Boolean);
+      if (!family || !codes.length) return c.json({ error: "A family and its chassis codes are required." }, 400);
+      const { data: existingParent } = await supabase.from("vehicle_platform").select("id").eq("code", family).maybeSingle();
+      let parentId = (existingParent as { id?: string } | null)?.id ?? null;
+      if (!parentId) {
+        const { data: created, error: createErr } = await supabase.from("vehicle_platform").insert({ code: family, label: family }).select("id").single();
+        if (createErr) throw createErr;
+        parentId = (created as { id: string }).id;
+      }
+      for (const code of codes) {
+        const { data: child } = await supabase.from("vehicle_platform").select("id").eq("code", code).maybeSingle();
+        const childId = (child as { id?: string } | null)?.id;
+        if (!childId || childId === parentId) continue;
+        const { error } = await supabase.from("vehicle_platform").update({
+          parent_id: body.shareBodyParts ? parentId : null,
+        }).eq("id", childId);
+        if (error) throw error;
+      }
+      return c.json({ ok: true, family, shareBodyParts: body.shareBodyParts === true });
     } catch (e) {
       return fail(c, e);
     }
@@ -311,6 +329,95 @@ export function registerPartsEnterpriseRoutes(route: RouteApp, supabase: Supabas
   listTable("/make-server-37f42386/admin/part-repeat-alerts", "part_repeat_alert");
   listTable("/make-server-37f42386/admin/part-quotes", "part_quote_request");
   listTable("/make-server-37f42386/admin/part-fit-feedback", "part_fit_feedback");
+  listTable("/make-server-37f42386/admin/part-rule-reviews", "part_rule_review");
+  listTable("/make-server-37f42386/admin/part-rule-proposals", "part_rule_proposal");
+
+  route.get("/make-server-37f42386/admin/service-components", requireAuth(), async (c: Context) => {
+    const denied = staff(c);
+    if (denied) return denied;
+    try {
+      const { data, error } = await supabase
+        .from("maintenance_service_categories")
+        .select("id, name, op_code, code")
+        .eq("kind", "component")
+        .order("name");
+      if (error) throw error;
+      return c.json({ items: data || [] });
+    } catch (e) {
+      return fail(c, e);
+    }
+  });
+
+  route.get("/make-server-37f42386/admin/catalog-variants", requireAuth(), async (c: Context) => {
+    const denied = staff(c);
+    if (denied) return denied;
+    try {
+      const q = (c.req.query("q") ?? "").trim().replace(/[%_\\,]/g, "");
+      if (q.length < 2) return c.json({ items: [] });
+      const { data, error } = await supabase
+        .from("vehicle_catalog")
+        .select("id, make, model, chassis_code, engine_code, production_start_year")
+        .or(`chassis_code.ilike.%${q}%,make.ilike.%${q}%,model.ilike.%${q}%`)
+        .limit(20);
+      if (error) throw error;
+      return c.json({ items: data || [] });
+    } catch (e) {
+      return fail(c, e);
+    }
+  });
+
+  route.patch("/make-server-37f42386/admin/part-rule-reviews/:id", requireAuth(), async (c: Context) => {
+    const denied = staff(c);
+    if (denied) return denied;
+    try {
+      const body = await c.req.json() as { notes?: string };
+      const notes = String(body.notes ?? "resolved").slice(0, 500);
+      const { data, error } = await supabase
+        .from("part_rule_review")
+        .update({ status: "resolved", notes })
+        .eq("id", c.req.param("id"))
+        .select("*")
+        .single();
+      if (error) throw error;
+      return c.json({ item: data });
+    } catch (e) {
+      return fail(c, e);
+    }
+  });
+
+  route.post("/make-server-37f42386/admin/part-rule-proposals/:id/decision", requireAuth(), async (c: Context) => {
+    const denied = staff(c);
+    if (denied) return denied;
+    try {
+      const body = await c.req.json() as { status?: string };
+      const status = String(body.status ?? "");
+      if (!["approved", "rejected"].includes(status)) return c.json({ error: "Choose approve or reject." }, 400);
+      const { data: proposal, error: pErr } = await supabase.from("part_rule_proposal").select("*").eq("id", c.req.param("id")).maybeSingle();
+      if (pErr) throw pErr;
+      if (!proposal) return c.json({ error: "Suggestion not found" }, 404);
+      const row = proposal as { part_id: string; target_kind: string; platform_id?: string | null; engine_family_id?: string | null; status: string };
+      if (row.status !== "proposed") return c.json({ error: "This suggestion is already closed." }, 400);
+      if (status === "approved") {
+        const { data: part, error: partErr } = await supabase.from("part_master").select("interchange_group_id").eq("id", row.part_id).maybeSingle();
+        if (partErr) throw partErr;
+        const groupId = (part as { interchange_group_id?: string } | null)?.interchange_group_id;
+        if (!groupId) return c.json({ error: "This part has no interchange group yet." }, 400);
+        const { error: ruleErr } = await supabase.from("interchange_fitment_rule").insert({
+          interchange_group_id: groupId,
+          target_kind: row.target_kind,
+          platform_id: row.platform_id ?? null,
+          engine_family_id: row.engine_family_id ?? null,
+          source: "install_confirmed",
+        });
+        if (ruleErr) throw ruleErr;
+      }
+      const { data, error } = await supabase.from("part_rule_proposal").update({ status }).eq("id", c.req.param("id")).select("*").single();
+      if (error) throw error;
+      return c.json({ item: data });
+    } catch (e) {
+      return fail(c, e);
+    }
+  });
 
   route.patch("/make-server-37f42386/admin/part-cores/:id", requireAuth(), async (c: Context) => {
     const denied = staff(c);
@@ -482,6 +589,17 @@ export function registerPartsEnterpriseRoutes(route: RouteApp, supabase: Supabas
       const body = await c.req.json() as { text?: string; engineNumber?: string; year?: number };
       const decoded = body.text ? decodeFrameBatch(String(body.text)) : [];
       const enginePrefix = engineFamilyPrefix(body.engineNumber ?? null);
+      let engineFamily: { id: string; code: string } | null = null;
+      if (enginePrefix) {
+        const exact = await supabase.from("engine_family").select("id, code").eq("code", enginePrefix.toUpperCase()).maybeSingle();
+        if (exact.data) {
+          engineFamily = exact.data as { id: string; code: string };
+        } else {
+          const fuzzy = await supabase.from("engine_family").select("id, code").ilike("code", `${enginePrefix.replace(/[%_\\]/g, "")}%`).limit(8);
+          const rows = (fuzzy.data || []) as Array<{ id: string; code: string }>;
+          if (rows.length === 1) engineFamily = rows[0];
+        }
+      }
       const items = [];
       for (const row of decoded) {
         let matches: { id: string; make: string; model: string; chassis_code: string | null }[] = [];
@@ -513,7 +631,7 @@ export function registerPartsEnterpriseRoutes(route: RouteApp, supabase: Supabas
           matches,
         });
       }
-      return c.json({ items, enginePrefix });
+      return c.json({ items, enginePrefix, engineFamily });
     } catch (e) {
       return fail(c, e);
     }
@@ -635,6 +753,25 @@ export function registerPartsEnterpriseRoutes(route: RouteApp, supabase: Supabas
     }
   });
 
+  route.patch("/make-server-37f42386/part-repeat-alerts/:id", requireAuth(), requirePermission("vehicles.edit"), async (c: Context) => {
+    try {
+      const orgId = getOrgId(c);
+      if (!orgId) return c.json({ error: "Organization required" }, 400);
+      const { data, error } = await supabase
+        .from("part_repeat_alert")
+        .update({ status: "dismissed", dismissed_at: new Date().toISOString() })
+        .eq("id", c.req.param("id"))
+        .eq("organization_id", orgId)
+        .select("*")
+        .maybeSingle();
+      if (error) throw error;
+      if (!data) return c.json({ error: "Alert not found" }, 404);
+      return c.json({ item: data });
+    } catch (e) {
+      return fail(c, e);
+    }
+  });
+
   route.get("/make-server-37f42386/part-repeat-alerts", requireAuth(), requirePermission("vehicles.view"), async (c: Context) => {
     try {
       const orgId = getOrgId(c);
@@ -680,6 +817,7 @@ export function registerPartsEnterpriseRoutes(route: RouteApp, supabase: Supabas
         supplier_sku: body.supplierSku ? String(body.supplierSku) : `quote-${quoteId.slice(0, 8)}`,
         unit_price: Number(body.unitPrice ?? 0),
         currency: body.currency ? String(body.currency) : "JMD",
+        lead_time_days: body.leadTimeDays != null && body.leadTimeDays !== "" ? Number(body.leadTimeDays) : null,
         source: "quote",
         organization_id: q.organization_id ?? null,
         price_observed_at: new Date().toISOString(),
@@ -741,7 +879,7 @@ export function registerPartsEnterpriseRoutes(route: RouteApp, supabase: Supabas
       if (!vehicle || typeof vehicle !== "object") return c.json({ error: "Vehicle not found" }, 404);
       const row = vehicle as Record<string, unknown>;
       const owner = String(row.organizationId || row.organization_id || "");
-      if (owner && owner !== orgId) return c.json({ error: "Vehicle not found" }, 404);
+      if (!owner || owner !== orgId) return c.json({ error: "Vehicle not found" }, 404);
       const next = {
         ...row,
         vehicle_catalog_id: body.catalogId && isUuid(body.catalogId) ? body.catalogId : row.vehicle_catalog_id,

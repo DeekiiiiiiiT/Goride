@@ -127,6 +127,8 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
   const [myRequests, setMyRequests] = useState<Array<Record<string, unknown>>>([]);
   const [myRequestsError, setMyRequestsError] = useState("");
   const [coreSummary, setCoreSummary] = useState("");
+  const [repeatAlerts, setRepeatAlerts] = useState<Array<Record<string, unknown>>>([]);
+  const [warrantyClaims, setWarrantyClaims] = useState<Array<Record<string, unknown>>>([]);
   const [partsRequestBusy, setPartsRequestBusy] = useState(false);
   const [hubTab, setHubTab] = useState<"by-vehicle" | "service-ledger">("by-vehicle");
 
@@ -274,6 +276,8 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
     void api.listPartCores().then((res) => {
       setCoreSummary(`J$ ${Number(res.pendingAmount || 0).toFixed(2)} in pending core returns · ${res.overdueCount || 0} overdue`);
     }).catch(() => setCoreSummary(""));
+    void api.listPartRepeatAlerts().then((res) => setRepeatAlerts(res.items || [])).catch(() => setRepeatAlerts([]));
+    void api.listWarrantyClaims().then((res) => setWarrantyClaims(res.items || [])).catch(() => setWarrantyClaims([]));
     void api.listMyPartsRequests().then((res) => setMyRequests(res.items || [])).catch((err) => {
       setMyRequests([]);
       setMyRequestsError(err instanceof Error ? err.message : "Could not load your requests");
@@ -811,6 +815,24 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
           </div>
           <div className="text-sm space-y-1">
             {coreSummary ? <p className="text-slate-600">{coreSummary}</p> : null}
+            <p className="font-medium">Repeat part alerts</p>
+            {repeatAlerts.length === 0 ? <p className="text-slate-500">None open.</p> : repeatAlerts.slice(0, 8).map((alert) => (
+              <p key={String(alert.id)} className="text-slate-600 flex items-center justify-between gap-2">
+                <span>{String(alert.detail || "Same part failed again")}</span>
+                <Button type="button" size="sm" variant="ghost" className="h-7" onClick={async () => {
+                  try {
+                    await api.dismissPartRepeatAlert(String(alert.id));
+                    setRepeatAlerts((rows) => rows.filter((row) => row.id !== alert.id));
+                  } catch (err) {
+                    toast.error(err instanceof Error ? err.message : "Could not dismiss");
+                  }
+                }}>Dismiss</Button>
+              </p>
+            ))}
+            <p className="font-medium">Warranty claims</p>
+            {warrantyClaims.length === 0 ? <p className="text-slate-500">None open. Crediting a claim is done in Dominion.</p> : warrantyClaims.slice(0, 8).map((claim) => (
+              <p key={String(claim.id)} className="text-slate-600">{String(claim.status)} — {String(claim.notes || claim.part_id || "Claim")}</p>
+            ))}
             <p className="font-medium">My requests</p>
             {myRequestsError ? <p className="text-red-600">{myRequestsError}</p> : null}
             {myRequests.length === 0 && !myRequestsError ? <p className="text-slate-500">No parts requests yet.</p> : null}

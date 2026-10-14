@@ -80,4 +80,87 @@ BEGIN
   END;
 END $$;
 
+DO $$
+DECLARE
+  result jsonb;
+  applied int;
+  qty numeric;
+  open_count int;
+  wo1 uuid := '88888888-8888-4888-8888-888888888881';
+  wo2 uuid := '88888888-8888-4888-8888-888888888882';
+  line1 uuid := '88888888-8888-4888-8888-888888888883';
+  line2 uuid := '88888888-8888-4888-8888-888888888884';
+  line3 uuid := '88888888-8888-4888-8888-888888888885';
+  comp uuid;
+BEGIN
+  SELECT public.import_parts_catalog_rows(
+    jsonb_build_array(jsonb_build_object(
+      'interchangeCode', 'REV2-IMPORT',
+      'label', 'Rev2 import',
+      'manufacturer', 'Toyota',
+      'partNumber', 'REV2-IMP-1',
+      'partName', 'Imported filter',
+      'partKind', 'oem',
+      'fitScope', 'powertrain',
+      'targetKind', 'engine_family',
+      'targetCode', 'REV2-1NZ-FE',
+      'categorySlug', 'rev2-engine'
+    )),
+    '77777777-7777-4777-8777-777777777777'
+  ) INTO result;
+  applied := (result->>'applied')::int;
+  IF applied IS DISTINCT FROM 1 THEN
+    RAISE EXCEPTION 'Import should apply 1 row, got % errors %', applied, result->>'errors';
+  END IF;
+
+  INSERT INTO public.org_part_stock (organization_id, part_id, qty)
+  VALUES ('rev2-org', '66666666-6666-4666-8666-666666666666', 5);
+
+  INSERT INTO public.maintenance_work_orders (id, organization_id, vehicle_id, status, closed_at, odometer)
+  VALUES (wo1, 'rev2-org', 'rev2-veh', 'completed', now(), 1000);
+
+  INSERT INTO public.maintenance_work_order_lines (id, work_order_id, part_id, qty, action)
+  VALUES (line1, wo1, '66666666-6666-4666-8666-666666666666', 2, 'inspect');
+
+  PERFORM public.apply_parts_usage_for_work_order(wo1);
+  PERFORM public.apply_parts_usage_for_work_order(wo1);
+  SELECT s.qty INTO qty FROM public.org_part_stock s
+  WHERE s.organization_id = 'rev2-org' AND s.part_id = '66666666-6666-4666-8666-666666666666';
+  IF qty IS DISTINCT FROM 3 THEN
+    RAISE EXCEPTION 'A second usage save must not drop stock twice, qty %', qty;
+  END IF;
+
+  SELECT id INTO comp FROM public.maintenance_service_categories WHERE op_code = 'ENG-OIL' LIMIT 1;
+  IF comp IS NULL THEN
+    RAISE EXCEPTION 'ENG-OIL component is missing';
+  END IF;
+
+  INSERT INTO public.maintenance_work_orders (id, organization_id, vehicle_id, status, closed_at, odometer)
+  VALUES
+    (wo2, 'rev2-org', 'rev2-alert-veh', 'completed', now() - interval '1 day', 4000),
+    ('88888888-8888-4888-8888-888888888886', 'rev2-org', 'rev2-alert-veh', 'completed', now() - interval '20 days', 1000);
+  INSERT INTO public.maintenance_work_order_lines (id, work_order_id, component_id, action)
+  VALUES
+    (line2, wo2, comp, 'replace'),
+    (line3, '88888888-8888-4888-8888-888888888886', comp, 'replace');
+
+  PERFORM public.refresh_repeat_part_alerts(10000, 90, 'rev2-alert-veh');
+  SELECT count(*) INTO open_count FROM public.part_repeat_alert
+  WHERE vehicle_id = 'rev2-alert-veh' AND component_id = comp AND status = 'open';
+  IF open_count IS DISTINCT FROM 1 THEN
+    RAISE EXCEPTION 'Expected one open repeat alert, got %', open_count;
+  END IF;
+
+  UPDATE public.part_repeat_alert
+  SET status = 'dismissed', dismissed_at = now()
+  WHERE vehicle_id = 'rev2-alert-veh' AND component_id = comp AND status = 'open';
+
+  PERFORM public.refresh_repeat_part_alerts(10000, 90, 'rev2-alert-veh');
+  SELECT count(*) INTO open_count FROM public.part_repeat_alert
+  WHERE vehicle_id = 'rev2-alert-veh' AND component_id = comp AND status = 'open';
+  IF open_count IS DISTINCT FROM 0 THEN
+    RAISE EXCEPTION 'A dismiss must stick, open alerts %', open_count;
+  END IF;
+END $$;
+
 ROLLBACK;

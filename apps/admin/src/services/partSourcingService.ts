@@ -430,4 +430,12 @@ export const partsEnterpriseApi = {
   search: (token: string, q: string) => adminGet(token, `part-search?q=${encodeURIComponent(q)}`),
   replyQuote: (token: string, id: string, body: Record<string, unknown>) => adminSend(token, `part-quotes/${id}/reply`, "POST", body),
   updateClaim: (token: string, id: string, status: string) => adminSend(token, `part-warranty-claims/${id}`, "PATCH", { status }),
+  ruleReviews: (token: string) => adminGet(token, "part-rule-reviews"),
+  resolveRuleReview: (token: string, id: string, notes: string) => adminSend(token, `part-rule-reviews/${id}`, "PATCH", { notes }),
+  proposals: (token: string) => adminGet(token, "part-rule-proposals"),
+  decideProposal: (token: string, id: string, status: "approved" | "rejected") => adminSend(token, `part-rule-proposals/${id}/decision`, "POST", { status }),
+  components: (token: string) => adminGet(token, "service-components"),
+  catalogVariants: (token: string, q: string) => adminGet(token, `catalog-variants?q=${encodeURIComponent(q)}`),
+  setFamily: (token: string, body: { family: string; chassisCodes: string[]; shareBodyParts: boolean }) => adminSend(token, "vehicle-platform-families", "POST", body),
+  setTieredSearch: (token: string, organizationId: string, enabled: boolean) => adminSend(token, "parts-tiered-search", "POST", { organizationId, enabled }),
 };

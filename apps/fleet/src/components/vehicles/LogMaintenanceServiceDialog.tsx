@@ -862,12 +862,18 @@ export function LogMaintenanceServiceDialog({
         );
       }
       onSaved?.();
-      const prompts = (result as { warrantyPrompts?: Array<{ partId?: string; supplierId?: string | null; workOrderLineId?: string }> }).warrantyPrompts;
+      const saved = result as {
+        warrantyPrompts?: Array<{ partId?: string; supplierId?: string | null; workOrderLineId?: string }>;
+        item?: { lines?: Array<{ id?: string; partId?: string; declined?: boolean }> };
+        lines?: Array<{ id?: string; partId?: string; declined?: boolean }>;
+      };
+      const prompts = saved.warrantyPrompts;
+      const savedLines = saved.item?.lines?.length ? saved.item.lines : saved.lines?.length ? saved.lines : lines;
       const queue: Array<{ kind: "fit" | "warranty"; partId: string; supplierId?: string | null; workOrderLineId?: string | null }> = [];
       for (const prompt of prompts || []) {
         if (prompt.partId) queue.push({ kind: "warranty", partId: String(prompt.partId), supplierId: prompt.supplierId, workOrderLineId: prompt.workOrderLineId });
       }
-      for (const line of lines) {
+      for (const line of savedLines) {
         if (line.partId && !line.declined) queue.push({ kind: "fit", partId: line.partId, workOrderLineId: line.id });
       }
       if (queue.length) setFollowQueue(queue);
@@ -1053,7 +1059,7 @@ export function LogMaintenanceServiceDialog({
               <>
                 <Button type="button" onClick={async () => {
                   try {
-                    await api.createWarrantyClaim({ partId: followUp.partId, supplierId: followUp.supplierId, vehicleId });
+                    await api.createWarrantyClaim({ partId: followUp.partId, supplierId: followUp.supplierId, vehicleId, workOrderLineId: followUp.workOrderLineId });
                     toast.success("Warranty claim opened");
                   } catch (err) {
                     toast.error(err instanceof Error ? err.message : "Could not open the claim");

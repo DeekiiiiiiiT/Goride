@@ -230,7 +230,27 @@ export function PartsSourcingManager() {
   const [partKind, setPartKind] = useState("oem");
   const [partGroup, setPartGroup] = useState("");
   const [partComponent, setPartComponent] = useState("");
+  const [groupChoices, setGroupChoices] = useState<Record<string, unknown>[]>([]);
+  const [componentChoices, setComponentChoices] = useState<Record<string, unknown>[]>([]);
+  const [partHits, setPartHits] = useState<Record<string, unknown>[]>([]);
   const [supersedesId, setSupersedesId] = useState("");
+
+  const loadPartPickers = async () => {
+    if (!token) return;
+    try {
+      const [groups, components] = await Promise.all([
+        partsEnterpriseApi.groups(token),
+        partsEnterpriseApi.components(token),
+      ]);
+      const groupItems = groups.items;
+      const componentItems = components.items;
+      setGroupChoices(Array.isArray(groupItems) ? groupItems as Record<string, unknown>[] : []);
+      setComponentChoices(Array.isArray(componentItems) ? componentItems as Record<string, unknown>[] : []);
+    } catch {
+      setGroupChoices([]);
+      setComponentChoices([]);
+    }
+  };
 
   const openNewPart = () => {
     setPartEditingId(null);
@@ -243,7 +263,9 @@ export function PartsSourcingManager() {
     setPartGroup("");
     setPartComponent("");
     setSupersedesId("");
+    setPartHits([]);
     setPartOpen(true);
+    void loadPartPickers();
   };
 
   const savePart = async () => {
@@ -457,7 +479,7 @@ export function PartsSourcingManager() {
           ["catalog", "Catalog"],
           ["vehicles", "Vehicles"],
           ["supply", "Supply"],
-          ["queue", "Queue"],
+          ["queue", "Review"],
         ] as const).map(([id, label]) => (
           <Button key={id} type="button" size="sm" variant={area === id ? "default" : "outline"} onClick={() => {
             setArea(id);
@@ -651,6 +673,7 @@ export function PartsSourcingManager() {
                           setPartOem(p.oem_part_number ?? "");
                           setPartDesc(p.description ?? "");
                           setPartOpen(true);
+                          void loadPartPickers();
                         }}
                       >
                         Edit
@@ -682,6 +705,9 @@ export function PartsSourcingManager() {
         </TabsContent>
 
         <TabsContent value="suppliers" className="mt-4 space-y-3">
+          <p className="text-sm text-slate-600 dark:text-slate-400">
+            Live supplier search stays off until a Jamaican or JDM parts feed is confirmed. Prices you enter here are what fleets see.
+          </p>
           <div className="flex justify-end">
             <Button type="button" size="sm" onClick={openNewSupplier} className="gap-1">
               <Plus className="w-4 h-4" />
@@ -952,17 +978,49 @@ export function PartsSourcingManager() {
               <Input id="pkind" value={partKind} onChange={(e) => setPartKind(e.target.value)} placeholder="oem" />
             </div>
             <div>
-              <Label className={adminLabel} htmlFor="pgroup">Interchange group id</Label>
-              <Input id="pgroup" value={partGroup} onChange={(e) => setPartGroup(e.target.value)} />
+              <Label className={adminLabel}>Interchange group</Label>
+              <Select value={partGroup || undefined} onValueChange={setPartGroup}>
+                <SelectTrigger className={cn(adminSelectTrigger, "w-full")}><SelectValue placeholder="Choose a group" /></SelectTrigger>
+                <SelectContent className={adminSelectContent}>
+                  {groupChoices.map((g) => (
+                    <SelectItem className={adminSelectItem} key={String(g.id)} value={String(g.id)}>{String(g.code)}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div>
-              <Label className={adminLabel} htmlFor="pcomp">Maintenance component id</Label>
-              <Input id="pcomp" value={partComponent} onChange={(e) => setPartComponent(e.target.value)} />
+              <Label className={adminLabel}>Job this part belongs to</Label>
+              <Select value={partComponent || undefined} onValueChange={setPartComponent}>
+                <SelectTrigger className={cn(adminSelectTrigger, "w-full")}><SelectValue placeholder="Choose a job" /></SelectTrigger>
+                <SelectContent className={adminSelectContent}>
+                  {componentChoices.map((c) => (
+                    <SelectItem className={adminSelectItem} key={String(c.id)} value={String(c.id)}>
+                      {String(c.name)}{c.op_code ? ` (${String(c.op_code)})` : ""}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             {partEditingId ? (
               <div>
-                <Label className={adminLabel} htmlFor="psuper">Replaces part id</Label>
-                <Input id="psuper" value={supersedesId} onChange={(e) => setSupersedesId(e.target.value)} placeholder="Older part id" />
+                <Label className={adminLabel}>Replaces this part</Label>
+                <Input placeholder="Search by name or number" onChange={async (e) => {
+                  const q = e.target.value.trim();
+                  if (!token || q.length < 2) { setPartHits([]); return; }
+                  try {
+                    const res = await partsEnterpriseApi.search(token, q);
+                    const items = res.items;
+                    setPartHits(Array.isArray(items) ? items as Record<string, unknown>[] : []);
+                  } catch { setPartHits([]); }
+                }} />
+                <select className="mt-2 h-9 w-full rounded-md border px-2 bg-white dark:bg-slate-800" value={supersedesId} onChange={(e) => setSupersedesId(e.target.value)}>
+                  <option value="">Choose the older part</option>
+                  {partHits.map((hit) => (
+                    <option key={String(hit.part_id)} value={String(hit.part_id)}>
+                      {String(hit.name)} · {String(hit.oem_part_number ?? "")}
+                    </option>
+                  ))}
+                </select>
               </div>
             ) : null}
             <div>

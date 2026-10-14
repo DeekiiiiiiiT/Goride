@@ -1,38 +1,39 @@
 # Rush Ops Console (`/admin`): what's left
 
-**Rev 4 · 2026-10-13** · Every code item from Rev 3 is fixed. What remains is getting those fixes live, plus one small UI gap.
+**Rev 6 · 2026-10-13** · Clicked through on the live site. One buyer landing bug was fixed locally and still needs a Rush customer deploy.
+
+**Rev 5 note, still true:** Every finding from Rev 1–4 is fixed, committed (`ad234278`, `61717c78`) and live on the API.
 
 **Checks run:**
-- Production: the migration is applied (all 3 SQL functions exist), and `delivery` is at v852.
-- `tsc` through `apps/dash-customer`: 293 errors, back to the baseline. No new errors.
-- `consoleAccess.test.ts`: 6 of 6 pass, and the test is now in `ci.yml`.
-- Nothing was checked in a browser.
+- Production database: all 3 console SQL functions exist.
+- `delivery` v854: the deployed `consoleAccess.ts`, `consoleRoutes.ts` and `identityRoutes.ts` match the repo byte for byte.
+- `tsc` through `apps/dash-customer`: 293 errors, the same as before this work. No new errors.
+- `consoleAccess.test.ts` is in CI.
+- Live Rush site `roamrush.app` is production deployment `61717c78` (`roam-rush-customer`). That commit already contains `ad234278`. No frontend deploy was required for the Rev 1–4 work.
 
----
+## Browser pass
 
-## 1. Deploy the fixes: an access leak is live now
+There was no standing login for ops, courier-only, In-House buyer, support, or analyst. The personal owner account was not used. Short-lived logins, one role each, were signed in (including the authenticator step for owner and support) and then removed.
 
-`delivery` v852 went out at 18:05 Jamaica time. Your fixes to `consoleAccess.ts` and `consoleRoutes.ts` were saved at 23:03 and are still uncommitted. So production is running the console **without** them:
+Each allowed hub was opened at desktop width and at 375px wide. Blocked hubs, opened by typing the address, showed "You don't have access." Nothing scrolled sideways, and the phone menu opened.
 
-- **Courier staff can search every customer's name and email.** This is what your `canSeePeople` fix addresses.
-- **Courier staff can read every store's audit log** (`/merchant-audit`).
-- **Home's comparison and the audit date filter** are still the old versions.
+| Role | Menu | Search for "Rush Test" | Home sales | Audit log | Badges |
+| --- | --- | --- | --- | --- | --- |
+| Owner (`dash_admin`) | Every hub | Customer link included | Orders today 0 and Sales today J$0.00, both "same as last week", plus the today-vs-last-week hour chart | Staff, Pricing, and Merchant | Home and Support both showed 3, matching 3 open support cases |
+| Ops | Home through Markets only | Customer link included | Hidden. Server said sales are hidden | Blocked | Same 3, matching the Support list |
+| Courier only | No customers, merchants, finance, pricing, or settings | Courier only. No customer | Hidden | Staff history only. Pricing and Merchant stay hidden even if the address asks for them | Support badge 3 once the feed loaded |
+| In-House buyer | In-House desk only | No customer results. Server refuses the search | Hidden | Blocked | None. The desk opened |
+| Support | No finance, audit, markets, or In-House | Customer link included | Hidden | Blocked | Home and Support both 3, and the Home row said 3 open cases past the limit |
+| Analyst | Finance, pricing, promotions, and audit. No support or team | Customer link included | Same 0 vs last week as the owner, and the hour chart. Server sales were visible | Staff, Pricing, and Merchant | "All clear." Support cases are hidden from this role, so the 3 does not appear |
 
-**To do:** commit these four files and deploy `delivery`:
-- `supabase/functions/delivery/admin/consoleAccess.ts`
-- `supabase/functions/delivery/admin/consoleRoutes.ts`
-- `supabase/functions/delivery/admin/consoleAccess.test.ts`
-- `.github/workflows/ci.yml`
+Finance for the owner showed 0 people to review and 0 chargebacks, which matches sales of J$0.00 and no finance badge. Queues at zero do not show a badge.
 
-Your working tree also has unrelated parts-sourcing changes, including a new migration. Commit those separately so this deploy doesn't carry them.
+## Fixed
 
-## 2. One UI gap
+An In-House buyer who opened Home was told they don't have access, instead of being sent to the In-House desk. The desk itself was fine. Home now sends a buyer-only login straight to the desk, including if they open Home again. Checked on the local Rush app at desktop and 375px. An ops login still lands on Home.
 
-- **The Audit log offers courier roles tabs they can't load.** Courier roles still see the **Pricing** and **Merchant** tabs (`pages/audit/AuditHubPage.tsx:57-63`). The server now refuses both, and the `.catch(() => setRows([]))` on line 49 hides the error, so the tabs look like there's simply no history. Show each tab only to roles that can open Pricing or Merchants, and show an error message rather than an empty list.
+This landing fix is in the working tree. It is not on `roamrush.app` until the Rush customer app is deployed.
 
-## 3. Before calling it done
+## Left to do
 
-After the deploy, click through each hub at desktop and 375px wide. Sign in as one role from each column of the role table: owner, ops, courier, In-House buyer, support and analyst. For each role, confirm that:
-- search only returns what that role can open
-- Home shows sales only to Finance roles, compared with the same time last week
-- every badge count matches its list
+Deploy the Rush customer app so the buyer landing fix is on `roamrush.app`.

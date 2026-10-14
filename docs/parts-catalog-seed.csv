@@ -1,0 +1,37 @@
+interchange_code,label,manufacturer,part_number,part_name,part_kind,fit_scope,target_kind,target_code,component_op_code,category_slug
+IC-OIL-1NZ-FE,1NZ-FE oil filter,Toyota,90915-YZZD2,Oil filter,oem,powertrain,engine_family,1NZ-FE,ENG-OIL,engine-components
+IC-OIL-1NZ-FE,1NZ-FE oil filter,Denso,1501004,Oil filter,oe_supplier,powertrain,engine_family,1NZ-FE,ENG-OIL,engine-components
+IC-AIR-1NZ-FE,1NZ-FE air filter,Toyota,17801-21050,Air filter,oem,powertrain,engine_family,1NZ-FE,FILT-AIR,engine-components
+IC-PLUG-1NZ-FE,1NZ-FE spark plug,Toyota,90919-01210,Spark plug,oem,powertrain,engine_family,1NZ-FE,ENG-SPARK,engine-components
+IC-BELT-1NZ-FE,1NZ-FE drive belt,Toyota,90916-02664,Drive belt,oem,powertrain,engine_family,1NZ-FE,BELT-SERP,engine-components
+IC-THERM-1NZ-FE,1NZ-FE thermostat,Toyota,90916-03100,Thermostat,oem,powertrain,engine_family,1NZ-FE,ENG-THERM,cooling
+IC-PUMP-1NZ-FE,1NZ-FE water pump,Toyota,16100-29085,Water pump,oem,powertrain,engine_family,1NZ-FE,ENG-WPUMP,cooling
+IC-O2-1NZ-FE,1NZ-FE oxygen sensor,Toyota,89465-02380,Oxygen sensor,oem,powertrain,engine_family,1NZ-FE,ENG-O2,electrical-computers
+IC-COIL-1NZ-FE,1NZ-FE ignition coil,Toyota,90919-02248,Ignition coil,oem,powertrain,engine_family,1NZ-FE,ENG-COIL,electrical-computers
+IC-OIL-2ZR-FXE,2ZR-FXE oil filter,Toyota,04152-YZZA1,Oil filter,oem,powertrain,engine_family,2ZR-FXE,ENG-OIL,engine-components
+IC-AIR-2ZR-FXE,2ZR-FXE air filter,Toyota,17801-0T020,Air filter,oem,powertrain,engine_family,2ZR-FXE,FILT-AIR,engine-components
+IC-PLUG-2ZR-FXE,2ZR-FXE spark plug,Toyota,90919-01247,Spark plug,oem,powertrain,engine_family,2ZR-FXE,ENG-SPARK,engine-components
+IC-THERM-2ZR-FXE,2ZR-FXE thermostat,Toyota,90916-03129,Thermostat,oem,powertrain,engine_family,2ZR-FXE,ENG-THERM,cooling
+IC-PUMP-2ZR-FXE,2ZR-FXE water pump,Toyota,16100-39465,Water pump,oem,powertrain,engine_family,2ZR-FXE,ENG-WPUMP,cooling
+IC-COIL-2ZR-FXE,2ZR-FXE ignition coil,Toyota,90919-02259,Ignition coil,oem,powertrain,engine_family,2ZR-FXE,ENG-COIL,electrical-computers
+IC-OIL-1KR-FE,1KR-FE oil filter,Toyota,90915-10003,Oil filter,oem,powertrain,engine_family,1KR-FE,ENG-OIL,engine-components
+IC-AIR-1KR-FE,1KR-FE air filter,Toyota,17801-0H050,Air filter,oem,powertrain,engine_family,1KR-FE,FILT-AIR,engine-components
+IC-PLUG-1KR-FE,1KR-FE spark plug,Toyota,90919-01235,Spark plug,oem,powertrain,engine_family,1KR-FE,ENG-SPARK,engine-components
+IC-PUMP-1KR-FE,1KR-FE water pump,Toyota,16100-BZ040,Water pump,oem,powertrain,engine_family,1KR-FE,ENG-WPUMP,cooling
+IC-OIL-2AZ-FE,2AZ-FE oil filter,Toyota,90915-YZZD1,Oil filter,oem,powertrain,engine_family,2AZ-FE,ENG-OIL,engine-components
+IC-AIR-2AZ-FE,2AZ-FE air filter,Toyota,17801-28030,Air filter,oem,powertrain,engine_family,2AZ-FE,FILT-AIR,engine-components
+IC-PLUG-2AZ-FE,2AZ-FE spark plug,Toyota,90919-01191,Spark plug,oem,powertrain,engine_family,2AZ-FE,ENG-SPARK,engine-components
+IC-PUMP-2AZ-FE,2AZ-FE water pump,Toyota,16100-29415,Water pump,oem,powertrain,engine_family,2AZ-FE,ENG-WPUMP,cooling
+IC-COIL-2AZ-FE,2AZ-FE ignition coil,Toyota,90919-02239,Ignition coil,oem,powertrain,engine_family,2AZ-FE,ENG-COIL,electrical-computers
+IC-OIL-1NZ-FXE,1NZ-FXE oil filter,Toyota,90915-YZZD4,Oil filter,oem,powertrain,engine_family,1NZ-FXE,ENG-OIL,engine-components
+IC-AIR-1NZ-FXE,1NZ-FXE air filter,Toyota,17801-21040,Air filter,oem,powertrain,engine_family,1NZ-FXE,FILT-AIR,engine-components
+IC-PLUG-1NZ-FXE,1NZ-FXE spark plug,Toyota,90919-01164,Spark plug,oem,powertrain,engine_family,1NZ-FXE,ENG-SPARK,engine-components
+IC-OIL-HR15DE,HR15DE oil filter,Nissan,15208-65F0E,Oil filter,oem,powertrain,engine_family,HR15DE,ENG-OIL,engine-components
+IC-AIR-HR15DE,HR15DE air filter,Nissan,16546-ED000,Air filter,oem,powertrain,engine_family,HR15DE,FILT-AIR,engine-components
+IC-PLUG-HR15DE,HR15DE spark plug,Nissan,22401-CK81A,Spark plug,oem,powertrain,engine_family,HR15DE,ENG-SPARK,engine-components
+IC-OIL-L15B,L15B oil filter,Honda,15400-PLM-A02,Oil filter,oem,powertrain,engine_family,L15B,ENG-OIL,engine-components
+IC-AIR-L15B,L15B air filter,Honda,17220-5R0-A00,Air filter,oem,powertrain,engine_family,L15B,FILT-AIR,engine-components
+IC-PLUG-L15B,L15B spark plug,Honda,12290-5R0-003,Spark plug,oem,powertrain,engine_family,L15B,ENG-SPARK,engine-components
+IC-OIL-R06A,R06A oil filter,Suzuki,16510-82703,Oil filter,oem,powertrain,engine_family,R06A,ENG-OIL,engine-components
+IC-AIR-R06A,R06A air filter,Suzuki,13780-68K00,Air filter,oem,powertrain,engine_family,R06A,FILT-AIR,engine-components
+IC-PLUG-R06A,R06A spark plug,Suzuki,09482-00615,Spark plug,oem,powertrain,engine_family,R06A,ENG-SPARK,engine-components

@@ -128,6 +128,12 @@ function badgesFromQueues(queues: AttentionQueue[]): Record<string, AdminNavBadg
   return byNav;
 }
 
+/** A buyer has the desk only. Home is not a page they can be stuck on. */
+function isInHouseBuyerOnly(roles: string[]) {
+  return roles.includes('dash_concierge')
+    && !roles.some((role) => role !== 'dash_concierge' && role !== 'authenticated');
+}
+
 function AdminLayoutShell({ session }: { session: Session }) {
   const location = useLocation();
   const navigate = useNavigate();
@@ -139,6 +145,8 @@ function AdminLayoutShell({ session }: { session: Session }) {
   const [detailLabel, setDetailLabelState] = useState<string | null>(null);
   const setDetailLabel = useCallback((label: string | null) => setDetailLabelState(label), []);
   const allowed = canOpenPath(roles, location.pathname);
+  const sendBuyerToDesk = isInHouseBuyerOnly(roles)
+    && (location.pathname === '/' || location.pathname === '/dashboard');
   const baseConfig = filterConfigForRole(roles);
   const config = applyNavBadges(baseConfig, badgesFromQueues(queues ?? []));
   const currentPage = pathnameToNavId(location.pathname);
@@ -212,7 +220,11 @@ function AdminLayoutShell({ session }: { session: Session }) {
       }}
       onSignOut={handleSignOut}
     >
-      {allowed ? <Outlet context={{ session, setDetailLabel, attention: queues }} /> : <AccessDenied />}
+      {sendBuyerToDesk
+        ? <Navigate to="/in-house" replace />
+        : allowed
+          ? <Outlet context={{ session, setDetailLabel, attention: queues }} />
+          : <AccessDenied />}
       <CommandPalette
         open={searchOpen}
         onClose={() => setSearchOpen(false)}
@@ -227,7 +239,7 @@ function AdminLayoutShell({ session }: { session: Session }) {
 function DashAdminHome() {
   const { session } = useOutletContext<AdminOutletContext>();
   const roles = getJwtRoles(session.user);
-  if (roles.includes('dash_concierge') && !roles.some((role) => role !== 'dash_concierge' && role !== 'authenticated')) {
+  if (isInHouseBuyerOnly(roles)) {
     return <Navigate to="/in-house" replace />;
   }
   return <HomePage />;
