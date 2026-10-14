@@ -1,3 +1,4 @@
+import { formatMoney } from '../../../components/ui/format';
 import type {
   MerchantTierRow,
   PricingLayerResponse,
@@ -32,7 +33,7 @@ export const PARTY_META: Record<
 };
 
 export function formatJmd(n: number) {
-  return `J$${Math.round(n).toLocaleString()}`;
+  return formatMoney(n);
 }
 
 export function layerLabel(source: string | undefined): string {

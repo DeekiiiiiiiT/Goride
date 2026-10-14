@@ -27,7 +27,10 @@ export function classifyPartTier(input: {
     return 4;
   }
   const ownMake = (input.manufacturer ?? "").trim().toLowerCase() === input.vehicleMake.trim().toLowerCase();
-  if (input.partKind === "oem" && (input.targetKind === "catalog_variant" || (input.targetKind === "platform" && ownMake))) {
+  if (input.partKind === "oem" && (
+    input.targetKind === "catalog_variant"
+    || ((input.targetKind === "platform" || input.targetKind === "engine_family") && ownMake)
+  )) {
     return 1;
   }
   if (input.targetKind === "platform") return 2;
@@ -141,6 +144,28 @@ export function totalImpactJmd(landed: number, leadDays: number, downtimePerDay:
   const lead = Number.isFinite(leadDays) && leadDays > 0 ? leadDays : 0;
   const down = Number.isFinite(downtimePerDay) && downtimePerDay > 0 ? downtimePerDay : 0;
   return Math.round((landed + lead * down) * 100) / 100;
+}
+
+/** Parts usage is committed before the service record and the ledger charge. */
+export const MAINTENANCE_SAVE_ORDER = [
+  "work_order_lines",
+  "parts_usage",
+  "service_record",
+  "ledger",
+] as const;
+
+/** Tiered search stays off until 60% of active vehicles have a real Tier 1–3 match. */
+export function tieredSearchReady(coveragePct: number): boolean {
+  return Number.isFinite(coveragePct) && coveragePct >= 60;
+}
+
+/** A ledger post is allowed only after parts usage succeeded, or when the job has no part. */
+export function ledgerAllowedAfterParts(input: {
+  needsUsage: boolean;
+  usageCommitted: boolean;
+}): boolean {
+  if (!input.needsUsage) return true;
+  return input.usageCommitted;
 }
 
 /** Non-null means the save must fail. A missing error means the usage write succeeded. */

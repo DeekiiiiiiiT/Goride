@@ -158,6 +158,7 @@ export interface MaintenanceLogLine {
   warranty?: boolean;
   complimentary?: boolean;
   partId?: string;
+  supplierPartOfferId?: string | null;
   notes?: string;
   recommended?: boolean;
   declined?: boolean;

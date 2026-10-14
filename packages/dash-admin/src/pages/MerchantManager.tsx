@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useOutletContext, useSearchParams } from 'react-router-dom';
 import { Loader2, RefreshCw, Search } from 'lucide-react';
 import { toast } from 'sonner';
-import { MerchantStatusBadge } from '../components/MerchantStatusBadge';
+import { StatusBadge } from '../components/ui/StatusBadge';
 import {
   getMerchantHealth,
   listIncompleteSetup,
@@ -221,7 +221,7 @@ export function MerchantManager({ mode = 'applications' }: { mode?: 'directory' 
                           Draft
                         </span>
                       ) : row.verificationStatus ? (
-                        <MerchantStatusBadge status={row.verificationStatus as MerchantVerificationStatus} />
+                        <StatusBadge value={row.verificationStatus as MerchantVerificationStatus} />
                       ) : (
                         '—'
                       )}
@@ -283,7 +283,7 @@ export function MerchantManager({ mode = 'applications' }: { mode?: 'directory' 
                     )}
                   </td>
                   <td className="px-4 py-3">
-                    <MerchantStatusBadge status={m.verification_status} />
+                    <StatusBadge value={m.verification_status} />
                   </td>
                   <td className="px-4 py-3">
                     <span className={`text-xs px-2 py-0.5 rounded-full ${

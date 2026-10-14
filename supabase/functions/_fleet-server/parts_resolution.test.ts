@@ -9,6 +9,9 @@ import {
   classifyPartTier,
   engineFamilyRuleAllowed,
   latestSupersededPartId,
+  ledgerAllowedAfterParts,
+  MAINTENANCE_SAVE_ORDER,
+  tieredSearchReady,
   partVisibleForComponent,
   usageWriteFailure,
 } from "../../../packages/types/src/partsResolution.ts";
@@ -34,6 +37,12 @@ Deno.test("fitment matrix lands each part on the expected tier", () => {
     targetKind: "engine_family",
     manufacturer: "Toyota",
     vehicleMake: "Toyota",
+  }), 1);
+  assertEquals(classifyPartTier({
+    partKind: "oem",
+    targetKind: "engine_family",
+    manufacturer: "Toyota",
+    vehicleMake: "Nissan",
   }), 3);
   assertEquals(classifyPartTier({
     partKind: "aftermarket",
@@ -61,6 +70,22 @@ Deno.test("category bridge matches the maintenance component, not the parts cate
 Deno.test("a failed usage write fails the save", () => {
   assertEquals(usageWriteFailure(null), null);
   assertEquals(usageWriteFailure({ message: "insert failed" }), "insert failed");
+});
+
+Deno.test("tiered search stays off until coverage is real", () => {
+  assertEquals(tieredSearchReady(0), false);
+  assertEquals(tieredSearchReady(59), false);
+  assertEquals(tieredSearchReady(60), true);
+});
+
+Deno.test("a failed usage write never reaches the service record or the ledger", () => {
+  const usageAt = MAINTENANCE_SAVE_ORDER.indexOf("parts_usage");
+  const recordAt = MAINTENANCE_SAVE_ORDER.indexOf("service_record");
+  const ledgerAt = MAINTENANCE_SAVE_ORDER.indexOf("ledger");
+  assertEquals(usageAt < recordAt && usageAt < ledgerAt, true);
+  assertEquals(ledgerAllowedAfterParts({ needsUsage: true, usageCommitted: false }), false);
+  assertEquals(ledgerAllowedAfterParts({ needsUsage: true, usageCommitted: true }), true);
+  assertEquals(ledgerAllowedAfterParts({ needsUsage: false, usageCommitted: false }), true);
 });
 
 Deno.test("superseded number is listed as also known as", () => {

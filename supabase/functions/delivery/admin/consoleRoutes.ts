@@ -114,6 +114,7 @@ export function registerConsoleAdminRoutes(app: Hono) {
       countOldest(async () => {
         const { count, data, error } = await db.from("merchants")
           .select("submitted_at", { count: "exact" })
+          .neq("onboarding_status", "draft")
           .in("verification_status", ["pending", "in_review", "docs_requested"])
           .order("submitted_at", { ascending: true })
           .limit(1);

@@ -1,5 +1,6 @@
 import React from 'react';
-import { IdentityStatusBadge, PersonaChip } from './IdentityStatusBadge';
+import { StatusBadge } from '../../../components/ui/StatusBadge';
+import { PersonaChip } from './IdentityStatusBadge';
 import type { IdentityDetail, IdentityPersona } from '@roam/dash-admin-client';
 
 type Props = {
@@ -19,7 +20,7 @@ export function IdentityHeaderCard({ detail, userId }: Props) {
           <h2 className="text-xl font-semibold text-white">{name}</h2>
           <p className="text-sm text-slate-400">{detail.authEmail}</p>
         </div>
-        <IdentityStatusBadge status={globalStatus} />
+        <StatusBadge value={globalStatus} />
       </div>
       <div className="flex flex-wrap gap-2">
         {personas.map((p: IdentityPersona) => (

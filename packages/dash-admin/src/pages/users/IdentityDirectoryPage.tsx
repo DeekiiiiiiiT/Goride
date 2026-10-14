@@ -4,7 +4,8 @@ import { ChevronLeft, ChevronRight, Loader2, Search, Download } from 'lucide-rea
 import { toast } from 'sonner';
 import { listIdentities, type IdentityListRow } from '@roam/dash-admin-client';
 import type { AdminOutletContext } from '../../DashAdminPortal';
-import { IdentityStatusBadge, PersonaChip } from './components/IdentityStatusBadge';
+import { StatusBadge } from '../../components/ui/StatusBadge';
+import { PersonaChip } from './components/IdentityStatusBadge';
 import { IdentityActionBar } from './components/IdentityActionBar';
 import { IdentityDetailOverlay } from './components/IdentityDetailOverlay';
 import { useDashAdminAccess } from '../../hooks/useDashAdminAccess';
@@ -214,7 +215,7 @@ export function IdentityDirectoryPage({ lockedPersona, embedded = false }: { loc
                     </div>
                   </td>
                   <td className="px-4 py-3">
-                    <IdentityStatusBadge status={row.global_status || 'active'} />
+                    <StatusBadge value={row.global_status || 'active'} />
                   </td>
                   <td className="px-4 py-3 text-right" onClick={(e) => e.stopPropagation()}>
                     <div className="inline-flex justify-end">

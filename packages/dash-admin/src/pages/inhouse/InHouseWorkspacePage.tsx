@@ -13,6 +13,7 @@ import {
   uploadInHouseReceipt,
   type InHouseTaskDetail,
 } from '@roam/dash-admin-client';
+import { formatMoney } from '../../components/ui/format';
 import type { AdminOutletContext } from '../../DashAdminPortal';
 
 const EXCEPTIONS = [
@@ -24,7 +25,7 @@ const EXCEPTIONS = [
 ] as const;
 
 function money(minor: number) {
-  return `J$${(minor / 100).toLocaleString('en-JM', { maximumFractionDigits: 0 })}`;
+  return formatMoney(minor / 100);
 }
 
 export function InHouseWorkspacePage() {

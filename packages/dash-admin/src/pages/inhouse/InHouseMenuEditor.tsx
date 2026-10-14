@@ -3,6 +3,7 @@ import { toast } from 'sonner';
 import { listInHouseChoiceLists, listInHouseMenu, saveInHouseChoiceList, saveInHouseMenu, uploadDeskImage } from '@roam/dash-admin-client';
 import { cheapestPizzaPrice, defaultPizzaRecipe, groupsFromStored, groupsToStored, listFromGroup, parsePizzaMenu, parsePizzaRecipe, startingRestaurantPrice, validateDishChoices, type ChoiceGroup, type ChoiceList, type PizzaMenu, type PizzaRecipe } from '@roam/merchant-ops';
 import { useAdminConfirm } from '../../contexts/AdminConfirmContext';
+import { formatMoney } from '../../components/ui/format';
 import { StitchMenuScreens } from './StitchMenuScreens';
 
 type Dish = {
@@ -40,7 +41,7 @@ function customerPrice(inStoreMajor: number, markupBps: number): number {
 function money(value: unknown): string {
   const amount = Number(value);
   if (!Number.isFinite(amount)) return '—';
-  return `J$${Math.round(amount).toLocaleString('en-US')}`;
+  return formatMoney(amount);
 }
 
 function fresh(checkedAt: unknown, now = Date.now()): boolean {

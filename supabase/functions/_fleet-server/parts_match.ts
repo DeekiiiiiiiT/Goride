@@ -65,10 +65,12 @@ export async function loadTieredCompatibleParts(
   componentId: string | null,
   organizationId: string | null,
   downtimePerDay: number,
+  vehicleYear: number | null = null,
 ): Promise<{ items: Record<string, unknown>[] }> {
   const { data, error } = await supabase.rpc("parts_for_vehicle", {
     p_catalog_id: catalogId,
     p_component_id: componentId,
+    p_vehicle_year: vehicleYear,
   });
   if (error) throw error;
   const rows = (data || []) as TierRow[];

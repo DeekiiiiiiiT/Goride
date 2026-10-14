@@ -1,0 +1,12 @@
+chassis_code,suggested_family,share_body_parts,notes
+NZE141,NZE141,,Leave blank until Dominion confirms these codes share body parts.
+NZE141G,NZE141,,Do not group until share_body_parts is yes.
+NKE165,NKE165,,
+NKE165G,NKE165,,
+NZE151H,NZE151,,
+NZE151N,NZE151,,
+CV1,CV1,,
+CV1W,CV1,,
+ZRR80G,R80,,Gas Noah. Do not merge with the hybrid.
+ZRR80W,R80,,
+ZWR80G,R80,,Hybrid Noah. Stays separate until this row is marked yes.

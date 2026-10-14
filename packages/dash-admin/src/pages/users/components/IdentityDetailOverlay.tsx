@@ -11,7 +11,7 @@ import {
 } from '@roam/dash-admin-client';
 import { IdentityHeaderCard } from './IdentityHeaderCard';
 import { IdentityActionBar } from './IdentityActionBar';
-import { IdentityStatusBadge } from './IdentityStatusBadge';
+import { StatusBadge } from '../../../components/ui/StatusBadge';
 import { useAdminConfirm } from '../../../contexts/AdminConfirmContext';
 import { useDashAdminAccess } from '../../../hooks/useDashAdminAccess';
 import type { IdentityActionScope } from './identityActions';
@@ -129,7 +129,7 @@ export function IdentityDetailPanel({
         <div className="rounded-xl border border-slate-800 p-4 space-y-3 text-sm">
           <div className="flex justify-between items-center">
             <span className="text-slate-400">Global status</span>
-            <IdentityStatusBadge status={String(detail.identity.global_status || 'active')} />
+            <StatusBadge value={String(detail.identity.global_status || 'active')} />
           </div>
           <div>
             <span className="text-slate-400 block mb-2">Personas</span>
@@ -137,7 +137,7 @@ export function IdentityDetailPanel({
               {(detail.personas ?? []).map((p) => (
                 <li key={`${p.persona}-${p.ref_id}`} className="flex items-center gap-2 text-slate-200">
                   <span>{p.persona}</span>
-                  <IdentityStatusBadge status={p.status} />
+                  <StatusBadge value={p.status} />
                 </li>
               ))}
             </ul>
@@ -149,7 +149,7 @@ export function IdentityDetailPanel({
         <div className="rounded-xl border border-slate-800 p-4 text-sm space-y-3">
           <div className="flex items-center gap-2">
             <span className="text-slate-400">Status</span>
-            <IdentityStatusBadge status={String(detail.customer.account_status || 'active')} />
+            <StatusBadge value={String(detail.customer.account_status || 'active')} />
           </div>
           <p className="text-slate-300">Phone: {String(detail.customer.phone || '—')}</p>
           <Link to={`/customers/${detail.customer.id}`} className="text-amber-300 hover:underline text-xs">
@@ -162,7 +162,7 @@ export function IdentityDetailPanel({
         <div className="rounded-xl border border-slate-800 p-4 text-sm space-y-3">
           <div className="flex items-center gap-2">
             <span className="text-slate-400">Status</span>
-            <IdentityStatusBadge status={String(detail.courier.status || 'pending')} />
+            <StatusBadge value={String(detail.courier.status || 'pending')} />
           </div>
           <Link to={`/couriers/${userId}`} className="text-amber-300 hover:underline text-xs">
             Full courier record →
@@ -181,7 +181,7 @@ export function IdentityDetailPanel({
                     <Link to={`/merchants/${m.id}`} className="text-amber-300 hover:underline">
                       {String(m.name)}
                     </Link>
-                    <IdentityStatusBadge status={String(m.operational_status || 'active')} />
+                    <StatusBadge value={String(m.operational_status || 'active')} />
                   </li>
                 ))}
               </ul>

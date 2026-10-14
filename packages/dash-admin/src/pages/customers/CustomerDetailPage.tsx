@@ -14,6 +14,8 @@ import {
   type CustomerDevice,
   type CustomerTrust,
 } from '@roam/dash-admin-client';
+import { getJwtRoles } from '@roam/auth-client';
+import { canOpenCapabilityForRoles } from '../../config/dashAdminCapabilities';
 import { useDetailCrumb, type AdminOutletContext } from '../../DashAdminPortal';
 import { formatMoney } from '../../components/ui/format';
 import { useUrlTab } from '../../components/SegmentTabs';
@@ -37,6 +39,7 @@ function when(iso: string | null | undefined) {
 export function CustomerDetailPage() {
   const { id } = useParams<{ id: string }>();
   const { session } = useOutletContext<AdminOutletContext>();
+  const canOpenTeam = canOpenCapabilityForRoles(getJwtRoles(session.user), 'team');
   const navigate = useNavigate();
   const { prompt } = useAdminConfirm();
   const canWrite = canWriteDashAdmin(session.user);
@@ -375,7 +378,9 @@ export function CustomerDetailPage() {
       {tab === 'access' && (
         <section className="rounded-xl border border-slate-800 bg-slate-900/50 p-4 space-y-2 text-sm text-slate-300">
           <p>Sign-in and role changes for this person are on Team and access.</p>
-          <button type="button" className="text-amber-300" onClick={() => navigate(`/team?tab=all-users&id=${String(customer?.user_id || '')}`)}>Open their account</button>
+          {canOpenTeam && (
+            <button type="button" className="text-amber-300" onClick={() => navigate(`/team?tab=all-users&id=${String(customer?.user_id || '')}`)}>Open their account</button>
+          )}
         </section>
       )}
     </div>

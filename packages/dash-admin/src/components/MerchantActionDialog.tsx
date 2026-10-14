@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Loader2, X } from 'lucide-react';
-import { MerchantStatusBadge } from './MerchantStatusBadge';
+import { StatusBadge } from './ui/StatusBadge';
 import type { MerchantVerificationStatus } from '@roam/dash-admin-client';
 
 interface MerchantActionDialogProps {
@@ -142,7 +142,7 @@ export function MerchantActionDialog({
               </div>
               <div className="text-right">
                 <p className="text-xs text-slate-500">New status</p>
-                <MerchantStatusBadge status={targetStatus} />
+                <StatusBadge value={targetStatus} />
               </div>
             </div>
           </div>

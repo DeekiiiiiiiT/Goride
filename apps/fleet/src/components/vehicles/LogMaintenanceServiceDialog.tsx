@@ -171,6 +171,7 @@ type LineExtras = {
   warranty: boolean;
   complimentary: boolean;
   partId: string | null;
+  supplierPartOfferId: string | null;
   system: MaintenanceServiceCategory | null;
 };
 
@@ -185,6 +186,7 @@ function defaultExtras(system: MaintenanceServiceCategory | null = null): LineEx
     warranty: false,
     complimentary: false,
     partId: null,
+    supplierPartOfferId: null,
     system,
   };
 }
@@ -228,6 +230,7 @@ function lineFromCategoryValues(
     warranty: extras.warranty || undefined,
     complimentary: extras.complimentary || undefined,
     partId: extras.partId || undefined,
+    supplierPartOfferId: extras.supplierPartOfferId || undefined,
     notes: typeof values.notes === "string" ? values.notes : undefined,
     values: { ...values },
   };
@@ -320,11 +323,13 @@ export function LogMaintenanceServiceDialog({
   const [markPackageComplete, setMarkPackageComplete] = useState(true);
   const [formQueue, setFormQueue] = useState<MaintenanceServiceCategory[]>([]);
 
-  const [followUp, setFollowUp] = useState<null | {
+  const [followQueue, setFollowQueue] = useState<Array<{
     kind: "fit" | "warranty";
     partId: string;
     supplierId?: string | null;
-  }>(null);
+    workOrderLineId?: string | null;
+  }>>([]);
+  const followUp = followQueue[0] ?? null;
   const [compatibleParts, setCompatibleParts] = useState<CompatiblePartsItem[]>([]);
   const [partsLoading, setPartsLoading] = useState(false);
 
@@ -545,6 +550,7 @@ export function LogMaintenanceServiceDialog({
       warranty: Boolean(existing?.warranty),
       complimentary: Boolean(existing?.complimentary),
       partId: existing?.partId || null,
+      supplierPartOfferId: (existing as { supplierPartOfferId?: string | null } | undefined)?.supplierPartOfferId || null,
       system,
     });
     setStep("form");
@@ -856,15 +862,16 @@ export function LogMaintenanceServiceDialog({
         );
       }
       onSaved?.();
-      const prompts = (result as { warrantyPrompts?: Array<{ partId?: string; supplierId?: string | null }> }).warrantyPrompts;
-      const linked = lines.find((l) => l.partId && !l.declined);
-      if (prompts?.length && prompts[0]?.partId) {
-        setFollowUp({ kind: "warranty", partId: String(prompts[0].partId), supplierId: prompts[0].supplierId });
-      } else if (linked?.partId) {
-        setFollowUp({ kind: "fit", partId: linked.partId });
-      } else {
-        onOpenChange(false);
+      const prompts = (result as { warrantyPrompts?: Array<{ partId?: string; supplierId?: string | null; workOrderLineId?: string }> }).warrantyPrompts;
+      const queue: Array<{ kind: "fit" | "warranty"; partId: string; supplierId?: string | null; workOrderLineId?: string | null }> = [];
+      for (const prompt of prompts || []) {
+        if (prompt.partId) queue.push({ kind: "warranty", partId: String(prompt.partId), supplierId: prompt.supplierId, workOrderLineId: prompt.workOrderLineId });
       }
+      for (const line of lines) {
+        if (line.partId && !line.declined) queue.push({ kind: "fit", partId: line.partId, workOrderLineId: line.id });
+      }
+      if (queue.length) setFollowQueue(queue);
+      else onOpenChange(false);
     } catch (error) {
       console.error(error);
       toast.error("Failed to save service log");
@@ -1009,13 +1016,21 @@ export function LogMaintenanceServiceDialog({
   const answerFit = async (outcome: "fit" | "no_fit" | "modified") => {
     if (!followUp) return;
     try {
-      await api.submitPartFitFeedback({ partId: followUp.partId, outcome });
+      await api.submitPartFitFeedback({
+        partId: followUp.partId,
+        outcome,
+        vehicleId,
+        workOrderLineId: followUp.workOrderLineId,
+      });
       toast.success("Fit recorded");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not save");
     } finally {
-      setFollowUp(null);
-      onOpenChange(false);
+      setFollowQueue((q) => {
+        const next = q.slice(1);
+        if (!next.length) onOpenChange(false);
+        return next;
+      });
     }
   };
 
@@ -1043,11 +1058,14 @@ export function LogMaintenanceServiceDialog({
                   } catch (err) {
                     toast.error(err instanceof Error ? err.message : "Could not open the claim");
                   } finally {
-                    setFollowUp(null);
-                    onOpenChange(false);
+                    setFollowQueue((q) => {
+                      const next = q.slice(1);
+                      if (!next.length) onOpenChange(false);
+                      return next;
+                    });
                   }
                 }}>Claim warranty</Button>
-                <Button type="button" variant="outline" onClick={() => setFollowUp({ kind: "fit", partId: followUp.partId })}>It was a new buy</Button>
+                <Button type="button" variant="outline" onClick={() => setFollowQueue((q) => q.length ? [{ ...q[0], kind: "fit" }, ...q.slice(1)] : q)}>It was a new buy</Button>
               </>
             ) : (
               <>
@@ -1441,13 +1459,15 @@ export function LogMaintenanceServiceDialog({
                     value={lineExtras.partId || "__none__"}
                     onValueChange={(v: string) => {
                       if (v === "__none__") {
-                        setLineExtras((prev) => ({ ...prev, partId: null }));
+                        setLineExtras((prev) => ({ ...prev, partId: null, supplierPartOfferId: null }));
                         return;
                       }
                       const item = compatibleParts.find((p) => p.part.id === v);
+                      const offerId = item?.offers?.[0]?.id ?? null;
                       setLineExtras((prev) => ({
                         ...prev,
                         partId: v,
+                        supplierPartOfferId: offerId,
                         brand: prev.brand || item?.part.name || prev.brand,
                         partNumber:
                           prev.partNumber || item?.part.oem_part_number || prev.partNumber,

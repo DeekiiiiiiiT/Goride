@@ -79,6 +79,9 @@ export function PartsGroupsPanel({ token }: { token: string }) {
   const [rules, setRules] = useState<Record<string, unknown>[]>([]);
   const [code, setCode] = useState("");
   const [scope, setScope] = useState("powertrain");
+  const [ruleGroup, setRuleGroup] = useState("");
+  const [ruleTarget, setRuleTarget] = useState("engine_family");
+  const [ruleCode, setRuleCode] = useState("");
   const [error, setError] = useState("");
 
   const load = useCallback(async () => {
@@ -115,6 +118,29 @@ export function PartsGroupsPanel({ token }: { token: string }) {
           }
         }}>Add group</Button>
       </div>
+      <div className="flex flex-wrap gap-2 items-end">
+        <div><Label>Group id</Label><Input value={ruleGroup} onChange={(e) => setRuleGroup(e.target.value)} placeholder="Group id" /></div>
+        <div>
+          <Label>Fits</Label>
+          <select className="h-9 rounded-md border px-2 bg-white dark:bg-slate-800" value={ruleTarget} onChange={(e) => setRuleTarget(e.target.value)}>
+            {["engine_family", "platform", "catalog_variant"].map((s) => <option key={s}>{s}</option>)}
+          </select>
+        </div>
+        <div><Label>Code</Label><Input value={ruleCode} onChange={(e) => setRuleCode(e.target.value)} placeholder="1NZ-FE or ZRR80G" /></div>
+        <Button type="button" variant="outline" onClick={async () => {
+          try {
+            const body: Record<string, unknown> = { interchange_group_id: ruleGroup, target_kind: ruleTarget };
+            if (ruleTarget === "engine_family") body.engine_code = ruleCode;
+            else if (ruleTarget === "platform") body.platform_code = ruleCode;
+            else body.vehicle_catalog_id = ruleCode;
+            await partsEnterpriseApi.createRule(token, body);
+            toast.success("Rule saved");
+            await load();
+          } catch (err) {
+            toast.error(err instanceof Error ? err.message : "Failed");
+          }
+        }}>Add rule</Button>
+      </div>
       <p className="text-sm text-slate-500">An engine-family rule is rejected unless the group is powertrain or universal.</p>
       <div className="rounded-lg border overflow-hidden">
         <Table>
@@ -146,7 +172,7 @@ export function PartsGroupsPanel({ token }: { token: string }) {
 }
 
 export function PartsImportPanel({ token }: { token: string }) {
-  const [text, setText] = useState("interchange_code,manufacturer,part_number,part_name,part_kind,fit_scope,target_kind,target_code,component_op_code\n");
+  const [text, setText] = useState("interchange_code,manufacturer,part_number,part_name,part_kind,fit_scope,target_kind,target_code,component_op_code,category_slug,supersedes\n");
   const [batchId, setBatchId] = useState("");
   const [message, setMessage] = useState("");
 

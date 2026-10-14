@@ -37,10 +37,6 @@ function when(iso: string) {
   return new Date(iso).toLocaleString();
 }
 
-function StatusPill({ status }: { status: string }) {
-  return <StatusBadge value={status} />;
-}
-
 export function LiveOpsPage({ embedded = false }: { embedded?: boolean } = {}) {
   const { session } = useOutletContext<AdminOutletContext>();
   const navigate = useNavigate();
@@ -226,7 +222,7 @@ export function LiveOpsPage({ embedded = false }: { embedded?: boolean } = {}) {
                     {o.courier_display_name ?? <span className="text-amber-400">Unassigned</span>}
                   </td>
                   <td className="px-4 py-3">
-                    <StatusPill status={o.status} />
+                    <StatusBadge value={o.status} />
                   </td>
                   <td className="px-4 py-3">{money(o.total)}</td>
                   <td className="px-4 py-3 text-slate-500">{when(o.placed_at)}</td>

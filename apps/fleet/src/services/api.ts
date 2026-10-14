@@ -2683,7 +2683,7 @@ export const api = {
       return response.json() as Promise<{ items: Array<Record<string, unknown>> }>;
   },
 
-  async submitPartFitFeedback(body: { partId: string; outcome: "fit" | "no_fit" | "modified"; catalogId?: string | null; notes?: string }) {
+  async submitPartFitFeedback(body: { partId: string; outcome: "fit" | "no_fit" | "modified"; catalogId?: string | null; vehicleId?: string; workOrderLineId?: string | null; notes?: string }) {
       const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/part-fit-feedback`, {
         method: "POST",
         headers: await getHeaders(),
@@ -2710,6 +2710,22 @@ export const api = {
         body: JSON.stringify(body),
       });
       if (!response.ok) throw new Error("Failed to open warranty claim");
+      return response.json();
+  },
+
+  async listPartCores() {
+      const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/part-cores`, { headers: await getHeaders() });
+      if (!response.ok) throw new Error("Failed to load core returns");
+      return response.json() as Promise<{ pendingAmount: number; overdueCount: number; pendingCount: number }>;
+  },
+
+  async confirmFrameDecode(body: { vehicleId: string; catalogId?: string; chassisCode?: string; engineCode?: string }) {
+      const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/vehicles/decode-frames/confirm`, {
+        method: "POST",
+        headers: await getHeaders(),
+        body: JSON.stringify(body),
+      });
+      if (!response.ok) throw new Error("Could not save the decode onto the vehicle");
       return response.json();
   },
 

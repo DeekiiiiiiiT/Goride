@@ -426,4 +426,8 @@ export const partsEnterpriseApi = {
   feedback: (token: string) => adminGet(token, "part-fit-feedback"),
   stock: (token: string) => adminGet(token, "org-part-stock"),
   supplierSearch: (token: string, partNumber: string) => adminSend(token, "part-supplier-search", "POST", { partNumber }),
+  supersede: (token: string, body: { oldPartId: string; newPartId: string }) => adminSend(token, "part-supersession", "POST", body),
+  search: (token: string, q: string) => adminGet(token, `part-search?q=${encodeURIComponent(q)}`),
+  replyQuote: (token: string, id: string, body: Record<string, unknown>) => adminSend(token, `part-quotes/${id}/reply`, "POST", body),
+  updateClaim: (token: string, id: string, status: string) => adminSend(token, `part-warranty-claims/${id}`, "PATCH", { status }),
 };

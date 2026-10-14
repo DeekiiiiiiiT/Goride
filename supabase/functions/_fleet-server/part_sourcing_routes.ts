@@ -107,8 +107,9 @@ export function registerPartSourcingRoutes(
         const categoryId = c.req.query("category_id")?.trim() || "";
         const componentId = c.req.query("component_id")?.trim() || "";
 
-        if (await isFeatureEnabled(FEATURE_FLAGS.PARTS_TIERED_SEARCH)) {
-          const orgId = String((v as { organizationId?: string }).organizationId || "");
+        const orgId = String((v as { organizationId?: string }).organizationId || getOrgId(c) || "");
+        const vehicleYear = parseVehicleYear(v);
+        if (await isFeatureEnabled(FEATURE_FLAGS.PARTS_TIERED_SEARCH, orgId || null)) {
           let downtime = 0;
           if (orgId) {
             const settings = await kv.get(`organization_settings:${orgId}`);
@@ -120,6 +121,7 @@ export function registerPartSourcingRoutes(
             componentId && isUuid(componentId) ? componentId : null,
             orgId || null,
             downtime,
+            vehicleYear,
           );
           const items = categoryId && isUuid(categoryId)
             ? tieredResult.items.filter((item) => (item.part as { category_id?: string }).category_id === categoryId)
@@ -140,7 +142,6 @@ export function registerPartSourcingRoutes(
           v.vehicle_catalog_chassis_hint ?? v.vehicle_catalog_generation_hint ?? "",
         );
         const hintEngine = normCode(v.vehicle_catalog_engine_code_hint ?? "");
-        const vehicleYear = parseVehicleYear(v);
 
         const { data: fitRows, error: fitErr } = await supabase
           .from("part_fitment")

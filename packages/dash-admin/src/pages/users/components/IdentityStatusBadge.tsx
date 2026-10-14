@@ -1,9 +1,3 @@
-import { StatusBadge } from '../../../components/ui/StatusBadge';
-
-export function IdentityStatusBadge({ status }: { status: string; className?: string }) {
-  return <StatusBadge value={status || 'active'} />;
-}
-
 export function PersonaChip({ persona }: { persona: string }) {
   const labels: Record<string, string> = {
     customer: 'Customer',

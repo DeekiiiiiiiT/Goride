@@ -22,6 +22,7 @@ import {
   listSuppliers,
   updatePartMaster,
   updatePartsSourcingRequest,
+  partsEnterpriseApi,
   type PartsSourcingRequestRow,
 } from "../../../services/partSourcingService";
 import { PartsGroupsPanel, PartsImportPanel, PartsQueuePanel, PartsVehiclesPanel } from "./PartsEnterprisePanels";
@@ -225,6 +226,11 @@ export function PartsSourcingManager() {
   const [partName, setPartName] = useState("");
   const [partOem, setPartOem] = useState("");
   const [partDesc, setPartDesc] = useState("");
+  const [partMaker, setPartMaker] = useState("");
+  const [partKind, setPartKind] = useState("oem");
+  const [partGroup, setPartGroup] = useState("");
+  const [partComponent, setPartComponent] = useState("");
+  const [supersedesId, setSupersedesId] = useState("");
 
   const openNewPart = () => {
     setPartEditingId(null);
@@ -232,6 +238,11 @@ export function PartsSourcingManager() {
     setPartName("");
     setPartOem("");
     setPartDesc("");
+    setPartMaker("");
+    setPartKind("oem");
+    setPartGroup("");
+    setPartComponent("");
+    setSupersedesId("");
     setPartOpen(true);
   };
 
@@ -247,9 +258,16 @@ export function PartsSourcingManager() {
         name: partName.trim(),
         oem_part_number: partOem.trim() || null,
         description: partDesc.trim() || null,
+        manufacturer: partMaker.trim() || null,
+        part_kind: partKind,
+        interchange_group_id: partGroup.trim() || null,
+        maintenance_component_id: partComponent.trim() || null,
       };
       if (partEditingId) await updatePartMaster(token, partEditingId, payload);
       else await createPartMaster(token, payload);
+      if (partEditingId && supersedesId.trim()) {
+        await partsEnterpriseApi.supersede(token, { oldPartId: supersedesId.trim(), newPartId: partEditingId });
+      }
       toast.success(partEditingId ? "Part updated" : "Part created");
       setPartOpen(false);
       await reloadParts();
@@ -298,6 +316,12 @@ export function PartsSourcingManager() {
   const [offPrice, setOffPrice] = useState("0");
   const [offCurrency, setOffCurrency] = useState("USD");
   const [offLead, setOffLead] = useState("");
+  const [offCore, setOffCore] = useState("");
+  const [offWarrantyMonths, setOffWarrantyMonths] = useState("");
+  const [offWarrantyKm, setOffWarrantyKm] = useState("");
+  const [offFreight, setOffFreight] = useState("");
+  const [offDuty, setOffDuty] = useState("");
+  const [offFx, setOffFx] = useState("");
 
   const openNewOffer = async () => {
     if (!token) return;
@@ -334,6 +358,14 @@ export function PartsSourcingManager() {
         unit_price: Number(offPrice) || 0,
         currency: offCurrency,
         lead_time_days: offLead.trim() ? Number(offLead) : null,
+        core_charge: offCore.trim() ? Number(offCore) : null,
+        warranty_months: offWarrantyMonths.trim() ? Number(offWarrantyMonths) : null,
+        warranty_km: offWarrantyKm.trim() ? Number(offWarrantyKm) : null,
+        freight_estimate: offFreight.trim() ? Number(offFreight) : null,
+        duty_rate: offDuty.trim() ? Number(offDuty) : null,
+        fx_rate_to_jmd: offFx.trim() ? Number(offFx) : null,
+        price_observed_at: new Date().toISOString(),
+        source: "manual",
       });
       toast.success("Offer created");
       setOffOpen(false);
@@ -912,6 +944,28 @@ export function PartsSourcingManager() {
               <Input id="po" value={partOem} onChange={(e) => setPartOem(e.target.value)} />
             </div>
             <div>
+              <Label className={adminLabel} htmlFor="pmaker">Manufacturer</Label>
+              <Input id="pmaker" value={partMaker} onChange={(e) => setPartMaker(e.target.value)} placeholder="Toyota" />
+            </div>
+            <div>
+              <Label className={adminLabel} htmlFor="pkind">Kind</Label>
+              <Input id="pkind" value={partKind} onChange={(e) => setPartKind(e.target.value)} placeholder="oem" />
+            </div>
+            <div>
+              <Label className={adminLabel} htmlFor="pgroup">Interchange group id</Label>
+              <Input id="pgroup" value={partGroup} onChange={(e) => setPartGroup(e.target.value)} />
+            </div>
+            <div>
+              <Label className={adminLabel} htmlFor="pcomp">Maintenance component id</Label>
+              <Input id="pcomp" value={partComponent} onChange={(e) => setPartComponent(e.target.value)} />
+            </div>
+            {partEditingId ? (
+              <div>
+                <Label className={adminLabel} htmlFor="psuper">Replaces part id</Label>
+                <Input id="psuper" value={supersedesId} onChange={(e) => setSupersedesId(e.target.value)} placeholder="Older part id" />
+              </div>
+            ) : null}
+            <div>
               <Label className={adminLabel} htmlFor="pd">
                 Description
               </Label>
@@ -1028,6 +1082,32 @@ export function PartsSourcingManager() {
                 Lead time override (days)
               </Label>
               <Input id="old" type="number" value={offLead} onChange={(e) => setOffLead(e.target.value)} />
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <Label className={adminLabel}>Core charge</Label>
+                <Input type="number" value={offCore} onChange={(e) => setOffCore(e.target.value)} />
+              </div>
+              <div>
+                <Label className={adminLabel}>Warranty months</Label>
+                <Input type="number" value={offWarrantyMonths} onChange={(e) => setOffWarrantyMonths(e.target.value)} />
+              </div>
+              <div>
+                <Label className={adminLabel}>Warranty km</Label>
+                <Input type="number" value={offWarrantyKm} onChange={(e) => setOffWarrantyKm(e.target.value)} />
+              </div>
+              <div>
+                <Label className={adminLabel}>Freight</Label>
+                <Input type="number" value={offFreight} onChange={(e) => setOffFreight(e.target.value)} />
+              </div>
+              <div>
+                <Label className={adminLabel}>Duty rate</Label>
+                <Input type="number" step="0.01" value={offDuty} onChange={(e) => setOffDuty(e.target.value)} />
+              </div>
+              <div>
+                <Label className={adminLabel}>FX to JMD</Label>
+                <Input type="number" step="0.01" value={offFx} onChange={(e) => setOffFx(e.target.value)} />
+              </div>
             </div>
           </div>
           <DialogFooter>

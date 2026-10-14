@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { toast } from 'sonner';
 import { getInHouseAudience, listInHouseMarkets, listInHouseStores, saveInHouseAudience, saveInHouseStore, uploadDeskImage } from '@roam/dash-admin-client';
+import { formatMoney } from '../../components/ui/format';
 import type { AdminOutletContext } from '../../DashAdminPortal';
 import { CUISINE_OPTIONS } from './cuisineOptions';
 import { defaultWeek, InHouseHoursFields, weekFromRows, type DayHours } from './InHouseHoursFields';
@@ -519,7 +520,7 @@ function InHouseRestaurantDesk({ mode, embedded = false }: { mode: 'stores' | 'm
         return (
           <article key={String(store.merchant_id)} className="rounded border border-slate-800 p-3">
             <div className="font-medium">{merchant?.name || String(store.merchant_id || '')}</div>
-            <div className="text-sm text-slate-400">{demand?.orders || 0} orders / 30 days · J${Math.round(Number(demand?.cost || 0) / 100)}</div>
+            <div className="text-sm text-slate-400">{demand?.orders || 0} orders / 30 days · {formatMoney(Number(demand?.cost || 0) / 100)}</div>
             <div className="text-sm">Markup {Number(store.markup_bps || 0) / 100}% · {live ? 'Live' : 'Paused'} · {audience === 'public' ? 'Everyone' : 'Closed test'}</div>
             <div className="mt-2 flex gap-2">
               <button type="button" className="rounded bg-slate-800 px-3 py-1" onClick={() => openStore(store, mode === 'menu' ? 'menu' : 'details')}>{mode === 'menu' ? 'Open menu' : 'Edit'}</button>

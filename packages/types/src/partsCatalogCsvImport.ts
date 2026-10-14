@@ -14,6 +14,8 @@ export type PartsCatalogCsvRow = {
   yearTo: number | null;
   position: string | null;
   componentOpCode: string | null;
+  categorySlug: string;
+  supersedes: string | null;
 };
 
 const KINDS = new Set(["oem", "oe_supplier", "aftermarket", "used", "reman"]);
@@ -47,6 +49,10 @@ const HEADER_MAP: Record<string, keyof PartsCatalogCsvRow> = {
   component_op_code: "componentOpCode",
   "component op code": "componentOpCode",
   op_code: "componentOpCode",
+  category_slug: "categorySlug",
+  "category slug": "categorySlug",
+  category: "categorySlug",
+  supersedes: "supersedes",
 };
 
 function parseYear(value: string): number | null {
@@ -87,8 +93,9 @@ export function buildPartsCatalogRow(
   const targetCode = (raw.targetCode ?? "").trim();
   const fitScope = (raw.fitScope ?? "").trim();
   const partKind = (raw.partKind ?? "oem").trim() || "oem";
-  if (!interchangeCode || !partNumber || !targetKind || !targetCode || !fitScope) {
-    return { error: `Line ${lineNo}: interchange code, part number, fit scope, target kind, and target code are required.` };
+  const categorySlug = (raw.categorySlug ?? "").trim();
+  if (!interchangeCode || !partNumber || !targetKind || !targetCode || !fitScope || !categorySlug) {
+    return { error: `Line ${lineNo}: interchange code, part number, fit scope, target kind, target code, and parts category are required.` };
   }
   if (!KINDS.has(partKind)) return { error: `Line ${lineNo}: unknown part kind “${partKind}”.` };
   if (!SCOPES.has(fitScope)) return { error: `Line ${lineNo}: unknown fit scope “${fitScope}”.` };
@@ -111,6 +118,8 @@ export function buildPartsCatalogRow(
       yearTo: parseYear(raw.yearTo ?? ""),
       position: (raw.position ?? "").trim() || null,
       componentOpCode: (raw.componentOpCode ?? "").trim() || null,
+      categorySlug,
+      supersedes: (raw.supersedes ?? "").trim() || null,
     },
   };
 }

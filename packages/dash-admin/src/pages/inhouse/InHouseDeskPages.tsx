@@ -11,6 +11,7 @@ import {
   listInHouseCards,
   updateInHouseCard,
 } from '@roam/dash-admin-client';
+import { formatMoney } from '../../components/ui/format';
 import type { AdminOutletContext } from '../../DashAdminPortal';
 import { readStatementFile } from './statementCharges';
 
@@ -22,7 +23,7 @@ function useToken() {
 export { InHouseMenuPage, InHouseStoresPage } from './InHouseRestaurantDesk';
 
 function money(amount: number) {
-  return `J$${amount.toLocaleString('en-JM', { maximumFractionDigits: 2 })}`;
+  return formatMoney(amount);
 }
 
 export function InHouseCardsPage({ embedded = false }: { embedded?: boolean } = {}) {
@@ -153,7 +154,7 @@ export function InHouseCardsPage({ embedded = false }: { embedded?: boolean } = 
                   </form>
                 ) : (
                   <>
-                    <p>{String(card.label)} ·· {String(card.last4)} · today J${Math.round(Number(card.spentTodayMinor || 0) / 100)} / J${Math.round(Number(card.daily_limit_minor || 0) / 100)}</p>
+                    <p>{String(card.label)} ·· {String(card.last4)} · today {formatMoney(Number(card.spentTodayMinor || 0) / 100)} / {formatMoney(Number(card.daily_limit_minor || 0) / 100)}</p>
                     <div className="flex gap-2">
                       <button className="rounded bg-slate-800 px-3 py-1" type="button" onClick={() => startEdit(card)}>Edit</button>
                       <button className="rounded bg-slate-800 px-3 py-1" type="button" onClick={() => {
@@ -214,7 +215,7 @@ export function InHouseReportsPage({ embedded = false }: { embedded?: boolean } 
           <li>Orders, 30 days: {report.orders}</li>
           <li>Exception rate: {Math.round(Number(report.exceptionRate || 0) * 100)}%</li>
           <li>Median claim to placed: {Number(report.medianClaimToPlacedMinutes || 0).toFixed(1)} min</li>
-          <li>Price gap: J${Math.round(Number(report.varianceMinor || 0) / 100)}</li>
+          <li>Price gap: {formatMoney(Number(report.varianceMinor || 0) / 100)}</li>
         </ul>
       ) : null}
       {recon ? <pre className="text-xs text-slate-400">{JSON.stringify(recon, null, 2)}</pre> : null}

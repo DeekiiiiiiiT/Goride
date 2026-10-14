@@ -38,6 +38,7 @@ import { deleteCanonicalLedgerBySource } from "./ledger_canonical.ts";
 import { isMaintenanceLedgerEligible } from "../../../packages/finance-core/src/canonicalMaintenanceLedger.ts";
 import { projectFromMaintenanceLog, voidOdometerReading } from "./odometer_ledger.ts";
 import { commitPartsUsage } from "./parts_match.ts";
+import { ledgerAllowedAfterParts } from "../../../packages/types/src/partsResolution.ts";
 
 // Wave 5: DRY — use shared assertPlatformStaffResponse from rbac_middleware
 const assertVehicleCatalogPlatformAccess = assertPlatformStaffResponse;
@@ -56,6 +57,29 @@ function aggregateFleetStatus(
 }
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function lineNeedsPartsUsage(row: Record<string, unknown>): boolean {
+  if (row.declined === true) return false;
+  if (row.part_id && isUuid(String(row.part_id))) return true;
+  const num = row.part_number != null ? String(row.part_number).trim() : "";
+  return num.length > 0;
+}
+
+async function commitUsageOrDiscardNewWorkOrder(
+  supabase: SupabaseClient,
+  workOrderId: string,
+  createdHere: boolean,
+): Promise<unknown[]> {
+  try {
+    const usageResult = await commitPartsUsage(supabase, workOrderId);
+    return Array.isArray(usageResult.warrantyPrompts) ? usageResult.warrantyPrompts as unknown[] : [];
+  } catch (err) {
+    if (createdHere) {
+      await supabase.from("maintenance_work_orders").delete().eq("id", workOrderId);
+    }
+    throw err;
+  }
+}
 
 function isUuid(s: string): boolean {
   return UUID_RE.test(s.trim());
@@ -225,6 +249,10 @@ function mapApiLineToDb(
     warranty: raw.warranty === true,
     complimentary: raw.complimentary === true,
     part_id: partParsed.ok ? partParsed.value : null,
+    supplier_part_offer_id: (() => {
+      const offerParsed = parseOptionalUuidField(raw.supplierPartOfferId ?? raw.supplier_part_offer_id);
+      return offerParsed.ok ? offerParsed.value : null;
+    })(),
     notes: raw.notes != null ? String(raw.notes) : null,
     recommended: raw.recommended === true,
     declined: raw.declined === true,
@@ -1386,12 +1414,85 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
           updated_at: new Date().toISOString(),
         };
 
+        // Parts usage before the service record and the ledger charge. A usage failure deletes only this work order.
+        let workOrderId: string | undefined;
+        let warrantyPrompts: unknown[] = [];
+        const lineRows = (Array.isArray(log.lines) ? log.lines as unknown[] : [])
+          .map((raw, i) => {
+            if (!raw || typeof raw !== "object") return null;
+            return mapApiLineToDb(raw as Record<string, unknown>, i);
+          })
+          .filter((r): r is Record<string, unknown> => r != null);
+        const needsUsage = lineRows.some(lineNeedsPartsUsage);
+        let usageCommitted = !needsUsage;
+        if (lineRows.length) {
+          const woId = crypto.randomUUID();
+          const rowsForWo = lineRows.map((r) => ({ ...r, work_order_id: woId }));
+          const lineSum = rowsForWo.reduce((s, r) => s + (Number(r.line_total) || 0), 0);
+          const logModeDb = logMode === "package" ? "package" : "quick_job";
+          const packageComplete = logModeDb === "package" && !!templateId;
+          const { error: woErr } = await supabase.from("maintenance_work_orders").insert({
+            id: woId,
+            organization_id: orgId,
+            vehicle_id: vehicleId,
+            status: "completed",
+            opened_at: new Date().toISOString(),
+            closed_at: new Date().toISOString(),
+            performed_at_date,
+            odometer: performed_at_miles,
+            provider: rowInsert.provider,
+            currency,
+            template_id: templateId || null,
+            package_complete: packageComplete,
+            log_mode: logModeDb,
+            notes: rowInsert.notes,
+            invoice_url: rowInsert.invoice_url,
+            total_cost: cost ?? lineSum,
+            maintenance_record_id: null,
+            payload_json: { source: "maintenance_logs_bridge", logId: id },
+            updated_at: new Date().toISOString(),
+          });
+          if (woErr) throw woErr;
+          workOrderId = woId;
+          const { error: lineErr } = await supabase.from("maintenance_work_order_lines").insert(rowsForWo);
+          if (lineErr) {
+            await supabase.from("maintenance_work_orders").delete().eq("id", woId);
+            throw lineErr;
+          }
+          if (needsUsage) {
+            warrantyPrompts = await commitUsageOrDiscardNewWorkOrder(supabase, woId, true);
+            usageCommitted = true;
+          }
+        }
+        if (!ledgerAllowedAfterParts({ needsUsage, usageCommitted })) {
+          if (workOrderId) await supabase.from("maintenance_work_orders").delete().eq("id", workOrderId);
+          throw new Error("Parts usage was not saved");
+        }
+
         const { data: inserted, error: insErr } = await supabase
           .from("maintenance_records")
           .insert(rowInsert)
           .select()
           .single();
-        if (insErr) throw insErr;
+        if (insErr) {
+          if (workOrderId) await supabase.from("maintenance_work_orders").delete().eq("id", workOrderId);
+          throw insErr;
+        }
+
+        if (workOrderId) {
+          rowInsert.payload_json = {
+            ...(rowInsert.payload_json as Record<string, unknown>),
+            workOrderId,
+          };
+          await supabase.from("maintenance_work_orders").update({
+            maintenance_record_id: id,
+            updated_at: new Date().toISOString(),
+          }).eq("id", workOrderId);
+          await supabase.from("maintenance_records").update({
+            payload_json: rowInsert.payload_json,
+            updated_at: new Date().toISOString(),
+          }).eq("id", id);
+        }
 
         // Service ledger + component schedules (ops truth); package clock only when members satisfied
         if (String(status).trim().toLowerCase() === "completed") {
@@ -1436,89 +1537,6 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
         };
         const ledgerResult = await appendCanonicalMaintenanceIfEligible(ledgerInput, c);
 
-        // Bridge: when lines present, also create a completed work order for the new garage UI
-        let workOrderId: string | undefined;
-        if (Array.isArray(log.lines) && log.lines.length) {
-          const woId = crypto.randomUUID();
-          const lineRows = (log.lines as unknown[])
-            .map((raw, i) => {
-              if (!raw || typeof raw !== "object") return null;
-              return mapApiLineToDb(raw as Record<string, unknown>, i, woId);
-            })
-            .filter((r): r is Record<string, unknown> => r != null);
-          const lineSum = lineRows.reduce((s, r) => s + (Number(r.line_total) || 0), 0);
-          const logModeDb = logMode === "package" ? "package" : "quick_job";
-          const packageComplete = logModeDb === "package" && !!templateId;
-          const { error: woErr } = await supabase.from("maintenance_work_orders").insert({
-            id: woId,
-            organization_id: orgId,
-            vehicle_id: vehicleId,
-            status: "completed",
-            opened_at: new Date().toISOString(),
-            closed_at: new Date().toISOString(),
-            performed_at_date,
-            odometer: performed_at_miles,
-            provider: rowInsert.provider,
-            currency,
-            template_id: templateId || null,
-            package_complete: packageComplete,
-            log_mode: logModeDb,
-            notes: rowInsert.notes,
-            invoice_url: rowInsert.invoice_url,
-            total_cost: cost ?? lineSum,
-            maintenance_record_id: id,
-            payload_json: { source: "maintenance_logs_bridge", logId: id },
-            updated_at: new Date().toISOString(),
-          });
-          if (woErr) {
-            console.warn("[maintenance-logs] WO bridge insert failed:", woErr.message);
-          } else {
-            workOrderId = woId;
-            if (lineRows.length) {
-              const { error: lineErr } = await supabase
-                .from("maintenance_work_order_lines")
-                .insert(lineRows);
-              if (lineErr) {
-                console.warn("[maintenance-logs] WO lines bridge failed:", lineErr.message);
-              } else {
-                const usageRows = lineRows
-                  .filter((r) => r.part_id && isUuid(String(r.part_id)))
-                  .map((r) => ({
-                    organization_id: orgId,
-                    work_order_id: woId,
-                    line_id: r.id != null ? String(r.id) : null,
-                    part_id: String(r.part_id),
-                    qty: r.qty != null ? Number(r.qty) : 1,
-                    unit_cost: r.unit_price != null ? Number(r.unit_price) : null,
-                    currency,
-                    vehicle_id: vehicleId,
-                    used_at: new Date().toISOString(),
-                  }));
-                const needsUsage = lineRows.some((r) => r.part_id || (r.part_number && String(r.part_number).trim()));
-                if (needsUsage) {
-                  try {
-                    await commitPartsUsage(supabase, woId);
-                  } catch (usageErr) {
-                    await supabase.from("maintenance_work_orders").delete().eq("id", woId);
-                    throw usageErr;
-                  }
-                }
-              }
-            }
-            // Stash workOrderId on record payload for clients
-            await supabase
-              .from("maintenance_records")
-              .update({
-                payload_json: {
-                  ...(rowInsert.payload_json as Record<string, unknown>),
-                  workOrderId: woId,
-                },
-                updated_at: new Date().toISOString(),
-              })
-              .eq("id", id);
-          }
-        }
-
         try {
           await projectFromMaintenanceLog(
             {
@@ -1539,6 +1557,7 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
           success: true,
           data: inserted,
           workOrderId,
+          warrantyPrompts,
           ledgerPosted: ledgerResult.posted,
           ledgerWarning: ledgerResult.failed
             ? "Service saved but not posted to books — contact support if this persists"
@@ -1619,6 +1638,54 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
           ? String(body.logMode)
           : (prevPayload.logMode != null ? String(prevPayload.logMode) : null);
 
+        const editLines = (Array.isArray(lines) ? lines as unknown[] : [])
+          .map((raw, i) => {
+            if (!raw || typeof raw !== "object") return null;
+            return mapApiLineToDb(raw as Record<string, unknown>, i);
+          })
+          .filter((r): r is Record<string, unknown> => r != null);
+        const needsUsage = editLines.some(lineNeedsPartsUsage);
+        let usageCommitted = !needsUsage;
+        let editWorkOrderId = prevPayload.workOrderId != null ? String(prevPayload.workOrderId) : "";
+        if (needsUsage) {
+          let createdHere = false;
+          if (!isUuid(editWorkOrderId)) {
+            editWorkOrderId = crypto.randomUUID();
+            createdHere = true;
+            const rowsForWo = editLines.map((r) => ({ ...r, work_order_id: editWorkOrderId }));
+            const { error: woErr } = await supabase.from("maintenance_work_orders").insert({
+              id: editWorkOrderId,
+              organization_id: orgId,
+              vehicle_id: vehicleId,
+              status: nextStatusLc === "completed" ? "completed" : "in_progress",
+              opened_at: new Date().toISOString(),
+              closed_at: nextStatusLc === "completed" ? new Date().toISOString() : null,
+              performed_at_date,
+              odometer: performed_at_miles,
+              provider,
+              currency,
+              template_id: templateId || null,
+              notes,
+              invoice_url,
+              total_cost: cost,
+              maintenance_record_id: id,
+              payload_json: { source: "maintenance_logs_edit", logId: id },
+              updated_at: new Date().toISOString(),
+            });
+            if (woErr) throw woErr;
+            const { error: lineErr } = await supabase.from("maintenance_work_order_lines").insert(rowsForWo);
+            if (lineErr) {
+              await supabase.from("maintenance_work_orders").delete().eq("id", editWorkOrderId);
+              throw lineErr;
+            }
+          }
+          await commitUsageOrDiscardNewWorkOrder(supabase, editWorkOrderId, createdHere);
+          usageCommitted = true;
+        }
+        if (!ledgerAllowedAfterParts({ needsUsage, usageCommitted })) {
+          throw new Error("Parts usage was not saved");
+        }
+
         const payload_json = {
           ...prevPayload,
           ...body,
@@ -1636,6 +1703,7 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
           status: nextStatus,
           lines,
           logMode: logMode || undefined,
+          workOrderId: editWorkOrderId || prevPayload.workOrderId,
         };
 
         const { data: updated, error: upErr } = await supabase
@@ -2711,6 +2779,17 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
           ? String(body.invoiceUrl ?? body.invoice_url)
           : (wo.invoice_url != null ? String(wo.invoice_url) : null);
 
+        const needsUsage = lineRows.some(lineNeedsPartsUsage);
+        let usageCommitted = !needsUsage;
+        let warrantyPrompts: unknown[] = [];
+        if (needsUsage) {
+          warrantyPrompts = await commitUsageOrDiscardNewWorkOrder(supabase, id, false);
+          usageCommitted = true;
+        }
+        if (!ledgerAllowedAfterParts({ needsUsage, usageCommitted })) {
+          throw new Error("Parts usage was not saved");
+        }
+
         const recordId = crypto.randomUUID();
         const apiLines = lineRows.map(mapDbLineToApi);
         const service_type = body.type != null
@@ -2815,25 +2894,6 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
           provider,
         };
         const ledgerResult = await appendCanonicalMaintenanceIfEligible(ledgerInput, c);
-
-        const needsUsage = lineRows.some((r) =>
-          (r.part_id && isUuid(String(r.part_id)) && r.declined !== true)
-          || (r.part_number && String(r.part_number).trim() && r.declined !== true)
-        );
-        let warrantyPrompts: unknown[] = [];
-        if (needsUsage) {
-          try {
-            const usageResult = await commitPartsUsage(supabase, id);
-            warrantyPrompts = Array.isArray(usageResult.warrantyPrompts) ? usageResult.warrantyPrompts as unknown[] : [];
-          } catch (usageErr) {
-            await supabase.from("maintenance_work_orders").update({
-              status: "in_progress",
-              closed_at: null,
-              updated_at: new Date().toISOString(),
-            }).eq("id", id);
-            throw usageErr;
-          }
-        }
 
         return c.json({
           item: mapDbWorkOrderToApi(completedWo as Record<string, unknown>, lineRows),

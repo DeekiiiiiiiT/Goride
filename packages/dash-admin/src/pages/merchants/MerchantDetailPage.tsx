@@ -4,7 +4,7 @@ import { ArrowLeft, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { resolveGoLiveRule, resolveVerticalType } from '@roam/vertical-config';
 import { WIZARD_TOTAL_STEPS } from '../../constants/partnerWizard';
-import { MerchantStatusBadge } from '../../components/MerchantStatusBadge';
+import { StatusBadge } from '../../components/ui/StatusBadge';
 import { MerchantActionDialog } from '../../components/MerchantActionDialog';
 import { useAdminConfirm } from '../../contexts/AdminConfirmContext';
 import { canDeleteDashAdmin, canWriteDashAdmin } from '../../utils/dashAdminRoles';
@@ -556,7 +556,7 @@ export function MerchantDetailPage() {
                 Draft — Step {merchant.wizard_step ?? 1} of {WIZARD_TOTAL_STEPS}
               </span>
             ) : (
-              <MerchantStatusBadge status={merchant.verification_status} />
+              <StatusBadge value={merchant.verification_status} />
             )}
             {merchant.onboarding_status !== 'draft' && (
               <span className="text-xs px-2 py-0.5 rounded-full bg-slate-800 text-slate-300">{opStatus}</span>

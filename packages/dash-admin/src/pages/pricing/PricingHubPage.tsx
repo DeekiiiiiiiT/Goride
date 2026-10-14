@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { formatMoney } from '../../components/ui/format';
 import { Link, useOutletContext, useSearchParams } from 'react-router-dom';
 import { ChevronRight, HelpCircle, Loader2, X } from 'lucide-react';
 import { toast } from 'sonner';
@@ -104,7 +105,7 @@ const RULES_SCOPES: { id: RulesScope; label: string; hint: string }[] = [
 ];
 
 function formatJmd(n: number) {
-  return `J$${Math.round(n).toLocaleString()}`;
+  return formatMoney(n);
 }
 
 /** Parish rows for Pricing Overview — parish sort_order, then town name. */
@@ -1985,19 +1986,19 @@ export function PricingHubPage({ onlyTab }: { onlyTab?: TabId } = {}) {
                       <tr key={row.tierId} className="border-b border-slate-800/80">
                         <td className="px-3 py-2 text-white font-medium">{row.tierName}</td>
                         <td className="px-3 py-2 text-slate-200">
-                          J${row.customerTotal.toLocaleString()}
+                          {formatMoney(row.customerTotal)}
                         </td>
                         <td className="px-3 py-2 text-slate-300">
-                          J${row.deliveryFee.toLocaleString()}
+                          {formatMoney(row.deliveryFee)}
                         </td>
                         <td className="px-3 py-2 text-slate-300">
-                          J${row.commission.toLocaleString()}
+                          {formatMoney(row.commission)}
                         </td>
                         <td className="px-3 py-2 text-slate-300">
-                          J${row.courierPay.toLocaleString()}
+                          {formatMoney(row.courierPay)}
                         </td>
                         <td className="px-3 py-2 text-amber-300">
-                          J${row.subsidy.toLocaleString()}
+                          {formatMoney(row.subsidy)}
                         </td>
                       </tr>
                     ))}
@@ -2559,7 +2560,7 @@ function ScenarioCard({
         <p className="text-xs text-slate-500 mt-1">{scenario.expected.note}</p>
       )}
       {blocked && (
-        <p className="text-xs text-amber-400 mt-1">Would block below min order J${minOrderJmd}</p>
+        <p className="text-xs text-amber-400 mt-1">Would block below min order {formatMoney(minOrderJmd)}</p>
       )}
       {scenario.runnable ? (
         <button
@@ -2664,7 +2665,7 @@ function SimBreakdownPanel({
       )}
       {wouldBlock && partyTab === 'customer' && (
         <p className="text-amber-400 text-xs rounded-lg bg-amber-950/30 p-2">
-          Checkout would be blocked — food subtotal J${subtotal} is below min order J${minOrderJmd}.
+          Checkout would be blocked — food subtotal {formatMoney(subtotal)} is below min order {formatMoney(minOrderJmd)}.
         </p>
       )}
 
@@ -3271,7 +3272,7 @@ function RushPassAdminPanel({
 
         {calcTrips != null && (
           <p className="text-xs text-amber-200/90">
-            At last 30d avg Pass cost {formatJmd(avgCost)} / order, J${proposedPrice} funds ~
+            At last 30d avg Pass cost {formatJmd(avgCost)} / order, {formatMoney(proposedPrice)} funds ~
             {calcTrips} subsidized trips per member.
           </p>
         )}

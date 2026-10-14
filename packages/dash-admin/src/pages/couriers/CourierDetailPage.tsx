@@ -260,7 +260,7 @@ export function CourierDetailPage() {
       {detailTab === 'documents' && (
         <section className="rounded-xl border border-slate-800 p-4 space-y-2 text-sm">
           <h3 className="font-medium text-white">Documents</h3>
-          {courier.documents.length === 0 ? <p className="text-slate-400">No documents on file.</p> : courier.documents.map((doc) => (
+          {courier.documents.length === 0 ? <p className="text-slate-400">No documents on file.</p> : courier.documents.map((doc: { id: string; doc_type: string; status: string; expiry_date?: string | null }) => (
             <p key={doc.id} className="flex justify-between gap-3 text-slate-200">
               <span>{doc.doc_type.replace(/_/g, ' ')}</span>
               <span className="text-slate-400">{doc.status}{doc.expiry_date ? ` · expires ${doc.expiry_date}` : ''}</span>

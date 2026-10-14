@@ -12,7 +12,7 @@ import {
 import type { DataSafetyState } from '@roam/play-store-launch';
 import { canWriteAppPermissionPolicy } from '@roam/admin-core';
 import type { AdminOutletContext } from '../DashAdminPortal';
-import { SegmentTabs } from '../components/SegmentTabs';
+import { SegmentTabs, useUrlParam } from '../components/SegmentTabs';
 import { isCourierOnlyRole } from '../utils/isCourierOnlyRole';
 import {
   addDashPlayStoreRelease,
@@ -344,13 +344,8 @@ export function DashPlayStoreLaunchPage() {
     ];
   }, [courierOnly]);
 
-  const [activeTab, setActiveTab] = useState<PlayStoreTab>(tabs[0]?.id ?? 'rush');
-
-  useEffect(() => {
-    if (!tabs.some((t) => t.id === activeTab)) {
-      setActiveTab(tabs[0]?.id ?? 'rush');
-    }
-  }, [activeTab, tabs]);
+  const allowed = tabs.map((tab) => tab.id);
+  const [activeTab, setActiveTab] = useUrlParam<PlayStoreTab>('scope', tabs[0]?.id ?? 'rush', allowed, 'replace');
 
   return (
     <div>

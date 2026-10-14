@@ -11,7 +11,7 @@ type Decoded = {
   chassisPrefix: string;
   confidence: string;
   matchCount?: number;
-  matches?: Array<{ make?: string; model?: string; chassis_code?: string }>;
+  matches?: Array<{ id?: string; make?: string; model?: string; chassis_code?: string | null; engine_code?: string | null }>;
 };
 
 export function FrameDecodeButton() {
@@ -28,6 +28,7 @@ export function FrameDecodeDialog({ open, onOpenChange }: { open: boolean; onOpe
   const [text, setText] = useState("");
   const [rows, setRows] = useState<Decoded[]>([]);
   const [busy, setBusy] = useState(false);
+  const [vehicleId, setVehicleId] = useState("");
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -36,6 +37,8 @@ export function FrameDecodeDialog({ open, onOpenChange }: { open: boolean; onOpe
           <DialogTitle>Decode frame numbers</DialogTitle>
         </DialogHeader>
         <div className="space-y-3">
+          <Label>Vehicle id to save onto</Label>
+          <Textarea className="min-h-[40px] font-mono" placeholder="Paste the vehicle id, then confirm a single match" value={vehicleId} onChange={(e) => setVehicleId(e.target.value)} />
           <Label>Paste up to 50 frame numbers</Label>
           <Textarea className="min-h-[120px] font-mono" placeholder={"ZRR80-0123456\nM900A-001234"} value={text} onChange={(e) => setText(e.target.value)} />
           <Button type="button" disabled={busy} onClick={async () => {
@@ -58,6 +61,23 @@ export function FrameDecodeDialog({ open, onOpenChange }: { open: boolean; onOpe
                   {row.matches?.length ? (
                     <p className="text-xs text-slate-500">{row.matches.map((m) => `${m.make} ${m.model} ${m.chassis_code ?? ""}`).join(" · ")}</p>
                   ) : <p className="text-xs text-slate-500">No catalog match yet.</p>}
+                  {row.matches?.length === 1 && vehicleId.trim() ? (
+                    <Button type="button" size="sm" variant="outline" className="mt-2" onClick={async () => {
+                      const match = row.matches?.[0];
+                      if (!match?.id) return;
+                      try {
+                        await api.confirmFrameDecode({
+                          vehicleId: vehicleId.trim(),
+                          catalogId: match.id,
+                          chassisCode: match.chassis_code || row.chassisPrefix,
+                          engineCode: match.engine_code || undefined,
+                        });
+                        toast.success("Saved onto the vehicle");
+                      } catch (err) {
+                        toast.error(err instanceof Error ? err.message : "Could not save");
+                      }
+                    }}>Save this match</Button>
+                  ) : null}
                 </li>
               ))}
             </ul>
