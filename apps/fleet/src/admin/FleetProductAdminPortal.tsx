@@ -38,6 +38,7 @@ import {
 import { FleetAdminServiceLinesModal } from './FleetAdminServiceLinesModal';
 import { StorageCenterPage } from './storage/StorageCenterPage';
 import { MaintenanceScheduleLedgerPage } from './ledger/MaintenanceScheduleLedgerPage';
+import { FleetAdminPartsDesk } from './FleetAdminPartsDesk';
 import { Button } from '../components/ui/button';
 import {
   DropdownMenu,
@@ -52,7 +53,7 @@ import { useAdminConfirm } from './contexts/AdminConfirmContext';
 const DRIVER_ADMIN_URL = 'https://roamdriver.co/admin';
 const RIDES_ADMIN_URL = 'https://roam-s.co/admin';
 
-type AdminPage = 'dashboard' | 'customers' | 'storage' | 'ledger-maintenance';
+type AdminPage = 'dashboard' | 'customers' | 'storage' | 'ledger-maintenance' | 'parts';
 
 function FleetAdminLogin({ onSession }: { onSession: (s: Session) => void }) {
   const [email, setEmail] = useState('');
@@ -333,6 +334,13 @@ export function FleetProductAdminPortal() {
         >
           <HardDrive className="h-4 w-4" /> Storage
         </button>
+        <button
+          type="button"
+          onClick={() => setPage('parts')}
+          className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm ${page === 'parts' ? 'bg-slate-800' : 'hover:bg-slate-900'}`}
+        >
+          <Wrench className="h-4 w-4" /> Parts desk
+        </button>
         <div className="mt-1">
           <button
             type="button"
@@ -422,6 +430,9 @@ export function FleetProductAdminPortal() {
 
         {page === 'storage' && (
           <StorageCenterPage accessToken={token} canPurge={canDelete} />
+        )}
+        {page === 'parts' && (
+          <FleetAdminPartsDesk token={token} />
         )}
 
         {page === 'ledger-maintenance' && (

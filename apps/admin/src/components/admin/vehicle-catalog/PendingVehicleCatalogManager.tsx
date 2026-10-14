@@ -4,7 +4,6 @@ import { useAuth } from "../../auth/AuthContext";
 import {
   approveExistingPendingVehicleCatalogRequest,
   approvePendingVehicleCatalogRequest,
-  getPendingVehicleCatalogRequest,
   listPendingVehicleCatalogRequests,
   rejectPendingVehicleCatalogRequest,
   requestInfoOnPendingVehicleCatalogRequest,
@@ -79,7 +78,6 @@ export function PendingVehicleCatalogManager() {
   const PAGE_SIZE = 50;
   const [selected, setSelected] = useState<VehicleCatalogPendingRequest | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
-  const [fleetSnap, setFleetSnap] = useState<Record<string, unknown> | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
 
   const [make, setMake] = useState("");
@@ -132,16 +130,7 @@ export function PendingVehicleCatalogManager() {
     setRejectReason("");
     setRequestInfoMessage("");
     setDetailOpen(true);
-    setDetailLoading(true);
-    setFleetSnap(null);
-    try {
-      const d = await getPendingVehicleCatalogRequest(token, row.id);
-      setFleetSnap(d.fleetVehicle);
-    } catch {
-      toast.error("Failed to load detail");
-    } finally {
-      setDetailLoading(false);
-    }
+    setDetailLoading(false);
   };
 
   const handleApproveNew = async () => {
@@ -266,8 +255,7 @@ export function PendingVehicleCatalogManager() {
               <TableRow>
                 <TableHead>Submitted</TableHead>
                 <TableHead>Age</TableHead>
-                <TableHead>Org</TableHead>
-                <TableHead>Fleet vehicle id</TableHead>
+                <TableHead>Requested by</TableHead>
                 <TableHead>Proposed</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
@@ -276,7 +264,7 @@ export function PendingVehicleCatalogManager() {
             <TableBody>
               {items.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center text-slate-500 py-12">
+                  <TableCell colSpan={6} className="text-center text-slate-500 py-12">
                     No pending requests.
                   </TableCell>
                 </TableRow>
@@ -293,10 +281,7 @@ export function PendingVehicleCatalogManager() {
                         {formatAge(hours)}
                       </Badge>
                     </TableCell>
-                    <TableCell className="font-mono text-xs max-w-[120px] truncate" title={row.organization_id}>
-                      {row.organization_id}
-                    </TableCell>
-                    <TableCell className="font-mono text-sm">{row.fleet_vehicle_id}</TableCell>
+                    <TableCell className="text-sm">{Number((row as { fleet_count?: number }).fleet_count ?? 1)} fleet{Number((row as { fleet_count?: number }).fleet_count ?? 1) === 1 ? "" : "s"}</TableCell>
                     <TableCell>
                       {row.proposed_make} {row.proposed_model}{" "}
                       {formatCatalogProductionWindow({
@@ -381,12 +366,8 @@ export function PendingVehicleCatalogManager() {
                 {selected && (
                   <div className="grid gap-3 rounded-lg border bg-muted/40 p-3 text-sm sm:grid-cols-2">
                     <div className="space-y-0.5">
-                      <p className="text-xs font-medium text-muted-foreground">Organization ID</p>
-                      <p className="break-all font-mono text-xs text-foreground">{selected.organization_id}</p>
-                    </div>
-                    <div className="space-y-0.5">
-                      <p className="text-xs font-medium text-muted-foreground">Fleet vehicle ID</p>
-                      <p className="break-all font-mono text-xs text-foreground">{selected.fleet_vehicle_id}</p>
+                      <p className="text-xs font-medium text-muted-foreground">Requested by</p>
+                      <p className="text-foreground">{Number((selected as { fleet_count?: number }).fleet_count ?? 1)} fleets</p>
                     </div>
                     <div className="space-y-0.5">
                       <p className="text-xs font-medium text-muted-foreground">Request ID</p>
@@ -451,13 +432,6 @@ export function PendingVehicleCatalogManager() {
                     )}
                   </div>
                 )}
-
-                <div className="space-y-2">
-                  <Label className="text-foreground">Fleet vehicle snapshot (JSON)</Label>
-                  <div className="max-h-[min(42vh,320px)] overflow-auto rounded-md border bg-muted/30 p-3 text-xs font-mono leading-relaxed text-foreground whitespace-pre-wrap break-words">
-                    {fleetSnap ? JSON.stringify(fleetSnap, null, 2) : "No fleet vehicle snapshot"}
-                  </div>
-                </div>
 
                 <div className="space-y-3">
                   <p className="text-sm font-medium text-foreground">Catalog values to create (editable)</p>

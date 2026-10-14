@@ -1,7 +1,7 @@
 {
   "slug": "fleet-ops",
-  "generatedAt": "2026-09-25T17:34:20.489Z",
-  "routeCount": 76,
+  "generatedAt": "2026-10-14T22:02:41.290Z",
+  "routeCount": 78,
   "routes": [
     "DELETE ${ADMIN_CAT}/:id",
     "DELETE ${ADMIN}/:id",
@@ -20,6 +20,7 @@
     "GET /admin/maintenance-categories",
     "GET /admin/maintenance-templates/:id/categories",
     "GET /admin/maintenance-templates/global",
+    "GET /admin/maintenance-templates/scoped",
     "GET /admin/vehicle-catalog/:catalogId/maintenance-templates",
     "GET /health",
     "GET /maintenance-categories",
@@ -64,6 +65,7 @@
     "POST ${PREFIX}/vendors/bulk",
     "POST /admin/maintenance-categories",
     "POST /admin/maintenance-templates/global",
+    "POST /admin/maintenance-templates/scoped",
     "POST /admin/migrate-maintenance-from-kv",
     "POST /admin/vehicle-catalog/:catalogId/maintenance-templates",
     "POST /maintenance-fleet-bootstrap",

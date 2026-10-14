@@ -29,6 +29,7 @@ import {
   updateMaintenanceTemplate,
 } from "../../../services/maintenanceTemplateService";
 import { formatCatalogProductionSpan, type VehicleCatalogRecord } from "../../../types/vehicleCatalog";
+import { FamilyScheduleForm } from "./FamilyScheduleForm";
 import type {
   MaintenanceCategoryFieldSchema,
   MaintenanceCategoryKind,
@@ -883,8 +884,7 @@ export function MaintenanceTemplatesManager() {
             Maintenance templates
           </h2>
           <p className="text-sm text-slate-500">
-            Fleet packages and service categories power icon-driven logging. Catalog packages add or override by
-            model/year.
+            A platform or engine schedule is the default. A variant rule wins when both exist.
           </p>
         </div>
         {canMigrate && (
@@ -900,6 +900,8 @@ export function MaintenanceTemplatesManager() {
           </Button>
         )}
       </div>
+
+      <FamilyScheduleForm />
 
       {error && (
         <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">{error}</div>

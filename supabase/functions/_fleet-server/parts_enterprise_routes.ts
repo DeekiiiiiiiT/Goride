@@ -4,12 +4,10 @@ import { requireAuth, requirePermission, assertPlatformStaffResponse } from "./r
 import { getOrgId } from "./org_scope.ts";
 import * as kv from "./kv_store.tsx";
 import { resolveCatalogIdForKvVehicle } from "./vehicle_catalog_resolve.ts";
-import { FEATURE_FLAGS, isFeatureEnabled, enableFlagForOrg, disableFlagForOrg, getFeatureFlag } from "./feature_flags.ts";
+import { FEATURE_FLAGS, isFeatureEnabled } from "./feature_flags.ts";
 import { decodeFrameBatch, decodeFrameNumber, engineFamilyPrefix } from "../../../packages/types/src/frameNumberDecode.ts";
 import { CacheOnlySupplierAdapter } from "./parts_supplier_adapter.ts";
-import { loadFleetCoverage } from "./parts_fleet_coverage.ts";
-import { attachCatalogPart, decideCatalogPart, loadCatalogReview, loadPartsCompare, saveCatalogPart } from "./parts_catalog_review.ts";
-import { secondFleetBlocked, tieredSearchReady } from "../../../packages/types/src/partsResolution.ts";
+import { attachCatalogPart, decideCatalogPart, loadCatalogReview, saveCatalogPart } from "./parts_catalog_review.ts";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 function isUuid(s: string): boolean {
@@ -81,59 +79,6 @@ export function registerPartsEnterpriseRoutes(route: RouteApp, supabase: Supabas
     }
   });
 
-  route.get("/make-server-37f42386/admin/parts-coverage", requireAuth(), async (c: Context) => {
-    const denied = staff(c);
-    if (denied) return denied;
-    try {
-      const orgId = c.req.query("organizationId")?.trim() || null;
-      const coverage = await loadFleetCoverage(supabase, orgId);
-      const flag = await getFeatureFlag(FEATURE_FLAGS.PARTS_TIERED_SEARCH);
-      return c.json({
-        coverage: {
-          ...coverage,
-          readyAt: 60,
-          tieredOnFor: flag?.enabledForOrgs ?? [],
-          orgEnabledAt: flag?.orgEnabledAt ?? {},
-          globallyOn: flag?.enabled === true,
-        },
-      });
-    } catch (e) {
-      return fail(c, e);
-    }
-  });
-
-  route.post("/make-server-37f42386/admin/parts-tiered-search", requireAuth(), async (c: Context) => {
-    const denied = staff(c);
-    if (denied) return denied;
-    try {
-      const body = await c.req.json() as { organizationId?: string; enabled?: boolean };
-      const organizationId = String(body.organizationId ?? "").trim();
-      if (!organizationId) return c.json({ error: "Pick one fleet." }, 400);
-      if (body.enabled === true) {
-        const coverage = await loadFleetCoverage(supabase, organizationId);
-        if (!tieredSearchReady(coverage.coveragePct)) {
-          return c.json({
-            error: `This fleet is at ${coverage.coveragePct}% coverage. Tiered search unlocks at 60%.`,
-            coveragePct: coverage.coveragePct,
-          }, 400);
-        }
-        const flag = await getFeatureFlag(FEATURE_FLAGS.PARTS_TIERED_SEARCH);
-        if (flag?.enabled === true) {
-          return c.json({ error: "Tiered search is already on for every fleet. Turn that off before choosing one fleet." }, 400);
-        }
-        if (secondFleetBlocked(flag?.enabledForOrgs ?? [], flag?.orgEnabledAt ?? {}, organizationId, Date.now())) {
-          return c.json({ error: "Another fleet is still in its first week of tiered search. Turn a second fleet on after that week." }, 400);
-        }
-        await enableFlagForOrg(FEATURE_FLAGS.PARTS_TIERED_SEARCH, organizationId, "parts-sourcing");
-      } else {
-        await disableFlagForOrg(FEATURE_FLAGS.PARTS_TIERED_SEARCH, organizationId, "parts-sourcing");
-      }
-      return c.json({ ok: true, organizationId, enabled: body.enabled === true });
-    } catch (e) {
-      return fail(c, e);
-    }
-  });
-
   route.post("/make-server-37f42386/admin/vehicle-platform-families", requireAuth(), async (c: Context) => {
     const denied = staff(c);
     if (denied) return denied;
@@ -197,10 +142,14 @@ export function registerPartsEnterpriseRoutes(route: RouteApp, supabase: Supabas
     const denied = staff(c);
     if (denied) return denied;
     try {
-      const body = await c.req.json() as { partId?: string; decision?: string };
+      const body = await c.req.json() as { partId?: string; decision?: string; evidenceUrl?: string };
       const decision = body.decision === "confirmed" || body.decision === "rejected" ? body.decision : "";
       if (!body.partId || !decision) return c.json({ error: "Pick confirm or reject." }, 400);
-      return c.json(await decideCatalogPart(supabase, body.partId, decision));
+      const actor = c.get("rbacUser") as { userId?: string; id?: string } | undefined;
+      return c.json(await decideCatalogPart(supabase, body.partId, decision, {
+        url: body.evidenceUrl ? String(body.evidenceUrl).slice(0, 2000) : null,
+        verifiedBy: actor?.userId ?? actor?.id ?? null,
+      }));
     } catch (e) {
       return fail(c, e);
     }
@@ -233,18 +182,6 @@ export function registerPartsEnterpriseRoutes(route: RouteApp, supabase: Supabas
         partNumber: String(body.partNumber ?? ""),
         partName: body.partName,
       }));
-    } catch (e) {
-      return fail(c, e);
-    }
-  });
-
-  route.get("/make-server-37f42386/admin/parts-compare", requireAuth(), async (c: Context) => {
-    const denied = staff(c);
-    if (denied) return denied;
-    try {
-      const organizationId = c.req.query("organizationId")?.trim() || "";
-      if (!organizationId) return c.json({ error: "Pick one fleet." }, 400);
-      return c.json(await loadPartsCompare(supabase, organizationId));
     } catch (e) {
       return fail(c, e);
     }
@@ -420,11 +357,6 @@ export function registerPartsEnterpriseRoutes(route: RouteApp, supabase: Supabas
       }
     });
   };
-  listTable("/make-server-37f42386/admin/part-cores", "part_core_return");
-  listTable("/make-server-37f42386/admin/part-warranty-claims", "part_warranty_claim");
-  listTable("/make-server-37f42386/admin/part-repeat-alerts", "part_repeat_alert");
-  listTable("/make-server-37f42386/admin/part-quotes", "part_quote_request");
-  listTable("/make-server-37f42386/admin/part-fit-feedback", "part_fit_feedback");
   listTable("/make-server-37f42386/admin/part-rule-reviews", "part_rule_review");
   listTable("/make-server-37f42386/admin/part-rule-proposals", "part_rule_proposal");
 
@@ -517,9 +449,9 @@ export function registerPartsEnterpriseRoutes(route: RouteApp, supabase: Supabas
         patch.credited_at = new Date().toISOString();
         if (body.credit_amount != null) patch.credit_amount = Number(body.credit_amount);
       }
-      const { data, error } = await supabase.from("part_core_return").update(patch).eq("id", c.req.param("id")).select("*").single();
+      const { error } = await supabase.from("part_core_return").update(patch).eq("id", c.req.param("id"));
       if (error) throw error;
-      return c.json({ item: data });
+      return c.json({ ok: true });
     } catch (e) {
       return fail(c, e);
     }
@@ -529,14 +461,12 @@ export function registerPartsEnterpriseRoutes(route: RouteApp, supabase: Supabas
     const denied = staff(c);
     if (denied) return denied;
     try {
-      const { data, error } = await supabase
+      const { error } = await supabase
         .from("part_repeat_alert")
         .update({ status: "dismissed", dismissed_at: new Date().toISOString() })
-        .eq("id", c.req.param("id"))
-        .select("*")
-        .single();
+        .eq("id", c.req.param("id"));
       if (error) throw error;
-      return c.json({ item: data });
+      return c.json({ ok: true });
     } catch (e) {
       return fail(c, e);
     }
@@ -771,9 +701,7 @@ export function registerPartsEnterpriseRoutes(route: RouteApp, supabase: Supabas
     const denied = staff(c);
     if (denied) return denied;
     try {
-      const { data, error } = await supabase.from("org_part_stock").select("*").order("updated_at", { ascending: false }).limit(200);
-      if (error) throw error;
-      return c.json({ items: data || [] });
+      return c.json({ items: [], moved: "fleet-admin" });
     } catch (e) {
       return fail(c, e);
     }
@@ -877,9 +805,9 @@ export function registerPartsEnterpriseRoutes(route: RouteApp, supabase: Supabas
       const body = await c.req.json() as { status?: string };
       const status = String(body.status ?? "");
       if (!["open", "submitted", "credited", "rejected"].includes(status)) return c.json({ error: "Invalid status" }, 400);
-      const { data, error } = await supabase.from("part_warranty_claim").update({ status }).eq("id", c.req.param("id")).select("*").single();
+      const { error } = await supabase.from("part_warranty_claim").update({ status }).eq("id", c.req.param("id"));
       if (error) throw error;
-      return c.json({ item: data });
+      return c.json({ ok: true });
     } catch (e) {
       return fail(c, e);
     }
@@ -915,7 +843,7 @@ export function registerPartsEnterpriseRoutes(route: RouteApp, supabase: Supabas
         reply_offer_id: (offer as { id: string }).id,
       }).eq("id", quoteId);
       if (uErr) throw uErr;
-      return c.json({ offer });
+      return c.json({ ok: true });
     } catch (e) {
       return fail(c, e);
     }

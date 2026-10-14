@@ -21,7 +21,7 @@ Merchants cannot self-enable. `POST /merchant/capabilities/enable` returns 403.
 
 ## Migrations
 
-1. `20260801120000_enterprise_inventory_foundation.sql` — schema, RLS, variance function
+1. `20260718164900_enterprise_inventory_foundation.sql` — schema, RLS, variance function
 2. `20260802120000_enterprise_inventory_rpcs.sql` — `receive_purchase_order_tx`, `inventory_append_entry_tx`
 
 ## Operator scripts

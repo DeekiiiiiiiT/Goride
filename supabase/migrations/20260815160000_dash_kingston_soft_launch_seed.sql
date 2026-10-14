@@ -14,6 +14,18 @@ DECLARE
   owner_burger uuid := '440fa7d3-a749-4695-bfe8-3d33f0fe2b7e';
   owner_green uuid := 'd386ce4c-bd17-41af-862f-428ee13cd169';
 BEGIN
+  -- Fresh replays have no Auth users. Production already has these owners.
+  INSERT INTO auth.users (id, email)
+  SELECT v.id, v.email
+  FROM (
+    VALUES
+      ('eb41f937-e819-4ee4-bfb5-e3094db8614b'::uuid, 'seed-island@roamrush.app'),
+      ('fe46536c-1b52-4b34-aabe-24d0f97eced0'::uuid, 'seed-marios@roamrush.app'),
+      ('440fa7d3-a749-4695-bfe8-3d33f0fe2b7e'::uuid, 'seed-burger@roamrush.app'),
+      ('d386ce4c-bd17-41af-862f-428ee13cd169'::uuid, 'seed-green@roamrush.app')
+  ) AS v(id, email)
+  WHERE NOT EXISTS (SELECT 1 FROM auth.users u WHERE u.id = v.id);
+
   -- Island Grill
   SELECT id INTO island_id FROM delivery.merchants WHERE slug = 'island-grill';
   IF island_id IS NULL THEN

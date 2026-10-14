@@ -883,6 +883,16 @@ export interface DashOverviewParishShape {
   rings?: DashOverviewRing[];
 }
 
+/** Admin3 community outline. Reference only — not a delivery market. */
+export interface DashOverviewCommunityShape {
+  pcode: string;
+  name: string;
+  parent_pcode: string | null;
+  center_lat: number | null;
+  center_lng: number | null;
+  rings?: DashOverviewRing[];
+}
+
 export interface DashBoundaryImportReport {
   created: number;
   updated: number;
@@ -1036,6 +1046,14 @@ export function listOverviewShapes(accessToken: string) {
   return deliveryFetch<{ towns: DashOverviewTownShape[]; parishes?: DashOverviewParishShape[] }>(
     accessToken,
     '/admin/markets/overview-shapes',
+  );
+}
+
+/** Opt-in community outlines. A failed load is an empty list so the overview map still works. */
+export function listOverviewCommunityShapes(accessToken: string) {
+  return deliveryFetch<{ communities: DashOverviewCommunityShape[] }>(
+    accessToken,
+    '/admin/markets/overview-shapes?communities=only',
   );
 }
 

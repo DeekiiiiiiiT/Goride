@@ -5,8 +5,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Loader2, Satellite, X } from 'lucide-react';
 import { loadPartnerMapsApi } from '@roam/location';
-import type { DashOverviewParishShape, DashOverviewTownShape, DashParishRow, DashZoneVertex } from '@roam/dash-admin-client';
-import { shapeIntersectsView, type LatLngBox } from './overviewViewport';
+import type { DashOverviewCommunityShape, DashOverviewParishShape, DashOverviewTownShape, DashParishRow, DashZoneVertex } from '@roam/dash-admin-client';
+import { groupRingsForOutline, shapeIntersectsView, type LatLngBox } from './overviewViewport';
 
 type Props = {
   parishes: DashParishRow[];
@@ -19,6 +19,10 @@ type Props = {
   showParishes?: boolean;
   /** Toggle town delivery / cutout polygons (default on; culled below zoom 10). */
   showTowns?: boolean;
+  /** Admin3 outlines. Empty until the operator opts in. */
+  communityShapes?: DashOverviewCommunityShape[];
+  /** Loads community outlines once. The map does not refit when they arrive. */
+  onLoadCommunities?: () => Promise<void>;
 };
 
 function foundationVerts(p: DashParishRow): DashZoneVertex[] {
@@ -71,11 +75,16 @@ export function JamaicaOverviewMap({
   onClose,
   showParishes = true,
   showTowns = true,
+  communityShapes = [],
+  onLoadCommunities,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<google.maps.Map | null>(null);
   const overlaysRef = useRef<OverlayHandle[]>([]);
   const townPolysRef = useRef<google.maps.Polygon[]>([]);
+  const communityPolysRef = useRef<google.maps.Polygon[]>([]);
+  const communityMarkersRef = useRef<google.maps.Marker[]>([]);
+  const communityLoadRef = useRef<Promise<void> | null>(null);
   const nameNodesRef = useRef<HTMLElement[]>([]);
   const classicMarkersRef = useRef<google.maps.Marker[]>([]);
   const [ready, setReady] = useState(false);
@@ -83,6 +92,8 @@ export function JamaicaOverviewMap({
   const [mapType, setMapType] = useState<'roadmap' | 'hybrid'>('roadmap');
   const [layerParishes, setLayerParishes] = useState(showParishes);
   const [layerTowns, setLayerTowns] = useState(showTowns);
+  const [layerCommunities, setLayerCommunities] = useState(false);
+  const [communitiesLoading, setCommunitiesLoading] = useState(false);
   const [zoom, setZoom] = useState(9);
 
   useEffect(() => {
@@ -340,6 +351,90 @@ export function JamaicaOverviewMap({
     };
   }, [shapes, ready, layerTowns]);
 
+  // Community lines are a reference layer: outline only, culled to the view, off until asked.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !ready) return;
+
+    const clearCommunities = () => {
+      for (const poly of communityPolysRef.current) poly.setMap(null);
+      communityPolysRef.current = [];
+      for (const marker of communityMarkersRef.current) marker.setMap(null);
+      communityMarkersRef.current = [];
+    };
+
+    const sync = () => {
+      clearCommunities();
+      if (!layerCommunities) return;
+      const z = map.getZoom() ?? 9;
+      if (z < 12) return;
+      const bounds = map.getBounds();
+      if (!bounds) return;
+      const view = viewBox(bounds);
+      const onSatellite = mapType === 'hybrid';
+      const showNames = z >= 13;
+
+      for (const shape of communityShapes) {
+        const lat = Number(shape.center_lat);
+        const lng = Number(shape.center_lng);
+        const center = Number.isFinite(lat) && Number.isFinite(lng) ? { lat, lng } : null;
+        if (!shapeIntersectsView(shape.rings, center, view)) continue;
+
+        for (const paths of groupRingsForOutline(shape.rings)) {
+          communityPolysRef.current.push(new google.maps.Polygon({
+            map,
+            paths,
+            strokeColor: '#94a3b8',
+            strokeOpacity: onSatellite ? 0.85 : 0.35,
+            strokeWeight: 1,
+            fillOpacity: 0,
+            clickable: false,
+            zIndex: 1,
+          }));
+        }
+
+        if (!showNames || !center || !shape.name) continue;
+        const text = shape.name.length > 28 ? `${shape.name.slice(0, 27)}…` : shape.name;
+        communityMarkersRef.current.push(new google.maps.Marker({
+          map,
+          position: center,
+          clickable: false,
+          zIndex: 1,
+          icon: {
+            path: google.maps.SymbolPath.CIRCLE,
+            scale: 0,
+            fillOpacity: 0,
+            strokeOpacity: 0,
+          },
+          label: {
+            text,
+            color: onSatellite ? '#e2e8f0' : '#64748b',
+            fontSize: '10px',
+            fontWeight: '500',
+          },
+        }));
+      }
+    };
+
+    const listener = map.addListener('idle', sync);
+    sync();
+    return () => {
+      google.maps.event.removeListener(listener);
+      clearCommunities();
+    };
+  }, [communityShapes, ready, layerCommunities, mapType]);
+
+  const enableCommunities = () => {
+    setLayerCommunities(true);
+    if (communityShapes.length > 0 || !onLoadCommunities || communityLoadRef.current) return;
+    setCommunitiesLoading(true);
+    const pending = onLoadCommunities().finally(() => {
+      setCommunitiesLoading(false);
+      communityLoadRef.current = null;
+    });
+    communityLoadRef.current = pending;
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6">
       <button
@@ -361,7 +456,9 @@ export function JamaicaOverviewMap({
             </h3>
             <p className="text-xs text-slate-300">
               Read-only view of every parish border, town delivery area, cutout, and town pin
+              {layerCommunities ? ' · community lines are a reference only' : ''}
               {zoom <= 9 ? ' · zoom in to show town borders and names' : ''}
+              {layerCommunities && zoom < 12 ? ' · zoom in to show community lines' : ''}
             </p>
           </div>
           <label className="inline-flex items-center gap-1.5 text-xs text-slate-300 cursor-pointer">
@@ -381,6 +478,19 @@ export function JamaicaOverviewMap({
               className="rounded border-slate-600"
             />
             Towns{zoom <= 9 ? ' (zoom)' : ''}
+          </label>
+          <label className="inline-flex items-center gap-1.5 text-xs text-slate-300 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={layerCommunities}
+              onChange={(e) => {
+                if (e.target.checked) enableCommunities();
+                else setLayerCommunities(false);
+              }}
+              className="rounded border-slate-600"
+            />
+            Communities{zoom < 12 ? ' (zoom)' : ''}
+            {communitiesLoading ? ' …' : ''}
           </label>
           <button
             type="button"
@@ -425,6 +535,10 @@ export function JamaicaOverviewMap({
             <span className="inline-flex items-center gap-1.5">
               <span className="w-2.5 h-2.5 rounded-full bg-sky-400 border border-sky-900/60" />
               Town / city pin
+            </span>
+            <span className="inline-flex items-center gap-1.5 border-l border-slate-700 pl-3">
+              <span className="w-2.5 h-2.5 rounded-sm border border-slate-400 bg-transparent" />
+              Community (reference)
             </span>
           </div>
 

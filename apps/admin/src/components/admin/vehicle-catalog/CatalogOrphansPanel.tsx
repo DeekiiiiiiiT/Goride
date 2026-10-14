@@ -14,16 +14,18 @@ export function CatalogOrphansPanel() {
   const token = session?.access_token;
   const [loading, setLoading] = useState(false);
   const [loaded, setLoaded] = useState(false);
-  const [items, setItems] = useState<CatalogOrphanVehicle[]>([]);
+  const [links, setLinks] = useState<Array<{ catalogId: string; count: number }>>([]);
+  const [total, setTotal] = useState(0);
 
   const load = useCallback(async () => {
     if (!token) return;
     setLoading(true);
     try {
-      const res = await listVehicleCatalogOrphans(token);
-      setItems(res.items);
+      const res = await listVehicleCatalogOrphans(token) as { items?: CatalogOrphanVehicle[]; total?: number; links?: Array<{ catalogId?: string; count?: number }> };
+      setTotal(Number(res.total ?? 0));
+      setLinks((res.links ?? []).map((row) => ({ catalogId: String(row.catalogId ?? ""), count: Number(row.count ?? 0) })));
     } catch {
-      setItems([]);
+      setLinks([]);
     } finally {
       setLoading(false);
       setLoaded(true);
@@ -34,35 +36,26 @@ export function CatalogOrphansPanel() {
     void load();
   }, [load]);
 
-  if (!token || !loaded || items.length === 0) return null;
+  if (!token || !loaded || total === 0) return null;
 
   return (
     <div className="rounded-xl border border-rose-200 dark:border-rose-900/50 bg-rose-50/80 dark:bg-rose-950/20 p-4 space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <Link2Off className="w-4 h-4 text-rose-600" />
-          <h2 className="text-sm font-semibold text-rose-900 dark:text-rose-100">Catalog orphans</h2>
-          <Badge variant="secondary" className="text-[10px]">
-            {items.length}
-          </Badge>
+          <h2 className="text-sm font-semibold text-rose-900 dark:text-rose-100">Broken catalog links</h2>
+          <Badge variant="secondary" className="text-[10px]">{total}</Badge>
         </div>
         <Button type="button" size="sm" variant="outline" onClick={() => void load()} disabled={loading}>
           {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
         </Button>
       </div>
       <p className="text-xs text-rose-800/80 dark:text-rose-200/80">
-        Fleet vehicles whose catalog id is missing or invalid. Rematch in Fleet Vehicles / Pending catalog.
+        Counts only. The customer and the vehicle stay in Roam Fleet admin, where the link can be repaired.
       </p>
       <ul className="max-h-36 overflow-y-auto space-y-1 text-xs font-mono">
-        {items.slice(0, 50).map((o) => (
-          <li key={o.vehicleId} className="flex flex-wrap gap-x-2 text-slate-600 dark:text-slate-300">
-            <span className="text-slate-900 dark:text-slate-100">{o.vehicleId}</span>
-            <Badge variant="outline" className="text-[10px]">
-              {o.reason}
-            </Badge>
-            <span className="truncate text-slate-400">{o.label || "—"}</span>
-            <span className="text-slate-400">{o.vehicle_catalog_id}</span>
-          </li>
+        {links.slice(0, 50).map((row) => (
+          <li key={row.catalogId}>{row.count} link{row.count === 1 ? "" : "s"} point at {row.catalogId}</li>
         ))}
       </ul>
     </div>

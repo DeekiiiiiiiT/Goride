@@ -124,6 +124,13 @@ export function attachBoundaryAdminRoutes(admin: Hono) {
 
   admin.get("/overview-shapes", async (c) => {
     const db = getDb();
+    // Communities are ~2.8MB and off by default. Fetch them only when asked.
+    if (c.req.query("communities") === "only") {
+      const communitiesRes = await db.rpc("overview_community_shapes");
+      const communities =
+        communitiesRes.error || !Array.isArray(communitiesRes.data) ? [] : communitiesRes.data;
+      return c.json({ communities });
+    }
     const [townsRes, parishesRes] = await Promise.all([
       db.rpc("overview_town_shapes"),
       db.rpc("overview_parish_shapes"),

@@ -26,6 +26,8 @@ import { RidesOverviewCard } from './product-overviews/RidesOverviewCard';
 import { DriverOverviewCard } from './product-overviews/DriverOverviewCard';
 import { HaulOverviewCard } from './product-overviews/HaulOverviewCard';
 import { PartsSourcingManager } from './parts-sourcing/PartsSourcingManager';
+import { CatalogQualityPage } from './parts-sourcing/CatalogQualityPage';
+import { PlatformsEnginesPage } from './parts-sourcing/PlatformsEnginesPage';
 import { AccountingCatalogManager } from './accounting/AccountingCatalogManager';
 import { PendingVendorRequestsManager } from './accounting/PendingVendorRequestsManager';
 import { GctEnginePage } from './gct/GctEnginePage';
@@ -325,9 +327,24 @@ export function AdminPortal() {
           <MaintenanceTemplatesManager />
         </div>
       )}
-      {currentPage === 'parts-sourcing' && (
+      {currentPage === 'parts-catalog' && (
         <div className="bg-white rounded-xl shadow-sm overflow-hidden min-h-[600px] dark:bg-card">
-          <PartsSourcingManager />
+          <PartsSourcingManager mode="catalog" />
+        </div>
+      )}
+      {currentPage === 'suppliers-prices' && (
+        <div className="bg-white rounded-xl shadow-sm overflow-hidden min-h-[600px] dark:bg-card">
+          <PartsSourcingManager mode="supply" />
+        </div>
+      )}
+      {currentPage === 'platforms-engines' && (
+        <div className="bg-white rounded-xl shadow-sm overflow-hidden min-h-[600px] dark:bg-card">
+          <PlatformsEnginesPage />
+        </div>
+      )}
+      {currentPage === 'catalog-quality' && (
+        <div className="bg-white rounded-xl shadow-sm overflow-hidden min-h-[600px] dark:bg-card">
+          <CatalogQualityPage />
         </div>
       )}
       {currentPage === 'gct-engine' && (

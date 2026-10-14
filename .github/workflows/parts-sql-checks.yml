@@ -1,17 +1,16 @@
 # Parts catalog checks. Database only, no Studio, Auth, Storage, or seed.
-# A local run on 2026-10-14 died in 20260718164000_rls_wave4_latent_rls.sql
-# because public.toll_settlement_allocations is created later, in
-# 20260805120000. The parts file never started. Pull requests stay off
-# until that replay gets past the toll table. The full-stack replay in
-# verify-migrations-replay.yml stays manual for the same reason.
+# A fresh database can replay through the parts migrations. The check file
+# has more than one statement, so it is run with psql. The full-stack replay
+# in verify-migrations-replay.yml stays manual.
 name: Parts SQL checks
 
 on:
-  # pull_request:
-  #   paths:
-  #     - 'supabase/migrations/**'
-  #     - 'supabase/tests/parts_rev2_checks.sql'
-  #     - '.github/workflows/parts-sql-checks.yml'
+  pull_request:
+    paths:
+      - 'supabase/migrations/**'
+      - 'supabase/tests/parts_rev2_checks.sql'
+      - 'supabase/tests/vehicle_database_rebuild_checks.sql'
+      - '.github/workflows/parts-sql-checks.yml'
   workflow_dispatch:
 
 jobs:
@@ -44,4 +43,9 @@ jobs:
       - name: Parts sourcing SQL checks
         run: |
           set -euo pipefail
-          supabase db query --local -f supabase/tests/parts_rev2_checks.sql
+          db_container="$(docker ps --format '{{.Names}}' | grep '^supabase_db_' | head -n 1)"
+          test -n "$db_container"
+          docker cp supabase/tests/parts_rev2_checks.sql "$db_container":/tmp/parts_rev2_checks.sql
+          docker exec "$db_container" psql -U postgres -d postgres -v ON_ERROR_STOP=1 -f /tmp/parts_rev2_checks.sql
+          docker cp supabase/tests/vehicle_database_rebuild_checks.sql "$db_container":/tmp/vehicle_database_rebuild_checks.sql
+          docker exec "$db_container" psql -U postgres -d postgres -v ON_ERROR_STOP=1 -f /tmp/vehicle_database_rebuild_checks.sql

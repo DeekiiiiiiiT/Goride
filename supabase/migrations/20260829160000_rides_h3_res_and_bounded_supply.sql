@@ -10,6 +10,8 @@ CREATE INDEX IF NOT EXISTS idx_driver_locations_h3_res_available
 ON rides.driver_locations (h3_res, h3_cell)
 WHERE available_for_rides = TRUE AND h3_cell IS NOT NULL;
 
+DROP FUNCTION IF EXISTS public.rides_drivers_in_h3_cells(TEXT[], TIMESTAMPTZ);
+
 CREATE OR REPLACE FUNCTION public.rides_drivers_in_h3_cells(
   p_h3_cells TEXT[],
   p_fresh_since TIMESTAMPTZ,
@@ -60,7 +62,7 @@ BEGIN
 END;
 $$;
 
-GRANT EXECUTE ON FUNCTION public.rides_drivers_in_h3_cells TO service_role;
+GRANT EXECUTE ON FUNCTION public.rides_drivers_in_h3_cells(TEXT[], TIMESTAMPTZ, SMALLINT, INT) TO service_role;
 
 DROP VIEW IF EXISTS public.rides_driver_locations;
 CREATE VIEW public.rides_driver_locations

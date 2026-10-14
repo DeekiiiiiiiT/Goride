@@ -101,7 +101,7 @@ export async function loadCatalogReview(supabase: SupabaseClient) {
       decision: part.catalog_decision,
       engineCode: part.engineCode,
     })),
-    gaps,
+    gaps: [],
   };
 }
 
@@ -222,8 +222,19 @@ async function loadFleetChassis(supabase: SupabaseClient) {
   return [...grouped.values()].sort((a, b) => b.vehicleCount - a.vehicleCount || a.carName.localeCompare(b.carName));
 }
 
-export async function decideCatalogPart(supabase: SupabaseClient, partId: string, decision: "confirmed" | "rejected") {
-  const { error } = await supabase.from("part_master").update({ catalog_decision: decision, updated_at: new Date().toISOString() }).eq("id", partId);
+export async function decideCatalogPart(
+  supabase: SupabaseClient,
+  partId: string,
+  decision: "confirmed" | "rejected",
+  evidence?: { url?: string | null; verifiedBy?: string | null },
+) {
+  const patch: Record<string, unknown> = { catalog_decision: decision, updated_at: new Date().toISOString() };
+  if (decision === "confirmed") {
+    patch.verified_at = new Date().toISOString();
+    if (evidence?.verifiedBy) patch.verified_by = evidence.verifiedBy;
+    if (evidence?.url) patch.evidence_url = evidence.url;
+  }
+  const { error } = await supabase.from("part_master").update(patch).eq("id", partId);
   if (error) throw error;
   return { ok: true };
 }

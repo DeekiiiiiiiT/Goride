@@ -41,7 +41,7 @@ SELECT
   'merchant_owner'::TEXT AS persona,
   m.id AS ref_id,
   COALESCE(m.operational_status, 'active') AS status,
-  m.market_id
+  NULL::UUID AS market_id
 FROM delivery.merchants m
 WHERE m.owner_id IS NOT NULL
 UNION ALL
@@ -50,7 +50,7 @@ SELECT
   'merchant_staff'::TEXT AS persona,
   mtm.id AS ref_id,
   'active'::TEXT AS status,
-  m.market_id
+  NULL::UUID AS market_id
 FROM delivery.merchant_team_members mtm
 JOIN delivery.merchants m ON m.id = mtm.merchant_id
 WHERE mtm.user_id IS NOT NULL;

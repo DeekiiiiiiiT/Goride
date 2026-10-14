@@ -407,7 +407,9 @@ async function adminSend(accessToken: string, path: string, method: string, body
 export const partsEnterpriseApi = {
   platforms: (token: string) => adminGet(token, "vehicle-platforms"),
   engines: (token: string) => adminGet(token, "engine-families"),
-  coverage: (token: string) => adminGet(token, "parts-coverage"),
+  coverage: async (_token: string) => ({ coverage: {} }),
+  setTieredSearch: async () => { throw new Error("Per-fleet tiered search is retired."); },
+  compare: async () => { throw new Error("Compare a variant from Data quality."); },
   groups: (token: string) => adminGet(token, "part-groups"),
   createGroup: (token: string, body: Record<string, unknown>) => adminSend(token, "part-groups", "POST", body),
   rules: (token: string) => adminGet(token, "part-rules"),
@@ -437,11 +439,17 @@ export const partsEnterpriseApi = {
   components: (token: string) => adminGet(token, "service-components"),
   catalogVariants: (token: string, q: string) => adminGet(token, `catalog-variants?q=${encodeURIComponent(q)}`),
   setFamily: (token: string, body: { family: string; chassisCodes: string[]; shareBodyParts: boolean }) => adminSend(token, "vehicle-platform-families", "POST", body),
-  setTieredSearch: (token: string, organizationId: string, enabled: boolean) => adminSend(token, "parts-tiered-search", "POST", { organizationId, enabled }),
   familyReview: (token: string) => adminGet(token, "platform-family-review"),
   catalogReview: (token: string) => adminGet(token, "part-catalog-review"),
-  decidePart: (token: string, partId: string, decision: "confirmed" | "rejected") => adminSend(token, "part-catalog-decision", "POST", { partId, decision }),
+  decidePart: (token: string, partId: string, decision: "confirmed" | "rejected", evidenceUrl?: string) => adminSend(token, "part-catalog-decision", "POST", { partId, decision, evidenceUrl }),
   attachPart: (token: string, partId: string, chassisCode: string) => adminSend(token, "part-catalog-attach", "POST", { partId, chassisCode }),
   addCatalogPart: (token: string, body: Record<string, unknown>) => adminSend(token, "part-catalog-add", "POST", body),
-  compare: (token: string, organizationId: string) => adminGet(token, `parts-compare?organizationId=${encodeURIComponent(organizationId)}`),
+  matrix: (token: string) => adminGet(token, "catalog/matrix"),
+  refreshDemand: (token: string) => adminSend(token, "catalog/refresh-demand", "POST", {}),
+  seedInUse: (token: string) => adminSend(token, "catalog/seed-in-use", "POST", {}),
+  tieredKill: (token: string, killed: boolean) => adminSend(token, "catalog/tiered-kill", "POST", { killed }),
+  blast: async (token: string, kind: string, id: string) => {
+    const data = await adminGet(token, `catalog/blast?kind=${encodeURIComponent(kind)}&id=${encodeURIComponent(id)}`);
+    return { variantCount: Number(data.variantCount ?? 0), makeCount: Number(data.makeCount ?? 0) };
+  },
 };

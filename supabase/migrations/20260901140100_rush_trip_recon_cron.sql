@@ -24,6 +24,11 @@ EXCEPTION
 END;
 $cron$;
 
-COMMENT ON EXTENSION pg_cron IS 'Includes rush-trip-recon-daily when pg_cron and pg_net are available';
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_cron') THEN
+    COMMENT ON EXTENSION pg_cron IS 'Includes rush-trip-recon-daily when pg_cron and pg_net are available';
+  END IF;
+END $$;
 
 NOTIFY pgrst, 'reload schema';

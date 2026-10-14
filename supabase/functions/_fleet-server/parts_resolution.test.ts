@@ -11,7 +11,6 @@ import {
   latestSupersededPartId,
   ledgerAllowedAfterParts,
   MAINTENANCE_SAVE_ORDER,
-  secondFleetBlocked,
   tieredSearchReady,
   partVisibleForComponent,
   usageWriteFailure,
@@ -79,14 +78,14 @@ Deno.test("tiered search stays off until coverage is real", () => {
   assertEquals(tieredSearchReady(60), true);
 });
 
-Deno.test("a second fleet waits a week", () => {
-  const week = 7 * 24 * 60 * 60 * 1000;
-  const start = Date.parse("2026-10-01T00:00:00.000Z");
-  assertEquals(secondFleetBlocked([], {}, "fleet-b", start), false);
-  assertEquals(secondFleetBlocked(["fleet-a"], { "fleet-a": "2026-10-01T00:00:00.000Z" }, "fleet-a", start + week), false);
-  assertEquals(secondFleetBlocked(["fleet-a"], { "fleet-a": "2026-10-01T00:00:00.000Z" }, "fleet-b", start + week - 1), true);
-  assertEquals(secondFleetBlocked(["fleet-a"], { "fleet-a": "2026-10-01T00:00:00.000Z" }, "fleet-b", start + week), false);
-  assertEquals(secondFleetBlocked(["fleet-a"], {}, "fleet-b", start + week), true);
+Deno.test("ready variants use tiered search unless the emergency stop is on", async () => {
+  const { selectPartsMode, findCustomerIdentityLeak, referenceOffersOnly } = await import("./catalog_parts_shape.ts");
+  assertEquals(selectPartsMode({ killed: false, ready: true }), "tiered");
+  assertEquals(selectPartsMode({ killed: true, ready: true }), "legacy");
+  assertEquals(selectPartsMode({ killed: false, ready: false }), "legacy");
+  assertEquals(findCustomerIdentityLeak({ items: [{ organization_id: "x" }] }) != null, true);
+  assertEquals(findCustomerIdentityLeak({ items: [{ id: "request" }] }), null);
+  assertEquals(referenceOffersOnly([{ id: "a", supplier_id: "s", part_id: "p", supplier_sku: "1", unit_price: 1, currency: "JMD", organization_id: "org" }, { id: "b", supplier_id: "s", part_id: "p", supplier_sku: "2", unit_price: 2, currency: "JMD", organization_id: null }]).map((row) => row.id), ["b"]);
 });
 
 Deno.test("a failed usage write never reaches the service record or the ledger", () => {

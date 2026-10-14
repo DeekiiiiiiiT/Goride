@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { shapeIntersectsView } from './overviewViewport';
+import { groupRingsForOutline, shapeIntersectsView } from './overviewViewport';
 
 const view = { south: 18.0, north: 18.2, west: -76.9, east: -76.7 };
 
@@ -26,5 +26,36 @@ describe('shapeIntersectsView', () => {
         view,
       ),
     ).toBe(true);
+  });
+});
+
+const tri = (lat: number, lng: number) => [
+  { lat, lng },
+  { lat: lat + 0.1, lng },
+  { lat, lng: lng + 0.1 },
+];
+
+describe('groupRingsForOutline', () => {
+  it('keeps a hole on its outer ring', () => {
+    const grouped = groupRingsForOutline([
+      { kind: 'include', polygon: tri(18, -77) },
+      { kind: 'exclude', polygon: tri(18.02, -76.98) },
+    ]);
+    expect(grouped).toHaveLength(1);
+    expect(grouped[0]).toHaveLength(2);
+  });
+
+  it('starts a new outline for each outer ring', () => {
+    const grouped = groupRingsForOutline([
+      { kind: 'include', polygon: tri(18, -77) },
+      { kind: 'include', polygon: tri(18.2, -76.5) },
+    ]);
+    expect(grouped).toHaveLength(2);
+    expect(grouped[0]).toHaveLength(1);
+    expect(grouped[1]).toHaveLength(1);
+  });
+
+  it('drops a hole that has no outer ring', () => {
+    expect(groupRingsForOutline([{ kind: 'exclude', polygon: tri(18, -77) }])).toEqual([]);
   });
 });

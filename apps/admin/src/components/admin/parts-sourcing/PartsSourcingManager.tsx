@@ -18,14 +18,11 @@ import {
   listPartFitment,
   listPartMasters,
   listPartOffers,
-  listPartsSourcingRequests,
   listSuppliers,
   updatePartMaster,
-  updatePartsSourcingRequest,
   partsEnterpriseApi,
-  type PartsSourcingRequestRow,
 } from "../../../services/partSourcingService";
-import { PartsGroupsPanel, PartsImportPanel, PartsQueuePanel, PartsVehiclesPanel } from "./PartsEnterprisePanels";
+import { PartsGroupsPanel, PartsImportPanel } from "./PartsEnterprisePanels";
 import type {
   PartCategoryRecord,
   PartFitmentRecord,
@@ -97,12 +94,12 @@ const adminTableWrap = cn(
 type MainTab = "categories" | "parts" | "suppliers" | "fitment" | "offers" | "groups" | "import";
 type Area = "catalog" | "vehicles" | "supply" | "queue";
 
-export function PartsSourcingManager() {
+export function PartsSourcingManager({ mode = "catalog" }: { mode?: "catalog" | "supply" }) {
   const { session } = useAuth();
   const token = session?.access_token;
 
-  const [area, setArea] = useState<Area>("catalog");
-  const [mainTab, setMainTab] = useState<MainTab>("categories");
+  const [area, setArea] = useState<Area>(mode);
+  const [mainTab, setMainTab] = useState<MainTab>(mode === "supply" ? "suppliers" : "parts");
   const [busy, setBusy] = useState(false);
 
   const [categories, setCategories] = useState<PartCategoryRecord[]>([]);
@@ -111,20 +108,8 @@ export function PartsSourcingManager() {
   const [offers, setOffers] = useState<SupplierPartOfferRecord[]>([]);
   const [fitments, setFitments] = useState<PartFitmentRecord[]>([]);
   const [catalog, setCatalog] = useState<VehicleCatalogRecord[]>([]);
-  const [fleetRequests, setFleetRequests] = useState<PartsSourcingRequestRow[]>([]);
-
   const [partsCategoryFilter, setPartsCategoryFilter] = useState<string>("");
   const [fitmentCatalogFilter, setFitmentCatalogFilter] = useState<string>("");
-
-  const reloadFleetRequests = useCallback(async () => {
-    if (!token) return;
-    try {
-      setFleetRequests(await listPartsSourcingRequests(token, "open"));
-    } catch (err) {
-      setFleetRequests([]);
-      toast.error(err instanceof Error ? err.message : "Could not load fleet requests");
-    }
-  }, [token]);
 
   const reloadCategories = useCallback(async () => {
     if (!token) return;
@@ -187,8 +172,7 @@ export function PartsSourcingManager() {
     if (!token) return;
     void reloadCategories();
     void reloadCatalog();
-    void reloadFleetRequests();
-  }, [token, reloadCategories, reloadCatalog, reloadFleetRequests]);
+  }, [token, reloadCategories, reloadCatalog]);
 
   // --- Category dialog ---
   const [catOpen, setCatOpen] = useState(false);
@@ -462,10 +446,10 @@ export function PartsSourcingManager() {
         <div>
           <h1 className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
             <Package className="w-6 h-6 text-amber-600" />
-            Parts sourcing
+            {mode === "supply" ? "Suppliers & prices" : "Parts catalog"}
           </h1>
           <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">
-            Catalog, vehicles, supply, and the fleet queue. One fitment rule can cover a whole engine or platform.
+            {mode === "supply" ? "Supplier reference prices. A customer's negotiated price stays in Roam Fleet admin." : "Parts, groups, fitment rules, and import."}
           </p>
         </div>
         <Button type="button" variant="outline" size="sm" onClick={() => void refreshTab()} disabled={busy} className="gap-2">
@@ -475,67 +459,14 @@ export function PartsSourcingManager() {
       </div>
 
       <div className="flex flex-wrap gap-2">
-        {([
-          ["catalog", "Catalog"],
-          ["vehicles", "Vehicles"],
-          ["supply", "Supply"],
-          ["queue", "Review"],
-        ] as const).map(([id, label]) => (
-          <Button key={id} type="button" size="sm" variant={area === id ? "default" : "outline"} onClick={() => {
-            setArea(id);
-            if (id === "catalog") setMainTab("parts");
-            if (id === "supply") setMainTab("suppliers");
-          }}>{label}{id === "queue" ? ` (${fleetRequests.length})` : ""}</Button>
-        ))}
+        {mode === "catalog" ? (
+          <Button type="button" size="sm" variant="default">Catalog</Button>
+        ) : (
+          <Button type="button" size="sm" variant="default" onClick={() => setArea("supply")}>Reference prices</Button>
+        )}
       </div>
 
-      {area === "vehicles" && token ? <PartsVehiclesPanel token={token} /> : null}
-      {area === "queue" && token ? <PartsQueuePanel token={token} /> : null}
-
-      {(area === "catalog" || area === "supply") && fleetRequests.length > 0 && (
-        <div className="rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50/60 dark:bg-amber-950/20 p-4 space-y-3">
-          <div className="flex items-center justify-between gap-2">
-            <h2 className="font-semibold text-sm">Fleet parts requests ({fleetRequests.length} open)</h2>
-            <Button type="button" size="sm" variant="ghost" onClick={() => void reloadFleetRequests()}>
-              Refresh queue
-            </Button>
-          </div>
-          <ul className="space-y-2">
-            {fleetRequests.map((r) => (
-              <li
-                key={r.id}
-                className="flex flex-col sm:flex-row sm:items-center gap-2 rounded-lg border border-amber-200/80 bg-white/70 dark:bg-slate-900/40 px-3 py-2 text-sm"
-              >
-                <div className="min-w-0 flex-1">
-                  <p className="font-medium truncate">{r.need_text}</p>
-                  <p className="text-xs text-slate-500 font-mono">
-                    {r.vehicle_id} · {r.organization_id} · {new Date(r.created_at).toLocaleString()}
-                  </p>
-                </div>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  onClick={async () => {
-                    if (!token) return;
-                    try {
-                      await updatePartsSourcingRequest(token, r.id, "resolved");
-                      toast.success("Marked resolved");
-                      await reloadFleetRequests();
-                    } catch (e: unknown) {
-                      toast.error(e instanceof Error ? e.message : "Failed");
-                    }
-                  }}
-                >
-                  Resolve
-                </Button>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-      <Tabs value={mainTab} onValueChange={(v) => setMainTab(v as MainTab)} className={area === "vehicles" || area === "queue" ? "hidden" : "w-full"}>
+      <Tabs value={mainTab} onValueChange={(v) => setMainTab(v as MainTab)} className="w-full">
         <TabsList className="flex flex-wrap h-auto gap-1 bg-slate-100 dark:bg-slate-900/70 p-1 rounded-xl border border-slate-200 dark:border-slate-700">
           <TabsTrigger value="groups" className={area === "catalog" ? "gap-1.5 data-[state=active]:bg-amber-500/20" : "hidden"}>
             Groups

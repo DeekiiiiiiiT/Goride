@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "../../auth/AuthContext";
 import { CatalogOrphansPanel } from "./CatalogOrphansPanel";
+import { VariantHub } from "./VariantHub";
 import {
   bulkUpsertVehicleCatalog,
   createVehicleCatalog,
@@ -121,6 +122,7 @@ export function VehicleCatalogManager() {
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [viewRecord, setViewRecord] = useState<VehicleCatalogRecord | null>(null);
+  const [hubRecord, setHubRecord] = useState<VehicleCatalogRecord | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingUpdatedAt, setEditingUpdatedAt] = useState<string | null>(null);
   const [form, setForm] = useState<FormState>(() => emptyForm());
@@ -567,6 +569,10 @@ export function VehicleCatalogManager() {
     return <p className="text-sm text-slate-500">Sign in to manage the vehicle catalog.</p>;
   }
 
+  if (hubRecord) {
+    return <VariantHub record={hubRecord} onBack={() => setHubRecord(null)} />;
+  }
+
   return (
     <div className="flex flex-col gap-4 p-4 sm:p-6 text-slate-900 dark:text-slate-200">
       <CatalogOrphansPanel />
@@ -709,7 +715,7 @@ export function VehicleCatalogManager() {
             });
           }}
           modelGroupKey={modelGroupKey}
-          onView={setViewRecord}
+          onView={setHubRecord}
           onEdit={openEdit}
           onDelete={openDelete}
         />

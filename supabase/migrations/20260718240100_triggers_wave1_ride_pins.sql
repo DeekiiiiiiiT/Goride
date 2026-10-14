@@ -39,6 +39,10 @@ WHERE verification_pin IS NOT NULL
   AND verification_pin ~ '^[0-9]{4}$'
 ON CONFLICT (ride_request_id) DO NOTHING;
 
+-- The public view selects every column, so it has to go before the pin column.
+DROP VIEW IF EXISTS public.rides_ride_requests;
+DROP VIEW IF EXISTS rides.rides_ride_requests;
+
 -- Drop format CHECK on ride_requests if present, then drop column
 ALTER TABLE rides.ride_requests
   DROP CONSTRAINT IF EXISTS ride_requests_verification_pin_check;

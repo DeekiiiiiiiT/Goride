@@ -13,7 +13,7 @@ function normalizeMaintenanceTaskName(name: string): string {
   return name.trim().toLowerCase().replace(/\s+/g, " ");
 }
 
-function maintenanceTemplateMergeKey(t: { task_code?: unknown; task_name?: unknown }): string {
+function maintenanceTemplateMergeKey(t: Record<string, unknown>): string {
   const code = t.task_code != null ? String(t.task_code).trim() : "";
   if (code.length > 0) return `code:${code}`;
   return `name:${normalizeMaintenanceTaskName(String(t.task_name ?? ""))}`;
@@ -83,27 +83,42 @@ export async function executeMaintenanceBootstrap(args: {
     .trim()
     .toLowerCase() || "car";
 
-  const { data: globalTemplatesRaw, error: gErr } = await sb
-    .from("maintenance_task_templates")
-    .select("*")
-    .eq("template_scope", "global");
-  if (gErr) throw gErr;
-  const globalTemplates = ((globalTemplatesRaw || []) as MaintenanceTemplateRow[]).filter((t) => {
-    const classes = Array.isArray(t.applicable_vehicle_classes)
-      ? (t.applicable_vehicle_classes as unknown[]).map((c) => String(c).trim().toLowerCase())
-      : ["car"];
-    return classes.includes(vehicleClass);
+  const { data: sched, error: schedErr } = await sb.rpc("schedule_for_variant", {
+    p_catalog_id: args.catalogId,
+    p_vehicle_year: null,
   });
-  const { data: catalogTemplates, error: cErr } = await sb
-    .from("maintenance_task_templates")
-    .select("*")
-    .eq("vehicle_catalog_id", args.catalogId)
-    .eq("template_scope", "catalog");
-  if (cErr) throw cErr;
-  const { merged: templates, catalogOverridesGlobal } = mergeGlobalAndCatalogTemplates(
-    globalTemplates,
-    (catalogTemplates || []) as MaintenanceTemplateRow[],
-  );
+  let templates: MaintenanceTemplateRow[] = [];
+  let catalogOverridesGlobal = 0;
+  if (!schedErr && Array.isArray(sched)) {
+    const ids = (sched as Array<{ template_id?: string }>).map((row) => row.template_id).filter(Boolean) as string[];
+    if (ids.length) {
+      const { data: rows, error: rowErr } = await sb.from("maintenance_task_templates").select("*").in("id", ids);
+      if (rowErr) throw rowErr;
+      templates = (rows || []) as MaintenanceTemplateRow[];
+      catalogOverridesGlobal = templates.filter((t) => String(t.template_scope) !== "global").length;
+    }
+  } else {
+    const { data: globalTemplatesRaw, error: gErr } = await sb
+      .from("maintenance_task_templates")
+      .select("*")
+      .eq("template_scope", "global");
+    if (gErr) throw gErr;
+    const globalTemplates = ((globalTemplatesRaw || []) as MaintenanceTemplateRow[]).filter((t) => {
+      const classes = Array.isArray(t.applicable_vehicle_classes)
+        ? (t.applicable_vehicle_classes as unknown[]).map((c) => String(c).trim().toLowerCase())
+        : ["car"];
+      return classes.includes(vehicleClass);
+    });
+    const { data: catalogTemplates, error: cErr } = await sb
+      .from("maintenance_task_templates")
+      .select("*")
+      .eq("vehicle_catalog_id", args.catalogId)
+      .in("template_scope", ["variant", "catalog"]);
+    if (cErr) throw cErr;
+    const merged = mergeGlobalAndCatalogTemplates(globalTemplates, (catalogTemplates || []) as MaintenanceTemplateRow[]);
+    templates = merged.merged;
+    catalogOverridesGlobal = merged.catalogOverridesGlobal;
+  }
   const globalApplied = templates.filter((t) => String(t.template_scope ?? "") === "global").length;
   const catalogApplied = templates.filter((t) => String(t.template_scope ?? "") === "catalog").length;
   if (!templates.length) {

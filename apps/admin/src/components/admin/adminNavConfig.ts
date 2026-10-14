@@ -17,7 +17,8 @@ import {
   HardDrive,
   Inbox,
   Wrench,
-  ShoppingCart,
+  Layers,
+  ClipboardCheck,
   Gauge,
   KeyRound,
   ShieldAlert,
@@ -32,7 +33,6 @@ import {
   Search,
   Store,
   Brain,
-  Layers,
   ShieldCheck,
   DollarSign,
   CreditCard,
@@ -120,9 +120,12 @@ export const TOLL_MANAGEMENT_CHILDREN: NavChild[] = [
 
 export const VEHICLE_DATABASE_CHILDREN: NavChild[] = [
   { id: 'motor-vehicles', label: 'Vehicle Catalog', icon: Car },
+  { id: 'platforms-engines', label: 'Platforms & Engines', icon: Layers },
   { id: 'pending-motor-vehicles', label: 'Pending catalog', icon: Inbox },
   { id: 'maintenance-templates', label: 'Maintenance templates', icon: Wrench },
-  { id: 'parts-sourcing', label: 'Parts sourcing', icon: ShoppingCart },
+  { id: 'parts-catalog', label: 'Parts catalog', icon: ClipboardList },
+  { id: 'suppliers-prices', label: 'Suppliers & prices', icon: Store },
+  { id: 'catalog-quality', label: 'Data quality', icon: ClipboardCheck },
 ];
 
 export const GCT_CHILDREN: NavChild[] = [
@@ -225,9 +228,12 @@ const SHARED_PLATFORM_PAGES = [
   'toll-settings',
   'toll-live-monitor',
   'motor-vehicles',
+  'platforms-engines',
   'pending-motor-vehicles',
   'maintenance-templates',
-  'parts-sourcing',
+  'parts-catalog',
+  'suppliers-prices',
+  'catalog-quality',
   'gct-engine',
   'gct-rates',
   'gct-entities',
@@ -273,6 +279,7 @@ export const PLATFORM_ROLE_PAGES: Record<string, string[]> = {
 /** Legacy page IDs → new routes */
 export const LEGACY_PAGE_REDIRECTS: Record<string, string> = {
   customers: 'enterprise-customers',
+  'parts-sourcing': 'parts-catalog',
   'team-members': 'enterprise-team-members',
   drivers: 'driver-users',
   'roam-dash-merchants': 'dash-merchants',

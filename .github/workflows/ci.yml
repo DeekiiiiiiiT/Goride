@@ -139,6 +139,7 @@ jobs:
         run: >
           deno test --allow-read --allow-env
           supabase/functions/_fleet-server/parts_resolution.test.ts
+          supabase/functions/_fleet-server/catalog_privacy.test.ts
 
       - name: Deno test split fill station match
         run: >

@@ -479,7 +479,7 @@ export async function initializeDefaultFlags(): Promise<void> {
     {
       name: FEATURE_FLAGS.PARTS_TIERED_SEARCH,
       enabled: false,
-      description: "Fleet compatible-parts uses interchange tiers. Off keeps exact catalog fitment.",
+      description: "Emergency stop. On forces the old parts list for every fleet. Off lets a ready variant use tiered search.",
     },
     {
       name: FEATURE_FLAGS.PARTS_SUPPLIER_API,

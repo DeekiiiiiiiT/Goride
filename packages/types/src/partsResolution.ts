@@ -154,27 +154,9 @@ export const MAINTENANCE_SAVE_ORDER = [
   "ledger",
 ] as const;
 
-/** Tiered search stays off until 60% of active vehicles have a real Tier 1–3 match. */
+/** Readiness of the variant decides tiered search. The one-week second-fleet lock is retired. */
 export function tieredSearchReady(coveragePct: number): boolean {
   return Number.isFinite(coveragePct) && coveragePct >= 60;
-}
-
-export const TIERED_SOAK_MS = 7 * 24 * 60 * 60 * 1000;
-
-/** A second fleet stays locked while any other fleet is still inside its first week. */
-export function secondFleetBlocked(
-  enabledOrgIds: string[],
-  enabledAt: Record<string, string>,
-  candidateOrgId: string,
-  nowMs: number,
-): boolean {
-  const others = enabledOrgIds.filter((id) => id && id !== candidateOrgId);
-  if (!others.length) return false;
-  return others.some((id) => {
-    const started = Date.parse(enabledAt[id] ?? "");
-    if (!Number.isFinite(started)) return true;
-    return nowMs - started < TIERED_SOAK_MS;
-  });
 }
 
 /** A ledger post is allowed only after parts usage succeeded, or when the job has no part. */

@@ -27,9 +27,7 @@ import {
   HardDrive,
   Table2,
   Tags,
-  Wrench,
   Inbox,
-  ShoppingCart,
   Gauge,
   KeyRound,
   ShieldAlert,
@@ -82,12 +80,7 @@ const TOLL_MANAGEMENT_CHILDREN = [
 ];
 
 // Vehicle master data (motor variants)
-const VEHICLE_DATABASE_CHILDREN = [
-  { id: 'motor-vehicles', label: 'Vehicle Catalog', icon: Car },
-  { id: 'pending-motor-vehicles', label: 'Pending catalog', icon: Inbox },
-  { id: 'maintenance-templates', label: 'Maintenance templates', icon: Wrench },
-  { id: 'parts-sourcing', label: 'Parts sourcing', icon: ShoppingCart },
-];
+const VEHICLE_DATABASE_CHILDREN: { id: string; label: string; icon: typeof Car }[] = [];
 
 // Collapsible section for Roam Rush (food delivery)
 const ROAM_DASH_CHILDREN = [

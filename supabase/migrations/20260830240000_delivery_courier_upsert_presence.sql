@@ -191,6 +191,6 @@ BEGIN
 END;
 $$;
 
-GRANT EXECUTE ON FUNCTION public.rides_drivers_in_h3_cells TO service_role;
+GRANT EXECUTE ON FUNCTION public.rides_drivers_in_h3_cells(TEXT[], TIMESTAMPTZ, SMALLINT, INT) TO service_role;
 
 NOTIFY pgrst, 'reload schema';

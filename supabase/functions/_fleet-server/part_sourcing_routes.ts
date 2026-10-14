@@ -7,9 +7,10 @@ import * as kv from "./kv_store.tsx";
 import { requireAuth, requirePermission, assertPlatformStaffResponse } from "./rbac_middleware.ts";
 import { filterByOrg, getOrgId } from "./org_scope.ts";
 import { resolveCatalogIdForKvVehicle } from "./vehicle_catalog_resolve.ts";
-import { FEATURE_FLAGS, isFeatureEnabled } from "./feature_flags.ts";
-import { loadTieredCompatibleParts } from "./parts_match.ts";
 import { registerPartsEnterpriseRoutes } from "./parts_enterprise_routes.ts";
+import { registerCatalogRoutes } from "./catalog_routes.ts";
+import { registerFleetAdminPartsRoutes } from "./fleet_admin_parts_routes.ts";
+import { enrichFleetParts, getCatalogParts } from "./catalog_api.ts";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -25,37 +26,6 @@ function normCode(v: unknown): string {
   return String(v).trim().toUpperCase();
 }
 
-function chassisMatchesFitment(
-  fitmentChassis: string | null | undefined,
-  catalogChassis: string,
-  hintChassis: string,
-): boolean {
-  const f = normCode(fitmentChassis);
-  if (!f) return true;
-  return f === normCode(catalogChassis) || (hintChassis.length > 0 && f === hintChassis);
-}
-
-function engineMatchesFitment(
-  fitmentEngine: string | null | undefined,
-  catalogEngine: string,
-  hintEngine: string,
-): boolean {
-  const f = normCode(fitmentEngine);
-  if (!f) return true;
-  return f === normCode(catalogEngine) || (hintEngine.length > 0 && f === hintEngine);
-}
-
-function yearInFitmentRange(
-  yearFrom: number | null | undefined,
-  yearTo: number | null | undefined,
-  vehicleYear: number | null,
-): boolean {
-  if (vehicleYear == null || !Number.isFinite(vehicleYear)) return true;
-  if (yearFrom != null && Number.isFinite(yearFrom) && vehicleYear < yearFrom) return false;
-  if (yearTo != null && Number.isFinite(yearTo) && vehicleYear > yearTo) return false;
-  return true;
-}
-
 async function getVehicleFromKv(c: Context, vehicleId: string): Promise<Record<string, unknown> | null> {
   const raw = await kv.get(`vehicle:${vehicleId}`);
   if (!raw || typeof raw !== "object") return null;
@@ -69,9 +39,6 @@ function parseVehicleYear(v: Record<string, unknown>): number | null {
   const n = Number(String(y).trim());
   return Number.isFinite(n) ? n : null;
 }
-
-const FITMENT_SELECT =
-  "id, part_id, vehicle_catalog_id, chassis_code, engine_code, year_from, year_to, part_master ( id, category_id, maintenance_component_id, name, oem_part_number, description, metadata, manufacturer, part_kind, part_category ( id, slug, label, parent_id, sort_order ) )";
 
 export function registerPartSourcingRoutes(
   app: { get: unknown; post: unknown; patch: unknown; delete: unknown },
@@ -109,110 +76,26 @@ export function registerPartSourcingRoutes(
 
         const orgId = String((v as { organizationId?: string }).organizationId || getOrgId(c) || "");
         const vehicleYear = parseVehicleYear(v);
-        if (await isFeatureEnabled(FEATURE_FLAGS.PARTS_TIERED_SEARCH, orgId || null)) {
-          let downtime = 0;
-          if (orgId) {
-            const settings = await kv.get(`organization_settings:${orgId}`);
-            downtime = Number((settings as { downtimeCostPerDayJmd?: number } | null)?.downtimeCostPerDayJmd) || 0;
-          }
-          const tieredResult = await loadTieredCompatibleParts(
-            supabase,
-            catalogId,
-            componentId && isUuid(componentId) ? componentId : null,
-            orgId || null,
-            downtime,
-            vehicleYear,
-          );
-          const items = categoryId && isUuid(categoryId)
-            ? tieredResult.items.filter((item) => (item.part as { category_id?: string }).category_id === categoryId)
-            : tieredResult.items;
-          return c.json({ catalogMatched: true, catalogId, items, count: items.length, tiered: true });
+        let downtime = 0;
+        if (orgId) {
+          const settings = await kv.get(`organization_settings:${orgId}`);
+          downtime = Number((settings as { downtimeCostPerDayJmd?: number } | null)?.downtimeCostPerDayJmd) || 0;
         }
-
-        const { data: catRow, error: catErr } = await supabase
-          .from("vehicle_catalog")
-          .select("id, chassis_code, engine_code")
-          .eq("id", catalogId)
-          .maybeSingle();
-        if (catErr) throw catErr;
-        const catalogChassis = String((catRow as { chassis_code?: string } | null)?.chassis_code ?? "");
-        const catalogEngine = String((catRow as { engine_code?: string } | null)?.engine_code ?? "");
-
-        const hintChassis = normCode(
-          v.vehicle_catalog_chassis_hint ?? v.vehicle_catalog_generation_hint ?? "",
-        );
-        const hintEngine = normCode(v.vehicle_catalog_engine_code_hint ?? "");
-
-        const { data: fitRows, error: fitErr } = await supabase
-          .from("part_fitment")
-          .select(FITMENT_SELECT)
-          .eq("vehicle_catalog_id", catalogId);
-        if (fitErr) throw fitErr;
-
-        type FitRow = {
-          id: string;
-          part_id: string;
-          chassis_code?: string | null;
-          engine_code?: string | null;
-          year_from?: number | null;
-          year_to?: number | null;
-          part_master: {
-            id: string;
-            category_id: string;
-            maintenance_component_id?: string | null;
-            name: string;
-            oem_part_number?: string | null;
-            description?: string | null;
-            metadata?: unknown;
-            part_category: { id: string; slug: string; label: string; parent_id?: string | null; sort_order?: number };
-          } | null;
-        };
-
-        const matched: FitRow[] = [];
-        for (const raw of fitRows || []) {
-          const row = raw as FitRow;
-          if (!row.part_master) continue;
-          if (componentId && isUuid(componentId) && row.part_master.maintenance_component_id !== componentId) continue;
-          if (categoryId && isUuid(categoryId) && row.part_master.category_id !== categoryId) continue;
-          if (
-            !yearInFitmentRange(row.year_from, row.year_to, vehicleYear) ||
-            !chassisMatchesFitment(row.chassis_code, catalogChassis, hintChassis) ||
-            !engineMatchesFitment(row.engine_code, catalogEngine, hintEngine)
-          ) {
-            continue;
-          }
-          matched.push(row);
-        }
-
-        const partIds = [...new Set(matched.map((m) => m.part_id))];
-        const offersByPart: Record<string, unknown[]> = {};
-        if (partIds.length) {
-          const { data: offers, error: offErr } = await supabase
-            .from("supplier_part_offer")
-            .select(
-              "id, supplier_id, part_id, supplier_sku, unit_price, currency, moq, lead_time_days, url, is_active, supplier ( id, name, default_lead_time_days )",
-            )
-            .in("part_id", partIds)
-            .eq("is_active", true);
-          if (offErr) throw offErr;
-          for (const o of offers || []) {
-            const pid = String((o as { part_id: string }).part_id);
-            if (!offersByPart[pid]) offersByPart[pid] = [];
-            offersByPart[pid].push(o);
-          }
-        }
-
-        const items = matched.map((m) => ({
-          fitmentId: m.id,
-          part: m.part_master,
-          offers: offersByPart[m.part_id] ?? [],
-        }));
-
+        const catalog = await getCatalogParts(supabase, catalogId, {
+          componentId: componentId && isUuid(componentId) ? componentId : null,
+          categoryId: categoryId && isUuid(categoryId) ? categoryId : null,
+          vehicleYear,
+          hintChassis: normCode(v.vehicle_catalog_chassis_hint ?? v.vehicle_catalog_generation_hint ?? ""),
+          hintEngine: normCode(v.vehicle_catalog_engine_code_hint ?? ""),
+        });
+        const items = await enrichFleetParts(supabase, catalog.mode, catalog.items, orgId || null, downtime);
         return c.json({
           catalogMatched: true,
           catalogId,
           items,
           count: items.length,
+          tiered: catalog.mode === "tiered",
+          ready: catalog.ready,
         });
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : String(e);
@@ -562,12 +445,18 @@ export function registerPartSourcingRoutes(
       let q = supabase
         .from("supplier_part_offer")
         .select("*, supplier ( id, name ), part_master ( id, name )")
+        .is("organization_id", null)
         .order("updated_at", { ascending: false });
       if (partId && isUuid(partId)) q = q.eq("part_id", partId);
       if (supplierId && isUuid(supplierId)) q = q.eq("supplier_id", supplierId);
       const { data, error } = await q.limit(500);
       if (error) throw error;
-      return c.json({ items: data || [] });
+      const items = ((data || []) as Record<string, unknown>[]).map((row) => {
+        const copy = { ...row };
+        delete copy.organization_id;
+        return copy;
+      });
+      return c.json({ items });
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
       return c.json({ error: msg }, 500);
@@ -603,9 +492,7 @@ export function registerPartSourcingRoutes(
         core_charge: body.core_charge != null && body.core_charge !== "" ? Number(body.core_charge) : null,
         warranty_months: body.warranty_months != null && body.warranty_months !== "" ? Number(body.warranty_months) : null,
         warranty_km: body.warranty_km != null && body.warranty_km !== "" ? Number(body.warranty_km) : null,
-        organization_id: body.organization_id != null && String(body.organization_id).trim() !== ""
-          ? String(body.organization_id).trim()
-          : null,
+        organization_id: null,
         freight_estimate: body.freight_estimate != null && body.freight_estimate !== "" ? Number(body.freight_estimate) : null,
         duty_rate: body.duty_rate != null && body.duty_rate !== "" ? Number(body.duty_rate) : null,
         fx_rate_to_jmd: body.fx_rate_to_jmd != null && body.fx_rate_to_jmd !== "" ? Number(body.fx_rate_to_jmd) : null,
@@ -613,7 +500,9 @@ export function registerPartSourcingRoutes(
       };
       const { data, error } = await supabase.from("supplier_part_offer").insert(row).select("*").single();
       if (error) throw error;
-      return c.json({ item: data });
+      const item = { ...(data as Record<string, unknown>) };
+      delete item.organization_id;
+      return c.json({ item });
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
       return c.json({ error: msg }, 500);
@@ -804,79 +693,20 @@ export function registerPartSourcingRoutes(
         if (catErr) throw catErr;
         if (!catRow) return c.json({ error: "Catalog row not found" }, 404);
 
-        if (await isFeatureEnabled(FEATURE_FLAGS.PARTS_TIERED_SEARCH)) {
-          const tieredResult = await loadTieredCompatibleParts(supabase, vehicleCatalogId, null, null, 0);
-          return c.json({ catalogId: vehicleCatalogId, items: tieredResult.items, count: tieredResult.items.length, tiered: true });
-        }
-
-        const catalogChassis = String((catRow as { chassis_code?: string }).chassis_code ?? "");
-        const catalogEngine = String((catRow as { engine_code?: string }).engine_code ?? "");
         const vehicleYear = (catRow as { production_start_year?: number }).production_start_year != null
           ? Number((catRow as { production_start_year: number }).production_start_year)
           : null;
-
-        const { data: fitRows, error: fitErr } = await supabase
-          .from("part_fitment")
-          .select(FITMENT_SELECT)
-          .eq("vehicle_catalog_id", vehicleCatalogId);
-        if (fitErr) throw fitErr;
-
-        type FitRow = {
-          id: string;
-          part_id: string;
-          chassis_code?: string | null;
-          engine_code?: string | null;
-          year_from?: number | null;
-          year_to?: number | null;
-          part_master: {
-            id: string;
-            category_id: string;
-            name: string;
-            oem_part_number?: string | null;
-            part_category: { id: string; slug: string; label: string };
-          } | null;
-        };
-
-        const matched: FitRow[] = [];
-        for (const raw of fitRows || []) {
-          const row = raw as FitRow;
-          if (!row.part_master) continue;
-          if (categoryId && isUuid(categoryId) && row.part_master.category_id !== categoryId) continue;
-          if (
-            !yearInFitmentRange(row.year_from, row.year_to, vehicleYear) ||
-            !chassisMatchesFitment(row.chassis_code, catalogChassis, "") ||
-            !engineMatchesFitment(row.engine_code, catalogEngine, "")
-          ) {
-            continue;
-          }
-          matched.push(row);
-        }
-
-        const partIds = [...new Set(matched.map((m) => m.part_id))];
-        const offersByPart: Record<string, unknown[]> = {};
-        if (partIds.length) {
-          const { data: offers, error: offErr } = await supabase
-            .from("supplier_part_offer")
-            .select(
-              "id, supplier_id, part_id, supplier_sku, unit_price, currency, moq, lead_time_days, url, is_active, supplier ( id, name, default_lead_time_days )",
-            )
-            .in("part_id", partIds)
-            .eq("is_active", true);
-          if (offErr) throw offErr;
-          for (const o of offers || []) {
-            const pid = String((o as { part_id: string }).part_id);
-            if (!offersByPart[pid]) offersByPart[pid] = [];
-            offersByPart[pid].push(o);
-          }
-        }
-
-        const items = matched.map((m) => ({
-          fitmentId: m.id,
-          part: m.part_master,
-          offers: offersByPart[m.part_id] ?? [],
-        }));
-
-        return c.json({ catalogId: vehicleCatalogId, items, count: items.length });
+        const catalog = await getCatalogParts(supabase, vehicleCatalogId, {
+          categoryId: categoryId && isUuid(categoryId) ? categoryId : null,
+          vehicleYear,
+        });
+        return c.json({
+          catalogId: vehicleCatalogId,
+          items: catalog.items,
+          count: catalog.items.length,
+          tiered: catalog.mode === "tiered",
+          ready: catalog.ready,
+        });
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : String(e);
         return c.json({ error: msg }, 500);
@@ -938,16 +768,7 @@ export function registerPartSourcingRoutes(
       const denied = assertPartSourcingPlatformAccess(c);
       if (denied) return denied;
       try {
-        const status = (c.req.query("status") ?? "open").trim();
-        let q = supabase
-          .from("parts_sourcing_requests")
-          .select("*")
-          .order("created_at", { ascending: true })
-          .limit(100);
-        if (status !== "all") q = q.eq("status", status);
-        const { data, error } = await q;
-        if (error) throw error;
-        return c.json({ items: data || [] });
+        return c.json({ items: [], moved: "fleet-admin" });
       } catch (e: unknown) {
         return c.json({ error: e instanceof Error ? e.message : String(e) }, 500);
       }
@@ -979,20 +800,19 @@ export function registerPartSourcingRoutes(
           const partId = body.resolvedPartId;
           patch.resolved_part_id = partId === null || partId === "" ? null : String(partId);
         }
-        const { data, error } = await supabase
+        const { error } = await supabase
           .from("parts_sourcing_requests")
           .update(patch)
-          .eq("id", id)
-          .select("*")
-          .maybeSingle();
+          .eq("id", id);
         if (error) throw error;
-        if (!data) return c.json({ error: "Not found" }, 404);
-        return c.json({ item: data });
+        return c.json({ ok: true });
       } catch (e: unknown) {
         return c.json({ error: e instanceof Error ? e.message : String(e) }, 500);
       }
     },
   );
 
+  registerCatalogRoutes(route, supabase);
+  registerFleetAdminPartsRoutes(route, supabase);
   registerPartsEnterpriseRoutes(route, supabase);
 }

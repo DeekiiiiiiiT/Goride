@@ -11605,7 +11605,15 @@ export function registerResidualMonolithRoutes(app: Hono) {
     if (denied) return denied;
     try {
       const items = await listCatalogOrphanVehicles(supabase);
-      return c.json({ items, total: items.length });
+      const counts = new Map<string, number>();
+      for (const item of items) {
+        const key = String(item.vehicle_catalog_id || "invalid");
+        counts.set(key, (counts.get(key) ?? 0) + 1);
+      }
+      return c.json({
+        total: items.length,
+        links: [...counts.entries()].map(([catalogId, count]) => ({ catalogId, count })),
+      });
     } catch (e: any) {
       console.error("[vehicle-catalog] orphans:", e);
       return c.json({ error: e.message || "Failed to list catalog orphans" }, 500);
@@ -12709,31 +12717,8 @@ export function registerResidualMonolithRoutes(app: Hono) {
       }
 
       if (flagName === FEATURE_FLAGS.PARTS_TIERED_SEARCH) {
-        if (enabled === true) {
-          return c.json({ error: "Turn tiered search on for one fleet from Parts sourcing, after that fleet reaches 60% coverage." }, 400);
-        }
-        const { loadFleetCoverage } = await import("./parts_fleet_coverage.ts");
-        const { tieredSearchReady } = await import("../../../packages/types/src/partsResolution.ts");
-        const existingFlag = await getFeatureFlag(flagName);
-        const already = new Set(existingFlag?.enabledForOrgs ?? []);
-        const incoming = Array.isArray(enabledForOrgs) ? enabledForOrgs as string[] : [];
-        for (const orgId of incoming) {
-          if (already.has(orgId)) continue;
-          const coverage = await loadFleetCoverage(supabase, orgId);
-          if (!tieredSearchReady(coverage.coveragePct)) {
-            return c.json({ error: `Fleet ${orgId} is at ${coverage.coveragePct}% coverage. Tiered search unlocks at 60%.` }, 400);
-          }
-        }
-      }
-
-      if (flagName === FEATURE_FLAGS.PARTS_TIERED_SEARCH && Array.isArray(enabledForOrgs)) {
-        const { secondFleetBlocked } = await import("../../../packages/types/src/partsResolution.ts");
-        const current = await getFeatureFlag(flagName);
-        for (const orgId of enabledForOrgs as string[]) {
-          if ((current?.enabledForOrgs ?? []).includes(orgId)) continue;
-          if (secondFleetBlocked(current?.enabledForOrgs ?? [], current?.orgEnabledAt ?? {}, String(orgId), Date.now())) {
-            return c.json({ error: "Another fleet is still in its first week of tiered search. Turn a second fleet on after that week." }, 400);
-          }
+        if (Array.isArray(enabledForOrgs) && enabledForOrgs.length > 0) {
+          return c.json({ error: "Tiered search follows each variant. Per-fleet switches are retired. Use the emergency stop for everyone." }, 400);
         }
       }
 
@@ -12779,16 +12764,7 @@ export function registerResidualMonolithRoutes(app: Hono) {
       }
 
       if (flagName === FEATURE_FLAGS.PARTS_TIERED_SEARCH) {
-        const { loadFleetCoverage } = await import("./parts_fleet_coverage.ts");
-        const { secondFleetBlocked, tieredSearchReady } = await import("../../../packages/types/src/partsResolution.ts");
-        const coverage = await loadFleetCoverage(supabase, String(orgId));
-        if (!tieredSearchReady(coverage.coveragePct)) {
-          return c.json({ error: `This fleet is at ${coverage.coveragePct}% coverage. Tiered search unlocks at 60%.` }, 400);
-        }
-        const current = await getFeatureFlag(flagName);
-        if (secondFleetBlocked(current?.enabledForOrgs ?? [], current?.orgEnabledAt ?? {}, String(orgId), Date.now())) {
-          return c.json({ error: "Another fleet is still in its first week of tiered search. Turn a second fleet on after that week." }, 400);
-        }
+        return c.json({ error: "Tiered search follows each variant. Per-fleet switches are retired." }, 400);
       }
 
       await enableFlagForOrg(flagName, orgId, rbacUser.email || rbacUser.userId);

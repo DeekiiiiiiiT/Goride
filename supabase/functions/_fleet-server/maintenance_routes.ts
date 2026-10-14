@@ -515,7 +515,7 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
           .from("maintenance_task_templates")
           .select("*")
           .eq("vehicle_catalog_id", catalogId)
-          .eq("template_scope", "catalog")
+          .in("template_scope", ["variant", "catalog"])
           .order("sort_order", { ascending: true })
           .order("task_name", { ascending: true });
         if (error) throw error;
@@ -564,8 +564,9 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
           return c.json({ error: "due_kind must be service_package or statutory_inspection" }, 400);
         }
         const row = {
-          template_scope: "catalog",
+          template_scope: "variant",
           vehicle_catalog_id: catalogId,
+          component_id: typeof body.component_id === "string" && body.component_id ? body.component_id : null,
           task_name,
           task_code: parseTaskCode(body),
           description: body.description != null ? String(body.description) : null,
@@ -740,6 +741,55 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
     },
   );
 
+  route.get("/admin/maintenance-templates/scoped", requireAuth(), async (c) => {
+    const denied = assertVehicleCatalogPlatformAccess(c);
+    if (denied) return denied;
+    try {
+      const scope = String(c.req.query("scope") ?? "");
+      const targetId = String(c.req.query("targetId") ?? "");
+      if (!["platform", "engine_family", "variant"].includes(scope)) return c.json({ error: "Invalid scope" }, 400);
+      let q = supabase.from("maintenance_task_templates").select("*").eq("template_scope", scope).is("archived_at", null);
+      if (scope === "platform") q = q.eq("platform_id", targetId);
+      if (scope === "engine_family") q = q.eq("engine_family_id", targetId);
+      if (scope === "variant") q = q.eq("vehicle_catalog_id", targetId);
+      const { data, error } = await q.order("task_name");
+      if (error) throw error;
+      return c.json({ items: data || [] });
+    } catch (e: unknown) {
+      return c.json({ error: e instanceof Error ? e.message : String(e) }, 500);
+    }
+  });
+
+  route.post("/admin/maintenance-templates/scoped", requireAuth(), async (c) => {
+    const denied = assertVehicleCatalogPlatformAccess(c);
+    if (denied) return denied;
+    try {
+      const body = (await c.req.json()) as Record<string, unknown>;
+      const scope = String(body.template_scope ?? "");
+      const task_name = String(body.task_name ?? "").trim();
+      if (!task_name || !["platform", "engine_family", "variant"].includes(scope)) {
+        return c.json({ error: "A name and a scope are required." }, 400);
+      }
+      const row: Record<string, unknown> = {
+        template_scope: scope,
+        task_name,
+        task_code: body.task_code != null ? String(body.task_code) : null,
+        component_id: typeof body.component_id === "string" && body.component_id ? body.component_id : null,
+        vehicle_catalog_id: scope === "variant" ? body.vehicle_catalog_id : null,
+        platform_id: scope === "platform" ? body.platform_id : null,
+        engine_family_id: scope === "engine_family" ? body.engine_family_id : null,
+        interval_miles: body.interval_miles != null && body.interval_miles !== "" ? Number(body.interval_miles) : null,
+        interval_months: body.interval_months != null && body.interval_months !== "" ? Number(body.interval_months) : null,
+        icon_key: body.icon_key != null ? String(body.icon_key) : "wrench",
+      };
+      const { data, error } = await supabase.from("maintenance_task_templates").insert(row).select("*").single();
+      if (error) throw error;
+      return c.json({ item: data });
+    } catch (e: unknown) {
+      return c.json({ error: e instanceof Error ? e.message : String(e) }, 500);
+    }
+  });
+
   route.post(
     "/admin/maintenance-templates/global",
     requireAuth(),
@@ -774,6 +824,7 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
         const row = {
           template_scope: "global",
           vehicle_catalog_id: null as string | null,
+          component_id: typeof body.component_id === "string" && body.component_id ? body.component_id : null,
           task_name,
           task_code: parseTaskCode(body),
           description: body.description != null ? String(body.description) : null,

@@ -27,6 +27,31 @@ export function pointInBox(point: LatLng, box: LatLngBox): boolean {
   return point.lat >= box.south && point.lat <= box.north && point.lng >= box.west && point.lng <= box.east;
 }
 
+/**
+ * One Google polygon per outer ring. Following exclude rings are holes on that polygon.
+ * A hole with no outer ring is dropped so it cannot be painted as a cutout.
+ */
+export function groupRingsForOutline(
+  rings: { kind?: string; polygon?: LatLng[] | null }[] | undefined,
+): LatLng[][][] {
+  const polygons: LatLng[][][] = [];
+  let current: LatLng[][] | null = null;
+  for (const ring of rings ?? []) {
+    const path = (ring.polygon ?? []).filter(
+      (v) => v && Number.isFinite(v.lat) && Number.isFinite(v.lng),
+    );
+    if (path.length < 3) continue;
+    if (ring.kind === 'exclude') {
+      if (current) current.push(path);
+      continue;
+    }
+    if (current) polygons.push(current);
+    current = [path];
+  }
+  if (current) polygons.push(current);
+  return polygons;
+}
+
 /** Town shape is worth drawing when its center or any ring box meets the current map view. */
 export function shapeIntersectsView(
   rings: { polygon?: LatLng[] | null }[] | undefined,

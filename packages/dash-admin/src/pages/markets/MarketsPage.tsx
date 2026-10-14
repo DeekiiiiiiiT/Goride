@@ -40,6 +40,7 @@ import {
   listAdminBoundaries,
   listCoverageVersions,
   listMarkets,
+  listOverviewCommunityShapes,
   listOverviewShapes,
   publishMarketCoverage,
   previewMarketCoverageDiff,
@@ -57,6 +58,7 @@ import {
   type CoverageVersionRow,
   type DashAdminBoundary,
   type DashMarketRow,
+  type DashOverviewCommunityShape,
   type DashOverviewParishShape,
   type DashOverviewTownShape,
   type DashParishRow,
@@ -2189,6 +2191,8 @@ export function MarketsPage({ embedded = false }: { embedded?: boolean } = {}) {
   const [showJamaicaOverview, setShowJamaicaOverview] = useState(false);
   const [overviewShapes, setOverviewShapes] = useState<DashOverviewTownShape[]>([]);
   const [overviewParishShapes, setOverviewParishShapes] = useState<DashOverviewParishShape[]>([]);
+  const [overviewCommunityShapes, setOverviewCommunityShapes] = useState<DashOverviewCommunityShape[]>([]);
+  const communityLoadRef = useRef<Promise<void> | null>(null);
   const [launchPrompt, setLaunchPrompt] = useState<{
     town: DashMarketRow;
     checks: ReadinessCheck[];
@@ -3324,7 +3328,37 @@ export function MarketsPage({ embedded = false }: { embedded?: boolean } = {}) {
           parishes={parishes}
           shapes={overviewShapes}
           parishShapes={overviewParishShapes}
-          onClose={() => setShowJamaicaOverview(false)}
+          communityShapes={overviewCommunityShapes}
+          onLoadCommunities={() => {
+            if (communityLoadRef.current) return communityLoadRef.current;
+            const pending = listOverviewCommunityShapes(session.access_token)
+              .then((res) => {
+                const rows = res.communities ?? [];
+                setOverviewCommunityShapes(rows);
+                // A silent empty array is indistinguishable from a failure — say which it is.
+                if (!Array.isArray(res.communities)) {
+                  toast.error(
+                    'Community layer: response had no "communities" field — the delivery function may be out of date.',
+                  );
+                } else if (rows.length === 0) {
+                  toast.error('Community layer: server returned 0 communities.');
+                }
+              })
+              .catch((e) => {
+                setOverviewCommunityShapes([]);
+                toast.error(
+                  `Community layer failed to load: ${e instanceof Error ? e.message : String(e)}`,
+                );
+                if (communityLoadRef.current === pending) communityLoadRef.current = null;
+              });
+            communityLoadRef.current = pending;
+            return pending;
+          }}
+          onClose={() => {
+            setShowJamaicaOverview(false);
+            setOverviewCommunityShapes([]);
+            communityLoadRef.current = null;
+          }}
         />
       )}
 

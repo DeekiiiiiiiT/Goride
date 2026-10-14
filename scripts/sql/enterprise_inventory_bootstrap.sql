@@ -1,5 +1,5 @@
 -- Idempotent bootstrap: one company + storefront node per merchant, migrate ingredients to item_master
--- Run manually after 20260801120000_enterprise_inventory_foundation.sql
+-- Run manually after 20260718164900_enterprise_inventory_foundation.sql
 
 DO $$
 DECLARE

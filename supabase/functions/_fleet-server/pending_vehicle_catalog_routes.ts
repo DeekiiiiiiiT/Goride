@@ -453,7 +453,48 @@ export function registerPendingVehicleCatalogRoutes(
         q = q.order("created_at", { ascending }).range(offset, offset + limit - 1);
         const { data, error, count } = await q;
         if (error) throw error;
-        return c.json({ items: data || [], total: count ?? 0 });
+        const grouped = new Map<string, { lead: Record<string, unknown>; fleetCount: number; first: string; last: string }>();
+        for (const raw of data || []) {
+          const row = raw as Record<string, unknown>;
+          const key = [
+            row.proposed_make,
+            row.proposed_model,
+            row.proposed_production_start_year,
+            row.proposed_production_end_year,
+            row.proposed_engine_code,
+            row.status,
+          ].join("|");
+          const seen = grouped.get(key);
+          const created = String(row.created_at ?? "");
+          if (!seen) {
+            grouped.set(key, { lead: row, fleetCount: 1, first: created, last: created });
+          } else {
+            seen.fleetCount += 1;
+            if (created && created < seen.first) seen.first = created;
+            if (created && created > seen.last) seen.last = created;
+          }
+        }
+        const items = [...grouped.values()].map((group) => {
+          const row = group.lead;
+          return {
+            id: row.id,
+            proposed_make: row.proposed_make,
+            proposed_model: row.proposed_model,
+            proposed_production_start_year: row.proposed_production_start_year,
+            proposed_production_end_year: row.proposed_production_end_year,
+            proposed_production_start_month: row.proposed_production_start_month,
+            proposed_production_end_month: row.proposed_production_end_month,
+            proposed_engine_code: row.proposed_engine_code,
+            proposed_trim_series: row.proposed_trim_series,
+            proposed_vehicle_class: row.proposed_vehicle_class,
+            source: row.source,
+            status: row.status,
+            created_at: group.first,
+            fleet_count: group.fleetCount,
+            request_count: group.fleetCount,
+          };
+        });
+        return c.json({ items, total: count ?? items.length });
       } catch (e: unknown) {
         return c.json({ error: e instanceof Error ? e.message : String(e) }, 500);
       }
@@ -472,9 +513,31 @@ export function registerPendingVehicleCatalogRoutes(
         const { data: row, error } = await supabase.from("vehicle_catalog_pending_requests").select("*").eq("id", id).maybeSingle();
         if (error) throw error;
         if (!row) return c.json({ error: "Not found" }, 404);
-        const fleetId = String((row as { fleet_vehicle_id?: string }).fleet_vehicle_id ?? "");
-        const rawVehicle = fleetId ? await kv.get(`vehicle:${fleetId}`) : null;
-        return c.json({ item: row, fleetVehicle: rawVehicle && typeof rawVehicle === "object" ? rawVehicle : null });
+        const source = row as Record<string, unknown>;
+        const { count } = await supabase
+          .from("vehicle_catalog_pending_requests")
+          .select("id", { count: "exact", head: true })
+          .eq("proposed_make", source.proposed_make)
+          .eq("proposed_model", source.proposed_model)
+          .eq("status", source.status);
+        return c.json({
+          item: {
+            id: source.id,
+            proposed_make: source.proposed_make,
+            proposed_model: source.proposed_model,
+            proposed_production_start_year: source.proposed_production_start_year,
+            proposed_production_end_year: source.proposed_production_end_year,
+            proposed_production_start_month: source.proposed_production_start_month,
+            proposed_production_end_month: source.proposed_production_end_month,
+            proposed_engine_code: source.proposed_engine_code,
+            proposed_trim_series: source.proposed_trim_series,
+            proposed_vehicle_class: source.proposed_vehicle_class,
+            source: source.source,
+            status: source.status,
+            created_at: source.created_at,
+            fleet_count: count ?? 1,
+          },
+        });
       } catch (e: unknown) {
         return c.json({ error: e instanceof Error ? e.message : String(e) }, 500);
       }
@@ -563,6 +626,40 @@ export function registerPendingVehicleCatalogRoutes(
     },
   );
 
+  async function linkMatchingFleetVehicles(
+    lead: Record<string, unknown>,
+    catalogId: string,
+    actor: string | null,
+  ) {
+    const { data: siblings } = await supabase
+      .from("vehicle_catalog_pending_requests")
+      .select("id, fleet_vehicle_id")
+      .eq("proposed_make", lead.proposed_make)
+      .eq("proposed_model", lead.proposed_model)
+      .eq("proposed_production_start_year", lead.proposed_production_start_year)
+      .in("status", [...OPEN_STATUSES])
+      .neq("id", String(lead.id));
+    for (const sibling of siblings ?? []) {
+      const fleetId = String((sibling as { fleet_vehicle_id?: string }).fleet_vehicle_id ?? "");
+      if (!fleetId) continue;
+      const raw = await kv.get(`vehicle:${fleetId}`);
+      if (raw && typeof raw === "object") {
+        await kv.set(`vehicle:${fleetId}`, {
+          ...(raw as Record<string, unknown>),
+          vehicle_catalog_id: catalogId,
+          catalogStatus: "matched",
+        });
+      }
+      await supabase.from("vehicle_catalog_pending_requests").update({
+        status: "approved",
+        resolved_vehicle_catalog_id: catalogId,
+        resolved_at: new Date().toISOString(),
+        resolved_by: actor,
+        updated_at: new Date().toISOString(),
+      }).eq("id", (sibling as { id: string }).id);
+    }
+  }
+
   route.post(
     "/make-server-37f42386/admin/vehicle-catalog-pending-requests/:id/approve-existing",
     requireAuth(),
@@ -611,7 +708,7 @@ export function registerPendingVehicleCatalogRoutes(
           .eq("id", id);
 
         const orgId = String((vehicle as { organizationId?: string }).organizationId ?? "");
-        const metricsBase = Number((vehicle.metrics as { odometer?: number })?.odometer ?? 0) || 0;
+        const metricsBase = Number((vehicle as { metrics?: { odometer?: number } }).metrics?.odometer ?? 0) || 0;
         const currentOdo = await canonicalOdometerForVehicle(supabase, fleetId, metricsBase, c);
         const run = await executeMaintenanceBootstrap({
           supabase,
@@ -620,6 +717,8 @@ export function registerPendingVehicleCatalogRoutes(
           currentOdo,
           catalogId: existingId,
         });
+
+        await linkMatchingFleetVehicles(reqRow as Record<string, unknown>, existingId, rbacUser?.id ?? rbacUser?.userId ?? null);
 
         return c.json({ success: true, vehicle_catalog_id: existingId, catalogStatus: "matched", bootstrap: run });
       } catch (e: unknown) {
@@ -821,7 +920,7 @@ export function registerPendingVehicleCatalogRoutes(
           .eq("id", id);
 
         const orgId = String((vehicle as { organizationId?: string }).organizationId ?? "");
-        const metricsBase = Number((vehicle.metrics as { odometer?: number })?.odometer ?? 0) || 0;
+        const metricsBase = Number((vehicle as { metrics?: { odometer?: number } }).metrics?.odometer ?? 0) || 0;
         const currentOdo = await canonicalOdometerForVehicle(supabase, fleetId, metricsBase, c);
         const run = await executeMaintenanceBootstrap({
           supabase,
@@ -830,6 +929,8 @@ export function registerPendingVehicleCatalogRoutes(
           currentOdo,
           catalogId,
         });
+
+        await linkMatchingFleetVehicles(reqRow as Record<string, unknown>, catalogId, rbacUser?.id ?? rbacUser?.userId ?? null);
 
         return c.json({
           success: true,

@@ -7,7 +7,6 @@ import { Textarea } from "../../ui/textarea";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../../ui/table";
 import { partsEnterpriseApi, listPartsSourcingRequests, updatePartsSourcingRequest, type PartsSourcingRequestRow } from "../../../services/partSourcingService";
 import { parsePartsCatalogCsv } from "@roam/types/partsCatalogCsvImport";
-import { secondFleetBlocked } from "@roam/types/partsResolution";
 
 function itemsOf(data: Record<string, unknown> | null): Record<string, unknown>[] {
   const items = data?.items;
@@ -30,6 +29,11 @@ const OP_LABEL: Record<string, string> = {
 };
 
 export function PartsVehiclesPanel({ token }: { token: string }) {
+  void token;
+  return null;
+}
+
+function RetiredVehiclesPanel({ token }: { token: string }) {
   const [platforms, setPlatforms] = useState<Record<string, unknown>[]>([]);
   const [engines, setEngines] = useState<Record<string, unknown>[]>([]);
   const [coverage, setCoverage] = useState<Record<string, unknown> | null>(null);
@@ -82,7 +86,7 @@ export function PartsVehiclesPanel({ token }: { token: string }) {
           const name = String(org.organizationName || id);
           const orgPct = Number(org.coveragePct ?? 0);
           const on = tieredSet.has(id);
-          const waiting = !on && secondFleetBlocked(tieredOn, enabledAt, id, Date.now());
+          const waiting = false;
           return (
             <div key={id} className="space-y-2 rounded-lg border px-3 py-2">
               <div className="flex flex-wrap items-center justify-between gap-2">

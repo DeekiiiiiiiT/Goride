@@ -4,8 +4,7 @@
 # can currently ship silently. This is exactly the class of bug tracked in
 # docs/adr/0001-migration-reorder-decision.md.
 #
-# Parts SQL checks fail this run. Automatic triggers stay commented out until the full
-# migration replay is green (see the ADR above).
+# Parts checks have their own workflow. This full-stack replay stays manual.
 name: Verify Migrations Replay
 
 # on:
@@ -48,3 +47,4 @@ jobs:
         run: |
           set -euo pipefail
           supabase db query --local -f supabase/tests/parts_rev2_checks.sql
+          supabase db query --local -f supabase/tests/vehicle_database_rebuild_checks.sql
