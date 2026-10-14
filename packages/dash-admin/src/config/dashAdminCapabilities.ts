@@ -1,5 +1,6 @@
 /**
- * Who can open each console destination. This is not a new permissions database.
+ * Who can open each console destination. The only role table.
+ * The server reads it from supabase/functions/delivery/admin/consoleAccess.ts.
  * Write buttons still use the existing checks (canWriteDashAdmin, finance approval).
  */
 export type DashCapability =

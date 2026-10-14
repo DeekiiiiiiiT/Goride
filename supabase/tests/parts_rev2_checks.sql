@@ -163,4 +163,100 @@ BEGIN
   END IF;
 END $$;
 
+DO $$
+DECLARE
+  result jsonb;
+  codes text[];
+  qty numeric;
+  decremented numeric;
+  shelf_count int;
+  wo_none uuid := '99999999-9999-4999-8999-999999999991';
+  line_none uuid := '99999999-9999-4999-8999-999999999992';
+  part_none uuid := '99999999-9999-4999-8999-999999999990';
+  wo_short uuid := '99999999-9999-4999-8999-999999999993';
+  line_short uuid := '99999999-9999-4999-8999-999999999994';
+  engine_rules int;
+BEGIN
+  SELECT COALESCE(u.stock_decremented, -1) INTO decremented
+  FROM public.maintenance_parts_usage u
+  WHERE u.line_id = '88888888-8888-4888-8888-888888888883';
+  IF decremented IS DISTINCT FROM 2 THEN
+    RAISE EXCEPTION 'Usage must remember the 2 units taken from the shelf, got %', decremented;
+  END IF;
+
+  INSERT INTO public.part_master (id, category_id, name, oem_part_number, manufacturer, part_kind, interchange_group_id)
+  SELECT
+    part_none,
+    (SELECT id FROM public.part_category WHERE slug = 'rev2-engine'),
+    'Rev2 no-shelf filter', 'REV2-NOSHELF', 'Toyota', 'oem',
+    (SELECT id FROM public.part_interchange_group WHERE code = 'REV2-OIL')
+  WHERE NOT EXISTS (SELECT 1 FROM public.part_master WHERE id = part_none);
+
+  INSERT INTO public.maintenance_work_orders (id, organization_id, vehicle_id, status)
+  VALUES (wo_none, 'rev2-org', 'rev2-veh', 'completed');
+  INSERT INTO public.maintenance_work_order_lines (id, work_order_id, part_id, qty, action)
+  VALUES (line_none, wo_none, part_none, 1, 'replace');
+  PERFORM public.apply_parts_usage_for_work_order(wo_none);
+  SELECT count(*) INTO shelf_count FROM public.org_part_stock WHERE part_id = part_none;
+  IF shelf_count IS DISTINCT FROM 0 THEN
+    RAISE EXCEPTION 'A job with no shelf row must not create one';
+  END IF;
+  PERFORM public.reverse_parts_usage_for_work_order(wo_none);
+  SELECT count(*) INTO shelf_count FROM public.org_part_stock WHERE part_id = part_none;
+  IF shelf_count IS DISTINCT FROM 0 THEN
+    RAISE EXCEPTION 'Reversing a job that took nothing must not create shelf stock';
+  END IF;
+
+  INSERT INTO public.maintenance_work_orders (id, organization_id, vehicle_id, status)
+  VALUES (wo_short, 'rev2-org', 'rev2-veh', 'completed');
+  INSERT INTO public.maintenance_work_order_lines (id, work_order_id, part_id, qty, action)
+  VALUES (line_short, wo_short, '66666666-6666-4666-8666-666666666666', 5, 'replace');
+  SELECT public.apply_parts_usage_for_work_order(wo_short) INTO result;
+  IF COALESCE((result->'stockWarnings'->0->>'shortBy')::numeric, -1) IS DISTINCT FROM 2 THEN
+    RAISE EXCEPTION 'Expected a short-by-2 warning, got %', result->'stockWarnings';
+  END IF;
+  SELECT s.qty INTO qty FROM public.org_part_stock s
+  WHERE s.organization_id = 'rev2-org' AND s.part_id = '66666666-6666-4666-8666-666666666666';
+  IF qty IS DISTINCT FROM 0 THEN
+    RAISE EXCEPTION 'Short shelf should land on 0, got %', qty;
+  END IF;
+  SELECT u.stock_decremented INTO decremented FROM public.maintenance_parts_usage u WHERE u.line_id = line_short;
+  IF decremented IS DISTINCT FROM 3 THEN
+    RAISE EXCEPTION 'Only the 3 on the shelf should be recorded as taken, got %', decremented;
+  END IF;
+  PERFORM public.reverse_parts_usage_for_work_order(wo_short);
+  SELECT s.qty INTO qty FROM public.org_part_stock s
+  WHERE s.organization_id = 'rev2-org' AND s.part_id = '66666666-6666-4666-8666-666666666666';
+  IF qty IS DISTINCT FROM 3 THEN
+    RAISE EXCEPTION 'Undo must restore only the 3 taken, got %', qty;
+  END IF;
+
+  result := public.parts_fleet_coverage('[]'::jsonb);
+  SELECT COALESCE(array_agg(code ORDER BY code), ARRAY[]::text[])
+  INTO codes
+  FROM (
+    SELECT x->>'opCode' AS code
+    FROM jsonb_array_elements(COALESCE(result->'components', '[]'::jsonb)) x
+  ) s;
+  IF codes IS DISTINCT FROM ARRAY[
+    'BELT-SERP', 'BRK-PADS', 'BRK-ROTOR', 'ENG-OIL', 'ENG-SPARK',
+    'ENG-THERM', 'FILT-AIR', 'HVAC-CABIN', 'LGT-WIPER', 'SUS-SHOCK'
+  ]::text[] THEN
+    RAISE EXCEPTION 'Coverage list is not the 10 parts, got %', codes;
+  END IF;
+  IF result::text ILIKE '%SUS-INSP%' OR result::text ILIKE '%FLD-COOL%' OR result::text ILIKE '%TRN-FLUID%' THEN
+    RAISE EXCEPTION 'Coverage still scores an inspection or fluid service';
+  END IF;
+
+  SELECT count(*) INTO engine_rules
+  FROM public.interchange_fitment_rule r
+  JOIN public.part_master pm ON pm.interchange_group_id = r.interchange_group_id
+  JOIN public.maintenance_service_categories c ON c.id = pm.maintenance_component_id
+  WHERE c.op_code IN ('FILT-AIR', 'BELT-SERP', 'ENG-O2', 'ENG-WPUMP')
+    AND r.target_kind = 'engine_family';
+  IF engine_rules IS DISTINCT FROM 0 THEN
+    RAISE EXCEPTION 'Air, belt, oxygen sensor and water pump rules must not be engine rules, found %', engine_rules;
+  END IF;
+END $$;
+
 ROLLBACK;

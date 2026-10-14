@@ -864,9 +864,19 @@ export function LogMaintenanceServiceDialog({
       onSaved?.();
       const saved = result as {
         warrantyPrompts?: Array<{ partId?: string; supplierId?: string | null; workOrderLineId?: string }>;
+        stockWarnings?: Array<{ partName?: string; shortBy?: number }>;
         item?: { lines?: Array<{ id?: string; partId?: string; declined?: boolean }> };
         lines?: Array<{ id?: string; partId?: string; declined?: boolean }>;
       };
+      const stockWarnings = Array.isArray(saved.stockWarnings) ? saved.stockWarnings : [];
+      if (stockWarnings.length) {
+        toast.warning(stockWarnings.map((warning) => {
+          const name = warning.partName?.trim() || "A part";
+          const shortBy = Number(warning.shortBy);
+          const count = Number.isFinite(shortBy) ? shortBy : 1;
+          return `${name} is short by ${count} on the shelf`;
+        }).join(". "));
+      }
       const prompts = saved.warrantyPrompts;
       const savedLines = saved.item?.lines?.length ? saved.item.lines : saved.lines?.length ? saved.lines : lines;
       const queue: Array<{ kind: "fit" | "warranty"; partId: string; supplierId?: string | null; workOrderLineId?: string | null }> = [];

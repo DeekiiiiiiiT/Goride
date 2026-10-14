@@ -73,14 +73,26 @@ async function reverseAndDeleteWorkOrder(
   await supabase.from("maintenance_work_orders").delete().eq("id", workOrderId);
 }
 
+type PartsUsageCommit = {
+  warrantyPrompts: unknown[];
+  stockWarnings: unknown[];
+};
+
+function usageFromCommit(usageResult: Record<string, unknown>): PartsUsageCommit {
+  return {
+    warrantyPrompts: Array.isArray(usageResult.warrantyPrompts) ? usageResult.warrantyPrompts : [],
+    stockWarnings: Array.isArray(usageResult.stockWarnings) ? usageResult.stockWarnings : [],
+  };
+}
+
 async function commitUsageOrDiscardNewWorkOrder(
   supabase: SupabaseClient,
   workOrderId: string,
   createdHere: boolean,
-): Promise<unknown[]> {
+): Promise<PartsUsageCommit> {
   try {
     const usageResult = await commitPartsUsage(supabase, workOrderId);
-    return Array.isArray(usageResult.warrantyPrompts) ? usageResult.warrantyPrompts as unknown[] : [];
+    return usageFromCommit(usageResult);
   } catch (err) {
     if (createdHere) await reverseAndDeleteWorkOrder(supabase, workOrderId);
     throw err;
@@ -1471,6 +1483,7 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
         // Parts usage before the service record and the ledger charge. A usage failure deletes only this work order.
         let workOrderId: string | undefined;
         let warrantyPrompts: unknown[] = [];
+        let stockWarnings: unknown[] = [];
         const needsUsage = lineRows.some(lineNeedsPartsUsage);
         let usageCommitted = !needsUsage || !jobCompleted;
         if (lineRows.length) {
@@ -1508,7 +1521,9 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
             throw lineErr;
           }
           if (needsUsage && jobCompleted) {
-            warrantyPrompts = await commitUsageOrDiscardNewWorkOrder(supabase, woId, true);
+            const usage = await commitUsageOrDiscardNewWorkOrder(supabase, woId, true);
+            warrantyPrompts = usage.warrantyPrompts;
+            stockWarnings = usage.stockWarnings;
             usageCommitted = true;
           }
         }
@@ -1607,6 +1622,7 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
           workOrderId,
           lines: savedLines,
           warrantyPrompts,
+          stockWarnings,
           ledgerPosted: ledgerResult.posted,
           ledgerWarning: ledgerResult.failed
             ? "Service saved but not posted to books — contact support if this persists"
@@ -1701,6 +1717,8 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
         let usageCommitted = !needsUsage || !jobCompleted;
         let editWorkOrderId = prevPayload.workOrderId != null ? String(prevPayload.workOrderId) : "";
         let warrantyPrompts: unknown[] = [];
+        let stockWarnings: unknown[] = [];
+        const leftCompleted = prevStatus === "completed" && nextStatusLc !== "completed";
         if (editLines.length || isUuid(editWorkOrderId)) {
           let createdHere = false;
           if (!isUuid(editWorkOrderId)) {
@@ -1733,6 +1751,12 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
               throw lineErr;
             }
           } else {
+            if (leftCompleted) {
+              const { error: revErr } = await supabase.rpc("reverse_parts_usage_for_work_order", {
+                p_work_order_id: editWorkOrderId,
+              });
+              if (revErr) throw revErr;
+            }
             await syncWorkOrderLines(supabase, editWorkOrderId, editLines);
             if (jobCompleted) {
               const { error: woUpErr } = await supabase.from("maintenance_work_orders").update({
@@ -1744,10 +1768,19 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
                 updated_at: new Date().toISOString(),
               }).eq("id", editWorkOrderId);
               if (woUpErr) throw woUpErr;
+            } else if (leftCompleted) {
+              const { error: woUpErr } = await supabase.from("maintenance_work_orders").update({
+                status: "in_progress",
+                closed_at: null,
+                updated_at: new Date().toISOString(),
+              }).eq("id", editWorkOrderId);
+              if (woUpErr) throw woUpErr;
             }
           }
           if (jobCompleted) {
-            warrantyPrompts = await commitUsageOrDiscardNewWorkOrder(supabase, editWorkOrderId, createdHere);
+            const usage = await commitUsageOrDiscardNewWorkOrder(supabase, editWorkOrderId, createdHere);
+            warrantyPrompts = usage.warrantyPrompts;
+            stockWarnings = usage.stockWarnings;
             usageCommitted = true;
           }
         }
@@ -1870,6 +1903,7 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
           data: updated,
           lines: savedLines,
           warrantyPrompts,
+          stockWarnings,
           ledgerPosted,
           ledgerWarning,
         });
@@ -2853,8 +2887,11 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
         const needsUsage = lineRows.some(lineNeedsPartsUsage);
         let usageCommitted = !needsUsage;
         let warrantyPrompts: unknown[] = [];
+        let stockWarnings: unknown[] = [];
         if (needsUsage) {
-          warrantyPrompts = await commitUsageOrDiscardNewWorkOrder(supabase, id, false);
+          const usage = await commitUsageOrDiscardNewWorkOrder(supabase, id, false);
+          warrantyPrompts = usage.warrantyPrompts;
+          stockWarnings = usage.stockWarnings;
           usageCommitted = true;
         }
         if (!ledgerAllowedAfterParts({ needsUsage, usageCommitted })) {
@@ -2976,6 +3013,7 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
           item: mapDbWorkOrderToApi(completedWo as Record<string, unknown>, lineRows),
           record,
           warrantyPrompts,
+          stockWarnings,
           ledgerPosted: ledgerResult.posted,
           ledgerWarning: ledgerResult.failed
             ? "Work order completed but not posted to books — contact support if this persists"

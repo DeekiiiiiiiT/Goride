@@ -392,27 +392,17 @@ export function registerPartsEnterpriseRoutes(route: RouteApp, supabase: Supabas
       const body = await c.req.json() as { status?: string };
       const status = String(body.status ?? "");
       if (!["approved", "rejected"].includes(status)) return c.json({ error: "Choose approve or reject." }, 400);
-      const { data: proposal, error: pErr } = await supabase.from("part_rule_proposal").select("*").eq("id", c.req.param("id")).maybeSingle();
-      if (pErr) throw pErr;
-      if (!proposal) return c.json({ error: "Suggestion not found" }, 404);
-      const row = proposal as { part_id: string; target_kind: string; platform_id?: string | null; engine_family_id?: string | null; status: string };
-      if (row.status !== "proposed") return c.json({ error: "This suggestion is already closed." }, 400);
-      if (status === "approved") {
-        const { data: part, error: partErr } = await supabase.from("part_master").select("interchange_group_id").eq("id", row.part_id).maybeSingle();
-        if (partErr) throw partErr;
-        const groupId = (part as { interchange_group_id?: string } | null)?.interchange_group_id;
-        if (!groupId) return c.json({ error: "This part has no interchange group yet." }, 400);
-        const { error: ruleErr } = await supabase.from("interchange_fitment_rule").insert({
-          interchange_group_id: groupId,
-          target_kind: row.target_kind,
-          platform_id: row.platform_id ?? null,
-          engine_family_id: row.engine_family_id ?? null,
-          source: "install_confirmed",
-        });
-        if (ruleErr) throw ruleErr;
+      const { data, error } = await supabase.rpc("decide_part_rule_proposal", {
+        p_id: c.req.param("id"),
+        p_status: status,
+      });
+      if (error) {
+        const msg = error.message || "Could not update this suggestion";
+        const statusCode = /not found/i.test(msg) ? 404
+          : /already closed|no interchange|approve or reject|engine-family|powertrain/i.test(msg) ? 400
+          : 500;
+        return c.json({ error: msg }, statusCode);
       }
-      const { data, error } = await supabase.from("part_rule_proposal").update({ status }).eq("id", c.req.param("id")).select("*").single();
-      if (error) throw error;
       return c.json({ item: data });
     } catch (e) {
       return fail(c, e);

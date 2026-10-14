@@ -1,30 +1,13 @@
 /**
- * Who can see each console feed. Keep this in step with
- * packages/dash-admin/src/config/dashAdminCapabilities.ts.
- * Owners short-circuit. An unknown capability stays hidden.
+ * Server checks use the website role table. Do not add a second copy here.
  */
-
-const OWNERS = new Set(["platform_owner", "superadmin", "dash_admin"]);
+import {
+  canOpenCapabilityForRoles,
+  type DashCapability,
+} from "../../../../packages/dash-admin/src/config/dashAdminCapabilities.ts";
 
 export function canSee(roles: string[], capability: string): boolean {
-  if (roles.some((role) => OWNERS.has(role))) return true;
-  const ops = roles.includes("dash_ops");
-  const courier = roles.some((role) => role === "courier_admin" || role === "courier_ops");
-  const support = roles.includes("platform_support");
-  const analyst = roles.includes("platform_analyst");
-  const map: Record<string, boolean> = {
-    merchants: ops || support || analyst,
-    couriers: ops || courier || support || analyst,
-    customers: ops || support || analyst,
-    team: courier,
-    orders: ops || courier || support || analyst,
-    support: ops || courier || support,
-    dispatch: ops || courier || support || analyst,
-    finance: analyst,
-    "courier-cash": courier || analyst,
-    "in-house": ops,
-  };
-  return map[capability] ?? false;
+  return canOpenCapabilityForRoles(roles, capability as DashCapability);
 }
 
 /** Customer directory only. Courier staff already get courier search. */

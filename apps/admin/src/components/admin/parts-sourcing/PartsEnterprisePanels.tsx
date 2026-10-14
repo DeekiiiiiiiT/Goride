@@ -40,14 +40,21 @@ export function PartsVehiclesPanel({ token }: { token: string }) {
   const pct = Number(coverage?.coveragePct ?? 0);
   const byOrg = Array.isArray(coverage?.byOrg) ? coverage.byOrg as Record<string, unknown>[] : [];
   const tieredOn = new Set(Array.isArray(coverage?.tieredOnFor) ? coverage.tieredOnFor as string[] : []);
+  const components = Array.isArray(coverage?.components) ? coverage.components as Record<string, unknown>[] : [];
+  const nameByCode = new Map(components.map((item) => [String(item.opCode ?? ""), String(item.name ?? item.opCode ?? "")]));
+  const missing = Array.isArray(coverage?.missing) ? coverage.missing as Record<string, unknown>[] : [];
+  const missingNames = missing.map((item) => String(item.name || item.opCode || "")).filter(Boolean);
   return (
     <div className="space-y-4">
       <div className="rounded-xl border border-slate-200 dark:border-slate-700 p-4 space-y-3">
-        <p className="text-sm text-slate-500">Active vehicles with a real match on all 10 common jobs</p>
+        <p className="text-sm text-slate-500">Active vehicles with a real match on all 10 parts: oil filter, spark plugs, thermostat, air filter, cabin filter, brake pads, drive belt, wipers, brake rotors, and shocks.</p>
         <p className="text-3xl font-semibold">{String(pct)}%</p>
         <p className="text-sm text-slate-500">
           {String(coverage?.coveredCount ?? 0)} of {String(coverage?.vehicleCount ?? 0)} active vehicles. Tiered search unlocks for a fleet at 60%. Turn on one fleet, compare it with the old search, then widen.
         </p>
+        {missingNames.length > 0 ? (
+          <p className="text-sm text-slate-500">Still missing a match: {missingNames.join(", ")}.</p>
+        ) : null}
         {byOrg.length === 0 ? <p className="text-sm text-slate-500">No active fleets in this sample yet.</p> : byOrg.map((org) => {
           const id = String(org.organizationId ?? "");
           const orgPct = Number(org.coveragePct ?? 0);
@@ -57,6 +64,9 @@ export function PartsVehiclesPanel({ token }: { token: string }) {
               <div>
                 <p className="text-sm font-medium">{id}</p>
                 <p className="text-xs text-slate-500">{orgPct}% · {String(org.coveredCount ?? 0)} of {String(org.vehicleCount ?? 0)} vehicles</p>
+                {Array.isArray(org.missingOpCodes) && (org.missingOpCodes as string[]).length > 0 ? (
+                  <p className="text-xs text-slate-500">Missing: {(org.missingOpCodes as string[]).map((code) => nameByCode.get(code) || code).join(", ")}</p>
+                ) : null}
               </div>
               <Button type="button" size="sm" variant={on ? "outline" : "default"} disabled={!on && orgPct < 60} onClick={async () => {
                 try {

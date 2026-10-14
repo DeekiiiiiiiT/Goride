@@ -1,11 +1,28 @@
 /// <reference lib="deno.ns" />
 import { assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
 import { jamaicaDayStartIso } from "../inHouse/pricing.ts";
+import {
+  CAPABILITY_LABELS,
+  CAPABILITY_MATRIX,
+  canOpenCapabilityForRoles,
+  type DashCapability,
+} from "../../../../packages/dash-admin/src/config/dashAdminCapabilities.ts";
 import { canSee, canSeePeople, courierGrantAllowed, personHref, sanitizeSearchToken } from "./consoleAccess.ts";
 
 Deno.test("search sanitizer strips filter breakers", () => {
   assertEquals(sanitizeSearchToken("a%,_()."), "a");
   assertEquals(sanitizeSearchToken("  Ada, (Lee) "), "Ada Lee");
+});
+
+Deno.test("server access uses the website role table", () => {
+  const capabilities = Object.keys(CAPABILITY_LABELS) as DashCapability[];
+  for (const role of Object.keys(CAPABILITY_MATRIX)) {
+    for (const capability of capabilities) {
+      assertEquals(canSee([role], capability), canOpenCapabilityForRoles([role], capability));
+    }
+  }
+  assertEquals(canSee(["dash_ops", "platform_analyst"], "finance"), true);
+  assertEquals(canSee(["dash_admin"], "not-a-page"), false);
 });
 
 Deno.test("sales stay with finance roles", () => {

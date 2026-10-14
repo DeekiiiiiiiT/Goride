@@ -106,6 +106,12 @@ jobs:
           VITE_SUPABASE_ANON_KEY: ci-placeholder-anon-key
         run: pnpm --filter @roam/admin test
 
+      - name: Test parts catalog CSV import
+        env:
+          VITE_SUPABASE_URL: https://ci-placeholder.supabase.co
+          VITE_SUPABASE_ANON_KEY: ci-placeholder-anon-key
+        run: pnpm --filter @roam/admin exec vitest run src/utils/partsCatalogCsvImport.test.ts
+
       - name: Check courier fleet stamp
         run: node scripts/check-courier-fleet-stamp.mjs
 
