@@ -6,11 +6,16 @@
  *   node scripts/edge-route-manifest.mjs --all [--check]
  *
  * --check: regenerate in memory and fail if committed manifest drifts (D15).
+ * Writes also refresh extractionStatus.generated.ts, which is derived from these manifests.
  */
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { collectRoutesFromEntry } from "./edge-route-collect.mjs";
+import {
+  extractionStatusDrift,
+  writeExtractionStatus,
+} from "./generate-extraction-status.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "..");
@@ -101,4 +106,18 @@ let exitCode = 0;
 for (const slug of slugs) {
   exitCode = Math.max(exitCode, processSlug(slug));
 }
+
+if (exitCode === 0) {
+  if (checkMode) {
+    if (extractionStatusDrift()) {
+      console.error(
+        "FAIL: extractionStatus.generated.ts is stale — re-run without --check and commit.",
+      );
+      exitCode = 1;
+    }
+  } else {
+    writeExtractionStatus();
+  }
+}
+
 process.exit(exitCode);

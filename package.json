@@ -75,7 +75,7 @@
     "check:ledger-amount-drift": "node scripts/check-ledger-amount-drift.mjs",
     "check:ledger-dual-read": "node scripts/ledger-dual-read-compare.mjs",
     "check:ledger-completeness": "node scripts/ledger-completeness-harness.mjs",
-    "check:edge-manifest": "node scripts/edge-route-manifest.mjs --all --check",
+    "check:edge-manifest": "node scripts/edge-route-manifest.mjs --all --check && node scripts/generate-extraction-status.mjs --check",
     "check:edge-overlap": "node scripts/check-edge-manifest-overlap.mjs",
     "check:shim-traffic": "node scripts/check-shim-traffic.mjs",
     "check:shim-traffic:log": "node scripts/check-shim-traffic.mjs --hours 24 --append-log",
