@@ -52,7 +52,10 @@ export function selectPartsMode(input: { killed: boolean; ready: boolean }): "ti
 }
 
 export function referenceOffersOnly(offers: CatalogOffer[]): CatalogOffer[] {
-  return offers.filter((offer) => !offer.organization_id);
+  return offers.filter((offer) => !offer.organization_id).map((offer) => {
+    const { organization_id: _organizationId, ...rest } = offer;
+    return rest;
+  });
 }
 
 export function offersForFleet(offers: CatalogOffer[], organizationId: string | null): CatalogOffer[] {
@@ -92,6 +95,12 @@ const FORBIDDEN_IDENTITY_KEYS = new Set([
   "customerName",
   "org_name",
   "fleetVehicle",
+  "work_order_line_id",
+  "workOrderLineId",
+  "latest_need_text",
+  "latestNeedText",
+  "need_text",
+  "needText",
 ]);
 
 /** Path of the first customer-identity field, or null when the payload is safe. */

@@ -761,57 +761,6 @@ export function registerPartSourcingRoutes(
     },
   );
 
-  route.get(
-    "/make-server-37f42386/admin/parts-sourcing-requests",
-    requireAuth(),
-    async (c: Context) => {
-      const denied = assertPartSourcingPlatformAccess(c);
-      if (denied) return denied;
-      try {
-        return c.json({ items: [], moved: "fleet-admin" });
-      } catch (e: unknown) {
-        return c.json({ error: e instanceof Error ? e.message : String(e) }, 500);
-      }
-    },
-  );
-
-  route.patch(
-    "/make-server-37f42386/admin/parts-sourcing-requests/:id",
-    requireAuth(),
-    async (c: Context) => {
-      const denied = assertPartSourcingPlatformAccess(c);
-      if (denied) return denied;
-      try {
-        const id = c.req.param("id");
-        const body = (await c.req.json()) as Record<string, unknown>;
-        const status = String(body.status ?? "").trim();
-        if (!["open", "in_progress", "resolved", "rejected"].includes(status)) {
-          return c.json({ error: "Invalid status" }, 400);
-        }
-        const patch: Record<string, unknown> = {
-          status,
-          updated_at: new Date().toISOString(),
-          admin_note: body.adminNote != null ? String(body.adminNote).slice(0, 2000) : undefined,
-        };
-        if (status === "resolved" || status === "rejected") {
-          patch.resolved_at = new Date().toISOString();
-        }
-        if (body.resolvedPartId !== undefined) {
-          const partId = body.resolvedPartId;
-          patch.resolved_part_id = partId === null || partId === "" ? null : String(partId);
-        }
-        const { error } = await supabase
-          .from("parts_sourcing_requests")
-          .update(patch)
-          .eq("id", id);
-        if (error) throw error;
-        return c.json({ ok: true });
-      } catch (e: unknown) {
-        return c.json({ error: e instanceof Error ? e.message : String(e) }, 500);
-      }
-    },
-  );
-
   registerCatalogRoutes(route, supabase);
   registerFleetAdminPartsRoutes(route, supabase);
   registerPartsEnterpriseRoutes(route, supabase);

@@ -216,4 +216,57 @@ export function registerFleetAdminPartsRoutes(route: RouteApp, supabase: Supabas
       return fail(c, error);
     }
   });
+
+  route.get(`${root}/link-reviews`, async (c: Context) => {
+    const denied = await allow(c);
+    if (denied) return denied;
+    try {
+      const { data, error } = await supabase
+        .from("part_number_link_review")
+        .select("id, organization_id, part_number, candidate_count, status, created_at")
+        .eq("status", "open")
+        .order("created_at", { ascending: false })
+        .limit(200);
+      if (error) throw error;
+      return c.json({ items: data || [] });
+    } catch (error) {
+      return fail(c, error);
+    }
+  });
+
+  route.patch(`${root}/link-reviews/:id`, async (c: Context) => {
+    const denied = await allow(c);
+    if (denied) return denied;
+    try {
+      const body = await c.req.json() as { status?: string; partNumber?: string };
+      const status = String(body.status ?? "");
+      if (!["linked", "dismissed"].includes(status)) return c.json({ error: "Choose link or dismiss." }, 400);
+      let linked: string | null = null;
+      if (status === "linked") {
+        const number = String(body.partNumber ?? "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+        if (!number) return c.json({ error: "Enter the catalog part number." }, 400);
+        const { data: part, error: partErr } = await supabase
+          .from("part_master")
+          .select("id")
+          .eq("oem_part_number_norm", number)
+          .maybeSingle();
+        if (partErr) throw partErr;
+        if (!part) return c.json({ error: "That catalog part number was not found." }, 404);
+        linked = String((part as { id: string }).id);
+      }
+      const { data: review, error } = await supabase
+        .from("part_number_link_review")
+        .update({ status, linked_part_id: linked })
+        .eq("id", c.req.param("id"))
+        .select("id, work_order_line_id, status")
+        .single();
+      if (error) throw error;
+      if (status === "linked" && linked && review?.work_order_line_id) {
+        await supabase.from("maintenance_work_order_lines").update({ part_id: linked }).eq("id", review.work_order_line_id);
+      }
+      return c.json({ ok: true });
+    } catch (error) {
+      return fail(c, error);
+    }
+  });
 }

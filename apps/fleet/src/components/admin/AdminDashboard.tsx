@@ -239,11 +239,6 @@ export function AdminDashboard({ onNavigate }: AdminDashboardProps) {
             onClick={() => onNavigate('toll-info')}
           />
           <QuickAction
-            label="Motor vehicle catalog"
-            description="Platform-wide make, model, and specification reference data"
-            onClick={() => onNavigate('motor-vehicles')}
-          />
-          <QuickAction
             label="Review Merchants"
             description={`${dashMerchantCounts.pending} pending Roam Rush restaurant applications`}
             onClick={() => onNavigate('roam-dash-merchants')}

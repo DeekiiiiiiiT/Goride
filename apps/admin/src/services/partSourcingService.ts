@@ -348,46 +348,6 @@ export async function previewPartsForCatalog(
   return (await res.json()) as CompatiblePartsResponse;
 }
 
-export type PartsSourcingRequestRow = {
-  id: string;
-  organization_id: string;
-  vehicle_id: string;
-  need_text: string;
-  status: string;
-  created_at: string;
-  admin_note?: string | null;
-};
-
-export async function listPartsSourcingRequests(
-  accessToken: string,
-  status = "open",
-): Promise<PartsSourcingRequestRow[]> {
-  const res = await fetch(
-    `${API_ENDPOINTS.admin}/admin/parts-sourcing-requests?status=${encodeURIComponent(status)}`,
-    { headers: edgeHeaders(accessToken) },
-  );
-  if (!res.ok) throw new Error(await parseError(res));
-  const data = await res.json();
-  return (data.items || []) as PartsSourcingRequestRow[];
-}
-
-export async function updatePartsSourcingRequest(
-  accessToken: string,
-  id: string,
-  status: string,
-  adminNote?: string,
-  resolvedPartId?: string | null,
-): Promise<PartsSourcingRequestRow> {
-  const res = await fetch(`${API_ENDPOINTS.admin}/admin/parts-sourcing-requests/${id}`, {
-    method: "PATCH",
-    headers: edgeHeaders(accessToken, "application/json"),
-    body: JSON.stringify({ status, adminNote, resolvedPartId }),
-  });
-  if (!res.ok) throw new Error(await parseError(res));
-  const data = await res.json();
-  return data.item as PartsSourcingRequestRow;
-}
-
 async function adminGet(accessToken: string, path: string): Promise<Record<string, unknown>> {
   const res = await fetch(`${base()}/${path}`, { headers: edgeHeaders(accessToken) });
   if (!res.ok) throw new Error(await parseError(res));
@@ -407,31 +367,15 @@ async function adminSend(accessToken: string, path: string, method: string, body
 export const partsEnterpriseApi = {
   platforms: (token: string) => adminGet(token, "vehicle-platforms"),
   engines: (token: string) => adminGet(token, "engine-families"),
-  coverage: async (_token: string) => ({ coverage: {} }),
-  setTieredSearch: async () => { throw new Error("Per-fleet tiered search is retired."); },
-  compare: async () => { throw new Error("Compare a variant from Data quality."); },
   groups: (token: string) => adminGet(token, "part-groups"),
   createGroup: (token: string, body: Record<string, unknown>) => adminSend(token, "part-groups", "POST", body),
   rules: (token: string) => adminGet(token, "part-rules"),
   createRule: (token: string, body: Record<string, unknown>) => adminSend(token, "part-rules", "POST", body),
   importRows: (token: string, rows: unknown[]) => adminSend(token, "part-import", "POST", { rows }),
   undoImport: (token: string, batchId: string) => adminSend(token, "part-import/undo", "POST", { batchId }),
-  linkReviews: (token: string) => adminGet(token, "part-link-reviews"),
-  resolveLink: (token: string, id: string, body: Record<string, unknown>) => adminSend(token, `part-link-reviews/${id}`, "PATCH", body),
-  cores: (token: string) => adminGet(token, "part-cores"),
-  updateCore: (token: string, id: string, status: string) => adminSend(token, `part-cores/${id}`, "PATCH", { status }),
-  claims: (token: string) => adminGet(token, "part-warranty-claims"),
-  alerts: (token: string) => adminGet(token, "part-repeat-alerts"),
-  dismissAlert: (token: string, id: string) => adminSend(token, `part-repeat-alerts/${id}`, "PATCH", {}),
-  refreshAlerts: (token: string) => adminSend(token, "part-repeat-alerts/refresh", "POST", {}),
-  quotes: (token: string) => adminGet(token, "part-quotes"),
-  feedback: (token: string) => adminGet(token, "part-fit-feedback"),
-  stock: (token: string) => adminGet(token, "org-part-stock"),
   supplierSearch: (token: string, partNumber: string) => adminSend(token, "part-supplier-search", "POST", { partNumber }),
   supersede: (token: string, body: { oldPartId: string; newPartId: string }) => adminSend(token, "part-supersession", "POST", body),
   search: (token: string, q: string) => adminGet(token, `part-search?q=${encodeURIComponent(q)}`),
-  replyQuote: (token: string, id: string, body: Record<string, unknown>) => adminSend(token, `part-quotes/${id}/reply`, "POST", body),
-  updateClaim: (token: string, id: string, status: string) => adminSend(token, `part-warranty-claims/${id}`, "PATCH", { status }),
   ruleReviews: (token: string) => adminGet(token, "part-rule-reviews"),
   resolveRuleReview: (token: string, id: string, notes: string) => adminSend(token, `part-rule-reviews/${id}`, "PATCH", { notes }),
   proposals: (token: string) => adminGet(token, "part-rule-proposals"),
@@ -444,6 +388,7 @@ export const partsEnterpriseApi = {
   decidePart: (token: string, partId: string, decision: "confirmed" | "rejected", evidenceUrl?: string) => adminSend(token, "part-catalog-decision", "POST", { partId, decision, evidenceUrl }),
   attachPart: (token: string, partId: string, chassisCode: string) => adminSend(token, "part-catalog-attach", "POST", { partId, chassisCode }),
   addCatalogPart: (token: string, body: Record<string, unknown>) => adminSend(token, "part-catalog-add", "POST", body),
+  referenceOffer: (token: string, body: { partId: string; supplierId: string; unitPrice: number; currency: string; supplierSku: string }) => adminSend(token, "catalog/reference-offer", "POST", body),
   matrix: (token: string) => adminGet(token, "catalog/matrix"),
   refreshDemand: (token: string) => adminSend(token, "catalog/refresh-demand", "POST", {}),
   seedInUse: (token: string) => adminSend(token, "catalog/seed-in-use", "POST", {}),

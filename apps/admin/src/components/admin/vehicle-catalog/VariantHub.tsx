@@ -4,6 +4,7 @@ import { Button } from "../../ui/button";
 import { API_ENDPOINTS } from "../../../services/apiConfig";
 import { publicAnonKey } from "../../../utils/supabase/info";
 import type { VehicleCatalogRecord } from "../../../types/vehicleCatalog";
+import { FamilyScheduleForm } from "../maintenance-templates/FamilyScheduleForm";
 
 type HubTab = "overview" | "family" | "maintenance" | "parts" | "gaps" | "signals";
 
@@ -45,9 +46,9 @@ export function VariantHub({ record, onBack }: { record: VehicleCatalogRecord; o
     }
   }, [tab, token, record.id]);
 
-  const family = (detail?.family ?? null) as { code?: string; label?: string } | null;
-  const platform = (detail?.platform ?? null) as { code?: string } | null;
-  const engine = (detail?.engine ?? null) as { code?: string } | null;
+  const family = (detail?.family ?? null) as { id?: string; code?: string; label?: string } | null;
+  const platform = (detail?.platform ?? null) as { id?: string; code?: string; label?: string } | null;
+  const engine = (detail?.engine ?? null) as { id?: string; code?: string } | null;
   const siblings = Array.isArray(detail?.siblings) ? detail.siblings as string[] : [];
   const partItems = Array.isArray(parts?.items) ? parts.items as Array<Record<string, unknown>> : [];
   const tasks = Array.isArray(schedule?.items) ? schedule.items as Array<Record<string, unknown>> : [];
@@ -86,11 +87,18 @@ export function VariantHub({ record, onBack }: { record: VehicleCatalogRecord; o
         </div>
       )}
       {tab === "maintenance" && (
-        <ul className="text-sm space-y-1">
-          {tasks.length === 0 ? <li>No schedule yet. Add a platform or engine template and it will show here.</li> : tasks.map((task) => (
-            <li key={String(task.template_id)}>{String(task.task_name)} · from {String(task.template_scope)}{task.component_op_code ? ` · ${String(task.component_op_code)}` : ""}</li>
-          ))}
-        </ul>
+        <div className="space-y-4">
+          <ul className="text-sm space-y-1">
+            {tasks.length === 0 ? <li>No schedule yet. Add one for this vehicle, its platform, or its engine.</li> : tasks.map((task) => (
+              <li key={String(task.template_id)}>{String(task.task_name)} · from {String(task.template_scope)}{task.component_op_code ? ` · ${String(task.component_op_code)}` : ""}</li>
+            ))}
+          </ul>
+          <FamilyScheduleForm preset={{
+            variant: { id: record.id, label: `${record.make} ${record.model}` },
+            platform: platform?.id ? { id: platform.id, label: platform.label || platform.code || "Platform" } : undefined,
+            engine: engine?.id ? { id: engine.id, label: engine.code || "Engine" } : undefined,
+          }} />
+        </div>
       )}
       {(tab === "parts" || tab === "gaps") && (
         <ul className="text-sm space-y-1">

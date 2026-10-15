@@ -9,6 +9,7 @@ type FamilyRow = {
   suggested_family: string;
   car_name: string;
   share_body_parts: boolean | null;
+  notes?: string;
 };
 
 export function PlatformsEnginesPage() {
@@ -33,6 +34,34 @@ export function PlatformsEnginesPage() {
 
   useEffect(() => { void load().catch((err) => setNotice(err instanceof Error ? err.message : "Could not load families")); }, [load]);
 
+  async function decide(list: FamilyRow[], share: boolean) {
+    if (!token) return;
+    const target = list[0]?.suggested_family || list[0]?.group_key || "";
+    try {
+      if (share) {
+        const blast = platforms.find((item) => String(item.code) === target);
+        if (blast?.id) {
+          const radius = await partsEnterpriseApi.blast(token, "platform", String(blast.id));
+          const vehicles = `${radius.variantCount} vehicle${radius.variantCount === 1 ? "" : "s"}`;
+          const makes = `${radius.makeCount} make${radius.makeCount === 1 ? "" : "s"}`;
+          const ok = window.confirm(`This applies to ${vehicles} across ${makes}.`);
+          if (!ok) return;
+        } else if (!window.confirm(`Mark ${list.map((row) => row.car_name || row.chassis_code).join(", ")} as sharing body parts?`)) {
+          return;
+        }
+      }
+      await partsEnterpriseApi.setFamily(token, {
+        family: target,
+        chassisCodes: list.map((row) => row.chassis_code),
+        shareBodyParts: share,
+      });
+      setNotice(share ? `${target} now shares body parts.` : `${target} stays separate.`);
+      await load();
+    } catch (err) {
+      setNotice(err instanceof Error ? err.message : "Could not update this family");
+    }
+  }
+
   const groups = new Map<string, FamilyRow[]>();
   for (const row of families) {
     const list = groups.get(row.group_key) ?? [];
@@ -52,19 +81,11 @@ export function PlatformsEnginesPage() {
           <div key={key} className="border rounded-lg p-3 space-y-2">
             <p className="font-medium">{list[0]?.suggested_family || key}</p>
             <p className="text-sm text-slate-500">{list.map((row) => row.car_name || row.chassis_code).join(", ")}</p>
-            <Button type="button" size="sm" onClick={async () => {
-              if (!token) return;
-              const target = list[0]?.suggested_family || key;
-              const blast = platforms.find((item) => String(item.code) === target);
-              if (blast?.id) {
-                const radius = await partsEnterpriseApi.blast(token, "platform", String(blast.id));
-                const ok = window.confirm(`This applies to ${radius.variantCount} variants across ${radius.makeCount} makes.`);
-                if (!ok) return;
-              }
-              await partsEnterpriseApi.setFamily(token, { family: target, chassisCodes: list.map((row) => row.chassis_code), shareBodyParts: true });
-              setNotice(`Applied ${target}.`);
-              await load();
-            }}>Apply family</Button>
+            {list.some((row) => row.notes) ? <p className="text-sm">{list.map((row) => row.notes).filter(Boolean).join(" ")}</p> : null}
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" size="sm" variant="outline" onClick={() => void decide(list, false)}>Keep separate</Button>
+              <Button type="button" size="sm" onClick={() => void decide(list, true)}>They share body parts</Button>
+            </div>
           </div>
         ))}
       </div>

@@ -132,7 +132,7 @@ export function registerCatalogRoutes(route: RouteApp, supabase: SupabaseClient)
         supabase.from("catalog_signal_variant_demand").select("variant_id, vehicle_count, fleet_count, refreshed_at"),
         supabase.from("catalog_signal_fit").select("part_id, variant_id, fit_count, no_fit_count, modified_count"),
         supabase.from("catalog_signal_unmatched_numbers").select("part_number, component_id, variant_id, occurrences"),
-        supabase.from("catalog_signal_part_demand").select("variant_id, component_id, open_count, fleet_count, latest_need_text"),
+        supabase.from("catalog_signal_part_demand").select("variant_id, component_id, open_count, fleet_count"),
         supabase.from("catalog_task").select("id, vehicle_catalog_id, component_id, kind, note, status, created_at").eq("status", "open").order("created_at", { ascending: false }).limit(100),
       ]);
       const body = {
@@ -223,6 +223,8 @@ export function registerCatalogRoutes(route: RouteApp, supabase: SupabaseClient)
     try {
       const { data, error } = await supabase.rpc("refresh_catalog_variant_demand");
       if (error) throw error;
+      const ready = await supabase.rpc("refresh_variant_parts_readiness");
+      if (ready.error) throw ready.error;
       return staffJson(c, { refreshed: data ?? 0 });
     } catch (error) {
       return fail(c, error);
@@ -264,6 +266,51 @@ export function registerCatalogRoutes(route: RouteApp, supabase: SupabaseClient)
       const { error } = await supabase.from("catalog_task").update({ status }).eq("id", id);
       if (error) throw error;
       return staffJson(c, { ok: true });
+    } catch (error) {
+      return fail(c, error);
+    }
+  });
+
+  route.post("/make-server-37f42386/admin/catalog/reference-offer", requireAuth(), async (c: Context) => {
+    const denied = assertPlatformStaffResponse(c);
+    if (denied) return denied;
+    try {
+      const body = await c.req.json() as {
+        partId?: string;
+        supplierId?: string;
+        unitPrice?: number;
+        currency?: string;
+        supplierSku?: string;
+      };
+      const partId = String(body.partId ?? "");
+      const supplierId = String(body.supplierId ?? "");
+      const supplierSku = String(body.supplierSku ?? "").trim();
+      const unitPrice = Number(body.unitPrice);
+      if (!UUID_RE.test(partId) || !UUID_RE.test(supplierId) || !supplierSku || !Number.isFinite(unitPrice) || unitPrice < 0) {
+        return c.json({ error: "A confirmed part, supplier, price, and supplier code are required." }, 400);
+      }
+      const { data: part, error: partErr } = await supabase
+        .from("part_master")
+        .select("id, catalog_decision")
+        .eq("id", partId)
+        .maybeSingle();
+      if (partErr) throw partErr;
+      if (!part || (part as { catalog_decision?: string }).catalog_decision !== "confirmed") {
+        return c.json({ error: "Only a confirmed catalog part can have a reference price." }, 400);
+      }
+      const { data, error } = await supabase.from("supplier_part_offer").insert({
+        supplier_id: supplierId,
+        part_id: partId,
+        supplier_sku: supplierSku.slice(0, 80),
+        unit_price: unitPrice,
+        currency: body.currency ? String(body.currency).slice(0, 8) : "JMD",
+        source: "manual",
+        organization_id: null,
+        is_active: true,
+        price_observed_at: new Date().toISOString(),
+      }).select("id, part_id, supplier_id, supplier_sku, unit_price, currency").single();
+      if (error) throw error;
+      return staffJson(c, { offer: data });
     } catch (error) {
       return fail(c, error);
     }

@@ -113,14 +113,14 @@ export async function executeMaintenanceBootstrap(args: {
       .from("maintenance_task_templates")
       .select("*")
       .eq("vehicle_catalog_id", args.catalogId)
-      .in("template_scope", ["variant", "catalog"]);
+      .in("template_scope", ["variant"]);
     if (cErr) throw cErr;
     const merged = mergeGlobalAndCatalogTemplates(globalTemplates, (catalogTemplates || []) as MaintenanceTemplateRow[]);
     templates = merged.merged;
     catalogOverridesGlobal = merged.catalogOverridesGlobal;
   }
   const globalApplied = templates.filter((t) => String(t.template_scope ?? "") === "global").length;
-  const catalogApplied = templates.filter((t) => String(t.template_scope ?? "") === "catalog").length;
+  const catalogApplied = templates.filter((t) => String(t.template_scope ?? "") === "variant").length;
   if (!templates.length) {
     return {
       ok: true,

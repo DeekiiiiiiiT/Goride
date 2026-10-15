@@ -120,7 +120,10 @@ export function registerPartsEnterpriseRoutes(route: RouteApp, supabase: Supabas
     const denied = staff(c);
     if (denied) return denied;
     try {
-      const { data, error } = await supabase.from("platform_family_review").select("*").order("chassis_code");
+      const { data, error } = await supabase
+        .from("platform_family_review")
+        .select("chassis_code, group_key, suggested_family, car_name, share_body_parts, notes")
+        .order("chassis_code");
       if (error) throw error;
       return c.json({ items: data || [] });
     } catch (e) {
@@ -307,58 +310,80 @@ export function registerPartsEnterpriseRoutes(route: RouteApp, supabase: Supabas
     }
   });
 
-  route.get("/make-server-37f42386/admin/part-link-reviews", requireAuth(), async (c: Context) => {
+  route.get("/make-server-37f42386/admin/part-rule-reviews", requireAuth(), async (c: Context) => {
     const denied = staff(c);
     if (denied) return denied;
     try {
-      const { data, error } = await supabase.from("part_number_link_review").select("*").eq("status", "open").limit(200);
+      const { data, error } = await supabase
+        .from("part_rule_review")
+        .select("id, part_id, vehicle_catalog_id, part_master(name, oem_part_number, manufacturer), vehicle_catalog(make, model)")
+        .eq("status", "open")
+        .order("created_at", { ascending: false })
+        .limit(200);
       if (error) throw error;
-      return c.json({ items: data || [] });
+      const groups = new Map<string, {
+        ids: string[];
+        partId: string;
+        partName: string;
+        variantId: string;
+        variantLabel: string;
+        count: number;
+      }>();
+      for (const raw of (data || []) as Array<Record<string, unknown>>) {
+        const part = (Array.isArray(raw.part_master) ? raw.part_master[0] : raw.part_master) as Record<string, unknown> | null;
+        const variant = (Array.isArray(raw.vehicle_catalog) ? raw.vehicle_catalog[0] : raw.vehicle_catalog) as Record<string, unknown> | null;
+        const partId = String(raw.part_id ?? "");
+        const variantId = String(raw.vehicle_catalog_id ?? "");
+        const key = `${partId}:${variantId}`;
+        const current = groups.get(key) ?? {
+          ids: [],
+          partId,
+          partName: [part?.manufacturer, part?.oem_part_number || part?.name].filter(Boolean).join(" ") || "Part",
+          variantId,
+          variantLabel: [variant?.make, variant?.model].filter(Boolean).join(" ") || "Variant",
+          count: 0,
+        };
+        current.ids.push(String(raw.id));
+        current.count += 1;
+        groups.set(key, current);
+      }
+      return c.json({ items: [...groups.values()] });
     } catch (e) {
       return fail(c, e);
     }
   });
 
-  route.patch("/make-server-37f42386/admin/part-link-reviews/:id", requireAuth(), async (c: Context) => {
+  route.get("/make-server-37f42386/admin/part-rule-proposals", requireAuth(), async (c: Context) => {
     const denied = staff(c);
     if (denied) return denied;
     try {
-      const id = c.req.param("id");
-      const body = await c.req.json() as Record<string, unknown>;
-      const status = String(body.status ?? "");
-      if (!["linked", "dismissed"].includes(status)) return c.json({ error: "Invalid status" }, 400);
-      const linked = body.linked_part_id ? String(body.linked_part_id) : null;
-      const { data: review, error } = await supabase
-        .from("part_number_link_review")
-        .update({ status, linked_part_id: linked })
-        .eq("id", id)
-        .select("*")
-        .single();
+      const { data, error } = await supabase
+        .from("part_rule_proposal")
+        .select("id, part_id, target_kind, fit_count, part_master(name, oem_part_number, manufacturer), vehicle_platform(code, label), engine_family(code)")
+        .eq("status", "proposed")
+        .order("created_at", { ascending: false })
+        .limit(200);
       if (error) throw error;
-      if (status === "linked" && linked && review?.work_order_line_id) {
-        await supabase.from("maintenance_work_order_lines").update({ part_id: linked }).eq("id", review.work_order_line_id);
-      }
-      return c.json({ item: review });
+      const items = ((data || []) as Array<Record<string, unknown>>).map((raw) => {
+        const part = (Array.isArray(raw.part_master) ? raw.part_master[0] : raw.part_master) as Record<string, unknown> | null;
+        const platform = (Array.isArray(raw.vehicle_platform) ? raw.vehicle_platform[0] : raw.vehicle_platform) as Record<string, unknown> | null;
+        const engine = (Array.isArray(raw.engine_family) ? raw.engine_family[0] : raw.engine_family) as Record<string, unknown> | null;
+        const where = raw.target_kind === "engine_family"
+          ? String(engine?.code ?? "Engine")
+          : String(platform?.label || platform?.code || "Platform");
+        return {
+          id: String(raw.id),
+          partId: String(raw.part_id ?? ""),
+          partName: [part?.manufacturer, part?.oem_part_number || part?.name].filter(Boolean).join(" ") || "Part",
+          where,
+          count: Number(raw.fit_count ?? 0),
+        };
+      });
+      return c.json({ items });
     } catch (e) {
       return fail(c, e);
     }
   });
-
-  const listTable = (path: string, table: string) => {
-    route.get(path, requireAuth(), async (c: Context) => {
-      const denied = staff(c);
-      if (denied) return denied;
-      try {
-        const { data, error } = await supabase.from(table).select("*").order("created_at", { ascending: false }).limit(200);
-        if (error) throw error;
-        return c.json({ items: data || [] });
-      } catch (e) {
-        return fail(c, e);
-      }
-    });
-  };
-  listTable("/make-server-37f42386/admin/part-rule-reviews", "part_rule_review");
-  listTable("/make-server-37f42386/admin/part-rule-proposals", "part_rule_proposal");
 
   route.get("/make-server-37f42386/admin/service-components", requireAuth(), async (c: Context) => {
     const denied = staff(c);
@@ -404,7 +429,7 @@ export function registerPartsEnterpriseRoutes(route: RouteApp, supabase: Supabas
         .from("part_rule_review")
         .update({ status: "resolved", notes })
         .eq("id", c.req.param("id"))
-        .select("*")
+        .select("id, status, notes")
         .single();
       if (error) throw error;
       return c.json({ item: data });
@@ -432,53 +457,6 @@ export function registerPartsEnterpriseRoutes(route: RouteApp, supabase: Supabas
         return c.json({ error: msg }, statusCode);
       }
       return c.json({ item: data });
-    } catch (e) {
-      return fail(c, e);
-    }
-  });
-
-  route.patch("/make-server-37f42386/admin/part-cores/:id", requireAuth(), async (c: Context) => {
-    const denied = staff(c);
-    if (denied) return denied;
-    try {
-      const body = await c.req.json() as Record<string, unknown>;
-      const status = String(body.status ?? "");
-      const patch: Record<string, unknown> = { status };
-      if (status === "shipped") patch.shipped_at = new Date().toISOString();
-      if (status === "credited") {
-        patch.credited_at = new Date().toISOString();
-        if (body.credit_amount != null) patch.credit_amount = Number(body.credit_amount);
-      }
-      const { error } = await supabase.from("part_core_return").update(patch).eq("id", c.req.param("id"));
-      if (error) throw error;
-      return c.json({ ok: true });
-    } catch (e) {
-      return fail(c, e);
-    }
-  });
-
-  route.patch("/make-server-37f42386/admin/part-repeat-alerts/:id", requireAuth(), async (c: Context) => {
-    const denied = staff(c);
-    if (denied) return denied;
-    try {
-      const { error } = await supabase
-        .from("part_repeat_alert")
-        .update({ status: "dismissed", dismissed_at: new Date().toISOString() })
-        .eq("id", c.req.param("id"));
-      if (error) throw error;
-      return c.json({ ok: true });
-    } catch (e) {
-      return fail(c, e);
-    }
-  });
-
-  route.post("/make-server-37f42386/admin/part-repeat-alerts/refresh", requireAuth(), async (c: Context) => {
-    const denied = staff(c);
-    if (denied) return denied;
-    try {
-      const { data, error } = await supabase.rpc("refresh_repeat_part_alerts", { p_km: 10000, p_days: 90 });
-      if (error) throw error;
-      return c.json({ inserted: data });
     } catch (e) {
       return fail(c, e);
     }
@@ -697,16 +675,6 @@ export function registerPartsEnterpriseRoutes(route: RouteApp, supabase: Supabas
     }
   });
 
-  route.get("/make-server-37f42386/admin/org-part-stock", requireAuth(), async (c: Context) => {
-    const denied = staff(c);
-    if (denied) return denied;
-    try {
-      return c.json({ items: [], moved: "fleet-admin" });
-    } catch (e) {
-      return fail(c, e);
-    }
-  });
-
   route.post("/make-server-37f42386/org-part-stock", requireAuth(), requirePermission("vehicles.edit"), async (c: Context) => {
     try {
       const orgId = getOrgId(c);
@@ -793,57 +761,6 @@ export function registerPartsEnterpriseRoutes(route: RouteApp, supabase: Supabas
       const { data, error } = await supabase.from("part_repeat_alert").select("*").eq("organization_id", orgId).eq("status", "open").order("created_at", { ascending: false });
       if (error) throw error;
       return c.json({ items: data || [] });
-    } catch (e) {
-      return fail(c, e);
-    }
-  });
-
-  route.patch("/make-server-37f42386/admin/part-warranty-claims/:id", requireAuth(), async (c: Context) => {
-    const denied = staff(c);
-    if (denied) return denied;
-    try {
-      const body = await c.req.json() as { status?: string };
-      const status = String(body.status ?? "");
-      if (!["open", "submitted", "credited", "rejected"].includes(status)) return c.json({ error: "Invalid status" }, 400);
-      const { error } = await supabase.from("part_warranty_claim").update({ status }).eq("id", c.req.param("id"));
-      if (error) throw error;
-      return c.json({ ok: true });
-    } catch (e) {
-      return fail(c, e);
-    }
-  });
-
-  route.post("/make-server-37f42386/admin/part-quotes/:id/reply", requireAuth(), async (c: Context) => {
-    const denied = staff(c);
-    if (denied) return denied;
-    try {
-      const body = await c.req.json() as Record<string, unknown>;
-      const quoteId = c.req.param("id");
-      const { data: quote, error: qErr } = await supabase.from("part_quote_request").select("*").eq("id", quoteId).maybeSingle();
-      if (qErr) throw qErr;
-      if (!quote) return c.json({ error: "Quote not found" }, 404);
-      const q = quote as { part_id?: string; supplier_ids?: string[]; organization_id?: string };
-      const supplierId = body.supplierId && isUuid(String(body.supplierId)) ? String(body.supplierId) : q.supplier_ids?.[0];
-      if (!supplierId || !q.part_id) return c.json({ error: "A supplier and a part are required" }, 400);
-      const { data: offer, error: oErr } = await supabase.from("supplier_part_offer").insert({
-        supplier_id: supplierId,
-        part_id: q.part_id,
-        supplier_sku: body.supplierSku ? String(body.supplierSku) : `quote-${quoteId.slice(0, 8)}`,
-        unit_price: Number(body.unitPrice ?? 0),
-        currency: body.currency ? String(body.currency) : "JMD",
-        lead_time_days: body.leadTimeDays != null && body.leadTimeDays !== "" ? Number(body.leadTimeDays) : null,
-        source: "quote",
-        organization_id: q.organization_id ?? null,
-        price_observed_at: new Date().toISOString(),
-        is_active: true,
-      }).select("*").single();
-      if (oErr) throw oErr;
-      const { error: uErr } = await supabase.from("part_quote_request").update({
-        status: "quoted",
-        reply_offer_id: (offer as { id: string }).id,
-      }).eq("id", quoteId);
-      if (uErr) throw uErr;
-      return c.json({ ok: true });
     } catch (e) {
       return fail(c, e);
     }

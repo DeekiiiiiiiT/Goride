@@ -4,6 +4,7 @@ import { API_ENDPOINTS } from "../services/apiConfig";
 type DeskItem = {
   id: string;
   need_text?: string;
+  part_number?: string;
   status?: string;
   organization_id?: string;
   vehicle_id?: string;
@@ -18,6 +19,7 @@ const LISTS = [
   ["alerts", "Repeat failures"],
   ["stock", "Stock"],
   ["orphans", "Broken links"],
+  ["link-reviews", "Number reviews"],
 ] as const;
 
 async function loadList(token: string, name: string): Promise<DeskItem[]> {
@@ -43,6 +45,7 @@ export function FleetAdminPartsDesk({ token }: { token: string }) {
   const [items, setItems] = useState<DeskItem[]>([]);
   const [error, setError] = useState("");
   const [note, setNote] = useState("");
+  const [catalogNumber, setCatalogNumber] = useState("");
 
   const load = useCallback(async () => {
     try {
@@ -75,6 +78,21 @@ export function FleetAdminPartsDesk({ token }: { token: string }) {
     await load();
   }
 
+  async function reviewNumber(item: DeskItem, status: "linked" | "dismissed") {
+    const res = await fetch(`${API_ENDPOINTS.admin}/fleet-admin/parts/link-reviews/${item.id}`, {
+      method: "PATCH",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ status, partNumber: catalogNumber }),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      setError(data.error || "Could not update the number review");
+      return;
+    }
+    setCatalogNumber("");
+    await load();
+  }
+
   return (
     <div className="space-y-4 max-w-4xl">
       <h2 className="text-xl font-semibold">Parts desk</h2>
@@ -93,12 +111,19 @@ export function FleetAdminPartsDesk({ token }: { token: string }) {
       <ul className="space-y-2">
         {items.length === 0 ? <li className="text-sm text-slate-500">Nothing in this list.</li> : items.map((item) => (
           <li key={item.id} className="rounded-lg border border-slate-800 bg-slate-900 p-3 text-sm">
-            <p>{item.need_text || item.status || item.id}</p>
+            <p>{item.part_number || item.need_text || item.status || item.id}</p>
             <p className="text-xs text-slate-500">{item.organization_id} {item.vehicle_id}</p>
             {tab === "requests" ? (
               <div className="mt-2 flex gap-2">
                 <button type="button" className="rounded bg-slate-800 px-2 py-1" onClick={() => void resolve(item, false)}>Resolve</button>
                 <button type="button" className="rounded bg-amber-700 px-2 py-1" onClick={() => void resolve(item, true)}>Needs a new catalog part</button>
+              </div>
+            ) : null}
+            {tab === "link-reviews" ? (
+              <div className="mt-2 flex flex-wrap gap-2">
+                <input className="rounded border border-slate-700 bg-slate-950 px-2 py-1" placeholder="Catalog part number" value={catalogNumber} onChange={(e) => setCatalogNumber(e.target.value)} />
+                <button type="button" className="rounded bg-slate-800 px-2 py-1" onClick={() => void reviewNumber(item, "linked")}>Link</button>
+                <button type="button" className="rounded bg-slate-800 px-2 py-1" onClick={() => void reviewNumber(item, "dismissed")}>Dismiss</button>
               </div>
             ) : null}
           </li>

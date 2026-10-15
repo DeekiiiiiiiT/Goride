@@ -1,14 +1,6 @@
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 
-const RETIRED = new Set(["retired", "sold", "inactive", "archived"]);
-
 const ENGINE_OPS = new Set(["ENG-OIL", "ENG-SPARK", "ENG-THERM", "ENG-COIL"]);
-
-const REVIEW_OPS = [
-  "ENG-OIL", "ENG-SPARK", "ENG-THERM", "FILT-AIR", "HVAC-CABIN",
-  "BRK-PADS", "BELT-SERP", "LGT-WIPER", "BRK-ROTOR", "SUS-SHOCK",
-  "ENG-O2", "ENG-WPUMP",
-];
 
 const CATEGORY: Record<string, string> = {
   "ENG-OIL": "engine-components",
@@ -52,44 +44,12 @@ function engineFromGroup(code: string): string {
   return "";
 }
 
-function partFitsFleet(part: PartRow, fleet: { engineCode: string; chassisCode: string }): boolean {
-  if (part.engineCode && fleet.engineCode && part.engineCode === fleet.engineCode) return true;
-  const code = part.groupCode.toUpperCase();
-  if (fleet.chassisCode && code.endsWith(`-${fleet.chassisCode}`)) return true;
-  if (fleet.engineCode && code.endsWith(`-${fleet.engineCode}`)) return true;
-  return false;
-}
-
 function normNumber(value: string): string {
   return value.toUpperCase().replace(/[^A-Z0-9]/g, "");
 }
 
 export async function loadCatalogReview(supabase: SupabaseClient) {
   const parts = await loadParts(supabase);
-  const fleets = await loadFleetChassis(supabase);
-  const gaps = fleets.map((fleet) => ({
-    ...fleet,
-    rows: REVIEW_OPS.map((opCode) => {
-      const matches = parts.filter((part) => part.opCode === opCode && partFitsFleet(part, fleet));
-      if (!matches.length) {
-        return { opCode, action: "enter" as const, partNumber: "", manufacturer: "", partId: null, decision: "pending", done: false };
-      }
-      const part = matches[0];
-      const attach = !ENGINE_OPS.has(opCode);
-      const attached = part.platformCodes.includes(fleet.chassisCode);
-      const done = part.catalog_decision === "confirmed" && (!attach || attached);
-      return {
-        opCode,
-        action: attach ? "attach" as const : "confirm" as const,
-        partNumber: part.oem_part_number ?? "",
-        manufacturer: part.manufacturer ?? "",
-        partId: part.id,
-        partName: part.name,
-        decision: part.catalog_decision,
-        done,
-      };
-    }),
-  }));
   return {
     parts: parts.map((part) => ({
       id: part.id,
@@ -156,70 +116,6 @@ function one(value: unknown): Record<string, unknown> | null {
   if (Array.isArray(value)) return (value[0] as Record<string, unknown>) ?? null;
   if (value && typeof value === "object") return value as Record<string, unknown>;
   return null;
-}
-
-async function loadFleetChassis(supabase: SupabaseClient) {
-  const { data, error } = await supabase
-    .from("fleet_vehicles")
-    .select("organization_id, make, model, year, status, vehicle_catalog_id");
-  if (error) throw error;
-  const active = ((data || []) as Array<Record<string, unknown>>).filter((row) => {
-    const status = String(row.status ?? "active").toLowerCase();
-    return !RETIRED.has(status) && row.vehicle_catalog_id;
-  });
-  const catalogIds = [...new Set(active.map((row) => String(row.vehicle_catalog_id)))];
-  const catalog = new Map<string, { chassis: string; engine: string; make: string; model: string }>();
-  if (catalogIds.length) {
-    const { data: rows, error: catErr } = await supabase
-      .from("vehicle_catalog")
-      .select("id, chassis_code, engine_code, make, model")
-      .in("id", catalogIds);
-    if (catErr) throw catErr;
-    for (const row of (rows || []) as Array<Record<string, unknown>>) {
-      catalog.set(String(row.id), {
-        chassis: String(row.chassis_code ?? "").toUpperCase(),
-        engine: String(row.engine_code ?? "").toUpperCase(),
-        make: String(row.make ?? ""),
-        model: String(row.model ?? ""),
-      });
-    }
-  }
-  const orgIds = [...new Set(active.map((row) => String(row.organization_id ?? "")).filter(Boolean))];
-  const names = new Map<string, string>();
-  if (orgIds.length) {
-    const { data: orgs } = await supabase.from("organizations").select("id, name").in("id", orgIds);
-    for (const org of (orgs || []) as Array<{ id: string; name?: string }>) {
-      if (org.name) names.set(String(org.id), org.name);
-    }
-  }
-  const grouped = new Map<string, {
-    organizationId: string;
-    organizationName: string;
-    chassisCode: string;
-    engineCode: string;
-    carName: string;
-    vehicleCount: number;
-  }>();
-  for (const row of active) {
-    const info = catalog.get(String(row.vehicle_catalog_id));
-    if (!info?.chassis) continue;
-    const organizationId = String(row.organization_id ?? "");
-    const key = `${organizationId}:${info.chassis}`;
-    const current = grouped.get(key);
-    if (current) {
-      current.vehicleCount += 1;
-      continue;
-    }
-    grouped.set(key, {
-      organizationId,
-      organizationName: names.get(organizationId) || organizationId,
-      chassisCode: info.chassis,
-      engineCode: info.engine,
-      carName: `${info.make || row.make || ""} ${info.model || row.model || ""}`.trim(),
-      vehicleCount: 1,
-    });
-  }
-  return [...grouped.values()].sort((a, b) => b.vehicleCount - a.vehicleCount || a.carName.localeCompare(b.carName));
 }
 
 export async function decideCatalogPart(
@@ -374,49 +270,4 @@ async function ensureEngineRule(supabase: SupabaseClient, groupId: string, engin
     source: "manual",
   });
   if (insertErr) throw insertErr;
-}
-
-export async function loadPartsCompare(supabase: SupabaseClient, organizationId: string) {
-  const { data, error } = await supabase
-    .from("fleet_vehicles")
-    .select("make, model, year, status, vehicle_catalog_id")
-    .eq("organization_id", organizationId);
-  if (error) throw error;
-  const vehicle = ((data || []) as Array<Record<string, unknown>>).find((row) => {
-    const status = String(row.status ?? "active").toLowerCase();
-    return !RETIRED.has(status) && row.vehicle_catalog_id;
-  });
-  if (!vehicle) return { vehicle: null, legacy: [], tiered: [] };
-  const catalogId = String(vehicle.vehicle_catalog_id);
-  const year = Number(vehicle.year);
-  const { data: catalog } = await supabase.from("vehicle_catalog").select("chassis_code, make, model").eq("id", catalogId).maybeSingle();
-  const { data: legacyRows, error: legacyErr } = await supabase
-    .from("part_fitment")
-    .select("part_master(name, oem_part_number)")
-    .eq("vehicle_catalog_id", catalogId);
-  if (legacyErr) throw legacyErr;
-  const { data: tieredRows, error: tieredErr } = await supabase.rpc("parts_for_vehicle", {
-    p_catalog_id: catalogId,
-    p_component_id: null,
-    p_vehicle_year: Number.isFinite(year) ? year : null,
-  });
-  if (tieredErr) throw tieredErr;
-  const cat = catalog as { chassis_code?: string; make?: string; model?: string } | null;
-  return {
-    vehicle: {
-      make: cat?.make || vehicle.make || "",
-      model: cat?.model || vehicle.model || "",
-      year: Number.isFinite(year) ? year : null,
-      chassisCode: cat?.chassis_code ?? "",
-    },
-    legacy: ((legacyRows || []) as Array<Record<string, unknown>>).map((row) => {
-      const part = one(row.part_master);
-      return { name: String(part?.name ?? ""), partNumber: String(part?.oem_part_number ?? "") };
-    }).filter((row) => row.name || row.partNumber),
-    tiered: ((tieredRows || []) as Array<Record<string, unknown>>).map((row) => ({
-      name: String(row.part_name ?? ""),
-      partNumber: String(row.oem_part_number ?? ""),
-      tier: Number(row.tier ?? 0),
-    })),
-  };
 }
