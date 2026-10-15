@@ -35,12 +35,13 @@ Helper: `resolveMyPendingCatalogScope` in `_fleet-server/pending_catalog_my_scop
 
 | Check | Expect | Status |
 |---|---|---|
-| `function_edge_logs` → `rides/.../active-ride` | `200`, not `500` | Re-check after drivers on 1.0.27 |
-| `fleet-core/platform-status` | No 401s from the driver app | Baseline 401s at 20:11 UTC looked non-driver |
+| `function_edge_logs` → `rides/.../active-ride` | `200`, not `500` | Last hits were `500` ~18:39 UTC (pre–1.0.27 traffic). No new driver hits yet — re-check after Kenny/update installs. |
+| `fleet-core/platform-status` | No 401s from the driver app | Four `401`s at 20:11 UTC still look non-driver. Re-check after rollout. |
+| `vehicle-catalog-pending/my` | Staff `200` org-wide; drivers scoped | `200` seen at 20:11 UTC after staff-scope deploy. |
 | Sentry | Events tagged release `1.0.27` | Pending device on 1.0.27 |
 | Kill mid-photo (odometer, receipt, toll, check-in) | Right screen + photo applied | Pending device |
 | Two drivers, same org, different vehicles | Each sees only own pending rows | Server live; confirm on device |
-| Fleet manager catalog badges | Org badges visible | Server live; confirm in Fleet app |
+| Fleet manager catalog badges | Org badges visible | Server live — open Fleet Vehicles page to confirm |
 
 ---
 
