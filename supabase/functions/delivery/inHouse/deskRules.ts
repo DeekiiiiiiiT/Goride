@@ -205,3 +205,104 @@ export function merchantFaultJournal(inHouse: boolean, merchantId: string, minor
     },
   ];
 }
+
+const STALE_MS = 14 * 24 * 60 * 60 * 1000;
+
+export type GoLiveStoreOwnInput = {
+  hasHours: boolean;
+  orderChannel: string | null | undefined;
+  orderUrl: string | null | undefined;
+  orderPhone: string | null | undefined;
+  tosReviewedAt: string | null | undefined;
+  freshDishCount: number;
+};
+
+export type GoLiveDeskInput = {
+  hasCard: boolean;
+  globallyEnabled: boolean;
+};
+
+export type GoLiveStoreInput = GoLiveStoreOwnInput & GoLiveDeskInput;
+
+/** Store-only setup gaps (excludes desk-wide card/switch). */
+export function inHouseStoreGoLiveBlockers(store: GoLiveStoreOwnInput): string[] {
+  const blockers: string[] = [];
+  if (!store.hasHours) blockers.push("Opening hours are not set");
+  const channel = String(store.orderChannel || "web");
+  const hasLink = Boolean(String(store.orderUrl || "").trim());
+  const hasPhone = Boolean(String(store.orderPhone || "").trim());
+  if (channel === "web" || channel === "whatsapp") {
+    if (!hasLink) blockers.push("Ordering link is missing");
+  } else if (!hasPhone && !hasLink) {
+    blockers.push("Order phone or ordering link is missing");
+  }
+  if (!store.tosReviewedAt) blockers.push("Website terms have not been reviewed");
+  if (store.freshDishCount < 1) blockers.push("Need at least one dish with a confirmed price from the last 14 days");
+  return blockers;
+}
+
+/** Desk-wide blockers that apply to every store. */
+export function inHouseDeskGoLiveBlockers(desk: GoLiveDeskInput): string[] {
+  const blockers: string[] = [];
+  if (!desk.hasCard) blockers.push("No company card can pay for this yet");
+  if (!desk.globallyEnabled) blockers.push("The In-House switch is off");
+  return blockers;
+}
+
+/** All reasons a store cannot go live. Empty list means ready. */
+export function inHouseGoLiveBlockers(store: GoLiveStoreInput): string[] {
+  return [...inHouseStoreGoLiveBlockers(store), ...inHouseDeskGoLiveBlockers(store)];
+}
+
+export function priceCheckedIsFresh(checkedAt: string | null | undefined, now = Date.now()): boolean {
+  if (!checkedAt) return false;
+  const at = Date.parse(checkedAt);
+  return Number.isFinite(at) && now - at <= STALE_MS;
+}
+
+/** Build an in_house_stores patch from only the keys the client sent. */
+export function storePatchFromBody(body: Record<string, unknown>, existing: Record<string, unknown> | null): Record<string, unknown> {
+  const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
+  const set = (key: string, value: unknown) => { patch[key] = value; };
+  if ("sourceBrand" in body || "name" in body) set("source_brand", body.sourceBrand ?? body.name ?? existing?.source_brand ?? null);
+  if ("sourceLocationLabel" in body) set("source_location_label", body.sourceLocationLabel || null);
+  if ("orderChannel" in body) set("order_channel", body.orderChannel || "web");
+  if ("orderUrl" in body) set("order_url", body.orderUrl || null);
+  if ("orderPhone" in body) set("order_phone", body.orderPhone || null);
+  if ("pickupInstructions" in body) set("pickup_instructions", body.pickupInstructions || null);
+  if ("defaultPrepMinutes" in body) set("default_prep_minutes", Number(body.defaultPrepMinutes || 25));
+  if ("markupBps" in body) set("markup_bps", Number(body.markupBps ?? 1500));
+  if ("priceToleranceBps" in body) set("price_tolerance_bps", Number(body.priceToleranceBps ?? 1000));
+  if ("absorbCapMinor" in body) set("absorb_cap_minor", Number(body.absorbCapMinor ?? 50000));
+  if ("maxOrderMinor" in body) set("max_order_minor", body.maxOrderMinor == null ? null : Number(body.maxOrderMinor));
+  if ("partnershipStatus" in body) set("partnership_status", body.partnershipStatus || "none");
+  if ("notes" in body) set("notes", body.notes || null);
+  if ("audience" in body && (body.audience === "public" || body.audience === "beta")) set("audience", body.audience);
+  if ("setupStatus" in body && (body.setupStatus === "draft" || body.setupStatus === "ready")) set("setup_status", body.setupStatus);
+  if ("tosReviewed" in body) {
+    if (body.tosReviewed) {
+      // Stamp only on first review; later saves must not overwrite who/when.
+      if (!existing?.tos_reviewed_at) {
+        set("tos_reviewed_at", new Date().toISOString());
+        if ("tosReviewedBy" in body) set("tos_reviewed_by", body.tosReviewedBy || null);
+      }
+    } else if (body.tosReviewed === false) {
+      set("tos_reviewed_at", null);
+      set("tos_reviewed_by", null);
+    }
+  }
+  if ("pausedReason" in body) set("paused_reason", body.pausedReason || null);
+  if ("pausedBy" in body) set("paused_by", body.pausedBy || null);
+  if ("pausedAt" in body) set("paused_at", body.pausedAt || null);
+  // Never wipe automation flags on a partial save.
+  if (!existing) {
+    set("automation_level", "L0");
+    set("adapter_key", "manual");
+    set("tos_allows_automation", false);
+  }
+  return patch;
+}
+
+export function namesMatch(a: string, b: string): boolean {
+  return a.trim().toLowerCase() === b.trim().toLowerCase();
+}

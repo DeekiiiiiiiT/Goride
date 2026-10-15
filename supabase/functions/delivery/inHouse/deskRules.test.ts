@@ -4,8 +4,12 @@ import {
   audienceAllows,
   canReplaceReceipt,
   faultChargeLine,
+  inHouseDeskGoLiveBlockers,
+  inHouseGoLiveBlockers,
+  inHouseStoreGoLiveBlockers,
   lastClaimer,
   merchantFaultJournal,
+  namesMatch,
   partnerConversionBlocked,
   pickStatementTask,
   purchaseRecording,
@@ -13,6 +17,7 @@ import {
   receiptFollowsAbandon,
   refundMissingTask,
   slaLevel,
+  storePatchFromBody,
 } from "./deskRules.ts";
 import { expectedCostMinor, pickupName } from "./createTask.ts";
 
@@ -100,4 +105,73 @@ Deno.test("an In-House fault charge stays with Roam", () => {
   assertEquals(faultChargeLine(false, "merchant-1", 5000).kind, "merchant_receivable");
   assertEquals(merchantFaultJournal(true, "merchant-1", 5000), null);
   assertEquals(merchantFaultJournal(false, "merchant-1", 5000)?.length, 2);
+});
+
+Deno.test("go-live blockers name every missing piece", () => {
+  assertEquals(inHouseGoLiveBlockers({
+    hasHours: true,
+    orderChannel: "web",
+    orderUrl: "https://example.com",
+    orderPhone: null,
+    tosReviewedAt: "2026-10-01T00:00:00.000Z",
+    freshDishCount: 3,
+    hasCard: true,
+    globallyEnabled: true,
+  }), []);
+  const blocked = inHouseGoLiveBlockers({
+    hasHours: false,
+    orderChannel: "web",
+    orderUrl: null,
+    orderPhone: null,
+    tosReviewedAt: null,
+    freshDishCount: 0,
+    hasCard: false,
+    globallyEnabled: false,
+  });
+  assertEquals(blocked.length, 6);
+  assertEquals(inHouseStoreGoLiveBlockers({
+    hasHours: true,
+    orderChannel: "web",
+    orderUrl: "https://example.com",
+    orderPhone: null,
+    tosReviewedAt: "2026-10-01T00:00:00.000Z",
+    freshDishCount: 3,
+  }), []);
+  assertEquals(inHouseDeskGoLiveBlockers({ hasCard: false, globallyEnabled: false }).length, 2);
+});
+
+Deno.test("partial store patches leave omitted columns alone", () => {
+  const patch = storePatchFromBody({ live: true, audience: "public" }, {
+    notes: "keep me",
+    order_url: "https://keep.me",
+    tos_reviewed_at: "2026-10-01T00:00:00.000Z",
+  });
+  assertEquals(patch.audience, "public");
+  assertEquals("notes" in patch, false);
+  assertEquals("order_url" in patch, false);
+  assertEquals("tos_reviewed_at" in patch, false);
+});
+
+Deno.test("terms review stamps only on first review", () => {
+  const first = storePatchFromBody({ tosReviewed: true, tosReviewedBy: "a@roam.app" }, {
+    tos_reviewed_at: null,
+  });
+  assertEquals(typeof first.tos_reviewed_at, "string");
+  assertEquals(first.tos_reviewed_by, "a@roam.app");
+  const again = storePatchFromBody({ tosReviewed: true, tosReviewedBy: "b@roam.app" }, {
+    tos_reviewed_at: "2026-10-01T00:00:00.000Z",
+    tos_reviewed_by: "a@roam.app",
+  });
+  assertEquals("tos_reviewed_at" in again, false);
+  assertEquals("tos_reviewed_by" in again, false);
+  const clear = storePatchFromBody({ tosReviewed: false }, {
+    tos_reviewed_at: "2026-10-01T00:00:00.000Z",
+  });
+  assertEquals(clear.tos_reviewed_at, null);
+  assertEquals(clear.tos_reviewed_by, null);
+});
+
+Deno.test("restaurant names match without case", () => {
+  assertEquals(namesMatch("Domino's", "domino's"), true);
+  assertEquals(namesMatch("Sakura", "Sakura Express"), false);
 });

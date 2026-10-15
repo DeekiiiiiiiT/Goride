@@ -5,5 +5,6 @@ packages:
 
 # pnpm 11: replace onlyBuiltDependencies with allowBuilds
 allowBuilds:
+  '@sentry/capacitor': true
   "@tailwindcss/oxide": true
   esbuild: true

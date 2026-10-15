@@ -12,12 +12,14 @@
     "npm:@capacitor/android@^7.6.5": "7.6.8_@capacitor+core@7.6.8",
     "npm:@capacitor/app@^7.1.2": "7.1.2_@capacitor+core@7.6.8",
     "npm:@capacitor/browser@^7.0.5": "7.0.5_@capacitor+core@7.6.8",
+    "npm:@capacitor/camera@^7.0.5": "7.0.5_@capacitor+core@7.6.8",
     "npm:@capacitor/cli@^7.6.5": "7.6.8",
     "npm:@capacitor/core@^7.6.5": "7.6.8",
     "npm:@capacitor/geolocation@^7.1.5": "7.1.8_@capacitor+core@7.6.8",
     "npm:@capacitor/geolocation@^7.1.8": "7.1.8_@capacitor+core@7.6.8",
     "npm:@capacitor/ios@^7.6.8": "7.6.8_@capacitor+core@7.6.8",
     "npm:@capacitor/keyboard@^7.0.6": "7.0.6_@capacitor+core@7.6.8",
+    "npm:@capacitor/preferences@7": "7.0.4_@capacitor+core@7.6.8",
     "npm:@capacitor/push-notifications@^7.0.7": "7.0.7_@capacitor+core@7.6.8",
     "npm:@capacitor/share@^7.0.4": "7.0.4_@capacitor+core@7.6.8",
     "npm:@capacitor/splash-screen@^7.0.5": "7.0.5_@capacitor+core@7.6.8",
@@ -55,6 +57,7 @@
     "npm:@radix-ui/react-toggle@^1.1.2": "1.1.18_@types+react@18.3.31_@types+react-dom@18.3.7__@types+react@18.3.31_react@18.3.1_react-dom@18.3.1__react@18.3.1",
     "npm:@radix-ui/react-tooltip@^1.1.8": "1.2.16_@types+react@18.3.31_@types+react-dom@18.3.7__@types+react@18.3.31_react@18.3.1_react-dom@18.3.1__react@18.3.1",
     "npm:@radix-ui/react-visually-hidden@^1.1.1": "1.2.11_@types+react@18.3.31_@types+react-dom@18.3.7__@types+react@18.3.31_react@18.3.1_react-dom@18.3.1__react@18.3.1",
+    "npm:@sentry/capacitor@^4.4.0": "4.4.0_@capacitor+core@7.6.8_@sentry+react@10.71.0__react@18.3.1",
     "npm:@sentry/react@^10.69.0": "10.71.0_react@18.3.1",
     "npm:@stripe/terminal-js@0.24": "0.24.0",
     "npm:@supabase/auth-js@2.69.1": "2.69.1",
@@ -1016,6 +1019,12 @@
         "@capacitor/core"
       ]
     },
+    "@capacitor/camera@7.0.5_@capacitor+core@7.6.8": {
+      "integrity": "sha512-+53f1xHq8on7O+ULXbgWp00ooWvn3fUkWxTP3p5zHi1nVriCxLbYnY0zTpZQqn52M96vclFKkoABbTVQ3x755w==",
+      "dependencies": [
+        "@capacitor/core"
+      ]
+    },
     "@capacitor/cli@7.6.8": {
       "integrity": "sha512-sJYLoSS1wVHjDPwRc0grtNZcQZnkQc7TJKoVZdHL2HI5TPCq+27WBrMAo0mXvQQSH2axPYCz5cyRrcqqakOvxQ==",
       "dependencies": [
@@ -1060,6 +1069,12 @@
     },
     "@capacitor/keyboard@7.0.6_@capacitor+core@7.6.8": {
       "integrity": "sha512-mH9EHo4EnBA9zJAi6domGVB/PdEkcm0h27nJDHG4Y3fd2oKsheCxDRXlYrbgj8hcyQPe0cGWqAfzfwKzkWQoFQ==",
+      "dependencies": [
+        "@capacitor/core"
+      ]
+    },
+    "@capacitor/preferences@7.0.4_@capacitor+core@7.6.8": {
+      "integrity": "sha512-TJhkwaI2RCs/iDC9PjNczZV4h6JM4gUtTuKMeFdy0OwGgFEHf4TrtW2mFMc1TnPDalYQ91p9NT+UKgiJs9/xtg==",
       "dependencies": [
         "@capacitor/core"
       ]
@@ -2803,26 +2818,64 @@
       "os": ["win32"],
       "cpu": ["x64"]
     },
+    "@sentry/browser-utils@10.69.0": {
+      "integrity": "sha512-e/u1Abj0zRPwR/deGZAP3GOULrsx67/XXnM5Skniqs4uxTsdNtPek1Nef0tpxwaQJYxwh6pWdhswLPPbbPOgBQ==",
+      "dependencies": [
+        "@sentry/conventions",
+        "@sentry/core@10.69.0"
+      ]
+    },
     "@sentry/browser-utils@10.71.0": {
       "integrity": "sha512-Djhb+RdEwSdYTlDaMzc2uRCA+bYDIFsFCtZzKEtB9UR7lJNV/bJ0k3el3ifaVGTRELO8WBll/X0elty1Dk5tTw==",
       "dependencies": [
         "@sentry/conventions",
-        "@sentry/core"
+        "@sentry/core@10.71.0"
+      ]
+    },
+    "@sentry/browser@10.69.0": {
+      "integrity": "sha512-8391tnm96YbR7b8SYfEA/NEIZuyb2r3SZrtAT0bhZtjlujcYWjo7gugQvk8sWLU9cAa/euD00eJoIoJvNfpd7Q==",
+      "dependencies": [
+        "@sentry/browser-utils@10.69.0",
+        "@sentry/conventions",
+        "@sentry/core@10.69.0",
+        "@sentry/feedback@10.69.0",
+        "@sentry/replay@10.69.0",
+        "@sentry/replay-canvas@10.69.0"
       ]
     },
     "@sentry/browser@10.71.0": {
       "integrity": "sha512-fTE9tUDoggJSFv8cQ+h1UA9onovOoUNJWu8Var1MXmUVuVG/W3WqzJFVyKArZMj95lizZkq8aiS63SURvrBsFQ==",
       "dependencies": [
-        "@sentry/browser-utils",
+        "@sentry/browser-utils@10.71.0",
         "@sentry/conventions",
-        "@sentry/core",
-        "@sentry/feedback",
-        "@sentry/replay",
-        "@sentry/replay-canvas"
+        "@sentry/core@10.71.0",
+        "@sentry/feedback@10.71.0",
+        "@sentry/replay@10.71.0",
+        "@sentry/replay-canvas@10.71.0"
       ]
+    },
+    "@sentry/capacitor@4.4.0_@capacitor+core@7.6.8_@sentry+react@10.71.0__react@18.3.1": {
+      "integrity": "sha512-t2PPB90JvKLCsSmF09jGYGtNW0ao6tLgyYyivFLNWRKkEbMWyHR5RtyaEb7CnRgdx9wOTUQ0mGrwYGpfbUE/ZQ==",
+      "dependencies": [
+        "@capacitor/core",
+        "@sentry/browser@10.69.0",
+        "@sentry/core@10.69.0",
+        "@sentry/react",
+        "@sentry/types"
+      ],
+      "optionalPeers": [
+        "@sentry/react"
+      ],
+      "scripts": true
     },
     "@sentry/conventions@0.16.0": {
       "integrity": "sha512-fO9PLmHdVURcSPUpWCItWAtgKiMwGdJHbovoSEyLplX5sxs2ugvI4CBPTrkkgqhObnZOD0CnWBKDzSVQYBKEyQ=="
+    },
+    "@sentry/core@10.69.0": {
+      "integrity": "sha512-+uuqVEeiDzYuAKjZLqsROKXvRTbl/QeH0gfGRtpYib1cud4rAFWRIkFmcR7Jb7JGFYwmReyQotiTj/hcDszTZg==",
+      "dependencies": [
+        "@sentry/conventions"
+      ]
     },
     "@sentry/core@10.71.0": {
       "integrity": "sha512-OIjT7rzcWJjUC6r3eBT3Td1j0afDBMkbbx9jTocSD+ZSfc25eEU7hoIPS0WvfeIOTIN3y8bfQnXavwMReaNVHQ==",
@@ -2830,33 +2883,59 @@
         "@sentry/conventions"
       ]
     },
+    "@sentry/feedback@10.69.0": {
+      "integrity": "sha512-qrGz5Qaw93/IhMjlFN6uIaXeHwgHDaKGa6FkTAP6PonpkvSbGGqan6xfsENxzj9HUVoli1lZ6tMRDnt2qtSPhg==",
+      "dependencies": [
+        "@sentry/core@10.69.0"
+      ]
+    },
     "@sentry/feedback@10.71.0": {
       "integrity": "sha512-4+zMAmn1DcbYBtFE0pWt6zo8vWoBHTuP/UhtCMTCoGB4sVYvmwRxv9Hc9OpRHSzE9kSl8beD0zKFxuoVHizKQQ==",
       "dependencies": [
-        "@sentry/core"
+        "@sentry/core@10.71.0"
       ]
     },
     "@sentry/react@10.71.0_react@18.3.1": {
       "integrity": "sha512-Ab1cFyOpl0PKKgEBlckIq/gCRIP/MD75gc4B85YnifdTAHK3KxgSWxz43GCeyTTyNBCx19XQsd0dti9YCRYCkw==",
       "dependencies": [
-        "@sentry/browser",
+        "@sentry/browser@10.71.0",
         "@sentry/conventions",
-        "@sentry/core",
+        "@sentry/core@10.71.0",
         "react"
+      ]
+    },
+    "@sentry/replay-canvas@10.69.0": {
+      "integrity": "sha512-VF6nXvSninHcc7dC1Zme0RjkC7VgRMCixs6jKaQX5zTNeqTW3dZGSefSOVv+ZteRi3hJvVORq985VjUC9Z/0+A==",
+      "dependencies": [
+        "@sentry/core@10.69.0",
+        "@sentry/replay@10.69.0"
       ]
     },
     "@sentry/replay-canvas@10.71.0": {
       "integrity": "sha512-YTqesxBh9arExI49LrTm4Y2/xPX40q2GWi0gWRw6lNfYtyNz7/ZfHi8/1N6JEc8dldTslqFhII6ZFecUyU9iaA==",
       "dependencies": [
-        "@sentry/core",
-        "@sentry/replay"
+        "@sentry/core@10.71.0",
+        "@sentry/replay@10.71.0"
+      ]
+    },
+    "@sentry/replay@10.69.0": {
+      "integrity": "sha512-uRhmNhtFGPOlM0iniVmWKAX3KVXI0le41yYK/iKdPjinT9jA3ZrmykO/Fv1v/KI5znOtwa9D6eHRnDTTMRxFrg==",
+      "dependencies": [
+        "@sentry/browser-utils@10.69.0",
+        "@sentry/core@10.69.0"
       ]
     },
     "@sentry/replay@10.71.0": {
       "integrity": "sha512-ytEgVg7isvavQL6hgsgYeuSCkcA3EyOKm9lMLQOZTLkiUCtFT/ItWwGNhzS46vQ6wsTv3Uc0Y1JlcJHSFKe/Kg==",
       "dependencies": [
-        "@sentry/browser-utils",
-        "@sentry/core"
+        "@sentry/browser-utils@10.71.0",
+        "@sentry/core@10.71.0"
+      ]
+    },
+    "@sentry/types@10.69.0": {
+      "integrity": "sha512-sWOH1SrpGecTWVygZy3tI3D4WmJQd1/CEcR+1GJr0MltNHK6u8GbTF/Zl+aOR7EfYxPR9vZWUYTjNpdpFt7HeA==",
+      "dependencies": [
+        "@sentry/core@10.69.0"
       ]
     },
     "@standard-schema/spec@1.1.0": {
@@ -6675,11 +6754,13 @@
             "npm:@capacitor/android@^7.6.5",
             "npm:@capacitor/app@^7.1.2",
             "npm:@capacitor/browser@^7.0.5",
+            "npm:@capacitor/camera@^7.0.5",
             "npm:@capacitor/cli@^7.6.5",
             "npm:@capacitor/core@^7.6.5",
             "npm:@capacitor/geolocation@^7.1.8",
             "npm:@capacitor/ios@^7.6.8",
             "npm:@capacitor/keyboard@^7.0.6",
+            "npm:@capacitor/preferences@7",
             "npm:@capacitor/splash-screen@^7.0.5",
             "npm:@capacitor/status-bar@^7.0.6",
             "npm:@radix-ui/react-accordion@^1.2.3",
@@ -6699,6 +6780,7 @@
             "npm:@radix-ui/react-switch@^1.1.3",
             "npm:@radix-ui/react-tabs@^1.1.3",
             "npm:@radix-ui/react-tooltip@^1.1.8",
+            "npm:@sentry/capacitor@^4.4.0",
             "npm:@sentry/react@^10.69.0",
             "npm:@supabase/supabase-js@2",
             "npm:@tailwindcss/vite@4.1.12",

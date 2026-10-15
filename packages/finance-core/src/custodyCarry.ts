@@ -68,7 +68,10 @@ export const CUSTODY_ERROR_CODES = {
   SUCCESSOR_FROZEN: 'REOPEN_CUSTODY_SUCCESSOR_FROZEN',
 } as const;
 
-/** Residual pocket cash that still needs a carry target (Pass 6 / N-3). */
+/**
+ * Residual pocket cash (Pass 6 / N-3). Pre-share — do NOT use as a carry amount;
+ * use custodyCarryAmount.
+ */
 export function residualCustodyHeld(
   cashStillHeld: number,
   eps: number = 0.005,
@@ -76,6 +79,28 @@ export function residualCustodyHeld(
   return round2(Math.max(0, Number(cashStillHeld) || 0)) > eps
     ? round2(Math.max(0, Number(cashStillHeld) || 0))
     : 0;
+}
+
+/** Directional statuses: the week's settlement residual already sits on a desk list. */
+const DIRECTIONAL_SETTLEMENT_STATUSES = new Set(['settled', 'driver_owes', 'company_owes']);
+
+/**
+ * Amount a frozen week may carry forward as the next week's openingCashCustody.
+ *
+ * cash_still_held is pocket cash BEFORE driver share, and settlement_amount already
+ * nets it against the share. Carrying cash_still_held double-bills the driver for
+ * their own pay (Rattray 2026-09-07: 27 settled weeks → $513,466.69 phantom custody).
+ * Only an after-share debt (−settlement_amount) on a week with no directional
+ * status is undischarged and reachable nowhere else, so only that is carried.
+ */
+export function custodyCarryAmount(
+  period: { settlement_status?: unknown; settlement_amount?: unknown },
+  eps: number = 0.005,
+): number {
+  const status = String(period.settlement_status || 'pending').trim().toLowerCase();
+  if (DIRECTIONAL_SETTLEMENT_STATUSES.has(status)) return 0;
+  const owed = round2(Math.max(0, -(Number(period.settlement_amount) || 0)));
+  return owed > eps ? owed : 0;
 }
 
 /**

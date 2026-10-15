@@ -50,6 +50,8 @@ import { PromotionsHubPage } from './pages/promotions/PromotionsHubPage';
 import { CourierCashPage } from './pages/finance/CourierCashPage';
 import { InHouseTeamPage } from './pages/inhouse/InHouseTeamPage';
 import { InHouseWorkspacePage } from './pages/inhouse/InHouseWorkspacePage';
+import { InHouseRestaurantHomePage } from './pages/inhouse/restaurants/InHouseRestaurantHomePage';
+import { InHouseMenuBuilderPage } from './pages/inhouse/restaurants/InHouseMenuBuilderPage';
 import { useAdminSessionPolicy } from './hooks/useAdminSessionPolicy';
 
 const DASH_ADMIN_BASENAME = '/admin';
@@ -344,9 +346,11 @@ export function DashAdminPortal() {
             <Route path="dispatch" element={<DispatchPage />} />
             <Route path="live-ops" element={<RedirectKeep to="/dispatch" />} />
             <Route path="in-house/task/:id" element={<InHouseWorkspacePage />} />
-            <Route path="in-house/exceptions" element={<RedirectKeep to="/in-house?tab=ops" />} />
-            <Route path="in-house/stores" element={<RedirectKeep to="/in-house?tab=stores" />} />
-            <Route path="in-house/menu" element={<RedirectKeep to="/in-house?tab=menu" />} />
+            <Route path="in-house/restaurants/:id/menu" element={<InHouseMenuBuilderPage />} />
+            <Route path="in-house/restaurants/:id" element={<InHouseRestaurantHomePage />} />
+            <Route path="in-house/exceptions" element={<RedirectKeep to="/in-house?tab=orders" />} />
+            <Route path="in-house/stores" element={<RedirectKeep to="/in-house?tab=restaurants" />} />
+            <Route path="in-house/menu" element={<RedirectKeep to="/in-house?tab=restaurants" />} />
             <Route path="in-house/cards" element={<RedirectKeep to="/in-house?tab=cards" />} />
             <Route path="in-house/reports" element={<RedirectKeep to="/in-house?tab=reports" />} />
             <Route path="in-house" element={<InHouseTeamPage />} />

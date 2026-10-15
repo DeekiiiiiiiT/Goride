@@ -87,13 +87,13 @@ import {
   PRIOR_CLOSE_HASH_CHANGED,
   clearCustodyTransferMarks,
   custodyCarryAlreadyLanded,
+  custodyCarryAmount,
   custodyTargetWeekCandidates,
   mergeOpeningCashCustody,
   openingCustodyAfterReverse,
   pickFirstOpenCustodyTargetFromMap,
   priorCloseHashChanged,
   readCustodyTransferMarks,
-  residualCustodyHeld,
 } from "../../../packages/finance-core/src/custodyCarry.ts";
 import {
   releaseWeekCloseLock,
@@ -192,8 +192,9 @@ async function findFirstOpenCustodyTarget(
 }
 
 /**
- * Phase 2 / Pass 4–6: after calendar freeze (or recovery), transfer residual
- * cash_still_held onto the first non-frozen later week as openingCashCustody.
+ * Phase 2 / Pass 4–6: after calendar freeze (or recovery), transfer an undischarged
+ * after-share debt (custodyCarryAmount — never pre-share cash_still_held) onto the
+ * first non-frozen later week as openingCashCustody.
  */
 async function carryForwardCashCustodyAfterFreeze(opts: {
   orgId: string;
@@ -213,7 +214,7 @@ async function carryForwardCashCustodyAfterFreeze(opts: {
   for (const f of opts.freezeBatch) {
     const period = opts.periodByDriver.get(f.driverId);
     if (!period) continue;
-    const held = residualCustodyHeld(Number(period.cash_still_held) || 0, CLOSE_INVARIANT_EPS);
+    const held = custodyCarryAmount(period, CLOSE_INVARIANT_EPS);
     if (held <= CLOSE_INVARIANT_EPS) continue;
 
     const srcFc = ((f.metadata.financeCore || {}) as Record<string, unknown>);
@@ -331,7 +332,7 @@ async function custodyCarryPreflight(
   | { ok: true; targetWeek?: string }
   | { ok: false; held: number }
 > {
-  const held = residualCustodyHeld(Number(period.cash_still_held) || 0, CLOSE_INVARIANT_EPS);
+  const held = custodyCarryAmount(period, CLOSE_INVARIANT_EPS);
   if (held <= CLOSE_INVARIANT_EPS) return { ok: true };
   const fc = ((metadata?.financeCore || {}) as Record<string, unknown>);
   if (fc.custodyTransferredTo) {
@@ -384,7 +385,7 @@ async function runCustodyCarryForWeek(opts: {
     // Only carry from calendar-frozen sources — never from an open week that failed close.
     if (!periodIsFrozen(p)) continue;
     periodByDriver.set(driverId, p);
-    const held = residualCustodyHeld(Number(p.cash_still_held) || 0, CLOSE_INVARIANT_EPS);
+    const held = custodyCarryAmount(p, CLOSE_INVARIANT_EPS);
     if (held <= CLOSE_INVARIANT_EPS) continue;
     const meta = { ...((p.metadata as Record<string, unknown>) || {}) };
     freezeBatch.push({
@@ -2212,14 +2213,15 @@ async function closeWeekBody(
       }
     } catch (e) {
       console.warn("[week_close] custody preflight failed", driverId, week, e);
+      const carry = custodyCarryAmount(period as unknown as Record<string, unknown>, CLOSE_INVARIANT_EPS);
       blockers.push({
         code: CUSTODY_ERROR_CODES.NO_OPEN_TARGET,
         severity: "block",
         driverId,
         week,
-        persisted: Number(period.cash_still_held) || 0,
+        persisted: carry,
         expected: 0,
-        delta: Number(period.cash_still_held) || 0,
+        delta: carry,
         message: "Could not verify custody carry target — retry Close",
       });
     }

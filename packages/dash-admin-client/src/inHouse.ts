@@ -114,7 +114,40 @@ export function approveInHousePurchase(token: string, id: string) {
 }
 
 export function listInHouseStores(token: string) {
-  return dashAdminFetch<{ enabled: boolean; stores: Array<Record<string, unknown>> }>(token, '/in-house/stores');
+  return dashAdminFetch<{
+    enabled: boolean;
+    hasCard?: boolean;
+    deskGoLiveBlockers?: string[];
+    stores: Array<Record<string, unknown>>;
+  }>(token, '/in-house/stores');
+}
+
+export function setInHouseStoreLive(token: string, merchantId: string, body: { live: boolean; reason?: string }) {
+  return dashAdminFetch<{ ok: boolean; blockers?: string[] }>(token, `/in-house/stores/${merchantId}/live`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+}
+
+export function setInHouseStoreAudience(token: string, merchantId: string, audience: 'public' | 'beta') {
+  return dashAdminFetch<{ ok: boolean; audience: string }>(token, `/in-house/stores/${merchantId}/audience`, {
+    method: 'POST',
+    body: JSON.stringify({ audience }),
+  });
+}
+
+export function archiveInHouseStore(token: string, merchantId: string) {
+  return dashAdminFetch<{ ok: boolean }>(token, `/in-house/stores/${merchantId}/archive`, {
+    method: 'POST',
+    body: '{}',
+  });
+}
+
+export function archiveInHouseDish(token: string, merchantId: string, itemId: string) {
+  return dashAdminFetch<{ ok: boolean }>(token, `/in-house/stores/${merchantId}/menu/${itemId}/archive`, {
+    method: 'POST',
+    body: '{}',
+  });
 }
 
 export function listInHouseMarkets(token: string) {
@@ -151,7 +184,10 @@ export function saveInHouseChoiceList(token: string, merchantId: string, list: R
 }
 
 export function listInHouseMenu(token: string, merchantId: string) {
-  return dashAdminFetch<{ items: Array<Record<string, unknown>>; categories: Array<{ id: string; name: string; choice_list_ids?: string[]; pizza_menu?: unknown }> }>(token, `/in-house/stores/${merchantId}/menu`);
+  return dashAdminFetch<{
+    items: Array<Record<string, unknown>>;
+    categories: Array<{ id: string; name: string; choice_list_ids?: string[]; pizza_menu?: unknown; section_kind?: string; sort_order?: number }>;
+  }>(token, `/in-house/stores/${merchantId}/menu`);
 }
 
 export function saveInHouseMenu(
@@ -160,7 +196,7 @@ export function saveInHouseMenu(
   items: Array<Record<string, unknown>>,
   confirm: boolean,
   create?: Array<Record<string, unknown>>,
-  categories?: Array<{ id?: string; name: string; remove?: boolean; choiceListIds?: string[]; pizzaMenu?: unknown }>,
+  categories?: Array<{ id?: string; name: string; remove?: boolean; choiceListIds?: string[]; pizzaMenu?: unknown; sectionKind?: string; sortOrder?: number }>,
 ) {
   return dashAdminFetch<{ ok: boolean }>(token, `/in-house/stores/${merchantId}/menu`, {
     method: 'POST',
@@ -190,11 +226,15 @@ export function createInHouseCard(token: string, body: { label: string; last4: s
   });
 }
 
-export function updateInHouseCard(token: string, id: string, body: { label: string; last4: string; dailyLimitMinor: number }) {
+export function updateInHouseCard(token: string, id: string, body: { label?: string; last4?: string; dailyLimitMinor?: number; active?: boolean }) {
   return dashAdminFetch<{ card: Record<string, unknown> }>(token, `/in-house/cards/${id}`, {
     method: 'PATCH',
     body: JSON.stringify(body),
   });
+}
+
+export function archiveInHouseCard(token: string, id: string) {
+  return updateInHouseCard(token, id, { active: false });
 }
 
 export function deleteInHouseCard(token: string, id: string) {

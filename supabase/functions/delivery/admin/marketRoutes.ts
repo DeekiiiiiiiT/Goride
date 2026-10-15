@@ -405,22 +405,24 @@ export function registerMarketAdminRoutes(app: Hono) {
 
   admin.get("/", async (c) => {
     const db = getDb();
+    // Dropdowns (In-House, merchant detail) only need names — skip heavy zone polygons.
+    const includeZones = c.req.query("include_zones") !== "0";
     const { data: parishes, error: pErr } = await db
       .from("service_parishes")
-      .select("*")
+      .select(includeZones ? "*" : "id,name,slug,sort_order,coverage_mode,pcode")
       .order("sort_order", { ascending: true })
       .order("name", { ascending: true });
     if (pErr) return c.json({ error: pErr.message }, 500);
 
     const { data: markets, error } = await db
       .from("service_markets")
-      .select("*")
+      .select(includeZones ? "*" : "id,name,slug,is_active,parish_id,pcode,waitlist_enabled")
       .order("created_at", { ascending: true });
     if (error) return c.json({ error: error.message }, 500);
 
     const marketIds = (markets ?? []).map((m) => String((m as Record<string, unknown>).id));
     let zonesByMarket = new Map<string, unknown[]>();
-    if (marketIds.length > 0) {
+    if (includeZones && marketIds.length > 0) {
       const { data: zones } = await db
         .from("service_zone_polygons")
         .select("*")
@@ -445,12 +447,11 @@ export function registerMarketAdminRoutes(app: Hono) {
     for (const m of markets ?? []) {
       const market = m as Record<string, unknown>;
       const id = String(market.id);
-      const zones = zonesByMarket.get(id) ?? [];
       const parishId = market.parish_id == null ? "" : String(market.parish_id);
       // Do not auto-seed demo circle fences — towns stay empty until ops draws/imports a border.
       enrichedMarkets.push({
         ...market,
-        zones,
+        ...(includeZones ? { zones: zonesByMarket.get(id) ?? [] } : { zones: [] }),
         parish_name: parishNameById.get(parishId) || null,
       });
     }

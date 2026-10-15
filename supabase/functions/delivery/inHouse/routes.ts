@@ -20,11 +20,17 @@ import { cartPayload, manualChecklist } from "./adapter.ts";
 import {
   abandonMoment,
   canReplaceReceipt,
+  inHouseDeskGoLiveBlockers,
+  inHouseGoLiveBlockers,
+  inHouseStoreGoLiveBlockers,
   lastClaimer,
+  namesMatch,
   partnerConversionBlocked,
   pickStatementTask,
+  priceCheckedIsFresh,
   purchaseRecording,
   receiptFollowsAbandon,
+  storePatchFromBody,
 } from "./deskRules.ts";
 import { customerPriceFromCost, DESK_FRESH_MS, jamaicaDayStartIso, TWO_PERSON_MINOR, weekOfferWindow, withinAbsorbCap } from "./pricing.ts";
 import { listChoiceLists, saveChoiceList, stampSectionChoiceLists } from "../menuChoiceLibrary.ts";
@@ -767,15 +773,28 @@ export function registerInHouseRoutes(app: Hono, deps: { getServiceSupabase: () 
     const admin = await requireDesk(c, ADMIN_ROLES);
     if (admin instanceof Response) return admin;
     const body = await c.req.json().catch(() => ({}));
+    const archiveOnly = body.active === false && !("last4" in body) && !("label" in body) && !("dailyLimitMinor" in body);
+    if (archiveOnly) {
+      const { data, error } = await deps.getServiceSupabase().from("in_house_cards").update({
+        active: false,
+      }).eq("id", c.req.param("id")).select("id, label, last4, daily_limit_minor, active").maybeSingle();
+      if (error) return c.json({ error: error.message }, 500);
+      if (!data) return c.json({ error: "Card not found" }, 404);
+      return c.json({ card: data });
+    }
     const last4 = String(body.last4 || "");
     if (!/^[0-9]{4}$/.test(last4)) return c.json({ error: "Enter the last 4 digits only" }, 400);
     const dailyLimitMinor = Math.round(Number(body.dailyLimitMinor));
     if (!Number.isFinite(dailyLimitMinor) || dailyLimitMinor < 0) return c.json({ error: "Enter a daily limit" }, 400);
-    const { data, error } = await deps.getServiceSupabase().from("in_house_cards").update({
+    const patch: Record<string, unknown> = {
       label: String(body.label || `Card ${last4}`),
       last4,
       daily_limit_minor: dailyLimitMinor,
-    }).eq("id", c.req.param("id")).select("id, label, last4, daily_limit_minor, active").maybeSingle();
+    };
+    if (body.active === false) patch.active = false;
+    if (body.active === true) patch.active = true;
+    const { data, error } = await deps.getServiceSupabase().from("in_house_cards").update(patch)
+      .eq("id", c.req.param("id")).select("id, label, last4, daily_limit_minor, active").maybeSingle();
     if (error) return c.json({ error: error.message }, 500);
     if (!data) return c.json({ error: "Card not found" }, 404);
     return c.json({ card: data });
@@ -947,16 +966,20 @@ export function registerInHouseRoutes(app: Hono, deps: { getServiceSupabase: () 
   });
 
   app.get("/admin/in-house/stores", async (c) => {
-    const admin = await requireDesk(c, ADMIN_ROLES);
+    const admin = await requireDesk(c, OPS_ROLES);
     if (admin instanceof Response) return admin;
+    const isAdmin = hasAnyRole(admin.roles, ADMIN_ROLES);
     const sb = deps.getServiceSupabase();
-    const { data: stores } = await sb.from("in_house_stores").select("*");
+    const { data: stores, error: storesError } = await sb.from("in_house_stores").select("*").is("archived_at", null);
+    if (storesError) return c.json({ error: storesError.message }, 500);
     const ids = (stores || []).map((row) => String(row.merchant_id));
     const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
-    const [{ data: merchants }, { data: tasks }, { data: hours }] = await Promise.all([
+    const [{ data: merchants }, { data: tasks }, { data: hours }, { data: menuItems }, { count: cardCount }] = await Promise.all([
       ids.length ? sb.from("merchants").select("id, name, address, phone, lat, lng, logo_url, cover_image_url, market_id, avg_prep_time_mins, cuisine_type, procurement_mode, in_house_live, is_accepting_orders, gct_registered").in("id", ids) : Promise.resolve({ data: [] }),
       ids.length ? sb.from("procurement_tasks").select("merchant_id, expected_cost_minor, created_at").in("merchant_id", ids).gte("created_at", since) : Promise.resolve({ data: [] }),
       ids.length ? sb.from("merchant_hours").select("merchant_id, day_of_week, open_time, close_time, is_closed").in("merchant_id", ids).order("day_of_week") : Promise.resolve({ data: [] }),
+      ids.length ? sb.from("menu_items").select("merchant_id, is_available, source_price_checked_at, archived_at").in("merchant_id", ids).eq("is_available", true).is("archived_at", null) : Promise.resolve({ data: [] }),
+      sb.from("in_house_cards").select("id", { count: "exact", head: true }).eq("active", true),
     ]);
     const demand = new Map<string, { orders: number; cost: number }>();
     for (const task of tasks || []) {
@@ -966,15 +989,83 @@ export function registerInHouseRoutes(app: Hono, deps: { getServiceSupabase: () 
       current.cost += Number(task.expected_cost_minor || 0);
       demand.set(id, current);
     }
+    const dishStats = new Map<string, { dishes: number; fresh: number; stale: number }>();
+    for (const item of menuItems || []) {
+      const id = String(item.merchant_id);
+      const current = dishStats.get(id) || { dishes: 0, fresh: 0, stale: 0 };
+      current.dishes += 1;
+      if (priceCheckedIsFresh(item.source_price_checked_at ? String(item.source_price_checked_at) : null)) current.fresh += 1;
+      else current.stale += 1;
+      dishStats.set(id, current);
+    }
     const enabled = await getFlag("IN_HOUSE_ENABLED", false);
+    const nameCounts = new Map<string, number>();
+    for (const merchant of merchants || []) {
+      const key = String(merchant.name || "").trim().toLowerCase();
+      if (!key) continue;
+      nameCounts.set(key, (nameCounts.get(key) || 0) + 1);
+    }
+    const hasCard = (cardCount || 0) > 0;
+    const deskGoLiveBlockers = inHouseDeskGoLiveBlockers({ hasCard, globallyEnabled: enabled });
     return c.json({
       enabled,
-      stores: (stores || []).map((store) => ({
-        ...store,
-        merchant: (merchants || []).find((row) => String(row.id) === String(store.merchant_id)) || null,
-        hours: (hours || []).filter((row) => String(row.merchant_id) === String(store.merchant_id)),
-        demand30d: demand.get(String(store.merchant_id)) || { orders: 0, cost: 0 },
-      })),
+      hasCard,
+      deskGoLiveBlockers,
+      stores: (stores || []).map((store) => {
+        const merchant = (merchants || []).find((row) => String(row.id) === String(store.merchant_id)) || null;
+        const storeHours = (hours || []).filter((row) => String(row.merchant_id) === String(store.merchant_id));
+        const stats = dishStats.get(String(store.merchant_id)) || { dishes: 0, fresh: 0, stale: 0 };
+        // Store-only; desk card/switch sit in deskGoLiveBlockers above the list.
+        const blockers = inHouseStoreGoLiveBlockers({
+          hasHours: storeHours.some((row) => !row.is_closed),
+          orderChannel: store.order_channel ? String(store.order_channel) : null,
+          orderUrl: store.order_url ? String(store.order_url) : null,
+          orderPhone: store.order_phone ? String(store.order_phone) : null,
+          tosReviewedAt: store.tos_reviewed_at ? String(store.tos_reviewed_at) : null,
+          freshDishCount: stats.fresh,
+        });
+        const money = isAdmin ? {
+          price_tolerance_bps: store.price_tolerance_bps,
+          absorb_cap_minor: store.absorb_cap_minor,
+          max_order_minor: store.max_order_minor,
+          demand30d: demand.get(String(store.merchant_id)) || { orders: 0, cost: 0 },
+        } : {
+          demand30d: { orders: demand.get(String(store.merchant_id))?.orders || 0, cost: 0 },
+        };
+        return {
+          merchant_id: store.merchant_id,
+          order_channel: store.order_channel,
+          order_url: store.order_url,
+          order_phone: store.order_phone,
+          pickup_instructions: store.pickup_instructions,
+          audience: store.audience,
+          setup_status: store.setup_status || "draft",
+          tos_reviewed_at: store.tos_reviewed_at,
+          tos_reviewed_by: store.tos_reviewed_by,
+          // markup drives customer price; ops need it in the menu builder.
+          markup_bps: store.markup_bps,
+          notes: isAdmin ? store.notes : undefined,
+          paused_reason: store.paused_reason,
+          paused_by: store.paused_by,
+          paused_at: store.paused_at,
+          merchant,
+          hours: storeHours,
+          dishCount: stats.dishes,
+          freshDishCount: stats.fresh,
+          staleDishCount: stats.stale,
+          goLiveBlockers: blockers,
+          duplicateNameCount: nameCounts.get(String(merchant?.name || "").trim().toLowerCase()) || 1,
+          ...money,
+          ...(isAdmin ? {
+            price_tolerance_bps: store.price_tolerance_bps,
+            absorb_cap_minor: store.absorb_cap_minor,
+            max_order_minor: store.max_order_minor,
+            partnership_status: store.partnership_status,
+            source_location_label: store.source_location_label,
+            default_prep_minutes: store.default_prep_minutes,
+          } : {}),
+        };
+      }),
     });
   });
 
@@ -985,27 +1076,39 @@ export function registerInHouseRoutes(app: Hono, deps: { getServiceSupabase: () 
     const sb = deps.getServiceSupabase();
     const creating = Boolean(body.create);
     let merchantId = String(body.merchantId || "");
-    if (body.live && !(await getFlag("IN_HOUSE_ENABLED", false))) {
-      return c.json({ error: "The In-House switch is off. A store cannot go live yet." }, 409);
-    }
     if (creating) {
       const name = String(body.name || "").trim();
       const address = String(body.address || "").trim();
       const marketId = String(body.marketId || "");
-      if (!name || !address || !marketId) return c.json({ error: "Name, address, and market are required" }, 400);
+      if (!name) return c.json({ error: "Name is required" }, 400);
+      const { data: existingMerchants } = await sb.from("merchants")
+        .select("id, name")
+        .eq("procurement_mode", "in_house")
+        .eq("is_active", true);
+      const duel = (existingMerchants || []).find((row) => namesMatch(String(row.name || ""), name));
+      if (duel) {
+        const { data: archived } = await sb.from("in_house_stores").select("archived_at").eq("merchant_id", duel.id).maybeSingle();
+        if (!archived?.archived_at) {
+          return c.json({
+            error: `A restaurant called ${name} already exists. Open it?`,
+            code: "duplicate_name",
+            merchantId: String(duel.id),
+          }, 409);
+        }
+      }
       const prep = Number(body.avgPrepMinutes || body.defaultPrepMinutes || 35);
       const { data: merchant, error } = await sb.from("merchants").insert({
         owner_id: null,
         name,
         slug: slugify(name),
         description: body.description || null,
-        address,
-        lat: body.lat == null ? null : Number(body.lat),
-        lng: body.lng == null ? null : Number(body.lng),
+        address: address || "Address pending",
+        lat: body.lat == null || body.lat === "" ? null : Number(body.lat),
+        lng: body.lng == null || body.lng === "" ? null : Number(body.lng),
         phone: body.phone || body.orderPhone || null,
         logo_url: body.logoUrl || null,
         cover_image_url: body.coverImageUrl || null,
-        market_id: marketId,
+        market_id: marketId || null,
         cuisine_type: body.cuisineType || null,
         avg_prep_time_mins: prep,
         is_active: true,
@@ -1023,6 +1126,18 @@ export function registerInHouseRoutes(app: Hono, deps: { getServiceSupabase: () 
       }).select("id").single();
       if (error || !merchant) return c.json({ error: error?.message || "Could not create the restaurant" }, 500);
       merchantId = String(merchant.id);
+      const createPatch = storePatchFromBody({
+        ...body,
+        name,
+        setupStatus: "draft",
+        tosReviewed: false,
+      }, null);
+      const { error: storeError } = await sb.from("in_house_stores").upsert({
+        merchant_id: merchantId,
+        ...createPatch,
+        setup_status: "draft",
+      });
+      if (storeError) return c.json({ error: storeError.message }, 500);
     } else {
       if (!merchantId) return c.json({ error: "Choose a store" }, 400);
       const { data: merchant } = await sb.from("merchants").select("id, owner_id, procurement_mode").eq("id", merchantId).maybeSingle();
@@ -1049,64 +1164,62 @@ export function registerInHouseRoutes(app: Hono, deps: { getServiceSupabase: () 
       }
     }
 
+    if ("name" in body && !creating) {
+      const name = String(body.name || "").trim();
+      if (name) {
+        const { data: existingMerchants } = await sb.from("merchants")
+          .select("id, name")
+          .eq("procurement_mode", "in_house")
+          .eq("is_active", true)
+          .neq("id", merchantId);
+        const duel = (existingMerchants || []).find((row) => namesMatch(String(row.name || ""), name));
+        if (duel) {
+          return c.json({
+            error: `A restaurant called ${name} already exists. Open it?`,
+            code: "duplicate_name",
+            merchantId: String(duel.id),
+          }, 409);
+        }
+      }
+    }
+
     const week = normalizeWeek(body.hours) || (creating ? defaultWeek() : null);
     if (week) {
       const hoursError = await saveWeek(sb, merchantId, week);
       if (hoursError) return c.json({ error: hoursError.message }, 500);
     }
     const window = week ? weekOfferWindow(week) : null;
-    const markupBps = Number(body.markupBps ?? 1500);
+    const { data: existingStore } = await sb.from("in_house_stores").select("*").eq("merchant_id", merchantId).maybeSingle();
+    const patch = storePatchFromBody({
+      ...body,
+      ...(body.tosReviewed ? { tosReviewedBy: admin.email || admin.id } : {}),
+    }, existingStore || null);
+    if (window) {
+      patch.offer_start_minute = window.start;
+      patch.offer_end_minute = window.end;
+    }
     const { error } = await sb.from("in_house_stores").upsert({
       merchant_id: merchantId,
-      source_brand: body.sourceBrand || body.name || null,
-      source_location_label: body.sourceLocationLabel || null,
-      order_channel: body.orderChannel || "web",
-      order_url: body.orderUrl || null,
-      order_phone: body.orderPhone || null,
-      pickup_instructions: body.pickupInstructions || null,
-      default_prep_minutes: Number(body.defaultPrepMinutes || 25),
-      markup_bps: markupBps,
-      price_tolerance_bps: Number(body.priceToleranceBps ?? 1000),
-      absorb_cap_minor: Number(body.absorbCapMinor ?? 50000),
-      max_order_minor: body.maxOrderMinor == null ? null : Number(body.maxOrderMinor),
-      ...(window ? { offer_start_minute: window.start, offer_end_minute: window.end } : {}),
-      partnership_status: body.partnershipStatus || "none",
-      automation_level: "L0",
-      adapter_key: "manual",
-      tos_reviewed_at: body.tosReviewed ? new Date().toISOString() : null,
-      tos_allows_automation: false,
-      notes: body.notes || null,
-      ...(body.audience === "public" || body.audience === "beta" ? { audience: body.audience } : {}),
-      updated_at: new Date().toISOString(),
+      ...(existingStore || {}),
+      ...patch,
     });
     if (error) return c.json({ error: error.message }, 500);
-    await sb.from("merchants").update({
-      procurement_mode: "in_house",
-      in_house_live: Boolean(body.live),
-      gct_registered: false,
-      ...(body.name ? { name: String(body.name) } : {}),
-      ...(body.address ? { address: String(body.address) } : {}),
-      ...(body.phone ? { phone: String(body.phone) } : {}),
-      ...(body.logoUrl ? { logo_url: String(body.logoUrl) } : {}),
-      ...(body.coverImageUrl ? { cover_image_url: String(body.coverImageUrl) } : {}),
-      ...(body.cuisineType != null ? { cuisine_type: String(body.cuisineType) } : {}),
-      ...(body.marketId ? { market_id: String(body.marketId) } : {}),
-      ...(body.lat != null && body.lat !== "" ? { lat: Number(body.lat) } : {}),
-      ...(body.lng != null && body.lng !== "" ? { lng: Number(body.lng) } : {}),
-      ...(body.avgPrepMinutes ? { avg_prep_time_mins: Number(body.avgPrepMinutes) } : {}),
-      updated_at: new Date().toISOString(),
-    }).eq("id", merchantId).eq("procurement_mode", creating ? "in_house" : "in_house");
-    const { data: priced } = await sb.from("menu_items").select("id, in_store_price").eq("merchant_id", merchantId);
-    for (const item of priced || []) {
-      if (item.in_store_price == null) continue;
-      await sb.from("menu_items").update({ in_store_price: item.in_store_price }).eq("id", item.id);
-    }
-    const items = Array.isArray(body.items) ? body.items : [];
-    if (items.length) {
-      const saved = await saveMenuItems(sb, merchantId, items);
-      if (!saved.ok) return c.json({ error: saved.error }, 400);
-    }
-    if (body.markupBps != null) {
+
+    const merchantPatch: Record<string, unknown> = { updated_at: new Date().toISOString(), procurement_mode: "in_house" };
+    if ("name" in body && body.name) merchantPatch.name = String(body.name);
+    if ("address" in body && body.address) merchantPatch.address = String(body.address);
+    if ("phone" in body) merchantPatch.phone = body.phone ? String(body.phone) : null;
+    if ("logoUrl" in body) merchantPatch.logo_url = body.logoUrl ? String(body.logoUrl) : null;
+    if ("coverImageUrl" in body) merchantPatch.cover_image_url = body.coverImageUrl ? String(body.coverImageUrl) : null;
+    if ("cuisineType" in body) merchantPatch.cuisine_type = body.cuisineType ? String(body.cuisineType) : null;
+    if ("marketId" in body && body.marketId) merchantPatch.market_id = String(body.marketId);
+    if ("lat" in body && body.lat != null && body.lat !== "") merchantPatch.lat = Number(body.lat);
+    if ("lng" in body && body.lng != null && body.lng !== "") merchantPatch.lng = Number(body.lng);
+    if ("avgPrepMinutes" in body && body.avgPrepMinutes) merchantPatch.avg_prep_time_mins = Number(body.avgPrepMinutes);
+    // live is only changed via /live endpoint — never wipe on partial save
+    await sb.from("merchants").update(merchantPatch).eq("id", merchantId);
+
+    if ("markupBps" in body && body.markupBps != null) {
       const { data: optionRows } = await sb.from("menu_items").select("id, options").eq("merchant_id", merchantId);
       for (const row of optionRows || []) {
         if (!Array.isArray(row.options) || row.options.length === 0) continue;
@@ -1115,7 +1228,90 @@ export function registerInHouseRoutes(app: Hono, deps: { getServiceSupabase: () 
         }).eq("id", row.id);
       }
     }
+    const items = Array.isArray(body.items) ? body.items : [];
+    if (items.length) {
+      const saved = await saveMenuItems(sb, merchantId, items);
+      if (!saved.ok) return c.json({ error: saved.error }, 400);
+    }
     return c.json({ ok: true, merchantId });
+  });
+
+  app.post("/admin/in-house/stores/:id/live", async (c) => {
+    const admin = await requireDesk(c, ADMIN_ROLES);
+    if (admin instanceof Response) return admin;
+    const merchantId = c.req.param("id");
+    const body = await c.req.json().catch(() => ({}));
+    const live = Boolean(body.live);
+    const sb = deps.getServiceSupabase();
+    const { data: store } = await sb.from("in_house_stores").select("*").eq("merchant_id", merchantId).is("archived_at", null).maybeSingle();
+    if (!store) return c.json({ error: "Restaurant not found" }, 404);
+    if (live) {
+      const enabled = await getFlag("IN_HOUSE_ENABLED", false);
+      const [{ data: hours }, { data: dishes }, { count: cardCount }] = await Promise.all([
+        sb.from("merchant_hours").select("is_closed").eq("merchant_id", merchantId),
+        sb.from("menu_items").select("source_price_checked_at, is_available").eq("merchant_id", merchantId).eq("is_available", true).is("archived_at", null),
+        sb.from("in_house_cards").select("id", { count: "exact", head: true }).eq("active", true),
+      ]);
+      const fresh = (dishes || []).filter((row) => priceCheckedIsFresh(row.source_price_checked_at ? String(row.source_price_checked_at) : null)).length;
+      const blockers = inHouseGoLiveBlockers({
+        hasHours: (hours || []).some((row) => !row.is_closed),
+        orderChannel: store.order_channel ? String(store.order_channel) : null,
+        orderUrl: store.order_url ? String(store.order_url) : null,
+        orderPhone: store.order_phone ? String(store.order_phone) : null,
+        tosReviewedAt: store.tos_reviewed_at ? String(store.tos_reviewed_at) : null,
+        freshDishCount: fresh,
+        hasCard: (cardCount || 0) > 0,
+        globallyEnabled: enabled,
+      });
+      if (blockers.length) return c.json({ error: blockers[0], blockers }, 409);
+      await sb.from("in_house_stores").update({
+        setup_status: "ready",
+        paused_reason: null,
+        paused_by: null,
+        paused_at: null,
+        updated_at: new Date().toISOString(),
+      }).eq("merchant_id", merchantId);
+      await sb.from("merchants").update({ in_house_live: true, updated_at: new Date().toISOString() }).eq("id", merchantId);
+    } else {
+      const reason = String(body.reason || "").trim() || "Paused";
+      await sb.from("in_house_stores").update({
+        paused_reason: reason,
+        paused_by: admin.email || admin.id,
+        paused_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }).eq("merchant_id", merchantId);
+      await sb.from("merchants").update({ in_house_live: false, updated_at: new Date().toISOString() }).eq("id", merchantId);
+    }
+    return c.json({ ok: true });
+  });
+
+  app.post("/admin/in-house/stores/:id/audience", async (c) => {
+    const admin = await requireDesk(c, ADMIN_ROLES);
+    if (admin instanceof Response) return admin;
+    const merchantId = c.req.param("id");
+    const body = await c.req.json().catch(() => ({}));
+    const audience = body.audience === "public" ? "public" : "beta";
+    const sb = deps.getServiceSupabase();
+    const { data: store } = await sb.from("in_house_stores").select("merchant_id").eq("merchant_id", merchantId).is("archived_at", null).maybeSingle();
+    if (!store) return c.json({ error: "Restaurant not found" }, 404);
+    const { error } = await sb.from("in_house_stores").update({
+      audience,
+      updated_at: new Date().toISOString(),
+    }).eq("merchant_id", merchantId);
+    if (error) return c.json({ error: error.message }, 500);
+    return c.json({ ok: true, audience });
+  });
+
+  app.post("/admin/in-house/stores/:id/archive", async (c) => {
+    const admin = await requireDesk(c, ADMIN_ROLES);
+    if (admin instanceof Response) return admin;
+    const merchantId = c.req.param("id");
+    const sb = deps.getServiceSupabase();
+    const now = new Date().toISOString();
+    await sb.from("merchants").update({ in_house_live: false, is_active: false, updated_at: now }).eq("id", merchantId);
+    const { error } = await sb.from("in_house_stores").update({ archived_at: now, updated_at: now }).eq("merchant_id", merchantId);
+    if (error) return c.json({ error: error.message }, 500);
+    return c.json({ ok: true });
   });
 
   app.get("/admin/in-house/stores/:id/choice-lists", async (c) => {
@@ -1165,27 +1361,56 @@ export function registerInHouseRoutes(app: Hono, deps: { getServiceSupabase: () 
         if (!priced.ok) return c.json({ error: priced.error }, 400);
       }
       if (!name) continue;
+      const { data: siblingSections } = await sb.from("menu_categories")
+        .select("id, name")
+        .eq("merchant_id", merchantId)
+        .eq("is_active", true);
+      const duplicate = (siblingSections || []).find((row) =>
+        namesMatch(String(row.name || ""), name) && (!category.id || String(row.id) !== String(category.id))
+      );
+      if (duplicate) {
+        return c.json({ error: `A section called ${name} already exists`, code: "duplicate_section" }, 409);
+      }
+      const sectionKind = category.sectionKind === "sized" || category.sectionKind === "pizza"
+        ? category.sectionKind
+        : category.sectionKind === "standard"
+          ? "standard"
+          : undefined;
+      const sortOrder = Number.isFinite(Number(category.sortOrder)) ? Math.round(Number(category.sortOrder)) : undefined;
       if (category.id) {
-        await sb.from("menu_categories").update({ name }).eq("id", String(category.id)).eq("merchant_id", merchantId);
+        await sb.from("menu_categories").update({
+          name,
+          ...(sectionKind ? { section_kind: sectionKind } : {}),
+          ...(sortOrder != null ? { sort_order: sortOrder } : {}),
+        }).eq("id", String(category.id)).eq("merchant_id", merchantId);
       } else {
-        const { data: existingSection } = await sb.from("menu_categories").select("id").eq("merchant_id", merchantId).eq("name", name).eq("is_active", true).limit(1);
-        if (!existingSection?.length) {
-          await sb.from("menu_categories").insert({ merchant_id: merchantId, name, is_active: true });
-        }
+        const { data: created } = await sb.from("menu_categories").insert({
+          merchant_id: merchantId,
+          name,
+          is_active: true,
+          section_kind: sectionKind || "standard",
+          ...(sortOrder != null ? { sort_order: sortOrder } : {}),
+        }).select("id").single();
+        if (created?.id) stampIds.add(String(created.id));
       }
     }
+    const { data: kindRows } = await sb.from("menu_categories").select("id, section_kind, name").eq("merchant_id", merchantId).eq("is_active", true);
+    const kindById = new Map((kindRows || []).map((row) => [String(row.id), String(row.section_kind || "standard")]));
     for (const item of items) {
       const id = String(item.id || "");
       if (!id) continue;
       const fullDish = Boolean(String(item.name || "").trim());
-      const drink = /drink/i.test(String(item.category || ""));
-      const pizza = /pizza/i.test(String(item.category || ""));
+      const categoryId = item.categoryId ? String(item.categoryId) : "";
+      const sectionKind = kindById.get(categoryId)
+        || (/pizza/i.test(String(item.category || "")) ? "pizza" : /drink/i.test(String(item.category || "")) ? "sized" : "standard");
+      const sized = sectionKind === "sized";
+      const pizza = sectionKind === "pizza";
       const prep = Math.round(Number(item.prepMinutes));
-      if (fullDish && !drink && (!Number.isFinite(prep) || prep <= 0)) {
+      if (fullDish && !sized && (!Number.isFinite(prep) || prep <= 0)) {
         return c.json({ error: "Every dish needs how many minutes it takes" }, 400);
       }
       const baked = pizza && item.pizzaRecipe
-        ? await pizzaDishPrice(sb, merchantId, String(item.categoryId || ""), item.pizzaRecipe)
+        ? await pizzaDishPrice(sb, merchantId, categoryId, item.pizzaRecipe)
         : null;
       if (baked && !baked.ok) return c.json({ error: baked.error }, 400);
       const restaurantPrice = baked?.ok ? baked.price : Number(item.inStorePrice);
@@ -1203,9 +1428,9 @@ export function registerInHouseRoutes(app: Hono, deps: { getServiceSupabase: () 
           image_url: item.imageUrl || null,
           options: pricedOptions(item.options, markupBps),
           is_available: item.isAvailable !== false,
-          prep_time_mins: drink ? null : prep,
+          prep_time_mins: sized ? null : prep,
           ...(baked?.ok ? { pizza_recipe: baked.recipe } : {}),
-          ...(item.categoryId ? { category_id: String(item.categoryId) } : {}),
+          ...(categoryId ? { category_id: categoryId } : {}),
         } : {}),
       }).eq("id", id).eq("merchant_id", merchantId);
     }
@@ -1229,6 +1454,22 @@ export function registerInHouseRoutes(app: Hono, deps: { getServiceSupabase: () 
     return c.json({ ok: true });
   });
 
+  app.post("/admin/in-house/stores/:id/menu/:itemId/archive", async (c) => {
+    const admin = await requireDesk(c, OPS_ROLES);
+    if (admin instanceof Response) return admin;
+    const merchantId = c.req.param("id");
+    const itemId = c.req.param("itemId");
+    const sb = deps.getServiceSupabase();
+    const now = new Date().toISOString();
+    const { error } = await sb.from("menu_items").update({
+      archived_at: now,
+      is_available: false,
+      updated_at: now,
+    }).eq("id", itemId).eq("merchant_id", merchantId);
+    if (error) return c.json({ error: error.message }, 500);
+    return c.json({ ok: true });
+  });
+
   app.get("/admin/in-house/stores/:id/menu", async (c) => {
     const admin = await requireDesk(c, OPS_ROLES);
     if (admin instanceof Response) return admin;
@@ -1238,8 +1479,9 @@ export function registerInHouseRoutes(app: Hono, deps: { getServiceSupabase: () 
       sb.from("menu_items")
         .select("id, name, description, image_url, in_store_price, marketplace_price, options, source_sku, source_url, source_price_checked_at, is_available, category_id, prep_time_mins, pizza_recipe")
         .eq("merchant_id", merchantId)
+        .is("archived_at", null)
         .order("name"),
-      sb.from("menu_categories").select("id, name, choice_list_ids, pizza_menu").eq("merchant_id", merchantId).eq("is_active", true).order("name"),
+      sb.from("menu_categories").select("id, name, choice_list_ids, pizza_menu, section_kind, sort_order").eq("merchant_id", merchantId).eq("is_active", true).order("sort_order").order("name"),
     ]);
     if (error) return c.json({ error: error.message }, 500);
     return c.json({ items: data || [], categories: categories || [] });
@@ -1332,12 +1574,21 @@ async function saveMenuItems(sb: Sb, merchantId: string, items: Array<Record<str
   const now = new Date().toISOString();
   const { data: storeRow } = await sb.from("in_house_stores").select("markup_bps").eq("merchant_id", merchantId).maybeSingle();
   const markupBps = Number(storeRow?.markup_bps ?? 1500);
+  const { data: kindRows } = await sb.from("menu_categories").select("id, section_kind, name").eq("merchant_id", merchantId).eq("is_active", true);
+  const kindById = new Map((kindRows || []).map((row) => [String(row.id), String(row.section_kind || "standard")]));
+  const kindByName = new Map((kindRows || []).map((row) => [String(row.name || "").trim().toLowerCase(), String(row.section_kind || "standard")]));
   const categories = new Map<string, string>();
   for (const item of items) {
     const name = String(item.name || "").trim();
     const price = Number(item.inStorePrice);
-    const drink = /drink/i.test(String(item.category || ""));
-    const pizza = /pizza/i.test(String(item.category || ""));
+    const categoryId = await sectionForNewDish(sb, merchantId, item, categories);
+    if (!categoryId.ok) return categoryId;
+    // Prefer section_kind over legacy name heuristics (Beverages ≠ drink by name).
+    const kind = kindById.get(categoryId.id)
+      || kindByName.get(String(item.category || "").trim().toLowerCase())
+      || "standard";
+    const drink = kind === "sized";
+    const pizza = kind === "pizza";
     const prep = Math.round(Number(item.prepMinutes));
     if (!name || (!pizza && (!Number.isFinite(price) || price <= 0))) {
       return { ok: false as const, error: "Every item needs a name and the restaurant price" };
@@ -1345,8 +1596,6 @@ async function saveMenuItems(sb: Sb, merchantId: string, items: Array<Record<str
     if (!drink && (!Number.isFinite(prep) || prep <= 0)) {
       return { ok: false as const, error: "Every dish needs how many minutes it takes" };
     }
-    const categoryId = await sectionForNewDish(sb, merchantId, item, categories);
-    if (!categoryId.ok) return categoryId;
     const baked = pizza && item.pizzaRecipe
       ? await pizzaDishPrice(sb, merchantId, categoryId.id, item.pizzaRecipe)
       : null;

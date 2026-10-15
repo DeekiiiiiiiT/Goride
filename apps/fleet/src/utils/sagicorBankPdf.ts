@@ -176,9 +176,8 @@ export function parseSagicorStatementText(text: string): SagicorPdfParseResult {
 /** Extract plain text from a PDF (client-side via pdfjs). */
 export async function extractPdfPlainText(data: ArrayBuffer): Promise<string> {
   const pdfjsLib = await import('pdfjs-dist');
-  if (typeof window !== 'undefined' && !pdfjsLib.GlobalWorkerOptions.workerSrc) {
-    pdfjsLib.GlobalWorkerOptions.workerSrc = `https://esm.sh/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
-  }
+  const { ensurePdfWorker } = await import('./pdfWorker');
+  ensurePdfWorker(pdfjsLib);
   const loadingTask = pdfjsLib.getDocument({ data });
   const pdf = await loadingTask.promise;
   const pages: string[] = [];

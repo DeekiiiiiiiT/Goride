@@ -1,14 +1,9 @@
 import * as pdfjsLib from 'pdfjs-dist';
-
-// Initialize worker
-if (typeof window !== 'undefined' && !pdfjsLib.GlobalWorkerOptions.workerSrc) {
-    // Use esm.sh which is reliable in this environment
-    // Use .mjs for newer versions of pdfjs-dist which are likely ESM
-    pdfjsLib.GlobalWorkerOptions.workerSrc = `https://esm.sh/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
-}
+import { ensurePdfWorker } from './pdfWorker';
 
 export const convertPdfToImage = async (file: File): Promise<File | null> => {
     try {
+        ensurePdfWorker(pdfjsLib);
         const arrayBuffer = await file.arrayBuffer();
         const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
         const pdf = await loadingTask.promise;

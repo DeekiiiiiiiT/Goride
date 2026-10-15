@@ -46,7 +46,7 @@ function ExclusionsTab() {
   const { session } = useOutletContext<AdminOutletContext>();
   const [parishes, setParishes] = useState<DashParishRow[]>([]);
   useEffect(() => {
-    void listMarkets(session.access_token)
+    void listMarkets(session.access_token, { includeZones: false })
       .then((res) => setParishes((res.parishes ?? []) as DashParishRow[]))
       .catch(() => setParishes([]));
   }, [session.access_token]);

@@ -216,6 +216,11 @@ export async function loadDriverUserIdsWithActiveRides(
   return ids;
 }
 
+/** True when a query helper returned `{ error }` (never treat null as an error). */
+export function isQueryError(v: unknown): v is { error: string } {
+  return v != null && typeof v === "object" && "error" in v;
+}
+
 async function getActiveRideFromTable(
   db: SupabaseClient,
   table: string,
@@ -241,11 +246,12 @@ export async function getDriverActiveRideRequest(
   publicDb: SupabaseClient,
   driverUserId: string,
 ): Promise<Record<string, unknown> | null | { error: string }> {
+  // Null = no active ride in rides.ride_requests (canonical). Do not fall through to public.
   const native = await getActiveRideFromTable(ridesDb, "ride_requests", driverUserId);
-  if (!("error" in native)) return native;
+  if (native === null || !isQueryError(native)) return native;
 
   const pub = await getActiveRideFromTable(publicDb, "rides_ride_requests", driverUserId);
-  if (!("error" in pub)) return pub;
+  if (pub === null || !isQueryError(pub)) return pub;
 
   return { error: pub.error };
 }
@@ -273,10 +279,10 @@ export async function listDriverRideRequests(
   }
 
   const native = await listFromTable(ridesDb, "ride_requests", effectiveOpts);
-  if (!("error" in native)) return native;
+  if (!isQueryError(native)) return native;
 
   const pub = await listFromTable(publicDb, "rides_ride_requests", effectiveOpts);
-  if (!("error" in pub)) return pub;
+  if (!isQueryError(pub)) return pub;
 
   return { error: pub.error };
 }
@@ -541,10 +547,10 @@ export async function aggregateDriverEarnings(
   period: DriverEarningsPeriod,
 ): Promise<DriverEarningsAggregate | { error: string }> {
   const native = await aggregateFromTable(ridesDb, "ride_requests", driverUserId, period);
-  if (!("error" in native)) return native;
+  if (!isQueryError(native)) return native;
 
   const pub = await aggregateFromTable(publicDb, "rides_ride_requests", driverUserId, period);
-  if (!("error" in pub)) return pub;
+  if (!isQueryError(pub)) return pub;
 
   return { error: pub.error };
 }

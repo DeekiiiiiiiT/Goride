@@ -10,11 +10,11 @@ const TONE: Record<string, string> = {
 
 function toneFor(value: string): keyof typeof TONE {
   const v = value.toLowerCase();
-  if (['active', 'approved', 'delivered', 'paid', 'resolved', 'won', 'live', 'online'].includes(v)) return 'success';
-  if (['pending', 'in_review', 'docs_requested', 'preparing', 'ready', 'assigned', 'held', 'open', 'restricted'].includes(v)) return 'warning';
-  if (['rejected', 'cancelled', 'canceled', 'suspended', 'failed', 'lost', 'banned'].includes(v)) return 'danger';
+  if (v.includes('live') || ['active', 'approved', 'delivered', 'paid', 'resolved', 'won', 'online', 'on time'].includes(v)) return 'success';
+  if (v.includes('ready') || v.includes('setting up') || v.includes('getting late') || ['pending', 'in_review', 'docs_requested', 'preparing', 'assigned', 'held', 'open', 'restricted', 'out of date'].includes(v)) return 'warning';
+  if (v.includes('late') || v.includes('problem') || ['rejected', 'cancelled', 'canceled', 'suspended', 'failed', 'lost', 'banned'].includes(v)) return 'danger';
   if (['in_transit', 'picked_up', 'placed', 'accepted'].includes(v)) return 'info';
-  if (['deleted', 'deactivated'].includes(v)) return 'neutral';
+  if (v.includes('paused') || ['deleted', 'deactivated', 'draft'].includes(v)) return 'neutral';
   return 'neutral';
 }
 

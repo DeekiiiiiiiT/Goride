@@ -153,7 +153,7 @@ export function MerchantDetailPage() {
       );
       const [tiersRes, marketsRes] = await Promise.all([
         fetchPricingTiers(token),
-        listMarkets(token),
+        listMarkets(token, { includeZones: false }),
       ]);
       setPricingTiers(tiersRes.tiers ?? []);
       const parishName = new Map(

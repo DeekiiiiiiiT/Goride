@@ -947,12 +947,15 @@ export interface MarketReadiness {
   published_version_id?: string | null;
 }
 
-export function listMarkets(accessToken: string) {
+/** Full list includes zone polygons (for the markets map editor). Prefer includeZones:false for dropdowns. */
+export function listMarkets(accessToken: string, opts?: { includeZones?: boolean }) {
+  const includeZones = opts?.includeZones !== false;
+  const qs = includeZones ? '' : '?include_zones=0';
   return deliveryFetch<{
     markets: DashMarketRow[];
     parishes: DashParishRow[];
     unassigned: DashMarketRow[];
-  }>(accessToken, '/admin/markets');
+  }>(accessToken, `/admin/markets${qs}`);
 }
 
 export function createParish(accessToken: string, payload: { name: string; sort_order?: number }) {

@@ -5,6 +5,7 @@ import {
   PRIOR_CLOSE_HASH_CHANGED,
   clearCustodyTransferMarks,
   custodyCarryAlreadyLanded,
+  custodyCarryAmount,
   custodyTargetWeekCandidates,
   mergeOpeningCashCustody,
   openingCustodyAfterReverse,
@@ -126,6 +127,22 @@ describe('custodyCarry (Pass 4 N-1 / N-2)', () => {
     expect(residualCustodyHeld(0)).toBe(0);
     expect(residualCustodyHeld(0.001)).toBe(0);
     expect(residualCustodyHeld(7185.97)).toBe(7185.97);
+  });
+
+  it('custodyCarryAmount: settled / directional weeks carry nothing (pre-share cash is already netted)', () => {
+    // Rattray 2026-07-20: $20,128.19 held before share, settlement 0 → carried in prod, must not.
+    expect(custodyCarryAmount({ settlement_status: 'settled', settlement_amount: 0 })).toBe(0);
+    // 2026-03-02: driver_owes $12,029.67 is already its own Collect row.
+    expect(custodyCarryAmount({ settlement_status: 'driver_owes', settlement_amount: -12029.67 })).toBe(0);
+    expect(custodyCarryAmount({ settlement_status: 'company_owes', settlement_amount: 7543.32 })).toBe(0);
+  });
+
+  it('custodyCarryAmount: pending week carries only its after-share debt', () => {
+    expect(custodyCarryAmount({ settlement_status: 'pending', settlement_amount: -10640.43 })).toBe(10640.43);
+    // 2026-01-12: $24,542.42 held, but fleet owes driver $5,203.22 → nothing to carry.
+    expect(custodyCarryAmount({ settlement_status: 'pending', settlement_amount: 5203.22 })).toBe(0);
+    expect(custodyCarryAmount({ settlement_amount: -0.001 })).toBe(0);
+    expect(custodyCarryAmount({ settlement_status: null, settlement_amount: -50 })).toBe(50);
   });
 
   it('N-3: custodyCarryAlreadyLanded requires marks + successor opening', () => {

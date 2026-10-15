@@ -56,6 +56,7 @@ import {
 import {
   aggregateDriverEarnings,
   getDriverActiveRideRequest,
+  isQueryError,
   listDriverRideRequests,
   type DriverEarningsPeriod,
 } from "../_shared/driverRideQueries.ts";
@@ -2471,7 +2472,7 @@ app.get("/v1/drivers/me/active-ride", async (c) => {
   if (!(await requireDriverOrHaulerSurface(auth.user))) return jsonEdgeForbidden(c, "forbidden_role");
 
   const result = await getDriverActiveRideRequest(svc(), pubSvc(), auth.user.id);
-  if ("error" in result) {
+  if (isQueryError(result)) {
     return c.json({ error: "active_ride_failed", message: result.error }, 500);
   }
 
