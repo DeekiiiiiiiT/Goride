@@ -112,6 +112,29 @@ export interface CompatiblePartsItem {
   }>;
 }
 
+export interface UniversalSpecSection {
+  specKey: string;
+  label: string;
+  value: string;
+  unit?: string | null;
+  items: Array<{
+    id: string;
+    manufacturer?: string;
+    partNumber?: string;
+    name?: string;
+    extra?: Record<string, unknown>;
+    stockQty?: number;
+    inYourStock?: boolean;
+  }>;
+}
+
+export interface RelatedSupply {
+  id: string;
+  component_id: string;
+  supply_name: string;
+  note?: string | null;
+}
+
 export interface CompatiblePartsResponse {
   catalogMatched: boolean;
   catalogId?: string;
@@ -119,4 +142,6 @@ export interface CompatiblePartsResponse {
   count?: number;
   message?: string;
   tiered?: boolean;
+  universal?: UniversalSpecSection[];
+  relatedSupplies?: RelatedSupply[];
 }

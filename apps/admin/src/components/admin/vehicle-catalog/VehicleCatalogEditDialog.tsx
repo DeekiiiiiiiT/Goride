@@ -1164,7 +1164,7 @@ export function VehicleCatalogEditDialog({
                 type="number"
               />
               <FieldWithHint
-                label="Engine oil capacity L"
+                label="Engine oil capacity (litres, catalog note — not a verified spec)"
                 hint={FUEL_SYSTEM_FLUIDS_FIELD_HINTS.engineOilCapacityL}
                 value={form.engine_oil_capacity_l}
                 onChange={update("engine_oil_capacity_l")}

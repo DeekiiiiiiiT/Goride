@@ -10,7 +10,7 @@ import { resolveCatalogIdForKvVehicle } from "./vehicle_catalog_resolve.ts";
 import { registerPartsEnterpriseRoutes } from "./parts_enterprise_routes.ts";
 import { registerCatalogRoutes } from "./catalog_routes.ts";
 import { registerFleetAdminPartsRoutes } from "./fleet_admin_parts_routes.ts";
-import { enrichFleetParts, getCatalogParts } from "./catalog_api.ts";
+import { enrichFleetParts, getCatalogParts, overlayUniversalStock } from "./catalog_api.ts";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -89,10 +89,15 @@ export function registerPartSourcingRoutes(
           hintEngine: normCode(v.vehicle_catalog_engine_code_hint ?? ""),
         });
         const items = await enrichFleetParts(supabase, catalog.mode, catalog.items, orgId || null, downtime);
+        const universal = await overlayUniversalStock(supabase, catalog.universal, orgId || null);
+        const componentIds = new Set(items.map((item) => String(item.part?.maintenance_component_id ?? "")));
+        const relatedSupplies = (catalog.relatedSupplies ?? []).filter((row) => componentIds.has(String(row.component_id ?? "")));
         return c.json({
           catalogMatched: true,
           catalogId,
           items,
+          universal,
+          relatedSupplies,
           count: items.length,
           tiered: catalog.mode === "tiered",
           ready: catalog.ready,

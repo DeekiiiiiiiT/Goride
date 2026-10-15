@@ -63,12 +63,12 @@ export function buildFitMessage(input: {
   if (input.tier === 2) {
     const sister = input.sisterNames?.trim() || "a sister vehicle";
     const body = input.fitScope === "body" || input.fitScope === "chassis";
-    const caution = body
-      ? "Same platform — check trim, year and photos before ordering."
-      : "Same platform — expected direct fit.";
+      const caution = body
+      ? "check trim, year and photos before ordering."
+      : "Expected direct fit.";
     return {
-      tierLabel: "Same platform",
-      matchReason: `Same platform as ${sister}. ${caution}`,
+      tierLabel: "Same car, other badge",
+      matchReason: `Same car, other badge as ${sister}. ${caution}`,
       confirmedFit,
     };
   }

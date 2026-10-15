@@ -5,8 +5,28 @@ import { API_ENDPOINTS } from "../../../services/apiConfig";
 import { publicAnonKey } from "../../../utils/supabase/info";
 import type { VehicleCatalogRecord } from "../../../types/vehicleCatalog";
 import { FamilyScheduleForm } from "../maintenance-templates/FamilyScheduleForm";
+import { VariantPartsChecklist } from "../parts-sourcing/VariantPartsChecklist";
+import { VariantSpecsPanel } from "../parts-sourcing/VariantSpecsPanel";
 
-type HubTab = "overview" | "family" | "maintenance" | "parts" | "gaps" | "signals";
+type HubTab = "overview" | "family" | "maintenance" | "parts" | "specs" | "gaps" | "signals";
+
+const HUB_TABS: Array<[HubTab, string]> = [
+  ["overview", "Overview"],
+  ["family", "Family"],
+  ["maintenance", "Maintenance"],
+  ["parts", "Parts"],
+  ["specs", "Specs"],
+  ["gaps", "Gaps"],
+  ["signals", "Signals"],
+];
+
+function scopeWords(scope: string) {
+  if (scope === "variant") return "this vehicle";
+  if (scope === "platform") return "this body";
+  if (scope === "engine_family") return "this engine";
+  if (scope === "global") return "all vehicles";
+  return scope;
+}
 
 async function catalogGet(token: string, path: string) {
   const res = await fetch(`${API_ENDPOINTS.admin}/${path}`, {
@@ -21,7 +41,6 @@ export function VariantHub({ record, onBack }: { record: VehicleCatalogRecord; o
   const token = session?.access_token;
   const [tab, setTab] = useState<HubTab>("overview");
   const [detail, setDetail] = useState<Record<string, unknown> | null>(null);
-  const [parts, setParts] = useState<Record<string, unknown> | null>(null);
   const [schedule, setSchedule] = useState<Record<string, unknown> | null>(null);
   const [signals, setSignals] = useState<Record<string, unknown> | null>(null);
   const [error, setError] = useState("");
@@ -35,9 +54,6 @@ export function VariantHub({ record, onBack }: { record: VehicleCatalogRecord; o
 
   useEffect(() => {
     if (!token) return;
-    if (tab === "parts" || tab === "gaps") {
-      void catalogGet(token, `catalog/v1/variants/${record.id}/parts`).then(setParts).catch(() => setParts(null));
-    }
     if (tab === "maintenance") {
       void catalogGet(token, `catalog/v1/variants/${record.id}/schedule`).then(setSchedule).catch(() => setSchedule(null));
     }
@@ -50,7 +66,6 @@ export function VariantHub({ record, onBack }: { record: VehicleCatalogRecord; o
   const platform = (detail?.platform ?? null) as { id?: string; code?: string; label?: string } | null;
   const engine = (detail?.engine ?? null) as { id?: string; code?: string } | null;
   const siblings = Array.isArray(detail?.siblings) ? detail.siblings as string[] : [];
-  const partItems = Array.isArray(parts?.items) ? parts.items as Array<Record<string, unknown>> : [];
   const tasks = Array.isArray(schedule?.items) ? schedule.items as Array<Record<string, unknown>> : [];
   const demand = Array.isArray(signals?.demand)
     ? (signals.demand as Array<Record<string, unknown>>).find((row) => row.variant_id === record.id)
@@ -67,8 +82,8 @@ export function VariantHub({ record, onBack }: { record: VehicleCatalogRecord; o
       </div>
       {error ? <p className="text-sm text-red-600">{error}</p> : null}
       <div className="flex flex-wrap gap-2">
-        {(["overview", "family", "maintenance", "parts", "gaps", "signals"] as HubTab[]).map((id) => (
-          <Button key={id} type="button" size="sm" variant={tab === id ? "default" : "outline"} onClick={() => setTab(id)}>{id}</Button>
+        {HUB_TABS.map(([id, label]) => (
+          <Button key={id} type="button" size="sm" variant={tab === id ? "default" : "outline"} onClick={() => setTab(id)}>{label}</Button>
         ))}
       </div>
       {tab === "overview" && (
@@ -90,7 +105,7 @@ export function VariantHub({ record, onBack }: { record: VehicleCatalogRecord; o
         <div className="space-y-4">
           <ul className="text-sm space-y-1">
             {tasks.length === 0 ? <li>No schedule yet. Add one for this vehicle, its platform, or its engine.</li> : tasks.map((task) => (
-              <li key={String(task.template_id)}>{String(task.task_name)} · from {String(task.template_scope)}{task.component_op_code ? ` · ${String(task.component_op_code)}` : ""}</li>
+              <li key={String(task.template_id)}>{String(task.task_name)} · from {scopeWords(String(task.template_scope))}{task.component_op_code ? ` · ${String(task.component_op_code)}` : ""}</li>
             ))}
           </ul>
           <FamilyScheduleForm preset={{
@@ -100,20 +115,28 @@ export function VariantHub({ record, onBack }: { record: VehicleCatalogRecord; o
           }} />
         </div>
       )}
-      {(tab === "parts" || tab === "gaps") && (
-        <ul className="text-sm space-y-1">
-          {partItems.length === 0 ? <li>No parts for this variant yet.</li> : partItems.map((item) => {
-            const part = (item.part ?? {}) as Record<string, unknown>;
-            const decision = String(item.catalogDecision ?? part.catalog_decision ?? "pending");
-            if (tab === "gaps" && decision === "confirmed") return null;
-            return (
-              <li key={String(item.fitmentId)}>
-                {String(part.name ?? "Part")} · {decision === "confirmed" ? "Verified" : decision === "rejected" ? "Rejected" : "Unverified"}
-                {item.tier != null ? ` · tier ${String(item.tier)}` : ""}
-              </li>
-            );
-          })}
-        </ul>
+      {(tab === "parts" || tab === "gaps") && token && (
+        <VariantPartsChecklist
+          token={token}
+          onlyGaps={tab === "gaps"}
+          variant={{
+            id: record.id,
+            label: `${record.make} ${record.model}`,
+            yearFrom: record.production_start_year,
+            yearTo: record.production_end_year,
+          }}
+        />
+      )}
+      {tab === "specs" && token && (
+        <VariantSpecsPanel
+          token={token}
+          variant={{
+            id: record.id,
+            label: `${record.make} ${record.model}`,
+            yearFrom: record.production_start_year,
+            yearTo: record.production_end_year,
+          }}
+        />
       )}
       {tab === "signals" && (
         <p className="text-sm">Vehicles using this variant: {demand ? String(demand.vehicle_count) : "0"}. Fleets: {demand ? String(demand.fleet_count) : "0"}.</p>

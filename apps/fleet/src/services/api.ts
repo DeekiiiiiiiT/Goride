@@ -2662,6 +2662,19 @@ export const api = {
       return response.json() as Promise<CompatiblePartsResponse>;
   },
 
+  async setOrgPartStock(body: { partId?: string; universalPartId?: string; qty: number }) {
+      const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/org-part-stock`, {
+        method: "POST",
+        headers: await getHeaders(),
+        body: JSON.stringify(body),
+      });
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error((err as { error?: string }).error || "Could not update stock");
+      }
+      return response.json();
+  },
+
   async requestPartsSourcing(vehicleId: string, needText: string, extra?: Record<string, unknown>) {
       const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/parts-sourcing-requests`, {
         method: "POST",

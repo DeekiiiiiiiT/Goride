@@ -3,6 +3,7 @@ import { useAuth } from "../../auth/AuthContext";
 import { Button } from "../../ui/button";
 import { partsEnterpriseApi, listSuppliers } from "../../../services/partSourcingService";
 import type { SupplierRecord } from "../../../types/partSourcing";
+import { GuidedPartDialog } from "./GuidedPartDialog";
 
 const CORE = [
   ["ENG-OIL", "Oil"],
@@ -17,28 +18,39 @@ const CORE = [
   ["SUS-SHOCK", "Shocks"],
 ] as const;
 
-type Cell = "verified" | "unverified" | "missing";
+const SPECS = [
+  ["wiper_driver_mm", "Driver wiper"],
+  ["wiper_passenger_mm", "Passenger wiper"],
+  ["engine_oil_grade", "Oil grade"],
+  ["battery_jis", "Battery"],
+] as const;
+
+type Cell = "verified" | "unverified" | "missing" | "not_applicable";
 type VariantRow = {
   variantId: string;
   make: string;
   model: string;
   chassisCode?: string;
   engineCode?: string;
+  yearFrom?: number | null;
+  yearTo?: number | null;
   demand: number;
   fleetCount: number;
   ready: boolean;
   cells: Record<string, Cell>;
+  specCells?: Record<string, string>;
 };
 
 function cellMark(cell: Cell | undefined) {
   if (cell === "verified") return "Yes";
   if (cell === "unverified") return "Check";
+  if (cell === "not_applicable") return "N/A";
   return "Missing";
 }
 
 type FitReview = { ids: string[]; partName: string; variantLabel: string; count: number };
 type FitProposal = { id: string; partName: string; where: string; count: number };
-type Gap = { variantId: string; label: string; chassisCode: string; engineCode: string; opCode: string; opLabel: string };
+type Gap = { variantId: string; label: string; chassisCode: string; engineCode: string; opCode: string; opLabel: string; yearFrom?: number | null; yearTo?: number | null };
 
 export function CatalogQualityPage() {
   const { session } = useAuth();
@@ -56,7 +68,6 @@ export function CatalogQualityPage() {
   const [proposals, setProposals] = useState<FitProposal[]>([]);
   const [suppliers, setSuppliers] = useState<SupplierRecord[]>([]);
   const [gap, setGap] = useState<Gap | null>(null);
-  const [gapPart, setGapPart] = useState({ manufacturer: "", partNumber: "", partName: "" });
   const [price, setPrice] = useState({ partId: "", supplierId: "", supplierSku: "", unitPrice: "", currency: "JMD" });
 
   const load = useCallback(async () => {
@@ -113,6 +124,7 @@ export function CatalogQualityPage() {
               <th className="text-left p-2">Variant</th>
               <th className="p-2">In use</th>
               {CORE.map(([code, label]) => <th key={code} className="p-2">{label}</th>)}
+              {SPECS.map(([code, label]) => <th key={code} className="p-2">{label}</th>)}
             </tr>
           </thead>
           <tbody>
@@ -122,7 +134,9 @@ export function CatalogQualityPage() {
                 <td className="p-2 text-center">{row.demand}</td>
                 {CORE.map(([code]) => (
                   <td key={code} className="p-2 text-center">
-                    {row.demand > 0 && row.cells?.[code] !== "verified" ? (
+                    {row.cells?.[code] === "not_applicable" ? (
+                      <span className="text-slate-400">N/A</span>
+                    ) : row.demand > 0 && row.cells?.[code] !== "verified" ? (
                       <button type="button" className="underline" onClick={() => {
                         setGap({
                           variantId: row.variantId,
@@ -131,11 +145,15 @@ export function CatalogQualityPage() {
                           engineCode: row.engineCode || "",
                           opCode: code,
                           opLabel: CORE.find(([op]) => op === code)?.[1] || code,
+                          yearFrom: row.yearFrom,
+                          yearTo: row.yearTo,
                         });
-                        setGapPart({ manufacturer: "", partNumber: "", partName: "" });
                       }}>{cellMark(row.cells?.[code])}</button>
                     ) : cellMark(row.cells?.[code])}
                   </td>
+                ))}
+                {SPECS.map(([code]) => (
+                  <td key={code} className="p-2 text-center text-slate-600">{row.specCells?.[code] || "—"}</td>
                 ))}
               </tr>
             ))}
@@ -150,34 +168,29 @@ export function CatalogQualityPage() {
             <div key={id} className="flex flex-wrap items-center gap-2 border rounded px-3 py-2">
               <span className="text-sm flex-1">{String(part.manufacturer ?? "")} {String(part.partNumber ?? part.name ?? "")}</span>
               <input className="border rounded px-2 py-1 text-sm" placeholder="Evidence link" value={evidence[id] ?? ""} onChange={(e) => setEvidence((prev) => ({ ...prev, [id]: e.target.value }))} />
-              <Button type="button" size="sm" onClick={() => token && partsEnterpriseApi.decidePart(token, id, "confirmed", evidence[id]).then(() => load())}>Confirm</Button>
+              <Button type="button" size="sm" onClick={() => {
+                if (!token) return;
+                if (!evidence[id]?.trim()) {
+                  setMessage("A verified part needs a source link.");
+                  return;
+                }
+                void partsEnterpriseApi.decidePart(token, id, "confirmed", evidence[id]).then(() => load());
+              }}>Confirm</Button>
               <Button type="button" size="sm" variant="outline" onClick={() => token && partsEnterpriseApi.decidePart(token, id, "rejected").then(() => load())}>Reject</Button>
             </div>
           );
         })}
       </div>
-      {gap ? (
-        <div className="space-y-2 border rounded-lg p-3">
-          <h2 className="font-semibold">Add {gap.opLabel} for {gap.label}</h2>
-          <p className="text-sm text-slate-500">Use a part number you have already checked. This does not invent one.</p>
-          <div className="flex flex-wrap gap-2">
-            <input className="border rounded px-2 py-1 text-sm" placeholder="Manufacturer" value={gapPart.manufacturer} onChange={(e) => setGapPart((prev) => ({ ...prev, manufacturer: e.target.value }))} />
-            <input className="border rounded px-2 py-1 text-sm" placeholder="Part number" value={gapPart.partNumber} onChange={(e) => setGapPart((prev) => ({ ...prev, partNumber: e.target.value }))} />
-            <input className="border rounded px-2 py-1 text-sm" placeholder="Part name" value={gapPart.partName} onChange={(e) => setGapPart((prev) => ({ ...prev, partName: e.target.value }))} />
-            <Button type="button" size="sm" disabled={!token || !gapPart.partNumber.trim()} onClick={() => {
-              if (!token) return;
-              void partsEnterpriseApi.addCatalogPart(token, {
-                opCode: gap.opCode,
-                chassisCode: gap.chassisCode,
-                engineCode: gap.engineCode,
-                manufacturer: gapPart.manufacturer,
-                partNumber: gapPart.partNumber,
-                partName: gapPart.partName || gap.opLabel,
-              }).then(() => { setGap(null); return load(); }).catch((err) => setMessage(err instanceof Error ? err.message : "Could not add the part"));
-            }}>Save part</Button>
-            <Button type="button" size="sm" variant="outline" onClick={() => setGap(null)}>Cancel</Button>
-          </div>
-        </div>
+      {gap && token ? (
+        <GuidedPartDialog
+          open
+          token={token}
+          mode="create"
+          variant={{ id: gap.variantId, label: gap.label, yearFrom: gap.yearFrom, yearTo: gap.yearTo }}
+          job={{ opCode: gap.opCode, label: gap.opLabel }}
+          onClose={() => setGap(null)}
+          onSaved={() => { setGap(null); void load(); }}
+        />
       ) : null}
       <div className="space-y-2">
         <h2 className="font-semibold">Didn't fit</h2>

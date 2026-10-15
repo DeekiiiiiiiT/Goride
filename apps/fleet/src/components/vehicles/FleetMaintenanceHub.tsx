@@ -813,6 +813,36 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
               </TableBody>
             </Table>
           </div>
+          {partsData?.universal?.length ? (
+            <div className="rounded-lg border border-slate-200 dark:border-slate-700 p-3 space-y-2 text-sm">
+              <p className="font-medium">By size / spec</p>
+              {partsData.universal.map((section) => (
+                <div key={section.specKey}>
+                  <p>{section.label}: {section.value}{section.unit ? ` ${section.unit}` : ""}</p>
+                  {section.items.length === 0 ? (
+                    <p className="text-xs text-slate-500">No brand item on file. This size is enough to buy the right one.</p>
+                  ) : section.items.map((item) => (
+                    <div key={item.id} className="flex flex-wrap items-center gap-2 text-xs">
+                      <span>{item.manufacturer} {item.partNumber} · {item.name}</span>
+                      {item.stockQty ? <span>In your stock — {item.stockQty} on the shelf.</span> : (
+                        <Button type="button" size="sm" variant="ghost" className="h-7 px-2" onClick={() => {
+                          void api.setOrgPartStock({ universalPartId: item.id, qty: 1 }).then(() => handleLoadCompatibleParts()).catch((err) => toast.error(err instanceof Error ? err.message : "Could not add stock"));
+                        }}>Add 1 to stock</Button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </div>
+          ) : null}
+          {partsData?.relatedSupplies?.length ? (
+            <div className="text-sm">
+              <p className="font-medium">You may also need</p>
+              {partsData.relatedSupplies.map((supply) => (
+                <p key={supply.id} className="text-slate-600">{supply.supply_name}{supply.note ? ` — ${supply.note}` : ""}</p>
+              ))}
+            </div>
+          ) : null}
           <div className="text-sm space-y-1">
             {coreSummary ? <p className="text-slate-600">{coreSummary}</p> : null}
             <p className="font-medium">Repeat part alerts</p>

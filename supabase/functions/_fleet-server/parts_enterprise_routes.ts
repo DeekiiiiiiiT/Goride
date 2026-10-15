@@ -7,7 +7,7 @@ import { resolveCatalogIdForKvVehicle } from "./vehicle_catalog_resolve.ts";
 import { FEATURE_FLAGS, isFeatureEnabled } from "./feature_flags.ts";
 import { decodeFrameBatch, decodeFrameNumber, engineFamilyPrefix } from "../../../packages/types/src/frameNumberDecode.ts";
 import { CacheOnlySupplierAdapter } from "./parts_supplier_adapter.ts";
-import { attachCatalogPart, decideCatalogPart, loadCatalogReview, saveCatalogPart } from "./parts_catalog_review.ts";
+import { decideCatalogPart, loadCatalogReview } from "./parts_catalog_review.ts";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 function isUuid(s: string): boolean {
@@ -161,33 +161,13 @@ export function registerPartsEnterpriseRoutes(route: RouteApp, supabase: Supabas
   route.post("/make-server-37f42386/admin/part-catalog-attach", requireAuth(), async (c: Context) => {
     const denied = staff(c);
     if (denied) return denied;
-    try {
-      const body = await c.req.json() as { partId?: string; chassisCode?: string };
-      if (!body.partId || !body.chassisCode) return c.json({ error: "A part and a chassis are required." }, 400);
-      return c.json(await attachCatalogPart(supabase, body.partId, body.chassisCode));
-    } catch (e) {
-      return fail(c, e);
-    }
+    return c.json({ error: "Add the part from the vehicle checklist." }, 410);
   });
 
   route.post("/make-server-37f42386/admin/part-catalog-add", requireAuth(), async (c: Context) => {
     const denied = staff(c);
     if (denied) return denied;
-    try {
-      const body = await c.req.json() as {
-        opCode?: string; chassisCode?: string; engineCode?: string; manufacturer?: string; partNumber?: string; partName?: string;
-      };
-      return c.json(await saveCatalogPart(supabase, {
-        opCode: String(body.opCode ?? ""),
-        chassisCode: String(body.chassisCode ?? ""),
-        engineCode: String(body.engineCode ?? ""),
-        manufacturer: String(body.manufacturer ?? ""),
-        partNumber: String(body.partNumber ?? ""),
-        partName: body.partName,
-      }));
-    } catch (e) {
-      return fail(c, e);
-    }
+    return c.json({ error: "Add the part from the vehicle checklist." }, 410);
   });
 
   route.get("/make-server-37f42386/admin/part-groups", requireAuth(), async (c: Context) => {
@@ -290,7 +270,8 @@ export function registerPartsEnterpriseRoutes(route: RouteApp, supabase: Supabas
         p_batch_id: batchId,
       });
       if (error) throw error;
-      return c.json({ result: data });
+      const refreshed = await supabase.rpc("refresh_variant_parts_readiness");
+      return c.json({ result: data, refreshError: refreshed.error?.message ?? null });
     } catch (e) {
       return fail(c, e);
     }
@@ -304,7 +285,8 @@ export function registerPartsEnterpriseRoutes(route: RouteApp, supabase: Supabas
       if (!body.batchId || !isUuid(body.batchId)) return c.json({ error: "batchId required" }, 400);
       const { data, error } = await supabase.rpc("undo_parts_catalog_batch", { p_batch_id: body.batchId });
       if (error) throw error;
-      return c.json({ result: data });
+      const refreshed = await supabase.rpc("refresh_variant_parts_readiness");
+      return c.json({ result: data, refreshError: refreshed.error?.message ?? null });
     } catch (e) {
       return fail(c, e);
     }
@@ -409,7 +391,7 @@ export function registerPartsEnterpriseRoutes(route: RouteApp, supabase: Supabas
       if (q.length < 2) return c.json({ items: [] });
       const { data, error } = await supabase
         .from("vehicle_catalog")
-        .select("id, make, model, chassis_code, engine_code, production_start_year")
+        .select("id, make, model, chassis_code, engine_code, production_start_year, production_end_year")
         .or(`chassis_code.ilike.%${q}%,make.ilike.%${q}%,model.ilike.%${q}%`)
         .limit(20);
       if (error) throw error;
@@ -681,14 +663,19 @@ export function registerPartsEnterpriseRoutes(route: RouteApp, supabase: Supabas
       if (!orgId) return c.json({ error: "Organization required" }, 400);
       const body = await c.req.json() as Record<string, unknown>;
       const partId = String(body.partId ?? "");
-      if (!isUuid(partId)) return c.json({ error: "partId required" }, 400);
+      const universalPartId = String(body.universalPartId ?? "");
+      const hasPart = isUuid(partId);
+      const hasUniversal = isUuid(universalPartId);
+      if (hasPart === hasUniversal) return c.json({ error: "Choose a catalog part or a size item, not both." }, 400);
       const location = body.location ? String(body.location) : null;
-      let stockQuery = supabase.from("org_part_stock").select("id").eq("organization_id", orgId).eq("part_id", partId);
+      let stockQuery = supabase.from("org_part_stock").select("id").eq("organization_id", orgId);
+      stockQuery = hasPart ? stockQuery.eq("part_id", partId) : stockQuery.eq("universal_part_id", universalPartId);
       stockQuery = location ? stockQuery.eq("location", location) : stockQuery.is("location", null);
       const existing = await stockQuery.maybeSingle();
       const row = {
         organization_id: orgId,
-        part_id: partId,
+        part_id: hasPart ? partId : null,
+        universal_part_id: hasUniversal ? universalPartId : null,
         qty: Number(body.qty ?? 0),
         location,
         reorder_point: body.reorderPoint != null ? Number(body.reorderPoint) : null,

@@ -315,4 +315,91 @@ export function registerCatalogRoutes(route: RouteApp, supabase: SupabaseClient)
       return fail(c, error);
     }
   });
+
+  const guided = async (c: Context, name: string) => {
+    const denied = assertPlatformStaffResponse(c);
+    if (denied) return denied;
+    try {
+      const body = await c.req.json() as Record<string, unknown>;
+      const actor = c.get("rbacUser") as { userId?: string; id?: string } | undefined;
+      const actorId = String(actor?.userId ?? actor?.id ?? "");
+      if (UUID_RE.test(actorId)) {
+        body.verifiedBy = body.verifiedBy ?? actorId;
+        body.createdBy = body.createdBy ?? actorId;
+      }
+      const { data, error } = await supabase.rpc(name, { p_input: body });
+      if (error) return c.json({ error: error.message }, 400);
+      return staffJson(c, data ?? {});
+    } catch (error) {
+      return fail(c, error);
+    }
+  };
+
+  route.post("/make-server-37f42386/admin/catalog/parts/preview", requireAuth(), (c: Context) => guided(c, "preview_guided_fit"));
+  route.post("/make-server-37f42386/admin/catalog/parts/guided", requireAuth(), (c: Context) => guided(c, "save_guided_part"));
+  route.patch("/make-server-37f42386/admin/catalog/parts/:groupId/fit", requireAuth(), async (c: Context) => {
+    const body = await c.req.json() as Record<string, unknown>;
+    body.groupId = c.req.param("groupId");
+    const denied = assertPlatformStaffResponse(c);
+    if (denied) return denied;
+    try {
+      const actor = c.get("rbacUser") as { userId?: string; id?: string } | undefined;
+      const actorId = String(actor?.userId ?? actor?.id ?? "");
+      if (UUID_RE.test(actorId)) {
+        body.verifiedBy = body.verifiedBy ?? actorId;
+        body.createdBy = body.createdBy ?? actorId;
+      }
+      const { data, error } = await supabase.rpc("replace_guided_fit", { p_input: body });
+      if (error) return c.json({ error: error.message }, 400);
+      return staffJson(c, data ?? {});
+    } catch (error) {
+      return fail(c, error);
+    }
+  });
+  route.post("/make-server-37f42386/admin/catalog/parts/remove", requireAuth(), (c: Context) => guided(c, "remove_guided_variant"));
+  route.post("/make-server-37f42386/admin/catalog/applicability", requireAuth(), (c: Context) => guided(c, "save_component_applicability"));
+  route.post("/make-server-37f42386/admin/catalog/specs", requireAuth(), (c: Context) => guided(c, "save_catalog_spec"));
+  route.post("/make-server-37f42386/admin/catalog/universal-parts", requireAuth(), (c: Context) => guided(c, "save_universal_part"));
+  route.post("/make-server-37f42386/admin/catalog/related-supplies", requireAuth(), (c: Context) => guided(c, "save_related_supply"));
+
+  route.get("/make-server-37f42386/admin/catalog/variants/:id/checklist", requireAuth(), async (c: Context) => {
+    const denied = assertPlatformStaffResponse(c);
+    if (denied) return denied;
+    try {
+      const id = c.req.param("id")?.trim() ?? "";
+      if (!UUID_RE.test(id)) return c.json({ error: "Invalid variant" }, 400);
+      const { data, error } = await supabase.rpc("variant_parts_checklist", { p_catalog_id: id });
+      if (error) return c.json({ error: error.message }, 400);
+      return staffJson(c, data ?? { jobs: [], specs: [], supplies: [] });
+    } catch (error) {
+      return fail(c, error);
+    }
+  });
+
+  route.get("/make-server-37f42386/admin/catalog/spec-keys", requireAuth(), async (c: Context) => {
+    const denied = assertPlatformStaffResponse(c);
+    if (denied) return denied;
+    try {
+      const { data, error } = await supabase.from("spec_key").select("key, label, value_type, unit, allowed_values").order("label");
+      if (error) throw error;
+      return staffJson(c, { items: data || [] });
+    } catch (error) {
+      return fail(c, error);
+    }
+  });
+
+  route.get("/make-server-37f42386/admin/catalog/universal-parts", requireAuth(), async (c: Context) => {
+    const denied = assertPlatformStaffResponse(c);
+    if (denied) return denied;
+    try {
+      const { data, error } = await supabase
+        .from("universal_part")
+        .select("id, spec_key, spec_value, manufacturer, part_number, name, extra, evidence_url")
+        .order("manufacturer");
+      if (error) throw error;
+      return staffJson(c, { items: data || [] });
+    } catch (error) {
+      return fail(c, error);
+    }
+  });
 }

@@ -267,7 +267,26 @@ export async function getCatalogParts(
   const filtered = categoryId && mode === "tiered"
     ? items.filter((item) => String(item.part.category_id ?? "") === categoryId)
     : items;
-  return { mode, ready, items: filtered };
+  const universal = await loadUniversalSection(supabase, catalogId, input.vehicleYear ?? null);
+  const relatedSupplies = await loadRelatedSupplies(supabase);
+  return { mode, ready, items: filtered, universal, relatedSupplies };
+}
+
+async function loadUniversalSection(supabase: SupabaseClient, catalogId: string, vehicleYear: number | null) {
+  const { data, error } = await supabase.rpc("universal_section_for_variant", {
+    p_catalog_id: catalogId,
+    p_vehicle_year: vehicleYear,
+  });
+  if (error) throw error;
+  return Array.isArray(data) ? data : [];
+}
+
+async function loadRelatedSupplies(supabase: SupabaseClient) {
+  const { data, error } = await supabase
+    .from("component_related_supply")
+    .select("id, component_id, supply_name, note");
+  if (error) throw error;
+  return data || [];
 }
 
 function priceOffer(offer: CatalogOffer, downtimePerDay: number) {
@@ -354,6 +373,44 @@ export async function enrichFleetParts(
   });
   shaped.sort((a, b) => a.tier - b.tier || String(a.part.name).localeCompare(String(b.part.name)));
   return shaped;
+}
+
+export async function overlayUniversalStock(
+  supabase: SupabaseClient,
+  universal: unknown,
+  organizationId: string | null,
+) {
+  const sections = Array.isArray(universal) ? universal as Array<Record<string, unknown>> : [];
+  const ids = sections.flatMap((section) => {
+    const items = Array.isArray(section.items) ? section.items as Array<Record<string, unknown>> : [];
+    return items.map((item) => String(item.id ?? "")).filter((id) => id.length > 0);
+  });
+  const stockById: Record<string, number> = {};
+  if (organizationId && ids.length) {
+    const { data, error } = await supabase
+      .from("org_part_stock")
+      .select("universal_part_id, qty")
+      .eq("organization_id", organizationId)
+      .in("universal_part_id", ids);
+    if (error) throw error;
+    for (const row of data || []) {
+      const id = String((row as { universal_part_id: string }).universal_part_id);
+      stockById[id] = (stockById[id] ?? 0) + Number((row as { qty: number }).qty || 0);
+    }
+  }
+  return sections.map((section) => {
+    const items = Array.isArray(section.items) ? section.items as Array<Record<string, unknown>> : [];
+    return {
+      specKey: section.specKey ?? section.spec_key,
+      label: section.label,
+      value: section.value ?? section.spec_value,
+      unit: section.unit,
+      items: items.map((item) => {
+        const stockQty = stockById[String(item.id ?? "")] ?? 0;
+        return { ...item, stockQty, inYourStock: stockQty > 0 };
+      }),
+    };
+  });
 }
 
 export async function getCatalogSchedule(supabase: SupabaseClient, catalogId: string, vehicleYear: number | null) {

@@ -38,7 +38,9 @@ Deno.test("catalog answers hide a customer", () => {
   }), null);
   assertEquals(findCustomerIdentityLeak({ organization_id: "org" }) != null, true);
   assertEquals(findCustomerIdentityLeak({ fleetVehicle: { id: "v" } }) != null, true);
-  assertEquals(findCustomerIdentityLeak({ links: [{ catalogId: "x", count: 2 }] }), null);
+  assertEquals(findCustomerIdentityLeak({
+    universal: [{ specKey: "wiper_driver_mm", label: "Wiper, driver side", value: "525", unit: "mm", items: [] }],
+  }), null);
   assertEquals(findCustomerIdentityLeak({ work_order_line_id: "line" }) != null, true);
   assertEquals(findCustomerIdentityLeak({ latest_need_text: "call me" }) != null, true);
 });

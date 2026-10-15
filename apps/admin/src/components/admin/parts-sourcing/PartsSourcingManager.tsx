@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from "react";
-import { Loader2, Package, Plus, RefreshCw, Tags, Truck, Link2, ShoppingCart, Trash2 } from "lucide-react";
+import { Loader2, Package, Plus, RefreshCw, Tags, Truck, Link2, ShoppingCart, Trash2, ChevronDown, ChevronRight } from "lucide-react";
 import { useAuth } from "../../auth/AuthContext";
 import { listVehicleCatalog } from "../../../services/vehicleCatalogService";
 import type { VehicleCatalogRecord } from "../../../types/vehicleCatalog";
@@ -23,6 +23,7 @@ import {
   partsEnterpriseApi,
 } from "../../../services/partSourcingService";
 import { PartsGroupsPanel, PartsImportPanel } from "./PartsEnterprisePanels";
+import { PartsCatalogHome } from "./PartsCatalogHome";
 import type {
   PartCategoryRecord,
   PartFitmentRecord,
@@ -100,6 +101,7 @@ export function PartsSourcingManager({ mode = "catalog" }: { mode?: "catalog" | 
 
   const [area, setArea] = useState<Area>(mode);
   const [mainTab, setMainTab] = useState<MainTab>(mode === "supply" ? "suppliers" : "parts");
+  const [advancedOpen, setAdvancedOpen] = useState(false);
   const [busy, setBusy] = useState(false);
 
   const [categories, setCategories] = useState<PartCategoryRecord[]>([]);
@@ -449,7 +451,7 @@ export function PartsSourcingManager({ mode = "catalog" }: { mode?: "catalog" | 
             {mode === "supply" ? "Suppliers & prices" : "Parts catalog"}
           </h1>
           <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">
-            {mode === "supply" ? "Supplier reference prices. A customer's negotiated price stays in Roam Fleet admin." : "Parts, groups, fitment rules, and import."}
+            {mode === "supply" ? "Supplier reference prices. A customer's negotiated price stays in Roam Fleet admin." : "Find a vehicle, then add the parts it uses."}
           </p>
         </div>
         <Button type="button" variant="outline" size="sm" onClick={() => void refreshTab()} disabled={busy} className="gap-2">
@@ -466,6 +468,14 @@ export function PartsSourcingManager({ mode = "catalog" }: { mode?: "catalog" | 
         )}
       </div>
 
+      {mode === "catalog" && token ? <PartsCatalogHome token={token} /> : null}
+      {mode === "catalog" ? (
+        <button type="button" className="flex w-full items-center gap-2 rounded-lg border px-3 py-2 text-sm" onClick={() => setAdvancedOpen((open) => !open)}>
+          {advancedOpen ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+          Advanced
+        </button>
+      ) : null}
+      {(mode !== "catalog" || advancedOpen) && (
       <Tabs value={mainTab} onValueChange={(v) => setMainTab(v as MainTab)} className="w-full">
         <TabsList className="flex flex-wrap h-auto gap-1 bg-slate-100 dark:bg-slate-900/70 p-1 rounded-xl border border-slate-200 dark:border-slate-700">
           <TabsTrigger value="groups" className={area === "catalog" ? "gap-1.5 data-[state=active]:bg-amber-500/20" : "hidden"}>
@@ -836,6 +846,7 @@ export function PartsSourcingManager({ mode = "catalog" }: { mode?: "catalog" | 
           {token ? <PartsImportPanel token={token} /> : null}
         </TabsContent>
       </Tabs>
+      )}
 
       <Dialog open={catOpen} onOpenChange={setCatOpen}>
         <DialogContent>
