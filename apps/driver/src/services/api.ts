@@ -11,13 +11,15 @@ import { isTollCategory } from '../utils/tollCategoryHelper';
 import { unwrapFuelEntriesPayload } from '@roam/fuel-core';
 import { appendUploadEvidenceMeta, type UploadEvidenceMeta } from '@roam/types/evidence';
 
-// Helper to get authorization headers (JWT if logged in, else anon key)
+// Helper to get authorization headers (JWT if logged in, else anon key).
+// Always send `apikey` — Supabase Edge gateway requires it even when Authorization is a user JWT.
 async function getHeaders(contentType: string | null = 'application/json') {
   const { data: { session } } = await supabase.auth.getSession();
   const token = session?.access_token || publicAnonKey;
   
   const headers: Record<string, string> = {
-    'Authorization': `Bearer ${token}`
+    'Authorization': `Bearer ${token}`,
+    apikey: publicAnonKey,
   };
   
   if (contentType) {
@@ -559,7 +561,7 @@ export const api = {
 
   async getVehicleTankStatus(vehicleId: string) {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/vehicles/${vehicleId}/tank-status`, {
-        headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+        headers: await getHeaders(null),
     });
     if (!response.ok) throw new Error("Failed to fetch tank status");
     return response.json();
@@ -1213,7 +1215,7 @@ export const api = {
 
   async getStations() {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/stations`, {
-        headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+        headers: await getHeaders(null),
     });
     if (!response.ok) throw new Error("Failed to fetch stations");
     return response.json();

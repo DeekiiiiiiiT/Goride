@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { supabaseAnonFunctionHeaders } from '@roam/api-client';
 import { API_ENDPOINTS } from '../../services/apiConfig';
 
 interface PlatformConfig {
@@ -25,7 +26,9 @@ export function PlatformConfigProvider({ children }: { children: React.ReactNode
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    fetch(`${API_ENDPOINTS.admin}/platform-status`)
+    fetch(`${API_ENDPOINTS.admin}/platform-status`, {
+      headers: supabaseAnonFunctionHeaders(),
+    })
       .then(res => res.json())
       .then(data => {
         if (data.defaultCurrency) setCurrency(data.defaultCurrency);

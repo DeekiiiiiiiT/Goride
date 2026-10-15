@@ -3,6 +3,7 @@ import { CheckCircle, Loader2, Radio, RefreshCw, Star } from 'lucide-react';
 import { cn } from '@roam/ui';
 import { formatMoneyMinor } from '@roam/types/rides';
 import { useRideDispatchContext } from '../../contexts/RideDispatchContext';
+import { useDriver } from '../../contexts/DriverContext';
 import { useCurrentDriver } from '../../hooks/useCurrentDriver';
 import { useIndependentEarnings } from '../../hooks/useIndependentEarnings';
 import { useOnlineSessionDuration } from '../../hooks/useOnlineSessionDuration';
@@ -45,8 +46,10 @@ export function DriverHomeDashboard({ tripFlowActive, startTripSlot }: Props) {
   const [period, setPeriod] = useState<HomePeriod>('today');
   const { data, loading, error, refresh } = useIndependentEarnings(period);
   const { driverRecord } = useCurrentDriver();
+  const { canGoOnlineForDispatch } = useDriver();
   const { online, goingOnline, toggleOnline, locationGoOnlineBlocked } = useRideDispatchContext();
   const onlineTime = useOnlineSessionDuration(online);
+  const goOnlineBlocked = !canGoOnlineForDispatch || locationGoOnlineBlocked;
 
   const rating =
     typeof driverRecord?.rating === 'number'
@@ -126,9 +129,11 @@ export function DriverHomeDashboard({ tripFlowActive, startTripSlot }: Props) {
         <p className="text-center text-sm text-slate-500 dark:text-slate-400">
           {online
             ? 'Waiting for nearby passengers…'
-            : locationGoOnlineBlocked
-              ? 'Allow location to go online'
-              : 'Slide below to start receiving rides'}
+            : !canGoOnlineForDispatch
+              ? "Passenger trips aren't available for your account yet."
+              : locationGoOnlineBlocked
+                ? 'Allow location to go online'
+                : 'Slide below to start receiving rides'}
         </p>
 
         <div className="grid grid-cols-2 gap-3">
@@ -158,15 +163,21 @@ export function DriverHomeDashboard({ tripFlowActive, startTripSlot }: Props) {
           </div>
         </div>
 
-        <div className="driver-home-premium-card mt-4 rounded-3xl p-4 shadow-2xl">
-          <OnlineGaugeSlider
-            variant="premium"
-            online={online}
-            goingOnline={goingOnline}
-            onToggle={toggleOnline}
-            disabled={!online && locationGoOnlineBlocked}
-          />
-        </div>
+        {canGoOnlineForDispatch ? (
+          <div className="driver-home-premium-card mt-4 rounded-3xl p-4 shadow-2xl">
+            <OnlineGaugeSlider
+              variant="premium"
+              online={online}
+              goingOnline={goingOnline}
+              onToggle={toggleOnline}
+              disabled={!online && goOnlineBlocked}
+            />
+          </div>
+        ) : (
+          <div className="driver-home-premium-card mt-4 rounded-3xl p-4 text-center text-sm text-slate-600 dark:text-slate-300">
+            Passenger trips aren&apos;t available for your account yet. Ask your fleet if you should be on the dispatch pilot.
+          </div>
+        )}
       </div>
     </div>
   );

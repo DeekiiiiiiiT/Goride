@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { useDriver } from '../../contexts/DriverContext';
 import { useAuth } from '../../contexts/AuthContext';
@@ -34,6 +34,10 @@ import { WeeklyCheckInModal } from '../fleet/WeeklyCheckInModal';
 import { useCurrentDriver } from '../../hooks/useCurrentDriver';
 import { useWeeklyCheckIn } from '../../hooks/useWeeklyCheckIn';
 import { resolveVehicleIdForDriver } from '../../utils/resolveDriverVehicleId';
+import {
+  getCameraResumeTarget,
+  type CaptureFlowId,
+} from '../../utils/nativePhotoCapture';
 
 import { MyVehicle } from '../independent/MyVehicle';
 import { TaxCenter } from '../independent/TaxCenter';
@@ -66,8 +70,29 @@ export function DriverShell({ forcePassengerRides = false }: { forcePassengerRid
   const [expensesMode, setExpensesMode] = useState<'view' | 'log'>('view');
   const [checkInOpen, setCheckInOpen] = useState(false);
   const [checkInSubmitting, setCheckInSubmitting] = useState(false);
+  /** Camera process-death resume — open the right expense step once. */
+  const [cameraResume, setCameraResume] = useState<CaptureFlowId | null>(null);
+  const cameraResumeRoutedRef = useRef(false);
   const bottomNavItems = getBottomNavItems();
   const menuNavItems = getNavigationItems(mode);
+
+  // After OEM camera kill, reopen check-in / expenses so consumeRestoredPhoto can run.
+  useEffect(() => {
+    if (loading || cameraResumeRoutedRef.current || !user) return;
+    const target = getCameraResumeTarget();
+    if (!target) return;
+    cameraResumeRoutedRef.current = true;
+    toast.message('We saved your draft after the camera closed.');
+    if (target === 'checkin') {
+      setCheckInOpen(true);
+      return;
+    }
+    if (target === 'odometer' || target === 'receipt' || target === 'toll' || target === 'fuel') {
+      setCameraResume(target === 'fuel' ? 'odometer' : target);
+      setExpensesMode('log');
+      setCurrentPage('expenses');
+    }
+  }, [loading, user]);
 
   const assignedVehicleId = useMemo(() => {
     const id =
@@ -185,9 +210,13 @@ export function DriverShell({ forcePassengerRides = false }: { forcePassengerRid
       case 'expenses':
         return (
           <DriverExpenses
-            key={expensesMode}
+            key={`${expensesMode}:${cameraResume ?? 'none'}`}
             mode={expensesMode}
-            onBack={() => setCurrentPage('dashboard')}
+            cameraResume={cameraResume}
+            onBack={() => {
+              setCameraResume(null);
+              setCurrentPage('dashboard');
+            }}
           />
         );
       case 'fleet-settlement':

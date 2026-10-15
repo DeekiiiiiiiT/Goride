@@ -708,6 +708,9 @@ importers:
       '@capacitor/browser':
         specifier: ^7.0.5
         version: 7.0.5(@capacitor/core@7.6.5)
+      '@capacitor/camera':
+        specifier: ^7.0.5
+        version: 7.0.5(@capacitor/core@7.6.5)
       '@capacitor/core':
         specifier: ^7.6.5
         version: 7.6.5
@@ -720,6 +723,9 @@ importers:
       '@capacitor/keyboard':
         specifier: ^7.0.6
         version: 7.0.6(@capacitor/core@7.6.5)
+      '@capacitor/preferences':
+        specifier: ^7.0.0
+        version: 7.0.4(@capacitor/core@7.6.5)
       '@capacitor/splash-screen':
         specifier: ^7.0.5
         version: 7.0.5(@capacitor/core@7.6.5)
@@ -816,6 +822,9 @@ importers:
       '@roam/ui':
         specifier: workspace:*
         version: link:../../packages/ui
+      '@sentry/capacitor':
+        specifier: ^4.4.0
+        version: 4.4.0(@capacitor/core@7.6.5)(@sentry/react@10.69.0(react@18.3.1))
       '@sentry/react':
         specifier: ^10.69.0
         version: 10.69.0(react@18.3.1)
@@ -3071,6 +3080,11 @@ packages:
     peerDependencies:
       '@capacitor/core': '>=7.0.0'
 
+  '@capacitor/camera@7.0.5':
+    resolution: {integrity: sha512-+53f1xHq8on7O+ULXbgWp00ooWvn3fUkWxTP3p5zHi1nVriCxLbYnY0zTpZQqn52M96vclFKkoABbTVQ3x755w==}
+    peerDependencies:
+      '@capacitor/core': '>=7.0.0'
+
   '@capacitor/cli@7.6.5':
     resolution: {integrity: sha512-nlhNoWZIL7YcV1JgNP8+p7WAVIG+zwsY20ZQJ0zd+2lLeCx9MijfELLhLzMCq33c2pILwOvLww8HUqZ5uYCvHg==}
     engines: {node: '>=20.0.0'}
@@ -3091,6 +3105,11 @@ packages:
 
   '@capacitor/keyboard@7.0.6':
     resolution: {integrity: sha512-mH9EHo4EnBA9zJAi6domGVB/PdEkcm0h27nJDHG4Y3fd2oKsheCxDRXlYrbgj8hcyQPe0cGWqAfzfwKzkWQoFQ==}
+    peerDependencies:
+      '@capacitor/core': '>=7.0.0'
+
+  '@capacitor/preferences@7.0.4':
+    resolution: {integrity: sha512-TJhkwaI2RCs/iDC9PjNczZV4h6JM4gUtTuKMeFdy0OwGgFEHf4TrtW2mFMc1TnPDalYQ91p9NT+UKgiJs9/xtg==}
     peerDependencies:
       '@capacitor/core': '>=7.0.0'
 
@@ -4534,6 +4553,21 @@ packages:
     resolution: {integrity: sha512-8391tnm96YbR7b8SYfEA/NEIZuyb2r3SZrtAT0bhZtjlujcYWjo7gugQvk8sWLU9cAa/euD00eJoIoJvNfpd7Q==}
     engines: {node: '>=18'}
 
+  '@sentry/capacitor@4.4.0':
+    resolution: {integrity: sha512-t2PPB90JvKLCsSmF09jGYGtNW0ao6tLgyYyivFLNWRKkEbMWyHR5RtyaEb7CnRgdx9wOTUQ0mGrwYGpfbUE/ZQ==}
+    peerDependencies:
+      '@capacitor/core': '>=3.0.0'
+      '@sentry/angular': 10.69.0
+      '@sentry/react': 10.69.0
+      '@sentry/vue': 10.69.0
+    peerDependenciesMeta:
+      '@sentry/angular':
+        optional: true
+      '@sentry/react':
+        optional: true
+      '@sentry/vue':
+        optional: true
+
   '@sentry/conventions@0.16.0':
     resolution: {integrity: sha512-fO9PLmHdVURcSPUpWCItWAtgKiMwGdJHbovoSEyLplX5sxs2ugvI4CBPTrkkgqhObnZOD0CnWBKDzSVQYBKEyQ==}
     engines: {node: '>=14'}
@@ -4558,6 +4592,10 @@ packages:
 
   '@sentry/replay@10.69.0':
     resolution: {integrity: sha512-uRhmNhtFGPOlM0iniVmWKAX3KVXI0le41yYK/iKdPjinT9jA3ZrmykO/Fv1v/KI5znOtwa9D6eHRnDTTMRxFrg==}
+    engines: {node: '>=18'}
+
+  '@sentry/types@10.69.0':
+    resolution: {integrity: sha512-sWOH1SrpGecTWVygZy3tI3D4WmJQd1/CEcR+1GJr0MltNHK6u8GbTF/Zl+aOR7EfYxPR9vZWUYTjNpdpFt7HeA==}
     engines: {node: '>=18'}
 
   '@standard-schema/spec@1.1.0':
@@ -7822,6 +7860,10 @@ snapshots:
     dependencies:
       '@capacitor/core': 7.6.5
 
+  '@capacitor/camera@7.0.5(@capacitor/core@7.6.5)':
+    dependencies:
+      '@capacitor/core': 7.6.5
+
   '@capacitor/cli@7.6.5':
     dependencies:
       '@ionic/cli-framework-output': 2.2.8
@@ -7858,6 +7900,10 @@ snapshots:
       '@capacitor/core': 7.6.5
 
   '@capacitor/keyboard@7.0.6(@capacitor/core@7.6.5)':
+    dependencies:
+      '@capacitor/core': 7.6.5
+
+  '@capacitor/preferences@7.0.4(@capacitor/core@7.6.5)':
     dependencies:
       '@capacitor/core': 7.6.5
 
@@ -9147,6 +9193,15 @@ snapshots:
       '@sentry/replay': 10.69.0
       '@sentry/replay-canvas': 10.69.0
 
+  '@sentry/capacitor@4.4.0(@capacitor/core@7.6.5)(@sentry/react@10.69.0(react@18.3.1))':
+    dependencies:
+      '@capacitor/core': 7.6.5
+      '@sentry/browser': 10.69.0
+      '@sentry/core': 10.69.0
+      '@sentry/types': 10.69.0
+    optionalDependencies:
+      '@sentry/react': 10.69.0(react@18.3.1)
+
   '@sentry/conventions@0.16.0': {}
 
   '@sentry/core@10.69.0':
@@ -9172,6 +9227,10 @@ snapshots:
   '@sentry/replay@10.69.0':
     dependencies:
       '@sentry/browser-utils': 10.69.0
+      '@sentry/core': 10.69.0
+
+  '@sentry/types@10.69.0':
+    dependencies:
       '@sentry/core': 10.69.0
 
   '@standard-schema/spec@1.1.0': {}

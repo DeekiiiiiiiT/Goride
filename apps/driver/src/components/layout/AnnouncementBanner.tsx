@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Info, AlertTriangle, AlertCircle, X } from 'lucide-react';
+import { supabaseAnonFunctionHeaders } from '@roam/api-client';
 import { API_ENDPOINTS } from '../../services/apiConfig';
 
 interface Announcement {
@@ -24,7 +25,9 @@ export function AnnouncementBanner({ preview }: { preview?: boolean }) {
       setDismissed(true);
     }
 
-    fetch(`${API_ENDPOINTS.admin}/platform-status`)
+    fetch(`${API_ENDPOINTS.admin}/platform-status`, {
+      headers: supabaseAnonFunctionHeaders(),
+    })
       .then(res => res.json())
       .then(data => {
         if (data.announcement) {

@@ -1,4 +1,5 @@
 import './instrument';
+import { reportPriorWebViewCrashIfAny } from './instrument';
 
 import { createRoot } from 'react-dom/client';
 import * as Sentry from '@sentry/react';
@@ -10,10 +11,12 @@ import './index.css';
 
 setDispatchAuthClient(supabase);
 
-void initCapacitorNative().finally(() => {
-  createRoot(document.getElementById('root')!).render(
-    <Sentry.ErrorBoundary fallback={<p>Something went wrong. Please refresh the page.</p>}>
-      <App />
-    </Sentry.ErrorBoundary>,
-  );
-});
+void initCapacitorNative()
+  .then(() => reportPriorWebViewCrashIfAny())
+  .finally(() => {
+    createRoot(document.getElementById('root')!).render(
+      <Sentry.ErrorBoundary fallback={<p>Something went wrong. Please refresh the page.</p>}>
+        <App />
+      </Sentry.ErrorBoundary>,
+    );
+  });

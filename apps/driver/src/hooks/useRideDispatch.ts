@@ -24,6 +24,7 @@ import { useActiveRideTracking } from './useActiveRideTracking';
 import { openExternalNavigation } from '../utils/rideNavigation';
 import { useDriverPermissionPolicy } from './usePermissionPolicy';
 import { useActiveRideRecovery } from '../contexts/ActiveRideRecoveryContext';
+import { useDriver } from '../contexts/DriverContext';
 import {
   clearSuppressActiveTripUi,
   persistActiveRideId,
@@ -90,6 +91,7 @@ function buildExactCashSettlementResult(ride: RideRequestRow): CashSettlementRes
 export function useRideDispatch() {
   const dispatchConfig = useDispatchConfig();
   const defaultBodyTypeSlug = dispatchConfig.defaultBodyTypeSlug;
+  const { profile: driverProfile } = useDriver();
 
   const [online, setOnline] = useState(false);
   const [goingOnline, setGoingOnline] = useState(false);
@@ -219,12 +221,17 @@ export function useRideDispatch() {
       if (!user) return;
       setUserId(user.id);
 
-      const { data: profile } = await supabase
-        .from('driver_profiles')
-        .select('id')
-        .eq('user_id', user.id)
-        .maybeSingle();
-      if (!profile?.id) {
+      // Prefer DriverContext profile id (already loaded) over a duplicate driver_profiles select.
+      let profileId = driverProfile?.id ?? null;
+      if (!profileId) {
+        const { data: profile } = await supabase
+          .from('driver_profiles')
+          .select('id')
+          .eq('user_id', user.id)
+          .maybeSingle();
+        profileId = profile?.id ?? null;
+      }
+      if (!profileId) {
         setBodyTypeSlug(defaultBodyTypeSlug);
         setVehicleReady(true);
         return;
@@ -233,7 +240,7 @@ export function useRideDispatch() {
       const { data: vehicle, error: vehicleError } = await supabase
         .from('driver_vehicles')
         .select('body_type')
-        .eq('driver_profile_id', profile.id)
+        .eq('driver_profile_id', profileId)
         .eq('status', 'active')
         .order('is_primary', { ascending: false })
         .limit(1)
@@ -247,7 +254,7 @@ export function useRideDispatch() {
       setBodyTypeSlug(label ? slugFromBodyLabel(label) || defaultBodyTypeSlug : defaultBodyTypeSlug);
       setVehicleReady(true);
     })();
-  }, []);
+  }, [defaultBodyTypeSlug, driverProfile?.id]);
 
   const effectiveBodyTypeSlug = bodyTypeSlug ?? defaultBodyTypeSlug;
   bodyTypeSlugRef.current = effectiveBodyTypeSlug;

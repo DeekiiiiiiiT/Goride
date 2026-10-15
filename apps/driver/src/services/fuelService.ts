@@ -1,4 +1,5 @@
 import { supabase } from '../utils/supabase/client';
+import { publicAnonKey } from '../utils/supabase/info';
 import { FuelCard, FuelEntry, MileageAdjustment, FuelScenario } from '../types/fuel';
 import { FinancialTransaction } from '../types/data';
 import { API_ENDPOINTS } from './apiConfig';
@@ -22,7 +23,10 @@ async function authHeaders(contentType: string | null = 'application/json'): Pro
   if (!token) {
     throw new Error('You must be signed in to load fuel cards.');
   }
-  const headers: Record<string, string> = { Authorization: `Bearer ${token}` };
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${token}`,
+    apikey: publicAnonKey,
+  };
   if (contentType) headers['Content-Type'] = contentType;
   return headers;
 }

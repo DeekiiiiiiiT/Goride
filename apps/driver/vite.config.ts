@@ -2,6 +2,7 @@ import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import path from 'path';
+import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { roamSupabaseDevProxy } from '@roam/api-client/viteDevProxy';
 
@@ -13,6 +14,16 @@ const SUPABASE_ENV_KEYS = [
   'VITE_SUPABASE_PROJECT_ID',
   'VITE_SUPABASE_ANON_KEY',
 ] as const;
+
+function androidVersionName(): string {
+  try {
+    const raw = readFileSync(path.join(__dirname, 'android/version.properties'), 'utf8');
+    const m = raw.match(/^VERSION_NAME=(.+)$/m);
+    return m?.[1]?.trim() || '0.0.0';
+  } catch {
+    return '0.0.0';
+  }
+}
 
 export default defineConfig(({ mode }) => {
   const fromFleet = loadEnv(mode, path.resolve(__dirname, '../fleet'), 'VITE_');
@@ -26,10 +37,15 @@ export default defineConfig(({ mode }) => {
     ]),
   );
 
+  const appVersion = env.VITE_APP_VERSION || androidVersionName();
+
   return {
     base: './',
     plugins: [roamSupabaseDevProxy(), react(), tailwindcss()],
-    define: supabaseDefine,
+    define: {
+      ...supabaseDefine,
+      'import.meta.env.VITE_APP_VERSION': JSON.stringify(appVersion),
+    },
     resolve: {
       extensions: ['.js', '.jsx', '.ts', '.tsx', '.json'],
       alias: {

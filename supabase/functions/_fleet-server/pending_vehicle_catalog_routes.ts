@@ -2,7 +2,13 @@
 import type { Context } from "npm:hono@4.3.11";
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import * as kv from "./kv_store.tsx";
-import { requireAuth, requirePermission, assertPlatformStaffResponse } from "./rbac_middleware.ts";
+import {
+  requireAuth,
+  requirePermission,
+  assertPlatformStaffResponse,
+  hasPermission,
+  type RbacUser,
+} from "./rbac_middleware.ts";
 import { executeMaintenanceBootstrap } from "./maintenance_bootstrap_core.ts";
 import { canonicalOdometerForVehicle } from "./canonical_vehicle_odometer.ts";
 import { filterByOrg, getOrgId } from "./org_scope.ts";
@@ -23,6 +29,8 @@ import { parseCatalogMonthFromUnknown } from "../../../packages/types/src/catalo
 import { VEHICLE_CATALOG_WRITABLE_KEYS } from "../../../packages/types/src/vehicleCatalogCsvImport.ts";
 import { resolveApproveVehicleClass } from "../../../packages/types/src/vehicleCatalog.ts";
 import { isEnforcementEnabled, listRecentCatalogGateEvents } from "./vehicle_catalog_gate.ts";
+import { resolveDriverVehicleAssignment } from "./driver_vehicle_assignment.ts";
+import { resolveMyPendingCatalogScope } from "./pending_catalog_my_scope.ts";
 
 /** Approve insert/update allowlist — keep in sync with packages/types VEHICLE_CATALOG_WRITABLE_KEYS. */
 const KEYS = VEHICLE_CATALOG_WRITABLE_KEYS;
@@ -404,24 +412,53 @@ export function registerPendingVehicleCatalogRoutes(
     },
   );
 
+  // Driver app needs this on Start Trip — do not require vehicles.view on the route
+  // (driver RBAC is empty). Staff with vehicles.view get org-wide; drivers get
+  // their assigned vehicle only.
   route.get(
     "/make-server-37f42386/vehicle-catalog-pending/my",
     requireAuth(),
-    requirePermission("vehicles.view"),
     async (c) => {
       try {
         const orgId = getOrgId(c);
         if (!orgId) {
           return c.json({ error: "Organization required" }, 403);
         }
-        const fleetVid = (c.req.query("fleet_vehicle_id") ?? "").trim();
+        const rbacUser = c.get("rbacUser") as RbacUser | undefined;
+        const userId = rbacUser?.userId?.trim() || "";
+        if (!userId) {
+          return c.json({ items: [] });
+        }
+        const canViewVehicles = Boolean(
+          rbacUser?.resolvedRole && hasPermission(rbacUser.resolvedRole, "vehicles.view"),
+        );
+
+        let assignedVehicleId: string | null = null;
+        if (!canViewVehicles) {
+          const resolved = await resolveDriverVehicleAssignment(userId, {
+            organizationId: orgId,
+          });
+          assignedVehicleId = resolved.vehicleId;
+        }
+
+        const scope = resolveMyPendingCatalogScope({
+          canViewVehicles,
+          assignedVehicleId,
+          fleetVehicleIdHint: c.req.query("fleet_vehicle_id"),
+        });
+        if (scope.mode === "empty") {
+          return c.json({ items: [] });
+        }
+
         let q = supabase
           .from("vehicle_catalog_pending_requests")
           .select("*")
           .eq("organization_id", orgId)
           .in("status", [...OPEN_STATUSES]);
-        if (fleetVid && UUID_RE.test(fleetVid)) {
-          q = q.eq("fleet_vehicle_id", fleetVid);
+        if (scope.mode === "vehicle") {
+          q = q.eq("fleet_vehicle_id", scope.vehicleId);
+        } else if (scope.vehicleId) {
+          q = q.eq("fleet_vehicle_id", scope.vehicleId);
         }
         const { data, error } = await q.order("updated_at", { ascending: false });
         if (error) throw error;

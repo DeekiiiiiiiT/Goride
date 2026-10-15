@@ -27,6 +27,8 @@ export interface DriverProfile {
   profilePhotoUrl?: string;
   /** Temporary Start Trip bridge — default true for fleet. */
   manualStartTripEnabled?: boolean;
+  /** Staged rideshare dispatch for fleet drivers when independent_only_matching is on. */
+  dispatchPilot?: boolean;
 }
 
 export interface FleetInfo {
@@ -50,6 +52,8 @@ interface DriverContextType {
   mode: DriverMode;
   isFleetDriver: boolean;
   isIndependentDriver: boolean;
+  /** False for non-pilot fleet drivers under independent-only matching. */
+  canGoOnlineForDispatch: boolean;
   fleet: FleetInfo | null;
   permissions: DriverPermissions;
   loading: boolean;
@@ -71,6 +75,7 @@ const DriverContext = createContext<DriverContextType>({
   mode: 'independent',
   isFleetDriver: false,
   isIndependentDriver: true,
+  canGoOnlineForDispatch: true,
   fleet: null,
   permissions: defaultPermissions,
   loading: true,
@@ -125,6 +130,7 @@ export const DriverProvider = ({ children }: { children: React.ReactNode }) => {
           phone: data.phone,
           profilePhotoUrl: data.profile_photo_url,
           manualStartTripEnabled: data.manual_start_trip_enabled !== false,
+          dispatchPilot: data.dispatch_pilot === true,
         });
 
         if (data.fleet_id) {
@@ -162,6 +168,8 @@ export const DriverProvider = ({ children }: { children: React.ReactNode }) => {
   const mode: DriverMode = profile?.mode || 'independent';
   const isFleetDriver = mode === 'fleet';
   const isIndependentDriver = mode === 'independent';
+  // Mirror server isDriverEligibleForDispatch: fleet needs dispatch_pilot when independent-only matching is on.
+  const canGoOnlineForDispatch = isIndependentDriver || profile?.dispatchPilot === true;
 
   const permissions: DriverPermissions = {
     canAccessEquipment: isFleetDriver,
@@ -180,6 +188,7 @@ export const DriverProvider = ({ children }: { children: React.ReactNode }) => {
         mode,
         isFleetDriver,
         isIndependentDriver,
+        canGoOnlineForDispatch,
         fleet,
         permissions,
         loading,

@@ -29,24 +29,34 @@ const ActiveRideRecoveryContext = createContext<ActiveRideRecoveryContextValue>(
 });
 
 async function fetchActiveRideFromServer(): Promise<RideRequestRow | null> {
+  // Single active-ride call per recovery (was two — burned launch traffic on every boot).
+  let serverRide: RideRequestRow | null = null;
   try {
-    const { ride: mandatoryCashRide } = await ridesDriverActiveRide();
-    if (
-      mandatoryCashRide &&
-      mandatoryCashRide.status === 'awaiting_cash_settlement' &&
-      isDriverActiveRideStatus(mandatoryCashRide.status)
-    ) {
-      clearSuppressActiveTripUi();
-      persistActiveRideId(mandatoryCashRide.id);
-      persistActiveRideSnapshot(mandatoryCashRide);
-      return mandatoryCashRide;
-    }
+    const { ride } = await ridesDriverActiveRide();
+    serverRide = ride ?? null;
   } catch {
-    /* fall through */
+    /* fall through to cache */
+  }
+
+  if (
+    serverRide &&
+    serverRide.status === 'awaiting_cash_settlement' &&
+    isDriverActiveRideStatus(serverRide.status)
+  ) {
+    clearSuppressActiveTripUi();
+    persistActiveRideId(serverRide.id);
+    persistActiveRideSnapshot(serverRide);
+    return serverRide;
   }
 
   if (isActiveTripUiSuppressed()) {
     return null;
+  }
+
+  if (serverRide && isDriverActiveRideStatus(serverRide.status)) {
+    persistActiveRideId(serverRide.id);
+    persistActiveRideSnapshot(serverRide);
+    return serverRide;
   }
 
   const cachedId = readPersistedActiveRideId();
@@ -61,19 +71,8 @@ async function fetchActiveRideFromServer(): Promise<RideRequestRow | null> {
       persistActiveRideId(null);
       persistActiveRideSnapshot(null);
     } catch {
-      /* fall through to active-ride endpoint or cache */
+      /* use local snapshot below */
     }
-  }
-
-  try {
-    const { ride } = await ridesDriverActiveRide();
-    if (ride && isDriverActiveRideStatus(ride.status)) {
-      persistActiveRideId(ride.id);
-      persistActiveRideSnapshot(ride);
-      return ride;
-    }
-  } catch {
-    /* use local snapshot below */
   }
 
   const snapshot = readPersistedActiveRideSnapshot();

@@ -29,6 +29,9 @@ export async function initCapacitorNative(): Promise<void> {
     void finishNativeAuthFromUrl(url);
   });
 
+  const { initCameraRestoredResultListener } = await import('./utils/nativePhotoCapture');
+  await initCameraRestoredResultListener();
+
   const { StatusBar, Style } = await import('@capacitor/status-bar');
   await StatusBar.setStyle({ style: Style.Light });
   if (Capacitor.getPlatform() === 'android') {

@@ -146,7 +146,7 @@ export function PendingCatalogRequestsDrawer({
   onOpenVehicle,
 }: PendingCatalogRequestsDrawerProps) {
   const queryClient = useQueryClient();
-  const { data, isLoading, isFetching } = useMyPendingCatalogRequests();
+  const { data, isLoading, isFetching } = useMyPendingCatalogRequests({ enabled: open });
 
   // Pull whatever the fleet page already loaded so we can show plates without
   // an extra fetch. Read-only - never mutate this cache.

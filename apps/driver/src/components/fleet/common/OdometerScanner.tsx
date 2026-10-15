@@ -7,6 +7,14 @@ import { Textarea } from '@roam/ui';
 import { Camera, AlertTriangle, ScanLine, CheckCircle, RotateCcw, ShieldAlert } from 'lucide-react';
 import { api } from '../../../services/api';
 import { motion, AnimatePresence } from 'motion/react';
+import {
+  captureNativePhoto,
+  clearCameraDraft,
+  consumeRestoredPhoto,
+  registerCaptureHandler,
+  saveCameraDraft,
+} from '../../../utils/nativePhotoCapture';
+import { toast } from 'sonner';
 
 export interface ScanResult {
     reading: number;
@@ -43,8 +51,6 @@ export function OdometerScanner({
     const [manualReason, setManualReason] = useState<string>('');
     const [errorMsg, setErrorMsg] = useState<string | null>(null);
     const [isVerifying, setIsVerifying] = useState(false);
-    const fileInputRef = useRef<HTMLInputElement>(null);
-    const photoOnlyInputRef = useRef<HTMLInputElement>(null);
     const scanAbortRef = useRef<AbortController | null>(null);
     const scanGenerationRef = useRef(0);
 
@@ -55,32 +61,51 @@ export function OdometerScanner({
     const isDecreasing = lastOdometer > 0 && odometerValue > 0 && odometerValue < lastOdometer;
     const isHighJump = lastOdometer > 0 && odometerValue > (lastOdometer + 1500); // Flag > 1500km since last entry
 
+    const applyCapturedFile = (file: File, mode: 'ai' | 'photo_only') => {
+        setPhoto(file);
+        const reader = new FileReader();
+        reader.onloadend = () => {
+            setPhotoPreview(reader.result as string);
+            if (mode === 'ai') {
+                setStep('ANALYZING');
+                void analyzePhoto(file);
+            } else {
+                setPhotoOnlyReady(true);
+            }
+        };
+        reader.readAsDataURL(file);
+        clearCameraDraft('odometer');
+    };
+
+    const openOdometerCamera = async (mode: 'ai' | 'photo_only') => {
+        saveCameraDraft('odometer', { step, mode, lastOdometer });
+        const file = await captureNativePhoto('odometer');
+        if (file) applyCapturedFile(file, mode);
+    };
+
     useEffect(() => {
+        const unsub = registerCaptureHandler('odometer', (file) => {
+            toast.message('We saved your draft after the camera closed.');
+            applyCapturedFile(file, step === 'PHOTO_ONLY' ? 'photo_only' : 'ai');
+        });
+        void consumeRestoredPhoto('odometer').then((file) => {
+            if (file) {
+                toast.message('We saved your draft after the camera closed.');
+                applyCapturedFile(file, 'ai');
+            }
+        });
         return () => {
+            unsub();
             scanAbortRef.current?.abort();
             scanGenerationRef.current += 1;
         };
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only restore
     }, []);
 
     const abortInFlightScan = () => {
         scanAbortRef.current?.abort();
         scanAbortRef.current = null;
         scanGenerationRef.current += 1;
-    };
-
-    const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        if (e.target.files && e.target.files[0]) {
-            const file = e.target.files[0];
-            setPhoto(file);
-            
-            const reader = new FileReader();
-            reader.onloadend = () => {
-                setPhotoPreview(reader.result as string);
-                setStep('ANALYZING'); // Trigger analysis
-                analyzePhoto(file);
-            };
-            reader.readAsDataURL(file);
-        }
     };
 
     const analyzePhoto = async (file: File) => {
@@ -189,20 +214,6 @@ export function OdometerScanner({
 
     // ── PHOTO_ONLY handlers ──
 
-    const handlePhotoOnlyChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        if (e.target.files && e.target.files[0]) {
-            const file = e.target.files[0];
-            setPhoto(file);
-            setPhotoOnlyReady(true);
-
-            const reader = new FileReader();
-            reader.onloadend = () => {
-                setPhotoPreview(reader.result as string);
-            };
-            reader.readAsDataURL(file);
-        }
-    };
-
     const handlePhotoOnlySubmit = () => {
         if (!photo) return;
         onScanComplete({
@@ -237,7 +248,7 @@ export function OdometerScanner({
 
                             <div 
                                 className="bg-slate-50 p-8 rounded-xl border-2 border-dashed border-slate-300 hover:border-indigo-400 hover:bg-indigo-50/30 transition-colors text-center space-y-4 cursor-pointer"
-                                onClick={() => fileInputRef.current?.click()}
+                                onClick={() => void openOdometerCamera('ai')}
                             >
                                 <div className="mx-auto w-20 h-20 bg-white rounded-full flex items-center justify-center shadow-sm border border-slate-100">
                                     <Camera className="w-10 h-10 text-indigo-600" />
@@ -251,20 +262,12 @@ export function OdometerScanner({
                                     className="w-full max-w-xs mx-auto mt-4 bg-indigo-600 hover:bg-indigo-700"
                                     onClick={(e) => {
                                         e.stopPropagation();
-                                        fileInputRef.current?.click();
+                                        void openOdometerCamera('ai');
                                     }}
                                 >
                                     <Camera className="w-4 h-4 mr-2" />
                                     Open Camera
                                 </Button>
-                                <Input 
-                                    ref={fileInputRef}
-                                    type="file" 
-                                    accept="image/*" 
-                                    capture="environment"
-                                    className="hidden" 
-                                    onChange={handlePhotoChange}
-                                />
                             </div>
 
                             {errorMsg && (
@@ -463,7 +466,7 @@ export function OdometerScanner({
                                 /* Camera capture area — no photo taken yet */
                                 <div 
                                     className="bg-slate-50 p-8 rounded-xl border-2 border-dashed border-amber-300 hover:border-amber-400 hover:bg-amber-50/30 transition-colors text-center space-y-4 cursor-pointer"
-                                    onClick={() => photoOnlyInputRef.current?.click()}
+                                    onClick={() => void openOdometerCamera('photo_only')}
                                 >
                                     <div className="mx-auto w-20 h-20 bg-white rounded-full flex items-center justify-center shadow-sm border border-amber-200">
                                         <Camera className="w-10 h-10 text-amber-600" />
@@ -477,20 +480,12 @@ export function OdometerScanner({
                                         className="w-full max-w-xs mx-auto mt-4 bg-amber-600 hover:bg-amber-700"
                                         onClick={(e) => {
                                             e.stopPropagation();
-                                            photoOnlyInputRef.current?.click();
+                                            void openOdometerCamera('photo_only');
                                         }}
                                     >
                                         <Camera className="w-4 h-4 mr-2" />
                                         Open Camera
                                     </Button>
-                                    <Input 
-                                        ref={photoOnlyInputRef}
-                                        type="file" 
-                                        accept="image/*" 
-                                        capture="environment"
-                                        className="hidden" 
-                                        onChange={handlePhotoOnlyChange}
-                                    />
                                 </div>
                             ) : (
                                 /* Photo captured — show preview + submit */

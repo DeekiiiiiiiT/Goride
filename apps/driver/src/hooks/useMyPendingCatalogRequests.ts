@@ -1,4 +1,4 @@
-// Single source of truth for the org's open vehicle-catalog pending requests.
+// Single source of truth for this driver's assigned-vehicle open catalog requests.
 //
 // Replaces two ad-hoc useQuery copies in VehiclesPage and VehicleDetail and
 // the 30s setInterval in VehicleDetail. Keeps the same query key
@@ -28,17 +28,20 @@ const OPEN_STATUSES = new Set<VehicleCatalogPendingRequest["status"]>([
   "needs_info",
 ]);
 
-export function useMyPendingCatalogRequests() {
+/** Pass `enabled` false while the drawer is closed so home launch does not 403-poll. */
+export function useMyPendingCatalogRequests(opts?: { enabled?: boolean }) {
   const { session } = useAuth();
   const token = session?.access_token;
+  const enabled = (opts?.enabled ?? true) && Boolean(token);
 
   return useQuery<MyPendingCatalogResult>({
     queryKey: MY_PENDING_CATALOG_QUERY_KEY,
     queryFn: () => listMyPendingCatalogRequests(token!),
-    enabled: Boolean(token),
+    enabled,
     staleTime: 60_000,
-    refetchOnWindowFocus: "always",
+    refetchOnWindowFocus: enabled ? "always" : false,
     refetchInterval: (query) => {
+      if (!enabled) return false;
       const items = query.state.data?.items ?? [];
       const hasOpen = items.some((r) => OPEN_STATUSES.has(r.status));
       return hasOpen ? 12_000 : false;

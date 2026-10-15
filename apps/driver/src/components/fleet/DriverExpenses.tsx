@@ -66,6 +66,8 @@ interface ExpenseLoggerProps {
   defaultOpen?: boolean;
   /** view = list only; log = start at category picker */
   mode?: 'view' | 'log';
+  /** Boot resume after camera process death — open the matching capture step. */
+  cameraResume?: 'odometer' | 'receipt' | 'toll' | 'fuel' | null;
   onBack?: () => void;
 }
 
@@ -81,6 +83,34 @@ type ViewState =
   | 'entry_details'
   | 'toll_scan'
   | 'toll_review';
+
+function initialViewForCameraResume(
+  resume: ExpenseLoggerProps['cameraResume'],
+): { viewState: ViewState; category: string; fuelPumpStep: FuelPumpStep } | null {
+  if (!resume) return null;
+  if (resume === 'toll') {
+    return { viewState: 'toll_scan', category: 'Tolls', fuelPumpStep: 'photo' };
+  }
+  if (resume === 'odometer' || resume === 'fuel') {
+    return { viewState: 'odometer_scan', category: 'Fuel', fuelPumpStep: 'photo' };
+  }
+  if (resume === 'receipt') {
+    try {
+      const raw = localStorage.getItem('roam:driver:camera-draft:receipt');
+      const draft = raw ? (JSON.parse(raw) as { viewState?: string }) : null;
+      if (draft?.viewState === 'split_details') {
+        return { viewState: 'split_details', category: 'Fuel', fuelPumpStep: 'photo' };
+      }
+      if (draft?.viewState === 'gas_card_details') {
+        return { viewState: 'gas_card_details', category: 'Fuel', fuelPumpStep: 'photo' };
+      }
+    } catch {
+      /* ignore */
+    }
+    return { viewState: 'entry_details', category: 'Fuel', fuelPumpStep: 'photo' };
+  }
+  return null;
+}
 
 /** Manual "Retry GPS" taps allowed after the automatic post–odometer-scan attempt fails. */
 const MAX_MANUAL_FUEL_GPS_RETRIES = 2;
@@ -126,7 +156,7 @@ interface ExpenseItem {
   receiptUrl?: string;
 }
 
-export function DriverExpenses({ defaultOpen = false, mode, onBack }: ExpenseLoggerProps) {
+export function DriverExpenses({ defaultOpen = false, mode, cameraResume = null, onBack }: ExpenseLoggerProps) {
   const { user } = useAuth();
   const { isFleetDriver } = useDriver();
   const { driverRecord } = useCurrentDriver();
@@ -134,6 +164,7 @@ export function DriverExpenses({ defaultOpen = false, mode, onBack }: ExpenseLog
   const { getLocation } = useGeolocation();
   const { enabled: fuelSplitEnabled, loading: fuelSplitLoading } = useFuelSplitPaymentEnabled();
   const isLogMode = mode === 'log' || (mode == null && defaultOpen);
+  const resumeBoot = initialViewForCameraResume(cameraResume);
   const pendingFuelOffline = queue.filter(
     (q) =>
       q.type === 'SUBMIT_FUEL_EXPENSE' ||
@@ -154,18 +185,20 @@ export function DriverExpenses({ defaultOpen = false, mode, onBack }: ExpenseLog
   const periodStart = startOfWeek(new Date(), { weekStartsOn: 1 });
   const periodEnd = endOfWeek(new Date(), { weekStartsOn: 1 });
   
-  const [viewState, setViewState] = useState<ViewState>(isLogMode ? 'category_select' : 'list');
+  const [viewState, setViewState] = useState<ViewState>(
+    resumeBoot?.viewState ?? (isLogMode ? 'category_select' : 'list'),
+  );
   const [fuelEntry, setFuelEntry] = useState<FuelEntryState>({});
   const [tankStatus, setTankStatus] = useState<any>(null);
   
   const [isScanning, setIsScanning] = useState(false);
-  const [fuelPumpStep, setFuelPumpStep] = useState<FuelPumpStep>('photo');
+  const [fuelPumpStep, setFuelPumpStep] = useState<FuelPumpStep>(resumeBoot?.fuelPumpStep ?? 'photo');
   const [pumpFromOcr, setPumpFromOcr] = useState(false);
 
   const [date, setDate] = useState<Date>(new Date());
   const [time, setTime] = useState<string>(format(new Date(), 'HH:mm'));
   const [amount, setAmount] = useState('');
-  const [category, setCategory] = useState<string>('');
+  const [category, setCategory] = useState<string>(resumeBoot?.category ?? '');
   const [notes, setNotes] = useState('');
   const [odometer, setOdometer] = useState('');
   const [receiptFile, setReceiptFile] = useState<File | null>(null);
@@ -611,83 +644,112 @@ export function DriverExpenses({ defaultOpen = false, mode, onBack }: ExpenseLog
     }
   };
 
-  const tollFileInputRef = useRef<HTMLInputElement>(null);
   const tollScanGenRef = useRef(0);
 
-  const handleTollPhotoCapture = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      const file = e.target.files[0];
-      setReceiptFile(file);
-      const reader = new FileReader();
-      reader.onload = (ev) => setReceiptPreview(ev.target?.result as string);
-      reader.readAsDataURL(file);
+  const processTollPhotoFile = async (file: File) => {
+    setReceiptFile(file);
+    const reader = new FileReader();
+    reader.onload = (ev) => setReceiptPreview(ev.target?.result as string);
+    reader.readAsDataURL(file);
 
-      const scanGen = ++tollScanGenRef.current;
-      setIsScanning(true);
+    const scanGen = ++tollScanGenRef.current;
+    setIsScanning(true);
 
-      try {
-        const { data } = await api.scanReceipt(file);
-        if (scanGen !== tollScanGenRef.current) return;
+    try {
+      const { data } = await api.scanReceipt(file);
+      if (scanGen !== tollScanGenRef.current) return;
 
-        if (data) {
-          if (data.amount) setAmount(data.amount.toString());
+      if (data) {
+        if (data.amount) setAmount(data.amount.toString());
 
-          if (data.date) {
-            const parts = data.date.split('-');
-            if (parts.length === 3) {
-              const y = parseInt(parts[0]);
-              const m = parseInt(parts[1]) - 1;
-              const d = parseInt(parts[2]);
-              if (y > 2000) {
-                const localDate = new Date(y, m, d);
-                if (isValid(localDate)) {
-                  setDate(localDate);
-                }
+        if (data.date) {
+          const parts = data.date.split('-');
+          if (parts.length === 3) {
+            const y = parseInt(parts[0]);
+            const m = parseInt(parts[1]) - 1;
+            const d = parseInt(parts[2]);
+            if (y > 2000) {
+              const localDate = new Date(y, m, d);
+              if (isValid(localDate)) {
+                setDate(localDate);
               }
             }
           }
+        }
 
-          if (data.time) {
-            let timeStr = data.time;
-            if (timeStr.length > 5) {
-              timeStr = timeStr.substring(0, 5);
-            }
-            setTime(timeStr);
-          } else if (!data.time && data.date) {
-            setTime("12:00");
+        if (data.time) {
+          let timeStr = data.time;
+          if (timeStr.length > 5) {
+            timeStr = timeStr.substring(0, 5);
           }
+          setTime(timeStr);
+        } else if (!data.time && data.date) {
+          setTime("12:00");
+        }
 
-          setMerchant(data.merchant || '');
-          setPlaza(data.plaza || '');
-          setLane(data.lane || '');
-          setVehicleClass(data.vehicleClass || '');
-          setReferenceNumber(data.receiptNumber || '');
-          setCollector(data.collector || '');
-          if (data.notes) setNotes(data.notes);
+        setMerchant(data.merchant || '');
+        setPlaza(data.plaza || '');
+        setLane(data.lane || '');
+        setVehicleClass(data.vehicleClass || '');
+        setReferenceNumber(data.receiptNumber || '');
+        setCollector(data.collector || '');
+        if (data.notes) setNotes(data.notes);
 
-          toast.success("Receipt details extracted!");
-          setViewState('toll_review');
-        } else {
-          toast.error("Could not read receipt. Please try again.");
-        }
-      } catch (error: any) {
-        if (scanGen !== tollScanGenRef.current) return;
-        console.error("Toll scan error:", error);
-        toast.error(error?.message || "Could not scan receipt. Please try again.");
-        // Stay on toll_scan so driver can retry
-        setReceiptFile(null);
-        setReceiptPreview(null);
-      } finally {
-        if (scanGen === tollScanGenRef.current) {
-          setIsScanning(false);
-        }
-        // Reset the file input so the same file can be re-selected
-        if (tollFileInputRef.current) {
-          tollFileInputRef.current.value = '';
-        }
+        toast.success("Receipt details extracted!");
+        setViewState('toll_review');
+      } else {
+        toast.error("Could not read receipt. Please try again.");
+      }
+    } catch (error: any) {
+      if (scanGen !== tollScanGenRef.current) return;
+      console.error("Toll scan error:", error);
+      toast.error(error?.message || "Could not scan receipt. Please try again.");
+      setReceiptFile(null);
+      setReceiptPreview(null);
+    } finally {
+      if (scanGen === tollScanGenRef.current) {
+        setIsScanning(false);
       }
     }
   };
+
+  const openTollCamera = async () => {
+    const { captureNativePhoto, saveCameraDraft, clearCameraDraft } = await import('../../utils/nativePhotoCapture');
+    saveCameraDraft('toll', { viewState: 'toll_scan' });
+    const file = await captureNativePhoto('toll');
+    if (file) {
+      clearCameraDraft('toll');
+      await processTollPhotoFile(file);
+    }
+  };
+
+  // Toll restore parity with odometer/receipt — apply stashed photo after camera kill.
+  useEffect(() => {
+    if (viewState !== 'toll_scan') return;
+    let unsub: (() => void) | undefined;
+    let cancelled = false;
+    void import('../../utils/nativePhotoCapture').then(
+      ({ registerCaptureHandler, consumeRestoredPhoto, clearCameraDraft }) => {
+        if (cancelled) return;
+        unsub = registerCaptureHandler('toll', (file) => {
+          toast.message('We saved your draft after the camera closed.');
+          clearCameraDraft('toll');
+          void processTollPhotoFile(file);
+        });
+        void consumeRestoredPhoto('toll').then((file) => {
+          if (cancelled || !file) return;
+          toast.message('We saved your draft after the camera closed.');
+          clearCameraDraft('toll');
+          void processTollPhotoFile(file);
+        });
+      },
+    );
+    return () => {
+      cancelled = true;
+      unsub?.();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewState]);
 
   const constructTransactionPayload = (
     baseTx: Partial<FinancialTransaction>, 
@@ -2192,6 +2254,7 @@ export function DriverExpenses({ defaultOpen = false, mode, onBack }: ExpenseLog
                   onFileSelect={handleFileChange}
                   onClear={handleRetakePumpPhoto}
                   fileName={receiptFile?.name}
+                  draftExtras={{ viewState: 'split_details' }}
                 />
               )}
 
@@ -2294,6 +2357,7 @@ export function DriverExpenses({ defaultOpen = false, mode, onBack }: ExpenseLog
                           onFileSelect={handleFileChange}
                           onClear={handleRetakePumpPhoto}
                           fileName={receiptFile?.name}
+                          draftExtras={{ viewState: 'entry_details' }}
                         />
                       )}
 
@@ -2333,6 +2397,7 @@ export function DriverExpenses({ defaultOpen = false, mode, onBack }: ExpenseLog
                     isScanning={isScanning}
                     onFileSelect={handleFileChange}
                     onClear={() => { setReceiptFile(null); setReceiptPreview(null); }}
+                    draftExtras={{ viewState: 'entry_details', category }}
                   />
                 )}
 
@@ -2404,7 +2469,6 @@ export function DriverExpenses({ defaultOpen = false, mode, onBack }: ExpenseLog
                       setIsScanning(false);
                       setReceiptFile(null);
                       setReceiptPreview(null);
-                      if (tollFileInputRef.current) tollFileInputRef.current.value = '';
                       toast.info("Scan cancelled. Tap to try again.");
                     }}
                   >
@@ -2415,7 +2479,9 @@ export function DriverExpenses({ defaultOpen = false, mode, onBack }: ExpenseLog
 
               {/* Main scan area — large tap target */}
               <div
-                onClick={() => !isScanning && tollFileInputRef.current?.click()}
+                onClick={() => {
+                  if (!isScanning) void openTollCamera();
+                }}
                 className={cn(
                   "w-full flex flex-col items-center justify-center py-12 px-6 rounded-2xl border-2 border-dashed cursor-pointer transition-all",
                   isScanning
@@ -2431,15 +2497,6 @@ export function DriverExpenses({ defaultOpen = false, mode, onBack }: ExpenseLog
                   Position the receipt clearly in frame for automatic verification
                 </p>
               </div>
-
-              <input
-                type="file"
-                accept="image/*"
-                capture="environment"
-                className="hidden"
-                ref={tollFileInputRef}
-                onChange={handleTollPhotoCapture}
-              />
             </div>
           )}
 

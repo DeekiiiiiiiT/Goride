@@ -1,8 +1,17 @@
 // cache-bust: force recompile — 2026-02-10
-import React, { useRef } from 'react';
+import React, { useEffect } from 'react';
 import { Button } from '@roam/ui';
 import { Label } from '@roam/ui';
 import { Camera, Upload, X, Loader2, FileText } from "lucide-react";
+import {
+  captureNativePhoto,
+  clearCameraDraft,
+  consumeRestoredPhoto,
+  pickGalleryFile,
+  registerCaptureHandler,
+  saveCameraDraft,
+} from '../../../utils/nativePhotoCapture';
+import { toast } from 'sonner';
 
 interface ReceiptUploaderProps {
   onFileSelect: (e: React.ChangeEvent<HTMLInputElement>) => void;
@@ -12,6 +21,14 @@ interface ReceiptUploaderProps {
   fileName?: string;
   label?: string;
   hint?: string;
+  /** Persisted with camera draft so boot resume can reopen the right expense step. */
+  draftExtras?: Record<string, unknown>;
+}
+
+function asFileChangeEvent(file: File): React.ChangeEvent<HTMLInputElement> {
+  const dt = new DataTransfer();
+  dt.items.add(file);
+  return { target: { files: dt.files } } as React.ChangeEvent<HTMLInputElement>;
 }
 
 export function ReceiptUploader({ 
@@ -22,11 +39,37 @@ export function ReceiptUploader({
   fileName,
   label = 'Receipt',
   hint = 'or upload from gallery',
+  draftExtras,
 }: ReceiptUploaderProps) {
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const deliver = (file: File) => {
+    clearCameraDraft('receipt');
+    onFileSelect(asFileChangeEvent(file));
+  };
 
-  const handleClick = () => {
-    fileInputRef.current?.click();
+  useEffect(() => {
+    const unsub = registerCaptureHandler('receipt', (file) => {
+      toast.message('We saved your draft after the camera closed.');
+      deliver(file);
+    });
+    void consumeRestoredPhoto('receipt').then((file) => {
+      if (file) {
+        toast.message('We saved your draft after the camera closed.');
+        deliver(file);
+      }
+    });
+    return unsub;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const handleCamera = async () => {
+    saveCameraDraft('receipt', { label, ...draftExtras });
+    const file = await captureNativePhoto('receipt');
+    if (file) deliver(file);
+  };
+
+  const handleGallery = async () => {
+    const file = await pickGalleryFile('image/*,application/pdf');
+    if (file) deliver(file);
   };
 
   return (
@@ -34,25 +77,27 @@ export function ReceiptUploader({
       <Label>{label}</Label>
       
       {!previewUrl ? (
-        <div 
-          onClick={handleClick}
-          className="border-2 border-dashed border-slate-200 rounded-lg p-6 flex flex-col items-center justify-center cursor-pointer hover:bg-slate-50 transition-colors gap-2"
-        >
-          <div className="h-10 w-10 bg-slate-100 rounded-full flex items-center justify-center">
-            <Camera className="h-5 w-5 text-slate-500" />
-          </div>
-          <div className="text-center">
-            <p className="text-sm font-medium text-slate-900">Take a photo of {label.toLowerCase().includes('pump') ? 'the pump' : 'receipt'}</p>
-            <p className="text-xs text-slate-500">{hint}</p>
-          </div>
-          <input 
-            type="file" 
-            ref={fileInputRef} 
-            className="hidden" 
-            accept="image/*,application/pdf"
-            capture="environment"
-            onChange={onFileSelect}
-          />
+        <div className="border-2 border-dashed border-slate-200 rounded-lg p-6 flex flex-col items-center justify-center gap-2">
+          <button
+            type="button"
+            onClick={() => void handleCamera()}
+            className="flex flex-col items-center gap-2 cursor-pointer hover:opacity-90"
+          >
+            <div className="h-10 w-10 bg-slate-100 rounded-full flex items-center justify-center">
+              <Camera className="h-5 w-5 text-slate-500" />
+            </div>
+            <div className="text-center">
+              <p className="text-sm font-medium text-slate-900">Take a photo of {label.toLowerCase().includes('pump') ? 'the pump' : 'receipt'}</p>
+            </div>
+          </button>
+          <button
+            type="button"
+            onClick={() => void handleGallery()}
+            className="text-xs text-slate-500 hover:text-slate-700 flex items-center gap-1"
+          >
+            <Upload className="h-3 w-3" />
+            {hint}
+          </button>
         </div>
       ) : (
         <div className="relative rounded-lg border border-slate-200 overflow-hidden bg-slate-50">

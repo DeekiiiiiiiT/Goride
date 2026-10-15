@@ -9,6 +9,14 @@ import { Camera, Upload, RefreshCw, CheckCircle, AlertTriangle, XCircle, Chevron
 import { ImageWithFallback } from '../figma/ImageWithFallback';
 import { api } from '../../services/api';
 import { motion, AnimatePresence } from 'motion/react';
+import {
+  captureNativePhoto,
+  clearCameraDraft,
+  consumeRestoredPhoto,
+  registerCaptureHandler,
+  saveCameraDraft,
+} from '../../utils/nativePhotoCapture';
+import { toast } from 'sonner';
 
 type CheckInStep = 'CAPTURE' | 'ANALYZING' | 'CONFIRM_AI' | 'MANUAL_ENTRY' | 'SUBMITTING';
 
@@ -75,20 +83,39 @@ export function WeeklyCheckInModal({
         scanGenerationRef.current += 1;
     };
 
-    const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        if (e.target.files && e.target.files[0]) {
-            const file = e.target.files[0];
-            setPhoto(file);
-            
-            const reader = new FileReader();
-            reader.onloadend = () => {
-                setPhotoPreview(reader.result as string);
-                setStep('ANALYZING'); // Trigger analysis
-                analyzePhoto(file);
-            };
-            reader.readAsDataURL(file);
-        }
+    const applyCheckInPhoto = (file: File) => {
+        setPhoto(file);
+        const reader = new FileReader();
+        reader.onloadend = () => {
+            setPhotoPreview(reader.result as string);
+            setStep('ANALYZING');
+            void analyzePhoto(file);
+        };
+        reader.readAsDataURL(file);
+        clearCameraDraft('checkin');
     };
+
+    const openCheckInCamera = async () => {
+        saveCameraDraft('checkin', { step });
+        const file = await captureNativePhoto('checkin');
+        if (file) applyCheckInPhoto(file);
+    };
+
+    useEffect(() => {
+        if (!isOpen) return;
+        const unsub = registerCaptureHandler('checkin', (file) => {
+            toast.message('We saved your draft after the camera closed.');
+            applyCheckInPhoto(file);
+        });
+        void consumeRestoredPhoto('checkin').then((file) => {
+            if (file) {
+                toast.message('We saved your draft after the camera closed.');
+                applyCheckInPhoto(file);
+            }
+        });
+        return unsub;
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isOpen]);
 
     const analyzePhoto = async (file: File) => {
         abortInFlightScan();
@@ -209,7 +236,7 @@ export function WeeklyCheckInModal({
                             </div>
                             <div 
                                 className="bg-slate-50 p-8 rounded-xl border-2 border-dashed border-slate-300 hover:border-indigo-400 hover:bg-indigo-50/30 transition-colors text-center space-y-4 cursor-pointer"
-                                onClick={() => document.getElementById('odo-photo-step')?.click()}
+                                onClick={() => void openCheckInCamera()}
                             >
                                 <div className="mx-auto w-20 h-20 bg-white rounded-full flex items-center justify-center shadow-sm border border-slate-100">
                                     <Camera className="w-10 h-10 text-indigo-600" />
@@ -221,18 +248,14 @@ export function WeeklyCheckInModal({
                                 <Button 
                                     variant="default" 
                                     className="w-full max-w-xs mx-auto mt-4 bg-indigo-600 hover:bg-indigo-700"
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        void openCheckInCamera();
+                                    }}
                                 >
                                     <Camera className="w-4 h-4 mr-2" />
                                     Open Camera
                                 </Button>
-                                <Input 
-                                    id="odo-photo-step" 
-                                    type="file" 
-                                    accept="image/*" 
-                                    capture="environment"
-                                    className="hidden" 
-                                    onChange={handlePhotoChange}
-                                />
                             </div>
                             {errorMsg && (
                                 <motion.div 
