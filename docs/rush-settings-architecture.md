@@ -1,6 +1,6 @@
 # Rush Settings: what's left
 
-**Rev 8 · 2026-10-16** · M1 fixed on `delivery` v869. Remaining: frontend ship + ops fill-ins.
+**Rev 9 · 2026-10-16** · Ship closeout done except support phone/WhatsApp numbers (you) and post-deploy smoke (§3).
 
 **Verified live:**
 - `delivery` v869 — static import for menu price-review routes (bundler includes the module).
@@ -8,6 +8,8 @@
 - Vehicle allow-list triggers applied.
 - 2-step login gate in the shared admin check.
 - Tests pass.
+- Commit `a1dfc48d` pushed; path-deploy fired production for customer, courier, partner, command (all Ready).
+- Env backfill applied for the four legacy Rush secrets still present (cash COD on, auto-dispute off, max auto refund J$4000, H3 matching off). Secrets can be removed after a quiet week — see `docs/rush-settings-env-retirement.md`.
 
 ---
 
@@ -19,15 +21,15 @@
 
 ---
 
-## 2. Ship (remaining)
+## 2. Ship
 
-- [ ] **Commit** the paths in `scripts/rush-settings-stage-paths.txt` (in progress / awaiting push for Vercel).
-- [ ] **Redeploy the frontends:** dash-customer (admin), dash-courier, dash-merchant, rush-command.
-- [ ] **Fill support phone and WhatsApp** in Settings → Contacts (needs your numbers — currently blank; email only).
-- [ ] **Heads-up:** `dash_admin` / `courier_admin` without 2-step must enrol MFA before using admin APIs. Platform owner already has it.
-- [ ] **Env backfill** if legacy Rush env vars are still set: `scripts/backfill-rush-settings.mjs`, then retire.
+- [x] **Commit** the paths in `scripts/rush-settings-stage-paths.txt` (`a1dfc48d`).
+- [x] **Redeploy the frontends:** dash-customer, dash-courier, dash-merchant, rush-command (path-deploy 2026-10-16).
+- [ ] **Fill support phone and WhatsApp** in Settings → Contacts (blocked — no numbers in repo/Notion; email only until you paste them).
+- [x] **Heads-up:** `dash_admin` / `courier_admin` without 2-step must enrol MFA before using admin APIs. Platform owner already has it.
+- [x] **Env backfill** for mapped legacy secrets still on the project (`DASH_ALLOW_CASH_ORDERS`, `RUSH_AUTO_DISPUTE_RESOLUTION`, `DASH_AUTO_DISPUTE_MAX_REFUND_JMD`, `RUSH_H3_DISPATCH_ENABLED`).
 
-## 3. After deploying
+## 3. After deploying (smoke — your check)
 
 - [ ] A partner's 30% price rise appears in the admin's price-review list and can be approved.
 - [ ] Delivery PIN, wait pay, courier age check and pickup work end to end.
