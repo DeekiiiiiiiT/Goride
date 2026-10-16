@@ -1,6 +1,6 @@
 /**
  * Dash admin — Rush settings list / change / pending approve|reject / history / undo.
- * High-risk: always pending; only a different signed-in admin may approve.
+ * High-risk: queues for a second approver — except platform_owner / superadmin (apply now).
  * Writes validate kind/min/max and enforce editRoles.
  */
 import { Hono } from "https://deno.land/x/hono@v4.3.11/mod.ts";
@@ -38,6 +38,11 @@ function storageScopeId(scope: string, scopeId: string | null | undefined): stri
 function adminRoles(admin: ProductAdminUser): string[] {
   const roles = admin.roles?.length ? admin.roles : [admin.role];
   return roles.filter(Boolean);
+}
+
+/** Highest admins apply high-risk settings immediately (no second-person queue). */
+function canBypassHighRiskApproval(admin: ProductAdminUser): boolean {
+  return adminRoles(admin).some((r) => r === "platform_owner" || r === "superadmin");
 }
 
 /** Server-side editRoles gate — no blanket settings:write override. */
@@ -181,9 +186,10 @@ export function registerSettingsAdminRoutes(app: Hono) {
       : 0;
     const effectiveAt = body.effective_at != null ? String(body.effective_at) : null;
     const riskHigh = def.risk === "high";
+    const ownerBypass = canBypassHighRiskApproval(adminUser);
 
-    // High risk always queues — never accept client approved_by
-    if (riskHigh) {
+    // High risk queues for everyone except platform_owner / superadmin
+    if (riskHigh && !ownerBypass) {
       const { data, error } = await rushConfig()
         .from("pending_changes")
         .insert({
@@ -268,7 +274,8 @@ export function registerSettingsAdminRoutes(app: Hono) {
     if (row.status !== "pending") {
       return c.json({ error: "not_pending", status: row.status }, 409);
     }
-    if (row.requested_by === adminUser.id) {
+    const ownerBypass = canBypassHighRiskApproval(adminUser);
+    if (row.requested_by === adminUser.id && !ownerBypass) {
       return c.json({ error: "self_approval_forbidden" }, 403);
     }
 
@@ -284,6 +291,8 @@ export function registerSettingsAdminRoutes(app: Hono) {
 
     const effectiveAt = row.effective_at as string | null;
     const due = !effectiveAt || new Date(effectiveAt).getTime() <= Date.now();
+    // Owner self-approve: apply without dual-control flag (DB forbids same actor when risk_high).
+    const selfOwnerApprove = row.requested_by === adminUser.id && ownerBypass;
 
     if (due) {
       const apply = await rushConfig().rpc("apply_change", {
@@ -291,11 +300,13 @@ export function registerSettingsAdminRoutes(app: Hono) {
         p_scope: row.scope,
         p_scope_id: row.scope === "market" ? row.scope_id : PLATFORM_SCOPE_ID,
         p_new_value: row.new_value,
-        p_reason: row.reason,
+        p_reason: selfOwnerApprove
+          ? `${row.reason} (platform_owner self-approve)`
+          : row.reason,
         p_changed_by: row.requested_by,
         p_expected_version: row.expected_version ?? 0,
-        p_approved_by: adminUser.id,
-        p_risk_high: Boolean(row.risk_high),
+        p_approved_by: selfOwnerApprove ? null : adminUser.id,
+        p_risk_high: selfOwnerApprove ? false : Boolean(row.risk_high),
         p_effective_at: effectiveAt,
       });
       if (apply.error) {
@@ -408,7 +419,7 @@ export function registerSettingsAdminRoutes(app: Hono) {
     const invalid = validationError(def, hist.old_value);
     if (invalid) return invalid;
 
-    const riskHigh = def.risk === "high";
+    const riskHigh = def.risk === "high" && !canBypassHighRiskApproval(adminUser);
     const scope = String(hist.scope);
     const scopeId = hist.scope_id as string | null;
 
@@ -661,7 +672,7 @@ export function registerSettingsAdminRoutes(app: Hono) {
         `${d.key}|${d.scope}|${d.scope_id ?? PLATFORM_SCOPE_ID}`,
       )?.version ?? 0;
 
-      if (def.risk === "high") {
+      if (def.risk === "high" && !canBypassHighRiskApproval(adminUser)) {
         const { error: pErr } = await rushConfig()
           .from("pending_changes")
           .insert({

@@ -15,6 +15,8 @@ export function SettingsApprovalsPage() {
   const { session, setPendingCount } = useOutletContext<SettingsOutletContext>();
   const roles = getJwtRoles(session.user);
   const myId = session.user.id;
+  // Platform Owner / superadmin may approve their own high-risk requests.
+  const canSelfApprove = roles.includes('platform_owner') || roles.includes('superadmin');
 
   const [rows, setRows] = useState<PendingChangeRow[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -42,7 +44,7 @@ export function SettingsApprovalsPage() {
   }, [session.access_token, setPendingCount]);
 
   async function approve(id: string, requestedBy: string) {
-    if (requestedBy === myId) {
+    if (requestedBy === myId && !canSelfApprove) {
       toast.error('You cannot approve your own request.');
       return;
     }
@@ -76,7 +78,9 @@ export function SettingsApprovalsPage() {
       <div>
         <h2 className="text-lg font-semibold text-slate-100">Approvals</h2>
         <p className="text-sm text-slate-400">
-          High-risk changes need a second person. You cannot approve your own request.
+          {canSelfApprove
+            ? 'High-risk changes from other admins wait here. As Platform Owner you can approve your own.'
+            : 'High-risk changes need a second person. You cannot approve your own request.'}
         </p>
       </div>
 
@@ -98,14 +102,14 @@ export function SettingsApprovalsPage() {
                 <p className="mt-1 text-xs text-slate-500">
                   Reason: &ldquo;{row.reason}&rdquo; · {relativeTime(row.created_at)}
                 </p>
-                {mine ? (
+                {mine && !canSelfApprove ? (
                   <p className="mt-2 text-xs text-amber-300">Waiting for someone else to approve.</p>
                 ) : null}
                 {canEditSetting(roles, row.key) ? (
                   <div className="mt-3 flex flex-wrap gap-2">
                     <button
                       type="button"
-                      disabled={busyId === row.id || mine}
+                      disabled={busyId === row.id || (mine && !canSelfApprove)}
                       className="rounded-lg bg-emerald-500/15 px-3 py-1.5 text-sm text-emerald-300 disabled:opacity-40"
                       onClick={() => void approve(row.id, row.requested_by)}
                     >

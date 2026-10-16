@@ -73,6 +73,7 @@ export function SettingsSectionPage() {
   const highlight = params.get('highlight');
   const { session, setPendingCount } = useOutletContext<SettingsOutletContext>();
   const roles = getJwtRoles(session.user);
+  const ownerBypass = roles.includes('platform_owner') || roles.includes('superadmin');
 
   const sectionTitle = slugToSection(sectionSlug, area);
   const [rows, setRows] = useState<AdminSettingRow[]>([]);
@@ -293,7 +294,7 @@ export function SettingsSectionPage() {
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-medium text-slate-100">
                     {def.label}
-                    {def.risk === 'high' ? (
+                    {def.risk === 'high' && !ownerBypass ? (
                       <span className="ml-2 text-xs font-normal text-amber-300">(needs a second person)</span>
                     ) : null}
                     {isLockedSqlOnly(def.key) ? (
@@ -418,7 +419,7 @@ export function SettingsSectionPage() {
                     {formatSettingValue(row?.value ?? def?.default, def)} →{' '}
                     {formatSettingValue(d.value, def)}
                   </p>
-                  {def?.risk === 'high' ? (
+                  {def?.risk === 'high' && !ownerBypass ? (
                     <p className="mt-1 text-xs text-amber-300">
                       Needs a second person: sent to Approvals
                     </p>
