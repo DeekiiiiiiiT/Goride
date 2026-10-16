@@ -31,9 +31,10 @@ export async function commitOrderStatus(
   orderId: string,
   status: string,
   notes?: string,
+  opts?: { deliveryPin?: string },
 ): Promise<MutationResult> {
   if (!orderId) return { ok: false, error: 'Missing order id' };
-  return withRetry(() => updateCourierOrderStatus(orderId, status, notes));
+  return withRetry(() => updateCourierOrderStatus(orderId, status, notes, opts));
 }
 
 export async function commitPickup(
@@ -60,6 +61,7 @@ export async function commitDelivered(
   orderId: string,
   photoPath?: string,
   courierNotes?: string,
+  deliveryPin?: string,
 ): Promise<MutationResult> {
   if (!orderId) return { ok: false, error: 'Missing order id' };
 
@@ -80,7 +82,12 @@ export async function commitDelivered(
     if (!notesOk.ok) return notesOk;
   }
 
-  return commitOrderStatus(orderId, 'delivered');
+  return commitOrderStatus(
+    orderId,
+    'delivered',
+    undefined,
+    deliveryPin ? { deliveryPin } : undefined,
+  );
 }
 
 export async function commitUnassign(orderId: string): Promise<MutationResult> {

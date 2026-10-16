@@ -39,11 +39,99 @@ export type ProductAdminUser = {
   isPlatformRole: boolean;
 };
 
+/** Fallback when platform.staff_security has not loaded — matches catalog default. */
+export const DEFAULT_MFA_REQUIRED_ROLES = [
+  "platform_owner",
+  "dash_admin",
+  "courier_admin",
+  "identity_admin",
+  "superadmin",
+] as const;
+
+const MFA_MIN_LEVEL = 800;
+
+const ROLE_LEVELS: Record<string, number> = {
+  platform_owner: 1000,
+  superadmin: 1000,
+  platform_support: 950,
+  identity_admin: 900,
+  dash_admin: 800,
+  courier_admin: 800,
+  dash_ops: 700,
+  courier_ops: 700,
+  support_agent: 600,
+  dash_concierge: 500,
+  platform_analyst: 500,
+};
+
+/** Read aal from JWT payload (token already verified via getUser). */
+export function jwtAssuranceLevel(authHeader: string): "aal1" | "aal2" {
+  try {
+    const token = authHeader.replace(/^Bearer\s+/i, "").trim();
+    const mid = token.split(".")[1];
+    if (!mid) return "aal1";
+    const json = atob(mid.replace(/-/g, "+").replace(/_/g, "/"));
+    const payload = JSON.parse(json) as { aal?: string };
+    return payload.aal === "aal2" ? "aal2" : "aal1";
+  } catch {
+    return "aal1";
+  }
+}
+
+/** True when roles need 2-step login per platform.staff_security (+ level ≥ 800 floor). */
+export function staffRolesRequireMfa(
+  roles: string[],
+  mfaRequiredRoles?: string[] | null,
+): boolean {
+  const list =
+    mfaRequiredRoles && mfaRequiredRoles.length > 0
+      ? mfaRequiredRoles
+      : (DEFAULT_MFA_REQUIRED_ROLES as readonly string[]);
+  return roles.some((r) => {
+    const level = ROLE_LEVELS[r] ?? 0;
+    return level >= MFA_MIN_LEVEL || list.includes(r);
+  });
+}
+
 function authClient(authHeader: string) {
   return createClient(
     Deno.env.get("SUPABASE_URL") ?? "",
     Deno.env.get("SUPABASE_ANON_KEY") ?? "",
     { global: { headers: { Authorization: authHeader } } },
+  );
+}
+
+/** platform.staff_security — privileged admins must present AAL2. */
+async function enforceStaffMfa(
+  c: {
+    req: { header: (n: string) => string | undefined };
+    json: (b: unknown, s?: number) => Response;
+  },
+  authHeader: string,
+  roles: string[],
+): Promise<Response | null> {
+  let mfaRequiredRoles: string[] | null = null;
+  try {
+    const { getSetting } = await import("./rushSettings/getSetting.ts");
+    const sec = await getSetting<{
+      sessionTimeoutMinutes?: number;
+      mfaRequiredRoles?: string[];
+    }>("platform.staff_security");
+    if (sec && Array.isArray(sec.mfaRequiredRoles)) {
+      mfaRequiredRoles = sec.mfaRequiredRoles;
+    }
+  } catch {
+    /* use defaults */
+  }
+  if (!staffRolesRequireMfa(roles, mfaRequiredRoles)) return null;
+  if (jwtAssuranceLevel(authHeader) === "aal2") return null;
+  return c.json(
+    {
+      error: "Forbidden",
+      message: "Two-step login required",
+      code: "mfa_required",
+    },
+    403,
   );
 }
 
@@ -104,6 +192,9 @@ export async function requireProductAdmin(
     ?? roles[0]
     ?? "";
 
+  const mfaBlock = await enforceStaffMfa(c, authHeader, roles);
+  if (mfaBlock) return mfaBlock;
+
   const permissions = await resolveUserPermissions(user.id, user);
 
   return {
@@ -152,6 +243,8 @@ export async function requireRoleSet(
   if (!roles.some((role) => allowed.has(role))) {
     return c.json({ error: "Forbidden", message: "desk role required" }, 403);
   }
+  const mfaBlock = await enforceStaffMfa(c, authHeader, roles);
+  if (mfaBlock) return mfaBlock;
   const permissions = await resolveUserPermissions(user.id, user);
   const effectiveRole = roles.find((role) => allowed.has(role)) ?? roles[0] ?? "";
   return {
@@ -215,6 +308,9 @@ export async function requireProductAdminAny(
       403,
     );
   }
+
+  const mfaBlock = await enforceStaffMfa(c, authHeader, roles);
+  if (mfaBlock) return mfaBlock;
 
   return {
     id: user.id,

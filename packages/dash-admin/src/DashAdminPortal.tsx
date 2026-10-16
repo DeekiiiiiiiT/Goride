@@ -12,7 +12,7 @@ import { Session } from '@supabase/supabase-js';
 import { Loader2 } from 'lucide-react';
 import { Toaster } from 'sonner';
 import { AdminShell } from '@roam/admin-core';
-import { getAttention, type AttentionQueue } from '@roam/dash-admin-client';
+import { getAttention, listAdminSettings, type AttentionQueue } from '@roam/dash-admin-client';
 import type { AdminNavBadge } from '@roam/admin-core';
 import { AdminLoginForm } from './components/AdminLoginForm';
 import { AdminMfaGate } from './components/AdminMfaGate';
@@ -33,6 +33,7 @@ import { HomePage } from './pages/HomePage';
 import { OrdersListPage } from './pages/orders/OrdersListPage';
 import { MerchantDetailPage } from './pages/merchants/MerchantDetailPage';
 import { MerchantsHubPage } from './pages/merchants/MerchantsHubPage';
+import { MenuPriceReviewsPage } from './pages/MenuPriceReviewsPage';
 import { OrderDetailPage } from './pages/orders/OrderDetailPage';
 import { SupportToolsPage } from './pages/SupportToolsPage';
 import { CustomerDetailPage } from './pages/customers/CustomerDetailPage';
@@ -112,6 +113,7 @@ function badgesFromQueues(queues: AttentionQueue[]): Record<string, AdminNavBadg
   const byNav: Record<string, { count: number; tone: 'waiting' | 'breach' }> = {};
   const navFor: Record<string, string> = {
     applications: 'merchants',
+    'menu-price-reviews': 'merchants',
     compliance: 'couriers',
     cases: 'support',
     unassigned: 'dispatch',
@@ -275,12 +277,19 @@ function SettingsLegacyOrLayout() {
   return <SettingsLayout />;
 }
 
+type StaffSecurityValue = {
+  sessionTimeoutMinutes: number;
+  mfaRequiredRoles: string[];
+};
+
 export function DashAdminPortal() {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
   const [mfaBlocked, setMfaBlocked] = useState(false);
+  // platform.staff_security — loaded from Rush settings after login
+  const [staffSecurity, setStaffSecurity] = useState<StaffSecurityValue | null>(null);
   const { hasPermission, loading: permsLoading } = usePermissions({ supabase });
-  useAdminSessionPolicy();
+  useAdminSessionPolicy(staffSecurity?.sessionTimeoutMinutes ?? null);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session: s } }) => {
@@ -292,17 +301,44 @@ export function DashAdminPortal() {
   }, []);
 
   useEffect(() => {
+    if (!session?.access_token) {
+      setStaffSecurity(null);
+      return;
+    }
+    let cancelled = false;
+    void listAdminSettings(session.access_token)
+      .then((res) => {
+        if (cancelled) return;
+        const row = res.settings.find((s) => s.key === 'platform.staff_security');
+        const value = (row?.value ?? row?.default) as StaffSecurityValue | undefined;
+        if (
+          value &&
+          typeof value.sessionTimeoutMinutes === 'number' &&
+          Array.isArray(value.mfaRequiredRoles)
+        ) {
+          setStaffSecurity(value);
+        }
+      })
+      .catch(() => {
+        /* keep defaults / hardcoded floor */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [session?.access_token]);
+
+  useEffect(() => {
     if (!session) {
       setMfaBlocked(false);
       return;
     }
     const meta = session.user.app_metadata as { roles?: string[]; role?: string };
     const roles = Array.isArray(meta.roles) ? meta.roles : [meta.role ?? jwtPrimaryRole(session.user)].filter(Boolean);
-    if (!requiresAdminMfaFromRoles(roles)) return;
+    if (!requiresAdminMfaFromRoles(roles, staffSecurity?.mfaRequiredRoles)) return;
     void supabase.auth.mfa.getAuthenticatorAssuranceLevel().then(({ data }) => {
       setMfaBlocked(data?.currentLevel !== 'aal2');
     }).catch(() => setMfaBlocked(true));
-  }, [session]);
+  }, [session, staffSecurity?.mfaRequiredRoles]);
 
   const hasJwtAccess =
     !!session &&
@@ -358,6 +394,7 @@ export function DashAdminPortal() {
             <Route path="merchants/onboarding/applications" element={<RedirectKeep to="/merchants?tab=applications" />} />
             <Route path="merchants/onboarding/business-types" element={<RedirectKeep to="/merchants?tab=business-types" />} />
             <Route path="merchants/onboarding" element={<RedirectKeep to="/merchants?tab=applications" />} />
+            <Route path="merchants/price-reviews" element={<MenuPriceReviewsPage />} />
             <Route path="merchants/:id" element={<MerchantDetailPage />} />
             <Route path="merchants" element={<MerchantsHubPage />} />
             <Route path="dispatch" element={<DispatchPage />} />

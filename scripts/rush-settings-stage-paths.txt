@@ -7,23 +7,38 @@
 # packages/dash-admin/src/DashAdminPortal.tsx
 # packages/dash-admin/src/config/dashAdminNav.ts
 # packages/dash-admin/src/config/dashAdminCapabilities.ts
+# packages/dash-admin/src/hooks/useAdminSessionPolicy.ts
+# packages/dash-admin/src/utils/adminMfa.ts
 # packages/dash-admin/package.json
 # packages/dash-admin-client/src/settings.ts
 # packages/dash-admin-client/src/index.ts
+# packages/dash-admin-client/src/menuPriceReviews.ts
 # supabase/functions/_shared/rushSettings/
+# supabase/functions/_shared/productAdmin.ts
+# supabase/functions/_shared/productAdmin.staffMfa.test.ts
 # supabase/functions/delivery/appConfigRoutes.ts
+# supabase/functions/delivery/appConfigRoutes.test.ts
 # supabase/functions/delivery/admin/settingsRoutes.ts
+# supabase/functions/delivery/admin/menuPriceReviewRoutes.ts
 # supabase/functions/delivery/maintenanceMiddleware.ts
 # supabase/functions/delivery/maintenanceMiddleware.test.ts
 # supabase/functions/delivery/partnerAcceptDeadline.ts
 # supabase/functions/delivery/partnerAcceptDeadline.test.ts
 # supabase/functions/delivery/index.ts
-# (+ getSetting consumer diffs under delivery/_shared/payments)
+# supabase/functions/delivery/customerOrderRoutes.ts
+# supabase/functions/delivery/courierConsumerRoutes.ts
+# (+ other getSetting consumer diffs under delivery/ and _shared/payments)
 # supabase/migrations/202610152*rush_config*.sql
+# supabase/migrations/20261016010000_rush_deferred_settings_features.sql
+# supabase/migrations/20261016120000_courier_vehicle_type_allowlist.sql
 # supabase/config.toml
 # scripts/*rush-settings*
+# scripts/backfill-rush-settings.mjs
 # scripts/rush-settings-stage-paths.txt
 # scripts/rush-settings-cutover.mjs
+# scripts/check-rush-settings-parity.mjs
+# scripts/_dump-rush-settings-mirror.mjs
+# scripts/generate-rush-settings-registry.mjs
 # docs/rush-settings-*.md
 # .github/workflows/ci.yml  (Deno Rush settings step only)
 # package.json  (check:rush-settings-parity)

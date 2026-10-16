@@ -3,7 +3,7 @@
  * High-risk: always pending; only a different signed-in admin may approve.
  * Writes validate kind/min/max and enforce editRoles.
  */
-import type { Hono } from "https://deno.land/x/hono@v4.3.11/mod.ts";
+import { Hono } from "https://deno.land/x/hono@v4.3.11/mod.ts";
 import { requireProductAdmin, type ProductAdminUser } from "../../_shared/productAdmin.ts";
 import {
   REGISTRY,

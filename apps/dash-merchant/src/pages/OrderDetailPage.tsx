@@ -168,12 +168,17 @@ export default function OrderDetailPage({
   }
 
   if (status === 'ready' || status === 'assigned') {
+    const isCustomerPickup = String(order.fulfillment_type || 'delivery') === 'pickup';
     return (
       <div className="fixed inset-0 z-[55] overflow-y-auto bg-background">
         <ReadyOrderDetail
           order={order}
           onBack={onBack}
-          onConfirmPickup={() => updateStatusMutation.mutate({ status: 'picked_up' })}
+          onConfirmPickup={() =>
+            updateStatusMutation.mutate({
+              status: isCustomerPickup ? 'delivered' : 'picked_up',
+            })
+          }
           onHelp={onHelp}
           isSubmitting={updateStatusMutation.isPending}
         />

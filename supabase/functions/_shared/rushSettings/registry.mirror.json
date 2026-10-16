@@ -795,7 +795,7 @@
     "scopes": [
       "platform"
     ],
-    "risk": "locked",
+    "risk": "high",
     "app": "platform",
     "section": "Staff security",
     "enumValues": null,
@@ -805,7 +805,7 @@
     ],
     "min": null,
     "max": null,
-    "hidden": true
+    "hidden": false
   },
   {
     "key": "platform.notifications.quiet_hours",
@@ -972,7 +972,7 @@
     ],
     "min": null,
     "max": null,
-    "hidden": true
+    "hidden": false
   },
   {
     "key": "customer.ordering.cancel_window_seconds",
@@ -1366,7 +1366,7 @@
     ],
     "min": 16,
     "max": 25,
-    "hidden": true
+    "hidden": false
   },
   {
     "key": "courier.dispatch.radius_km",
@@ -1512,7 +1512,7 @@
     ],
     "min": 0,
     "max": 500000,
-    "hidden": true
+    "hidden": false
   },
   {
     "key": "courier.delivery.wait_grace_minutes",
@@ -1536,7 +1536,31 @@
     ],
     "min": 0,
     "max": 60,
-    "hidden": true
+    "hidden": false
+  },
+  {
+    "key": "courier.delivery.wait_pay_jmd_per_min",
+    "default": 20,
+    "kind": "number",
+    "clientVisible": true,
+    "envOverride": null,
+    "onReadError": "default",
+    "scopes": [
+      "platform"
+    ],
+    "risk": "normal",
+    "app": "courier",
+    "section": "Delivery rules",
+    "enumValues": null,
+    "editRoles": [
+      "platform_owner",
+      "superadmin",
+      "dash_admin",
+      "courier_admin"
+    ],
+    "min": 0,
+    "max": 500,
+    "hidden": false
   },
   {
     "key": "courier.cash.remittance_enabled",
@@ -1701,7 +1725,7 @@
     ],
     "min": 0,
     "max": 100,
-    "hidden": true
+    "hidden": false
   },
   {
     "key": "partner.performance.min_orders_for_warning",
@@ -2075,7 +2099,7 @@
       "betaUserIds": []
     },
     "kind": "object",
-    "clientVisible": true,
+    "clientVisible": false,
     "envOverride": null,
     "onReadError": "default",
     "scopes": [
@@ -2103,7 +2127,7 @@
       "betaUserIds": []
     },
     "kind": "object",
-    "clientVisible": true,
+    "clientVisible": false,
     "envOverride": null,
     "onReadError": "default",
     "scopes": [
@@ -2132,7 +2156,7 @@
       "betaUserIds": []
     },
     "kind": "object",
-    "clientVisible": true,
+    "clientVisible": false,
     "envOverride": null,
     "onReadError": "default",
     "scopes": [

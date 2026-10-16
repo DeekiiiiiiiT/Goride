@@ -109,11 +109,13 @@ export const PARTNER_SETTINGS: SettingDef[] = [
     clientVisible: false,
     risk: 'normal',
     editRoles: ROLES.sharedEdit,
-    readers: [GET_SETTING],
+    readers: [
+      'supabase/functions/delivery/index.ts',
+      'packages/dash-admin/src/pages/MenuPriceReviewsPage.tsx',
+    ],
     unit: '%',
     min: 0,
     max: 100,
-    hidden: true,
   }),
   defineSetting({
     key: 'partner.performance.min_orders_for_warning',

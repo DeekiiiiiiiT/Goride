@@ -267,7 +267,7 @@ exports[`rush-settings registry snapshot > matches keys, defaults, clientVisible
       "sessionTimeoutMinutes": 0,
     },
     "key": "platform.staff_security",
-    "risk": "locked",
+    "risk": "high",
   },
   {
     "clientVisible": false,
@@ -495,6 +495,12 @@ exports[`rush-settings registry snapshot > matches keys, defaults, clientVisible
     "risk": "normal",
   },
   {
+    "clientVisible": true,
+    "default": 20,
+    "key": "courier.delivery.wait_pay_jmd_per_min",
+    "risk": "normal",
+  },
+  {
     "clientVisible": false,
     "default": true,
     "key": "courier.cash.remittance_enabled",
@@ -711,7 +717,7 @@ exports[`rush-settings registry snapshot > matches keys, defaults, clientVisible
     "risk": "normal",
   },
   {
-    "clientVisible": true,
+    "clientVisible": false,
     "default": {
       "betaUserIds": [],
       "mode": "on",
@@ -721,7 +727,7 @@ exports[`rush-settings registry snapshot > matches keys, defaults, clientVisible
     "risk": "high",
   },
   {
-    "clientVisible": true,
+    "clientVisible": false,
     "default": {
       "betaUserIds": [],
       "mode": "on",
@@ -731,7 +737,7 @@ exports[`rush-settings registry snapshot > matches keys, defaults, clientVisible
     "risk": "high",
   },
   {
-    "clientVisible": true,
+    "clientVisible": false,
     "default": {
       "betaUserIds": [],
       "mode": "on",

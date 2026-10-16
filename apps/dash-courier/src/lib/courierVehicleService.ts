@@ -2,6 +2,7 @@ import { createClient } from '@supabase/supabase-js';
 import { projectId, publicAnonKey } from '@roam/api-client';
 import { supabase } from '@/lib/supabase';
 import { loadSignupDraft } from '@/lib/signupDraft';
+import { upsertCourierVehicleRemote } from '@/lib/courierApi';
 
 export type CourierVehicleRow = {
   id: string;
@@ -61,8 +62,10 @@ export async function upsertCourierVehicle(input: {
   vehicleType: string;
   year?: number | null;
 }): Promise<{ ok: true; vehicle: CourierVehicleRow } | { ok: false; error: string }> {
-  const client = await getDeliveryClient();
-  if (!client) return { ok: false, error: 'Not signed in' };
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  if (!session?.user) return { ok: false, error: 'Not signed in' };
 
   const plate = input.licensePlate.trim().toUpperCase();
   if (!plate) return { ok: false, error: 'License plate required' };
@@ -71,38 +74,15 @@ export async function upsertCourierVehicle(input: {
   }
 
   const { make, model } = splitMakeModel(input.makeModel);
-  const payload = {
-    user_id: client.session.user.id,
+  // Edge enforces courier.signup.vehicle_types
+  return upsertCourierVehicleRemote({
     make,
     model,
     year: input.year ?? null,
     color: input.color || null,
     license_plate: plate,
     vehicle_type: input.vehicleType,
-    is_primary: true,
-    status: 'active',
-    updated_at: new Date().toISOString(),
-  };
-
-  const existing = await loadPrimaryVehicle();
-  if (existing) {
-    const { data, error } = await client.delivery
-      .from('courier_vehicles')
-      .update(payload)
-      .eq('id', existing.id)
-      .select('id, user_id, make, model, year, color, license_plate, vehicle_type, is_primary')
-      .single();
-    if (error || !data) return { ok: false, error: error?.message || 'Update failed' };
-    return { ok: true, vehicle: data as CourierVehicleRow };
-  }
-
-  const { data, error } = await client.delivery
-    .from('courier_vehicles')
-    .insert(payload)
-    .select('id, user_id, make, model, year, color, license_plate, vehicle_type, is_primary')
-    .single();
-  if (error || !data) return { ok: false, error: error?.message || 'Insert failed' };
-  return { ok: true, vehicle: data as CourierVehicleRow };
+  });
 }
 
 /** Persist vehicle fields from signup draft after profile exists. */

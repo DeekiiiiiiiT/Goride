@@ -7,6 +7,7 @@ import SortableList from './SortableList';
 interface MenuDesktopDashboardProps {
   categories: MenuCategory[];
   items: MenuItem[];
+  pendingItemIds?: Set<string>;
   selectedCategoryId: string | null;
   onSelectCategory: (categoryId: string) => void;
   onAddCategory: () => void;
@@ -21,6 +22,7 @@ interface MenuDesktopDashboardProps {
 export default function MenuDesktopDashboard({
   categories,
   items,
+  pendingItemIds,
   selectedCategoryId,
   onSelectCategory,
   onAddCategory,
@@ -286,6 +288,7 @@ export default function MenuDesktopDashboard({
                   )}
                   <MenuItemCard
                     item={item}
+                    pricePending={pendingItemIds?.has(item.id) ?? false}
                     onEdit={() => onEditItem(item)}
                     onToggleAvailability={(isAvailable) =>
                       onToggleAvailability(item.id, isAvailable)
@@ -303,10 +306,12 @@ export default function MenuDesktopDashboard({
 
 function MenuItemCard({
   item,
+  pricePending,
   onEdit,
   onToggleAvailability,
 }: {
   item: MenuItem;
+  pricePending?: boolean;
   onEdit: () => void;
   onToggleAvailability: (isAvailable: boolean) => void;
 }) {
@@ -326,11 +331,18 @@ function MenuItemCard({
             <MaterialIcon name="set_meal" className="text-outline-variant" size={48} />
           </div>
         )}
-        <div className="absolute right-2 top-2 flex cursor-pointer items-center gap-inset-xs rounded border border-outline-variant/50 bg-surface/90 px-2 py-1 backdrop-blur-sm">
-          <span
-            className={`h-2 w-2 rounded-full ${isLive ? 'bg-primary-container' : 'bg-error'}`}
-          />
-          <span className="text-label-sm text-on-surface">{isLive ? 'Live' : 'Hidden'}</span>
+        <div className="absolute right-2 top-2 flex flex-col items-end gap-1">
+          {pricePending ? (
+            <span className="rounded border border-amber-500/40 bg-amber-500/15 px-2 py-0.5 text-label-sm font-medium text-amber-800">
+              Price pending
+            </span>
+          ) : null}
+          <div className="flex cursor-pointer items-center gap-inset-xs rounded border border-outline-variant/50 bg-surface/90 px-2 py-1 backdrop-blur-sm">
+            <span
+              className={`h-2 w-2 rounded-full ${isLive ? 'bg-primary-container' : 'bg-error'}`}
+            />
+            <span className="text-label-sm text-on-surface">{isLive ? 'Live' : 'Hidden'}</span>
+          </div>
         </div>
         <div className="absolute inset-0 flex items-center justify-center gap-inset-sm bg-black/40 opacity-0 backdrop-blur-[2px] transition-opacity group-hover:opacity-100">
           <button

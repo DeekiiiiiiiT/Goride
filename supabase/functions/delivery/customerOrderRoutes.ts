@@ -89,6 +89,8 @@ const PlaceOrderBody = z.object({
   deliveryInstructions: z.unknown().optional(),
   paymentMethod: z.string().optional(),
   promoCode: z.string().optional(),
+  /** Customer checkout: delivery (default) or store pickup */
+  fulfillmentType: z.enum(["delivery", "pickup"]).optional(),
 }).passthrough();
 
 export type CustomerOrderRoutesDeps = {
@@ -114,6 +116,19 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
 
     const body = await validateBody(c, PlaceOrderBody);
     if (body instanceof Response) return body;
+
+    const fulfillmentType: "delivery" | "pickup" =
+      body.fulfillmentType === "pickup" ? "pickup" : "delivery";
+    const isPickup = fulfillmentType === "pickup";
+
+    if (isPickup) {
+      if (!(await getSetting<boolean>("customer.ordering.pickup"))) {
+        return c.json({
+          error: "Pickup ordering is not available",
+          code: "pickup_disabled",
+        }, 400);
+      }
+    }
 
     const scheduledFor = (body as { scheduledFor?: { date?: string; slot?: string } | null })
       .scheduledFor;
@@ -345,14 +360,10 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
       default_lat?: number | null;
       default_lng?: number | null;
     };
-    const dropoffLat = asCoord(body.deliveryLat) ?? asCoord(customerRow.default_lat);
-    const dropoffLng = asCoord(body.deliveryLng) ?? asCoord(customerRow.default_lng);
-    const hasDropoffPin = dropoffLat != null && dropoffLng != null && !(dropoffLat === 0 && dropoffLng === 0);
-
     const { data: merchantMarketRow } = await serviceSb
       .from("merchants")
       .select(
-        "market_id, min_order_amount, delivery_radius_km, pricing_tier:merchant_tiers(default_delivery_radius_km)",
+        "market_id, min_order_amount, delivery_radius_km, address, lat, lng, pricing_tier:merchant_tiers(default_delivery_radius_km)",
       )
       .eq("id", body.merchantId)
       .maybeSingle();
@@ -360,14 +371,41 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
       ? String(merchantMarketRow.market_id)
       : null;
 
-    const coverageGate = await assertSameMarketCoverage(serviceSb, {
-      dropoffLat,
-      dropoffLng,
-      merchantMarketId,
-      merchantId: body.merchantId,
-    });
-    if (!coverageGate.ok) {
-      return c.json({ error: coverageGate.error, code: coverageGate.code }, 400);
+    if (isPickup) {
+      const { data: pickupSettings } = await serviceSb
+        .from("merchant_settings")
+        .select("allows_pickup")
+        .eq("merchant_id", body.merchantId)
+        .maybeSingle();
+      // Missing row defaults to allow (same as partner settings API)
+      if (pickupSettings != null && pickupSettings.allows_pickup === false) {
+        return c.json({
+          error: "This store does not offer pickup",
+          code: "pickup_not_allowed",
+        }, 400);
+      }
+    }
+
+    const dropoffLat = isPickup
+      ? asCoord(merchantMarketRow?.lat)
+      : asCoord(body.deliveryLat) ?? asCoord(customerRow.default_lat);
+    const dropoffLng = isPickup
+      ? asCoord(merchantMarketRow?.lng)
+      : asCoord(body.deliveryLng) ?? asCoord(customerRow.default_lng);
+    const hasDropoffPin = dropoffLat != null && dropoffLng != null && !(dropoffLat === 0 && dropoffLng === 0);
+
+    let coverageMarketId: string | null = merchantMarketId;
+    if (!isPickup) {
+      const coverageGate = await assertSameMarketCoverage(serviceSb, {
+        dropoffLat,
+        dropoffLng,
+        merchantMarketId,
+        merchantId: body.merchantId,
+      });
+      if (!coverageGate.ok) {
+        return c.json({ error: coverageGate.error, code: coverageGate.code }, 400);
+      }
+      coverageMarketId = coverageGate.marketId;
     }
 
     const gct = await resolveMerchantFoodGctRate(serviceSb, body.merchantId);
@@ -378,7 +416,8 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
       gctRegistered: gct.gctRegistered,
       discount,
     });
-    const tip = Math.max(0, Number(body.tip) || 0);
+    // Pickup: no courier tip
+    const tip = isPickup ? 0 : Math.max(0, Number(body.tip) || 0);
     const paymentMethod = body.paymentMethod || "wipay";
     const discountedSubtotal = Math.round(Math.max(0, pricing.subtotal - discount) * 100) / 100;
 
@@ -412,7 +451,7 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
       }
     }
 
-    // Model B only — market already validated via same-town gate
+    // Model B only — market already validated via same-town gate (delivery) or merchant market (pickup)
     const v2Pricing = await resolveDashOrderPricing(serviceSb, {
       merchantId: body.merchantId,
       subtotal: pricing.subtotal,
@@ -422,9 +461,9 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
       dropoffLng,
       customerId: customer.id,
       paymentMethod: paymentMethod === "cash" ? "cash" : "wipay",
-      marketIdOverride: coverageGate.marketId,
+      marketIdOverride: coverageMarketId,
       requireCoverage: false,
-      freeDelivery: freeDeliveryFromPromo,
+      freeDelivery: isPickup ? true : freeDeliveryFromPromo,
     });
 
     if (!v2Pricing) {
@@ -441,7 +480,7 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
     }
 
     const distanceKmRaw = v2Pricing.distanceKmRaw ?? null;
-    if (distanceKmRaw != null && Number.isFinite(distanceKmRaw)) {
+    if (!isPickup && distanceKmRaw != null && Number.isFinite(distanceKmRaw)) {
       const merchantRadius = merchantMarketRow?.delivery_radius_km != null
         ? Number(merchantMarketRow.delivery_radius_km)
         : NaN;
@@ -477,56 +516,60 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
     // Pass free delivery: allow contribution down to −remaining budget; reject overspend.
     // Promo free delivery (Finding N): same budget check; no blanket floor bypass.
     // Delivery charged (Pass or promo deny): enforce normal contribution floor.
+    // Pickup: no courier economics — skip delivery margin floor.
     const passFree = v2Pricing.rushPassApplied === true && v2Pricing.freeDeliveryApplied === true;
     const promoFree = v2Pricing.freeDeliveryApplied === true && v2Pricing.rushPassApplied !== true;
     const remainingPassBudget = Number(v2Pricing.rushPassSubsidyRemainingJmd ?? 0);
     const remainingPromoBudget = Number(v2Pricing.promoFreeDeliverySubsidyRemainingJmd ?? 0);
     const thisSubsidy = Number(v2Pricing.platformDeliverySubsidyJmd ?? 0);
-    if (passFree) {
-      if (thisSubsidy > remainingPassBudget + 0.01) {
+    if (!isPickup) {
+      if (passFree) {
+        if (thisSubsidy > remainingPassBudget + 0.01) {
+          return c.json({
+            error: "Rush Pass free-delivery credit for this period is insufficient for this trip",
+            code: "pass_subsidy_budget_exceeded",
+          }, 400);
+        }
+      } else if (promoFree) {
+        if (thisSubsidy > remainingPromoBudget + 0.01) {
+          return c.json({
+            error: "Platform free-delivery credit for this month is insufficient for this trip",
+            code: "promo_fd_subsidy_budget_exceeded",
+          }, 400);
+        }
+      } else if (
+        minContribution > 0 &&
+        v2Pricing.contributionJmd < minContribution
+      ) {
+        console.error(
+          "[placeOrder] contribution below floor",
+          v2Pricing.contributionJmd,
+          minContribution,
+        );
         return c.json({
-          error: "Rush Pass free-delivery credit for this period is insufficient for this trip",
-          code: "pass_subsidy_budget_exceeded",
+          error: "Order cannot be placed with current pricing configuration",
+          code: "order_below_margin_floor",
         }, 400);
       }
-    } else if (promoFree) {
-      if (thisSubsidy > remainingPromoBudget + 0.01) {
-        return c.json({
-          error: "Platform free-delivery credit for this month is insufficient for this trip",
-          code: "promo_fd_subsidy_budget_exceeded",
-        }, 400);
-      }
-    } else if (
-      minContribution > 0 &&
-      v2Pricing.contributionJmd < minContribution
-    ) {
-      console.error(
-        "[placeOrder] contribution below floor",
-        v2Pricing.contributionJmd,
-        minContribution,
-      );
-      return c.json({
-        error: "Order cannot be placed with current pricing configuration",
-        code: "order_below_margin_floor",
-      }, 400);
     }
 
-    const deliveryFee = v2Pricing.deliveryFee;
+    // Pickup: zero delivery fee + courier pay (no dispatch)
+    const deliveryFee = isPickup ? 0 : v2Pricing.deliveryFee;
     const serviceFee = v2Pricing.serviceFee;
     const platformFee = serviceFee; // alias — service_fee is authoritative for Model B
     const merchantCommissionAmount = v2Pricing.merchantCommissionAmount;
-    const deliveryFeePlatformAmount = v2Pricing.deliveryFeePlatformAmount;
-    const deliveryFeeCourierAmount = v2Pricing.deliveryFeeCourierAmount;
-    const distanceKm = v2Pricing.distanceKm;
+    const deliveryFeePlatformAmount = isPickup ? 0 : v2Pricing.deliveryFeePlatformAmount;
+    const deliveryFeeCourierAmount = isPickup ? 0 : v2Pricing.deliveryFeeCourierAmount;
+    const distanceKm = isPickup ? 0 : v2Pricing.distanceKm;
     const pricingProfileVersion = v2Pricing.pricingProfileVersion;
     const processingFee = v2Pricing.processingFee;
     const taxFoodJmd = v2Pricing.taxFoodJmd;
     const taxPlatformJmd = v2Pricing.taxPlatformJmd;
     const taxRateFoodPercent = v2Pricing.taxRateFoodPercent;
     const taxRatePlatformPercent = v2Pricing.taxRatePlatformPercent;
-    const courierTipNet = v2Pricing.courierTipNet;
+    const courierTipNet = isPickup ? 0 : v2Pricing.courierTipNet;
     const smallOrderFee = v2Pricing.smallOrderFee ?? 0;
-    const platformDeliverySubsidyJmd = v2Pricing.platformDeliverySubsidyJmd ?? 0;
+    const platformDeliverySubsidyJmd = isPickup ? 0 : (v2Pricing.platformDeliverySubsidyJmd ?? 0);
     const pricingSnapshot: Record<string, unknown> = {
       rules: v2Pricing.rules,
       tier_slug: v2Pricing.tierSlug,
@@ -553,20 +596,24 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
       tax_platform_jmd: v2Pricing.taxPlatformJmd,
       service_fee: v2Pricing.serviceFee,
       service_fee_distance_jmd: v2Pricing.serviceFeeDistanceJmd ?? 0,
-      delivery_fee: v2Pricing.deliveryFee,
-      delivery_fee_platform_amount: v2Pricing.deliveryFeePlatformAmount,
-      delivery_fee_courier_amount: v2Pricing.deliveryFeeCourierAmount,
-      zone_surcharge_jmd: v2Pricing.zoneSurchargeJmd,
-      distance_km_raw: v2Pricing.distanceKmRaw,
-      courier_tip_net: v2Pricing.courierTipNet,
+      delivery_fee: deliveryFee,
+      delivery_fee_platform_amount: deliveryFeePlatformAmount,
+      delivery_fee_courier_amount: deliveryFeeCourierAmount,
+      zone_surcharge_jmd: isPickup ? 0 : v2Pricing.zoneSurchargeJmd,
+      distance_km_raw: isPickup ? 0 : v2Pricing.distanceKmRaw,
+      courier_tip_net: courierTipNet,
       small_order_fee: smallOrderFee,
       platform_delivery_subsidy_jmd: platformDeliverySubsidyJmd,
-      courier_base_pay_jmd: v2Pricing.courierBasePayJmd ?? 0,
-      courier_distance_pay_jmd: v2Pricing.courierDistancePayJmd ?? 0,
+      courier_base_pay_jmd: isPickup ? 0 : (v2Pricing.courierBasePayJmd ?? 0),
+      courier_distance_pay_jmd: isPickup ? 0 : (v2Pricing.courierDistancePayJmd ?? 0),
       contribution_jmd: v2Pricing.contributionJmd,
       promo_funded_by: v2Pricing.promoFundedBy,
+      fulfillment_type: fulfillmentType,
     };
-    const total = v2Pricing.customerTotal;
+    // Strip delivery fee from customer total when pickup (quote may still include waived/base fee)
+    const total = isPickup
+      ? Math.round(Math.max(0, Number(v2Pricing.customerTotal) - Number(v2Pricing.deliveryFee || 0)) * 100) / 100
+      : v2Pricing.customerTotal;
     pricing.tax = v2Pricing.tax;
 
     async function waitForOrderById(orderId: string) {
@@ -641,6 +688,9 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
     }
 
     const isCash = paymentMethod === "cash";
+    const pickupStoreAddress = merchantMarketRow?.address
+      ? String(merchantMarketRow.address)
+      : null;
     const insertPayload: Record<string, unknown> = {
       customer_id: customer.id,
       merchant_id: body.merchantId,
@@ -654,10 +704,10 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
       delivery_fee_platform_amount: deliveryFeePlatformAmount,
       delivery_fee_courier_amount: deliveryFeeCourierAmount,
       platform_delivery_subsidy_jmd: platformDeliverySubsidyJmd,
-      free_delivery_applied: v2Pricing.freeDeliveryApplied === true,
+      free_delivery_applied: isPickup ? true : v2Pricing.freeDeliveryApplied === true,
       small_order_fee: smallOrderFee,
-      courier_base_pay_jmd: v2Pricing.courierBasePayJmd ?? 0,
-      courier_distance_pay_jmd: v2Pricing.courierDistancePayJmd ?? 0,
+      courier_base_pay_jmd: isPickup ? 0 : (v2Pricing.courierBasePayJmd ?? 0),
+      courier_distance_pay_jmd: isPickup ? 0 : (v2Pricing.courierDistancePayJmd ?? 0),
       distance_km: distanceKm,
       pricing_profile_version: pricingProfileVersion,
       pricing_snapshot: pricingSnapshot,
@@ -672,11 +722,20 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
       tip,
       discount,
       total,
-      delivery_address: body.deliveryAddress,
-      delivery_address_line2: body.deliveryAddressLine2 ?? body.delivery_address_line2 ?? null,
-      delivery_lat: hasDropoffPin ? dropoffLat : null,
-      delivery_lng: hasDropoffPin ? dropoffLng : null,
-      delivery_instructions: body.deliveryInstructions,
+      fulfillment_type: fulfillmentType,
+      delivery_address: isPickup
+        ? (pickupStoreAddress ?? body.deliveryAddress ?? "Store pickup")
+        : body.deliveryAddress,
+      delivery_address_line2: isPickup
+        ? null
+        : (body.deliveryAddressLine2 ?? body.delivery_address_line2 ?? null),
+      delivery_lat: isPickup
+        ? (hasDropoffPin ? dropoffLat : null)
+        : (hasDropoffPin ? dropoffLat : null),
+      delivery_lng: isPickup
+        ? (hasDropoffPin ? dropoffLng : null)
+        : (hasDropoffPin ? dropoffLng : null),
+      delivery_instructions: isPickup ? null : body.deliveryInstructions,
       payment_method: paymentMethod,
       payment_status: isCash ? "pending_collection" : "pending",
       money_state: isCash ? "awaiting_collection" : "awaiting_payment",
@@ -702,6 +761,31 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
         await serviceSb.from("order_idempotency_keys").delete().eq("customer_id", customer.id).eq("idempotency_key", idempotencyKey).eq("order_id", idempotencyOrderId);
       }
       return c.json({ error: orderError.message }, 500);
+    }
+
+    // High-value handoff PIN (courier.delivery.pin_required_over_jmd) — delivery only
+    if (!isPickup) {
+      try {
+        const { getSetting } = await import("../_shared/rushSettings/getSetting.ts");
+        const pinThreshold = Number(
+          await getSetting<number>("courier.delivery.pin_required_over_jmd"),
+        ) || 0;
+        const { generateDeliveryPin, maybeNeedsPin } = await import("./deliveryPin.ts");
+        const orderTotal = Number(total);
+        if (maybeNeedsPin(orderTotal, pinThreshold)) {
+          const pin = generateDeliveryPin();
+          const { data: pinned } = await serviceSb
+            .from("orders")
+            .update({ delivery_pin: pin })
+            .eq("id", order.id)
+            .select()
+            .single();
+          if (pinned) Object.assign(order, pinned);
+          else (order as Record<string, unknown>).delivery_pin = pin;
+        }
+      } catch (pinErr) {
+        console.error("[orders] delivery_pin assign failed", pinErr);
+      }
     }
 
     // Create initial order event

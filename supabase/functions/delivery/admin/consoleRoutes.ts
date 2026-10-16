@@ -266,6 +266,24 @@ export function registerConsoleAdminRoutes(app: Hono) {
         href: "/finance?tab=payouts",
         capability: "finance",
       }),
+      countOldest(async () => {
+        const { count, data, error } = await db.from("menu_price_change_requests")
+          .select("created_at", { count: "exact" })
+          .eq("status", "pending")
+          .order("created_at", { ascending: true })
+          .limit(1);
+        if (error) throw new Error(error.message);
+        const oldest = (data?.[0] as { created_at?: string } | undefined)?.created_at ?? null;
+        return { count: count ?? 0, oldest };
+      }).then((row) => row && {
+        id: "menu-price-reviews",
+        label: "Menu price reviews",
+        count: row.count,
+        oldestAt: row.oldest,
+        breached: ageBreached(row.oldest, hours(48)),
+        href: "/merchants?tab=price-reviews",
+        capability: "merchants",
+      }),
     ]);
 
     const queues = built

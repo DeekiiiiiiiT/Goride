@@ -13,8 +13,12 @@ const COURIER_APP = 'apps/dash-courier/src/App.tsx';
 const DOCUMENTS_PAGE = 'apps/dash-courier/src/pages/onboarding/DocumentsPage.tsx';
 const SIGNUP_PAGE = 'apps/dash-courier/src/pages/onboarding/SignUpPage.tsx';
 const VEHICLE_PAGE = 'apps/dash-courier/src/pages/onboarding/VehicleSetupPage.tsx';
+const PROFILE_SETUP = 'apps/dash-courier/src/pages/onboarding/ProfileSetupPage.tsx';
 const AT_CUSTOMER = 'apps/dash-courier/src/pages/delivery/AtCustomerPage.tsx';
+const AT_STORE = 'apps/dash-courier/src/pages/delivery/AtStorePage.tsx';
+const WAIT_SHEET = 'apps/dash-courier/src/components/delivery/WaitTimeSheet.tsx';
 const DELIVERY_INDEX = 'supabase/functions/delivery/index.ts';
+const CUSTOMER_TRACKING = 'apps/dash-customer/src/pages/OrderTrackingPage.tsx';
 const H3 = 'supabase/functions/_shared/h3/geoIndex.ts';
 const REMITTANCE = 'supabase/functions/delivery/remittance/collectOnDelivery.ts';
 
@@ -77,7 +81,14 @@ export const COURIER_SETTINGS: SettingDef[] = [
     clientVisible: true,
     risk: 'normal',
     editRoles: ROLES.courierEdit,
-    readers: [VEHICLE_PAGE],
+    readers: [
+      VEHICLE_PAGE,
+      COURIER_ROUTES,
+      'apps/dash-courier/src/lib/courierVehicleService.ts',
+      'apps/dash-courier/src/lib/ensureCourierProfile.ts',
+      'apps/dash-courier/src/lib/courierProfileService.ts',
+      'supabase/migrations/20261016120000_courier_vehicle_type_allowlist.sql',
+    ],
   }),
   defineSetting({
     key: 'courier.signup.required_documents',
@@ -107,11 +118,10 @@ export const COURIER_SETTINGS: SettingDef[] = [
     clientVisible: true,
     risk: 'normal',
     editRoles: ROLES.courierEdit,
-    readers: [APP_CONFIG, COURIER_APP, GET_SETTING],
+    readers: [PROFILE_SETUP, COURIER_ROUTES],
     unit: 'years',
     min: 16,
     max: 25,
-    hidden: true,
   }),
   defineSetting({
     key: 'courier.dispatch.radius_km',
@@ -207,18 +217,17 @@ export const COURIER_SETTINGS: SettingDef[] = [
     clientVisible: true,
     risk: 'normal',
     editRoles: ROLES.courierEdit,
-    readers: [APP_CONFIG, COURIER_APP, GET_SETTING],
+    readers: [AT_CUSTOMER, DELIVERY_INDEX, CUSTOMER_TRACKING, COURIER_ROUTES],
     unit: 'J$',
     min: 0,
     max: 500_000,
-    hidden: true,
   }),
   defineSetting({
     key: 'courier.delivery.wait_grace_minutes',
     app: 'courier',
     section: 'Delivery rules',
     label: 'Free wait at restaurant',
-    help: 'Minutes of free wait at the restaurant before wait pay applies.',
+    help: 'Minutes of free wait at the restaurant before wait pay applies (rate from wait pay per minute).',
     kind: 'number',
     zodSchema: z.number().int().min(0).max(60),
     default: 10,
@@ -226,11 +235,28 @@ export const COURIER_SETTINGS: SettingDef[] = [
     clientVisible: true,
     risk: 'normal',
     editRoles: ROLES.courierEdit,
-    readers: [APP_CONFIG, COURIER_APP, GET_SETTING],
+    readers: [AT_STORE, WAIT_SHEET, COURIER_ROUTES],
     unit: 'min',
     min: 0,
     max: 60,
-    hidden: true,
+  }),
+  defineSetting({
+    key: 'courier.delivery.wait_pay_jmd_per_min',
+    app: 'courier',
+    section: 'Delivery rules',
+    label: 'Wait pay per minute',
+    help: 'J$ credited to the courier for each billable minute after free wait.',
+    kind: 'number',
+    zodSchema: z.number().int().min(0).max(500),
+    default: 20,
+    scopes: ['platform'],
+    clientVisible: true,
+    risk: 'normal',
+    editRoles: ROLES.courierEdit,
+    readers: [AT_STORE, WAIT_SHEET, COURIER_ROUTES],
+    unit: 'J$',
+    min: 0,
+    max: 500,
   }),
   defineSetting({
     key: 'courier.cash.remittance_enabled',

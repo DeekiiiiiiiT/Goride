@@ -144,6 +144,7 @@ export function CourierHomePage({ onSignOut }: CourierHomePageProps) {
   const [mutationSubmitting, setMutationSubmitting] = useState(false);
   const [pendingFleetInviteCount, setPendingFleetInviteCount] = useState(0);
   const [sessionRestoredApprox, setSessionRestoredApprox] = useState(false);
+  const pendingDeliveryPinRef = useRef<string | undefined>(undefined);
   const delivery = activeDelivery ?? emptyActiveDelivery();
   const hasActiveDeliveryData = Boolean(activeDelivery?.orderId);
     const locationSeqRef = useRef(0);
@@ -569,8 +570,15 @@ export function CourierHomePage({ onSignOut }: CourierHomePageProps) {
   }, []);
 
   const handleAtCustomerComplete = useCallback(
-    async (method: DropoffMethod, _hasPhoto: boolean, photoPath?: string, courierNotes?: string) => {
+    async (
+      method: DropoffMethod,
+      _hasPhoto: boolean,
+      photoPath?: string,
+      courierNotes?: string,
+      deliveryPin?: string,
+    ) => {
       const orderId = realDispatchProvider.activeOrderId || delivery.orderId;
+      pendingDeliveryPinRef.current = deliveryPin;
       if (method === 'hand-to-customer') {
         if (delivery.vertical_type === 'alcohol') {
           setAgeVerifyOpen(true);
@@ -580,12 +588,13 @@ export function CourierHomePage({ onSignOut }: CourierHomePageProps) {
         return;
       }
       setMutationSubmitting(true);
-      const result = await commitDelivered(orderId, photoPath, courierNotes);
+      const result = await commitDelivered(orderId, photoPath, courierNotes, deliveryPin);
       setMutationSubmitting(false);
       if (!result.ok) {
         toast.error('Delivery failed', result.error);
         return;
       }
+      pendingDeliveryPinRef.current = undefined;
       dispatch.setDeliveryPhase('complete');
     },
     [dispatch, delivery.vertical_type, delivery.orderId],
@@ -606,12 +615,18 @@ export function CourierHomePage({ onSignOut }: CourierHomePageProps) {
       toast.success('Cash recorded', cash.words);
     }
     setMutationSubmitting(true);
-    const result = await commitDelivered(orderId);
+    const result = await commitDelivered(
+      orderId,
+      undefined,
+      undefined,
+      pendingDeliveryPinRef.current,
+    );
     setMutationSubmitting(false);
     if (!result.ok) {
       toast.error('Delivery failed', result.error);
       return;
     }
+    pendingDeliveryPinRef.current = undefined;
     dispatch.setDeliveryPhase('complete');
   }, [dispatch, delivery.orderId]);
 
@@ -619,12 +634,18 @@ export function CourierHomePage({ onSignOut }: CourierHomePageProps) {
     async (photoPath: string) => {
       const orderId = realDispatchProvider.activeOrderId || delivery.orderId;
       setMutationSubmitting(true);
-      const result = await commitDelivered(orderId, photoPath, 'Left at a safe spot');
+      const result = await commitDelivered(
+        orderId,
+        photoPath,
+        'Left at a safe spot',
+        pendingDeliveryPinRef.current,
+      );
       setMutationSubmitting(false);
       if (!result.ok) {
         toast.error('Delivery failed', result.error);
         return;
       }
+      pendingDeliveryPinRef.current = undefined;
       toast.success('Left at a safe spot', 'The customer is charged and you are paid for this trip.');
       dispatch.setDeliveryPhase('complete');
     },

@@ -529,7 +529,7 @@ export const PLATFORM_SETTINGS: SettingDef[] = [
     app: 'platform',
     section: 'Staff security',
     label: 'Admin session and MFA roles',
-    help: 'Session timeout (0 = none) and roles that must use 2-step login.',
+    help: 'Session timeout (0 = none) and roles that must use 2-step login. High-risk — needs a second person.',
     kind: 'object',
     zodSchema: staffSecuritySchema,
     default: {
@@ -544,10 +544,14 @@ export const PLATFORM_SETTINGS: SettingDef[] = [
     },
     scopes: ['platform'],
     clientVisible: false,
-    risk: 'locked',
+    risk: 'high',
     editRoles: ROLES.ownerOnly,
-    readers: [GET_SETTING],
-    hidden: true,
+    readers: [
+      'packages/dash-admin/src/utils/adminMfa.ts',
+      'packages/dash-admin/src/hooks/useAdminSessionPolicy.ts',
+      'packages/dash-admin/src/DashAdminPortal.tsx',
+      'supabase/functions/_shared/productAdmin.ts',
+    ],
   }),
 
   defineSetting({

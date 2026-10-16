@@ -41,6 +41,8 @@ export type AvailableOrder = {
   order_number?: string;
   status: string;
   payment_method?: string | null;
+  total?: number;
+  delivery_pin?: string | null;
   delivery_fee?: number;
   /** Courier share of delivery fee (Model B). */
   delivery_fee_courier_amount?: number;
@@ -196,13 +198,16 @@ export async function updateCourierOrderStatus(
   orderId: string,
   status: string,
   notes?: string,
+  opts?: { deliveryPin?: string },
 ): Promise<{ ok: boolean; error?: string }> {
   const headers = await authHeaders();
   if (!headers) return { ok: false, error: 'Not signed in' };
+  const body: Record<string, unknown> = { status, notes, actorType: 'courier' };
+  if (opts?.deliveryPin) body.delivery_pin = opts.deliveryPin;
   const res = await fetch(`${BASE}/orders/${orderId}/status`, {
     method: 'PUT',
     headers,
-    body: JSON.stringify({ status, notes, actorType: 'courier' }),
+    body: JSON.stringify(body),
   });
   if (!res.ok) return { ok: false, error: await parseError(res) };
   return { ok: true };
@@ -590,6 +595,55 @@ export async function patchCourierSettings(patch: CourierCloudSettings): Promise
     body: JSON.stringify({ settings: patch }),
   });
   return res.ok;
+}
+
+/** Server-validated profile write (courier.signup.vehicle_types). */
+export async function upsertCourierProfile(
+  body: Record<string, unknown>,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const headers = await authHeaders();
+  if (!headers) return { ok: false, error: 'Not signed in' };
+  const res = await fetch(`${BASE}/courier/profile`, {
+    method: 'PUT',
+    headers,
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) return { ok: false, error: await parseError(res) };
+  return { ok: true };
+}
+
+export type CourierVehicleDto = {
+  id: string;
+  user_id: string;
+  make: string;
+  model: string;
+  year: number | null;
+  color: string | null;
+  license_plate: string;
+  vehicle_type: string | null;
+  is_primary: boolean;
+};
+
+/** Server-validated vehicle write (courier.signup.vehicle_types). */
+export async function upsertCourierVehicleRemote(input: {
+  make: string;
+  model: string;
+  year?: number | null;
+  color?: string | null;
+  license_plate: string;
+  vehicle_type: string;
+}): Promise<{ ok: true; vehicle: CourierVehicleDto } | { ok: false; error: string }> {
+  const headers = await authHeaders();
+  if (!headers) return { ok: false, error: 'Not signed in' };
+  const res = await fetch(`${BASE}/courier/vehicle`, {
+    method: 'PUT',
+    headers,
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) return { ok: false, error: await parseError(res) };
+  const body = (await res.json()) as { vehicle?: CourierVehicleDto };
+  if (!body.vehicle) return { ok: false, error: 'No vehicle returned' };
+  return { ok: true, vehicle: body.vehicle };
 }
 
 export type PeakPromotion = {

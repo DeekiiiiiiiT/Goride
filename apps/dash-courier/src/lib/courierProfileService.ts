@@ -64,20 +64,12 @@ export async function updateCourierProfile(
     >
   >,
 ): Promise<boolean> {
-  const delivery = await getDeliveryClient();
-  if (!delivery) return false;
-
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
-  if (!session?.user) return false;
-
-  const { error } = await delivery
-    .from('courier_profiles')
-    .update({ ...partial, updated_at: new Date().toISOString() })
-    .eq('user_id', session.user.id);
-
-  return !error;
+  // Route through edge so courier.signup.vehicle_types is enforced.
+  const { upsertCourierProfile } = await import('@/lib/courierApi');
+  const body: Record<string, unknown> = { ...partial };
+  if (partial.onboarding_complete === true) body.markComplete = true;
+  const result = await upsertCourierProfile(body);
+  return result.ok;
 }
 
 export async function pollApprovalStatus(): Promise<CourierProfileStatus | null> {

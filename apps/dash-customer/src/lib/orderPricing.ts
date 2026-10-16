@@ -60,6 +60,8 @@ export type CheckoutPricing = {
   cardProcessingFeePercent?: number;
   /** Merchant menu markup 0–1 when disclosed to customers. */
   menuInflationPercent?: number;
+  /** From merchant_settings.allows_pickup (default true when unset). */
+  allowsPickup?: boolean;
 };
 
 function roundMoney(value: number) {
@@ -148,6 +150,8 @@ export type FetchPricingOptions = {
   tip?: number;
   /** Request promo/launch free delivery so server can apply caps (Finding N) */
   freeDelivery?: boolean;
+  /** Store pickup quote — zeros delivery fee server-side */
+  fulfillmentType?: 'delivery' | 'pickup';
 };
 
 /** Live merchant fee + delivery for cart/checkout display (Model B only). */
@@ -182,6 +186,9 @@ export async function fetchMerchantCheckoutPricing(
   if (opts.freeDelivery) {
     params.set('free_delivery', '1');
   }
+  if (opts.fulfillmentType === 'pickup') {
+    params.set('fulfillment', 'pickup');
+  }
 
   const qs = params.toString();
   const url = `${API_ENDPOINTS.delivery}/merchants/${opts.merchantId}/pricing${qs ? `?${qs}` : ''}`;
@@ -215,6 +222,7 @@ export async function fetchMerchantCheckoutPricing(
     min_order_subtotal_jmd?: number;
     card_processing_fee_percent?: number;
     menu_inflation_percent?: number;
+    allows_pickup?: boolean;
   };
 
   const resolvedMerchantId =
@@ -249,5 +257,6 @@ export async function fetchMerchantCheckoutPricing(
     minOrderSubtotalJmd: data.min_order_subtotal_jmd,
     cardProcessingFeePercent: data.card_processing_fee_percent,
     menuInflationPercent: Math.max(0, Number(data.menu_inflation_percent ?? 0)),
+    allowsPickup: data.allows_pickup !== false,
   };
 }

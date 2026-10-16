@@ -7,11 +7,22 @@ type WaitTimeSheetProps = {
   onClose: () => void;
   onWait: (minutes: number) => void;
   onUnassign: () => void;
+  /** From courier.delivery.wait_grace_minutes — minutes that are free before wait pay. */
+  graceMinutes?: number;
+  /** From courier.delivery.wait_pay_jmd_per_min. */
+  payPerMinute?: number;
 };
 
 const WAIT_OPTIONS = [5, 10, 15] as const;
 
-export function WaitTimeSheet({ open, onClose, onWait, onUnassign }: WaitTimeSheetProps) {
+export function WaitTimeSheet({
+  open,
+  onClose,
+  onWait,
+  onUnassign,
+  graceMinutes = 10,
+  payPerMinute = 20,
+}: WaitTimeSheetProps) {
   const [selected, setSelected] = useState<number | null>(null);
   const keyboardOffset = useVisualViewport();
 
@@ -46,14 +57,20 @@ export function WaitTimeSheet({ open, onClose, onWait, onUnassign }: WaitTimeShe
             </button>
           </div>
 
+          {/* courier.delivery.wait_grace_minutes + wait_pay_jmd_per_min */}
           <p className="text-sm text-muted mb-4">
-            We&apos;ll log this wait so dispatch can see you&apos;re still on the job.
+            First {graceMinutes} min are free. Longer waits earn J${payPerMinute}/min.
           </p>
 
           <div className="grid grid-cols-3 gap-2 mb-8">
             {WAIT_OPTIONS.map((mins) => {
               const isSelected = selected === mins;
               const label = mins === 15 ? '15+' : String(mins);
+              const billable = Math.max(0, mins - graceMinutes);
+              const isFree = billable <= 0;
+              const payLabel = isFree
+                ? 'Free'
+                : `+J$${billable * payPerMinute}`;
               return (
                 <button
                   key={mins}
@@ -67,6 +84,13 @@ export function WaitTimeSheet({ open, onClose, onWait, onUnassign }: WaitTimeShe
                 >
                   <span className="text-xl font-semibold mb-1">{label}</span>
                   <span className="text-xs font-semibold uppercase tracking-wide text-muted">min</span>
+                  <span
+                    className={`mt-1 text-[10px] font-semibold uppercase tracking-wide ${
+                      isFree ? 'text-success' : 'text-primary'
+                    }`}
+                  >
+                    {payLabel}
+                  </span>
                 </button>
               );
             })}

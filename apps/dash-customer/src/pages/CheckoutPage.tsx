@@ -46,6 +46,8 @@ export default function CheckoutPage({ onNavigate, session }: Props) {
     | undefined;
   const scheduledEnabled = scheduledSetting?.enabled === true;
   const maxDaysAhead = Math.max(1, Number(scheduledSetting?.maxDaysAhead) || 7);
+  // Platform switch — stores still gate via merchant_settings.allows_pickup
+  const platformPickupEnabled = appConfig.settings['customer.ordering.pickup'] === true;
   const { items, merchantId, clearCart, subtotal } = useCart();
   const savedAddress = getSavedAddress();
   const pin = getCheckoutLocation();
@@ -53,6 +55,7 @@ export default function CheckoutPage({ onNavigate, session }: Props) {
   const pinLng = pin.lng ?? savedAddress?.lng;
   const initialPrefs = getCheckoutPreferences();
 
+  const [fulfillmentType, setFulfillmentType] = useState<'delivery' | 'pickup'>('delivery');
   const [deliveryMode, setDeliveryMode] = useState<'standard' | 'scheduled'>(
     scheduledEnabled ? initialPrefs.deliveryMode : 'standard',
   );
@@ -75,6 +78,7 @@ export default function CheckoutPage({ onNavigate, session }: Props) {
   const [showPharmacyNotice, setShowPharmacyNotice] = useState(false);
   const [checkoutPricing, setCheckoutPricing] = useState<CheckoutPricing | null>(null);
   const [pricingError, setPricingError] = useState<string | null>(null);
+  const [merchantAllowsPickup, setMerchantAllowsPickup] = useState(true);
   const [accountSuspended, setAccountSuspended] = useState(false);
   const [walletWords, setWalletWords] = useState('');
   const [orderingBlocked, setOrderingBlocked] = useState(false);
@@ -92,13 +96,16 @@ export default function CheckoutPage({ onNavigate, session }: Props) {
   const appliedPromo = getAppliedPromo();
   const paymentMethodId = getCheckoutPreferences().paymentMethodId;
   const apiPaymentMethod = getApiPaymentMethod(paymentMethodId);
+  const isPickup = fulfillmentType === 'pickup';
+  const showPickupToggle = platformPickupEnabled && merchantAllowsPickup;
+  const effectiveTip = isPickup ? 0 : tip;
   const hasLivePricing = checkoutPricing != null && !pricingError;
   const totals = useMemo(
     () =>
       hasLivePricing && checkoutPricing
-        ? calculateOrderTotals(subtotal, appliedPromo, tip, 0, undefined, undefined, {
+        ? calculateOrderTotals(subtotal, appliedPromo, effectiveTip, 0, undefined, undefined, {
             v2Quote: checkoutPricing,
-            tip,
+            tip: effectiveTip,
           })
         : {
             discount: 0,
@@ -106,13 +113,13 @@ export default function CheckoutPage({ onNavigate, session }: Props) {
             deliveryFee: 0,
             serviceFee: 0,
             tax: 0,
-            tip,
-            orderTotal: subtotal + tip,
+            tip: effectiveTip,
+            orderTotal: subtotal + effectiveTip,
             processingFee: 0,
             smallOrderFee: 0,
-            total: subtotal + tip,
+            total: subtotal + effectiveTip,
           },
-    [subtotal, appliedPromo, tip, checkoutPricing, hasLivePricing],
+    [subtotal, appliedPromo, effectiveTip, checkoutPricing, hasLivePricing],
   );
   const taxRateLabel = checkoutPricing?.taxRatePercent;
   const paymentLabel = getPaymentLabel(paymentMethodId);
@@ -156,15 +163,17 @@ export default function CheckoutPage({ onNavigate, session }: Props) {
           merchantId,
           accessToken: session?.access_token,
           subtotal,
-          dropoffLat: pinLat,
-          dropoffLng: pinLng,
+          dropoffLat: isPickup ? undefined : pinLat,
+          dropoffLng: isPickup ? undefined : pinLng,
           paymentMethod: apiPaymentMethod,
-          tip,
+          tip: isPickup ? 0 : tip,
           freeDelivery: appliedPromo?.type === 'free_delivery',
+          fulfillmentType: isPickup ? 'pickup' : 'delivery',
         });
         if (cancelled) return;
         setCheckoutPricing(pricing);
         setPricingError(null);
+        if (pricing.allowsPickup != null) setMerchantAllowsPickup(pricing.allowsPickup);
       } catch (err) {
         if (cancelled) return;
         setCheckoutPricing(null);
@@ -174,7 +183,48 @@ export default function CheckoutPage({ onNavigate, session }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [merchantId, session?.access_token, subtotal, pinLat, pinLng, apiPaymentMethod, tip, appliedPromo?.type]);
+  }, [
+    merchantId,
+    session?.access_token,
+    subtotal,
+    pinLat,
+    pinLng,
+    apiPaymentMethod,
+    tip,
+    appliedPromo?.type,
+    isPickup,
+  ]);
+
+  // Learn allows_pickup even when delivery quote needs a pin (toggle still needed)
+  useEffect(() => {
+    if (!platformPickupEnabled || !merchantId || isPickup) return;
+    let cancelled = false;
+    void fetchMerchantCheckoutPricing({
+      merchantId,
+      accessToken: session?.access_token,
+      subtotal,
+      paymentMethod: apiPaymentMethod,
+      tip: 0,
+      fulfillmentType: 'pickup',
+    })
+      .then((pricing) => {
+        if (!cancelled && pricing.allowsPickup != null) {
+          setMerchantAllowsPickup(pricing.allowsPickup);
+        }
+      })
+      .catch(() => {
+        /* delivery quote path remains authoritative for checkout */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [platformPickupEnabled, merchantId, session?.access_token, subtotal, apiPaymentMethod, isPickup]);
+
+  useEffect(() => {
+    if (!showPickupToggle && fulfillmentType === 'pickup') {
+      setFulfillmentType('delivery');
+    }
+  }, [showPickupToggle, fulfillmentType]);
 
   useEffect(() => {
     const vertical = sessionStorage.getItem('roam_cart_vertical');
@@ -262,7 +312,7 @@ export default function CheckoutPage({ onNavigate, session }: Props) {
       onNavigate('cart');
       return;
     }
-    if (!deliveryAddress) {
+    if (!isPickup && !deliveryAddress) {
       toast.error('Add a delivery address before placing your order');
       onNavigate('address');
       return;
@@ -276,35 +326,37 @@ export default function CheckoutPage({ onNavigate, session }: Props) {
       return;
     }
 
-    // Re-validate coverage at checkout (address may have gone stale after zone publish)
     const checkoutLocation = getCheckoutLocation();
-    const zoneLat = checkoutLocation.lat ?? savedAddress?.lat;
-    const zoneLng = checkoutLocation.lng ?? savedAddress?.lng;
-    if (zoneLat == null || zoneLng == null || !Number.isFinite(zoneLat) || !Number.isFinite(zoneLng)) {
-      toast.error('Add a map pin to your delivery address before placing your order');
-      onNavigate('address');
-      return;
-    }
-    try {
-      const zone = await checkDeliveryZoneAsync({
-        line1: deliveryAddress,
-        lat: zoneLat,
-        lng: zoneLng,
-      });
-      // Client polygon cache can lag live town coverage; server still enforces on POST /orders.
-      // If we already have a live quote for this pin, do not bounce the customer to waitlist.
-      if (!zone.inZone && !hasLivePricing) {
-        toast.error(zone.reason ?? "We don't deliver to this address yet");
-        onNavigate('out-of-delivery', {
-          returnTo: 'checkout',
-          attemptedAddress: deliveryAddress,
-          townName: zone.townName,
-          marketId: zone.marketId,
-        });
+    if (!isPickup) {
+      // Re-validate coverage at checkout (address may have gone stale after zone publish)
+      const zoneLat = checkoutLocation.lat ?? savedAddress?.lat;
+      const zoneLng = checkoutLocation.lng ?? savedAddress?.lng;
+      if (zoneLat == null || zoneLng == null || !Number.isFinite(zoneLat) || !Number.isFinite(zoneLng)) {
+        toast.error('Add a map pin to your delivery address before placing your order');
+        onNavigate('address');
         return;
       }
-    } catch {
-      /* server still enforces on POST /orders */
+      try {
+        const zone = await checkDeliveryZoneAsync({
+          line1: deliveryAddress,
+          lat: zoneLat,
+          lng: zoneLng,
+        });
+        // Client polygon cache can lag live town coverage; server still enforces on POST /orders.
+        // If we already have a live quote for this pin, do not bounce the customer to waitlist.
+        if (!zone.inZone && !hasLivePricing) {
+          toast.error(zone.reason ?? "We don't deliver to this address yet");
+          onNavigate('out-of-delivery', {
+            returnTo: 'checkout',
+            attemptedAddress: deliveryAddress,
+            townName: zone.townName,
+            marketId: zone.marketId,
+          });
+          return;
+        }
+      } catch {
+        /* server still enforces on POST /orders */
+      }
     }
 
     if (submitLockRef.current) return;
@@ -333,17 +385,22 @@ export default function CheckoutPage({ onNavigate, session }: Props) {
             options: item.options,
             ...(item.pizza ? { pizza: item.pizza } : {}),
           })),
-          deliveryAddress,
-          deliveryAddressLine2: savedAddress?.line2?.trim() || undefined,
-          deliveryLat: checkoutLocation.lat,
-          deliveryLng: checkoutLocation.lng,
-          deliveryInstructions: buildDeliveryInstructions(handoff, instructions),
-          deliveryFee: totals.deliveryFee,
-          tip: totals.tip,
+          fulfillmentType: isPickup ? 'pickup' : 'delivery',
+          ...(isPickup
+            ? { tip: 0 }
+            : {
+                deliveryAddress,
+                deliveryAddressLine2: savedAddress?.line2?.trim() || undefined,
+                deliveryLat: checkoutLocation.lat,
+                deliveryLng: checkoutLocation.lng,
+                deliveryInstructions: buildDeliveryInstructions(handoff, instructions),
+                deliveryFee: totals.deliveryFee,
+                tip: totals.tip,
+              }),
           paymentMethod,
           promoCode: getAppliedPromo()?.code ?? getCheckoutPreferences().appliedPromoCode ?? undefined,
           scheduledFor:
-            deliveryMode === 'scheduled' && scheduledDateId && scheduledSlotId
+            !isPickup && deliveryMode === 'scheduled' && scheduledDateId && scheduledSlotId
               ? { date: scheduledDateId, slot: scheduledSlotId }
               : undefined,
         }),
@@ -480,6 +537,52 @@ export default function CheckoutPage({ onNavigate, session }: Props) {
       </header>
 
       <main className="pb-32 px-4 space-y-6 max-w-2xl mx-auto pt-[calc(4rem+env(safe-area-inset-top,0px)+1rem)]">
+        {showPickupToggle && (
+          <section className="bg-surface-container-lowest rounded-xl p-4 shadow-[0px_4px_20px_rgba(0,0,0,0.04)]">
+            <h2 className="text-headline-sm font-semibold text-on-surface mb-3">How do you want it?</h2>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setFulfillmentType('delivery')}
+                className={`flex-1 py-3 rounded-lg border text-body-md transition-colors ${
+                  fulfillmentType === 'delivery'
+                    ? 'border-2 border-primary bg-surface-container-low text-primary font-medium'
+                    : 'border-outline-variant text-on-surface-variant'
+                }`}
+              >
+                Delivery
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setFulfillmentType('pickup');
+                  setTip(0);
+                  saveCheckoutPreferences({ tip: 0 });
+                  if (deliveryMode === 'scheduled') {
+                    setDeliveryMode('standard');
+                    setScheduledDateId(null);
+                    setScheduledSlotId(null);
+                    setScheduledLabel(null);
+                    saveCheckoutPreferences({
+                      deliveryMode: 'standard',
+                      scheduledDateId: null,
+                      scheduledSlotId: null,
+                    });
+                  }
+                }}
+                className={`flex-1 py-3 rounded-lg border text-body-md transition-colors ${
+                  fulfillmentType === 'pickup'
+                    ? 'border-2 border-primary bg-surface-container-low text-primary font-medium'
+                    : 'border-outline-variant text-on-surface-variant'
+                }`}
+              >
+                Pickup
+              </button>
+            </div>
+          </section>
+        )}
+
+        {!isPickup && (
         <section className="bg-surface-container-lowest rounded-xl p-4 shadow-[0px_4px_20px_rgba(0,0,0,0.04)]">
           <div className="flex justify-between items-start">
             <div className="flex gap-4 items-start">
@@ -517,7 +620,23 @@ export default function CheckoutPage({ onNavigate, session }: Props) {
             />
           </div>
         </section>
+        )}
 
+        {isPickup && (
+          <section className="bg-surface-container-lowest rounded-xl p-4 shadow-[0px_4px_20px_rgba(0,0,0,0.04)]">
+            <div className="flex gap-4 items-start">
+              <MaterialIcon name="storefront" className="text-primary mt-1" filled />
+              <div>
+                <h2 className="text-headline-sm font-semibold text-on-surface">Store pickup</h2>
+                <p className="text-body-md text-on-surface-variant mt-2">
+                  We&apos;ll tell you when your order is ready to collect. No delivery fee.
+                </p>
+              </div>
+            </div>
+          </section>
+        )}
+
+        {!isPickup && (
         <section className="bg-surface-container-lowest rounded-xl p-4 shadow-[0px_4px_20px_rgba(0,0,0,0.04)]">
           <div className="flex gap-4 items-start">
             <MaterialIcon name="schedule" className="text-primary mt-1" filled />
@@ -566,7 +685,9 @@ export default function CheckoutPage({ onNavigate, session }: Props) {
             </div>
           </div>
         </section>
+        )}
 
+        {!isPickup && (
         <section className="bg-surface-container-lowest rounded-xl p-4 shadow-[0px_4px_20px_rgba(0,0,0,0.04)]">
           <div className="flex gap-4 items-start">
             <MaterialIcon name="home_work" className="text-primary mt-1" filled />
@@ -614,6 +735,7 @@ export default function CheckoutPage({ onNavigate, session }: Props) {
             </div>
           </div>
         </section>
+        )}
 
         <section className="bg-surface-container-lowest rounded-xl p-4 shadow-[0px_4px_20px_rgba(0,0,0,0.04)]">
           <div className="flex justify-between items-center">
@@ -649,6 +771,7 @@ export default function CheckoutPage({ onNavigate, session }: Props) {
           </div>
         </section>
 
+        {!isPickup && (
         <section className="bg-surface-container-lowest rounded-xl p-4 shadow-[0px_4px_20px_rgba(0,0,0,0.04)]">
           <h2 className="text-headline-sm font-semibold text-on-surface mb-1">Add a tip for your courier</h2>
           <p className="text-label-sm text-on-surface-variant mb-4">Tip is 100% for the courier</p>
@@ -680,6 +803,7 @@ export default function CheckoutPage({ onNavigate, session }: Props) {
             </button>
           </div>
         </section>
+        )}
 
         <section className="bg-surface-container-lowest rounded-xl p-4 shadow-[0px_4px_20px_rgba(0,0,0,0.04)]">
           <button
@@ -741,10 +865,12 @@ export default function CheckoutPage({ onNavigate, session }: Props) {
                   <span>Subtotal</span>
                   <span>{formatJmd(subtotal)}</span>
                 </div>
+                {!isPickup && (
                 <div className="flex justify-between">
                   <span>Delivery Fee</span>
                   <span>{totals.deliveryFee === 0 ? 'FREE' : formatJmd(totals.deliveryFee)}</span>
                 </div>
+                )}
                 <div className="flex justify-between">
                   <span>Service Fee</span>
                   <span>
@@ -793,10 +919,12 @@ export default function CheckoutPage({ onNavigate, session }: Props) {
                     <span>{formatJmd(totals.processingFee)}</span>
                   </div>
                 )}
+                {!isPickup && (
                 <div className="flex justify-between">
                   <span>Courier Tip</span>
                   <span>{formatJmd(totals.tip)}</span>
                 </div>
+                )}
               </div>
             </div>
           )}
@@ -817,7 +945,7 @@ export default function CheckoutPage({ onNavigate, session }: Props) {
             Minimum order {formatJmd(minOrder)} — add {formatJmd(minOrder - subtotal)} more.
           </p>
         )}
-        {!deliveryAddress && (
+        {!isPickup && !deliveryAddress && (
           <p className="text-sm text-error text-center mb-2 max-w-2xl mx-auto">
             Add a delivery address before placing your order.
           </p>
@@ -831,7 +959,11 @@ export default function CheckoutPage({ onNavigate, session }: Props) {
             }
             void handlePlaceOrder();
           }}
-          disabled={isPlacingOrder || accountSuspended || (!orderingBlocked && (!deliveryAddress || !hasLivePricing || belowMinOrder))}
+          disabled={
+            isPlacingOrder ||
+            accountSuspended ||
+            (!orderingBlocked && ((!isPickup && !deliveryAddress) || !hasLivePricing || belowMinOrder))
+          }
           className="w-full max-w-2xl mx-auto bg-primary text-on-primary text-headline-sm font-semibold py-4 rounded-xl flex justify-between items-center px-6 active:scale-[0.98] transition-transform disabled:opacity-50"
         >
           <span>{isPlacingOrder ? 'Processing...' : orderingBlocked ? 'Pay balance' : 'Place Order'}</span>

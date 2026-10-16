@@ -65,6 +65,9 @@ import {
 } from "./analyticsSummary.ts";
 import { rushMaintenanceMiddleware } from "./maintenanceMiddleware.ts";
 import { enforcePartnerAcceptOnStatusChange } from "./partnerAcceptDeadline.ts";
+// Must be top-level: edge bundler mishandles mid-file / dynamic imports in this large index.
+import { registerSettingsAdminRoutes } from "./admin/settingsRoutes.ts";
+import { registerMenuPriceReviewAdminRoutes } from "./admin/menuPriceReviewRoutes.ts";
 
 const app = new Hono().basePath("/delivery");
 
@@ -446,8 +449,15 @@ app.get("/merchants", async (c) => {
     }
     const { procurement_mode: _procurementMode, in_house_live: _inHouseLive, ...customerMerchant } = responseMerchant;
 
+    const { data: settingsRow } = await supabase
+      .from("merchant_settings")
+      .select("allows_pickup")
+      .eq("merchant_id", merchantId)
+      .maybeSingle();
+    const allowsPickup = settingsRow == null ? true : settingsRow.allows_pickup !== false;
+
     return c.json({
-      merchant: customerMerchant,
+      merchant: { ...customerMerchant, allows_pickup: allowsPickup },
       categories: responseCategories,
       items: responseItems,
       hours: hours || [],
@@ -461,14 +471,16 @@ app.get("/merchants", async (c) => {
   app.get("/merchants/:id/pricing", async (c) => {
     const supabase = getServiceSupabase();
     const { id } = c.req.param();
-    const dropoffLat = c.req.query("dropoff_lat") ? Number(c.req.query("dropoff_lat")) : null;
-    const dropoffLng = c.req.query("dropoff_lng") ? Number(c.req.query("dropoff_lng")) : null;
+    let dropoffLat = c.req.query("dropoff_lat") ? Number(c.req.query("dropoff_lat")) : null;
+    let dropoffLng = c.req.query("dropoff_lng") ? Number(c.req.query("dropoff_lng")) : null;
     const subtotalQ = c.req.query("subtotal") ? Number(c.req.query("subtotal")) : 0;
     const paymentRaw = c.req.query("payment_method") ?? "wipay";
     const paymentMethod = paymentRaw === "cash" ? "cash" : "wipay";
     const tipQ = c.req.query("tip") ? Number(c.req.query("tip")) : 0;
     const freeDeliveryQ = c.req.query("free_delivery") === "1" ||
       c.req.query("free_delivery") === "true";
+    const fulfillmentQ = String(c.req.query("fulfillment") || c.req.query("fulfillment_type") || "delivery");
+    const isPickupQuote = fulfillmentQ === "pickup";
 
     let customerId: string | null = null;
     const authHeader = c.req.header("Authorization");
@@ -493,9 +505,11 @@ app.get("/merchants", async (c) => {
     let merchantMarketId: string | null = null;
     let deliveryFee = 0;
     let menuInflationPercent = 0;
+    let merchantLat: number | null = null;
+    let merchantLng: number | null = null;
     const byId = await supabase
       .from("merchants")
-      .select("id, delivery_fee, market_id, menu_inflation_percent")
+      .select("id, delivery_fee, market_id, menu_inflation_percent, lat, lng")
       .eq("id", id)
       .maybeSingle();
     if (byId.data) {
@@ -503,10 +517,12 @@ app.get("/merchants", async (c) => {
       deliveryFee = Math.max(0, Number(byId.data.delivery_fee ?? 0));
       merchantMarketId = byId.data.market_id != null ? String(byId.data.market_id) : null;
       menuInflationPercent = Math.max(0, Number(byId.data.menu_inflation_percent ?? 0));
+      merchantLat = byId.data.lat != null ? Number(byId.data.lat) : null;
+      merchantLng = byId.data.lng != null ? Number(byId.data.lng) : null;
     } else {
       const bySlug = await supabase
         .from("merchants")
-        .select("id, delivery_fee, market_id, menu_inflation_percent")
+        .select("id, delivery_fee, market_id, menu_inflation_percent, lat, lng")
         .eq("slug", id)
         .maybeSingle();
       if (bySlug.data) {
@@ -514,23 +530,42 @@ app.get("/merchants", async (c) => {
         deliveryFee = Math.max(0, Number(bySlug.data.delivery_fee ?? 0));
         merchantMarketId = bySlug.data.market_id != null ? String(bySlug.data.market_id) : null;
         menuInflationPercent = Math.max(0, Number(bySlug.data.menu_inflation_percent ?? 0));
+        merchantLat = bySlug.data.lat != null ? Number(bySlug.data.lat) : null;
+        merchantLng = bySlug.data.lng != null ? Number(bySlug.data.lng) : null;
       }
     }
     if (!merchantId) return c.json({ error: "Merchant not found" }, 404);
+
+    const { data: merchantSettingsRow } = await supabase
+      .from("merchant_settings")
+      .select("allows_pickup")
+      .eq("merchant_id", merchantId)
+      .maybeSingle();
+    const allowsPickup = merchantSettingsRow == null
+      ? true
+      : merchantSettingsRow.allows_pickup !== false;
+
+    if (isPickupQuote) {
+      dropoffLat = merchantLat;
+      dropoffLng = merchantLng;
+    }
 
     if (
       dropoffLat == null || dropoffLng == null ||
       !Number.isFinite(dropoffLat) || !Number.isFinite(dropoffLng)
     ) {
       return c.json({
-        error: "dropoff_lat and dropoff_lng are required for delivery pricing",
+        error: isPickupQuote
+          ? "Store location is required for pickup pricing"
+          : "dropoff_lat and dropoff_lng are required for delivery pricing",
         code: "dropoff_required",
-        requireCoverage: true,
+        requireCoverage: !isPickupQuote,
+        allows_pickup: allowsPickup,
       }, 400);
     }
 
     const { assertSameMarketCoverage, resolveDashOrderPricing } = await import("./pricingResolver.ts");
-    {
+    if (!isPickupQuote) {
       const coverageGate = await assertSameMarketCoverage(supabase, {
         dropoffLat,
         dropoffLng,
@@ -538,7 +573,11 @@ app.get("/merchants", async (c) => {
         merchantId,
       });
       if (!coverageGate.ok) {
-        return c.json({ error: coverageGate.error, code: coverageGate.code }, 400);
+        return c.json({
+          error: coverageGate.error,
+          code: coverageGate.code,
+          allows_pickup: allowsPickup,
+        }, 400);
       }
     }
 
@@ -548,36 +587,51 @@ app.get("/merchants", async (c) => {
       dropoffLat,
       dropoffLng,
       paymentMethod,
-      tip: tipQ > 0 ? tipQ : undefined,
+      tip: isPickupQuote ? 0 : (tipQ > 0 ? tipQ : undefined),
       customerId,
-      freeDelivery: freeDeliveryQ,
-      requireCoverage: true,
+      freeDelivery: isPickupQuote ? true : freeDeliveryQ,
+      requireCoverage: !isPickupQuote,
+      marketIdOverride: isPickupQuote ? merchantMarketId : undefined,
     });
 
-    if (v2 && dropoffLat != null && dropoffLng != null && v2.covered === false) {
+    if (v2 && !isPickupQuote && dropoffLat != null && dropoffLng != null && v2.covered === false) {
       return c.json({
         error: "We don’t deliver to this address yet",
         code: "out_of_coverage",
+        allows_pickup: allowsPickup,
       }, 400);
     }
 
     if (!v2) {
-      return c.json({ error: "Unable to resolve pricing", code: "pricing_unavailable" }, 503);
+      return c.json({
+        error: "Unable to resolve pricing",
+        code: "pricing_unavailable",
+        allows_pickup: allowsPickup,
+      }, 503);
     }
+
+    const quotedDeliveryFee = isPickupQuote ? 0 : v2.deliveryFee;
+    const quotedTotal = isPickupQuote
+      ? Math.round(Math.max(0, Number(v2.customerTotal) - Number(v2.deliveryFee || 0)) * 100) / 100
+      : v2.customerTotal;
 
     return c.json({
       merchant_id: merchantId,
-      delivery_fee: v2.deliveryFee,
+      allows_pickup: allowsPickup,
+      fulfillment_type: isPickupQuote ? "pickup" : "delivery",
+      delivery_fee: quotedDeliveryFee,
       service_fee: v2.serviceFee,
       service_fee_distance_jmd: v2.serviceFeeDistanceJmd ?? 0,
       processing_fee: v2.processingFee,
-      order_total: v2.orderTotal,
+      order_total: isPickupQuote
+        ? Math.round(Math.max(0, Number(v2.orderTotal) - Number(v2.deliveryFee || 0)) * 100) / 100
+        : v2.orderTotal,
       merchant_commission_rate: v2.merchantCommissionRate,
       merchant_commission_amount: v2.merchantCommissionAmount,
-      delivery_fee_courier_amount: v2.deliveryFeeCourierAmount,
-      delivery_fee_platform_amount: v2.deliveryFeePlatformAmount,
-      zone_surcharge_jmd: v2.zoneSurchargeJmd,
-      distance_km: v2.distanceKm,
+      delivery_fee_courier_amount: isPickupQuote ? 0 : v2.deliveryFeeCourierAmount,
+      delivery_fee_platform_amount: isPickupQuote ? 0 : v2.deliveryFeePlatformAmount,
+      zone_surcharge_jmd: isPickupQuote ? 0 : v2.zoneSurchargeJmd,
+      distance_km: isPickupQuote ? 0 : v2.distanceKm,
       tax: v2.tax,
       tax_food_jmd: v2.taxFoodJmd,
       tax_platform_jmd: v2.taxPlatformJmd,
@@ -586,19 +640,19 @@ app.get("/merchants", async (c) => {
       tax_rate_percent: v2.taxRatePercent ?? 0,
       gct_registered: v2.gctRegistered ?? false,
       processing_fee_order: v2.processingFeeOrder,
-      processing_fee_tip: v2.processingFeeTip,
-      courier_tip_net: v2.courierTipNet,
+      processing_fee_tip: isPickupQuote ? 0 : v2.processingFeeTip,
+      courier_tip_net: isPickupQuote ? 0 : v2.courierTipNet,
       promo_cost_jmd: v2.promoCostJmd,
       small_order_fee: v2.smallOrderFee ?? 0,
-      platform_delivery_subsidy_jmd: v2.platformDeliverySubsidyJmd ?? 0,
-      courier_base_pay_jmd: v2.courierBasePayJmd ?? 0,
-      courier_distance_pay_jmd: v2.courierDistancePayJmd ?? 0,
+      platform_delivery_subsidy_jmd: isPickupQuote ? 0 : (v2.platformDeliverySubsidyJmd ?? 0),
+      courier_base_pay_jmd: isPickupQuote ? 0 : (v2.courierBasePayJmd ?? 0),
+      courier_distance_pay_jmd: isPickupQuote ? 0 : (v2.courierDistancePayJmd ?? 0),
       contribution_jmd: v2.contributionJmd,
       promo_funded_by: v2.promoFundedBy,
-      total: v2.customerTotal,
+      total: quotedTotal,
       pricing_profile_version: v2.pricingProfileVersion,
       tier: v2.tierSlug,
-      free_delivery_applied: v2.freeDeliveryApplied,
+      free_delivery_applied: isPickupQuote ? true : v2.freeDeliveryApplied,
       rush_pass_applied: v2.rushPassApplied === true,
       rush_pass_membership_id: v2.rushPassMembershipId ?? null,
       rush_pass_free_delivery_denied_reason: v2.rushPassFreeDeliveryDeniedReason ?? null,
@@ -1046,6 +1100,9 @@ app.put("/merchants/:merchantId/items/:itemId", async (c) => {
   const access = await requireMerchantForId(authHeader, merchantId, "menu");
   if (!access.ok) return c.json({ error: access.message }, access.status);
 
+  const authSb = getAuthClient(authHeader);
+  const { data: { user: actor } } = await authSb.auth.getUser();
+
   const serviceSb = getServiceSupabase();
   const body = await c.req.json();
   const updates: Record<string, unknown> = { ...body };
@@ -1063,6 +1120,8 @@ app.put("/merchants/:merchantId/items/:itemId", async (c) => {
     body.marketplace_price != null ||
     body.marketplacePrice != null;
 
+  let pendingReviewRequest: Record<string, unknown> | null = null;
+
   if (hasPriceUpdate) {
     const inStore = Number(
       body.in_store_price ?? body.inStorePrice ?? body.price ?? 0,
@@ -1077,9 +1136,70 @@ app.put("/merchants/:merchantId/items/:itemId", async (c) => {
       body.marketplace_price ?? body.marketplacePrice,
     );
     if (!priced.ok) return c.json({ error: priced.error }, 400);
-    updates.in_store_price = priced.inStorePrice;
-    updates.marketplace_price = priced.marketplacePrice;
-    updates.price = priced.marketplacePrice;
+
+    // Large marketplace price increases may need ops review (partner.menu.price_change_review_pct).
+    const { getSetting } = await import("../_shared/rushSettings/getSetting.ts");
+    const thresholdRaw = await getSetting<number>("partner.menu.price_change_review_pct");
+    const threshold = Number(thresholdRaw);
+    const reviewPct = Number.isFinite(threshold) ? threshold : 0;
+
+    const { data: existingItem } = await serviceSb
+      .from("menu_items")
+      .select("id, price, marketplace_price, in_store_price")
+      .eq("id", itemId)
+      .eq("merchant_id", merchantId)
+      .maybeSingle();
+
+    const oldPrice = Number(
+      (existingItem as { marketplace_price?: number; price?: number } | null)?.marketplace_price
+        ?? (existingItem as { price?: number } | null)?.price
+        ?? 0,
+    );
+    const newPrice = priced.marketplacePrice;
+
+    if (
+      reviewPct > 0
+      && oldPrice > 0
+      && newPrice > oldPrice
+      && ((newPrice - oldPrice) / oldPrice) * 100 > reviewPct
+    ) {
+      const pctIncrease = ((newPrice - oldPrice) / oldPrice) * 100;
+      // Supersede any prior pending request for this item
+      await serviceSb
+        .from("menu_price_change_requests")
+        .update({
+          status: "rejected",
+          decided_at: new Date().toISOString(),
+        })
+        .eq("item_id", itemId)
+        .eq("merchant_id", merchantId)
+        .eq("status", "pending");
+
+      const { data: request, error: reqErr } = await serviceSb
+        .from("menu_price_change_requests")
+        .insert({
+          merchant_id: merchantId,
+          item_id: itemId,
+          old_price: oldPrice,
+          new_price: newPrice,
+          pct_increase: Math.round(pctIncrease * 100) / 100,
+          status: "pending",
+          requested_by: actor?.id ?? null,
+        })
+        .select()
+        .single();
+      if (reqErr) return c.json({ error: reqErr.message }, 500);
+
+      pendingReviewRequest = request as Record<string, unknown>;
+      // Hold live marketplace price; still allow in_store draft + other fields
+      delete updates.price;
+      delete updates.marketplace_price;
+      delete updates.in_store_price;
+    } else {
+      updates.in_store_price = priced.inStorePrice;
+      updates.marketplace_price = priced.marketplacePrice;
+      updates.price = priced.marketplacePrice;
+    }
   }
 
   delete updates.categoryId;
@@ -1089,6 +1209,39 @@ app.put("/merchants/:merchantId/items/:itemId", async (c) => {
   delete updates.prepTimeMins;
   delete updates.inStorePrice;
   delete updates.marketplacePrice;
+
+  if (pendingReviewRequest) {
+    // Apply non-price fields only; live price stays until ops approve
+    const nonPriceKeys = Object.keys(updates).filter(
+      (k) => !["price", "marketplace_price", "in_store_price"].includes(k),
+    );
+    let itemRow: Record<string, unknown> | null = null;
+    if (nonPriceKeys.length > 0) {
+      const nonPriceUpdates: Record<string, unknown> = {};
+      for (const k of nonPriceKeys) nonPriceUpdates[k] = updates[k];
+      const { data, error } = await serviceSb
+        .from("menu_items")
+        .update(nonPriceUpdates)
+        .eq("id", itemId)
+        .eq("merchant_id", merchantId)
+        .select()
+        .single();
+      if (error) return c.json({ error: error.message }, 500);
+      itemRow = data as Record<string, unknown>;
+    } else {
+      const { data } = await serviceSb
+        .from("menu_items")
+        .select()
+        .eq("id", itemId)
+        .eq("merchant_id", merchantId)
+        .maybeSingle();
+      itemRow = (data as Record<string, unknown> | null) ?? null;
+    }
+    return c.json(
+      { status: "pending_review", request: pendingReviewRequest, item: itemRow },
+      202,
+    );
+  }
 
   const { data, error } = await serviceSb
     .from("menu_items")
@@ -1100,6 +1253,29 @@ app.put("/merchants/:merchantId/items/:itemId", async (c) => {
   
   if (error) return c.json({ error: error.message }, 500);
   return c.json({ item: data });
+});
+
+/** Partner: list own menu price-change requests (pending badge). */
+app.get("/merchants/:merchantId/menu-price-reviews", async (c) => {
+  const authHeader = c.req.header("Authorization");
+  if (!authHeader) return c.json({ error: "Unauthorized" }, 401);
+
+  const { merchantId } = c.req.param();
+  const access = await requireMerchantForId(authHeader, merchantId, "menu");
+  if (!access.ok) return c.json({ error: access.message }, access.status);
+
+  const status = (c.req.query("status") || "pending").trim();
+  const serviceSb = getServiceSupabase();
+  let q = serviceSb
+    .from("menu_price_change_requests")
+    .select("id, item_id, old_price, new_price, pct_increase, status, created_at")
+    .eq("merchant_id", merchantId)
+    .order("created_at", { ascending: false })
+    .limit(100);
+  if (status && status !== "all") q = q.eq("status", status);
+  const { data, error } = await q;
+  if (error) return c.json({ error: error.message }, 500);
+  return c.json({ requests: data ?? [] });
 });
 
 // Delete menu item
@@ -1222,9 +1398,12 @@ app.put("/orders/:id/status", async (c) => {
   const body = await c.req.json();
   const { status, notes, actorType, estimatedPrepTimeMins } = body;
 
-  function transitionsForChannel(channel: string | null | undefined): Record<string, string[]> {
+  function transitionsForChannel(
+    channel: string | null | undefined,
+    fulfillmentType?: string | null,
+  ): Record<string, string[]> {
     if (channel === "in_store" || channel === "phone") return inStoreStatusTransitions();
-    return roamStatusTransitions();
+    return roamStatusTransitions(fulfillmentType);
   }
 
   if (deviceToken && actorType === "merchant") {
@@ -1234,7 +1413,7 @@ app.put("/orders/:id/status", async (c) => {
 
     const { data: order, error: orderError } = await serviceSb
       .from("orders")
-      .select("status, merchant_id, channel, courier_id, placed_at")
+      .select("status, merchant_id, channel, courier_id, placed_at, fulfillment_type")
       .eq("id", id)
       .single();
 
@@ -1244,7 +1423,10 @@ app.put("/orders/:id/status", async (c) => {
       return c.json({ error: "Order not found" }, 404);
     }
 
-    const allowed = transitionsForChannel(String(orderRow.channel ?? "roam_app"))[String(orderRow.status)] || [];
+    const allowed = transitionsForChannel(
+      String(orderRow.channel ?? "roam_app"),
+      orderRow.fulfillment_type != null ? String(orderRow.fulfillment_type) : null,
+    )[String(orderRow.status)] || [];
     if (!allowed.includes(status)) {
       return c.json({ error: `Invalid status transition from ${orderRow.status} to ${status}` }, 400);
     }
@@ -1363,9 +1545,13 @@ app.put("/orders/:id/status", async (c) => {
     if (status === "delivered") {
       const { getSetting } = await import("../_shared/rushSettings/getSetting.ts");
       const photoProofRequired = await getSetting<boolean>("courier.delivery.photo_proof");
+      // courier.delivery.pin_required_over_jmd stamps delivery_pin at place-order; require verify here.
+      void (await getSetting<number>("courier.delivery.pin_required_over_jmd"));
       const { data: payRow } = await serviceSb
         .from("orders")
-        .select("payment_status, cash_collected_minor, delivery_photo_url")
+        .select(
+          "payment_status, cash_collected_minor, delivery_photo_url, delivery_pin, delivery_pin_verified_at",
+        )
         .eq("id", id)
         .maybeSingle();
       if (
@@ -1376,6 +1562,28 @@ app.put("/orders/:id/status", async (c) => {
           error: "Delivery photo is required before completing this drop-off",
           code: "photo_proof_required",
         }, 400);
+      }
+      const storedPin = (payRow as { delivery_pin?: string | null } | null)?.delivery_pin;
+      const pinVerifiedAt =
+        (payRow as { delivery_pin_verified_at?: string | null } | null)?.delivery_pin_verified_at;
+      if (storedPin && !pinVerifiedAt) {
+        const offered = String(body.delivery_pin ?? body.deliveryPin ?? body.pin ?? "").trim();
+        if (!offered) {
+          return c.json({
+            error: "Customer delivery PIN is required",
+            code: "pin_required",
+          }, 400);
+        }
+        if (offered !== String(storedPin)) {
+          return c.json({
+            error: "Delivery PIN is incorrect",
+            code: "pin_invalid",
+          }, 400);
+        }
+        await serviceSb
+          .from("orders")
+          .update({ delivery_pin_verified_at: new Date().toISOString() })
+          .eq("id", id);
       }
       if (
         String(payRow?.payment_status || "") === "pending_collection"
@@ -1459,7 +1667,7 @@ app.put("/orders/:id/status", async (c) => {
   // Get current order
   const { data: order, error: orderError } = await writer
     .from("orders")
-    .select("status, channel, courier_id, merchant_id, placed_at")
+    .select("status, channel, courier_id, merchant_id, placed_at, fulfillment_type")
     .eq("id", id)
     .single();
   
@@ -1471,7 +1679,10 @@ app.put("/orders/:id/status", async (c) => {
     }
   }
   
-  const allowed = transitionsForChannel((order as { channel?: string }).channel)[order.status] || [];
+  const allowed = transitionsForChannel(
+    (order as { channel?: string }).channel,
+    (order as { fulfillment_type?: string | null }).fulfillment_type,
+  )[order.status] || [];
   if (!allowed.includes(status)) {
     return c.json({ error: `Invalid status transition from ${order.status} to ${status}` }, 400);
   }
@@ -1547,8 +1758,12 @@ app.put("/orders/:id/status", async (c) => {
     }
   }
 
-  // Soft-launch: when merchant marks ready, fan out courier offers
-  if (status === "ready" && actorType === "merchant") {
+  // Soft-launch: when merchant marks ready, fan out courier offers (skip store pickup)
+  if (
+    status === "ready" &&
+    actorType === "merchant" &&
+    String((order as { fulfillment_type?: string | null }).fulfillment_type || "delivery") !== "pickup"
+  ) {
     await dispatchOffersForOrder(serviceSb, id);
   }
 
@@ -2989,7 +3204,6 @@ import { registerSupportAdminRoutes } from "./admin/supportRoutes.ts";
 import { registerOrderChatRoutes } from "./orderChat.ts";
 import { registerAdminOrderChatRoutes } from "./admin/orderChatRoutes.ts";
 import { registerAppConfigRoutes } from "./appConfigRoutes.ts";
-import { registerSettingsAdminRoutes } from "./admin/settingsRoutes.ts";
 registerCustomerOrderRoutes(app, { getSupabase, getServiceSupabase });
 registerMerchantChoiceRoutes(app, { getServiceSupabase, requireMerchant: requireMerchantForId });
 registerInHouseRoutes(app, { getServiceSupabase });
@@ -3147,6 +3361,7 @@ registerConsoleAdminRoutes(app);
 registerPricingAdminRoutes(app);
 registerSupportAdminRoutes(app);
 registerSettingsAdminRoutes(app);
+registerMenuPriceReviewAdminRoutes(app);
 registerPublicGeoRoutes(app, { getServiceSupabase });
 
 Deno.serve(app.fetch);

@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { API_ENDPOINTS } from '@roam/api-client';
 import { Merchant } from '../hooks/useMerchant';
 import { toast } from 'sonner';
@@ -62,6 +62,24 @@ export default function MenuPage({ merchant, onNavigate, onOpenMobileNav, setupB
     resolveGoLiveRule(merchant.go_live_rule) === 'pos_connected';
 
   const { data, isLoading, isError, refetch } = useMerchantMenu(merchant.id);
+
+  const { data: pendingReviews } = useQuery({
+    queryKey: ['menu-price-reviews', merchant.id],
+    queryFn: async () => {
+      const headers = await getAuthHeaders();
+      const res = await fetch(
+        `${API_ENDPOINTS.delivery}/merchants/${merchant.id}/menu-price-reviews?status=pending`,
+        { headers },
+      );
+      if (!res.ok) return { requests: [] as Array<{ item_id: string }> };
+      return res.json() as Promise<{ requests: Array<{ item_id: string }> }>;
+    },
+    enabled: Boolean(merchant.id),
+  });
+  const pendingItemIds = useMemo(
+    () => new Set((pendingReviews?.requests ?? []).map((r) => r.item_id)),
+    [pendingReviews],
+  );
 
   const categories: MenuCategory[] = data?.categories || [];
   const items: MenuItem[] = data?.items || [];
@@ -157,7 +175,8 @@ export default function MenuPage({ merchant, onNavigate, onOpenMobileNav, setupB
           }
         );
         if (!res.ok) throw new Error('Failed to update item');
-        return res.json();
+        const body = await res.json();
+        return { ...body, httpStatus: res.status };
       }
 
       const res = await fetch(`${API_ENDPOINTS.delivery}/merchants/${merchant.id}/items`, {
@@ -168,9 +187,17 @@ export default function MenuPage({ merchant, onNavigate, onOpenMobileNav, setupB
       if (!res.ok) throw new Error('Failed to add item');
       return res.json();
     },
-    onSuccess: () => {
+    onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ['merchant-menu'] });
-      toast.success(editingItem?.id ? 'Item updated' : 'Item added');
+      queryClient.invalidateQueries({ queryKey: ['menu-price-reviews', merchant.id] });
+      const pending =
+        result?.status === 'pending_review' ||
+        result?.httpStatus === 202;
+      if (pending) {
+        toast.success('Price submitted for review');
+      } else {
+        toast.success(editingItem?.id ? 'Item updated' : 'Item added');
+      }
       setView(selectedCategoryId ? 'category' : 'overview');
       setEditingItem(null);
     },
@@ -346,6 +373,7 @@ export default function MenuPage({ merchant, onNavigate, onOpenMobileNav, setupB
           <MenuDesktopDashboard
             categories={categories}
             items={items}
+            pendingItemIds={pendingItemIds}
             selectedCategoryId={selectedCategoryId}
             onSelectCategory={setSelectedCategoryId}
             onAddCategory={openAddCategory}

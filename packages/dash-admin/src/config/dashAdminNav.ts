@@ -186,6 +186,8 @@ export function navIdToPath(navId: string): string {
     case 'merchants':
     case 'merchants-applications':
       return '/merchants';
+    case 'merchants-price-reviews':
+      return '/merchants?tab=price-reviews';
     case 'merchants-business-types':
       return '/merchants?tab=business-types';
     case 'couriers':

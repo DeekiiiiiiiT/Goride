@@ -1,12 +1,21 @@
 import { useEffect, useRef } from 'react';
 import { supabaseDashAdmin as supabase } from '@roam/auth-client';
 
-const IDLE_MS = 30 * 60 * 1000;
 const ABSOLUTE_MS = 8 * 60 * 60 * 1000;
+const DEFAULT_IDLE_MS = 30 * 60 * 1000;
 
-export function useAdminSessionPolicy() {
+/**
+ * Idle timeout from platform.staff_security.sessionTimeoutMinutes (0 = no idle logout).
+ * Absolute 8h max always applies.
+ */
+export function useAdminSessionPolicy(sessionTimeoutMinutes?: number | null) {
   const loginAt = useRef(Date.now());
   const lastActive = useRef(Date.now());
+  // platform.staff_security — minutes; null uses legacy 30m until settings load
+  const idleMinutes =
+    sessionTimeoutMinutes === undefined || sessionTimeoutMinutes === null
+      ? DEFAULT_IDLE_MS / 60_000
+      : sessionTimeoutMinutes;
 
   useEffect(() => {
     const onActivity = () => {
@@ -16,9 +25,12 @@ export function useAdminSessionPolicy() {
     window.addEventListener('keydown', onActivity);
     window.addEventListener('click', onActivity);
 
+    const idleMs = idleMinutes > 0 ? idleMinutes * 60_000 : null;
+
     const interval = setInterval(() => {
       const now = Date.now();
-      if (now - loginAt.current > ABSOLUTE_MS || now - lastActive.current > IDLE_MS) {
+      const idleExpired = idleMs != null && now - lastActive.current > idleMs;
+      if (now - loginAt.current > ABSOLUTE_MS || idleExpired) {
         void supabase.auth.signOut();
         window.location.href = '/admin';
       }
@@ -30,5 +42,5 @@ export function useAdminSessionPolicy() {
       window.removeEventListener('click', onActivity);
       clearInterval(interval);
     };
-  }, []);
+  }, [idleMinutes]);
 }

@@ -58,6 +58,9 @@ export type ActiveDelivery = {
   orderStatus?: string;
   pickedUpAt?: string | null;
   deliveredAt?: string | null;
+  /** Set when courier.delivery.pin_required_over_jmd applied at place-order */
+  deliveryPin?: string | null;
+  orderTotal?: number;
 };
 
 export const MOCK_ACTIVE_DELIVERY: ActiveDelivery = {

@@ -11,7 +11,13 @@ import { useVisualViewport } from '@/hooks/useVisualViewport';
 type AtCustomerPageProps = {
   delivery: ActiveDelivery;
   onBack: () => void;
-  onComplete: (method: DropoffMethod, hasPhoto: boolean, photoUrl?: string, courierNotes?: string) => void;
+  onComplete: (
+    method: DropoffMethod,
+    hasPhoto: boolean,
+    photoUrl?: string,
+    courierNotes?: string,
+    deliveryPin?: string,
+  ) => void;
   onCustomerUnavailable: () => void;
   onHelpClick?: () => void;
 };
@@ -25,6 +31,12 @@ export function AtCustomerPage({
 }: AtCustomerPageProps) {
   const appConfig = useAppConfig('courier');
   const photoProofRequired = Boolean(appConfig.settings['courier.delivery.photo_proof']);
+  // courier.delivery.pin_required_over_jmd — require PIN when threshold met or order already has one
+  const pinThreshold = Number(appConfig.settings['courier.delivery.pin_required_over_jmd']) || 0;
+  const orderTotal = Number(delivery.orderTotal ?? delivery.cashDue ?? 0);
+  const pinRequired =
+    Boolean(delivery.deliveryPin)
+    || (pinThreshold > 0 && orderTotal >= pinThreshold);
   const handoff = parseDeliveryHandoff(delivery.deliveryInstructions);
   const [method, setMethod] = useState<DropoffMethod>(
     handoff.mode === 'hand' ? 'hand-to-customer' : 'leave-at-door',
@@ -32,6 +44,7 @@ export function AtCustomerPage({
   const [hasPhoto, setHasPhoto] = useState(false);
   const [photoUrl, setPhotoUrl] = useState<string | undefined>();
   const [note, setNote] = useState('');
+  const [deliveryPin, setDeliveryPin] = useState('');
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const keyboardOffset = useVisualViewport();
@@ -39,10 +52,13 @@ export function AtCustomerPage({
   const instructionText = (delivery.deliveryInstructions || '').trim() || 'No special instructions';
   const unit = (delivery.unit || '').trim();
   const showPhotoProof = photoProofRequired || method === 'leave-at-door';
+  const pinOk = !pinRequired || /^\d{4}$/.test(deliveryPin);
 
-  const canComplete = photoProofRequired
-    ? hasPhoto
-    : method === 'hand-to-customer' || hasPhoto;
+  const canComplete =
+    pinOk
+    && (photoProofRequired
+      ? hasPhoto
+      : method === 'hand-to-customer' || hasPhoto);
 
   return (
     <div className="fixed inset-0 z-[60] bg-background flex flex-col overflow-hidden">
@@ -278,6 +294,28 @@ export function AtCustomerPage({
           </div>
         </section>
 
+        {pinRequired && (
+          <section className="flex flex-col gap-3">
+            <h3 className="text-xs font-semibold uppercase tracking-widest text-muted px-1">
+              Customer delivery PIN
+            </h3>
+            <input
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              maxLength={4}
+              value={deliveryPin}
+              onChange={(e) => setDeliveryPin(e.target.value.replace(/\D/g, '').slice(0, 4))}
+              placeholder="4-digit PIN"
+              aria-label="Customer delivery PIN"
+              className="w-full h-14 rounded-[20px] border border-outline-variant bg-surface px-4 text-center text-2xl font-semibold tracking-[0.4em] text-on-surface focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none shadow-sm placeholder:tracking-normal placeholder:text-base placeholder:font-normal"
+            />
+            <p className="text-[11px] text-muted px-1">
+              Ask the customer for the PIN shown in their tracking screen.
+            </p>
+          </section>
+        )}
+
         {method === 'hand-to-customer' && (
           <button
             type="button"
@@ -298,7 +336,19 @@ export function AtCustomerPage({
       >
         <button
           type="button"
-          onClick={() => onComplete(method, hasPhoto, photoUrl, note.trim() || undefined)}
+          onClick={() => {
+            if (pinRequired && !/^\d{4}$/.test(deliveryPin)) {
+              toast.error('PIN required', 'Enter the 4-digit customer PIN.');
+              return;
+            }
+            onComplete(
+              method,
+              hasPhoto,
+              photoUrl,
+              note.trim() || undefined,
+              pinRequired ? deliveryPin : undefined,
+            );
+          }}
           disabled={!canComplete || uploading}
           className="w-full h-[60px] rounded-[20px] bg-primary text-on-primary text-lg font-semibold tracking-wide flex items-center justify-center gap-3 shadow-[0_8px_20px_rgba(0,108,73,0.3)] active:scale-[0.97] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
         >

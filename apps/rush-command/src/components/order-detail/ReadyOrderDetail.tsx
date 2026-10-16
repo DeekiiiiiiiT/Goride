@@ -23,13 +23,16 @@ export default function ReadyOrderDetail({
     2: false,
   });
 
+  const isCustomerPickup = String(order.fulfillment_type || 'delivery') === 'pickup';
   const courierAssigned = Boolean(order.courier_id);
   const courierName = order.courier?.display_name?.trim() || null;
   const courierVehicle = order.courier?.vehicle_type?.trim() || null;
   const courierPhone = order.courier?.phone?.trim() || null;
   const readySince = order.ready_at;
   const checklistComplete = HANDOFF_CHECKLIST_ITEMS.every((_, i) => checklist[i]);
-  const canConfirmPickup = courierAssigned && checklistComplete && !isSubmitting;
+  const canConfirmPickup = isCustomerPickup
+    ? checklistComplete && !isSubmitting
+    : courierAssigned && checklistComplete && !isSubmitting;
 
   const toggleChecklist = (index: number) => {
     setChecklist((prev) => ({ ...prev, [index]: !prev[index] }));
@@ -69,7 +72,7 @@ export default function ReadyOrderDetail({
           <div className="flex flex-col gap-inset-base">
             <div className="flex items-center gap-inset-xs">
               <span className="rounded-sm bg-primary-container px-2 py-1 text-label-md font-semibold uppercase tracking-wider text-on-primary-container">
-                READY
+                {isCustomerPickup ? 'READY FOR PICKUP' : 'READY'}
               </span>
               {readySince && (
                 <span className="text-body-sm text-on-surface-variant">
@@ -77,13 +80,16 @@ export default function ReadyOrderDetail({
                 </span>
               )}
             </div>
-            <p className="text-body-lg font-semibold text-on-surface">Waiting for courier</p>
+            <p className="text-body-lg font-semibold text-on-surface">
+              {isCustomerPickup ? 'Waiting for customer' : 'Waiting for courier'}
+            </p>
           </div>
           <div className="flex h-12 w-12 items-center justify-center rounded-full border border-primary-container bg-surface-container text-primary">
             <MaterialIcon name="inventory_2" size={28} filled />
           </div>
         </div>
 
+        {!isCustomerPickup && (
         <div className="flex flex-col gap-inset-sm rounded-lg border border-outline-variant bg-surface-container-lowest p-inset-sm">
           <div className="flex items-start justify-between">
             <div className="flex items-center gap-inset-xs">
@@ -120,6 +126,7 @@ export default function ReadyOrderDetail({
             />
           </div>
         </div>
+        )}
 
         <div className="rounded-lg border border-outline-variant bg-surface-container-lowest p-inset-sm">
           <div className="mb-inset-xs flex items-center gap-inset-xs">
@@ -183,15 +190,23 @@ export default function ReadyOrderDetail({
           onClick={onConfirmPickup}
           className="flex h-12 w-full items-center justify-center gap-2 rounded-lg bg-primary text-headline-md font-semibold text-on-primary transition-opacity disabled:cursor-not-allowed disabled:bg-surface-variant disabled:text-on-surface-variant disabled:opacity-70"
         >
-          <MaterialIcon name="local_shipping" />
-          {isSubmitting ? 'CONFIRMING…' : 'CONFIRM PICKUP'}
+          <MaterialIcon name={isCustomerPickup ? 'shopping_bag' : 'local_shipping'} />
+          {isSubmitting
+            ? 'CONFIRMING…'
+            : isCustomerPickup
+              ? 'CONFIRM COLLECTED'
+              : 'CONFIRM PICKUP'}
         </button>
         <p className="mt-2 text-center text-label-sm text-on-surface-variant">
-          {!courierAssigned
-            ? 'Available when a courier is assigned'
-            : !checklistComplete
+          {isCustomerPickup
+            ? !checklistComplete
               ? 'Complete the handoff checklist first'
-              : 'Confirm when the courier has the order'}
+              : 'Confirm when the customer has collected the order'
+            : !courierAssigned
+              ? 'Available when a courier is assigned'
+              : !checklistComplete
+                ? 'Complete the handoff checklist first'
+                : 'Confirm when the courier has the order'}
         </p>
       </div>
     </div>

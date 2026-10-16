@@ -18,6 +18,7 @@ type OrderLike = AvailableOrder & {
   status?: string;
   picked_up_at?: string | null;
   delivered_at?: string | null;
+  delivery_pin?: string | null;
   customer?: { name?: string | null; phone?: string | null } | null;
 };
 
@@ -201,6 +202,8 @@ export function mapOrderToActiveDelivery(
     orderStatus: String(order.status || ''),
     pickedUpAt: order.picked_up_at ? String(order.picked_up_at) : null,
     deliveredAt: order.delivered_at ? String(order.delivered_at) : null,
+    deliveryPin: order.delivery_pin != null ? String(order.delivery_pin) : null,
+    orderTotal: Number(order.total || 0),
   };
 }
 

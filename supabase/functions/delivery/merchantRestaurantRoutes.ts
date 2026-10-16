@@ -566,12 +566,18 @@ export function inStoreStatusTransitions(): Record<string, string[]> {
   };
 }
 
-export function roamStatusTransitions(): Record<string, string[]> {
+export function roamStatusTransitions(
+  fulfillmentType?: string | null,
+): Record<string, string[]> {
+  const isPickup = String(fulfillmentType || "delivery") === "pickup";
   return {
     placed: ["accepted", "cancelled"],
     accepted: ["preparing", "cancelled"],
     preparing: ["ready"],
-    ready: ["assigned", "picked_up", "cancelled"],
+    // Pickup: ready = ready for customer collection → delivered (no courier)
+    ready: isPickup
+      ? ["delivered", "cancelled"]
+      : ["assigned", "picked_up", "cancelled"],
     assigned: ["picked_up", "cancelled"],
     picked_up: ["in_transit", "cancelled"],
     in_transit: ["delivered", "cancelled"],

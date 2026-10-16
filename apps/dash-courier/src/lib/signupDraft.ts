@@ -12,6 +12,8 @@ export type SignupDraft = {
   color: string;
   equipmentPhotoUrl?: string;
   profilePhotoUrl?: string;
+  /** YYYY-MM-DD — enforced against courier.signup.min_age */
+  dateOfBirth?: string;
   workforceChoice?: WorkforceChoice;
 };
 

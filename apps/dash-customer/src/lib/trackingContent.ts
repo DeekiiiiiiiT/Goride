@@ -1,5 +1,6 @@
 export type TrackingPhase =
   | 'preparing'
+  | 'ready_for_pickup'
   | 'courier_assigned'
   | 'on_the_way'
   | 'almost_there'
@@ -16,6 +17,7 @@ export type TrackingOrder = {
   id: string;
   orderNumber: string;
   status: string;
+  fulfillmentType?: string;
   merchantId: string;
   merchantName: string;
   merchantAddress: string;
@@ -54,6 +56,8 @@ export type TrackingOrder = {
   courierId?: string | null;
   pickedUpAt?: string | null;
   deliveredAt?: string | null;
+  /** Customer handoff PIN when courier.delivery.pin_required_over_jmd applied */
+  deliveryPin?: string | null;
   /** Approximate map until live courier GPS (Phase 3) */
   locationApproximate?: boolean;
 };
@@ -115,13 +119,19 @@ export const FEEDBACK_CHIPS = [
   'Cold food',
 ] as const;
 
-export function getTrackingPhase(status: string): TrackingPhase {
+export function getTrackingPhase(
+  status: string,
+  fulfillmentType?: string | null,
+): TrackingPhase {
+  const isPickup = String(fulfillmentType || 'delivery') === 'pickup';
   switch (status) {
     case 'placed':
     case 'accepted':
     case 'preparing':
       return 'preparing';
     case 'ready':
+    case 'ready_for_pickup':
+      return isPickup ? 'ready_for_pickup' : 'courier_assigned';
     case 'assigned':
       return 'courier_assigned';
     case 'picked_up':
@@ -165,6 +175,7 @@ export function mapApiOrderToTracking(order: Record<string, unknown>): TrackingO
     id: String(order.id ?? ''),
     orderNumber: String(order.order_number ?? order.id ?? ''),
     status: String(order.status ?? 'preparing'),
+    fulfillmentType: order.fulfillment_type != null ? String(order.fulfillment_type) : 'delivery',
     merchantId: String(order.merchant_id ?? merchant.id ?? merchant.slug ?? ''),
     merchantName: String(merchant.name ?? 'Restaurant'),
     merchantAddress: String(merchant.address ?? ''),
@@ -214,6 +225,7 @@ export function mapApiOrderToTracking(order: Record<string, unknown>): TrackingO
     courierId: order.courier_id != null ? String(order.courier_id) : null,
     pickedUpAt: order.picked_up_at ? String(order.picked_up_at) : null,
     deliveredAt: order.delivered_at ? String(order.delivered_at) : null,
+    deliveryPin: order.delivery_pin != null ? String(order.delivery_pin) : null,
     locationApproximate: order.courier_lat == null || order.courier_lng == null,
   };
 }

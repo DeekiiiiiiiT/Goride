@@ -30,6 +30,7 @@ export default function OrderTrackingPage({ orderId, demoPhase, onNavigate }: Pr
     Number(appConfig.settings['customer.ordering.cancel_window_seconds']) || 60;
   const mocksOk = allowMocks();
   const [cancelPending, setCancelPending] = useState(false);
+  const [collectPending, setCollectPending] = useState(false);
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const [cancelQuote, setCancelQuote] = useState('You can only cancel before the restaurant starts preparing.');
   const [, setCancelTick] = useState(0);
@@ -99,7 +100,9 @@ export default function OrderTrackingPage({ orderId, demoPhase, onNavigate }: Pr
     return null;
   }, [data, orderId, mocksOk, demoPhase, error]);
 
-  const phase: TrackingPhase = demoPhase ?? (order ? getTrackingPhase(order.status) : 'preparing');
+  const phase: TrackingPhase =
+    demoPhase ??
+    (order ? getTrackingPhase(order.status, order.fulfillmentType) : 'preparing');
 
   useEffect(() => {
     if (!order) return;
@@ -216,6 +219,39 @@ export default function OrderTrackingPage({ orderId, demoPhase, onNavigate }: Pr
   const handleHelp = () => onNavigate('report-issue', { orderId: order.id, returnTo: 'tracking' });
   const handleDetails = () => onNavigate('order-details', { orderId: order.id });
 
+  const handleCollected = async () => {
+    if (!orderId || collectPending) return;
+    setCollectPending(true);
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (!session?.access_token) {
+        toast.error('Sign in to confirm collection');
+        return;
+      }
+      const res = await fetch(`${API_ENDPOINTS.delivery}/orders/${orderId}/status`, {
+        method: 'PUT',
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ status: 'delivered', actorType: 'customer' }),
+      });
+      const body = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) {
+        toast.error(body.error || 'Could not confirm collection');
+        return;
+      }
+      toast.success('Enjoy your order');
+      void refetch();
+    } catch {
+      toast.error('Could not confirm collection');
+    } finally {
+      setCollectPending(false);
+    }
+  };
+
   const statusLower = String(order.status || '').toLowerCase();
   const placedAtMs = order.placedAt ? new Date(order.placedAt).getTime() : NaN;
   const ageSec = Number.isFinite(placedAtMs)
@@ -224,6 +260,24 @@ export default function OrderTrackingPage({ orderId, demoPhase, onNavigate }: Pr
   const withinFreeCancelWindow = statusLower !== 'placed' || ageSec <= cancelWindowSeconds;
   const canCancelOrder =
     ['placed', 'accepted'].includes(statusLower) && withinFreeCancelWindow;
+
+  // courier.delivery.pin_required_over_jmd — show PIN clearly until delivered
+  const showDeliveryPin =
+    Boolean(order.deliveryPin)
+    && !['delivered', 'cancelled', 'canceled', 'completed'].includes(statusLower);
+
+  const deliveryPinBanner = showDeliveryPin ? (
+    <div className="fixed bottom-0 inset-x-0 z-[70] pointer-events-none safe-x pb-safe">
+      <div className="mx-auto mb-4 max-w-md px-4">
+        <div className="rounded-2xl bg-primary text-on-primary px-5 py-4 shadow-xl text-center">
+          <p className="text-[11px] font-semibold uppercase tracking-widest opacity-90 mb-1">
+            Give this PIN to your courier
+          </p>
+          <p className="text-4xl font-bold tracking-[0.35em] tabular-nums">{order.deliveryPin}</p>
+        </div>
+      </div>
+    </div>
+  ) : null;
 
   const cancelConfirmSheet = showCancelConfirm ? (
     <div className="fixed inset-0 z-[80] flex items-end justify-center bg-black/40 sm:items-center">
@@ -263,10 +317,58 @@ export default function OrderTrackingPage({ orderId, demoPhase, onNavigate }: Pr
   ) : null;
 
   switch (phase) {
+    case 'ready_for_pickup':
+      return (
+        <>
+          <div className="min-h-dvh flex flex-col bg-background text-on-surface safe-x">
+            <header className="flex items-center justify-between px-4 min-h-16 pt-safe">
+              <button type="button" onClick={handleClose} className="p-2 -ml-2 rounded-full">
+                <MaterialIcon name="arrow_back" />
+              </button>
+              <h1 className="text-headline-md font-semibold">Pickup</h1>
+              <button type="button" onClick={handleHelp} className="p-2 -mr-2 rounded-full">
+                <MaterialIcon name="help" />
+              </button>
+            </header>
+            <main className="flex-1 px-4 pb-safe flex flex-col items-center justify-center text-center gap-4">
+              <div className="flex h-20 w-20 items-center justify-center rounded-full bg-primary-container text-on-primary-container">
+                <MaterialIcon name="shopping_bag" className="text-4xl" filled />
+              </div>
+              <div>
+                <h2 className="text-headline-lg font-bold mb-2">Ready for pickup</h2>
+                <p className="text-body-md text-on-surface-variant">
+                  Head to {order.merchantName}
+                  {order.merchantAddress ? ` · ${order.merchantAddress}` : ''}
+                </p>
+                <p className="text-label-sm text-on-surface-variant mt-2">
+                  Order #{order.orderNumber}
+                </p>
+              </div>
+              <button
+                type="button"
+                disabled={collectPending}
+                onClick={() => void handleCollected()}
+                className="w-full max-w-sm mt-4 bg-primary text-on-primary text-headline-sm font-semibold py-4 rounded-xl disabled:opacity-50"
+              >
+                {collectPending ? 'Confirming…' : 'Collected'}
+              </button>
+              <button
+                type="button"
+                onClick={handleDetails}
+                className="text-label-md font-semibold text-primary"
+              >
+                Order details
+              </button>
+            </main>
+          </div>
+          {cancelConfirmSheet}
+        </>
+      );
     case 'courier_assigned':
       return (
         <>
           <CourierAssignedView order={order} onBack={handleClose} onHelp={handleHelp} onDetails={handleDetails} />
+          {deliveryPinBanner}
           {cancelConfirmSheet}
         </>
       );
@@ -274,6 +376,7 @@ export default function OrderTrackingPage({ orderId, demoPhase, onNavigate }: Pr
       return (
         <>
           <OnTheWayView order={order} onBack={handleClose} onHelp={handleHelp} onDetails={handleDetails} />
+          {deliveryPinBanner}
           {cancelConfirmSheet}
         </>
       );
@@ -281,6 +384,7 @@ export default function OrderTrackingPage({ orderId, demoPhase, onNavigate }: Pr
       return (
         <>
           <AlmostThereView order={order} onClose={handleClose} onHelp={handleHelp} />
+          {deliveryPinBanner}
           {cancelConfirmSheet}
         </>
       );
@@ -296,6 +400,7 @@ export default function OrderTrackingPage({ orderId, demoPhase, onNavigate }: Pr
             onHelp={handleHelp}
             onNavigate={(page) => onNavigate(page)}
           />
+          {deliveryPinBanner}
           {cancelConfirmSheet}
         </>
       );

@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react';
+import { useAppConfig } from '@roam/rush-app-config';
 import { resolveFulfillmentType } from '@roam/vertical-config';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
 import { DeliveryMap } from '@/components/map/DeliveryMap';
@@ -28,6 +29,11 @@ export function AtStorePage({
   onRequestUnassign,
   onReportIssue,
 }: AtStorePageProps) {
+  const appConfig = useAppConfig('courier');
+  const waitGraceMinutes =
+    Number(appConfig.settings['courier.delivery.wait_grace_minutes']) || 10;
+  const waitPayPerMin =
+    Number(appConfig.settings['courier.delivery.wait_pay_jmd_per_min']) || 20;
   const fulfillment = resolveFulfillmentType(delivery.fulfillment_type);
 
   if (fulfillment === 'pick_and_pack') {
@@ -266,6 +272,8 @@ export function AtStorePage({
       <WaitTimeSheet
         open={waitSheetOpen}
         onClose={() => setWaitSheetOpen(false)}
+        graceMinutes={waitGraceMinutes}
+        payPerMinute={waitPayPerMin}
         onWait={(minutes) => {
           const orderId = realDispatchProvider.activeOrderId || delivery.orderId;
           void submitCourierIssue(orderId, 'long_wait', `wait:${minutes}min`).then((reported) => {

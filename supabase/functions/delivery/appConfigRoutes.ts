@@ -103,13 +103,18 @@ export async function handleAppConfig(
   const busy = await getResolvedBusyMode({ marketId, supabase: sb });
   settings["enterprise.busy_mode"] = busy;
 
+  // Load rollout server-side only — never put the bag (betaUserIds) in settings.
   const rolloutKey = `enterprise.rollouts.${app}`;
-  const rolloutRaw = (settings[rolloutKey] ?? {
+  const rolloutRaw = (await getSetting<Rollout>(rolloutKey, { marketId, supabase: sb }) ?? {
     mode: "on",
     percent: 100,
     betaUserIds: [],
   }) as Rollout;
   const rolloutEnabled = evaluateRollout(rolloutRaw, userId);
+  delete settings[rolloutKey];
+  for (const k of Object.keys(settings)) {
+    if (k.startsWith("enterprise.rollouts.")) delete settings[k];
+  }
 
   const announcementKey = `platform.announcement.${app}`;
   const existingAnnouncements = Array.isArray(settings[announcementKey])

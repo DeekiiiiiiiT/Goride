@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { useAppConfig } from '@roam/rush-app-config';
 import { OnboardingHeader } from '@/components/layout/OnboardingHeader';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
 import { loadSignupDraft, saveSignupDraft } from '@/lib/signupDraft';
@@ -8,6 +9,14 @@ import { uploadAndGetProofUrl } from '@/lib/courierFileUpload';
 import { toast } from '@/lib/toast';
 import { useVisualViewport } from '@/hooks/useVisualViewport';
 import { normalizeCourierRoamTagName, validateCourierRoamTagName } from '@roam/types';
+
+function ageFromDob(dob: string, now = new Date()): number {
+  const d = new Date(dob + 'T00:00:00');
+  let age = now.getFullYear() - d.getFullYear();
+  const m = now.getMonth() - d.getMonth();
+  if (m < 0 || (m === 0 && now.getDate() < d.getDate())) age--;
+  return age;
+}
 
 type ProfileSetupPageProps = {
   onBack: () => void;
@@ -21,9 +30,12 @@ export function ProfileSetupPage({
   onContinue,
   showRoamTagClaim = false,
 }: ProfileSetupPageProps) {
+  const appConfig = useAppConfig('courier');
+  const minAge = Number(appConfig.settings['courier.signup.min_age']) || 18;
   const draft = loadSignupDraft();
   const [fullName, setFullName] = useState(draft.fullName);
   const [displayName, setDisplayName] = useState(draft.displayName);
+  const [dateOfBirth, setDateOfBirth] = useState(draft.dateOfBirth || '');
   const [phone, setPhone] = useState(
     draft.phone ? `${draft.countryCode} ${draft.phone}` : '+1 ',
   );
@@ -57,6 +69,15 @@ export function ProfileSetupPage({
   };
 
   const handleContinue = async () => {
+    if (!dateOfBirth || !/^\d{4}-\d{2}-\d{2}$/.test(dateOfBirth)) {
+      toast.error('Date of birth required', 'Enter your date of birth to continue.');
+      return;
+    }
+    if (ageFromDob(dateOfBirth) < minAge) {
+      toast.error(`Must be ${minAge}+`);
+      return;
+    }
+
     setUploading(true);
     let profilePhotoUrl = draft.profilePhotoUrl;
     if (photoFile) {
@@ -69,7 +90,7 @@ export function ProfileSetupPage({
       profilePhotoUrl = url;
     }
 
-    saveSignupDraft({ fullName, displayName, phone, profilePhotoUrl });
+    saveSignupDraft({ fullName, displayName, phone, profilePhotoUrl, dateOfBirth });
     await syncCourierProfileFromDraft();
 
     if (showRoamTagClaim && roamTag.trim()) {
@@ -169,6 +190,21 @@ export function ProfileSetupPage({
                   placeholder="Jane (How customers see you)"
                   className="w-full bg-surface border border-outline-variant rounded-lg px-4 h-14 text-base text-on-surface placeholder:text-muted focus:ring-2 focus:ring-primary focus:border-primary transition-all outline-none shadow-sm"
                 />
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <label htmlFor="dateOfBirth" className="text-[11px] font-medium text-on-surface-variant uppercase tracking-wider ml-1">
+                  Date of birth
+                </label>
+                <input
+                  id="dateOfBirth"
+                  type="date"
+                  value={dateOfBirth}
+                  onChange={(e) => setDateOfBirth(e.target.value)}
+                  max={new Date().toISOString().slice(0, 10)}
+                  className="w-full bg-surface border border-outline-variant rounded-lg px-4 h-14 text-base text-on-surface focus:ring-2 focus:ring-primary focus:border-primary transition-all outline-none shadow-sm"
+                />
+                <p className="text-[11px] text-muted ml-1">You must be {minAge}+ to deliver with Roam Rush.</p>
               </div>
 
               {showRoamTagClaim ? (

@@ -19,6 +19,16 @@ type Deps = {
   getServiceSupabase: () => Sb;
 };
 
+const DEFAULT_VEHICLE_TYPES = ["bicycle", "motorcycle", "car"] as const;
+
+function ageFromDob(dob: string, now = new Date()): number {
+  const d = new Date(dob + "T00:00:00");
+  let age = now.getFullYear() - d.getFullYear();
+  const m = now.getMonth() - d.getMonth();
+  if (m < 0 || (m === 0 && now.getDate() < d.getDate())) age--;
+  return age;
+}
+
 const COURIER_TRANSITIONS: Record<string, string[]> = {
   assigned: ["picked_up", "cancelled"],
   picked_up: ["in_transit", "cancelled"],
@@ -315,10 +325,12 @@ async function dispatchOffersForOrder(
 ): Promise<number> {
   const { data: order } = await serviceSb
     .from("orders")
-    .select("id, status, courier_id, delivery_lat, delivery_lng, merchant_id")
+    .select("id, status, courier_id, delivery_lat, delivery_lng, merchant_id, fulfillment_type")
     .eq("id", orderId)
     .maybeSingle();
+  // Customer store pickup — never offer to couriers
   if (!order || order.status !== "ready" || order.courier_id) return 0;
+  if (String(order.fulfillment_type || "delivery") === "pickup") return 0;
 
   const { data: merchant } = await serviceSb
     .from("merchants")
@@ -517,14 +529,16 @@ async function redispatchExpiredOffers(serviceSb: Sb): Promise<{ expired: number
 
   const { data: stranded } = await serviceSb
     .from("orders")
-    .select("id")
+    .select("id, fulfillment_type")
     .eq("status", "ready")
     .is("courier_id", null)
     .limit(40);
 
   const toRedispatch = new Set([
     ...orderIds,
-    ...(stranded || []).map((o) => String(o.id)),
+    ...(stranded || [])
+      .filter((o) => String((o as { fulfillment_type?: string }).fulfillment_type || "delivery") !== "pickup")
+      .map((o) => String(o.id)),
   ]);
 
   let redispatched = 0;
@@ -629,7 +643,7 @@ export function registerCourierConsumerRoutes(app: Hono, deps: Deps) {
       .select(`
         *,
         order:orders(
-          id, order_number, status, total, delivery_fee, delivery_fee_courier_amount,
+          id, order_number, status, total, delivery_pin, delivery_fee, delivery_fee_courier_amount,
           courier_base_pay_jmd, courier_distance_pay_jmd, tip, delivery_address,
           delivery_address_line2, delivery_lat, delivery_lng, ready_at, delivery_instructions, items,
           peak_pay_amount,
@@ -822,6 +836,7 @@ export function registerCourierConsumerRoutes(app: Hono, deps: Deps) {
 
   // Age-verify / POD / pickup photo evidence.
   // courier.delivery.photo_proof: when true, status→delivered also requires delivery_photo_url (see index.ts).
+  // courier.delivery.pin_required_over_jmd: high-value orders get delivery_pin; verify at status→delivered (see index.ts).
   app.post("/orders/:id/courier-proof", async (c) => {
     const auth = await requireCourierUser(c.req.header("Authorization"), getSupabase);
     if (auth instanceof Response) return auth;
@@ -981,17 +996,73 @@ export function registerCourierConsumerRoutes(app: Hono, deps: Deps) {
     const shouldAbort = abortTypes.has(issueType.toLowerCase()) ||
       String(body.abort || body.cancelOrder || "").toLowerCase() === "true";
 
-    // Structured wait logging for long_wait issues
+    // Structured wait logging for long_wait issues (courier.delivery.wait_grace_minutes)
     if (issueType === "long_wait" && notes) {
       const waitMatch = notes.match(/wait:(\d+)min/i);
       const waitMinutes = waitMatch ? Number(waitMatch[1]) : 10;
       if (waitMinutes > 0) {
+        const { getSetting } = await import("../_shared/rushSettings/getSetting.ts");
+        const graceMinutes = Number(
+          await getSetting<number>("courier.delivery.wait_grace_minutes"),
+        ) || 0;
+        const payPerMin = Number(
+          await getSetting<number>("courier.delivery.wait_pay_jmd_per_min"),
+        );
+        const rate = Number.isFinite(payPerMin) ? payPerMin : 20;
+        const billableMinutes = Math.max(0, waitMinutes - graceMinutes);
+        const waitPayJmd = billableMinutes * rate;
         await serviceSb.from("courier_wait_events").insert({
           order_id: orderId,
           courier_user_id: auth.userId,
           wait_minutes: waitMinutes,
           issue_id: data.id,
+          grace_minutes: graceMinutes,
+          billable_minutes: billableMinutes,
+          wait_pay_jmd: waitPayJmd,
         });
+        if (waitPayJmd > 0) {
+          const { postRushJournal, publicJournalClient } = await import(
+            "../_shared/rushMoney/postJournal.ts"
+          );
+          const waitPayMinor = Math.round(waitPayJmd * 100);
+          await postRushJournal(publicJournalClient(), {
+            p_idempotency_key: `wait_pay:${orderId}:${data.id}`,
+            p_event_type: "wait_pay",
+            p_order_id: orderId,
+            p_correlation_id: null,
+            p_lines: [
+              {
+                kind: "platform_cost",
+                party_type: "platform",
+                party_id: null,
+                component: "delivery",
+                amount_minor: waitPayMinor,
+              },
+              {
+                kind: "courier_earnings",
+                party_type: "courier",
+                party_id: auth.userId,
+                component: "delivery",
+                amount_minor: -waitPayMinor,
+              },
+            ],
+            p_actor_type: "courier",
+            p_actor_id: auth.userId,
+            p_reason: "Restaurant wait pay",
+            p_evidence: { wait_minutes: waitMinutes, grace_minutes: graceMinutes },
+            p_policy_version: null,
+          });
+          const { data: orderWait } = await serviceSb
+            .from("orders")
+            .select("wait_pay_jmd")
+            .eq("id", orderId)
+            .maybeSingle();
+          const priorWait = Number(orderWait?.wait_pay_jmd || 0);
+          await serviceSb
+            .from("orders")
+            .update({ wait_pay_jmd: priorWait + waitPayJmd })
+            .eq("id", orderId);
+        }
       }
       const { data: task } = await serviceSb.from("procurement_tasks").select("id, state").eq("order_id", orderId).maybeSingle();
       if (task) {
@@ -1322,9 +1393,10 @@ export function registerCourierConsumerRoutes(app: Hono, deps: Deps) {
     const signupMode = await getSetting<"open" | "invite_or_fleet" | "closed">(
       "courier.signup.mode",
     );
+    const minAge = Number(await getSetting<number>("courier.signup.min_age")) || 18;
     const { data: profileGate } = await serviceSb
       .from("courier_profiles")
-      .select("status, onboarding_complete, mode, fleet_id")
+      .select("status, onboarding_complete, mode, fleet_id, date_of_birth")
       .eq("user_id", auth.userId)
       .maybeSingle();
     const onboarded =
@@ -1346,6 +1418,41 @@ export function registerCourierConsumerRoutes(app: Hono, deps: Deps) {
         code: "signup_invite_required",
       }, 403);
     }
+
+    const dobRaw =
+      body.date_of_birth ?? body.dateOfBirth ?? (patch as Record<string, unknown>).date_of_birth;
+    const dobStr = dobRaw != null && String(dobRaw).trim()
+      ? String(dobRaw).trim().slice(0, 10)
+      : null;
+    const markingComplete =
+      body.markComplete === true
+      || body.onboarding_complete === true
+      || (patch as Record<string, unknown>).onboarding_complete === true
+      || (patch as Record<string, unknown>).markComplete === true;
+    const dobForCheck = dobStr
+      || (profileGate?.date_of_birth ? String(profileGate.date_of_birth).slice(0, 10) : null);
+    if (dobStr || markingComplete) {
+      if (!dobForCheck || !/^\d{4}-\d{2}-\d{2}$/.test(dobForCheck)) {
+        if (markingComplete || dobStr) {
+          return c.json({
+            error: `Must be ${minAge}+`,
+            code: "underage",
+          }, 403);
+        }
+      } else if (ageFromDob(dobForCheck) < minAge) {
+        return c.json({
+          error: `Must be ${minAge}+`,
+          code: "underage",
+        }, 403);
+      }
+    }
+
+    const settingsPatch = { ...(patch as Record<string, unknown>) };
+    delete settingsPatch.date_of_birth;
+    delete settingsPatch.dateOfBirth;
+    delete settingsPatch.onboarding_complete;
+    delete settingsPatch.markComplete;
+
     const { data: existing } = await serviceSb
       .from("courier_profiles")
       .select("app_settings")
@@ -1355,14 +1462,187 @@ export function registerCourierConsumerRoutes(app: Hono, deps: Deps) {
       ...((existing?.app_settings && typeof existing.app_settings === "object")
         ? existing.app_settings as Record<string, unknown>
         : {}),
-      ...patch,
+      ...settingsPatch,
     };
+    const profileUpdate: Record<string, unknown> = {
+      app_settings: merged,
+      updated_at: new Date().toISOString(),
+    };
+    if (dobStr) profileUpdate.date_of_birth = dobStr;
+    if (markingComplete) profileUpdate.onboarding_complete = true;
     const { error } = await serviceSb
       .from("courier_profiles")
-      .update({ app_settings: merged, updated_at: new Date().toISOString() })
+      .update(profileUpdate)
       .eq("user_id", auth.userId);
     if (error) return c.json({ error: error.message }, 500);
     return c.json({ settings: merged });
+  });
+
+  /** Validate vehicle_type against courier.signup.vehicle_types. */
+  async function loadAllowedVehicleTypes(): Promise<string[]> {
+    const { getSetting } = await import("../_shared/rushSettings/getSetting.ts");
+    const raw = await getSetting<string[]>("courier.signup.vehicle_types");
+    return Array.isArray(raw) && raw.length > 0 ? raw : [...DEFAULT_VEHICLE_TYPES];
+  }
+
+  // Profile upsert with server-side vehicle allow-list (courier.signup.vehicle_types)
+  app.put("/courier/profile", async (c) => {
+    const auth = await requireCourierUser(c.req.header("Authorization"), getSupabase);
+    if (auth instanceof Response) return auth;
+    const body = await c.req.json().catch(() => ({})) as Record<string, unknown>;
+    const vehicleType = body.vehicle_type != null
+      ? String(body.vehicle_type)
+      : body.vehicleType != null
+      ? String(body.vehicleType)
+      : null;
+    if (vehicleType != null && String(vehicleType).trim() !== "") {
+      const allowed = await loadAllowedVehicleTypes();
+      if (!allowed.includes(vehicleType)) {
+        return c.json(
+          { error: "Vehicle type not allowed", code: "vehicle_type_not_allowed", allowed },
+          400,
+        );
+      }
+    }
+
+    const serviceSb = getServiceSupabase();
+    const { data: existing } = await serviceSb
+      .from("courier_profiles")
+      .select("user_id, mode, fleet_id, status")
+      .eq("user_id", auth.userId)
+      .maybeSingle();
+
+    const payload: Record<string, unknown> = {
+      user_id: auth.userId,
+      updated_at: new Date().toISOString(),
+    };
+    if (body.email != null) payload.email = body.email;
+    if (body.phone != null) payload.phone = body.phone;
+    if (body.display_name != null || body.displayName != null) {
+      payload.display_name = body.display_name ?? body.displayName;
+    }
+    if (vehicleType != null) payload.vehicle_type = vehicleType;
+    if (body.profile_photo_url != null || body.profilePhotoUrl != null) {
+      payload.profile_photo_url = body.profile_photo_url ?? body.profilePhotoUrl;
+    }
+    if (body.date_of_birth != null || body.dateOfBirth != null) {
+      payload.date_of_birth = body.date_of_birth ?? body.dateOfBirth;
+    }
+    if (body.mode != null) payload.mode = body.mode;
+    if (body.markComplete === true || body.onboarding_complete === true) {
+      payload.onboarding_complete = true;
+    }
+
+    if (existing) {
+      if (existing.mode === "fleet" && existing.fleet_id) {
+        delete payload.mode;
+      }
+      delete payload.user_id;
+      const { data, error } = await serviceSb
+        .from("courier_profiles")
+        .update(payload)
+        .eq("user_id", auth.userId)
+        .select("*")
+        .maybeSingle();
+      if (error) return c.json({ error: error.message }, 500);
+      return c.json({ profile: data });
+    }
+
+    const { data, error } = await serviceSb
+      .from("courier_profiles")
+      .upsert(
+        {
+          ...payload,
+          status: "pending",
+          onboarding_complete: payload.onboarding_complete === true,
+          mode: payload.mode ?? "independent",
+        },
+        { onConflict: "user_id" },
+      )
+      .select("*")
+      .maybeSingle();
+    if (error) return c.json({ error: error.message }, 500);
+    return c.json({ profile: data });
+  });
+
+  // Vehicle upsert with server-side vehicle allow-list
+  app.put("/courier/vehicle", async (c) => {
+    const auth = await requireCourierUser(c.req.header("Authorization"), getSupabase);
+    if (auth instanceof Response) return auth;
+    const body = await c.req.json().catch(() => ({})) as Record<string, unknown>;
+    const vehicleType = body.vehicle_type != null
+      ? String(body.vehicle_type)
+      : body.vehicleType != null
+      ? String(body.vehicleType)
+      : null;
+    if (vehicleType != null && String(vehicleType).trim() !== "") {
+      const allowed = await loadAllowedVehicleTypes();
+      if (!allowed.includes(vehicleType)) {
+        return c.json(
+          { error: "Vehicle type not allowed", code: "vehicle_type_not_allowed", allowed },
+          400,
+        );
+      }
+    }
+
+    const make = String(body.make ?? "").trim() || "Unknown";
+    const model = String(body.model ?? "").trim() || "Unknown";
+    const plate = String(body.license_plate ?? body.licensePlate ?? "").trim().toUpperCase();
+    if (!plate) return c.json({ error: "License plate required" }, 400);
+
+    const serviceSb = getServiceSupabase();
+    const { data: existing } = await serviceSb
+      .from("courier_vehicles")
+      .select("id")
+      .eq("user_id", auth.userId)
+      .order("is_primary", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    const payload = {
+      user_id: auth.userId,
+      make,
+      model,
+      year: body.year != null && Number.isFinite(Number(body.year)) ? Number(body.year) : null,
+      color: body.color != null ? String(body.color) : null,
+      license_plate: plate,
+      vehicle_type: vehicleType,
+      is_primary: true,
+      status: "active",
+      updated_at: new Date().toISOString(),
+    };
+
+    if (existing?.id) {
+      const { data, error } = await serviceSb
+        .from("courier_vehicles")
+        .update(payload)
+        .eq("id", existing.id)
+        .select("id, user_id, make, model, year, color, license_plate, vehicle_type, is_primary")
+        .single();
+      if (error) return c.json({ error: error.message }, 500);
+      // Keep profile.vehicle_type in sync
+      if (vehicleType) {
+        await serviceSb
+          .from("courier_profiles")
+          .update({ vehicle_type: vehicleType, updated_at: new Date().toISOString() })
+          .eq("user_id", auth.userId);
+      }
+      return c.json({ vehicle: data });
+    }
+
+    const { data, error } = await serviceSb
+      .from("courier_vehicles")
+      .insert(payload)
+      .select("id, user_id, make, model, year, color, license_plate, vehicle_type, is_primary")
+      .single();
+    if (error) return c.json({ error: error.message }, 500);
+    if (vehicleType) {
+      await serviceSb
+        .from("courier_profiles")
+        .update({ vehicle_type: vehicleType, updated_at: new Date().toISOString() })
+        .eq("user_id", auth.userId);
+    }
+    return c.json({ vehicle: data });
   });
 
   // Active peak pay windows
@@ -1454,7 +1734,7 @@ export function registerCourierConsumerRoutes(app: Hono, deps: Deps) {
       .select(`
         id, order_id, stack_group_id, sequence, leg_status,
         order:orders(
-          id, order_number, status, delivery_fee, delivery_fee_courier_amount,
+          id, order_number, status, total, delivery_pin, delivery_fee, delivery_fee_courier_amount,
           courier_base_pay_jmd, courier_distance_pay_jmd, tip, peak_pay_amount, delivery_address,
           delivery_address_line2, delivery_lat, delivery_lng, delivery_instructions, items,
           merchant:merchants(id, name, address, lat, lng, phone, vertical_type, fulfillment_type),

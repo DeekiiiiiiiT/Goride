@@ -4,24 +4,17 @@ import { supabase } from '@/lib/supabase';
 import { loadSignupDraft } from '@/lib/signupDraft';
 import { toE164JamaicaPhone } from '@/components/forms/PhoneInput';
 import { syncVehicleFromSignupDraft } from '@/lib/courierVehicleService';
+import { upsertCourierProfile } from '@/lib/courierApi';
 
 /**
  * Ensures a delivery.courier_profiles row exists for the signed-in courier.
- * New rows must insert as onboarding_complete=false (RLS). Only mark complete
- * when the signup wizard actually finishes.
+ * Writes go through delivery edge so courier.signup.vehicle_types is enforced.
  */
 export async function ensureCourierProfile(opts?: { markComplete?: boolean }): Promise<void> {
   const {
     data: { session },
   } = await supabase.auth.getSession();
   if (!session?.user) return;
-
-  const delivery = createClient(`https://${projectId}.supabase.co`, publicAnonKey, {
-    db: { schema: 'delivery' },
-    global: {
-      headers: { Authorization: `Bearer ${session.access_token}` },
-    },
-  });
 
   const user = session.user;
   const draft = loadSignupDraft();
@@ -39,50 +32,28 @@ export async function ensureCourierProfile(opts?: { markComplete?: boolean }): P
     (draft.phone ? toE164JamaicaPhone(draft.phone) : null) ||
     (typeof meta.phone === 'string' ? meta.phone : null);
 
-  const { data: existing } = await delivery
-    .from('courier_profiles')
-    .select('user_id')
-    .eq('user_id', user.id)
-    .maybeSingle();
-
   const payload: Record<string, unknown> = {
-    user_id: user.id,
     email: user.email ?? draft.email ?? null,
     phone,
     display_name: displayName,
     vehicle_type: draft.vehicleType ?? null,
-    status: 'pending' as const,
-    updated_at: new Date().toISOString(),
   };
-  // Independent / fleet-owner-continue: stamp mode. Join stays independent until invite accept.
   if (draft.workforceChoice !== 'join_fleet') {
     payload.mode = 'independent';
   }
   if (draft.profilePhotoUrl) {
     payload.profile_photo_url = draft.profilePhotoUrl;
   }
+  if (draft.dateOfBirth) {
+    payload.date_of_birth = draft.dateOfBirth;
+  }
+  if (opts?.markComplete) {
+    payload.markComplete = true;
+  }
 
-  if (existing) {
-    // Do not overwrite status on existing profiles; do not flip complete mid-wizard.
-    // Do not overwrite mode=fleet if already linked.
-    const { status: _status, ...safePayload } = payload;
-    if (opts?.markComplete) {
-      safePayload.onboarding_complete = true;
-    }
-    const { data: current } = await delivery
-      .from('courier_profiles')
-      .select('mode, fleet_id')
-      .eq('user_id', user.id)
-      .maybeSingle();
-    if (current?.mode === 'fleet' && current?.fleet_id) {
-      delete safePayload.mode;
-    }
-    await delivery.from('courier_profiles').update(safePayload).eq('user_id', user.id);
-  } else {
-    await delivery.from('courier_profiles').upsert(
-      { ...payload, onboarding_complete: false, mode: payload.mode ?? 'independent' },
-      { onConflict: 'user_id' },
-    );
+  const result = await upsertCourierProfile(payload);
+  if (!result.ok) {
+    console.warn('[ensureCourierProfile]', result.error);
   }
 
   await syncVehicleFromSignupDraft();
@@ -91,9 +62,6 @@ export async function ensureCourierProfile(opts?: { markComplete?: boolean }): P
 export async function syncCourierProfileFromDraft(): Promise<void> {
   await ensureCourierProfile();
   const draft = loadSignupDraft();
-  const delivery = await getDeliveryClient();
-  if (!delivery) return;
-
   const {
     data: { session },
   } = await supabase.auth.getSession();
@@ -103,23 +71,28 @@ export async function syncCourierProfileFromDraft(): Promise<void> {
     display_name: draft.displayName || draft.fullName || null,
     phone: draft.phone ? toE164JamaicaPhone(draft.phone) : null,
     vehicle_type: draft.vehicleType,
-    updated_at: new Date().toISOString(),
   };
   if (draft.profilePhotoUrl) {
     patch.profile_photo_url = draft.profilePhotoUrl;
   }
+  if (draft.dateOfBirth) {
+    patch.date_of_birth = draft.dateOfBirth;
+  }
   if (draft.workforceChoice !== 'join_fleet') {
-    const { data: current } = await delivery
-      .from('courier_profiles')
-      .select('mode, fleet_id')
-      .eq('user_id', session.user.id)
-      .maybeSingle();
-    if (!(current?.mode === 'fleet' && current?.fleet_id)) {
-      patch.mode = 'independent';
+    const delivery = await getDeliveryClient();
+    if (delivery) {
+      const { data: current } = await delivery
+        .from('courier_profiles')
+        .select('mode, fleet_id')
+        .eq('user_id', session.user.id)
+        .maybeSingle();
+      if (!(current?.mode === 'fleet' && current?.fleet_id)) {
+        patch.mode = 'independent';
+      }
     }
   }
 
-  await delivery.from('courier_profiles').update(patch).eq('user_id', session.user.id);
+  await upsertCourierProfile(patch);
 }
 
 async function getDeliveryClient() {

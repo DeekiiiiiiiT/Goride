@@ -112,8 +112,10 @@ export const CUSTOMER_SETTINGS: SettingDef[] = [
     clientVisible: true,
     risk: 'normal',
     editRoles: ROLES.sharedEdit,
-    readers: [APP_CONFIG, CUSTOMER_APP, GET_SETTING],
-    hidden: true,
+    readers: [
+      'apps/dash-customer/src/pages/CheckoutPage.tsx',
+      CUSTOMER_ORDERS,
+    ],
   }),
   defineSetting({
     key: 'customer.ordering.cancel_window_seconds',
