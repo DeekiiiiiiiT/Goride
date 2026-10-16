@@ -26,9 +26,18 @@ function publicDb() {
   return createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 }
 
+const RUNTIME_FLAG_TO_SETTING: Record<string, string> = {
+  wallet_live: "customer.payment.wallet",
+  device_linking: "money.device_linking",
+  payout_export: "money.payout_export",
+  risk_controls: "money.risk_controls",
+};
+
 async function flagOn(key: string): Promise<boolean> {
-  const { data } = await publicDb().schema("rush_money").from("runtime_flags").select("enabled").eq("key", key).maybeSingle();
-  return Boolean(data?.enabled);
+  const settingKey = RUNTIME_FLAG_TO_SETTING[key];
+  if (!settingKey) return false;
+  const { getSetting } = await import("../../_shared/rushSettings/getSetting.ts");
+  return await getSetting<boolean>(settingKey);
 }
 
 function canMoveMoney(roles: string[]): boolean {

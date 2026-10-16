@@ -35,6 +35,7 @@
     "@roam/business-config": "workspace:*",
     "@roam/location": "workspace:*",
     "@roam/play-store-launch": "workspace:*",
+    "@roam/rush-app-config": "workspace:*",
     "@roam/rush-chat": "workspace:*",
     "@roam/spatial": "workspace:*",
     "@roam/types": "workspace:*",

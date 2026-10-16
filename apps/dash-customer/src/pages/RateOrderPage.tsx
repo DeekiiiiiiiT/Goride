@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { API_ENDPOINTS } from '@roam/api-client';
+import { useAppConfig } from '@roam/rush-app-config';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
 import { StarRating } from '@/components/rating/StarRating';
 import { submitCustomerOrderIssue } from '@/lib/customerApi';
@@ -16,6 +17,12 @@ type Props = {
   onNavigate: (page: string, data?: Record<string, unknown>) => void;
 };
 
+function parseDeliveredAtMs(value: string): number | null {
+  if (!value) return null;
+  const ms = Date.parse(value);
+  return Number.isFinite(ms) ? ms : null;
+}
+
 export default function RateOrderPage({
   orderId,
   merchantName = 'Restaurant',
@@ -24,6 +31,15 @@ export default function RateOrderPage({
   initialFeedbackChips = [],
   onNavigate,
 }: Props) {
+  const appConfig = useAppConfig('customer');
+  const ratingWindowHours =
+    Number(appConfig.settings['customer.ratings.window_hours']) || 72;
+  const ratingWindowExpired = useMemo(() => {
+    const deliveredMs = parseDeliveredAtMs(deliveredAt);
+    if (deliveredMs == null) return false;
+    const ageHours = (Date.now() - deliveredMs) / (1000 * 60 * 60);
+    return ageHours > ratingWindowHours;
+  }, [deliveredAt, ratingWindowHours]);
   const split = splitFeedbackChips(initialFeedbackChips);
   const [overall, setOverall] = useState(initialRating >= 1 && initialRating <= 5 ? initialRating : 0);
   const [foodQuality, setFoodQuality] = useState(4);
@@ -41,6 +57,10 @@ export default function RateOrderPage({
   const handleSubmit = async () => {
     if (!orderId) {
       toast.error('Missing order');
+      return;
+    }
+    if (ratingWindowExpired) {
+      toast.error(`Rating window of ${ratingWindowHours} hours has expired`);
       return;
     }
     if (overall < 1) {
@@ -134,7 +154,16 @@ export default function RateOrderPage({
             {merchantName}
             {deliveredAt ? ` • Delivered ${deliveredAt}` : ''}
           </p>
+          <p className="text-body-sm text-on-surface-variant mt-1">
+            You can rate within {ratingWindowHours} hours of delivery.
+          </p>
         </div>
+
+        {ratingWindowExpired ? (
+          <div className="rounded-xl border border-outline-variant bg-surface-container-low p-4 text-center text-body-md text-on-surface-variant">
+            The rating window for this order has closed.
+          </div>
+        ) : null}
 
         <section className="bg-surface-container-lowest rounded-xl p-4 shadow-[0px_4px_20px_rgba(0,0,0,0.04)] mb-6">
           <div className="mb-6 text-center">
@@ -197,11 +226,11 @@ export default function RateOrderPage({
         <div className="max-w-[600px] mx-auto">
           <button
             type="button"
-            disabled={submitting}
+            disabled={submitting || ratingWindowExpired}
             onClick={() => void handleSubmit()}
             className="w-full bg-primary text-on-primary font-semibold text-label-md h-12 rounded-lg flex items-center justify-center hover:opacity-90 active:scale-95 transition-all shadow-md disabled:opacity-70"
           >
-            {submitting ? 'Submitting…' : 'Submit Rating'}
+            {submitting ? 'Submitting…' : ratingWindowExpired ? 'Window closed' : 'Submit Rating'}
           </button>
         </div>
       </div>

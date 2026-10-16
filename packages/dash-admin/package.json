@@ -23,6 +23,7 @@
     "@roam/merchant-ops": "workspace:*",
     "@roam/platform-ops-ui": "workspace:*",
     "@roam/play-store-launch": "workspace:*",
+    "@roam/rush-settings": "workspace:*",
     "@roam/spatial": "workspace:*",
     "@roam/types": "workspace:*",
     "@roam/vertical-config": "workspace:*",

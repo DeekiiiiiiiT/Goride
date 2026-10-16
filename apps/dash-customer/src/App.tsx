@@ -2,9 +2,12 @@ import React, { Suspense, useState, useEffect, useCallback, useMemo } from 'reac
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { BrowserRouter } from 'react-router-dom';
 import { AuthRecoveryGate } from '@roam/auth-client';
+import { API_ENDPOINTS } from '@roam/api-client';
+import { AppConfigGates, AppConfigProvider } from '@roam/rush-app-config';
 import { Loader2 } from 'lucide-react';
 import { Session } from '@supabase/supabase-js';
 import { toast } from 'sonner';
+import { APP_VERSION } from './lib/aboutContent';
 import HomePage from './pages/HomePage';
 import SearchPage from './pages/SearchPage';
 import SearchResultsPage from './pages/SearchResultsPage';
@@ -210,7 +213,15 @@ export default function App() {
           </AdminPortalErrorBoundary>
         </BrowserRouter>
       ) : (
-        <DashCustomerApp />
+        <AppConfigProvider
+          app="customer"
+          deliveryBaseUrl={API_ENDPOINTS.delivery}
+          appVersion={APP_VERSION}
+        >
+          <AppConfigGates app="customer">
+            <DashCustomerApp />
+          </AppConfigGates>
+        </AppConfigProvider>
       )}
     </AuthRecoveryGate>
   );

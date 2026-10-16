@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { API_ENDPOINTS } from '@roam/api-client';
+import { useAppConfig } from '@roam/rush-app-config';
 import { supabase } from '@/lib/supabase';
 import { AlmostThereView } from '@/components/tracking/AlmostThereView';
 import { CourierAssignedView } from '@/components/tracking/CourierAssignedView';
@@ -24,10 +25,19 @@ type Props = {
 };
 
 export default function OrderTrackingPage({ orderId, demoPhase, onNavigate }: Props) {
+  const appConfig = useAppConfig('customer');
+  const cancelWindowSeconds =
+    Number(appConfig.settings['customer.ordering.cancel_window_seconds']) || 60;
   const mocksOk = allowMocks();
   const [cancelPending, setCancelPending] = useState(false);
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const [cancelQuote, setCancelQuote] = useState('You can only cancel before the restaurant starts preparing.');
+  const [, setCancelTick] = useState(0);
+
+  useEffect(() => {
+    const id = window.setInterval(() => setCancelTick((n) => n + 1), 1000);
+    return () => window.clearInterval(id);
+  }, []);
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['order', orderId],
     queryFn: async () => {
@@ -206,6 +216,15 @@ export default function OrderTrackingPage({ orderId, demoPhase, onNavigate }: Pr
   const handleHelp = () => onNavigate('report-issue', { orderId: order.id, returnTo: 'tracking' });
   const handleDetails = () => onNavigate('order-details', { orderId: order.id });
 
+  const statusLower = String(order.status || '').toLowerCase();
+  const placedAtMs = order.placedAt ? new Date(order.placedAt).getTime() : NaN;
+  const ageSec = Number.isFinite(placedAtMs)
+    ? Math.max(0, (Date.now() - placedAtMs) / 1000)
+    : 0;
+  const withinFreeCancelWindow = statusLower !== 'placed' || ageSec <= cancelWindowSeconds;
+  const canCancelOrder =
+    ['placed', 'accepted'].includes(statusLower) && withinFreeCancelWindow;
+
   const cancelConfirmSheet = showCancelConfirm ? (
     <div className="fixed inset-0 z-[80] flex items-end justify-center bg-black/40 sm:items-center">
       <div
@@ -218,7 +237,9 @@ export default function OrderTrackingPage({ orderId, demoPhase, onNavigate }: Pr
           Cancel this order?
         </h2>
         <p className="mt-2 text-body-md text-on-surface-variant">
-          {cancelQuote}
+          {statusLower === 'placed'
+            ? `Free cancel is available for ${cancelWindowSeconds}s after placing. ${cancelQuote}`
+            : cancelQuote}
         </p>
         <div className="mt-6 flex gap-3">
           <button
@@ -270,7 +291,7 @@ export default function OrderTrackingPage({ orderId, demoPhase, onNavigate }: Pr
           <PreparingTrackingView
             order={order}
             onClose={handleClose}
-            onCancel={handleCancelOrder}
+            onCancel={canCancelOrder ? handleCancelOrder : undefined}
             cancelPending={cancelPending}
             onHelp={handleHelp}
             onNavigate={(page) => onNavigate(page)}

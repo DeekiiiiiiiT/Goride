@@ -1,9 +1,10 @@
 import React, { useMemo, useState } from 'react';
+import { ROAM_LEGAL } from '@roam/business-config/legalUrls';
+import { useAppConfig } from '@roam/rush-app-config';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
 import { SubPageHeader } from '@/components/layout/SubPageHeader';
 import { HELP_TOPICS } from '@/lib/mockSettings';
 import { HELP_ARTICLES } from '@/lib/helpContent';
-import { ROAM_LEGAL } from '@roam/business-config/legalUrls';
 
 type HelpSupportPageProps = {
   onBack: () => void;
@@ -11,6 +12,9 @@ type HelpSupportPageProps = {
 };
 
 export function HelpSupportPage({ onBack, onTopicSelect }: HelpSupportPageProps) {
+  const config = useAppConfig('courier');
+  const supportEmail = config.support.email || ROAM_LEGAL.supportEmail;
+  const supportPhone = config.support.phone;
   const [query, setQuery] = useState('');
   const normalized = query.trim().toLowerCase();
 
@@ -83,15 +87,28 @@ export function HelpSupportPage({ onBack, onTopicSelect }: HelpSupportPageProps)
           )}
         </section>
 
-        <div className="mt-4">
+        <div className="mt-4 space-y-3">
+          {supportPhone ? (
+            <a
+              href={`tel:${supportPhone}`}
+              className="w-full border border-primary text-primary h-14 rounded-xl active:scale-95 transition-transform flex items-center justify-center gap-2 text-xl font-semibold"
+            >
+              <MaterialIcon name="call" />
+              Call Support
+            </a>
+          ) : null}
           <a
-            href={`mailto:${ROAM_LEGAL.supportEmail}?subject=${encodeURIComponent('Courier support request')}`}
+            href={`mailto:${supportEmail}?subject=${encodeURIComponent('Courier support request')}`}
             className="w-full bg-primary text-on-primary h-14 rounded-xl shadow-primary active:scale-95 transition-transform flex items-center justify-center gap-2 text-xl font-semibold"
           >
             <MaterialIcon name="headset_mic" />
             Contact Support
           </a>
-          <p className="text-center text-sm text-muted mt-3">Average response time: &lt; 5 mins</p>
+          <p className="text-center text-sm text-muted mt-3">
+            {config.support.hours
+              ? `Hours: ${config.support.hours}`
+              : 'Average response time: < 5 mins'}
+          </p>
         </div>
       </main>
     </div>

@@ -42,7 +42,13 @@ import { CouriersHubPage } from './pages/couriers/CouriersHubPage';
 import { CustomersHubPage } from './pages/customers/CustomersHubPage';
 import { TeamAccessPage } from './pages/team/TeamAccessPage';
 import { AuditHubPage } from './pages/audit/AuditHubPage';
-import { SettingsHubPage } from './pages/settings/SettingsHubPage';
+import { SettingsLayout } from './pages/settings/SettingsLayout';
+import { SettingsOverviewPage } from './pages/settings/SettingsOverviewPage';
+import { SettingsSectionPage } from './pages/settings/SettingsSectionPage';
+import { SettingsApprovalsPage } from './pages/settings/SettingsApprovalsPage';
+import { SettingsHistoryPage } from './pages/settings/SettingsHistoryPage';
+import { SettingsKillSwitchesPage } from './pages/settings/SettingsKillSwitchesPage';
+import { LegacySettingsRedirect } from './pages/settings/LegacySettingsRedirect';
 import { ReportsPage } from './pages/reports/ReportsPage';
 import { IdentityPersonaRedirect } from './pages/users/IdentityPersonaRedirect';
 import { MarketsHubPage } from './pages/markets/MarketsHubPage';
@@ -258,6 +264,17 @@ function RedirectKeep({ to }: { to: string }) {
   return <Navigate to={`${dest.pathname}${search ? `?${search}` : ''}${location.hash}`} replace />;
 }
 
+/** Old `/settings?tab=` URLs → new paths; otherwise the left-rail layout. */
+function SettingsLegacyOrLayout() {
+  const location = useLocation();
+  const search = new URLSearchParams(location.search);
+  const atSettingsRoot = location.pathname.replace(/\/$/, '').endsWith('/settings');
+  if (atSettingsRoot && (search.has('tab') || search.has('scope'))) {
+    return <LegacySettingsRedirect />;
+  }
+  return <SettingsLayout />;
+}
+
 export function DashAdminPortal() {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
@@ -391,8 +408,14 @@ export function DashAdminPortal() {
             <Route path="remittance" element={<RedirectKeep to="/courier-cash" />} />
             <Route path="reviews" element={<RedirectKeep to="/support?tab=reviews" />} />
             <Route path="support" element={<SupportToolsPage />} />
-            <Route path="play-store" element={<RedirectKeep to="/settings?tab=app-releases" />} />
-            <Route path="settings" element={<SettingsHubPage />} />
+            <Route path="play-store" element={<RedirectKeep to="/settings/platform/app-versions" />} />
+            <Route path="settings" element={<SettingsLegacyOrLayout />}>
+              <Route index element={<SettingsOverviewPage />} />
+              <Route path="approvals" element={<SettingsApprovalsPage />} />
+              <Route path="history" element={<SettingsHistoryPage />} />
+              <Route path="kill-switches" element={<SettingsKillSwitchesPage />} />
+              <Route path=":area/:section" element={<SettingsSectionPage />} />
+            </Route>
           </Route>
         </Routes>
         </DashAdminAccessProvider>

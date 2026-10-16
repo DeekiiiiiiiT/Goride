@@ -66,6 +66,7 @@
     "check:edge-imports": "node scripts/check-no-edge-fleet-imports.mjs",
     "check:admin-fleet-imports": "node scripts/check-no-admin-fleet-imports.mjs",
     "check:toll-core-parity": "node scripts/check-toll-core-parity.mjs",
+    "check:rush-settings-parity": "node scripts/check-rush-settings-parity.mjs",
     "lint": "pnpm -r lint",
     "check:ledger-view-invoker": "node scripts/assert-ledger-view-invoker.mjs && node scripts/assert-fleet-view-invoker.mjs",
     "check:ledger-sort-whitelist": "node scripts/assert-ledger-sort-whitelist.mjs",

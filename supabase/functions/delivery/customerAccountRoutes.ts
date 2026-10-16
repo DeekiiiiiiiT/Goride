@@ -586,4 +586,67 @@ export function registerCustomerAccountRoutes(app: Hono, deps: CustomerAccountRo
 
     return c.json({ path, signedUrl: signed.signedUrl }, 201);
   });
+
+  /**
+   * POST /customer/account/deletion-request
+   * Reads enterprise.accounts.limits + enterprise.privacy.retention.
+   * No hard-delete API yet — returns settings-driven mailto + grace days.
+   */
+  app.post("/customer/account/deletion-request", async (c) => {
+    const auth = await requireUser(c.req.header("Authorization"), getSupabase);
+    if ("error" in auth) return c.json({ error: auth.error }, auth.status);
+
+    const { getSetting } = await import("../_shared/rushSettings/getSetting.ts");
+    type AccountLimits = {
+      selfServiceDeletionEnabled: boolean;
+      deletionGraceDays: number;
+    };
+    type DataRetention = { dataRequestEmail: string };
+
+    const [limits, retention] = await Promise.all([
+      getSetting<AccountLimits>("enterprise.accounts.limits"),
+      getSetting<DataRetention>("enterprise.privacy.retention"),
+    ]);
+
+    if (!limits?.selfServiceDeletionEnabled) {
+      return c.json({
+        error: "Self-service account deletion is disabled. Contact support.",
+        code: "deletion_disabled",
+      }, 403);
+    }
+
+    const graceDays = Math.max(0, Number(limits.deletionGraceDays) || 14);
+    const email = String(retention?.dataRequestEmail || "help@roamrush.app").trim();
+    const subject = encodeURIComponent("Roam Rush account deletion request");
+    const body = encodeURIComponent(
+      `Please delete my Roam Rush customer account.\n\nUser id: ${auth.user.id}\nEmail: ${auth.user.email || ""}\n\nI understand deletion may take up to ${graceDays} day(s).`,
+    );
+    const mailto = `mailto:${email}?subject=${subject}&body=${body}`;
+
+    // Stamp intent on auth metadata (grace window starts when support processes)
+    try {
+      const admin = getAuthAdmin();
+      const { data: authUser } = await admin.auth.admin.getUserById(auth.user.id);
+      const prev = (authUser?.user?.user_metadata ?? {}) as Record<string, unknown>;
+      await admin.auth.admin.updateUserById(auth.user.id, {
+        user_metadata: {
+          ...prev,
+          deletion_requested_at: new Date().toISOString(),
+          deletion_grace_days: graceDays,
+        },
+      });
+    } catch {
+      // Mailto path still works
+    }
+
+    return c.json({
+      ok: true,
+      mode: "mailto",
+      mailto,
+      email,
+      graceDays,
+      message:
+        `We'll process your request within ${graceDays} day(s). Email support to confirm.`,
+    });
+  });
 }

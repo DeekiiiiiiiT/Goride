@@ -1,3 +1,4 @@
+import { useAppConfig } from '@roam/rush-app-config';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
 import { SubPageHeader } from '@/components/layout/SubPageHeader';
 import { ABOUT_LINKS, APP_VERSION } from '@/lib/aboutContent';
@@ -8,6 +9,18 @@ type AboutPageProps = {
 };
 
 export function AboutPage({ onBack, onOpenSettings }: AboutPageProps) {
+  const config = useAppConfig('courier');
+  const brand = config.brandName || 'Roam Rush Courier';
+  const links = [
+    { id: 'terms', label: 'Terms of Service', href: config.legal.terms || ABOUT_LINKS[0].href },
+    { id: 'privacy', label: 'Privacy Policy', href: config.legal.privacy || ABOUT_LINKS[1].href },
+    {
+      id: 'support',
+      label: 'Courier Support',
+      href: `mailto:${config.support.email || 'couriers@roamrush.app'}`,
+    },
+  ];
+
   return (
     <div className="fixed inset-0 z-[70] bg-background flex flex-col overflow-hidden">
       <SubPageHeader title="About" onBack={onBack} />
@@ -17,14 +30,14 @@ export function AboutPage({ onBack, onOpenSettings }: AboutPageProps) {
           <div className="w-24 h-24 rounded-2xl bg-primary-container/20 flex items-center justify-center mb-4">
             <MaterialIcon name="local_shipping" className="text-primary text-5xl" filled />
           </div>
-          <h2 className="text-2xl font-bold text-primary mb-1">Roam Rush Courier</h2>
+          <h2 className="text-2xl font-bold text-primary mb-1">{brand}</h2>
           <p className="text-sm text-muted">Deliver. Earn. On your schedule.</p>
           <p className="text-xs text-outline mt-3">Version {APP_VERSION}</p>
         </div>
 
         <section className="w-full bg-surface rounded-xl shadow-soft overflow-hidden mb-6">
           <ul className="flex flex-col">
-            {ABOUT_LINKS.map((link, index) => (
+            {links.map((link, index) => (
               <li key={link.id}>
                 {index > 0 && (
                   <div className="px-4">

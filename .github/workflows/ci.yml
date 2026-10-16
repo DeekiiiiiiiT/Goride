@@ -203,6 +203,16 @@ jobs:
           supabase/functions/delivery/admin/consoleAccess.test.ts
           tools/in-house-worker/guard.test.ts
 
+      - name: Deno test Rush settings
+        run: >
+          deno test --allow-read --allow-env
+          supabase/functions/_shared/rushSettings/getSetting.test.ts
+          supabase/functions/_shared/rushSettings/shadowCompare.test.ts
+          supabase/functions/_shared/rushSettings/registry.drift.test.ts
+          supabase/functions/_shared/rushSettings/enterpriseReaders.test.ts
+          supabase/functions/delivery/maintenanceMiddleware.test.ts
+          supabase/functions/delivery/partnerAcceptDeadline.test.ts
+
       - name: Typecheck fleet Rush spine
         env:
           VITE_SUPABASE_URL: https://ci-placeholder.supabase.co

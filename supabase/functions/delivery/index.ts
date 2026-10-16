@@ -63,6 +63,8 @@ import {
   resolveAnalyticsDateRange,
   type OrderRow,
 } from "./analyticsSummary.ts";
+import { rushMaintenanceMiddleware } from "./maintenanceMiddleware.ts";
+import { enforcePartnerAcceptOnStatusChange } from "./partnerAcceptDeadline.ts";
 
 const app = new Hono().basePath("/delivery");
 
@@ -80,8 +82,12 @@ applyCors(app, {
     "Idempotency-Key",
     "X-Staff-Shift-Token",
     "X-Station-Device-Token",
+    "x-roam-app",
   ],
 });
+
+// Per-app maintenance (customer / courier / partner). Exempts admin, app-config, internal, health, webhooks.
+app.use("*", rushMaintenanceMiddleware());
 
 /** JWT-scoped client only — never falls back to service role (P0 audit fix). */
 function getSupabase(authHeader: string) {
@@ -1228,7 +1234,7 @@ app.put("/orders/:id/status", async (c) => {
 
     const { data: order, error: orderError } = await serviceSb
       .from("orders")
-      .select("status, merchant_id, channel, courier_id")
+      .select("status, merchant_id, channel, courier_id, placed_at")
       .eq("id", id)
       .single();
 
@@ -1252,6 +1258,20 @@ app.put("/orders/:id/status", async (c) => {
       });
       if (!result.ok) return c.json({ error: result.error }, result.status as 400);
       return c.json({ order: result.order, quote: result.quote });
+    }
+
+    const deadlineGate = await enforcePartnerAcceptOnStatusChange(serviceSb, {
+      orderId: id,
+      currentStatus: String(orderRow.status),
+      nextStatus: String(status),
+      placedAt: orderRow.placed_at != null ? String(orderRow.placed_at) : null,
+      actorId: device.deviceId,
+    });
+    if (!deadlineGate.ok) {
+      return c.json(
+        { error: deadlineGate.error, code: deadlineGate.code, order: deadlineGate.order },
+        deadlineGate.status,
+      );
     }
 
     const updateData: Record<string, unknown> = { status };
@@ -1341,11 +1361,22 @@ app.put("/orders/:id/status", async (c) => {
     }
 
     if (status === "delivered") {
+      const { getSetting } = await import("../_shared/rushSettings/getSetting.ts");
+      const photoProofRequired = await getSetting<boolean>("courier.delivery.photo_proof");
       const { data: payRow } = await serviceSb
         .from("orders")
-        .select("payment_status, cash_collected_minor")
+        .select("payment_status, cash_collected_minor, delivery_photo_url")
         .eq("id", id)
         .maybeSingle();
+      if (
+        photoProofRequired
+        && !(payRow as { delivery_photo_url?: string | null } | null)?.delivery_photo_url
+      ) {
+        return c.json({
+          error: "Delivery photo is required before completing this drop-off",
+          code: "photo_proof_required",
+        }, 400);
+      }
       if (
         String(payRow?.payment_status || "") === "pending_collection"
         && (payRow as { cash_collected_minor?: number | null } | null)?.cash_collected_minor == null
@@ -1428,7 +1459,7 @@ app.put("/orders/:id/status", async (c) => {
   // Get current order
   const { data: order, error: orderError } = await writer
     .from("orders")
-    .select("status, channel, courier_id, merchant_id")
+    .select("status, channel, courier_id, merchant_id, placed_at")
     .eq("id", id)
     .single();
   
@@ -1455,6 +1486,24 @@ app.put("/orders/:id/status", async (c) => {
     });
     if (!result.ok) return c.json({ error: result.error }, result.status as 400);
     return c.json({ order: result.order, quote: result.quote });
+  }
+
+  if (actorType === "merchant") {
+    const deadlineGate = await enforcePartnerAcceptOnStatusChange(serviceSb, {
+      orderId: id,
+      currentStatus: String((order as { status?: string }).status),
+      nextStatus: String(status),
+      placedAt: (order as { placed_at?: string | null }).placed_at != null
+        ? String((order as { placed_at: string }).placed_at)
+        : null,
+      actorId: user?.id ?? null,
+    });
+    if (!deadlineGate.ok) {
+      return c.json(
+        { error: deadlineGate.error, code: deadlineGate.code, order: deadlineGate.order },
+        deadlineGate.status,
+      );
+    }
   }
 
   // Update order
@@ -2939,6 +2988,8 @@ import { registerPricingAdminRoutes } from "./admin/pricingRoutes.ts";
 import { registerSupportAdminRoutes } from "./admin/supportRoutes.ts";
 import { registerOrderChatRoutes } from "./orderChat.ts";
 import { registerAdminOrderChatRoutes } from "./admin/orderChatRoutes.ts";
+import { registerAppConfigRoutes } from "./appConfigRoutes.ts";
+import { registerSettingsAdminRoutes } from "./admin/settingsRoutes.ts";
 registerCustomerOrderRoutes(app, { getSupabase, getServiceSupabase });
 registerMerchantChoiceRoutes(app, { getServiceSupabase, requireMerchant: requireMerchantForId });
 registerInHouseRoutes(app, { getServiceSupabase });
@@ -2978,6 +3029,20 @@ app.post("/internal/pricing/rush-pass/renew", async (c) => {
     return c.json({ error: e instanceof Error ? e.message : "rush_pass_renew_failed" }, 500);
   }
 });
+
+// Partner accept deadline — auto-reject stale placed orders when setting is on
+app.post("/internal/orders/auto-reject-stale", async (c) => {
+  const auth = await authorizeCronOrServiceRole(c.req.raw);
+  if (!auth.ok) return c.json({ error: auth.error }, auth.status);
+  try {
+    const { autoRejectStalePlacedOrders } = await import("./partnerAcceptDeadline.ts");
+    const result = await autoRejectStalePlacedOrders(getServiceSupabase());
+    return c.json(result);
+  } catch (e) {
+    return c.json({ error: e instanceof Error ? e.message : "auto_reject_failed" }, 500);
+  }
+});
+
 app.post("/internal/disputes/refresh-merchant-performance", async (c) => {
   const auth = await authorizeCronOrServiceRole(c.req.raw);
   if (!auth.ok) return c.json({ error: auth.error }, auth.status);
@@ -3000,10 +3065,66 @@ app.post("/internal/disputes/process-pending-refunds", async (c) => {
     return c.json({ error: e instanceof Error ? e.message : "pending_refunds_failed" }, 500);
   }
 });
+
+/** Cron stub — courier document expiry reminders (enterprise.courier.compliance). */
+app.post("/internal/courier/compliance-remind", async (c) => {
+  const auth = await authorizeCronOrServiceRole(c.req.raw);
+  if (!auth.ok) return c.json({ error: auth.error }, auth.status);
+  try {
+    const { getSetting } = await import("../_shared/rushSettings/getSetting.ts");
+    const compliance = await getSetting<{
+      remindDaysBeforeExpiry: number;
+      autoPauseOnExpiry: boolean;
+      reVerifyIdMonths: number;
+    }>("enterprise.courier.compliance");
+    const remindDays = Math.max(1, Number(compliance?.remindDaysBeforeExpiry) || 14);
+    const sb = getServiceSupabase();
+    const until = new Date();
+    until.setUTCDate(until.getUTCDate() + remindDays);
+    const untilYmd = until.toISOString().slice(0, 10);
+    const todayYmd = new Date().toISOString().slice(0, 10);
+
+    const { data: docs, error } = await sb
+      .from("courier_documents")
+      .select("user_id, doc_type, expiry_date, status")
+      .eq("status", "approved")
+      .gte("expiry_date", todayYmd)
+      .lte("expiry_date", untilYmd)
+      .limit(500);
+    if (error) return c.json({ error: error.message }, 500);
+
+    // Stub: log candidates; push/SMS fanout can plug in later
+    const candidates = (docs ?? []).map((d: {
+      user_id?: string;
+      doc_type?: string;
+      expiry_date?: string;
+    }) => ({
+      userId: d.user_id,
+      docType: d.doc_type,
+      expiryDate: d.expiry_date,
+    }));
+    console.log(JSON.stringify({
+      svc: "courier_compliance_remind",
+      remindDays,
+      count: candidates.length,
+    }));
+    return c.json({
+      ok: true,
+      remindDays,
+      autoPauseOnExpiry: Boolean(compliance?.autoPauseOnExpiry),
+      candidates,
+    });
+  } catch (e) {
+    return c.json({
+      error: e instanceof Error ? e.message : "compliance_remind_failed",
+    }, 500);
+  }
+});
 registerCustomerDiscoveryRoutes(app, { getServiceSupabase, getSupabase });
 registerMerchantSupportRoutes(app, { getSupabase, getServiceSupabase });
 registerCourierConsumerRoutes(app, { getSupabase, getServiceSupabase });
 registerDashHealthRoutes(app, { getServiceSupabase });
+registerAppConfigRoutes(app, { getServiceSupabase });
 registerBankPayoutRoutes(app, { getSupabase });
 registerMerchantApplicationRoutes(app);
 registerMerchantAssetsRoutes(app);
@@ -3025,6 +3146,7 @@ registerOpsAdminRoutes(app);
 registerConsoleAdminRoutes(app);
 registerPricingAdminRoutes(app);
 registerSupportAdminRoutes(app);
+registerSettingsAdminRoutes(app);
 registerPublicGeoRoutes(app, { getServiceSupabase });
 
 Deno.serve(app.fetch);

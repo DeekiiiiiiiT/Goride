@@ -337,7 +337,7 @@ export function CourierConsumerApp() {
     return (
       <AccountPendingPage
         onLogOut={() => void handleSignOut()}
-        onContactSupport={() => window.open('mailto:support@roam.app', '_blank')}
+        onContactSupport={() => window.open('mailto:couriers@roamrush.app', '_blank')}
         onApproved={finishOnboarding}
       />
     );

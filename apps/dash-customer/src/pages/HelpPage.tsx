@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { SupportContact, useAppConfig } from '@roam/rush-app-config';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
 import {
   FAQ_ITEMS,
@@ -22,6 +23,8 @@ const TOPIC_CTA: Record<
 };
 
 export default function HelpPage({ onNavigate }: Props) {
+  const config = useAppConfig('customer');
+  const supportEmail = config.support.email || 'help@roamrush.app';
   const [query, setQuery] = useState('');
   const [topic, setTopic] = useState<HelpTopicId | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
@@ -120,10 +123,11 @@ export default function HelpPage({ onNavigate }: Props) {
         </section>
 
         <section className="flex flex-col items-center gap-3 text-center mt-8">
+          <SupportContact app="customer" className="mb-2 text-center text-body-sm text-on-surface-variant" />
           <p className="text-body-sm text-on-surface-variant">
             {topic === 'safety'
               ? 'If you are in immediate danger, call local emergency services first.'
-              : 'Still need help? Report a problem from a real order.'}
+              : `Still need help? Email ${supportEmail} or report a problem from a real order.`}
           </p>
           {cta?.extra ? (
             <button

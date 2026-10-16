@@ -184,8 +184,9 @@ export async function cancelOrder(
     });
   }
 
-  const { data: walletFlag } = await publicJournalClient().schema("rush_money").from("runtime_flags").select("enabled").eq("key", "wallet_live").maybeSingle();
-  if (quote.customerDebtJmd > 0 && order.customer_id && walletFlag?.enabled) {
+  const { getSetting } = await import("../../_shared/rushSettings/getSetting.ts");
+  const walletLive = await getSetting<boolean>("customer.payment.wallet");
+  if (quote.customerDebtJmd > 0 && order.customer_id && walletLive) {
     await postRushJournal(books, {
       ...journalBase,
       p_idempotency_key: `cancel-debt:${input.orderId}`,

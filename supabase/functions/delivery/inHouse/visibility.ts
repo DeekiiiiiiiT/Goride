@@ -1,4 +1,4 @@
-import { getFlag } from "../../_shared/featureFlags.ts";
+import { getSetting } from "../../_shared/rushSettings/getSetting.ts";
 import { audienceAllows } from "./deskRules.ts";
 import { DESK_FRESH_MS, storeOpenNow, type WeekHourRow } from "./pricing.ts";
 
@@ -25,7 +25,7 @@ export type InHouseStoreRow = {
 };
 
 export async function inHouseGloballyEnabled(): Promise<boolean> {
-  return await getFlag("IN_HOUSE_ENABLED", false);
+  return await getSetting<boolean>("customer.in_house.enabled");
 }
 
 export async function deskIsStaffed(sb: Sb, now = Date.now()): Promise<boolean> {

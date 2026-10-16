@@ -143,7 +143,7 @@ export default function AccountPendingPage({ onSignOut }: AccountPendingPageProp
 
           <div className="mt-auto flex w-full flex-col gap-4">
             <a
-              href="mailto:support@roamdash.com"
+              href="mailto:partners@roamrush.app"
               className="flex h-12 w-full items-center justify-center rounded-lg border-2 border-secondary text-label-md font-semibold text-secondary transition-colors duration-150 hover:bg-surface-container-low active:scale-95"
             >
               Contact Support

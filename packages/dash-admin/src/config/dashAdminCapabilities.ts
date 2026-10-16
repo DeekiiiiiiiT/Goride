@@ -58,7 +58,7 @@ const OPS: Record<DashCapability, CapabilityAccess> = {
   promotions: 'none',
   team: 'none',
   audit: 'none',
-  settings: 'none',
+  settings: 'read',
 };
 
 const COURIER: Record<DashCapability, CapabilityAccess> = {
@@ -77,7 +77,7 @@ const COURIER: Record<DashCapability, CapabilityAccess> = {
   promotions: 'none',
   team: 'write',
   audit: 'read',
-  settings: 'none',
+  settings: 'read',
 };
 
 const CONCIERGE: Record<DashCapability, CapabilityAccess> = {
@@ -115,7 +115,7 @@ const SUPPORT: Record<DashCapability, CapabilityAccess> = {
   promotions: 'none',
   team: 'none',
   audit: 'none',
-  settings: 'none',
+  settings: 'read',
 };
 
 const ANALYST: Record<DashCapability, CapabilityAccess> = {
@@ -134,7 +134,7 @@ const ANALYST: Record<DashCapability, CapabilityAccess> = {
   promotions: 'read',
   team: 'none',
   audit: 'read',
-  settings: 'none',
+  settings: 'read',
 };
 
 export const CAPABILITY_MATRIX: Record<string, Record<DashCapability, CapabilityAccess>> = {

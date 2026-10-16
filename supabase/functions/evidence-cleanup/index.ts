@@ -1,15 +1,26 @@
 /**
  * Daily purge of expired ephemeral scan evidence.
  * Invoke via Supabase cron or: POST .../internal/evidence-cleanup with X-Fleet-Cron-Secret
+ * Retention days from enterprise.privacy.retention.deliveryPhotosDays (reader).
  */
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import * as kv from "../_fleet-server/kv_store.tsx";
 import { runEvidenceCleanup } from "../_fleet-server/evidence_storage.ts";
 import { requireInternalSecret } from "../_shared/requireInternalSecret.ts";
+import { getSetting } from "../_shared/rushSettings/getSetting.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-fleet-cron-secret, x-rides-cron-secret",
+};
+
+type DataRetention = {
+  deliveryPhotosDays: number;
+  chatDays: number;
+  gpsTrailDays: number;
+  receiptsDays: number;
+  exportRoles: string[];
+  dataRequestEmail: string;
 };
 
 Deno.serve(async (req) => {
@@ -38,8 +49,17 @@ Deno.serve(async (req) => {
   );
 
   try {
+    const retention = await getSetting<DataRetention>("enterprise.privacy.retention", {
+      supabase,
+    });
+    const retentionDays = Math.max(1, Number(retention?.deliveryPhotosDays) || 90);
     const result = await runEvidenceCleanup(supabase, kv, { dryRun });
-    return new Response(JSON.stringify({ success: true, ...result }), {
+    return new Response(JSON.stringify({
+      success: true,
+      ...result,
+      retentionDays,
+      retentionSource: "enterprise.privacy.retention",
+    }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {

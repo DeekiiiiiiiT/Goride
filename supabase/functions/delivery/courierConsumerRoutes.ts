@@ -69,6 +69,46 @@ async function requireActiveCourier(
   return { ok: true };
 }
 
+type CourierCompliance = {
+  remindDaysBeforeExpiry: number;
+  autoPauseOnExpiry: boolean;
+  reVerifyIdMonths: number;
+};
+
+/** When autoPauseOnExpiry and an approved doc is past expiry_date — block go-online. */
+async function assertCourierDocumentsNotExpired(
+  serviceSb: Sb,
+  userId: string,
+): Promise<Response | null> {
+  const { getSetting } = await import("../_shared/rushSettings/getSetting.ts");
+  const compliance = await getSetting<CourierCompliance>("enterprise.courier.compliance", {
+    supabase: serviceSb as never,
+  });
+  if (!compliance?.autoPauseOnExpiry) return null;
+
+  const today = new Date().toISOString().slice(0, 10);
+  const { data: docs } = await serviceSb
+    .from("courier_documents")
+    .select("doc_type, status, expiry_date")
+    .eq("user_id", userId)
+    .eq("status", "approved");
+
+  const expired = (docs ?? []).filter((d: { expiry_date?: string | null }) => {
+    const exp = d.expiry_date ? String(d.expiry_date).slice(0, 10) : "";
+    return exp && exp < today;
+  });
+  if (expired.length === 0) return null;
+
+  const types = expired.map((d: { doc_type?: string }) => d.doc_type || "document").join(", ");
+  return new Response(
+    JSON.stringify({
+      error: `Document(s) expired: ${types}. Upload renewed documents to go online.`,
+      code: "courier_document_expired",
+    }),
+    { status: 403, headers: { "Content-Type": "application/json" } },
+  );
+}
+
 /** Haversine distance in km */
 function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
   const toRad = (d: number) => (d * Math.PI) / 180;
@@ -81,10 +121,28 @@ function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): nu
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-const DISPATCH_RADIUS_KM = Number(Deno.env.get("COURIER_DISPATCH_RADIUS_KM") || 12);
-const DISPATCH_MAX_OFFERS = Number(Deno.env.get("COURIER_DISPATCH_MAX_OFFERS") || 15);
-const DISPATCH_OFFER_TTL_MS = Number(Deno.env.get("COURIER_DISPATCH_OFFER_TTL_MS") || 90_000);
 const STACK_CAPACITY = 2;
+
+async function dispatchSettings(): Promise<{
+  radiusKm: number;
+  maxOffers: number;
+  offerTtlMs: number;
+  h3Matching: boolean;
+}> {
+  const { getSetting } = await import("../_shared/rushSettings/getSetting.ts");
+  const [radiusKm, maxOffers, offerTtlSec, h3Matching] = await Promise.all([
+    getSetting<number>("courier.dispatch.radius_km"),
+    getSetting<number>("courier.dispatch.max_offers"),
+    getSetting<number>("courier.dispatch.offer_ttl_seconds"),
+    getSetting<boolean>("courier.dispatch.h3_matching"),
+  ]);
+  return {
+    radiusKm,
+    maxOffers,
+    offerTtlMs: Math.max(1, Math.round(offerTtlSec)) * 1000,
+    h3Matching,
+  };
+}
 
 async function activeStackCount(serviceSb: Sb, courierId: string): Promise<number> {
   const { count } = await serviceSb
@@ -277,7 +335,8 @@ async function dispatchOffersForOrder(
   const originLat = origin?.lat ?? Number.NaN;
   const originLng = origin?.lng ?? Number.NaN;
 
-  const useH3 = (await import("../_shared/h3/geoIndex.ts")).isRushH3DispatchEnabled();
+  const dispatch = await dispatchSettings();
+  const useH3 = dispatch.h3Matching;
   let online: Array<{
     driver_id: string;
     current_lat: number | null;
@@ -296,7 +355,7 @@ async function dispatchOffersForOrder(
         h3Disk,
         kRingForRadiusKmWithMargin,
       } = await import("../_shared/h3/geoIndex.ts");
-      const k = kRingForRadiusKmWithMargin(DISPATCH_RADIUS_KM, DEFAULT_H3_RESOLUTION);
+      const k = kRingForRadiusKmWithMargin(dispatch.radiusKm, DEFAULT_H3_RESOLUTION);
       const cells = h3Disk(originLat, originLng, k, DEFAULT_H3_RESOLUTION);
       cellsQueried = cells.length;
       const { data: rpcRows, error: rpcErr } = await serviceSb.rpc("delivery_couriers_in_h3_cells", {
@@ -368,12 +427,12 @@ async function dispatchOffersForOrder(
     }
     if (!Number.isFinite(lat) || !Number.isFinite(lng)) continue;
     const km = haversineKm(originLat, originLng, lat, lng);
-    if (km <= DISPATCH_RADIUS_KM) {
+    if (km <= dispatch.radiusKm) {
       ranked.push({ driver_id: row.driver_id, km });
     }
   }
   ranked.sort((a, b) => a.km - b.km);
-  const targets = ranked.slice(0, DISPATCH_MAX_OFFERS);
+  const targets = ranked.slice(0, dispatch.maxOffers);
 
   console.log(JSON.stringify({
     svc: "delivery",
@@ -389,7 +448,7 @@ async function dispatchOffersForOrder(
     fresh_since: freshSince,
   }));
 
-  const expiresAt = new Date(Date.now() + DISPATCH_OFFER_TTL_MS).toISOString();
+  const expiresAt = new Date(Date.now() + dispatch.offerTtlMs).toISOString();
   let created = 0;
   for (const row of targets) {
     const { error } = await serviceSb.from("courier_offers").upsert(
@@ -520,6 +579,9 @@ export function registerCourierConsumerRoutes(app: Hono, deps: Deps) {
           gate.status,
         );
       }
+      // enterprise.courier.compliance — refuse go-online when docs expired
+      const complianceBlock = await assertCourierDocumentsNotExpired(serviceSb, auth.userId);
+      if (complianceBlock) return complianceBlock;
     }
 
     const { upsertCourierPresence } = await import("./courierPresence.ts");
@@ -758,7 +820,8 @@ export function registerCourierConsumerRoutes(app: Hono, deps: Deps) {
     return c.json({ ok: true, reason: body.reasonId ?? null });
   });
 
-  // Age-verify / POD / pickup photo evidence
+  // Age-verify / POD / pickup photo evidence.
+  // courier.delivery.photo_proof: when true, status→delivered also requires delivery_photo_url (see index.ts).
   app.post("/orders/:id/courier-proof", async (c) => {
     const auth = await requireCourierUser(c.req.header("Authorization"), getSupabase);
     if (auth instanceof Response) return auth;
@@ -1255,6 +1318,34 @@ export function registerCourierConsumerRoutes(app: Hono, deps: Deps) {
       return c.json({ error: "settings object required" }, 400);
     }
     const serviceSb = getServiceSupabase();
+    const { getSetting } = await import("../_shared/rushSettings/getSetting.ts");
+    const signupMode = await getSetting<"open" | "invite_or_fleet" | "closed">(
+      "courier.signup.mode",
+    );
+    const { data: profileGate } = await serviceSb
+      .from("courier_profiles")
+      .select("status, onboarding_complete, mode, fleet_id")
+      .eq("user_id", auth.userId)
+      .maybeSingle();
+    const onboarded =
+      profileGate?.onboarding_complete === true || profileGate?.status === "active";
+    if (!onboarded && signupMode === "closed") {
+      return c.json({
+        error: "Courier signup is currently closed",
+        code: "signup_closed",
+      }, 403);
+    }
+    if (
+      !onboarded
+      && signupMode === "invite_or_fleet"
+      && profileGate?.mode !== "fleet"
+      && !profileGate?.fleet_id
+    ) {
+      return c.json({
+        error: "Courier signup requires an invite or fleet membership",
+        code: "signup_invite_required",
+      }, 403);
+    }
     const { data: existing } = await serviceSb
       .from("courier_profiles")
       .select("app_settings")

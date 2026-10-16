@@ -1,0 +1,766 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`rush-settings registry snapshot > matches keys, defaults, clientVisible, and risk 1`] = `
+[
+  {
+    "clientVisible": true,
+    "default": "Roam Rush",
+    "key": "platform.brand.name.customer",
+    "risk": "normal",
+  },
+  {
+    "clientVisible": true,
+    "default": "Roam Rush Courier",
+    "key": "platform.brand.name.courier",
+    "risk": "normal",
+  },
+  {
+    "clientVisible": true,
+    "default": "Roam Partner",
+    "key": "platform.brand.name.partner",
+    "risk": "normal",
+  },
+  {
+    "clientVisible": true,
+    "default": {
+      "email": "help@roamrush.app",
+      "hours": "8am–10pm",
+      "phone": "",
+      "whatsapp": "",
+    },
+    "key": "platform.support.customer",
+    "risk": "normal",
+  },
+  {
+    "clientVisible": true,
+    "default": {
+      "email": "couriers@roamrush.app",
+      "hours": "8am–10pm",
+      "phone": "",
+      "whatsapp": "",
+    },
+    "key": "platform.support.courier",
+    "risk": "normal",
+  },
+  {
+    "clientVisible": true,
+    "default": {
+      "email": "partners@roamrush.app",
+      "hours": "8am–10pm",
+      "phone": "",
+      "whatsapp": "",
+    },
+    "key": "platform.support.partner",
+    "risk": "normal",
+  },
+  {
+    "clientVisible": true,
+    "default": "https://roamrush.app/terms",
+    "key": "platform.legal.terms.customer",
+    "risk": "normal",
+  },
+  {
+    "clientVisible": true,
+    "default": "https://roamrush.app/privacy",
+    "key": "platform.legal.privacy.customer",
+    "risk": "normal",
+  },
+  {
+    "clientVisible": true,
+    "default": "https://roamrush.app/terms",
+    "key": "platform.legal.terms.courier",
+    "risk": "normal",
+  },
+  {
+    "clientVisible": true,
+    "default": "https://roamrush.app/privacy",
+    "key": "platform.legal.privacy.courier",
+    "risk": "normal",
+  },
+  {
+    "clientVisible": true,
+    "default": "https://roamrush.app/terms",
+    "key": "platform.legal.terms.partner",
+    "risk": "normal",
+  },
+  {
+    "clientVisible": true,
+    "default": "https://roamrush.app/privacy",
+    "key": "platform.legal.privacy.partner",
+    "risk": "normal",
+  },
+  {
+    "clientVisible": true,
+    "default": {
+      "active": false,
+      "message": "",
+      "until": null,
+    },
+    "key": "platform.maintenance.customer",
+    "risk": "high",
+  },
+  {
+    "clientVisible": true,
+    "default": {
+      "active": false,
+      "message": "",
+      "until": null,
+    },
+    "key": "platform.maintenance.courier",
+    "risk": "high",
+  },
+  {
+    "clientVisible": true,
+    "default": {
+      "active": false,
+      "message": "",
+      "until": null,
+    },
+    "key": "platform.maintenance.partner",
+    "risk": "high",
+  },
+  {
+    "clientVisible": true,
+    "default": [],
+    "key": "platform.announcement.customer",
+    "risk": "normal",
+  },
+  {
+    "clientVisible": true,
+    "default": [],
+    "key": "platform.announcement.courier",
+    "risk": "normal",
+  },
+  {
+    "clientVisible": true,
+    "default": [],
+    "key": "platform.announcement.partner",
+    "risk": "normal",
+  },
+  {
+    "clientVisible": true,
+    "default": {
+      "minVersion": "0.0.0",
+      "recommendedVersion": "0.1.0",
+    },
+    "key": "platform.app_version.customer.android",
+    "risk": "high",
+  },
+  {
+    "clientVisible": true,
+    "default": {
+      "minVersion": "0.0.0",
+      "recommendedVersion": "0.1.0",
+    },
+    "key": "platform.app_version.customer.ios",
+    "risk": "high",
+  },
+  {
+    "clientVisible": true,
+    "default": {
+      "minVersion": "0.0.0",
+      "recommendedVersion": "0.1.0",
+    },
+    "key": "platform.app_version.customer.web",
+    "risk": "high",
+  },
+  {
+    "clientVisible": true,
+    "default": {
+      "minVersion": "0.0.0",
+      "recommendedVersion": "0.1.0",
+    },
+    "key": "platform.app_version.courier.android",
+    "risk": "high",
+  },
+  {
+    "clientVisible": true,
+    "default": {
+      "minVersion": "0.0.0",
+      "recommendedVersion": "0.1.0",
+    },
+    "key": "platform.app_version.courier.ios",
+    "risk": "high",
+  },
+  {
+    "clientVisible": true,
+    "default": {
+      "minVersion": "0.0.0",
+      "recommendedVersion": "0.1.0",
+    },
+    "key": "platform.app_version.courier.web",
+    "risk": "high",
+  },
+  {
+    "clientVisible": true,
+    "default": {
+      "minVersion": "0.0.0",
+      "recommendedVersion": "0.1.0",
+    },
+    "key": "platform.app_version.partner.android",
+    "risk": "high",
+  },
+  {
+    "clientVisible": true,
+    "default": {
+      "minVersion": "0.0.0",
+      "recommendedVersion": "0.1.0",
+    },
+    "key": "platform.app_version.partner.ios",
+    "risk": "high",
+  },
+  {
+    "clientVisible": true,
+    "default": {
+      "minVersion": "0.0.0",
+      "recommendedVersion": "0.1.0",
+    },
+    "key": "platform.app_version.partner.web",
+    "risk": "high",
+  },
+  {
+    "clientVisible": true,
+    "default": {
+      "appStore": "",
+      "playStore": "",
+    },
+    "key": "platform.store_links.customer",
+    "risk": "normal",
+  },
+  {
+    "clientVisible": true,
+    "default": {
+      "appStore": "",
+      "playStore": "",
+    },
+    "key": "platform.store_links.courier",
+    "risk": "normal",
+  },
+  {
+    "clientVisible": true,
+    "default": {
+      "appStore": "",
+      "playStore": "",
+    },
+    "key": "platform.store_links.partner",
+    "risk": "normal",
+  },
+  {
+    "clientVisible": true,
+    "default": {
+      "currency": "JMD",
+      "timeZone": "America/Jamaica",
+    },
+    "key": "platform.locale",
+    "risk": "locked",
+  },
+  {
+    "clientVisible": false,
+    "default": {
+      "mfaRequiredRoles": [
+        "platform_owner",
+        "dash_admin",
+        "courier_admin",
+        "identity_admin",
+        "superadmin",
+      ],
+      "sessionTimeoutMinutes": 0,
+    },
+    "key": "platform.staff_security",
+    "risk": "locked",
+  },
+  {
+    "clientVisible": false,
+    "default": {
+      "end": "08:00",
+      "start": "21:00",
+    },
+    "key": "platform.notifications.quiet_hours",
+    "risk": "normal",
+  },
+  {
+    "clientVisible": true,
+    "default": true,
+    "key": "customer.ordering.enabled",
+    "risk": "high",
+  },
+  {
+    "clientVisible": true,
+    "default": false,
+    "key": "customer.payment.cash_on_delivery",
+    "risk": "high",
+  },
+  {
+    "clientVisible": true,
+    "default": true,
+    "key": "customer.payment.card",
+    "risk": "high",
+  },
+  {
+    "clientVisible": true,
+    "default": true,
+    "key": "customer.payment.wallet",
+    "risk": "high",
+  },
+  {
+    "clientVisible": true,
+    "default": {
+      "enabled": false,
+      "maxDaysAhead": 7,
+    },
+    "key": "customer.ordering.scheduled",
+    "risk": "normal",
+  },
+  {
+    "clientVisible": true,
+    "default": true,
+    "key": "customer.ordering.pickup",
+    "risk": "normal",
+  },
+  {
+    "clientVisible": true,
+    "default": 60,
+    "key": "customer.ordering.cancel_window_seconds",
+    "risk": "normal",
+  },
+  {
+    "clientVisible": true,
+    "default": [
+      50,
+      100,
+      150,
+      200,
+    ],
+    "key": "customer.tips.presets_jmd",
+    "risk": "normal",
+  },
+  {
+    "clientVisible": true,
+    "default": -1,
+    "key": "customer.tips.default_index",
+    "risk": "normal",
+  },
+  {
+    "clientVisible": true,
+    "default": 24,
+    "key": "customer.issues.report_window_hours",
+    "risk": "normal",
+  },
+  {
+    "clientVisible": false,
+    "default": true,
+    "key": "customer.refunds.auto_resolution",
+    "risk": "high",
+  },
+  {
+    "clientVisible": false,
+    "default": 4000,
+    "key": "customer.refunds.auto_max_jmd",
+    "risk": "high",
+  },
+  {
+    "clientVisible": true,
+    "default": 72,
+    "key": "customer.ratings.window_hours",
+    "risk": "normal",
+  },
+  {
+    "clientVisible": false,
+    "default": false,
+    "key": "customer.in_house.enabled",
+    "risk": "high",
+  },
+  {
+    "clientVisible": false,
+    "default": true,
+    "key": "money.device_linking",
+    "risk": "high",
+  },
+  {
+    "clientVisible": false,
+    "default": true,
+    "key": "money.payout_export",
+    "risk": "high",
+  },
+  {
+    "clientVisible": false,
+    "default": true,
+    "key": "money.risk_controls",
+    "risk": "high",
+  },
+  {
+    "clientVisible": true,
+    "default": "open",
+    "key": "courier.signup.mode",
+    "risk": "normal",
+  },
+  {
+    "clientVisible": true,
+    "default": [
+      "bicycle",
+      "motorcycle",
+      "car",
+    ],
+    "key": "courier.signup.vehicle_types",
+    "risk": "normal",
+  },
+  {
+    "clientVisible": true,
+    "default": [
+      {
+        "docType": "drivers_license",
+        "expiryRequired": true,
+        "name": "Driver's licence",
+        "required": true,
+        "sides": "single",
+        "vehicleTypes": [
+          "bicycle",
+          "motorcycle",
+          "car",
+        ],
+      },
+      {
+        "docType": "insurance",
+        "expiryRequired": true,
+        "name": "Vehicle insurance",
+        "required": true,
+        "sides": "single",
+        "vehicleTypes": [
+          "motorcycle",
+          "car",
+        ],
+      },
+      {
+        "docType": "background_check",
+        "expiryRequired": false,
+        "name": "Background check",
+        "required": false,
+        "sides": "single",
+        "vehicleTypes": [
+          "bicycle",
+          "motorcycle",
+          "car",
+        ],
+      },
+    ],
+    "key": "courier.signup.required_documents",
+    "risk": "high",
+  },
+  {
+    "clientVisible": true,
+    "default": 18,
+    "key": "courier.signup.min_age",
+    "risk": "normal",
+  },
+  {
+    "clientVisible": false,
+    "default": 12,
+    "key": "courier.dispatch.radius_km",
+    "risk": "normal",
+  },
+  {
+    "clientVisible": true,
+    "default": 90,
+    "key": "courier.dispatch.offer_ttl_seconds",
+    "risk": "normal",
+  },
+  {
+    "clientVisible": false,
+    "default": 15,
+    "key": "courier.dispatch.max_offers",
+    "risk": "normal",
+  },
+  {
+    "clientVisible": false,
+    "default": true,
+    "key": "courier.dispatch.h3_matching",
+    "risk": "high",
+  },
+  {
+    "clientVisible": true,
+    "default": false,
+    "key": "courier.delivery.photo_proof",
+    "risk": "normal",
+  },
+  {
+    "clientVisible": true,
+    "default": 0,
+    "key": "courier.delivery.pin_required_over_jmd",
+    "risk": "normal",
+  },
+  {
+    "clientVisible": true,
+    "default": 10,
+    "key": "courier.delivery.wait_grace_minutes",
+    "risk": "normal",
+  },
+  {
+    "clientVisible": false,
+    "default": true,
+    "key": "courier.cash.remittance_enabled",
+    "risk": "high",
+  },
+  {
+    "clientVisible": true,
+    "default": "open",
+    "key": "partner.signup.mode",
+    "risk": "normal",
+  },
+  {
+    "clientVisible": false,
+    "default": true,
+    "key": "partner.signup.require_approval",
+    "risk": "high",
+  },
+  {
+    "clientVisible": true,
+    "default": 270,
+    "key": "partner.orders.accept_deadline_seconds",
+    "risk": "normal",
+  },
+  {
+    "clientVisible": false,
+    "default": false,
+    "key": "partner.orders.auto_reject_after_deadline",
+    "risk": "high",
+  },
+  {
+    "clientVisible": false,
+    "default": 45,
+    "key": "partner.orders.stuck_alert_minutes",
+    "risk": "normal",
+  },
+  {
+    "clientVisible": false,
+    "default": 25,
+    "key": "partner.menu.price_change_review_pct",
+    "risk": "normal",
+  },
+  {
+    "clientVisible": true,
+    "default": 5,
+    "key": "partner.performance.min_orders_for_warning",
+    "risk": "normal",
+  },
+  {
+    "clientVisible": true,
+    "default": {
+      "friday": {
+        "close": "23:00",
+        "closed": false,
+        "open": "07:00",
+      },
+      "monday": {
+        "close": "23:00",
+        "closed": false,
+        "open": "07:00",
+      },
+      "outsideHoursMessage": "Roam Rush is closed right now. Please try again during service hours.",
+      "saturday": {
+        "close": "23:00",
+        "closed": false,
+        "open": "07:00",
+      },
+      "sunday": {
+        "close": "23:00",
+        "closed": false,
+        "open": "07:00",
+      },
+      "thursday": {
+        "close": "23:00",
+        "closed": false,
+        "open": "07:00",
+      },
+      "tuesday": {
+        "close": "23:00",
+        "closed": false,
+        "open": "07:00",
+      },
+      "wednesday": {
+        "close": "23:00",
+        "closed": false,
+        "open": "07:00",
+      },
+    },
+    "key": "enterprise.hours.service",
+    "risk": "normal",
+  },
+  {
+    "clientVisible": true,
+    "default": [],
+    "key": "enterprise.hours.holidays",
+    "risk": "normal",
+  },
+  {
+    "clientVisible": true,
+    "default": {
+      "active": false,
+      "autoEndAt": null,
+      "bannerMessage": "We're busier than usual — times may be longer.",
+      "extraEtaMinutes": 0,
+      "pauseNewRestaurants": false,
+    },
+    "key": "enterprise.busy_mode",
+    "risk": "high",
+  },
+  {
+    "clientVisible": false,
+    "default": {
+      "cancelled": [
+        "push",
+        "sms",
+      ],
+      "courierAssigned": [
+        "push",
+        "sms",
+      ],
+      "delivered": [
+        "push",
+      ],
+      "orderAccepted": [
+        "push",
+      ],
+      "orderPlaced": [
+        "push",
+      ],
+      "outForDelivery": [
+        "push",
+      ],
+    },
+    "key": "enterprise.notifications.channels",
+    "risk": "normal",
+  },
+  {
+    "clientVisible": false,
+    "default": "Roam Rush",
+    "key": "enterprise.notifications.sender_name",
+    "risk": "normal",
+  },
+  {
+    "clientVisible": false,
+    "default": [
+      {
+        "body": "Order {order_number} received. We will update you soon.",
+        "channel": "push",
+        "key": "order_placed",
+      },
+      {
+        "body": "A courier is on the way for order {order_number}. ETA {eta}.",
+        "channel": "sms",
+        "key": "courier_assigned",
+      },
+      {
+        "body": "Order {order_number} was delivered. Enjoy!",
+        "channel": "push",
+        "key": "delivered",
+      },
+    ],
+    "key": "enterprise.notifications.templates",
+    "risk": "normal",
+  },
+  {
+    "clientVisible": true,
+    "default": {
+      "deletionGraceDays": 14,
+      "maxDevicesPerAccount": 5,
+      "minimumAge": 18,
+      "phoneCodeMaxAttempts": 5,
+      "phoneCodeResendWaitSeconds": 60,
+      "selfServiceDeletionEnabled": true,
+    },
+    "key": "enterprise.accounts.limits",
+    "risk": "high",
+  },
+  {
+    "clientVisible": false,
+    "default": {
+      "chatDays": 365,
+      "dataRequestEmail": "help@roamrush.app",
+      "deliveryPhotosDays": 90,
+      "exportRoles": [
+        "platform_owner",
+        "superadmin",
+        "dash_admin",
+      ],
+      "gpsTrailDays": 30,
+      "receiptsDays": 2555,
+    },
+    "key": "enterprise.privacy.retention",
+    "risk": "locked",
+  },
+  {
+    "clientVisible": true,
+    "default": {
+      "autoPauseOnExpiry": true,
+      "reVerifyIdMonths": 12,
+      "remindDaysBeforeExpiry": 14,
+    },
+    "key": "enterprise.courier.compliance",
+    "risk": "high",
+  },
+  {
+    "clientVisible": true,
+    "default": {
+      "alertRepeatSeconds": 15,
+      "alertSound": "default",
+      "autoPrintOnAccept": false,
+      "printerPaperWidthMm": 80,
+      "tabletStayAwake": true,
+    },
+    "key": "enterprise.partner.devices",
+    "risk": "normal",
+  },
+  {
+    "clientVisible": true,
+    "default": {
+      "betaUserIds": [],
+      "mode": "on",
+      "percent": 100,
+    },
+    "key": "enterprise.rollouts.customer",
+    "risk": "high",
+  },
+  {
+    "clientVisible": true,
+    "default": {
+      "betaUserIds": [],
+      "mode": "on",
+      "percent": 100,
+    },
+    "key": "enterprise.rollouts.courier",
+    "risk": "high",
+  },
+  {
+    "clientVisible": true,
+    "default": {
+      "betaUserIds": [],
+      "mode": "on",
+      "percent": 100,
+    },
+    "key": "enterprise.rollouts.partner",
+    "risk": "high",
+  },
+  {
+    "clientVisible": false,
+    "default": {
+      "lastSuccessAt": null,
+      "maps": "unknown",
+      "maskedKeyHint": "",
+      "payments": "unknown",
+      "push": "unknown",
+      "sms": "unknown",
+    },
+    "key": "enterprise.integrations.status",
+    "risk": "locked",
+  },
+  {
+    "clientVisible": false,
+    "default": {
+      "exportEnabled": false,
+      "importEnabled": false,
+    },
+    "key": "enterprise.settings.export_import",
+    "risk": "locked",
+  },
+]
+`;

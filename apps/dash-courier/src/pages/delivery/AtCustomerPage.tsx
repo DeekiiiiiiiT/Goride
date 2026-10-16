@@ -1,4 +1,5 @@
 import React, { useRef, useState } from 'react';
+import { useAppConfig } from '@roam/rush-app-config';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
 import type { ActiveDelivery, DropoffMethod } from '@/lib/mockActiveDelivery';
 import { CUSTOMER_AVATAR } from '@/lib/mockActiveDelivery';
@@ -22,6 +23,8 @@ export function AtCustomerPage({
   onCustomerUnavailable,
   onHelpClick,
 }: AtCustomerPageProps) {
+  const appConfig = useAppConfig('courier');
+  const photoProofRequired = Boolean(appConfig.settings['courier.delivery.photo_proof']);
   const handoff = parseDeliveryHandoff(delivery.deliveryInstructions);
   const [method, setMethod] = useState<DropoffMethod>(
     handoff.mode === 'hand' ? 'hand-to-customer' : 'leave-at-door',
@@ -35,8 +38,11 @@ export function AtCustomerPage({
   const customerPhone = toDialablePhone(delivery.customerPhone);
   const instructionText = (delivery.deliveryInstructions || '').trim() || 'No special instructions';
   const unit = (delivery.unit || '').trim();
+  const showPhotoProof = photoProofRequired || method === 'leave-at-door';
 
-  const canComplete = method === 'hand-to-customer' || hasPhoto;
+  const canComplete = photoProofRequired
+    ? hasPhoto
+    : method === 'hand-to-customer' || hasPhoto;
 
   return (
     <div className="fixed inset-0 z-[60] bg-background flex flex-col overflow-hidden">
@@ -200,10 +206,11 @@ export function AtCustomerPage({
           </div>
         </section>
 
-        {method === 'leave-at-door' && (
+        {showPhotoProof && (
           <section className="flex flex-col gap-3">
             <h3 className="text-xs font-semibold uppercase tracking-widest text-muted px-1">
               Proof of Delivery
+              {photoProofRequired ? ' (required)' : ''}
             </h3>
             <input
               ref={fileInputRef}
@@ -240,7 +247,13 @@ export function AtCustomerPage({
                 <MaterialIcon name={hasPhoto ? 'check_circle' : 'photo_camera'} className="text-[28px]" />
               </div>
               <span className="text-sm font-medium">
-                {uploading ? 'Uploading…' : hasPhoto ? 'Photo captured' : 'Take photo of order at door'}
+                {uploading
+                  ? 'Uploading…'
+                  : hasPhoto
+                    ? 'Photo captured'
+                    : photoProofRequired
+                      ? 'Take photo of delivered order'
+                      : 'Take photo of order at door'}
               </span>
             </button>
           </section>

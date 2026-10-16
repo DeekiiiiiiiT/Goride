@@ -285,8 +285,15 @@ export function registerCustomerDiscoveryRoutes(app: Hono, deps: CustomerDiscove
 
     const { resolveDeliveryFee, haversineKm, roundDistanceKm } = await import("../_shared/dashPricing.ts");
     const { resolvePricingLayers } = await import("./pricingLayers.ts");
+    const { applyBusyEtaMinutes, getResolvedBusyMode } = await import(
+      "../_shared/rushSettings/enterpriseReaders.ts"
+    );
     const layered = await resolvePricingLayers(serviceSb, {
       marketId: pin.parishBoundaryMode ? pin.marketIds[0] ?? null : pin.marketId,
+    });
+    const busyMode = await getResolvedBusyMode({
+      marketId: pin.parishBoundaryMode ? pin.marketIds[0] ?? null : pin.marketId,
+      supabase: serviceSb,
     });
     const pinLat = Number(lat);
     const pinLng = Number(lng);
@@ -325,6 +332,8 @@ export function registerCustomerDiscoveryRoutes(app: Hono, deps: CustomerDiscove
           return null;
         }
 
+        const baseEta = m.avg_prep_time_mins != null ? Number(m.avg_prep_time_mins) : null;
+        const etaMins = applyBusyEtaMinutes(baseEta, busyMode);
         return {
           id: String(m.id),
           name: String(m.name ?? ""),
@@ -332,7 +341,7 @@ export function registerCustomerDiscoveryRoutes(app: Hono, deps: CustomerDiscove
           coverImageUrl: m.cover_image_url ? String(m.cover_image_url) : null,
           cuisineType: m.cuisine_type ? String(m.cuisine_type) : null,
           rating: m.rating != null ? Number(m.rating) : null,
-          etaMins: m.avg_prep_time_mins != null ? Number(m.avg_prep_time_mins) : null,
+          etaMins,
           deliveryFee,
           delivery_fee: deliveryFee,
           minOrderAmount: m.min_order_amount != null ? Number(m.min_order_amount) : null,
@@ -340,7 +349,8 @@ export function registerCustomerDiscoveryRoutes(app: Hono, deps: CustomerDiscove
           auto_ads: autoAds,
           is_promoted: isPromoted,
           promoted: isPromoted,
-          avg_prep_time_mins: m.avg_prep_time_mins ?? null,
+          avg_prep_time_mins: etaMins,
+          busyExtraEtaMinutes: busyMode.active ? busyMode.extraEtaMinutes : 0,
         };
       })
       .filter((m): m is NonNullable<typeof m> => m != null)

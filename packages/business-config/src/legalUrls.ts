@@ -4,7 +4,8 @@ export const ROAM_LEGAL = {
   termsOfServiceUrl: 'https://roamenterprise.co/terms',
   /** Monitored inbox for privacy, deletion requests, and support (Play Console contact). */
   privacyContactEmail: 'deekiiiiiii@gmail.com',
-  supportEmail: 'deekiiiiiii@gmail.com',
+  /** Courier / Rush in-app support — keep in sync with rush settings defaults. */
+  supportEmail: 'couriers@roamrush.app',
   operatorName: 'Sadiki Thomas, operating as Roam Enterprise',
 } as const;
 

@@ -260,3 +260,10 @@ export function incompleteSetupStageLabel(row: Record<string, unknown>): string 
   }
   return "";
 }
+
+/** When partner.signup.require_approval is false, skip AccountPending (auto-approve). */
+export async function verificationStatusForNewPartner(): Promise<"pending" | "approved"> {
+  const { getSetting } = await import("../_shared/rushSettings/getSetting.ts");
+  const requireApproval = await getSetting<boolean>("partner.signup.require_approval");
+  return requireApproval ? "pending" : "approved";
+}

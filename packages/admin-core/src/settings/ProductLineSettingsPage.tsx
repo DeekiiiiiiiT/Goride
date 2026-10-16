@@ -72,6 +72,10 @@ export type ProductLineSettingsPageProps = {
   showProductToggles?: boolean;
   showDangerZone?: boolean;
   showFeaturesTab?: boolean;
+  /** Rush: fee lives in Pricing → Merchant tiers; hide the competing KV control. */
+  hidePlatformFee?: boolean;
+  /** Rush: System Information exposes admin internals; hide on consumer settings. */
+  hideSystemInformation?: boolean;
   platformLabel?: string;
   appearanceSlot?: React.ReactNode;
   pageTitle?: string;
@@ -163,6 +167,8 @@ export function ProductLineSettingsPage({
   showProductToggles = false,
   showDangerZone = isProductLineSegment(segment),
   showFeaturesTab = isProductLineSegment(segment),
+  hidePlatformFee = false,
+  hideSystemInformation = false,
   platformLabel = 'Roam Platform Admin',
   appearanceSlot,
   pageTitle,
@@ -445,7 +451,7 @@ export function ProductLineSettingsPage({
           </div>
         </div>
 
-        {segment === 'dash' && (
+        {segment === 'dash' && !hidePlatformFee && (
           <div className="mt-4">
             <label className="block text-xs font-medium text-slate-700 dark:text-slate-400 mb-1.5">
               Platform fee (%)
@@ -607,6 +613,7 @@ export function ProductLineSettingsPage({
       )}
 
       {/* ── Section: System Info ── */}
+      {!hideSystemInformation && (
       <SettingsSection
         icon={<Server className="w-4 h-4 text-emerald-400" />}
         title="System Information"
@@ -635,6 +642,7 @@ export function ProductLineSettingsPage({
           <ReadOnlyField label="Backend" value="Supabase Edge Functions + KV" />
         </div>
       </SettingsSection>
+      )}
       </>}
 
       {/* ── Tab: Security ── */}

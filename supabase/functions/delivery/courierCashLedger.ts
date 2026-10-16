@@ -211,13 +211,13 @@ export async function handleOrderDelivered(
         legacyWriteEnabled,
       } = await import("./remittance/collectOnDelivery.ts");
 
-      if (remittanceWriteEnabled()) {
+      if (await remittanceWriteEnabled()) {
         await collectOnDelivery(sb, orderId, courierId);
       }
 
       // Legacy: emergency dual-write, or V-2 kill-switch failover (never silent COD).
-      if (legacyWriteEnabled()) {
-        const killSwitchFailover = !remittanceWriteEnabled();
+      if (await legacyWriteEnabled()) {
+        const killSwitchFailover = !(await remittanceWriteEnabled());
         // Normal dual-write still gated on pending_collection; failover posts any cash deliver.
         if (killSwitchFailover || paymentStatus === "pending_collection") {
           try {
@@ -225,7 +225,7 @@ export async function handleOrderDelivered(
               const { logKillSwitchLegacyFailover } = await import(
                 "./remittance/collectOnDelivery.ts"
               );
-              logKillSwitchLegacyFailover(orderId);
+              await logKillSwitchLegacyFailover(orderId);
             }
             const split = computeCodLedgerAmounts(row);
             await recordCashCollection(sb, {

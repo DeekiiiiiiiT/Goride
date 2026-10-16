@@ -71,6 +71,31 @@ export async function patchCustomerProfile(body: {
   return data.profile as CustomerProfileDto;
 }
 
+export type AccountDeletionRequestResult = {
+  ok: boolean;
+  mode: 'mailto';
+  mailto: string;
+  email: string;
+  graceDays: number;
+  message: string;
+};
+
+/** Self-service deletion — settings-driven mailto until hard-delete ships. */
+export async function requestAccountDeletion(): Promise<AccountDeletionRequestResult> {
+  const headers = await authHeaders();
+  if (!headers) throw new Error('Sign in required');
+  const res = await fetch(`${API_ENDPOINTS.delivery}/customer/account/deletion-request`, {
+    method: 'POST',
+    headers,
+    body: '{}',
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error((data as { error?: string }).error || 'Could not start account deletion');
+  }
+  return data as AccountDeletionRequestResult;
+}
+
 export async function uploadCustomerAvatar(file: File): Promise<CustomerProfileDto> {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session?.access_token) throw new Error('Sign in required');

@@ -1,0 +1,33 @@
+# Rush-settings commit isolation — stage ONLY these paths (Phase 0).
+# Exclude: apps/fleet, apps/driver, apps/admin (Dominion), parts-catalog, unrelated edge diffs.
+#
+# packages/rush-settings/
+# packages/rush-app-config/
+# packages/dash-admin/src/pages/settings/
+# packages/dash-admin/src/DashAdminPortal.tsx
+# packages/dash-admin/src/config/dashAdminNav.ts
+# packages/dash-admin/src/config/dashAdminCapabilities.ts
+# packages/dash-admin/package.json
+# packages/dash-admin-client/src/settings.ts
+# packages/dash-admin-client/src/index.ts
+# supabase/functions/_shared/rushSettings/
+# supabase/functions/delivery/appConfigRoutes.ts
+# supabase/functions/delivery/admin/settingsRoutes.ts
+# supabase/functions/delivery/maintenanceMiddleware.ts
+# supabase/functions/delivery/maintenanceMiddleware.test.ts
+# supabase/functions/delivery/partnerAcceptDeadline.ts
+# supabase/functions/delivery/partnerAcceptDeadline.test.ts
+# supabase/functions/delivery/index.ts
+# (+ getSetting consumer diffs under delivery/_shared/payments)
+# supabase/migrations/202610152*rush_config*.sql
+# supabase/config.toml
+# scripts/*rush-settings*
+# scripts/rush-settings-stage-paths.txt
+# scripts/rush-settings-cutover.mjs
+# docs/rush-settings-*.md
+# .github/workflows/ci.yml  (Deno Rush settings step only)
+# package.json  (check:rush-settings-parity)
+# apps/dash-customer/  (AppConfig + support + settings consumers)
+# apps/dash-courier/
+# apps/dash-merchant/
+# apps/rush-command/

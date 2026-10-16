@@ -33,6 +33,7 @@
     "@roam/auth-client": "workspace:*",
     "@roam/business-config": "workspace:*",
     "@roam/merchant-ops": "workspace:*",
+    "@roam/rush-app-config": "workspace:*",
     "@roam/rush-chat": "workspace:*",
     "@roam/types": "workspace:*",
     "@roam/ui": "workspace:*",

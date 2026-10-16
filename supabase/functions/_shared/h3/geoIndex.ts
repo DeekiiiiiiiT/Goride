@@ -154,12 +154,17 @@ export function isMatchingH3SurgeEnabled(policyEnabled: boolean): boolean {
   return policyEnabled;
 }
 
-export function isRushH3DispatchEnabled(): boolean {
-  // On by default; set RUSH_H3_DISPATCH_ENABLED=0 to force legacy scan.
-  return Deno.env.get("RUSH_H3_DISPATCH_ENABLED") !== "0";
+export async function isRushH3DispatchEnabled(): Promise<boolean> {
+  // Env emergency override still honored inside getSetting (RUSH_H3_DISPATCH_ENABLED).
+  const { getSetting } = await import("../rushSettings/getSetting.ts");
+  return await getSetting<boolean>("courier.dispatch.h3_matching");
 }
 
-/** Hex coverage is live by default; set RUSH_HEX_COVERAGE_ENABLED=0 only to kill-switch back to polygons. */
+/**
+ * Ops emergency kill-switch only — intentionally NOT a Rush admin setting.
+ * Hex coverage is live by default; set RUSH_HEX_COVERAGE_ENABLED=0 to fall back to polygons.
+ * (Sister flag courier.dispatch.h3_matching is the admin-tunable H3 dispatch switch.)
+ */
 export function isRushHexCoverageEnabled(): boolean {
   return Deno.env.get("RUSH_HEX_COVERAGE_ENABLED") !== "0";
 }

@@ -4,8 +4,7 @@
  */
 import type { Hono } from "https://deno.land/x/hono@v4.3.11/mod.ts";
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
-
-const STUCK_ORDER_MINUTES = Number(Deno.env.get("DASH_STUCK_ORDER_MINUTES") || 45);
+import { getSetting } from "../_shared/rushSettings/getSetting.ts";
 
 export function registerDashHealthRoutes(
   app: Hono,
@@ -23,7 +22,8 @@ export function registerDashHealthRoutes(
     if (!authorized) return c.json({ error: "Forbidden" }, 403);
 
     const sb = deps.getServiceSupabase();
-    const cutoff = new Date(Date.now() - STUCK_ORDER_MINUTES * 60_000).toISOString();
+    const stuckOrderMinutes = await getSetting<number>("partner.orders.stuck_alert_minutes");
+    const cutoff = new Date(Date.now() - stuckOrderMinutes * 60_000).toISOString();
 
     const { count: stuckCount } = await sb
       .from("orders")
@@ -71,7 +71,7 @@ export function registerDashHealthRoutes(
         wipayConfigured: wipayOk,
         smsConfigured: smsOk,
         orderIdempotencyTable: idempotencyTableOk,
-        stuckThresholdMinutes: STUCK_ORDER_MINUTES,
+        stuckThresholdMinutes: stuckOrderMinutes,
       },
     }, ok ? 200 : 503);
   });

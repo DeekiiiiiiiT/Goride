@@ -5,3 +5,4 @@ export * from './couriers';
 export * from './playStoreLaunchService';
 export * from './courierPlayStoreLaunchService';
 export * from './identities';
+export * from './settings';

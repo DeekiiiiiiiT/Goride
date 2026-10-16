@@ -5,7 +5,7 @@
 import type { Hono } from "https://deno.land/x/hono@v4.3.11/mod.ts";
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { calculateOrderPricing } from "../_shared/orderPricing.ts";
-import { getFlag } from "../_shared/featureFlags.ts";
+import { getSetting } from "../_shared/rushSettings/getSetting.ts";
 import { requireResolvedMerchantWithPermission } from "./merchantAuth.ts";
 import { validateBody, z } from "../_shared/validateBody.ts";
 import {
@@ -101,7 +101,7 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
 
   // Place new order
   app.post("/orders", async (c) => {
-    if (!(await getFlag("DELIVERY_CUSTOMER_ORDERS_ENABLED", true))) {
+    if (!(await getSetting<boolean>("customer.ordering.enabled"))) {
       return c.json({ error: "orders_disabled" }, 503);
     }
 
@@ -115,10 +115,52 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
     const body = await validateBody(c, PlaceOrderBody);
     if (body instanceof Response) return body;
 
+    const scheduledFor = (body as { scheduledFor?: { date?: string; slot?: string } | null })
+      .scheduledFor;
+    if (scheduledFor != null) {
+      const scheduled = await getSetting<{ enabled: boolean; maxDaysAhead: number }>(
+        "customer.ordering.scheduled",
+      );
+      if (!scheduled?.enabled) {
+        return c.json({
+          error: "Scheduled orders are not available",
+          code: "scheduled_disabled",
+        }, 400);
+      }
+      const dateStr = typeof scheduledFor.date === "string" ? scheduledFor.date : "";
+      const dayMs = 24 * 60 * 60 * 1000;
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const target = new Date(`${dateStr}T00:00:00`);
+      if (!dateStr || Number.isNaN(target.getTime())) {
+        return c.json({ error: "Invalid scheduled date", code: "scheduled_invalid" }, 400);
+      }
+      const daysAhead = Math.round((target.getTime() - today.getTime()) / dayMs);
+      const maxDays = Math.max(1, Number(scheduled.maxDaysAhead) || 7);
+      if (daysAhead < 0 || daysAhead >= maxDays) {
+        return c.json({
+          error: `Scheduled date must be within the next ${maxDays} day(s)`,
+          code: "scheduled_out_of_range",
+        }, 400);
+      }
+    }
+
     const idempotencyKeyRaw = c.req.header("Idempotency-Key") ?? c.req.header("idempotency-key");
     const idempotencyKey = idempotencyKeyRaw?.trim() ? idempotencyKeyRaw.trim() : null;
     if (idempotencyKey && (idempotencyKey.length < 8 || idempotencyKey.length > 128)) {
       return c.json({ error: "Invalid idempotency key" }, 400);
+    }
+
+    // Platform hours / closed holidays (America/Jamaica) — enterprise.hours.*
+    const { assertPlatformOrderingOpen } = await import(
+      "../_shared/rushSettings/enterpriseReaders.ts"
+    );
+    const platformOpen = await assertPlatformOrderingOpen({ supabase: getServiceSupabase() });
+    if (!platformOpen.ok) {
+      return c.json(
+        { error: platformOpen.message, code: platformOpen.code },
+        409,
+      );
     }
 
     // Enforce accepting + hours + holiday specials before pricing/insert
@@ -340,7 +382,7 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
     const paymentMethod = body.paymentMethod || "wipay";
     const discountedSubtotal = Math.round(Math.max(0, pricing.subtotal - discount) * 100) / 100;
 
-    if (paymentMethod === "cash" && Deno.env.get("DASH_ALLOW_CASH_ORDERS") !== "true") {
+    if (paymentMethod === "cash" && !(await getSetting<boolean>("customer.payment.cash_on_delivery"))) {
       return c.json({
         error: "Cash on delivery is not available yet. Please pay with card via WiPay.",
         code: "cash_not_available",
@@ -351,7 +393,7 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
       const { walletDecision } = await import("../_shared/rushMoney/walletRules.ts");
       const books = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
       const wallet = await loadCustomerWallet(books, String(customer.id));
-      const { data: walletFlag } = await books.schema("rush_money").from("runtime_flags").select("enabled").eq("key", "wallet_live").maybeSingle();
+      const walletLive = await getSetting<boolean>("customer.payment.wallet");
       const { count } = await serviceSb.from("orders").select("id", { count: "exact", head: true })
         .eq("customer_id", customer.id)
         .eq("payment_status", "paid")
@@ -360,7 +402,7 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
         balanceMajor: wallet.balanceMajor,
         debtAgeDays: wallet.debtAgeDays,
         completedCardOrders: count || 0,
-        walletLive: Boolean(walletFlag?.enabled),
+        walletLive,
       });
       if (!decision.orderingAllowed) {
         return c.json({ error: decision.reason, code: "balance_due" }, 400);
@@ -824,8 +866,8 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
     if (!customer) return c.json({ error: "Customer not found" }, 404);
 
     const lookup = ORDER_ID_UUID.test(id)
-      ? serviceSb.from("orders").select("id, customer_id, merchant_id, status, customer_rating").eq("id", id)
-      : serviceSb.from("orders").select("id, customer_id, merchant_id, status, customer_rating").eq("order_number", id);
+      ? serviceSb.from("orders").select("id, customer_id, merchant_id, status, customer_rating, delivered_at").eq("id", id)
+      : serviceSb.from("orders").select("id, customer_id, merchant_id, status, customer_rating, delivered_at").eq("order_number", id);
     const { data: order, error: orderError } = await lookup.maybeSingle();
 
     if (orderError || !order) return c.json({ error: "Order not found" }, 404);
@@ -834,6 +876,18 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
     const status = String(order.status);
     if (!["delivered", "completed"].includes(status)) {
       return c.json({ error: "Order must be delivered before reviewing" }, 400);
+    }
+
+    const ratingWindowHours = await getSetting<number>("customer.ratings.window_hours");
+    const deliveredAt = (order as { delivered_at?: string | null }).delivered_at;
+    if (deliveredAt) {
+      const ageHours = (Date.now() - new Date(deliveredAt).getTime()) / (1000 * 60 * 60);
+      if (ageHours > Number(ratingWindowHours || 72)) {
+        return c.json({
+          error: `Rating window of ${ratingWindowHours} hours has expired`,
+          code: "rating_window_expired",
+        }, 400);
+      }
     }
 
     const now = new Date().toISOString();
@@ -909,7 +963,7 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
 
     const { data: order, error: orderError } = await serviceSb
       .from("orders")
-      .select("id, customer_id, status, courier_id, payment_status, total")
+      .select("id, customer_id, status, courier_id, payment_status, total, placed_at, created_at, accepted_at")
       .eq("id", id)
       .single();
 
@@ -925,6 +979,28 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
         },
         400,
       );
+    }
+
+    // Free cancel window applies while the restaurant has not accepted yet.
+    const cancelWindowSeconds = await getSetting<number>(
+      "customer.ordering.cancel_window_seconds",
+    );
+    if (status === "placed" && !(order as { accepted_at?: string | null }).accepted_at) {
+      const placedAt = String(
+        (order as { placed_at?: string | null }).placed_at
+          || (order as { created_at?: string | null }).created_at
+          || "",
+      );
+      if (placedAt) {
+        const ageSec = (Date.now() - new Date(placedAt).getTime()) / 1000;
+        if (ageSec > Number(cancelWindowSeconds || 60)) {
+          return c.json({
+            error:
+              `Free cancel window of ${cancelWindowSeconds}s has expired. Contact support for help.`,
+            code: "cancel_window_expired",
+          }, 400);
+        }
+      }
     }
 
     const { cancelOrder } = await import("./rushMoney/cancelOrder.ts");
@@ -1009,12 +1085,24 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
     if (!customer) return c.json({ error: "Customer not found" }, 404);
 
     const lookup = ORDER_ID_UUID.test(id)
-      ? serviceSb.from("orders").select("id, customer_id, status, order_number").eq("id", id)
-      : serviceSb.from("orders").select("id, customer_id, status, order_number").eq("order_number", id);
+      ? serviceSb.from("orders").select("id, customer_id, status, order_number, delivered_at").eq("id", id)
+      : serviceSb.from("orders").select("id, customer_id, status, order_number, delivered_at").eq("order_number", id);
     const { data: order, error: orderError } = await lookup.maybeSingle();
 
     if (orderError || !order) return c.json({ error: "Order not found" }, 404);
     if (order.customer_id !== customer.id) return c.json({ error: "Forbidden" }, 403);
+
+    const reportWindowHours = await getSetting<number>("customer.issues.report_window_hours");
+    const deliveredAt = (order as { delivered_at?: string | null }).delivered_at;
+    if (deliveredAt) {
+      const ageHours = (Date.now() - new Date(deliveredAt).getTime()) / (1000 * 60 * 60);
+      if (ageHours > Number(reportWindowHours || 24)) {
+        return c.json({
+          error: `Issue report window of ${reportWindowHours} hours has expired`,
+          code: "issue_window_expired",
+        }, 400);
+      }
+    }
 
     const { data: issue, error: insertError } = await serviceSb
       .from("customer_order_issues")

@@ -9,6 +9,7 @@ import {
 
 type Props = {
   open: boolean;
+  maxDaysAhead?: number;
   initialDateId: string | null;
   initialSlotId: string | null;
   onClose: () => void;
@@ -17,12 +18,13 @@ type Props = {
 
 export function ScheduleDeliverySheet({
   open,
+  maxDaysAhead = 7,
   initialDateId,
   initialSlotId,
   onClose,
   onConfirm,
 }: Props) {
-  const dates = buildScheduleDates();
+  const dates = buildScheduleDates(Math.max(1, maxDaysAhead));
   const [selectedDateId, setSelectedDateId] = useState(dates[0]?.id ?? '');
   const [selectedSlotId, setSelectedSlotId] = useState('12-30');
 

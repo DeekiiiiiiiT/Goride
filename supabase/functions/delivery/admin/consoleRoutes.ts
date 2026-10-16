@@ -5,7 +5,7 @@
 import { Hono } from "https://deno.land/x/hono@v4.3.11/mod.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { requireProductAdmin, type ProductAdminUser } from "../../_shared/productAdmin.ts";
-import { getFlag } from "../../_shared/featureFlags.ts";
+import { getSetting } from "../../_shared/rushSettings/getSetting.ts";
 import { getDb } from "./merchantAdminShared.ts";
 import { canSee, canSeePeople, personHref, sanitizeSearchToken } from "./consoleAccess.ts";
 
@@ -489,11 +489,11 @@ export function registerConsoleAdminRoutes(app: Hono) {
     const user = c.get("adminUser") as ProductAdminUser;
     const allowed = (user.roles ?? []).some((role) => role === "platform_owner" || role === "superadmin" || role === "dash_admin");
     if (!allowed) return c.json({ error: "forbidden" }, 403);
-    const [inHouse, payments] = await Promise.all([
-      getFlag("IN_HOUSE_ENABLED", false),
-      getFlag("PAYMENTS_INTENTS_ENABLED", true),
+    const [inHouse, payments, cash] = await Promise.all([
+      getSetting<boolean>("customer.in_house.enabled"),
+      getSetting<boolean>("customer.payment.card"),
+      getSetting<boolean>("customer.payment.cash_on_delivery"),
     ]);
-    const cash = (Deno.env.get("DASH_ALLOW_CASH_ORDERS") || "").toLowerCase() === "true";
     return c.json({
       flags: [
         { name: "In-House desk", on: inHouse },

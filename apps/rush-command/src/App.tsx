@@ -1,5 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { AuthRecoveryGate } from '@roam/auth-client';
+import { API_ENDPOINTS } from '@roam/api-client';
+import { AppConfigGates, AppConfigProvider } from '@roam/rush-app-config';
 import type { Session } from '@supabase/supabase-js';
 import {
   canAccessCommand,
@@ -27,10 +29,24 @@ initCommandMerchantOps();
 const SPLASH_MIN_MS = 1200;
 const AUTH_READY_MAX_MS = 6_000;
 
+const APP_VERSION =
+  (typeof import.meta !== 'undefined' &&
+    typeof import.meta.env?.VITE_APP_VERSION === 'string' &&
+    import.meta.env.VITE_APP_VERSION.trim()) ||
+  '0.1.0';
+
 export default function App() {
   return (
     <AuthRecoveryGate title="Reset password" subtitle="Roam Command" signInHref="/">
-      <CommandApp />
+      <AppConfigProvider
+        app="partner"
+        deliveryBaseUrl={API_ENDPOINTS.delivery}
+        appVersion={APP_VERSION}
+      >
+        <AppConfigGates app="partner">
+          <CommandApp />
+        </AppConfigGates>
+      </AppConfigProvider>
     </AuthRecoveryGate>
   );
 }

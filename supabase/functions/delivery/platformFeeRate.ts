@@ -1,9 +1,12 @@
 /**
- * Dash platform fee rate resolution.
- * Merchant override (commission_rate) → global platformFeeRate → 0.05
+ * Merchant commission for display / legacy fee fields.
+ * Source of truth: Pricing → merchant_tiers (+ optional merchant.commission_rate override).
+ * KV platformFeeRate is no longer used (conflicts with tier commission).
  */
 
-export const DASH_PLATFORM_FEE_FALLBACK = 0.05;
+import { resolveMerchantCommissionRate } from "../_shared/dashPricing.ts";
+
+export const DASH_PLATFORM_FEE_FALLBACK = 0.20;
 export const DASH_PLATFORM_SETTINGS_KV_KEY = "platform:settings:dash";
 
 export function isValidFeeRate(rate: unknown): rate is number {
@@ -14,7 +17,7 @@ export function isValidFeeRate(rate: unknown): rate is number {
   return Number.isFinite(n) && n >= 0 && n <= 1;
 }
 
-/** First valid rate among merchant → global → fallback. */
+/** @deprecated Prefer resolveFeeRateForMerchant (tier-based). Kept for tests. */
 export function resolveDashPlatformFeeRate(
   merchantRate: number | null | undefined,
   globalRate: number | null | undefined,
@@ -32,40 +35,45 @@ export function percentToFeeRate(percent: number): number {
   return Math.round(percent * 100) / 10000;
 }
 
-/** Load global platformFeeRate from platform settings KV (service role). */
+/** Always null — global KV fee retired in favour of Pricing tiers. */
 export async function loadDashGlobalPlatformFeeRate(
   // deno-lint-ignore no-explicit-any
-  sb: { schema: (s: string) => { from: (t: string) => any }; from: (t: string) => any },
+  _sb: { schema: (s: string) => { from: (t: string) => any }; from: (t: string) => any },
 ): Promise<number | null> {
-  // KV lives in public schema; delivery service client is schema-scoped to delivery
-  const client = typeof sb.schema === "function" ? sb.schema("public") : sb;
-  const { data, error } = await client
-    .from("kv_store_37f42386")
-    .select("value")
-    .eq("key", DASH_PLATFORM_SETTINGS_KV_KEY)
-    .maybeSingle();
-  if (error || !data) return null;
-  const value = (data as { value?: Record<string, unknown> }).value;
-  if (!value || typeof value !== "object") return null;
-  const rate = value.platformFeeRate;
-  return isValidFeeRate(rate) ? Number(rate) : null;
+  return null;
 }
 
 export async function resolveFeeRateForMerchant(
   // deno-lint-ignore no-explicit-any
   sb: { from: (t: string) => any },
   merchantId: string,
-): Promise<{ rate: number; merchantOverride: number | null; globalRate: number | null }> {
-  const [{ data: merchant }, globalRate] = await Promise.all([
-    sb.from("merchants").select("commission_rate").eq("id", merchantId).maybeSingle(),
-    loadDashGlobalPlatformFeeRate(sb),
-  ]);
+): Promise<{ rate: number; merchantOverride: number | null; globalRate: number | null; tierRate: number | null }> {
+  const { data: merchant } = await sb
+    .from("merchants")
+    .select("commission_rate, pricing_tier_id, pricing_tier:merchant_tiers(commission_rate)")
+    .eq("id", merchantId)
+    .maybeSingle();
+
   const merchantOverride = merchant?.commission_rate != null && isValidFeeRate(merchant.commission_rate)
     ? Number(merchant.commission_rate)
     : null;
-  return {
-    rate: resolveDashPlatformFeeRate(merchantOverride, globalRate),
+
+  const tierRow = merchant?.pricing_tier as { commission_rate?: number } | null | undefined;
+  const tierRate = tierRow?.commission_rate != null && isValidFeeRate(tierRow.commission_rate)
+    ? Number(tierRow.commission_rate)
+    : null;
+
+  const rate = resolveMerchantCommissionRate(
+    tierRate != null
+      ? { slug: "tier", name: "Tier", commissionRate: tierRate }
+      : null,
     merchantOverride,
-    globalRate,
+  );
+
+  return {
+    rate,
+    merchantOverride,
+    globalRate: null,
+    tierRate,
   };
 }

@@ -1,5 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { redirectPartnerTabletToCommand } from '@roam/merchant-ops';
+import { API_ENDPOINTS } from '@roam/api-client';
+import { AppConfigGates, AppConfigProvider } from '@roam/rush-app-config';
 import { supabase, ensureValidPartnerSession, migrateLegacyPartnerSession } from './lib/partner-supabase';
 import { AuthRecoveryGate } from '@roam/auth-client';
 import { Session } from '@supabase/supabase-js';
@@ -72,13 +74,27 @@ export default function App() {
     return <PartnerAdminRemovedPage />;
   }
 
+  const appVersion =
+    (typeof import.meta !== 'undefined' &&
+      typeof import.meta.env?.VITE_APP_VERSION === 'string' &&
+      import.meta.env.VITE_APP_VERSION.trim()) ||
+    '0.1.0';
+
   return (
     <AuthRecoveryGate
       title="Reset password"
       subtitle="Roam Rush Partner"
       signInHref="/"
     >
-      <DashMerchantApp />
+      <AppConfigProvider
+        app="partner"
+        deliveryBaseUrl={API_ENDPOINTS.delivery}
+        appVersion={appVersion}
+      >
+        <AppConfigGates app="partner">
+          <DashMerchantApp />
+        </AppConfigGates>
+      </AppConfigProvider>
     </AuthRecoveryGate>
   );
 }

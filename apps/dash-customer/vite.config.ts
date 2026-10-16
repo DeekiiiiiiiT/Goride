@@ -2,16 +2,26 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import path from 'path';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { roamSupabaseDevProxy } from '@roam/api-client/viteDevProxy';
+
+const pkg = JSON.parse(
+  readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), 'package.json'), 'utf8'),
+) as { version?: string };
 
 export default defineConfig({
   plugins: [roamSupabaseDevProxy(), react(), tailwindcss()],
+  define: {
+    'import.meta.env.VITE_APP_VERSION': JSON.stringify(pkg.version ?? '0.1.0'),
+  },
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
       '@roam/admin-core': path.resolve(__dirname, '../../packages/admin-core/src'),
       '@roam/dash-admin': path.resolve(__dirname, '../../packages/dash-admin/src'),
       '@roam/dash-admin-client': path.resolve(__dirname, '../../packages/dash-admin-client/src'),
+      '@roam/rush-settings': path.resolve(__dirname, '../../packages/rush-settings/src'),
       '@roam/location': path.resolve(__dirname, '../../packages/location/src'),
       '@roam/spatial': path.resolve(__dirname, '../../packages/spatial/src/index.ts'),
     },

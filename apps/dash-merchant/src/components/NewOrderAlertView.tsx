@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
+import { useAppConfig } from '@roam/rush-app-config';
 import { MaterialIcon } from '../signup/components/MaterialIcon';
 import PartnerFullscreenScreen from './layout/PartnerFullscreenScreen';
 import { formatCountdown, formatJmd } from '../lib/partner-utils';
 import { Order } from '../types/order';
 
-const ACCEPT_DEADLINE_SECONDS = 270;
+const FALLBACK_ACCEPT_DEADLINE_SECONDS = 270;
 const TIMER_CIRCUMFERENCE = 283;
 
 interface NewOrderAlertViewProps {
@@ -24,6 +25,12 @@ export default function NewOrderAlertView({
   onHelp,
   isSubmitting = false,
 }: NewOrderAlertViewProps) {
+  const appConfig = useAppConfig('partner');
+  // Reader key: partner.orders.accept_deadline_seconds
+  const acceptDeadlineSeconds =
+    Number(appConfig.settings['partner.orders.accept_deadline_seconds']) ||
+    appConfig.rules.acceptDeadlineSeconds ||
+    FALLBACK_ACCEPT_DEADLINE_SECONDS;
   const [, setTick] = useState(0);
 
   useEffect(() => {
@@ -34,8 +41,8 @@ export default function NewOrderAlertView({
 
   const placedAt = order.placed_at || order.created_at;
   const elapsedSeconds = Math.floor((Date.now() - new Date(placedAt).getTime()) / 1000);
-  const remainingSeconds = Math.max(0, ACCEPT_DEADLINE_SECONDS - elapsedSeconds);
-  const timerProgress = remainingSeconds / ACCEPT_DEADLINE_SECONDS;
+  const remainingSeconds = Math.max(0, acceptDeadlineSeconds - elapsedSeconds);
+  const timerProgress = remainingSeconds / acceptDeadlineSeconds;
   const strokeOffset = TIMER_CIRCUMFERENCE * (1 - timerProgress);
 
   return (

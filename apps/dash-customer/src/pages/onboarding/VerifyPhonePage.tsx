@@ -1,4 +1,5 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { useAppConfig } from '@roam/rush-app-config';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
 import { OtpInput } from '@/components/forms/OtpInput';
 import { PhoneInput, formatJamaicaPhone, toE164JamaicaPhone } from '@/components/forms/PhoneInput';
@@ -29,13 +30,29 @@ function resolveInitialPhone(prop?: string): string {
 }
 
 export function VerifyPhonePage({ onBack, onVerify, initialPhone }: VerifyPhonePageProps) {
+  const config = useAppConfig('customer');
+  const otpLimits = useMemo(() => {
+    const raw = config.settings['enterprise.accounts.limits'];
+    if (!raw || typeof raw !== 'object') {
+      return { phoneCodeMaxAttempts: 5, phoneCodeResendWaitSeconds: 60 };
+    }
+    const o = raw as Record<string, unknown>;
+    return {
+      phoneCodeMaxAttempts:
+        typeof o.phoneCodeMaxAttempts === 'number' ? o.phoneCodeMaxAttempts : 5,
+      phoneCodeResendWaitSeconds:
+        typeof o.phoneCodeResendWaitSeconds === 'number' ? o.phoneCodeResendWaitSeconds : 60,
+    };
+  }, [config.settings]);
+
   const [phoneLocal, setPhoneLocal] = useState(() => resolveInitialPhone(initialPhone));
   const [code, setCode] = useState('');
   const [verifying, setVerifying] = useState(false);
   const [sending, setSending] = useState(false);
   const [otpSent, setOtpSent] = useState(false);
+  const [sendAttempts, setSendAttempts] = useState(0);
   const [error, setError] = useState<string | null>(null);
-  const { canResend, formatted, reset } = useResendTimer(59);
+  const { canResend, formatted, reset } = useResendTimer(otpLimits.phoneCodeResendWaitSeconds);
   const autoSentRef = useRef(false);
 
   const e164 = phoneLocal.trim() ? toE164JamaicaPhone(phoneLocal) : '';
@@ -46,6 +63,12 @@ export function VerifyPhonePage({ onBack, onVerify, initialPhone }: VerifyPhoneP
       setError('Enter a valid Jamaica phone number (876…).');
       return false;
     }
+    if (sendAttempts >= otpLimits.phoneCodeMaxAttempts) {
+      setError(
+        `Too many code requests. Wait and try again (max ${otpLimits.phoneCodeMaxAttempts}).`,
+      );
+      return false;
+    }
     setSending(true);
     setError(null);
     try {
@@ -53,6 +76,7 @@ export function VerifyPhonePage({ onBack, onVerify, initialPhone }: VerifyPhoneP
       if (otpError) throw otpError;
       saveProfile({ phone: e164 });
       setOtpSent(true);
+      setSendAttempts((n) => n + 1);
       reset();
       setCode('');
       return true;

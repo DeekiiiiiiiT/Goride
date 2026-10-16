@@ -1,0 +1,23 @@
+{
+  "name": "@roam/rush-app-config",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./*": "./src/*"
+  },
+  "peerDependencies": {
+    "react": "^18.0.0"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.12",
+    "react": "^18.3.1",
+    "vitest": "^3.2.4"
+  },
+  "scripts": {
+    "test": "vitest run"
+  }
+}

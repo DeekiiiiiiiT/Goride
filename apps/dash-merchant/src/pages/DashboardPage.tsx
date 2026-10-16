@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { API_ENDPOINTS } from '@roam/api-client';
+import { useAppConfig } from '@roam/rush-app-config';
 import { supabase } from '../lib/partner-supabase';
 import { toast } from 'sonner';
 import { Merchant } from '../hooks/useMerchant';
@@ -106,6 +107,9 @@ function pauseStorageKey(merchantId: string) {
 }
 
 export default function DashboardPage({ merchant, onNavigate, onOpenMobileNav }: DashboardPageProps) {
+  const appConfig = useAppConfig('partner');
+  const minOrdersForWarning =
+    Number(appConfig.settings['partner.performance.min_orders_for_warning']) || 5;
   const [, setTick] = useState(0);
   const [pauseSheetOpen, setPauseSheetOpen] = useState(false);
   const [performanceWarningOpen, setPerformanceWarningOpen] = useState(false);
@@ -289,11 +293,11 @@ export default function DashboardPage({ merchant, onNavigate, onOpenMobileNav }:
   useEffect(() => {
     if (
       !performanceWarningOpen &&
-      shouldShowPerformanceWarning(merchant.id, performanceMetrics)
+      shouldShowPerformanceWarning(merchant.id, performanceMetrics, minOrdersForWarning)
     ) {
       setPerformanceWarningOpen(true);
     }
-  }, [merchant.id, performanceMetrics, performanceWarningOpen]);
+  }, [merchant.id, performanceMetrics, performanceWarningOpen, minOrdersForWarning]);
 
   const handleAcknowledgePerformance = () => {
     acknowledgePerformanceWarning(merchant.id);

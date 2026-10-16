@@ -1,5 +1,6 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ROAM_LEGAL } from '@roam/business-config/legalUrls';
+import { useAppConfig, type CourierRequiredDocument } from '@roam/rush-app-config';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
 import {
   listCourierDocuments,
@@ -16,41 +17,58 @@ type DocumentsPageProps = {
   onContinue: () => void;
 };
 
-const DOC_DEFS: Array<{
+type DocDef = {
   docType: CourierDocType;
   title: string;
   subtitle: string;
   icon: string;
   actionLabel: string;
-  motorizedOnly?: boolean;
   required: boolean;
-}> = [
+};
+
+const DOC_ICON: Record<string, string> = {
+  drivers_license: 'badge',
+  insurance: 'policy',
+  background_check: 'verified_user',
+};
+
+const FALLBACK_DOCS: CourierRequiredDocument[] = [
   {
+    name: "Driver's licence",
     docType: 'drivers_license',
-    title: "Driver's licence",
-    subtitle: 'Clear photo of your licence',
-    icon: 'badge',
-    actionLabel: 'Upload licence',
+    sides: 'single',
+    expiryRequired: true,
     required: true,
+    vehicleTypes: ['bicycle', 'motorcycle', 'car'],
   },
   {
+    name: 'Vehicle insurance',
     docType: 'insurance',
-    title: 'Vehicle insurance',
-    subtitle: 'Valid policy document',
-    icon: 'policy',
-    actionLabel: 'Upload insurance',
-    motorizedOnly: true,
+    sides: 'single',
+    expiryRequired: true,
     required: true,
+    vehicleTypes: ['motorcycle', 'car'],
   },
   {
+    name: 'Background check',
     docType: 'background_check',
-    title: 'Background check',
-    subtitle: 'Optional — you can add this later',
-    icon: 'verified_user',
-    actionLabel: 'Upload document',
+    sides: 'single',
+    expiryRequired: false,
     required: false,
+    vehicleTypes: ['bicycle', 'motorcycle', 'car'],
   },
 ];
+
+function toDocDef(doc: CourierRequiredDocument): DocDef {
+  return {
+    docType: doc.docType as CourierDocType,
+    title: doc.name,
+    subtitle: doc.required ? 'Required for verification' : 'Optional — you can add this later',
+    icon: DOC_ICON[doc.docType] ?? 'description',
+    actionLabel: `Upload ${doc.name}`,
+    required: doc.required,
+  };
+}
 
 function isSubmitted(row: CourierDocumentRow | undefined): boolean {
   return Boolean(row?.file_url);
@@ -70,9 +88,25 @@ function statusAccent(row: CourierDocumentRow | undefined): string {
 }
 
 export function DocumentsPage({ onBack, onContinue }: DocumentsPageProps) {
+  const appConfig = useAppConfig('courier');
+  // Reader key: courier.signup.required_documents (also derived into rules.requiredDocuments)
+  const requiredDocumentsSetting = appConfig.settings['courier.signup.required_documents'];
   const draft = loadSignupDraft();
-  const isBicycle = draft.vehicleType === 'bicycle';
-  const defs = DOC_DEFS.filter((def) => !def.motorizedOnly || !isBicycle);
+  const vehicleType = (draft.vehicleType || 'bicycle') as 'bicycle' | 'motorcycle' | 'car';
+  const defs = useMemo(() => {
+    const fromSettings = Array.isArray(requiredDocumentsSetting)
+      ? (requiredDocumentsSetting as CourierRequiredDocument[])
+      : null;
+    const fromConfig =
+      fromSettings && fromSettings.length > 0
+        ? fromSettings
+        : appConfig.rules.requiredDocuments.length > 0
+          ? appConfig.rules.requiredDocuments
+          : FALLBACK_DOCS;
+    return fromConfig
+      .filter((doc) => doc.vehicleTypes.includes(vehicleType))
+      .map(toDocDef);
+  }, [appConfig.rules.requiredDocuments, requiredDocumentsSetting, vehicleType]);
   const [consent, setConsent] = useState(false);
   const [docs, setDocs] = useState<CourierDocumentRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -215,7 +249,7 @@ export function DocumentsPage({ onBack, onContinue }: DocumentsPageProps) {
               I consent to a background check and acknowledge that my documents will be processed
               securely according to the{' '}
               <a
-                href={ROAM_LEGAL.privacyPolicyUrl}
+                href={appConfig.legal.privacy || ROAM_LEGAL.privacyPolicyUrl}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-primary font-medium hover:underline"

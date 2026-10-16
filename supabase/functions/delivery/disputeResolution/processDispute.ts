@@ -9,10 +9,9 @@ import { createLinkedSupportCase, createOrderDispute } from "./supportCase.ts";
 import type { FaultAttribution, ProcessDisputeResult, ResolutionAction } from "./types.ts";
 import { isForgottenOrderCandidate, shouldEvaluateForgottenRule } from "./forgottenOrderRule.ts";
 
-function autoRefundCapJmd(): number {
-  const raw = Deno.env.get("DASH_AUTO_DISPUTE_MAX_REFUND_JMD");
-  if (raw) return Number(raw) || 0;
-  return 4000;
+async function autoRefundCapJmd(): Promise<number> {
+  const { getSetting } = await import("../../_shared/rushSettings/getSetting.ts");
+  return await getSetting<number>("customer.refunds.auto_max_jmd");
 }
 
 async function customerOverRefundBudget(serviceSb: SupabaseClient, customerId: string | null): Promise<boolean> {
@@ -28,8 +27,9 @@ async function customerOverRefundBudget(serviceSb: SupabaseClient, customerId: s
   return autos.length >= AUTO_REFUND_BUDGET_COUNT || sum >= AUTO_REFUND_BUDGET_JMD;
 }
 
-function isAutoDisputeEnabled(): boolean {
-  return Deno.env.get("RUSH_AUTO_DISPUTE_RESOLUTION") !== "false";
+async function isAutoDisputeEnabled(): Promise<boolean> {
+  const { getSetting } = await import("../../_shared/rushSettings/getSetting.ts");
+  return await getSetting<boolean>("customer.refunds.auto_resolution");
 }
 
 async function hasRuleRun(serviceSb: SupabaseClient, orderId: string, ruleId: string): Promise<boolean> {
@@ -130,13 +130,13 @@ export async function processDispute(input: ProcessDisputeInput): Promise<Proces
   const body = input.photoPath ? `${notes}\n\nPhoto: ${input.photoPath}` : notes;
 
   // R1: Forgotten / never fulfilled order with courier wait evidence
-  if (isAutoDisputeEnabled() && isForgottenOrderCandidate(issueType, String(order.status))) {
+  if (await isAutoDisputeEnabled() && isForgottenOrderCandidate(issueType, String(order.status))) {
     const waitMinutes = await getMaxCourierWaitMinutes(serviceSb, orderId);
     const ruleId = "R1_forgotten_order";
 
     if (shouldEvaluateForgottenRule(issueType, String(order.status), waitMinutes) && !await hasRuleRun(serviceSb, orderId, ruleId)) {
       const refundAmount = Number(order.total || 0);
-      const cap = autoRefundCapJmd();
+      const cap = await autoRefundCapJmd();
       if (refundAmount > 0 && refundAmount <= cap && String(order.payment_status) === "paid" && !await customerOverRefundBudget(serviceSb, order.customer_id)) {
         const refundResult = await orchestrateSystemOrderRefund({
           orderId,
@@ -239,7 +239,7 @@ export async function processDispute(input: ProcessDisputeInput): Promise<Proces
 
   // R6: Partial auto-refund for missing items with photo (post-delivery)
   if (
-    isAutoDisputeEnabled() &&
+    await isAutoDisputeEnabled() &&
     issueType === "missing" &&
     ["delivered", "completed"].includes(String(order.status)) &&
     input.photoPath &&
@@ -258,7 +258,7 @@ export async function processDispute(input: ProcessDisputeInput): Promise<Proces
       }, 0);
       const subtotal = Number(order.subtotal || 0);
       const taxShare = subtotal > 0 ? Number(order.tax_food_jmd || 0) * (food / subtotal) : 0;
-      const partialCap = Math.min(food + taxShare, autoRefundCapJmd());
+      const partialCap = Math.min(food + taxShare, await autoRefundCapJmd());
       if (partialCap > 0) {
         const refundResult = await orchestrateSystemOrderRefund({
           orderId,

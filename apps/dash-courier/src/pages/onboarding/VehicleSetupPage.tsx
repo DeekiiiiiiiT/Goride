@@ -1,4 +1,5 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { useAppConfig } from '@roam/rush-app-config';
 import { OnboardingHeader } from '@/components/layout/OnboardingHeader';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
 import { uploadAndGetProofUrl } from '@/lib/courierFileUpload';
@@ -13,7 +14,7 @@ type VehicleSetupPageProps = {
 
 type VehicleType = SignupDraft['vehicleType'];
 
-const VEHICLE_OPTIONS: { type: VehicleType; icon: string; label: string }[] = [
+const ALL_VEHICLE_OPTIONS: { type: VehicleType; icon: string; label: string }[] = [
   { type: 'bicycle', icon: 'pedal_bike', label: 'Bicycle' },
   { type: 'motorcycle', icon: 'two_wheeler', label: 'Motorcycle / Scooter' },
   { type: 'car', icon: 'directions_car', label: 'Car' },
@@ -22,8 +23,21 @@ const VEHICLE_OPTIONS: { type: VehicleType; icon: string; label: string }[] = [
 const COLOR_OPTIONS = ['Black', 'White', 'Silver / Grey', 'Red', 'Blue', 'Other'];
 
 export function VehicleSetupPage({ onBack, onContinue }: VehicleSetupPageProps) {
+  const appConfig = useAppConfig('courier');
+  const allowedTypes = useMemo(() => {
+    const raw = appConfig.settings['courier.signup.vehicle_types'];
+    const list = Array.isArray(raw) ? raw.map(String) : [];
+    return list.length > 0 ? list : ['bicycle', 'motorcycle', 'car'];
+  }, [appConfig.settings]);
+  const VEHICLE_OPTIONS = useMemo(
+    () => ALL_VEHICLE_OPTIONS.filter((option) => allowedTypes.includes(option.type)),
+    [allowedTypes],
+  );
   const draft = loadSignupDraft();
-  const [vehicleType, setVehicleType] = useState<VehicleType>(draft.vehicleType);
+  const initialType = allowedTypes.includes(draft.vehicleType)
+    ? draft.vehicleType
+    : (VEHICLE_OPTIONS[0]?.type ?? 'bicycle');
+  const [vehicleType, setVehicleType] = useState<VehicleType>(initialType);
   const [makeModel, setMakeModel] = useState(draft.makeModel || '');
   const [licensePlate, setLicensePlate] = useState(draft.licensePlate || '');
   const [color, setColor] = useState(draft.color || '');

@@ -1,3 +1,4 @@
+import { useAppConfig } from '@roam/rush-app-config';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
 import { ABOUT_LINKS, APP_VERSION } from '@/lib/aboutContent';
 
@@ -6,6 +7,14 @@ type Props = {
 };
 
 export default function AboutPage({ onNavigate }: Props) {
+  const config = useAppConfig('customer');
+  const brand = config.brandName || 'Roam Rush';
+  const links = [
+    { id: 'terms', label: 'Terms of Service', href: config.legal.terms || ABOUT_LINKS[0].href },
+    { id: 'privacy', label: 'Privacy Policy', href: config.legal.privacy || ABOUT_LINKS[1].href },
+    ABOUT_LINKS[2],
+  ];
+
   return (
     <div className="bg-background text-on-background min-h-dvh pb-24">
       <header className="w-full top-0 sticky bg-surface shadow-sm z-40 safe-t">
@@ -19,15 +28,15 @@ export default function AboutPage({ onNavigate }: Props) {
 
       <main className="max-w-[1200px] mx-auto px-4 py-8 flex flex-col items-center">
         <div className="flex flex-col items-center text-center mb-8">
-          <img src="/images/logo.png" alt="Roam Rush" className="w-32 h-auto object-contain mb-4" />
-          <h2 className="text-headline-lg-mobile font-bold text-primary mb-1">Roam Rush</h2>
+          <img src="/images/logo.png" alt={brand} className="w-32 h-auto object-contain mb-4" />
+          <h2 className="text-headline-lg-mobile font-bold text-primary mb-1">{brand}</h2>
           <p className="text-body-md text-on-surface-variant">Cravings. Delivered.</p>
           <p className="text-label-sm text-outline mt-3">Version {APP_VERSION}</p>
         </div>
 
         <section className="w-full max-w-md bg-surface-container-lowest rounded-xl shadow-[0px_4px_20px_rgba(0,0,0,0.04)] overflow-hidden mb-8">
           <ul className="flex flex-col">
-            {ABOUT_LINKS.map((link, index) => (
+            {links.map((link, index) => (
               <li key={link.id}>
                 {index > 0 && (
                   <div className="px-4">

@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { useAppConfig } from '@roam/rush-app-config';
 import { toast } from 'sonner';
 import { MaterialIcon } from '../../signup/components/MaterialIcon';
 import {
@@ -45,6 +46,10 @@ export default function HelpSupportView({
   onOpenSection,
   onNavigate,
 }: HelpSupportViewProps) {
+  const appConfig = useAppConfig('partner');
+  const supportEmail = appConfig.support.email || SUPPORT_EMAIL;
+  const supportPhone = appConfig.support.phone || SUPPORT_PHONE;
+  const dispatchPhone = appConfig.support.phone || DISPATCH_PHONE;
   const [searchQuery, setSearchQuery] = useState('');
 
   const filteredTopics = useMemo(
@@ -102,7 +107,7 @@ export default function HelpSupportView({
         <h1 className="flex-1 text-headline-md font-bold text-primary">Help &amp; Support</h1>
         <button
           type="button"
-          onClick={() => toast.info('Roam Rush Partner Support', { description: SUPPORT_EMAIL })}
+          onClick={() => toast.info('Roam Rush Partner Support', { description: supportEmail })}
           className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-primary transition-colors hover:bg-surface-container-low active:scale-95"
           aria-label="Support"
         >
@@ -142,13 +147,23 @@ export default function HelpSupportView({
               </p>
             </div>
           </div>
-          <a
-            href={`tel:${DISPATCH_PHONE}`}
-            className="flex h-12 w-full items-center justify-center gap-2 whitespace-nowrap rounded-lg bg-error px-6 text-label-md text-on-error transition-transform active:scale-95 sm:w-auto"
-          >
-            <MaterialIcon name="phone_in_talk" />
-            Call Dispatch
-          </a>
+          {dispatchPhone ? (
+            <a
+              href={`tel:${dispatchPhone}`}
+              className="flex h-12 w-full items-center justify-center gap-2 whitespace-nowrap rounded-lg bg-error px-6 text-label-md text-on-error transition-transform active:scale-95 sm:w-auto"
+            >
+              <MaterialIcon name="phone_in_talk" />
+              Call Dispatch
+            </a>
+          ) : (
+            <a
+              href={`mailto:${supportEmail}?subject=${encodeURIComponent('Urgent order issue')}`}
+              className="flex h-12 w-full items-center justify-center gap-2 whitespace-nowrap rounded-lg bg-error px-6 text-label-md text-on-error transition-transform active:scale-95 sm:w-auto"
+            >
+              <MaterialIcon name="email" />
+              Email Dispatch
+            </a>
+          )}
         </div>
 
         <h2 className="mb-inset-sm text-headline-md text-on-surface">Quick Topics</h2>
@@ -204,7 +219,7 @@ export default function HelpSupportView({
           </button>
 
           <a
-            href={`mailto:${SUPPORT_EMAIL}`}
+            href={`mailto:${supportEmail}`}
             className="flex items-center gap-4 rounded-lg border border-outline-variant bg-surface-container-lowest p-inset-md shadow-sm transition-all hover:shadow-md active:-translate-y-px"
           >
             <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-surface-container text-on-surface-variant">
@@ -213,15 +228,17 @@ export default function HelpSupportView({
             <span className="text-label-md text-on-surface">Email Us</span>
           </a>
 
-          <a
-            href={`tel:${SUPPORT_PHONE}`}
-            className="flex items-center gap-4 rounded-lg border border-outline-variant bg-surface-container-lowest p-inset-md shadow-sm transition-all hover:shadow-md active:-translate-y-px"
-          >
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-surface-container text-on-surface-variant">
-              <MaterialIcon name="phone" />
-            </div>
-            <span className="text-label-md text-on-surface">Call Support</span>
-          </a>
+          {supportPhone ? (
+            <a
+              href={`tel:${supportPhone}`}
+              className="flex items-center gap-4 rounded-lg border border-outline-variant bg-surface-container-lowest p-inset-md shadow-sm transition-all hover:shadow-md active:-translate-y-px"
+            >
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-surface-container text-on-surface-variant">
+                <MaterialIcon name="phone" />
+              </div>
+              <span className="text-label-md text-on-surface">Call Support</span>
+            </a>
+          ) : null}
         </div>
       </main>
     </div>

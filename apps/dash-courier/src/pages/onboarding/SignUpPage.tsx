@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { ROAM_LEGAL } from '@roam/business-config/legalUrls';
+import { useAppConfig } from '@roam/rush-app-config';
 import { OnboardingHeader } from '@/components/layout/OnboardingHeader';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
 import { CourierGoogleAuthButton } from '@/components/auth/CourierGoogleAuthButton';
@@ -20,7 +21,13 @@ type SignUpPageProps = {
   onSignIn: () => void;
 };
 
+type SignupMode = 'open' | 'invite_or_fleet' | 'closed';
+
 export function SignUpPage({ onBack, onContinue, onSignIn }: SignUpPageProps) {
+  const appConfig = useAppConfig('courier');
+  const signupMode = (appConfig.settings['courier.signup.mode'] as SignupMode | undefined) ?? 'open';
+  const signupClosed = signupMode === 'closed';
+  const inviteOrFleetOnly = signupMode === 'invite_or_fleet';
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -33,7 +40,7 @@ export function SignUpPage({ onBack, onContinue, onSignIn }: SignUpPageProps) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!termsAccepted) return;
+    if (!termsAccepted || signupClosed) return;
 
     const trimmedEmail = email.trim();
     const trimmedPhone = phone.trim();
@@ -131,10 +138,35 @@ export function SignUpPage({ onBack, onContinue, onSignIn }: SignUpPageProps) {
           <h1 className="text-[28px] leading-9 font-bold tracking-tight text-on-surface">
             Create your courier account
           </h1>
-          <p className="text-sm text-muted mt-2">Join the fleet and start earning on your schedule.</p>
+          <p className="text-sm text-muted mt-2">
+            {signupClosed
+              ? 'Courier signup is currently closed. Check back later or contact support.'
+              : inviteOrFleetOnly
+                ? 'Signup is invite or fleet only. Continue with an invite link, or join through your fleet manager.'
+                : 'Join the fleet and start earning on your schedule.'}
+          </p>
         </div>
 
+        {signupClosed ? (
+          <div className="flex flex-col gap-4">
+            <div className="rounded-lg border border-outline-variant bg-surface-container-low px-4 py-4 text-sm text-on-surface">
+              New courier applications are not being accepted right now.
+            </div>
+            <button
+              type="button"
+              onClick={onSignIn}
+              className="w-full min-h-[56px] bg-primary-container text-on-primary-container rounded-lg font-semibold text-xl"
+            >
+              Sign in instead
+            </button>
+          </div>
+        ) : (
         <form className="flex-1 flex flex-col gap-6" onSubmit={(e) => void handleSubmit(e)}>
+          {inviteOrFleetOnly && (
+            <div className="rounded-lg border border-primary/30 bg-primary/5 px-3 py-3 text-sm text-on-surface">
+              Need an invite or fleet path? Ask your fleet manager, or open the invite link you were sent.
+            </div>
+          )}
           <div className="flex flex-col gap-3">
             <CourierGoogleAuthButton variant="signup" onError={(msg) => setGoogleError(msg || null)} />
             <p className="text-xs text-muted leading-relaxed text-center px-2">
@@ -265,6 +297,7 @@ export function SignUpPage({ onBack, onContinue, onSignIn }: SignUpPageProps) {
             </button>
           </div>
         </form>
+        )}
       </main>
     </div>
   );

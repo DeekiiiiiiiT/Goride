@@ -434,9 +434,12 @@ export function registerMerchantAdminRoutes(app: Hono) {
       team: team || [],
       pendingInvites: invites || [],
       platform_fee_rate: feeResolved.rate,
-      global_platform_fee_rate: feeResolved.globalRate ?? 0.05,
+      /** Tier commission from Pricing (KV global fee retired). */
+      global_platform_fee_rate: feeResolved.tierRate ?? feeResolved.rate,
       platform_fee_percent: feeRateToPercent(feeResolved.rate),
-      global_platform_fee_percent: feeRateToPercent(feeResolved.globalRate ?? 0.05),
+      global_platform_fee_percent: feeRateToPercent(feeResolved.tierRate ?? feeResolved.rate),
+      tier_commission_rate: feeResolved.tierRate,
+      tier_commission_percent: feeResolved.tierRate != null ? feeRateToPercent(feeResolved.tierRate) : null,
     });
   });
 

@@ -13,9 +13,10 @@ export interface HelpArticle {
   section?: 'hours' | 'delivery' | 'profile' | 'earnings';
 }
 
-export const DISPATCH_PHONE = '+18765550199';
-export const SUPPORT_EMAIL = 'partners@roamdash.com';
-export const SUPPORT_PHONE = '+18765550100';
+/** Fallback partner contacts when app-config is offline (matches platform.support.partner defaults). */
+export const DISPATCH_PHONE = '';
+export const SUPPORT_EMAIL = 'partners@roamrush.app';
+export const SUPPORT_PHONE = '';
 
 export const QUICK_TOPICS: HelpTopic[] = [
   {

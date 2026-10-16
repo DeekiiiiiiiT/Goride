@@ -3,7 +3,10 @@ import { computeCancellationRatePercent } from './order-utils';
 
 export const ACCEPTANCE_RATE_TARGET = 85;
 export const CANCELLATION_RATE_TARGET = 5;
+/** @deprecated Prefer passing threshold from app config; default remains 5. */
 export const MIN_ORDERS_FOR_PERFORMANCE_WARNING = 5;
+export const PERFORMANCE_MIN_ORDERS_SETTING_KEY =
+  'partner.performance.min_orders_for_warning';
 
 export interface PerformanceMetrics {
   acceptanceRate: number;
@@ -44,8 +47,11 @@ export function computePerformanceMetrics(
   };
 }
 
-export function isPoorPerformance(metrics: PerformanceMetrics) {
-  if (metrics.sampleSize < MIN_ORDERS_FOR_PERFORMANCE_WARNING) return false;
+export function isPoorPerformance(
+  metrics: PerformanceMetrics,
+  minOrdersForWarning = MIN_ORDERS_FOR_PERFORMANCE_WARNING,
+) {
+  if (metrics.sampleSize < minOrdersForWarning) return false;
   return (
     metrics.acceptanceRate < ACCEPTANCE_RATE_TARGET ||
     metrics.cancellationRate >= CANCELLATION_RATE_TARGET
@@ -60,8 +66,12 @@ export function acknowledgePerformanceWarning(merchantId: string) {
   localStorage.setItem(performanceWarningKey(merchantId), new Date().toISOString());
 }
 
-export function shouldShowPerformanceWarning(merchantId: string, metrics: PerformanceMetrics) {
-  if (!isPoorPerformance(metrics)) return false;
+export function shouldShowPerformanceWarning(
+  merchantId: string,
+  metrics: PerformanceMetrics,
+  minOrdersForWarning = MIN_ORDERS_FOR_PERFORMANCE_WARNING,
+) {
+  if (!isPoorPerformance(metrics, minOrdersForWarning)) return false;
 
   const acknowledgedAt = localStorage.getItem(performanceWarningKey(merchantId));
   if (!acknowledgedAt) return true;

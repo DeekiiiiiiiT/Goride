@@ -6,8 +6,8 @@ import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { requireRoleSet } from "../../_shared/productAdmin.ts";
 import { authorizeCronOrServiceRole } from "../../_shared/authorizeCronOrServiceRole.ts";
 import { detectFileMagicBytes } from "../../_shared/fileMagic.ts";
-import { getFlag } from "../../_shared/featureFlags.ts";
 import { scanForMalware } from "../../_shared/malwareScan.ts";
+import { inHouseGloballyEnabled } from "./visibility.ts";
 import { notifyCustomerOrderStatus } from "../../_shared/dashOrderSms.ts";
 import {
   procurementCardReconLines,
@@ -998,7 +998,7 @@ export function registerInHouseRoutes(app: Hono, deps: { getServiceSupabase: () 
       else current.stale += 1;
       dishStats.set(id, current);
     }
-    const enabled = await getFlag("IN_HOUSE_ENABLED", false);
+    const enabled = await inHouseGloballyEnabled();
     const nameCounts = new Map<string, number>();
     for (const merchant of merchants || []) {
       const key = String(merchant.name || "").trim().toLowerCase();
@@ -1246,7 +1246,16 @@ export function registerInHouseRoutes(app: Hono, deps: { getServiceSupabase: () 
     const { data: store } = await sb.from("in_house_stores").select("*").eq("merchant_id", merchantId).is("archived_at", null).maybeSingle();
     if (!store) return c.json({ error: "Restaurant not found" }, 404);
     if (live) {
-      const enabled = await getFlag("IN_HOUSE_ENABLED", false);
+      const { getResolvedBusyMode } = await import("../../_shared/rushSettings/enterpriseReaders.ts");
+      const busy = await getResolvedBusyMode({ supabase: sb });
+      if (busy.active && busy.pauseNewRestaurants) {
+        return c.json({
+          error: busy.bannerMessage ||
+            "New restaurants cannot go live while the platform is in busy mode.",
+          code: "busy_mode_pause_new_restaurants",
+        }, 409);
+      }
+      const enabled = await inHouseGloballyEnabled();
       const [{ data: hours }, { data: dishes }, { count: cardCount }] = await Promise.all([
         sb.from("merchant_hours").select("is_closed").eq("merchant_id", merchantId),
         sb.from("menu_items").select("source_price_checked_at, is_available").eq("merchant_id", merchantId).eq("is_available", true).is("archived_at", null),

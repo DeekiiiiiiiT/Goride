@@ -1,6 +1,7 @@
 import { ChangeEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { API_ENDPOINTS } from '@roam/api-client';
+import { useAppConfig } from '@roam/rush-app-config';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
 import { ISSUE_TYPES } from '@/lib/accountSubContent';
 import { submitCustomerOrderIssue, uploadCustomerIssuePhoto } from '@/lib/customerApi';
@@ -20,6 +21,7 @@ type ApiOrder = {
   order_number: string;
   status: string;
   created_at: string;
+  delivered_at?: string | null;
   merchant: { name: string; logo_url?: string } | null;
 };
 
@@ -39,6 +41,9 @@ export default function ReportIssuePage({
   issueType: initialIssueType,
   returnTo = 'help',
 }: Props) {
+  const appConfig = useAppConfig('customer');
+  const reportWindowHours =
+    Number(appConfig.settings['customer.issues.report_window_hours']) || 24;
   const [selectedOrder, setSelectedOrder] = useState(orderId ?? '');
   const [issueType, setIssueType] = useState(
     ISSUE_TYPES.some((type) => type.id === initialIssueType) ? initialIssueType! : 'other',
@@ -72,10 +77,16 @@ export default function ReportIssuePage({
     retry: false,
   });
 
-  const orders = useMemo(
-    () => (data?.orders ?? []).filter(o => o.status !== 'cancelled').slice(0, 20),
-    [data],
-  );
+  const orders = useMemo(() => {
+    const cutoffMs = Date.now() - reportWindowHours * 60 * 60 * 1000;
+    return (data?.orders ?? [])
+      .filter((o) => o.status !== 'cancelled')
+      .filter((o) => {
+        if (!o.delivered_at) return true;
+        return new Date(o.delivered_at).getTime() >= cutoffMs;
+      })
+      .slice(0, 20);
+  }, [data, reportWindowHours]);
 
   useEffect(() => {
     if (selectedOrder) return;
@@ -253,7 +264,7 @@ export default function ReportIssuePage({
             <p className="text-body-sm text-on-surface-variant">Loading your orders…</p>
           ) : orders.length === 0 ? (
             <p className="text-body-sm text-on-surface-variant">
-              No recent orders to report on.
+              No orders within the {reportWindowHours}-hour report window.
             </p>
           ) : (
             orders.map(order => {

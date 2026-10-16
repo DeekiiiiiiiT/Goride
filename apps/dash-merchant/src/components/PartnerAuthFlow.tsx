@@ -1,10 +1,12 @@
 import { useState } from 'react';
+import { useAppConfig } from '@roam/rush-app-config';
 import { buildCommandTabletUrl } from '@roam/merchant-ops';
 import OnboardingCarouselPage from '../pages/OnboardingCarouselPage';
 import LoginPage from '../pages/LoginPage';
 import { MaterialIcon } from '../signup/components/MaterialIcon';
 
 type AuthStep = 'welcome' | 'onboarding' | 'login';
+type PartnerSignupMode = 'open' | 'invite_only' | 'closed';
 
 interface PartnerAuthFlowProps {
   onLoginSuccess: () => void;
@@ -19,6 +21,11 @@ export default function PartnerAuthFlow({
   inviteMode = false,
   onCancel,
 }: PartnerAuthFlowProps) {
+  const appConfig = useAppConfig('partner');
+  const signupMode =
+    (appConfig.settings['partner.signup.mode'] as PartnerSignupMode | undefined) ?? 'open';
+  const signupClosed = !inviteMode && signupMode === 'closed';
+  const inviteOnly = !inviteMode && signupMode === 'invite_only';
   const [step, setStep] = useState<AuthStep>(inviteMode ? 'login' : 'welcome');
   const [signUpMode, setSignUpMode] = useState(false);
 
@@ -41,16 +48,26 @@ export default function PartnerAuthFlow({
           >
             Sign in
           </button>
-          <button
-            type="button"
-            onClick={() => {
-              setSignUpMode(true);
-              setStep('onboarding');
-            }}
-            className="mt-inset-sm w-full rounded-lg border border-outline-variant px-inset-lg py-3 text-label-lg font-semibold text-on-surface"
-          >
-            Apply to join Roam Rush
-          </button>
+          {signupClosed ? (
+            <p className="mt-inset-sm text-body-sm text-on-surface-variant">
+              New partner applications are currently closed.
+            </p>
+          ) : inviteOnly ? (
+            <p className="mt-inset-sm text-body-sm text-on-surface-variant">
+              Partner signup is invite only. Open the invite link you were sent to apply.
+            </p>
+          ) : (
+            <button
+              type="button"
+              onClick={() => {
+                setSignUpMode(true);
+                setStep('onboarding');
+              }}
+              className="mt-inset-sm w-full rounded-lg border border-outline-variant px-inset-lg py-3 text-label-lg font-semibold text-on-surface"
+            >
+              Apply to join Roam Rush
+            </button>
+          )}
           <a
             href={commandOrigin ? `${commandOrigin}/tablet` : buildCommandTabletUrl()}
             className="mt-inset-lg inline-flex items-center gap-2 text-label-md font-semibold text-primary"
@@ -83,7 +100,11 @@ export default function PartnerAuthFlow({
           ? onCancel
           : () => setStep(signUpMode ? 'onboarding' : 'welcome')
       }
-      onApply={inviteMode ? undefined : () => setStep('onboarding')}
+      onApply={
+        inviteMode || signupClosed || inviteOnly
+          ? undefined
+          : () => setStep('onboarding')
+      }
       onSuccess={onLoginSuccess}
     />
   );

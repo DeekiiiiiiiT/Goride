@@ -225,7 +225,7 @@ export function navIdToPath(navId: string): string {
       return '/audit';
     case 'settings':
     case 'play-store':
-      return navId === 'play-store' ? '/settings?tab=app-releases' : '/settings';
+      return navId === 'play-store' ? '/settings/platform/app-versions' : '/settings';
     default:
       return '/';
   }

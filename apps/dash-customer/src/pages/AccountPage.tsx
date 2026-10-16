@@ -1,5 +1,7 @@
 import { Session } from '@supabase/supabase-js';
+import { useAppConfig } from '@roam/rush-app-config';
 import { useEffect, useState } from 'react';
+import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
 import {
@@ -9,19 +11,56 @@ import {
   syncProfileFromBackend,
   type UserProfile,
 } from '@/lib/accountContent';
+import { requestAccountDeletion } from '@/lib/customerApi';
 
 type AccountPageProps = {
   session: Session | null;
   onNavigate: (page: string, data?: Record<string, unknown>) => void;
 };
 
+function readAccountLimits(settings: Record<string, unknown>) {
+  const raw = settings['enterprise.accounts.limits'];
+  if (!raw || typeof raw !== 'object') {
+    return { selfServiceDeletionEnabled: true, deletionGraceDays: 14 };
+  }
+  const o = raw as Record<string, unknown>;
+  return {
+    selfServiceDeletionEnabled: o.selfServiceDeletionEnabled !== false,
+    deletionGraceDays: typeof o.deletionGraceDays === 'number' ? o.deletionGraceDays : 14,
+  };
+}
+
 export default function AccountPage({ session, onNavigate }: AccountPageProps) {
   const [profile, setProfile] = useState<UserProfile>(getProfile);
+  const [deleting, setDeleting] = useState(false);
+  const config = useAppConfig('customer');
+  const limits = readAccountLimits(config.settings);
 
   useEffect(() => {
     if (!session) return;
     void syncProfileFromBackend().then(setProfile);
   }, [session]);
+
+  const handleDeleteAccount = async () => {
+    if (!limits.selfServiceDeletionEnabled) {
+      toast.error('Self-service deletion is turned off. Contact support.');
+      return;
+    }
+    const ok = window.confirm(
+      `Request account deletion? Support will process it within about ${limits.deletionGraceDays} day(s).`,
+    );
+    if (!ok) return;
+    setDeleting(true);
+    try {
+      const result = await requestAccountDeletion();
+      window.location.href = result.mailto;
+      toast.message(result.message);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not start deletion');
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   const displayName = session
     ? `${profile.firstName} ${profile.lastName}`.trim() || 'Customer'
@@ -126,6 +165,29 @@ export default function AccountPage({ session, onNavigate }: AccountPageProps) {
             ))}
             {session && (
               <>
+                {limits.selfServiceDeletionEnabled && (
+                  <>
+                    <li>
+                      <div className="px-4">
+                        <div className="h-px bg-outline-variant opacity-20" />
+                      </div>
+                    </li>
+                    <li>
+                      <button
+                        type="button"
+                        disabled={deleting}
+                        onClick={() => void handleDeleteAccount()}
+                        className="w-full flex items-center px-6 py-4 hover:bg-error-container transition-colors active:scale-[0.99] disabled:opacity-60"
+                      >
+                        <MaterialIcon name="person_remove" className="text-error mr-4" />
+                        <span className="text-body-md text-error flex-grow text-left font-medium">
+                          {deleting ? 'Starting…' : 'Delete account'}
+                        </span>
+                        <MaterialIcon name="chevron_right" className="text-outline-variant" />
+                      </button>
+                    </li>
+                  </>
+                )}
                 <li>
                   <div className="px-4">
                     <div className="h-px bg-outline-variant opacity-20" />

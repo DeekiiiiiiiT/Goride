@@ -2,9 +2,9 @@
 import { assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
 import { resolveDashPlatformFeeRate } from "./platformFeeRate.ts";
 
-Deno.test("null merchant override uses global then 5% fallback", () => {
+Deno.test("null merchant override uses global then 20% tier fallback", () => {
   assertEquals(resolveDashPlatformFeeRate(null, 0.05), 0.05);
-  assertEquals(resolveDashPlatformFeeRate(null, null), 0.05);
+  assertEquals(resolveDashPlatformFeeRate(null, null), 0.20);
 });
 
 Deno.test("merchant override only applies when it is a real custom rate", () => {

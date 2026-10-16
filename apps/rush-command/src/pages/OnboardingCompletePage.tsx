@@ -257,10 +257,10 @@ export default function OnboardingCompletePage({
       <footer className="border-t border-outline-variant bg-surface-dim py-8 text-center">
         <p className="text-body-md text-on-surface-variant">Need help with your setup?</p>
         <a
-          href="mailto:support@roamdash.com"
+          href="mailto:partners@roamrush.app"
           className="mt-2 inline-block text-label-lg text-primary underline"
         >
-          support@roamdash.com
+          partners@roamrush.app
         </a>
       </footer>
     </div>

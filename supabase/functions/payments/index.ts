@@ -9,7 +9,7 @@ import { applyCors } from "../_shared/corsAllowlist.ts";
 import { timingSafeEqual } from "../_shared/timingSafeEqual.ts";
 import { requireProductAdmin } from "../_shared/productAdmin.ts";
 import { assertRateLimit } from "../_shared/rateLimit.ts";
-import { getFlag } from "../_shared/featureFlags.ts";
+import { getSetting } from "../_shared/rushSettings/getSetting.ts";
 import { fetchWithTimeout } from "../_shared/fetchWithTimeout.ts";
 import { validateBody, z } from "../_shared/validateBody.ts";
 import { isWipayDemoMode } from "../_shared/wipayDemo.ts";
@@ -517,7 +517,7 @@ app.post("/wallet-debt", async (c) => {
   const supabase = getSupabase(authHeader);
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return c.json({ error: "Unauthorized" }, 401);
-  if (!(await getFlag("PAYMENTS_INTENTS_ENABLED", true))) {
+  if (!(await getSetting<boolean>("customer.payment.card"))) {
     return c.json({ error: "payments_disabled" }, 503);
   }
   const limited = await assertRateLimit(c, `payments:wallet-debt:${user.id}`, { max: 10, windowMs: 60_000 });
@@ -634,7 +634,7 @@ app.post("/intents", async (c) => {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return c.json({ error: "Unauthorized" }, 401);
 
-  if (!(await getFlag("PAYMENTS_INTENTS_ENABLED", true))) {
+  if (!(await getSetting<boolean>("customer.payment.card"))) {
     return c.json({ error: "payments_disabled" }, 503);
   }
 

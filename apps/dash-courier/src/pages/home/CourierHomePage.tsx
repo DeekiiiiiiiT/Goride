@@ -1,5 +1,6 @@
 // @refresh reset — mid-HMR can leave offer/promotion state undefined (ROAM-DASH-COURIER-2/6/8).
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { useAppConfig } from '@roam/rush-app-config';
 import { CourierAppHeader } from '@/components/layout/CourierAppHeader';
 import { AppShell } from '@/components/layout/AppShell';
 import { useImmersiveMode } from '@/hooks/useImmersiveMode';
@@ -109,6 +110,8 @@ type CourierHomePageProps = {
 };
 
 export function CourierHomePage({ onSignOut }: CourierHomePageProps) {
+  const appConfig = useAppConfig('courier');
+  const offerTtlSeconds = appConfig.rules.offerTtlSeconds || 90;
   const dispatch = useCourierDispatch();
   const { mode, offerPhase, deliveryPhase, acceptedStacked, provider } = dispatch;
   const [activeTab, setActiveTab] = useState<CourierTab>('home');
@@ -808,7 +811,7 @@ export function CourierHomePage({ onSignOut }: CourierHomePageProps) {
         <ImmersiveScreen>
           <StackedOfferPage
             offer={currentStackedOffer}
-            initialSeconds={45}
+            initialSeconds={offerTtlSeconds}
             onTimerExpire={handleOfferTimerExpire}
             onDecline={requestDeclineOffer}
             onAccept={handleAcceptStackedOffer}
@@ -820,6 +823,7 @@ export function CourierHomePage({ onSignOut }: CourierHomePageProps) {
         <ImmersiveScreen>
           <DeliveryOfferPage
             offer={currentSingleOffer}
+            initialSeconds={offerTtlSeconds}
             onClose={requestDeclineOffer}
             onTimerExpire={handleOfferTimerExpire}
             onDecline={requestDeclineOffer}
@@ -834,6 +838,7 @@ export function CourierHomePage({ onSignOut }: CourierHomePageProps) {
         <ImmersiveScreen className="z-[70]">
           <OfferDetailsPage
             offer={currentSingleOffer}
+            initialSeconds={offerTtlSeconds}
             onBack={() => dispatch.dismissOfferDetails()}
             onTimerExpire={handleOfferTimerExpire}
             onDecline={requestDeclineOffer}
@@ -989,7 +994,7 @@ export function CourierHomePage({ onSignOut }: CourierHomePageProps) {
         <OfferPushBanner
           restaurant={currentSingleOffer.restaurant}
           earnings={currentSingleOffer.earnings}
-          secondsLeft={90}
+          secondsLeft={offerTtlSeconds}
           onTap={() => {
             setPushBannerOpen(false);
             dispatch.receiveOffer('single');

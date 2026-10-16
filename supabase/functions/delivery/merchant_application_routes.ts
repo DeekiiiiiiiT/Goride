@@ -10,6 +10,7 @@ import {
   merchantPayloadFromBody,
   mirrorDraftScalarsToColumns,
   sanitizeOnboardingDraft,
+  verificationStatusForNewPartner,
   wizardStepFromKey,
 } from "./partnerOnboarding.ts";
 import { fetchBusinessTypeMetadataById } from "./admin/onboardingConfigRoutes.ts";
@@ -359,6 +360,28 @@ export function registerMerchantApplicationRoutes(app: Hono) {
     }
 
     const existing = await getMerchantForUser(supabase, user.id);
+    const { getSetting } = await import("../_shared/rushSettings/getSetting.ts");
+    const partnerSignupMode = await getSetting<"open" | "invite_only" | "closed">(
+      "partner.signup.mode",
+    );
+    // Gate brand-new applications; allow updates to an existing draft/application.
+    if (!existing) {
+      if (partnerSignupMode === "closed") {
+        return c.json({
+          error: "Partner signup is currently closed",
+          code: "signup_closed",
+        }, 403);
+      }
+      if (partnerSignupMode === "invite_only") {
+        const inviteHeader = c.req.header("X-Partner-Invite") || c.req.header("x-partner-invite");
+        if (!inviteHeader) {
+          return c.json({
+            error: "Partner signup is invite only",
+            code: "signup_invite_only",
+          }, 403);
+        }
+      }
+    }
     const businessTypeId = String(body.businessType || existing?.business_type || "");
     const typeRow = businessTypeId
       ? await fetchBusinessTypeMetadataById(businessTypeId)
@@ -391,6 +414,11 @@ export function registerMerchantApplicationRoutes(app: Hono) {
       user.id,
       verticalSnapshot,
     ) as Record<string, unknown>;
+    payload.verification_status = await verificationStatusForNewPartner();
+    if (payload.verification_status === "approved") {
+      payload.is_verified = true;
+      payload.verified_at = new Date().toISOString();
+    }
     if (!pricingTierId) delete payload.pricing_tier_id;
     const pinLat = Number(payload.lat);
     const pinLng = Number(payload.lng);
@@ -544,6 +572,22 @@ export function registerMerchantApplicationRoutes(app: Hono) {
         nextAccepting,
       );
       if (!gate.ok) return c.json(gate.body, gate.status);
+      // Busy mode: pause new restaurant go-live
+      if (nextAccepting && current.is_accepting_orders !== true) {
+        const { getResolvedBusyMode } = await import(
+          "../_shared/rushSettings/enterpriseReaders.ts"
+        );
+        const busy = await getResolvedBusyMode({
+          marketId: current.market_id != null ? String(current.market_id) : null,
+        });
+        if (busy.active && busy.pauseNewRestaurants) {
+          return c.json({
+            error: busy.bannerMessage ||
+              "New restaurants cannot go live while the platform is in busy mode.",
+            code: "busy_mode_pause_new_restaurants",
+          }, 409);
+        }
+      }
     }
 
     // Re-suggest town when partner moves the store pin (skip if ops locked)

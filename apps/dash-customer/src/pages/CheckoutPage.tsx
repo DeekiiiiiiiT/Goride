@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Session } from '@supabase/supabase-js';
 import { API_ENDPOINTS, supabaseAnonFunctionHeaders } from '@roam/api-client';
+import { useAppConfig } from '@roam/rush-app-config';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
 import { AddTipSheet } from '@/components/checkout/AddTipSheet';
 import { ScheduleDeliverySheet } from '@/components/checkout/ScheduleDeliverySheet';
@@ -32,9 +33,19 @@ type Props = {
   session: Session | null;
 };
 
-const TIP_PRESETS = [50, 100, 150, 200];
+const FALLBACK_TIP_PRESETS = [50, 100, 150, 200];
 
 export default function CheckoutPage({ onNavigate, session }: Props) {
+  const appConfig = useAppConfig('customer');
+  const tipPresets =
+    appConfig.rules.tipPresetsJmd.length > 0
+      ? appConfig.rules.tipPresetsJmd
+      : FALLBACK_TIP_PRESETS;
+  const scheduledSetting = appConfig.settings['customer.ordering.scheduled'] as
+    | { enabled?: boolean; maxDaysAhead?: number }
+    | undefined;
+  const scheduledEnabled = scheduledSetting?.enabled === true;
+  const maxDaysAhead = Math.max(1, Number(scheduledSetting?.maxDaysAhead) || 7);
   const { items, merchantId, clearCart, subtotal } = useCart();
   const savedAddress = getSavedAddress();
   const pin = getCheckoutLocation();
@@ -42,12 +53,19 @@ export default function CheckoutPage({ onNavigate, session }: Props) {
   const pinLng = pin.lng ?? savedAddress?.lng;
   const initialPrefs = getCheckoutPreferences();
 
-  const [deliveryMode, setDeliveryMode] = useState<'standard' | 'scheduled'>(initialPrefs.deliveryMode);
+  const [deliveryMode, setDeliveryMode] = useState<'standard' | 'scheduled'>(
+    scheduledEnabled ? initialPrefs.deliveryMode : 'standard',
+  );
   const [scheduledDateId, setScheduledDateId] = useState<string | null>(initialPrefs.scheduledDateId);
   const [scheduledSlotId, setScheduledSlotId] = useState<string | null>(initialPrefs.scheduledSlotId);
   const [scheduledLabel, setScheduledLabel] = useState<string | null>(null);
   const [handoff, setHandoff] = useState<'hand' | 'door'>(initialPrefs.handoff);
-  const [tip, setTip] = useState(initialPrefs.tip);
+  const [tip, setTip] = useState(() => {
+    if (initialPrefs.tip > 0) return initialPrefs.tip;
+    const idx = appConfig.rules.tipDefaultIndex;
+    if (idx >= 0 && tipPresets[idx] != null) return tipPresets[idx];
+    return initialPrefs.tip;
+  });
   const [showSchedule, setShowSchedule] = useState(false);
   const [showTipSheet, setShowTipSheet] = useState(false);
   const [summaryOpen, setSummaryOpen] = useState(false);
@@ -166,8 +184,23 @@ export default function CheckoutPage({ onNavigate, session }: Props) {
     }
   }, [onNavigate]);
 
+  useEffect(() => {
+    if (!scheduledEnabled && deliveryMode === 'scheduled') {
+      setDeliveryMode('standard');
+      setScheduledDateId(null);
+      setScheduledSlotId(null);
+      setScheduledLabel(null);
+      saveCheckoutPreferences({
+        deliveryMode: 'standard',
+        scheduledDateId: null,
+        scheduledSlotId: null,
+      });
+    }
+  }, [scheduledEnabled, deliveryMode]);
+
   const handleDeliveryModeChange = (mode: 'standard' | 'scheduled') => {
     if (mode === 'scheduled') {
+      if (!scheduledEnabled) return;
       setShowSchedule(true);
       return;
     }
@@ -507,26 +540,28 @@ export default function CheckoutPage({ onNavigate, session }: Props) {
                     className="custom-radio"
                   />
                 </label>
-                <label
-                  className={`flex items-center justify-between p-2 rounded-lg cursor-pointer transition-colors ${
-                    deliveryMode === 'scheduled'
-                      ? 'border-2 border-primary bg-surface-container-low'
-                      : 'border border-outline-variant hover:bg-surface-container-low'
-                  }`}
-                >
-                  <span className="text-body-md text-on-surface">
-                    {deliveryMode === 'scheduled' && scheduledLabel
-                      ? `Scheduled: ${scheduledLabel}`
-                      : 'Schedule for later'}
-                  </span>
-                  <input
-                    type="radio"
-                    name="delivery_time"
-                    checked={deliveryMode === 'scheduled'}
-                    onChange={() => handleDeliveryModeChange('scheduled')}
-                    className="custom-radio"
-                  />
-                </label>
+                {scheduledEnabled && (
+                  <label
+                    className={`flex items-center justify-between p-2 rounded-lg cursor-pointer transition-colors ${
+                      deliveryMode === 'scheduled'
+                        ? 'border-2 border-primary bg-surface-container-low'
+                        : 'border border-outline-variant hover:bg-surface-container-low'
+                    }`}
+                  >
+                    <span className="text-body-md text-on-surface">
+                      {deliveryMode === 'scheduled' && scheduledLabel
+                        ? `Scheduled: ${scheduledLabel}`
+                        : 'Schedule for later'}
+                    </span>
+                    <input
+                      type="radio"
+                      name="delivery_time"
+                      checked={deliveryMode === 'scheduled'}
+                      onChange={() => handleDeliveryModeChange('scheduled')}
+                      className="custom-radio"
+                    />
+                  </label>
+                )}
               </div>
             </div>
           </div>
@@ -618,7 +653,7 @@ export default function CheckoutPage({ onNavigate, session }: Props) {
           <h2 className="text-headline-sm font-semibold text-on-surface mb-1">Add a tip for your courier</h2>
           <p className="text-label-sm text-on-surface-variant mb-4">Tip is 100% for the courier</p>
           <div className="flex flex-wrap gap-2">
-            {TIP_PRESETS.map(amount => (
+            {tipPresets.map(amount => (
               <button
                 key={amount}
                 type="button"
@@ -636,7 +671,7 @@ export default function CheckoutPage({ onNavigate, session }: Props) {
               type="button"
               onClick={() => handleTipSelect('custom')}
               className={`px-4 py-2 rounded-full border text-body-md transition-colors ${
-                !TIP_PRESETS.includes(tip as (typeof TIP_PRESETS)[number])
+                !tipPresets.includes(tip)
                   ? 'border-2 border-primary bg-surface-container-low text-primary font-medium'
                   : 'border-outline-variant text-on-surface-variant hover:bg-surface-container'
               }`}
@@ -804,13 +839,16 @@ export default function CheckoutPage({ onNavigate, session }: Props) {
         </button>
       </div>
 
-      <ScheduleDeliverySheet
-        open={showSchedule}
-        initialDateId={scheduledDateId}
-        initialSlotId={scheduledSlotId}
-        onClose={() => setShowSchedule(false)}
-        onConfirm={handleScheduleConfirm}
-      />
+      {scheduledEnabled && (
+        <ScheduleDeliverySheet
+          open={showSchedule}
+          maxDaysAhead={maxDaysAhead}
+          initialDateId={scheduledDateId}
+          initialSlotId={scheduledSlotId}
+          onClose={() => setShowSchedule(false)}
+          onConfirm={handleScheduleConfirm}
+        />
+      )}
 
       <AddTipSheet
         open={showTipSheet}

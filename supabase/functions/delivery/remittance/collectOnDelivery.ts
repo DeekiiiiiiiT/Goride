@@ -39,9 +39,10 @@ function isCashOrder(order: Record<string, unknown>): boolean {
   return pm === "cash" || pm === "cod";
 }
 
-/** Write remittance ledger always (production authority). Kill-switch: DELIVERY_REMITTANCE_OFF=1. */
-function remittanceWriteEnabled(): boolean {
-  return Deno.env.get("DELIVERY_REMITTANCE_OFF") !== "1";
+/** Write remittance ledger (courier.cash.remittance_enabled; env DELIVERY_REMITTANCE_OFF still via getSetting). */
+async function remittanceWriteEnabled(): Promise<boolean> {
+  const { getSetting } = await import("../../_shared/rushSettings/getSetting.ts");
+  return await getSetting<boolean>("courier.cash.remittance_enabled");
 }
 
 /**
@@ -49,22 +50,22 @@ function remittanceWriteEnabled(): boolean {
  * - Emergency dual-write: DELIVERY_COD_LEGACY_WRITE=1 (with remittance on)
  * - V-2 failover: remittance kill-switch ON ⇒ always write legacy (never silent COD)
  */
-function legacyWriteEnabled(): boolean {
-  if (!remittanceWriteEnabled()) return true;
+async function legacyWriteEnabled(): Promise<boolean> {
+  if (!(await remittanceWriteEnabled())) return true;
   return Deno.env.get("DELIVERY_COD_LEGACY_WRITE") === "1";
 }
 
-function dualWriteEnabled(): boolean {
-  return legacyWriteEnabled() && remittanceWriteEnabled();
+async function dualWriteEnabled(): Promise<boolean> {
+  return (await legacyWriteEnabled()) && (await remittanceWriteEnabled());
 }
 
 /** Loud once per isolate when kill-switch forces legacy COD writes. */
 let killSwitchFailoverLogged = false;
-export function logKillSwitchLegacyFailover(orderId?: string): void {
-  if (remittanceWriteEnabled() || killSwitchFailoverLogged) return;
+export async function logKillSwitchLegacyFailover(orderId?: string): Promise<void> {
+  if ((await remittanceWriteEnabled()) || killSwitchFailoverLogged) return;
   killSwitchFailoverLogged = true;
   console.error(
-    "[REMITTANCE_KILL_SWITCH_LEGACY_FAILOVER] DELIVERY_REMITTANCE_OFF=1 — posting COD to legacy courier_cash_* only",
+    "[REMITTANCE_KILL_SWITCH_LEGACY_FAILOVER] remittance disabled — posting COD to legacy courier_cash_* only",
     orderId ? { orderId } : {},
   );
 }
