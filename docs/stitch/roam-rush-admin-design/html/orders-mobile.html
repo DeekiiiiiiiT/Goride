@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" name="viewport"/>
+<title>Roam Rush Ops — Cash-Desk Companion</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&amp;family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {
+            "inverse-on-surface": "#4c5660",
+            "on-secondary-fixed-variant": "#005da7",
+            "tertiary-dim": "#1ad0eb",
+            "on-tertiary-container": "#004b56",
+            "surface-variant": "#122839",
+            "primary-dim": "#699cff",
+            "on-error": "#490006",
+            "outline-variant": "#354a5c",
+            "on-primary-fixed": "#000000",
+            "tertiary-container": "#3adffa",
+            "on-surface-variant": "#98adc3",
+            "surface-container-lowest": "#000000",
+            "error-container": "#871f21",
+            "outline": "#63788c",
+            "on-error-container": "#ff9993",
+            "secondary-dim": "#64a8fe",
+            "surface-dim": "#060f17",
+            "on-tertiary-fixed": "#00363e",
+            "on-primary-container": "#ffffff",
+            "error-dim": "#c54d4a",
+            "error": "#fa746f",
+            "tertiary-fixed-dim": "#1ad0eb",
+            "on-tertiary-fixed-variant": "#005561",
+            "background": "#060f17",
+            "secondary-fixed-dim": "#bcd6ff",
+            "on-secondary-fixed": "#004076",
+            "inverse-primary": "#005bc4",
+            "inverse-surface": "#f7f9ff",
+            "surface-bright": "#192e3f",
+            "secondary": "#a4c9ff",
+            "on-secondary": "#004178",
+            "on-surface": "#d2e8ff",
+            "secondary-fixed": "#d4e3ff",
+            "surface-tint": "#adc6ff",
+            "tertiary": "#7de9ff",
+            "primary-container": "#0e69dc",
+            "on-secondary-container": "#96c2ff",
+            "surface-container": "#0a1b28",
+            "primary": "#adc6ff",
+            "surface-container-highest": "#122839",
+            "on-primary-fixed-variant": "#001435",
+            "on-primary": "#003d88",
+            "secondary-container": "#003c70",
+            "surface-container-high": "#0f212f",
+            "primary-fixed-dim": "#317bef",
+            "on-background": "#d2e8ff",
+            "surface-container-low": "#071520",
+            "on-tertiary": "#005561",
+            "tertiary-fixed": "#3adffa",
+            "surface": "#060f17",
+            "primary-fixed": "#4388fd"
+          },
+          borderRadius: {
+            DEFAULT: "0.25rem",
+            lg: "0.5rem",
+            xl: "0.75rem",
+            full: "9999px"
+          },
+          fontFamily: {
+            headline: ["Inter", "sans-serif"],
+            display: ["Inter", "sans-serif"],
+            body: ["Inter", "sans-serif"],
+            label: ["Inter", "sans-serif"]
+          }
+        }
+      }
+    }
+  </script>
+<style>
+    .no-scrollbar::-webkit-scrollbar {
+      display: none;
+    }
+    .no-scrollbar {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+      display: inline-block;
+      vertical-align: middle;
+      line-height: 1;
+    }
+    .material-symbols-fill {
+      font-variation-settings: 'FILL' 1, 'wght' 500, 'GRAD' 0, 'opsz' 24;
+    }
+    .gradient-primary-cta {
+      background: linear-gradient(135deg, #3b82f6 0%, #22d3ee 100%);
+    }
+  </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background text-on-surface font-body antialiased flex justify-center min-h-screen selection:bg-primary-container selection:text-on-primary-container pb-20">
+<!-- Mobile Frame Container (Max 390px iPhone standard) -->
+<div class="w-full max-w-[390px] min-h-screen bg-background flex flex-col relative shadow-2xl">
+<!-- TopAppBar JSON Anchor Implementation -->
+<header class="sticky top-0 z-40 bg-surface-container border-b border-outline-variant shadow-sm backdrop-blur-md bg-opacity-95">
+<div class="flex justify-between items-center w-full px-4 py-2.5 max-w-[390px] mx-auto">
+<div class="flex items-center gap-2">
+<div class="w-8 h-8 rounded-lg bg-surface-container-high border border-outline-variant flex items-center justify-center text-primary">
+<span class="material-symbols-outlined text-[20px]">storefront</span>
+</div>
+<div class="flex flex-col">
+<span class="text-base font-bold font-headline text-on-surface tracking-tight leading-none">Roam Rush Ops</span>
+<span class="text-[10px] font-medium font-label text-on-surface-variant tracking-wide mt-0.5">BUYER CASH-DESK</span>
+</div>
+</div>
+<div class="flex items-center gap-2">
+<!-- Audio Toggle with JSON trailing icon volume_up -->
+<button aria-label="Audio notifications on" class="w-8 h-8 rounded-lg bg-surface-container-high hover:bg-surface-variant text-on-surface-variant flex items-center justify-center transition-colors active:scale-95" id="soundToggle">
+<span class="material-symbols-outlined text-[19px] text-tertiary">volume_up</span>
+</button>
+<!-- Operator RR Badge -->
+<div class="relative flex items-center gap-1.5 pl-1">
+<div class="w-7 h-7 rounded-lg bg-primary-container text-on-primary-container text-xs font-bold flex items-center justify-center border border-outline-variant shadow-inner">
+              RR
+            </div>
+<span class="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-emerald-500 ring-2 ring-surface-container"></span>
+</div>
+</div>
+</div>
+<!-- Live Desk Status Subheader Strip -->
+<div class="px-4 pb-2.5 pt-0.5 flex items-center justify-between text-xs">
+<div class="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-surface-container-low border border-outline-variant/60 shadow-sm">
+<span class="relative flex h-2 w-2">
+<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+<span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+</span>
+<span class="text-[11px] font-medium text-emerald-400 tracking-tight">Desk open · Customers can order</span>
+</div>
+<div class="flex items-center gap-1 text-[11px] font-medium text-on-surface-variant">
+<span class="w-1.5 h-1.5 rounded-full bg-tertiary"></span>
+<span>4 Ops Active</span>
+</div>
+</div>
+</header>
+<!-- Main Operational Workspace -->
+<main class="flex-1 px-3.5 py-3 space-y-4">
+<!-- Section: Search & Filter Controls -->
+<section class="space-y-2.5">
+<!-- Quick Search Bar -->
+<div class="relative flex items-center">
+<span class="material-symbols-outlined absolute left-3 text-on-surface-variant text-lg pointer-events-none">search</span>
+<input class="w-full bg-surface-container-high border border-outline-variant focus:border-tertiary text-on-surface placeholder:text-on-surface-variant text-xs rounded-lg pl-9 pr-8 py-2 focus:ring-1 focus:ring-tertiary outline-none transition-all" placeholder="Search order #, restaurant, or item..." type="text"/>
+<button class="absolute right-2.5 text-on-surface-variant hover:text-on-surface transition-colors" title="Clear or voice search">
+<span class="material-symbols-outlined text-[17px]">mic</span>
+</button>
+</div>
+<!-- Filter Selector & Operational Stats Strip -->
+<div class="space-y-2">
+<div class="relative">
+<label class="sr-only" for="order-status-filter">Filter queue state</label>
+<div class="w-full bg-surface-container rounded-lg border border-outline-variant p-1.5 flex items-center justify-between shadow-sm">
+<div class="flex items-center gap-2 pl-1.5 overflow-hidden">
+<span class="material-symbols-outlined text-tertiary text-[18px]">filter_list</span>
+<div class="flex items-center gap-1.5 truncate">
+<span class="text-xs font-medium text-on-surface">View:</span>
+<span class="text-xs font-semibold text-primary">Needs attention (3)</span>
+</div>
+</div>
+<div class="flex items-center gap-1 pr-1 text-on-surface-variant">
+<span class="text-[11px] px-1.5 py-0.5 rounded bg-surface-variant text-tertiary font-semibold">Live sync</span>
+<span class="material-symbols-outlined text-lg">expand_more</span>
+</div>
+</div>
+</div>
+<!-- Quick Metric Chips in a 3-Col Bento Grid -->
+<div class="grid grid-cols-3 gap-2">
+<div class="bg-surface-container-low border border-outline-variant/60 rounded-lg p-2 text-center flex flex-col justify-center">
+<span class="text-[10px] text-on-surface-variant font-medium uppercase tracking-wider">Avg Claim</span>
+<span class="text-xs font-bold text-tertiary mt-0.5">42s</span>
+</div>
+<div class="bg-surface-container-low border border-outline-variant/60 rounded-lg p-2 text-center flex flex-col justify-center">
+<span class="text-[10px] text-on-surface-variant font-medium uppercase tracking-wider">Active Ops</span>
+<span class="text-xs font-bold text-secondary mt-0.5">4 ready</span>
+</div>
+<div class="bg-surface-container-low border border-outline-variant/60 rounded-lg p-2 text-center flex flex-col justify-center">
+<span class="text-[10px] text-on-surface-variant font-medium uppercase tracking-wider">Checkout</span>
+<span class="text-xs font-bold text-emerald-400 mt-0.5">100% ok</span>
+</div>
+</div>
+</div>
+</section>
+<!-- Section: Needs you Alert Cards (Horizontal Snap Scroll) -->
+<section class="space-y-2">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-1.5">
+<h2 class="text-xs font-bold font-headline text-on-surface tracking-tight uppercase">Needs you</h2>
+<span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-error-container text-on-error-container">3 urgent</span>
+</div>
+<span class="text-[10px] text-on-surface-variant font-medium">Requires manual intervention</span>
+</div>
+<!-- Horizontal Snap Rail -->
+<div class="flex gap-2.5 overflow-x-auto no-scrollbar scroll-smooth snap-x snap-mandatory py-1 -mx-3.5 px-3.5">
+<!-- Alert Card 1: Late Order -->
+<div class="min-w-[270px] max-w-[270px] snap-center bg-surface-container border border-error-container/70 rounded-lg p-3 flex flex-col justify-between shadow-md relative overflow-hidden">
+<div class="absolute top-0 right-0 w-16 h-16 bg-error/10 rounded-bl-full pointer-events-none"></div>
+<div>
+<div class="flex items-center justify-between mb-1.5">
+<span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-error/20 text-error">
+<span class="material-symbols-outlined text-[13px]">alarm</span>
+                  +18m overdue
+                </span>
+<span class="text-[11px] font-bold text-on-surface-variant">#1042</span>
+</div>
+<h3 class="text-xs font-bold text-on-surface truncate">Bella Napoli</h3>
+<p class="text-[11px] text-on-surface-variant mt-1 leading-relaxed">
+                Courier delayed 18m. Customer asking for desk update &amp; ETA reassurance.
+              </p>
+</div>
+<button class="mt-3 w-full py-1.5 rounded-lg bg-error-container text-on-error-container hover:bg-error-container/80 text-[11px] font-bold flex items-center justify-center gap-1.5 transition-colors active:scale-95">
+<span>Resolve delay</span>
+<span class="material-symbols-outlined text-[14px]">arrow_forward</span>
+</button>
+</div>
+<!-- Alert Card 2: Double-charge Flag -->
+<div class="min-w-[270px] max-w-[270px] snap-center bg-surface-container border border-amber-500/40 rounded-lg p-3 flex flex-col justify-between shadow-md relative overflow-hidden">
+<div class="absolute top-0 right-0 w-16 h-16 bg-amber-500/10 rounded-bl-full pointer-events-none"></div>
+<div>
+<div class="flex items-center justify-between mb-1.5">
+<span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-300">
+<span class="material-symbols-outlined text-[13px]">credit_card</span>
+                  Flag: $34.50
+                </span>
+<span class="text-[11px] font-bold text-on-surface-variant">#1038</span>
+</div>
+<h3 class="text-xs font-bold text-on-surface truncate">Burger &amp; Co.</h3>
+<p class="text-[11px] text-on-surface-variant mt-1 leading-relaxed">
+                Card may have been charged twice by gateway. Instant manual check advised.
+              </p>
+</div>
+<button class="mt-3 w-full py-1.5 rounded-lg bg-surface-container-highest border border-amber-400/50 text-amber-300 hover:bg-surface-variant text-[11px] font-bold flex items-center justify-center gap-1.5 transition-colors active:scale-95">
+<span>Verify charge</span>
+<span class="material-symbols-outlined text-[14px]">verified</span>
+</button>
+</div>
+<!-- Alert Card 3: Price Mismatch Approval -->
+<div class="min-w-[270px] max-w-[270px] snap-center bg-surface-container border border-outline-variant rounded-lg p-3 flex flex-col justify-between shadow-md relative overflow-hidden">
+<div class="absolute top-0 right-0 w-16 h-16 bg-primary/10 rounded-bl-full pointer-events-none"></div>
+<div>
+<div class="flex items-center justify-between mb-1.5">
+<span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-primary-container/30 text-secondary">
+<span class="material-symbols-outlined text-[13px]">price_change</span>
+                  Gap +$18.50
+                </span>
+<span class="text-[11px] font-bold text-on-surface-variant">#1029</span>
+</div>
+<h3 class="text-xs font-bold text-on-surface truncate">Golden Dragon Wok</h3>
+<p class="text-[11px] text-on-surface-variant mt-1 leading-relaxed">
+                Price mismatch detected against POS catalog. Overcharge protection lock.
+              </p>
+</div>
+<button class="mt-3 w-full py-1.5 rounded-lg bg-surface-container-highest border border-outline-variant text-on-surface hover:text-primary text-[11px] font-bold flex items-center justify-center gap-1.5 transition-colors active:scale-95">
+<span>Approve adjustment</span>
+<span class="material-symbols-outlined text-[14px]">tune</span>
+</button>
+</div>
+</div>
+</section>
+<!-- Section: Live Order Queue -->
+<section class="space-y-3 pt-1">
+<div class="flex items-center justify-between px-0.5">
+<div class="flex items-center gap-2">
+<h2 class="text-sm font-bold font-headline text-on-surface tracking-tight">Live Order Queue</h2>
+<span class="px-2 py-0.5 rounded-full text-[11px] font-bold bg-surface-container-high border border-outline-variant text-primary">24 active</span>
+</div>
+<span class="text-[11px] text-on-surface-variant font-medium flex items-center gap-1">
+<span class="material-symbols-outlined text-[13px] text-emerald-400">autorenew</span>
+            Auto-refresh
+          </span>
+</div>
+<!-- Card 1 (Sample Pizza Co Order #1001 - HERO OPERATIONAL FOCUS) -->
+<article class="bg-surface-container border-2 border-primary/50 rounded-lg p-3.5 space-y-3 shadow-lg relative">
+<!-- Top Accent Light Indicator -->
+<div class="flex items-start justify-between">
+<div class="flex items-center gap-2.5">
+<div class="w-9 h-9 rounded-lg bg-surface-variant border border-outline-variant flex items-center justify-center text-primary shadow-inner">
+<span class="material-symbols-outlined text-[20px]">local_pizza</span>
+</div>
+<div>
+<div class="flex items-center gap-1.5">
+<h3 class="text-sm font-bold font-headline text-on-surface">Sample Pizza Co.</h3>
+<span class="text-xs font-extrabold text-tertiary">#1001</span>
+</div>
+<div class="flex items-center gap-2 mt-0.5">
+<span class="text-[10px] font-medium text-on-surface-variant">Buyer Desk</span>
+<span class="text-[10px] px-1.5 py-0.2 rounded bg-surface-variant text-on-surface-variant font-semibold">Unclaimed</span>
+</div>
+</div>
+</div>
+<!-- SLA Badge (Red Overdue) -->
+<div class="flex flex-col items-end">
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-error-container text-on-error-container text-[11px] font-bold shadow-sm">
+<span class="material-symbols-outlined text-[13px]">warning</span>
+                Late (14m)
+              </span>
+<span class="text-[10px] text-error font-medium mt-1">SLA Breached</span>
+</div>
+</div>
+<!-- Item Preview Pills & Summary -->
+<div class="bg-surface-container-low rounded-lg p-2.5 border border-outline-variant/50 space-y-2">
+<div class="flex justify-between items-center text-xs">
+<span class="font-bold text-on-surface">4 items</span>
+<span class="font-bold text-tertiary text-xs">$48.20 Total</span>
+</div>
+<div class="flex flex-wrap gap-1.5 pt-0.5">
+<span class="text-[11px] px-2 py-1 rounded bg-surface-container-highest border border-outline-variant/60 text-on-surface-variant">2x Truffle Pepperoni Pizza</span>
+<span class="text-[11px] px-2 py-1 rounded bg-surface-container-highest border border-outline-variant/60 text-on-surface-variant">1x Garlic Knots</span>
+<span class="text-[11px] px-2 py-1 rounded bg-surface-container-highest border border-outline-variant/60 text-on-surface-variant">2x San Pellegrino</span>
+</div>
+</div>
+<!-- Primary CTA Button (Claim Order) & Secondary Actions -->
+<div class="grid grid-cols-5 gap-2 pt-0.5">
+<button class="col-span-4 gradient-primary-cta text-on-primary-fixed py-2.5 px-3 rounded-lg font-bold text-xs flex items-center justify-center gap-2 shadow-md hover:brightness-110 active:scale-95 transition-all">
+<span class="material-symbols-outlined text-[17px]">pan_tool</span>
+<span>Claim Order</span>
+</button>
+<button class="col-span-1 bg-surface-container-highest border border-outline-variant hover:bg-surface-variant text-on-surface py-2.5 rounded-lg text-xs font-semibold flex items-center justify-center transition-all active:scale-95" title="View details">
+<span class="material-symbols-outlined text-[18px]">info</span>
+</button>
+</div>
+</article>
+<!-- Card 2: Sakura Sushi Bar #1002 -->
+<article class="bg-surface-container border border-outline-variant rounded-lg p-3 space-y-2.5 shadow-sm">
+<div class="flex items-start justify-between">
+<div class="flex items-center gap-2">
+<div class="w-8 h-8 rounded-lg bg-surface-variant flex items-center justify-center text-secondary">
+<span class="material-symbols-outlined text-[18px]">set_meal</span>
+</div>
+<div>
+<div class="flex items-center gap-1.5">
+<h3 class="text-xs font-bold text-on-surface">Sakura Sushi Bar</h3>
+<span class="text-xs font-bold text-secondary">#1002</span>
+</div>
+<span class="text-[10px] text-on-surface-variant">6 items · $72.50</span>
+</div>
+</div>
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 text-[10px] font-bold">
+<span class="material-symbols-outlined text-[12px]">schedule</span>
+              Getting late (6m)
+            </span>
+</div>
+<div class="flex items-center justify-between pt-1">
+<div class="flex items-center gap-1 text-[11px] text-on-surface-variant">
+<span class="material-symbols-outlined text-[14px]">location_on</span>
+<span>Bayview Branch</span>
+</div>
+<button class="gradient-primary-cta text-on-primary-fixed py-1.5 px-4 rounded-lg font-bold text-[11px] flex items-center gap-1.5 shadow active:scale-95 transition-transform">
+<span class="material-symbols-outlined text-[14px]">pan_tool</span>
+<span>Claim Order</span>
+</button>
+</div>
+</article>
+<!-- Card 3: Taqueria Los Hermanos #1003 -->
+<article class="bg-surface-container border border-outline-variant rounded-lg p-3 space-y-2.5 shadow-sm">
+<div class="flex items-start justify-between">
+<div class="flex items-center gap-2">
+<div class="w-8 h-8 rounded-lg bg-surface-variant flex items-center justify-center text-tertiary">
+<span class="material-symbols-outlined text-[18px]">lunch_dining</span>
+</div>
+<div>
+<div class="flex items-center gap-1.5">
+<h3 class="text-xs font-bold text-on-surface">Taqueria Los Hermanos</h3>
+<span class="text-xs font-bold text-tertiary">#1003</span>
+</div>
+<span class="text-[10px] text-on-surface-variant">2 items · $23.00</span>
+</div>
+</div>
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 text-[10px] font-bold">
+<span class="material-symbols-outlined text-[12px]">check_circle</span>
+              On time (22m left)
+            </span>
+</div>
+<div class="flex items-center justify-between pt-1">
+<div class="flex items-center gap-1 text-[11px] text-on-surface-variant">
+<span class="material-symbols-outlined text-[14px]">credit_score</span>
+<span>Direct POS Confirmed</span>
+</div>
+<button class="gradient-primary-cta text-on-primary-fixed py-1.5 px-4 rounded-lg font-bold text-[11px] flex items-center gap-1.5 shadow active:scale-95 transition-transform">
+<span class="material-symbols-outlined text-[14px]">pan_tool</span>
+<span>Claim Order</span>
+</button>
+</div>
+</article>
+<!-- Card 4: Downtown Deli Kitchen #1005 -->
+<article class="bg-surface-container border border-outline-variant rounded-lg p-3 space-y-2.5 shadow-sm">
+<div class="flex items-start justify-between">
+<div class="flex items-center gap-2">
+<div class="w-8 h-8 rounded-lg bg-surface-variant flex items-center justify-center text-primary">
+<span class="material-symbols-outlined text-[18px]">dinner_dining</span>
+</div>
+<div>
+<div class="flex items-center gap-1.5">
+<h3 class="text-xs font-bold text-on-surface">Downtown Deli Kitchen</h3>
+<span class="text-xs font-bold text-primary">#1005</span>
+</div>
+<span class="text-[10px] text-on-surface-variant">5 items · $51.00</span>
+</div>
+</div>
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 text-[10px] font-bold">
+<span class="material-symbols-outlined text-[12px]">schedule</span>
+              Getting late (4m)
+            </span>
+</div>
+<div class="flex items-center justify-between pt-1">
+<div class="flex items-center gap-1 text-[11px] text-on-surface-variant">
+<span class="material-symbols-outlined text-[14px]">person</span>
+<span>Courier Assigned</span>
+</div>
+<button class="gradient-primary-cta text-on-primary-fixed py-1.5 px-4 rounded-lg font-bold text-[11px] flex items-center gap-1.5 shadow active:scale-95 transition-transform">
+<span class="material-symbols-outlined text-[14px]">pan_tool</span>
+<span>Claim Order</span>
+</button>
+</div>
+</article>
+</section>
+</main>
+<!-- BottomNavBar JSON Anchor Implementation -->
+<nav class="fixed bottom-0 left-0 w-full z-50 bg-surface-container border-t border-outline-variant shadow-md">
+<div class="flex justify-around items-center px-2 py-2 max-w-[390px] mx-auto">
+<!-- Tab 1: Live Queue (ACTIVE as this is Live Order Queue page) -->
+<button aria-label="Live Queue tab" class="flex flex-col items-center justify-center bg-primary-container text-on-primary-container rounded-lg px-3 py-1.5 transition-all active:scale-95 relative">
+<div class="relative">
+<span class="material-symbols-outlined text-[20px]">receipt_long</span>
+<span class="absolute -top-1.5 -right-3 text-[9px] font-bold bg-error text-white rounded-full px-1 py-0.2">24</span>
+</div>
+<span class="text-[11px] font-medium font-label mt-0.5">Live Queue</span>
+</button>
+<!-- Tab 2: Urgent -->
+<button aria-label="Urgent tab" class="flex flex-col items-center justify-center text-on-surface-variant px-3 py-1.5 hover:text-on-surface transition-colors duration-150 active:scale-95 relative">
+<div class="relative">
+<span class="material-symbols-outlined text-[20px]">warning</span>
+<span class="absolute -top-1 -right-2 text-[9px] font-bold bg-error-container text-on-error-container rounded-full w-3.5 h-3.5 flex items-center justify-center">3</span>
+</div>
+<span class="text-[11px] font-medium font-label mt-0.5">Urgent</span>
+</button>
+<!-- Tab 3: Cash Desk -->
+<button aria-label="Cash Desk tab" class="flex flex-col items-center justify-center text-on-surface-variant px-3 py-1.5 hover:text-on-surface transition-colors duration-150 active:scale-95">
+<span class="material-symbols-outlined text-[20px]">point_of_sale</span>
+<span class="text-[11px] font-medium font-label mt-0.5">Cash Desk</span>
+</button>
+<!-- Tab 4: History -->
+<button aria-label="History tab" class="flex flex-col items-center justify-center text-on-surface-variant px-3 py-1.5 hover:text-on-surface transition-colors duration-150 active:scale-95">
+<span class="material-symbols-outlined text-[20px]">history</span>
+<span class="text-[11px] font-medium font-label mt-0.5">History</span>
+</button>
+</div>
+</nav>
+</div>
+<script>
+    // Lightweight audio feedback simulation for ops sound toggle
+    const soundToggle = document.getElementById('soundToggle');
+    if (soundToggle) {
+      soundToggle.addEventListener('click', () => {
+        const icon = soundToggle.querySelector('.material-symbols-outlined');
+        if (icon.textContent === 'volume_up') {
+          icon.textContent = 'volume_off';
+          icon.classList.remove('text-tertiary');
+          icon.classList.add('text-on-surface-variant');
+        } else {
+          icon.textContent = 'volume_up';
+          icon.classList.add('text-tertiary');
+          icon.classList.remove('text-on-surface-variant');
+        }
+      });
+    }
+  </script>
+</body></html>

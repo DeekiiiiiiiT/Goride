@@ -1,0 +1,771 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Roam Rush Ops Desk — Buyer Card Vault &amp; Transactions</title>
+<!-- Inter Font -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet"/>
+<!-- Material Symbols Outlined -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind CSS with Forms and Container Queries -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          "colors": {
+            "surface-container-low": "#071520",
+            "on-background": "#d2e8ff",
+            "primary-dim": "#699cff",
+            "on-secondary-container": "#96c2ff",
+            "error-container": "#871f21",
+            "tertiary-fixed": "#3adffa",
+            "on-tertiary-fixed": "#00363e",
+            "surface-container": "#0a1b28",
+            "tertiary-container": "#3adffa",
+            "on-secondary": "#004178",
+            "tertiary-fixed-dim": "#1ad0eb",
+            "secondary-container": "#003c70",
+            "surface-variant": "#122839",
+            "inverse-primary": "#005bc4",
+            "on-primary-fixed": "#000000",
+            "secondary": "#a4c9ff",
+            "secondary-dim": "#64a8fe",
+            "on-tertiary-container": "#004b56",
+            "tertiary": "#7de9ff",
+            "secondary-fixed-dim": "#bcd6ff",
+            "surface-bright": "#192e3f",
+            "on-surface-variant": "#98adc3",
+            "tertiary-dim": "#1ad0eb",
+            "on-primary-container": "#ffffff",
+            "error-dim": "#c54d4a",
+            "outline": "#63788c",
+            "on-secondary-fixed-variant": "#005da7",
+            "on-tertiary-fixed-variant": "#005561",
+            "primary": "#adc6ff",
+            "on-primary": "#003d88",
+            "surface-dim": "#060f17",
+            "on-tertiary": "#005561",
+            "error": "#fa746f",
+            "background": "#060f17",
+            "outline-variant": "#354a5c",
+            "surface-container-highest": "#122839",
+            "surface-container-lowest": "#000000",
+            "surface-container-high": "#0f212f",
+            "on-primary-fixed-variant": "#001435",
+            "primary-fixed-dim": "#317bef",
+            "surface-tint": "#adc6ff",
+            "surface": "#060f17",
+            "on-error": "#490006",
+            "primary-container": "#0e69dc",
+            "inverse-surface": "#f7f9ff",
+            "on-surface": "#d2e8ff",
+            "inverse-on-surface": "#4c5660",
+            "on-error-container": "#ff9993",
+            "secondary-fixed": "#d4e3ff",
+            "on-secondary-fixed": "#004076",
+            "primary-fixed": "#4388fd"
+          },
+          "borderRadius": {
+            "DEFAULT": "0.25rem",
+            "lg": "0.5rem",
+            "xl": "0.75rem",
+            "full": "9999px"
+          },
+          "fontFamily": {
+            "headline": ["Inter", "sans-serif"],
+            "display": ["Inter", "sans-serif"],
+            "body": ["Inter", "sans-serif"],
+            "label": ["Inter", "sans-serif"]
+          }
+        },
+      },
+    }
+  </script>
+<style>
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #060f17;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #354a5c;
+      border-radius: 4px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #63788c;
+    }
+  </style>
+</head>
+<body class="bg-background text-on-surface font-body min-h-screen overflow-x-hidden flex antialiased select-none">
+<!-- SIDEBAR -->
+<aside class="fixed inset-y-0 left-0 w-64 flex flex-col z-40 bg-surface-container-low border-r border-outline-variant shadow-none">
+<div class="w-64 h-screen flex flex-col justify-between p-4 bg-surface-container-low">
+<div>
+<div class="flex items-center gap-3 px-2 py-3 mb-6">
+<div class="w-9 h-9 rounded-lg bg-gradient-to-br from-[#3b82f6] to-[#22d3ee] flex items-center justify-center text-white shadow-sm shadow-blue-500/20">
+<span class="material-symbols-outlined text-xl" style="font-variation-settings: 'FILL' 1;">bolt</span>
+</div>
+<div class="flex flex-col">
+<span class="font-headline text-lg font-bold tracking-tight text-on-surface">Roam Rush</span>
+<span class="font-label text-xs tracking-wide text-on-surface-variant font-medium">Ops Desk</span>
+</div>
+</div>
+<nav class="space-y-1">
+<a class="flex items-center gap-3 px-3 py-2 text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high rounded-lg text-sm transition-colors transition-all duration-150 active:scale-[0.98]" href="#">
+<span class="material-symbols-outlined text-[20px]">receipt_long</span>
+<span class="font-body text-sm font-medium">Orders</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high rounded-lg text-sm transition-colors transition-all duration-150 active:scale-[0.98]" href="#">
+<span class="material-symbols-outlined text-[20px]">space_dashboard</span>
+<span class="font-body text-sm font-medium">Workspace</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high rounded-lg text-sm transition-colors transition-all duration-150 active:scale-[0.98]" href="#">
+<span class="material-symbols-outlined text-[20px]">storefront</span>
+<span class="font-body text-sm font-medium">Restaurants</span>
+</a>
+<!-- Cards & Spend (Active) -->
+<a class="flex items-center gap-3 px-3 py-2 text-primary bg-secondary-container/50 font-medium rounded-lg text-sm border-l-2 border-[#3b82f6] transition-all duration-150 active:scale-[0.98]" href="#">
+<span class="material-symbols-outlined text-[20px]" style="font-variation-settings: 'FILL' 1;">credit_card</span>
+<span class="font-body text-sm font-semibold text-primary">Cards &amp; spend</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high rounded-lg text-sm transition-colors transition-all duration-150 active:scale-[0.98]" href="#">
+<span class="material-symbols-outlined text-[20px]">bar_chart</span>
+<span class="font-body text-sm font-medium">Reports</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high rounded-lg text-sm transition-colors transition-all duration-150 active:scale-[0.98]" href="#">
+<span class="material-symbols-outlined text-[20px]">settings</span>
+<span class="font-body text-sm font-medium">Settings</span>
+</a>
+</nav>
+<div class="mt-6 pt-4 border-t border-outline-variant/50">
+<button class="w-full py-2.5 px-3 rounded-lg bg-surface-variant hover:bg-surface-container-highest border border-outline-variant text-secondary text-xs font-semibold flex items-center justify-center gap-2 transition-all active:scale-[0.98]">
+<span class="material-symbols-outlined text-base">near_me</span>
+<span>Quick Dispatch</span>
+</button>
+</div>
+</div>
+<div class="border-t border-outline-variant pt-4 space-y-1">
+<div class="px-3 py-2 rounded-lg bg-surface-container/60 border border-outline-variant/40 mb-3">
+<div class="flex items-center justify-between text-xs mb-1">
+<span class="text-on-surface-variant font-medium">Shift Buffer</span>
+<span class="text-[#22d3ee] font-semibold font-mono">J$ 65,000</span>
+</div>
+<div class="w-full bg-surface-dim rounded-full h-1.5 overflow-hidden">
+<div class="bg-gradient-to-r from-[#3b82f6] to-[#22d3ee] h-full rounded-full" style="width: 42%;"></div>
+</div>
+</div>
+<a class="flex items-center gap-3 px-3 py-2 text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high rounded-lg text-xs transition-colors" href="#">
+<span class="material-symbols-outlined text-[18px]">help_center</span>
+<span>Support</span>
+</a>
+<a class="flex items-center justify-between px-3 py-2 text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high rounded-lg text-xs transition-colors" href="#">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-[18px]">monitoring</span>
+<span>System Health</span>
+</div>
+<span class="flex h-2 w-2 relative">
+<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+<span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+</span>
+</a>
+</div>
+</div>
+</aside>
+<!-- MAIN CONTENT WRAPPER -->
+<div class="flex-1 ml-64 flex flex-col min-w-0 bg-[#060f17]">
+<!-- TOP NAV -->
+<header class="docked full-width top-0 z-30 bg-[#071520] border-b border-[#354a5c] shadow-none sticky">
+<div class="flex justify-between items-center h-14 px-6 w-full">
+<div class="flex items-center gap-6">
+<div class="flex items-center gap-2">
+<span class="font-headline text-sm font-semibold tracking-wide text-on-surface">Roam Rush Ops Desk</span>
+<span class="text-outline text-xs">/</span>
+<span class="text-xs text-on-surface-variant font-medium">In-House Desk</span>
+</div>
+<div class="hidden sm:flex items-center gap-2 px-2.5 py-1 rounded-full bg-emerald-950/60 border border-emerald-500/30 text-emerald-300 text-xs font-medium">
+<span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+<span>Desk open · Customers can order</span>
+</div>
+</div>
+<nav class="hidden xl:flex items-center gap-6">
+<a class="text-on-surface-variant hover:text-on-surface text-xs font-medium transition-colors" href="#">Live Queue</a>
+<a class="text-on-surface-variant hover:text-on-surface text-xs font-medium transition-colors" href="#">Driver Map</a>
+<a class="text-on-surface-variant hover:text-on-surface text-xs font-medium transition-colors" href="#">Escalations</a>
+</nav>
+<div class="flex items-center gap-3">
+<div class="hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded bg-surface-container border border-outline-variant/60 text-[11px] text-on-surface-variant">
+<span class="material-symbols-outlined text-sm text-[#22d3ee]">speed</span>
+<span class="font-mono text-[#22d3ee] font-medium">99.8%</span>
+<span>Health</span>
+</div>
+<button class="p-1.5 rounded-lg text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors" title="Sound alerts enabled">
+<span class="material-symbols-outlined text-lg">volume_up</span>
+</button>
+<button class="relative p-1.5 rounded-lg text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors">
+<span class="material-symbols-outlined text-lg">notifications</span>
+<span class="absolute top-1 right-1 w-2 h-2 rounded-full bg-[#3b82f6] ring-2 ring-surface-container-low"></span>
+</button>
+<div class="h-5 w-px bg-outline-variant"></div>
+<div class="flex items-center gap-2.5 pl-1">
+<img class="w-8 h-8 rounded-full border border-outline-variant object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAPCAKC-iw-SNnAKCj3i5ATPVoBzE_mmaNqEYuxb86mWsXmGql6zuZV1vVotVFc6XnkeTudB1YV9isU-rmIatUgJ3wl0pJ2LIXXPtgiVosLzv_JlA5nhQeVLND11EMsnvpLyDyGxPj8HfCzrkQmEaxns_PUwy-XKy9R_9grgEFy9jyeJFayW8QvgNCCPNCPD84tmGpG9aL82LPlSJUVzs2RNpe6qwDY9zBIWqCEAVMmvtMWhc6MA8uG9n6pUql6een1D0uywNyvi_c"/>
+<div class="hidden lg:flex flex-col text-left">
+<span class="text-xs font-semibold text-on-surface leading-tight">Sarah Miller</span>
+<span class="text-[10px] text-on-surface-variant leading-tight">Senior Operator #402</span>
+</div>
+</div>
+</div>
+</div>
+</header>
+<!-- MAIN WORKSPACE -->
+<main class="flex-1 p-6 space-y-6 bg-[#060f17]">
+<div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+<div>
+<div class="flex items-center gap-2">
+<h1 class="font-headline text-2xl font-bold tracking-tight text-on-surface">Cards &amp; Spend</h1>
+<span class="px-2 py-0.5 rounded text-[11px] font-mono font-medium bg-surface-variant text-secondary border border-outline-variant">VAULT v2.4</span>
+</div>
+<p class="text-sm text-on-surface-variant mt-0.5">Manage buyer payment cards and reconcile ledger bank transactions</p>
+</div>
+<div class="flex items-center gap-3">
+<button class="px-3.5 py-2 rounded-lg text-xs font-medium text-on-surface-variant hover:text-on-surface bg-surface-container border border-outline-variant transition-colors flex items-center gap-1.5" id="toggle-empty-view-btn">
+<span class="material-symbols-outlined text-sm">visibility</span>
+<span>Toggle Zero-State</span>
+</button>
+<button class="px-4 py-2 rounded-lg text-xs font-bold text-white bg-gradient-to-r from-[#3b82f6] to-[#22d3ee] hover:brightness-110 shadow-lg shadow-blue-500/20 flex items-center gap-2 transition-all active:scale-95" id="open-add-card-btn">
+<span class="material-symbols-outlined text-base font-bold">add</span>
+<span>+ Add card</span>
+</button>
+</div>
+</div>
+<!-- SUB-TABS NAVIGATION -->
+<div class="flex items-center border-b border-[#354a5c] gap-6">
+<button class="sub-tab-btn active pb-3 text-sm font-semibold text-[#3b82f6] border-b-2 border-[#3b82f6] flex items-center gap-2 transition-colors" data-target="cards-tab-content">
+<span class="material-symbols-outlined text-base">credit_card</span>
+<span>Cards Vault</span>
+</button>
+<button class="sub-tab-btn pb-3 text-sm font-medium text-on-surface-variant hover:text-on-surface flex items-center gap-2 transition-colors" data-target="transactions-tab-content">
+<span class="material-symbols-outlined text-base">receipt_long</span>
+<span>Transactions &amp; Reconciliation</span>
+</button>
+</div>
+<!-- TAB 1: CARDS VAULT CONTENT -->
+<div class="tab-pane space-y-6" id="cards-tab-content">
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+<div class="p-4 rounded-xl bg-[#0a1b28] border border-[#354a5c] flex flex-col justify-between">
+<div class="flex items-center justify-between text-on-surface-variant mb-2">
+<span class="text-xs font-medium uppercase tracking-wider">Total Active Cards</span>
+<div class="w-7 h-7 rounded-lg bg-surface-variant flex items-center justify-center text-[#3b82f6]">
+<span class="material-symbols-outlined text-base">credit_card</span>
+</div>
+</div>
+<div class="flex items-baseline gap-2">
+<span class="text-2xl font-bold text-on-surface font-mono">6 Cards</span>
+<span class="text-xs text-emerald-400 font-medium flex items-center">
+<span class="material-symbols-outlined text-xs">check_circle</span> 5 ready
+            </span>
+</div>
+<p class="text-[11px] text-on-surface-variant mt-1.5">1 card currently paused for manual audit</p>
+</div>
+<div class="p-4 rounded-xl bg-[#0a1b28] border border-[#354a5c] flex flex-col justify-between">
+<div class="flex items-center justify-between text-on-surface-variant mb-2">
+<span class="text-xs font-medium uppercase tracking-wider">Total Daily Limit</span>
+<div class="w-7 h-7 rounded-lg bg-surface-variant flex items-center justify-center text-secondary">
+<span class="material-symbols-outlined text-base">account_balance_wallet</span>
+</div>
+</div>
+<div class="flex items-baseline gap-2">
+<span class="text-2xl font-bold text-on-surface font-mono">J$ 140,000</span>
+<span class="text-xs text-on-surface-variant font-medium">Daily cap</span>
+</div>
+<p class="text-[11px] text-on-surface-variant mt-1.5">Resets automatically at 00:00 EST</p>
+</div>
+<div class="p-4 rounded-xl bg-[#0a1b28] border border-[#354a5c] flex flex-col justify-between">
+<div class="flex items-center justify-between text-on-surface-variant mb-2">
+<span class="text-xs font-medium uppercase tracking-wider">Total Spent Today</span>
+<div class="w-7 h-7 rounded-lg bg-surface-variant flex items-center justify-center text-[#22d3ee]">
+<span class="material-symbols-outlined text-base">shopping_cart_checkout</span>
+</div>
+</div>
+<div class="flex items-baseline gap-2">
+<span class="text-2xl font-bold text-on-surface font-mono">J$ 48,250</span>
+<span class="text-xs font-medium text-[#22d3ee]">34.5% utilized</span>
+</div>
+<div class="w-full bg-[#122839] rounded-full h-1.5 mt-2 overflow-hidden">
+<div class="bg-gradient-to-r from-[#3b82f6] to-[#22d3ee] h-full rounded-full" style="width: 34.5%;"></div>
+</div>
+</div>
+<div class="p-4 rounded-xl bg-[#0a1b28] border border-[#354a5c] flex flex-col justify-between">
+<div class="flex items-center justify-between text-on-surface-variant mb-2">
+<span class="text-xs font-medium uppercase tracking-wider">Available Capacity</span>
+<div class="w-7 h-7 rounded-lg bg-surface-variant flex items-center justify-center text-emerald-400">
+<span class="material-symbols-outlined text-base">savings</span>
+</div>
+</div>
+<div class="flex items-baseline gap-2">
+<span class="text-2xl font-bold text-emerald-400 font-mono">J$ 91,750</span>
+<span class="text-xs text-on-surface-variant">Remaining</span>
+</div>
+<p class="text-[11px] text-emerald-400/80 mt-1.5 flex items-center gap-1">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> Adequate purchasing cushion
+          </p>
+</div>
+</div>
+<div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 p-2 bg-[#0a1b28] rounded-lg border border-[#354a5c]/60">
+<div class="relative flex-1 max-w-md">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-lg">search</span>
+<input class="w-full pl-9 pr-4 py-2 bg-[#071520] border border-[#354a5c] rounded-md text-xs text-on-surface placeholder-on-surface-variant/60 focus:outline-none focus:border-[#3b82f6] focus:ring-1 focus:ring-[#3b82f6]" id="card-search-input" placeholder="Search by card nickname or last 4 digits..." type="text"/>
+</div>
+<div class="flex items-center gap-1 bg-[#071520] p-1 rounded-md border border-[#354a5c]/40">
+<button class="filter-tab-btn active px-3 py-1 rounded text-xs font-semibold bg-[#003c70] text-[#96c2ff] transition-all">All (6)</button>
+<button class="filter-tab-btn px-3 py-1 rounded text-xs font-medium text-on-surface-variant hover:text-on-surface transition-all">Active (5)</button>
+<button class="filter-tab-btn px-3 py-1 rounded text-xs font-medium text-on-surface-variant hover:text-on-surface transition-all">Paused (1)</button>
+</div>
+</div>
+<div class="rounded-xl border border-[#354a5c] bg-[#0a1b28] overflow-hidden shadow-sm" id="data-table-container">
+<div class="overflow-x-auto">
+<table class="w-full text-left text-xs border-collapse">
+<thead>
+<tr class="bg-[#071520]/80 border-b border-[#354a5c] text-[11px] text-on-surface-variant font-medium uppercase tracking-wider">
+<th class="py-3 px-4">Card Details &amp; Nickname</th>
+<th class="py-3 px-4">Assigned Buyer / Desk</th>
+<th class="py-3 px-4">Daily Spend Limit</th>
+<th class="py-3 px-4 w-64">Spent Today</th>
+<th class="py-3 px-4">Status</th>
+<th class="py-3 px-4 text-right">Actions</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-[#354a5c]/40">
+<tr class="hover:bg-[#0f212f]/60 transition-colors group">
+<td class="py-3.5 px-4">
+<div class="flex items-center gap-3">
+<div class="w-10 h-7 rounded bg-surface-variant border border-outline-variant flex items-center justify-center font-black tracking-tighter text-[11px] text-[#3b82f6] italic font-headline">VISA</div>
+<div>
+<div class="flex items-center gap-2">
+<span class="font-bold text-on-surface text-sm">Buyer A — Downtown Rapid</span>
+<span class="font-mono text-xs text-on-surface-variant">•••• 4242</span>
+</div>
+<div class="text-[11px] text-on-surface-variant flex items-center gap-2 mt-0.5">
+<span>Exp 09/27</span><span>•</span><span class="text-[#22d3ee]">Corporate Fleet Primary</span>
+</div>
+</div>
+</div>
+</td>
+<td class="py-3.5 px-4">
+<div class="flex items-center gap-2">
+<div class="w-6 h-6 rounded-full bg-[#003c70] text-[#96c2ff] flex items-center justify-center font-bold text-[10px]">AD</div>
+<div><span class="text-on-surface font-medium block">Alex D.</span><span class="text-[10px] text-on-surface-variant">Lead Terminal #01</span></div>
+</div>
+</td>
+<td class="py-3.5 px-4 font-mono font-medium text-on-surface">J$ 25,000</td>
+<td class="py-3.5 px-4">
+<div class="space-y-1">
+<div class="flex items-center justify-between font-mono text-[11px]">
+<span class="text-on-surface font-semibold">J$ 18,450</span><span class="text-on-surface-variant">73.8%</span>
+</div>
+<div class="w-full bg-[#122839] rounded-full h-1.5 overflow-hidden">
+<div class="bg-gradient-to-r from-[#3b82f6] to-[#699cff] h-full rounded-full" style="width: 73.8%;"></div>
+</div>
+</div>
+</td>
+<td class="py-3.5 px-4">
+<span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-emerald-950/70 border border-emerald-500/30 text-emerald-300">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>Active
+</span>
+</td>
+<td class="py-3.5 px-4 text-right">
+<div class="flex items-center justify-end gap-1.5">
+<button class="px-2.5 py-1 rounded bg-surface-variant hover:bg-surface-bright text-xs text-secondary font-medium transition-colors">Edit limit</button>
+<button class="p-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-variant transition-colors" title="Archive / Pause Card"><span class="material-symbols-outlined text-base">archive</span></button>
+</div>
+</td>
+</tr>
+<tr class="hover:bg-[#0f212f]/60 transition-colors group">
+<td class="py-3.5 px-4">
+<div class="flex items-center gap-3">
+<div class="w-10 h-7 rounded bg-surface-variant border border-outline-variant flex items-center justify-center font-bold text-[10px] text-[#22d3ee] font-headline tracking-tight">MC</div>
+<div>
+<div class="flex items-center gap-2">
+<span class="font-bold text-on-surface text-sm">Buyer B — North Fleet</span>
+<span class="font-mono text-xs text-on-surface-variant">•••• 8831</span>
+</div>
+<div class="text-[11px] text-on-surface-variant flex items-center gap-2 mt-0.5">
+<span>Exp 11/26</span><span>•</span><span class="text-secondary">Suburban Cluster Ops</span>
+</div>
+</div>
+</div>
+</td>
+<td class="py-3.5 px-4">
+<div class="flex items-center gap-2">
+<div class="w-6 h-6 rounded-full bg-surface-bright text-[#3b82f6] flex items-center justify-center font-bold text-[10px]">SM</div>
+<div><span class="text-on-surface font-medium block">Sarah Miller</span><span class="text-[10px] text-on-surface-variant">Terminal #03</span></div>
+</div>
+</td>
+<td class="py-3.5 px-4 font-mono font-medium text-on-surface">J$ 30,000</td>
+<td class="py-3.5 px-4">
+<div class="space-y-1">
+<div class="flex items-center justify-between font-mono text-[11px]">
+<span class="text-on-surface font-semibold">J$ 12,100</span><span class="text-on-surface-variant">40.3%</span>
+</div>
+<div class="w-full bg-[#122839] rounded-full h-1.5 overflow-hidden">
+<div class="bg-gradient-to-r from-[#3b82f6] to-[#22d3ee] h-full rounded-full" style="width: 40.3%;"></div>
+</div>
+</div>
+</td>
+<td class="py-3.5 px-4">
+<span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-emerald-950/70 border border-emerald-500/30 text-emerald-300">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>Active
+</span>
+</td>
+<td class="py-3.5 px-4 text-right">
+<div class="flex items-center justify-end gap-1.5">
+<button class="px-2.5 py-1 rounded bg-surface-variant hover:bg-surface-bright text-xs text-secondary font-medium transition-colors">Edit limit</button>
+<button class="p-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-variant transition-colors" title="Archive / Pause Card"><span class="material-symbols-outlined text-base">archive</span></button>
+</div>
+</td>
+</tr>
+<tr class="hover:bg-[#0f212f]/60 transition-colors group">
+<td class="py-3.5 px-4">
+<div class="flex items-center gap-3">
+<div class="w-10 h-7 rounded bg-surface-variant border border-outline-variant flex items-center justify-center font-black tracking-tighter text-[11px] text-[#3b82f6] italic font-headline">VISA</div>
+<div>
+<div class="flex items-center gap-2">
+<span class="font-bold text-on-surface text-sm">Buyer C — East Hub</span>
+<span class="font-mono text-xs text-on-surface-variant">•••• 1092</span>
+</div>
+<div class="text-[11px] text-on-surface-variant flex items-center gap-2 mt-0.5">
+<span>Exp 04/28</span><span>•</span><span class="text-on-surface-variant">High Speed Orders</span>
+</div>
+</div>
+</div>
+</td>
+<td class="py-3.5 px-4">
+<div class="flex items-center gap-2">
+<div class="w-6 h-6 rounded-full bg-surface-bright text-[#22d3ee] flex items-center justify-center font-bold text-[10px]">KL</div>
+<div><span class="text-on-surface font-medium block">Kevin Lew</span><span class="text-[10px] text-on-surface-variant">Terminal #04</span></div>
+</div>
+</td>
+<td class="py-3.5 px-4 font-mono font-medium text-on-surface">J$ 20,000</td>
+<td class="py-3.5 px-4">
+<div class="space-y-1">
+<div class="flex items-center justify-between font-mono text-[11px]">
+<span class="text-on-surface font-semibold">J$ 6,200</span><span class="text-on-surface-variant">31.0%</span>
+</div>
+<div class="w-full bg-[#122839] rounded-full h-1.5 overflow-hidden">
+<div class="bg-gradient-to-r from-[#3b82f6] to-[#22d3ee] h-full rounded-full" style="width: 31%;"></div>
+</div>
+</div>
+</td>
+<td class="py-3.5 px-4">
+<span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-emerald-950/70 border border-emerald-500/30 text-emerald-300">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>Active
+</span>
+</td>
+<td class="py-3.5 px-4 text-right">
+<div class="flex items-center justify-end gap-1.5">
+<button class="px-2.5 py-1 rounded bg-surface-variant hover:bg-surface-bright text-xs text-secondary font-medium transition-colors">Edit limit</button>
+<button class="p-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-variant transition-colors" title="Archive / Pause Card"><span class="material-symbols-outlined text-base">archive</span></button>
+</div>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="px-4 py-3 bg-[#071520]/70 border-t border-[#354a5c] flex items-center justify-between text-xs text-on-surface-variant">
+<div class="flex items-center gap-2">
+<span>Showing <span class="text-on-surface font-semibold font-mono">6 of 6</span> configured buyer cards</span>
+<span>•</span>
+<span class="text-[#22d3ee]">Real-time gateway sync on</span>
+</div>
+<div class="flex items-center gap-4">
+<span class="font-mono text-[11px]">Orders routed: <span class="text-on-surface font-semibold">#1001 – #1240</span></span>
+</div>
+</div>
+</div>
+<div class="hidden rounded-xl border border-dashed border-[#354a5c] bg-[#071520] p-12 text-center" id="zero-state-container">
+<div class="max-w-md mx-auto space-y-4">
+<div class="w-16 h-16 mx-auto rounded-2xl bg-surface-variant border border-[#354a5c] flex items-center justify-center text-secondary">
+<span class="material-symbols-outlined text-3xl">credit_card_off</span>
+</div>
+<div>
+<h3 class="text-base font-bold text-on-surface">No cards yet — add a buyer card to start placing orders</h3>
+<p class="text-xs text-on-surface-variant mt-1">Cards linked here will be dispatched across in-house operators to place orders securely.</p>
+</div>
+<button class="px-4 py-2 rounded-lg text-xs font-bold text-white bg-gradient-to-r from-[#3b82f6] to-[#22d3ee] hover:brightness-110 shadow-lg shadow-blue-500/20 inline-flex items-center gap-2" onclick="document.getElementById('open-add-card-btn').click()">
+<span class="material-symbols-outlined text-base">add</span>
+<span>+ Add first buyer card</span>
+</button>
+</div>
+</div>
+</div>
+<!-- TAB 2: TRANSACTIONS & RECONCILIATION CONTENT -->
+<div class="tab-pane hidden space-y-6" id="transactions-tab-content">
+<!-- Statement Upload Strip -->
+<div class="p-5 rounded-xl bg-[#0a1b28] border border-[#354a5c] flex flex-col md:flex-row items-center justify-between gap-4">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-lg bg-[#3b82f6]/20 border border-[#3b82f6]/40 flex items-center justify-center text-[#22d3ee]">
+<span class="material-symbols-outlined text-xl">upload_file</span>
+</div>
+<div>
+<h3 class="text-sm font-bold text-on-surface">Import Bank Statement</h3>
+<p class="text-xs text-on-surface-variant">Upload CSV or PDF statements from local acquiring banks for automated order reconciliation.</p>
+</div>
+</div>
+<div class="flex items-center gap-3 w-full md:w-auto">
+<label class="flex-1 md:flex-none cursor-pointer px-4 py-2 rounded-lg bg-surface-variant hover:bg-surface-bright border border-[#354a5c] text-xs font-medium text-secondary text-center transition-colors flex items-center justify-center gap-2">
+<span class="material-symbols-outlined text-base">attach_file</span>
+<span>Browse CSV / PDF</span>
+<input class="hidden" type="file"/>
+</label>
+<button class="px-4 py-2 rounded-lg text-xs font-bold text-white bg-gradient-to-r from-[#3b82f6] to-[#22d3ee] hover:brightness-110 shadow-md shadow-blue-500/20 flex items-center gap-1.5">
+<span class="material-symbols-outlined text-base">bolt</span>
+<span>Run Matching</span>
+</button>
+</div>
+</div>
+<!-- Order Matching Table -->
+<div class="rounded-xl border border-[#354a5c] bg-[#0a1b28] overflow-hidden shadow-sm">
+<div class="p-4 border-b border-[#354a5c] flex items-center justify-between">
+<h3 class="text-xs font-bold text-on-surface uppercase tracking-wider">Statement vs Order Reconciliation Feed</h3>
+<span class="text-xs font-mono text-[#22d3ee]">14 records matched today</span>
+</div>
+<div class="overflow-x-auto">
+<table class="w-full text-left text-xs border-collapse">
+<thead>
+<tr class="bg-[#071520]/80 border-b border-[#354a5c] text-[11px] text-on-surface-variant font-medium uppercase tracking-wider">
+<th class="py-3 px-4">Order</th>
+<th class="py-3 px-4">Date &amp; Time</th>
+<th class="py-3 px-4">Customer paid</th>
+<th class="py-3 px-4">Bank charge</th>
+<th class="py-3 px-4">Match Status</th>
+<th class="py-3 px-4 text-right">Action</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-[#354a5c]/40">
+<tr class="hover:bg-[#0f212f]/60 transition-colors">
+<td class="py-3.5 px-4 font-mono font-bold text-on-surface">#1240</td>
+<td class="py-3.5 px-4 text-on-surface-variant">Today, 14:22 EST</td>
+<td class="py-3.5 px-4 font-mono text-on-surface font-semibold">J$ 4,500</td>
+<td class="py-3.5 px-4 font-mono text-[#22d3ee] font-semibold">J$ 4,500</td>
+<td class="py-3.5 px-4">
+<span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-emerald-950/70 border border-emerald-500/30 text-emerald-300">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>Exact Match
+</span>
+</td>
+<td class="py-3.5 px-4 text-right">
+<button class="px-2.5 py-1 rounded bg-surface-variant text-xs text-secondary hover:bg-surface-bright">Details</button>
+</td>
+</tr>
+<tr class="hover:bg-[#0f212f]/60 transition-colors">
+<td class="py-3.5 px-4 font-mono font-bold text-on-surface">#1239</td>
+<td class="py-3.5 px-4 text-on-surface-variant">Today, 13:50 EST</td>
+<td class="py-3.5 px-4 font-mono text-on-surface font-semibold">J$ 6,800</td>
+<td class="py-3.5 px-4 font-mono text-[#22d3ee] font-semibold">J$ 6,800</td>
+<td class="py-3.5 px-4">
+<span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-emerald-950/70 border border-emerald-500/30 text-emerald-300">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>Exact Match
+</span>
+</td>
+<td class="py-3.5 px-4 text-right">
+<button class="px-2.5 py-1 rounded bg-surface-variant text-xs text-secondary hover:bg-surface-bright">Details</button>
+</td>
+</tr>
+<tr class="hover:bg-[#0f212f]/60 transition-colors">
+<td class="py-3.5 px-4 font-mono font-bold text-on-surface">#1238</td>
+<td class="py-3.5 px-4 text-on-surface-variant">Today, 13:15 EST</td>
+<td class="py-3.5 px-4 font-mono text-on-surface font-semibold">J$ 3,200</td>
+<td class="py-3.5 px-4 font-mono text-amber-400 font-semibold">J$ 3,350</td>
+<td class="py-3.5 px-4">
+<span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-amber-950/60 border border-amber-500/30 text-amber-300">
+<span class="w-1.5 h-1.5 rounded-full bg-amber-400"></span>Variance (+150)
+</span>
+</td>
+<td class="py-3.5 px-4 text-right">
+<button class="px-2.5 py-1 rounded bg-amber-500/20 text-amber-300 text-xs font-semibold hover:bg-amber-500/30">Review</button>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</div>
+</main>
+</div>
+<!-- SLIDE-OVER DRAWER: 'Add Buyer Card' -->
+<div class="fixed inset-0 bg-black/60 backdrop-blur-[2px] z-50 flex justify-end transition-opacity duration-200 hidden" id="slide-over-backdrop">
+<div class="w-full max-w-md bg-[#0a1b28] border-l border-[#354a5c] h-full shadow-2xl flex flex-col justify-between transform transition-transform duration-300" id="slide-over-panel">
+<div class="p-6 border-b border-[#354a5c] flex items-start justify-between bg-[#071520]">
+<div>
+<div class="flex items-center gap-2">
+<div class="w-6 h-6 rounded bg-[#3b82f6] text-white flex items-center justify-center">
+<span class="material-symbols-outlined text-sm">credit_card</span>
+</div>
+<h2 class="font-headline text-base font-bold text-on-surface">Add Buyer Card</h2>
+</div>
+<p class="text-xs text-on-surface-variant mt-1">Link an active corporate card to buyer dispatch fleet</p>
+</div>
+<button class="p-1 rounded-lg text-on-surface-variant hover:text-on-surface hover:bg-surface-variant transition-colors" id="close-drawer-btn">
+<span class="material-symbols-outlined text-lg">close</span>
+</button>
+</div>
+<form class="p-6 space-y-5 overflow-y-auto flex-1 text-xs">
+<div class="space-y-1.5">
+<label class="block font-semibold text-on-surface tracking-wide">Card Nickname</label>
+<input class="w-full px-3 py-2 bg-[#071520] border border-[#354a5c] rounded-md text-xs text-on-surface focus:outline-none focus:border-[#3b82f6] focus:ring-1 focus:ring-[#3b82f6]" placeholder="e.g. Buyer F — Express Fleet" type="text" value="Buyer F — Express Fleet"/>
+<p class="text-[11px] text-on-surface-variant">Used by operators during quick telephone &amp; web dispatch</p>
+</div>
+<div class="space-y-1.5">
+<label class="block font-semibold text-on-surface tracking-wide">Card Last 4 Digits</label>
+<div class="relative">
+<input class="w-full pl-3 pr-16 py-2 font-mono font-bold tracking-widest bg-[#071520] border border-[#354a5c] rounded-md text-sm text-on-surface focus:outline-none focus:border-[#3b82f6] focus:ring-1 focus:ring-[#3b82f6]" maxlength="4" type="text" value="8821"/>
+<div class="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
+<span class="px-1.5 py-0.5 rounded text-[10px] font-black bg-surface-variant text-[#3b82f6] border border-[#354a5c] font-headline">VISA</span>
+</div>
+</div>
+</div>
+<div class="space-y-2">
+<div class="flex items-center justify-between">
+<label class="block font-semibold text-on-surface tracking-wide">Daily Spend Limit (J$)</label>
+<span class="text-[11px] text-[#22d3ee] font-mono">Sample format J$ 25,000</span>
+</div>
+<div class="relative">
+<span class="absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant font-mono font-semibold">J$</span>
+<input class="w-full pl-10 pr-4 py-2 font-mono font-semibold bg-[#071520] border border-[#354a5c] rounded-md text-xs text-on-surface focus:outline-none focus:border-[#3b82f6] focus:ring-1 focus:ring-[#3b82f6]" id="limit-input" type="text" value="25,000"/>
+</div>
+<div class="flex items-center gap-2 pt-1">
+<button class="px-2.5 py-1 rounded bg-surface-variant hover:bg-surface-bright border border-[#354a5c]/60 text-secondary text-[11px] font-mono transition-colors" onclick="setPresetLimit('10,000')" type="button">+J$ 10,000</button>
+<button class="px-2.5 py-1 rounded bg-surface-variant hover:bg-surface-bright border border-[#354a5c]/60 text-secondary text-[11px] font-mono transition-colors" onclick="setPresetLimit('20,000')" type="button">+J$ 20,000</button>
+<button class="px-2.5 py-1 rounded bg-surface-variant hover:bg-surface-bright border border-[#354a5c]/60 text-secondary text-[11px] font-mono transition-colors" onclick="setPresetLimit('50,000')" type="button">+J$ 50,000</button>
+</div>
+</div>
+<div class="p-3.5 rounded-lg bg-[#071520] border border-[#354a5c]/60 flex items-start justify-between gap-3">
+<div class="space-y-0.5">
+<span class="font-semibold text-on-surface block">Auto-pause threshold</span>
+<span class="text-[11px] text-on-surface-variant leading-relaxed block">Pause card automatically when daily spend limit is reached to prevent overages</span>
+</div>
+<label class="relative inline-flex items-center cursor-pointer mt-0.5">
+<input checked="" class="sr-only peer" type="checkbox"/>
+<div class="w-9 h-5 bg-surface-variant peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[#3b82f6]"></div>
+</label>
+</div>
+<div class="space-y-1.5">
+<label class="block font-semibold text-on-surface tracking-wide">Assigned Shift / Buyer Desk</label>
+<div class="relative">
+<select class="w-full px-3 py-2 bg-[#071520] border border-[#354a5c] rounded-md text-xs text-on-surface focus:outline-none focus:border-[#3b82f6] focus:ring-1 focus:ring-[#3b82f6] appearance-none">
+<option selected="">All Active Desk Operators (Pool)</option>
+<option>Sarah Miller — Terminal #03 (Downtown &amp; Express)</option>
+<option>Alex D. — Lead Terminal #01 (Priority)</option>
+<option>Kevin Lew — Terminal #04 (East Hub)</option>
+<option>Tanya Chin — Terminal #02 (Suburban Reserve)</option>
+</select>
+<span class="material-symbols-outlined absolute right-2.5 top-1/2 -translate-y-1/2 text-on-surface-variant text-base pointer-events-none">expand_more</span>
+</div>
+<p class="text-[11px] text-on-surface-variant">Card credentials can only be decrypted on authorized in-house terminals</p>
+</div>
+<div class="p-3 rounded-lg bg-surface-variant/40 border border-[#354a5c] flex items-center gap-2.5 text-on-surface-variant">
+<span class="material-symbols-outlined text-base text-[#3b82f6]">verified_user</span>
+<span class="text-[11px]">Zero-knowledge encrypted card tokenization active. PCI-DSS compliant.</span>
+</div>
+</form>
+<div class="p-4 border-t border-[#354a5c] bg-[#071520] flex items-center justify-end gap-3">
+<button class="px-4 py-2 rounded-lg text-xs font-semibold text-on-surface-variant hover:text-on-surface hover:bg-surface-variant transition-colors" id="cancel-drawer-btn" type="button">Cancel</button>
+<button class="px-5 py-2 rounded-lg text-xs font-bold text-white bg-gradient-to-r from-[#3b82f6] to-[#22d3ee] hover:brightness-110 shadow-lg shadow-blue-500/25 flex items-center gap-1.5 transition-all active:scale-95" id="save-card-btn" type="button">
+<span class="material-symbols-outlined text-base font-bold">check</span>
+<span>Save Buyer Card</span>
+</button>
+</div>
+</div>
+</div>
+<script>
+    const drawerBackdrop = document.getElementById('slide-over-backdrop');
+    const openAddCardBtn = document.getElementById('open-add-card-btn');
+    const closeDrawerBtn = document.getElementById('close-drawer-btn');
+    const cancelDrawerBtn = document.getElementById('cancel-drawer-btn');
+    const saveCardBtn = document.getElementById('save-card-btn');
+    const limitInput = document.getElementById('limit-input');
+
+    const toggleEmptyViewBtn = document.getElementById('toggle-empty-view-btn');
+    const dataTableContainer = document.getElementById('data-table-container');
+    const zeroStateContainer = document.getElementById('zero-state-container');
+
+    function openDrawer() {
+      drawerBackdrop.classList.remove('hidden');
+    }
+    function closeDrawer() {
+      drawerBackdrop.classList.add('hidden');
+    }
+
+    openAddCardBtn.addEventListener('click', openDrawer);
+    closeDrawerBtn.addEventListener('click', closeDrawer);
+    cancelDrawerBtn.addEventListener('click', closeDrawer);
+    saveCardBtn.addEventListener('click', closeDrawer);
+
+    function setPresetLimit(amount) {
+      if (limitInput) limitInput.value = amount;
+    }
+
+    toggleEmptyViewBtn.addEventListener('click', () => {
+      dataTableContainer.classList.toggle('hidden');
+      zeroStateContainer.classList.toggle('hidden');
+    });
+
+    const filterTabs = document.querySelectorAll('.filter-tab-btn');
+    filterTabs.forEach(tab => {
+      tab.addEventListener('click', () => {
+        filterTabs.forEach(t => {
+          t.classList.remove('bg-[#003c70]', 'text-[#96c2ff]', 'font-semibold');
+          t.classList.add('text-on-surface-variant', 'font-medium');
+        });
+        tab.classList.remove('text-on-surface-variant', 'font-medium');
+        tab.classList.add('bg-[#003c70]', 'text-[#96c2ff]', 'font-semibold');
+      });
+    });
+
+    const subTabBtns = document.querySelectorAll('.sub-tab-btn');
+    const tabPanes = document.querySelectorAll('.tab-pane');
+    subTabBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        subTabBtns.forEach(b => {
+          b.classList.remove('active', 'text-[#3b82f6]', 'border-b-2', 'border-[#3b82f6]', 'font-semibold');
+          b.classList.add('text-on-surface-variant', 'font-medium');
+        });
+        btn.classList.remove('text-on-surface-variant', 'font-medium');
+        btn.classList.add('active', 'text-[#3b82f6]', 'border-b-2', 'border-[#3b82f6]', 'font-semibold');
+        
+        const targetId = btn.getAttribute('data-target');
+        tabPanes.forEach(pane => {
+          if (pane.id === targetId) {
+            pane.classList.remove('hidden');
+          } else {
+            pane.classList.add('hidden');
+          }
+        });
+      });
+    });
+
+    const searchInput = document.getElementById('card-search-input');
+    if (searchInput) {
+      searchInput.addEventListener('input', (e) => {
+        const q = e.target.value.toLowerCase();
+        const rows = document.querySelectorAll('#data-table-container tbody tr');
+        rows.forEach(row => {
+          const text = row.innerText.toLowerCase();
+          row.style.display = text.includes(q) ? '' : 'none';
+        });
+      });
+    }
+
+    drawerBackdrop.addEventListener('click', (e) => {
+      if (e.target === drawerBackdrop) closeDrawer();
+    });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') closeDrawer();
+    });
+  </script>
+</body></html>

@@ -1,0 +1,834 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Roam Rush In-House Desk — Settings</title>
+<!-- Inter Font Family -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&amp;family=JetBrains+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet"/>
+<!-- Material Symbols Outlined -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind CSS with Forms & Container Plugins -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          "colors": {
+            "secondary": "#a4c9ff",
+            "on-tertiary-container": "#004b56",
+            "on-error": "#490006",
+            "on-surface-variant": "#98adc3",
+            "on-primary-fixed-variant": "#001435",
+            "on-secondary-container": "#96c2ff",
+            "tertiary": "#7de9ff",
+            "secondary-container": "#003c70",
+            "error-container": "#871f21",
+            "surface-dim": "#060f17",
+            "on-primary-fixed": "#000000",
+            "surface-container-lowest": "#000000",
+            "tertiary-container": "#3adffa",
+            "inverse-surface": "#f7f9ff",
+            "inverse-on-surface": "#4c5660",
+            "on-tertiary-fixed-variant": "#005561",
+            "on-secondary-fixed-variant": "#005da7",
+            "on-surface": "#d2e8ff",
+            "surface-container": "#0a1b28",
+            "surface-bright": "#192e3f",
+            "outline": "#63788c",
+            "primary-container": "#0e69dc",
+            "on-background": "#d2e8ff",
+            "tertiary-fixed": "#3adffa",
+            "primary-dim": "#699cff",
+            "surface-variant": "#122839",
+            "secondary-fixed": "#d4e3ff",
+            "on-primary-container": "#ffffff",
+            "on-error-container": "#ff9993",
+            "primary": "#adc6ff",
+            "on-tertiary": "#005561",
+            "secondary-dim": "#64a8fe",
+            "error-dim": "#c54d4a",
+            "surface-container-low": "#071520",
+            "surface-container-highest": "#122839",
+            "tertiary-fixed-dim": "#1ad0eb",
+            "on-tertiary-fixed": "#00363e",
+            "inverse-primary": "#005bc4",
+            "secondary-fixed-dim": "#bcd6ff",
+            "primary-fixed": "#4388fd",
+            "background": "#060f17",
+            "tertiary-dim": "#1ad0eb",
+            "surface-container-high": "#0f212f",
+            "error": "#fa746f",
+            "on-primary": "#003d88",
+            "surface": "#060f17",
+            "on-secondary-fixed": "#004076",
+            "primary-fixed-dim": "#317bef",
+            "on-secondary": "#004178",
+            "outline-variant": "#354a5c",
+            "surface-tint": "#adc6ff"
+          },
+          "borderRadius": {
+            "DEFAULT": "0.25rem",
+            "lg": "0.5rem",
+            "xl": "0.75rem",
+            "full": "9999px"
+          },
+          "fontFamily": {
+            "headline": ["Inter", "sans-serif"],
+            "display": ["Inter", "sans-serif"],
+            "body": ["Inter", "sans-serif"],
+            "label": ["Inter", "sans-serif"],
+            "mono": ["JetBrains Mono", "monospace"]
+          }
+        },
+      },
+    }
+  </script>
+<style>
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 20;
+      font-size: 1.25rem;
+      line-height: 1;
+      display: inline-block;
+      vertical-align: middle;
+    }
+    .material-symbols-outlined.fill {
+      font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 20;
+    }
+    /* Oceanic Blue Glow and Custom Scrollbars */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #071520;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #1e293b;
+      border-radius: 3px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #334155;
+    }
+    .gradient-cta {
+      background: linear-gradient(135deg, #3b82f6 0%, #22d3ee 100%);
+    }
+    .gradient-cta:hover {
+      background: linear-gradient(135deg, #2563eb 0%, #06b6d4 100%);
+    }
+  </style>
+</head>
+<body class="bg-background text-on-surface font-body antialiased selection:bg-primary/20 selection:text-tertiary min-h-screen flex flex-col">
+<!-- ========================================================================= -->
+<!-- TopNavBar (Shared Component Anchor)                                       -->
+<!-- ========================================================================= -->
+<header class="bg-surface-container docked full-width top-0 z-50 h-14 border-b border-outline-variant shadow-sm fixed w-full">
+<div class="w-full px-6 flex items-center justify-between gap-4 h-full">
+<!-- Brand & Context Anchor -->
+<div class="flex items-center gap-6">
+<a class="text-base font-bold tracking-tight text-on-surface flex items-center gap-2 hover:opacity-90 transition-opacity" href="#top">
+<div class="w-7 h-7 rounded-lg bg-gradient-to-tr from-primary-container to-tertiary-container flex items-center justify-center text-on-primary-container shadow-sm shadow-cyan-500/20">
+<span class="material-symbols-outlined fill text-lg" data-icon="bolt">bolt</span>
+</div>
+<span class="font-headline font-bold text-slate-100">Roam Rush</span>
+<span class="text-xs px-2 py-0.5 rounded font-mono font-medium bg-surface-variant text-on-surface-variant border border-outline-variant/60 ml-0.5">Ops</span>
+</a>
+<div class="hidden sm:flex items-center gap-2 px-2.5 py-1 bg-surface-container-low border border-outline-variant/70 rounded-md">
+<span class="w-2 h-2 rounded-full bg-tertiary animate-pulse"></span>
+<span class="text-xs font-semibold text-tertiary tracking-wide font-headline">In-House Desk</span>
+</div>
+<!-- Navigation Tabs (JSON: ["Orders", "Restaurants", "Cards", "Reports", "Settings"]) -->
+<!-- Exact Active State applied to 'Settings' as current screen -->
+<nav class="hidden md:flex items-center gap-6 ml-2 font-body text-sm font-medium">
+<a class="text-on-surface-variant hover:text-on-surface py-4 transition-colors" href="#orders">Orders</a>
+<a class="text-on-surface-variant hover:text-on-surface py-4 transition-colors" href="#restaurants">Restaurants</a>
+<a class="text-on-surface-variant hover:text-on-surface py-4 transition-colors" href="#cards">Cards</a>
+<a class="text-on-surface-variant hover:text-on-surface py-4 transition-colors" href="#reports">Reports</a>
+<a class="text-primary font-semibold border-b-2 border-primary py-4 flex items-center gap-1.5" href="#settings">
+            Settings
+          </a>
+</nav>
+</div>
+<!-- Trailing Action Cluster -->
+<div class="flex items-center gap-3">
+<!-- Live Desk Status Pill -->
+<div class="hidden xl:flex items-center gap-2 bg-emerald-950/40 border border-emerald-500/30 text-emerald-400 px-3 py-1 rounded-full text-xs font-medium">
+<span class="w-2 h-2 rounded-full bg-emerald-400 ring-4 ring-emerald-400/20 animate-pulse"></span>
+<span>Desk Open</span>
+<span class="text-emerald-500/60 text-[10px]">·</span>
+<span class="text-emerald-300/80">Customers can order</span>
+</div>
+<!-- System Health Indicator -->
+<div class="hidden lg:flex items-center gap-1.5 text-xs text-on-surface-variant px-2.5 py-1 bg-surface-container-low/60 rounded-md border border-outline-variant/40">
+<span class="w-1.5 h-1.5 rounded-full bg-cyan-400"></span>
+<span class="font-mono text-slate-300">99.8%</span>
+<span class="text-[11px] text-on-surface-variant/80">System health</span>
+</div>
+<!-- Trailing Icon Actions -->
+<div class="flex items-center border-l border-outline-variant/40 pl-3 gap-1">
+<button aria-label="Audio notifications toggle" class="p-2 rounded-lg text-on-surface-variant hover:bg-surface-variant hover:text-on-surface transition-colors duration-150" title="Audio alerts enabled" type="button">
+<span class="material-symbols-outlined" data-icon="volume_up">volume_up</span>
+</button>
+<button aria-label="View system notifications" class="p-2 rounded-lg text-on-surface-variant hover:bg-surface-variant hover:text-on-surface transition-colors duration-150 relative" type="button">
+<span class="material-symbols-outlined" data-icon="notifications">notifications</span>
+<span class="absolute top-1.5 right-1.5 w-2 h-2 bg-primary rounded-full"></span>
+</button>
+</div>
+<!-- Operator Profile Pill -->
+<div class="flex items-center gap-2.5 pl-2 border-l border-outline-variant/40">
+<div class="relative">
+<div class="w-8 h-8 rounded-full bg-surface-variant border border-secondary/40 flex items-center justify-center text-xs font-bold text-secondary font-headline">
+              AD
+            </div>
+<span class="absolute bottom-0 right-0 w-2.5 h-2.5 bg-emerald-500 border-2 border-surface-container rounded-full"></span>
+</div>
+<div class="hidden sm:block text-left">
+<div class="text-xs font-semibold text-slate-200 leading-none">Alex D.</div>
+<div class="text-[10px] text-on-surface-variant font-mono mt-0.5">Lead 04</div>
+</div>
+</div>
+</div>
+</div>
+</header>
+<!-- ========================================================================= -->
+<!-- SideNavBar (Shared Component Anchor)                                      -->
+<!-- ========================================================================= -->
+<aside class="fixed top-14 left-0 bottom-0 w-60 z-40 bg-surface-container-low border-r border-outline-variant hidden lg:block">
+<div class="h-[calc(100vh-3.5rem)] flex flex-col justify-between p-3 font-body text-xs font-medium tracking-wide">
+<!-- Upper Section: Terminal Header + Nav Tabs -->
+<div class="space-y-4">
+<!-- Terminal Header Info -->
+<div class="p-2.5 rounded-lg bg-surface-container border border-outline-variant/40 flex items-center justify-between">
+<div class="flex items-center gap-2.5">
+<div class="w-7 h-7 rounded-md bg-secondary-container text-on-secondary-container flex items-center justify-center font-mono font-bold text-xs">
+              04
+            </div>
+<div>
+<div class="text-xs font-semibold uppercase tracking-wider text-on-surface">In-House Desk</div>
+<div class="text-[11px] text-on-surface-variant font-mono">Floor Terminal 04</div>
+</div>
+</div>
+<span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+</div>
+<!-- Quick Tabs Navigation (JSON: ["Live Feed", "Checklist", "Desk Switch", "Shift Roster", "SMS Alerts", "Access Logins"]) -->
+<div class="space-y-1">
+<div class="px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-outline">Ops Console Jump</div>
+<a class="text-on-surface-variant hover:bg-surface-variant hover:text-on-surface rounded-lg px-3 py-2 flex items-center gap-3 transition-colors" href="#feed">
+<span class="material-symbols-outlined" data-icon="dashboard">dashboard</span>
+<span>Live Feed</span>
+</a>
+<a class="text-on-surface-variant hover:bg-surface-variant hover:text-on-surface rounded-lg px-3 py-2 flex items-center gap-3 transition-colors" href="#checklist-section">
+<span class="material-symbols-outlined" data-icon="checklist">checklist</span>
+<span>Checklist</span>
+<span class="ml-auto text-[10px] font-mono bg-amber-500/20 text-amber-300 px-1.5 py-0.5 rounded">4/5</span>
+</a>
+<a class="text-on-surface-variant hover:bg-surface-variant hover:text-on-surface rounded-lg px-3 py-2 flex items-center gap-3 transition-colors" href="#switch-section">
+<span class="material-symbols-outlined" data-icon="toggle_on">toggle_on</span>
+<span>Desk Switch</span>
+<span class="ml-auto w-2 h-2 rounded-full bg-emerald-400"></span>
+</a>
+<a class="text-on-surface-variant hover:bg-surface-variant hover:text-on-surface rounded-lg px-3 py-2 flex items-center gap-3 transition-colors" href="#roster-section">
+<span class="material-symbols-outlined" data-icon="schedule">schedule</span>
+<span>Shift Roster</span>
+<span class="ml-auto text-[10px] font-mono bg-surface-variant text-on-surface-variant px-1.5 py-0.5 rounded">3 Active</span>
+</a>
+<a class="text-on-surface-variant hover:bg-surface-variant hover:text-on-surface rounded-lg px-3 py-2 flex items-center gap-3 transition-colors" href="#sms-section">
+<span class="material-symbols-outlined" data-icon="sms">sms</span>
+<span>SMS Alerts</span>
+</a>
+<a class="bg-secondary-container text-on-secondary-container font-semibold rounded-lg px-3 py-2 flex items-center gap-3" href="#logins-section">
+<span class="material-symbols-outlined fill" data-icon="manage_accounts">manage_accounts</span>
+<span>Access Logins</span>
+</a>
+</div>
+</div>
+<!-- Footer Help & Documentation Links -->
+<div class="pt-3 border-t border-outline-variant/50 space-y-1">
+<a class="text-on-surface-variant hover:bg-surface-variant hover:text-on-surface rounded-lg px-3 py-2 flex items-center gap-3 transition-colors" href="#documentation">
+<span class="material-symbols-outlined" data-icon="help_outline">help_outline</span>
+<span>Documentation</span>
+</a>
+<a class="text-on-surface-variant hover:bg-surface-variant hover:text-on-surface rounded-lg px-3 py-2 flex items-center gap-3 transition-colors" href="#support">
+<span class="material-symbols-outlined" data-icon="headset_mic">headset_mic</span>
+<span>Support</span>
+</a>
+</div>
+</div>
+</aside>
+<!-- ========================================================================= -->
+<!-- Main Operational Canvas                                                  -->
+<!-- ========================================================================= -->
+<main class="lg:pl-60 pt-14 flex-1 pb-16">
+<div class="max-w-6xl mx-auto px-4 sm:px-8 py-8 space-y-6">
+<!-- Header & Page Intro Banner -->
+<div class="flex flex-col md:flex-row md:items-end justify-between gap-4 pb-4 border-b border-outline-variant/60">
+<div>
+<div class="flex items-center gap-3">
+<h1 class="font-headline font-bold text-2xl text-slate-100 tracking-tight">Settings</h1>
+<span class="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-primary-container/30 text-secondary border border-primary/30">
+              In-House Ops Config
+            </span>
+</div>
+<p class="text-sm text-on-surface-variant mt-1">
+            Desk configuration for In-House buying.
+          </p>
+<div class="flex items-center gap-2 mt-2 text-xs font-mono text-outline">
+<span class="material-symbols-outlined text-[15px]" data-icon="sync">sync</span>
+<span>Last synced with fleet controller 4 mins ago · Shift Terminal #04</span>
+</div>
+</div>
+<!-- Action Cluster -->
+<div class="flex items-center gap-3 shrink-0">
+<button class="px-3.5 py-2 rounded-lg border border-outline-variant bg-surface-container-low text-xs font-medium text-slate-200 hover:bg-surface-variant hover:border-outline transition-colors flex items-center gap-2" type="button">
+<span class="material-symbols-outlined text-base" data-icon="history">history</span>
+            Audit Log
+          </button>
+<button class="gradient-cta text-on-primary-container font-semibold text-xs px-4 py-2 rounded-lg shadow-md shadow-blue-500/20 active:scale-[0.98] transition-all flex items-center gap-2" type="button">
+<span class="material-symbols-outlined text-base" data-icon="cloud_sync">cloud_sync</span>
+            Save All Configurations
+          </button>
+</div>
+</div>
+<!-- SECTION 1: Get the desk running (Checklist Panel) -->
+<section class="bg-surface-container-low border border-outline-variant/60 rounded-xl p-6 shadow-sm" id="checklist-section">
+<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-outline-variant/40">
+<div>
+<h2 class="text-base font-bold text-slate-100 font-headline flex items-center gap-2">
+<span class="material-symbols-outlined text-tertiary" data-icon="task_alt">task_alt</span>
+              Desk Readiness Checklist
+            </h2>
+<p class="text-xs text-on-surface-variant mt-0.5">Ensure all operational prerequisites are cleared before launching broad consumer routing.</p>
+</div>
+<div class="flex items-center gap-3 shrink-0">
+<div class="text-right">
+<div class="text-xs font-mono font-bold text-cyan-400">4 of 5 complete — 80%</div>
+<div class="text-[10px] text-outline">1 verification remaining</div>
+</div>
+<div class="w-24 h-2 bg-surface-variant rounded-full overflow-hidden border border-outline-variant/50">
+<div class="h-full bg-gradient-to-r from-primary to-tertiary w-4/5 rounded-full"></div>
+</div>
+</div>
+</div>
+<!-- 5 Checklist Rows -->
+<div class="divide-y divide-outline-variant/30 mt-2 text-xs">
+<!-- Step 1 -->
+<div class="py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+<div class="flex items-start gap-3">
+<span class="material-symbols-outlined text-emerald-400 fill mt-0.5" data-icon="check_circle">check_circle</span>
+<div>
+<div class="font-semibold text-slate-200">1. Turn on In-House switch</div>
+<div class="text-on-surface-variant text-[11px] mt-0.5">Desk live mode toggled on for downtown territory.</div>
+</div>
+</div>
+<a class="text-cyan-400 hover:text-cyan-300 font-mono text-[11px] self-start sm:self-auto hover:underline flex items-center gap-1" href="#switch-section">
+              View switch below <span class="material-symbols-outlined text-xs" data-icon="south">south</span>
+</a>
+</div>
+<!-- Step 2 -->
+<div class="py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+<div class="flex items-start gap-3">
+<span class="material-symbols-outlined text-emerald-400 fill mt-0.5" data-icon="check_circle">check_circle</span>
+<div>
+<div class="font-semibold text-slate-200">2. Add company purchasing card</div>
+<div class="text-on-surface-variant text-[11px] mt-0.5">Visa ending in 8821 verified in Buyer Card Vault.</div>
+</div>
+</div>
+<a class="text-cyan-400 hover:text-cyan-300 font-mono text-[11px] self-start sm:self-auto hover:underline flex items-center gap-1" href="#cards">
+              Manage in Cards vault <span class="material-symbols-outlined text-xs" data-icon="arrow_forward">arrow_forward</span>
+</a>
+</div>
+<!-- Step 3 -->
+<div class="py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+<div class="flex items-start gap-3">
+<span class="material-symbols-outlined text-emerald-400 fill mt-0.5" data-icon="check_circle">check_circle</span>
+<div>
+<div class="font-semibold text-slate-200">3. Late-order dispatch phone</div>
+<div class="text-on-surface-variant text-[11px] mt-0.5">2 emergency escalation phone numbers registered.</div>
+</div>
+</div>
+<a class="text-cyan-400 hover:text-cyan-300 font-mono text-[11px] self-start sm:self-auto hover:underline flex items-center gap-1" href="#sms-section">
+              Edit SMS routes <span class="material-symbols-outlined text-xs" data-icon="south">south</span>
+</a>
+</div>
+<!-- Step 4 -->
+<div class="py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+<div class="flex items-start gap-3">
+<span class="material-symbols-outlined text-emerald-400 fill mt-0.5" data-icon="check_circle">check_circle</span>
+<div>
+<div class="font-semibold text-slate-200">4. Onboard first in-house restaurant</div>
+<div class="text-on-surface-variant text-[11px] mt-0.5">Sample Pizza Co. (#1001) catalog active and mapped.</div>
+</div>
+</div>
+<a class="text-cyan-400 hover:text-cyan-300 font-mono text-[11px] self-start sm:self-auto hover:underline flex items-center gap-1" href="#restaurants">
+              View Restaurants <span class="material-symbols-outlined text-xs" data-icon="arrow_forward">arrow_forward</span>
+</a>
+</div>
+<!-- Step 5 (Pending) -->
+<div class="py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-amber-950/10 px-2 -mx-2 rounded-lg border border-amber-500/20">
+<div class="flex items-start gap-3">
+<span class="material-symbols-outlined text-amber-400 mt-0.5" data-icon="schedule">schedule</span>
+<div>
+<div class="font-semibold text-amber-200 flex items-center gap-2">
+                  5. Run closed test live order
+                  <span class="text-[10px] px-1.5 py-0.2 font-mono font-normal rounded bg-amber-500/20 text-amber-300">In Progress</span>
+</div>
+<div class="text-amber-300/70 text-[11px] mt-0.5">Pending 1 verified test checkout with beta allowlist customer.</div>
+</div>
+</div>
+<button class="px-3 py-1.5 rounded border border-cyan-400/60 text-cyan-300 hover:bg-cyan-950/40 font-semibold text-xs transition-colors flex items-center gap-1.5 self-start sm:self-auto shrink-0 shadow-sm shadow-cyan-500/10" type="button">
+<span class="material-symbols-outlined text-xs" data-icon="science">science</span>
+              Launch Test Order →
+            </button>
+</div>
+</div>
+</section>
+<!-- SECTION 2: In-House Switch -->
+<section class="bg-surface-container-low border border-outline-variant/60 rounded-xl p-6 shadow-sm" id="switch-section">
+<div class="flex flex-col md:flex-row md:items-center justify-between gap-6">
+<div class="max-w-xl">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-xl" data-icon="power_settings_new">power_settings_new</span>
+<h2 class="text-base font-bold text-slate-100 font-headline">In-House Purchasing Desk Switch</h2>
+</div>
+<p class="text-xs text-on-surface-variant mt-1.5 leading-relaxed">
+              When enabled, customers can place orders for non-integrated in-house restaurants. Turning this off routes inbound orders to standby queues and displays a pause banner to storefront users.
+            </p>
+<div class="mt-3">
+<a class="text-xs text-cyan-400 hover:text-cyan-300 font-mono inline-flex items-center gap-1 hover:underline" href="#failover">
+                Open System Settings &amp; Failover Rules →
+              </a>
+</div>
+</div>
+<!-- Switch & Status Cluster -->
+<div class="flex flex-col sm:flex-row items-start sm:items-center gap-4 bg-surface-container px-4 py-3 rounded-lg border border-outline-variant/50 shrink-0">
+<div>
+<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-950/60 text-emerald-400 border border-emerald-500/40">
+<span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                ACTIVE / LIVE
+              </span>
+<div class="text-[11px] text-slate-300 mt-1 font-medium">Accepting Customer Orders</div>
+</div>
+<!-- Master Toggle Button Component -->
+<label class="relative inline-flex items-center cursor-pointer ml-auto sm:ml-4">
+<input checked="" class="sr-only peer" type="checkbox"/>
+<div class="w-14 h-7 bg-surface-variant peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[4px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-gradient-to-r peer-checked:from-primary peer-checked:to-tertiary"></div>
+</label>
+</div>
+</div>
+</section>
+<!-- SECTION 3: Desk Open Hours & Active Staff -->
+<section class="bg-surface-container-low border border-outline-variant/60 rounded-xl p-6 shadow-sm space-y-6" id="roster-section">
+<!-- Top row: Operating schedule -->
+<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-outline-variant/40">
+<div>
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-xl" data-icon="browse_activity">browse_activity</span>
+<h2 class="text-base font-bold text-slate-100 font-headline">Desk Open Hours &amp; Active Staff</h2>
+</div>
+<div class="text-xs text-on-surface-variant mt-1 flex items-center gap-2">
+<span>Operating Schedule:</span>
+<span class="font-mono font-semibold text-slate-200">Mon–Sun: 11:00 AM – 10:30 PM EST</span>
+</div>
+</div>
+<div class="flex items-center gap-2.5">
+<button class="px-3 py-1.5 text-xs font-medium text-slate-300 bg-surface-variant hover:bg-surface-container-high rounded-lg border border-outline-variant transition-colors flex items-center gap-1.5" type="button">
+<span class="material-symbols-outlined text-xs" data-icon="edit_calendar">edit_calendar</span>
+              Edit Schedule
+            </button>
+<button class="gradient-cta text-on-primary-container text-xs font-semibold px-3 py-1.5 rounded-lg shadow-sm hover:opacity-95 transition-opacity flex items-center gap-1" type="button">
+<span class="material-symbols-outlined text-xs" data-icon="person_add">person_add</span>
+              + Assign Operator to Shift
+            </button>
+</div>
+</div>
+<!-- Operational Roster List -->
+<div>
+<div class="flex items-center justify-between mb-3">
+<h3 class="text-xs font-bold uppercase tracking-wider text-outline font-headline">Who is on staff right now</h3>
+<span class="text-xs font-mono text-emerald-400 flex items-center gap-1">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> 3 Floor Terminals Connected
+            </span>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+<!-- Operator 1 -->
+<div class="bg-surface-container border border-outline-variant/60 rounded-lg p-4 relative group hover:border-outline transition-colors">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2.5">
+<div class="w-9 h-9 rounded-lg bg-primary-container/40 border border-primary/40 flex items-center justify-center font-bold text-xs text-primary font-headline">
+                    AD
+                  </div>
+<div>
+<div class="text-xs font-bold text-slate-100">Alex D.</div>
+<div class="text-[10px] text-tertiary font-mono">Lead Desk Operator</div>
+</div>
+</div>
+<span class="w-2 h-2 rounded-full bg-emerald-400 ring-4 ring-emerald-500/20" title="Online"></span>
+</div>
+<div class="mt-3 pt-3 border-t border-outline-variant/40 space-y-1 text-xs">
+<div class="text-slate-300 text-[11px] flex items-center gap-1">
+<span class="material-symbols-outlined text-outline text-xs" data-icon="computer">computer</span>
+                  Station 04 · <span class="text-on-surface-variant">Live Queue &amp; Escalations</span>
+</div>
+<div class="text-[10px] text-slate-400 font-mono">Status: Online since 11:00 AM</div>
+</div>
+</div>
+<!-- Operator 2 -->
+<div class="bg-surface-container border border-outline-variant/60 rounded-lg p-4 relative group hover:border-outline transition-colors">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2.5">
+<div class="w-9 h-9 rounded-lg bg-surface-variant border border-outline-variant flex items-center justify-center font-bold text-xs text-secondary font-headline">
+                    SM
+                  </div>
+<div>
+<div class="text-xs font-bold text-slate-100">Sarah Miller</div>
+<div class="text-[10px] text-secondary font-mono">Buyer Ops</div>
+</div>
+</div>
+<span class="w-2 h-2 rounded-full bg-emerald-400 ring-4 ring-emerald-500/20" title="Online"></span>
+</div>
+<div class="mt-3 pt-3 border-t border-outline-variant/40 space-y-1 text-xs">
+<div class="text-slate-300 text-[11px] flex items-center gap-1">
+<span class="material-symbols-outlined text-outline text-xs" data-icon="call">call</span>
+                  Station 02 · <span class="text-on-surface-variant">Phone Placements &amp; Card Vault</span>
+</div>
+<div class="text-[10px] text-slate-400 font-mono">Status: Online since 11:30 AM</div>
+</div>
+</div>
+<!-- Operator 3 -->
+<div class="bg-surface-container border border-outline-variant/60 rounded-lg p-4 relative group hover:border-outline transition-colors">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2.5">
+<div class="w-9 h-9 rounded-lg bg-surface-variant border border-outline-variant flex items-center justify-center font-bold text-xs text-secondary font-headline">
+                    KL
+                  </div>
+<div>
+<div class="text-xs font-bold text-slate-100">Kevin Lew</div>
+<div class="text-[10px] text-secondary font-mono">Junior Buyer</div>
+</div>
+</div>
+<span class="w-2 h-2 rounded-full bg-emerald-400 ring-4 ring-emerald-500/20" title="Online"></span>
+</div>
+<div class="mt-3 pt-3 border-t border-outline-variant/40 space-y-1 text-xs">
+<div class="text-slate-300 text-[11px] flex items-center gap-1">
+<span class="material-symbols-outlined text-outline text-xs" data-icon="fact_check">fact_check</span>
+                  Station 05 · <span class="text-on-surface-variant">Menu verification &amp; audit</span>
+</div>
+<div class="text-[10px] text-slate-400 font-mono">Status: Online since 12:00 PM</div>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- SECTION 4: Late-Order SMS Alerts -->
+<section class="bg-surface-container-low border border-outline-variant/60 rounded-xl p-6 shadow-sm" id="sms-section">
+<div class="flex flex-col sm:flex-row sm:items-start justify-between gap-4 pb-4 border-b border-outline-variant/40">
+<div>
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-xl" data-icon="notifications_active">notifications_active</span>
+<h2 class="text-base font-bold text-slate-100 font-headline">Late-Order SMS Alerts</h2>
+</div>
+<p class="text-xs text-on-surface-variant mt-1">
+              Direct automated SMS escalation when an in-house placed ticket exceeds SLA threshold (+10 mins late).
+            </p>
+</div>
+<!-- Alert Threshold Badges -->
+<div class="flex flex-wrap items-center gap-2 shrink-0">
+<span class="text-[11px] font-mono px-2.5 py-1 rounded bg-surface-container border border-outline-variant text-slate-300 flex items-center gap-1.5">
+<span class="material-symbols-outlined text-amber-400 text-xs" data-icon="timer">timer</span>
+              Trigger: 10 mins late
+            </span>
+<span class="text-[11px] font-mono px-2.5 py-1 rounded bg-surface-container border border-outline-variant text-slate-300 flex items-center gap-1.5">
+<span class="material-symbols-outlined text-cyan-400 text-xs" data-icon="repeat">repeat</span>
+              Repeat: Every 5 mins
+            </span>
+</div>
+</div>
+<!-- Phone Number Slots Form -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-5 mt-5">
+<!-- Slot 1 -->
+<div class="space-y-1.5">
+<div class="flex items-center justify-between">
+<label class="text-xs font-semibold text-slate-200" for="phone-slot-1">
+                Primary On-Call (Lead Dispatcher Mobile)
+              </label>
+<span class="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-950/60 text-emerald-400 border border-emerald-500/30">
+                Verified · SMS Active
+              </span>
+</div>
+<div class="relative">
+<div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-outline">
+<span class="material-symbols-outlined text-sm" data-icon="smartphone">smartphone</span>
+</div>
+<input class="w-full bg-surface-container border border-outline-variant rounded-lg pl-9 pr-3 py-2 text-xs font-mono text-slate-100 focus:outline-none focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400 transition-colors" id="phone-slot-1" type="text" value="+1 (555) 019-2834"/>
+</div>
+<p class="text-[10px] text-outline">Receives immediate Tier-1 text alerts for unassigned tickets.</p>
+</div>
+<!-- Slot 2 -->
+<div class="space-y-1.5">
+<div class="flex items-center justify-between">
+<label class="text-xs font-semibold text-slate-200" for="phone-slot-2">
+                Secondary Escalation (Floor Ops Manager Mobile)
+              </label>
+<span class="text-[10px] font-mono px-2 py-0.5 rounded bg-surface-variant text-slate-300 border border-outline-variant/60">
+                Verified
+              </span>
+</div>
+<div class="relative">
+<div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-outline">
+<span class="material-symbols-outlined text-sm" data-icon="emergency">emergency</span>
+</div>
+<input class="w-full bg-surface-container border border-outline-variant rounded-lg pl-9 pr-3 py-2 text-xs font-mono text-slate-100 focus:outline-none focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400 transition-colors" id="phone-slot-2" type="text" value="+1 (555) 849-0012"/>
+</div>
+<p class="text-[10px] text-outline">Escalates automatically if ticket is unacknowledged within 5 minutes.</p>
+</div>
+</div>
+<!-- Action Row -->
+<div class="mt-5 pt-4 border-t border-outline-variant/40 flex items-center justify-end gap-3">
+<button class="px-3 py-1.5 rounded-lg border border-outline-variant hover:bg-surface-variant text-xs text-slate-300 transition-colors" type="button">
+            Send Test SMS
+          </button>
+<button class="gradient-cta text-on-primary-container text-xs font-semibold px-4 py-1.5 rounded-lg shadow-sm hover:opacity-95 transition-opacity flex items-center gap-1.5" type="button">
+<span class="material-symbols-outlined text-xs" data-icon="save">save</span>
+            Save SMS Settings
+          </button>
+</div>
+</section>
+<!-- SECTION 5: Closed Test List (Beta Testers) -->
+<section class="bg-surface-container-low border border-outline-variant/60 rounded-xl p-6 shadow-sm" id="beta-section">
+<div class="pb-4 border-b border-outline-variant/40">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-xl" data-icon="group_add">group_add</span>
+<h2 class="text-base font-bold text-slate-100 font-headline">Closed Test List (Beta Testers)</h2>
+</div>
+<span class="text-xs font-mono text-cyan-400 bg-cyan-950/40 border border-cyan-500/30 px-2.5 py-0.5 rounded-full">
+              4 of 25 beta slots filled
+            </span>
+</div>
+<p class="text-xs text-on-surface-variant mt-1">
+            Only customers whose accounts are on this allowlist can see and place in-house delivery orders in the customer mobile app during private rollout.
+          </p>
+</div>
+<!-- Add Form -->
+<div class="mt-4 flex flex-col sm:flex-row gap-2.5">
+<div class="relative flex-1">
+<div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-outline">
+<span class="material-symbols-outlined text-sm" data-icon="mail">mail</span>
+</div>
+<input class="w-full bg-surface-container border border-outline-variant rounded-lg pl-9 pr-3 py-2 text-xs font-body text-slate-100 placeholder:text-outline focus:outline-none focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400 transition-colors" placeholder="Enter customer email to grant test access..." type="email"/>
+</div>
+<button class="gradient-cta text-on-primary-container text-xs font-semibold px-4 py-2 rounded-lg shrink-0 flex items-center justify-center gap-1.5 hover:opacity-95 transition-opacity" type="button">
+<span class="material-symbols-outlined text-xs" data-icon="person_add">person_add</span>
+            Add Beta Tester
+          </button>
+</div>
+<!-- Dense Table Layout -->
+<div class="mt-4 border border-outline-variant/60 rounded-lg overflow-x-auto bg-surface-container/50">
+<table class="w-full text-left text-xs border-collapse">
+<thead>
+<tr class="border-b border-outline-variant/60 bg-surface-container text-on-surface-variant uppercase text-[10px] font-mono tracking-wider">
+<th class="py-2.5 px-4 font-semibold">Tester</th>
+<th class="py-2.5 px-4 font-semibold">Added Date</th>
+<th class="py-2.5 px-4 font-semibold">Orders Placed</th>
+<th class="py-2.5 px-4 font-semibold text-right">Action</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-outline-variant/30 font-body">
+<tr class="hover:bg-surface-variant/40 transition-colors">
+<td class="py-2.5 px-4 font-mono text-slate-200 flex items-center gap-2">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                  marcus.vance@example.com
+                </td>
+<td class="py-2.5 px-4 text-on-surface-variant font-mono text-[11px]">Jun 14, 2024</td>
+<td class="py-2.5 px-4 font-mono font-medium text-slate-200">12 test orders</td>
+<td class="py-2.5 px-4 text-right">
+<button class="text-rose-400 hover:text-rose-300 font-mono text-[11px] hover:underline" type="button">Remove</button>
+</td>
+</tr>
+<tr class="hover:bg-surface-variant/40 transition-colors">
+<td class="py-2.5 px-4 font-mono text-slate-200 flex items-center gap-2">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                  elena.roam@testmail.com
+                </td>
+<td class="py-2.5 px-4 text-on-surface-variant font-mono text-[11px]">Jun 18, 2024</td>
+<td class="py-2.5 px-4 font-mono font-medium text-slate-200">6 test orders</td>
+<td class="py-2.5 px-4 text-right">
+<button class="text-rose-400 hover:text-rose-300 font-mono text-[11px] hover:underline" type="button">Remove</button>
+</td>
+</tr>
+<tr class="hover:bg-surface-variant/40 transition-colors">
+<td class="py-2.5 px-4 font-mono text-slate-200 flex items-center gap-2">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                  devon.ops@roamrush.com
+                </td>
+<td class="py-2.5 px-4 text-on-surface-variant font-mono text-[11px]">Jun 22, 2024</td>
+<td class="py-2.5 px-4 font-mono font-medium text-slate-200">3 test orders</td>
+<td class="py-2.5 px-4 text-right">
+<button class="text-rose-400 hover:text-rose-300 font-mono text-[11px] hover:underline" type="button">Remove</button>
+</td>
+</tr>
+<tr class="hover:bg-surface-variant/40 transition-colors">
+<td class="py-2.5 px-4 font-mono text-slate-200 flex items-center gap-2">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                  tanya.chin@samplepizza.com
+                </td>
+<td class="py-2.5 px-4 text-on-surface-variant font-mono text-[11px]">Jun 27, 2024</td>
+<td class="py-2.5 px-4 font-mono font-medium text-slate-200">1 test order</td>
+<td class="py-2.5 px-4 text-right">
+<button class="text-rose-400 hover:text-rose-300 font-mono text-[11px] hover:underline" type="button">Remove</button>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="mt-2 flex items-center justify-between text-[11px] text-outline font-mono">
+<span>Staging cohort active</span>
+<span>Max cohort cap: 25 active shoppers</span>
+</div>
+</section>
+<!-- SECTION 6: Desk Logins & Role Management -->
+<section class="bg-surface-container-low border border-outline-variant/60 rounded-xl p-6 shadow-sm" id="logins-section">
+<div class="pb-4 border-b border-outline-variant/40">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-xl" data-icon="badge">badge</span>
+<h2 class="text-base font-bold text-slate-100 font-headline">Desk Logins &amp; Role Management</h2>
+</div>
+<p class="text-xs text-on-surface-variant mt-1">
+            Configure credentialed floor buying operators and supervisor desk controls.
+          </p>
+</div>
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-5">
+<!-- Column A: Buyer Logins -->
+<div class="bg-surface-container/60 border border-outline-variant/50 rounded-lg p-4 space-y-3">
+<div class="flex items-center justify-between border-b border-outline-variant/40 pb-2.5">
+<div>
+<h3 class="text-xs font-bold text-slate-100 font-headline">Buyer Logins</h3>
+<div class="text-[10px] text-on-surface-variant">Floor buying terminals &amp; telephone agents</div>
+</div>
+<button class="px-2.5 py-1 text-xs font-medium text-cyan-300 border border-cyan-400/40 rounded hover:bg-cyan-950/30 transition-colors" type="button">
+                + Invite Buyer Terminal
+              </button>
+</div>
+<div class="space-y-2 text-xs">
+<!-- Buyer 1 -->
+<div class="p-2.5 bg-surface-container rounded border border-outline-variant/40 flex items-center justify-between">
+<div>
+<div class="font-semibold text-slate-200">Terminal 01 · In-House Lead</div>
+<div class="text-[10px] font-mono text-outline">Terminal ID: BUY-01-DT · Last active 2m ago</div>
+<div class="flex gap-1.5 mt-1.5">
+<span class="text-[9px] px-1.5 py-0.5 rounded bg-surface-variant text-slate-300">Place orders</span>
+<span class="text-[9px] px-1.5 py-0.5 rounded bg-surface-variant text-slate-300">View cards</span>
+</div>
+</div>
+<span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+</div>
+<!-- Buyer 2 -->
+<div class="p-2.5 bg-surface-container rounded border border-outline-variant/40 flex items-center justify-between">
+<div>
+<div class="font-semibold text-slate-200">Terminal 02 · Voice Agent West</div>
+<div class="text-[10px] font-mono text-outline">Terminal ID: BUY-02-DT · Last active 14m ago</div>
+<div class="flex gap-1.5 mt-1.5">
+<span class="text-[9px] px-1.5 py-0.5 rounded bg-surface-variant text-slate-300">Call merchants</span>
+<span class="text-[9px] px-1.5 py-0.5 rounded bg-surface-variant text-slate-300">Place orders</span>
+</div>
+</div>
+<span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+</div>
+<!-- Buyer 3 -->
+<div class="p-2.5 bg-surface-container rounded border border-outline-variant/40 flex items-center justify-between">
+<div>
+<div class="font-semibold text-slate-200">Terminal 03 · Dispatch Reserve</div>
+<div class="text-[10px] font-mono text-outline">Terminal ID: BUY-03-DT · Standby idle</div>
+<div class="flex gap-1.5 mt-1.5">
+<span class="text-[9px] px-1.5 py-0.5 rounded bg-surface-variant text-slate-300">Place orders</span>
+</div>
+</div>
+<span class="w-2 h-2 rounded-full bg-slate-500"></span>
+</div>
+</div>
+</div>
+<!-- Column B: Ops Desk Logins -->
+<div class="bg-surface-container/60 border border-outline-variant/50 rounded-lg p-4 space-y-3">
+<div class="flex items-center justify-between border-b border-outline-variant/40 pb-2.5">
+<div>
+<h3 class="text-xs font-bold text-slate-100 font-headline">Ops Desk Logins</h3>
+<div class="text-[10px] text-on-surface-variant">Supervisor &amp; admin management</div>
+</div>
+<button class="px-2.5 py-1 text-xs font-medium text-cyan-300 border border-cyan-400/40 rounded hover:bg-cyan-950/30 transition-colors" type="button">
+                + Invite Ops Admin
+              </button>
+</div>
+<div class="space-y-2 text-xs">
+<!-- Admin 1 -->
+<div class="p-2.5 bg-surface-container rounded border border-outline-variant/40 flex items-center justify-between">
+<div>
+<div class="font-semibold text-slate-200 flex items-center gap-1.5">
+                    Alex D.
+                    <span class="text-[10px] px-1.5 py-0.2 rounded bg-primary/20 text-primary font-mono">Floor Supervisor</span>
+</div>
+<div class="text-[10px] font-mono text-outline">alex.d@roamrush.com · Station 04</div>
+<div class="flex gap-1.5 mt-1.5">
+<span class="text-[9px] px-1.5 py-0.5 rounded bg-cyan-950/50 text-cyan-300 border border-cyan-500/30">Full config access</span>
+<span class="text-[9px] px-1.5 py-0.5 rounded bg-cyan-950/50 text-cyan-300 border border-cyan-500/30">Reconciliation</span>
+</div>
+</div>
+<span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+</div>
+<!-- Admin 2 -->
+<div class="p-2.5 bg-surface-container rounded border border-outline-variant/40 flex items-center justify-between">
+<div>
+<div class="font-semibold text-slate-200 flex items-center gap-1.5">
+                    Sarah Miller
+                    <span class="text-[10px] px-1.5 py-0.2 rounded bg-secondary/20 text-secondary font-mono">Ops Admin</span>
+</div>
+<div class="text-[10px] font-mono text-outline">sarah.m@roamrush.com · Station 02</div>
+<div class="flex gap-1.5 mt-1.5">
+<span class="text-[9px] px-1.5 py-0.5 rounded bg-cyan-950/50 text-cyan-300 border border-cyan-500/30">Catalog approval</span>
+<span class="text-[9px] px-1.5 py-0.5 rounded bg-cyan-950/50 text-cyan-300 border border-cyan-500/30">Card Vault Admin</span>
+</div>
+</div>
+<span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+</div>
+</div>
+</div>
+</div>
+</section>
+</div>
+</main>
+<!-- ========================================================================= -->
+<!-- Footer Status Bar                                                         -->
+<!-- ========================================================================= -->
+<footer class="lg:pl-60 bg-surface-container border-t border-outline-variant text-[11px] text-outline font-mono py-2 px-6 fixed bottom-0 left-0 right-0 z-30 flex items-center justify-between">
+<div class="flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+<span class="text-slate-300">Roam Rush In-House Operations Console · Settings</span>
+</div>
+<div class="hidden sm:flex items-center gap-4 text-outline">
+<span>Sync Latency: <strong class="text-slate-300 font-normal">12ms</strong></span>
+<span>Cluster: <strong class="text-slate-300 font-normal">US-East-Ops-01</strong></span>
+<span>v2.4.9 Oceanic</span>
+</div>
+</footer>
+<!-- Micro-Interactions Script -->
+<script>
+    // Simple micro-interaction feedback on save buttons
+    document.querySelectorAll('.gradient-cta').forEach(button => {
+      button.addEventListener('click', function() {
+        const originalText = this.innerHTML;
+        this.innerHTML = '<span class="material-symbols-outlined text-xs animate-spin">autorenew</span> Saving...';
+        this.disabled = true;
+        setTimeout(() => {
+          this.innerHTML = '<span class="material-symbols-outlined text-xs">check</span> Synced!';
+          setTimeout(() => {
+            this.innerHTML = originalText;
+            this.disabled = false;
+          }, 1500);
+        }, 600);
+      });
+    });
+  </script>
+</body></html>

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+﻿import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useOutletContext, useParams, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { getJwtRoles, jwtPrimaryRole } from '@roam/auth-client';
@@ -28,14 +28,14 @@ type StepId = ChecklistStepId | 'pricing';
 const STEPS: Array<{ id: ChecklistStepId; label: string }> = [
   { id: 'basics', label: 'Basics' },
   { id: 'location', label: 'Location' },
-  { id: 'hours', label: 'Opening hours' },
-  { id: 'photos', label: 'Photos (optional)' },
-  { id: 'ordering', label: 'How Roam orders' },
+  { id: 'hours', label: 'Hours' },
+  { id: 'photos', label: 'Photos' },
+  { id: 'ordering', label: 'How we order' },
   { id: 'menu', label: 'Menu' },
-  { id: 'go-live', label: 'Who can order & go live' },
+  { id: 'go-live', label: 'Go live' },
 ];
 
-const field = 'mt-1 w-full rounded bg-slate-900 p-2';
+const field = 'mt-1 w-full rounded-lg border border-slate-700 bg-[#0f172a] p-2';
 
 export function InHouseRestaurantHomePage() {
   const { id = '' } = useParams();
@@ -221,17 +221,17 @@ export function InHouseRestaurantHomePage() {
   if (!store) return <div className="p-4 text-slate-300">Loading restaurant…</div>;
 
   return (
-    <div className="space-y-4 p-4 text-slate-100">
-      <div className="flex flex-wrap items-center justify-between gap-2">
+    <div className="-mx-4 -mt-4 min-h-full space-y-4 bg-[#0f172a] p-4 text-slate-100 sm:-mx-6 sm:p-6">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-4">
         <div>
-          <Link to="/in-house?tab=restaurants" className="text-sm text-slate-400">← Restaurants</Link>
-          <h1 className="text-xl font-semibold">{name || 'Restaurant'}</h1>
+          <Link to="/in-house?tab=restaurants" className="text-sm text-[#fbbf24] hover:text-[#fbbf24]">← Restaurants</Link>
+          <h1 className="text-2xl font-bold tracking-tight text-white">{name || 'Restaurant'}</h1>
           <p className="text-sm text-slate-400">{status} · {doneCount} of 7 done</p>
         </div>
         {isAdmin ? (
           <button
             type="button"
-            className="rounded bg-slate-800 px-3 py-1 text-sm text-red-200"
+            className="rounded-lg border border-red-900/50 bg-red-950/30 px-3 py-1.5 text-sm text-red-200 hover:bg-red-950/50"
             onClick={() => void confirm({
               title: 'Archive restaurant',
               description: 'This hides it from the list and customers. Past orders stay.',
@@ -249,27 +249,28 @@ export function InHouseRestaurantHomePage() {
         ) : null}
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-[220px_1fr]">
-        <nav className="space-y-1">
+      <div className="grid gap-4 lg:grid-cols-[240px_1fr]">
+        <nav className="space-y-1 rounded-lg border border-slate-700 bg-[#1e293b] p-2">
+          <p className="px-2 py-1 text-xs font-semibold uppercase tracking-wide text-slate-400">Setup</p>
           {STEPS.map((item, index) => (
             <button
               key={item.id}
               type="button"
-              className={`flex w-full items-center gap-2 rounded px-3 py-2 text-left text-sm ${step === item.id ? 'bg-slate-800' : 'text-slate-400 hover:bg-slate-900'}`}
+              className={`flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm ${step === item.id ? 'bg-[#f59e0b]/20 text-[#fcd34d] ring-1 ring-[#f59e0b]/40' : 'text-slate-400 hover:bg-slate-800'}`}
               onClick={() => openStep(item.id)}
             >
-              <span>{done[item.id] ? '✓' : '○'}</span>
+              <span className={done[item.id] ? 'text-[#22c55e]' : ''}>{done[item.id] ? '✓' : '○'}</span>
               <span>{index + 1}. {item.label}</span>
             </button>
           ))}
           {isAdmin ? (
-            <button type="button" className={`w-full rounded px-3 py-2 text-left text-sm ${step === 'pricing' ? 'bg-slate-800' : 'text-slate-400'}`} onClick={() => openStep('pricing')}>
+            <button type="button" className={`w-full rounded-lg px-3 py-2 text-left text-sm ${step === 'pricing' ? 'bg-[#f59e0b]/20 text-[#fcd34d]' : 'text-slate-400'}`} onClick={() => openStep('pricing')}>
               Pricing rules
             </button>
           ) : null}
         </nav>
 
-        <section className="space-y-3 rounded border border-slate-800 p-4">
+        <section className="space-y-3 rounded-lg border border-slate-700 bg-[#1e293b] p-4">
           {step === 'basics' ? (
             <form className="grid gap-3 md:grid-cols-2" onSubmit={(event) => {
               event.preventDefault();
@@ -293,7 +294,7 @@ export function InHouseRestaurantHomePage() {
                       <button
                         key={cuisine}
                         type="button"
-                        className={`rounded-full border px-3 py-1 text-xs ${on ? 'border-amber-500 bg-amber-500/20 text-amber-100' : 'border-slate-700 text-slate-400'}`}
+                        className={`rounded-full border px-3 py-1 text-xs ${on ? 'border-[#f59e0b] bg-[#f59e0b]/20 text-[#fcd34d]' : 'border-slate-700 text-slate-400'}`}
                         onClick={() => {
                           setCuisines((current) => {
                             if (current.includes(cuisine)) return current.filter((c) => c !== cuisine);
@@ -324,7 +325,7 @@ export function InHouseRestaurantHomePage() {
                   </label>
                 ) : null}
               </fieldset>
-              {isAdmin ? <button disabled={saving} className="rounded-xl bg-amber-500 px-3 py-2 text-slate-950 md:col-span-2 disabled:opacity-40" type="submit">{saving ? 'Saving…' : 'Save basics'}</button> : null}
+              {isAdmin ? <button disabled={saving} className="rounded-xl bg-[#f59e0b] px-3 py-2 text-slate-950 md:col-span-2 disabled:opacity-40" type="submit">{saving ? 'Saving…' : 'Save basics'}</button> : null}
             </form>
           ) : null}
 
@@ -357,14 +358,14 @@ export function InHouseRestaurantHomePage() {
                   {markets.map((market) => <option key={market.id} value={market.id}>{market.name}</option>)}
                 </select>
               </label>
-              {isAdmin ? <button disabled={saving} className="rounded-xl bg-amber-500 px-3 py-2 text-slate-950 md:col-span-2 disabled:opacity-40" type="submit">{saving ? 'Saving…' : 'Save location'}</button> : null}
+              {isAdmin ? <button disabled={saving} className="rounded-xl bg-[#f59e0b] px-3 py-2 text-slate-950 md:col-span-2 disabled:opacity-40" type="submit">{saving ? 'Saving…' : 'Save location'}</button> : null}
             </form>
           ) : null}
 
           {step === 'hours' ? (
             <div className="space-y-3">
               <InHouseHoursFields hours={hours} onChange={setHours} />
-              {isAdmin ? <button type="button" disabled={saving} className="rounded-xl bg-amber-500 px-3 py-2 text-slate-950 disabled:opacity-40" onClick={() => void save({ hours: hours.map((day, index) => ({ dayOfWeek: index, open: day.open, close: day.close, isClosed: day.isClosed })) })}>{saving ? 'Saving…' : 'Save hours'}</button> : null}
+              {isAdmin ? <button type="button" disabled={saving} className="rounded-xl bg-[#f59e0b] px-3 py-2 text-slate-950 disabled:opacity-40" onClick={() => void save({ hours: hours.map((day, index) => ({ dayOfWeek: index, open: day.open, close: day.close, isClosed: day.isClosed })) })}>{saving ? 'Saving…' : 'Save hours'}</button> : null}
             </div>
           ) : null}
 
@@ -416,7 +417,7 @@ export function InHouseRestaurantHomePage() {
               </label>
               {store.tos_reviewed_at ? <p className="text-xs text-slate-500">Reviewed {String(store.tos_reviewed_by || 'someone')} on {new Date(String(store.tos_reviewed_at)).toLocaleDateString()}</p> : null}
               <label className="text-sm">Notes<textarea className={field} value={notes} onChange={(event) => setNotes(event.target.value)} /></label>
-              {isAdmin ? <button disabled={saving} className="rounded-xl bg-amber-500 px-3 py-2 text-slate-950 disabled:opacity-40" type="submit">{saving ? 'Saving…' : 'Save ordering'}</button> : null}
+              {isAdmin ? <button disabled={saving} className="rounded-xl bg-[#f59e0b] px-3 py-2 text-slate-950 disabled:opacity-40" type="submit">{saving ? 'Saving…' : 'Save ordering'}</button> : null}
             </form>
           ) : null}
 
@@ -424,7 +425,7 @@ export function InHouseRestaurantHomePage() {
             <div className="space-y-3">
               <p className="text-sm text-slate-400">A restaurant needs at least one section and one dish with a confirmed price.</p>
               <p className="text-sm">{Number(store.dishCount || 0)} dishes · {Number(store.freshDishCount || 0)} prices confirmed · {Number(store.staleDishCount || 0)} out of date</p>
-              <Link to={`/in-house/restaurants/${id}/menu`} className="inline-block rounded-xl bg-amber-500 px-3 py-2 text-slate-950">Build menu →</Link>
+              <Link to={`/in-house/restaurants/${id}/menu`} className="inline-block rounded-xl bg-[#f59e0b] px-3 py-2 text-slate-950">Build menu →</Link>
             </div>
           ) : null}
 
@@ -434,10 +435,10 @@ export function InHouseRestaurantHomePage() {
                 <h2 className="font-medium">Ready to go live?</h2>
                 <ul className="mt-2 space-y-1 text-sm">
                   {blockers.length === 0 ? <li className="text-emerald-300">✓ Everything needed is ready</li> : blockers.map((blocker) => (
-                    <li key={blocker} className="text-amber-200">✗ {blocker}</li>
+                    <li key={blocker} className="text-[#fbbf24]">✗ {blocker}</li>
                   ))}
-                  {!hasCard ? <li className="text-amber-200">✗ No company card can pay for this yet</li> : null}
-                  {!enabled ? <li className="text-amber-200">✗ The In-House switch is off</li> : null}
+                  {!hasCard ? <li className="text-[#fbbf24]">✗ No company card can pay for this yet</li> : null}
+                  {!enabled ? <li className="text-[#fbbf24]">✗ The In-House switch is off</li> : null}
                 </ul>
               </div>
               <div className="space-y-2">
@@ -490,7 +491,7 @@ export function InHouseRestaurantHomePage() {
                     <button
                       type="button"
                       disabled={blockers.length > 0}
-                      className="rounded-xl bg-amber-500 px-3 py-2 text-slate-950 disabled:opacity-40"
+                      className="rounded-xl bg-[#f59e0b] px-3 py-2 text-slate-950 disabled:opacity-40"
                       onClick={() => void setInHouseStoreLive(session.access_token, id, { live: true }).then(() => {
                         toast.success('Restaurant is live');
                         return load();
@@ -534,7 +535,7 @@ export function InHouseRestaurantHomePage() {
                 <p>A J${exampleDish.toLocaleString()} dish shows customers <strong className="text-slate-100">{formatMoney(customerExample)}</strong> ({markup || 0}% markup, rounded up to the next J$10).</p>
                 <p>If the restaurant charges more than expected, Roam pays the difference up to <strong className="text-slate-100">{absorbPercent || 0}% or J${absorbDollars || 0}</strong>, whichever is smaller.</p>
               </div>
-              <button disabled={saving} className="rounded-xl bg-amber-500 px-3 py-2 text-slate-950 md:col-span-2 disabled:opacity-40" type="submit">{saving ? 'Saving…' : 'Save pricing rules'}</button>
+              <button disabled={saving} className="rounded-xl bg-[#f59e0b] px-3 py-2 text-slate-950 md:col-span-2 disabled:opacity-40" type="submit">{saving ? 'Saving…' : 'Save pricing rules'}</button>
             </form>
           ) : null}
         </section>

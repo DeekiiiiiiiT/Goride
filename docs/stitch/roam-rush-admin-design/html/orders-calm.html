@@ -1,0 +1,638 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Roam Rush Ops — In-House Desk Orders</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">tailwind.config = {darkMode: "class", theme: {extend: {colors: {"inverse-surface": "#f7f9ff", "tertiary-container": "#3adffa", "surface-container-highest": "#122839", "on-tertiary-container": "#004b56", "surface-variant": "#122839", "secondary-fixed-dim": "#bcd6ff", primary: "#adc6ff", "on-secondary-container": "#96c2ff", error: "#fa746f", "secondary-fixed": "#d4e3ff", "on-tertiary-fixed-variant": "#005561", "primary-fixed-dim": "#317bef", secondary: "#a4c9ff", background: "#060f17", "on-secondary-fixed": "#004076", "primary-fixed": "#4388fd", "tertiary-fixed-dim": "#1ad0eb", "primary-container": "#0e69dc", "on-error-container": "#ff9993", "on-secondary": "#004178", "tertiary-dim": "#1ad0eb", "secondary-dim": "#64a8fe", "tertiary-fixed": "#3adffa", "on-surface": "#d2e8ff", "surface-container-lowest": "#000000", "on-surface-variant": "#98adc3", "on-primary-fixed": "#000000", "primary-dim": "#699cff", "surface-tint": "#adc6ff", tertiary: "#7de9ff", "on-tertiary-fixed": "#00363e", "on-primary-fixed-variant": "#001435", "secondary-container": "#003c70", "on-primary-container": "#ffffff", "on-background": "#d2e8ff", "surface-dim": "#060f17", "on-primary": "#003d88", surface: "#060f17", "surface-bright": "#192e3f", "error-dim": "#c54d4a", "surface-container": "#0a1b28", "inverse-primary": "#005bc4", "outline-variant": "#354a5c", "inverse-on-surface": "#4c5660", "error-container": "#871f21", outline: "#63788c", "surface-container-low": "#071520", "surface-container-high": "#0f212f", "on-secondary-fixed-variant": "#005da7", "on-error": "#490006", "on-tertiary": "#005561"}, borderRadius: {DEFAULT: "0.25rem", lg: "0.5rem", xl: "0.75rem", full: "9999px"}, spacing: {}, fontFamily: {headline: ["Inter"], display: ["Inter"], body: ["Inter"], label: ["Inter"]}, fontSize: {}}}};</script>
+<style>
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 20;
+    }
+    .material-symbols-outlined.fill {
+      font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 20;
+    }
+    body {
+      font-family: 'Inter', sans-serif;
+      background-color: #0f172a;
+      color: #cbd5e1;
+    }
+  </style>
+</head>
+<body class="bg-slate-900 text-slate-300 min-h-screen flex flex-col antialiased selection:bg-blue-500/30 selection:text-white">
+<!-- Shared Component: TopNavBar (desktop_ops_header) -->
+<header class="sticky top-0 w-full z-50 bg-slate-900 border-b border-slate-800 shadow-sm dark:shadow-none">
+<div class="flex items-center justify-between px-6 w-full h-16">
+<!-- Brand & Desk Context -->
+<div class="flex items-center gap-6">
+<div class="text-lg font-bold text-white tracking-tight flex items-center gap-2">
+<div class="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-cyan-400 flex items-center justify-center text-white shadow-md shadow-blue-500/20">
+<span class="material-symbols-outlined text-[20px] font-bold">bolt</span>
+</div>
+<span>Roam Rush Ops</span>
+</div>
+<div class="h-5 w-px bg-slate-800 hidden md:block"></div>
+<div class="hidden md:flex items-center gap-2 text-sm">
+<span class="text-slate-400">Desk:</span>
+<span class="text-slate-200 font-medium bg-slate-800/80 px-2.5 py-1 rounded-md border border-slate-700/60">In-House Desk</span>
+</div>
+</div>
+<!-- Navigation Links -->
+<nav class="hidden md:flex items-center space-x-1 font-headline font-medium text-slate-200">
+<!-- Active Tab: Orders -->
+<a class="text-blue-400 font-semibold border-b-2 border-blue-400 pb-4 pt-4 px-3 flex items-center gap-2 transition duration-150 ease-in-out cursor-pointer" href="#orders">
+<span class="material-symbols-outlined text-[18px]">receipt_long</span>
+<span>Orders</span>
+<span class="bg-blue-500/20 text-blue-300 text-xs px-2 py-0.5 rounded-full font-medium ml-0.5">14</span>
+</a>
+<!-- Inactive: Restaurants -->
+<a class="text-slate-400 hover:text-slate-200 pb-4 pt-4 px-3 font-normal transition-colors flex items-center gap-2 transition duration-150 ease-in-out cursor-pointer hover:bg-slate-800/60" href="#restaurants">
+<span class="material-symbols-outlined text-[18px]">storefront</span>
+<span>Restaurants</span>
+</a>
+<!-- Inactive: Cards -->
+<a class="text-slate-400 hover:text-slate-200 pb-4 pt-4 px-3 font-normal transition-colors flex items-center gap-2 transition duration-150 ease-in-out cursor-pointer hover:bg-slate-800/60" href="#cards">
+<span class="material-symbols-outlined text-[18px]">credit_card</span>
+<span>Cards</span>
+</a>
+<!-- Inactive: Reports -->
+<a class="text-slate-400 hover:text-slate-200 pb-4 pt-4 px-3 font-normal transition-colors flex items-center gap-2 transition duration-150 ease-in-out cursor-pointer hover:bg-slate-800/60" href="#reports">
+<span class="material-symbols-outlined text-[18px]">analytics</span>
+<span>Reports</span>
+</a>
+<!-- Inactive: Settings -->
+<a class="text-slate-400 hover:text-slate-200 pb-4 pt-4 px-3 font-normal transition-colors flex items-center gap-2 transition duration-150 ease-in-out cursor-pointer hover:bg-slate-800/60" href="#settings">
+<span class="material-symbols-outlined text-[18px]">settings</span>
+<span>Settings</span>
+</a>
+</nav>
+<!-- Right Trailing Cluster -->
+<div class="flex items-center gap-3">
+<!-- Desk Status Indicator -->
+<div class="flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/25 px-3 py-1.5 rounded-full">
+<span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+<span class="text-xs font-semibold text-emerald-400 tracking-wide">Desk Open</span>
+</div>
+<!-- Volume Toggle -->
+<button aria-label="Toggle Sound" class="p-2 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition duration-150 ease-in-out" type="button">
+<span class="material-symbols-outlined text-[20px]">volume_up</span>
+</button>
+<!-- Notifications with unread badge -->
+<button aria-label="Notifications" class="p-2 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition duration-150 relative" type="button">
+<span class="material-symbols-outlined text-[20px]">notifications</span>
+<span class="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-blue-500 ring-2 ring-slate-900"></span>
+</button>
+<!-- Operator Avatar Profile -->
+<div class="flex items-center gap-2.5 pl-2 border-l border-slate-800">
+<img alt="Operator profile photo" class="w-8 h-8 rounded-full border border-slate-700 object-cover" data-alt="Close-up portrait of a cheerful, professional operations desk supervisor wearing modern headphones in a dim high-tech command center with soft blue ambient neon backlighting, high detail, cinematic photography." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCBYuyEBAcs1_NuQVJa9pfu2xYMtIFjHbXQk1GD0hkGvmuyYScAGLsp-9vpWNpEeI7JGfRDJuSpG202k0_XMIbLX-ZJLd04kiKyU1P37z07CYdptRrBng_OvSJfqRsUW6WY5awOTYm7pkAn3Q9AzqZrDn2xA_A-XUR6Gj6fIMeSzbXR11DmWDIXJKs1Ksep6iYMwTiG03cM9bEgnyTghACkVl-1wtCIG9UE31kQ8LJdOKogZIBxVyce0NzIe4MBKUZGle3oCZLtnyY"/>
+<div class="hidden lg:block text-left text-xs leading-tight">
+<div class="font-medium text-slate-200">Alex D.</div>
+<div class="text-slate-400 text-[10px]">Lead Operator</div>
+</div>
+</div>
+</div>
+</div>
+</header>
+<!-- Slim Setup Banner -->
+<aside class="bg-slate-800/60 border-b border-slate-800 text-xs px-6 py-2.5 flex items-center justify-between text-slate-400" id="shiftBanner">
+<div class="flex items-center gap-3">
+<span class="flex items-center justify-center w-5 h-5 rounded-full bg-blue-500/15 text-blue-400">
+<span class="material-symbols-outlined text-[14px]">info</span>
+</span>
+<span>Desk shift started at 11:30 AM · Audio alerts active · Thermal receipt printer connected (Bay 2)</span>
+</div>
+<div class="flex items-center gap-4">
+<a class="text-blue-400 hover:text-blue-300 font-medium underline underline-offset-2 transition-colors" href="#shift-settings">Shift Settings</a>
+<button aria-label="Dismiss banner" class="hover:text-slate-200 p-0.5 rounded text-slate-400" onclick="document.getElementById('shiftBanner').style.display='none'" type="button">
+<span class="material-symbols-outlined text-[16px]">close</span>
+</button>
+</div>
+</aside>
+<!-- Main Viewport Canvas (1440px max width container with calm spacing) -->
+<main class="flex-1 max-w-[1440px] w-full mx-auto px-6 py-8">
+<!-- Top Control & Metrics Bar -->
+<div class="flex flex-col gap-6 mb-8">
+<!-- Title & Live Indicator Header -->
+<div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+<div>
+<div class="flex items-center gap-3">
+<h1 class="text-2xl font-bold tracking-tight text-white font-headline">Live Orders</h1>
+<span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-500/10 text-blue-400 border border-blue-500/20">
+<span class="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-ping"></span>
+              Live · 30s auto-refresh
+            </span>
+</div>
+<p class="text-sm text-slate-400 mt-1">Real-time dispatch and kitchen progress for In-House fleet.</p>
+</div>
+<!-- Search and Sort controls -->
+<div class="flex items-center gap-3 flex-wrap sm:flex-nowrap">
+<div class="relative w-72">
+<span class="material-symbols-outlined absolute left-3 top-2.5 text-slate-500 text-[18px]">search</span>
+<input class="w-full bg-slate-800 border border-slate-700/80 rounded-lg pl-9 pr-3 py-2 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500" placeholder="Search order #, customer, restaurant..." type="text"/>
+</div>
+<div class="relative">
+<select aria-label="Sort orders" class="appearance-none bg-slate-800 border border-slate-700/80 rounded-lg px-3 py-2 pr-8 text-xs text-slate-200 focus:outline-none focus:border-blue-500 font-medium cursor-pointer">
+<option>Sort by: Urgency</option>
+<option>Sort by: Newest First</option>
+<option>Sort by: Order Total</option>
+<option>Sort by: Estimated Delivery</option>
+</select>
+<span class="material-symbols-outlined absolute right-2.5 top-2.5 text-slate-400 text-[16px] pointer-events-none">expand_more</span>
+</div>
+<button class="p-2 bg-slate-800 hover:bg-slate-700/70 border border-slate-700/80 rounded-lg text-slate-300 transition-colors" title="Manual Refresh" type="button">
+<span class="material-symbols-outlined text-[18px]">refresh</span>
+</button>
+</div>
+</div>
+<!-- Segmented Filter Bar -->
+<div class="flex items-center gap-2 overflow-x-auto pb-1 border-b border-slate-800/80">
+<button class="px-4 py-2 rounded-lg text-xs font-semibold bg-blue-600 text-white shadow-sm shadow-blue-500/25 flex items-center gap-2 whitespace-nowrap transition" type="button">
+<span>All Orders</span>
+<span class="px-1.5 py-0.5 rounded-full bg-blue-700/80 text-[11px] font-bold">14</span>
+</button>
+<button class="px-4 py-2 rounded-lg text-xs font-medium text-slate-300 hover:text-white bg-slate-800/70 hover:bg-slate-800 border border-amber-500/30 flex items-center gap-2 whitespace-nowrap transition" type="button">
+<span class="w-2 h-2 rounded-full bg-amber-400"></span>
+<span>Needs You</span>
+<span class="px-1.5 py-0.5 rounded-full bg-amber-500/15 text-amber-300 text-[11px] font-semibold">3</span>
+</button>
+<button class="px-4 py-2 rounded-lg text-xs font-medium text-slate-400 hover:text-slate-200 bg-slate-800/40 hover:bg-slate-800 border border-slate-700/40 flex items-center gap-2 whitespace-nowrap transition" type="button">
+<span>Preparing</span>
+<span class="px-1.5 py-0.5 rounded-full bg-slate-700 text-slate-300 text-[11px]">6</span>
+</button>
+<button class="px-4 py-2 rounded-lg text-xs font-medium text-slate-400 hover:text-slate-200 bg-slate-800/40 hover:bg-slate-800 border border-slate-700/40 flex items-center gap-2 whitespace-nowrap transition" type="button">
+<span>Out for Delivery</span>
+<span class="px-1.5 py-0.5 rounded-full bg-slate-700 text-slate-300 text-[11px]">4</span>
+</button>
+<button class="px-4 py-2 rounded-lg text-xs font-medium text-slate-400 hover:text-slate-200 bg-slate-800/40 hover:bg-slate-800 border border-slate-700/40 flex items-center gap-2 whitespace-nowrap transition" type="button">
+<span>Completed</span>
+<span class="px-1.5 py-0.5 rounded-full bg-slate-700 text-slate-300 text-[11px]">1</span>
+</button>
+</div>
+</div>
+<!-- Section 1: Priority Attention / "Needs You" (3 Column Grid) -->
+<div class="mb-10">
+<div class="flex items-center justify-between mb-4">
+<div class="flex items-center gap-2.5">
+<div class="w-2.5 h-2.5 rounded-full bg-amber-400 shadow-sm shadow-amber-400/50"></div>
+<h2 class="text-sm font-semibold tracking-wide uppercase text-slate-200 font-headline">Needs Desk Attention · Priority Queue</h2>
+<span class="text-xs text-slate-400 font-normal">(3 orders requiring dispatch or customer clarification)</span>
+</div>
+</div>
+<!-- 3-Column Responsive Grid -->
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+<!-- Priority Card 1: Sample Pizza Co. #1001 -->
+<article class="bg-slate-800 border border-amber-500/30 rounded-lg p-5 flex flex-col justify-between shadow-lg shadow-black/20 hover:border-amber-400/50 transition duration-150">
+<div>
+<!-- Header Row -->
+<div class="flex items-start justify-between gap-2 mb-3">
+<div>
+<div class="flex items-center gap-2">
+<h3 class="text-base font-semibold text-white tracking-tight">Sample Pizza Co.</h3>
+<span class="text-xs font-medium text-slate-400">#1001</span>
+</div>
+<div class="text-[11px] text-slate-400 mt-0.5">Received 18 mins ago · In-House Fleet</div>
+</div>
+<div class="flex items-center gap-1">
+<button class="p-1 rounded text-slate-400 hover:text-slate-200 hover:bg-slate-700/60" title="Print slip" type="button">
+<span class="material-symbols-outlined text-[18px]">print</span>
+</button>
+<button class="p-1 rounded text-slate-400 hover:text-slate-200 hover:bg-slate-700/60" title="More options" type="button">
+<span class="material-symbols-outlined text-[18px]">more_vert</span>
+</button>
+</div>
+</div>
+<!-- Status Badges & Timers -->
+<div class="flex items-center gap-2 mb-4 flex-wrap">
+<!-- Soft Amber Alert -->
+<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-amber-500/10 text-amber-300 border border-amber-500/20">
+<span class="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
+                Needs Driver
+              </span>
+<!-- Calm Red Timer -->
+<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium bg-red-500/10 text-red-300 border border-red-500/20">
+<span class="material-symbols-outlined text-[14px]">schedule</span>
+                Late (+6m)
+              </span>
+</div>
+<!-- Order Items Snippet -->
+<div class="bg-slate-900/60 rounded-lg p-3 border border-slate-700/40 mb-4 text-xs space-y-1.5">
+<div class="flex justify-between text-slate-200">
+<span><span class="font-semibold text-blue-400">2x</span> Truffle Pepperoni Pizza</span>
+<span class="text-slate-400 font-mono">$38.00</span>
+</div>
+<div class="flex justify-between text-slate-300">
+<span><span class="font-semibold text-blue-400">1x</span> Garlic Knots</span>
+<span class="text-slate-400 font-mono">$5.50</span>
+</div>
+<div class="flex justify-between text-slate-300">
+<span><span class="font-semibold text-blue-400">2x</span> San Pellegrino Aranciata</span>
+<span class="text-slate-400 font-mono">$5.00</span>
+</div>
+</div>
+<!-- Logistics and Destination Details -->
+<div class="space-y-1.5 mb-5 text-xs text-slate-300">
+<div class="flex items-start gap-2">
+<span class="material-symbols-outlined text-[16px] text-slate-400 mt-0.5">location_on</span>
+<span class="line-clamp-1">442 Maple Ave, Apt 3B (Buzzer 14)</span>
+</div>
+<div class="flex items-center justify-between pt-1 border-t border-slate-700/40">
+<span class="flex items-center gap-1.5 text-slate-400">
+<span class="material-symbols-outlined text-[15px]">person</span>
+                  Elena Vance
+                </span>
+<span class="font-medium text-slate-200">Total: <strong class="text-white">$48.50</strong> <span class="text-emerald-400 text-[11px] font-normal ml-1">(Paid)</span></span>
+</div>
+</div>
+</div>
+<!-- Action Buttons -->
+<div class="flex items-center gap-2 pt-2 border-t border-slate-700/40">
+<button class="flex-1 bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 text-white font-medium text-xs py-2.5 px-4 rounded-lg shadow-md shadow-blue-500/20 flex items-center justify-center gap-2 transition duration-150" type="button">
+<span class="material-symbols-outlined text-[16px]">touch_app</span>
+<span>Claim Order</span>
+</button>
+<button class="px-3 py-2.5 bg-slate-700/50 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-medium rounded-lg border border-slate-600/60 transition duration-150" title="Reassign Fleet" type="button">
+              Reassign
+            </button>
+</div>
+</article>
+<!-- Priority Card 2: Harbor Ramen Bar #1004 -->
+<article class="bg-slate-800 border border-amber-500/30 rounded-lg p-5 flex flex-col justify-between shadow-lg shadow-black/20 hover:border-amber-400/50 transition duration-150">
+<div>
+<!-- Header Row -->
+<div class="flex items-start justify-between gap-2 mb-3">
+<div>
+<div class="flex items-center gap-2">
+<h3 class="text-base font-semibold text-white tracking-tight">Harbor Ramen Bar</h3>
+<span class="text-xs font-medium text-slate-400">#1004</span>
+</div>
+<div class="text-[11px] text-slate-400 mt-0.5">Received 12 mins ago · In-House Fleet</div>
+</div>
+<div class="flex items-center gap-1">
+<button class="p-1 rounded text-slate-400 hover:text-slate-200 hover:bg-slate-700/60" title="Print slip" type="button">
+<span class="material-symbols-outlined text-[18px]">print</span>
+</button>
+<button class="p-1 rounded text-slate-400 hover:text-slate-200 hover:bg-slate-700/60" title="More options" type="button">
+<span class="material-symbols-outlined text-[18px]">more_vert</span>
+</button>
+</div>
+</div>
+<!-- Status Badges & Timers -->
+<div class="flex items-center gap-2 mb-4 flex-wrap">
+<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-amber-500/10 text-amber-300 border border-amber-500/20">
+<span class="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
+                Kitchen Delay
+              </span>
+<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium bg-amber-500/10 text-amber-300 border border-amber-500/20">
+<span class="material-symbols-outlined text-[14px]">schedule</span>
+                Getting Late (14m left)
+              </span>
+</div>
+<!-- Order Items Snippet -->
+<div class="bg-slate-900/60 rounded-lg p-3 border border-slate-700/40 mb-4 text-xs space-y-1.5">
+<div class="flex justify-between text-slate-200">
+<span><span class="font-semibold text-blue-400">2x</span> Spicy Tonkotsu Ramen</span>
+<span class="text-slate-400 font-mono">$29.00</span>
+</div>
+<div class="flex justify-between text-slate-300">
+<span><span class="font-semibold text-blue-400">1x</span> Chashu Bao (2pcs)</span>
+<span class="text-slate-400 font-mono">$7.20</span>
+</div>
+<div class="text-[11px] text-amber-300/80 italic pt-0.5">Note: Extra spicy oil on side</div>
+</div>
+<!-- Logistics and Destination Details -->
+<div class="space-y-1.5 mb-5 text-xs text-slate-300">
+<div class="flex items-start gap-2">
+<span class="material-symbols-outlined text-[16px] text-slate-400 mt-0.5">location_on</span>
+<span class="line-clamp-1">120 Harbor Blvd, Suite 800 (Front desk)</span>
+</div>
+<div class="flex items-center justify-between pt-1 border-t border-slate-700/40">
+<span class="flex items-center gap-1.5 text-slate-400">
+<span class="material-symbols-outlined text-[15px]">person</span>
+                  Marcus Chen
+                </span>
+<span class="font-medium text-slate-200">Total: <strong class="text-white">$36.20</strong> <span class="text-emerald-400 text-[11px] font-normal ml-1">(Paid)</span></span>
+</div>
+</div>
+</div>
+<!-- Action Buttons -->
+<div class="flex items-center gap-2 pt-2 border-t border-slate-700/40">
+<button class="flex-1 bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 text-white font-medium text-xs py-2.5 px-4 rounded-lg shadow-md shadow-blue-500/20 flex items-center justify-center gap-2 transition duration-150" type="button">
+<span class="material-symbols-outlined text-[16px]">touch_app</span>
+<span>Claim Order</span>
+</button>
+<button class="px-3 py-2.5 bg-slate-700/50 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-medium rounded-lg border border-slate-600/60 flex items-center gap-1.5 transition duration-150" title="Contact Kitchen" type="button">
+<span class="material-symbols-outlined text-[15px]">call</span>
+<span>Kitchen</span>
+</button>
+</div>
+</article>
+<!-- Priority Card 3: Bayview Artisan Bakery #1007 -->
+<article class="bg-slate-800 border border-slate-700 rounded-lg p-5 flex flex-col justify-between shadow-lg shadow-black/20 hover:border-slate-600 transition duration-150">
+<div>
+<!-- Header Row -->
+<div class="flex items-start justify-between gap-2 mb-3">
+<div>
+<div class="flex items-center gap-2">
+<h3 class="text-base font-semibold text-white tracking-tight">Bayview Artisan Bakery</h3>
+<span class="text-xs font-medium text-slate-400">#1007</span>
+</div>
+<div class="text-[11px] text-slate-400 mt-0.5">Received 5 mins ago · In-House Fleet</div>
+</div>
+<div class="flex items-center gap-1">
+<button class="p-1 rounded text-slate-400 hover:text-slate-200 hover:bg-slate-700/60" title="Print slip" type="button">
+<span class="material-symbols-outlined text-[18px]">print</span>
+</button>
+<button class="p-1 rounded text-slate-400 hover:text-slate-200 hover:bg-slate-700/60" title="More options" type="button">
+<span class="material-symbols-outlined text-[18px]">more_vert</span>
+</button>
+</div>
+</div>
+<!-- Status Badges & Timers -->
+<div class="flex items-center gap-2 mb-4 flex-wrap">
+<!-- Calm Lavender/Blue Alert Badge -->
+<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-indigo-500/15 text-indigo-300 border border-indigo-500/25">
+<span class="w-1.5 h-1.5 rounded-full bg-indigo-400"></span>
+                Address Clarification
+              </span>
+<!-- Calm Emerald/Teal Timer -->
+<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium bg-emerald-500/10 text-emerald-300 border border-emerald-500/20">
+<span class="material-symbols-outlined text-[14px]">schedule</span>
+                On Time (22m left)
+              </span>
+</div>
+<!-- Order Items Snippet -->
+<div class="bg-slate-900/60 rounded-lg p-3 border border-slate-700/40 mb-4 text-xs space-y-1.5">
+<div class="flex justify-between text-slate-200">
+<span><span class="font-semibold text-blue-400">1x</span> Sourdough Country Loaf</span>
+<span class="text-slate-400 font-mono">$9.00</span>
+</div>
+<div class="flex justify-between text-slate-300">
+<span><span class="font-semibold text-blue-400">4x</span> Pistachio Croissants</span>
+<span class="text-slate-400 font-mono">$14.00</span>
+</div>
+<div class="flex justify-between text-slate-300">
+<span><span class="font-semibold text-blue-400">2x</span> Cold Brew Reserve</span>
+<span class="text-slate-400 font-mono">$6.00</span>
+</div>
+</div>
+<!-- Logistics and Destination Details -->
+<div class="space-y-1.5 mb-5 text-xs text-slate-300">
+<div class="flex items-start gap-2 text-indigo-200">
+<span class="material-symbols-outlined text-[16px] text-indigo-400 mt-0.5">help_outline</span>
+<span class="line-clamp-1">88 Marina Way, Dock B (Gate code missing)</span>
+</div>
+<div class="flex items-center justify-between pt-1 border-t border-slate-700/40">
+<span class="flex items-center gap-1.5 text-slate-400">
+<span class="material-symbols-outlined text-[15px]">person</span>
+                  Sarah Jenkins
+                </span>
+<span class="font-medium text-slate-200">Total: <strong class="text-white">$29.00</strong> <span class="text-emerald-400 text-[11px] font-normal ml-1">(Paid)</span></span>
+</div>
+</div>
+</div>
+<!-- Action Buttons -->
+<div class="flex items-center gap-2 pt-2 border-t border-slate-700/40">
+<button class="flex-1 bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 text-white font-medium text-xs py-2.5 px-4 rounded-lg shadow-md shadow-blue-500/20 flex items-center justify-center gap-2 transition duration-150" type="button">
+<span class="material-symbols-outlined text-[16px]">touch_app</span>
+<span>Claim Order</span>
+</button>
+<button class="px-3 py-2.5 bg-slate-700/50 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-medium rounded-lg border border-slate-600/60 transition duration-150" type="button">
+              Resolve Note
+            </button>
+</div>
+</article>
+</div>
+</div>
+<!-- Section 2: In Progress & Kitchen Queue (Calm Oceanic Cards) -->
+<div>
+<div class="flex items-center justify-between mb-4">
+<div class="flex items-center gap-2.5">
+<div class="w-2.5 h-2.5 rounded-full bg-blue-400"></div>
+<h2 class="text-sm font-semibold tracking-wide uppercase text-slate-200 font-headline">In Progress &amp; Kitchen Queue</h2>
+<span class="text-xs text-slate-400 font-normal">(6 orders actively cooking or awaiting pickup)</span>
+</div>
+<a class="text-xs text-blue-400 hover:text-blue-300 font-medium" href="#view-all-kitchen">View Kitchen Display →</a>
+</div>
+<!-- 3-Column Grid for Kitchen & En Route Queue -->
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+<!-- Card 4: Sample Pizza Co. #1008 -->
+<article class="bg-slate-800 border border-slate-700/80 rounded-lg p-5 flex flex-col justify-between hover:border-slate-600 transition duration-150">
+<div>
+<div class="flex items-start justify-between gap-2 mb-3">
+<div>
+<div class="flex items-center gap-2">
+<h3 class="text-base font-semibold text-white tracking-tight">Sample Pizza Co.</h3>
+<span class="text-xs font-medium text-slate-400">#1008</span>
+</div>
+<div class="text-[11px] text-slate-400 mt-0.5">Received 8 mins ago · In-House Fleet</div>
+</div>
+<div class="flex items-center gap-1">
+<button class="p-1 rounded text-slate-400 hover:text-slate-200 hover:bg-slate-700/60" title="Print slip" type="button">
+<span class="material-symbols-outlined text-[18px]">print</span>
+</button>
+<button class="p-1 rounded text-slate-400 hover:text-slate-200 hover:bg-slate-700/60" title="More options" type="button">
+<span class="material-symbols-outlined text-[18px]">more_vert</span>
+</button>
+</div>
+</div>
+<!-- Status Badges -->
+<div class="flex items-center gap-2 mb-4 flex-wrap">
+<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-blue-500/15 text-blue-400 border border-blue-500/25">
+<span class="material-symbols-outlined text-[14px]">local_fire_department</span>
+                Baking in Oven
+              </span>
+<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium bg-emerald-500/10 text-emerald-300 border border-emerald-500/20">
+<span class="material-symbols-outlined text-[14px]">schedule</span>
+                On Time (18m left)
+              </span>
+</div>
+<!-- Order Items Snippet -->
+<div class="bg-slate-900/60 rounded-lg p-3 border border-slate-700/40 mb-4 text-xs space-y-1.5">
+<div class="flex justify-between text-slate-200">
+<span><span class="font-semibold text-blue-400">1x</span> Margherita Pizza (14")</span>
+<span class="text-slate-400 font-mono">$18.50</span>
+</div>
+<div class="flex justify-between text-slate-300">
+<span><span class="font-semibold text-blue-400">1x</span> Caesar Salad</span>
+<span class="text-slate-400 font-mono">$9.30</span>
+</div>
+</div>
+<!-- Logistics details -->
+<div class="space-y-1.5 mb-5 text-xs text-slate-300">
+<div class="flex items-start gap-2">
+<span class="material-symbols-outlined text-[16px] text-slate-400 mt-0.5">location_on</span>
+<span class="line-clamp-1">710 4th St, Unit 4</span>
+</div>
+<div class="flex items-center justify-between pt-1 border-t border-slate-700/40">
+<span class="flex items-center gap-1.5 text-slate-400">
+<span class="material-symbols-outlined text-[15px]">person</span>
+                  David K.
+                </span>
+<span class="font-medium text-slate-200">Total: <strong class="text-white">$27.80</strong> <span class="text-emerald-400 text-[11px] font-normal ml-1">(Paid)</span></span>
+</div>
+</div>
+</div>
+<!-- Claim CTA -->
+<button class="w-full bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 text-white font-medium text-xs py-2.5 px-4 rounded-lg shadow-md shadow-blue-500/20 flex items-center justify-center gap-2 transition duration-150" type="button">
+<span class="material-symbols-outlined text-[16px]">touch_app</span>
+<span>Claim Order</span>
+</button>
+</article>
+<!-- Card 5: Pacific Coastal Taqueria #1011 -->
+<article class="bg-slate-800 border border-slate-700/80 rounded-lg p-5 flex flex-col justify-between hover:border-slate-600 transition duration-150">
+<div>
+<div class="flex items-start justify-between gap-2 mb-3">
+<div>
+<div class="flex items-center gap-2">
+<h3 class="text-base font-semibold text-white tracking-tight">Pacific Coastal Taqueria</h3>
+<span class="text-xs font-medium text-slate-400">#1011</span>
+</div>
+<div class="text-[11px] text-slate-400 mt-0.5">Received 4 mins ago · In-House Fleet</div>
+</div>
+<div class="flex items-center gap-1">
+<button class="p-1 rounded text-slate-400 hover:text-slate-200 hover:bg-slate-700/60" title="Print slip" type="button">
+<span class="material-symbols-outlined text-[18px]">print</span>
+</button>
+<button class="p-1 rounded text-slate-400 hover:text-slate-200 hover:bg-slate-700/60" title="More options" type="button">
+<span class="material-symbols-outlined text-[18px]">more_vert</span>
+</button>
+</div>
+</div>
+<!-- Status Badges -->
+<div class="flex items-center gap-2 mb-4 flex-wrap">
+<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-cyan-500/15 text-cyan-300 border border-cyan-500/25">
+<span class="material-symbols-outlined text-[14px]">inventory_2</span>
+                Packaging
+              </span>
+<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium bg-emerald-500/10 text-emerald-300 border border-emerald-500/20">
+<span class="material-symbols-outlined text-[14px]">schedule</span>
+                On Time (26m left)
+              </span>
+</div>
+<!-- Order Items Snippet -->
+<div class="bg-slate-900/60 rounded-lg p-3 border border-slate-700/40 mb-4 text-xs space-y-1.5">
+<div class="flex justify-between text-slate-200">
+<span><span class="font-semibold text-blue-400">3x</span> Baja Fish Tacos</span>
+<span class="text-slate-400 font-mono">$19.50</span>
+</div>
+<div class="flex justify-between text-slate-300">
+<span><span class="font-semibold text-blue-400">1x</span> Chips &amp; Guacamole</span>
+<span class="text-slate-400 font-mono">$8.40</span>
+</div>
+<div class="flex justify-between text-slate-300">
+<span><span class="font-semibold text-blue-400">1x</span> House Horchata</span>
+<span class="text-slate-400 font-mono">$4.50</span>
+</div>
+</div>
+<!-- Logistics details -->
+<div class="space-y-1.5 mb-5 text-xs text-slate-300">
+<div class="flex items-start gap-2">
+<span class="material-symbols-outlined text-[16px] text-slate-400 mt-0.5">location_on</span>
+<span class="line-clamp-1">1940 Mission St, 3rd Floor</span>
+</div>
+<div class="flex items-center justify-between pt-1 border-t border-slate-700/40">
+<span class="flex items-center gap-1.5 text-slate-400">
+<span class="material-symbols-outlined text-[15px]">person</span>
+                  Maya Lin
+                </span>
+<span class="font-medium text-slate-200">Total: <strong class="text-white">$32.40</strong> <span class="text-emerald-400 text-[11px] font-normal ml-1">(Paid)</span></span>
+</div>
+</div>
+</div>
+<!-- Claim CTA -->
+<button class="w-full bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 text-white font-medium text-xs py-2.5 px-4 rounded-lg shadow-md shadow-blue-500/20 flex items-center justify-center gap-2 transition duration-150" type="button">
+<span class="material-symbols-outlined text-[16px]">touch_app</span>
+<span>Claim Order</span>
+</button>
+</article>
+<!-- Card 6: Green Garden Bowls #1012 -->
+<article class="bg-slate-800 border border-slate-700/80 rounded-lg p-5 flex flex-col justify-between hover:border-slate-600 transition duration-150">
+<div>
+<div class="flex items-start justify-between gap-2 mb-3">
+<div>
+<div class="flex items-center gap-2">
+<h3 class="text-base font-semibold text-white tracking-tight">Green Garden Bowls</h3>
+<span class="text-xs font-medium text-slate-400">#1012</span>
+</div>
+<div class="text-[11px] text-slate-400 mt-0.5">Received 2 mins ago · In-House Fleet</div>
+</div>
+<div class="flex items-center gap-1">
+<button class="p-1 rounded text-slate-400 hover:text-slate-200 hover:bg-slate-700/60" title="Print slip" type="button">
+<span class="material-symbols-outlined text-[18px]">print</span>
+</button>
+<button class="p-1 rounded text-slate-400 hover:text-slate-200 hover:bg-slate-700/60" title="More options" type="button">
+<span class="material-symbols-outlined text-[18px]">more_vert</span>
+</button>
+</div>
+</div>
+<!-- Status Badges -->
+<div class="flex items-center gap-2 mb-4 flex-wrap">
+<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-blue-500/15 text-blue-400 border border-blue-500/25">
+<span class="material-symbols-outlined text-[14px]">two_wheeler</span>
+                Driver Assigned
+              </span>
+<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium bg-emerald-500/10 text-emerald-300 border border-emerald-500/20">
+<span class="material-symbols-outlined text-[14px]">schedule</span>
+                On Time (31m left)
+              </span>
+</div>
+<!-- Order Items Snippet -->
+<div class="bg-slate-900/60 rounded-lg p-3 border border-slate-700/40 mb-4 text-xs space-y-1.5">
+<div class="flex justify-between text-slate-200">
+<span><span class="font-semibold text-blue-400">2x</span> Mediterranean Falafel Bowl</span>
+<span class="text-slate-400 font-mono">$28.60</span>
+</div>
+<div class="flex justify-between text-slate-300">
+<span><span class="font-semibold text-blue-400">1x</span> Ginger Lemon Kombucha</span>
+<span class="text-slate-400 font-mono">$5.50</span>
+</div>
+</div>
+<!-- Logistics details -->
+<div class="space-y-1.5 mb-5 text-xs text-slate-300">
+<div class="flex items-start gap-2">
+<span class="material-symbols-outlined text-[16px] text-slate-400 mt-0.5">location_on</span>
+<span class="line-clamp-1">505 Howard St, 12th Floor</span>
+</div>
+<div class="flex items-center justify-between pt-1 border-t border-slate-700/40">
+<span class="flex items-center gap-1.5 text-slate-400">
+<span class="material-symbols-outlined text-[15px]">person</span>
+                  Robert P.
+                </span>
+<span class="font-medium text-slate-200">Total: <strong class="text-white">$34.10</strong> <span class="text-emerald-400 text-[11px] font-normal ml-1">(Paid)</span></span>
+</div>
+</div>
+</div>
+<!-- Claim CTA -->
+<button class="w-full bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 text-white font-medium text-xs py-2.5 px-4 rounded-lg shadow-md shadow-blue-500/20 flex items-center justify-center gap-2 transition duration-150" type="button">
+<span class="material-symbols-outlined text-[16px]">touch_app</span>
+<span>Claim Order</span>
+</button>
+</article>
+</div>
+</div>
+</main>
+<!-- Quiet Ops Footer with System Telemetry -->
+<footer class="mt-auto border-t border-slate-800 bg-slate-900/80 text-xs text-slate-400 py-4 px-6">
+<div class="max-w-[1440px] mx-auto flex flex-col md:flex-row items-center justify-between gap-3">
+<div class="flex items-center gap-4">
+<span class="flex items-center gap-2 text-slate-400">
+<span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+          Fleet Dispatch Gateway: Online (18 active couriers)
+        </span>
+<span class="text-slate-700">|</span>
+<span>Average preparation time: 14.2m</span>
+</div>
+<div class="flex items-center gap-6">
+<span class="hover:text-slate-200 cursor-pointer">Dispatch Protocols</span>
+<span class="hover:text-slate-200 cursor-pointer">Hotline: Ext 402</span>
+<span class="text-slate-400 font-mono">v4.2.1-calm</span>
+</div>
+</div>
+</footer>
+</body></html>

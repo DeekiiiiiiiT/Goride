@@ -1,0 +1,583 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Roam Rush Ops — Reports &amp; Financial Reconciliation</title>
+<!-- Material Symbols Outlined Font -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Inter Google Font -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind CSS with Forms & Container Queries -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<!-- Tailwind Configuration verbatim from theme -->
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          "colors": {
+            "secondary-dim": "#64a8fe",
+            "on-surface": "#d2e8ff",
+            "surface-container-highest": "#122839",
+            "outline-variant": "#354a5c",
+            "primary-container": "#0e69dc",
+            "on-background": "#d2e8ff",
+            "on-tertiary-container": "#004b56",
+            "on-secondary-fixed": "#004076",
+            "on-tertiary-fixed-variant": "#005561",
+            "tertiary": "#7de9ff",
+            "surface-tint": "#adc6ff",
+            "surface-container": "#0a1b28",
+            "on-error-container": "#ff9993",
+            "surface-container-low": "#071520",
+            "surface-container-high": "#0f212f",
+            "tertiary-container": "#3adffa",
+            "outline": "#63788c",
+            "on-tertiary-fixed": "#00363e",
+            "error-container": "#871f21",
+            "surface-dim": "#060f17",
+            "tertiary-fixed": "#3adffa",
+            "surface": "#060f17",
+            "surface-bright": "#192e3f",
+            "on-secondary-fixed-variant": "#005da7",
+            "inverse-surface": "#f7f9ff",
+            "on-primary-fixed": "#000000",
+            "primary-fixed-dim": "#317bef",
+            "on-primary": "#003d88",
+            "primary-fixed": "#4388fd",
+            "secondary-fixed-dim": "#bcd6ff",
+            "secondary-container": "#003c70",
+            "on-secondary": "#004178",
+            "secondary-fixed": "#d4e3ff",
+            "on-primary-fixed-variant": "#001435",
+            "tertiary-fixed-dim": "#1ad0eb",
+            "tertiary-dim": "#1ad0eb",
+            "on-surface-variant": "#98adc3",
+            "on-tertiary": "#005561",
+            "inverse-primary": "#005bc4",
+            "error-dim": "#c54d4a",
+            "inverse-on-surface": "#4c5660",
+            "primary": "#adc6ff",
+            "primary-dim": "#699cff",
+            "error": "#fa746f",
+            "background": "#060f17",
+            "on-error": "#490006",
+            "surface-variant": "#122839",
+            "on-secondary-container": "#96c2ff",
+            "on-primary-container": "#ffffff",
+            "surface-container-lowest": "#000000",
+            "secondary": "#a4c9ff"
+          },
+          "borderRadius": {
+            "DEFAULT": "0.25rem",
+            "lg": "0.5rem",
+            "xl": "0.75rem",
+            "full": "9999px"
+          },
+          "fontFamily": {
+            "headline": ["Inter", "sans-serif"],
+            "display": ["Inter", "sans-serif"],
+            "body": ["Inter", "sans-serif"],
+            "label": ["Inter", "sans-serif"]
+          }
+        },
+      },
+    }
+  </script>
+<style>
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 20;
+      font-size: 19px;
+      line-height: 1;
+      display: inline-block;
+      vertical-align: middle;
+    }
+    .material-symbols-outlined.fill-icon {
+      font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 20;
+    }
+    body {
+      font-family: 'Inter', sans-serif;
+      background-color: #060f17;
+      color: #d2e8ff;
+    }
+    /* Oceanic custom scrollbar */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #060f17;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #1e293b;
+      border-radius: 4px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #334155;
+    }
+  </style>
+</head>
+<body class="bg-background text-on-surface antialiased min-h-screen flex flex-col select-none">
+<!-- ========================================================================= -->
+<!-- TOP APP BAR (Shared Component Execution: TopNavBar desktop_ops_header) -->
+<!-- ========================================================================= -->
+<header class="sticky top-0 w-full z-50 bg-slate-900 border-b border-slate-800 shadow-sm transition duration-150 ease-in-out">
+<div class="flex items-center justify-between px-6 w-full h-16 bg-slate-900">
+<!-- Left side: Brand identity & Navigation cluster -->
+<div class="flex items-center gap-8">
+<!-- Logo Anchor -->
+<div class="text-lg font-bold text-white tracking-tight flex items-center gap-2">
+<div class="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-cyan-400 flex items-center justify-center text-slate-950 font-black shadow-inner">
+<span class="material-symbols-outlined fill-icon text-slate-950 text-xl">bolt</span>
+</div>
+<span class="font-headline font-bold text-white text-base tracking-tight">Roam Rush Ops</span>
+<span class="text-xs px-2 py-0.5 rounded bg-slate-800 text-cyan-400 font-mono font-medium border border-cyan-900/40">In-House Desk</span>
+</div>
+<!-- Global Navigation Items matching JSON exactly -->
+<!-- ACTIVE TAB: 'Reports' autonomously highlighted per page intent -->
+<nav class="hidden md:flex items-center space-x-1 font-headline font-medium text-slate-200">
+<a class="text-slate-400 hover:text-slate-200 pb-4 pt-4 px-3 font-normal transition-colors flex items-center gap-2 hover:bg-slate-800/60 transition duration-150 ease-in-out cursor-pointer" href="#">
+<span class="material-symbols-outlined text-[18px]">receipt_long</span>
+<span>Orders</span>
+</a>
+<a class="text-slate-400 hover:text-slate-200 pb-4 pt-4 px-3 font-normal transition-colors flex items-center gap-2 hover:bg-slate-800/60 transition duration-150 ease-in-out cursor-pointer" href="#">
+<span class="material-symbols-outlined text-[18px]">storefront</span>
+<span>Restaurants</span>
+</a>
+<a class="text-slate-400 hover:text-slate-200 pb-4 pt-4 px-3 font-normal transition-colors flex items-center gap-2 hover:bg-slate-800/60 transition duration-150 ease-in-out cursor-pointer" href="#">
+<span class="material-symbols-outlined text-[18px]">credit_card</span>
+<span>Cards</span>
+</a>
+<a class="text-blue-400 font-semibold border-b-2 border-blue-400 pb-4 pt-4 px-3 flex items-center gap-2 hover:bg-slate-800/60 transition duration-150 ease-in-out cursor-pointer" href="#">
+<span class="material-symbols-outlined text-[18px] text-blue-400">analytics</span>
+<span>Reports</span>
+</a>
+<a class="text-slate-400 hover:text-slate-200 pb-4 pt-4 px-3 font-normal transition-colors flex items-center gap-2 hover:bg-slate-800/60 transition duration-150 ease-in-out cursor-pointer" href="#">
+<span class="material-symbols-outlined text-[18px]">settings</span>
+<span>Settings</span>
+</a>
+</nav>
+</div>
+<!-- Right side: Operational indicators & Actions -->
+<div class="flex items-center gap-4">
+<!-- Live Desk Status Pill -->
+<div class="hidden lg:flex items-center gap-2 px-2.5 py-1 rounded-full bg-emerald-950/60 border border-emerald-500/30 text-emerald-400 text-xs font-medium">
+<span class="relative flex h-2 w-2">
+<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+<span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+</span>
+<span>Desk Open · Customers can order</span>
+</div>
+<!-- System Health Meter -->
+<div class="hidden xl:flex items-center gap-1.5 px-2.5 py-1 rounded bg-slate-800/70 text-slate-300 text-xs border border-slate-700/50">
+<span class="material-symbols-outlined text-cyan-400 text-sm">wifi_tethering</span>
+<span class="font-mono text-cyan-300">99.8%</span>
+<span class="text-slate-400">System health</span>
+</div>
+<!-- Trailing actions from JSON: volume_up, notifications -->
+<div class="flex items-center gap-1 border-l border-slate-800 pl-3">
+<button class="p-2 text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 rounded-lg transition duration-150 ease-in-out" title="Sound alerts toggle">
+<span class="material-symbols-outlined text-xl">volume_up</span>
+</button>
+<button class="p-2 text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 rounded-lg transition duration-150 ease-in-out relative" title="Alerts notifications">
+<span class="material-symbols-outlined text-xl">notifications</span>
+<span class="absolute top-1.5 right-1.5 w-2 h-2 bg-blue-500 rounded-full"></span>
+</button>
+</div>
+<!-- Operator User Chip -->
+<div class="flex items-center gap-2.5 pl-2 border-l border-slate-800">
+<div class="relative">
+<img class="w-8 h-8 rounded-full border border-slate-700 object-cover" data-alt="Close-up professional portrait of a tech ops specialist wearing an audio headset, framed against dark navy slate server lighting with cool cyan rim illumination, highly cinematic and corporate modern food-tech aesthetic." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCkMyjxJFRbe2Nvzmkuy3C1gzWkbYUwwGJuAcVCaE5MXWM6GDwkMQ0r0khtWKWx0beEnOtafUyoTOpciV0W5sFIl2x2prjqOgTKHPhyei3Gpqxmi-NTUtdkbe8DKDDCWpywrsMbowQR9DAJ5VjLNcN4k-a0hm6CsgEbvklvllQLG8nu-fU4lFKQj-A5kksIYSMponuWrfnKER70IAiyhc-vzjAmtr1-8rFNpQpk54Z4pRUKvgWRt_rtKHr8y1QLk7Qu_2uHBObTMHQ"/>
+<span class="absolute bottom-0 right-0 w-2.5 h-2.5 bg-emerald-500 border-2 border-slate-900 rounded-full"></span>
+</div>
+<div class="hidden 2xl:flex flex-col text-left">
+<span class="text-xs font-semibold text-slate-200 leading-tight">Desk Lead #04</span>
+<span class="text-[10px] text-cyan-400 font-medium">Operator active</span>
+</div>
+</div>
+</div>
+</div>
+</header>
+<!-- ========================================================================= -->
+<!-- MAIN WORKSPACE CANVAS -->
+<!-- ========================================================================= -->
+<main class="flex-1 w-full max-w-[1680px] mx-auto px-6 py-7 space-y-6">
+<!-- PAGE HERO HEADER STRIP: Title, Filters & Direct Export Actions -->
+<div class="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-800/80 pb-6">
+<div>
+<div class="flex items-center gap-2.5">
+<h1 class="text-2xl font-bold tracking-tight text-white font-headline">Reports</h1>
+<span class="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-blue-900/40 text-blue-300 border border-blue-700/40">In-House Ops</span>
+</div>
+<p class="text-sm text-slate-400 mt-1">
+          Last 30 days of In-House performance and financial reconciliation
+        </p>
+</div>
+<!-- Action Cluster: Date Selector & CSV Export Button -->
+<div class="flex flex-wrap items-center gap-3">
+<!-- Date range pill -->
+<div class="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg bg-surface-container border border-outline-variant/50 text-slate-200 text-xs font-medium shadow-sm hover:border-slate-600 transition-colors cursor-pointer">
+<span class="material-symbols-outlined text-cyan-400 text-[18px]">calendar_today</span>
+<span>Last 30 Days (Jun 1 – Jun 30, 2024)</span>
+<span class="material-symbols-outlined text-slate-400 text-sm">arrow_drop_down</span>
+</div>
+<!-- Export CSV secondary outline button -->
+<button class="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg bg-surface-variant hover:bg-slate-800 border border-slate-700 text-slate-200 hover:text-white text-xs font-semibold tracking-wide transition-all duration-150 shadow-sm active:scale-95">
+<span class="material-symbols-outlined text-blue-400 text-[18px]">download</span>
+<span>Export CSV</span>
+</button>
+<!-- Primary Action Trigger -->
+<button class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 text-slate-950 font-bold text-xs shadow-md shadow-blue-500/20 active:scale-95 transition-all">
+<span class="material-symbols-outlined text-slate-950 text-[18px]">refresh</span>
+<span>Sync Statements</span>
+</button>
+</div>
+</div>
+<!-- QUICK SEGMENT FILTER TABS -->
+<div class="flex items-center gap-2 border-b border-slate-800/60 pb-3 overflow-x-auto text-xs">
+<button class="px-3.5 py-1.5 rounded-lg font-semibold bg-slate-800 text-cyan-300 border border-slate-700 transition">
+        Overview (30d)
+      </button>
+<button class="px-3.5 py-1.5 rounded-lg font-medium text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 transition">
+        Buyer Dispatch Velocity
+      </button>
+<button class="px-3.5 py-1.5 rounded-lg font-medium text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 transition">
+        Pricing Integrity &amp; Gaps
+      </button>
+<button class="px-3.5 py-1.5 rounded-lg font-medium text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 transition">
+        Reconciliation Audit
+      </button>
+</div>
+<!-- ========================================================================= -->
+<!-- KPI METRIC GRID (Row of 5 high-density cards) -->
+<!-- ========================================================================= -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
+<!-- Metric 1: Orders (30 days) -->
+<div class="bg-slate-900/60 border border-slate-800/80 rounded-xl p-5 flex flex-col justify-between hover:border-slate-700 transition-all shadow-sm">
+<div>
+<div class="flex items-center justify-between text-slate-400 mb-2">
+<span class="text-xs uppercase tracking-wider font-semibold text-slate-400">Orders (30 days)</span>
+<span class="p-1.5 rounded-md bg-blue-500/10 text-blue-400">
+<span class="material-symbols-outlined text-base">shopping_cart</span>
+</span>
+</div>
+<div class="flex items-baseline gap-2">
+<span class="text-3xl font-extrabold text-white tracking-tight font-headline">1,428</span>
+</div>
+<div class="flex items-center gap-1.5 mt-2 text-xs font-medium text-emerald-400">
+<span class="material-symbols-outlined text-sm font-bold">trending_up</span>
+<span>+14.2% vs previous period (1,250)</span>
+</div>
+</div>
+<div class="mt-4 pt-3 border-t border-slate-800/60">
+<p class="text-[11px] text-slate-400 leading-relaxed">
+<span class="text-slate-400 font-medium">What good looks like:</span> Consistent growth &gt; 1,200 orders/mo
+          </p>
+</div>
+</div>
+<!-- Metric 2: Problem Rate -->
+<div class="bg-slate-900/60 border border-slate-800/80 rounded-xl p-5 flex flex-col justify-between hover:border-slate-700 transition-all shadow-sm">
+<div>
+<div class="flex items-center justify-between text-slate-400 mb-2">
+<span class="text-xs uppercase tracking-wider font-semibold text-slate-400">Problem Rate</span>
+<span class="p-1.5 rounded-md bg-emerald-500/10 text-emerald-400">
+<span class="material-symbols-outlined text-base">check_circle</span>
+</span>
+</div>
+<div class="flex items-baseline gap-2">
+<span class="text-3xl font-extrabold text-emerald-400 tracking-tight font-headline">2.8%</span>
+</div>
+<div class="flex items-center gap-1.5 mt-2 text-xs font-medium text-slate-300">
+<span class="material-symbols-outlined text-sm text-cyan-400">info</span>
+<span>40 issues flagged across 1,428 orders</span>
+</div>
+</div>
+<div class="mt-4 pt-3 border-t border-slate-800/60">
+<p class="text-[11px] text-slate-400 leading-relaxed">
+<span class="text-slate-400 font-medium">What good looks like:</span> Target sustained under 5.0%
+          </p>
+</div>
+</div>
+<!-- Metric 3: Claim → placed median -->
+<div class="bg-slate-900/60 border border-slate-800/80 rounded-xl p-5 flex flex-col justify-between hover:border-slate-700 transition-all shadow-sm">
+<div>
+<div class="flex items-center justify-between text-slate-400 mb-2">
+<span class="text-xs uppercase tracking-wider font-semibold text-slate-400">Claim → Placed Median</span>
+<span class="p-1.5 rounded-md bg-cyan-500/10 text-cyan-400">
+<span class="material-symbols-outlined text-base">timer</span>
+</span>
+</div>
+<div class="flex items-baseline gap-2">
+<span class="text-3xl font-extrabold text-cyan-300 tracking-tight font-headline">3.4 min</span>
+</div>
+<div class="flex items-center gap-1.5 mt-2 text-xs font-medium text-slate-300">
+<span class="material-symbols-outlined text-sm text-blue-400">call</span>
+<span>Median operator speed to call &amp; confirm</span>
+</div>
+</div>
+<div class="mt-4 pt-3 border-t border-slate-800/60">
+<p class="text-[11px] text-slate-400 leading-relaxed">
+<span class="text-slate-400 font-medium">What good looks like:</span> Under 5 mins SLA threshold
+          </p>
+</div>
+</div>
+<!-- Metric 4: Price Gap & Variance -->
+<div class="bg-slate-900/60 border border-slate-800/80 rounded-xl p-5 flex flex-col justify-between hover:border-slate-700 transition-all shadow-sm">
+<div>
+<div class="flex items-center justify-between text-slate-400 mb-2">
+<span class="text-xs uppercase tracking-wider font-semibold text-slate-400">Price Gap &amp; Variance</span>
+<span class="p-1.5 rounded-md bg-amber-500/10 text-amber-400">
+<span class="material-symbols-outlined text-base">difference</span>
+</span>
+</div>
+<div class="flex items-center gap-2">
+<span class="text-3xl font-extrabold text-white tracking-tight font-headline">J$ 14,820</span>
+<span class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-950/60 text-amber-400 border border-amber-800/50">+1.2%</span>
+</div>
+<div class="flex items-center gap-1.5 mt-2 text-xs font-medium text-slate-300">
+<span class="material-symbols-outlined text-sm text-amber-400">receipt</span>
+<span>Net gap: menu estimate vs merchant bill</span>
+</div>
+</div>
+<div class="mt-4 pt-3 border-t border-slate-800/60">
+<p class="text-[11px] text-slate-400 leading-relaxed">
+<span class="text-slate-400 font-medium">What good looks like:</span> Under J$ 25,000 monthly cap
+          </p>
+</div>
+</div>
+<!-- Metric 5: Statement matching -->
+<div class="bg-slate-900/60 border border-slate-800/80 rounded-xl p-5 flex flex-col justify-between hover:border-slate-700 transition-all shadow-sm">
+<div>
+<div class="flex items-center justify-between text-slate-400 mb-2">
+<span class="text-xs uppercase tracking-wider font-semibold text-slate-400">Statement Matching</span>
+<span class="p-1.5 rounded-md bg-cyan-500/10 text-cyan-400">
+<span class="material-symbols-outlined text-base">verified</span>
+</span>
+</div>
+<div class="flex items-baseline gap-2">
+<span class="text-3xl font-extrabold text-cyan-400 tracking-tight font-headline">98.4%</span>
+</div>
+<div class="flex items-center gap-1.5 mt-2 text-xs font-medium text-slate-300">
+<span class="text-cyan-300 font-semibold">1,405</span> settled · <span class="text-blue-300">18</span> wait · <span class="text-amber-400">5</span> bank
+          </div>
+</div>
+<div class="mt-4 pt-3 border-t border-slate-800/60">
+<p class="text-[11px] text-slate-400 leading-relaxed">
+<span class="text-slate-400 font-medium">What good looks like:</span> &gt;97% auto-match within 48h
+          </p>
+</div>
+</div>
+</div>
+<!-- ========================================================================= -->
+<!-- STATEMENT RECONCILIATION SUMMARY STRIP -->
+<!-- ========================================================================= -->
+<div class="bg-slate-900/80 border border-slate-800 rounded-xl p-5 shadow-sm space-y-4">
+<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+<div>
+<h2 class="text-base font-bold text-white font-headline flex items-center gap-2">
+<span>Statement Reconciliation Summary</span>
+<span class="text-xs font-normal text-slate-400 font-mono">(1,428 Recorded In-House Dispatches)</span>
+</h2>
+<p class="text-xs text-slate-400 mt-0.5">Real-time matching status between Roam Rush buyer debit card debits &amp; merchant printed receipts</p>
+</div>
+<!-- Legend Pill Badges -->
+<div class="flex items-center gap-3 text-xs">
+<div class="flex items-center gap-1.5">
+<span class="w-2.5 h-2.5 rounded-full bg-cyan-400"></span>
+<span class="text-slate-200 font-medium">Matched: 98.4% (1,405)</span>
+</div>
+<div class="flex items-center gap-1.5">
+<span class="w-2.5 h-2.5 rounded-full bg-blue-500"></span>
+<span class="text-slate-300">Pending: 1.2% (18)</span>
+</div>
+<div class="flex items-center gap-1.5">
+<span class="w-2.5 h-2.5 rounded-full bg-amber-400"></span>
+<span class="text-slate-300">Flagged: 0.4% (5)</span>
+</div>
+</div>
+</div>
+<!-- High-tech Progress Split Bar -->
+<div class="w-full bg-slate-950 h-3 rounded-full overflow-hidden flex p-0.5 border border-slate-800">
+<div class="bg-gradient-to-r from-blue-500 to-cyan-400 h-full rounded-l-full" style="width: 98.4%;" title="98.4% Matched"></div>
+<div class="bg-blue-600 h-full mx-0.5" style="width: 1.2%;" title="1.2% Pending Batch"></div>
+<div class="bg-amber-400 h-full rounded-r-full" style="width: 0.4%;" title="0.4% Flagged / Bank-only"></div>
+</div>
+<!-- Micro status notes -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-3 pt-1 text-xs">
+<div class="p-2.5 rounded-lg bg-slate-950/50 border border-slate-800/80 flex items-center justify-between">
+<span class="text-slate-400">Total Cleared Value:</span>
+<span class="font-mono font-bold text-white">J$ 3,842,910.00</span>
+</div>
+<div class="p-2.5 rounded-lg bg-slate-950/50 border border-slate-800/80 flex items-center justify-between">
+<span class="text-slate-400">Pending Settlement Queue:</span>
+<span class="font-mono font-bold text-blue-300">J$ 48,220.00 (18 orders)</span>
+</div>
+<div class="p-2.5 rounded-lg bg-slate-950/50 border border-slate-800/80 flex items-center justify-between">
+<span class="text-slate-400">Bank-Only Unlinked:</span>
+<span class="font-mono font-bold text-amber-300">J$ 12,450.00 (5 items)</span>
+</div>
+</div>
+</div>
+<!-- ========================================================================= -->
+<!-- DETAILED RECONCILIATION BREAKDOWN TABLE -->
+<!-- ========================================================================= -->
+<div class="bg-slate-900/60 border border-slate-800 rounded-xl overflow-hidden shadow-sm">
+<div class="p-4 border-b border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-900">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-cyan-400">table_rows</span>
+<div>
+<h3 class="text-sm font-bold text-white font-headline">Daily Settlement Reconciliation Log</h3>
+<p class="text-xs text-slate-400">Batched ledger reports with cross-system verification audit status</p>
+</div>
+</div>
+<div class="flex items-center gap-2 text-xs">
+<span class="text-slate-400">Showing batches for:</span>
+<span class="px-2 py-1 rounded bg-slate-800 text-cyan-300 font-medium border border-slate-700">Sample Pizza Co. &amp; Top 12 Merchants</span>
+</div>
+</div>
+<!-- Dense Utility Table -->
+<div class="overflow-x-auto">
+<table class="w-full text-left text-xs text-slate-300 divide-y divide-slate-800">
+<thead class="bg-slate-950/80 text-slate-400 uppercase font-semibold text-[11px] tracking-wider">
+<tr>
+<th class="py-3 px-4" scope="col">Date</th>
+<th class="py-3 px-4" scope="col">Batch ID</th>
+<th class="py-3 px-4" scope="col">Merchant / Group</th>
+<th class="py-3 px-4 text-center" scope="col">Settled Orders</th>
+<th class="py-3 px-4 text-right" scope="col">Dispatched Total (J$)</th>
+<th class="py-3 px-4 text-right" scope="col">Bank Statement Total (J$)</th>
+<th class="py-3 px-4 text-right" scope="col">Net Variance</th>
+<th class="py-3 px-4 text-center" scope="col">Audit Status</th>
+<th class="py-3 px-4 text-right" scope="col">Action</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-slate-800/60 font-body">
+<!-- Row 1 -->
+<tr class="hover:bg-slate-800/40 transition-colors">
+<td class="py-3.5 px-4 font-mono text-slate-300">2024-06-30</td>
+<td class="py-3.5 px-4 font-mono font-medium text-cyan-400">#BATCH-8821</td>
+<td class="py-3.5 px-4 text-white font-medium">Sample Pizza Co. (Downtown)</td>
+<td class="py-3.5 px-4 text-center font-mono font-medium">48</td>
+<td class="py-3.5 px-4 text-right font-mono">142,500.00</td>
+<td class="py-3.5 px-4 text-right font-mono text-slate-200">142,500.00</td>
+<td class="py-3.5 px-4 text-right font-mono text-emerald-400">J$ 0.00</td>
+<td class="py-3.5 px-4 text-center">
+<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-950/60 text-emerald-400 border border-emerald-800/40">
+<span class="material-symbols-outlined text-[13px] font-bold">check</span>
+<span>Reconciled</span>
+</span>
+</td>
+<td class="py-3.5 px-4 text-right">
+<button class="text-slate-400 hover:text-cyan-400 font-medium transition-colors">Inspect</button>
+</td>
+</tr>
+<!-- Row 2 -->
+<tr class="hover:bg-slate-800/40 transition-colors">
+<td class="py-3.5 px-4 font-mono text-slate-300">2024-06-29</td>
+<td class="py-3.5 px-4 font-mono font-medium text-cyan-400">#BATCH-8819</td>
+<td class="py-3.5 px-4 text-white font-medium">Sample Pizza Co. (Express Plaza)</td>
+<td class="py-3.5 px-4 text-center font-mono font-medium">54</td>
+<td class="py-3.5 px-4 text-right font-mono">168,400.00</td>
+<td class="py-3.5 px-4 text-right font-mono text-slate-200">167,950.00</td>
+<td class="py-3.5 px-4 text-right font-mono text-amber-400">-J$ 450.00</td>
+<td class="py-3.5 px-4 text-center">
+<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-blue-950/60 text-cyan-300 border border-blue-800/40">
+<span class="material-symbols-outlined text-[13px]">bolt</span>
+<span>Auto-cleared</span>
+</span>
+</td>
+<td class="py-3.5 px-4 text-right">
+<button class="text-slate-400 hover:text-cyan-400 font-medium transition-colors">Inspect</button>
+</td>
+</tr>
+<!-- Row 3 -->
+<tr class="hover:bg-slate-800/40 transition-colors bg-amber-950/10">
+<td class="py-3.5 px-4 font-mono text-slate-300">2024-06-28</td>
+<td class="py-3.5 px-4 font-mono font-medium text-cyan-400">#BATCH-8814</td>
+<td class="py-3.5 px-4 text-white font-medium">Sample Pizza Co. (Northway Hub)</td>
+<td class="py-3.5 px-4 text-center font-mono font-medium">32</td>
+<td class="py-3.5 px-4 text-right font-mono">98,120.00</td>
+<td class="py-3.5 px-4 text-right font-mono text-slate-200">96,200.00</td>
+<td class="py-3.5 px-4 text-right font-mono text-amber-300 font-bold">-J$ 1,920.00</td>
+<td class="py-3.5 px-4 text-center">
+<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-amber-950/60 text-amber-300 border border-amber-800/50">
+<span class="material-symbols-outlined text-[13px]">pending</span>
+<span>Under Review</span>
+</span>
+</td>
+<td class="py-3.5 px-4 text-right">
+<button class="text-amber-400 hover:underline font-semibold transition-colors">Resolve</button>
+</td>
+</tr>
+<!-- Row 4 -->
+<tr class="hover:bg-slate-800/40 transition-colors">
+<td class="py-3.5 px-4 font-mono text-slate-300">2024-06-27</td>
+<td class="py-3.5 px-4 font-mono font-medium text-cyan-400">#BATCH-8809</td>
+<td class="py-3.5 px-4 text-white font-medium">Sample Pizza Co. (Downtown)</td>
+<td class="py-3.5 px-4 text-center font-mono font-medium">61</td>
+<td class="py-3.5 px-4 text-right font-mono">184,300.00</td>
+<td class="py-3.5 px-4 text-right font-mono text-slate-200">184,300.00</td>
+<td class="py-3.5 px-4 text-right font-mono text-emerald-400">J$ 0.00</td>
+<td class="py-3.5 px-4 text-center">
+<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-950/60 text-emerald-400 border border-emerald-800/40">
+<span class="material-symbols-outlined text-[13px] font-bold">check</span>
+<span>Reconciled</span>
+</span>
+</td>
+<td class="py-3.5 px-4 text-right">
+<button class="text-slate-400 hover:text-cyan-400 font-medium transition-colors">Inspect</button>
+</td>
+</tr>
+<!-- Row 5 (Order #1001 related batch) -->
+<tr class="hover:bg-slate-800/40 transition-colors">
+<td class="py-3.5 px-4 font-mono text-slate-300">2024-06-26</td>
+<td class="py-3.5 px-4 font-mono font-medium text-cyan-400">#BATCH-8802</td>
+<td class="py-3.5 px-4 text-white font-medium">Sample Pizza Co. (Order #1001 Batch)</td>
+<td class="py-3.5 px-4 text-center font-mono font-medium">42</td>
+<td class="py-3.5 px-4 text-right font-mono">126,900.00</td>
+<td class="py-3.5 px-4 text-right font-mono text-slate-200">126,900.00</td>
+<td class="py-3.5 px-4 text-right font-mono text-emerald-400">J$ 0.00</td>
+<td class="py-3.5 px-4 text-center">
+<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-950/60 text-emerald-400 border border-emerald-800/40">
+<span class="material-symbols-outlined text-[13px] font-bold">check</span>
+<span>Reconciled</span>
+</span>
+</td>
+<td class="py-3.5 px-4 text-right">
+<button class="text-slate-400 hover:text-cyan-400 font-medium transition-colors">Inspect</button>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<!-- Table Pagination / Footer stats -->
+<div class="px-4 py-3 bg-slate-950/90 border-t border-slate-800 flex items-center justify-between text-xs text-slate-400">
+<div>
+          Showing <span class="font-semibold text-slate-200">5</span> of <span class="font-semibold text-slate-200">30</span> reconciliation daily batches
+        </div>
+<div class="flex items-center gap-2">
+<button class="px-2.5 py-1 rounded bg-slate-800 text-slate-400 hover:text-white border border-slate-700 disabled:opacity-40" disabled="">Previous</button>
+<button class="px-2.5 py-1 rounded bg-slate-800 text-slate-200 hover:bg-slate-700 border border-slate-700">Next</button>
+</div>
+</div>
+</div>
+</main>
+<!-- ========================================================================= -->
+<!-- OPS DESK COMPACT FOOTER -->
+<!-- ========================================================================= -->
+<footer class="mt-auto border-t border-slate-800/80 bg-slate-950 py-3 px-6 text-xs text-slate-500 flex flex-col md:flex-row items-center justify-between gap-2">
+<div class="flex items-center gap-2">
+<span class="w-1.5 h-1.5 rounded-full bg-cyan-400"></span>
+<span>Roam Rush In-House Operations Console · Reports Hub</span>
+</div>
+<div class="flex items-center gap-4 text-slate-400">
+<span>Sync Latency: <strong class="text-slate-200 font-mono">14ms</strong></span>
+<span>Last Statement Import: <strong class="text-slate-200">Today at 14:30 EST</strong></span>
+<span class="text-cyan-400">v2.4.9 Oceanic</span>
+</div>
+</footer>
+</body></html>

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+﻿import { useCallback, useEffect, useState } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -94,7 +94,7 @@ export function TeamLogins({ job }: { job: 'buyer' | 'ops' }) {
       {canWrite ? (
         <form className="mt-2 flex flex-wrap gap-2" onSubmit={(event) => void send(event)}>
           <input type="email" className="min-w-56 rounded bg-slate-900 p-2" placeholder="name@email.com" value={email} onChange={(event) => setEmail(event.target.value)} />
-          <button className="rounded-lg bg-amber-500 px-3 py-2 text-slate-950 font-semibold disabled:opacity-50" type="submit" disabled={sending}>{sending ? 'Sending…' : `Send ${spec.label} login`}</button>
+          <button className="rounded-lg bg-[#f59e0b] px-3 py-2 text-slate-950 font-semibold disabled:opacity-50" type="submit" disabled={sending}>{sending ? 'Sending…' : `Send ${spec.label} login`}</button>
         </form>
       ) : null}
       {loading ? <Loader2 className="mt-3 h-5 w-5 animate-spin" /> : (

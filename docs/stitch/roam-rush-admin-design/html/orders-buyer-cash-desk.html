@@ -1,0 +1,578 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>In-House desk - Roam Rush Ops</title>
+<!-- Google Fonts: Inter -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&amp;display=swap" rel="stylesheet"/>
+<!-- Material Symbols Outlined -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind CSS CDN -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">tailwind.config = {darkMode: "class", theme: {extend: {colors: {brand: {bg: "#0f172a", surface: "#1e293b", surfaceLight: "#334155", primary: "#3b82f6", secondary: "#60a5fa", cyan: "#06b6d4", cyanLight: "#22d3ee", success: "#22c55e", warning: "#f59e0b", error: "#ef4444", neutral: "#cbd5e1"}, "inverse-surface": "#f7f9ff", "tertiary-container": "#3adffa", "surface-container-highest": "#122839", "on-tertiary-container": "#004b56", "surface-variant": "#122839", "secondary-fixed-dim": "#bcd6ff", primary: "#adc6ff", "on-secondary-container": "#96c2ff", error: "#fa746f", "secondary-fixed": "#d4e3ff", "on-tertiary-fixed-variant": "#005561", "primary-fixed-dim": "#317bef", secondary: "#a4c9ff", background: "#060f17", "on-secondary-fixed": "#004076", "primary-fixed": "#4388fd", "tertiary-fixed-dim": "#1ad0eb", "primary-container": "#0e69dc", "on-error-container": "#ff9993", "on-secondary": "#004178", "tertiary-dim": "#1ad0eb", "secondary-dim": "#64a8fe", "tertiary-fixed": "#3adffa", "on-surface": "#d2e8ff", "surface-container-lowest": "#000000", "on-surface-variant": "#98adc3", "on-primary-fixed": "#000000", "primary-dim": "#699cff", "surface-tint": "#adc6ff", tertiary: "#7de9ff", "on-tertiary-fixed": "#00363e", "on-primary-fixed-variant": "#001435", "secondary-container": "#003c70", "on-primary-container": "#ffffff", "on-background": "#d2e8ff", "surface-dim": "#060f17", "on-primary": "#003d88", surface: "#060f17", "surface-bright": "#192e3f", "error-dim": "#c54d4a", "surface-container": "#0a1b28", "inverse-primary": "#005bc4", "outline-variant": "#354a5c", "inverse-on-surface": "#4c5660", "error-container": "#871f21", outline: "#63788c", "surface-container-low": "#071520", "surface-container-high": "#0f212f", "on-secondary-fixed-variant": "#005da7", "on-error": "#490006", "on-tertiary": "#005561"}, borderRadius: {DEFAULT: "0.25rem", lg: "0.5rem", xl: "0.75rem", full: "9999px"}, fontFamily: {headline: ["Inter"], display: ["Inter"], body: ["Inter"], label: ["Inter"]}, fontSize: {}}}};</script>
+<style>
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+      display: inline-block;
+      vertical-align: middle;
+      line-height: 1;
+    }
+    .material-symbols-outlined.fill-icon {
+      font-variation-settings: 'FILL' 1;
+    }
+    .btn-gradient-primary {
+      background: linear-gradient(135deg, #3b82f6 0%, #22d3ee 100%);
+    }
+    .btn-gradient-primary:hover {
+      background: linear-gradient(135deg, #2563eb 0%, #06b6d4 100%);
+    }
+  </style>
+</head>
+<body class="bg-slate-900 text-slate-200 font-body antialiased selection:bg-cyan-500 selection:text-slate-950 min-h-screen">
+<!-- SHARED COMPONENT: SideNavBar -->
+<aside class="fixed top-0 left-0 h-screen w-16 md:w-20 z-40 bg-slate-900 border-r border-slate-800 shadow-none">
+<div class="flex flex-col justify-between items-center py-4 h-full">
+<!-- Brand Logo / Header -->
+<div class="flex flex-col items-center gap-1 group cursor-pointer" title="Roam Rush Ops Desk">
+<div class="w-10 h-10 rounded-lg bg-gradient-to-tr from-blue-600 to-cyan-400 flex items-center justify-center text-white shadow-lg shadow-blue-500/20 active:scale-95 transition-transform duration-100">
+<span class="material-symbols-outlined fill-icon text-2xl">local_shipping</span>
+</div>
+<span class="font-headline text-[10px] font-bold text-slate-100 tracking-tight mt-1 text-center">Roam Rush</span>
+</div>
+<!-- Main Navigation Tabs (Orders active) -->
+<nav aria-label="Main Navigation" class="flex flex-col items-center gap-3 w-full px-2">
+<!-- Orders (Active Tab) -->
+<a class="flex items-center justify-center p-3 rounded-lg bg-blue-500/10 text-cyan-400 relative cursor-pointer active:scale-95 transition-transform duration-100 group w-full" href="#orders" title="Orders">
+<span class="material-symbols-outlined text-2xl">receipt_long</span>
+<span class="absolute top-2 right-2 w-2 h-2 rounded-full bg-cyan-400 ring-2 ring-slate-900"></span>
+</a>
+<!-- Restaurants -->
+<a class="flex items-center justify-center p-3 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 cursor-pointer active:scale-95 transition-transform duration-100 group w-full" href="#restaurants" title="Restaurants">
+<span class="material-symbols-outlined text-2xl">storefront</span>
+</a>
+<!-- Cards & Spend -->
+<a class="flex items-center justify-center p-3 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 cursor-pointer active:scale-95 transition-transform duration-100 group w-full" href="#cards" title="Cards &amp; Spend">
+<span class="material-symbols-outlined text-2xl">credit_card</span>
+</a>
+<!-- Reports -->
+<a class="flex items-center justify-center p-3 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 cursor-pointer active:scale-95 transition-transform duration-100 group w-full" href="#reports" title="Reports">
+<span class="material-symbols-outlined text-2xl">bar_chart</span>
+</a>
+<!-- Settings -->
+<a class="flex items-center justify-center p-3 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 cursor-pointer active:scale-95 transition-transform duration-100 group w-full" href="#settings" title="Settings">
+<span class="material-symbols-outlined text-2xl">settings</span>
+</a>
+</nav>
+<!-- Footer Action Tabs -->
+<div class="flex flex-col items-center gap-2 w-full px-2 border-t border-slate-800 pt-3">
+<button class="flex items-center justify-center p-2.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 cursor-pointer active:scale-95 transition-transform duration-100 w-full" title="Help &amp; Support" type="button">
+<span class="material-symbols-outlined text-xl">help</span>
+</button>
+<button class="flex items-center justify-center p-2.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-slate-800/50 cursor-pointer active:scale-95 transition-transform duration-100 w-full" title="Log out" type="button">
+<span class="material-symbols-outlined text-xl">logout</span>
+</button>
+</div>
+</div>
+</aside>
+<!-- MAIN WRAPPER: Responsive offset for Collapsed SideNavBar -->
+<div class="pl-16 md:pl-20 min-h-screen flex flex-col bg-slate-900">
+<!-- SHARED COMPONENT: TopNavBar -->
+<header class="sticky top-0 w-full z-30 bg-slate-900/90 backdrop-blur-md border-b border-slate-800 shadow-sm">
+<div class="flex justify-between items-center h-14 px-4 sm:px-6 w-full">
+<!-- Brand Title & Operating Status Badge -->
+<div class="flex items-center gap-4">
+<h1 class="font-headline text-base md:text-lg font-semibold text-slate-100 tracking-tight flex items-center gap-2">
+            In-House desk
+          </h1>
+<span class="h-4 w-px bg-slate-700 hidden sm:block"></span>
+<!-- Desk status indicator pill -->
+<div class="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-emerald-950/60 border border-emerald-500/30 text-emerald-400 text-xs font-medium">
+<span class="relative flex h-2 w-2">
+<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+<span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+</span>
+<span>Desk open · Customers can order</span>
+</div>
+</div>
+<!-- Trailing Operator Controls and Status -->
+<div class="flex items-center gap-3 sm:gap-4">
+<!-- Sound toggle switch / button -->
+<button class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-800/80 hover:bg-slate-800 text-slate-300 text-xs font-medium border border-slate-700/60 transition-colors" id="soundToggle" type="button">
+<span class="material-symbols-outlined text-sm text-cyan-400">volume_up</span>
+<span class="hidden sm:inline">Sound on</span>
+</button>
+<!-- Notifications Icon -->
+<button class="p-2 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800/80 transition-colors relative" title="Notifications" type="button">
+<span class="material-symbols-outlined text-xl">notifications</span>
+<span class="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-blue-500"></span>
+</button>
+<!-- Operator status pill & Profile -->
+<div class="flex items-center gap-2 pl-2 border-l border-slate-800">
+<div class="flex items-center gap-1.5 px-2 py-1 rounded-md bg-blue-950/40 border border-blue-500/20 text-blue-300 text-xs">
+<span class="w-1.5 h-1.5 rounded-full bg-blue-400"></span>
+<span class="hidden lg:inline">Operator active</span>
+</div>
+<div class="flex items-center gap-2 cursor-pointer group" title="Current Operator Avatar">
+<div class="w-8 h-8 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-slate-300 group-hover:border-cyan-400 transition-colors">
+<span class="material-symbols-outlined text-lg">account_circle</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+</header>
+<!-- SUBHEADER / SECONDARY NAVIGATION TABS -->
+<div class="border-b border-slate-800 bg-slate-900/60 px-4 sm:px-6">
+<div class="flex items-center justify-between overflow-x-auto no-scrollbar">
+<nav class="flex space-x-1 sm:space-x-3 text-sm font-medium">
+<!-- Active Tab: Orders with count badge -->
+<button class="inline-flex items-center gap-2 px-3 py-3 text-cyan-400 border-b-2 border-cyan-400 font-semibold transition-colors">
+<span>Orders</span>
+<span class="inline-flex items-center justify-center px-2 py-0.5 rounded-full text-xs font-bold bg-blue-500/20 text-cyan-300 border border-cyan-500/30">
+              3
+            </span>
+</button>
+<!-- Restaurants -->
+<button class="inline-flex items-center gap-2 px-3 py-3 text-slate-400 hover:text-slate-200 border-b-2 border-transparent hover:border-slate-700 transition-colors">
+<span>Restaurants</span>
+</button>
+<!-- Cards & spend -->
+<button class="inline-flex items-center gap-2 px-3 py-3 text-slate-400 hover:text-slate-200 border-b-2 border-transparent hover:border-slate-700 transition-colors">
+<span>Cards &amp; spend</span>
+</button>
+<!-- Reports -->
+<button class="inline-flex items-center gap-2 px-3 py-3 text-slate-400 hover:text-slate-200 border-b-2 border-transparent hover:border-slate-700 transition-colors">
+<span>Reports</span>
+</button>
+<!-- Settings -->
+<button class="inline-flex items-center gap-2 px-3 py-3 text-slate-400 hover:text-slate-200 border-b-2 border-transparent hover:border-slate-700 transition-colors">
+<span>Settings</span>
+</button>
+</nav>
+<div class="hidden xl:flex items-center gap-3 text-xs text-slate-400 pr-2">
+<span class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-emerald-400"></span> 99.8% System health</span>
+<span>•</span>
+<span>Last sync: 2s ago</span>
+</div>
+</div>
+</div>
+<!-- MAIN PAGE CONTENT CANVAS -->
+<main class="flex-1 px-4 sm:px-6 py-5 space-y-6 max-w-[1440px] w-full mx-auto">
+<!-- SLIM DISMISSIBLE BANNER -->
+<section class="relative flex items-center justify-between px-3.5 py-2 rounded-lg bg-blue-950/30 border border-blue-500/30 text-xs sm:text-sm text-slate-300 transition-all duration-200" id="setupBanner">
+<div class="flex items-center gap-2.5 truncate">
+<span class="material-symbols-outlined text-cyan-400 text-lg">info</span>
+<span class="font-medium text-slate-200">1 step left to get the desk running</span>
+<span class="text-slate-500 hidden sm:inline">|</span>
+<a class="text-cyan-400 hover:text-cyan-300 font-semibold underline underline-offset-2 flex items-center gap-1 transition-colors" href="#finishSetup">
+            Finish setup <span class="material-symbols-outlined text-sm">arrow_forward</span>
+</a>
+</div>
+<button class="text-slate-400 hover:text-slate-200 p-1 rounded hover:bg-slate-800 transition-colors" onclick="document.getElementById('setupBanner').remove()" title="Dismiss" type="button">
+<span class="material-symbols-outlined text-base">close</span>
+</button>
+</section>
+<!-- HERO SECTION: 'NEEDS YOU' STRIP -->
+<section class="space-y-3">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2.5">
+<h2 class="font-headline text-lg font-bold text-slate-100 tracking-tight">Needs you</h2>
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-500/15 text-amber-400 border border-amber-500/30">
+<span class="material-symbols-outlined text-sm">priority_high</span> (3 urgent)
+            </span>
+</div>
+<span class="text-xs text-slate-400 hidden sm:block">Requires immediate operator manual intervention</span>
+</div>
+<!-- 3 Bento Alert Cards Grid -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+<!-- Card 1: Late order alert -->
+<div class="rounded-lg bg-slate-800/90 border border-rose-500/40 p-4 shadow-sm relative flex flex-col justify-between hover:border-rose-400 transition-colors group">
+<div class="space-y-2">
+<div class="flex items-center justify-between">
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-rose-500/20 text-rose-300 border border-rose-500/40">
+<span class="material-symbols-outlined text-xs">timer</span> Late order
+                </span>
+<span class="text-xs font-mono font-medium text-rose-400">+18m overdue</span>
+</div>
+<h3 class="font-semibold text-slate-100 text-sm">Order #1042 · Bella Napoli</h3>
+<p class="text-xs text-slate-300 leading-relaxed">Courier delayed 18m, customer asking for status update.</p>
+</div>
+<div class="pt-4 mt-2 border-t border-slate-700/50 flex items-center justify-between">
+<span class="text-[11px] text-slate-400">Assigned: Auto-dispatch</span>
+<button class="px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-xs font-semibold shadow transition-all active:scale-95" type="button">
+                Resolve delay
+              </button>
+</div>
+</div>
+<!-- Card 2: Card charge alert -->
+<div class="rounded-lg bg-slate-800/90 border border-amber-500/40 p-4 shadow-sm relative flex flex-col justify-between hover:border-amber-400 transition-colors group">
+<div class="space-y-2">
+<div class="flex items-center justify-between">
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-amber-500/20 text-amber-300 border border-amber-500/40">
+<span class="material-symbols-outlined text-xs">credit_card_heart</span> Double-charge flag
+                </span>
+<span class="text-xs font-mono font-medium text-amber-400">$34.50</span>
+</div>
+<h3 class="font-semibold text-slate-100 text-sm">Order #1038 · Burger &amp; Co.</h3>
+<p class="text-xs text-slate-300 leading-relaxed">Card may have been charged twice at checkout.</p>
+</div>
+<div class="pt-4 mt-2 border-t border-slate-700/50 flex items-center justify-between">
+<span class="text-[11px] text-slate-400">Flagged: Stripe webhook</span>
+<button class="px-3 py-1.5 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/40 text-xs font-semibold transition-all active:scale-95" type="button">
+                Verify charge
+              </button>
+</div>
+</div>
+<!-- Card 3: Approval needed -->
+<div class="rounded-lg bg-slate-800/90 border border-cyan-500/40 p-4 shadow-sm relative flex flex-col justify-between hover:border-cyan-400 transition-colors group">
+<div class="space-y-2">
+<div class="flex items-center justify-between">
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-cyan-500/20 text-cyan-300 border border-cyan-500/40">
+<span class="material-symbols-outlined text-xs">verified</span> Approval needed
+                </span>
+<span class="text-xs font-mono font-medium text-cyan-400">+$18.50 gap</span>
+</div>
+<h3 class="font-semibold text-slate-100 text-sm">Order #1029 · Golden Dragon Wok</h3>
+<p class="text-xs text-slate-300 leading-relaxed">Price mismatch detected (+18.50). Needs second approval.</p>
+</div>
+<div class="pt-4 mt-2 border-t border-slate-700/50 flex items-center justify-between">
+<span class="text-[11px] text-slate-400">Submitted by: Cashier desk</span>
+<button class="px-3 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-slate-950 font-bold text-xs shadow transition-all active:scale-95" type="button">
+                Approve adjustment
+              </button>
+</div>
+</div>
+</div>
+</section>
+<!-- ORDER QUEUE (DENSE QUEUE-FIRST PATTERN) -->
+<section class="space-y-4">
+<!-- Controls Bar: Filter Pills, Search Bar, Refresh/Sort -->
+<div class="bg-slate-800/70 border border-slate-700/80 rounded-lg p-3 flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3">
+<!-- Segmented Filter Pills -->
+<div class="flex items-center gap-1 overflow-x-auto no-scrollbar py-0.5">
+<button class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-blue-600 text-white shadow-sm flex items-center gap-1.5 whitespace-nowrap">
+<span>All</span>
+<span class="bg-blue-700 text-blue-100 text-[10px] px-1.5 py-0.2 rounded-full">24</span>
+</button>
+<button class="px-3 py-1.5 rounded-lg text-xs font-medium text-slate-300 hover:bg-slate-700/60 transition-colors flex items-center gap-1.5 whitespace-nowrap">
+<span>Waiting</span>
+<span class="bg-slate-700 text-slate-300 text-[10px] px-1.5 py-0.2 rounded-full">8</span>
+</button>
+<button class="px-3 py-1.5 rounded-lg text-xs font-medium text-slate-300 hover:bg-slate-700/60 transition-colors flex items-center gap-1.5 whitespace-nowrap">
+<span>Being bought</span>
+<span class="bg-slate-700 text-slate-300 text-[10px] px-1.5 py-0.2 rounded-full">5</span>
+</button>
+<button class="px-3 py-1.5 rounded-lg text-xs font-medium text-slate-300 hover:bg-slate-700/60 transition-colors flex items-center gap-1.5 whitespace-nowrap">
+<span>At restaurant</span>
+<span class="bg-slate-700 text-slate-300 text-[10px] px-1.5 py-0.2 rounded-full">7</span>
+</button>
+<button class="px-3 py-1.5 rounded-lg text-xs font-medium text-slate-300 hover:bg-slate-700/60 transition-colors flex items-center gap-1.5 whitespace-nowrap">
+<span>Out for delivery</span>
+<span class="bg-slate-700 text-slate-300 text-[10px] px-1.5 py-0.2 rounded-full">3</span>
+</button>
+<button class="px-3 py-1.5 rounded-lg text-xs font-medium text-rose-300 bg-rose-950/30 border border-rose-500/30 hover:bg-rose-900/40 transition-colors flex items-center gap-1.5 whitespace-nowrap">
+<span>Problems</span>
+<span class="bg-rose-600 text-white text-[10px] px-1.5 py-0.2 rounded-full">1</span>
+</button>
+</div>
+<!-- Search & Action Cluster -->
+<div class="flex items-center gap-2">
+<div class="relative flex-1 sm:w-64">
+<span class="material-symbols-outlined absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm">search</span>
+<input class="w-full bg-slate-900/90 border border-slate-700 rounded-lg pl-8 pr-3 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-cyan-400 transition-colors" placeholder="Search order # or restaurant..." type="text"/>
+</div>
+<!-- Quick refresh button -->
+<button class="p-1.5 rounded-lg bg-slate-900/80 border border-slate-700 text-slate-400 hover:text-slate-200 hover:border-slate-600 transition-colors" title="Refresh queue" type="button">
+<span class="material-symbols-outlined text-lg">refresh</span>
+</button>
+<!-- Sort dropdown button -->
+<button class="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-slate-900/80 border border-slate-700 text-slate-300 text-xs hover:border-slate-600 transition-colors" type="button">
+<span class="material-symbols-outlined text-sm">swap_vert</span>
+<span class="hidden sm:inline">Urgency</span>
+</button>
+</div>
+</div>
+<!-- Dense List Table Container -->
+<div class="bg-slate-800/80 border border-slate-700/80 rounded-lg overflow-hidden shadow-sm">
+<!-- Table Header -->
+<div class="grid grid-cols-12 gap-3 px-4 py-2.5 bg-slate-900/60 border-b border-slate-700 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+<div class="col-span-4 sm:col-span-3">Restaurant &amp; ID</div>
+<div class="col-span-2 hidden sm:block">Items &amp; Total</div>
+<div class="col-span-3 sm:col-span-2">SLA Timer</div>
+<div class="col-span-2 hidden md:block">Desk Status</div>
+<div class="col-span-5 sm:col-span-3 text-right">Quick Action</div>
+</div>
+<!-- Queue List Rows -->
+<div class="divide-y divide-slate-700/60 font-body text-xs">
+<!-- ROW 1: Sample Pizza Co. (Late) -->
+<div class="grid grid-cols-12 gap-3 px-4 py-3 items-center hover:bg-slate-750/50 bg-slate-800/40 transition-colors group">
+<!-- Restaurant & Order ID -->
+<div class="col-span-4 sm:col-span-3 flex items-center gap-2.5 min-w-0">
+<div class="w-8 h-8 rounded-lg bg-rose-500/10 border border-rose-500/30 flex items-center justify-center text-rose-400 shrink-0">
+<span class="material-symbols-outlined text-base">local_pizza</span>
+</div>
+<div class="truncate">
+<p class="font-semibold text-slate-100 truncate group-hover:text-cyan-300 transition-colors">Sample Pizza Co.</p>
+<p class="text-[11px] text-slate-400 font-mono">Order #1001</p>
+</div>
+</div>
+<!-- Items & Total -->
+<div class="col-span-2 hidden sm:block">
+<p class="text-slate-200 font-medium">4 items</p>
+<p class="text-slate-400 font-mono text-[11px]">$48.20</p>
+</div>
+<!-- SLA Timer Label -->
+<div class="col-span-3 sm:col-span-2">
+<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-rose-500/20 text-rose-300 border border-rose-500/40">
+<span class="material-symbols-outlined text-xs">warning</span> Late (14m)
+                </span>
+</div>
+<!-- Operator claim state -->
+<div class="col-span-2 hidden md:block">
+<span class="text-slate-400 italic">Unclaimed</span>
+</div>
+<!-- Action Button -->
+<div class="col-span-5 sm:col-span-3 flex justify-end items-center gap-2">
+<button class="btn-gradient-primary text-slate-950 font-bold px-4 py-1.5 rounded-lg shadow-sm hover:shadow-cyan-500/20 active:scale-95 transition-all text-xs flex items-center gap-1.5" type="button">
+<span class="material-symbols-outlined text-sm">pan_tool</span> Claim
+                </button>
+</div>
+</div>
+<!-- ROW 2: Sakura Sushi Bar (Getting late) -->
+<div class="grid grid-cols-12 gap-3 px-4 py-3 items-center hover:bg-slate-750/50 bg-slate-800/20 transition-colors group">
+<!-- Restaurant & Order ID -->
+<div class="col-span-4 sm:col-span-3 flex items-center gap-2.5 min-w-0">
+<div class="w-8 h-8 rounded-lg bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0">
+<span class="material-symbols-outlined text-base">set_meal</span>
+</div>
+<div class="truncate">
+<p class="font-semibold text-slate-100 truncate group-hover:text-cyan-300 transition-colors">Sakura Sushi Bar</p>
+<p class="text-[11px] text-slate-400 font-mono">Order #1002</p>
+</div>
+</div>
+<!-- Items & Total -->
+<div class="col-span-2 hidden sm:block">
+<p class="text-slate-200 font-medium">6 items</p>
+<p class="text-slate-400 font-mono text-[11px]">$72.50</p>
+</div>
+<!-- SLA Timer Label -->
+<div class="col-span-3 sm:col-span-2">
+<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-500/20 text-amber-300 border border-amber-500/40">
+<span class="material-symbols-outlined text-xs">schedule</span> Getting late (6m)
+                </span>
+</div>
+<!-- Operator claim state -->
+<div class="col-span-2 hidden md:block">
+<span class="text-slate-400 italic">Unclaimed</span>
+</div>
+<!-- Action Button -->
+<div class="col-span-5 sm:col-span-3 flex justify-end items-center gap-2">
+<button class="btn-gradient-primary text-slate-950 font-bold px-4 py-1.5 rounded-lg shadow-sm hover:shadow-cyan-500/20 active:scale-95 transition-all text-xs flex items-center gap-1.5" type="button">
+<span class="material-symbols-outlined text-sm">pan_tool</span> Claim
+                </button>
+</div>
+</div>
+<!-- ROW 3: Taqueria Los Hermanos (On time) -->
+<div class="grid grid-cols-12 gap-3 px-4 py-3 items-center hover:bg-slate-750/50 transition-colors group">
+<!-- Restaurant & Order ID -->
+<div class="col-span-4 sm:col-span-3 flex items-center gap-2.5 min-w-0">
+<div class="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0">
+<span class="material-symbols-outlined text-base">lunch_dining</span>
+</div>
+<div class="truncate">
+<p class="font-semibold text-slate-100 truncate group-hover:text-cyan-300 transition-colors">Taqueria Los Hermanos</p>
+<p class="text-[11px] text-slate-400 font-mono">Order #1003</p>
+</div>
+</div>
+<!-- Items & Total -->
+<div class="col-span-2 hidden sm:block">
+<p class="text-slate-200 font-medium">2 items</p>
+<p class="text-slate-400 font-mono text-[11px]">$23.00</p>
+</div>
+<!-- SLA Timer Label -->
+<div class="col-span-3 sm:col-span-2">
+<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+<span class="material-symbols-outlined text-xs">check_circle</span> On time (22m left)
+                </span>
+</div>
+<!-- Operator claim state -->
+<div class="col-span-2 hidden md:block">
+<span class="text-slate-400 italic">Unclaimed</span>
+</div>
+<!-- Action Button -->
+<div class="col-span-5 sm:col-span-3 flex justify-end items-center gap-2">
+<button class="btn-gradient-primary text-slate-950 font-bold px-4 py-1.5 rounded-lg shadow-sm hover:shadow-cyan-500/20 active:scale-95 transition-all text-xs flex items-center gap-1.5" type="button">
+<span class="material-symbols-outlined text-sm">pan_tool</span> Claim
+                </button>
+</div>
+</div>
+<!-- ROW 4: The Green Bowl Eatery (Claimed by Sarah M.) -->
+<div class="grid grid-cols-12 gap-3 px-4 py-3 items-center hover:bg-slate-750/50 bg-slate-800/10 transition-colors group">
+<!-- Restaurant & Order ID -->
+<div class="col-span-4 sm:col-span-3 flex items-center gap-2.5 min-w-0">
+<div class="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0">
+<span class="material-symbols-outlined text-base">nutrition</span>
+</div>
+<div class="truncate">
+<p class="font-semibold text-slate-100 truncate group-hover:text-cyan-300 transition-colors">The Green Bowl Eatery</p>
+<p class="text-[11px] text-slate-400 font-mono">Order #1004</p>
+</div>
+</div>
+<!-- Items & Total -->
+<div class="col-span-2 hidden sm:block">
+<p class="text-slate-200 font-medium">3 items</p>
+<p class="text-slate-400 font-mono text-[11px]">$35.90</p>
+</div>
+<!-- SLA Timer Label -->
+<div class="col-span-3 sm:col-span-2">
+<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+<span class="material-symbols-outlined text-xs">check_circle</span> On time (18m left)
+                </span>
+</div>
+<!-- Operator claim state -->
+<div class="col-span-2 hidden md:block">
+<span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-blue-900/30 border border-blue-500/20 text-blue-300 text-[11px]">
+<span class="w-1.5 h-1.5 rounded-full bg-blue-400"></span> Claimed: Sarah M.
+                </span>
+</div>
+<!-- Action Button (Open Secondary) -->
+<div class="col-span-5 sm:col-span-3 flex justify-end items-center gap-2">
+<button class="px-3.5 py-1.5 rounded-lg border border-slate-700 bg-slate-800/80 hover:bg-slate-750 text-slate-200 text-xs font-semibold hover:border-slate-600 transition-all active:scale-95 flex items-center gap-1" type="button">
+<span>Open</span>
+<span class="material-symbols-outlined text-sm">open_in_new</span>
+</button>
+</div>
+</div>
+<!-- ROW 5: Downtown Deli Kitchen (Getting late) -->
+<div class="grid grid-cols-12 gap-3 px-4 py-3 items-center hover:bg-slate-750/50 bg-slate-800/20 transition-colors group">
+<!-- Restaurant & Order ID -->
+<div class="col-span-4 sm:col-span-3 flex items-center gap-2.5 min-w-0">
+<div class="w-8 h-8 rounded-lg bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0">
+<span class="material-symbols-outlined text-base">bakery_dining</span>
+</div>
+<div class="truncate">
+<p class="font-semibold text-slate-100 truncate group-hover:text-cyan-300 transition-colors">Downtown Deli Kitchen</p>
+<p class="text-[11px] text-slate-400 font-mono">Order #1005</p>
+</div>
+</div>
+<!-- Items & Total -->
+<div class="col-span-2 hidden sm:block">
+<p class="text-slate-200 font-medium">5 items</p>
+<p class="text-slate-400 font-mono text-[11px]">$51.00</p>
+</div>
+<!-- SLA Timer Label -->
+<div class="col-span-3 sm:col-span-2">
+<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-500/20 text-amber-300 border border-amber-500/40">
+<span class="material-symbols-outlined text-xs">schedule</span> Getting late (4m)
+                </span>
+</div>
+<!-- Operator claim state -->
+<div class="col-span-2 hidden md:block">
+<span class="text-slate-400 italic">Unclaimed</span>
+</div>
+<!-- Action Button -->
+<div class="col-span-5 sm:col-span-3 flex justify-end items-center gap-2">
+<button class="btn-gradient-primary text-slate-950 font-bold px-4 py-1.5 rounded-lg shadow-sm hover:shadow-cyan-500/20 active:scale-95 transition-all text-xs flex items-center gap-1.5" type="button">
+<span class="material-symbols-outlined text-sm">pan_tool</span> Claim
+                </button>
+</div>
+</div>
+<!-- ROW 6: Wok Express Bistro (On time / secondary) -->
+<div class="grid grid-cols-12 gap-3 px-4 py-3 items-center hover:bg-slate-750/50 transition-colors group">
+<!-- Restaurant & Order ID -->
+<div class="col-span-4 sm:col-span-3 flex items-center gap-2.5 min-w-0">
+<div class="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0">
+<span class="material-symbols-outlined text-base">ramen_dining</span>
+</div>
+<div class="truncate">
+<p class="font-semibold text-slate-100 truncate group-hover:text-cyan-300 transition-colors">Wok Express Bistro</p>
+<p class="text-[11px] text-slate-400 font-mono">Order #1006</p>
+</div>
+</div>
+<!-- Items & Total -->
+<div class="col-span-2 hidden sm:block">
+<p class="text-slate-200 font-medium">1 item</p>
+<p class="text-slate-400 font-mono text-[11px]">$14.25</p>
+</div>
+<!-- SLA Timer Label -->
+<div class="col-span-3 sm:col-span-2">
+<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+<span class="material-symbols-outlined text-xs">check_circle</span> On time (30m left)
+                </span>
+</div>
+<!-- Operator claim state -->
+<div class="col-span-2 hidden md:block">
+<span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-blue-900/30 border border-blue-500/20 text-blue-300 text-[11px]">
+<span class="w-1.5 h-1.5 rounded-full bg-blue-400"></span> Claimed: Alex R.
+                </span>
+</div>
+<!-- Action Button (Open Secondary) -->
+<div class="col-span-5 sm:col-span-3 flex justify-end items-center gap-2">
+<button class="px-3.5 py-1.5 rounded-lg border border-slate-700 bg-slate-800/80 hover:bg-slate-750 text-slate-200 text-xs font-semibold hover:border-slate-600 transition-all active:scale-95 flex items-center gap-1" type="button">
+<span>Open</span>
+<span class="material-symbols-outlined text-sm">open_in_new</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Queue Footer / Pagination summary -->
+<div class="px-4 py-2.5 bg-slate-900/60 border-t border-slate-700/80 flex items-center justify-between text-xs text-slate-400">
+<span>Showing 6 of 24 active queue orders</span>
+<div class="flex items-center gap-2">
+<button class="px-2 py-1 rounded border border-slate-700 hover:bg-slate-800 text-slate-400 hover:text-slate-200 transition-colors disabled:opacity-40" disabled="">Previous</button>
+<span class="font-mono text-slate-300">1 / 4</span>
+<button class="px-2 py-1 rounded border border-slate-700 hover:bg-slate-800 text-slate-300 hover:text-slate-100 transition-colors">Next</button>
+</div>
+</div>
+</div>
+</section>
+<!-- QUICK STATS FOOTPRINT / OPERATIONAL TELEMETRY -->
+<footer class="pt-2 pb-6 border-t border-slate-800 grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs">
+<div class="p-3 rounded-lg bg-slate-800/40 border border-slate-800">
+<p class="text-slate-400">Avg. Claim Time</p>
+<p class="text-base font-semibold text-slate-100 font-mono mt-0.5">42 seconds</p>
+</div>
+<div class="p-3 rounded-lg bg-slate-800/40 border border-slate-800">
+<p class="text-slate-400">Active Operators</p>
+<p class="text-base font-semibold text-cyan-400 font-mono mt-0.5">4 online</p>
+</div>
+<div class="p-3 rounded-lg bg-slate-800/40 border border-slate-800">
+<p class="text-slate-400">Checkout Card Health</p>
+<p class="text-base font-semibold text-emerald-400 font-mono mt-0.5">100% operational</p>
+</div>
+<div class="p-3 rounded-lg bg-slate-800/40 border border-slate-800">
+<p class="text-slate-400">Hourly Throughput</p>
+<p class="text-base font-semibold text-slate-100 font-mono mt-0.5">38 orders/hr</p>
+</div>
+</footer>
+</main>
+</div>
+<!-- Micro-interactions logic -->
+<script>
+    // Sound toggle state handler
+    const soundToggleBtn = document.getElementById('soundToggle');
+    let soundEnabled = true;
+    if (soundToggleBtn) {
+      soundToggleBtn.addEventListener('click', () => {
+        soundEnabled = !soundEnabled;
+        const icon = soundToggleBtn.querySelector('.material-symbols-outlined');
+        const text = soundToggleBtn.querySelector('span:not(.material-symbols-outlined)');
+        if (soundEnabled) {
+          icon.textContent = 'volume_up';
+          icon.classList.remove('text-slate-500');
+          icon.classList.add('text-cyan-400');
+          if (text) text.textContent = 'Sound on';
+        } else {
+          icon.textContent = 'volume_off';
+          icon.classList.remove('text-cyan-400');
+          icon.classList.add('text-slate-500');
+          if (text) text.textContent = 'Muted';
+        }
+      });
+    }
+  </script>
+</body></html>

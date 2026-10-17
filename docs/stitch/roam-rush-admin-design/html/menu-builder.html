@@ -1,0 +1,678 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Roam Rush - Menu Builder</title>
+<!-- Fonts & Icons -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind CSS CDN -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {
+            "secondary": "#a4c9ff",
+            "primary-dim": "#699cff",
+            "on-secondary": "#004178",
+            "tertiary": "#7de9ff",
+            "on-primary-fixed": "#000000",
+            "tertiary-container": "#3adffa",
+            "outline-variant": "#354a5c",
+            "on-tertiary-container": "#004b56",
+            "surface-container-lowest": "#000000",
+            "on-tertiary-fixed-variant": "#005561",
+            "surface-container": "#0a1b28",
+            "on-primary-container": "#ffffff",
+            "surface": "#060f17",
+            "secondary-container": "#003c70",
+            "surface-tint": "#adc6ff",
+            "surface-dim": "#060f17",
+            "on-error": "#490006",
+            "primary-fixed-dim": "#317bef",
+            "surface-container-low": "#071520",
+            "tertiary-fixed": "#3adffa",
+            "on-secondary-fixed": "#004076",
+            "surface-variant": "#122839",
+            "error-dim": "#c54d4a",
+            "primary": "#adc6ff",
+            "on-surface": "#d2e8ff",
+            "inverse-primary": "#005bc4",
+            "on-surface-variant": "#98adc3",
+            "on-primary": "#003d88",
+            "on-tertiary": "#005561",
+            "on-secondary-fixed-variant": "#005da7",
+            "secondary-fixed": "#d4e3ff",
+            "error": "#fa746f",
+            "secondary-dim": "#64a8fe",
+            "primary-fixed": "#4388fd",
+            "inverse-on-surface": "#4c5660",
+            "tertiary-fixed-dim": "#1ad0eb",
+            "surface-container-high": "#0f212f",
+            "secondary-fixed-dim": "#bcd6ff",
+            "inverse-surface": "#f7f9ff",
+            "on-secondary-container": "#96c2ff",
+            "outline": "#63788c",
+            "on-background": "#d2e8ff",
+            "on-tertiary-fixed": "#00363e",
+            "on-error-container": "#ff9993",
+            "surface-bright": "#192e3f",
+            "background": "#060f17",
+            "tertiary-dim": "#1ad0eb",
+            "on-primary-fixed-variant": "#001435",
+            "primary-container": "#0e69dc",
+            "error-container": "#871f21",
+            "surface-container-highest": "#122839"
+          },
+          borderRadius: {
+            "DEFAULT": "0.25rem",
+            "lg": "0.5rem",
+            "xl": "0.75rem",
+            "full": "9999px"
+          },
+          fontFamily: {
+            headline: ["Inter", "sans-serif"],
+            display: ["Inter", "sans-serif"],
+            body: ["Inter", "sans-serif"],
+            label: ["Inter", "sans-serif"]
+          }
+        }
+      }
+    }
+  </script>
+<style>
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 20;
+      font-size: 1.125rem;
+      line-height: 1;
+      display: inline-block;
+      vertical-align: middle;
+    }
+    .custom-scrollbar::-webkit-scrollbar {
+      width: 5px;
+      height: 5px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-track {
+      background: #071520;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+      background: #192e3f;
+      border-radius: 9999px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+      background: #354a5c;
+    }
+  </style>
+</head>
+<body class="bg-background text-on-surface font-body antialiased min-h-screen flex flex-col h-screen overflow-hidden selection:bg-primary-container selection:text-on-primary-container">
+<!-- TOP APP BAR -->
+<header class="flex justify-between items-center w-full px-4 h-14 bg-surface-container border-b border-outline-variant shadow-sm shrink-0 z-30 select-none">
+<!-- Left Navigation / Breadcrumbs -->
+<div class="flex items-center gap-4">
+<div class="flex items-center gap-2.5">
+<div class="w-8 h-8 rounded-lg bg-gradient-to-br from-primary-container to-tertiary-container flex items-center justify-center shadow-inner">
+<span class="material-symbols-outlined text-white" style="font-variation-settings: 'FILL' 1;">local_pizza</span>
+</div>
+<span class="font-headline text-base font-bold text-on-surface tracking-tight">Roam Rush</span>
+</div>
+<div class="h-4 w-[1px] bg-outline-variant"></div>
+<!-- Breadcrumbs exact match to labels -->
+<nav class="flex items-center gap-2 font-headline text-sm font-medium">
+<span class="text-on-surface-variant hover:text-on-surface transition-colors cursor-pointer">In-House Desk</span>
+<span class="text-outline text-xs">/</span>
+<span class="text-on-surface-variant hover:text-on-surface transition-colors cursor-pointer">Sample Pizza Co. #1001</span>
+<span class="text-outline text-xs">/</span>
+<span class="text-primary font-semibold">Menu Builder</span>
+</nav>
+<!-- Status Indicator Pill -->
+<div class="hidden lg:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-surface-container-high border border-outline-variant/60 text-xs text-on-surface-variant">
+<span class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
+<span>Draft · 3 changes not live</span>
+</div>
+</div>
+<!-- Right Actions -->
+<div class="flex items-center gap-3">
+<button class="px-3 py-1.5 text-xs font-semibold rounded-lg text-on-surface-variant hover:text-on-surface bg-surface-container-high hover:bg-surface-bright border border-outline-variant transition-colors duration-150 flex items-center gap-1.5 active:scale-95" type="button">
+<span class="material-symbols-outlined text-sm">visibility</span>
+<span>Preview as customer</span>
+</button>
+<!-- More Menu Dropdown trigger -->
+<div class="relative group">
+<button class="px-2.5 py-1.5 text-xs font-semibold rounded-lg text-on-surface-variant hover:text-on-surface bg-surface-container-high hover:bg-surface-bright border border-outline-variant transition-colors duration-150 flex items-center gap-1" type="button">
+<span>More</span>
+<span class="material-symbols-outlined text-xs">arrow_drop_down</span>
+</button>
+<div class="absolute right-0 top-full mt-1 w-44 bg-surface-container-high border border-outline-variant rounded-lg shadow-xl hidden group-hover:block z-50 py-1">
+<a class="block px-3 py-1.5 text-xs text-on-surface-variant hover:text-on-surface hover:bg-surface-bright flex items-center gap-2" href="#">
+<span class="material-symbols-outlined text-sm">hub</span> Shared chain menu
+          </a>
+<a class="block px-3 py-1.5 text-xs text-on-surface-variant hover:text-on-surface hover:bg-surface-bright flex items-center gap-2" href="#">
+<span class="material-symbols-outlined text-sm">tune</span> Price rules
+          </a>
+</div>
+</div>
+<button class="px-3.5 py-1.5 text-xs font-bold rounded-lg text-on-primary-container bg-gradient-to-r from-primary-container to-secondary-container hover:brightness-110 active:scale-95 transition-all shadow-md flex items-center gap-1.5" type="button">
+<span class="material-symbols-outlined text-sm">publish</span>
+<span>Review &amp; publish</span>
+</button>
+<div class="h-4 w-[1px] bg-outline-variant mx-0.5"></div>
+<!-- Icon Actions -->
+<div class="flex items-center gap-1 text-on-surface-variant">
+<button class="p-1.5 rounded-lg hover:bg-surface-container-high hover:text-on-surface transition-colors">
+<span class="material-symbols-outlined">help</span>
+</button>
+<button class="p-1.5 rounded-lg hover:bg-surface-container-high hover:text-on-surface transition-colors">
+<span class="material-symbols-outlined">more_vert</span>
+</button>
+</div>
+<!-- Profile Avatar -->
+<div class="relative cursor-pointer">
+<div class="w-7 h-7 rounded-full bg-surface-bright border border-outline-variant flex items-center justify-center text-xs font-bold text-tertiary">
+          RR
+        </div>
+<span class="absolute bottom-0 right-0 w-2 h-2 rounded-full bg-emerald-500 ring-2 ring-surface-container"></span>
+</div>
+</div>
+</header>
+<!-- WORKSPACE BODY (3-Column Layout) -->
+<div class="flex flex-1 overflow-hidden relative">
+<!-- 1. LEFT SIDEBAR: MENU SECTIONS (matches SideNavBar specification) -->
+<aside class="flex flex-col justify-between h-full p-3 border-r border-outline-variant w-64 bg-surface-container-low shrink-0 select-none">
+<!-- Top Section -->
+<div class="flex flex-col gap-3">
+<!-- Store Identity Mini Header -->
+<div class="flex items-center gap-2.5 px-2 py-1.5 rounded-lg bg-surface-container border border-outline-variant/40">
+<div class="w-8 h-8 rounded bg-secondary-container flex items-center justify-center text-on-secondary-container font-bold text-xs shrink-0">
+            SP
+          </div>
+<div class="overflow-hidden">
+<h2 class="font-headline text-sm font-semibold text-on-surface truncate">Sample Pizza Co.</h2>
+<p class="font-body text-xs text-on-surface-variant truncate">ID: #1001 · Menu Sections</p>
+</div>
+</div>
+<!-- Section List Header -->
+<div class="flex items-center justify-between px-2 pt-1">
+<div class="flex items-center gap-1.5">
+<span class="text-xs font-semibold text-on-surface-variant uppercase tracking-wider">Sections</span>
+<span class="text-[10px] px-1.5 py-0.2 rounded bg-surface-container text-tertiary font-mono">6</span>
+</div>
+<button class="text-xs font-medium text-tertiary hover:text-tertiary-fixed transition-colors flex items-center gap-0.5">
+<span>+ Add Section</span>
+</button>
+</div>
+<!-- Category Tabs List -->
+<nav class="flex flex-col gap-1">
+<!-- Item 1: Signature Pizzas (Active) -->
+<button class="bg-primary-container text-on-primary-container font-semibold rounded-lg px-3 py-2 flex items-center justify-between text-left group active:scale-[0.98] transition-transform duration-100 shadow-sm">
+<div class="flex items-center gap-2.5 truncate">
+<span class="material-symbols-outlined text-sm">local_pizza</span>
+<span class="text-xs truncate">Signature Pizzas</span>
+</div>
+<span class="text-[10px] bg-primary-fixed/20 text-white px-1.5 py-0.5 rounded font-mono font-normal">8 items</span>
+</button>
+<!-- Item 2: Crust & Sizes -->
+<button class="text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high rounded-lg px-3 py-2 flex items-center justify-between text-left group active:scale-[0.98] transition-all duration-150">
+<div class="flex items-center gap-2.5 truncate">
+<span class="material-symbols-outlined text-sm">straighten</span>
+<span class="text-xs truncate">Crust &amp; Sizes</span>
+</div>
+<span class="text-[10px] text-on-surface-variant group-hover:text-on-surface font-mono">4 items</span>
+</button>
+<!-- Item 3: Appetizers & Starters -->
+<button class="text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high rounded-lg px-3 py-2 flex items-center justify-between text-left group active:scale-[0.98] transition-all duration-150">
+<div class="flex items-center gap-2.5 truncate">
+<span class="material-symbols-outlined text-sm">lunch_dining</span>
+<span class="text-xs truncate">Appetizers &amp; Starters</span>
+</div>
+<span class="text-[10px] text-on-surface-variant group-hover:text-on-surface font-mono">6 items</span>
+</button>
+<!-- Item 4: Wings & Tenders -->
+<button class="text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high rounded-lg px-3 py-2 flex items-center justify-between text-left group active:scale-[0.98] transition-all duration-150">
+<div class="flex items-center gap-2.5 truncate">
+<span class="material-symbols-outlined text-sm">menu_book</span>
+<span class="text-xs truncate">Wings &amp; Tenders</span>
+</div>
+<span class="text-[10px] text-on-surface-variant group-hover:text-on-surface font-mono">5 items</span>
+</button>
+<!-- Item 5: Combos & Bundles -->
+<button class="text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high rounded-lg px-3 py-2 flex items-center justify-between text-left group active:scale-[0.98] transition-all duration-150">
+<div class="flex items-center gap-2.5 truncate">
+<span class="material-symbols-outlined text-sm">local_offer</span>
+<span class="text-xs truncate">Combos &amp; Bundles</span>
+</div>
+<span class="text-[10px] text-amber-400 font-mono">3 deals</span>
+</button>
+<!-- Item 6: Cold Beverages -->
+<button class="text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high rounded-lg px-3 py-2 flex items-center justify-between text-left group active:scale-[0.98] transition-all duration-150">
+<div class="flex items-center gap-2.5 truncate">
+<span class="material-symbols-outlined text-sm">local_bar</span>
+<span class="text-xs truncate">Cold Beverages</span>
+</div>
+<span class="text-[10px] text-on-surface-variant group-hover:text-on-surface font-mono">7 items</span>
+</button>
+</nav>
+</div>
+<!-- Bottom Sidebar Links -->
+<div class="border-t border-outline-variant/60 pt-3 flex flex-col gap-1">
+<a class="text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high rounded-lg px-3 py-2 flex items-center gap-3 text-xs transition-colors" href="#">
+<span class="material-symbols-outlined text-sm">tune</span>
+<span>Price Rules</span>
+</a>
+<a class="text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high rounded-lg px-3 py-2 flex items-center gap-3 text-xs transition-colors" href="#">
+<span class="material-symbols-outlined text-sm">settings</span>
+<span>Settings</span>
+</a>
+</div>
+</aside>
+<!-- 2. MIDDLE MAIN PANE: DISHES TABLE / CATALOG -->
+<main class="flex-1 flex flex-col min-w-0 bg-background overflow-hidden">
+<!-- Section Header & Controls -->
+<div class="p-5 border-b border-outline-variant/60 flex flex-col gap-4 bg-surface-container-low/40">
+<div class="flex flex-wrap items-center justify-between gap-3">
+<div class="flex items-center gap-3">
+<h1 class="text-lg font-bold text-on-surface tracking-tight">Signature Pizzas</h1>
+<span class="px-2 py-0.5 rounded text-[11px] font-mono bg-surface-container-high text-primary border border-outline-variant">
+              SEC-8812
+            </span>
+<span class="text-xs text-on-surface-variant">8 items total</span>
+</div>
+<div class="flex items-center gap-2">
+<button class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-surface-container-high hover:bg-surface-bright text-on-surface border border-outline-variant flex items-center gap-1.5 transition-colors">
+<span class="material-symbols-outlined text-sm">swap_vert</span>
+<span>Reorder</span>
+</button>
+<button class="px-3.5 py-1.5 rounded-lg text-xs font-bold text-on-primary-container bg-primary-container hover:brightness-110 active:scale-95 transition-all flex items-center gap-1.5 shadow-sm">
+<span class="material-symbols-outlined text-sm">add</span>
+<span>+ Add dish</span>
+</button>
+</div>
+</div>
+<!-- Filter and Search Row -->
+<div class="flex flex-wrap items-center justify-between gap-3">
+<div class="flex items-center gap-2 flex-1 max-w-md">
+<div class="relative w-full">
+<span class="material-symbols-outlined absolute left-3 top-2.5 text-outline text-sm pointer-events-none">search</span>
+<input class="w-full pl-9 pr-3 py-1.5 text-xs bg-surface-container border border-outline-variant rounded-lg text-on-surface placeholder:text-outline focus:outline-none focus:border-tertiary transition-colors" placeholder="Filter by photo status, availability, price..." type="text"/>
+</div>
+</div>
+<!-- Status Filter Chips -->
+<div class="flex items-center gap-1.5 overflow-x-auto text-xs">
+<button class="px-2.5 py-1 rounded-full bg-surface-container-high text-on-surface font-medium border border-outline-variant hover:bg-surface-bright transition-colors">
+              All Statuses
+            </button>
+<button class="px-2.5 py-1 rounded-full bg-amber-500/10 text-amber-300 font-medium border border-amber-500/30 hover:bg-amber-500/20 transition-colors flex items-center gap-1">
+<span class="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
+              Needs Verification (2)
+            </button>
+<button class="px-2.5 py-1 rounded-full bg-surface-container text-on-surface-variant font-medium border border-outline-variant hover:text-on-surface transition-colors">
+              Active Only
+            </button>
+</div>
+</div>
+</div>
+<!-- Data Table Container -->
+<div class="flex-1 overflow-auto custom-scrollbar">
+<table class="w-full text-left border-collapse text-xs">
+<thead class="sticky top-0 bg-surface-container text-on-surface-variant font-medium border-b border-outline-variant z-10 select-none">
+<tr>
+<th class="py-2.5 pl-4 pr-2 w-8 text-center">#</th>
+<th class="py-2.5 px-3">Dish Info &amp; Recipe</th>
+<th class="py-2.5 px-3 w-28">POS Price</th>
+<th class="py-2.5 px-3 w-36">In-House Price</th>
+<th class="py-2.5 px-3 w-44">Freshness Status</th>
+<th class="py-2.5 pr-4 pl-2 w-12 text-center">Actions</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-outline-variant/40">
+<!-- Row 1: Selected (Sample Margherita) -->
+<tr class="bg-surface-container-high/60 border-l-2 border-l-tertiary hover:bg-surface-container-high transition-colors cursor-pointer group">
+<td class="py-3 pl-4 pr-2 text-center text-outline font-mono">1</td>
+<td class="py-3 px-3">
+<div class="flex items-center gap-3">
+<div class="w-11 h-11 rounded-lg bg-surface-variant border border-outline-variant overflow-hidden shrink-0 relative">
+<img class="w-full h-full object-cover" data-alt="A gourmet artisan Margherita pizza fresh from a wood-fired oven on dark rustic slate. Vibrant San Marzano red sauce, melted white buffalo mozzarella pearls, fresh green basil leaves with slight blistered crust edges, photographed in cinematic dark moody oceanic food photography lighting." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCvouIJ3PtxCK9HWqWf8awEM-saYjlL7NXzeM4Mpdersd7yJgeU00Vs1BriBHFRb0XUS24urMYp54rHyyIFmRdCY3PXm2ivA7O8fMSIUGLyRjc8bb30CLjLH1zF_UsDqmchkHZ6tEjZQ9SFNjlbKm_LQPwwpQpUN7d3rocfzoXyZYQln4WEF821d_gipG8Nh7oY8pRpFpRu38vIC-u-RiRw4pXCfzwIW5UgAcgWApvLxVm3IoCn8_R6LlFbUx1ycV55mPMlCqiWkH4"/>
+</div>
+<div>
+<div class="flex items-center gap-2">
+<span class="font-semibold text-sm text-on-surface group-hover:text-tertiary transition-colors">Sample Margherita</span>
+<span class="px-1.5 py-0.5 rounded text-[10px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">Vegetarian</span>
+<span class="text-[10px] text-outline font-mono">#ITM-8821</span>
+</div>
+<p class="text-on-surface-variant text-[11px] mt-0.5 truncate max-w-sm">
+                      San Marzano DOP, buffalo mozzarella, fresh basil, extra virgin olive oil.
+                    </p>
+</div>
+</div>
+</td>
+<td class="py-3 px-3 font-mono text-on-surface font-medium">$18.00</td>
+<td class="py-3 px-3">
+<div class="flex items-center gap-1.5 font-mono">
+<span class="font-bold text-on-surface">$20.70</span>
+<span class="text-[10px] px-1 py-0.2 rounded bg-tertiary-container/20 text-tertiary border border-tertiary/30">+15%</span>
+</div>
+</td>
+<td class="py-3 px-3">
+<div class="flex items-center gap-1.5">
+<span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+<span class="text-emerald-300 font-medium">Verified today</span>
+</div>
+<div class="text-[10px] text-outline font-mono mt-0.5">Checked 11:20 AM</div>
+</td>
+<td class="py-3 pr-4 pl-2 text-center">
+<button class="p-1 rounded text-outline hover:text-on-surface hover:bg-surface-bright">
+<span class="material-symbols-outlined text-sm">edit</span>
+</button>
+</td>
+</tr>
+<!-- Row 2: Sample Truffle Pepperoni -->
+<tr class="hover:bg-surface-container-low transition-colors cursor-pointer group">
+<td class="py-3 pl-4 pr-2 text-center text-outline font-mono">2</td>
+<td class="py-3 px-3">
+<div class="flex items-center gap-3">
+<div class="w-11 h-11 rounded-lg bg-surface-variant border border-outline-variant overflow-hidden shrink-0 relative">
+<img class="w-full h-full object-cover" data-alt="Close-up of a artisanal pepperoni pizza with cupped charred pepperoni discs glistening with savory oils and drizzled with delicate white truffle oil on dark moody background, high resolution food studio lighting in deep navy and warm amber tones." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBOvdGtafQw8gDY1ObmNwWseE7JB0-Blex40Nb5wV7elyrl_9ckA6YkzlTSXcKm5oMlNxHhrVHdKmAh4QIS7Bw1R4qNSl-v1q1Ei6RJ-zTul1kaEwxfUtjQhGwIiSCHDU-1dYBZ9ht-cES0etDz5QGY8kgnkWfiO6CMn4ZzXs6uIiJYnRj_ZRFXAzIPuq_7rLQtjKt2FUqW4XkC6Q9vaO2Owv-kTfHKzd5Il0QlzBfz0cQdidfm6Em__Fg0tWtpNaEoEjSlDzA6Taw"/>
+</div>
+<div>
+<div class="flex items-center gap-2">
+<span class="font-semibold text-sm text-on-surface group-hover:text-primary transition-colors">Sample Truffle Pepperoni</span>
+<span class="px-1.5 py-0.5 rounded text-[10px] font-medium bg-red-500/10 text-red-400 border border-red-500/20">Spicy</span>
+<span class="text-[10px] text-outline font-mono">#ITM-8822</span>
+</div>
+<p class="text-on-surface-variant text-[11px] mt-0.5 truncate max-w-sm">
+                      Cupped pepperoni, white truffle drizzle, hot crushed red pepper, smoked provolone.
+                    </p>
+</div>
+</div>
+</td>
+<td class="py-3 px-3 font-mono text-on-surface font-medium">$22.50</td>
+<td class="py-3 px-3">
+<div class="flex items-center gap-1.5 font-mono">
+<span class="font-bold text-on-surface">$25.85</span>
+<span class="text-[10px] px-1 py-0.2 rounded bg-tertiary-container/20 text-tertiary border border-tertiary/30">+15%</span>
+</div>
+</td>
+<td class="py-3 px-3">
+<div class="flex items-center gap-1.5">
+<span class="w-2 h-2 rounded-full bg-amber-400"></span>
+<span class="text-amber-300 font-medium">Needs quick verification</span>
+</div>
+<div class="text-[10px] text-outline font-mono mt-0.5">Photo sync pending</div>
+</td>
+<td class="py-3 pr-4 pl-2 text-center">
+<button class="p-1 rounded text-outline hover:text-on-surface hover:bg-surface-bright">
+<span class="material-symbols-outlined text-sm">edit</span>
+</button>
+</td>
+</tr>
+<!-- Row 3: Sample Quattro Formaggi (Mismatch) -->
+<tr class="hover:bg-surface-container-low transition-colors cursor-pointer group bg-error-container/10">
+<td class="py-3 pl-4 pr-2 text-center text-outline font-mono">3</td>
+<td class="py-3 px-3">
+<div class="flex items-center gap-3">
+<div class="w-11 h-11 rounded-lg bg-surface-variant border border-outline-variant overflow-hidden shrink-0 relative">
+<img class="w-full h-full object-cover" data-alt="Four cheese artisan white pizza topped with melted gorgonzola dolce, golden smoked provolone, shredded fontina, and parmesan flakes resting on a dark slate board with soft moody restaurant ambient lighting." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCeCabzVen-jlPsrJDHtcg6fq9cu7u9VEsG0Q9MZvqtP1J4T1Y7F9l_OxTnF5PngCziS96_lnhG0zNCrkrw8VYLOcl8kck0RyT_8KpMHRt2j_2RLp1WFbbhfM497ySxDJbin40w1nXKCwZY4YzB4tAT_qyml_O9T1Zg-TZSb7eEfiZBCjfQ-hZPHd6CgFI9i8CRzRY_V8DG1mdZ55IYXcJXi109IaKJ-yRV7p9BW5W3d5GuqHBOt1A9emCWwupVivtm5fUJjEHPuSM"/>
+</div>
+<div>
+<div class="flex items-center gap-2">
+<span class="font-semibold text-sm text-on-surface group-hover:text-primary transition-colors">Sample Quattro Formaggi</span>
+<span class="px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-500/10 text-secondary border border-blue-500/20">White Base</span>
+<span class="text-[10px] text-outline font-mono">#ITM-8823</span>
+</div>
+<p class="text-on-surface-variant text-[11px] mt-0.5 truncate max-w-sm">
+                      Gorgonzola dolce, smoked provolone, fresh mozzarella, aged parmesan.
+                    </p>
+</div>
+</div>
+</td>
+<td class="py-3 px-3 font-mono text-on-surface font-medium">$21.00</td>
+<td class="py-3 px-3">
+<div class="flex items-center gap-1.5 font-mono">
+<span class="font-bold text-on-surface">$24.15</span>
+<span class="text-[10px] px-1 py-0.2 rounded bg-tertiary-container/20 text-tertiary border border-tertiary/30">+15%</span>
+</div>
+</td>
+<td class="py-3 px-3">
+<div class="flex items-center gap-1.5">
+<span class="w-2 h-2 rounded-full bg-error"></span>
+<span class="text-error font-medium">Price mismatch flagged</span>
+</div>
+<div class="text-[10px] text-error-dim font-mono mt-0.5">POS shows $21.00 vs $19.50 recorded</div>
+</td>
+<td class="py-3 pr-4 pl-2 text-center">
+<button class="p-1 rounded text-outline hover:text-on-surface hover:bg-surface-bright">
+<span class="material-symbols-outlined text-sm">edit</span>
+</button>
+</td>
+</tr>
+<!-- Row 4: Sample Hot Honey & Soppressata -->
+<tr class="hover:bg-surface-container-low transition-colors cursor-pointer group">
+<td class="py-3 pl-4 pr-2 text-center text-outline font-mono">4</td>
+<td class="py-3 px-3">
+<div class="flex items-center gap-3">
+<div class="w-11 h-11 rounded-lg bg-surface-variant border border-outline-variant overflow-hidden shrink-0 relative">
+<img class="w-full h-full object-cover" data-alt="Gourmet spicy Italian soppressata pizza drizzled with shimmering chili-infused hot honey on crisp bubbling crust placed against a dark slate background, dramatic commercial food styling." src="https://lh3.googleusercontent.com/aida-public/AB6AXuD_ux1NsgHMysVwmYPyyBBd4gGo6tYYZdNFu2C4BFKgqUcpCpDpm86bpKBpWnawvLt015okO0sz_hMyZLrZILWMO1YTqFA_M429VwBIqaOKK52M0Xk2dtPxBxvwtzeNCmfdS9Bh2HiaCuDSD22V2A3RjDtyLNdjzVVtrBFJi_ZAxfg3WpEN-DdCeCFkb7RsBUsHyf03vuwm5-8fn4HaljeXrfU5pz9qKgnYmGRr2veAbGOcMsdk9aPQkEK_CYclaMvtAvAQLOBg-io"/>
+</div>
+<div>
+<div class="flex items-center gap-2">
+<span class="font-semibold text-sm text-on-surface group-hover:text-primary transition-colors">Sample Hot Honey &amp; Soppressata</span>
+<span class="px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-500/10 text-amber-300 border border-amber-500/20">Chef Special</span>
+<span class="text-[10px] text-outline font-mono">#ITM-8824</span>
+</div>
+<p class="text-on-surface-variant text-[11px] mt-0.5 truncate max-w-sm">
+                      Calabrian chili hot honey, cured soppressata, pecorino romano, oregano.
+                    </p>
+</div>
+</div>
+</td>
+<td class="py-3 px-3 font-mono text-on-surface font-medium">$23.00</td>
+<td class="py-3 px-3">
+<div class="flex items-center gap-1.5 font-mono">
+<span class="font-bold text-on-surface">$26.45</span>
+<span class="text-[10px] px-1 py-0.2 rounded bg-tertiary-container/20 text-tertiary border border-tertiary/30">+15%</span>
+</div>
+</td>
+<td class="py-3 px-3">
+<div class="flex items-center gap-1.5">
+<span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+<span class="text-emerald-300 font-medium">Verified today</span>
+</div>
+<div class="text-[10px] text-outline font-mono mt-0.5">Checked 10:45 AM</div>
+</td>
+<td class="py-3 pr-4 pl-2 text-center">
+<button class="p-1 rounded text-outline hover:text-on-surface hover:bg-surface-bright">
+<span class="material-symbols-outlined text-sm">edit</span>
+</button>
+</td>
+</tr>
+<!-- Row 5: Sample Wild Mushroom Garlic -->
+<tr class="hover:bg-surface-container-low transition-colors cursor-pointer group">
+<td class="py-3 pl-4 pr-2 text-center text-outline font-mono">5</td>
+<td class="py-3 px-3">
+<div class="flex items-center gap-3">
+<div class="w-11 h-11 rounded-lg bg-surface-variant border border-outline-variant overflow-hidden shrink-0 relative">
+<img class="w-full h-full object-cover" data-alt="Rustic wild roasted chanterelle and cremini mushroom pizza with roasted garlic cream sauce and fresh thyme sprigs on artisan blistered dough, photographed in a high-contrast culinary studio setting." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBPLQXGG90vtrJLKaC6ABdKbwPORMoIBGa7d7tLQBLhxSvIHNrxNqRcv1UChjWNhDmtpWateaFbjtMNIpByKnfJeCvaoE_yEXbButqUu-mn0cRJlVoq4ew8Uh6w4fazleuAQQNoguhAUjxIN1nAGlsiCjg4iNpHoAbOvCAt-PwjUcsw7IqKUe7JBdNnC3yftkBK-PXfc6Ejc8EikYELKieOdikvxpLimHcTwgieVaW_Hwk5nnmXJpE_7QsEk69yyJYy4Z0_n_9zTpY"/>
+</div>
+<div>
+<div class="flex items-center gap-2">
+<span class="font-semibold text-sm text-on-surface group-hover:text-primary transition-colors">Sample Wild Mushroom Garlic</span>
+<span class="px-1.5 py-0.5 rounded text-[10px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">Vegetarian</span>
+<span class="text-[10px] text-outline font-mono">#ITM-8825</span>
+</div>
+<p class="text-on-surface-variant text-[11px] mt-0.5 truncate max-w-sm">
+                      Roasted cremini, chanterelles, caramelized garlic purée, thyme, taleggio.
+                    </p>
+</div>
+</div>
+</td>
+<td class="py-3 px-3 font-mono text-on-surface font-medium">$20.00</td>
+<td class="py-3 px-3">
+<div class="flex items-center gap-1.5 font-mono">
+<span class="font-bold text-on-surface">$23.00</span>
+<span class="text-[10px] px-1 py-0.2 rounded bg-tertiary-container/20 text-tertiary border border-tertiary/30">+15%</span>
+</div>
+</td>
+<td class="py-3 px-3">
+<div class="flex items-center gap-1.5">
+<span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+<span class="text-emerald-300 font-medium">Verified today</span>
+</div>
+<div class="text-[10px] text-outline font-mono mt-0.5">Checked 09:15 AM</div>
+</td>
+<td class="py-3 pr-4 pl-2 text-center">
+<button class="p-1 rounded text-outline hover:text-on-surface hover:bg-surface-bright">
+<span class="material-symbols-outlined text-sm">edit</span>
+</button>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<!-- Table Footer / Pagination -->
+<div class="px-5 py-3 border-t border-outline-variant bg-surface-container flex items-center justify-between text-xs text-on-surface-variant shrink-0">
+<div class="flex items-center gap-3">
+<span>Showing <strong>5 of 8</strong> items in Signature Pizzas</span>
+<span class="text-outline">·</span>
+<span class="text-outline">All prices in USD ($) sample</span>
+</div>
+<div class="flex items-center gap-1">
+<button class="px-2.5 py-1 rounded bg-surface-container-high border border-outline-variant text-outline cursor-not-allowed">
+            Previous
+          </button>
+<button class="px-2.5 py-1 rounded bg-surface-bright border border-outline-variant text-on-surface hover:bg-surface-variant transition-colors">
+            Next
+          </button>
+</div>
+</div>
+</main>
+<!-- 3. RIGHT DRAWER / INSPECTOR: EDIT ITEM -->
+<aside class="w-96 border-l border-outline-variant bg-surface-container-low flex flex-col shrink-0 h-full z-20 shadow-xl overflow-hidden">
+<!-- Drawer Header -->
+<div class="p-4 border-b border-outline-variant flex items-start justify-between bg-surface-container">
+<div>
+<div class="flex items-center gap-2">
+<h2 class="text-sm font-bold text-on-surface">Edit Item: Sample Margherita</h2>
+<span class="px-1.5 py-0.5 rounded text-[10px] font-mono bg-surface-container-highest text-tertiary">#ITM-8821</span>
+</div>
+<div class="flex items-center gap-1.5 mt-1">
+<span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+<span class="text-[11px] text-emerald-300 font-medium">Freshness: Green (Checked 11:20 AM)</span>
+</div>
+</div>
+<button class="p-1 rounded text-outline hover:text-on-surface hover:bg-surface-container-high transition-colors">
+<span class="material-symbols-outlined text-sm">close</span>
+</button>
+</div>
+<!-- Drawer Form Scroll Area -->
+<div class="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar text-xs">
+<!-- Field 1: Item Name -->
+<div class="space-y-1">
+<label class="block font-medium text-on-surface-variant">Item Name</label>
+<input class="w-full px-3 py-1.5 bg-surface-container border border-outline-variant rounded-lg text-on-surface focus:outline-none focus:border-tertiary transition-colors" type="text" value="Sample Margherita"/>
+</div>
+<!-- Field 2: Category Dropdown -->
+<div class="space-y-1">
+<label class="block font-medium text-on-surface-variant">Category</label>
+<div class="relative">
+<select class="w-full px-3 py-1.5 bg-surface-container border border-outline-variant rounded-lg text-on-surface appearance-none focus:outline-none focus:border-tertiary transition-colors pr-8 cursor-pointer">
+<option selected="">Signature Pizzas</option>
+<option>Crust &amp; Sizes</option>
+<option>Appetizers &amp; Starters</option>
+<option>Wings &amp; Tenders</option>
+</select>
+<span class="material-symbols-outlined absolute right-2.5 top-2 text-outline pointer-events-none text-xs">expand_more</span>
+</div>
+</div>
+<!-- In-House Pricing Box (Side-by-side comparison) -->
+<div class="p-3 rounded-lg bg-surface-container border border-outline-variant space-y-2.5">
+<div class="flex items-center justify-between">
+<span class="font-semibold text-on-surface">In-House Pricing Box</span>
+<span class="px-1.5 py-0.5 rounded text-[10px] font-mono bg-tertiary-container/20 text-tertiary border border-tertiary/30">+15% rule badge</span>
+</div>
+<div class="grid grid-cols-2 gap-2 pt-1">
+<div class="p-2 rounded bg-surface-container-high border border-outline-variant/60">
+<div class="text-[10px] text-outline">Restaurant POS Price</div>
+<div class="text-sm font-bold font-mono text-on-surface mt-0.5">$18.00</div>
+<div class="text-[9px] text-outline-variant font-mono mt-0.5">Base sync synced</div>
+</div>
+<div class="p-2 rounded bg-surface-variant border border-tertiary/30">
+<div class="text-[10px] text-tertiary">Customer In-House Price</div>
+<div class="text-sm font-bold font-mono text-tertiary mt-0.5">$20.70</div>
+<div class="text-[9px] text-tertiary-dim font-mono mt-0.5">$2.70 / 13.0% net margin</div>
+</div>
+</div>
+</div>
+<!-- Availability Switch -->
+<div class="flex items-center justify-between p-3 rounded-lg bg-surface-container border border-outline-variant">
+<div>
+<div class="font-medium text-on-surface">Availability Toggle</div>
+<div class="text-[10px] text-emerald-400">Available for ordering</div>
+</div>
+<!-- Custom Toggle UI -->
+<button class="w-10 h-5 bg-emerald-500 rounded-full relative p-0.5 transition-colors cursor-pointer" type="button">
+<div class="w-4 h-4 rounded-full bg-white ml-auto shadow-sm"></div>
+</button>
+</div>
+<!-- Modifier Groups Linked Section -->
+<div class="space-y-2">
+<label class="block font-medium text-on-surface-variant">Modifier Groups Linked</label>
+<div class="space-y-1.5">
+<div class="p-2.5 rounded-lg bg-surface-container border border-outline-variant flex items-center justify-between">
+<div>
+<span class="font-medium text-on-surface block">Size Selection</span>
+<span class="text-[10px] text-outline font-mono">Required: 12", 14", 16" active</span>
+</div>
+<span class="material-symbols-outlined text-outline hover:text-on-surface cursor-pointer text-sm">tune</span>
+</div>
+<div class="p-2.5 rounded-lg bg-surface-container border border-outline-variant flex items-center justify-between">
+<div>
+<span class="font-medium text-on-surface block">Crust Type</span>
+<span class="text-[10px] text-outline font-mono">Optional: Thin, Sourdough +$2, Stuffed +$3.50</span>
+</div>
+<span class="material-symbols-outlined text-outline hover:text-on-surface cursor-pointer text-sm">tune</span>
+</div>
+</div>
+</div>
+<!-- Special Prep / Kitchen Notes -->
+<div class="space-y-1">
+<label class="block font-medium text-on-surface-variant">Special Prep / Kitchen Notes</label>
+<input class="w-full px-3 py-1.5 bg-surface-container border border-outline-variant rounded-lg text-on-surface focus:outline-none focus:border-tertiary transition-colors" type="text" value="Neapolitan style high heat bake"/>
+</div>
+<!-- Photo Manager Card -->
+<div class="p-3 rounded-lg bg-surface-container border border-outline-variant space-y-2.5">
+<div class="flex items-center justify-between">
+<span class="font-semibold text-on-surface">Photo Manager</span>
+<button class="text-tertiary hover:underline text-[11px] font-medium">Replace</button>
+</div>
+<div class="flex items-center gap-3">
+<div class="w-16 h-16 rounded-lg bg-surface-variant border border-outline-variant overflow-hidden shrink-0 relative">
+<img class="w-full h-full object-cover" data-alt="Close up professional studio photo of a fresh gourmet Italian Margherita pizza, topped with vibrant basil leaves, creamy mozzarella, rich red sauce on a textured dark ceramic platter under crisp studio lighting." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCUoBRj1nyG6jGQKDZZF6qgP-kGXuLmJT0sXTff5ZtOgNJdbYBVOjBvMl-_eB9XBjNePdZ--f52-4vhHeaVaq9ltu_zE6dkvCiFqsxqKMB0EocIQOJG8YCPpFsy8MZ61vMNCa3MvSIafms-tpILnqJ97d3YT6FZZOGCJiTmURJTtcrNrH7SCcfndIIHajys4AwQQtSHWOi1Yr_kl1lDDRuppXBdo9OrftKs8Js2msl1-Ht03qq4XfVT-_c2fp25Hf6iRbfd8VFbAlQ"/>
+</div>
+<div>
+<div class="flex items-center gap-1 text-emerald-400 font-medium text-[11px]">
+<span class="material-symbols-outlined text-xs">check_circle</span>
+<span>Photo approved (Hi-res)</span>
+</div>
+<div class="text-[10px] text-outline mt-0.5">Aspect ratio 1:1</div>
+<div class="text-[10px] text-outline font-mono">1200 x 1200 px · 1.4 MB</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Drawer Sticky Footer -->
+<div class="p-3 border-t border-outline-variant bg-surface-container flex items-center gap-2 shrink-0">
+<button class="flex-1 py-2 rounded-lg font-bold text-xs text-on-primary-container bg-primary-container hover:brightness-110 active:scale-95 transition-all shadow-sm">
+          Save Item Changes
+        </button>
+<button class="px-4 py-2 rounded-lg font-semibold text-xs text-on-surface-variant hover:text-on-surface bg-surface-container-high hover:bg-surface-bright border border-outline-variant transition-colors">
+          Cancel
+        </button>
+</div>
+</aside>
+</div>
+</body></html>

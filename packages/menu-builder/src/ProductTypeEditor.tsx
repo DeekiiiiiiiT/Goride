@@ -2,6 +2,7 @@ import type { MenuSnapshot, ProductType } from '@roam/menu-engine';
 import { PizzaConfigEditor } from './PizzaConfigEditor.tsx';
 import { WingsEditor } from './WingsEditor.tsx';
 import { ComboSlotsEditor } from './ComboSlotsEditor.tsx';
+import { OptionGroupsEditor } from './OptionGroupsEditor.tsx';
 
 const TYPE_HELP: Record<ProductType, string> = {
   standard: 'Name, price, photo, and option groups.',
@@ -113,6 +114,9 @@ export function ProductTypeEditor({
         </div>
       ) : null}
 
+      {product.type === 'standard' || product.type === 'sized' || product.type === 'build_your_own' ? (
+        <OptionGroupsEditor snapshot={snapshot} productId={productId} onChange={onChange} />
+      ) : null}
       {product.type === 'pizza' ? (
         <PizzaConfigEditor snapshot={snapshot} productId={productId} onChange={onChange} markupBps={markupBps} />
       ) : null}

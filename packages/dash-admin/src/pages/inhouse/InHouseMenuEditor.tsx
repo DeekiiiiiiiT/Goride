@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react';
+﻿import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { toast } from 'sonner';
 import {
   archiveInHouseDish,
@@ -551,7 +551,7 @@ export function InHouseMenuEditor({
                       </td>
                       <td className="p-2">{money(item.in_store_price)}</td>
                       <td className="p-2">{money(customerPrice(Number(item.in_store_price || 0), markupBps))}</td>
-                      <td className={`p-2 ${isFresh ? 'text-emerald-300' : 'text-amber-200'}`}>
+                      <td className={`p-2 ${isFresh ? 'text-emerald-300' : 'text-[#fbbf24]'}`}>
                         {isFresh ? `✓ ${ago(item.source_price_checked_at)}` : `⚠ ${ago(item.source_price_checked_at)} · hidden from customers`}
                       </td>
                     </tr>
@@ -576,7 +576,7 @@ export function InHouseMenuEditor({
                 Confirm all in this section
               </button>
             ) : null}
-            <button type="button" className="rounded bg-amber-500 px-3 py-1 text-sm text-slate-950" onClick={startDish}>
+            <button type="button" className="rounded bg-[#f59e0b] px-3 py-1 text-sm text-slate-950" onClick={startDish}>
               + Add dish{activeSection ? ` to ${activeSection.name}` : ''}
             </button>
           </div>
@@ -666,7 +666,7 @@ export function InHouseMenuEditor({
               </button>
             ) : null}
             <button type="button" className="rounded bg-slate-800 px-3 py-2" onClick={() => setComposing(false)}>Cancel</button>
-            <button disabled={saving} className="rounded-xl bg-amber-500 px-3 py-2 text-slate-950 disabled:opacity-40" type="submit">{saving ? 'Saving…' : 'Save dish'}</button>
+            <button disabled={saving} className="rounded-xl bg-[#f59e0b] px-3 py-2 text-slate-950 disabled:opacity-40" type="submit">{saving ? 'Saving…' : 'Save dish'}</button>
           </div>
         </form>
       </EntityDrawer>

@@ -1,4 +1,4 @@
-import {
+﻿import {
   groupFromList,
   type ChoiceGroup,
   type ChoiceKind,
@@ -52,7 +52,7 @@ export function DishChoices({
         <section key={kind} className="space-y-2 rounded-lg border border-slate-800 bg-slate-950/50 p-3">
           <div className="flex items-center justify-between gap-2">
             <p className="text-[10px] text-slate-500">{kind === 'included' ? 'Included choice. The customer must pick one, and it stays free.' : kind === 'priced' ? 'Required price. The customer must pick one. Each option is the restaurant price.' : 'Extras. Optional, each with its own price.'}</p>
-            <button type="button" className="shrink-0 text-[11px] font-medium text-amber-300" onClick={() => onChange([...groups, blankChoice(kind)])}>
+            <button type="button" className="shrink-0 text-[11px] font-medium text-[#fbbf24]" onClick={() => onChange([...groups, blankChoice(kind)])}>
               {kind === 'included' ? 'Add included choice' : kind === 'priced' ? 'Add price choice' : 'Add extras'}
             </button>
           </div>

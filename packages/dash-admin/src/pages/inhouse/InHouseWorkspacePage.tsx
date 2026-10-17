@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+﻿import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useOutletContext, useParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import {
@@ -16,6 +16,7 @@ import {
 import { formatMoney } from '../../components/ui/format';
 import type { AdminOutletContext } from '../../DashAdminPortal';
 import { absorbLimitMinor } from './inHouseUi';
+import { IH } from './inHouseTheme';
 
 const EXCEPTIONS = [
   ['item_unavailable', 'Item missing', 'Item missing → the customer is asked to pick a swap.'],
@@ -181,25 +182,27 @@ export function InHouseWorkspacePage() {
     }
   }
 
-  if (!detail) return <div className="p-6 text-slate-200">Loading order…</div>;
+  if (!detail) return <div className={`p-6 ${IH.page}`}>Loading order…</div>;
   const storeName = detail.merchant?.name || 'Restaurant';
   const orderUrl = String(detail.store?.order_url || '');
   const claimedAgo = detail.task.claimed_at
     ? Math.max(0, Math.floor((Date.now() - new Date(String(detail.task.claimed_at)).getTime()) / 60000))
     : null;
+  const stepDone = itemsTicked ? 1 : 0;
+  const recordReady = Boolean(externalOrderRef.trim() && actualMinor > 0 && cardId && receiptPath && readyTime);
 
   return (
-    <div className="fixed inset-0 z-40 overflow-auto bg-slate-950 text-slate-100">
-      <header className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 px-4 py-3">
-        <button type="button" className="text-sm text-slate-300" onClick={() => navigate('/in-house?tab=orders')}>← Back to orders</button>
-        <div className="font-semibold">
+    <div className={`fixed inset-0 z-40 flex flex-col overflow-hidden ${IH.page}`}>
+      <header className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 bg-[#0f172a] px-4 py-3">
+        <button type="button" className={`text-sm ${IH.link}`} onClick={() => navigate('/in-house?tab=orders')}>← Back to orders</button>
+        <div className="font-semibold text-slate-100">
           {storeName} · {String(detail.order?.order_number || '')}
           {claimedAgo != null ? <span className="ml-2 text-sm font-normal text-slate-400">claimed by you {claimedAgo} min ago</span> : null}
         </div>
         <div className="flex items-center gap-2">
-          <button type="button" className="rounded bg-slate-800 px-2 py-1 text-sm" onClick={() => setShowKeys((open) => !open)}>?</button>
+          <button type="button" className={IH.secondaryBtn} onClick={() => setShowKeys((open) => !open)}>?</button>
           {detail.task.state === 'claimed' || detail.task.state === 'placing' ? (
-            <button type="button" className="text-sm text-slate-300" onClick={() => void releaseInHouseTask(session.access_token, id).then(() => navigate('/in-house?tab=orders'))}>
+            <button type="button" className={`text-sm ${IH.muted}`} onClick={() => void releaseInHouseTask(session.access_token, id).then(() => navigate('/in-house?tab=orders'))}>
               Give back to queue
             </button>
           ) : <span />}
@@ -209,128 +212,152 @@ export function InHouseWorkspacePage() {
         <p className="border-b border-slate-800 px-4 py-2 text-sm text-slate-400">Keys: 1–9 copy an item, P mark placed, E raise a problem.</p>
       ) : null}
 
-      <div className="grid gap-4 p-4 lg:grid-cols-2">
-        <section className="space-y-3 rounded-lg border border-slate-800 p-4">
-          <h2 className="font-medium">1. Place the order on {storeName}</h2>
-          {orderUrl ? <a className="inline-block rounded-xl bg-amber-500 px-3 py-2 text-slate-950" href={orderUrl} target="_blank" rel="noreferrer">Open {storeName} ordering ↗</a> : <p className="text-amber-200">No ordering link on this restaurant yet.</p>}
-          <p>Order type: carry-out</p>
-          <p>Pickup name: {String(detail.task.pickup_code)} <button type="button" className="ml-2 rounded bg-slate-800 px-2 py-0.5 text-sm" onClick={() => void copy(String(detail.task.pickup_code))}>Copy</button></p>
-          {itemSteps.map((step) => (
-            <div key={step.id} className="space-y-2 rounded border border-slate-800 p-3">
-              <label className="flex items-center gap-2">
-                <input type="checkbox" checked={Boolean(ticks[step.id])} onChange={(event) => setTicks((current) => ({ ...current, [step.id]: event.target.checked }))} />
-                <span className="font-medium">{step.label}</span>
-                <button type="button" className="rounded bg-slate-800 px-2 py-0.5 text-sm" onClick={() => void copy(step.copyText)}>Copy all</button>
-              </label>
-              {(step.children || []).map((child) => (
-                <label key={child.id} className="ml-6 flex items-center gap-2 text-sm text-slate-300">
-                  <input type="checkbox" checked={Boolean(ticks[child.id])} onChange={(event) => setTicks((current) => ({ ...current, [child.id]: event.target.checked }))} />
-                  <span>{child.label}</span>
-                  <button type="button" className="rounded bg-slate-800 px-2 py-0.5 text-xs" onClick={() => void copy(child.copyText)}>Copy</button>
+      <div className="mx-4 mt-3 flex flex-wrap gap-2 text-sm">
+        {[
+          { n: 1, label: 'Place it', on: stepDone < 1 },
+          { n: 2, label: 'Record it', on: stepDone >= 1 && !recordReady },
+          { n: 3, label: 'Done', on: canPlace },
+        ].map((step) => (
+          <span
+            key={step.n}
+            className={`rounded-full px-3 py-1 ${step.on ? 'bg-[#f59e0b]/20 text-[#fbbf24] ring-1 ring-[#f59e0b]/50' : 'bg-slate-800 text-slate-400'}`}
+          >
+            {step.n} {step.label}
+          </span>
+        ))}
+      </div>
+
+      <div className="grid min-h-0 flex-1 gap-4 overflow-auto p-4 pb-28 lg:grid-cols-[1fr_320px]">
+        <div className="space-y-4">
+          <section className={`${IH.surface} space-y-3 p-4`}>
+            <h2 className="font-medium text-slate-100">1. Place it on {storeName}</h2>
+            {orderUrl ? (
+              <a className={`inline-block ${IH.primaryBtnLg}`} href={orderUrl} target="_blank" rel="noreferrer">Open restaurant site ↗</a>
+            ) : (
+              <p className={IH.warn}>No ordering link on this restaurant yet.</p>
+            )}
+            <p className="text-sm">Order type: carry-out</p>
+            <p className="text-sm">
+              Pickup name: {String(detail.task.pickup_code)}{' '}
+              <button type="button" className={`ml-2 ${IH.secondaryBtn}`} onClick={() => void copy(String(detail.task.pickup_code))}>Copy</button>
+            </p>
+            {itemSteps.map((step) => (
+              <div key={step.id} className="space-y-2 rounded-lg border border-slate-700/80 bg-[#0f172a]/60 p-3">
+                <label className="flex items-center gap-2">
+                  <input type="checkbox" checked={Boolean(ticks[step.id])} onChange={(event) => setTicks((current) => ({ ...current, [step.id]: event.target.checked }))} />
+                  <span className="font-medium">{step.label}</span>
+                  <button type="button" className={IH.secondaryBtn} onClick={() => void copy(step.copyText)}>Copy</button>
                 </label>
-              ))}
-            </div>
-          ))}
-          <p>Expected cost {money(expected)}</p>
-          <p>Customer paid {money(Math.round(Number(detail.order?.total || 0) * 100))}</p>
-        </section>
-
-        <section className="space-y-3 rounded-lg border border-slate-800 p-4">
-          <h2 className="font-medium">2. Record what you paid</h2>
-          <label className="block text-sm">
-            External order number
-            <input className="mt-1 w-full rounded bg-slate-900 p-2" value={externalOrderRef} onChange={(event) => setExternalOrderRef(event.target.value)} placeholder="e.g. 48291" />
-          </label>
-          <label className="block text-sm">
-            Total charged J$
-            <input className="mt-1 w-full rounded bg-slate-900 p-2" value={totalMajor} onChange={(event) => setTotalMajor(event.target.value)} placeholder="e.g. 4280" />
-          </label>
-          {actualMinor > 0 ? (
-            over
-              ? <p className="text-amber-300">{money(actualMinor - limit)} over the limit. Choose: swap an item / ask the customer / refund.</p>
-              : <p className="text-emerald-300">Within limit · up to {money(limit)} is OK</p>
-          ) : (
-            <p className="text-slate-400">Up to {money(limit)} is OK</p>
-          )}
-          <label className="block text-sm">
-            Card
-            <select className="mt-1 w-full rounded bg-slate-900 p-2" value={cardId} onChange={(event) => setCardId(event.target.value)}>
-              {detail.cards.map((card) => (
-                <option key={card.id} value={card.id}>{card.label} ·· {card.last4} · daily limit {money(card.daily_limit_minor)}</option>
-              ))}
-            </select>
-          </label>
-          {selectedCard && actualMinor > 0 && actualMinor > selectedCard.daily_limit_minor ? (
-            <p className="text-amber-300">This charge is above the card&apos;s daily limit of {money(selectedCard.daily_limit_minor)}.</p>
-          ) : null}
-          <div className="space-y-2 text-sm">
-            <span>Ready at</span>
-            <div className="flex flex-wrap gap-2">
-              {[15, 20, 30].map((mins) => (
-                <button key={mins} type="button" className="rounded bg-slate-800 px-3 py-1" onClick={() => setReadyIn(mins)}>+{mins}</button>
-              ))}
-              <button type="button" className="rounded bg-slate-800 px-3 py-1" onClick={() => setCustomReady(true)}>custom</button>
-            </div>
-            {(customReady || readyTime) ? (
-              <input type="time" className="mt-1 w-full rounded bg-slate-900 p-2" value={readyTime} onChange={(event) => setReadyTime(event.target.value)} />
-            ) : null}
-          </div>
-          <div className="space-y-2 text-sm">
-            <span>Receipt</span>
-            <label className="block">
-              <input type="file" accept="image/*,application/pdf" className="mt-1 block" disabled={uploading} onChange={(event) => { const file = event.target.files?.[0]; if (file) void onReceipt(file); }} />
-            </label>
-            {uploading ? <p className="text-slate-400">Uploading…</p> : null}
-            {receiptPath ? (
-              <div className="flex items-center gap-3">
-                {receiptPreview ? <img src={receiptPreview} alt="" className="h-16 w-16 rounded object-cover" /> : null}
-                <div>
-                  <p className="text-emerald-300">✓ {receiptName || 'receipt saved'}</p>
-                  <label className="text-slate-400 underline">
-                    Replace
-                    <input type="file" accept="image/*,application/pdf" className="hidden" onChange={(event) => { const file = event.target.files?.[0]; if (file) void onReceipt(file); }} />
+                {(step.children || []).map((child) => (
+                  <label key={child.id} className="ml-6 flex items-center gap-2 text-sm text-slate-300">
+                    <input type="checkbox" checked={Boolean(ticks[child.id])} onChange={(event) => setTicks((current) => ({ ...current, [child.id]: event.target.checked }))} />
+                    <span>{child.label}</span>
+                    <button type="button" className={IH.secondaryBtn} onClick={() => void copy(child.copyText)}>Copy</button>
                   </label>
-                </div>
+                ))}
               </div>
-            ) : null}
-          </div>
-          <button type="button" disabled={!canPlace || busy} className="rounded-xl bg-amber-500 px-4 py-2 text-slate-950 disabled:opacity-40" onClick={() => void save()}>
-            Mark placed
-          </button>
-          {!canPlace ? <p className="text-sm text-slate-400">Still needed: {stillNeeded.join(' · ')}</p> : null}
-
-          <h2 className="pt-4 font-medium">3. Something wrong?</h2>
-          <div className="flex flex-wrap gap-2">
-            {EXCEPTIONS.map(([code, label, hint]) => (
-              <button key={code} type="button" title={hint} className="rounded bg-slate-800 px-3 py-2" onClick={() => void problem(code)}>{label}</button>
             ))}
+            <p className={`text-sm ${IH.muted}`}>Expected cost {money(expected)} · Customer paid {money(Math.round(Number(detail.order?.total || 0) * 100))}</p>
+          </section>
+
+          <section className={`${IH.surface} space-y-3 p-4`}>
+            <h2 className="font-medium text-slate-100">2. Record it</h2>
+            <p className={`text-sm font-medium ${over ? IH.err : IH.ok}`}>OK up to {money(limit)}</p>
+            <label className="block text-sm">
+              Restaurant order number
+              <input className={`mt-1 w-full ${IH.input}`} value={externalOrderRef} onChange={(event) => setExternalOrderRef(event.target.value)} placeholder="e.g. 48291" />
+            </label>
+            <label className="block text-sm">
+              Total charged J$
+              <input className={`mt-1 w-full ${IH.input}`} value={totalMajor} onChange={(event) => setTotalMajor(event.target.value)} placeholder="e.g. 4280" />
+            </label>
+            {actualMinor > 0 && over ? (
+              <p className={IH.warn}>{money(actualMinor - limit)} over the limit. Choose: swap an item / ask the customer / refund.</p>
+            ) : null}
+            <label className="block text-sm">
+              Card
+              <select className={`mt-1 w-full ${IH.input}`} value={cardId} onChange={(event) => setCardId(event.target.value)}>
+                {detail.cards.map((card) => (
+                  <option key={card.id} value={card.id}>{card.label} ·· {card.last4} · daily limit {money(card.daily_limit_minor)}</option>
+                ))}
+              </select>
+            </label>
+            {selectedCard && actualMinor > 0 && actualMinor > selectedCard.daily_limit_minor ? (
+              <p className={IH.warn}>This charge is above the card&apos;s daily limit of {money(selectedCard.daily_limit_minor)}.</p>
+            ) : null}
+            <div className="space-y-2 text-sm">
+              <span>Ready at</span>
+              <div className="flex flex-wrap gap-2">
+                {[15, 20, 30].map((mins) => (
+                  <button key={mins} type="button" className={IH.secondaryBtn} onClick={() => setReadyIn(mins)}>+{mins}</button>
+                ))}
+                <button type="button" className={IH.secondaryBtn} onClick={() => setCustomReady(true)}>custom</button>
+              </div>
+              {(customReady || readyTime) ? (
+                <input type="time" className={`mt-1 w-full ${IH.input}`} value={readyTime} onChange={(event) => setReadyTime(event.target.value)} />
+              ) : null}
+            </div>
+            <div className="space-y-2 text-sm">
+              <span>Receipt</span>
+              <label className="block">
+                <input type="file" accept="image/*,application/pdf" className="mt-1 block" disabled={uploading} onChange={(event) => { const file = event.target.files?.[0]; if (file) void onReceipt(file); }} />
+              </label>
+              {uploading ? <p className={IH.muted}>Uploading…</p> : null}
+              {receiptPath ? (
+                <div className="flex items-center gap-3">
+                  {receiptPreview ? <img src={receiptPreview} alt="" className="h-16 w-16 rounded object-cover" /> : null}
+                  <div>
+                    <p className={IH.ok}>✓ {receiptName || 'receipt saved'}</p>
+                    <label className={`${IH.link} underline`}>
+                      Replace
+                      <input type="file" accept="image/*,application/pdf" className="hidden" onChange={(event) => { const file = event.target.files?.[0]; if (file) void onReceipt(file); }} />
+                    </label>
+                  </div>
+                </div>
+              ) : null}
+            </div>
+
+            <h2 className="pt-2 font-medium text-slate-100">Something wrong?</h2>
+            <div className="flex flex-wrap gap-2">
+              {EXCEPTIONS.map(([code, label, hint]) => (
+                <button key={code} type="button" title={hint} className={IH.secondaryBtn} onClick={() => void problem(code)}>{label}</button>
+              ))}
+            </div>
+          </section>
+        </div>
+
+        <section className={`${IH.surface} flex max-h-[70vh] flex-col p-4 lg:max-h-none`}>
+          <h2 className="mb-1 font-medium text-slate-100">Customer messages</h2>
+          <p className={`mb-2 text-xs ${IH.muted}`}>They see these as coming from the restaurant.</p>
+          <div className="mb-2 min-h-0 flex-1 space-y-1 overflow-auto text-sm">
+            {messages.map((message) => (
+              <p key={message.id}><span className="text-slate-400">{message.sender_role}:</span> {message.body}</p>
+            ))}
+            {messages.length === 0 ? <p className={IH.muted}>No messages yet.</p> : null}
           </div>
-          <p className="text-xs text-slate-500">Each choice tells the customer what happens next.</p>
+          <form className="flex gap-2" onSubmit={(event) => {
+            event.preventDefault();
+            const orderId = String(detail.order?.id || '');
+            if (!orderId || !reply.trim()) return;
+            void sendInHouseChat(session.access_token, orderId, reply.trim())
+              .then(() => listInHouseChat(session.access_token, orderId))
+              .then((chat) => { setMessages(chat.messages || []); setReply(''); })
+              .catch((error: Error) => toast.error(error.message));
+          }}>
+            <input className={`flex-1 ${IH.input}`} value={reply} onChange={(event) => setReply(event.target.value)} placeholder="Reply as the restaurant" />
+            <button className={IH.secondaryBtn} type="submit">Send</button>
+          </form>
         </section>
       </div>
 
-      <section className="border-t border-slate-800 p-4">
-        <h2 className="mb-2 font-medium">Messages with the customer</h2>
-        <p className="mb-2 text-xs text-slate-500">They see these as coming from the restaurant.</p>
-        <div className="mb-2 max-h-40 space-y-1 overflow-auto text-sm">
-          {messages.map((message) => (
-            <p key={message.id}><span className="text-slate-400">{message.sender_role}:</span> {message.body}</p>
-          ))}
-          {messages.length === 0 ? <p className="text-slate-400">No messages yet.</p> : null}
-        </div>
-        <form className="flex gap-2" onSubmit={(event) => {
-          event.preventDefault();
-          const orderId = String(detail.order?.id || '');
-          if (!orderId || !reply.trim()) return;
-          void sendInHouseChat(session.access_token, orderId, reply.trim())
-            .then(() => listInHouseChat(session.access_token, orderId))
-            .then((chat) => { setMessages(chat.messages || []); setReply(''); })
-            .catch((error: Error) => toast.error(error.message));
-        }}>
-          <input className="flex-1 rounded bg-slate-900 p-2" value={reply} onChange={(event) => setReply(event.target.value)} placeholder="Reply as the restaurant" />
-          <button className="rounded bg-slate-800 px-3" type="submit">Send</button>
-        </form>
-      </section>
+      <div className="fixed inset-x-0 bottom-0 z-50 flex flex-wrap items-center justify-between gap-3 border-t border-slate-700 bg-[#0f172a]/95 px-4 py-3 backdrop-blur">
+        <p className={`text-sm ${canPlace ? IH.ok : IH.warn}`}>
+          {canPlace ? 'Ready to mark placed' : `Still needed: ${stillNeeded.join(' · ')}`}
+        </p>
+        <button type="button" disabled={!canPlace || busy} className={IH.primaryBtnLg} onClick={() => void save()}>
+          Mark placed
+        </button>
+      </div>
     </div>
   );
 }

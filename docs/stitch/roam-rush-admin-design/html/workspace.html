@@ -1,0 +1,695 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Sample Pizza Co. Order #1001 — Roam Rush Ops</title>
+<!-- Google Fonts: Inter -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet"/>
+<!-- Material Symbols Outlined -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind CSS CDN -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<!-- Tailwind Configuration verbatim -->
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          "colors": {
+            "primary": "#adc6ff",
+            "on-surface": "#d2e8ff",
+            "tertiary-fixed": "#3adffa",
+            "on-tertiary": "#005561",
+            "secondary-fixed": "#d4e3ff",
+            "outline-variant": "#354a5c",
+            "primary-fixed-dim": "#317bef",
+            "outline": "#63788c",
+            "on-primary-fixed": "#000000",
+            "secondary": "#a4c9ff",
+            "inverse-surface": "#f7f9ff",
+            "primary-fixed": "#4388fd",
+            "primary-dim": "#699cff",
+            "on-error-container": "#ff9993",
+            "on-background": "#d2e8ff",
+            "on-tertiary-container": "#004b56",
+            "inverse-primary": "#005bc4",
+            "on-tertiary-fixed-variant": "#005561",
+            "error-container": "#871f21",
+            "tertiary": "#7de9ff",
+            "secondary-fixed-dim": "#bcd6ff",
+            "surface-dim": "#060f17",
+            "on-secondary": "#004178",
+            "surface-container-lowest": "#000000",
+            "on-primary-container": "#ffffff",
+            "on-surface-variant": "#98adc3",
+            "on-tertiary-fixed": "#00363e",
+            "on-secondary-container": "#96c2ff",
+            "on-primary": "#003d88",
+            "tertiary-container": "#3adffa",
+            "surface-tint": "#adc6ff",
+            "tertiary-fixed-dim": "#1ad0eb",
+            "tertiary-dim": "#1ad0eb",
+            "surface": "#060f17",
+            "error-dim": "#c54d4a",
+            "surface-variant": "#122839",
+            "on-secondary-fixed": "#004076",
+            "background": "#060f17",
+            "secondary-dim": "#64a8fe",
+            "secondary-container": "#003c70",
+            "surface-container": "#0a1b28",
+            "surface-bright": "#192e3f",
+            "surface-container-highest": "#122839",
+            "error": "#fa746f",
+            "inverse-on-surface": "#4c5660",
+            "primary-container": "#0e69dc",
+            "surface-container-high": "#0f212f",
+            "surface-container-low": "#071520",
+            "on-primary-fixed-variant": "#001435",
+            "on-secondary-fixed-variant": "#005da7",
+            "on-error": "#490006"
+          },
+          "borderRadius": {
+            "DEFAULT": "0.25rem",
+            "lg": "0.5rem",
+            "xl": "0.75rem",
+            "full": "9999px"
+          },
+          "spacing": {},
+          "fontFamily": {
+            "headline": [
+              "Inter"
+            ],
+            "display": [
+              "Inter"
+            ],
+            "body": [
+              "Inter"
+            ],
+            "label": [
+              "Inter"
+            ]
+          },
+          "fontSize": {}
+        },
+      },
+    }
+  </script>
+<style>
+    .material-symbols-outlined {
+      font-family: 'Material Symbols Outlined';
+      font-weight: normal;
+      font-style: normal;
+      font-size: 20px;
+      line-height: 1;
+      letter-spacing: normal;
+      text-transform: none;
+      display: inline-block;
+      white-space: nowrap;
+      word-wrap: normal;
+      direction: ltr;
+      -webkit-font-feature-settings: 'liga';
+      -webkit-font-smoothing: antialiased;
+    }
+    
+    /* Custom scrollbar for ops high-density */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #0f172a;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #334155;
+      border-radius: 4px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #475569;
+    }
+  </style>
+</head>
+<body class="bg-slate-900 text-slate-100 font-body min-h-screen flex flex-col antialiased selection:bg-blue-500 selection:text-white pb-20">
+<!-- =========================================================================
+       GLOBAL SHARED COMPONENT: TopNavBar (Desktop Ops Header)
+       Exact identity & labels from Shared Components JSON
+       Active item logically mapped to "Orders" for task routing
+       ========================================================================= -->
+<header class="sticky top-0 w-full z-50 shadow-sm dark:shadow-none border-b border-slate-800 bg-slate-900">
+<div class="flex items-center justify-between px-6 w-full h-16 border-b border-slate-800 bg-slate-900">
+<!-- Left side: Brand Logo and Main Nav -->
+<div class="flex items-center gap-8">
+<a class="text-lg font-bold text-white tracking-tight flex items-center gap-2" href="#">
+<span class="flex items-center justify-center w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-cyan-400 text-slate-950 font-extrabold text-sm shadow-md shadow-blue-500/20">
+<span class="material-symbols-outlined text-[19px]">bolt</span>
+</span>
+<span>Roam Rush Ops</span>
+</a>
+<!-- Navigation Cluster -->
+<nav class="hidden md:flex items-center gap-1">
+<!-- Orders (Active: Current Task Route) -->
+<a class="text-blue-400 font-semibold border-b-2 border-blue-400 pb-4 pt-4 px-3 flex items-center gap-2" href="#">
+<span class="material-symbols-outlined text-[18px]">receipt_long</span>
+<span>Orders</span>
+</a>
+<!-- Inactive Links -->
+<a class="text-slate-400 hover:text-slate-200 pb-4 pt-4 px-3 font-normal transition-colors flex items-center gap-2" href="#">
+<span class="material-symbols-outlined text-[18px]">storefront</span>
+<span>Restaurants</span>
+</a>
+<a class="text-slate-400 hover:text-slate-200 pb-4 pt-4 px-3 font-normal transition-colors flex items-center gap-2" href="#">
+<span class="material-symbols-outlined text-[18px]">credit_card</span>
+<span>Cards</span>
+</a>
+<a class="text-slate-400 hover:text-slate-200 pb-4 pt-4 px-3 font-normal transition-colors flex items-center gap-2" href="#">
+<span class="material-symbols-outlined text-[18px]">bar_chart</span>
+<span>Reports</span>
+</a>
+<a class="text-slate-400 hover:text-slate-200 pb-4 pt-4 px-3 font-normal transition-colors flex items-center gap-2" href="#">
+<span class="material-symbols-outlined text-[18px]">settings</span>
+<span>Settings</span>
+</a>
+</nav>
+</div>
+<!-- Right side: Search Bar + Trailing Actions + Statuses -->
+<div class="flex items-center gap-4">
+<!-- Search bar (on_right) -->
+<div class="relative hidden lg:block w-64">
+<span class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-slate-400">
+<span class="material-symbols-outlined text-[18px]">search</span>
+</span>
+<input class="w-full pl-9 pr-3 py-1.5 bg-slate-800/80 border border-slate-700 rounded-lg text-xs text-slate-200 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-colors" placeholder="Search order, phone, card..." type="text"/>
+</div>
+<!-- Trailing Desk Badges -->
+<div class="flex items-center gap-2">
+<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+            Desk Open
+          </span>
+<span class="inline-flex items-center px-2 py-1 rounded-lg text-xs font-medium bg-slate-800 text-slate-300 border border-slate-700">
+            In-House Desk
+          </span>
+</div>
+<div class="h-5 w-px bg-slate-800"></div>
+<!-- Trailing Icons: volume_up, notifications -->
+<div class="flex items-center gap-1">
+<button class="p-2 text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 rounded-lg transition-colors cursor-pointer" title="Audio alerts enabled">
+<span class="material-symbols-outlined text-[20px]">volume_up</span>
+</button>
+<button class="p-2 text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 rounded-lg transition-colors relative cursor-pointer" title="Notifications">
+<span class="material-symbols-outlined text-[20px]">notifications</span>
+<span class="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-cyan-400 ring-2 ring-slate-900"></span>
+</button>
+</div>
+<!-- Profile Photo -->
+<div class="flex items-center gap-2 pl-1 border-l border-slate-800">
+<img alt="Operator profile photo" class="w-8 h-8 rounded-lg object-cover ring-1 ring-slate-700" data-alt="Close-up professional portrait of Alex D., an operational delivery coordinator working in a modern dark-themed command center. Soft atmospheric cyan and blue ambient rim light highlights his concentrated focus. The background showcases softly blurred oceanic dark blue monitors and high-tech workstation equipment, rendering a sleek and trustworthy workplace atmosphere." src="https://lh3.googleusercontent.com/aida-public/AB6AXuC6DhAKMoh17NNVtH3yxuboQHK8wLEdfn5YRttRjUrfAoWhds2stk6wCn1dZEIm0eWMmpjYLOhS7H-7l5MJOoE9z4ovswZ6CIoUJsCp1VZHREKLseEzNDULZiH_CvPjy2d1w5hjeZ9DbZ4RNBkpQtkYhjq5AZKJ8sm5i1Ne8CO_cmJ6A7jkVauIDc1WxDHnUu4_nfh-wy1Ped3liH4sTBDH_mA0TOt8tltwmH6i3GtzFK_O91b5dlvb52z6vC_TonPm1OUpP2U302o"/>
+<span class="text-xs font-medium text-slate-300 hidden xl:inline-block">Alex D.</span>
+</div>
+</div>
+</div>
+</header>
+<!-- =========================================================================
+       SUB-HEADER: Operational Route Context & Order Banner
+       ========================================================================= -->
+<section class="bg-slate-900/90 border-b border-slate-800 px-6 py-4 sticky top-16 z-40 backdrop-blur-md">
+<div class="max-w-[1440px] mx-auto flex flex-col md:flex-row md:items-center justify-between gap-4">
+<!-- Left: Back link and Order Context -->
+<div class="space-y-1.5">
+<div class="flex items-center gap-3">
+<a class="inline-flex items-center gap-1.5 text-xs font-medium text-blue-400 hover:text-cyan-300 transition-colors" href="#">
+<span class="material-symbols-outlined text-[16px]">arrow_back</span>
+            Back to Orders Queue
+          </a>
+<span class="text-slate-600">/</span>
+<span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-medium bg-slate-800 text-slate-300 border border-slate-700/80">
+<span class="w-1.5 h-1.5 rounded-full bg-blue-400"></span>
+            In-House Fleet · Claimed by Alex D.
+          </span>
+</div>
+<div class="flex flex-wrap items-center gap-3">
+<h1 class="text-xl font-bold text-white tracking-tight flex items-center gap-2">
+            Sample Pizza Co. #1001
+          </h1>
+<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-500/15 text-amber-300 border border-amber-500/30">
+<span class="material-symbols-outlined text-[14px]">warning</span>
+            Needs Driver · Late (+6m)
+          </span>
+<span class="text-xs text-slate-400 flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px] text-slate-500">schedule</span>
+            Order created 18 mins ago (11:24 AM)
+          </span>
+</div>
+<p class="text-xs text-slate-300 flex items-center gap-2">
+<span class="font-semibold text-slate-200">Customer:</span>
+<span>Elena Vance</span>
+<span class="text-slate-600">•</span>
+<span class="text-slate-400">442 Maple Ave, Apt 3B · Buzzer 14</span>
+</p>
+</div>
+<!-- Right: Operational Hotline Quick Links -->
+<div class="flex items-center gap-2 self-start md:self-center">
+<a class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700/80 border border-slate-700 text-slate-200 rounded-lg text-xs font-medium transition-colors" href="tel:5550192">
+<span class="material-symbols-outlined text-[16px] text-cyan-400">call</span>
+          Hotline: 555-0192
+        </a>
+<button class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700/80 border border-slate-700 text-slate-200 rounded-lg text-xs font-medium transition-colors" onclick="alert('Copied internal dispatch link!')">
+<span class="material-symbols-outlined text-[16px] text-blue-400">link</span>
+          Copy Task Link
+        </button>
+</div>
+</div>
+</section>
+<!-- =========================================================================
+       MAIN WORKSPACE: Split Operational Layout
+       ========================================================================= -->
+<main class="max-w-[1440px] w-full mx-auto px-6 py-6 flex-1 grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+<!-- =======================================================================
+         LEFT/CENTER EXECUTION CANVAS (Cols 1-8)
+         ======================================================================= -->
+<div class="lg:col-span-8 space-y-6">
+<!-- STEPPER NAVIGATION (3-Step Linear Stepper) -->
+<div class="bg-slate-800/50 backdrop-blur border border-slate-800 rounded-lg p-3">
+<div class="grid grid-cols-3 gap-2">
+<!-- Step 1: Active -->
+<div class="relative flex items-center gap-3 p-2.5 rounded-lg bg-slate-800/90 border border-blue-500/50 shadow-sm shadow-blue-500/10">
+<div class="w-7 h-7 rounded-full bg-blue-500 text-white flex items-center justify-center font-bold text-xs shadow-md shadow-blue-500/30">
+              1
+            </div>
+<div class="min-w-0">
+<div class="flex items-center gap-1.5">
+<span class="text-xs font-bold text-white tracking-tight">Step 1: Place it</span>
+<span class="px-1.5 py-0.2 rounded text-[10px] font-semibold bg-blue-500/20 text-cyan-300">In Progress</span>
+</div>
+<p class="text-[11px] text-slate-400 truncate">Call or order on portal</p>
+</div>
+</div>
+<!-- Step 2: Previewable / Next -->
+<div class="relative flex items-center gap-3 p-2.5 rounded-lg bg-slate-900/60 border border-slate-700/60 opacity-90">
+<div class="w-7 h-7 rounded-full bg-slate-700 text-slate-300 flex items-center justify-center font-bold text-xs border border-slate-600">
+              2
+            </div>
+<div class="min-w-0">
+<div class="flex items-center gap-1.5">
+<span class="text-xs font-semibold text-slate-300">Step 2: Record it</span>
+<span class="px-1.5 py-0.2 rounded text-[10px] font-medium bg-slate-800 text-slate-400">Pending</span>
+</div>
+<p class="text-[11px] text-slate-500 truncate">Fill total &amp; prep time</p>
+</div>
+</div>
+<!-- Step 3: Done / Upcoming -->
+<div class="relative flex items-center gap-3 p-2.5 rounded-lg bg-slate-900/30 border border-slate-800/60 opacity-60">
+<div class="w-7 h-7 rounded-full bg-slate-800 text-slate-500 flex items-center justify-center font-bold text-xs">
+              3
+            </div>
+<div class="min-w-0">
+<span class="text-xs font-medium text-slate-400">Step 3: Done</span>
+<p class="text-[11px] text-slate-600 truncate">Dispatch &amp; confirmation</p>
+</div>
+</div>
+</div>
+</div>
+<!-- =====================================================================
+           STEP 1 ACTIVE PANEL: "Place it"
+           ===================================================================== -->
+<section class="bg-slate-800 border border-slate-700 rounded-lg p-5 shadow-sm space-y-5">
+<!-- Header & Action Banner -->
+<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-700/70">
+<div>
+<div class="flex items-center gap-2">
+<span class="px-2 py-0.5 rounded text-[11px] font-bold bg-blue-500 text-slate-950 uppercase tracking-wider">Active Step 1</span>
+<h2 class="text-base font-bold text-white">Place order with Sample Pizza Co.</h2>
+</div>
+<p class="text-xs text-slate-400 mt-0.5">Contact restaurant desk or launch portal to place the items below.</p>
+</div>
+<!-- Direct action buttons -->
+<div class="flex items-center gap-2">
+<a class="inline-flex items-center gap-1.5 bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 text-white font-semibold text-xs px-4 py-2 rounded-lg shadow-md shadow-blue-500/20 transition-all cursor-pointer" href="https://samplepizza.example.com" rel="noopener noreferrer" target="_blank">
+<span>Open restaurant site</span>
+<span class="material-symbols-outlined text-[16px]">open_in_new</span>
+</a>
+<a class="inline-flex items-center gap-1.5 bg-slate-700/80 hover:bg-slate-700 text-slate-200 border border-slate-600 font-medium text-xs px-3.5 py-2 rounded-lg transition-colors" href="tel:5550192">
+<span class="material-symbols-outlined text-[16px] text-cyan-400">call</span>
+<span>Call Merchant (555-0192)</span>
+</a>
+</div>
+</div>
+<!-- Checklist of Order Items -->
+<div class="space-y-3">
+<div class="flex items-center justify-between">
+<span class="text-xs font-semibold text-slate-300 uppercase tracking-wide flex items-center gap-1.5">
+<span class="material-symbols-outlined text-[16px] text-blue-400">checklist</span>
+              Order Line Items (2/3 verified)
+            </span>
+<span class="text-xs text-slate-400">Item Total: <span class="font-bold text-white">$48.50</span></span>
+</div>
+<div class="space-y-2.5">
+<!-- Item 1: Checked -->
+<div class="flex items-start justify-between p-3.5 rounded-lg bg-slate-900/80 border border-emerald-500/30 hover:border-emerald-500/50 transition-colors gap-3 group">
+<div class="flex items-start gap-3">
+<label class="relative flex items-center pt-0.5 cursor-pointer">
+<input checked="" class="w-4 h-4 rounded text-blue-500 bg-slate-800 border-slate-600 focus:ring-0 focus:ring-offset-0 cursor-pointer" type="checkbox"/>
+</label>
+<div>
+<div class="flex items-center gap-2">
+<span class="text-sm font-semibold text-white">2x Truffle Pepperoni Pizza</span>
+<span class="text-xs font-semibold text-cyan-400">$38.00</span>
+<span class="px-1.5 py-0.2 rounded text-[10px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-medium">Checked</span>
+</div>
+<div class="mt-1 text-xs text-amber-300/95 bg-amber-500/10 border border-amber-500/20 px-2.5 py-1 rounded inline-block">
+<span class="font-semibold text-amber-200">Special note:</span> Well done crust, extra hot honey on side
+                  </div>
+</div>
+</div>
+<button class="inline-flex items-center gap-1 px-2.5 py-1 rounded text-xs font-medium text-slate-400 hover:text-slate-200 bg-slate-800 hover:bg-slate-700 border border-slate-700 transition-colors" onclick="navigator.clipboard.writeText('2x Truffle Pepperoni Pizza - Special note: Well done crust, extra hot honey on side')" title="Copy item &amp; modifiers">
+<span class="material-symbols-outlined text-[14px]">content_copy</span>
+<span>Copy</span>
+</button>
+</div>
+<!-- Item 2: Checked -->
+<div class="flex items-start justify-between p-3.5 rounded-lg bg-slate-900/80 border border-emerald-500/30 hover:border-emerald-500/50 transition-colors gap-3 group">
+<div class="flex items-start gap-3">
+<label class="relative flex items-center pt-0.5 cursor-pointer">
+<input checked="" class="w-4 h-4 rounded text-blue-500 bg-slate-800 border-slate-600 focus:ring-0 focus:ring-offset-0 cursor-pointer" type="checkbox"/>
+</label>
+<div>
+<div class="flex items-center gap-2">
+<span class="text-sm font-semibold text-white">1x Garlic Knots (6pcs)</span>
+<span class="text-xs font-semibold text-cyan-400">$5.50</span>
+<span class="px-1.5 py-0.2 rounded text-[10px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-medium">Checked</span>
+</div>
+<div class="mt-1 text-xs text-amber-300/95 bg-amber-500/10 border border-amber-500/20 px-2.5 py-1 rounded inline-block">
+<span class="font-semibold text-amber-200">Special note:</span> Extra marinara dipping cup
+                  </div>
+</div>
+</div>
+<button class="inline-flex items-center gap-1 px-2.5 py-1 rounded text-xs font-medium text-slate-400 hover:text-slate-200 bg-slate-800 hover:bg-slate-700 border border-slate-700 transition-colors" onclick="navigator.clipboard.writeText('1x Garlic Knots (6pcs) - Special note: Extra marinara dipping cup')" title="Copy item &amp; modifiers">
+<span class="material-symbols-outlined text-[14px]">content_copy</span>
+<span>Copy</span>
+</button>
+</div>
+<!-- Item 3: Unchecked (Pending) -->
+<div class="flex items-start justify-between p-3.5 rounded-lg bg-slate-900/90 border border-amber-500/50 hover:border-amber-400 transition-colors gap-3 group ring-1 ring-amber-500/20">
+<div class="flex items-start gap-3">
+<label class="relative flex items-center pt-0.5 cursor-pointer">
+<input class="w-4 h-4 rounded text-blue-500 bg-slate-800 border-slate-500 focus:ring-0 focus:ring-offset-0 cursor-pointer" type="checkbox"/>
+</label>
+<div>
+<div class="flex items-center gap-2">
+<span class="text-sm font-semibold text-white">2x San Pellegrino Aranciata (Can)</span>
+<span class="text-xs font-semibold text-cyan-400">$5.00</span>
+<span class="px-1.5 py-0.2 rounded text-[10px] bg-amber-500/20 text-amber-300 font-semibold border border-amber-500/30">Needs Check</span>
+</div>
+<p class="text-xs text-slate-400 mt-0.5">Cold from fridge, check expiration</p>
+</div>
+</div>
+<button class="inline-flex items-center gap-1 px-2.5 py-1 rounded text-xs font-medium text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 border border-slate-600 transition-colors" onclick="navigator.clipboard.writeText('2x San Pellegrino Aranciata (Can)')" title="Copy item name">
+<span class="material-symbols-outlined text-[14px]">content_copy</span>
+<span>Copy</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Delivery Instructions & Snippet Card -->
+<div class="bg-slate-900/70 border border-slate-700/80 rounded-lg p-3.5 flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
+<div class="space-y-0.5">
+<span class="text-[11px] font-semibold text-slate-400 uppercase tracking-wide">Destination Dropoff</span>
+<div class="text-xs text-slate-200">
+<span class="font-medium text-white">Elena Vance</span> — 442 Maple Ave, Apt 3B (Buzzer 14), Metropolis · <span class="text-cyan-400">555-0144</span>
+</div>
+<p class="text-[11px] text-slate-400 italic">"Lobby buzzer sticks, give two firm pushes"</p>
+</div>
+<div class="flex items-center gap-2 shrink-0">
+<button class="inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 border border-slate-600 text-slate-300 hover:text-white transition-colors" onclick="navigator.clipboard.writeText('442 Maple Ave, Apt 3B, Buzzer 14')">
+<span class="material-symbols-outlined text-[14px]">location_on</span>
+              Copy Address
+            </button>
+<button class="inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 border border-slate-600 text-slate-300 hover:text-white transition-colors" onclick="navigator.clipboard.writeText('555-0144')">
+<span class="material-symbols-outlined text-[14px]">phone</span>
+              Copy Phone
+            </button>
+</div>
+</div>
+</section>
+<!-- =====================================================================
+           STEP 2 PREVIEWABLE SECTION: "Record it"
+           ===================================================================== -->
+<section class="bg-slate-800/80 border border-slate-700 rounded-lg p-5 shadow-sm space-y-4">
+<!-- Header & Live Spend Guard Indicator -->
+<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-700/70">
+<div>
+<div class="flex items-center gap-2">
+<span class="px-2 py-0.5 rounded text-[11px] font-bold bg-slate-700 text-slate-300 uppercase tracking-wider">Step 2 Preview</span>
+<h2 class="text-sm font-bold text-white">Fill after placing order with merchant</h2>
+</div>
+<p class="text-xs text-slate-400 mt-0.5">Enter restaurant receipt confirmation, exact card total, and kitchen prep estimate.</p>
+</div>
+<!-- Live Spending Authority Chip -->
+<div class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+<span class="material-symbols-outlined text-[16px]">verified_user</span>
+<span>✓ OK up to J$ 7,500.00 ($65.00 limit)</span>
+</div>
+</div>
+<!-- Form Fields Grid -->
+<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+<!-- Field: Confirmation # -->
+<div>
+<label class="block text-xs font-semibold text-slate-300 mb-1">
+              Restaurant Order / Confirmation #
+            </label>
+<div class="relative">
+<input class="w-full bg-slate-900 border border-slate-700 rounded-lg text-xs text-slate-100 placeholder-slate-500 px-3 py-2 focus:ring-1 focus:ring-blue-500 focus:border-blue-500" placeholder="e.g. SPC-88392" type="text"/>
+<span class="absolute right-2.5 top-2 text-slate-500">
+<span class="material-symbols-outlined text-[16px]">tag</span>
+</span>
+</div>
+</div>
+<!-- Field: Total Charged -->
+<div>
+<label class="block text-xs font-semibold text-slate-300 mb-1">
+              Total charged at restaurant
+            </label>
+<div class="relative">
+<span class="absolute left-3 top-2 text-xs font-semibold text-slate-400">$</span>
+<input class="w-full bg-slate-900 border border-slate-700 rounded-lg text-xs text-emerald-400 font-semibold pl-7 pr-3 py-2 focus:ring-1 focus:ring-blue-500 focus:border-blue-500" type="text" value="48.50"/>
+<span class="absolute right-2.5 top-2 text-[11px] text-emerald-400 flex items-center gap-0.5 font-medium">
+                Within limit
+              </span>
+</div>
+</div>
+<!-- Field: Purchasing Card -->
+<div class="md:col-span-2">
+<label class="block text-xs font-semibold text-slate-300 mb-1">
+              Purchasing Card (Corporate In-House)
+            </label>
+<div class="relative">
+<select class="w-full bg-slate-900 border border-slate-700 rounded-lg text-xs text-slate-200 px-3 py-2 pr-8 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 appearance-none">
+<option selected="">Corporate Purchasing Visa ···4819 ($412.50 daily limit remaining)</option>
+<option>Backup MasterFleet ···1029 ($850.00 daily limit remaining)</option>
+</select>
+<span class="absolute right-2.5 top-2.5 pointer-events-none text-slate-400">
+<span class="material-symbols-outlined text-[16px]">expand_more</span>
+</span>
+</div>
+</div>
+<!-- Field: Ready-time estimate quick chips -->
+<div class="md:col-span-2 space-y-1.5">
+<label class="block text-xs font-semibold text-slate-300">
+              Kitchen Ready-Time Estimate
+            </label>
+<div class="flex flex-wrap items-center gap-2">
+<button class="px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-900 border border-slate-700 text-slate-300 hover:border-slate-500 transition-colors" type="button">
+                +15m (12:45 PM)
+              </button>
+<!-- Active Selected Chip -->
+<button class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-blue-500/20 border border-blue-400 text-cyan-300 flex items-center gap-1.5 shadow-sm shadow-blue-500/20" type="button">
+<span class="material-symbols-outlined text-[14px]">check</span>
+                +20m (12:50 PM) · Selected
+              </button>
+<button class="px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-900 border border-slate-700 text-slate-300 hover:border-slate-500 transition-colors" type="button">
+                +30m (01:00 PM)
+              </button>
+<button class="px-2.5 py-1.5 rounded-lg text-xs font-medium bg-slate-900/60 border border-slate-800 text-slate-400 hover:text-slate-200" type="button">
+                Custom time...
+              </button>
+</div>
+</div>
+<!-- Field: Receipt upload dropzone & preview -->
+<div class="md:col-span-2">
+<label class="block text-xs font-semibold text-slate-300 mb-1">
+              Receipt Proof (Merchant Ticket / POS Slip)
+            </label>
+<div class="border border-dashed border-slate-700 hover:border-blue-500/60 rounded-lg p-3 bg-slate-900/50 flex items-center justify-between gap-4 transition-colors">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-lg bg-blue-500/10 border border-blue-500/30 flex items-center justify-center text-blue-400 shrink-0">
+<span class="material-symbols-outlined text-[20px]">image</span>
+</div>
+<div>
+<span class="text-xs font-semibold text-slate-200 flex items-center gap-1.5">
+                    receipt_1001_preview.jpg
+                    <span class="text-[10px] font-medium text-emerald-400 bg-emerald-500/10 px-1.5 py-0.2 rounded border border-emerald-500/20">Uploaded · 184 KB</span>
+</span>
+<p class="text-[11px] text-slate-400">Attached to In-House audit trail for Sample Pizza Co.</p>
+</div>
+</div>
+<div class="flex items-center gap-2">
+<button class="text-xs px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition-colors" type="button">
+                  View
+                </button>
+<button class="text-xs px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-cyan-400 border border-slate-700 transition-colors" type="button">
+                  Re-upload
+                </button>
+</div>
+</div>
+</div>
+</div>
+</section>
+</div>
+<!-- =======================================================================
+         RIGHT PANEL: Customer Communications & Activity Feed (Cols 9-12)
+         ======================================================================= -->
+<div class="lg:col-span-4 space-y-5">
+<!-- Customer Communications Panel -->
+<section class="bg-slate-800 border border-slate-700 rounded-lg p-4 flex flex-col h-[580px] shadow-sm">
+<!-- Chat Header -->
+<div class="flex items-center justify-between pb-3 border-b border-slate-700/80">
+<div class="flex items-center gap-2.5">
+<div class="relative">
+<div class="w-8 h-8 rounded-full bg-slate-700 border border-slate-600 flex items-center justify-center font-bold text-xs text-white">
+                EV
+              </div>
+<span class="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-emerald-500 ring-2 ring-slate-800"></span>
+</div>
+<div>
+<div class="flex items-center gap-1.5">
+<h3 class="text-xs font-bold text-white">Elena Vance</h3>
+<span class="px-1.5 py-0.2 rounded text-[10px] bg-slate-700 text-slate-300">Customer</span>
+</div>
+<p class="text-[10px] text-slate-400">Active now · Order #1001</p>
+</div>
+</div>
+<button class="p-1.5 text-slate-400 hover:text-slate-200 hover:bg-slate-700 rounded-lg transition-colors" title="Message options">
+<span class="material-symbols-outlined text-[18px]">more_vert</span>
+</button>
+</div>
+<!-- Chat Messages Thread -->
+<div class="flex-1 overflow-y-auto py-3 space-y-3 pr-1 text-xs">
+<!-- System event -->
+<div class="text-center my-1">
+<span class="text-[10px] bg-slate-900/80 border border-slate-700/60 text-slate-400 px-2.5 py-0.5 rounded-full">
+              Order received via In-House desk at 11:24 AM
+            </span>
+</div>
+<!-- Customer Message -->
+<div class="flex flex-col items-start max-w-[85%] space-y-1">
+<div class="bg-slate-900 border border-slate-700 rounded-lg rounded-tl-none p-2.5 text-slate-200">
+              Hi! Can you make sure the driver rings Buzzer 14? The lobby door sticks sometimes.
+            </div>
+<span class="text-[10px] text-slate-500 pl-1">Elena Vance • 11:26 AM</span>
+</div>
+<!-- Operator Alex D. Reply -->
+<div class="flex flex-col items-end self-end max-w-[85%] space-y-1">
+<div class="bg-blue-600/30 border border-blue-500/40 rounded-lg rounded-tr-none p-2.5 text-blue-100">
+              Noted Elena! Adding that directly to the courier delivery notes now.
+            </div>
+<span class="text-[10px] text-slate-500 pr-1">Alex D. (Desk) • 11:27 AM</span>
+</div>
+<!-- Customer Followup -->
+<div class="flex flex-col items-start max-w-[85%] space-y-1">
+<div class="bg-slate-900 border border-slate-700 rounded-lg rounded-tl-none p-2.5 text-slate-200">
+              Thank you so much!
+            </div>
+<span class="text-[10px] text-slate-500 pl-1">Elena Vance • 11:28 AM</span>
+</div>
+</div>
+<!-- Canned Quick Responses -->
+<div class="pt-2 pb-1 border-t border-slate-700/60">
+<div class="flex items-center gap-1.5 overflow-x-auto pb-1 text-[11px]">
+<button class="shrink-0 px-2 py-0.5 rounded bg-slate-900 hover:bg-slate-700 text-slate-300 border border-slate-700">
+              Kitchen is preparing it
+            </button>
+<button class="shrink-0 px-2 py-0.5 rounded bg-slate-900 hover:bg-slate-700 text-slate-300 border border-slate-700">
+              Driver dispatched
+            </button>
+</div>
+</div>
+<!-- Reply Input Bar -->
+<div class="pt-2 flex items-center gap-2">
+<input class="flex-1 bg-slate-900 border border-slate-700 rounded-lg text-xs text-slate-100 placeholder-slate-500 px-3 py-2 focus:ring-1 focus:ring-blue-500 focus:border-blue-500" placeholder="Type message to Elena Vance..." type="text"/>
+<button class="p-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white shrink-0 shadow-md shadow-blue-500/20 transition-colors" title="Send message">
+<span class="material-symbols-outlined text-[18px]">send</span>
+</button>
+</div>
+</section>
+<!-- Order Audit Information Card -->
+<section class="bg-slate-800 border border-slate-700 rounded-lg p-4 space-y-3">
+<h3 class="text-xs font-bold text-slate-300 uppercase tracking-wide flex items-center gap-1.5">
+<span class="material-symbols-outlined text-[16px] text-cyan-400">lock</span>
+          Payment &amp; Audit Trail
+        </h3>
+<div class="space-y-2 text-xs">
+<div class="flex items-center justify-between text-slate-300">
+<span class="text-slate-400">Payment Status:</span>
+<span class="font-semibold text-emerald-400 flex items-center gap-1">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+              Paid via App
+            </span>
+</div>
+<div class="flex items-center justify-between text-slate-300">
+<span class="text-slate-400">Stripe Auth ID:</span>
+<span class="font-mono text-[11px] text-slate-300 bg-slate-900 px-1.5 py-0.5 rounded border border-slate-700">
+              ch_3N8k2...9aL2
+            </span>
+</div>
+<div class="flex items-center justify-between text-slate-300">
+<span class="text-slate-400">Assigned In-House Driver:</span>
+<span class="text-amber-300 font-medium flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]">local_shipping</span>
+              Pending Dispatch
+            </span>
+</div>
+<div class="flex items-center justify-between text-slate-300">
+<span class="text-slate-400">Estimated Delivery:</span>
+<span class="text-white font-medium">1:10 PM - 1:20 PM</span>
+</div>
+</div>
+</section>
+</div>
+</main>
+<!-- =========================================================================
+       STICKY BOTTOM ACTION BAR: Global Desk Operator Trigger
+       ========================================================================= -->
+<footer class="fixed bottom-0 inset-x-0 z-50 bg-slate-900/95 backdrop-blur-md border-t border-slate-800 py-3 px-6 shadow-2xl">
+<div class="max-w-[1440px] mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
+<!-- Left side status -->
+<div class="flex items-center gap-3 text-xs">
+<div class="flex items-center gap-1.5 font-medium text-slate-300">
+<span class="w-2 h-2 rounded-full bg-cyan-400 animate-pulse"></span>
+<span>Checklist: <strong class="text-white">2 of 3 items copied</strong></span>
+</div>
+<span class="text-slate-600 hidden sm:inline">•</span>
+<div class="text-slate-400 hidden sm:inline">
+          Spent: <span class="text-emerald-400 font-semibold">$48.50</span> within limit
+        </div>
+</div>
+<!-- Center blocker warning -->
+<div class="flex items-center gap-2 px-3 py-1 rounded-lg bg-amber-500/10 border border-amber-500/25 text-amber-300 text-xs font-medium">
+<span class="material-symbols-outlined text-[16px] text-amber-400">warning</span>
+<span>Still needed: Check 1 remaining item (San Pellegrino) before finalizing placement</span>
+</div>
+<!-- Right side Primary & Ghost Actions -->
+<div class="flex items-center gap-3">
+<button class="text-xs font-medium text-slate-400 hover:text-rose-400 px-3 py-2 rounded-lg transition-colors cursor-pointer" onclick="alert('Escalated to Desk Supervisor.')" type="button">
+          Need Help / Escalate
+        </button>
+<button class="bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 text-white font-semibold text-xs px-6 py-2.5 rounded-lg shadow-lg shadow-blue-500/20 flex items-center gap-2 transition-all cursor-pointer transform hover:-translate-y-0.5 active:translate-y-0" onclick="alert('Order marked as Placed! Advancing task to Step 2: Record it.')" type="button">
+<span>Mark Placed → Proceed to Record</span>
+<span class="material-symbols-outlined text-[16px]">arrow_forward</span>
+</button>
+</div>
+</div>
+</footer>
+</body></html>

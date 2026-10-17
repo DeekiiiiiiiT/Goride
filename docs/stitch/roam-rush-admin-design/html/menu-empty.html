@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Roam Rush — Sample Pizza Co. #1001 Menu Builder</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          "colors": {
+            "tertiary-fixed": "#3adffa",
+            "on-primary-container": "#ffffff",
+            "surface": "#060f17",
+            "primary-fixed": "#4388fd",
+            "primary-fixed-dim": "#317bef",
+            "surface-dim": "#060f17",
+            "error": "#fa746f",
+            "surface-container-high": "#0f212f",
+            "background": "#060f17",
+            "secondary-fixed": "#d4e3ff",
+            "on-secondary-fixed-variant": "#005da7",
+            "secondary": "#a4c9ff",
+            "tertiary-dim": "#1ad0eb",
+            "surface-tint": "#adc6ff",
+            "secondary-dim": "#64a8fe",
+            "primary": "#adc6ff",
+            "on-primary-fixed": "#000000",
+            "on-surface-variant": "#98adc3",
+            "tertiary-container": "#3adffa",
+            "secondary-fixed-dim": "#bcd6ff",
+            "surface-container-highest": "#122839",
+            "inverse-primary": "#005bc4",
+            "surface-variant": "#122839",
+            "on-primary-fixed-variant": "#001435",
+            "tertiary-fixed-dim": "#1ad0eb",
+            "on-tertiary": "#005561",
+            "secondary-container": "#003c70",
+            "on-secondary-fixed": "#004076",
+            "on-background": "#d2e8ff",
+            "on-tertiary-container": "#004b56",
+            "surface-container-lowest": "#000000",
+            "on-primary": "#003d88",
+            "on-surface": "#d2e8ff",
+            "primary-dim": "#699cff",
+            "outline-variant": "#354a5c",
+            "error-container": "#871f21",
+            "outline": "#63788c",
+            "on-secondary-container": "#96c2ff",
+            "inverse-surface": "#f7f9ff",
+            "on-secondary": "#004178",
+            "on-tertiary-fixed-variant": "#005561",
+            "on-error": "#490006",
+            "tertiary": "#7de9ff",
+            "on-error-container": "#ff9993",
+            "surface-bright": "#192e3f",
+            "surface-container-low": "#071520",
+            "error-dim": "#c54d4a",
+            "primary-container": "#0e69dc",
+            "inverse-on-surface": "#4c5660",
+            "surface-container": "#0a1b28",
+            "on-tertiary-fixed": "#00363e"
+          },
+          "borderRadius": {
+            "DEFAULT": "0.25rem",
+            "lg": "0.5rem",
+            "xl": "0.75rem",
+            "full": "9999px"
+          },
+          "fontFamily": {
+            "headline": ["Inter", "sans-serif"],
+            "display": ["Inter", "sans-serif"],
+            "body": ["Inter", "sans-serif"],
+            "label": ["Inter", "sans-serif"]
+          }
+        }
+      }
+    }
+  </script>
+<style>
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 20;
+      line-height: 1;
+      display: inline-block;
+      vertical-align: middle;
+    }
+    .custom-gradient-btn {
+      background: linear-gradient(135deg, #3b82f6, #22d3ee);
+    }
+  </style>
+</head>
+<body class="bg-background text-on-surface font-body antialiased flex flex-col h-screen overflow-hidden select-none">
+<!-- Top Navigation Bar (Shared Component: TopNavBar) -->
+<header class="flex items-center justify-between px-6 py-3 w-full border-b border-outline-variant bg-surface-container shadow-sm z-30 shrink-0">
+<div class="flex items-center gap-6">
+<!-- Brand Logo / Product Name -->
+<div class="flex items-center gap-2.5">
+<div class="w-8 h-8 rounded-lg bg-primary-container flex items-center justify-center text-on-primary-container font-headline font-bold text-base shadow-sm">
+<span class="material-symbols-outlined text-lg">bolt</span>
+</div>
+<span class="font-headline text-base font-bold text-on-surface tracking-tight">Roam Rush</span>
+</div>
+<!-- Breadcrumbs Hierarchy -->
+<nav class="flex items-center gap-2 font-body text-sm font-medium">
+<a class="text-on-surface-variant hover:text-on-surface transition-colors duration-150" href="#">In-House Desk</a>
+<span class="material-symbols-outlined text-outline text-xs">chevron_right</span>
+<a class="text-on-surface-variant hover:text-on-surface transition-colors duration-150" href="#">Sample Pizza Co. #1001</a>
+<span class="material-symbols-outlined text-outline text-xs">chevron_right</span>
+<span class="text-primary font-semibold">Menu Builder</span>
+</nav>
+<!-- Store Status Pill -->
+<div class="flex items-center gap-2 px-2.5 py-1 rounded-full bg-surface-container-high border border-outline-variant text-xs text-on-surface-variant font-medium">
+<span class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
+<span>Draft · 0 dishes</span>
+</div>
+</div>
+<!-- Actions & Profile Area -->
+<div class="flex items-center gap-3">
+<!-- Preview Secondary Action -->
+<button class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-outline-variant bg-surface-container text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-all duration-150 text-sm font-medium">
+<span class="material-symbols-outlined text-base">visibility</span>
+<span>Preview Customer</span>
+</button>
+<!-- Publish Primary Action (Draft/Disabled Mode) -->
+<button class="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-surface-variant text-outline cursor-not-allowed border border-outline-variant text-sm font-medium" title="Add at least one section with items to publish">
+<span class="material-symbols-outlined text-base">publish</span>
+<span>Publish</span>
+</button>
+<div class="h-5 w-px bg-outline-variant mx-1"></div>
+<!-- Icon Actions -->
+<div class="flex items-center gap-1">
+<button class="p-1.5 text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high rounded-lg transition-colors duration-150" title="Notifications">
+<span class="material-symbols-outlined text-xl">notifications</span>
+</button>
+<button class="p-1.5 text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high rounded-lg transition-colors duration-150" title="Help">
+<span class="material-symbols-outlined text-xl">help</span>
+</button>
+</div>
+<!-- User Avatar -->
+<div class="w-7 h-7 rounded-full bg-secondary-container text-on-secondary-container flex items-center justify-center font-bold text-xs ring-1 ring-outline-variant" title="Ops Staff User Avatar">
+        RR
+      </div>
+</div>
+</header>
+<!-- App Body Layout -->
+<div class="flex flex-1 h-[calc(100vh-57px)] overflow-hidden">
+<!-- Left Side Navigation (Shared Component: SideNavBar) -->
+<aside class="flex flex-col h-full w-64 border-r border-outline-variant bg-surface p-4 space-y-4 shrink-0 justify-between">
+<div class="flex flex-col space-y-4 overflow-y-auto">
+<!-- Store Identity Badge -->
+<div class="flex items-center gap-3 px-2 py-2 rounded-lg bg-surface-container-low border border-outline-variant">
+<div class="w-9 h-9 rounded-lg bg-surface-container-high border border-outline-variant flex items-center justify-center text-primary shrink-0">
+<span class="material-symbols-outlined text-lg">local_pizza</span>
+</div>
+<div class="overflow-hidden">
+<div class="font-headline text-sm font-semibold text-on-surface truncate">Sample Pizza Co.</div>
+<div class="text-xs text-on-surface-variant truncate">Store #1001 · Draft</div>
+</div>
+</div>
+<!-- Add Section Button -->
+<button class="w-full flex items-center justify-center gap-2 py-2 px-3 rounded-lg border border-dashed border-outline hover:border-primary text-secondary hover:text-primary bg-surface-container-low hover:bg-surface-container-high text-xs font-medium transition-all duration-150">
+<span class="material-symbols-outlined text-sm">add</span>
+<span>+ Add Section</span>
+</button>
+<!-- Navigation Tabs -->
+<nav class="space-y-1">
+<a class="flex items-center gap-3 px-3 py-2 text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface rounded-lg text-sm transition-colors duration-150" href="#">
+<span class="material-symbols-outlined text-lg">dashboard</span>
+<span>Overview</span>
+</a>
+<!-- Active Tab: Menu Sections -->
+<a class="flex items-center justify-between px-3 py-2 bg-secondary-container text-on-secondary-container font-medium rounded-lg text-sm transition-colors duration-150" href="#">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-lg">menu_book</span>
+<span>Menu Sections</span>
+</div>
+<span class="px-1.5 py-0.2 rounded text-[10px] bg-surface-container-lowest text-on-surface-variant font-mono">0</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface rounded-lg text-sm transition-colors duration-150" href="#">
+<span class="material-symbols-outlined text-lg">tune</span>
+<span>Modifiers &amp; Add-ons</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface rounded-lg text-sm transition-colors duration-150" href="#">
+<span class="material-symbols-outlined text-lg">schedule</span>
+<span>Availability &amp; Hours</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface rounded-lg text-sm transition-colors duration-150" href="#">
+<span class="material-symbols-outlined text-lg">settings</span>
+<span>Publish Settings</span>
+</a>
+</nav>
+</div>
+<!-- Sidebar Footer -->
+<div class="pt-4 border-t border-outline-variant space-y-1">
+<a class="flex items-center gap-3 px-3 py-1.5 text-xs text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high rounded-lg transition-colors duration-150" href="#">
+<span class="material-symbols-outlined text-base">help_outline</span>
+<span>Help &amp; Docs</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-1.5 text-xs text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high rounded-lg transition-colors duration-150" href="#">
+<span class="material-symbols-outlined text-base">support_agent</span>
+<span>Support Desk</span>
+</a>
+</div>
+</aside>
+<!-- Main Content Canvas -->
+<main class="flex-1 bg-surface-dim overflow-y-auto p-8 flex flex-col justify-between">
+<div class="max-w-6xl mx-auto w-full space-y-8">
+<!-- Stage Header & Crisp Hero Text -->
+<div class="space-y-2 border-b border-outline-variant pb-6">
+<div class="inline-flex items-center gap-2 px-2 py-0.5 rounded bg-surface-container-high border border-outline-variant text-[11px] font-semibold text-secondary tracking-wider">
+<span>TEMPLATE LIBRARY</span>
+</div>
+<h1 class="font-headline text-2xl lg:text-3xl font-bold text-on-surface tracking-tight">
+            Start from a kit
+          </h1>
+<p class="font-body text-sm text-on-surface-variant max-w-3xl leading-relaxed">
+            Accelerate setup for Sample Pizza Co. with pre-configured menu structures, pricing defaults, and modifier groups, or create sections manually.
+          </p>
+</div>
+<!-- Starter Kit Cards Bento Grid -->
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+<!-- Card 1: Pizza Kit -->
+<div class="flex flex-col justify-between rounded-lg bg-surface-container border border-outline-variant hover:border-secondary hover:shadow-lg transition-all duration-200 p-5 group">
+<div class="space-y-4">
+<div class="flex items-center justify-between">
+<div class="w-10 h-10 rounded-lg bg-surface-container-high border border-outline-variant flex items-center justify-center text-primary group-hover:bg-primary-container group-hover:text-on-primary-container transition-colors duration-150">
+<span class="material-symbols-outlined text-xl">local_pizza</span>
+</div>
+<span class="px-2 py-0.5 rounded bg-surface-container-highest text-secondary text-[10px] font-medium border border-outline-variant">Core</span>
+</div>
+<div>
+<h3 class="font-headline text-base font-semibold text-on-surface group-hover:text-primary transition-colors">Pizza Kit</h3>
+<p class="text-xs text-on-surface-variant mt-1 leading-normal">
+                  Signature Crusts, Sizes (12", 14", 16"), Sauce &amp; Cheese Modifiers, Specialty Pies.
+                </p>
+</div>
+<!-- Meta Preview Tag -->
+<div class="flex items-center gap-1.5 text-xs font-mono text-tertiary">
+<span class="material-symbols-outlined text-sm">view_timeline</span>
+<span>4 starter sections · 12 items</span>
+</div>
+</div>
+<div class="pt-5 mt-4 border-t border-outline-variant">
+<button class="w-full custom-gradient-btn text-surface-container-lowest font-medium text-xs py-2 px-3 rounded-lg flex items-center justify-center gap-1.5 hover:opacity-95 active:scale-[0.98] transition-all duration-150 shadow-sm font-headline">
+<span>Apply Pizza Kit</span>
+<span class="material-symbols-outlined text-sm">arrow_forward</span>
+</button>
+</div>
+</div>
+<!-- Card 2: Wings Kit -->
+<div class="flex flex-col justify-between rounded-lg bg-surface-container border border-outline-variant hover:border-secondary hover:shadow-lg transition-all duration-200 p-5 group">
+<div class="space-y-4">
+<div class="flex items-center justify-between">
+<div class="w-10 h-10 rounded-lg bg-surface-container-high border border-outline-variant flex items-center justify-center text-primary group-hover:bg-primary-container group-hover:text-on-primary-container transition-colors duration-150">
+<span class="material-symbols-outlined text-xl">lunch_dining</span>
+</div>
+<span class="px-2 py-0.5 rounded bg-surface-container-highest text-on-surface-variant text-[10px] font-medium border border-outline-variant">Add-on</span>
+</div>
+<div>
+<h3 class="font-headline text-base font-semibold text-on-surface group-hover:text-primary transition-colors">Wings Kit</h3>
+<p class="text-xs text-on-surface-variant mt-1 leading-normal">
+                  Bone-in &amp; Boneless, Heat Levels, Dips &amp; Rubs.
+                </p>
+</div>
+<!-- Meta Preview Tag -->
+<div class="flex items-center gap-1.5 text-xs font-mono text-tertiary">
+<span class="material-symbols-outlined text-sm">view_timeline</span>
+<span>2 starter sections · 8 items</span>
+</div>
+</div>
+<div class="pt-5 mt-4 border-t border-outline-variant">
+<button class="w-full bg-surface-container-high hover:bg-secondary-container text-on-surface hover:text-on-secondary-container border border-outline-variant font-medium text-xs py-2 px-3 rounded-lg flex items-center justify-center gap-1.5 transition-all duration-150 font-headline">
+<span>Apply Wings Kit</span>
+<span class="material-symbols-outlined text-sm">add</span>
+</button>
+</div>
+</div>
+<!-- Card 3: Sides Kit -->
+<div class="flex flex-col justify-between rounded-lg bg-surface-container border border-outline-variant hover:border-secondary hover:shadow-lg transition-all duration-200 p-5 group">
+<div class="space-y-4">
+<div class="flex items-center justify-between">
+<div class="w-10 h-10 rounded-lg bg-surface-container-high border border-outline-variant flex items-center justify-center text-primary group-hover:bg-primary-container group-hover:text-on-primary-container transition-colors duration-150">
+<span class="material-symbols-outlined text-xl">fastfood</span>
+</div>
+<span class="px-2 py-0.5 rounded bg-surface-container-highest text-on-surface-variant text-[10px] font-medium border border-outline-variant">Add-on</span>
+</div>
+<div>
+<h3 class="font-headline text-base font-semibold text-on-surface group-hover:text-primary transition-colors">Sides Kit</h3>
+<p class="text-xs text-on-surface-variant mt-1 leading-normal">
+                  Garlic Knots, Cheesy Bread, Salads &amp; Dips.
+                </p>
+</div>
+<!-- Meta Preview Tag -->
+<div class="flex items-center gap-1.5 text-xs font-mono text-tertiary">
+<span class="material-symbols-outlined text-sm">view_timeline</span>
+<span>2 starter sections · 6 items</span>
+</div>
+</div>
+<div class="pt-5 mt-4 border-t border-outline-variant">
+<button class="w-full bg-surface-container-high hover:bg-secondary-container text-on-surface hover:text-on-secondary-container border border-outline-variant font-medium text-xs py-2 px-3 rounded-lg flex items-center justify-center gap-1.5 transition-all duration-150 font-headline">
+<span>Apply Sides Kit</span>
+<span class="material-symbols-outlined text-sm">add</span>
+</button>
+</div>
+</div>
+<!-- Card 4: Drinks Kit -->
+<div class="flex flex-col justify-between rounded-lg bg-surface-container border border-outline-variant hover:border-secondary hover:shadow-lg transition-all duration-200 p-5 group">
+<div class="space-y-4">
+<div class="flex items-center justify-between">
+<div class="w-10 h-10 rounded-lg bg-surface-container-high border border-outline-variant flex items-center justify-center text-primary group-hover:bg-primary-container group-hover:text-on-primary-container transition-colors duration-150">
+<span class="material-symbols-outlined text-xl">local_drink</span>
+</div>
+<span class="px-2 py-0.5 rounded bg-surface-container-highest text-on-surface-variant text-[10px] font-medium border border-outline-variant">Beverage</span>
+</div>
+<div>
+<h3 class="font-headline text-base font-semibold text-on-surface group-hover:text-primary transition-colors">Drinks Kit</h3>
+<p class="text-xs text-on-surface-variant mt-1 leading-normal">
+                  Canned Sodas, Bottled Teas, Sparkling Waters, 2-Liter Bottles.
+                </p>
+</div>
+<!-- Meta Preview Tag -->
+<div class="flex items-center gap-1.5 text-xs font-mono text-tertiary">
+<span class="material-symbols-outlined text-sm">view_timeline</span>
+<span>1 starter section · 6 items</span>
+</div>
+</div>
+<div class="pt-5 mt-4 border-t border-outline-variant">
+<button class="w-full bg-surface-container-high hover:bg-secondary-container text-on-surface hover:text-on-secondary-container border border-outline-variant font-medium text-xs py-2 px-3 rounded-lg flex items-center justify-center gap-1.5 transition-all duration-150 font-headline">
+<span>Apply Drinks Kit</span>
+<span class="material-symbols-outlined text-sm">add</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Alternative Manual Structure Banner -->
+<div class="rounded-lg bg-surface-container-low border border-outline-variant p-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+<div class="flex items-start gap-4">
+<div class="w-10 h-10 rounded-lg bg-surface-container-high border border-outline-variant flex items-center justify-center text-secondary shrink-0 mt-0.5">
+<span class="material-symbols-outlined text-xl">edit_note</span>
+</div>
+<div>
+<h2 class="font-headline text-sm font-semibold text-on-surface">Prefer custom structure? + Add a section manually</h2>
+<p class="font-body text-xs text-on-surface-variant mt-0.5">
+                Configure custom section names, tax categories, and item slots from scratch.
+              </p>
+</div>
+</div>
+<button class="shrink-0 inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-outline text-secondary hover:text-on-surface hover:border-primary hover:bg-surface-container-high text-xs font-semibold transition-all duration-150">
+<span class="material-symbols-outlined text-base">add_box</span>
+<span>+ Add section manually</span>
+</button>
+</div>
+</div>
+<!-- Footer Metadata -->
+<footer class="pt-6 border-t border-outline-variant flex flex-col sm:flex-row items-center justify-between text-xs text-on-surface-variant max-w-6xl mx-auto w-full">
+<div>
+          Sample data: Sample Pizza Co. #1001 · Draft · 0 dishes · Inter 8px styling
+        </div>
+<div class="flex items-center gap-4 mt-2 sm:mt-0">
+<span class="flex items-center gap-1.5">
+<span class="w-1.5 h-1.5 rounded-full bg-secondary"></span>
+            Ops Console Active
+          </span>
+<span>Roam Rush In-House Desk</span>
+</div>
+</footer>
+</main>
+</div>
+</body></html>
