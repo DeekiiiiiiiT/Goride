@@ -1,6 +1,6 @@
 # In-House desk redesign: what's left
 
-**Rev 4 · Done 2026-10-17** · Redesign live (`a81424e3`). Add section form + blank-name guard shipped in this commit; walk-through already passed at desktop and 390px.
+**Rev 4 · Done 2026-10-17** · Redesign live. Add section form + blank-name guard shipped (`8a19425e`) and deployed to `roamrush.app` (admin bundle shows Create section / e.g. Pizzas; old typed Section type prompt gone). Walk-through already passed at desktop and 390px.
 
 **Verified:**
 - Every dish type has its full editor again: choices, sizes, pizza, wings and combo, plus photo upload, archive, section types and Preview as customer.
