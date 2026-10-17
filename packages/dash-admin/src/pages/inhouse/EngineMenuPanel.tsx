@@ -124,9 +124,14 @@ export function EngineMenuPanel({
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [addingSection, setAddingSection] = useState(false);
+  const [newSectionName, setNewSectionName] = useState('');
+  const [newSectionType, setNewSectionType] = useState<ProductType>('standard');
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const skipAutosave = useRef(true);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  /** Last non-blank section name while editing — restore on blur if cleared. */
+  const sectionNameBackup = useRef('');
 
   async function load() {
     setError('');
@@ -198,6 +203,13 @@ export function EngineMenuPanel({
 
   async function publish() {
     if (!snapshot) return;
+    const blankSections = snapshot.sections.filter((s) => !s.archivedAt && !String(s.name || '').trim());
+    if (blankSections.length > 0) {
+      setError('Every section needs a name before you can publish.');
+      const firstBlank = blankSections[0];
+      if (firstBlank) setSectionId(firstBlank.id);
+      return;
+    }
     const summary = draftDiff(publishedBaseline, snapshot);
     if (!window.confirm(`Publish this menu?\n\n${summary}`)) return;
     setSaving(true);
@@ -247,24 +259,34 @@ export function EngineMenuPanel({
     if (sections[0]) setSectionId(sections[0].id);
   }
 
-  function addSection() {
+  function openAddSection() {
+    setNewSectionName('');
+    setNewSectionType('standard');
+    setAddingSection(true);
+  }
+
+  function cancelAddSection() {
+    setAddingSection(false);
+    setNewSectionName('');
+    setNewSectionType('standard');
+  }
+
+  function createSection(event?: { preventDefault?: () => void }) {
+    event?.preventDefault?.();
     if (!snapshot) return;
-    const name = window.prompt('Section name');
-    if (!name?.trim()) return;
-    const typeRaw = window.prompt(
-      `Section type (${SECTION_TYPES.map((t) => t.id).join(', ')})`,
-      'standard',
-    );
-    const sectionType = (SECTION_TYPES.find((t) => t.id === typeRaw?.trim())?.id || 'standard') as ProductType;
+    const name = newSectionName.trim();
+    if (!name) return;
+    const sectionType = (SECTION_TYPES.find((t) => t.id === newSectionType)?.id || 'standard') as ProductType;
     const id = crypto.randomUUID();
     setSnapshot({
       ...snapshot,
       sections: [
         ...snapshot.sections,
-        { id, name: name.trim(), sectionType, sort: snapshot.sections.length },
+        { id, name, sectionType, sort: snapshot.sections.length },
       ],
     });
     setSectionId(id);
+    cancelAddSection();
   }
 
   function patchSection(id: string, patch: Partial<MenuSnapshot['sections'][0]>) {
@@ -412,9 +434,44 @@ export function EngineMenuPanel({
             </p>
           </div>
           <KitStarter kits={kits} onApply={applyKit} />
-          <button type="button" className={IH.secondaryBtn} onClick={addSection}>
-            + Add section manually
-          </button>
+          {addingSection ? (
+            <form className="max-w-md space-y-2 rounded-lg border border-dashed border-slate-600 p-3" onSubmit={createSection}>
+              <label className="block space-y-1 text-[10px] text-slate-500">
+                Section name
+                <input
+                  className={`${IH.input} w-full`}
+                  placeholder="e.g. Pizzas"
+                  value={newSectionName}
+                  onChange={(e) => setNewSectionName(e.target.value)}
+                  autoFocus
+                />
+              </label>
+              <label className="block space-y-1 text-[10px] text-slate-500">
+                Section type
+                <select
+                  className={`${IH.input} w-full text-xs`}
+                  value={newSectionType}
+                  onChange={(e) => setNewSectionType(e.target.value as ProductType)}
+                >
+                  {SECTION_TYPES.map((t) => (
+                    <option key={t.id} value={t.id}>{t.label}</option>
+                  ))}
+                </select>
+              </label>
+              <div className="flex flex-wrap gap-2">
+                <button type="submit" className={IH.primaryBtn} disabled={!newSectionName.trim()}>
+                  Create section
+                </button>
+                <button type="button" className={IH.secondaryBtn} onClick={cancelAddSection}>
+                  Cancel
+                </button>
+              </div>
+            </form>
+          ) : (
+            <button type="button" className={IH.secondaryBtn} onClick={openAddSection}>
+              + Add section manually
+            </button>
+          )}
         </div>
       </div>
     );
@@ -467,11 +524,47 @@ export function EngineMenuPanel({
               <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">
                 Sections <span className="ml-1 font-mono text-[10px] text-amber-400">{sections.length}</span>
               </span>
-              <button type="button" className={`text-xs font-medium ${IH.link}`} onClick={addSection}>
-                + Add
-              </button>
+              {!addingSection ? (
+                <button type="button" className={`text-xs font-medium ${IH.link}`} onClick={openAddSection}>
+                  + Add
+                </button>
+              ) : null}
             </div>
-            <nav className="flex max-h-[60vh] flex-col gap-1 overflow-auto">
+            {addingSection ? (
+              <form className="space-y-2 rounded-lg border border-dashed border-slate-600 p-2" onSubmit={createSection}>
+                <label className="block space-y-1 text-[10px] text-slate-500">
+                  Section name
+                  <input
+                    className={`${IH.input} w-full text-xs`}
+                    placeholder="e.g. Pizzas"
+                    value={newSectionName}
+                    onChange={(e) => setNewSectionName(e.target.value)}
+                    autoFocus
+                  />
+                </label>
+                <label className="block space-y-1 text-[10px] text-slate-500">
+                  Section type
+                  <select
+                    className={`${IH.input} w-full text-xs`}
+                    value={newSectionType}
+                    onChange={(e) => setNewSectionType(e.target.value as ProductType)}
+                  >
+                    {SECTION_TYPES.map((t) => (
+                      <option key={t.id} value={t.id}>{t.label}</option>
+                    ))}
+                  </select>
+                </label>
+                <div className="flex flex-wrap gap-1.5">
+                  <button type="submit" className={IH.primaryBtn} disabled={!newSectionName.trim()}>
+                    Create
+                  </button>
+                  <button type="button" className={IH.secondaryBtn} onClick={cancelAddSection}>
+                    Cancel
+                  </button>
+                </div>
+              </form>
+            ) : null}
+            <nav className="flex max-h-[50vh] flex-col gap-1 overflow-auto">
               {sections.map((sec) => {
                 const count = snapshot.products.filter((p) => p.sectionId === sec.id && !p.archivedAt).length;
                 const active = sec.id === activeSectionId;
@@ -517,8 +610,32 @@ export function EngineMenuPanel({
         <main className="flex min-w-0 flex-1 flex-col overflow-hidden bg-[#0f172a]">
           <div className="flex flex-col gap-3 border-b border-slate-700/60 bg-[#071520]/60 p-4 sm:p-5">
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="flex items-center gap-3">
-                <h1 className="text-lg font-bold tracking-tight text-slate-100">{activeSection?.name || 'Section'}</h1>
+              <div className="flex min-w-0 flex-1 flex-wrap items-center gap-3">
+                {activeSection ? (
+                  <input
+                    className={`${IH.input} max-w-xs min-w-[10rem] flex-1 text-lg font-bold tracking-tight`}
+                    value={activeSection.name}
+                    onFocus={() => {
+                      sectionNameBackup.current = String(activeSection.name || '').trim();
+                    }}
+                    onChange={(e) => patchSection(activeSection.id, { name: e.target.value })}
+                    onBlur={(e) => {
+                      const trimmed = e.target.value.trim();
+                      if (!trimmed) {
+                        patchSection(activeSection.id, {
+                          name: sectionNameBackup.current || 'Untitled section',
+                        });
+                        return;
+                      }
+                      if (trimmed !== e.target.value) {
+                        patchSection(activeSection.id, { name: trimmed });
+                      }
+                    }}
+                    aria-label="Section name"
+                  />
+                ) : (
+                  <h1 className="text-lg font-bold tracking-tight text-slate-100">Section</h1>
+                )}
                 <span className="text-xs text-slate-400">{sectionProducts.length} items</span>
               </div>
               <button type="button" className={IH.primaryBtn} onClick={addDish} disabled={!activeSectionId}>
