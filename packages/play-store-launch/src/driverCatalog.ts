@@ -3,8 +3,8 @@ import type { PlayStoreChecklistItemDef, PlayStoreProductMeta } from './types';
 
 /** Keep in sync with apps/driver/android/version.properties */
 export const DRIVER_ANDROID_BUILD = {
-  versionName: '1.0.7',
-  versionCode: 8,
+  versionName: '1.0.29',
+  versionCode: 30,
 } as const;
 
 export const DRIVER_PLAY_STORE_META: PlayStoreProductMeta = {
@@ -15,7 +15,7 @@ export const DRIVER_PLAY_STORE_META: PlayStoreProductMeta = {
   reviewerEmail: 'deekiiiiiii+roam.driver.review@gmail.com',
   reviewerPassword: 'RoamPlay2026!Driver',
   reviewerSteps:
-    'Open app → Sign in → Email → enter credentials → tap go online.',
+    'Use EMAIL + PASSWORD only (Google sign-in is not shown on Android). Open app → Sign In → enter Email and Password below → Sign In. Allow location when prompted → tap Go online. Do not use Sign in with Google.',
   repoVersionName: DRIVER_ANDROID_BUILD.versionName,
   repoVersionCode: DRIVER_ANDROID_BUILD.versionCode,
   playConsoleUrl: 'https://play.google.com/console',
@@ -32,7 +32,8 @@ export const DRIVER_PLAY_STORE_CATALOG: PlayStoreChecklistItemDef[] = [
     id: 'app_access',
     label: 'App access (reviewer sign-in)',
     group: 'app_content',
-    playConsoleHint: 'Policy → App content → App access → All functionality available → add test credentials',
+    playConsoleHint:
+      'Policy → App content → Sign in details → All or some features require login → paste reviewer email/password from admin Play Store page',
   },
   {
     id: 'ads',

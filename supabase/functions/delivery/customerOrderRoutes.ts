@@ -215,15 +215,21 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
       id?: string;
       menuItemId?: string;
       item_id?: string;
+      productId?: string;
+      engineProductId?: string;
+      menuVersion?: number;
+      selections?: unknown;
+      engineSelections?: unknown;
+      slots?: unknown;
       quantity?: number;
       modifiers?: unknown[];
       pizza?: unknown;
     }>;
 
-    // Server-side prices from menu_items — never trust client unit prices / discount
+    // Server-side prices from menu_items / engine — never trust client unit prices / discount
     const serviceSb = getServiceSupabase();
     const menuItemIds = [...new Set(rawItems.map((item) =>
-      String(item.menuItemId || item.id || item.item_id || ""),
+      String(item.menuItemId || item.id || item.item_id || item.productId || item.engineProductId || ""),
     ).filter(Boolean))];
     if (menuItemIds.length === 0) return c.json({ error: "Invalid menu item ids" }, 400);
 
@@ -238,30 +244,16 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
       .select("id, procurement_mode, in_house_live")
       .eq("id", body.merchantId)
       .maybeSingle();
-    if (String(procurementMerchant?.procurement_mode || "") === "in_house") {
-      const { assertInHouseCheckout } = await import("./inHouse/checkout.ts");
-      const quantities = new Map<string, number>();
-      for (const item of rawItems) {
-        const id = String(item.menuItemId || item.id || item.item_id || "");
-        quantities.set(id, (quantities.get(id) || 0) + Math.max(1, Math.floor(Number(item.quantity) || 1)));
-      }
-      const gate = await assertInHouseCheckout(serviceSb, {
-        merchant: {
-          id: body.merchantId,
-          procurement_mode: procurementMerchant?.procurement_mode,
-          in_house_live: procurementMerchant?.in_house_live,
-        },
-        paymentMethod: String(body.paymentMethod || "wipay"),
-        customerId: String(customer.id),
-        menuRows: menuRows || [],
-        quantities,
-        rawItems,
-      });
-      if (!gate.ok) return c.json({ error: gate.error, code: gate.code }, gate.status);
-    }
+    const isInHouse = String(procurementMerchant?.procurement_mode || "") === "in_house";
     const menuById = new Map((menuRows || []).map((row) => [String(row.id), row]));
     const { pickedOptions, appliedMenuPrice, kitchenModifiers } = await import("./inHouse/pricing.ts");
     const { orderChoiceError } = await import("./menuChoiceLibrary.ts");
+    // Dual-read: prefer published menu-engine snapshot when the cart line carries IDs + menuVersion.
+    // loadCheckoutSnapshot applies location overrides + live menu_items.is_available on top of publish.
+    const { loadCheckoutSnapshot, tryEnginePriceLine } = await import("./inHouse/menuEngineRoutes.ts");
+    const engineSnapshot = await loadCheckoutSnapshot(serviceSb, String(body.merchantId));
+    const { data: storeMarkup } = await serviceSb.from("in_house_stores").select("markup_bps").eq("merchant_id", String(body.merchantId)).maybeSingle();
+    const engineMarkupBps = isInHouse ? Number(storeMarkup?.markup_bps ?? 1500) : 0;
 
     const pricedLines: Array<{
       menuItemId: string;
@@ -271,10 +263,63 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
       modifiers?: Array<{ name: string; priceAdjustment: number }>;
     }> = [];
     const orderItems: Record<string, unknown>[] = [];
+    type GateLine = {
+      lineId: string;
+      restaurantMinor: number;
+      priceCheckedAt?: string | null;
+      available: boolean;
+    };
+    const inHouseGateLines: GateLine[] = [];
 
     for (const item of rawItems) {
-      const menuItemId = String(item.menuItemId || item.id || item.item_id || "");
+      const menuItemId = String(item.menuItemId || item.id || item.item_id || item.productId || item.engineProductId || "");
       const menuRow = menuById.get(menuItemId);
+      const enginePriced = tryEnginePriceLine(engineSnapshot, item as Record<string, unknown>, engineMarkupBps);
+      if (enginePriced) {
+        if (!enginePriced.ok) return c.json({ error: enginePriced.error }, 400);
+        // Sold-out already applied in loadCheckoutSnapshot → archivedAt → priceLine refuse.
+        const quantity = Math.max(1, Math.floor(Number(item.quantity) || 0));
+        if (!quantity) return c.json({ error: "Invalid quantity" }, 400);
+        const productId = enginePriced.ticket.productId;
+        const product = engineSnapshot?.products.find((p) => p.id === productId);
+        const modifiers = enginePriced.ticket.steps.map((step) => ({
+          name: `${step.label}: ${step.value}`,
+          priceAdjustment: 0,
+        }));
+        const unitCustomer = enginePriced.customer / quantity;
+        const unitRestaurant = enginePriced.restaurant / quantity;
+        pricedLines.push({
+          menuItemId: menuItemId || productId,
+          name: enginePriced.ticket.title,
+          unitPrice: unitCustomer,
+          quantity,
+          modifiers,
+        });
+        orderItems.push({
+          id: menuItemId || productId,
+          menuItemId: menuItemId || productId,
+          engineProductId: productId,
+          menuVersion: Number(item.menuVersion),
+          selections: item.selections || item.engineSelections,
+          slots: item.slots,
+          name: enginePriced.ticket.title,
+          price: unitCustomer,
+          marketplace_price: unitCustomer,
+          in_store_price: unitRestaurant,
+          quantity,
+          modifiers,
+          buyerTicket: enginePriced.ticket,
+        });
+        if (isInHouse) {
+          inHouseGateLines.push({
+            lineId: productId,
+            restaurantMinor: Math.round(Number(enginePriced.restaurant) * 100),
+            priceCheckedAt: product?.priceCheckedAt ?? menuRow?.source_price_checked_at ?? null,
+            available: true,
+          });
+        }
+        continue;
+      }
       if (!menuRow || !menuRow.is_available) {
         return c.json({ error: `Unavailable menu item: ${menuItemId}` }, 400);
       }
@@ -288,7 +333,7 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
         (menuRow as { marketplace_price?: number }).marketplace_price ?? menuRow.price,
       );
       const rawInStore = (menuRow as { in_store_price?: number | null }).in_store_price;
-      if (String(procurementMerchant?.procurement_mode || "") === "in_house" && (rawInStore == null || !Number.isFinite(Number(rawInStore)))) {
+      if (isInHouse && (rawInStore == null || !Number.isFinite(Number(rawInStore)))) {
         return c.json({ error: "Unavailable menu item" }, 400);
       }
       const inStorePrice = Number(rawInStore ?? menuRow.price);
@@ -318,6 +363,30 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
         quantity,
         ...(modifiers ? { modifiers } : {}),
       });
+      if (isInHouse) {
+        inHouseGateLines.push({
+          lineId: menuItemId,
+          restaurantMinor: Math.round(Number(applied.restaurant) * 100) * quantity,
+          priceCheckedAt: menuRow.source_price_checked_at ?? null,
+          available: menuRow.is_available !== false,
+        });
+      }
+    }
+
+    // In-House money gate after pricing so engine-only lines get freshness + spend caps.
+    if (isInHouse) {
+      const { assertInHouseCheckout } = await import("./inHouse/checkout.ts");
+      const gate = await assertInHouseCheckout(serviceSb, {
+        merchant: {
+          id: body.merchantId,
+          procurement_mode: procurementMerchant?.procurement_mode,
+          in_house_live: procurementMerchant?.in_house_live,
+        },
+        paymentMethod: String(body.paymentMethod || "wipay"),
+        customerId: String(customer.id),
+        pricedLines: inHouseGateLines,
+      });
+      if (!gate.ok) return c.json({ error: gate.error, code: gate.code }, gate.status);
     }
 
     // Promo: re-validate server-side — never trust client discount amounts

@@ -85,6 +85,9 @@ jobs:
       - name: Test dash-pricing
         run: pnpm --filter @roam/dash-pricing test
 
+      - name: Test menu-engine
+        run: pnpm --filter @roam/menu-engine test
+
       - name: Test dash-customer
         run: pnpm --filter @roam/dash-customer test
 
@@ -212,6 +215,16 @@ jobs:
           supabase/functions/_shared/rushSettings/enterpriseReaders.test.ts
           supabase/functions/delivery/maintenanceMiddleware.test.ts
           supabase/functions/delivery/partnerAcceptDeadline.test.ts
+
+      - name: Deno test In-House checkout gate
+        run: >
+          deno test --allow-env --no-check
+          supabase/functions/delivery/inHouse/checkout.test.ts
+
+      - name: Deno test menu-engine mirror drift
+        run: >
+          deno test --allow-read
+          supabase/functions/_shared/menuEngine/exports.drift.test.ts
 
       - name: Typecheck fleet Rush spine
         env:

@@ -1,8 +1,9 @@
-import { Link, useNavigate, useOutletContext, useParams } from 'react-router-dom';
+import { useNavigate, useOutletContext, useParams } from 'react-router-dom';
 import { listInHouseStores } from '@roam/dash-admin-client';
 import { useEffect, useState } from 'react';
 import type { AdminOutletContext } from '../../../DashAdminPortal';
 import { InHouseMenuEditor } from '../InHouseMenuEditor';
+import { EngineMenuPanel } from '../EngineMenuPanel';
 
 /** Menu builder route under a restaurant home. */
 export function InHouseMenuBuilderPage() {
@@ -24,11 +25,7 @@ export function InHouseMenuBuilderPage() {
 
   return (
     <div className="space-y-3 p-4 text-slate-100">
-      <div className="flex flex-wrap items-center gap-2 text-sm text-slate-400">
-        <Link to={`/in-house/restaurants/${id}`}>← {name}</Link>
-        <span>/</span>
-        <span className="text-slate-200">Menu</span>
-      </div>
+      <EngineMenuPanel token={session.access_token} merchantId={id} markupBps={markupBps} />
       <InHouseMenuEditor
         token={session.access_token}
         merchantId={id}

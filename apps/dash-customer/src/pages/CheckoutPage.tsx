@@ -384,6 +384,15 @@ export default function CheckoutPage({ onNavigate, session }: Props) {
             quantity: item.quantity,
             options: item.options,
             ...(item.pizza ? { pizza: item.pizza } : {}),
+            ...(item.productId
+              ? {
+                  productId: item.productId,
+                  engineProductId: item.productId,
+                  menuVersion: item.menuVersion,
+                  selections: item.selections,
+                  slots: item.slots,
+                }
+              : {}),
           })),
           fulfillmentType: isPickup ? 'pickup' : 'delivery',
           ...(isPickup

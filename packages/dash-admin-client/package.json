@@ -13,6 +13,7 @@
     "@roam/api-client": "workspace:*",
     "@roam/auth-client": "workspace:*",
     "@roam/dash-coverage": "workspace:*",
+    "@roam/menu-engine": "workspace:*",
     "@roam/play-store-launch": "workspace:*",
     "@roam/types": "workspace:*"
   }

@@ -31,6 +31,8 @@
     "@roam/dash-coverage": "workspace:*",
     "@roam/api-client": "workspace:*",
     "@roam/merchant-ops": "workspace:*",
+    "@roam/menu-builder": "workspace:*",
+    "@roam/menu-engine": "workspace:*",
     "@roam/auth-client": "workspace:*",
     "@roam/business-config": "workspace:*",
     "@roam/location": "workspace:*",

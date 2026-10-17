@@ -975,7 +975,7 @@ export function registerInHouseRoutes(app: Hono, deps: { getServiceSupabase: () 
     const ids = (stores || []).map((row) => String(row.merchant_id));
     const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
     const [{ data: merchants }, { data: tasks }, { data: hours }, { data: menuItems }, { count: cardCount }] = await Promise.all([
-      ids.length ? sb.from("merchants").select("id, name, address, phone, lat, lng, logo_url, cover_image_url, market_id, avg_prep_time_mins, cuisine_type, procurement_mode, in_house_live, is_accepting_orders, gct_registered").in("id", ids) : Promise.resolve({ data: [] }),
+      ids.length ? sb.from("merchants").select("id, name, address, phone, lat, lng, logo_url, cover_image_url, market_id, avg_prep_time_mins, cuisine_type, cuisines, menu_brand_id, engine_menu_id, procurement_mode, in_house_live, is_accepting_orders, gct_registered").in("id", ids) : Promise.resolve({ data: [] }),
       ids.length ? sb.from("procurement_tasks").select("merchant_id, expected_cost_minor, created_at").in("merchant_id", ids).gte("created_at", since) : Promise.resolve({ data: [] }),
       ids.length ? sb.from("merchant_hours").select("merchant_id, day_of_week, open_time, close_time, is_closed").in("merchant_id", ids).order("day_of_week") : Promise.resolve({ data: [] }),
       ids.length ? sb.from("menu_items").select("merchant_id, is_available, source_price_checked_at, archived_at").in("merchant_id", ids).eq("is_available", true).is("archived_at", null) : Promise.resolve({ data: [] }),
@@ -1212,6 +1212,12 @@ export function registerInHouseRoutes(app: Hono, deps: { getServiceSupabase: () 
     if ("logoUrl" in body) merchantPatch.logo_url = body.logoUrl ? String(body.logoUrl) : null;
     if ("coverImageUrl" in body) merchantPatch.cover_image_url = body.coverImageUrl ? String(body.coverImageUrl) : null;
     if ("cuisineType" in body) merchantPatch.cuisine_type = body.cuisineType ? String(body.cuisineType) : null;
+    if ("cuisines" in body && Array.isArray(body.cuisines)) {
+      const list = body.cuisines.map((c: unknown) => String(c || "").trim()).filter(Boolean);
+      merchantPatch.cuisines = list;
+      if (list.length && !("cuisineType" in body)) merchantPatch.cuisine_type = list[0];
+    }
+    if ("menuBrandId" in body) merchantPatch.menu_brand_id = body.menuBrandId ? String(body.menuBrandId) : null;
     if ("marketId" in body && body.marketId) merchantPatch.market_id = String(body.marketId);
     if ("lat" in body && body.lat != null && body.lat !== "") merchantPatch.lat = Number(body.lat);
     if ("lng" in body && body.lng != null && body.lng !== "") merchantPatch.lng = Number(body.lng);
@@ -1476,6 +1482,141 @@ export function registerInHouseRoutes(app: Hono, deps: { getServiceSupabase: () 
       updated_at: now,
     }).eq("id", itemId).eq("merchant_id", merchantId);
     if (error) return c.json({ error: error.message }, 500);
+    return c.json({ ok: true });
+  });
+
+  app.get("/admin/in-house/stores/:id/engine-menu", async (c) => {
+    const admin = await requireDesk(c, OPS_ROLES);
+    if (admin instanceof Response) return admin;
+    const sb = deps.getServiceSupabase();
+    const merchantId = c.req.param("id");
+    const { ensureMerchantEngineMenu, listKitsForMerchant } = await import("./menuEngineRoutes.ts");
+    try {
+      const { menuId, snapshot } = await ensureMerchantEngineMenu(sb, merchantId);
+      const kits = await listKitsForMerchant(sb, merchantId);
+      const { data: menu } = await sb.from("menus").select("id, status, version, published_at, draft_snapshot").eq("id", menuId).maybeSingle();
+      const [{ data: brands }, { data: overrides }, { data: merchant }] = await Promise.all([
+        sb.from("menu_brands").select("id, name, evidence_urls").order("name"),
+        sb.from("location_overrides").select("id, target_kind, target_id, price, is_available").eq("merchant_id", merchantId),
+        sb.from("merchants").select("menu_brand_id").eq("id", merchantId).maybeSingle(),
+      ]);
+      return c.json({
+        menuId,
+        menu,
+        snapshot,
+        kits,
+        brands: brands || [],
+        brandId: merchant?.menu_brand_id || null,
+        overrides: (overrides || []).map((row: {
+          id: string;
+          target_kind: string;
+          target_id: string;
+          price?: number | null;
+          is_available?: boolean | null;
+        }) => ({
+          id: row.id,
+          targetKind: row.target_kind,
+          targetId: row.target_id,
+          price: row.price,
+          isAvailable: row.is_available,
+        })),
+      });
+    } catch (error) {
+      return c.json({ error: error instanceof Error ? error.message : "Engine menu failed" }, 500);
+    }
+  });
+
+  app.put("/admin/in-house/stores/:id/engine-menu", async (c) => {
+    const admin = await requireDesk(c, OPS_ROLES);
+    if (admin instanceof Response) return admin;
+    const sb = deps.getServiceSupabase();
+    const merchantId = c.req.param("id");
+    const body = await c.req.json().catch(() => ({}));
+    const { ensureMerchantEngineMenu, saveMenuDraft } = await import("./menuEngineRoutes.ts");
+    const { parseMenuSnapshot } = await import("../../../../packages/menu-engine/src/index.ts");
+    try {
+      const { menuId } = await ensureMerchantEngineMenu(sb, merchantId);
+      const snapshot = parseMenuSnapshot(body.snapshot);
+      if (!snapshot) return c.json({ error: "Invalid menu snapshot" }, 400);
+      await saveMenuDraft(sb, menuId, snapshot);
+      if ("brandId" in body) {
+        await sb.from("merchants").update({
+          menu_brand_id: body.brandId || null,
+        }).eq("id", merchantId);
+      }
+      return c.json({ ok: true, menuId });
+    } catch (error) {
+      return c.json({ error: error instanceof Error ? error.message : "Save draft failed" }, 500);
+    }
+  });
+
+  app.post("/admin/in-house/stores/:id/engine-menu/publish", async (c) => {
+    const admin = await requireDesk(c, OPS_ROLES);
+    if (admin instanceof Response) return admin;
+    const sb = deps.getServiceSupabase();
+    const merchantId = c.req.param("id");
+    const body = await c.req.json().catch(() => ({}));
+    const { ensureMerchantEngineMenu, publishMenuForMerchant } = await import("./menuEngineRoutes.ts");
+    const { parseMenuSnapshot } = await import("../../../../packages/menu-engine/src/index.ts");
+    try {
+      const { menuId, snapshot: draft } = await ensureMerchantEngineMenu(sb, merchantId);
+      const fromBody = parseMenuSnapshot(body.snapshot);
+      const snapshot = fromBody || draft;
+      if (!snapshot) return c.json({ error: "Invalid menu snapshot" }, 400);
+      const published = await publishMenuForMerchant(sb, merchantId, menuId, snapshot, admin.email || admin.id);
+      return c.json({ ok: true, ...published });
+    } catch (error) {
+      return c.json({ error: error instanceof Error ? error.message : "Publish failed" }, 500);
+    }
+  });
+
+  app.get("/admin/in-house/menu-brands", async (c) => {
+    const admin = await requireDesk(c, OPS_ROLES);
+    if (admin instanceof Response) return admin;
+    const sb = deps.getServiceSupabase();
+    const { data, error } = await sb.from("menu_brands").select("id, name, evidence_urls, created_at").order("name");
+    if (error) return c.json({ error: error.message }, 500);
+    return c.json({ brands: data || [] });
+  });
+
+  app.post("/admin/in-house/menu-brands", async (c) => {
+    const admin = await requireDesk(c, OPS_ROLES);
+    if (admin instanceof Response) return admin;
+    const sb = deps.getServiceSupabase();
+    const body = await c.req.json().catch(() => ({}));
+    const name = String(body.name || "").trim();
+    if (!name) return c.json({ error: "name required" }, 400);
+    const { data, error } = await sb.from("menu_brands").insert({
+      name,
+      evidence_urls: Array.isArray(body.evidenceUrls) ? body.evidenceUrls : [],
+    }).select("id, name, evidence_urls").single();
+    if (error) return c.json({ error: error.message }, 500);
+    return c.json({ brand: data });
+  });
+
+  app.put("/admin/in-house/stores/:id/location-overrides", async (c) => {
+    const admin = await requireDesk(c, OPS_ROLES);
+    if (admin instanceof Response) return admin;
+    const sb = deps.getServiceSupabase();
+    const merchantId = c.req.param("id");
+    const body = await c.req.json().catch(() => ({}));
+    const rows = Array.isArray(body.overrides) ? body.overrides : [];
+    await sb.from("location_overrides").delete().eq("merchant_id", merchantId);
+    if (rows.length) {
+      const { error } = await sb.from("location_overrides").insert(rows.map((row: {
+        targetKind?: string;
+        targetId?: string;
+        price?: number | null;
+        isAvailable?: boolean | null;
+      }) => ({
+        merchant_id: merchantId,
+        target_kind: String(row.targetKind || "product"),
+        target_id: String(row.targetId || ""),
+        price: row.price ?? null,
+        is_available: row.isAvailable ?? null,
+      })));
+      if (error) return c.json({ error: error.message }, 500);
+    }
     return c.json({ ok: true });
   });
 

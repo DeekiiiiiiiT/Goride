@@ -176,11 +176,17 @@ export function InHouseRestaurantsPage({ embedded = false }: { embedded?: boolea
           const status = restaurantStatus(store);
           const action = nextAction(store);
           const demand = store.demand30d;
+          const id = String(store.merchant_id);
+          // Live/ready rows use Open — keep Edit menu one click away (same as Add menu for drafts).
+          const showEditMenu =
+            (store.dishCount || 0) > 0 &&
+            action.label !== 'Add menu' &&
+            action.label !== 'Confirm prices';
           return (
-            <article key={String(store.merchant_id)} className="flex flex-wrap items-center justify-between gap-3 rounded border border-slate-800 p-3">
+            <article key={id} className="flex flex-wrap items-center justify-between gap-3 rounded border border-slate-800 p-3">
               <div>
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="font-medium">{store.merchant?.name || String(store.merchant_id)}</span>
+                  <span className="font-medium">{store.merchant?.name || id}</span>
                   <StatusBadge value={status} />
                   {(store.duplicateNameCount || 0) > 1 ? (
                     <span className="rounded bg-amber-950 px-2 py-0.5 text-xs text-amber-100">Possible duplicate ({store.duplicateNameCount} with this name)</span>
@@ -196,7 +202,14 @@ export function InHouseRestaurantsPage({ embedded = false }: { embedded?: boolea
                   <div className="text-sm text-slate-500">{store.goLiveBlockers[0]}</div>
                 ) : null}
               </div>
-              <Link to={action.to} className="rounded bg-slate-800 px-3 py-1 text-sm">{action.label}</Link>
+              <div className="flex flex-wrap items-center gap-2">
+                {showEditMenu ? (
+                  <Link to={`/in-house/restaurants/${id}/menu`} className="rounded bg-slate-800 px-3 py-1 text-sm">
+                    Edit menu
+                  </Link>
+                ) : null}
+                <Link to={action.to} className="rounded bg-slate-800 px-3 py-1 text-sm">{action.label}</Link>
+              </div>
             </article>
           );
         })}

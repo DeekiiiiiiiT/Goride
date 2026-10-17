@@ -1,4 +1,5 @@
 import type { PizzaMenu, PizzaRecipe } from '@roam/merchant-ops/pizzaMenu';
+import type { MenuSnapshot, ProductType } from '@roam/menu-engine';
 
 export type MenuModifierOption = {
   id: string;
@@ -16,6 +17,15 @@ export type MenuModifierGroup = {
   /** replace: the chosen option is the dish price. add: the option is added on top. */
   priceMode?: 'add' | 'replace';
   options: MenuModifierOption[];
+};
+
+/** When set, customer uses engine builders and checkout sends OrderLine fields. */
+export type MenuItemEngine = {
+  productId: string;
+  productType: ProductType;
+  menuVersion: number;
+  snapshot: MenuSnapshot;
+  markupBps: number;
 };
 
 export type MenuItem = {
@@ -36,6 +46,8 @@ export type MenuItem = {
     recipe: PizzaRecipe;
     markupBps: number;
   };
+  /** Published engine product for this dish (same id as menu_items when converted). */
+  engine?: MenuItemEngine;
 };
 
 export type RestaurantProfile = {
@@ -59,6 +71,9 @@ export type RestaurantProfile = {
   /** Server-computed: merchant is open and accepting orders right now. */
   isAcceptingOrdersNow?: boolean;
   acceptingOrdersError?: string;
+  /** Full published snapshot when the store runs on the menu engine. */
+  engineSnapshot?: MenuSnapshot | null;
+  engineMenuVersion?: number;
 };
 
 export const ISLAND_GRILL: RestaurantProfile = {

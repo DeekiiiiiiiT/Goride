@@ -2,8 +2,11 @@ import { ReactNode } from 'react';
 import { MaterialIcon } from '../../signup/components/MaterialIcon';
 import { MenuCategory, MenuItem } from '../../types/menu';
 import SortableList from './SortableList';
+import { PartnerEnginePanel } from './PartnerEnginePanel';
 
 interface MenuOverviewViewProps {
+  merchantId: string;
+  cuisineHints?: string[];
   categories: MenuCategory[];
   itemsByCategory: Record<string, MenuItem[]>;
   onAddCategory: () => void;
@@ -19,6 +22,8 @@ function getSoldOutCount(items: MenuItem[]) {
 }
 
 export default function MenuOverviewView({
+  merchantId,
+  cuisineHints = [],
   categories,
   itemsByCategory,
   onAddCategory,
@@ -125,6 +130,10 @@ export default function MenuOverviewView({
         <MaterialIcon name="add" className="mr-inset-xs text-[18px]" />
         Add Category
       </button>
+
+      <div className="mb-inset-lg">
+        <PartnerEnginePanel merchantId={merchantId} cuisineHints={cuisineHints} />
+      </div>
     </div>
   );
 }

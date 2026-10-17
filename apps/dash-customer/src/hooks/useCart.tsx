@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 
 import type { PizzaPick } from '@roam/merchant-ops/pizzaMenu';
+import type { OrderSelection } from '@roam/menu-engine';
 
 interface ModifierSelection {
   id?: string;
@@ -13,6 +14,16 @@ interface ItemOption {
   selections: ModifierSelection[];
 }
 
+export type EngineCartSlot = {
+  slotId: string;
+  line: {
+    productId: string;
+    quantity: number;
+    menuVersion: number;
+    selections: OrderSelection[];
+  };
+};
+
 export interface CartItem {
   id: string;
   itemId: string;
@@ -22,6 +33,11 @@ export interface CartItem {
   quantity: number;
   options?: ItemOption[];
   pizza?: PizzaPick;
+  /** Published menu-engine line (M2). */
+  productId?: string;
+  menuVersion?: number;
+  selections?: OrderSelection[];
+  slots?: EngineCartSlot[];
   imageUrl?: string;
 }
 
@@ -46,13 +62,27 @@ const CART_STORAGE_KEY = 'roam-dash-cart';
 
 const generateCartItemId = () => Math.random().toString(36).substring(2, 11);
 
-const getOptionsHash = (options?: ItemOption[], pizza?: PizzaPick) => {
-  const pizzaKey = pizza ? JSON.stringify(pizza) : '';
-  if ((!options || options.length === 0) && !pizzaKey) return '';
-  return JSON.stringify(options?.map(o => ({
-    name: o.name,
-    selections: o.selections.map(s => s.name).sort(),
-  })) || []) + pizzaKey;
+const getOptionsHash = (item: Pick<CartItem, 'options' | 'pizza' | 'productId' | 'selections' | 'slots' | 'menuVersion'>) => {
+  const pizzaKey = item.pizza ? JSON.stringify(item.pizza) : '';
+  const engineKey = item.productId
+    ? JSON.stringify({
+        productId: item.productId,
+        menuVersion: item.menuVersion,
+        selections: item.selections,
+        slots: item.slots,
+      })
+    : '';
+  if ((!item.options || item.options.length === 0) && !pizzaKey && !engineKey) return '';
+  return (
+    JSON.stringify(
+      item.options?.map((o) => ({
+        name: o.name,
+        selections: o.selections.map((s) => s.name).sort(),
+      })) || [],
+    ) +
+    pizzaKey +
+    engineKey
+  );
 };
 
 type StoredCart = {
@@ -118,17 +148,15 @@ export function CartProvider({ children }: { children: ReactNode }) {
       return 'added';
     }
 
-    setItems(prev => {
-      const newOptionsHash = getOptionsHash(item.options, item.pizza);
-      const existing = prev.find(i =>
-        i.itemId === item.itemId && getOptionsHash(i.options, i.pizza) === newOptionsHash
+    setItems((prev) => {
+      const newOptionsHash = getOptionsHash(item);
+      const existing = prev.find(
+        (i) => i.itemId === item.itemId && getOptionsHash(i) === newOptionsHash,
       );
 
       if (existing) {
-        return prev.map(i =>
-          i.id === existing.id
-            ? { ...i, quantity: i.quantity + item.quantity }
-            : i
+        return prev.map((i) =>
+          i.id === existing.id ? { ...i, quantity: i.quantity + item.quantity } : i,
         );
       }
       return [...prev, { ...item, id: generateCartItemId() }];
@@ -139,8 +167,8 @@ export function CartProvider({ children }: { children: ReactNode }) {
   };
 
   const removeItem = (cartItemId: string) => {
-    setItems(prev => {
-      const newItems = prev.filter(i => i.id !== cartItemId);
+    setItems((prev) => {
+      const newItems = prev.filter((i) => i.id !== cartItemId);
       if (newItems.length === 0) {
         setMerchantId(null);
         setMerchantName(null);
@@ -154,18 +182,16 @@ export function CartProvider({ children }: { children: ReactNode }) {
       removeItem(cartItemId);
       return;
     }
-    setItems(prev =>
-      prev.map(i => (i.id === cartItemId ? { ...i, quantity } : i))
-    );
+    setItems((prev) => prev.map((i) => (i.id === cartItemId ? { ...i, quantity } : i)));
   };
 
   const getCartItem = (cartItemId: string): CartItem | undefined => {
-    return items.find(i => i.id === cartItemId);
+    return items.find((i) => i.id === cartItemId);
   };
 
   const replaceItem = (cartItemId: string, item: Omit<CartItem, 'id'>) => {
-    setItems(prev => {
-      const index = prev.findIndex(i => i.id === cartItemId);
+    setItems((prev) => {
+      const index = prev.findIndex((i) => i.id === cartItemId);
       if (index < 0) return prev;
       const next = [...prev];
       next[index] = { ...item, id: cartItemId };

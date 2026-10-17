@@ -5,9 +5,25 @@ import { QuantityStepper } from '../ui/QuantityStepper';
 import type { MenuItem, MenuModifierGroup } from '../../lib/restaurantContent';
 import { formatJmd } from '../../lib/restaurantContent';
 import { pizzaRestaurantPrice, type PizzaPick } from '@roam/merchant-ops/pizzaMenu';
+import { ComboOrderBuilder, EnginePizzaBuilder, WingsOrderBuilder } from '@roam/menu-builder';
+import { priceLine, type OrderLine, type OrderSelection } from '@roam/menu-engine';
 import { PizzaOrder, startingPizzaPick } from './PizzaOrder';
+import type { EngineCartSlot } from '../../hooks/useCart';
 
 type Selections = Record<string, string | string[]>;
+
+export type ItemDetailAddPayload = {
+  quantity: number;
+  selections: Selections;
+  instructions: string;
+  unitPrice: number;
+  optionsLabel: string;
+  pizza?: PizzaPick;
+  productId?: string;
+  menuVersion?: number;
+  engineSelections?: OrderSelection[];
+  slots?: EngineCartSlot[];
+};
 
 type Props = {
   item: MenuItem | null;
@@ -18,14 +34,7 @@ type Props = {
   initialInstructions?: string;
   submitLabel?: string;
   addDisabled?: boolean;
-  onAdd: (payload: {
-    quantity: number;
-    selections: Selections;
-    instructions: string;
-    unitPrice: number;
-    optionsLabel: string;
-    pizza?: PizzaPick;
-  }) => void;
+  onAdd: (payload: ItemDetailAddPayload) => void;
 };
 
 function getDefaultSelections(item: MenuItem): Selections {
@@ -48,11 +57,11 @@ function buildOptionsLabel(item: MenuItem, selections: Selections): string {
     if (!value) continue;
     if (Array.isArray(value)) {
       for (const id of value) {
-        const opt = group.options.find(o => o.id === id);
+        const opt = group.options.find((o) => o.id === id);
         if (opt) parts.push(opt.label);
       }
     } else {
-      const opt = group.options.find(o => o.id === value);
+      const opt = group.options.find((o) => o.id === value);
       if (opt) parts.push(opt.label);
     }
   }
@@ -102,6 +111,12 @@ function pizzaLabel(item: MenuItem, pick: PizzaPick): string {
   return [size, crust, pick.cheese === 'extra' ? 'Extra cheese' : 'Cheese', sauce, ...toppings].join(', ');
 }
 
+function engineLabel(line: { selections?: OrderSelection[]; slots?: EngineCartSlot[] }, snapshotLabel: string): string {
+  if (line.slots?.length) return `${snapshotLabel} · ${line.slots.length} items`;
+  const n = line.selections?.length || 0;
+  return n ? `${snapshotLabel} · ${n} choices` : snapshotLabel;
+}
+
 export function ItemDetailSheet({
   item,
   open,
@@ -120,6 +135,12 @@ export function ItemDetailSheet({
   const [pizzaPick, setPizzaPick] = useState<PizzaPick | null>(null);
   const [pizzaError, setPizzaError] = useState('');
   const [shake, setShake] = useState(false);
+  const [engineSelections, setEngineSelections] = useState<OrderSelection[]>([]);
+  const [engineLine, setEngineLine] = useState<OrderLine | null>(null);
+  const [engineError, setEngineError] = useState('');
+
+  const engine = item?.engine;
+  const useEngine = Boolean(engine);
 
   useEffect(() => {
     if (item && open) {
@@ -127,6 +148,9 @@ export function ItemDetailSheet({
       setSelections(getDefaultSelections(item));
       setPizzaPick(item.pizza ? startingPizzaPick(item.pizza.menu, item.pizza.recipe) : null);
       setPizzaError('');
+      setEngineSelections([]);
+      setEngineLine(null);
+      setEngineError('');
       setInstructions(initialInstructions);
       setErrorGroupId(null);
     }
@@ -134,23 +158,37 @@ export function ItemDetailSheet({
 
   const actionLabel = submitLabel ?? (mode === 'edit' ? 'Update Item' : 'Add to Cart');
 
-  const pizzaTotal = item?.pizza && pizzaPick ? pizzaRestaurantPrice(item.pizza.menu, pizzaPick) : null;
+  const enginePriced = useMemo(() => {
+    if (!engine) return null;
+    const line: OrderLine = engineLine || {
+      productId: engine.productId,
+      quantity: 1,
+      menuVersion: engine.menuVersion,
+      selections: engineSelections,
+    };
+    const markup = (r: number) =>
+      engine.markupBps ? Math.ceil((r * (1 + engine.markupBps / 10000)) / 10) * 10 : r;
+    return priceLine(engine.snapshot, line, markup);
+  }, [engine, engineSelections, engineLine]);
+
+  const pizzaTotal = !useEngine && item?.pizza && pizzaPick ? pizzaRestaurantPrice(item.pizza.menu, pizzaPick) : null;
   const unitPrice = useMemo(() => {
+    if (useEngine && enginePriced?.ok) return enginePriced.customer;
     if (item?.pizza && pizzaTotal && pizzaTotal.ok) return pizzaTotal.restaurant;
     return item ? calcUnitPrice(item, selections) : 0;
-  }, [item, selections, pizzaTotal]);
+  }, [item, selections, pizzaTotal, useEngine, enginePriced]);
 
   if (!open || !item) return null;
 
   const handleRadio = (groupId: string, optionId: string) => {
-    setSelections(prev => ({ ...prev, [groupId]: optionId }));
+    setSelections((prev) => ({ ...prev, [groupId]: optionId }));
     if (errorGroupId === groupId) setErrorGroupId(null);
   };
 
   const handleCheckbox = (groupId: string, optionId: string, checked: boolean) => {
-    setSelections(prev => {
+    setSelections((prev) => {
       const current = (prev[groupId] as string[]) ?? [];
-      if (!checked) return { ...prev, [groupId]: current.filter(id => id !== optionId) };
+      if (!checked) return { ...prev, [groupId]: current.filter((id) => id !== optionId) };
       const group = item?.modifiers.find((entry) => entry.id === groupId);
       const max = group?.maxSelections ?? 0;
       const capped = max > 0 && max < 99;
@@ -160,6 +198,52 @@ export function ItemDetailSheet({
   };
 
   const handleAdd = () => {
+    if (useEngine && engine) {
+      if (engine.productType === 'combo') {
+        if (!engineLine) {
+          setEngineError('Finish each part of the deal');
+          return;
+        }
+        onAdd({
+          quantity,
+          selections,
+          instructions,
+          unitPrice,
+          optionsLabel: engineLabel(engineLine, item.name),
+          productId: engine.productId,
+          menuVersion: engine.menuVersion,
+          engineSelections: engineLine.selections,
+          slots: engineLine.slots?.map((s) => ({
+            slotId: s.slotId,
+            line: {
+              productId: s.line.productId,
+              quantity: s.line.quantity,
+              menuVersion: s.line.menuVersion,
+              selections: s.line.selections,
+            },
+          })),
+        });
+        onClose();
+        return;
+      }
+      if (!enginePriced || !enginePriced.ok) {
+        setEngineError(enginePriced && !enginePriced.ok ? enginePriced.error : 'Complete your choices');
+        return;
+      }
+      onAdd({
+        quantity,
+        selections,
+        instructions,
+        unitPrice,
+        optionsLabel: engineLabel({ selections: engineSelections }, item.name),
+        productId: engine.productId,
+        menuVersion: engine.menuVersion,
+        engineSelections,
+      });
+      onClose();
+      return;
+    }
+
     if (item.pizza) {
       if (!pizzaPick || !pizzaTotal || !pizzaTotal.ok) {
         setPizzaError(pizzaTotal && !pizzaTotal.ok ? pizzaTotal.error : 'Choose a size, crust, and sauce');
@@ -212,35 +296,102 @@ export function ItemDetailSheet({
           <div className="px-margin-mobile pt-inset-lg pb-inset-md">
             <div className="flex justify-between items-start mb-2">
               <h1 className="font-headline-lg-mobile text-headline-lg-mobile text-on-surface pr-8">{item.name}</h1>
-              <span className="font-headline-md text-headline-md text-primary shrink-0">{formatJmd(item.pizza ? unitPrice : item.price)}</span>
+              <span className="font-headline-md text-headline-md text-primary shrink-0">
+                {formatJmd(item.pizza || useEngine ? unitPrice : item.price)}
+              </span>
             </div>
             <p className="font-body-md text-body-md text-on-surface-variant">{item.description}</p>
             {item.prepMins ? <p className="mt-2 font-body-md text-body-md text-on-surface">{item.prepMins} min to prepare</p> : null}
           </div>
 
-          {item.pizza && pizzaPick ? (
+          {useEngine && engine ? (
+            <>
+              {engineError ? <p className="px-margin-mobile text-error">{engineError}</p> : null}
+              {engine.productType === 'pizza' ? (
+                <EnginePizzaBuilder
+                  snapshot={engine.snapshot}
+                  productId={engine.productId}
+                  selections={engineSelections}
+                  onChange={(next) => {
+                    setEngineSelections(next);
+                    setEngineError('');
+                  }}
+                  money={formatJmd}
+                  markupBps={engine.markupBps}
+                />
+              ) : null}
+              {engine.productType === 'wings' ? (
+                <WingsOrderBuilder
+                  snapshot={engine.snapshot}
+                  productId={engine.productId}
+                  selections={engineSelections}
+                  onChange={(next) => {
+                    setEngineSelections(next);
+                    setEngineError('');
+                  }}
+                  money={formatJmd}
+                />
+              ) : null}
+              {engine.productType === 'combo' ? (
+                <ComboOrderBuilder
+                  snapshot={engine.snapshot}
+                  productId={engine.productId}
+                  money={formatJmd}
+                  onReady={(line) => {
+                    setEngineLine(line);
+                    setEngineError('');
+                  }}
+                />
+              ) : null}
+              {engine.productType === 'standard' || engine.productType === 'sized' || engine.productType === 'build_your_own' ? (
+                item.modifiers.map((group, idx) => (
+                  <ModifierSection
+                    key={group.id}
+                    group={group}
+                    selections={selections}
+                    hasError={errorGroupId === group.id}
+                    shake={shake && errorGroupId === group.id}
+                    onRadio={handleRadio}
+                    onCheckbox={handleCheckbox}
+                    showDivider={idx < item.modifiers.length - 1}
+                  />
+                ))
+              ) : null}
+            </>
+          ) : item.pizza && pizzaPick ? (
             <>
               {pizzaError ? <p className="px-margin-mobile text-error">{pizzaError}</p> : null}
-              <PizzaOrder menu={item.pizza.menu} money={formatJmd} pick={pizzaPick} onChange={(pick) => { setPizzaPick(pick); setPizzaError(''); }} />
+              {/* Legacy pizza — no half/sauce-amount/extended cheese (not sent to cart). */}
+              <PizzaOrder
+                menu={item.pizza.menu}
+                money={formatJmd}
+                pick={pizzaPick}
+                onChange={(pick) => {
+                  setPizzaPick(pick);
+                  setPizzaError('');
+                }}
+              />
             </>
-          ) : item.modifiers.map((group, idx) => (
-            <ModifierSection
-              key={group.id}
-              group={group}
-              selections={selections}
-              hasError={errorGroupId === group.id}
-              shake={shake && errorGroupId === group.id}
-              onRadio={handleRadio}
-              onCheckbox={handleCheckbox}
-              showDivider={idx < item.modifiers.length - 1}
-            />
-          ))}
+          ) : (
+            item.modifiers.map((group, idx) => (
+              <ModifierSection
+                key={group.id}
+                group={group}
+                selections={selections}
+                hasError={errorGroupId === group.id}
+                shake={shake && errorGroupId === group.id}
+                onRadio={handleRadio}
+                onCheckbox={handleCheckbox}
+                showDivider={idx < item.modifiers.length - 1}
+              />
+            ))
+          )}
 
           <div className="px-margin-mobile py-inset-md mb-8">
             <h2 className="font-headline-sm text-headline-sm text-on-surface mb-4">Special Instructions</h2>
             <textarea
               value={instructions}
-              onChange={e => setInstructions(e.target.value)}
+              onChange={(e) => setInstructions(e.target.value)}
               className="w-full bg-[#F3F4F6] border-none rounded-lg p-4 font-body-md text-body-md text-on-surface placeholder:text-outline focus:ring-2 focus:ring-primary focus:bg-surface transition-all resize-none h-24"
               placeholder="Any allergies or requests?"
             />
@@ -255,12 +406,10 @@ export function ItemDetailSheet({
               disabled={addDisabled}
               onClick={handleAdd}
               className={`flex-1 rounded-lg py-4 px-6 flex justify-between items-center font-label-md text-label-md transition-transform duration-150 active:scale-95 shadow-sm disabled:cursor-not-allowed disabled:opacity-40 disabled:active:scale-100 ${
-                errorGroupId
-                  ? 'bg-error text-on-error'
-                  : 'bg-primary text-on-primary hover:shadow-md'
+                errorGroupId ? 'bg-error text-on-error' : 'bg-primary text-on-primary hover:shadow-md'
               }`}
             >
-              <span>{errorGroupId ? actionLabel : actionLabel}</span>
+              <span>{actionLabel}</span>
               <span>{formatJmd(unitPrice * quantity)}</span>
             </button>
           </div>
@@ -300,7 +449,11 @@ function ModifierSection({
               : 'text-on-surface-variant'
           }`}
         >
-          {group.required ? 'Required' : group.maxSelections && group.maxSelections > 1 && group.maxSelections < 99 ? `Up to ${group.maxSelections}` : 'Optional'}
+          {group.required
+            ? 'Required'
+            : group.maxSelections && group.maxSelections > 1 && group.maxSelections < 99
+              ? `Up to ${group.maxSelections}`
+              : 'Optional'}
         </span>
       </div>
 
@@ -313,7 +466,7 @@ function ModifierSection({
 
       {group.type === 'chips' ? (
         <div className="flex flex-wrap gap-2">
-          {group.options.map(opt => {
+          {group.options.map((opt) => {
             const selected = value === opt.id;
             const isExtraHot = opt.id === 'extra_hot';
             return (
@@ -339,11 +492,9 @@ function ModifierSection({
         </div>
       ) : (
         <div className="space-y-4">
-          {group.options.map(opt => {
+          {group.options.map((opt) => {
             const isRadio = group.type === 'radio';
-            const checked = isRadio
-              ? value === opt.id
-              : ((value as string[]) ?? []).includes(opt.id);
+            const checked = isRadio ? value === opt.id : ((value as string[]) ?? []).includes(opt.id);
 
             return (
               <label
@@ -357,7 +508,9 @@ function ModifierSection({
                     {opt.label}
                   </span>
                   {opt.price > 0 && (
-                    <span className="font-body-sm text-body-sm text-on-surface-variant">{group.priceMode === 'replace' ? formatJmd(opt.price) : `+${formatJmd(opt.price)}`}</span>
+                    <span className="font-body-sm text-body-sm text-on-surface-variant">
+                      {group.priceMode === 'replace' ? formatJmd(opt.price) : `+${formatJmd(opt.price)}`}
+                    </span>
                   )}
                 </div>
                 {isRadio ? (
@@ -372,7 +525,7 @@ function ModifierSection({
                   <input
                     type="checkbox"
                     checked={checked}
-                    onChange={e => onCheckbox(group.id, opt.id, e.target.checked)}
+                    onChange={(e) => onCheckbox(group.id, opt.id, e.target.checked)}
                     className="custom-checkbox"
                   />
                 )}
@@ -387,7 +540,9 @@ function ModifierSection({
   if (hasError && group.required) {
     return (
       <>
-        <div className={`mx-margin-mobile rounded-xl border-2 border-error bg-error-container/20 relative overflow-hidden ${shake ? 'animate-shake' : ''}`}>
+        <div
+          className={`mx-margin-mobile rounded-xl border-2 border-error bg-error-container/20 relative overflow-hidden ${shake ? 'animate-shake' : ''}`}
+        >
           <div className="absolute inset-0 bg-gradient-to-r from-error/5 to-transparent pointer-events-none" />
           <div className="relative z-10">{content}</div>
         </div>

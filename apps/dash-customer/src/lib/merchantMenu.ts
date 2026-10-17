@@ -1,4 +1,5 @@
 import { API_ENDPOINTS, supabaseAnonFunctionHeaders } from '@roam/api-client';
+import { parseMenuSnapshot, type MenuSnapshot } from '@roam/menu-engine';
 import { allowMocks } from './mocksGate';
 import {
   getRestaurantProfile,
@@ -57,14 +58,21 @@ function mapModifiers(raw: unknown): MenuModifierGroup[] {
   });
 }
 
-function mapMenuItem(row: Record<string, unknown>, menus: Map<string, ReturnType<typeof parsePizzaMenu>>, markupBps: number): MenuItem {
+function mapMenuItem(
+  row: Record<string, unknown>,
+  menus: Map<string, ReturnType<typeof parsePizzaMenu>>,
+  markupBps: number,
+  engine: MenuSnapshot | null,
+): MenuItem {
   const marketplacePrice = row.marketplace_price;
   const price =
     marketplacePrice != null && Number.isFinite(Number(marketplacePrice))
       ? Number(marketplacePrice)
       : Number(row.price ?? 0);
+  const id = String(row.id ?? '');
+  const product = engine?.products.find((p) => p.id === id && !p.archivedAt);
   return {
-    id: String(row.id ?? ''),
+    id,
     name: String(row.name ?? 'Item'),
     description: String(row.description ?? ''),
     price,
@@ -74,6 +82,15 @@ function mapMenuItem(row: Record<string, unknown>, menus: Map<string, ReturnType
     prepMins: Number(row.prep_time_mins) > 0 ? Number(row.prep_time_mins) : undefined,
     modifiers: mapModifiers(row.options),
     pizza: pizzaFor(row, menus, markupBps),
+    engine: product && engine
+      ? {
+          productId: product.id,
+          productType: product.type,
+          menuVersion: engine.version,
+          snapshot: engine,
+          markupBps,
+        }
+      : undefined,
   };
 }
 
@@ -125,18 +142,20 @@ export function mapMerchantMenuResponse(data: {
   is_accepting_orders_now?: boolean;
   accepting_orders_error?: string;
   markup_bps?: number;
+  engine_menu?: { version?: number; snapshot?: unknown } | null;
 }): RestaurantProfile {
   const merchant = data.merchant ?? {};
   const prep = Number(merchant.avg_prep_time_mins ?? 25);
   const fee = Number(merchant.delivery_fee ?? 0);
   const markupBps = data.markup_bps == null ? 0 : Number(data.markup_bps);
+  const engine = parseMenuSnapshot(data.engine_menu?.snapshot) || null;
   const menus = new Map((data.categories ?? []).map((cat) => [String(cat.id ?? ''), parsePizzaMenu(cat.pizza_menu)]));
   const categories = (data.categories ?? []).map((cat) => ({
     id: String(cat.id ?? ''),
     label: String(cat.name ?? 'Menu'),
   }));
 
-  const items = (data.items ?? []).map((row) => mapMenuItem(row, menus, markupBps));
+  const items = (data.items ?? []).map((row) => mapMenuItem(row, menus, markupBps, engine));
   const dishTimes = items.map((item) => item.prepMins).filter((minutes): minutes is number => minutes != null && minutes > 0);
   const fastest = dishTimes.length ? Math.min(...dishTimes) : prep;
   const slowest = dishTimes.length ? Math.max(...dishTimes) : prep + 15;
@@ -176,6 +195,8 @@ export function mapMerchantMenuResponse(data: {
     acceptingOrdersError: data.accepting_orders_error
       ? String(data.accepting_orders_error)
       : undefined,
+    engineSnapshot: engine,
+    engineMenuVersion: engine?.version,
   };
 }
 
@@ -193,6 +214,8 @@ export async function fetchMerchantMenu(id: string): Promise<RestaurantProfile> 
       hours?: unknown;
       is_accepting_orders_now?: boolean;
       accepting_orders_error?: string;
+      engine_menu?: { version?: number; snapshot?: unknown } | null;
+      markup_bps?: number;
     };
     if (!data.merchant) throw new Error('Merchant not found');
     return mapMerchantMenuResponse(data);

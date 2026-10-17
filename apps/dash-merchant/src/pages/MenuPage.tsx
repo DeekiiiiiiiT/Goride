@@ -440,6 +440,8 @@ export default function MenuPage({ merchant, onNavigate, onOpenMobileNav, setupB
             </div>
           )}
         <MenuOverviewView
+          merchantId={merchant.id}
+          cuisineHints={merchant.cuisine_type ? [merchant.cuisine_type] : []}
           categories={categories}
           itemsByCategory={itemsByCategory}
           onAddCategory={openAddCategory}

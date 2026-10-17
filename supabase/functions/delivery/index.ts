@@ -456,6 +456,21 @@ app.get("/merchants", async (c) => {
       .maybeSingle();
     const allowsPickup = settingsRow == null ? true : settingsRow.allows_pickup !== false;
 
+    // Published engine snapshot for chain builders (pizza half/sauce/cheese, wings, combos).
+    let engine_menu: { version: number; snapshot: unknown } | null = null;
+    let markup_bps = 0;
+    try {
+      const { data: storeRow } = await supabase.from("in_house_stores").select("markup_bps").eq("merchant_id", merchantId).maybeSingle();
+      if (storeRow) markup_bps = Number(storeRow.markup_bps ?? 1500);
+      const { loadCheckoutSnapshot } = await import("./inHouse/menuEngineRoutes.ts");
+      const snap = await loadCheckoutSnapshot(supabase, merchantId);
+      if (snap && snap.version > 0 && Array.isArray(snap.products) && snap.products.length > 0) {
+        engine_menu = { version: snap.version, snapshot: snap };
+      }
+    } catch {
+      engine_menu = null;
+    }
+
     return c.json({
       merchant: { ...customerMerchant, allows_pickup: allowsPickup },
       categories: responseCategories,
@@ -464,6 +479,8 @@ app.get("/merchants", async (c) => {
       platform_fee_rate: feeResolved.rate,
       is_accepting_orders_now: accepting,
       accepting_orders_error: accepting ? undefined : (acceptingNow.ok ? "This store is not accepting orders right now" : acceptingNow.error),
+      engine_menu,
+      markup_bps,
     });
   });
 
@@ -1047,6 +1064,74 @@ app.delete("/merchants/:merchantId/categories/:categoryId", async (c) => {
 
   if (error) return c.json({ error: error.message }, 500);
   return c.json({ success: true });
+});
+
+// Partner engine menu (same draft/publish model as desk admin)
+app.get("/merchants/:merchantId/engine-menu", async (c) => {
+  const authHeader = c.req.header("Authorization");
+  if (!authHeader) return c.json({ error: "Unauthorized" }, 401);
+  const { merchantId } = c.req.param();
+  const access = await requireMerchantForId(authHeader, merchantId, "menu");
+  if (!access.ok) return c.json({ error: access.message }, access.status);
+  const serviceSb = getServiceSupabase();
+  try {
+    const { ensureMerchantEngineMenu, listKitsForMerchant } = await import("./inHouse/menuEngineRoutes.ts");
+    const { menuId, snapshot } = await ensureMerchantEngineMenu(serviceSb, merchantId);
+    const kits = await listKitsForMerchant(serviceSb, merchantId);
+    const { data: menu } = await serviceSb.from("menus").select("id, status, version, published_at").eq("id", menuId).maybeSingle();
+    return c.json({ menuId, menu, snapshot, kits });
+  } catch (error) {
+    return c.json({ error: error instanceof Error ? error.message : "Engine menu failed" }, 500);
+  }
+});
+
+app.put("/merchants/:merchantId/engine-menu", async (c) => {
+  const authHeader = c.req.header("Authorization");
+  if (!authHeader) return c.json({ error: "Unauthorized" }, 401);
+  const { merchantId } = c.req.param();
+  const access = await requireMerchantForId(authHeader, merchantId, "menu");
+  if (!access.ok) return c.json({ error: access.message }, access.status);
+  const body = await c.req.json().catch(() => ({}));
+  const serviceSb = getServiceSupabase();
+  try {
+    const { ensureMerchantEngineMenu, saveMenuDraft } = await import("./inHouse/menuEngineRoutes.ts");
+    const { parseMenuSnapshot } = await import("../../../packages/menu-engine/src/index.ts");
+    const { menuId } = await ensureMerchantEngineMenu(serviceSb, merchantId);
+    const snapshot = parseMenuSnapshot(body.snapshot);
+    if (!snapshot) return c.json({ error: "Invalid menu snapshot" }, 400);
+    await saveMenuDraft(serviceSb, menuId, snapshot);
+    return c.json({ ok: true, menuId });
+  } catch (error) {
+    return c.json({ error: error instanceof Error ? error.message : "Save draft failed" }, 500);
+  }
+});
+
+app.post("/merchants/:merchantId/engine-menu/publish", async (c) => {
+  const authHeader = c.req.header("Authorization");
+  if (!authHeader) return c.json({ error: "Unauthorized" }, 401);
+  const { merchantId } = c.req.param();
+  const access = await requireMerchantForId(authHeader, merchantId, "menu");
+  if (!access.ok) return c.json({ error: access.message }, access.status);
+  const body = await c.req.json().catch(() => ({}));
+  const serviceSb = getServiceSupabase();
+  try {
+    const { ensureMerchantEngineMenu, publishMenuForMerchant } = await import("./inHouse/menuEngineRoutes.ts");
+    const { parseMenuSnapshot } = await import("../../../packages/menu-engine/src/index.ts");
+    const { menuId, snapshot: draft } = await ensureMerchantEngineMenu(serviceSb, merchantId);
+    const fromBody = parseMenuSnapshot(body.snapshot);
+    const snapshot = fromBody || draft;
+    if (!snapshot) return c.json({ error: "Invalid menu snapshot" }, 400);
+    const published = await publishMenuForMerchant(
+      serviceSb,
+      merchantId,
+      menuId,
+      snapshot,
+      String(access.merchant.owner_email || access.merchant.id || "merchant"),
+    );
+    return c.json({ ok: true, ...published });
+  } catch (error) {
+    return c.json({ error: error instanceof Error ? error.message : "Publish failed" }, 500);
+  }
 });
 
 // Add menu item

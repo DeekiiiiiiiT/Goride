@@ -94,11 +94,19 @@ export function InHouseWorkspacePage() {
   const percentCap = Math.floor((expected * tolerance) / 10000);
   const approved = Boolean(detail?.task.customer_price_approved_at);
   const over = expected > 0 && actualMinor > 0 && actualMinor > expected && extra > Math.min(percentCap, cap) && !approved;
-  const itemSteps = useMemo(() => (detail?.checklist || []).filter((step) => step.id.startsWith('item-')), [detail]);
-  const itemsTicked = itemSteps.length === 0 || itemSteps.every((step) => ticks[step.id]);
+  const itemSteps = useMemo(() => (detail?.checklist || []).filter((step) => step.id.startsWith('item-') && !step.id.includes('-step-')), [detail]);
+  const leafTicks = useMemo(() => {
+    const leaves: Array<{ id: string }> = [];
+    for (const step of itemSteps) {
+      if (step.children?.length) leaves.push(...step.children);
+      else leaves.push(step);
+    }
+    return leaves;
+  }, [itemSteps]);
+  const itemsTicked = leafTicks.length === 0 || leafTicks.every((step) => ticks[step.id]);
   const selectedCard = detail?.cards.find((card) => card.id === cardId);
   const stillNeeded: string[] = [];
-  if (!itemsTicked) stillNeeded.push(`tick ${itemSteps.filter((step) => !ticks[step.id]).length} item${itemSteps.filter((step) => !ticks[step.id]).length === 1 ? '' : 's'}`);
+  if (!itemsTicked) stillNeeded.push(`tick ${leafTicks.filter((step) => !ticks[step.id]).length} item step${leafTicks.filter((step) => !ticks[step.id]).length === 1 ? '' : 's'}`);
   if (!externalOrderRef.trim()) stillNeeded.push('external order number');
   if (!(actualMinor > 0)) stillNeeded.push('total charged');
   if (!cardId) stillNeeded.push('card');
@@ -208,11 +216,20 @@ export function InHouseWorkspacePage() {
           <p>Order type: carry-out</p>
           <p>Pickup name: {String(detail.task.pickup_code)} <button type="button" className="ml-2 rounded bg-slate-800 px-2 py-0.5 text-sm" onClick={() => void copy(String(detail.task.pickup_code))}>Copy</button></p>
           {itemSteps.map((step) => (
-            <label key={step.id} className="flex items-center gap-2">
-              <input type="checkbox" checked={Boolean(ticks[step.id])} onChange={(event) => setTicks((current) => ({ ...current, [step.id]: event.target.checked }))} />
-              <span>{step.label}</span>
-              <button type="button" className="rounded bg-slate-800 px-2 py-0.5 text-sm" onClick={() => void copy(step.copyText)}>Copy</button>
-            </label>
+            <div key={step.id} className="space-y-2 rounded border border-slate-800 p-3">
+              <label className="flex items-center gap-2">
+                <input type="checkbox" checked={Boolean(ticks[step.id])} onChange={(event) => setTicks((current) => ({ ...current, [step.id]: event.target.checked }))} />
+                <span className="font-medium">{step.label}</span>
+                <button type="button" className="rounded bg-slate-800 px-2 py-0.5 text-sm" onClick={() => void copy(step.copyText)}>Copy all</button>
+              </label>
+              {(step.children || []).map((child) => (
+                <label key={child.id} className="ml-6 flex items-center gap-2 text-sm text-slate-300">
+                  <input type="checkbox" checked={Boolean(ticks[child.id])} onChange={(event) => setTicks((current) => ({ ...current, [child.id]: event.target.checked }))} />
+                  <span>{child.label}</span>
+                  <button type="button" className="rounded bg-slate-800 px-2 py-0.5 text-xs" onClick={() => void copy(child.copyText)}>Copy</button>
+                </label>
+              ))}
+            </div>
           ))}
           <p>Expected cost {money(expected)}</p>
           <p>Customer paid {money(Math.round(Number(detail.order?.total || 0) * 100))}</p>

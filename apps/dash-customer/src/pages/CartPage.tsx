@@ -500,6 +500,15 @@ export default function CartPage({ onNavigate, session }: Props) {
             quantity: data.quantity,
             imageUrl: editingCartItem.imageUrl,
             options,
+            ...(data.pizza ? { pizza: data.pizza } : {}),
+            ...(data.productId
+              ? {
+                  productId: data.productId,
+                  menuVersion: data.menuVersion,
+                  selections: data.engineSelections,
+                  slots: data.slots,
+                }
+              : {}),
           });
           setEditingCartItemId(null);
           toast.success('Item updated');

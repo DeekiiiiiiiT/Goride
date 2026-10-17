@@ -59,6 +59,7 @@ export function InHouseRestaurantHomePage() {
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [cuisineType, setCuisineType] = useState('');
+  const [cuisines, setCuisines] = useState<string[]>([]);
   const [address, setAddress] = useState('');
   const [lat, setLat] = useState('');
   const [lng, setLng] = useState('');
@@ -103,6 +104,8 @@ export function InHouseRestaurantHomePage() {
       setName(String(merchant.name || ''));
       setPhone(String(merchant.phone || ''));
       setCuisineType(String(merchant.cuisine_type || ''));
+      const multi = Array.isArray(merchant.cuisines) ? merchant.cuisines.map(String).filter(Boolean) : [];
+      setCuisines(multi.length ? multi : (merchant.cuisine_type ? [String(merchant.cuisine_type)] : []));
       setAddress(String(merchant.address || ''));
       setLat(merchant.lat == null ? '' : String(merchant.lat));
       setLng(merchant.lng == null ? '' : String(merchant.lng));
@@ -270,7 +273,7 @@ export function InHouseRestaurantHomePage() {
           {step === 'basics' ? (
             <form className="grid gap-3 md:grid-cols-2" onSubmit={(event) => {
               event.preventDefault();
-              void save({ name, phone, cuisineType });
+              void save({ name, phone, cuisineType: cuisines[0] || cuisineType, cuisines });
             }}>
               <label className="text-sm">Restaurant name
                 <input className={field} value={name} onChange={(event) => setName(event.target.value)} required />
@@ -279,12 +282,48 @@ export function InHouseRestaurantHomePage() {
               <label className="text-sm">Phone
                 <input className={field} value={phone} onChange={(event) => setPhone(event.target.value)} placeholder="e.g. 876-555-0123" />
               </label>
-              <label className="text-sm md:col-span-2">Cuisine
-                <select className={field} value={cuisineType} onChange={(event) => setCuisineType(event.target.value)}>
-                  <option value="">Choose cuisine</option>
-                  {CUISINE_OPTIONS.map((cuisine) => <option key={cuisine} value={cuisine}>{cuisine}</option>)}
-                </select>
-              </label>
+              <fieldset className="text-sm md:col-span-2">
+                <legend className="mb-1">Cuisines</legend>
+                <p className="mb-2 text-xs text-slate-500">Pick all that apply. The first selected is primary for search and the store card.</p>
+                <div className="flex flex-wrap gap-2">
+                  {CUISINE_OPTIONS.map((cuisine) => {
+                    const on = cuisines.includes(cuisine);
+                    const primary = cuisines[0] === cuisine;
+                    return (
+                      <button
+                        key={cuisine}
+                        type="button"
+                        className={`rounded-full border px-3 py-1 text-xs ${on ? 'border-amber-500 bg-amber-500/20 text-amber-100' : 'border-slate-700 text-slate-400'}`}
+                        onClick={() => {
+                          setCuisines((current) => {
+                            if (current.includes(cuisine)) return current.filter((c) => c !== cuisine);
+                            return [...current, cuisine];
+                          });
+                          setCuisineType((current) => current || cuisine);
+                        }}
+                      >
+                        {cuisine}{primary ? ' · primary' : ''}
+                      </button>
+                    );
+                  })}
+                </div>
+                {cuisines.length > 1 ? (
+                  <label className="mt-2 block text-xs text-slate-500">
+                    Primary cuisine
+                    <select
+                      className={field}
+                      value={cuisines[0] || ''}
+                      onChange={(event) => {
+                        const primary = event.target.value;
+                        setCuisines((current) => [primary, ...current.filter((c) => c !== primary)]);
+                        setCuisineType(primary);
+                      }}
+                    >
+                      {cuisines.map((c) => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                  </label>
+                ) : null}
+              </fieldset>
               {isAdmin ? <button disabled={saving} className="rounded-xl bg-amber-500 px-3 py-2 text-slate-950 md:col-span-2 disabled:opacity-40" type="submit">{saving ? 'Saving…' : 'Save basics'}</button> : null}
             </form>
           ) : null}

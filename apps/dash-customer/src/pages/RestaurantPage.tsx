@@ -118,27 +118,35 @@ export default function RestaurantPage({ merchantId, itemId, onNavigate }: Props
     unitPrice: number;
     optionsLabel: string;
     pizza?: import('@roam/merchant-ops/pizzaMenu').PizzaPick;
+    productId?: string;
+    menuVersion?: number;
+    engineSelections?: import('@roam/menu-engine').OrderSelection[];
+    slots?: import('@/hooks/useCart').EngineCartSlot[];
   }) => {
-    void data.optionsLabel;
     if (!selectedItem || !restaurant) return;
 
-    const options = data.pizza
-      ? [{ name: 'Pizza', selections: [{ name: data.optionsLabel, priceAdjustment: 0 }] }]
+    const options = data.productId || data.pizza
+      ? [
+          { name: data.productId ? 'Customizations' : 'Pizza', selections: [{ name: data.optionsLabel, priceAdjustment: 0 }] },
+          ...(data.instructions
+            ? [{ name: 'Instructions', selections: [{ name: data.instructions, priceAdjustment: 0 }] }]
+            : []),
+        ]
       : [
-      ...selectedItem.modifiers.flatMap((group) => {
-        const value = data.selections[group.id];
-        const ids = Array.isArray(value) ? value : value ? [value] : [];
-        const selections = ids.flatMap((id) => {
-          const option = group.options.find((entry) => entry.id === id);
-          if (!option) return [];
-          return [{ id: option.id, name: option.label, priceAdjustment: option.price }];
-        });
-        return selections.length ? [{ name: group.title, selections }] : [];
-      }),
-      ...(data.instructions
-        ? [{ name: 'Instructions', selections: [{ name: data.instructions, priceAdjustment: 0 }] }]
-        : []),
-    ];
+          ...selectedItem.modifiers.flatMap((group) => {
+            const value = data.selections[group.id];
+            const ids = Array.isArray(value) ? value : value ? [value] : [];
+            const selections = ids.flatMap((id) => {
+              const option = group.options.find((entry) => entry.id === id);
+              if (!option) return [];
+              return [{ id: option.id, name: option.label, priceAdjustment: option.price }];
+            });
+            return selections.length ? [{ name: group.title, selections }] : [];
+          }),
+          ...(data.instructions
+            ? [{ name: 'Instructions', selections: [{ name: data.instructions, priceAdjustment: 0 }] }]
+            : []),
+        ];
 
     tryAddToCart(
       {
@@ -150,6 +158,14 @@ export default function RestaurantPage({ merchantId, itemId, onNavigate }: Props
         imageUrl: selectedItem.image,
         options,
         ...(data.pizza ? { pizza: data.pizza } : {}),
+        ...(data.productId
+          ? {
+              productId: data.productId,
+              menuVersion: data.menuVersion,
+              selections: data.engineSelections,
+              slots: data.slots,
+            }
+          : {}),
       },
       selectedItem.name,
     );

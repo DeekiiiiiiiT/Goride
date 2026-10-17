@@ -142,6 +142,7 @@
     "cap:command:android": "pnpm --filter @roam/rush-command cap:open:android",
     "cap:command:ios": "pnpm --filter @roam/rush-command cap:open:ios",
     "icons:dash-android": "node scripts/generate-dash-android-icons.mjs",
+    "icons:driver": "node scripts/apply-driver-brand-icons.mjs",
     "cap:fleet:sync": "pnpm --filter @roam/fleet cap:sync",
     "cap:fleet:release": "pnpm --filter @roam/fleet cap:release",
     "cap:fleet:aab": "pnpm --filter @roam/fleet cap:aab",

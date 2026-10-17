@@ -8,6 +8,7 @@ import { DriverPhoneAuthWizard } from './DriverPhoneAuthWizard';
 import { DriverEmailSignupForm, GoogleSignupButton } from './DriverEmailSignupForm';
 import { DriverEmailConfirmScreen } from './DriverEmailConfirmScreen';
 import { DriverSplashScreen } from '../layout/DriverSplashScreen';
+import { shouldShowNativeGoogleAuth } from '../../utils/openNativeOAuthUrl';
 
 type AuthView = 'welcome' | 'login' | 'signup';
 
@@ -87,13 +88,18 @@ export function DriverLoginPage() {
           ? 'Create your account'
           : 'Become a Driver';
 
+  const showGoogle = shouldShowNativeGoogleAuth();
   const panelSubtext =
     view === 'login'
       ? ENABLE_PHONE_AUTH && loginMethod === 'phone'
         ? 'Enter the code sent to your phone.'
         : ENABLE_PHONE_AUTH
-          ? 'Sign in with Google, email, or phone.'
-          : 'Sign in with Google or email.'
+          ? showGoogle
+            ? 'Sign in with Google, email, or phone.'
+            : 'Sign in with email or phone.'
+          : showGoogle
+            ? 'Sign in with Google or email.'
+            : 'Sign in with your email and password.'
       : signupSubView === 'confirm-email'
         ? 'Check your inbox for a confirmation link.'
         : null;
@@ -157,22 +163,26 @@ export function DriverLoginPage() {
           {view === 'signup' && signupSubView === 'main' && (
             <div className="driver-splash__auth-form">
               <GoogleSignupButton onError={msg => setError(msg || null)} />
-              <LegalPolicyLinks
-                variant="sentence"
-                order="terms-first"
-                className="driver-splash__terms"
-                beforePrivacy="By continuing with Google, you agree to our "
-                privacyClassName="underline underline-offset-2"
-                termsClassName="underline underline-offset-2"
-              />
-              .
+              {showGoogle && (
+                <>
+                  <LegalPolicyLinks
+                    variant="sentence"
+                    order="terms-first"
+                    className="driver-splash__terms"
+                    beforePrivacy="By continuing with Google, you agree to our "
+                    privacyClassName="underline underline-offset-2"
+                    termsClassName="underline underline-offset-2"
+                  />
+                  .
+                </>
+              )}
               <button
                 type="button"
                 onClick={() => {
                   setError(null);
                   setSignupSubView('email');
                 }}
-                className="driver-splash__btn-secondary"
+                className={showGoogle ? 'driver-splash__btn-secondary' : 'driver-splash__btn-primary'}
               >
                 Continue with email
               </button>
@@ -197,11 +207,13 @@ export function DriverLoginPage() {
           {view === 'login' && loginMethod === 'email' && (
             <div className="driver-splash__auth-form">
               <GoogleSignupButton variant="login" onError={msg => setError(msg || null)} />
-              <div className="driver-splash__or-row">
-                <div className="driver-splash__or-line" aria-hidden />
-                <span className="driver-splash__or-text">or email</span>
-                <div className="driver-splash__or-line" aria-hidden />
-              </div>
+              {showGoogle && (
+                <div className="driver-splash__or-row">
+                  <div className="driver-splash__or-line" aria-hidden />
+                  <span className="driver-splash__or-text">or email</span>
+                  <div className="driver-splash__or-line" aria-hidden />
+                </div>
+              )}
               <form onSubmit={e => void handleEmailLogin(e)} className="driver-splash__auth-form">
                 <div className="driver-splash__field">
                   <label htmlFor="driver-email">Email</label>

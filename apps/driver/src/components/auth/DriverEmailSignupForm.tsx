@@ -3,8 +3,12 @@ import { Loader2, Mail, Lock, Eye, EyeOff } from 'lucide-react';
 import { LegalPolicyAcceptanceLabel } from '@roam/ui';
 import { GOOGLE_OAUTH_EMAIL_ONLY_SCOPES } from '@roam/auth-client';
 import { supabase } from '../../utils/supabase/client';
+import { Capacitor } from '@capacitor/core';
 import { getDriverAuthRedirectUrl } from '../../utils/driverAuthRedirect';
-import { isNativeCapacitorPlatform } from '@roam/types';
+import {
+  openNativeOAuthUrl,
+  shouldShowNativeGoogleAuth,
+} from '../../utils/openNativeOAuthUrl';
 import { DRIVER_OAUTH_INTENT_KEY, DRIVER_OAUTH_INTENT_VALUE } from '../../utils/driverAuthSignup';
 
 interface DriverEmailSignupFormProps {
@@ -215,13 +219,18 @@ export function GoogleSignupButton({
   const [loading, setLoading] = useState(false);
   const label = variant === 'login' ? 'Sign in with Google' : 'Continue with Google';
 
+  // Play rejected: in-app Google OAuth → accounts.google.com DNS failure. Email is Android path.
+  if (!shouldShowNativeGoogleAuth()) {
+    return null;
+  }
+
   const onClick = async () => {
     onError('');
     setLoading(true);
     try {
       sessionStorage.setItem(DRIVER_OAUTH_INTENT_KEY, DRIVER_OAUTH_INTENT_VALUE);
       const redirectTo = getDriverAuthRedirectUrl();
-      const native = isNativeCapacitorPlatform();
+      const native = Capacitor.isNativePlatform();
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
@@ -233,8 +242,7 @@ export function GoogleSignupButton({
       });
       if (error) throw error;
       if (native && data?.url) {
-        const { Browser } = await import('@capacitor/browser');
-        await Browser.open({ url: data.url });
+        await openNativeOAuthUrl(data.url);
       }
     } catch (err: unknown) {
       sessionStorage.removeItem(DRIVER_OAUTH_INTENT_KEY);

@@ -20,12 +20,31 @@ Use **roamdriver.co/admin → Play Store** to track checklist progress and AAB u
 | Reviewer email | `deekiiiiiii+roam.driver.review@gmail.com` |
 | Reviewer password | `RoamPlay2026!Driver` |
 | Repo version | `apps/driver/android/version.properties` |
+| Android target SDK | 36 |
+
+## Play Console — Sign in details (required)
+
+**Policy → App content → Sign in details** → features require login → paste:
+
+```
+Email: deekiiiiiii+roam.driver.review@gmail.com
+Password: RoamPlay2026!Driver
+
+Instructions:
+Use EMAIL + PASSWORD only (Google sign-in is not shown on the Android app).
+Open app → Sign In → enter Email and Password → Sign In.
+Allow location when prompted → tap Go online.
+Do not use Sign in with Google.
+```
+
+Then **Publishing overview → Send for review**.
 
 ## QA
 
-1. Install from Play closed testing.
-2. Sign in with reviewer credentials → go online (location disclosure).
-3. New signups: email link must return via `co.roamenterprise.driver://login`.
+1. Install from Play (internal/closed or production candidate).
+2. Sign in with reviewer email/password → go online (location disclosure).
+3. Confirm Android login screen has **no** Google button.
+4. New web/iOS signups: email link must return via `co.roamenterprise.driver://login`.
 
 ## Data safety (admin CSV sync)
 

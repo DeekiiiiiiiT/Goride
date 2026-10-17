@@ -1,21 +1,46 @@
-import { FIRST_ORDER_CAP_MINOR, optionExtras, pickedOptions, priceIsFresh } from "./pricing.ts";
+import { FIRST_ORDER_CAP_MINOR, priceIsFresh } from "./pricing.ts";
 import { inHouseAudienceAllows, inHouseStoreIsVisible, loadInHouseStore } from "./visibility.ts";
 
 // deno-lint-ignore no-explicit-any
 type Sb = { from: (table: string) => any };
 
-type MenuRow = {
-  id: string;
-  in_store_price?: number | null;
-  source_price_checked_at?: string | null;
-  is_available?: boolean;
-  options?: unknown;
+/** One already-priced cart line for the In-House money gate (legacy or engine). */
+export type InHousePricedLine = {
+  lineId: string;
+  /** Restaurant cost for the full line (qty included), in cents. */
+  restaurantMinor: number;
+  priceCheckedAt?: string | null;
+  available: boolean;
 };
 
 const CASH = "Cash on delivery is not available yet. Please pay with card via WiPay.";
 const UNAVAILABLE = "Unavailable menu item";
 const CLOSED = "This store is not accepting orders right now";
 const OVER_LIMIT = "This order is over the store limit";
+
+type GateOk = { ok: true; expectedCostMinor: number };
+type GateErr = { ok: false; status: number; error: string; code: string };
+
+/** Pure: sold-out / 14-day freshness / restaurant cost sum for engine + legacy priced lines. */
+export function evaluateInHousePricedLines(
+  lines: InHousePricedLine[],
+  now = Date.now(),
+): GateOk | GateErr {
+  let expected = 0;
+  for (const line of lines) {
+    if (!line.available) {
+      return { ok: false, status: 400, error: UNAVAILABLE, code: "unavailable_menu_item" };
+    }
+    if (!Number.isFinite(line.restaurantMinor) || line.restaurantMinor < 0) {
+      return { ok: false, status: 400, error: UNAVAILABLE, code: "unavailable_menu_item" };
+    }
+    if (!priceIsFresh(line.priceCheckedAt, now)) {
+      return { ok: false, status: 409, error: UNAVAILABLE, code: "unavailable_menu_item" };
+    }
+    expected += Math.round(line.restaurantMinor);
+  }
+  return { ok: true, expectedCostMinor: expected };
+}
 
 /** Refuse an In-House checkout that would spend Roam's money before the rules are met. */
 export async function assertInHouseCheckout(
@@ -24,11 +49,20 @@ export async function assertInHouseCheckout(
     merchant: { id: string; procurement_mode?: string | null; in_house_live?: boolean | null };
     paymentMethod: string;
     customerId: string;
-    menuRows: MenuRow[];
-    quantities: Map<string, number>;
+    /** Priced lines (engine + legacy). Prefer this over menuRows. */
+    pricedLines?: InHousePricedLine[];
+    /** @deprecated legacy path — use pricedLines after pricing */
+    menuRows?: Array<{
+      id: string;
+      in_store_price?: number | null;
+      source_price_checked_at?: string | null;
+      is_available?: boolean;
+      options?: unknown;
+    }>;
+    quantities?: Map<string, number>;
     rawItems?: unknown[];
   },
-): Promise<{ ok: true; expectedCostMinor: number } | { ok: false; status: number; error: string; code: string }> {
+): Promise<GateOk | GateErr> {
   if (String(input.merchant.procurement_mode || "partner") !== "in_house") {
     return { ok: true, expectedCostMinor: 0 };
   }
@@ -44,23 +78,33 @@ export async function assertInHouseCheckout(
     return { ok: false, status: 409, error: CLOSED, code: "not_accepting" };
   }
   const store = await loadInHouseStore(sb, input.merchant.id);
+
   let expected = 0;
-  for (const row of input.menuRows) {
-    if (row.in_store_price == null || !Number.isFinite(Number(row.in_store_price))) {
-      return { ok: false, status: 400, error: UNAVAILABLE, code: "unavailable_menu_item" };
-    }
-    if (!priceIsFresh(row.source_price_checked_at)) {
-      return { ok: false, status: 409, error: UNAVAILABLE, code: "unavailable_menu_item" };
-    }
-    const qty = input.quantities.get(String(row.id)) || 0;
-    expected += Math.round(Number(row.in_store_price) * 100) * qty;
-    for (const item of input.rawItems || []) {
-      const raw = item as { menuItemId?: string; id?: string; item_id?: string; quantity?: number };
-      if (String(raw.menuItemId || raw.id || raw.item_id || "") !== String(row.id)) continue;
-      const lineQty = Math.max(1, Math.floor(Number(raw.quantity) || 1));
-      expected += Math.round(optionExtras(row.options, pickedOptions(item)).restaurant * 100) * lineQty;
+  if (input.pricedLines && input.pricedLines.length > 0) {
+    const priced = evaluateInHousePricedLines(input.pricedLines);
+    if (!priced.ok) return priced;
+    expected = priced.expectedCostMinor;
+  } else {
+    // Legacy fallback for callers that still pass menuRows only.
+    const { optionExtras, pickedOptions } = await import("./pricing.ts");
+    for (const row of input.menuRows || []) {
+      if (row.in_store_price == null || !Number.isFinite(Number(row.in_store_price))) {
+        return { ok: false, status: 400, error: UNAVAILABLE, code: "unavailable_menu_item" };
+      }
+      if (!priceIsFresh(row.source_price_checked_at)) {
+        return { ok: false, status: 409, error: UNAVAILABLE, code: "unavailable_menu_item" };
+      }
+      const qty = input.quantities?.get(String(row.id)) || 0;
+      expected += Math.round(Number(row.in_store_price) * 100) * qty;
+      for (const item of input.rawItems || []) {
+        const raw = item as { menuItemId?: string; id?: string; item_id?: string; quantity?: number };
+        if (String(raw.menuItemId || raw.id || raw.item_id || "") !== String(row.id)) continue;
+        const lineQty = Math.max(1, Math.floor(Number(raw.quantity) || 1));
+        expected += Math.round(optionExtras(row.options, pickedOptions(item)).restaurant * 100) * lineQty;
+      }
     }
   }
+
   if (store?.max_order_minor != null && expected > Number(store.max_order_minor)) {
     return { ok: false, status: 400, error: OVER_LIMIT, code: "over_store_limit" };
   }

@@ -53,8 +53,8 @@ First-time Play setup also needs: privacy URL, Data safety, store listing, conte
 
 ## App icon & splash
 
-- Default Capacitor launcher icons are in `android/app/src/main/res/mipmap-*`
-- Replace with your **512×512** Play icon (use Android Studio **Image Asset**)
+- Master Play icon: `public/images/brand/roam-driver-icon-master.png` (must match Play Console store listing)
+- Regenerate Android + iOS launchers: `node scripts/apply-driver-brand-icons.mjs` (repo root)
 - Splash background is `#006d43` in `capacitor.config.ts`
 
 ## Location (Play Store)

@@ -48,13 +48,20 @@ export function touchInHouseTask(token: string, id: string) {
   return dashAdminFetch<{ ok: boolean }>(token, `/in-house/tasks/${id}/touch`, { method: 'POST', body: '{}' });
 }
 
+export type InHouseChecklistStep = {
+  id: string;
+  label: string;
+  copyText?: string;
+  children?: InHouseChecklistStep[];
+};
+
 export type InHouseTaskDetail = {
   task: Record<string, unknown>;
   order: Record<string, unknown> | null;
   store: Record<string, unknown> | null;
   merchant: { id?: string; name?: string; phone?: string; address?: string } | null;
   cards: Array<{ id: string; label: string; last4: string; daily_limit_minor: number }>;
-  checklist: Array<{ id: string; label: string; copyText?: string }>;
+  checklist: InHouseChecklistStep[];
   cart: Array<{ name: string; quantity: number; sku: string | null; options: string[] }>;
 };
 
@@ -188,6 +195,59 @@ export function listInHouseMenu(token: string, merchantId: string) {
     items: Array<Record<string, unknown>>;
     categories: Array<{ id: string; name: string; choice_list_ids?: string[]; pizza_menu?: unknown; section_kind?: string; sort_order?: number }>;
   }>(token, `/in-house/stores/${merchantId}/menu`);
+}
+
+export type InHouseEngineOverride = {
+  id?: string;
+  targetKind: string;
+  targetId: string;
+  price?: number | null;
+  isAvailable?: boolean | null;
+};
+
+export function getInHouseEngineMenu(token: string, merchantId: string) {
+  return dashAdminFetch<{
+    menuId: string;
+    menu: { status?: string; version?: number; published_at?: string } | null;
+    snapshot: import('@roam/menu-engine').MenuSnapshot | null;
+    kits: import('@roam/menu-engine').MenuKitDef[];
+    brands: Array<{ id: string; name: string; evidence_urls?: unknown }>;
+    brandId: string | null;
+    overrides: InHouseEngineOverride[];
+  }>(token, `/in-house/stores/${merchantId}/engine-menu`);
+}
+
+export function saveInHouseEngineMenuDraft(
+  token: string,
+  merchantId: string,
+  snapshot: unknown,
+  brandId?: string | null,
+) {
+  return dashAdminFetch<{ ok: boolean; menuId: string }>(token, `/in-house/stores/${merchantId}/engine-menu`, {
+    method: 'PUT',
+    body: JSON.stringify({ snapshot, brandId }),
+  });
+}
+
+export function publishInHouseEngineMenu(token: string, merchantId: string, snapshot?: unknown) {
+  return dashAdminFetch<{ ok: boolean; version: number }>(token, `/in-house/stores/${merchantId}/engine-menu/publish`, {
+    method: 'POST',
+    body: JSON.stringify(snapshot ? { snapshot } : {}),
+  });
+}
+
+export function createInHouseMenuBrand(token: string, name: string, evidenceUrls: string[] = []) {
+  return dashAdminFetch<{ brand: { id: string; name: string } }>(token, '/in-house/menu-brands', {
+    method: 'POST',
+    body: JSON.stringify({ name, evidenceUrls }),
+  });
+}
+
+export function saveInHouseLocationOverrides(token: string, merchantId: string, overrides: InHouseEngineOverride[]) {
+  return dashAdminFetch<{ ok: boolean }>(token, `/in-house/stores/${merchantId}/location-overrides`, {
+    method: 'PUT',
+    body: JSON.stringify({ overrides }),
+  });
 }
 
 export function saveInHouseMenu(

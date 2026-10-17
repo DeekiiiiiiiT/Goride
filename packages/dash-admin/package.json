@@ -20,6 +20,8 @@
     "@roam/dash-coverage": "workspace:*",
     "@roam/dash-pricing": "workspace:*",
     "@roam/location": "workspace:*",
+    "@roam/menu-builder": "workspace:*",
+    "@roam/menu-engine": "workspace:*",
     "@roam/merchant-ops": "workspace:*",
     "@roam/platform-ops-ui": "workspace:*",
     "@roam/play-store-launch": "workspace:*",

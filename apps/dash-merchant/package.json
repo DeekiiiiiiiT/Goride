@@ -34,6 +34,8 @@
     "@roam/auth-client": "workspace:*",
     "@roam/business-config": "workspace:*",
     "@roam/location": "workspace:*",
+    "@roam/menu-builder": "workspace:*",
+    "@roam/menu-engine": "workspace:*",
     "@roam/merchant-ops": "workspace:*",
     "@roam/play-store-launch": "workspace:*",
     "@roam/rush-app-config": "workspace:*",

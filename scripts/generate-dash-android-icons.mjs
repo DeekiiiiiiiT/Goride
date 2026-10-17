@@ -43,6 +43,12 @@ const APPS = [
     logoCandidates: ['public/icons/icon-512.png'],
     solidSplash: true,
   },
+  {
+    id: 'driver',
+    appDir: 'apps/driver',
+    brand: '#252A2D',
+    logoCandidates: ['public/images/brand/roam-driver-icon-master.png'],
+  },
 ];
 
 const DENSITIES = [
