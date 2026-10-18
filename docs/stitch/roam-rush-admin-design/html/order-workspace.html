@@ -1,0 +1,582 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Roam Rush In-House Desk — Order Workspace</title>
+<!-- Fonts -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet"/>
+<!-- Material Symbols Outlined -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind CSS -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          "colors": {
+            "on-primary": "#003d88",
+            "on-tertiary-container": "#004b56",
+            "outline": "#63788c",
+            "error": "#fa746f",
+            "surface-container-high": "#0f212f",
+            "secondary": "#a4c9ff",
+            "on-error": "#490006",
+            "surface-bright": "#192e3f",
+            "primary-container": "#0e69dc",
+            "on-tertiary-fixed": "#00363e",
+            "on-secondary-fixed-variant": "#005da7",
+            "primary-fixed": "#4388fd",
+            "secondary-fixed-dim": "#bcd6ff",
+            "secondary-fixed": "#d4e3ff",
+            "on-tertiary": "#005561",
+            "surface-container-low": "#071520",
+            "on-error-container": "#ff9993",
+            "on-primary-fixed": "#000000",
+            "surface-container-lowest": "#000000",
+            "surface-dim": "#060f17",
+            "surface-variant": "#122839",
+            "error-dim": "#c54d4a",
+            "secondary-dim": "#64a8fe",
+            "inverse-surface": "#f7f9ff",
+            "on-tertiary-fixed-variant": "#005561",
+            "primary": "#adc6ff",
+            "tertiary-container": "#3adffa",
+            "surface-tint": "#adc6ff",
+            "inverse-primary": "#005bc4",
+            "on-surface": "#d2e8ff",
+            "primary-dim": "#699cff",
+            "secondary-container": "#003c70",
+            "on-primary-container": "#ffffff",
+            "on-secondary-container": "#96c2ff",
+            "on-primary-fixed-variant": "#001435",
+            "tertiary-dim": "#1ad0eb",
+            "tertiary": "#7de9ff",
+            "surface-container-highest": "#122839",
+            "outline-variant": "#354a5c",
+            "on-surface-variant": "#98adc3",
+            "on-secondary-fixed": "#004076",
+            "tertiary-fixed": "#3adffa",
+            "on-secondary": "#004178",
+            "on-background": "#d2e8ff",
+            "surface": "#060f17",
+            "primary-fixed-dim": "#317bef",
+            "error-container": "#871f21",
+            "inverse-on-surface": "#4c5660",
+            "tertiary-fixed-dim": "#1ad0eb",
+            "surface-container": "#0a1b28",
+            "background": "#060f17"
+          },
+          "borderRadius": {
+            "DEFAULT": "0.25rem",
+            "lg": "0.5rem",
+            "xl": "0.75rem",
+            "full": "9999px"
+          },
+          "fontFamily": {
+            "headline": ["Inter", "sans-serif"],
+            "display": ["Inter", "sans-serif"],
+            "body": ["Inter", "sans-serif"],
+            "label": ["Inter", "sans-serif"]
+          }
+        }
+      }
+    }
+  </script>
+<style>
+    /* Custom Scrollbar for dense operations */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #071520;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #354a5c;
+      border-radius: 3px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #63788c;
+    }
+    .gradient-cta {
+      background: linear-gradient(135deg, #3b82f6 0%, #22d3ee 100%);
+    }
+    .gradient-accent {
+      background: linear-gradient(135deg, #1e40af 0%, #0e7490 100%);
+    }
+  </style>
+</head>
+<body class="bg-background text-on-surface font-body antialiased flex flex-col h-screen overflow-hidden selection:bg-primary-container selection:text-white">
+<!-- TOP STICKY BAR (Shared Component: TopNavBar adaptation for Order Workspace) -->
+<header class="bg-surface-container-low border-b border-outline-variant/40 shadow-sm docked full-width top-0 sticky z-50 flex justify-between items-center h-14 px-6 w-full shrink-0">
+<!-- Left: Navigation breadcrumbs & ID -->
+<div class="flex items-center gap-3">
+<a class="flex items-center gap-1.5 text-on-surface-variant hover:text-on-surface text-xs font-semibold px-2 py-1 rounded-lg hover:bg-surface-variant/50 transition-colors" href="#">
+<span class="material-symbols-outlined text-sm">arrow_back</span>
+        Orders
+      </a>
+<div class="h-4 w-px bg-outline-variant/50"></div>
+<div class="flex items-center gap-2">
+<span class="font-headline text-base font-bold tracking-tight text-on-surface">Order Lab · IH-QA-CLAIM-001</span>
+<button class="p-1 rounded text-on-surface-variant hover:text-primary hover:bg-surface-variant/50 transition-colors active:scale-95 duration-150" title="Copy Order ID">
+<span class="material-symbols-outlined text-sm">content_copy</span>
+</button>
+</div>
+<div class="ml-2 px-2.5 py-0.5 rounded-full bg-secondary-container/60 border border-secondary/30 text-secondary text-xs font-medium flex items-center gap-1.5">
+<span class="w-1.5 h-1.5 rounded-full bg-tertiary animate-pulse"></span>
+        Claimed by you · 12m
+      </div>
+</div>
+<!-- Center/Right: Top Navigation Links (Desktop Shell) -->
+<nav class="hidden xl:flex items-center gap-6 font-label text-xs">
+<a class="text-primary border-b-2 border-primary font-bold py-1" href="#">Orders</a>
+<a class="text-on-surface-variant hover:text-on-surface py-1 transition-colors" href="#">Queue</a>
+<a class="text-on-surface-variant hover:text-on-surface py-1 transition-colors" href="#">Dispatches</a>
+<a class="text-on-surface-variant hover:text-on-surface py-1 transition-colors" href="#">Exceptions</a>
+</nav>
+<!-- Right: Desk Status & Operator Profile -->
+<div class="flex items-center gap-3">
+<div class="flex items-center gap-2 px-3 py-1 rounded-full bg-surface-container border border-outline-variant/40 text-xs text-on-surface">
+<span class="inline-block w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]"></span>
+<span class="font-medium text-emerald-400">Desk Open</span>
+<span class="text-on-surface-variant text-[11px] hidden sm:inline">· Customers can order</span>
+</div>
+<div class="flex items-center gap-1 text-on-surface-variant">
+<button class="p-1.5 rounded-lg hover:text-on-surface hover:bg-surface-variant/50 transition-colors" title="Toggle Audio Alerts">
+<span class="material-symbols-outlined text-lg">volume_up</span>
+</button>
+<button class="p-1.5 rounded-lg hover:text-on-surface hover:bg-surface-variant/50 transition-colors relative" title="Notifications">
+<span class="material-symbols-outlined text-lg">notifications</span>
+<span class="absolute top-1.5 right-1.5 w-2 h-2 bg-primary rounded-full"></span>
+</button>
+<button class="p-1.5 rounded-lg hover:text-on-surface hover:bg-surface-variant/50 transition-colors" title="Help &amp; Guides">
+<span class="material-symbols-outlined text-lg">help</span>
+</button>
+</div>
+<div class="h-5 w-px bg-outline-variant/40"></div>
+<!-- Operator Avatar & Info -->
+<div class="flex items-center gap-2 pl-1">
+<div class="w-8 h-8 rounded-full bg-primary-container text-on-primary-container font-headline font-bold text-xs flex items-center justify-center ring-2 ring-outline-variant/40">
+          AD
+        </div>
+<div class="hidden md:flex flex-col text-left">
+<span class="text-xs font-semibold text-on-surface leading-tight">Alex D.</span>
+<span class="text-[10px] text-on-surface-variant leading-tight">Lead Operator</span>
+</div>
+</div>
+</div>
+</header>
+<!-- MAIN APP CONTAINER (2 Columns) -->
+<div class="flex-1 flex overflow-hidden w-full">
+<!-- LEFT/CENTER WORK COLUMN -->
+<main class="flex-1 flex flex-col overflow-y-auto bg-surface-dim relative pb-20">
+<!-- a. Summary Strip (Card Surface) -->
+<div class="p-5 pb-0">
+<div class="bg-surface-container rounded-xl p-4 border border-outline-variant/40 shadow-sm flex flex-wrap items-center justify-between gap-4">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-lg bg-surface-container-high border border-outline-variant/50 flex items-center justify-center text-primary">
+<span class="material-symbols-outlined text-xl">receipt_long</span>
+</div>
+<div>
+<span class="text-[11px] font-medium text-on-surface-variant uppercase tracking-wider block">Customer Total</span>
+<span class="text-lg font-bold text-on-surface tracking-tight font-headline">J$ 1,000.00</span>
+</div>
+</div>
+<div class="h-8 w-px bg-outline-variant/30 hidden md:block"></div>
+<div>
+<span class="text-[11px] font-medium text-on-surface-variant uppercase tracking-wider block">Merchant</span>
+<div class="flex items-center gap-1.5 text-sm font-semibold text-on-surface">
+<span>Sample Pizza Co.</span>
+<span class="text-xs font-normal text-on-surface-variant">#1001</span>
+</div>
+</div>
+<div class="h-8 w-px bg-outline-variant/30 hidden md:block"></div>
+<div>
+<span class="text-[11px] font-medium text-on-surface-variant uppercase tracking-wider block">Items Breakdown</span>
+<span class="text-sm font-medium text-on-surface">3 items <span class="text-xs text-on-surface-variant">(2x Margherita, 1x San Pellegrino)</span></span>
+</div>
+<div class="h-8 w-px bg-outline-variant/30 hidden md:block"></div>
+<div>
+<span class="text-[11px] font-medium text-on-surface-variant uppercase tracking-wider block">SLA Target</span>
+<div class="flex items-center gap-2">
+<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-950/60 text-emerald-400 border border-emerald-800/50">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                On time (14m remaining)
+              </span>
+<span class="text-xs text-on-surface-variant font-medium">Due 12:45 PM</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Content Grid: Buyer Checklist & Order Line Items -->
+<div class="p-5 grid grid-cols-1 xl:grid-cols-12 gap-5">
+<!-- Checklist & Line Items: Left 7 cols -->
+<section class="xl:col-span-7 flex flex-col gap-5">
+<!-- Buyer Checklist Card -->
+<div class="bg-surface-container rounded-xl p-5 border border-outline-variant/40 shadow-sm">
+<div class="flex items-center justify-between pb-3 mb-3 border-b border-outline-variant/30">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-xl">fact_check</span>
+<h2 class="font-headline text-sm font-bold text-on-surface">Buyer Checklist &amp; Order Line Items</h2>
+</div>
+<span class="text-xs font-medium text-on-surface-variant bg-surface-container-high px-2.5 py-1 rounded-md border border-outline-variant/30">
+                Step 3 of 4
+              </span>
+</div>
+<!-- Checklist Items -->
+<div class="space-y-2 mb-5">
+<!-- Item 1 -->
+<div class="flex items-center justify-between p-2.5 rounded-lg bg-surface-container-low/70 border border-outline-variant/30">
+<div class="flex items-center gap-3">
+<div class="w-5 h-5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 flex items-center justify-center">
+<span class="material-symbols-outlined text-sm font-bold">check</span>
+</div>
+<span class="text-xs font-medium text-on-surface">1. Open merchant portal / call desk</span>
+</div>
+<span class="text-[11px] text-emerald-400 font-medium">Completed</span>
+</div>
+<!-- Item 2 -->
+<div class="flex items-center justify-between p-2.5 rounded-lg bg-surface-container-low/70 border border-outline-variant/30">
+<div class="flex items-center gap-3">
+<div class="w-5 h-5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 flex items-center justify-center">
+<span class="material-symbols-outlined text-sm font-bold">check</span>
+</div>
+<span class="text-xs font-medium text-on-surface">2. Pick order items and verify custom notes</span>
+</div>
+<span class="text-[11px] text-emerald-400 font-medium">2 items verified</span>
+</div>
+<!-- Item 3 (Active) -->
+<div class="flex items-center justify-between p-2.5 rounded-lg bg-secondary-container/20 border border-secondary/40 shadow-[0_0_12px_rgba(59,130,246,0.15)]">
+<div class="flex items-center gap-3">
+<div class="w-5 h-5 rounded bg-primary-container text-white flex items-center justify-center animate-pulse">
+<span class="material-symbols-outlined text-xs">hourglass_top</span>
+</div>
+<span class="text-xs font-semibold text-primary">3. Pay with corporate buyer card</span>
+</div>
+<span class="text-[11px] text-secondary font-semibold bg-secondary-container/60 px-2 py-0.5 rounded">In Progress</span>
+</div>
+<!-- Item 4 -->
+<div class="flex items-center justify-between p-2.5 rounded-lg bg-surface-container-low/40 border border-outline-variant/20 opacity-70">
+<div class="flex items-center gap-3">
+<div class="w-5 h-5 rounded border border-outline-variant/50 flex items-center justify-center text-on-surface-variant">
+<span class="text-[10px]">4</span>
+</div>
+<span class="text-xs text-on-surface-variant">4. Capture &amp; attach printed/digital receipt</span>
+</div>
+<span class="text-[11px] text-on-surface-variant">Pending</span>
+</div>
+</div>
+<!-- Detailed Line Items Table -->
+<div class="rounded-lg border border-outline-variant/30 overflow-hidden bg-surface-container-low">
+<div class="bg-surface-container-high px-4 py-2 border-b border-outline-variant/30 flex justify-between text-[11px] font-semibold text-on-surface-variant uppercase tracking-wider">
+<span>Item details &amp; requirements</span>
+<span>Subtotal</span>
+</div>
+<div class="divide-y divide-outline-variant/20">
+<!-- Pizza Item -->
+<div class="p-3.5 flex items-start justify-between">
+<div class="space-y-1">
+<div class="flex items-center gap-2">
+<span class="px-1.5 py-0.5 rounded text-xs font-bold bg-primary-container/30 text-secondary border border-primary/20">2x</span>
+<span class="text-xs font-bold text-on-surface">Margherita 12"</span>
+<span class="text-[11px] text-on-surface-variant">(J$ 420.00 each)</span>
+</div>
+<div class="flex items-center gap-1.5 text-xs text-amber-300 font-medium pl-6">
+<span class="material-symbols-outlined text-xs">priority_high</span>
+<span>Special note: "Extra crispy crust"</span>
+</div>
+</div>
+<div class="text-right">
+<span class="text-xs font-bold text-on-surface">J$ 840.00</span>
+</div>
+</div>
+<!-- Drink Item -->
+<div class="p-3.5 flex items-start justify-between">
+<div class="space-y-1">
+<div class="flex items-center gap-2">
+<span class="px-1.5 py-0.5 rounded text-xs font-bold bg-primary-container/30 text-secondary border border-primary/20">1x</span>
+<span class="text-xs font-bold text-on-surface">San Pellegrino Aranciata</span>
+</div>
+<div class="flex items-center gap-1.5 text-[11px] text-on-surface-variant pl-6">
+<span class="material-symbols-outlined text-xs">ac_unit</span>
+<span>Requirement: Cold</span>
+</div>
+</div>
+<div class="text-right">
+<span class="text-xs font-bold text-on-surface">J$ 160.00</span>
+</div>
+</div>
+</div>
+<!-- Line Items Footer Total -->
+<div class="bg-surface-container-high/80 px-4 py-2.5 border-t border-outline-variant/30 flex justify-between items-center text-xs">
+<span class="font-semibold text-on-surface-variant">Merchant Basket Total</span>
+<span class="font-bold text-sm text-tertiary font-headline">J$ 1,000.00</span>
+</div>
+</div>
+</div>
+<!-- Exception Action Row -->
+<div class="bg-surface-container rounded-xl p-4 border border-outline-variant/40 flex flex-wrap items-center justify-between gap-3">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-amber-400 text-lg">report_problem</span>
+<span class="text-xs font-semibold text-on-surface">Encountering an issue?</span>
+</div>
+<div class="flex flex-wrap items-center gap-2">
+<button class="px-3 py-1.5 rounded-lg border border-outline-variant/60 text-xs font-medium text-on-surface-variant hover:text-white hover:border-outline hover:bg-surface-variant/40 transition-colors">
+                Site Down
+              </button>
+<button class="px-3 py-1.5 rounded-lg border border-outline-variant/60 text-xs font-medium text-on-surface-variant hover:text-white hover:border-outline hover:bg-surface-variant/40 transition-colors">
+                Card Declined
+              </button>
+<button class="px-3 py-1.5 rounded-lg border border-outline-variant/60 text-xs font-medium text-on-surface-variant hover:text-white hover:border-outline hover:bg-surface-variant/40 transition-colors">
+                Price Mismatch
+              </button>
+<button class="px-3 py-1.5 rounded-lg border border-rose-500/40 text-rose-300 text-xs font-medium hover:bg-rose-950/30 transition-colors flex items-center gap-1">
+<span class="material-symbols-outlined text-xs">flag</span>
+                Flag Problem...
+              </button>
+</div>
+</div>
+</section>
+<!-- Placement Form Card: Right 5 cols -->
+<section class="xl:col-span-5 flex flex-col gap-5">
+<div class="bg-surface-container rounded-xl p-5 border border-outline-variant/40 shadow-sm flex flex-col gap-4">
+<div class="flex items-center justify-between border-b border-outline-variant/30 pb-3">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-tertiary text-xl">storefront</span>
+<h2 class="font-headline text-sm font-bold text-on-surface">Merchant Placement Details</h2>
+</div>
+<span class="text-[11px] text-tertiary font-mono">STEP 3 / PLACEMENT</span>
+</div>
+<!-- Final Order / Confirmation # -->
+<div>
+<label class="block text-xs font-semibold text-on-surface mb-1.5">
+                Merchant Order / Confirmation # <span class="text-primary">*</span>
+</label>
+<div class="relative">
+<input class="w-full bg-surface-container-low border border-outline-variant/60 rounded-lg px-3 py-2 text-xs font-medium text-on-surface focus:outline-none focus:border-tertiary focus:ring-1 focus:ring-tertiary placeholder:text-on-surface-variant/40" type="text" value="SPC-99214"/>
+<span class="material-symbols-outlined absolute right-2.5 top-2.5 text-emerald-400 text-sm">verified</span>
+</div>
+<p class="text-[10px] text-on-surface-variant mt-1">Found on the restaurant's order summary screen</p>
+</div>
+<!-- Total Charged at Restaurant -->
+<div>
+<label class="block text-xs font-semibold text-on-surface mb-1.5">
+                Total Charged at Restaurant <span class="text-primary">*</span>
+</label>
+<div class="relative flex items-center">
+<span class="absolute left-3 text-xs font-bold text-on-surface-variant">J$</span>
+<input class="w-full bg-surface-container-low border border-outline-variant/60 rounded-lg pl-9 pr-3 py-2 text-xs font-bold text-on-surface focus:outline-none focus:border-tertiary focus:ring-1 focus:ring-tertiary" type="text" value="1,000.00"/>
+</div>
+<div class="flex items-center gap-1.5 mt-1 text-[11px] text-emerald-400 font-medium">
+<span class="material-symbols-outlined text-xs">check_circle</span>
+<span>Within authorized limit (Match 100%)</span>
+</div>
+</div>
+<!-- Ready Time / Prep Estimate Quick Chips -->
+<div>
+<label class="block text-xs font-semibold text-on-surface mb-1.5">
+                Ready Time / Prep Estimate
+              </label>
+<div class="grid grid-cols-5 gap-1.5">
+<button class="py-1.5 px-1 text-center rounded-lg border border-outline-variant/40 text-xs font-medium text-on-surface-variant hover:text-on-surface hover:bg-surface-variant/30 transition-colors" type="button">
+                  10m
+                </button>
+<!-- Selected Active Chip with Cyan Border -->
+<button class="py-1.5 px-1 text-center rounded-lg border-2 border-tertiary bg-tertiary-container/20 text-xs font-bold text-tertiary shadow-[0_0_10px_rgba(34,211,238,0.2)]" type="button">
+                  15m
+                </button>
+<button class="py-1.5 px-1 text-center rounded-lg border border-outline-variant/40 text-xs font-medium text-on-surface-variant hover:text-on-surface hover:bg-surface-variant/30 transition-colors" type="button">
+                  20m
+                </button>
+<button class="py-1.5 px-1 text-center rounded-lg border border-outline-variant/40 text-xs font-medium text-on-surface-variant hover:text-on-surface hover:bg-surface-variant/30 transition-colors" type="button">
+                  30m
+                </button>
+<button class="py-1.5 px-1 text-center rounded-lg border border-dashed border-outline-variant/60 text-[11px] font-medium text-on-surface-variant hover:text-on-surface hover:border-tertiary transition-colors flex items-center justify-center" type="button">
+                  + Custom
+                </button>
+</div>
+</div>
+<!-- Buyer Card Selector -->
+<div>
+<label class="block text-xs font-semibold text-on-surface mb-1.5">
+                Buyer Payment Method <span class="text-primary">*</span>
+</label>
+<div class="relative">
+<div class="w-full bg-surface-container-low border border-outline-variant/60 rounded-lg p-2.5 flex items-center justify-between text-xs cursor-pointer hover:border-outline-variant transition-colors">
+<div class="flex items-center gap-2.5 truncate">
+<div class="w-7 h-5 rounded bg-secondary-container border border-secondary/40 flex items-center justify-center font-bold text-[9px] text-white">
+                      VISA
+                    </div>
+<div class="truncate">
+<div class="font-semibold text-on-surface truncate">Visa Corporate •••• 2154 <span class="font-normal text-on-surface-variant">(Alex D.)</span></div>
+<div class="text-[10px] text-emerald-400 font-mono">Daily Limit: J$ 50,000 | Avail: J$ 31,550</div>
+</div>
+</div>
+<span class="material-symbols-outlined text-on-surface-variant text-sm">expand_more</span>
+</div>
+</div>
+</div>
+<!-- Receipt Upload Dropzone -->
+<div>
+<label class="block text-xs font-semibold text-on-surface mb-1.5">
+                Receipt Scan or Screenshot <span class="text-on-surface-variant font-normal">(Optional now)</span>
+</label>
+<div class="border-2 border-dashed border-outline-variant/50 hover:border-tertiary/60 rounded-xl p-4 text-center bg-surface-container-low/50 hover:bg-surface-container-high/40 transition-colors cursor-pointer group">
+<div class="w-9 h-9 rounded-full bg-surface-container-high text-tertiary mx-auto flex items-center justify-center mb-2 group-hover:scale-110 transition-transform">
+<span class="material-symbols-outlined text-lg">cloud_upload</span>
+</div>
+<p class="text-xs font-semibold text-on-surface mb-0.5">Drop receipt scan or click to browse</p>
+<p class="text-[10px] text-on-surface-variant">Supports JPG, PNG or PDF up to 10MB</p>
+</div>
+</div>
+</div>
+</section>
+</div>
+</main>
+<!-- RIGHT DRAWER: CUSTOMER MESSAGES (Shared Component: SideNavBar alignment) -->
+<aside class="w-80 lg:w-96 bg-surface-container border-l border-outline-variant/30 flex flex-col h-full shrink-0 z-20">
+<!-- Drawer Header -->
+<div class="p-4 border-b border-outline-variant/30 flex items-center justify-between bg-surface-container-high">
+<div class="flex items-center gap-2.5">
+<div class="w-8 h-8 rounded-full bg-secondary-container/60 text-secondary flex items-center justify-center font-bold text-xs ring-1 ring-secondary/40">
+<span class="material-symbols-outlined text-base">chat</span>
+</div>
+<div>
+<h3 class="font-headline text-xs font-bold text-on-surface">Customer Messages</h3>
+<span class="text-[10px] text-tertiary font-medium">Connected proxy link</span>
+</div>
+</div>
+<div class="flex items-center gap-1">
+<button class="px-2 py-1 rounded text-[11px] font-semibold text-secondary hover:bg-surface-variant/50 transition-colors" title="Quick Note">
+            Quick Note
+          </button>
+</div>
+</div>
+<!-- Masking Notice Banner -->
+<div class="px-4 py-2 bg-surface-container-low border-b border-outline-variant/20 flex items-center gap-2 text-[11px] text-on-surface-variant">
+<span class="material-symbols-outlined text-xs text-primary">visibility</span>
+<span>They see these as coming from the restaurant.</span>
+</div>
+<!-- Conversation Thread -->
+<div class="flex-1 overflow-y-auto p-4 space-y-3.5">
+<!-- Timestamp separator -->
+<div class="flex items-center justify-center my-1">
+<span class="text-[10px] font-mono text-outline uppercase tracking-wider bg-surface-container-high px-2 py-0.5 rounded">Today 12:31 PM</span>
+</div>
+<!-- Customer Bubble 1 -->
+<div class="flex flex-col items-start max-w-[88%]">
+<div class="flex items-center gap-1.5 mb-1">
+<span class="text-[11px] font-semibold text-on-surface">Customer</span>
+<span class="text-[10px] text-on-surface-variant">12m ago</span>
+</div>
+<div class="bg-surface-container-high text-on-surface p-3 rounded-2xl rounded-tl-sm border border-outline-variant/30 text-xs leading-relaxed shadow-sm">
+            Hi, could you make sure the pizza is well-baked and sliced in 8 pieces? Thanks!
+          </div>
+</div>
+<!-- Operator / Restaurant Proxy Bubble -->
+<div class="flex flex-col items-end max-w-[88%] ml-auto">
+<div class="flex items-center gap-1.5 mb-1">
+<span class="text-[10px] text-on-surface-variant">10m ago</span>
+<span class="text-[11px] font-semibold text-tertiary">You (as Restaurant)</span>
+</div>
+<div class="bg-primary-container text-white p-3 rounded-2xl rounded-tr-sm text-xs leading-relaxed shadow-sm">
+            We've confirmed with the kitchen! Sliced into 8 pieces and well-done crust.
+          </div>
+<span class="text-[9px] text-on-surface-variant mt-0.5 flex items-center gap-0.5">
+<span class="material-symbols-outlined text-[10px] text-emerald-400">done_all</span> Delivered to customer SMS
+          </span>
+</div>
+<!-- Customer Bubble 2 -->
+<div class="flex flex-col items-start max-w-[88%]">
+<div class="flex items-center gap-1.5 mb-1">
+<span class="text-[11px] font-semibold text-on-surface">Customer</span>
+<span class="text-[10px] text-on-surface-variant">2m ago</span>
+</div>
+<div class="bg-surface-container-high text-on-surface p-3 rounded-2xl rounded-tl-sm border border-outline-variant/30 text-xs leading-relaxed shadow-sm">
+            Awesome, thank you so much!
+          </div>
+</div>
+</div>
+<!-- Quick Canned Response Chips -->
+<div class="px-4 py-2 border-t border-outline-variant/20 bg-surface-container-low/50">
+<div class="flex items-center gap-1.5 overflow-x-auto pb-1 text-[11px]">
+<button class="whitespace-nowrap px-2.5 py-1 rounded-full bg-surface-container-high border border-outline-variant/40 hover:border-tertiary text-on-surface-variant hover:text-on-surface transition-colors">
+            Order in oven
+          </button>
+<button class="whitespace-nowrap px-2.5 py-1 rounded-full bg-surface-container-high border border-outline-variant/40 hover:border-tertiary text-on-surface-variant hover:text-on-surface transition-colors">
+            Slight delay (5m)
+          </button>
+<button class="whitespace-nowrap px-2.5 py-1 rounded-full bg-surface-container-high border border-outline-variant/40 hover:border-tertiary text-on-surface-variant hover:text-on-surface transition-colors">
+            Driver on the way
+          </button>
+</div>
+</div>
+<!-- Reply Input Area -->
+<div class="p-3 border-t border-outline-variant/30 bg-surface-container-high">
+<div class="relative flex items-center">
+<input class="w-full bg-surface-container-low border border-outline-variant/60 rounded-xl pl-3 pr-10 py-2.5 text-xs text-on-surface placeholder:text-on-surface-variant/50 focus:outline-none focus:border-tertiary focus:ring-1 focus:ring-tertiary" placeholder="Reply as the restaurant..." type="text"/>
+<button class="absolute right-1.5 w-7 h-7 rounded-lg gradient-cta text-white flex items-center justify-center hover:opacity-90 active:scale-95 transition-all shadow-md">
+<span class="material-symbols-outlined text-sm">send</span>
+</button>
+</div>
+<div class="flex items-center justify-between mt-2 px-1 text-[10px] text-on-surface-variant">
+<span>SMS mask active</span>
+<span>Shift+Enter for newline</span>
+</div>
+</div>
+<!-- Drawer Sub-navigation tabs (Shared Component spec) -->
+<div class="px-3 py-2 border-t border-outline-variant/30 bg-surface-container flex items-center justify-around text-xs">
+<button class="p-1.5 text-tertiary font-bold flex flex-col items-center" title="Messages">
+<span class="material-symbols-outlined text-base">chat</span>
+<span class="text-[9px]">Messages</span>
+</button>
+<button class="p-1.5 text-on-surface-variant hover:text-on-surface flex flex-col items-center" title="Merchant">
+<span class="material-symbols-outlined text-base">storefront</span>
+<span class="text-[9px]">Merchant</span>
+</button>
+<button class="p-1.5 text-on-surface-variant hover:text-on-surface flex flex-col items-center" title="Driver">
+<span class="material-symbols-outlined text-base">local_shipping</span>
+<span class="text-[9px]">Driver</span>
+</button>
+<button class="p-1.5 text-on-surface-variant hover:text-on-surface flex flex-col items-center" title="Audit">
+<span class="material-symbols-outlined text-base">history</span>
+<span class="text-[9px]">Audit</span>
+</button>
+</div>
+</aside>
+</div>
+<!-- STICKY BOTTOM ACTION BAR (Strict Desk Spec) -->
+<footer class="fixed bottom-0 left-0 right-0 lg:right-96 bg-surface-container-low/95 backdrop-blur border-t border-outline-variant/40 px-6 py-2.5 z-40 flex items-center justify-between shadow-2xl">
+<!-- Left: Keyboard shortcuts hint -->
+<div class="flex items-center gap-4 text-xs text-on-surface-variant">
+<div class="flex items-center gap-1.5">
+<kbd class="px-1.5 py-0.5 rounded bg-surface-container-high border border-outline-variant/50 font-mono text-[11px] text-on-surface shadow-xs">⌘ + Enter</kbd>
+<span>to confirm placement</span>
+</div>
+<div class="hidden sm:flex items-center gap-1.5">
+<kbd class="px-1.5 py-0.5 rounded bg-surface-container-high border border-outline-variant/50 font-mono text-[11px] text-on-surface shadow-xs">Esc</kbd>
+<span>to back</span>
+</div>
+</div>
+<!-- Center: Spending verification check -->
+<div class="hidden md:flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-950/40 border border-emerald-500/30 text-emerald-400 text-xs font-medium">
+<span class="material-symbols-outlined text-sm">verified_user</span>
+<span>Spent: <strong>J$ 1,000.00</strong> / Limit: J$ 50,000</span>
+</div>
+<!-- Right: Primary CTA Button (Oceanic blue to cyan gradient) -->
+<div class="flex items-center gap-3">
+<button class="px-4 py-2 rounded-lg border border-outline-variant/60 text-xs font-semibold text-on-surface-variant hover:text-on-surface hover:bg-surface-variant/40 transition-colors">
+        Save Draft
+      </button>
+<button class="gradient-cta text-white font-semibold text-xs px-6 py-2.5 rounded-lg shadow-lg hover:shadow-cyan-500/20 active:scale-95 transition-all flex items-center gap-2">
+<span>Mark Placed</span>
+<span class="material-symbols-outlined text-sm font-bold">arrow_forward</span>
+</button>
+</div>
+</footer>
+</body></html>

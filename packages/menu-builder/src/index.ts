@@ -12,3 +12,12 @@ export { WingsOrderBuilder } from './WingsOrderBuilder.tsx';
 export { ComboOrderBuilder } from './ComboOrderBuilder.tsx';
 export { PartnerMenuShell } from './PartnerMenuShell.tsx';
 export { BrandCatalogPanel } from './BrandCatalogPanel.tsx';
+export {
+  addTemplateToSnapshot,
+  blankTemplatePayload,
+  instantiateTemplate,
+  snapshotToTemplate,
+  templateToSnapshot,
+} from './templates';
+export type { TemplatePayload } from './templates';
+export { PRODUCT_TYPE_OPTIONS, productTypeHint, productTypeLabel } from './productTypeOptions';

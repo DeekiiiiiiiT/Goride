@@ -1,4 +1,5 @@
 import type { MenuKitDef } from '@roam/menu-engine';
+import { productTypeLabel } from './productTypeOptions';
 
 export function KitStarter({
   kits,
@@ -26,7 +27,7 @@ export function KitStarter({
             <div className="mt-1 text-xs text-[#5f75a5]">{kit.cuisine}</div>
             <ul className="mt-2 text-xs text-[#334155]">
               {kit.payload.sections.map((s) => (
-                <li key={s.name}>· {s.name} ({s.sectionType})</li>
+                <li key={s.name}>· {s.name} ({productTypeLabel(s.sectionType)})</li>
               ))}
             </ul>
           </button>

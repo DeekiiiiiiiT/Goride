@@ -1,0 +1,276 @@
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          "colors": {
+            "on-tertiary": "#005561",
+            "surface-dim": "#060f17",
+            "outline-variant": "#354a5c",
+            "secondary-container": "#003c70",
+            "surface-variant": "#122839",
+            "primary-fixed-dim": "#317bef",
+            "inverse-surface": "#f7f9ff",
+            "secondary-fixed-dim": "#bcd6ff",
+            "primary-container": "#0e69dc",
+            "inverse-on-surface": "#4c5660",
+            "on-error-container": "#ff9993",
+            "surface-container-lowest": "#000000",
+            "tertiary": "#7de9ff",
+            "outline": "#63788c",
+            "on-primary-fixed-variant": "#001435",
+            "error-dim": "#c54d4a",
+            "secondary": "#a4c9ff",
+            "tertiary-fixed-dim": "#1ad0eb",
+            "on-background": "#d2e8ff",
+            "on-tertiary-container": "#004b56",
+            "surface-container": "#0a1b28",
+            "primary-fixed": "#4388fd",
+            "secondary-dim": "#64a8fe",
+            "tertiary-fixed": "#3adffa",
+            "surface-container-low": "#071520",
+            "error": "#fa746f",
+            "on-tertiary-fixed": "#00363e",
+            "on-secondary-fixed": "#004076",
+            "background": "#060f17",
+            "on-tertiary-fixed-variant": "#005561",
+            "on-secondary": "#004178",
+            "surface": "#060f17",
+            "primary-dim": "#699cff",
+            "surface-tint": "#adc6ff",
+            "on-primary-fixed": "#000000",
+            "tertiary-dim": "#1ad0eb",
+            "surface-container-high": "#0f212f",
+            "on-surface-variant": "#98adc3",
+            "secondary-fixed": "#d4e3ff",
+            "surface-container-highest": "#122839",
+            "on-surface": "#d2e8ff",
+            "on-primary-container": "#ffffff",
+            "error-container": "#871f21",
+            "surface-bright": "#192e3f",
+            "primary": "#adc6ff",
+            "on-secondary-container": "#96c2ff",
+            "inverse-primary": "#005bc4",
+            "tertiary-container": "#3adffa",
+            "on-error": "#490006",
+            "on-primary": "#003d88",
+            "on-secondary-fixed-variant": "#005da7"
+          },
+          "borderRadius": {
+            "DEFAULT": "0.25rem",
+            "lg": "0.5rem",
+            "xl": "0.75rem",
+            "full": "9999px"
+          },
+          "fontFamily": {
+            "headline": ["Inter"],
+            "display": ["Inter"],
+            "body": ["Inter"],
+            "label": ["Inter"]
+          }
+        },
+      },
+    }
+  </script>
+</head>
+<body class="bg-background text-on-background font-body antialiased min-h-screen flex flex-col">
+<!-- TopAppBar -->
+<header class="bg-surface text-primary border-b border-outline-variant sticky top-0 z-50">
+<div class="flex justify-between items-center w-full px-6 py-3 max-w-[1440px] mx-auto">
+<div class="flex items-center gap-4">
+<span class="text-xl font-headline font-black text-on-surface">Roam Rush Admin</span>
+<div class="relative ml-4">
+<span class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-on-surface-variant">
+<span class="material-symbols-outlined text-sm">search</span>
+</span>
+<input class="bg-surface-container border border-outline-variant rounded-lg pl-9 pr-4 py-1.5 text-sm text-on-surface placeholder:text-on-surface-variant focus:outline-none focus:border-primary w-80" placeholder="Search operations, restaurants, orders..." type="text"/>
+</div>
+</div>
+<nav class="hidden md:flex items-center gap-6">
+<a class="text-on-surface-variant hover:text-on-surface transition-colors text-sm font-label" href="#">Dashboard</a>
+<a class="text-primary font-bold border-b-2 border-primary pb-1 text-sm font-label" href="#">Restaurants</a>
+<a class="text-on-surface-variant hover:text-on-surface transition-colors text-sm font-label" href="#">Orders</a>
+<a class="text-on-surface-variant hover:text-on-surface transition-colors text-sm font-label" href="#">Settings</a>
+</nav>
+<div class="flex items-center gap-4">
+<button class="text-on-surface-variant hover:text-on-surface transition-colors relative">
+<span class="material-symbols-outlined">notifications</span>
+<span class="absolute top-0 right-0 w-2 h-2 bg-primary rounded-full"></span>
+</button>
+<button class="text-on-surface-variant hover:text-on-surface transition-colors">
+<span class="material-symbols-outlined">help</span>
+</button>
+<div class="flex items-center gap-3 pl-2 border-l border-outline-variant">
+<img class="w-8 h-8 rounded-full object-cover" data-alt="Professional admin avatar portrait with neutral background and crisp lighting suitable for a high-end corporate dashboard." src="https://lh3.googleusercontent.com/aida-public/AB6AXuABpNQjqRgl5sGXpM0MMWERgD_EcvLGPLLfVwoZCFVjU4LpJ4XniU553CTlB3_3JIFOOg-UPhlFYFVXTSI0RWS6fKTA0E9g9S-Zmr2lylNWKghtmTcVU8oYKxTm4hkYJPSKs31JgcYRTlrwjdAOjkpgKUKOaqHX2nQzmmhicMou5P0Aw2HsIklQXeYyUT87hBf31LXu8B508u5UjHEtWMrfcjtIVM98h42eHsqG23Ig2tqNnmvmIyaD3T9INKsuT2Eq2ALUigOOJbg"/>
+<span class="text-sm font-label text-on-surface font-semibold">Admin Avatar</span>
+</div>
+</div>
+</div>
+</header>
+<!-- Main Content Area -->
+<main class="flex-1 max-w-[1440px] w-full mx-auto p-6 md:p-8 flex flex-col gap-6">
+<!-- Header Row -->
+<div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+<div class="flex flex-col gap-1">
+<a class="text-tertiary text-sm font-label flex items-center gap-1 hover:underline w-fit" href="#">
+<span class="material-symbols-outlined text-sm">arrow_back</span> Restaurants
+        </a>
+<div class="flex items-center gap-3">
+<h1 class="text-3xl font-headline font-extrabold text-on-surface tracking-tight">KFC</h1>
+<span class="bg-surface-variant text-on-surface-variant text-xs font-label px-2.5 py-1 rounded-full border border-outline-variant">Setting up · 5 of 7 done</span>
+</div>
+<p class="text-sm text-on-surface-variant font-body">Manage configuration settings, menus, operational hours, and integration parameters.</p>
+</div>
+<div>
+<button class="border border-error text-error hover:bg-error/10 transition-colors px-4 py-2 rounded-lg text-sm font-label font-semibold flex items-center gap-2">
+<span class="material-symbols-outlined text-sm">archive</span> Archive restaurant
+        </button>
+</div>
+</div>
+<!-- One Large Two-Column Card -->
+<div class="bg-surface-container border border-outline-variant rounded-xl grid grid-cols-1 md:grid-cols-[260px_1fr] overflow-hidden shadow-lg">
+<!-- LEFT Rail -->
+<aside class="bg-surface-container-low border-r border-outline-variant flex flex-col justify-between p-4 gap-6">
+<div class="flex flex-col gap-1">
+<div class="text-xs font-headline font-bold text-on-surface-variant tracking-wider uppercase px-3 py-2">Setup</div>
+<nav class="flex flex-col gap-1">
+<!-- Step 1: Active -->
+<a class="bg-primary-container text-on-primary-container font-semibold rounded-lg px-3 py-2.5 flex items-center justify-between text-sm transition-transform active:scale-[0.98]" href="#">
+<div class="flex items-center gap-3">
+<span class="w-2 h-2 rounded-full bg-tertiary"></span>
+<span>1 Basics</span>
+</div>
+<span class="material-symbols-outlined text-sm text-tertiary" style="font-variation-settings: 'FILL' 1;">radio_button_checked</span>
+</a>
+<!-- Step 2 -->
+<a class="text-on-surface-variant hover:bg-surface-variant hover:text-on-surface rounded-lg px-3 py-2.5 flex items-center justify-between text-sm transition-colors" href="#">
+<div class="flex items-center gap-3">
+<span class="w-2 h-2 rounded-full opacity-0"></span>
+<span>2 Location</span>
+</div>
+<span class="material-symbols-outlined text-sm text-success" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+</a>
+<!-- Step 3 -->
+<a class="text-on-surface-variant hover:bg-surface-variant hover:text-on-surface rounded-lg px-3 py-2.5 flex items-center justify-between text-sm transition-colors" href="#">
+<div class="flex items-center gap-3">
+<span class="w-2 h-2 rounded-full opacity-0"></span>
+<span>3 Hours</span>
+</div>
+<span class="material-symbols-outlined text-sm text-success" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+</a>
+<!-- Step 4 -->
+<a class="text-on-surface-variant hover:bg-surface-variant hover:text-on-surface rounded-lg px-3 py-2.5 flex items-center justify-between text-sm transition-colors" href="#">
+<div class="flex items-center gap-3">
+<span class="w-2 h-2 rounded-full opacity-0"></span>
+<span>4 Photos</span>
+</div>
+<span class="material-symbols-outlined text-sm text-success" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+</a>
+<!-- Step 5 -->
+<a class="text-on-surface-variant hover:bg-surface-variant hover:text-on-surface rounded-lg px-3 py-2.5 flex items-center justify-between text-sm transition-colors" href="#">
+<div class="flex items-center gap-3">
+<span class="w-2 h-2 rounded-full opacity-0"></span>
+<span>5 How we order</span>
+</div>
+<span class="material-symbols-outlined text-sm text-success" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+</a>
+<!-- Step 6 -->
+<a class="text-on-surface-variant hover:bg-surface-variant hover:text-on-surface rounded-lg px-3 py-2.5 flex items-center justify-between text-sm transition-colors" href="#">
+<div class="flex items-center gap-3">
+<span class="w-2 h-2 rounded-full opacity-0"></span>
+<span>6 Menu</span>
+</div>
+<span class="material-symbols-outlined text-sm text-outline-variant">radio_button_unchecked</span>
+</a>
+<!-- Step 7 -->
+<a class="text-on-surface-variant hover:bg-surface-variant hover:text-on-surface rounded-lg px-3 py-2.5 flex items-center justify-between text-sm transition-colors" href="#">
+<div class="flex items-center gap-3">
+<span class="w-2 h-2 rounded-full opacity-0"></span>
+<span>7 Go live</span>
+</div>
+<span class="material-symbols-outlined text-sm text-outline-variant">radio_button_unchecked</span>
+</a>
+</nav>
+</div>
+<div class="pt-4 border-t border-outline-variant">
+<a class="text-tertiary text-xs font-label hover:underline flex items-center gap-1.5" href="#">
+<span class="material-symbols-outlined text-sm">payments</span> Pricing rules
+          </a>
+</div>
+</aside>
+<!-- RIGHT Pane -->
+<div class="bg-surface-container p-8 flex flex-col justify-between">
+<div class="flex flex-col gap-6">
+<!-- Step Badge & Heading -->
+<div class="flex flex-col gap-1">
+<div class="flex items-center gap-2">
+<span class="bg-primary-container/20 text-tertiary border border-outline-variant text-xs font-label px-2.5 py-0.5 rounded font-semibold">Step 1 of 7 · Basics</span>
+</div>
+<h2 class="text-2xl font-headline font-bold text-on-surface">Restaurant Basics & Identity</h2>
+<p class="text-sm text-on-surface-variant">Update the foundational commercial identifiers and select primary culinary classifications for customer matching.</p>
+</div>
+<!-- Form Fields -->
+<div class="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2">
+<div class="flex flex-col gap-2">
+<label class="text-xs font-label font-semibold text-on-surface">Restaurant name</label>
+<input class="bg-surface-variant border border-outline-variant rounded-lg px-4 py-2.5 text-sm text-on-surface focus:outline-none focus:border-primary" type="text" value="KFC"/>
+<span class="text-xs text-on-surface-variant">Primary legal business title displayed on consumer storefronts.</span>
+</div>
+<div class="flex flex-col gap-2">
+<label class="text-xs font-label font-semibold text-on-surface">Phone</label>
+<input class="bg-surface-variant border border-outline-variant rounded-lg px-4 py-2.5 text-sm text-on-surface focus:outline-none focus:border-primary" type="text" value="8767491826"/>
+<span class="text-xs text-on-surface-variant">Direct operational contact number for inbound delivery drivers.</span>
+</div>
+</div>
+<!-- Cuisines Section -->
+<div class="flex flex-col gap-3 pt-4">
+<div class="flex flex-col gap-1">
+<label class="text-xs font-label font-semibold text-on-surface">Cuisines</label>
+<span class="text-xs text-on-surface-variant">Select applicable categories. Primary chip is highlighted with cyan aesthetics.</span>
+</div>
+<div class="flex flex-wrap gap-2 pt-1">
+<!-- Selected Primary Chip -->
+<button class="bg-[#0e69dc] text-on-primary-container border border-[#7de9ff] px-3.5 py-1.5 rounded-full text-xs font-label font-semibold shadow-sm flex items-center gap-1.5">
+<span class="material-symbols-outlined text-xs text-tertiary" style="font-variation-settings: 'FILL' 1;">check</span> Fried Chicken
+              </button>
+<!-- Unselected Chips -->
+<button class="bg-surface-variant text-on-surface-variant border border-outline-variant hover:border-primary px-3.5 py-1.5 rounded-full text-xs font-label transition-colors">Jamaican</button>
+<button class="bg-surface-variant text-on-surface-variant border border-outline-variant hover:border-primary px-3.5 py-1.5 rounded-full text-xs font-label transition-colors">Grill</button>
+<button class="bg-surface-variant text-on-surface-variant border border-outline-variant hover:border-primary px-3.5 py-1.5 rounded-full text-xs font-label transition-colors">Seafood</button>
+<button class="bg-surface-variant text-on-surface-variant border border-outline-variant hover:border-primary px-3.5 py-1.5 rounded-full text-xs font-label transition-colors">Vegan Options</button>
+<button class="bg-surface-variant text-on-surface-variant border border-outline-variant hover:border-primary px-3.5 py-1.5 rounded-full text-xs font-label transition-colors">Chinese</button>
+<button class="bg-surface-variant text-on-surface-variant border border-outline-variant hover:border-primary px-3.5 py-1.5 rounded-full text-xs font-label transition-colors">Indian</button>
+<button class="bg-surface-variant text-on-surface-variant border border-outline-variant hover:border-primary px-3.5 py-1.5 rounded-full text-xs font-label transition-colors">Burgers</button>
+<button class="bg-surface-variant text-on-surface-variant border border-outline-variant hover:border-primary px-3.5 py-1.5 rounded-full text-xs font-label transition-colors">Pizza</button>
+<button class="bg-surface-variant text-on-surface-variant border border-outline-variant hover:border-primary px-3.5 py-1.5 rounded-full text-xs font-label transition-colors">Fast Food</button>
+<button class="bg-surface-variant text-on-surface-variant border border-outline-variant hover:border-primary px-3.5 py-1.5 rounded-full text-xs font-label transition-colors">Breakfast</button>
+<button class="bg-surface-variant text-on-surface-variant border border-outline-variant hover:border-primary px-3.5 py-1.5 rounded-full text-xs font-label transition-colors">Coffee</button>
+<button class="bg-surface-variant text-on-surface-variant border border-outline-variant hover:border-primary px-3.5 py-1.5 rounded-full text-xs font-label transition-colors">Desserts</button>
+<button class="bg-surface-variant text-on-surface-variant border border-outline-variant hover:border-primary px-3.5 py-1.5 rounded-full text-xs font-label transition-colors">Healthy</button>
+<button class="bg-surface-variant text-on-surface-variant border border-outline-variant hover:border-primary px-3.5 py-1.5 rounded-full text-xs font-label transition-colors">BBQ</button>
+<button class="bg-surface-variant text-on-surface-variant border border-outline-variant hover:border-primary px-3.5 py-1.5 rounded-full text-xs font-label transition-colors">Caribbean</button>
+<button class="bg-surface-variant text-on-surface-variant border border-outline-variant hover:border-primary px-3.5 py-1.5 rounded-full text-xs font-label transition-colors">American</button>
+<button class="bg-surface-variant text-on-surface-variant border border-outline-variant hover:border-primary px-3.5 py-1.5 rounded-full text-xs font-label transition-colors">Mexican</button>
+<button class="bg-surface-variant text-on-surface-variant border border-outline-variant hover:border-primary px-3.5 py-1.5 rounded-full text-xs font-label transition-colors">Thai</button>
+<button class="bg-surface-variant text-on-surface-variant border border-outline-variant hover:border-primary px-3.5 py-1.5 rounded-full text-xs font-label transition-colors">Japanese</button>
+<button class="bg-surface-variant text-on-surface-variant border border-outline-variant hover:border-primary px-3.5 py-1.5 rounded-full text-xs font-label transition-colors">Korean</button>
+</div>
+</div>
+</div>
+<!-- Footer Action -->
+<div class="pt-8 mt-8 border-t border-outline-variant flex items-center justify-end">
+<button class="w-full md:w-auto px-8 py-3 rounded-lg text-sm font-label font-bold text-on-primary-container bg-[linear-gradient(135deg,#3b82f6,#22d3ee)] hover:opacity-90 transition-opacity shadow-lg flex items-center justify-center gap-2">
+<span>Save basics</span>
+<span class="material-symbols-outlined text-sm">arrow_forward</span>
+</button>
+</div>
+</div>
+</div>
+</main>
+</body></html>

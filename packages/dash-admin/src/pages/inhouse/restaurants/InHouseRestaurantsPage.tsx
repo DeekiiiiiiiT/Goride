@@ -6,6 +6,7 @@ import { listInHouseStores, saveInHouseStore } from '@roam/dash-admin-client';
 import { formatMoney } from '../../../components/ui/format';
 import type { AdminOutletContext } from '../../../DashAdminPortal';
 import { DESK_ADMIN, restaurantStatus } from '../inHouseUi';
+import { IH } from '../inHouseTheme';
 
 type StoreRow = Record<string, unknown> & {
   merchant_id?: string;
@@ -148,7 +149,7 @@ export function InHouseRestaurantsPage({ embedded = false }: { embedded?: boolea
             <button
               type="button"
               disabled={creating}
-              className="ih-btn-primary inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold text-slate-950 shadow-md disabled:opacity-40"
+              className={`inline-flex items-center gap-2 shadow-md ${IH.primaryBtnLg}`}
               onClick={() => void createRestaurant()}
             >
               + Onboard Restaurant
@@ -288,7 +289,7 @@ export function InHouseRestaurantsPage({ embedded = false }: { embedded?: boolea
                 <Link to={`/in-house/restaurants/${id}`} className="text-xs text-slate-400 hover:text-slate-200">Open home</Link>
                 <Link
                   to={action.to}
-                  className="ih-btn-primary flex items-center gap-1 rounded-lg px-4 py-2 text-xs font-semibold text-slate-950 shadow-sm transition-all active:scale-95"
+                  className={`flex items-center gap-1 shadow-sm transition-all active:scale-95 ${IH.primaryBtn}`}
                 >
                   {action.label} →
                 </Link>

@@ -3,15 +3,7 @@ import { PizzaConfigEditor } from './PizzaConfigEditor.tsx';
 import { WingsEditor } from './WingsEditor.tsx';
 import { ComboSlotsEditor } from './ComboSlotsEditor.tsx';
 import { OptionGroupsEditor } from './OptionGroupsEditor.tsx';
-
-const TYPE_HELP: Record<ProductType, string> = {
-  standard: 'Name, price, photo, and option groups.',
-  sized: 'Size table with replace pricing, then the usual groups.',
-  pizza: 'Chain-style builder: sizes, crusts, sauces, cheese, toppings, halves, specialty.',
-  wings: 'Piece counts, style, flavours per N pieces, dips.',
-  combo: 'Deal slots with allowed products and upcharges.',
-  build_your_own: 'Ordered steps (base → protein → sides → extras).',
-};
+import { PRODUCT_TYPE_OPTIONS, productTypeHint } from './productTypeOptions';
 
 export function ProductTypeEditor({
   snapshot,
@@ -47,7 +39,7 @@ export function ProductTypeEditor({
     <div className="space-y-4">
       <div className="flex flex-wrap items-end gap-3">
         <label className="block text-xs text-[#5f75a5]">
-          Product type
+          How customers order it
           <select
             className="mt-1 block rounded border border-[#d7e0f2] px-2 py-1.5 text-sm"
             value={product.type}
@@ -60,12 +52,12 @@ export function ProductTypeEditor({
               })
             }
           >
-            {(Object.keys(TYPE_HELP) as ProductType[]).map((t) => (
-              <option key={t} value={t}>{t}</option>
+            {PRODUCT_TYPE_OPTIONS.map((t) => (
+              <option key={t.id} value={t.id}>{t.label}</option>
             ))}
           </select>
         </label>
-        <p className="flex-1 text-xs text-[#5f75a5]">{TYPE_HELP[product.type]}</p>
+        <p className="flex-1 text-xs text-[#5f75a5]">{productTypeHint(product.type)}</p>
         {onConfirmPrices ? (
           <div className="flex flex-col items-end gap-1">
             <button

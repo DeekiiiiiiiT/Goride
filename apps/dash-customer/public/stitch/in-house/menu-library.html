@@ -1,0 +1,682 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>In-House Desk — Menu Library | Roam Rush Ops</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          "colors": {
+            "secondary-container": "#003c70",
+            "secondary-fixed-dim": "#bcd6ff",
+            "surface": "#060f17",
+            "inverse-on-surface": "#4c5660",
+            "error-dim": "#c54d4a",
+            "surface-container-highest": "#122839",
+            "on-error-container": "#ff9993",
+            "on-surface": "#d2e8ff",
+            "on-tertiary-fixed-variant": "#005561",
+            "secondary-fixed": "#d4e3ff",
+            "surface-container-lowest": "#000000",
+            "on-primary-container": "#ffffff",
+            "primary": "#adc6ff",
+            "tertiary-fixed-dim": "#1ad0eb",
+            "surface-bright": "#192e3f",
+            "on-primary-fixed-variant": "#001435",
+            "secondary": "#a4c9ff",
+            "on-primary": "#003d88",
+            "on-secondary": "#004178",
+            "error-container": "#871f21",
+            "tertiary": "#7de9ff",
+            "surface-tint": "#adc6ff",
+            "tertiary-dim": "#1ad0eb",
+            "inverse-primary": "#005bc4",
+            "on-secondary-fixed": "#004076",
+            "primary-dim": "#699cff",
+            "primary-fixed": "#4388fd",
+            "on-secondary-container": "#96c2ff",
+            "secondary-dim": "#64a8fe",
+            "on-tertiary-fixed": "#00363e",
+            "on-surface-variant": "#98adc3",
+            "on-primary-fixed": "#000000",
+            "surface-variant": "#122839",
+            "outline-variant": "#354a5c",
+            "on-error": "#490006",
+            "surface-container": "#0a1b28",
+            "outline": "#63788c",
+            "on-background": "#d2e8ff",
+            "inverse-surface": "#f7f9ff",
+            "error": "#fa746f",
+            "surface-container-high": "#0f212f",
+            "on-secondary-fixed-variant": "#005da7",
+            "tertiary-container": "#3adffa",
+            "on-tertiary-container": "#004b56",
+            "background": "#060f17",
+            "tertiary-fixed": "#3adffa",
+            "surface-container-low": "#071520",
+            "surface-dim": "#060f17",
+            "primary-container": "#0e69dc",
+            "on-tertiary": "#005561",
+            "primary-fixed-dim": "#317bef"
+          },
+          "borderRadius": {
+            "DEFAULT": "0.25rem",
+            "lg": "0.5rem",
+            "xl": "0.75rem",
+            "full": "9999px"
+          },
+          "fontFamily": {
+            "headline": ["Inter"],
+            "display": ["Inter"],
+            "body": ["Inter"],
+            "label": ["Inter"]
+          }
+        }
+      }
+    }
+  </script>
+<style>
+    .material-symbols-outlined {
+      font-family: 'Material Symbols Outlined';
+      font-weight: normal;
+      font-style: normal;
+      font-size: 20px;
+      line-height: 1;
+      letter-spacing: normal;
+      text-transform: none;
+      display: inline-block;
+      white-space: nowrap;
+      word-wrap: normal;
+      direction: ltr;
+      -webkit-font-feature-settings: 'liga';
+      -webkit-font-smoothing: antialiased;
+    }
+    .custom-scrollbar::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-track {
+      background: #060f17;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+      background: #354a5c;
+      border-radius: 4px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+      background: #63788c;
+    }
+  </style>
+</head>
+<body class="bg-surface text-on-surface font-body antialiased min-h-screen flex flex-col selection:bg-tertiary-fixed-dim selection:text-surface-container-lowest">
+<!-- Docked Top Navigation Bar (Shared Component: TopNavBar) -->
+<header class="w-full px-6 flex flex-col justify-between bg-surface dark:bg-surface border-b border-outline-variant dark:border-outline-variant docked full-width top-0 sticky z-50 shadow-sm">
+<!-- Top Utility Bar -->
+<div class="h-14 flex items-center justify-between border-b border-outline-variant/40">
+<!-- Left Brand & Desk State -->
+<div class="flex items-center gap-3">
+<div class="font-headline text-lg font-bold text-on-surface dark:text-on-surface flex items-center gap-2">
+<div class="w-7 h-7 rounded bg-gradient-to-br from-primary-fixed to-tertiary-fixed flex items-center justify-center text-surface-container-lowest shadow">
+<span class="material-symbols-outlined text-[18px]" style="font-variation-settings: 'FILL' 1;">restaurant_menu</span>
+</div>
+<span>Roam Rush Ops</span>
+</div>
+<span class="px-2 py-0.5 rounded text-xs font-semibold bg-surface-container-highest text-secondary border border-outline-variant">
+          In-House Desk
+        </span>
+<div class="h-4 w-px bg-outline-variant mx-1"></div>
+<!-- Live Desk Status Pill -->
+<div class="flex items-center gap-2 px-2.5 py-1 rounded-full bg-surface-container-high border border-outline-variant/60 text-xs text-on-surface">
+<span class="relative flex h-2 w-2">
+<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+<span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+</span>
+<span class="font-medium">Desk open · Customers can order</span>
+</div>
+</div>
+<!-- Right System Telemetry & Operator Controls -->
+<div class="flex items-center gap-3">
+<!-- Telemetry Info -->
+<div class="flex items-center gap-1.5 px-2.5 py-1 rounded bg-surface-container-low border border-outline-variant/50 text-xs text-on-surface-variant">
+<span class="material-symbols-outlined text-tertiary text-sm" data-icon="monitor_heart">monitor_heart</span>
+<span>99.8% System health</span>
+</div>
+<!-- Trailing Action Icons -->
+<button aria-label="Toggle Sound" class="p-1.5 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container dark:hover:bg-surface-container transition-colors duration-150" type="button">
+<span class="material-symbols-outlined" data-icon="volume_up">volume_up</span>
+</button>
+<button aria-label="Notifications" class="p-1.5 rounded relative text-on-surface-variant hover:text-on-surface hover:bg-surface-container dark:hover:bg-surface-container transition-colors duration-150" type="button">
+<span class="material-symbols-outlined" data-icon="notifications">notifications</span>
+<span class="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-tertiary"></span>
+</button>
+<div class="h-4 w-px bg-outline-variant mx-1"></div>
+<!-- Operator Profile Avatar -->
+<div class="flex items-center gap-2.5 pl-1">
+<div class="w-8 h-8 rounded-full border border-outline-variant overflow-hidden bg-surface-container-high flex items-center justify-center">
+<img class="w-full h-full object-cover" data-alt="Close-up professional avatar portrait of Alex D., lead operations specialist, wearing glasses and a dark slate crewneck in a softly illuminated tech support studio." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDmaYMAIoltzuNQkwil5j0zofAD2UK-GRPtsbfgTONNrAIeY95_JMnRITnxfAAG2XqT42OiyGXqcCAE3js3zLWvK_Z594Q3mvGUspPEuOXccUwFrU-YceFFHisj5M4ZXobn3sRTC0jvGQDnqIf2d26GbcucCqkKLM8dX_vaakrm1DaR3PkCAdDmk-kp8O78OJPRZr_c9ES0HqQy8v4GlAHbF-sYGHFYzMZE3jFemcL3UbqwAhfgQcMBN8m4f9SEpdbq1mXO0tGEwys"/>
+</div>
+<div class="hidden lg:flex flex-col text-left">
+<span class="text-xs font-semibold text-on-surface leading-tight">Alex D.</span>
+<span class="text-[11px] text-on-surface-variant leading-none">Lead Operator</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Underline Tab Navigation Row (Semantic mapping: 'Menu library' is ACTIVE) -->
+<nav class="flex items-center gap-8 pt-3 text-sm font-medium tracking-tight">
+<a class="text-on-surface-variant dark:text-on-surface-variant hover:text-on-surface dark:hover:text-on-surface pb-3 font-normal transition-colors" href="#">
+        Orders
+      </a>
+<a class="text-on-surface-variant dark:text-on-surface-variant hover:text-on-surface dark:hover:text-on-surface pb-3 font-normal transition-colors" href="#">
+        Restaurants
+      </a>
+<a class="text-tertiary dark:text-tertiary border-b-2 border-tertiary pb-3 font-semibold flex items-center gap-1.5" href="#">
+<span>Menu library</span>
+<span class="text-[10px] px-1.5 py-0.2 rounded bg-tertiary/10 text-tertiary border border-tertiary/30">Taxonomy</span>
+</a>
+<a class="text-on-surface-variant dark:text-on-surface-variant hover:text-on-surface dark:hover:text-on-surface pb-3 font-normal transition-colors" href="#">
+        Cards
+      </a>
+<a class="text-on-surface-variant dark:text-on-surface-variant hover:text-on-surface dark:hover:text-on-surface pb-3 font-normal transition-colors" href="#">
+        Reports
+      </a>
+<a class="text-on-surface-variant dark:text-on-surface-variant hover:text-on-surface dark:hover:text-on-surface pb-3 font-normal transition-colors" href="#">
+        Settings
+      </a>
+</nav>
+</header>
+<!-- Page Main Canvas -->
+<main class="flex-1 max-w-7xl w-full mx-auto px-6 py-6 space-y-6">
+<!-- Page Header & Action Bar -->
+<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+<div>
+<h1 class="font-headline text-2xl font-bold tracking-tight text-on-surface">Menu library</h1>
+<p class="text-sm text-on-surface-variant mt-0.5">The building blocks every restaurant menu is made from.</p>
+</div>
+<!-- Right Actions: Search & Taxonomy Secondary Action -->
+<div class="flex items-center gap-3">
+<div class="relative w-72">
+<span class="material-symbols-outlined absolute left-3 top-2.5 text-on-surface-variant text-[18px]">search</span>
+<input class="w-full pl-9 pr-3 py-1.5 text-xs rounded bg-surface-container-high border border-outline-variant text-on-surface placeholder:text-on-surface-variant/70 focus:outline-none focus:border-tertiary transition-colors" placeholder="Search cuisines, starter kits..." type="text"/>
+</div>
+<button class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium text-on-surface bg-surface-container border border-outline-variant hover:bg-surface-container-highest transition-colors" type="button">
+<span class="material-symbols-outlined text-[16px]">history_edu</span>
+<span>Audit Changelog</span>
+</button>
+<button class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium text-on-surface bg-surface-container border border-outline-variant hover:bg-surface-container-highest transition-colors" type="button">
+<span class="material-symbols-outlined text-[16px]">file_download</span>
+<span>Export Taxonomy</span>
+</button>
+</div>
+</div>
+<!-- Sub-tabs Navigation Pills -->
+<div class="flex items-center gap-2 border-b border-outline-variant/60 pb-3">
+<!-- Active Pill -->
+<button class="px-3 py-1.5 rounded text-xs font-semibold bg-tertiary/10 text-tertiary border border-tertiary/30 shadow-xs flex items-center gap-1.5" type="button">
+<span>Cuisines</span>
+<span class="px-1.5 py-0.2 rounded-full text-[10px] bg-tertiary/20 text-tertiary font-bold">25</span>
+</button>
+<!-- Inactive Pills -->
+<button class="px-3 py-1.5 rounded text-xs font-medium bg-surface-container text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high border border-outline-variant/70 transition-colors flex items-center gap-1.5" type="button">
+<span>Starter kits</span>
+<span class="px-1.5 py-0.2 rounded-full text-[10px] bg-surface-container-highest text-on-surface-variant">7</span>
+</button>
+<button class="px-3 py-1.5 rounded text-xs font-medium bg-surface-container text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high border border-outline-variant/70 transition-colors flex items-center gap-1.5" type="button">
+<span>Dish templates</span>
+<span class="px-1.5 py-0.2 rounded-full text-[10px] bg-surface-container-highest text-on-surface-variant/60">0</span>
+</button>
+<button class="px-3 py-1.5 rounded text-xs font-medium bg-surface-container text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high border border-outline-variant/70 transition-colors flex items-center gap-1.5" type="button">
+<span>Product types</span>
+<span class="px-1.5 py-0.2 rounded-full text-[10px] bg-surface-container-highest text-on-surface-variant">6</span>
+</button>
+</div>
+<!-- Helper / Information Banner -->
+<div class="flex items-start gap-3 p-3.5 rounded bg-surface-container-low border border-outline-variant/70 text-xs">
+<span class="material-symbols-outlined text-tertiary text-base mt-0.5">info</span>
+<div class="text-on-surface-variant leading-relaxed">
+<span class="text-on-surface font-semibold">Cuisine Hierarchy Logic:</span> Cuisines label restaurants for marketplace search and discovery, and determine which starter kits and dish taxonomy rules are offered during onboarding.
+      </div>
+</div>
+<!-- Inline 'Add Cuisine' Action Bar -->
+<div class="p-4 rounded-lg bg-surface-container border border-outline-variant shadow-sm flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
+<div class="flex-1 flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+<div class="flex-1 relative">
+<label class="block text-[11px] font-semibold text-on-surface-variant uppercase tracking-wider mb-1">Add Cuisine Definition</label>
+<input class="w-full px-3 py-2 text-xs rounded bg-surface border border-outline-variant text-on-surface placeholder:text-on-surface-variant/60 focus:outline-none focus:border-tertiary transition-colors" placeholder="New cuisine, e.g. Soup, Wood-fired Pizza, Artisanal Bakery" type="text"/>
+</div>
+<div class="w-full sm:w-56">
+<label class="block text-[11px] font-semibold text-on-surface-variant uppercase tracking-wider mb-1">Marketplace Tag</label>
+<div class="relative">
+<select class="w-full px-3 py-2 text-xs rounded bg-surface border border-outline-variant text-on-surface focus:outline-none focus:border-tertiary appearance-none pr-8 transition-colors">
+<option value="main-entree">Main Entrée &amp; Specialist</option>
+<option value="breakfast-pastry">Bakery &amp; Breakfast</option>
+<option value="beverages">Bar &amp; Craft Beverage</option>
+<option value="quick-bites">Quick Bites &amp; Street Food</option>
+</select>
+<span class="material-symbols-outlined absolute right-2.5 top-2.5 pointer-events-none text-on-surface-variant text-[16px]">arrow_drop_down</span>
+</div>
+</div>
+</div>
+<div class="pt-0 md:pt-4 flex items-end">
+<!-- Single Primary CTA Per Region with Oceanic Gradient -->
+<button class="w-full sm:w-auto px-4 py-2 rounded text-xs font-semibold text-white bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 active:opacity-90 shadow-sm transition-all flex items-center justify-center gap-1.5 whitespace-nowrap" type="button">
+<span class="material-symbols-outlined text-[16px]">add</span>
+<span>Add cuisine</span>
+</button>
+</div>
+</div>
+<!-- Summary Metrics Header Bar -->
+<div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+<div class="p-3 rounded bg-surface-container border border-outline-variant flex items-center justify-between">
+<div>
+<span class="text-[11px] text-on-surface-variant uppercase font-semibold">Total Cuisines</span>
+<div class="text-lg font-bold text-on-surface">25</div>
+</div>
+<div class="p-2 rounded bg-surface-container-high text-tertiary">
+<span class="material-symbols-outlined text-lg">category</span>
+</div>
+</div>
+<div class="p-3 rounded bg-surface-container border border-outline-variant flex items-center justify-between">
+<div>
+<span class="text-[11px] text-on-surface-variant uppercase font-semibold">Active in Menus</span>
+<div class="text-lg font-bold text-on-surface">21</div>
+</div>
+<div class="p-2 rounded bg-surface-container-high text-emerald-400">
+<span class="material-symbols-outlined text-lg">check_circle</span>
+</div>
+</div>
+<div class="p-3 rounded bg-surface-container border border-outline-variant flex items-center justify-between">
+<div>
+<span class="text-[11px] text-on-surface-variant uppercase font-semibold">Unused / Draft</span>
+<div class="text-lg font-bold text-on-surface">4</div>
+</div>
+<div class="p-2 rounded bg-surface-container-high text-on-surface-variant">
+<span class="material-symbols-outlined text-lg">draft</span>
+</div>
+</div>
+<div class="p-3 rounded bg-surface-container border border-outline-variant flex items-center justify-between">
+<div>
+<span class="text-[11px] text-on-surface-variant uppercase font-semibold">Starter Kits Linked</span>
+<div class="text-lg font-bold text-on-surface">7</div>
+</div>
+<div class="p-2 rounded bg-surface-container-high text-secondary">
+<span class="material-symbols-outlined text-lg">widgets</span>
+</div>
+</div>
+</div>
+<!-- Dense High-Density Data Table / List -->
+<div class="bg-surface-container rounded-lg border border-outline-variant shadow-sm overflow-hidden flex flex-col">
+<div class="overflow-x-auto custom-scrollbar">
+<table class="w-full text-left border-collapse text-xs">
+<thead>
+<tr class="bg-surface-container-low border-b border-outline-variant text-[11px] font-semibold text-on-surface-variant uppercase tracking-wider">
+<th class="py-2.5 px-3 w-8 text-center" scope="col">
+<span class="sr-only">Reorder</span>
+</th>
+<th class="py-2.5 px-4" scope="col">Cuisine Name &amp; Slug</th>
+<th class="py-2.5 px-4" scope="col">Marketplace Tag</th>
+<th class="py-2.5 px-4" scope="col">Linked Restaurants &amp; Kits</th>
+<th class="py-2.5 px-4" scope="col">Item Count</th>
+<th class="py-2.5 px-4" scope="col">Last Updated</th>
+<th class="py-2.5 px-4 text-right" scope="col">Actions</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-outline-variant/50 text-on-surface">
+<!-- Row 1 -->
+<tr class="hover:bg-surface-container-high/60 transition-colors group">
+<td class="py-2.5 px-3 text-center text-outline cursor-grab">
+<span class="material-symbols-outlined text-[16px] text-on-surface-variant/40 group-hover:text-on-surface-variant">drag_indicator</span>
+</td>
+<td class="py-2.5 px-4">
+<div class="font-medium text-on-surface text-sm">Wood-Fired Pizza</div>
+<div class="text-[11px] text-on-surface-variant font-mono">wood-fired-pizza</div>
+</td>
+<td class="py-2.5 px-4">
+<span class="px-2 py-0.5 rounded text-[11px] bg-secondary-container/60 text-secondary border border-secondary-container">
+                  Italian &amp; Oven
+                </span>
+</td>
+<td class="py-2.5 px-4">
+<span class="font-medium text-on-surface">8 restaurants</span>
+<span class="text-on-surface-variant"> · 1 kit (Pizza Kit)</span>
+</td>
+<td class="py-2.5 px-4">
+<span class="font-medium">42</span> <span class="text-on-surface-variant">menu items</span>
+</td>
+<td class="py-2.5 px-4 text-on-surface-variant">Today, 11:24 AM</td>
+<td class="py-2.5 px-4 text-right">
+<div class="inline-flex items-center gap-1">
+<button class="p-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-highest" title="Move Up" type="button">
+<span class="material-symbols-outlined text-[16px]">arrow_upward</span>
+</button>
+<button class="p-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-highest" title="Move Down" type="button">
+<span class="material-symbols-outlined text-[16px]">arrow_downward</span>
+</button>
+<button class="px-2 py-1 rounded text-xs text-on-surface hover:bg-surface-container-highest" type="button">Rename</button>
+<button class="px-2 py-1 rounded text-xs text-on-surface hover:bg-surface-container-highest" type="button">Merge</button>
+<button class="px-2 py-1 rounded text-xs text-on-surface-variant hover:text-on-surface hover:bg-surface-container-highest" type="button">Archive</button>
+</div>
+</td>
+</tr>
+<!-- Row 2 -->
+<tr class="hover:bg-surface-container-high/60 transition-colors group">
+<td class="py-2.5 px-3 text-center text-outline cursor-grab">
+<span class="material-symbols-outlined text-[16px] text-on-surface-variant/40 group-hover:text-on-surface-variant">drag_indicator</span>
+</td>
+<td class="py-2.5 px-4">
+<div class="font-medium text-on-surface text-sm">Artisan Bakery &amp; Pastries</div>
+<div class="text-[11px] text-on-surface-variant font-mono">artisan-bakery</div>
+</td>
+<td class="py-2.5 px-4">
+<span class="px-2 py-0.5 rounded text-[11px] bg-secondary-container/60 text-secondary border border-secondary-container">
+                  Bakery &amp; Breakfast
+                </span>
+</td>
+<td class="py-2.5 px-4">
+<span class="font-medium text-on-surface">3 restaurants</span>
+<span class="text-on-surface-variant"> · 1 kit</span>
+</td>
+<td class="py-2.5 px-4">
+<span class="font-medium">24</span> <span class="text-on-surface-variant">menu items</span>
+</td>
+<td class="py-2.5 px-4 text-on-surface-variant">Yesterday</td>
+<td class="py-2.5 px-4 text-right">
+<div class="inline-flex items-center gap-1">
+<button class="p-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-highest" title="Move Up" type="button">
+<span class="material-symbols-outlined text-[16px]">arrow_upward</span>
+</button>
+<button class="p-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-highest" title="Move Down" type="button">
+<span class="material-symbols-outlined text-[16px]">arrow_downward</span>
+</button>
+<button class="px-2 py-1 rounded text-xs text-on-surface hover:bg-surface-container-highest" type="button">Rename</button>
+<button class="px-2 py-1 rounded text-xs text-on-surface hover:bg-surface-container-highest" type="button">Merge</button>
+<button class="px-2 py-1 rounded text-xs text-on-surface-variant hover:text-on-surface hover:bg-surface-container-highest" type="button">Archive</button>
+</div>
+</td>
+</tr>
+<!-- Row 3 -->
+<tr class="hover:bg-surface-container-high/60 transition-colors group">
+<td class="py-2.5 px-3 text-center text-outline cursor-grab">
+<span class="material-symbols-outlined text-[16px] text-on-surface-variant/40 group-hover:text-on-surface-variant">drag_indicator</span>
+</td>
+<td class="py-2.5 px-4">
+<div class="font-medium text-on-surface text-sm">Ramen &amp; Japanese Broths</div>
+<div class="text-[11px] text-on-surface-variant font-mono">ramen-japanese</div>
+</td>
+<td class="py-2.5 px-4">
+<span class="px-2 py-0.5 rounded text-[11px] bg-secondary-container/60 text-secondary border border-secondary-container">
+                  Noodle &amp; Broth
+                </span>
+</td>
+<td class="py-2.5 px-4">
+<span class="font-medium text-on-surface">2 restaurants</span>
+<span class="text-on-surface-variant"> · 1 kit</span>
+</td>
+<td class="py-2.5 px-4">
+<span class="font-medium">18</span> <span class="text-on-surface-variant">menu items</span>
+</td>
+<td class="py-2.5 px-4 text-on-surface-variant">Apr 22, 2024</td>
+<td class="py-2.5 px-4 text-right">
+<div class="inline-flex items-center gap-1">
+<button class="p-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-highest" title="Move Up" type="button">
+<span class="material-symbols-outlined text-[16px]">arrow_upward</span>
+</button>
+<button class="p-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-highest" title="Move Down" type="button">
+<span class="material-symbols-outlined text-[16px]">arrow_downward</span>
+</button>
+<button class="px-2 py-1 rounded text-xs text-on-surface hover:bg-surface-container-highest" type="button">Rename</button>
+<button class="px-2 py-1 rounded text-xs text-on-surface hover:bg-surface-container-highest" type="button">Merge</button>
+<button class="px-2 py-1 rounded text-xs text-on-surface-variant hover:text-on-surface hover:bg-surface-container-highest" type="button">Archive</button>
+</div>
+</td>
+</tr>
+<!-- Row 4 -->
+<tr class="hover:bg-surface-container-high/60 transition-colors group">
+<td class="py-2.5 px-3 text-center text-outline cursor-grab">
+<span class="material-symbols-outlined text-[16px] text-on-surface-variant/40 group-hover:text-on-surface-variant">drag_indicator</span>
+</td>
+<td class="py-2.5 px-4">
+<div class="font-medium text-on-surface text-sm">Burgers &amp; Craft Sides</div>
+<div class="text-[11px] text-on-surface-variant font-mono">burgers-craft</div>
+</td>
+<td class="py-2.5 px-4">
+<span class="px-2 py-0.5 rounded text-[11px] bg-secondary-container/60 text-secondary border border-secondary-container">
+                  Main Entrée &amp; Fast Casual
+                </span>
+</td>
+<td class="py-2.5 px-4">
+<span class="font-medium text-on-surface">5 restaurants</span>
+<span class="text-on-surface-variant"> · 1 kit</span>
+</td>
+<td class="py-2.5 px-4">
+<span class="font-medium">35</span> <span class="text-on-surface-variant">menu items</span>
+</td>
+<td class="py-2.5 px-4 text-on-surface-variant">Apr 21, 2024</td>
+<td class="py-2.5 px-4 text-right">
+<div class="inline-flex items-center gap-1">
+<button class="p-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-highest" title="Move Up" type="button">
+<span class="material-symbols-outlined text-[16px]">arrow_upward</span>
+</button>
+<button class="p-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-highest" title="Move Down" type="button">
+<span class="material-symbols-outlined text-[16px]">arrow_downward</span>
+</button>
+<button class="px-2 py-1 rounded text-xs text-on-surface hover:bg-surface-container-highest" type="button">Rename</button>
+<button class="px-2 py-1 rounded text-xs text-on-surface hover:bg-surface-container-highest" type="button">Merge</button>
+<button class="px-2 py-1 rounded text-xs text-on-surface-variant hover:text-on-surface hover:bg-surface-container-highest" type="button">Archive</button>
+</div>
+</td>
+</tr>
+<!-- Row 5 -->
+<tr class="hover:bg-surface-container-high/60 transition-colors group">
+<td class="py-2.5 px-3 text-center text-outline cursor-grab">
+<span class="material-symbols-outlined text-[16px] text-on-surface-variant/40 group-hover:text-on-surface-variant">drag_indicator</span>
+</td>
+<td class="py-2.5 px-4">
+<div class="font-medium text-on-surface text-sm">Coastal Mexican &amp; Tacos</div>
+<div class="text-[11px] text-on-surface-variant font-mono">coastal-mexican</div>
+</td>
+<td class="py-2.5 px-4">
+<span class="px-2 py-0.5 rounded text-[11px] bg-secondary-container/60 text-secondary border border-secondary-container">
+                  Latin &amp; Street
+                </span>
+</td>
+<td class="py-2.5 px-4">
+<span class="font-medium text-on-surface">2 restaurants</span>
+<span class="text-on-surface-variant"> · 1 kit</span>
+</td>
+<td class="py-2.5 px-4">
+<span class="font-medium">28</span> <span class="text-on-surface-variant">menu items</span>
+</td>
+<td class="py-2.5 px-4 text-on-surface-variant">Apr 20, 2024</td>
+<td class="py-2.5 px-4 text-right">
+<div class="inline-flex items-center gap-1">
+<button class="p-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-highest" title="Move Up" type="button">
+<span class="material-symbols-outlined text-[16px]">arrow_upward</span>
+</button>
+<button class="p-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-highest" title="Move Down" type="button">
+<span class="material-symbols-outlined text-[16px]">arrow_downward</span>
+</button>
+<button class="px-2 py-1 rounded text-xs text-on-surface hover:bg-surface-container-highest" type="button">Rename</button>
+<button class="px-2 py-1 rounded text-xs text-on-surface hover:bg-surface-container-highest" type="button">Merge</button>
+<button class="px-2 py-1 rounded text-xs text-on-surface-variant hover:text-on-surface hover:bg-surface-container-highest" type="button">Archive</button>
+</div>
+</td>
+</tr>
+<!-- Row 6 -->
+<tr class="hover:bg-surface-container-high/60 transition-colors group">
+<td class="py-2.5 px-3 text-center text-outline cursor-grab">
+<span class="material-symbols-outlined text-[16px] text-on-surface-variant/40 group-hover:text-on-surface-variant">drag_indicator</span>
+</td>
+<td class="py-2.5 px-4">
+<div class="font-medium text-on-surface text-sm">Healthy Greens &amp; Bowls</div>
+<div class="text-[11px] text-on-surface-variant font-mono">greens-bowls</div>
+</td>
+<td class="py-2.5 px-4">
+<span class="px-2 py-0.5 rounded text-[11px] bg-secondary-container/60 text-secondary border border-secondary-container">
+                  Bowls &amp; Salads
+                </span>
+</td>
+<td class="py-2.5 px-4">
+<span class="font-medium text-on-surface">2 restaurants</span>
+<span class="text-on-surface-variant"> · 1 kit</span>
+</td>
+<td class="py-2.5 px-4">
+<span class="font-medium">19</span> <span class="text-on-surface-variant">menu items</span>
+</td>
+<td class="py-2.5 px-4 text-on-surface-variant">Apr 19, 2024</td>
+<td class="py-2.5 px-4 text-right">
+<div class="inline-flex items-center gap-1">
+<button class="p-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-highest" title="Move Up" type="button">
+<span class="material-symbols-outlined text-[16px]">arrow_upward</span>
+</button>
+<button class="p-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-highest" title="Move Down" type="button">
+<span class="material-symbols-outlined text-[16px]">arrow_downward</span>
+</button>
+<button class="px-2 py-1 rounded text-xs text-on-surface hover:bg-surface-container-highest" type="button">Rename</button>
+<button class="px-2 py-1 rounded text-xs text-on-surface hover:bg-surface-container-highest" type="button">Merge</button>
+<button class="px-2 py-1 rounded text-xs text-on-surface-variant hover:text-on-surface hover:bg-surface-container-highest" type="button">Archive</button>
+</div>
+</td>
+</tr>
+<!-- Row 7 -->
+<tr class="hover:bg-surface-container-high/60 transition-colors group">
+<td class="py-2.5 px-3 text-center text-outline cursor-grab">
+<span class="material-symbols-outlined text-[16px] text-on-surface-variant/40 group-hover:text-on-surface-variant">drag_indicator</span>
+</td>
+<td class="py-2.5 px-4">
+<div class="font-medium text-on-surface text-sm">Dim Sum &amp; Cantonese</div>
+<div class="text-[11px] text-on-surface-variant font-mono">dim-sum-cantonese</div>
+</td>
+<td class="py-2.5 px-4">
+<span class="px-2 py-0.5 rounded text-[11px] bg-secondary-container/60 text-secondary border border-secondary-container">
+                  Asian Specialty
+                </span>
+</td>
+<td class="py-2.5 px-4">
+<span class="font-medium text-on-surface">1 restaurant</span>
+<span class="text-on-surface-variant"> · 1 kit</span>
+</td>
+<td class="py-2.5 px-4">
+<span class="font-medium">31</span> <span class="text-on-surface-variant">menu items</span>
+</td>
+<td class="py-2.5 px-4 text-on-surface-variant">Apr 15, 2024</td>
+<td class="py-2.5 px-4 text-right">
+<div class="inline-flex items-center gap-1">
+<button class="p-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-highest" title="Move Up" type="button">
+<span class="material-symbols-outlined text-[16px]">arrow_upward</span>
+</button>
+<button class="p-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-highest" title="Move Down" type="button">
+<span class="material-symbols-outlined text-[16px]">arrow_downward</span>
+</button>
+<button class="px-2 py-1 rounded text-xs text-on-surface hover:bg-surface-container-highest" type="button">Rename</button>
+<button class="px-2 py-1 rounded text-xs text-on-surface hover:bg-surface-container-highest" type="button">Merge</button>
+<button class="px-2 py-1 rounded text-xs text-on-surface-variant hover:text-on-surface hover:bg-surface-container-highest" type="button">Archive</button>
+</div>
+</td>
+</tr>
+<!-- Row 8 -->
+<tr class="hover:bg-surface-container-high/60 transition-colors group">
+<td class="py-2.5 px-3 text-center text-outline cursor-grab">
+<span class="material-symbols-outlined text-[16px] text-on-surface-variant/40 group-hover:text-on-surface-variant">drag_indicator</span>
+</td>
+<td class="py-2.5 px-4">
+<div class="font-medium text-on-surface text-sm">Traditional Deli &amp; Sandwiches</div>
+<div class="text-[11px] text-on-surface-variant font-mono">deli-sandwiches</div>
+</td>
+<td class="py-2.5 px-4">
+<span class="px-2 py-0.5 rounded text-[11px] bg-secondary-container/60 text-secondary border border-secondary-container">
+                  Lunch &amp; Deli
+                </span>
+</td>
+<td class="py-2.5 px-4">
+<span class="font-medium text-on-surface">1 restaurant</span>
+<span class="text-on-surface-variant"> · 0 kits</span>
+</td>
+<td class="py-2.5 px-4">
+<span class="font-medium">15</span> <span class="text-on-surface-variant">menu items</span>
+</td>
+<td class="py-2.5 px-4 text-on-surface-variant">Apr 12, 2024</td>
+<td class="py-2.5 px-4 text-right">
+<div class="inline-flex items-center gap-1">
+<button class="p-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-highest" title="Move Up" type="button">
+<span class="material-symbols-outlined text-[16px]">arrow_upward</span>
+</button>
+<button class="p-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-highest" title="Move Down" type="button">
+<span class="material-symbols-outlined text-[16px]">arrow_downward</span>
+</button>
+<button class="px-2 py-1 rounded text-xs text-on-surface hover:bg-surface-container-highest" type="button">Rename</button>
+<button class="px-2 py-1 rounded text-xs text-on-surface hover:bg-surface-container-highest" type="button">Merge</button>
+<button class="px-2 py-1 rounded text-xs text-on-surface-variant hover:text-on-surface hover:bg-surface-container-highest" type="button">Archive</button>
+</div>
+</td>
+</tr>
+<!-- Row 9 (Draft / Unused) -->
+<tr class="hover:bg-surface-container-high/60 transition-colors group bg-surface-container-low/40">
+<td class="py-2.5 px-3 text-center text-outline cursor-grab">
+<span class="material-symbols-outlined text-[16px] text-on-surface-variant/40 group-hover:text-on-surface-variant">drag_indicator</span>
+</td>
+<td class="py-2.5 px-4">
+<div class="font-medium text-on-surface-variant text-sm flex items-center gap-2">
+<span>Soup &amp; Broths</span>
+<span class="px-1.5 py-0.2 rounded text-[10px] bg-surface-container-highest text-on-surface-variant border border-outline-variant">Draft</span>
+</div>
+<div class="text-[11px] text-on-surface-variant/60 font-mono">soup-broths</div>
+</td>
+<td class="py-2.5 px-4">
+<span class="px-2 py-0.5 rounded text-[11px] bg-surface-container-highest text-on-surface-variant border border-outline-variant">
+                  Seasonal Soup
+                </span>
+</td>
+<td class="py-2.5 px-4">
+<span class="px-2 py-0.5 rounded text-[11px] bg-surface-container-highest text-on-surface-variant font-medium">
+                  Not used
+                </span>
+</td>
+<td class="py-2.5 px-4 text-on-surface-variant">
+<span>0 items</span>
+</td>
+<td class="py-2.5 px-4 text-on-surface-variant">Apr 08, 2024</td>
+<td class="py-2.5 px-4 text-right">
+<div class="inline-flex items-center gap-1">
+<button class="p-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-highest" title="Move Up" type="button">
+<span class="material-symbols-outlined text-[16px]">arrow_upward</span>
+</button>
+<button class="px-2 py-1 rounded text-xs text-on-surface hover:bg-surface-container-highest" type="button">Rename</button>
+<button class="px-2 py-1 rounded text-xs text-on-surface hover:bg-surface-container-highest" type="button">Merge</button>
+<button class="px-2 py-1 rounded text-xs text-error hover:bg-error-container/40 transition-colors" type="button">Delete</button>
+</div>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<!-- Clean Pagination & Ops Real-Time Sync Footer -->
+<div class="px-4 py-3 bg-surface-container-low border-t border-outline-variant flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-on-surface-variant">
+<div class="flex items-center gap-2">
+<span class="inline-block w-2 h-2 rounded-full bg-tertiary"></span>
+<span>Showing <strong>9</strong> of <strong>25</strong> cuisines · Batch reorder enabled</span>
+</div>
+<div class="flex items-center gap-4">
+<span class="text-[11px] text-on-surface-variant/80 hidden md:inline">Changes sync across In-House restaurant builder in real time</span>
+<div class="inline-flex items-center gap-1">
+<button class="px-2.5 py-1 rounded bg-surface-container border border-outline-variant text-on-surface-variant hover:text-on-surface hover:bg-surface-container-highest transition-colors disabled:opacity-40" disabled="" type="button">
+              Previous
+            </button>
+<span class="px-2 py-1 text-on-surface font-medium">1 / 3</span>
+<button class="px-2.5 py-1 rounded bg-surface-container border border-outline-variant text-on-surface hover:bg-surface-container-highest transition-colors" type="button">
+              Next
+            </button>
+</div>
+</div>
+</div>
+</div>
+</main>
+</body></html>

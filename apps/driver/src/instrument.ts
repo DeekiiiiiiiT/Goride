@@ -45,18 +45,21 @@ if (dsn) {
   );
 }
 
-/** Report a prior WebView renderer kill (flag set by MainActivity SharedPreferences). */
+/** Report a prior WebView renderer death (flag set by MainActivity SharedPreferences). */
 export async function reportPriorWebViewCrashIfAny(): Promise<void> {
   if (!dsn || !Capacitor.isNativePlatform()) return;
   try {
     const { value } = await Preferences.get({ key: WEBVIEW_RENDER_GONE_PREF });
     if (!value) return;
     await Preferences.remove({ key: WEBVIEW_RENDER_GONE_PREF });
+    // OS low-RAM kills (raw "kill") are recovered via MainActivity.recreate() —
+    // warning only. Chromium renderer crashes stay error-level.
+    const didCrash = String(value).includes('crash');
     Sentry.captureMessage('webview_render_process_gone', {
-      level: 'error',
+      level: didCrash ? 'error' : 'warning',
       tags: {
         platform: Capacitor.getPlatform(),
-        didCrash: String(value).includes('crash') ? 'true' : 'false',
+        didCrash: didCrash ? 'true' : 'false',
       },
       extra: { raw: value },
     });

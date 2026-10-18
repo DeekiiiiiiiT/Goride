@@ -88,6 +88,9 @@ jobs:
       - name: Test menu-engine
         run: pnpm --filter @roam/menu-engine test
 
+      - name: Test menu-builder
+        run: pnpm --filter @roam/menu-builder test
+
       - name: Test dash-customer
         run: pnpm --filter @roam/dash-customer test
 
@@ -201,6 +204,7 @@ jobs:
           supabase/functions/delivery/inHouse/taskMachine.test.ts
           supabase/functions/delivery/inHouse/pricing.test.ts
           supabase/functions/delivery/inHouse/deskRules.test.ts
+          supabase/functions/delivery/admin/menuLibrary.test.ts
           supabase/functions/delivery/inHouse/customerMenu.test.ts
           supabase/functions/delivery/inHouse/dispatchOrigin.test.ts
           supabase/functions/delivery/admin/consoleAccess.test.ts

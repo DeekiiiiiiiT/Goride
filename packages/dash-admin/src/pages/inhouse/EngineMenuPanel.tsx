@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { KitStarter, ProductTypeEditor } from '@roam/menu-builder';
+import { addTemplateToSnapshot, KitStarter, PRODUCT_TYPE_OPTIONS, ProductTypeEditor, productTypeHint } from '@roam/menu-builder';
 import type { MenuKitDef, MenuProduct, MenuSnapshot, ProductType } from '@roam/menu-engine';
 import {
   getInHouseEngineMenu,
@@ -7,19 +7,14 @@ import {
   saveInHouseEngineMenuDraft,
   saveInHouseLocationOverrides,
   uploadDeskImage,
+  type DishTemplate,
   type InHouseEngineOverride,
 } from '@roam/dash-admin-client';
+import { useAdminConfirm } from '../../contexts/AdminConfirmContext';
 import { EntityDrawer } from '../../components/ui/bits';
 import { IH } from './inHouseTheme';
 
-const SECTION_TYPES: Array<{ id: ProductType; label: string }> = [
-  { id: 'standard', label: 'Standard' },
-  { id: 'sized', label: 'Sizes' },
-  { id: 'pizza', label: 'Pizza' },
-  { id: 'wings', label: 'Wings' },
-  { id: 'combo', label: 'Combo' },
-  { id: 'build_your_own', label: 'Build your own' },
-];
+const SECTION_TYPES = PRODUCT_TYPE_OPTIONS;
 
 function draftDiff(before: MenuSnapshot | null, after: MenuSnapshot): string {
   const beforeIds = new Set((before?.products || []).map((p) => p.id));
@@ -110,6 +105,7 @@ export function EngineMenuPanel({
   const [snapshot, setSnapshot] = useState<MenuSnapshot | null>(null);
   const [publishedBaseline, setPublishedBaseline] = useState<MenuSnapshot | null>(null);
   const [kits, setKits] = useState<MenuKitDef[]>([]);
+  const [templates, setTemplates] = useState<DishTemplate[]>([]);
   const [menuMeta, setMenuMeta] = useState<{ status?: string; version?: number } | null>(null);
   const [sectionId, setSectionId] = useState('');
   const [productId, setProductId] = useState('');
@@ -127,6 +123,7 @@ export function EngineMenuPanel({
   const [addingSection, setAddingSection] = useState(false);
   const [newSectionName, setNewSectionName] = useState('');
   const [newSectionType, setNewSectionType] = useState<ProductType>('standard');
+  const { confirm } = useAdminConfirm();
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const skipAutosave = useRef(true);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -143,6 +140,7 @@ export function EngineMenuPanel({
       setSnapshot(data.snapshot);
       setPublishedBaseline(data.menu?.status === 'published' ? data.snapshot : null);
       setKits(data.kits || []);
+      setTemplates(data.templates || []);
       setMenuMeta(data.menu);
       setOverrides(data.overrides || []);
       const firstSection = data.snapshot?.sections[0]?.id || '';
@@ -211,7 +209,12 @@ export function EngineMenuPanel({
       return;
     }
     const summary = draftDiff(publishedBaseline, snapshot);
-    if (!window.confirm(`Publish this menu?\n\n${summary}`)) return;
+    const ok = await confirm({
+      title: 'Publish this menu?',
+      description: <span className="whitespace-pre-line">{summary}</span>,
+      confirmLabel: 'Publish',
+    });
+    if (!ok) return;
     setSaving(true);
     setError('');
     try {
@@ -236,9 +239,15 @@ export function EngineMenuPanel({
       sort: snapshot.sections.length + i,
     }));
     const products: MenuProduct[] = [];
+    let next: MenuSnapshot = { ...snapshot, sections: [...snapshot.sections, ...sections] };
     kit.payload.sections.forEach((section, si) => {
       const sec = sections[si];
-      (section.products || []).forEach((p) => {
+      (section.products || []).forEach((p: { name: string; type: string; templateId?: string }) => {
+        const template = p.templateId ? templates.find((t) => t.id === p.templateId) : undefined;
+        if (template) {
+          next = addTemplateToSnapshot(next, template.payload, sec.id, p.name).snapshot;
+          return;
+        }
         const type = (section.sectionType as MenuProduct['type']) || 'standard';
         products.push({
           id: crypto.randomUUID(),
@@ -251,11 +260,7 @@ export function EngineMenuPanel({
         });
       });
     });
-    setSnapshot({
-      ...snapshot,
-      sections: [...snapshot.sections, ...sections],
-      products: [...snapshot.products, ...products],
-    });
+    setSnapshot({ ...next, products: [...next.products, ...products] });
     if (sections[0]) setSectionId(sections[0].id);
   }
 
@@ -319,6 +324,14 @@ export function EngineMenuPanel({
     setDrawerOpen(true);
   }
 
+  function addDishFromTemplate(template: DishTemplate) {
+    if (!snapshot || !sectionId) return;
+    const next = addTemplateToSnapshot(snapshot, template.payload, sectionId);
+    setSnapshot(next.snapshot);
+    setProductId(next.productId);
+    setDrawerOpen(true);
+  }
+
   function patchProduct(id: string, patch: Partial<MenuProduct>) {
     if (!snapshot) return;
     setSnapshot({
@@ -327,8 +340,13 @@ export function EngineMenuPanel({
     });
   }
 
-  function archiveProduct(id: string) {
-    if (!window.confirm('Archive this dish? It will leave the list but stay in the draft until you publish.')) return;
+  async function archiveProduct(id: string) {
+    const ok = await confirm({
+      title: 'Archive this dish?',
+      description: 'It will leave the list but stay in the draft until you publish.',
+      confirmLabel: 'Archive',
+    });
+    if (!ok) return;
     patchProduct(id, { archivedAt: new Date().toISOString() });
     setDrawerOpen(false);
     setProductId('');
@@ -402,6 +420,10 @@ export function EngineMenuPanel({
   const activeSection = sections.find((s) => s.id === sectionId) || sections[0];
   const activeSectionId = activeSection?.id || '';
   const sectionProducts = snapshot.products.filter((p) => p.sectionId === activeSectionId && !p.archivedAt);
+  // Templates of this section's type first; any template can be used in any section.
+  const sectionTemplates = [...templates].sort((a, b) =>
+    Number(b.productType === activeSection?.sectionType) - Number(a.productType === activeSection?.sectionType)
+    || a.name.localeCompare(b.name));
   const filtered = sectionProducts.filter((p) => {
     if (filter && !`${p.name} ${p.description || ''}`.toLowerCase().includes(filter.toLowerCase())) return false;
     if (statusFilter === 'needs' && p.priceCheckedAt) return false;
@@ -447,7 +469,7 @@ export function EngineMenuPanel({
                 />
               </label>
               <label className="block space-y-1 text-[10px] text-slate-500">
-                Section type
+                How customers order dishes here
                 <select
                   className={`${IH.input} w-full text-xs`}
                   value={newSectionType}
@@ -457,6 +479,7 @@ export function EngineMenuPanel({
                     <option key={t.id} value={t.id}>{t.label}</option>
                   ))}
                 </select>
+                <span className="block text-[11px] normal-case leading-snug text-slate-400">{productTypeHint(newSectionType)}</span>
               </label>
               <div className="flex flex-wrap gap-2">
                 <button type="submit" className={IH.primaryBtn} disabled={!newSectionName.trim()}>
@@ -543,7 +566,7 @@ export function EngineMenuPanel({
                   />
                 </label>
                 <label className="block space-y-1 text-[10px] text-slate-500">
-                  Section type
+                  How customers order dishes here
                   <select
                     className={`${IH.input} w-full text-xs`}
                     value={newSectionType}
@@ -553,6 +576,7 @@ export function EngineMenuPanel({
                       <option key={t.id} value={t.id}>{t.label}</option>
                     ))}
                   </select>
+                <span className="block text-[11px] normal-case leading-snug text-slate-400">{productTypeHint(newSectionType)}</span>
                 </label>
                 <div className="flex flex-wrap gap-1.5">
                   <button type="submit" className={IH.primaryBtn} disabled={!newSectionName.trim()}>
@@ -591,7 +615,7 @@ export function EngineMenuPanel({
             </nav>
             {activeSection ? (
               <label className="block space-y-1 px-1 text-[10px] text-slate-500">
-                Section type
+                How customers order dishes here
                 <select
                   className={`${IH.input} w-full text-xs`}
                   value={activeSection.sectionType || 'standard'}
@@ -601,6 +625,7 @@ export function EngineMenuPanel({
                     <option key={t.id} value={t.id}>{t.label}</option>
                   ))}
                 </select>
+                <span className="block text-[11px] normal-case leading-snug text-slate-400">{productTypeHint(activeSection.sectionType)}</span>
               </label>
             ) : null}
           </div>
@@ -638,9 +663,26 @@ export function EngineMenuPanel({
                 )}
                 <span className="text-xs text-slate-400">{sectionProducts.length} items</span>
               </div>
-              <button type="button" className={IH.primaryBtn} onClick={addDish} disabled={!activeSectionId}>
-                + Add dish
-              </button>
+              <div className="flex flex-wrap items-center gap-2">
+                {sectionTemplates.length ? (
+                  <select
+                    className={`${IH.input} py-1.5 text-xs`}
+                    value=""
+                    disabled={!activeSectionId}
+                    aria-label="Add dish from template"
+                    onChange={(e) => {
+                      const template = templates.find((t) => t.id === e.target.value);
+                      if (template) addDishFromTemplate(template);
+                    }}
+                  >
+                    <option value="">+ From template…</option>
+                    {sectionTemplates.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+                  </select>
+                ) : null}
+                <button type="button" className={IH.primaryBtn} onClick={addDish} disabled={!activeSectionId}>
+                  + Add dish
+                </button>
+              </div>
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <input

@@ -13,6 +13,7 @@ import {
   type MenuSnapshot,
 } from "../../../../packages/menu-engine/src/index.ts";
 import { customerPriceFromCost } from "./pricing.ts";
+import { cuisineIdsForLabels, kitsForMerchant, type CuisineRow, type KitRow } from "../admin/menuLibrary.ts";
 
 type Sb = {
   from: (table: string) => {
@@ -323,10 +324,14 @@ export async function listKitsForMerchant(sb: Sb, merchantId: string) {
     : merchant?.cuisine_type
     ? [String(merchant.cuisine_type)]
     : [];
-  const { data: rows } = await sb.from("menu_kits").select("id, cuisine, name, payload");
-  if (rows?.length) {
-    const set = new Set(cuisines.map((c) => c.toLowerCase()));
-    return rows.filter((r: { cuisine: string }) => set.has(String(r.cuisine).toLowerCase()) || set.size === 0);
+  const [{ data: rows, error: kitErr }, { data: cuisineRows, error: cuisineErr }] = await Promise.all([
+    sb.from("menu_kits").select("id, cuisine, cuisine_ids, name, payload, sort, archived_at"),
+    sb.from("cuisines").select("id, label, aliases, sort, archived_at"),
+  ]);
+  if (!kitErr && !cuisineErr && rows?.length) {
+    // Menu library: match by cuisine id (old spellings via aliases). No cuisine → no kits.
+    const library = (cuisineRows || []) as CuisineRow[];
+    return kitsForMerchant(rows as KitRow[], cuisineIdsForLabels(cuisines, library), library);
   }
   return kitsForCuisines(cuisines);
 }

@@ -6,10 +6,11 @@ import type { AdminOutletContext } from '../../DashAdminPortal';
 import { InHouseCardsPage, InHouseReportsPage } from './InHouseDeskPages';
 import { InHouseDeskSettingsPage, InHouseFirstRunCard } from './InHouseDeskSettingsPage';
 import { InHouseOrdersPage } from './InHouseOrdersPage';
+import { MenuLibraryPage } from './MenuLibraryPage';
 import { InHouseRestaurantsPage } from './restaurants/InHouseRestaurantsPage';
 import { DESK_ADMIN, DESK_OPS } from './inHouseUi';
 
-const DESK_TABS = ['orders', 'restaurants', 'cards', 'reports', 'settings'] as const;
+const DESK_TABS = ['orders', 'restaurants', 'library', 'cards', 'reports', 'settings'] as const;
 type DeskTab = typeof DESK_TABS[number];
 
 function normalizeTab(raw: string | null, isOps: boolean, isAdmin: boolean): DeskTab {
@@ -20,6 +21,7 @@ function normalizeTab(raw: string | null, isOps: boolean, isAdmin: boolean): Des
   if (raw === 'reports' && isAdmin) return 'reports';
   if (raw === 'settings' && isAdmin) return 'settings';
   if (raw === 'restaurants') return 'restaurants';
+  if (raw === 'library' || raw === 'cuisines') return 'library';
   if (raw === 'orders') return 'orders';
   return 'orders';
 }
@@ -74,6 +76,7 @@ export function InHouseTeamPage() {
     ? [
         { id: 'orders' as const, label: 'Orders', count: waitingCount || undefined },
         { id: 'restaurants' as const, label: 'Restaurants' },
+        { id: 'library' as const, label: 'Menu library' },
         ...(isAdmin ? [
           { id: 'cards' as const, label: 'Cards' },
           { id: 'reports' as const, label: 'Reports' },
@@ -156,6 +159,7 @@ export function InHouseTeamPage() {
         {isAdmin && tab === 'orders' ? <InHouseFirstRunCard variant="banner" /> : null}
         {tab === 'orders' ? <InHouseOrdersPage embedded soundOn={soundOn} hideDeskChrome /> : null}
         {tab === 'restaurants' ? <InHouseRestaurantsPage embedded /> : null}
+        {tab === 'library' ? <MenuLibraryPage /> : null}
         {tab === 'cards' && isAdmin ? <InHouseCardsPage embedded /> : null}
         {tab === 'reports' && isAdmin ? <InHouseReportsPage embedded /> : null}
         {tab === 'settings' && isAdmin ? <InHouseDeskSettingsPage embedded /> : null}

@@ -211,6 +211,7 @@ export function getInHouseEngineMenu(token: string, merchantId: string) {
     menu: { status?: string; version?: number; published_at?: string } | null;
     snapshot: import('@roam/menu-engine').MenuSnapshot | null;
     kits: import('@roam/menu-engine').MenuKitDef[];
+    templates?: import('./menuLibrary').DishTemplate[];
     brands: Array<{ id: string; name: string; evidence_urls?: unknown }>;
     brandId: string | null;
     overrides: InHouseEngineOverride[];

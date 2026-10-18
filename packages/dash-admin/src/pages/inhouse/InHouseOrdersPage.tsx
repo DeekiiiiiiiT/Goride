@@ -15,6 +15,7 @@ import { EntityDrawer } from '../../components/ui/bits';
 import { formatMoney } from '../../components/ui/format';
 import type { AdminOutletContext } from '../../DashAdminPortal';
 import { ageMinutes, beep, DESK_OPS, timerLabel } from './inHouseUi';
+import { IH } from './inHouseTheme';
 
 type FilterId = 'everything' | 'waiting' | 'placing' | 'restaurant' | 'out' | 'problems';
 
@@ -382,7 +383,7 @@ export function InHouseOrdersPage({
                     {queued ? (
                       <button
                         type="button"
-                        className="ih-btn-primary flex items-center gap-1.5 rounded-lg px-4 py-1.5 text-xs font-bold text-slate-950 shadow-sm transition-all active:scale-95"
+                        className={`flex items-center gap-1.5 shadow-sm transition-all active:scale-95 ${IH.primaryBtn}`}
                         onClick={() => void claim(task.id)}
                       >
                         Claim

@@ -39,6 +39,8 @@ import { runInHouseSweep, dispatchAtFromReady } from "./sweep.ts";
 import { foodWasPurchased, transitionOrThrow } from "./orderStatus.ts";
 import { applyConciergeOrderStatus } from "./applyStatus.ts";
 import { retryAllowed } from "./taskMachine.ts";
+import { validateMerchantCuisines, type CuisineRow } from "../admin/menuLibrary.ts";
+import { listActiveTemplates } from "../admin/menuLibraryRoutes.ts";
 
 // deno-lint-ignore no-explicit-any
 type Sb = SupabaseClient | { from: (table: string) => any; schema?: (name: string) => any };
@@ -1076,6 +1078,19 @@ export function registerInHouseRoutes(app: Hono, deps: { getServiceSupabase: () 
     const sb = deps.getServiceSupabase();
     const creating = Boolean(body.create);
     let merchantId = String(body.merchantId || "");
+    // Cuisines come from the Menu library; refuse unknown labels before anything is written.
+    if ("cuisines" in body && Array.isArray(body.cuisines)) {
+      const { data: cuisineRows, error: cuisineErr } = await sb.from("cuisines").select("id, label, aliases, sort, archived_at");
+      if (cuisineErr) {
+        console.warn("[in-house] cuisine list unavailable, skipping check:", cuisineErr.message);
+      } else {
+        const checked = validateMerchantCuisines(body.cuisines, (cuisineRows || []) as CuisineRow[]);
+        if (!checked.ok) {
+          return c.json({ error: `Unknown cuisine: ${checked.unknown.join(", ")}. Add it in Menu library first.` }, 400);
+        }
+        body.cuisines = checked.labels;
+      }
+    }
     if (creating) {
       const name = String(body.name || "").trim();
       const address = String(body.address || "").trim();
@@ -1493,7 +1508,10 @@ export function registerInHouseRoutes(app: Hono, deps: { getServiceSupabase: () 
     const { ensureMerchantEngineMenu, listKitsForMerchant } = await import("./menuEngineRoutes.ts");
     try {
       const { menuId, snapshot } = await ensureMerchantEngineMenu(sb, merchantId);
-      const kits = await listKitsForMerchant(sb, merchantId);
+      const [kits, templates] = await Promise.all([
+        listKitsForMerchant(sb, merchantId),
+        listActiveTemplates(sb as SupabaseClient),
+      ]);
       const { data: menu } = await sb.from("menus").select("id, status, version, published_at, draft_snapshot").eq("id", menuId).maybeSingle();
       const [{ data: brands }, { data: overrides }, { data: merchant }] = await Promise.all([
         sb.from("menu_brands").select("id, name, evidence_urls").order("name"),
@@ -1505,6 +1523,7 @@ export function registerInHouseRoutes(app: Hono, deps: { getServiceSupabase: () 
         menu,
         snapshot,
         kits,
+        templates,
         brands: brands || [],
         brandId: merchant?.menu_brand_id || null,
         overrides: (overrides || []).map((row: {
