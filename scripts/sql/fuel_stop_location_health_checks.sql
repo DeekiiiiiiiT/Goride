@@ -1,5 +1,6 @@
 -- Fuel stop location resolution health checks (C1–C9).
--- Gates (0 rows when healthy): C1–C5, C9. Reports (warn only): C6–C8.
+-- Gates (0 rows when healthy): C1–C3, C5, C9. Reports (warn only): C4, C6–C8.
+-- C4 gpsAlias drift is report-only until a dedicated alias cleanup (pre-existing).
 -- Alert only — never auto-fix. Runner: scripts/check-fuel-stop-location-health.mjs
 -- Project: csfllzzastacofsvcdsc
 

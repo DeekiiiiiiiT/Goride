@@ -29,4 +29,4 @@
 - Driver store rollout (Android 1.0.29): first Gas Card fill should show `stationResolution`, `driverClaim`, `fixAt` ≠ submit time.
 - Dominion hand-review queue for `c12c265e` / `cd281fdb` (FESCO vs Jampet ~19 km).
 - Optional: replace GitHub `SUPABASE_DB_URL` with a full passworded Postgres URI (CLI path works without it when `SUPABASE_ACCESS_TOKEN` is set).
-- Pre-existing C4 gpsAlias drift (3 rows) is outside this audit — track separately.
+- Pre-existing C4 gpsAlias drift (3 rows) is **report-only** in the health job until a dedicated alias cleanup.
