@@ -155,20 +155,35 @@ export function FuelLogModal({
         matchedStationId: string;
     }>>([]);
 
+    // Brand key for cascade: verified station brand, else Independent (matches Silent Attach / reimbursements)
+    const stationBrand = (s: StationProfile) =>
+        String(s.brand || 'Independent').trim() || 'Independent';
+
     // --- Derive unique brands and filtered stations ---
     const uniqueBrands: string[] = useMemo(() => {
-        // Parent Company tab is the single source of truth — no fallback to station brands
-        return parentCompanies;
-    }, [parentCompanies]);
+        const set = new Set<string>();
+        for (const name of parentCompanies) {
+            if (name) set.add(String(name).trim());
+        }
+        // Fallback: brands on verified stations (Known fill must work if Parent Company KV is empty)
+        for (const s of verifiedStations) {
+            set.add(stationBrand(s));
+        }
+        return Array.from(set).filter(Boolean).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+    }, [parentCompanies, verifiedStations]);
 
     const stationsForBrand: StationProfile[] = useMemo(() => {
         if (!selectedBrand) return [];
-        return verifiedStations.filter(s => s.brand === selectedBrand);
+        return verifiedStations
+            .filter((s) => stationBrand(s) === selectedBrand)
+            .sort((a, b) => a.name.localeCompare(b.name));
     }, [verifiedStations, selectedBrand]);
 
     const bulkFilteredStations: StationProfile[] = useMemo(() => {
         if (!bulkSelectedBrand) return [];
-        return verifiedStations.filter(s => s.brand === bulkSelectedBrand);
+        return verifiedStations
+            .filter((s) => stationBrand(s) === bulkSelectedBrand)
+            .sort((a, b) => a.name.localeCompare(b.name));
     }, [verifiedStations, bulkSelectedBrand]);
 
     // --- Fetch verified stations and parent companies when modal opens ---
@@ -179,7 +194,7 @@ export function FuelLogModal({
         const loadData = async () => {
             setStationsLoading(true);
             try {
-                const stations = await fuelService.getStations();
+                const stations = await fuelService.getAllStations({ fields: 'list' });
                 setVerifiedStations((stations || []).filter((s: any) => s.status === 'verified'));
                 
                 // Phase 5: Use cached parent companies from React Query
@@ -190,6 +205,7 @@ export function FuelLogModal({
                 setParentCompanies(companyNames);
             } catch (error) {
                 console.error('[FuelLogModal] Failed to load stations/companies:', error);
+                toast.error('Could not load verified stations. Refresh and try again.');
             } finally {
                 setStationsLoading(false);
             }
@@ -263,7 +279,7 @@ export function FuelLogModal({
         if (initialData?.matchedStationId && verifiedStations.length > 0) {
             const match = verifiedStations.find(s => s.id === initialData.matchedStationId);
             if (match) {
-                setSelectedBrand(match.brand);
+                setSelectedBrand(stationBrand(match));
                 setSelectedStationId(match.id);
             } else {
                 setSelectedBrand('');
@@ -935,8 +951,13 @@ export function FuelLogModal({
                                                 <SelectValue placeholder={stationsLoading ? "Loading brands..." : "Select Brand"} />
                                             </SelectTrigger>
                                             <SelectContent>
+                                                {uniqueBrands.length === 0 && !stationsLoading ? (
+                                                    <div className="px-3 py-2 text-xs text-slate-500">
+                                                        No verified stations found. Add stations in Dominion Station Database.
+                                                    </div>
+                                                ) : null}
                                                 {uniqueBrands.map(brand => {
-                                                    const count = verifiedStations.filter(s => s.brand === brand).length;
+                                                    const count = verifiedStations.filter(s => stationBrand(s) === brand).length;
                                                     return (
                                                         <SelectItem key={brand} value={brand}>
                                                             <span className="flex items-center gap-2">

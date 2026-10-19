@@ -1,7 +1,7 @@
 {
   "slug": "fleet-fuel",
-  "generatedAt": "2026-10-19T20:31:10.560Z",
-  "routeCount": 208,
+  "generatedAt": "2026-10-19T21:36:30.593Z",
+  "routeCount": 209,
   "routes": [
     "DELETE ${BASE_PATH}/admin/evidence-inbox/gate-held/:transactionId",
     "DELETE ${BASE_PATH}/finalized-reports/:weekStart/:identityId",
@@ -103,6 +103,7 @@
     "POST ${BASE_PATH}/admin/bulk-assign-station",
     "POST ${BASE_PATH}/admin/chaos-seeder",
     "POST ${BASE_PATH}/admin/confirm-provisional",
+    "POST ${BASE_PATH}/admin/dismiss-hand-review",
     "POST ${BASE_PATH}/admin/evidence-inbox/ensure-learnt",
     "POST ${BASE_PATH}/admin/evidence-inbox/merge-to-station",
     "POST ${BASE_PATH}/admin/jaa-promote-gateheld",

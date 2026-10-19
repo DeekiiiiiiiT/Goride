@@ -228,7 +228,7 @@ export const stationOpsApi = {
   async getProvisionalFills(options?: {
     limit?: number;
     organizationId?: string;
-    /** provisional | STATEMENT_MISMATCH | DRIVER_CLAIM_CONFLICT | all */
+    /** provisional | STATEMENT_MISMATCH | DRIVER_CLAIM_CONFLICT | HAND_REVIEW | all */
     reason?: string;
   }) {
     const params = new URLSearchParams();
@@ -274,6 +274,19 @@ export const stationOpsApi = {
     if (!response.ok) {
       const err = await response.json().catch(() => ({}));
       throw new Error((err as { error?: string }).error || 'Failed to confirm provisional fill');
+    }
+    return response.json();
+  },
+
+  async dismissHandReview(entryId: string, note?: string) {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/admin/dismiss-hand-review`, {
+      method: 'POST',
+      headers: await authHeaders(),
+      body: JSON.stringify({ entryId, note }),
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error((err as { error?: string }).error || 'Failed to dismiss hand review');
     }
     return response.json();
   },

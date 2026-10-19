@@ -7,7 +7,8 @@ export type UnresolvedFilter =
   | 'all'
   | UnresolvedLinkage
   | 'statement_mismatch'
-  | 'claim_conflict';
+  | 'claim_conflict'
+  | 'hand_review';
 
 export interface LearntLocationDto {
   id: string;
@@ -59,6 +60,8 @@ export interface ProvisionalFillDto {
     driverClaim?: unknown;
     jaaStation?: string;
     statementMerchant?: string | null;
+    /** Admin hand-review stamp — auto-heal skips; only Confirm / Dismiss clears it. */
+    handReview?: { reason?: string; note?: string; flaggedAt?: string };
   };
 }
 

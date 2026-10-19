@@ -94,6 +94,10 @@ function rowStationResolutionReason(row: UnresolvedStopRow): string {
   return '';
 }
 
+export function rowHasHandReview(row: UnresolvedStopRow): boolean {
+  return !!row.provisional?.metadata?.handReview?.reason;
+}
+
 export function filterUnresolvedRows(rows: UnresolvedStopRow[], filter: string): UnresolvedStopRow[] {
   if (filter === 'all') return rows;
   if (filter === 'statement_mismatch') {
@@ -101,6 +105,9 @@ export function filterUnresolvedRows(rows: UnresolvedStopRow[], filter: string):
   }
   if (filter === 'claim_conflict') {
     return rows.filter((r) => rowStationResolutionReason(r) === 'DRIVER_CLAIM_CONFLICT');
+  }
+  if (filter === 'hand_review') {
+    return rows.filter((r) => rowHasHandReview(r));
   }
   return rows.filter((r) => r.linkage === filter);
 }

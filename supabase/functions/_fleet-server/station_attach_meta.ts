@@ -18,7 +18,14 @@ const STICKY_RESOLUTION_REASONS = new Set([
   "DRIVER_CLAIM_CONFLICT",
 ]);
 
-/** Never overwrite GPS verified, sticky mismatch/conflict, or prior platform ops override. */
+/** Admin hand-review stamp (e.g. suspicious statement↔driver pair) — only an admin may clear it. */
+export function hasHandReview(entry: Record<string, unknown>): boolean {
+  const meta = (entry.metadata || {}) as Record<string, unknown>;
+  const review = meta.handReview as Record<string, unknown> | undefined;
+  return !!review && typeof review === "object" && !!String(review.reason || "").trim();
+}
+
+/** Never overwrite GPS verified, sticky mismatch/conflict, hand review, or prior platform ops override. */
 export function isAttachProtected(entry: Record<string, unknown>): boolean {
   const meta = (entry.metadata || {}) as Record<string, unknown>;
   const status = String(meta.locationStatus || "");
@@ -26,6 +33,7 @@ export function isAttachProtected(entry: Record<string, unknown>): boolean {
   const resolution = (meta.stationResolution || {}) as Record<string, unknown>;
   const reason = String(resolution.reason || "");
   if (STICKY_RESOLUTION_REASONS.has(reason)) return true;
+  if (hasHandReview(entry)) return true;
   if (status === "verified" && (method === "gps_smart_matching" || method === "gps_handshake")) {
     return true;
   }

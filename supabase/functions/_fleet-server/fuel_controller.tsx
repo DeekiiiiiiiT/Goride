@@ -4978,6 +4978,11 @@ app.get(`${BASE_PATH}/admin/provisional-fills`, requirePlatformStaff(), async (c
             const resReason = String(
                 (meta.stationResolution as { reason?: string } | undefined)?.reason || "",
             );
+            // Admin hand-review stamp (any status) — only an admin clears it
+            const handReview = meta.handReview as { reason?: string } | undefined;
+            if (handReview && String(handReview.reason || "").trim()) {
+                return reasonQ === "all" || reasonQ === "HAND_REVIEW";
+            }
             if (status === "provisional") {
                 if (reasonQ === "all" || reasonQ === "provisional") return true;
                 return false;
@@ -5032,6 +5037,7 @@ app.get(`${BASE_PATH}/admin/provisional-fills`, requirePlatformStaff(), async (c
                     driverClaim: meta.driverClaim,
                     jaaStation: meta.jaaStation,
                     statementMerchant: meta.jaaStation || meta.jaaVendorRaw || null,
+                    handReview: meta.handReview || undefined,
                 },
             };
         });
@@ -5087,15 +5093,26 @@ app.post(`${BASE_PATH}/admin/confirm-provisional`, requirePlatformStaff(), async
             reason: "Admin confirmed provisional fill",
             dismissLearnt: true,
         });
-        if (!result.ok) {
+        // Already on this station (e.g. hand-review row) still counts as a confirm
+        if (!result.ok && result.skipped !== "already_assigned") {
             return c.json({ error: result.reason || "Confirm failed", skipped: result.skipped }, 400);
         }
-        // Stamp resolution as verified admin confirm
+        // Stamp resolution as verified admin confirm (clears any hand-review stamp)
         const entry = (await kv.get(`fuel_entry:${id}`)) as Record<string, unknown> | null;
         if (entry) {
-            const meta = (entry.metadata || {}) as Record<string, unknown>;
+            const { handReview, ...meta } = (entry.metadata || {}) as Record<string, unknown>;
             entry.metadata = {
                 ...meta,
+                ...(handReview
+                    ? {
+                        handReviewResolved: {
+                            ...(handReview as object),
+                            outcome: "confirmed_station",
+                            stationId: sid,
+                            resolvedAt: new Date().toISOString(),
+                        },
+                    }
+                    : {}),
                 locationStatus: "verified",
                 stationResolution: {
                     ...(typeof meta.stationResolution === "object" ? meta.stationResolution as object : {}),
@@ -5113,6 +5130,33 @@ app.post(`${BASE_PATH}/admin/confirm-provisional`, requirePlatformStaff(), async
         return c.json({ success: true, entryId: id, stationId: sid });
     } catch (e: any) {
         console.error("[confirm-provisional]", e);
+        return c.json({ error: e.message }, 500);
+    }
+});
+
+/** Dismiss a hand-review stamp: admin reviewed the pair and keeps the row as it is. */
+app.post(`${BASE_PATH}/admin/dismiss-hand-review`, requirePlatformStaff(), async (c) => {
+    try {
+        const { entryId, note } = await c.req.json();
+        const id = String(entryId || "").trim();
+        if (!id) return c.json({ error: "entryId required" }, 400);
+        const entry = (await kv.get(`fuel_entry:${id}`)) as Record<string, unknown> | null;
+        if (!entry) return c.json({ error: "Fuel entry not found" }, 404);
+        const { handReview, ...meta } = (entry.metadata || {}) as Record<string, unknown>;
+        if (!handReview) return c.json({ error: "Entry has no hand-review stamp" }, 400);
+        entry.metadata = {
+            ...meta,
+            handReviewResolved: {
+                ...(handReview as object),
+                outcome: "kept_as_is",
+                note: typeof note === "string" && note.trim() ? note.trim() : undefined,
+                resolvedAt: new Date().toISOString(),
+            },
+        };
+        await kv.set(`fuel_entry:${id}`, entry);
+        return c.json({ success: true, entryId: id });
+    } catch (e: any) {
+        console.error("[dismiss-hand-review]", e);
         return c.json({ error: e.message }, 500);
     }
 });

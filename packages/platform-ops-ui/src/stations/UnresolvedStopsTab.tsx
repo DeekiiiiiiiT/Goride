@@ -43,7 +43,7 @@ import {
   DropdownMenuLabel,
 } from '@roam/ui';
 import { StationProfile } from '../types/station';
-import { buildUnresolvedStopRows, filterUnresolvedRows } from './buildUnresolvedStopRows';
+import { buildUnresolvedStopRows, filterUnresolvedRows, rowHasHandReview } from './buildUnresolvedStopRows';
 import type {
   LearntLocationDto,
   ProvisionalFillDto,
@@ -254,6 +254,7 @@ export function UnresolvedStopsTab({ onPromoted, onVerifyLocation }: UnresolvedS
     const key = rowActionKey(row);
     const lateLog = isLateLogRow(row);
     const isProvisional = row.linkage === 'provisional';
+    const handReview = !!row.provisional?.metadata?.handReview?.reason;
 
     return (
       <DropdownMenu>
@@ -280,7 +281,24 @@ export function UnresolvedStopsTab({ onPromoted, onVerifyLocation }: UnresolvedS
               <div>
                 <div className="text-sm font-medium">Confirm station</div>
                 <div className="text-[10px] font-normal text-slate-500 leading-snug mt-0.5">
-                  Promote provisional match to verified (no new pin).
+                  {handReview
+                    ? 'Keep the current station and clear hand review.'
+                    : 'Promote provisional match to verified (no new pin).'}
+                </div>
+              </div>
+            </DropdownMenuItem>
+          )}
+
+          {handReview && (
+            <DropdownMenuItem
+              className="gap-2.5 items-start py-2"
+              onClick={() => void actions.handleDismissHandReview(row)}
+            >
+              <XCircle className="h-4 w-4 mt-0.5 shrink-0" />
+              <div>
+                <div className="text-sm font-medium">Dismiss hand review</div>
+                <div className="text-[10px] font-normal text-slate-500 leading-snug mt-0.5">
+                  Pair checked — keep the row exactly as it is.
                 </div>
               </div>
             </DropdownMenuItem>
@@ -297,7 +315,7 @@ export function UnresolvedStopsTab({ onPromoted, onVerifyLocation }: UnresolvedS
               actions.setLinkSortBy('distance');
               actions.openLinkDialog(row);
             }}
-            disabled={!hasGps}
+            disabled={!hasGps && !handReview}
           >
             <Link2 className="h-4 w-4 mt-0.5 shrink-0" />
             <div>
@@ -509,6 +527,7 @@ export function UnresolvedStopsTab({ onPromoted, onVerifyLocation }: UnresolvedS
               'claim_conflict',
               `Claim conflict (${allRows.filter((r) => rowResolutionReason(r) === 'DRIVER_CLAIM_CONFLICT').length})`,
             ],
+            ['hand_review', `Hand review (${allRows.filter((r) => rowHasHandReview(r)).length})`],
             ['linked', `Linked (${allRows.filter((r) => r.linkage === 'linked').length})`],
             ['payment_only', `Payment blocked (${allRows.filter((r) => r.linkage === 'payment_only').length})`],
             ['location_only', `Location only (${allRows.filter((r) => r.linkage === 'location_only').length})`],

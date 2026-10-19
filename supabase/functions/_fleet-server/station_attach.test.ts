@@ -70,6 +70,33 @@ Deno.test("isAttachProtected: DRIVER_CLAIM_CONFLICT sticky", () => {
   );
 });
 
+Deno.test("isAttachProtected: handReview statement row sticky", () => {
+  // cd281fdb shape: statement_vendor, no station, admin hand-review stamp
+  assertEquals(
+    isAttachProtected({
+      metadata: {
+        locationStatus: "statement_vendor",
+        verificationMethod: "jaa_issuer_statement",
+        handReview: { reason: "suspicious_pair_distance" },
+      },
+    }),
+    true,
+  );
+});
+
+Deno.test("isAttachProtected: resolved handReview no longer blocks", () => {
+  assertEquals(
+    isAttachProtected({
+      metadata: {
+        locationStatus: "statement_vendor",
+        verificationMethod: "jaa_issuer_statement",
+        handReviewResolved: { reason: "suspicious_pair_distance", outcome: "kept_as_is" },
+      },
+    }),
+    false,
+  );
+});
+
 Deno.test("applyMerchantHealMetadata clears review and sets verified", () => {
   const entry: Record<string, unknown> = {
     vendor: "Unknown",

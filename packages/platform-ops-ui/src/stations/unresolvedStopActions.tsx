@@ -30,6 +30,7 @@ function reasonLabel(resolutionReason?: string | null): string | null {
 
 export function shortBlockedReason(row: UnresolvedStopRow): string {
   if (row.linkage === 'provisional') {
+    if (row.provisional?.metadata?.handReview?.reason) return 'Hand review';
     return (
       reasonLabel(row.provisional?.metadata?.stationResolution?.reason) || 'Provisional'
     );
@@ -209,13 +210,15 @@ export function useUnresolvedStopActions({
 
   const linkStationsWithDistance = useMemo(() => {
     if (!linkingRow) return [];
+    // No GPS (e.g. hand-review statement row): list all GOD stations, distance unknown
     const coords = rowCoords(linkingRow);
-    if (!coords) return [];
     // GOD list only for link/merge
     const enriched = verifiedStations.map((station) => {
       const sLat = station.location?.lat ?? 0;
       const sLng = station.location?.lng ?? 0;
-      const distM = sLat && sLng ? Math.round(calculateDistance(coords.lat, coords.lng, sLat, sLng)) : Infinity;
+      const distM = coords && sLat && sLng
+        ? Math.round(calculateDistance(coords.lat, coords.lng, sLat, sLng))
+        : Infinity;
       return { ...station, _distance: distM };
     });
     const searchLower = linkSearch.toLowerCase();
@@ -228,7 +231,7 @@ export function useUnresolvedStopActions({
             s.address?.toLowerCase().includes(searchLower),
         )
       : enriched;
-    if (linkSortBy === 'distance') {
+    if (linkSortBy === 'distance' && coords) {
       filtered.sort((a, b) => a._distance - b._distance);
     } else {
       filtered.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
@@ -379,6 +382,22 @@ export function useUnresolvedStopActions({
     await handleMergeToStation(row, stationId);
   };
 
+  /** Hand review: admin checked the pair and keeps the row as it is (clears the stamp). */
+  const handleDismissHandReview = async (row: UnresolvedStopRow) => {
+    if (!row.provisional?.id) return;
+    const actionKey = row.provisional.id;
+    try {
+      setActionId(actionKey);
+      await api.dismissHandReview(row.provisional.id);
+      toast.success('Hand review cleared — row kept as is');
+      await onRefresh();
+    } catch (error: any) {
+      toast.error(error?.message || 'Failed to clear hand review');
+    } finally {
+      setActionId(null);
+    }
+  };
+
   const handleReject = async () => {
     if (!selectedRow) return;
     const actionKey = selectedRow.evidence?.id || selectedRow.learnt?.id || '';
@@ -455,7 +474,10 @@ export function useUnresolvedStopActions({
     setLinkingRow(row);
     setSelectedLinkStation(null);
     setLinkSearch('');
-    setRememberMerchantName(!!rowStatementMerchant(row));
+    // Suspicious hand-review pairs must not teach the alias registry by default
+    setRememberMerchantName(
+      !!rowStatementMerchant(row) && !row.provisional?.metadata?.handReview?.reason,
+    );
     setAddGpsAliasOnLink(false);
     setIsLinkDialogOpen(true);
   };
@@ -525,6 +547,7 @@ export function useUnresolvedStopActions({
     handlePromote,
     handleMergeToStation,
     handleConfirmProvisional,
+    handleDismissHandReview,
     handleDeleteCsvReference,
     handleReject,
     handleDelete,
