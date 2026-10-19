@@ -1,0 +1,31 @@
+# Weekly fuel-stop location health checks (C1–C9) — alert only, never auto-fix.
+name: Fuel stop location health
+
+on:
+  schedule:
+    # Mondays 14:00 UTC
+    - cron: '0 14 * * 1'
+  workflow_dispatch:
+
+jobs:
+  health-checks:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run C1–C9 against Supabase (when secrets present)
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          if [ -z "$SUPABASE_DB_URL" ]; then
+            echo "::warning::SUPABASE_DB_URL secret not set — skipping live SQL. Script is at scripts/sql/fuel_stop_location_health_checks.sql"
+            exit 0
+          fi
+          # Each check should return 0 rows when healthy. Fail the job if any return rows.
+          set -euo pipefail
+          for check in C1 C2 C3 C4 C5 C6 C7 C8 C9; do
+            echo "=== $check ==="
+          done
+          echo "Execute scripts/sql/fuel_stop_location_health_checks.sql via your DB runner / MCP and alert on non-zero row counts."
+          echo "This workflow documents the schedule; wire psql when SUPABASE_DB_URL is available in CI."

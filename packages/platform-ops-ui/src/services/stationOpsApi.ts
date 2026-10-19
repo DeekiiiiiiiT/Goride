@@ -73,6 +73,10 @@ export const stationOpsApi = {
     action: 'merge' | 'create';
     targetStationId?: string;
     stationData?: unknown;
+    /** When true, also add GPS alias (default false = Link fill only). */
+    addGpsAlias?: boolean;
+    aliasOverrideReason?: string;
+    rememberMerchantName?: string;
   }) {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/stations/promote-learnt`, {
       method: 'POST',
@@ -117,13 +121,22 @@ export const stationOpsApi = {
     }>;
   },
 
-  async mergeGateHeldTransactionToStation(transactionId: string, targetStationId: string) {
+  async mergeGateHeldTransactionToStation(
+    transactionId: string,
+    targetStationId: string,
+    opts?: { addGpsAlias?: boolean; aliasOverrideReason?: string },
+  ) {
     const response = await fetchWithRetry(
       `${API_ENDPOINTS.fuel}/admin/evidence-inbox/merge-to-station`,
       {
         method: 'POST',
         headers: await authHeaders(),
-        body: JSON.stringify({ transactionId, targetStationId }),
+        body: JSON.stringify({
+          transactionId,
+          targetStationId,
+          addGpsAlias: opts?.addGpsAlias,
+          aliasOverrideReason: opts?.aliasOverrideReason,
+        }),
       },
     );
     if (!response.ok) {
@@ -210,6 +223,47 @@ export const stationOpsApi = {
     });
     if (!response.ok) throw new Error('Failed to fetch learnt locations');
     return response.json();
+  },
+
+  async getProvisionalFills(options?: { limit?: number; organizationId?: string }) {
+    const params = new URLSearchParams();
+    if (options?.limit != null) params.set('limit', String(options.limit));
+    if (options?.organizationId) params.set('organizationId', options.organizationId);
+    const qs = params.toString();
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.fuel}/admin/provisional-fills${qs ? `?${qs}` : ''}`,
+      { headers: await authHeaders(null) },
+    );
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error((err as { error?: string }).error || 'Failed to fetch provisional fills');
+    }
+    return response.json();
+  },
+
+  async confirmProvisionalFill(entryId: string, stationId: string) {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/admin/confirm-provisional`, {
+      method: 'POST',
+      headers: await authHeaders(),
+      body: JSON.stringify({ entryId, stationId }),
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error((err as { error?: string }).error || 'Failed to confirm provisional fill');
+    }
+    return response.json();
+  },
+
+  async getPinCalibrationSuggestions() {
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.fuel}/admin/pin-calibration-suggestions`,
+      { headers: await authHeaders(null) },
+    );
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error((err as { error?: string }).error || 'Failed to fetch pin calibration suggestions');
+    }
+    return response.json() as Promise<{ success: boolean; suggestions: unknown[]; count: number }>;
   },
 
   async rescanLearntLocations(radius = 75) {

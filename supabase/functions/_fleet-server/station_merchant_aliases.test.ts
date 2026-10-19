@@ -1,0 +1,72 @@
+/**
+ * Alias upsert guards + re-heal merchant text matching (O4 / O6).
+ * Run: deno test --allow-read --allow-env station_merchant_aliases.test.ts
+ */
+import { assertEquals } from "jsr:@std/assert";
+import {
+  entryMatchesAliasNormalizedName,
+  resolveAliasUpsertAction,
+} from "./station_merchant_aliases.ts";
+import { normalizeVendorName } from "./vendor_matcher.ts";
+
+Deno.test("O4: heal_auto cannot overwrite seed station_id", () => {
+  const decision = resolveAliasUpsertAction(
+    { station_id: "station-seed", source: "seed" },
+    { stationId: "station-other", source: "heal_auto" },
+  );
+  assertEquals(decision.action, "skip");
+});
+
+Deno.test("O4: heal_auto cannot overwrite admin_link station_id", () => {
+  const decision = resolveAliasUpsertAction(
+    { station_id: "station-admin", source: "admin_link" },
+    { stationId: "station-other", source: "heal_auto" },
+  );
+  assertEquals(decision.action, "skip");
+});
+
+Deno.test("O4: same station is noop", () => {
+  const decision = resolveAliasUpsertAction(
+    { station_id: "station-a", source: "seed" },
+    { stationId: "station-a", source: "heal_auto" },
+  );
+  assertEquals(decision.action, "noop");
+});
+
+Deno.test("O4: admin_link may re-point heal_auto", () => {
+  const decision = resolveAliasUpsertAction(
+    { station_id: "station-old", source: "heal_auto" },
+    { stationId: "station-new", source: "admin_link" },
+  );
+  assertEquals(decision.action, "update");
+});
+
+Deno.test("O4: insert when no existing row", () => {
+  const decision = resolveAliasUpsertAction(null, {
+    stationId: "station-a",
+    source: "heal_auto",
+  });
+  assertEquals(decision.action, "insert");
+});
+
+Deno.test("O6: driver row with name only in location matches alias", () => {
+  const raw = "FESCO OVAL SPANISH TOWN ROAD";
+  const normalized = normalizeVendorName(raw);
+  const driverEntry = {
+    id: "drv-1",
+    location: raw,
+    vendor: "Unknown Vendor",
+    metadata: { locationStatus: "unknown" },
+  };
+  assertEquals(entryMatchesAliasNormalizedName(driverEntry, normalized), true);
+});
+
+Deno.test("O6: unrelated location does not match", () => {
+  const normalized = normalizeVendorName("FESCO OVAL SPANISH TOWN ROAD");
+  const driverEntry = {
+    id: "drv-2",
+    location: "TEXACO Half Way Tree",
+    metadata: {},
+  };
+  assertEquals(entryMatchesAliasNormalizedName(driverEntry, normalized), false);
+});

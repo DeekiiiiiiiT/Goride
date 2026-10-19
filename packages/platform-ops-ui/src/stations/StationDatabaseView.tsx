@@ -13,12 +13,13 @@ import { ParentCompanyManager } from './ParentCompanyManager';
 import { VerifiedStationsTab } from './VerifiedStationsTab';
 import { ResolutionQueueTab } from './ResolutionQueueTab';
 import type { ResolutionQueueSubTab } from './ResolutionQueueTab';
+import { PinCalibrationPanel } from './PinCalibrationPanel';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@roam/ui';
 import { Switch } from '@roam/ui';
 import { Label } from '@roam/ui';
 import { Button } from '@roam/ui';
 import { Badge } from '@roam/ui';
-import { Star, Loader2, Upload, Trash2, Plus, ShieldCheck, ShieldOff, Map as MapIcon, Inbox } from 'lucide-react';
+import { Star, Loader2, Upload, Trash2, Plus, ShieldCheck, ShieldOff, Map as MapIcon, Inbox, MapPin } from 'lucide-react';
 import { SpatialIntegrityMap } from './SpatialIntegrityMap';
 import { fuelService } from '../services/stationFuelService';
 import { api } from '../services/stationOpsApi';
@@ -536,6 +537,10 @@ export function StationDatabaseView({
                 <Badge variant="outline" className="h-4 px-1 text-[8px] border-slate-300 text-slate-400">CSV</Badge>
               </TabsTrigger>
               <TabsTrigger value="non-fuel">Non-Fuel Locations</TabsTrigger>
+              <TabsTrigger value="pin-calibration" className="flex items-center gap-1.5">
+                <MapPin className="h-3.5 w-3.5" />
+                Move pin
+              </TabsTrigger>
               <TabsTrigger value="resolution-queue" className="flex items-center gap-1.5">
                 <Inbox className="h-3.5 w-3.5 opacity-70" />
                 Resolution Queue
@@ -676,6 +681,10 @@ export function StationDatabaseView({
                   variant="manager"
                />
              </div>
+          </TabsContent>
+
+          <TabsContent value="pin-calibration" className="m-0 p-0 border-0">
+            <PinCalibrationPanel />
           </TabsContent>
 
           {/* --- Resolution Queue: merged unresolved stops + spatial review --- */}

@@ -12,9 +12,18 @@ export interface MapFeature {
   properties: any;
 }
 
+function cartoDarkTileUrl(): string {
+  const base = 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
+  const key = String(import.meta.env.VITE_CARTO_API_KEY || '').trim();
+  if (!key) return base;
+  return `${base}?key=${encodeURIComponent(key)}`;
+}
+
 export const MAP_TILES = {
   LIGHT: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-  DARK: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+  get DARK() {
+    return cartoDarkTileUrl();
+  },
   ATTRIBUTION: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
 };
 

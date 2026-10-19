@@ -44,7 +44,12 @@ import {
 } from '@roam/ui';
 import { StationProfile } from '../types/station';
 import { buildUnresolvedStopRows, filterUnresolvedRows } from './buildUnresolvedStopRows';
-import type { LearntLocationDto, UnresolvedFilter, UnresolvedStopRow } from './resolutionQueueTypes';
+import type {
+  LearntLocationDto,
+  ProvisionalFillDto,
+  UnresolvedFilter,
+  UnresolvedStopRow,
+} from './resolutionQueueTypes';
 import type { StationGateEvidenceRow } from './EvidenceInboxTab';
 import {
   formatQueueDate,
@@ -52,6 +57,8 @@ import {
   rowCoords,
   rowDisplayName,
   rowHasGps,
+  rowResolutionReason,
+  rowStatementMerchant,
   shortBlockedReason,
   useUnresolvedStopActions,
 } from './unresolvedStopActions';
@@ -65,12 +72,14 @@ const LINKAGE_LABELS: Record<string, { label: string; className: string }> = {
   linked: { label: 'Linked', className: 'bg-sky-50 text-sky-800 border-sky-200' },
   payment_only: { label: 'Payment blocked', className: 'bg-amber-50 text-amber-800 border-amber-200' },
   location_only: { label: 'Location only', className: 'bg-violet-50 text-violet-800 border-violet-200' },
+  provisional: { label: 'Provisional', className: 'bg-orange-50 text-orange-800 border-orange-200' },
 };
 
 export function UnresolvedStopsTab({ onPromoted, onVerifyLocation }: UnresolvedStopsTabProps) {
   const [loading, setLoading] = useState(true);
   const [learntLocations, setLearntLocations] = useState<LearntLocationDto[]>([]);
   const [evidenceRows, setEvidenceRows] = useState<StationGateEvidenceRow[]>([]);
+  const [provisionalFills, setProvisionalFills] = useState<ProvisionalFillDto[]>([]);
   const [verifiedStations, setVerifiedStations] = useState<StationProfile[]>([]);
   const [unverifiedStations, setUnverifiedStations] = useState<StationProfile[]>([]);
   const [filter, setFilter] = useState<UnresolvedFilter>('all');
@@ -78,17 +87,20 @@ export function UnresolvedStopsTab({ onPromoted, onVerifyLocation }: UnresolvedS
   const [rescanRadius, setRescanRadius] = useState(150);
   const [pendingMatches, setPendingMatches] = useState<any[]>([]);
   const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
+  const [bulkLinking, setBulkLinking] = useState(false);
 
   const loadData = useCallback(async () => {
     try {
       setLoading(true);
-      const [learntData, evidenceData, stationData] = await Promise.all([
+      const [learntData, evidenceData, provisionalData, stationData] = await Promise.all([
         api.getLearntLocations(),
         api.getStationGateEvidence({ limit: 5000 }),
+        api.getProvisionalFills({ limit: 500 }).catch(() => []),
         api.getStations(),
       ]);
       setLearntLocations(Array.isArray(learntData) ? learntData : []);
       setEvidenceRows(Array.isArray(evidenceData) ? evidenceData : []);
+      setProvisionalFills(Array.isArray(provisionalData) ? provisionalData : []);
       setVerifiedStations(stationData.filter((s: StationProfile) => s.status === 'verified'));
       setUnverifiedStations(stationData.filter((s: StationProfile) => s.status === 'unverified'));
     } catch (e) {
@@ -104,8 +116,8 @@ export function UnresolvedStopsTab({ onPromoted, onVerifyLocation }: UnresolvedS
   }, [loadData]);
 
   const allRows = useMemo(
-    () => buildUnresolvedStopRows(learntLocations, evidenceRows),
-    [learntLocations, evidenceRows],
+    () => buildUnresolvedStopRows(learntLocations, evidenceRows, provisionalFills),
+    [learntLocations, evidenceRows, provisionalFills],
   );
   const displayRows = useMemo(() => filterUnresolvedRows(allRows, filter), [allRows, filter]);
 
@@ -183,13 +195,65 @@ export function UnresolvedStopsTab({ onPromoted, onVerifyLocation }: UnresolvedS
     }
   };
 
-  const rowActionKey = (row: UnresolvedStopRow) => row.evidence?.id || row.learnt?.id || row.rowKey;
+  const rowActionKey = (row: UnresolvedStopRow) =>
+    row.evidence?.id || row.learnt?.id || row.provisional?.id || row.rowKey;
+
+  const isLateLogRow = (row: UnresolvedStopRow) => {
+    const reason = rowResolutionReason(row);
+    return row.linkage === 'provisional' || reason === 'LATE_LOG' || reason === 'DRIVER_CLAIM';
+  };
+
+  const handleBulkLinkLateLogs = async () => {
+    const candidates = allRows.filter((row) => {
+      if (!isLateLogRow(row)) return false;
+      const statement = rowStatementMerchant(row);
+      const nearby = actions.nearestWithin150(row);
+      if (!nearby || nearby.status !== 'verified') return false;
+      // Statement agrees with suggested GOD (name contains or vice versa)
+      if (statement) {
+        const a = statement.toLowerCase();
+        const b = (nearby.name || '').toLowerCase();
+        if (!(a.includes(b.split(' ')[0] || '') || b.includes(a.split(' ')[0] || ''))) {
+          // Still allow if provisional already matched that station
+          if (row.provisional?.matchedStationId !== nearby.id) return false;
+        }
+      } else if (row.provisional?.matchedStationId !== nearby.id) {
+        return false;
+      }
+      return true;
+    });
+    if (candidates.length === 0) {
+      toast.info('No LATE LOG rows where the statement agrees with a nearby GOD station.');
+      return;
+    }
+    setBulkLinking(true);
+    let ok = 0;
+    try {
+      for (const row of candidates) {
+        const nearby = actions.nearestWithin150(row);
+        if (!nearby) continue;
+        await actions.handleMergeToStation(row, nearby.id, {
+          rememberMerchantName: rowStatementMerchant(row) || undefined,
+        });
+        ok++;
+      }
+      toast.success(`Linked ${ok} LATE LOG row(s) where the statement agreed.`);
+      await loadData();
+      onPromoted?.();
+    } catch {
+      toast.error(`Bulk link stopped after ${ok} row(s).`);
+    } finally {
+      setBulkLinking(false);
+    }
+  };
 
   const renderActionsMenu = (row: UnresolvedStopRow) => {
     const nearby = actions.nearestWithin150(row);
     const nearbyStatus = nearby?.status || 'unverified';
     const hasGps = rowHasGps(row);
     const key = rowActionKey(row);
+    const lateLog = isLateLogRow(row);
+    const isProvisional = row.linkage === 'provisional';
 
     return (
       <DropdownMenu>
@@ -207,10 +271,50 @@ export function UnresolvedStopsTab({ onPromoted, onVerifyLocation }: UnresolvedS
             Resolve
           </DropdownMenuLabel>
 
+          {isProvisional && row.provisional?.matchedStationId && (
+            <DropdownMenuItem
+              className="gap-2.5 text-emerald-700 focus:text-emerald-800 focus:bg-emerald-50 font-medium items-start py-2"
+              onClick={() => void actions.handleConfirmProvisional(row)}
+            >
+              <Check className="h-4 w-4 mt-0.5 shrink-0" />
+              <div>
+                <div className="text-sm font-medium">Confirm station</div>
+                <div className="text-[10px] font-normal text-slate-500 leading-snug mt-0.5">
+                  Promote provisional match to verified (no new pin).
+                </div>
+              </div>
+            </DropdownMenuItem>
+          )}
+
+          <DropdownMenuItem
+            className={cn(
+              'gap-2.5 items-start py-2',
+              lateLog
+                ? 'text-emerald-700 focus:text-emerald-800 focus:bg-emerald-50 font-medium'
+                : 'text-emerald-700 focus:text-emerald-800 focus:bg-emerald-50',
+            )}
+            onClick={() => {
+              actions.setLinkSortBy('distance');
+              actions.openLinkDialog(row);
+            }}
+            disabled={!hasGps}
+          >
+            <Link2 className="h-4 w-4 mt-0.5 shrink-0" />
+            <div>
+              <div className="text-sm font-medium">
+                {lateLog ? 'Link to GOD Station (primary)' : 'Link to GOD Station'}
+              </div>
+              <div className="text-[10px] font-normal text-slate-500 leading-snug mt-0.5">
+                Merge into an existing Verified station only.
+              </div>
+            </div>
+          </DropdownMenuItem>
+
+          {!lateLog && (
           <DropdownMenuItem
             className="gap-2.5 text-blue-700 focus:text-blue-800 focus:bg-blue-50 font-medium items-start py-2"
             onClick={() => void actions.handlePromote(row)}
-            disabled={!hasGps}
+            disabled={!hasGps || isProvisional}
           >
             <ShieldCheck className="h-4 w-4 mt-0.5 shrink-0" />
             <div>
@@ -220,42 +324,23 @@ export function UnresolvedStopsTab({ onPromoted, onVerifyLocation }: UnresolvedS
               </div>
             </div>
           </DropdownMenuItem>
+          )}
 
-          {onVerifyLocation && (
+          {onVerifyLocation && !lateLog && (
             <DropdownMenuItem
               className="gap-2.5 text-violet-700 focus:text-violet-800 focus:bg-violet-50 items-start py-2"
               onClick={() => void actions.openVerifyFlow(row)}
-              disabled={!hasGps}
+              disabled={!hasGps || isProvisional}
             >
               <Navigation className="h-4 w-4 mt-0.5 shrink-0" />
               <div>
                 <div className="text-sm font-medium">Verify Location (GOD list)</div>
                 <div className="text-[10px] font-normal text-slate-500 leading-snug mt-0.5">
-                  Primary path — create Verified station from your pin. CSV is never copied.
+                  Create Verified station from your pin. CSV is never copied.
                 </div>
               </div>
             </DropdownMenuItem>
           )}
-
-          <DropdownMenuItem
-            className="gap-2.5 text-emerald-700 focus:text-emerald-800 focus:bg-emerald-50 items-start py-2"
-            onClick={() => {
-              actions.setLinkingRow(row);
-              actions.setLinkSearch('');
-              actions.setSelectedLinkStation(null);
-              actions.setLinkSortBy('distance');
-              actions.setIsLinkDialogOpen(true);
-            }}
-            disabled={!hasGps}
-          >
-            <Link2 className="h-4 w-4 mt-0.5 shrink-0" />
-            <div>
-              <div className="text-sm font-medium">Link to GOD Station</div>
-              <div className="text-[10px] font-normal text-slate-500 leading-snug mt-0.5">
-                Merge into an existing Verified station only.
-              </div>
-            </div>
-          </DropdownMenuItem>
 
           <DropdownMenuItem
             className="gap-2.5 text-slate-700 focus:text-slate-800 focus:bg-slate-50 items-start py-2"
@@ -359,10 +444,10 @@ export function UnresolvedStopsTab({ onPromoted, onVerifyLocation }: UnresolvedS
           <div className="space-y-1 max-w-3xl">
             <h4 className="font-semibold text-indigo-950">Unresolved stops</h4>
             <p className="text-sm text-indigo-900/90 leading-relaxed">
-              Combined queue for <span className="font-medium">unknown fuel stop locations</span> and{' '}
-              <span className="font-medium">blocked reimbursements</span>. Primary fix:{' '}
-              <span className="font-medium">Verify Location</span> into your GOD list. Nearby CSV Unverified rows are
-              reference only — delete them or ignore; never merge CSV into GOD. Merge/Link only targets Verified stations.
+              Most stops here are drivers logging after they left a known station. Primary fix:{' '}
+              <span className="font-medium">Link fill</span> to the suggested GOD station (does not move the pin).
+              Use <span className="font-medium">Verify Location</span> only when the station is truly missing from your
+              list. Nearby CSV Unverified rows are reference only — never merge CSV into GOD.
             </p>
           </div>
         </div>
@@ -393,6 +478,21 @@ export function UnresolvedStopsTab({ onPromoted, onVerifyLocation }: UnresolvedS
             <RefreshCw className="h-4 w-4 mr-2" />
             Refresh
           </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="border-emerald-200 text-emerald-800"
+            onClick={() => void handleBulkLinkLateLogs()}
+            disabled={bulkLinking || allRows.length === 0}
+          >
+            {bulkLinking ? (
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            ) : (
+              <Link2 className="h-4 w-4 mr-2" />
+            )}
+            Bulk link LATE LOG (statement agrees)
+          </Button>
         </div>
       </div>
 
@@ -400,6 +500,7 @@ export function UnresolvedStopsTab({ onPromoted, onVerifyLocation }: UnresolvedS
         {(
           [
             ['all', `All (${allRows.length})`],
+            ['provisional', `Provisional (${allRows.filter((r) => r.linkage === 'provisional').length})`],
             ['linked', `Linked (${allRows.filter((r) => r.linkage === 'linked').length})`],
             ['payment_only', `Payment blocked (${allRows.filter((r) => r.linkage === 'payment_only').length})`],
             ['location_only', `Location only (${allRows.filter((r) => r.linkage === 'location_only').length})`],
@@ -465,10 +566,15 @@ export function UnresolvedStopsTab({ onPromoted, onVerifyLocation }: UnresolvedS
                     <TableCell>
                       <div className="flex flex-col gap-0.5">
                         <span className="font-medium text-sm">{rowDisplayName(row)}</span>
+                        {rowStatementMerchant(row) && (
+                          <span className="text-[10px] text-slate-500">
+                            Card statement: {rowStatementMerchant(row)}
+                          </span>
+                        )}
                         {nearby && nearbyIsGod && (
                           <Badge variant="outline" className="text-[9px] w-fit bg-emerald-50 text-emerald-700 border-emerald-200">
                             <MapPin className="h-2.5 w-2.5 mr-0.5" />
-                            Near GOD: {nearby.name} ({nearby.distance}m)
+                            Suggested: {nearby.name} ({nearby.distance}m)
                           </Badge>
                         )}
                         {nearby && !nearbyIsGod && (
@@ -712,6 +818,32 @@ export function UnresolvedStopsTab({ onPromoted, onVerifyLocation }: UnresolvedS
               </button>
             ))}
           </div>
+          {actions.linkingRow && rowStatementMerchant(actions.linkingRow) && (
+            <label className="flex items-start gap-2 text-xs text-slate-700 cursor-pointer">
+              <input
+                type="checkbox"
+                className="mt-0.5"
+                checked={actions.rememberMerchantName}
+                onChange={(e) => actions.setRememberMerchantName(e.target.checked)}
+              />
+              <span>
+                Remember statement name{' '}
+                <span className="font-medium">
+                  &quot;{rowStatementMerchant(actions.linkingRow)}&quot;
+                </span>{' '}
+                for future auto-match
+              </span>
+            </label>
+          )}
+          <label className="flex items-start gap-2 text-xs text-slate-700 cursor-pointer">
+            <input
+              type="checkbox"
+              className="mt-0.5"
+              checked={actions.addGpsAliasOnLink}
+              onChange={(e) => actions.setAddGpsAliasOnLink(e.target.checked)}
+            />
+            <span>Add GPS alias at this pin (only if within 150 m of the station)</span>
+          </label>
           <DialogFooter>
             <Button variant="outline" onClick={() => actions.setIsLinkDialogOpen(false)}>
               Cancel

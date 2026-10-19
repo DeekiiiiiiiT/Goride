@@ -3553,27 +3553,25 @@ function mapDuplicateStationPayload(result: { station: any; matchType: 'pluscode
 
 // --- PHASE 6: MASTER LEDGER & INTEGRITY GAP ---
 
-// 1. Add Alias to Station
+// 1. Add GPS Alias to Station (explicit only — distance guard >150m needs overrideReason)
 app.patch(`${BASE_PATH}/stations/:id/alias`, requirePermission("fuel.edit_entry"), async (c) => {
     try {
         const id = c.req.param("id");
-        const { lat, lng, label } = await c.req.json();
+        const { lat, lng, label, overrideReason } = await c.req.json();
         
         const station = await kv.get(`station:${id}`);
         if (!station) return c.json({ error: "Station not found" }, 404);
 
-        const newAlias = {
-            id: crypto.randomUUID(),
-            lat: Number(lat),
-            lng: Number(lng),
-            label: label || "GPS Alias",
-            addedAt: new Date().toISOString()
-        };
-
-        station.aliases = [...(station.aliases || []), newAlias];
-        
-        // Also update the legacy gpsAliases field for geo_matcher compatibility
-        station.gpsAliases = [...(station.gpsAliases || []), { lat: Number(lat), lng: Number(lng), mergedAt: new Date().toISOString() }];
+        const aliasResult = appendGpsAliasIfAllowed(
+            station,
+            Number(lat),
+            Number(lng),
+            label || "GPS Alias",
+            { addGpsAlias: true, aliasOverrideReason: overrideReason },
+        );
+        if (!aliasResult.ok) {
+            return c.json({ error: aliasResult.error, distanceM: aliasResult.distanceM }, 400);
+        }
 
         await kv.set(`station:${id}`, station);
         return c.json({ success: true, data: station });
@@ -3591,17 +3589,16 @@ app.patch(`${BASE_PATH}/stations/:id/sync-master-pin`, requirePermission("fuel.e
         const station = await kv.get(`station:${id}`);
         if (!station) return c.json({ error: "Station not found" }, 404);
 
-        // Move current location to aliases before updating
-        const oldLocationAlias = {
-            id: crypto.randomUUID(),
-            lat: station.location.lat,
-            lng: station.location.lng,
-            label: `Previous Master Pin (${new Date(station.verifiedAt || Date.now()).toLocaleDateString()})`,
-            addedAt: new Date().toISOString()
-        };
-
-        station.aliases = [...(station.aliases || []), oldLocationAlias];
-        station.gpsAliases = [...(station.gpsAliases || []), { lat: station.location.lat, lng: station.location.lng, mergedAt: new Date().toISOString() }];
+        // Move current location to gpsAliases only (name aliases live in station_merchant_aliases)
+        station.gpsAliases = [
+            ...(station.gpsAliases || []),
+            {
+                lat: station.location.lat,
+                lng: station.location.lng,
+                mergedAt: new Date().toISOString(),
+                label: `Previous Master Pin (${new Date(station.verifiedAt || Date.now()).toLocaleDateString()})`,
+            },
+        ];
 
         // Update Master Pin
         station.location = { lat: Number(lat), lng: Number(lng) };
@@ -3618,10 +3615,48 @@ app.patch(`${BASE_PATH}/stations/:id/sync-master-pin`, requirePermission("fuel.e
     }
 });
 
+/** Refuse GPS aliases farther than this from the master pin unless overrideReason is set. */
+const MAX_GPS_ALIAS_M = 150;
+
+function appendGpsAliasIfAllowed(
+    station: any,
+    lat: number,
+    lng: number,
+    label: string,
+    opts?: { addGpsAlias?: boolean; aliasOverrideReason?: string },
+): { ok: true } | { ok: false; error: string; distanceM: number } {
+    if (!opts?.addGpsAlias) return { ok: true };
+    const pinLat = Number(station.location?.lat);
+    const pinLng = Number(station.location?.lng);
+    const distanceM = (Number.isFinite(pinLat) && Number.isFinite(pinLng))
+        ? Math.round(calculateDistance(lat, lng, pinLat, pinLng))
+        : Infinity;
+    if (distanceM > MAX_GPS_ALIAS_M && !opts.aliasOverrideReason) {
+        return {
+            ok: false,
+            error: `GPS alias ${distanceM}m from pin exceeds ${MAX_GPS_ALIAS_M}m — provide aliasOverrideReason to force`,
+            distanceM,
+        };
+    }
+    // Name aliases stay out of station.aliases (issuer registry). GPS-only side:
+    station.gpsAliases = [
+        ...(station.gpsAliases || []),
+        {
+            lat,
+            lng,
+            mergedAt: new Date().toISOString(),
+            label,
+            ...(opts.aliasOverrideReason ? { overrideReason: opts.aliasOverrideReason, distanceM } : {}),
+        },
+    ];
+    return { ok: true };
+}
+
 // 3. Promote Learnt Location to Verified Master Ledger
+// Default merge = Link fill (attach entries, no GPS alias). Pass addGpsAlias:true for explicit alias.
 app.post(`${BASE_PATH}/stations/promote-learnt`, requirePermission("fuel.edit_entry"), async (c) => {
     try {
-        const { learntId, action, targetStationId, stationData } = await c.req.json();
+        const { learntId, action, targetStationId, stationData, addGpsAlias, aliasOverrideReason, rememberMerchantName } = await c.req.json();
         
         const learnt = await kv.get(`learnt_location:${learntId}`);
         if (!learnt) return c.json({ error: "Learnt location not found" }, 404);
@@ -3629,7 +3664,7 @@ app.post(`${BASE_PATH}/stations/promote-learnt`, requirePermission("fuel.edit_en
         let resolvedStationId: string;
 
         if (action === 'merge' && targetStationId) {
-            // Merge into existing station as an alias
+            // Link fill into existing GOD station (no GPS alias by default)
             const station = await kv.get(`station:${targetStationId}`);
             if (!station) return c.json({ error: "Target station not found" }, 404);
             // GOD list only ? never merge live stops into CSV Unverified shelf
@@ -3637,16 +3672,16 @@ app.post(`${BASE_PATH}/stations/promote-learnt`, requirePermission("fuel.edit_en
                 return c.json({ error: "Cannot merge into Unverified CSV reference. Delete the CSV row and create a Verified station from your location, or merge into an existing Verified GOD station." }, 400);
             }
 
-            const newAlias = {
-                id: crypto.randomUUID(),
-                lat: learnt.location.lat,
-                lng: learnt.location.lng,
-                label: `Merged from Learnt: ${learnt.name}`,
-                addedAt: new Date().toISOString()
-            };
-
-            station.aliases = [...(station.aliases || []), newAlias];
-            station.gpsAliases = [...(station.gpsAliases || []), { lat: learnt.location.lat, lng: learnt.location.lng, mergedAt: new Date().toISOString() }];
+            const aliasResult = appendGpsAliasIfAllowed(
+                station,
+                Number(learnt.location?.lat),
+                Number(learnt.location?.lng),
+                `Merged from Learnt: ${learnt.name}`,
+                { addGpsAlias: !!addGpsAlias, aliasOverrideReason },
+            );
+            if (!aliasResult.ok) {
+                return c.json({ error: aliasResult.error, distanceM: aliasResult.distanceM }, 400);
+            }
             
             await kv.set(`station:${station.id}`, station);
             resolvedStationId = station.id;
@@ -3656,9 +3691,46 @@ app.post(`${BASE_PATH}/stations/promote-learnt`, requirePermission("fuel.edit_en
             // Release any gate-held transactions tied to this learnt location
             const releasedCount = await releaseHeldTransaction(learnt, resolvedStationId, station.name);
             await kv.del(`learnt_location:${learntId}`);
-            console.log(`[Promote-Learnt] Merged learnt ${learntId} ? station ${resolvedStationId}, linked ${linkedCount} fuel entries, released ${releasedCount} held transactions.`);
+            console.log(`[Promote-Learnt] Linked learnt ${learntId} ? station ${resolvedStationId}, linked ${linkedCount} fuel entries, released ${releasedCount} held transactions. addGpsAlias=${!!addGpsAlias}`);
+
+            // Optional: remember JAA/statement merchant name as issuer alias (Phase 1)
+            if (rememberMerchantName && typeof rememberMerchantName === "string") {
+                try {
+                    const { upsertStationMerchantAlias } = await import("./station_merchant_aliases.ts");
+                    const linkedEntry = learnt.sourceEntryId
+                        ? await kv.get(`fuel_entry:${learnt.sourceEntryId}`)
+                        : null;
+                    const orgId = String(
+                        getOrgId(c) ||
+                            linkedEntry?.organizationId ||
+                            learnt.organizationId ||
+                            station.organizationId ||
+                            "",
+                    ).trim();
+                    if (!orgId) {
+                        console.error(
+                            "[Promote-Learnt] rememberMerchantName skipped — no organizationId (caller/entry/station)",
+                        );
+                    } else {
+                        const aliasRow = await upsertStationMerchantAlias({
+                            organizationId: orgId,
+                            issuer: "jaa",
+                            rawName: rememberMerchantName,
+                            stationId: resolvedStationId,
+                            source: "admin_link",
+                        });
+                        if (!aliasRow) {
+                            console.error(
+                                `[Promote-Learnt] rememberMerchantName upsert returned null for "${rememberMerchantName}"`,
+                            );
+                        }
+                    }
+                } catch (aliasErr) {
+                    console.warn("[Promote-Learnt] rememberMerchantName failed:", aliasErr);
+                }
+            }
             
-            return c.json({ success: true, message: "Merged successfully", data: station, linkedEntries: linkedCount, releasedTransactions: releasedCount });
+            return c.json({ success: true, message: addGpsAlias ? "Merged with GPS alias" : "Fill linked to station (no GPS alias)", data: station, linkedEntries: linkedCount, releasedTransactions: releasedCount });
         } else if (action === 'create') {
             // --- Duplicate Guard: check before creating ---
             const checkLat = stationData?.location?.lat || learnt.location?.lat || 0;
@@ -3672,20 +3744,10 @@ app.post(`${BASE_PATH}/stations/promote-learnt`, requirePermission("fuel.edit_en
                     : await findDuplicateStation(checkPlusCode, checkLat, checkLng, undefined, stationData?.category, 'verified');
 
                 if (dupeResult) {
-                    // Auto-merge into the existing station instead of creating a duplicate
+                    // Auto-merge into the existing station instead of creating a duplicate.
+                    // Link fill only — never auto-add a GPS alias (late logs would drift the footprint).
                     const existingStation = dupeResult.station;
-                    console.log(`[Promote-Learnt] Duplicate detected ? auto-merging learnt ${learntId} into existing station ${existingStation.id} (${existingStation.name}). Match type: ${dupeResult.matchType}, distance: ${dupeResult.distance}m`);
-
-                    const autoAlias = {
-                        id: crypto.randomUUID(),
-                        lat: learnt.location.lat,
-                        lng: learnt.location.lng,
-                        label: `Auto-merged from Learnt: ${learnt.name} (duplicate ${dupeResult.matchType} match)`,
-                        addedAt: new Date().toISOString()
-                    };
-
-                    existingStation.aliases = [...(existingStation.aliases || []), autoAlias];
-                    existingStation.gpsAliases = [...(existingStation.gpsAliases || []), { lat: learnt.location.lat, lng: learnt.location.lng, mergedAt: new Date().toISOString() }];
+                    console.log(`[Promote-Learnt] Duplicate detected ? linking learnt ${learntId} into existing station ${existingStation.id} (${existingStation.name}). Match type: ${dupeResult.matchType}, distance: ${dupeResult.distance}m`);
 
                     await kv.set(`station:${existingStation.id}`, existingStation);
 
@@ -3830,10 +3892,10 @@ async function linkOrphanEntriesToStation(
     return linkedCount;
 }
 
-/** Evidence Inbox ? merge gate-held transaction into a station (same behavior as promote-learnt merge). */
+/** Evidence Inbox — Link fill into a GOD station (no GPS alias unless addGpsAlias:true). */
 app.post(`${BASE_PATH}/admin/evidence-inbox/merge-to-station`, requirePlatformStaff(), async (c) => {
     try {
-        const { transactionId, targetStationId } = await c.req.json();
+        const { transactionId, targetStationId, addGpsAlias, aliasOverrideReason } = await c.req.json();
         if (!transactionId || !targetStationId) {
             return c.json({ error: "transactionId and targetStationId are required" }, 400);
         }
@@ -3853,24 +3915,20 @@ app.post(`${BASE_PATH}/admin/evidence-inbox/merge-to-station`, requirePlatformSt
         const { learnt, learntId } = ensured;
         const station = await kv.get(`station:${targetStationId}`);
         if (!station) return c.json({ error: "Target station not found" }, 404);
+        if (station.status !== "verified") {
+            return c.json({ error: "Target must be a Verified GOD station" }, 400);
+        }
 
-        const newAlias = {
-            id: crypto.randomUUID(),
-            lat: learnt.location.lat,
-            lng: learnt.location.lng,
-            label: `Merged from Evidence Inbox: ${learnt.name || "Learnt"}`,
-            addedAt: new Date().toISOString(),
-        };
-
-        station.aliases = [...(station.aliases || []), newAlias];
-        station.gpsAliases = [
-            ...(station.gpsAliases || []),
-            {
-                lat: learnt.location.lat,
-                lng: learnt.location.lng,
-                mergedAt: new Date().toISOString(),
-            },
-        ];
+        const aliasResult = appendGpsAliasIfAllowed(
+            station,
+            Number(learnt.location?.lat),
+            Number(learnt.location?.lng),
+            `Merged from Evidence Inbox: ${learnt.name || "Learnt"}`,
+            { addGpsAlias: !!addGpsAlias, aliasOverrideReason },
+        );
+        if (!aliasResult.ok) {
+            return c.json({ error: aliasResult.error, distanceM: aliasResult.distanceM }, 400);
+        }
 
         await kv.set(`station:${station.id}`, station);
 
@@ -3879,12 +3937,12 @@ app.post(`${BASE_PATH}/admin/evidence-inbox/merge-to-station`, requirePlatformSt
         await kv.del(`learnt_location:${learntId}`);
 
         console.log(
-            `[EvidenceInbox] Merged gate-held tx ${transactionId} ? station ${station.id}, linked ${linkedCount}, released ${releasedCount}`,
+            `[EvidenceInbox] Linked gate-held tx ${transactionId} ? station ${station.id}, linked ${linkedCount}, released ${releasedCount}, addGpsAlias=${!!addGpsAlias}`,
         );
 
         return c.json({
             success: true,
-            message: "Merged successfully",
+            message: addGpsAlias ? "Merged with GPS alias" : "Fill linked to station (no GPS alias)",
             data: station,
             linkedEntries: linkedCount,
             releasedTransactions: releasedCount,
@@ -4873,6 +4931,124 @@ app.post(`${BASE_PATH}/admin/reconcile-ledger-orphans`, requirePlatformStaff(), 
     } catch (e: any) {
         console.error("[Reconcile Error]", e);
         return c.json({ error: e.message }, 500);
+    }
+});
+
+// G1: Open provisional fills for Resolution Queue (no learnt row by design)
+app.get(`${BASE_PATH}/admin/provisional-fills`, requirePlatformStaff(), async (c) => {
+    try {
+        const limit = Math.min(Number(c.req.query("limit") || 500) || 500, 2000);
+        const orgQ = (c.req.query("organizationId") || "").trim();
+        const isProvisional = (e: Record<string, unknown>) => {
+            const meta = (e.metadata || {}) as Record<string, unknown>;
+            if (String(meta.locationStatus || "") !== "provisional") return false;
+            if (orgQ && String(e.organizationId || "") !== orgQ) return false;
+            return true;
+        };
+        let entries: Record<string, unknown>[] = [];
+        try {
+            const { queryFleet } = await import("./repos/baseRepo.ts");
+            const res = await queryFleet("fuel_entries", {
+                org: orgQ || undefined,
+                limit: 5000,
+            });
+            if (!res.error && Array.isArray(res.data)) {
+                entries = (res.data as Record<string, unknown>[]).filter(isProvisional).slice(0, limit);
+            }
+        } catch (sqlErr) {
+            console.warn("[provisional-fills] SQL miss — KV fallback", sqlErr);
+        }
+        if (entries.length === 0) {
+            const all = ((await kv.getByPrefix("fuel_entry:")) || []) as Record<string, unknown>[];
+            entries = all.filter(isProvisional).slice(0, limit);
+        }
+        const out = entries.map((e) => {
+            const meta = (e.metadata || {}) as Record<string, unknown>;
+            const loc = (meta.locationMetadata || {}) as Record<string, unknown>;
+            return {
+                id: e.id,
+                vendor: e.vendor || e.location || meta.stationName || "Provisional stop",
+                location: e.location,
+                date: e.date || meta.stationResolution && (meta.stationResolution as any).decidedAt || null,
+                matchedStationId: e.matchedStationId || meta.matchedStationId || null,
+                organizationId: e.organizationId || null,
+                lat: Number(loc.lat) || null,
+                lng: Number(loc.lng) || null,
+                accuracy: Number(loc.accuracy) || null,
+                metadata: {
+                    locationStatus: "provisional",
+                    matchDistance: meta.matchDistance,
+                    nearMissCandidates: meta.nearMissCandidates,
+                    stationResolution: meta.stationResolution,
+                    driverClaim: meta.driverClaim,
+                    jaaStation: meta.jaaStation,
+                    statementMerchant: meta.jaaStation || meta.jaaVendorRaw || null,
+                },
+            };
+        });
+        return c.json(out);
+    } catch (e: any) {
+        console.error("[provisional-fills]", e);
+        return c.json({ error: e.message }, 500);
+    }
+});
+
+/** Confirm a provisional fill → verified GOD match (admin / statement agree). */
+app.post(`${BASE_PATH}/admin/confirm-provisional`, requirePlatformStaff(), async (c) => {
+    try {
+        const { entryId, stationId } = await c.req.json();
+        const id = String(entryId || "").trim();
+        const sid = String(stationId || "").trim();
+        if (!id || !sid) return c.json({ error: "entryId and stationId required" }, 400);
+        const station = await kv.get(`station:${sid}`);
+        if (!station || station.status !== "verified") {
+            return c.json({ error: "Target must be a verified GOD station" }, 400);
+        }
+        const { attachRecordIdToStation } = await import("./station_attach.ts");
+        const result = await attachRecordIdToStation(id, station, {
+            method: "platform_ops_override",
+            reason: "Admin confirmed provisional fill",
+            dismissLearnt: true,
+        });
+        if (!result.ok) {
+            return c.json({ error: result.reason || "Confirm failed", skipped: result.skipped }, 400);
+        }
+        // Stamp resolution as verified admin confirm
+        const entry = (await kv.get(`fuel_entry:${id}`)) as Record<string, unknown> | null;
+        if (entry) {
+            const meta = (entry.metadata || {}) as Record<string, unknown>;
+            entry.metadata = {
+                ...meta,
+                locationStatus: "verified",
+                stationResolution: {
+                    ...(typeof meta.stationResolution === "object" ? meta.stationResolution as object : {}),
+                    state: "verified",
+                    reason: meta.stationResolution && (meta.stationResolution as any).reason
+                        ? (meta.stationResolution as any).reason
+                        : "LATE_LOG",
+                    stationId: sid,
+                    decidedBy: "admin",
+                    decidedAt: new Date().toISOString(),
+                },
+            };
+            await kv.set(`fuel_entry:${id}`, entry);
+        }
+        return c.json({ success: true, entryId: id, stationId: sid });
+    } catch (e: any) {
+        console.error("[confirm-provisional]", e);
+        return c.json({ error: e.message }, 500);
+    }
+});
+
+// Pin calibration suggestions (C7) — never auto-moves pins
+app.get(`${BASE_PATH}/admin/pin-calibration-suggestions`, requirePlatformStaff(), async (c) => {
+    try {
+        const { computePinCalibrationSuggestions } = await import("./pin_calibration.ts");
+        const suggestions = await computePinCalibrationSuggestions();
+        return c.json({ success: true, suggestions, count: suggestions.length });
+    } catch (e: any) {
+        console.error("[PinCalibration]", e);
+        return c.json({ error: e.message || "Pin calibration failed" }, 500);
     }
 });
 

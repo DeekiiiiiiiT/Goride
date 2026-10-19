@@ -90,6 +90,15 @@ export const findMatchingStation = (
  * Result from the ambiguity-aware smart matching function.
  * Includes confidence level and diagnostic info for logging/auditing.
  */
+/** Verified station near the fix but outside its geofence (late-log / near-miss evidence). */
+export interface NearMissCandidate {
+  stationId: string;
+  name: string;
+  distanceM: number;
+  radiusM: number;
+  status?: string;
+}
+
 export interface SmartMatchResult {
   station: StationProfile | null;
   confidence: 'high' | 'medium' | 'ambiguous' | 'none';
@@ -97,7 +106,12 @@ export interface SmartMatchResult {
   candidatesInRange: number;
   secondClosestDistance: number;
   ambiguityReason?: string;
+  /** Top verified stations within NEAR_MISS_CANDIDATE_M (for unresolved / provisional paths). */
+  nearMissCandidates?: NearMissCandidate[];
 }
+
+/** How far we keep near-miss candidates for the Resolution Queue / provisional ladder. */
+export const NEAR_MISS_CANDIDATE_M = 1000;
 
 /**
  * Calculates the shortest distance from a GPS point to a station,
@@ -161,6 +175,29 @@ const isWithinStationAcceptance = (
  *
  * The driver workflow is unaffected — this runs server-side on GPS data only.
  */
+function buildNearMissCandidates(
+  lat: number,
+  lng: number,
+  stations: StationProfile[],
+  limit = 3,
+): NearMissCandidate[] {
+  const scored: NearMissCandidate[] = [];
+  for (const station of stations) {
+    if (!station?.id) continue;
+    const dist = Math.round(shortestDistanceToStation(lat, lng, station));
+    if (!Number.isFinite(dist) || dist > NEAR_MISS_CANDIDATE_M) continue;
+    scored.push({
+      stationId: station.id,
+      name: station.name || station.id,
+      distanceM: dist,
+      radiusM: geofenceLimitMeters(station),
+      status: station.status,
+    });
+  }
+  scored.sort((a, b) => a.distanceM - b.distanceM);
+  return scored.slice(0, limit);
+}
+
 export const findMatchingStationSmart = (
   lat: number,
   lng: number,
@@ -169,6 +206,7 @@ export const findMatchingStationSmart = (
   gpsAccuracy: number = 0
 ): SmartMatchResult => {
   const effectiveRadius = maxRadiusMeters + gpsAccuracy;
+  const nearMissCandidates = buildNearMissCandidates(lat, lng, stations);
 
   // 1. Stations within search radius (discovery pool — not yet geofence-validated)
   const inSearchRadius: { station: StationProfile; distance: number }[] = [];
@@ -190,6 +228,7 @@ export const findMatchingStationSmart = (
       distance: Infinity,
       candidatesInRange: 0,
       secondClosestDistance: Infinity,
+      nearMissCandidates,
     };
   }
 
@@ -218,6 +257,7 @@ export const findMatchingStationSmart = (
       distance: closestRejected.distance,
       candidatesInRange: 0,
       secondClosestDistance: Infinity,
+      nearMissCandidates,
     };
   }
 
@@ -237,6 +277,7 @@ export const findMatchingStationSmart = (
       distance: closest.distance,
       candidatesInRange: 1,
       secondClosestDistance: Infinity,
+      nearMissCandidates,
     };
   }
 
@@ -258,6 +299,7 @@ export const findMatchingStationSmart = (
       distance: closest.distance,
       candidatesInRange,
       secondClosestDistance,
+      nearMissCandidates,
     };
   }
 
@@ -274,6 +316,7 @@ export const findMatchingStationSmart = (
       distance: closest.distance,
       candidatesInRange,
       secondClosestDistance,
+      nearMissCandidates,
     };
   }
 
@@ -293,5 +336,6 @@ export const findMatchingStationSmart = (
     candidatesInRange,
     secondClosestDistance,
     ambiguityReason,
+    nearMissCandidates,
   };
 };

@@ -60,6 +60,24 @@ import {
   buildCashSplitMetadata,
   validateSplitPumpAmounts,
 } from '@roam/fuel-core';
+import {
+  evaluateFuelProximity,
+  minutesAgoToApprox,
+  type DriverClaimMinutesAgo,
+  type FuelProximityResult,
+} from '../../utils/fuelProximity';
+import { calculateDistance } from '../../utils/geoUtils';
+
+function stationPickerDistance(
+  lat: number,
+  lng: number,
+  station: StationProfile,
+): number {
+  const sLat = Number(station.location?.lat);
+  const sLng = Number(station.location?.lng);
+  if (!Number.isFinite(sLat) || !Number.isFinite(sLng)) return Infinity;
+  return calculateDistance(lat, lng, sLat, sLng);
+}
 
 interface ExpenseLoggerProps {
   /** @deprecated Prefer `mode="log"` */
@@ -77,6 +95,7 @@ type ViewState =
   | 'odometer_scan'
   | 'fuel_gps_locking'
   | 'fuel_gps_retry'
+  | 'fuel_station_claim'
   | 'method_select'
   | 'gas_card_details' // Gas Card only — never shares cash/pump entry_details
   | 'split_details' // Gas Card + Cash — pump photo + cash portion
@@ -119,7 +138,7 @@ const FUEL_GPS_SKIP_ENABLE_MS = 3000;
 /** Overall fuel/expense submit deadline (uploads + save). */
 const SUBMIT_DEADLINE_MS = 90_000;
 
-import { useGeolocation } from '../../hooks/useGeolocation';
+import { useFuelGeofenceWatch, useGeolocation } from '../../hooks/useGeolocation';
 
 interface FuelEntryState {
   odometerReading?: number;
@@ -133,8 +152,20 @@ interface FuelEntryState {
     lat: number;
     lng: number;
     accuracy: number;
+    /** ISO time when the phone measured the fix (not submit time). */
     timestamp?: string;
+    fixAt?: string;
+    ageS?: number;
+    mock?: boolean;
   };
+  /** Driver confirmation when GPS is outside geofence or missing. */
+  driverClaim?: {
+    stationId: string | null;
+    stationName?: string;
+    leftStation: boolean;
+    minutesAgo?: number;
+  };
+  nearbyStationChip?: string;
   parentCompany?: string;
 }
 
@@ -216,12 +247,23 @@ export function DriverExpenses({ defaultOpen = false, mode, cameraResume = null,
 
   const [verifiedStations, setVerifiedStations] = useState<StationProfile[]>([]);
 
+  // Opt-in geofence dwell prompt (localStorage flag) → nudge to log fuel
+  useFuelGeofenceWatch(verifiedStations, (station) => {
+    toast.message(`At ${station.name}?`, {
+      description: 'Tap Log Fuel when you are ready — we can match this stop for your fleet.',
+      duration: 8000,
+    });
+  });
+
   const [fuelGpsManualRetriesLeft, setFuelGpsManualRetriesLeft] = useState(MAX_MANUAL_FUEL_GPS_RETRIES);
   /** True after GPS capture was exhausted; shows copy on fuel details that admin will verify location. */
   const [fuelProceedingWithoutGps, setFuelProceedingWithoutGps] = useState(false);
   const [isRetryingFuelGps, setIsRetryingFuelGps] = useState(false);
   const [fuelGpsSkipEnabled, setFuelGpsSkipEnabled] = useState(false);
   const fuelGpsLockGenRef = useRef(0);
+  const [fuelProximity, setFuelProximity] = useState<FuelProximityResult | null>(null);
+  const [claimMinutesAgo, setClaimMinutesAgo] = useState<DriverClaimMinutesAgo>('5_15');
+  const [claimPickerOpen, setClaimPickerOpen] = useState(false);
   /** Active inventory card for Gas Card path (Roam assignment). */
   const [assignedGasCard, setAssignedGasCard] = useState<FuelCard | null>(null);
   const [gasCardLookupDone, setGasCardLookupDone] = useState(false);
@@ -232,7 +274,10 @@ export function DriverExpenses({ defaultOpen = false, mode, cameraResume = null,
       // Stations only needed while logging — never prefetch expense rows on view entry.
       api.getStations().then(data => {
         setVerifiedStations(data.filter((s: any) => s.status === 'verified'));
-      }).catch(console.error);
+      }).catch((err) => {
+        console.error(err);
+        setVerifiedStations([]);
+      });
       return;
     }
     // View mode: load period totals for Fuel/Tolls cards (list rows still wait for a tap).
@@ -807,6 +852,7 @@ export function DriverExpenses({ defaultOpen = false, mode, cameraResume = null,
         odometerProofUrl: (isFuel) ? odometerProofUrl : undefined,
         odometerManualReason: (isFuel) ? fuelEntry.manualReason : undefined,
         locationMetadata: fuelEntry.locationMetadata,
+        driverClaim: isFuel ? fuelEntry.driverClaim : undefined,
         parentCompany: fuelEntry.parentCompany,
         paymentSource: isFuel
           ? (isGasCard
@@ -967,6 +1013,7 @@ export function DriverExpenses({ defaultOpen = false, mode, cameraResume = null,
             odometerMethod: fuelEntry.odometerMethod,
             odometerProofUrl: odometerProofUrl || undefined,
             locationMetadata: fuelEntry.locationMetadata,
+            driverClaim: fuelEntry.driverClaim,
             parentCompany: fuelEntry.parentCompany,
             paymentSource: 'company_card',
             countsInFuelSpend: false,
@@ -1138,6 +1185,7 @@ export function DriverExpenses({ defaultOpen = false, mode, cameraResume = null,
             awaitingCardStatement: true,
             odometerMethod: fuelEntry.odometerMethod,
             locationMetadata: fuelEntry.locationMetadata,
+            driverClaim: fuelEntry.driverClaim,
             parentCompany: fuelEntry.parentCompany,
             paymentSource: 'company_card',
             countsInFuelSpend: false,
@@ -1223,6 +1271,7 @@ export function DriverExpenses({ defaultOpen = false, mode, cameraResume = null,
             odometerMethod: fuelEntry.odometerMethod,
             odometerProofUrl: odometerProofUrl || undefined,
             locationMetadata: fuelEntry.locationMetadata,
+            driverClaim: fuelEntry.driverClaim,
             parentCompany: fuelEntry.parentCompany,
             paymentSource: 'company_card',
             countsInFuelSpend: false,
@@ -1598,11 +1647,17 @@ export function DriverExpenses({ defaultOpen = false, mode, cameraResume = null,
       if (gen !== fuelGpsLockGenRef.current) return;
       lastLocError = loc.error;
       if (loc.lat != null && loc.lng != null) {
+        const fixMs = loc.timestamp ?? Date.now();
+        const fixAt = new Date(fixMs).toISOString();
+        const ageS = Math.max(0, Math.round((Date.now() - fixMs) / 1000));
         locationData = {
           lat: loc.lat,
           lng: loc.lng,
           accuracy: loc.accuracy ?? 0,
-          timestamp: new Date().toISOString(),
+          timestamp: fixAt,
+          fixAt,
+          ageS,
+          ...(loc.mock !== undefined ? { mock: loc.mock } : {}),
         };
       }
     } catch (e) {
@@ -1614,11 +1669,46 @@ export function DriverExpenses({ defaultOpen = false, mode, cameraResume = null,
     if (gen !== fuelGpsLockGenRef.current) return;
 
     if (locationData) {
-      setFuelEntry((prev) => ({ ...prev, locationMetadata: locationData }));
+      // Empty station list → skip claim sheet (avoid "can't see a station" false alarm)
+      if (!verifiedStations.length) {
+        setFuelEntry((prev) => ({ ...prev, locationMetadata: locationData }));
+        setFuelProximity(null);
+        setFuelProceedingWithoutGps(false);
+        setFuelGpsManualRetriesLeft(MAX_MANUAL_FUEL_GPS_RETRIES);
+        toast.success("Location locked for verification");
+        setViewState('method_select');
+        return;
+      }
+
+      const proximity = evaluateFuelProximity(
+        locationData.lat,
+        locationData.lng,
+        verifiedStations,
+      );
+      setFuelProximity(proximity);
       setFuelProceedingWithoutGps(false);
       setFuelGpsManualRetriesLeft(MAX_MANUAL_FUEL_GPS_RETRIES);
-      toast.success("Location locked for verification 📍");
-      setViewState('method_select');
+
+      if (proximity.kind === 'inside') {
+        setFuelEntry((prev) => ({
+          ...prev,
+          locationMetadata: locationData,
+          nearbyStationChip: proximity.station.name,
+          driverClaim: {
+            stationId: proximity.station.id,
+            stationName: proximity.station.name,
+            leftStation: false,
+            minutesAgo: 0,
+          },
+        }));
+        toast.success(`Location locked · ${proximity.station.name}`);
+        setViewState('method_select');
+        return;
+      }
+
+      setFuelEntry((prev) => ({ ...prev, locationMetadata: locationData }));
+      toast.success("Location locked for verification");
+      setViewState('fuel_station_claim');
       return;
     }
 
@@ -1669,19 +1759,59 @@ export function DriverExpenses({ defaultOpen = false, mode, cameraResume = null,
     try {
       const loc = await getLocation();
       if (loc.lat != null && loc.lng != null) {
-        setFuelEntry((prev) => ({
-          ...prev,
-          locationMetadata: {
-            lat: loc.lat,
-            lng: loc.lng,
-            accuracy: loc.accuracy ?? 0,
-            timestamp: new Date().toISOString(),
-          },
-        }));
+        const fixMs = loc.timestamp ?? Date.now();
+        const fixAt = new Date(fixMs).toISOString();
+        const ageS = Math.max(0, Math.round((Date.now() - fixMs) / 1000));
+        const locationData = {
+          lat: loc.lat,
+          lng: loc.lng,
+          accuracy: loc.accuracy ?? 0,
+          timestamp: fixAt,
+          fixAt,
+          ageS,
+          ...(loc.mock !== undefined ? { mock: loc.mock } : {}),
+        };
+
+        // Same proximity + claim path as the initial GPS lock
+        if (!verifiedStations.length) {
+          setFuelEntry((prev) => ({ ...prev, locationMetadata: locationData }));
+          setFuelProximity(null);
+          setFuelProceedingWithoutGps(false);
+          setFuelGpsManualRetriesLeft(MAX_MANUAL_FUEL_GPS_RETRIES);
+          toast.success("Location locked for verification");
+          setViewState('method_select');
+          return;
+        }
+
+        const proximity = evaluateFuelProximity(
+          locationData.lat,
+          locationData.lng,
+          verifiedStations,
+        );
+        setFuelProximity(proximity);
         setFuelProceedingWithoutGps(false);
         setFuelGpsManualRetriesLeft(MAX_MANUAL_FUEL_GPS_RETRIES);
-        toast.success("Location locked for verification 📍");
-        setViewState('method_select');
+
+        if (proximity.kind === 'inside') {
+          setFuelEntry((prev) => ({
+            ...prev,
+            locationMetadata: locationData,
+            nearbyStationChip: proximity.station.name,
+            driverClaim: {
+              stationId: proximity.station.id,
+              stationName: proximity.station.name,
+              leftStation: false,
+              minutesAgo: 0,
+            },
+          }));
+          toast.success(`Location locked · ${proximity.station.name}`);
+          setViewState('method_select');
+          return;
+        }
+
+        setFuelEntry((prev) => ({ ...prev, locationMetadata: locationData }));
+        toast.success("Location locked for verification");
+        setViewState('fuel_station_claim');
         return;
       }
       applyManualFuelGpsRetryFailed(fuelGpsManualRetriesLeft - 1);
@@ -2164,6 +2294,158 @@ export function DriverExpenses({ defaultOpen = false, mode, cameraResume = null,
             </div>
           )}
 
+          {viewState === 'fuel_station_claim' && (
+            <div className="p-6 space-y-5">
+              <div className="space-y-2">
+                <Label className="text-xs text-slate-500">About how long ago?</Label>
+                <Select
+                  value={claimMinutesAgo}
+                  onValueChange={(v) => setClaimMinutesAgo(v as DriverClaimMinutesAgo)}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="just_now">Just now</SelectItem>
+                    <SelectItem value="5_15">5–15 min</SelectItem>
+                    <SelectItem value="15_60">15–60 min</SelectItem>
+                    <SelectItem value="earlier_today">Earlier today</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              {fuelProximity?.kind === 'near_miss' ? (
+                <>
+                  <div className="text-center space-y-2">
+                    <h3 className="text-base font-semibold text-slate-900">Looks like you&apos;ve left the station</h3>
+                    <p className="text-sm text-slate-500">
+                      We&apos;ll still save your log. Confirm where you fuelled so your fleet can match it.
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    className="w-full"
+                    onClick={() => {
+                      setFuelEntry((prev) => ({
+                        ...prev,
+                        nearbyStationChip: fuelProximity.station.name,
+                        driverClaim: {
+                          stationId: fuelProximity.station.id,
+                          stationName: fuelProximity.station.name,
+                          leftStation: true,
+                          minutesAgo: minutesAgoToApprox(claimMinutesAgo),
+                        },
+                      }));
+                      setViewState('method_select');
+                    }}
+                  >
+                    I fuelled at {fuelProximity.station.name}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full"
+                    onClick={() => setClaimPickerOpen(true)}
+                  >
+                    A different station
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className="w-full"
+                    onClick={() => {
+                      setViewState('fuel_gps_locking');
+                      void runFuelGpsLock();
+                    }}
+                  >
+                    I&apos;m still at the pump — retry GPS
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <div className="text-center space-y-2">
+                    <h3 className="text-base font-semibold text-slate-900">Where did you fuel?</h3>
+                    <p className="text-sm text-slate-500">
+                      We can&apos;t see a gas station near you. Pick one or continue — your log always goes through.
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    className="w-full"
+                    onClick={() => setClaimPickerOpen(true)}
+                  >
+                    Choose a station
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full"
+                    onClick={() => {
+                      setFuelEntry((prev) => ({
+                        ...prev,
+                        driverClaim: {
+                          stationId: null,
+                          leftStation: true,
+                          minutesAgo: minutesAgoToApprox(claimMinutesAgo),
+                        },
+                      }));
+                      setViewState('method_select');
+                    }}
+                  >
+                    New / not listed
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className="w-full"
+                    onClick={() => {
+                      setViewState('fuel_gps_locking');
+                      void runFuelGpsLock();
+                    }}
+                  >
+                    I&apos;m at the pump — retry GPS
+                  </Button>
+                </>
+              )}
+              {claimPickerOpen && (
+                <div className="max-h-48 overflow-y-auto space-y-1 border rounded-lg p-2">
+                  {verifiedStations
+                    .slice()
+                    .sort((a, b) => {
+                      const loc = fuelEntry.locationMetadata;
+                      if (!loc) return (a.name || '').localeCompare(b.name || '');
+                      const da = stationPickerDistance(loc.lat, loc.lng, a);
+                      const db = stationPickerDistance(loc.lat, loc.lng, b);
+                      return da - db;
+                    })
+                    .slice(0, 20)
+                    .map((s) => (
+                      <button
+                        key={s.id}
+                        type="button"
+                        className="w-full text-left text-sm px-3 py-2 rounded hover:bg-slate-50"
+                        onClick={() => {
+                          setFuelEntry((prev) => ({
+                            ...prev,
+                            nearbyStationChip: s.name,
+                            driverClaim: {
+                              stationId: s.id,
+                              stationName: s.name,
+                              leftStation: true,
+                              minutesAgo: minutesAgoToApprox(claimMinutesAgo),
+                            },
+                          }));
+                          setClaimPickerOpen(false);
+                          setViewState('method_select');
+                        }}
+                      >
+                        {s.name}
+                      </button>
+                    ))}
+                </div>
+              )}
+            </div>
+          )}
+
           {viewState === 'fuel_gps_retry' && (
             <div className="p-6 space-y-6">
               <div className="flex flex-col items-center text-center space-y-3">
@@ -2201,6 +2483,17 @@ export function DriverExpenses({ defaultOpen = false, mode, cameraResume = null,
                     Retry GPS
                   </>
                 )}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full"
+                onClick={() => {
+                  setFuelProximity({ kind: 'no_gps' });
+                  setViewState('fuel_station_claim');
+                }}
+              >
+                Continue without GPS — pick station
               </Button>
             </div>
           )}

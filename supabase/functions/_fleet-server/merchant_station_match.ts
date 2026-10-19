@@ -1,25 +1,29 @@
 /**
  * Unique Verified (GOD) station match from merchant / vendor strings.
  * Used by Silent Attach auto-heal — never attaches on ambiguous two-station ties.
+ * Registry (station_merchant_aliases) is checked first when organizationId is provided.
  */
 
 import {
   calculateSimilarity,
   normalizeVendorName,
 } from "./vendor_matcher.ts";
+import { lookupStationMerchantAlias } from "./station_merchant_aliases.ts";
 
 export type MerchantMatchStation = {
   id: string;
   name?: string;
   brand?: string;
   status?: string;
-  aliases?: Array<{ label?: string } | string>;
+  /** Name-only aliases (strings). GPS objects must not live here. */
+  aliases?: Array<{ label?: string } | string> | string[];
 };
 
 export type UniqueMerchantMatch = {
   station: MerchantMatchStation;
   score: number;
   merchantText: string;
+  fromRegistry?: boolean;
 };
 
 const DEFAULT_MIN_SCORE = 0.88;
@@ -55,6 +59,10 @@ export function collectMerchantCandidateTexts(record: Record<string, unknown>): 
 
 function aliasLabel(alias: { label?: string } | string): string {
   if (typeof alias === "string") return alias;
+  // Skip GPS-shaped objects that were historically mixed into aliases
+  if (alias && typeof alias === "object" && ("lat" in alias || "lng" in alias)) {
+    return "";
+  }
   return String(alias?.label || "");
 }
 
@@ -64,7 +72,9 @@ function scoreStationAgainstText(station: MerchantMatchStation, text: string): n
     calculateSimilarity(text, station.brand || ""),
   );
   for (const alias of station.aliases || []) {
-    score = Math.max(score, calculateSimilarity(text, aliasLabel(alias)));
+    const label = aliasLabel(alias);
+    if (!label) continue;
+    score = Math.max(score, calculateSimilarity(text, label));
   }
   return score;
 }
@@ -104,6 +114,47 @@ export function matchUniqueVerifiedStation(
     score: top.score,
     merchantText: raw,
   };
+}
+
+/**
+ * Registry-first match: exact normalized_name hit → score 1.0, else fuzzy.
+ */
+export async function matchUniqueVerifiedStationForRecordAsync(
+  record: Record<string, unknown>,
+  stations: MerchantMatchStation[],
+  opts?: { preferStrong?: boolean; minScore?: number; organizationId?: string; issuer?: string },
+): Promise<UniqueMerchantMatch | null> {
+  const orgId = String(
+    opts?.organizationId ||
+      record.organizationId ||
+      (record.metadata as any)?.organizationId ||
+      "",
+  ).trim();
+  const texts = collectMerchantCandidateTexts(record);
+
+  if (orgId) {
+    for (const text of texts) {
+      const alias = await lookupStationMerchantAlias({
+        organizationId: orgId,
+        issuer: opts?.issuer || "jaa",
+        rawName: text,
+      });
+      if (!alias) continue;
+      const station = stations.find((s) => s.id === alias.station_id) || {
+        id: alias.station_id,
+        name: alias.raw_name,
+        status: "verified",
+      };
+      return {
+        station,
+        score: 1,
+        merchantText: text,
+        fromRegistry: true,
+      };
+    }
+  }
+
+  return matchUniqueVerifiedStationForRecord(record, stations, opts);
 }
 
 /**

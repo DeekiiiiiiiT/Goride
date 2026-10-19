@@ -5,15 +5,106 @@
 import * as kv from "./kv_store.tsx";
 import * as fuelLogic from "./fuel_logic.ts";
 import { auditLogic } from "./audit_logic.ts";
-import { findMatchingStationSmart } from "./geo_matcher.ts";
+import {
+  findMatchingStationSmart,
+  NEAR_MISS_CANDIDATE_M,
+  type NearMissCandidate,
+} from "./geo_matcher.ts";
 
 export type StationMatchOutcome =
   | "verified"
+  | "provisional"
   | "review_required"
   | "ambiguous"
   | "learnt"
   | "no_gps"
   | "skipped";
+
+/** Max GPS accuracy (m) to treat a near-miss as provisional LATE_LOG. */
+export const PROVISIONAL_MAX_ACCURACY_M = 50;
+
+export type StationResolutionReason =
+  | "GPS_IN_GEOFENCE"
+  | "LATE_LOG"
+  | "STALE_FIX"
+  | "LOW_ACCURACY"
+  | "PIN_OFFSET"
+  | "AMBIGUOUS_NEIGHBOURS"
+  | "NO_GPS"
+  | "NO_STATION_NEARBY"
+  | "STATEMENT_MISMATCH"
+  | "STATEMENT_ALIAS"
+  | "DRIVER_CLAIM"
+  | "DRIVER_CLAIM_CONFLICT";
+
+export type StationResolutionState =
+  | "verified"
+  | "provisional"
+  | "ambiguous"
+  | "unresolved"
+  | "new_location";
+
+function extractFixEvidence(entry: Record<string, any>): {
+  lat: number;
+  lng: number;
+  accuracyM: number;
+  fixAt?: string;
+  ageS?: number;
+  mock?: boolean;
+} | undefined {
+  const coords = extractEntryCoords(entry);
+  if (!coords) return undefined;
+  const loc = entry.metadata?.locationMetadata || entry.locationMetadata || {};
+  const fixAt = typeof loc.fixAt === "string"
+    ? loc.fixAt
+    : typeof loc.timestamp === "string"
+    ? loc.timestamp
+    : undefined;
+  const ageS = Number.isFinite(Number(loc.ageS)) ? Number(loc.ageS) : undefined;
+  return {
+    lat: coords.lat,
+    lng: coords.lng,
+    accuracyM: extractEntryGpsAccuracyMeters(entry),
+    fixAt,
+    ageS,
+    mock: loc.mock === true ? true : undefined,
+  };
+}
+
+function buildStationResolution(opts: {
+  state: StationResolutionState;
+  reason: StationResolutionReason;
+  stationId: string | null;
+  candidates: NearMissCandidate[];
+  entry: Record<string, any>;
+  decidedBy: "gps" | "statement_alias" | "driver_claim+gps" | "admin";
+}): Record<string, unknown> {
+  const claim = opts.entry.metadata?.driverClaim;
+  return {
+    state: opts.state,
+    reason: opts.reason,
+    stationId: opts.stationId,
+    evidence: {
+      fix: extractFixEvidence(opts.entry),
+      candidates: opts.candidates,
+      ...(claim && typeof claim === "object" ? { driverClaim: claim } : {}),
+    },
+    decidedBy: opts.decidedBy,
+    decidedAt: new Date().toISOString(),
+  };
+}
+
+function nearMissProvisionalCandidate(
+  candidates: NearMissCandidate[],
+  accuracyM: number,
+): NearMissCandidate | null {
+  if (accuracyM > PROVISIONAL_MAX_ACCURACY_M) return null;
+  const verifiedNear = candidates.filter(
+    (c) => (!c.status || c.status === "verified") && c.distanceM <= NEAR_MISS_CANDIDATE_M,
+  );
+  if (verifiedNear.length !== 1) return null;
+  return verifiedNear[0];
+}
 
 export type StationMatchDeps = {
   get: (key: string) => Promise<any>;
@@ -195,23 +286,27 @@ export async function applyStationMatch(
     }
   }
 
+  // GPS match pool = verified GOD stations only (CSV unverified is reference, not a match candidate).
   const allStationsForEntry =
     !skipGpsMatching && entryCoords ? (await deps.getByPrefix("station:")) || [] : [];
+  const verifiedStationsForMatch = allStationsForEntry.filter(
+    (s: any) => s && s.status === "verified",
+  );
 
   if (!skipGpsMatching && entryCoords) {
     const gpsAccuracyM = extractEntryGpsAccuracyMeters(entry);
     const smartResult = findMatchingStationSmart(
       entryLat,
       entryLng,
-      allStationsForEntry,
+      verifiedStationsForMatch,
       600,
       gpsAccuracyM,
     );
+    const candidates = smartResult.nearMissCandidates || [];
 
     if (smartResult.station && (smartResult.confidence === "high" || smartResult.confidence === "medium")) {
       const matchedStation = smartResult.station as any;
       bumpStationPriceStats(matchedStation, entry);
-      const isVerified = matchedStation.status === "verified";
       await deps.set(`station:${matchedStation.id}`, matchedStation);
 
       entry.matchedStationId = matchedStation.id;
@@ -220,11 +315,20 @@ export async function applyStationMatch(
       entry.stationAddress = matchedStation.address || entry.stationAddress || "";
       entry.metadata = {
         ...entry.metadata,
-        locationStatus: isVerified ? "verified" : "review_required",
+        locationStatus: "verified",
         verificationMethod: "gps_handshake",
         matchedStationId: matchedStation.id,
         matchDistance: smartResult.distance,
         matchConfidence: smartResult.confidence,
+        nearMissCandidates: candidates,
+        stationResolution: buildStationResolution({
+          state: "verified",
+          reason: "GPS_IN_GEOFENCE",
+          stationId: matchedStation.id,
+          candidates,
+          entry,
+          decidedBy: "gps",
+        }),
       };
 
       await signVerifiedEntry(entry, matchedStation, deferSignature);
@@ -232,8 +336,8 @@ export async function applyStationMatch(
         `[SmartGeoMatch] POST entry ${entry.id} matched "${matchedStation.name}" (${matchedStation.id}) at ${smartResult.distance}m [${smartResult.confidence}]`,
       );
       return {
-        outcome: isVerified ? "verified" : "review_required",
-        stations: allStationsForEntry,
+        outcome: "verified",
+        stations: verifiedStationsForMatch,
       };
     }
 
@@ -245,41 +349,146 @@ export async function applyStationMatch(
         matchDistance: smartResult.distance,
         matchConfidence: "ambiguous",
         ambiguityReason: smartResult.ambiguityReason,
+        nearMissCandidates: candidates,
+        stationResolution: buildStationResolution({
+          state: "ambiguous",
+          reason: "AMBIGUOUS_NEIGHBOURS",
+          stationId: null,
+          candidates,
+          entry,
+          decidedBy: "gps",
+        }),
       };
       entry.auditStatus = "Review Required";
-      const closestStation = smartResult.station as any;
-      if (closestStation) {
-        entry.matchedStationId = closestStation.id;
-        entry.vendor = closestStation.name;
-        entry.metadata = {
-          ...entry.metadata,
-          matchedStationId: closestStation.id,
-        };
-        const confidence = fuelLogic.calculateConfidenceScore(entry, closestStation);
-        entry.metadata = {
-          ...entry.metadata,
-          auditConfidenceScore: confidence.score,
-          auditConfidenceBreakdown: confidence.breakdown,
-          isHighlyTrusted: confidence.isHighlyTrusted,
-        };
-      }
       console.log(`[SmartGeoMatch] Ambiguous match for entry ${entry.id}. ${smartResult.ambiguityReason}`);
-      return { outcome: "ambiguous", stations: allStationsForEntry };
+      return { outcome: "ambiguous", stations: verifiedStationsForMatch };
+    }
+
+    // Near-miss: exactly one verified station within 1 km, accurate fix → provisional (no learnt, no GPS alias)
+    const provisionalHit = nearMissProvisionalCandidate(candidates, gpsAccuracyM);
+    const driverClaim = entry.metadata?.driverClaim;
+    const claimStationId =
+      driverClaim && typeof driverClaim === "object"
+        ? String((driverClaim as any).stationId || "") || null
+        : null;
+    const claimLeft = driverClaim && typeof driverClaim === "object"
+      ? (driverClaim as any).leftStation === true
+      : false;
+    // Claim only counts when that station is in near-miss candidates (≤1 km)
+    const claimInCandidates = claimStationId
+      ? candidates.find((c) => c.stationId === claimStationId) || null
+      : null;
+
+    // Driver named a different station than the GPS provisional — hold for admin review
+    if (
+      provisionalHit &&
+      claimLeft &&
+      claimStationId &&
+      claimStationId !== provisionalHit.stationId
+    ) {
+      entry.metadata = {
+        ...entry.metadata,
+        locationStatus: "review_required",
+        verificationMethod: "driver_claim_conflict",
+        matchDistance: provisionalHit.distanceM,
+        matchConfidence: "review",
+        nearMissCandidates: candidates,
+        stationResolution: {
+          ...buildStationResolution({
+            state: "ambiguous",
+            reason: "DRIVER_CLAIM_CONFLICT",
+            stationId: null,
+            candidates,
+            entry,
+            decidedBy: "driver_claim+gps",
+          }),
+          gpsStationId: provisionalHit.stationId,
+          claimStationId,
+        },
+      };
+      entry.auditStatus = "Review Required";
+      console.log(
+        `[SmartGeoMatch] Claim/GPS conflict for entry ${entry.id}: gps=${provisionalHit.stationId} claim=${claimStationId}`,
+      );
+      return { outcome: "review_required", stations: verifiedStationsForMatch };
+    }
+
+    const claimProvisional = !!(claimLeft && claimInCandidates);
+    if (provisionalHit || claimProvisional) {
+      const chosen = provisionalHit || claimInCandidates;
+      const stationId = chosen?.stationId || null;
+      const station = stationId
+        ? verifiedStationsForMatch.find((s: any) => s.id === stationId)
+        : null;
+      if (station && stationId && chosen) {
+        const reason: StationResolutionReason =
+          gpsAccuracyM > PROVISIONAL_MAX_ACCURACY_M
+            ? "LOW_ACCURACY"
+            : (extractFixEvidence(entry)?.ageS ?? 0) > 30
+            ? "STALE_FIX"
+            : claimInCandidates && !provisionalHit
+            ? "DRIVER_CLAIM"
+            : "LATE_LOG";
+        entry.matchedStationId = stationId;
+        entry.vendor = station.name;
+        entry.location = station.name;
+        entry.stationAddress = station.address || entry.stationAddress || "";
+        entry.metadata = {
+          ...entry.metadata,
+          locationStatus: "provisional",
+          verificationMethod: "near_miss_provisional",
+          matchedStationId: stationId,
+          matchDistance: chosen.distanceM ?? smartResult.distance,
+          matchConfidence: "provisional",
+          nearMissCandidates: candidates,
+          stationResolution: buildStationResolution({
+            state: "provisional",
+            reason,
+            stationId,
+            candidates,
+            entry,
+            decidedBy: claimInCandidates ? "driver_claim+gps" : "gps",
+          }),
+        };
+        // Provisional is not signed/locked — statement alias or admin Link promotes later.
+        console.log(
+          `[SmartGeoMatch] Provisional LATE_LOG for entry ${entry.id} → "${station.name}" (${stationId}) at ${chosen.distanceM ?? "?"}m`,
+        );
+        return { outcome: "provisional", stations: verifiedStationsForMatch };
+      }
     }
 
     if (!entry.metadata) entry.metadata = {};
+    const unresolvedReason: StationResolutionReason =
+      candidates.length === 0
+        ? "NO_STATION_NEARBY"
+        : claimLeft && claimStationId && !claimInCandidates
+        ? "DRIVER_CLAIM"
+        : "LATE_LOG";
+    const learntName =
+      entry.vendor ||
+      entry.stationName ||
+      (typeof entry.metadata?.ocrMerchant === "string" ? entry.metadata.ocrMerchant : null) ||
+      (driverClaim && typeof (driverClaim as any).stationName === "string"
+        ? (driverClaim as any).stationName
+        : null) ||
+      "Unknown Vendor";
     let learntId = entry.metadata.learntLocationId as string | undefined;
     if (!learntId) {
       learntId = crypto.randomUUID();
       const learntLocation = {
         id: learntId,
-        name: entry.vendor || entry.stationName || "Unknown Vendor",
+        name: learntName,
         location: { lat: entryLat, lng: entryLng },
         status: "learnt",
         firstSeen: entry.date || new Date().toISOString(),
         sourceEntryId: entry.id,
         driverId: entry.driverId,
         vehicleId: entry.vehicleId,
+        // G2: stamp reason + near-miss onto learnt for location-only queue chips
+        reason: unresolvedReason,
+        nearMissCandidates: candidates,
+        organizationId: entry.organizationId || entry.metadata?.organizationId || null,
       };
       await deps.set(`learnt_location:${learntId}`, learntLocation);
       console.log(`[SmartGeoMatch] No match for entry ${entry.id} — created Learnt Location: ${learntId}`);
@@ -289,8 +498,18 @@ export async function applyStationMatch(
       locationStatus: "unknown",
       verificationMethod: "none",
       learntLocationId: learntId,
+      nearMissCandidates: candidates,
+      matchDistance: Number.isFinite(smartResult.distance) ? smartResult.distance : undefined,
+      stationResolution: buildStationResolution({
+        state: candidates.length === 0 ? "new_location" : "unresolved",
+        reason: unresolvedReason,
+        stationId: null,
+        candidates,
+        entry,
+        decidedBy: claimLeft && claimStationId ? "driver_claim+gps" : "gps",
+      }),
     };
-    return { outcome: "learnt", stations: allStationsForEntry };
+    return { outcome: "learnt", stations: verifiedStationsForMatch };
   }
 
   if (!skipGpsMatching) {

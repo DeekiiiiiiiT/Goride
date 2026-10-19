@@ -352,6 +352,30 @@ export function resolveFuelEntryStationDisplay(
     return { title: title || 'Unknown Station', subtitle };
   }
 
+  // Provisional late-log: show suggested station + distance, not a contradictory review badge.
+  const locationStatus = String(meta.locationStatus || '');
+  const resolution = meta.stationResolution as
+    | { state?: string; reason?: string; stationId?: string; evidence?: { candidates?: Array<{ name?: string; distanceM?: number }> } }
+    | undefined;
+  if (locationStatus === 'provisional' || resolution?.state === 'provisional') {
+    const candidates = resolution?.evidence?.candidates || (meta.nearMissCandidates as Array<{ name?: string; distanceM?: number }>) || [];
+    const top = candidates[0];
+    const provisionalName =
+      String(entry.vendor || meta.stationName || top?.name || '').trim() || 'Nearby station';
+    const dist = top?.distanceM != null ? Math.round(Number(top.distanceM)) : null;
+    return {
+      title: provisionalName,
+      subtitle: dist != null ? `Logged ${dist} m away · Provisional` : 'Provisional — awaiting card confirmation',
+    };
+  }
+
+  if (resolution?.reason === 'STATEMENT_MISMATCH') {
+    return {
+      title: String(entry.vendor || meta.stationName || 'Station mismatch').trim(),
+      subtitle: 'Statement mismatch — review required',
+    };
+  }
+
   const title =
     String(entry.vendor || '').trim() ||
     String(meta.stationName || '').trim() ||
@@ -365,10 +389,14 @@ export function resolveFuelEntryStationDisplay(
   const lat = Number(loc?.lat ?? raw.lat ?? meta.lat);
   const lng = Number(loc?.lng ?? raw.lng ?? meta.lng);
   const gpsCaptured = Number.isFinite(lat) && lat !== 0 && Number.isFinite(lng) && lng !== 0;
+  const candidates = (meta.nearMissCandidates as Array<{ name?: string; distanceM?: number }>) || [];
+  const near = candidates[0];
   // Never repeat the station name on the subtitle line
   const subtitle =
     addressOnly && normalizeVendorName(addressOnly) !== normalizeVendorName(title)
       ? addressOnly
+      : near?.distanceM != null
+        ? `Near ${near.name || 'station'} · ${Math.round(Number(near.distanceM))} m`
       : gpsCaptured
         ? 'GPS captured — not matched'
         : 'No GPS metadata';

@@ -84,10 +84,15 @@ export function formatFuelLogDate(dateString: string): string {
 
 /**
  * Time for any fuel log:
+ * Prefer statement swipe / fillAt (real fueling time) over submit time.
  * - Admin anchors: separate `time` (HH:mm:ss)
  * - Live/portal reimbursements: embedded in `date` as ISO
  */
-export function formatFuelEntryTime(entry: { date?: string; time?: string | null }): string | null {
+export function formatFuelEntryTime(entry: {
+  date?: string;
+  time?: string | null;
+  metadata?: Record<string, unknown> | null;
+}): string | null {
   const fromTimeField = (timeRaw?: string | null) => {
     if (!timeRaw) return null;
     const m = String(timeRaw).trim().match(/^(\d{1,2}):(\d{2})/);
@@ -99,6 +104,23 @@ export function formatFuelEntryTime(entry: { date?: string; time?: string | null
     d.setHours(h, min, 0, 0);
     return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: true });
   };
+
+  const fromIso = (isoRaw?: string | null) => {
+    if (!isoRaw || !String(isoRaw).includes('T')) return null;
+    const d = new Date(String(isoRaw));
+    if (Number.isNaN(d.getTime())) return null;
+    return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: true });
+  };
+
+  const meta = (entry.metadata || {}) as Record<string, unknown>;
+  const loc = (meta.locationMetadata || {}) as Record<string, unknown>;
+  // Statement swipe / card transaction time first
+  const swipe =
+    fromIso(typeof meta.jaaTransactionAt === 'string' ? meta.jaaTransactionAt : null) ||
+    fromIso(typeof meta.statementSwipeAt === 'string' ? meta.statementSwipeAt : null) ||
+    fromIso(typeof meta.fillAt === 'string' ? meta.fillAt : null) ||
+    fromIso(typeof loc.fixAt === 'string' ? loc.fixAt : null);
+  if (swipe) return swipe;
 
   const viaField = fromTimeField(entry.time);
   if (viaField) return viaField;

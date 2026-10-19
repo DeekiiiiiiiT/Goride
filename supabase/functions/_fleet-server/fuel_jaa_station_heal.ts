@@ -6,15 +6,18 @@
 import * as kv from "./kv_store.tsx";
 import {
   matchUniqueVerifiedStationForRecord,
+  matchUniqueVerifiedStationForRecordAsync,
   type MerchantMatchStation,
   type UniqueMerchantMatch,
 } from "./merchant_station_match.ts";
 import { odometerSequenceHealthy } from "./odometer_health.ts";
 import { attachRecordIdToStation, type VerifiedStation } from "./station_attach.ts";
 import { isAttachProtected } from "./station_attach_meta.ts";
+import { upsertStationMerchantAlias } from "./station_merchant_aliases.ts";
 
 const HEALABLE_STATUSES = new Set([
   "unknown",
+  "provisional",
   "review_required",
   "statement_vendor",
   "unverified",
@@ -34,6 +37,8 @@ export function entryNeedsMerchantStationHeal(entry: Record<string, unknown>): b
   const meta = metaOf(entry);
   const status = String(meta.locationStatus || "unknown");
   const method = String(meta.verificationMethod || "");
+  // Provisional late-logs promote when statement alias agrees
+  if (status === "provisional") return true;
   if (status === "verified" && method && method !== "jaa_issuer_statement") {
     return false;
   }
@@ -123,6 +128,7 @@ export type AttachJaaPairResult = {
 
 /**
  * Persist GOD station on both linked fuel_entry ids when evaluate passes.
+ * Registry-first merchant match; auto-writes issuer alias on fuzzy heal; flags STATEMENT_MISMATCH.
  */
 export async function attachJaaPairIfUniqueMerchant(
   statement: Record<string, unknown>,
@@ -152,13 +158,101 @@ export async function attachJaaPairIfUniqueMerchant(
     opts?.vehicleTimeline ? { vehicleTimeline: opts.vehicleTimeline } : undefined,
   );
 
-  const decision = evaluateJaaPairMerchantHeal({
-    statement,
-    driver,
-    stations: stations as MerchantMatchStation[],
-    odoHealthy: odo.healthy,
-    isFirstFill: odo.isFirstFill,
-  });
+  const orgId = String(
+    (driver as any).organizationId ||
+      (statement as any).organizationId ||
+      metaOf(driver).organizationId ||
+      metaOf(statement).organizationId ||
+      "",
+  );
+
+  // Registry-first async match across both sides
+  let bestAsync: UniqueMerchantMatch | null = null;
+  for (const record of [statement, driver]) {
+    const hit = await matchUniqueVerifiedStationForRecordAsync(
+      record,
+      stations as MerchantMatchStation[],
+      { preferStrong: odo.isFirstFill, organizationId: orgId },
+    );
+    if (!hit) continue;
+    if (!bestAsync || hit.score > bestAsync.score) bestAsync = hit;
+  }
+
+  // STATEMENT_MISMATCH: GPS-verified or provisional station disagrees with issuer alias
+  const drvMeta = metaOf(driver);
+  const drvStationId = String(
+    driver.matchedStationId || drvMeta.matchedStationId || "",
+  );
+  const drvStatus = String(drvMeta.locationStatus || "");
+  if (
+    bestAsync &&
+    drvStationId &&
+    (drvStatus === "verified" || drvStatus === "provisional") &&
+    drvStationId !== String(bestAsync.station.id)
+  ) {
+    const existing = (await kv.get(`fuel_entry:${drvId}`)) as Record<string, unknown> | null;
+    if (existing) {
+      const meta = metaOf(existing);
+      existing.metadata = {
+        ...meta,
+        locationStatus: drvStatus === "provisional" ? "review_required" : meta.locationStatus,
+        stationResolution: {
+          ...(typeof meta.stationResolution === "object" ? meta.stationResolution as object : {}),
+          state: "ambiguous",
+          reason: "STATEMENT_MISMATCH",
+          stationId: drvStationId,
+          evidence: {
+            ...(typeof (meta.stationResolution as any)?.evidence === "object"
+              ? (meta.stationResolution as any).evidence
+              : {}),
+            statement: {
+              issuerName: bestAsync.merchantText,
+              aliasStationId: bestAsync.station.id,
+            },
+          },
+          decidedBy: "statement_alias",
+          decidedAt: new Date().toISOString(),
+        },
+        statementMismatchStationId: bestAsync.station.id,
+        statementMismatchMerchant: bestAsync.merchantText,
+      };
+      await kv.set(`fuel_entry:${drvId}`, existing);
+    }
+    return {
+      attached: false,
+      reason: "STATEMENT_MISMATCH",
+      stationId: bestAsync.station.id,
+      stationName: String(bestAsync.station.name || ""),
+      score: bestAsync.score,
+    };
+  }
+
+  let decision: JaaPairMerchantHealDecision;
+  if (bestAsync && (bestAsync.fromRegistry || bestAsync.score >= 0.88)) {
+    // Provisional + agreeing alias → promote
+    if (
+      !odo.healthy &&
+      !(drvStatus === "provisional" && bestAsync.fromRegistry)
+    ) {
+      decision = { heal: false, reason: "Odometer sequence unhealthy" };
+    } else {
+      decision = {
+        heal: true,
+        stationId: String(bestAsync.station.id),
+        stationName: String(bestAsync.station.name || bestAsync.station.id),
+        score: bestAsync.score,
+        merchantText: bestAsync.merchantText,
+      };
+    }
+  } else {
+    decision = evaluateJaaPairMerchantHeal({
+      statement,
+      driver,
+      stations: stations as MerchantMatchStation[],
+      odoHealthy: odo.healthy,
+      isFirstFill: odo.isFirstFill,
+    });
+  }
 
   if (!decision.heal) {
     return { attached: false, reason: decision.reason };
@@ -178,6 +272,57 @@ export async function attachJaaPairIfUniqueMerchant(
       dismissLearnt: true,
     });
     if (result.ok) updatedIds.push(entryId);
+  }
+
+  // Teach the registry so the next statement is an exact hit
+  if (orgId && decision.merchantText) {
+    await upsertStationMerchantAlias({
+      organizationId: orgId,
+      issuer: "jaa",
+      rawName: decision.merchantText,
+      stationId: decision.stationId,
+      source: "heal_auto",
+    });
+  }
+
+  // Stamp stationResolution.decidedBy for provisional → verified promotion
+  for (const entryId of updatedIds) {
+    const entry = (await kv.get(`fuel_entry:${entryId}`)) as Record<string, unknown> | null;
+    if (!entry) continue;
+    const meta = metaOf(entry);
+    entry.metadata = {
+      ...meta,
+      statementMerchant: decision.merchantText,
+      stationResolution: {
+        state: "verified",
+        reason: "STATEMENT_ALIAS",
+        stationId: decision.stationId,
+        evidence: {
+          ...(typeof (meta.stationResolution as any)?.evidence === "object"
+            ? (meta.stationResolution as any).evidence
+            : {}),
+          statement: {
+            issuerName: decision.merchantText,
+            aliasStationId: decision.stationId,
+          },
+        },
+        decidedBy: "statement_alias",
+        decidedAt: new Date().toISOString(),
+      },
+    };
+    await kv.set(`fuel_entry:${entryId}`, entry);
+
+    // G2: stamp statement merchant onto any still-open learnt staging pin
+    const learntId = String(meta.learntLocationId || "");
+    if (learntId) {
+      const learnt = (await kv.get(`learnt_location:${learntId}`)) as Record<string, unknown> | null;
+      if (learnt) {
+        await kv.set(`learnt_location:${learntId}`, {
+          ...learnt,
+          statementMerchant: decision.merchantText,
+        });
+      }
+    }
   }
 
   if (updatedIds.length === 0) {

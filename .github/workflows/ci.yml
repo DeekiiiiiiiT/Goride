@@ -152,6 +152,11 @@ jobs:
           deno test --allow-read --allow-env
           supabase/functions/_fleet-server/fuel_station_match.test.ts
           supabase/functions/_fleet-server/fuel_split_fill_station.test.ts
+          supabase/functions/_fleet-server/geo_matcher_near_miss.test.ts
+          supabase/functions/_fleet-server/fuel_station_match_provisional.test.ts
+          supabase/functions/_fleet-server/merchant_station_registry.test.ts
+          supabase/functions/_fleet-server/station_merchant_aliases.test.ts
+          supabase/functions/_fleet-server/fuel_jaa_station_heal.test.ts
 
       - name: Deno test fuel recon Rev 3 controls
         run: >

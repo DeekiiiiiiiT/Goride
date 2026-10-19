@@ -1,4 +1,9 @@
-import type { LearntLocationDto, StationGateEvidenceRow, UnresolvedStopRow } from './resolutionQueueTypes';
+import type {
+  LearntLocationDto,
+  ProvisionalFillDto,
+  StationGateEvidenceRow,
+  UnresolvedStopRow,
+} from './resolutionQueueTypes';
 
 function rowActivityDate(learnt?: LearntLocationDto, evidence?: StationGateEvidenceRow): string {
   if (evidence?.date) return evidence.date;
@@ -14,12 +19,14 @@ function matchesLearntToEvidence(learnt: LearntLocationDto, evidence: StationGat
   return false;
 }
 
-/** Join learnt staging rows with gate-held evidence into a unified queue. */
+/** Join learnt staging + gate evidence + provisional fills into a unified queue. */
 export function buildUnresolvedStopRows(
   learntLocations: LearntLocationDto[],
   evidenceRows: StationGateEvidenceRow[],
+  provisionalFills: ProvisionalFillDto[] = [],
 ): UnresolvedStopRow[] {
   const consumedLearntIds = new Set<string>();
+  const consumedEntryIds = new Set<string>();
   const rows: UnresolvedStopRow[] = [];
 
   for (const evidence of evidenceRows) {
@@ -41,6 +48,7 @@ export function buildUnresolvedStopRows(
         sortDate: rowActivityDate(undefined, evidence),
       });
     }
+    if (evidence.id) consumedEntryIds.add(evidence.id);
   }
 
   for (const learnt of learntLocations) {
@@ -50,6 +58,21 @@ export function buildUnresolvedStopRows(
       linkage: 'location_only',
       learnt,
       sortDate: rowActivityDate(learnt),
+    });
+  }
+
+  for (const fill of provisionalFills) {
+    if (!fill?.id || consumedEntryIds.has(fill.id)) continue;
+    const decidedAt =
+      fill.metadata?.stationResolution &&
+      typeof (fill.metadata.stationResolution as { decidedAt?: string }).decidedAt === 'string'
+        ? (fill.metadata.stationResolution as { decidedAt?: string }).decidedAt
+        : '';
+    rows.push({
+      rowKey: `provisional:${fill.id}`,
+      linkage: 'provisional',
+      provisional: fill,
+      sortDate: String(fill.date || decidedAt || ''),
     });
   }
 

@@ -541,6 +541,50 @@ export function FuelTransactionsTable({
                             </TooltipContent>
                           </Tooltip>
                         )}
+                        {locationStatus === 'provisional' && (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <div className="flex flex-shrink-0 rounded-full border border-orange-100 bg-orange-50 p-0.5 text-orange-600">
+                                <AlertTriangle className="h-2.5 w-2.5" />
+                              </div>
+                            </TooltipTrigger>
+                            <TooltipContent className="max-w-[260px]">
+                              <p className="text-[11px] font-bold">Provisional match</p>
+                              <p className="text-[11px]">
+                                Reason:{' '}
+                                {String(
+                                  (entry.metadata?.stationResolution as { reason?: string } | undefined)
+                                    ?.reason || 'LATE_LOG',
+                                ).replace(/_/g, ' ')}
+                              </p>
+                              {entry.metadata?.matchDistance != null && (
+                                <p className="text-[11px]">
+                                  Distance: {String(entry.metadata.matchDistance)} m
+                                </p>
+                              )}
+                              {entry.metadata?.driverClaim != null && (
+                                <p className="text-[11px]">
+                                  Driver claim:{' '}
+                                  {String(
+                                    (entry.metadata.driverClaim as { stationName?: string }).stationName ||
+                                      (entry.metadata.driverClaim as { stationId?: string }).stationId ||
+                                      'yes',
+                                  )}
+                                </p>
+                              )}
+                              {Array.isArray(entry.metadata?.nearMissCandidates) &&
+                                entry.metadata.nearMissCandidates.length > 0 && (
+                                  <p className="text-[11px]">
+                                    Candidates:{' '}
+                                    {(entry.metadata.nearMissCandidates as Array<{ name?: string; distanceM?: number }>)
+                                      .slice(0, 3)
+                                      .map((c) => `${c.name || '?'} (${Math.round(Number(c.distanceM || 0))}m)`)
+                                      .join(', ')}
+                                  </p>
+                                )}
+                            </TooltipContent>
+                          </Tooltip>
+                        )}
                         {(locationStatus === 'unknown' || !locationStatus) && (
                           <Tooltip>
                             <TooltipTrigger asChild>

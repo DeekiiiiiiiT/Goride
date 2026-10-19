@@ -14,8 +14,34 @@ export function formatQueueDate(dateStr?: string): string {
   return new Date(dateStr).toLocaleDateString();
 }
 
+function reasonLabel(resolutionReason?: string | null): string | null {
+  if (resolutionReason === 'LATE_LOG') return 'Late log';
+  if (resolutionReason === 'STALE_FIX') return 'Stale fix';
+  if (resolutionReason === 'LOW_ACCURACY') return 'Low accuracy';
+  if (resolutionReason === 'STATEMENT_MISMATCH') return 'Statement mismatch';
+  if (resolutionReason === 'STATEMENT_ALIAS') return 'Statement alias';
+  if (resolutionReason === 'AMBIGUOUS_NEIGHBOURS') return 'Ambiguous';
+  if (resolutionReason === 'DRIVER_CLAIM') return 'Driver claim';
+  if (resolutionReason === 'DRIVER_CLAIM_CONFLICT') return 'Claim conflict';
+  if (resolutionReason === 'NO_GPS') return 'No GPS';
+  if (resolutionReason === 'NO_STATION_NEARBY') return 'New location';
+  return null;
+}
+
 export function shortBlockedReason(row: UnresolvedStopRow): string {
-  const e = row.evidence;
+  if (row.linkage === 'provisional') {
+    return (
+      reasonLabel(row.provisional?.metadata?.stationResolution?.reason) || 'Provisional'
+    );
+  }
+  const e = row.evidence as
+    | { gateReason?: string; holdReason?: string; metadata?: { stationResolution?: { reason?: string } } }
+    | undefined;
+  const fromEvidence = reasonLabel(e?.metadata?.stationResolution?.reason);
+  if (fromEvidence) return fromEvidence;
+  // G2: location-only rows stamp reason on learnt
+  const fromLearnt = reasonLabel(row.learnt?.reason);
+  if (fromLearnt) return fromLearnt;
   if (!e) return row.learnt?.gateReason || 'Location staging';
   const combined = [e.gateReason, e.holdReason].filter(Boolean).join(' ');
   if (/unverified\s+station/i.test(combined)) return 'Unverified station';
@@ -32,6 +58,7 @@ export function fullBlockedDetail(row: UnresolvedStopRow): string {
 }
 
 export function rowHasGps(row: UnresolvedStopRow): boolean {
+  if (row.provisional?.lat != null && row.provisional?.lng != null) return true;
   if (row.evidence?.hasGps && row.evidence.lat != null && row.evidence.lng != null) return true;
   const lat = row.learnt?.location?.lat;
   const lng = row.learnt?.location?.lng;
@@ -39,6 +66,13 @@ export function rowHasGps(row: UnresolvedStopRow): boolean {
 }
 
 export function rowCoords(row: UnresolvedStopRow): { lat: number; lng: number; accuracy?: number } | null {
+  if (row.provisional?.lat != null && row.provisional?.lng != null) {
+    return {
+      lat: row.provisional.lat,
+      lng: row.provisional.lng,
+      accuracy: row.provisional.accuracy ?? undefined,
+    };
+  }
   if (row.evidence?.hasGps && row.evidence.lat != null && row.evidence.lng != null) {
     return { lat: row.evidence.lat, lng: row.evidence.lng, accuracy: row.evidence.accuracy };
   }
@@ -52,10 +86,35 @@ export function rowCoords(row: UnresolvedStopRow): { lat: number; lng: number; a
 
 export function rowDisplayName(row: UnresolvedStopRow): string {
   return (
+    row.provisional?.vendor ||
     row.evidence?.vendor ||
     row.evidence?.description ||
     row.learnt?.name ||
     'Unknown Merchant'
+  );
+}
+
+/** Statement / JAA merchant when known (shown alongside staging name). */
+export function rowStatementMerchant(row: UnresolvedStopRow): string | null {
+  const fromProv = row.provisional?.metadata?.statementMerchant || row.provisional?.metadata?.jaaStation;
+  if (fromProv && String(fromProv).trim()) return String(fromProv).trim();
+  const e = row.evidence as { jaaStation?: string; metadata?: Record<string, unknown> } | undefined;
+  const fromEvidence =
+    e?.jaaStation ||
+    (typeof e?.metadata?.jaaStation === 'string' ? e.metadata.jaaStation : null) ||
+    (typeof e?.metadata?.jaaVendorRaw === 'string' ? e.metadata.jaaVendorRaw : null);
+  if (fromEvidence && String(fromEvidence).trim()) return String(fromEvidence).trim();
+  const learntMeta = row.learnt?.statementMerchant;
+  return learntMeta?.trim() || null;
+}
+
+export function rowResolutionReason(row: UnresolvedStopRow): string | null {
+  return (
+    row.provisional?.metadata?.stationResolution?.reason ||
+    (row.evidence as { metadata?: { stationResolution?: { reason?: string } } } | undefined)?.metadata
+      ?.stationResolution?.reason ||
+    row.learnt?.reason ||
+    null
   );
 }
 
@@ -107,11 +166,8 @@ export function useUnresolvedStopActions({
   const [linkSearch, setLinkSearch] = useState('');
   const [linkSortBy, setLinkSortBy] = useState<'distance' | 'name'>('distance');
   const [selectedLinkStation, setSelectedLinkStation] = useState<string | null>(null);
-
-  const allStations = useMemo(
-    () => [...verifiedStations, ...unverifiedStations],
-    [verifiedStations, unverifiedStations],
-  );
+  const [rememberMerchantName, setRememberMerchantName] = useState(true);
+  const [addGpsAliasOnLink, setAddGpsAliasOnLink] = useState(false);
 
   // Merge/Link pickers: GOD list only — never offer CSV Unverified as merge target
   const filteredStations = verifiedStations.filter(
@@ -120,29 +176,35 @@ export function useUnresolvedStopActions({
       s.brand?.toLowerCase().includes(mergeSearch.toLowerCase()),
   );
 
+  /** Suggest verified GOD stations within 1 km (late logs often land 150–1000 m away). */
+  const SUGGEST_RADIUS_M = 1000;
+
   const nearestWithin150 = useCallback(
     (row: UnresolvedStopRow): { id: string; name: string; distance: number; status?: string } | null => {
       const coords = rowCoords(row);
       if (!coords) return null;
-      if (row.learnt?.nearbyStation && row.learnt.nearbyStation.distance <= 150) {
+      if (row.learnt?.nearbyStation && row.learnt.nearbyStation.distance <= SUGGEST_RADIUS_M) {
         const nearbyId = row.learnt.nearbyStation.id;
-        const fromList = allStations.find((s) => s.id === nearbyId);
-        return {
-          ...row.learnt.nearbyStation,
-          status: fromList?.status || 'unverified',
-        };
+        const fromList = verifiedStations.find((s) => s.id === nearbyId);
+        // Require GOD list hit — never promote a CSV nearbyStation to verified suggestion
+        if (fromList) {
+          return {
+            ...row.learnt.nearbyStation,
+            status: fromList.status || 'verified',
+          };
+        }
       }
       let best: { id: string; name: string; distance: number; status?: string } | null = null;
-      for (const s of allStations) {
+      for (const s of verifiedStations) {
         if (!s.location?.lat || !s.location?.lng) continue;
         const d = Math.round(calculateDistance(coords.lat, coords.lng, s.location.lat, s.location.lng));
-        if (d <= 150 && (!best || d < best.distance)) {
+        if (d <= SUGGEST_RADIUS_M && (!best || d < best.distance)) {
           best = { id: s.id, name: s.name || s.id, distance: d, status: s.status };
         }
       }
       return best;
     },
-    [allStations],
+    [verifiedStations],
   );
 
   const linkStationsWithDistance = useMemo(() => {
@@ -247,28 +309,74 @@ export function useUnresolvedStopActions({
     }
   };
 
-  const handleMergeToStation = async (row: UnresolvedStopRow, targetStationId: string) => {
-    const actionKey = row.evidence?.id || row.learnt?.id || '';
+  /** Same brand within 500 m of the chosen GOD station → warn before link. */
+  const warnSameBrandNearby = (targetStationId: string, coords: { lat: number; lng: number } | null) => {
+    const target = verifiedStations.find((s) => s.id === targetStationId);
+    const brand = String(target?.brand || '').trim().toLowerCase();
+    if (!brand || !coords) return;
+    const rival = verifiedStations.find((s) => {
+      if (s.id === targetStationId) return false;
+      if (String(s.brand || '').trim().toLowerCase() !== brand) return false;
+      if (!s.location?.lat || !s.location?.lng) return false;
+      const d = calculateDistance(coords.lat, coords.lng, s.location.lat, s.location.lng);
+      return d <= 500;
+    });
+    if (rival) {
+      toast.warning(`Same brand within 500 m: "${rival.name}" — confirm this is the right pin.`);
+    }
+  };
+
+  /** Link fill = attach records to GOD station without adding a GPS alias (default). */
+  const handleMergeToStation = async (
+    row: UnresolvedStopRow,
+    targetStationId: string,
+    opts?: { addGpsAlias?: boolean; rememberMerchantName?: string },
+  ) => {
+    const actionKey = row.evidence?.id || row.learnt?.id || row.provisional?.id || '';
     try {
       setActionId(actionKey);
-      if (row.evidence && (row.linkage === 'linked' || row.linkage === 'payment_only')) {
-        await api.mergeGateHeldTransactionToStation(row.evidence.id, targetStationId);
-        toast.success('Merged into station — gate-held transaction released.');
+      warnSameBrandNearby(targetStationId, rowCoords(row));
+      if (row.linkage === 'provisional' && row.provisional) {
+        await api.confirmProvisionalFill(row.provisional.id, targetStationId);
+        toast.success('Provisional fill confirmed → verified station');
+      } else if (row.evidence && (row.linkage === 'linked' || row.linkage === 'payment_only')) {
+        await api.mergeGateHeldTransactionToStation(row.evidence.id, targetStationId, {
+          addGpsAlias: opts?.addGpsAlias,
+        });
+        toast.success(
+          opts?.addGpsAlias
+            ? 'Merged into station with GPS alias — gate released.'
+            : 'Fill linked to station — gate-held transaction released (no GPS alias).',
+        );
       } else if (row.learnt) {
         await api.promoteLearntLocationToMaster({
           learntId: row.learnt.id,
           action: 'merge',
           targetStationId,
+          addGpsAlias: opts?.addGpsAlias,
+          rememberMerchantName: opts?.rememberMerchantName,
         });
-        toast.success('Location merged into Master Ledger');
+        toast.success(
+          opts?.addGpsAlias ? 'Location merged with GPS alias' : 'Fill linked to station (no GPS alias)',
+        );
       }
       await onRefresh();
       onPromoted?.();
     } catch (error: any) {
-      toast.error(error?.message || 'Failed to merge');
+      toast.error(error?.message || 'Failed to link fill');
     } finally {
       setActionId(null);
     }
+  };
+
+  /** Confirm provisional using its matchedStationId (GPS near-miss). */
+  const handleConfirmProvisional = async (row: UnresolvedStopRow) => {
+    const stationId = row.provisional?.matchedStationId;
+    if (!row.provisional || !stationId) {
+      toast.error('No suggested station on this provisional fill — use Link.');
+      return;
+    }
+    await handleMergeToStation(row, stationId);
   };
 
   const handleReject = async () => {
@@ -323,16 +431,33 @@ export function useUnresolvedStopActions({
     const actionKey = linkingRow.evidence?.id || linkingRow.learnt?.id || '';
     try {
       setActionId(actionKey);
-      await handleMergeToStation(linkingRow, selectedLinkStation);
+      const statementName = rowStatementMerchant(linkingRow);
+      await handleMergeToStation(linkingRow, selectedLinkStation, {
+        addGpsAlias: addGpsAliasOnLink,
+        rememberMerchantName:
+          rememberMerchantName && statementName ? statementName : undefined,
+      });
       setIsLinkDialogOpen(false);
       setLinkingRow(null);
       setSelectedLinkStation(null);
       setLinkSearch('');
+      setRememberMerchantName(true);
+      setAddGpsAliasOnLink(false);
     } catch {
       /* handleMergeToStation already toasts */
     } finally {
       setActionId(null);
     }
+  };
+
+  /** Open Link dialog with remember-name defaulted from statement merchant. */
+  const openLinkDialog = (row: UnresolvedStopRow) => {
+    setLinkingRow(row);
+    setSelectedLinkStation(null);
+    setLinkSearch('');
+    setRememberMerchantName(!!rowStatementMerchant(row));
+    setAddGpsAliasOnLink(false);
+    setIsLinkDialogOpen(true);
   };
 
   const openVerifyFlow = async (row: UnresolvedStopRow) => {
@@ -388,6 +513,10 @@ export function useUnresolvedStopActions({
     setLinkSortBy,
     selectedLinkStation,
     setSelectedLinkStation,
+    rememberMerchantName,
+    setRememberMerchantName,
+    addGpsAliasOnLink,
+    setAddGpsAliasOnLink,
     filteredStations,
     linkStationsWithDistance,
     nearestWithin150,
@@ -395,10 +524,12 @@ export function useUnresolvedStopActions({
     distanceColor,
     handlePromote,
     handleMergeToStation,
+    handleConfirmProvisional,
     handleDeleteCsvReference,
     handleReject,
     handleDelete,
     handleLinkConfirm,
+    openLinkDialog,
     openVerifyFlow,
   };
 }

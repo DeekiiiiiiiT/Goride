@@ -1,6 +1,6 @@
 import type { StationGateEvidenceRow } from './EvidenceInboxTab';
 
-export type UnresolvedLinkage = 'linked' | 'payment_only' | 'location_only';
+export type UnresolvedLinkage = 'linked' | 'payment_only' | 'location_only' | 'provisional';
 
 export type UnresolvedFilter = 'all' | UnresolvedLinkage;
 
@@ -24,6 +24,37 @@ export interface LearntLocationDto {
   };
   gateReason?: string;
   status?: string;
+  /** G2: resolution reason stamped at learnt create */
+  reason?: string;
+  nearMissCandidates?: Array<{ stationId?: string; name?: string; distanceM?: number }>;
+  statementMerchant?: string;
+}
+
+/** Open provisional fuel fill (no learnt row). */
+export interface ProvisionalFillDto {
+  id: string;
+  vendor?: string;
+  location?: string;
+  date?: string | null;
+  matchedStationId?: string | null;
+  organizationId?: string | null;
+  lat?: number | null;
+  lng?: number | null;
+  accuracy?: number | null;
+  metadata?: {
+    locationStatus?: string;
+    matchDistance?: number;
+    nearMissCandidates?: Array<{ stationId?: string; name?: string; distanceM?: number }>;
+    stationResolution?: {
+      reason?: string;
+      state?: string;
+      stationId?: string | null;
+      decidedAt?: string;
+    };
+    driverClaim?: unknown;
+    jaaStation?: string;
+    statementMerchant?: string | null;
+  };
 }
 
 export interface UnresolvedStopRow {
@@ -31,6 +62,7 @@ export interface UnresolvedStopRow {
   linkage: UnresolvedLinkage;
   learnt?: LearntLocationDto;
   evidence?: StationGateEvidenceRow;
+  provisional?: ProvisionalFillDto;
   sortDate: string;
 }
 
