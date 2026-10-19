@@ -1,6 +1,10 @@
 -- G5 / G7 data ops for fuel stop location resolution
 -- Project: csfllzzastacofsvcdsc
 -- Run manually (or via MCP). Alert-only health checks remain in fuel_stop_location_health_checks.sql.
+--
+-- AFTER seeding aliases below: call admin POST .../admin/reheal-merchant-alias
+-- (or Silent Attach / edge upsertStationMerchantAlias) so open statement_vendor
+-- rows attach. SQL INSERT alone does NOT re-heal.
 
 -- G7: Delete CSV/unverified twins within 50 m of GOD (C3)
 -- Maypen Main St (0 m) + Texaco / FIRST VENTURE twin (~4 m)
@@ -29,6 +33,7 @@ VALUES
     'country', 'Jamaica',
     'dataSource', 'seed_g5',
     'geofenceRadius', 100,
+    'pinConfirmed', false,
     'location', jsonb_build_object('lat', 18.0165, 'lng', -76.82),
     'organizationId', '8cfa606a-f6ea-4ccb-a2b2-1d2cc323a823'
   )
@@ -48,6 +53,7 @@ VALUES
     'country', 'Jamaica',
     'dataSource', 'seed_g5',
     'geofenceRadius', 100,
+    'pinConfirmed', false,
     'location', jsonb_build_object('lat', 18.0062, 'lng', -76.7888),
     'organizationId', '8cfa606a-f6ea-4ccb-a2b2-1d2cc323a823'
   )
@@ -56,6 +62,16 @@ ON CONFLICT (id) DO UPDATE
 SET name = EXCLUDED.name,
     payload_json = fleet.stations.payload_json || EXCLUDED.payload_json,
     updated_at = now();
+
+-- R1: Ensure existing GOD placeholder pins stay out of GPS matching until Move pin
+UPDATE fleet.stations
+SET payload_json = payload_json || jsonb_build_object('pinConfirmed', false),
+    updated_at = now()
+WHERE id IN (
+  'god-super-lube-service-centre',
+  'god-united-petroleum-lyndhurst'
+)
+AND COALESCE((payload_json->>'pinConfirmed')::boolean, true) IS DISTINCT FROM false;
 
 -- G5: Issuer aliases → new GOD stations
 INSERT INTO public.station_merchant_aliases (

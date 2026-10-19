@@ -1168,6 +1168,30 @@ export const api = {
     }>;
   },
 
+  /** R2: Re-heal open statement rows for an existing issuer alias (SQL seed catch-up). */
+  async rehealMerchantAlias(body: {
+    organizationId: string;
+    rawName: string;
+    stationId?: string;
+    issuer?: string;
+  }) {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/admin/reheal-merchant-alias`, {
+      method: 'POST',
+      headers: await getHeaders(),
+      body: JSON.stringify(body),
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error((err as { error?: string }).error || 'Failed to re-heal merchant alias');
+    }
+    return response.json() as Promise<{
+      success: boolean;
+      healed: number;
+      stationId: string;
+      normalizedName: string;
+    }>;
+  },
+
   async saveStation(station: any) {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/stations`, {
         method: 'POST',

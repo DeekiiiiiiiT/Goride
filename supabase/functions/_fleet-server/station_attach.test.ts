@@ -33,7 +33,7 @@ Deno.test("isAttachProtected: platform_ops_override blocked", () => {
   );
 });
 
-Deno.test("isAttachProtected: review_required not protected", () => {
+Deno.test("isAttachProtected: review_required gps_ambiguous not protected", () => {
   assertEquals(
     isAttachProtected({
       metadata: {
@@ -42,6 +42,31 @@ Deno.test("isAttachProtected: review_required not protected", () => {
       },
     }),
     false,
+  );
+});
+
+Deno.test("isAttachProtected: STATEMENT_MISMATCH sticky", () => {
+  assertEquals(
+    isAttachProtected({
+      metadata: {
+        locationStatus: "review_required",
+        stationResolution: { reason: "STATEMENT_MISMATCH" },
+      },
+    }),
+    true,
+  );
+});
+
+Deno.test("isAttachProtected: DRIVER_CLAIM_CONFLICT sticky", () => {
+  assertEquals(
+    isAttachProtected({
+      metadata: {
+        locationStatus: "review_required",
+        verificationMethod: "driver_claim_conflict",
+        stationResolution: { reason: "DRIVER_CLAIM_CONFLICT" },
+      },
+    }),
+    true,
   );
 });
 

@@ -37,14 +37,16 @@ export function ResolutionQueueTab({
 
   const refreshCounts = useCallback(async () => {
     try {
-      const [learnt, evidence, spatial] = await Promise.all([
+      const [learnt, evidence, provisional, spatial] = await Promise.all([
         api.getLearntLocations(),
         api.getStationGateEvidence({ limit: 5000 }),
+        api.getProvisionalFills({ limit: 500 }).catch(() => []),
         api.getSpatialReviewQueue(),
       ]);
       const unresolved = buildUnresolvedStopRows(
         Array.isArray(learnt) ? learnt : [],
         Array.isArray(evidence) ? evidence : [],
+        Array.isArray(provisional) ? provisional : [],
       );
       const spatialN = spatial?.count ?? spatial?.items?.length ?? 0;
       setUnresolvedCount(unresolved.length);

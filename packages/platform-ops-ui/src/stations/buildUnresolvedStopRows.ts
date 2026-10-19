@@ -85,7 +85,22 @@ export function buildUnresolvedStopRows(
   return rows;
 }
 
+function rowStationResolutionReason(row: UnresolvedStopRow): string {
+  const fromProv = row.provisional?.metadata?.stationResolution?.reason;
+  if (fromProv) return String(fromProv);
+  const fromEv = (row.evidence?.metadata as { stationResolution?: { reason?: string } } | undefined)
+    ?.stationResolution?.reason;
+  if (fromEv) return String(fromEv);
+  return '';
+}
+
 export function filterUnresolvedRows(rows: UnresolvedStopRow[], filter: string): UnresolvedStopRow[] {
   if (filter === 'all') return rows;
+  if (filter === 'statement_mismatch') {
+    return rows.filter((r) => rowStationResolutionReason(r) === 'STATEMENT_MISMATCH');
+  }
+  if (filter === 'claim_conflict') {
+    return rows.filter((r) => rowStationResolutionReason(r) === 'DRIVER_CLAIM_CONFLICT');
+  }
   return rows.filter((r) => r.linkage === filter);
 }

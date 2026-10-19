@@ -2,7 +2,12 @@ import type { StationGateEvidenceRow } from './EvidenceInboxTab';
 
 export type UnresolvedLinkage = 'linked' | 'payment_only' | 'location_only' | 'provisional';
 
-export type UnresolvedFilter = 'all' | UnresolvedLinkage;
+/** Queue filters — linkage chips plus sticky resolution reasons (R3b). */
+export type UnresolvedFilter =
+  | 'all'
+  | UnresolvedLinkage
+  | 'statement_mismatch'
+  | 'claim_conflict';
 
 export interface LearntLocationDto {
   id: string;

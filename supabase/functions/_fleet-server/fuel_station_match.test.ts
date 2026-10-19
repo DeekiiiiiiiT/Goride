@@ -62,6 +62,27 @@ Deno.test("split card 10m from a verified station matches both halves", async ()
   assertEquals(cash.metadata.verificationMethod, "gps_handshake");
 });
 
+Deno.test("verified station with pinConfirmed false is excluded from GPS match", async () => {
+  const placeholder = {
+    ...jampet,
+    id: "united-placeholder",
+    name: "United Petroleum Placeholder",
+    pinConfirmed: false,
+  };
+  const { deps } = memoryDeps([placeholder]);
+  const card: Record<string, any> = {
+    id: "card-pin",
+    liters: 0,
+    amount: 0,
+    metadata: {
+      locationMetadata: { lat: 17.99109, lng: -76.979, accuracy: 1.2 },
+    },
+  };
+  const match = await applyStationMatch(card, { deferSignature: true, deps });
+  assertEquals(match.outcome === "verified", false);
+  assertEquals(card.matchedStationId, undefined);
+});
+
 Deno.test("split card with no GPS is held and both rows can still be saved", async () => {
   const { deps, store } = memoryDeps([]);
   const card: Record<string, any> = {

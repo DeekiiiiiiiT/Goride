@@ -12,11 +12,20 @@ function shouldOverwriteLocation(location: unknown): boolean {
   return location.toLowerCase().includes("unknown") || location === "Manual Entry";
 }
 
-/** Never overwrite GPS verified or prior platform ops override (auto-heal safety). */
+/** Fraud / conflict signals that must only clear via admin confirm (platform_ops_override). */
+const STICKY_RESOLUTION_REASONS = new Set([
+  "STATEMENT_MISMATCH",
+  "DRIVER_CLAIM_CONFLICT",
+]);
+
+/** Never overwrite GPS verified, sticky mismatch/conflict, or prior platform ops override. */
 export function isAttachProtected(entry: Record<string, unknown>): boolean {
   const meta = (entry.metadata || {}) as Record<string, unknown>;
   const status = String(meta.locationStatus || "");
   const method = String(meta.verificationMethod || "");
+  const resolution = (meta.stationResolution || {}) as Record<string, unknown>;
+  const reason = String(resolution.reason || "");
+  if (STICKY_RESOLUTION_REASONS.has(reason)) return true;
   if (status === "verified" && (method === "gps_smart_matching" || method === "gps_handshake")) {
     return true;
   }

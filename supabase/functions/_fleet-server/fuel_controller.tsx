@@ -544,7 +544,7 @@ app.patch(`${BASE_PATH}/jaa-unmatched/:id`, requirePlatformStaff(), async (c) =>
   }
 });
 
-/** Prefer SQL fuel_entries; fall back to KV prefix for admin repair paths (P-2). */
+/** Prefer SQL fuel_entries; fall back to KV only when SQL errors (P-2). */
 async function loadFuelEntriesPreferSql(limit = 50_000): Promise<any[]> {
   try {
     const { queryFleet } = await import("./repos/baseRepo.ts");
@@ -553,7 +553,10 @@ async function loadFuelEntriesPreferSql(limit = 50_000): Promise<any[]> {
       limit,
       offset: 0,
     });
-    if (Array.isArray(res.data) && res.data.length > 0) return res.data;
+    if (!res.error && Array.isArray(res.data)) return res.data;
+    if (res.error) {
+      console.warn("[fuel] loadFuelEntriesPreferSql SQL error — KV fallback", res.error);
+    }
   } catch (e) {
     console.warn("[fuel] loadFuelEntriesPreferSql SQL miss — KV fallback", e);
   }
@@ -823,6 +826,13 @@ app.post(`${BASE_PATH}/admin/jaa-promote-gateheld`, requirePlatformStaff(), asyn
       };
 
       await kv.set(`fuel_entry:${entry.id}`, entry);
+      // Unpaired statement: merchant-heal immediately when issuer alias exists (C2)
+      try {
+        const { healUnpairedStatementEntry } = await import("./fuel_jaa_station_heal.ts");
+        await healUnpairedStatementEntry(entry);
+      } catch (healErr) {
+        console.warn("[jaa-promote] unpaired merchant heal failed", healErr);
+      }
       if (receipt) existingReceipts.add(receipt);
       promoted++;
     }
@@ -3600,8 +3610,9 @@ app.patch(`${BASE_PATH}/stations/:id/sync-master-pin`, requirePermission("fuel.e
             },
         ];
 
-        // Update Master Pin
+        // Update Master Pin — sync confirms the pin for GPS matching
         station.location = { lat: Number(lat), lng: Number(lng) };
+        station.pinConfirmed = true;
         station.masterPinEvidence = {
             lastSyncedAt: new Date().toISOString(),
             sourceTransactionId: transactionId,
@@ -4644,6 +4655,24 @@ app.post(`${BASE_PATH}/fuel-entries`, async (c: Context) => {
     stampPendingReconciliationStatus(entry as Record<string, unknown>);
     await kv.set(`fuel_entry:${entry.id}`, entry);
 
+    // Unpaired JAA statement rows: merchant-heal when issuer alias exists (not only on pair link)
+    if (
+      isNewFuelEntry &&
+      String((entry.metadata as { locationStatus?: string } | undefined)?.locationStatus || "") ===
+        "statement_vendor"
+    ) {
+      try {
+        const { healUnpairedStatementEntry } = await import("./fuel_jaa_station_heal.ts");
+        const healed = await healUnpairedStatementEntry(entry as Record<string, unknown>);
+        if (healed.attached) {
+          const refreshed = await kv.get(`fuel_entry:${entry.id}`);
+          if (refreshed) Object.assign(entry, refreshed);
+        }
+      } catch (healErr) {
+        console.warn("[fuel-entries] unpaired statement merchant heal failed", healErr);
+      }
+    }
+
     // Append-only correction ledger for sealed-row mutations — fail closed.
     // Entry is already written; if the ledger insert fails, restore the prior
     // snapshot so sealed edits never land without an audit row.
@@ -4934,37 +4963,57 @@ app.post(`${BASE_PATH}/admin/reconcile-ledger-orphans`, requirePlatformStaff(), 
     }
 });
 
-// G1: Open provisional fills for Resolution Queue (no learnt row by design)
+// G1 / R3b: Provisional + sticky mismatch/conflict fills for Resolution Queue
+const QUEUE_RESOLUTION_REASONS = new Set(["STATEMENT_MISMATCH", "DRIVER_CLAIM_CONFLICT"]);
+
 app.get(`${BASE_PATH}/admin/provisional-fills`, requirePlatformStaff(), async (c) => {
     try {
         const limit = Math.min(Number(c.req.query("limit") || 500) || 500, 2000);
         const orgQ = (c.req.query("organizationId") || "").trim();
-        const isProvisional = (e: Record<string, unknown>) => {
+        const reasonQ = (c.req.query("reason") || "all").trim();
+        const isQueueFill = (e: Record<string, unknown>) => {
             const meta = (e.metadata || {}) as Record<string, unknown>;
-            if (String(meta.locationStatus || "") !== "provisional") return false;
             if (orgQ && String(e.organizationId || "") !== orgQ) return false;
-            return true;
+            const status = String(meta.locationStatus || "");
+            const resReason = String(
+                (meta.stationResolution as { reason?: string } | undefined)?.reason || "",
+            );
+            if (status === "provisional") {
+                if (reasonQ === "all" || reasonQ === "provisional") return true;
+                return false;
+            }
+            if (status === "review_required" && QUEUE_RESOLUTION_REASONS.has(resReason)) {
+                if (reasonQ === "all" || reasonQ === resReason) return true;
+                return false;
+            }
+            return false;
         };
         let entries: Record<string, unknown>[] = [];
+        let sqlFailed = false;
         try {
             const { queryFleet } = await import("./repos/baseRepo.ts");
             const res = await queryFleet("fuel_entries", {
                 org: orgQ || undefined,
                 limit: 5000,
             });
-            if (!res.error && Array.isArray(res.data)) {
-                entries = (res.data as Record<string, unknown>[]).filter(isProvisional).slice(0, limit);
+            if (res.error) {
+                sqlFailed = true;
+                console.warn("[provisional-fills] SQL error — KV fallback", res.error);
+            } else if (Array.isArray(res.data)) {
+                entries = (res.data as Record<string, unknown>[]).filter(isQueueFill).slice(0, limit);
             }
         } catch (sqlErr) {
+            sqlFailed = true;
             console.warn("[provisional-fills] SQL miss — KV fallback", sqlErr);
         }
-        if (entries.length === 0) {
+        if (sqlFailed) {
             const all = ((await kv.getByPrefix("fuel_entry:")) || []) as Record<string, unknown>[];
-            entries = all.filter(isProvisional).slice(0, limit);
+            entries = all.filter(isQueueFill).slice(0, limit);
         }
         const out = entries.map((e) => {
             const meta = (e.metadata || {}) as Record<string, unknown>;
             const loc = (meta.locationMetadata || {}) as Record<string, unknown>;
+            const status = String(meta.locationStatus || "provisional");
             return {
                 id: e.id,
                 vendor: e.vendor || e.location || meta.stationName || "Provisional stop",
@@ -4976,7 +5025,7 @@ app.get(`${BASE_PATH}/admin/provisional-fills`, requirePlatformStaff(), async (c
                 lng: Number(loc.lng) || null,
                 accuracy: Number(loc.accuracy) || null,
                 metadata: {
-                    locationStatus: "provisional",
+                    locationStatus: status,
                     matchDistance: meta.matchDistance,
                     nearMissCandidates: meta.nearMissCandidates,
                     stationResolution: meta.stationResolution,
@@ -4989,6 +5038,34 @@ app.get(`${BASE_PATH}/admin/provisional-fills`, requirePlatformStaff(), async (c
         return c.json(out);
     } catch (e: any) {
         console.error("[provisional-fills]", e);
+        return c.json({ error: e.message }, 500);
+    }
+});
+
+/** R2: Re-heal open statement_vendor / unknown rows for an existing issuer alias. */
+app.post(`${BASE_PATH}/admin/reheal-merchant-alias`, requirePlatformStaff(), async (c) => {
+    try {
+        const body = await c.req.json();
+        const organizationId = String(body.organizationId || "").trim();
+        const rawName = String(body.rawName || body.merchantName || "").trim();
+        const stationId = body.stationId ? String(body.stationId).trim() : undefined;
+        const issuer = body.issuer ? String(body.issuer).trim() : "jaa";
+        if (!organizationId || !rawName) {
+            return c.json({ error: "organizationId and rawName required" }, 400);
+        }
+        const { rehealMerchantAliasByLookup } = await import("./station_merchant_aliases.ts");
+        const result = await rehealMerchantAliasByLookup({
+            organizationId,
+            issuer,
+            rawName,
+            stationId,
+        });
+        if (!result) {
+            return c.json({ error: "Alias or station not found" }, 404);
+        }
+        return c.json({ success: true, ...result });
+    } catch (e: any) {
+        console.error("[reheal-merchant-alias]", e);
         return c.json({ error: e.message }, 500);
     }
 });

@@ -25,6 +25,8 @@ export interface StationProfile {
   };
   plusCode?: string; // Open Location Code (Google Plus Code) for high-precision location
   geofenceRadius?: number; // Configurable geofence radius in meters
+  /** Explicit false = placeholder pin excluded from GPS matching. Missing = confirmed. */
+  pinConfirmed?: boolean;
   isPreferred: boolean;
   stats: StationStats;
   

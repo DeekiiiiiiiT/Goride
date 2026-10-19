@@ -5,6 +5,7 @@
 import { assertEquals } from "jsr:@std/assert";
 import {
   entryMatchesAliasNormalizedName,
+  escapeIlike,
   resolveAliasUpsertAction,
 } from "./station_merchant_aliases.ts";
 import { normalizeVendorName } from "./vendor_matcher.ts";
@@ -69,4 +70,12 @@ Deno.test("O6: unrelated location does not match", () => {
     metadata: {},
   };
   assertEquals(entryMatchesAliasNormalizedName(driverEntry, normalized), false);
+});
+
+Deno.test("escapeIlike escapes parentheses and dots for PostgREST or()", () => {
+  const escaped = escapeIlike("ALWIL COMPANY LTD (FESCO)");
+  assertEquals(escaped, "ALWIL COMPANY LTD \\(FESCO\\)");
+  const withDot = escapeIlike("RUBIS WATERLANE ST.");
+  assertEquals(withDot, "RUBIS WATERLANE ST\\.");
+  assertEquals(escapeIlike("A,B").includes(","), false);
 });

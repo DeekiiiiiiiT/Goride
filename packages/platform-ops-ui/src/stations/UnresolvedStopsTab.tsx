@@ -500,7 +500,15 @@ export function UnresolvedStopsTab({ onPromoted, onVerifyLocation }: UnresolvedS
         {(
           [
             ['all', `All (${allRows.length})`],
-            ['provisional', `Provisional (${allRows.filter((r) => r.linkage === 'provisional').length})`],
+            ['provisional', `Provisional (${allRows.filter((r) => r.linkage === 'provisional' && r.provisional?.metadata?.locationStatus === 'provisional').length})`],
+            [
+              'statement_mismatch',
+              `Statement mismatch (${allRows.filter((r) => rowResolutionReason(r) === 'STATEMENT_MISMATCH').length})`,
+            ],
+            [
+              'claim_conflict',
+              `Claim conflict (${allRows.filter((r) => rowResolutionReason(r) === 'DRIVER_CLAIM_CONFLICT').length})`,
+            ],
             ['linked', `Linked (${allRows.filter((r) => r.linkage === 'linked').length})`],
             ['payment_only', `Payment blocked (${allRows.filter((r) => r.linkage === 'payment_only').length})`],
             ['location_only', `Location only (${allRows.filter((r) => r.linkage === 'location_only').length})`],

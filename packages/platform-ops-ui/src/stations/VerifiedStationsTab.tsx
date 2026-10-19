@@ -480,10 +480,22 @@ export function VerifiedStationsTab({ stations: propsStations, onRefresh, onSele
                     </div>
                   </TableCell>
                   <TableCell>
-                    <Badge className="bg-blue-50 text-blue-700 border-blue-100 font-medium flex items-center gap-1 w-fit">
-                      <ShieldCheck className="h-3 w-3" />
-                      Verified Station
-                    </Badge>
+                    <div className="flex flex-col gap-1">
+                      <Badge className="bg-blue-50 text-blue-700 border-blue-100 font-medium flex items-center gap-1 w-fit">
+                        <ShieldCheck className="h-3 w-3" />
+                        Verified Station
+                      </Badge>
+                      {s.pinConfirmed === false && (
+                        <Badge
+                          variant="outline"
+                          className="bg-amber-50 text-amber-800 border-amber-200 font-medium flex items-center gap-1 w-fit text-[10px]"
+                          title="Placeholder pin — excluded from GPS matching until Move pin confirms"
+                        >
+                          <AlertTriangle className="h-3 w-3" />
+                          Pin not confirmed — excluded from GPS matching
+                        </Badge>
+                      )}
+                    </div>
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-2">

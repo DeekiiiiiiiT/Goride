@@ -225,10 +225,16 @@ export const stationOpsApi = {
     return response.json();
   },
 
-  async getProvisionalFills(options?: { limit?: number; organizationId?: string }) {
+  async getProvisionalFills(options?: {
+    limit?: number;
+    organizationId?: string;
+    /** provisional | STATEMENT_MISMATCH | DRIVER_CLAIM_CONFLICT | all */
+    reason?: string;
+  }) {
     const params = new URLSearchParams();
     if (options?.limit != null) params.set('limit', String(options.limit));
     if (options?.organizationId) params.set('organizationId', options.organizationId);
+    if (options?.reason) params.set('reason', options.reason);
     const qs = params.toString();
     const response = await fetchWithRetry(
       `${API_ENDPOINTS.fuel}/admin/provisional-fills${qs ? `?${qs}` : ''}`,
@@ -237,6 +243,24 @@ export const stationOpsApi = {
     if (!response.ok) {
       const err = await response.json().catch(() => ({}));
       throw new Error((err as { error?: string }).error || 'Failed to fetch provisional fills');
+    }
+    return response.json();
+  },
+
+  async rehealMerchantAlias(body: {
+    organizationId: string;
+    rawName: string;
+    stationId?: string;
+    issuer?: string;
+  }) {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/admin/reheal-merchant-alias`, {
+      method: 'POST',
+      headers: await authHeaders(),
+      body: JSON.stringify(body),
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error((err as { error?: string }).error || 'Failed to re-heal merchant alias');
     }
     return response.json();
   },

@@ -12,11 +12,21 @@ export interface StationProfile {
   };
   status: LocationStatus;
   geofenceRadius?: number;
+  /**
+   * Explicit false = placeholder / uncalibrated pin — excluded from GPS matching.
+   * Missing/undefined/true = eligible (backward compatible).
+   */
+  pinConfirmed?: boolean;
   gpsAliases?: {
     lat: number;
     lng: number;
     mergedAt?: string;
   }[];
+}
+
+/** Stations with pinConfirmed === false must not participate in GPS / near-miss matching. */
+export function isStationPinConfirmedForGps(station: { pinConfirmed?: boolean } | null | undefined): boolean {
+  return station?.pinConfirmed !== false;
 }
 
 /**
@@ -184,6 +194,7 @@ function buildNearMissCandidates(
   const scored: NearMissCandidate[] = [];
   for (const station of stations) {
     if (!station?.id) continue;
+    if (!isStationPinConfirmedForGps(station)) continue;
     const dist = Math.round(shortestDistanceToStation(lat, lng, station));
     if (!Number.isFinite(dist) || dist > NEAR_MISS_CANDIDATE_M) continue;
     scored.push({
@@ -212,6 +223,7 @@ export const findMatchingStationSmart = (
   const inSearchRadius: { station: StationProfile; distance: number }[] = [];
 
   for (const station of stations) {
+    if (!isStationPinConfirmedForGps(station)) continue;
     const dist = shortestDistanceToStation(lat, lng, station);
     if (dist <= effectiveRadius) {
       inSearchRadius.push({ station, distance: Math.round(dist) });

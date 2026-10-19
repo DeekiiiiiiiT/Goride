@@ -74,6 +74,7 @@
     "verify:split-cash-enable": "node scripts/verify-split-cash-enable.mjs",
     "check:statement-toll-netting": "node scripts/assert-statement-toll-netting.mjs",
     "check:ledger-amount-drift": "node scripts/check-ledger-amount-drift.mjs",
+    "check:fuel-stop-location-health": "node scripts/check-fuel-stop-location-health.mjs",
     "check:ledger-dual-read": "node scripts/ledger-dual-read-compare.mjs",
     "check:ledger-completeness": "node scripts/ledger-completeness-harness.mjs",
     "check:edge-manifest": "node scripts/edge-route-manifest.mjs --all --check && node scripts/generate-extraction-status.mjs --check",

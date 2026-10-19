@@ -345,3 +345,91 @@ export async function attachJaaPairIfUniqueMerchant(
 }
 
 export { AUTO_REASON as JAA_PAIR_MERCHANT_HEAL_REASON };
+
+/**
+ * Merchant-heal a single unpaired statement row (no driver twin yet).
+ * Used on JAA import / gate-promote so C2 does not strand alias-known vendors.
+ */
+export async function healUnpairedStatementEntry(
+  entry: Record<string, unknown>,
+  opts?: { stations?: VerifiedStation[] },
+): Promise<AttachJaaPairResult> {
+  const entryId = String(entry.id || "");
+  if (!entryId) return { attached: false, reason: "Missing entry id" };
+  if (!entryNeedsMerchantStationHeal(entry)) {
+    return { attached: false, reason: "Not healable" };
+  }
+
+  const stations =
+    opts?.stations ||
+    ((await kv.getByPrefix("station:")) || []).filter(
+      (s: VerifiedStation) => s && s.id && (!s.status || s.status === "verified"),
+    );
+
+  const orgId = String(
+    (entry as { organizationId?: string }).organizationId ||
+      metaOf(entry).organizationId ||
+      "",
+  );
+
+  const hit = await matchUniqueVerifiedStationForRecordAsync(
+    entry,
+    stations as MerchantMatchStation[],
+    { preferStrong: true, organizationId: orgId },
+  );
+  if (!hit || (!hit.fromRegistry && hit.score < 0.88)) {
+    return { attached: false, reason: "No unique merchant match" };
+  }
+
+  const stationFull =
+    stations.find((s) => s.id === hit.station.id) ||
+    ({ id: hit.station.id, name: hit.station.name, status: "verified" } as VerifiedStation);
+
+  const result = await attachRecordIdToStation(entryId, stationFull, {
+    method: "jaa_match_merchant_heal",
+    reason: "Auto: unpaired statement merchant match",
+    autoHealScore: hit.score,
+    autoHealMerchantText: hit.merchantText,
+    dismissLearnt: true,
+  });
+  if (!result.ok) {
+    return {
+      attached: false,
+      reason: result.reason || "Attach skipped",
+      stationId: String(hit.station.id),
+      stationName: String(hit.station.name || hit.station.id),
+      score: hit.score,
+    };
+  }
+
+  const saved = (await kv.get(`fuel_entry:${entryId}`)) as Record<string, unknown> | null;
+  if (saved) {
+    const meta = metaOf(saved);
+    saved.metadata = {
+      ...meta,
+      statementMerchant: hit.merchantText,
+      stationResolution: {
+        state: "verified",
+        reason: "STATEMENT_ALIAS",
+        stationId: hit.station.id,
+        evidence: {
+          statement: {
+            issuerName: hit.merchantText,
+            aliasStationId: hit.station.id,
+          },
+        },
+        decidedBy: "statement_alias",
+        decidedAt: new Date().toISOString(),
+      },
+    };
+    await kv.set(`fuel_entry:${entryId}`, saved);
+  }
+
+  return {
+    attached: true,
+    stationId: String(hit.station.id),
+    stationName: String(hit.station.name || hit.station.id),
+    score: hit.score,
+    updatedIds: [entryId],
+  };
+}

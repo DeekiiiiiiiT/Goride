@@ -138,7 +138,7 @@ const FUEL_GPS_SKIP_ENABLE_MS = 3000;
 /** Overall fuel/expense submit deadline (uploads + save). */
 const SUBMIT_DEADLINE_MS = 90_000;
 
-import { useFuelGeofenceWatch, useGeolocation } from '../../hooks/useGeolocation';
+import { useGeolocation } from '../../hooks/useGeolocation';
 
 interface FuelEntryState {
   odometerReading?: number;
@@ -246,14 +246,6 @@ export function DriverExpenses({ defaultOpen = false, mode, cameraResume = null,
   const formRef = useRef<HTMLFormElement>(null);
 
   const [verifiedStations, setVerifiedStations] = useState<StationProfile[]>([]);
-
-  // Opt-in geofence dwell prompt (localStorage flag) → nudge to log fuel
-  useFuelGeofenceWatch(verifiedStations, (station) => {
-    toast.message(`At ${station.name}?`, {
-      description: 'Tap Log Fuel when you are ready — we can match this stop for your fleet.',
-      duration: 8000,
-    });
-  });
 
   const [fuelGpsManualRetriesLeft, setFuelGpsManualRetriesLeft] = useState(MAX_MANUAL_FUEL_GPS_RETRIES);
   /** True after GPS capture was exhausted; shows copy on fuel details that admin will verify location. */

@@ -184,15 +184,17 @@ export async function upsertStationMerchantAlias(opts: {
   return (data as StationMerchantAliasRow) || null;
 }
 
-function escapeIlike(value: string): string {
-  return value.replace(/[%_,]/g, "\\$&").replace(/,/g, " ");
+/** Escape for PostgREST `or()` ilike filters — commas → space; escape % _ ( ) . */
+export function escapeIlike(value: string): string {
+  return value.replace(/,/g, " ").replace(/[%_().]/g, "\\$&");
 }
 
 /**
  * Find fuel entries still needing a station whose merchant text matches this alias,
  * and attach them (pair-aware) to the GOD station (no GPS alias).
+ * Export for admin re-heal after SQL-seeded aliases (R2).
  */
-async function rehealOpenRowsForAlias(opts: {
+export async function rehealOpenRowsForAlias(opts: {
   organizationId: string;
   issuer: string;
   normalizedName: string;
@@ -204,6 +206,7 @@ async function rehealOpenRowsForAlias(opts: {
 
   const needle = escapeIlike(opts.rawName.trim());
   let entries: Record<string, unknown>[] = [];
+  let sqlFailed = false;
   try {
     const res = await queryFleet("fuel_entries", {
       org: opts.organizationId,
@@ -223,15 +226,19 @@ async function rehealOpenRowsForAlias(opts: {
         ]
         : undefined,
     });
-    if (!res.error && Array.isArray(res.data)) {
+    if (res.error) {
+      sqlFailed = true;
+      console.warn("[station_merchant_aliases] SQL reheal query error — KV org fallback", res.error);
+    } else if (Array.isArray(res.data)) {
       entries = res.data as Record<string, unknown>[];
     }
   } catch (e) {
+    sqlFailed = true;
     console.warn("[station_merchant_aliases] SQL reheal query failed — KV org fallback", e);
   }
 
-  // Fallback: org-scoped KV scan only if SQL returned nothing usable
-  if (entries.length === 0) {
+  // Fallback only on SQL failure — empty SQL is the healthy "nothing to heal" case
+  if (sqlFailed) {
     const all = ((await kv.getByPrefix("fuel_entry:")) || []) as Record<string, unknown>[];
     entries = all.filter((e) => String(e.organizationId || "") === opts.organizationId);
   }
@@ -275,4 +282,31 @@ async function rehealOpenRowsForAlias(opts: {
     );
   }
   return healed;
+}
+
+/**
+ * Admin / runbook: re-heal open rows for an existing alias (even when upsert would noop).
+ */
+export async function rehealMerchantAliasByLookup(opts: {
+  organizationId: string;
+  issuer?: string;
+  rawName: string;
+  stationId?: string;
+}): Promise<{ healed: number; stationId: string; normalizedName: string } | null> {
+  const org = String(opts.organizationId || "").trim();
+  const raw = String(opts.rawName || "").trim();
+  if (!org || !raw) return null;
+  const issuer = opts.issuer || "jaa";
+  const alias = await lookupStationMerchantAlias({ organizationId: org, issuer, rawName: raw });
+  const stationId = String(opts.stationId || alias?.station_id || "").trim();
+  if (!stationId) return null;
+  const normalizedName = alias?.normalized_name || normalizeVendorName(raw);
+  const healed = await rehealOpenRowsForAlias({
+    organizationId: org,
+    issuer,
+    normalizedName,
+    stationId,
+    rawName: alias?.raw_name || raw,
+  });
+  return { healed, stationId, normalizedName };
 }

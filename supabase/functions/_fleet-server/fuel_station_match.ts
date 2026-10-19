@@ -289,8 +289,9 @@ export async function applyStationMatch(
   // GPS match pool = verified GOD stations only (CSV unverified is reference, not a match candidate).
   const allStationsForEntry =
     !skipGpsMatching && entryCoords ? (await deps.getByPrefix("station:")) || [] : [];
+  // pinConfirmed === false = placeholder pin — merchant/alias match still OK, GPS pool skip
   const verifiedStationsForMatch = allStationsForEntry.filter(
-    (s: any) => s && s.status === "verified",
+    (s: any) => s && s.status === "verified" && s.pinConfirmed !== false,
   );
 
   if (!skipGpsMatching && entryCoords) {

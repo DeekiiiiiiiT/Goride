@@ -1,5 +1,6 @@
--- Fuel stop location resolution health checks (C1–C8).
--- Each query should return 0 rows when healthy. Alert only — never auto-fix.
+-- Fuel stop location resolution health checks (C1–C9).
+-- Gates (0 rows when healthy): C1–C5, C9. Reports (warn only): C6–C8.
+-- Alert only — never auto-fix. Runner: scripts/check-fuel-stop-location-health.mjs
 -- Project: csfllzzastacofsvcdsc
 
 -- C1: Learnt locations within 1 km of a verified station (late logs that escaped near-miss)
