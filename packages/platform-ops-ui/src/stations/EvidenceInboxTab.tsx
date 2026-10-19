@@ -62,6 +62,12 @@ export interface StationGateEvidenceRow {
   lat?: number;
   lng?: number;
   accuracy?: number;
+  /** Present when gate evidence carries station resolution / claim metadata. */
+  metadata?: {
+    stationResolution?: { reason?: string; state?: string; stationId?: string | null };
+    locationStatus?: string;
+    driverClaim?: unknown;
+  };
 }
 
 export interface EvidenceInboxTabProps {

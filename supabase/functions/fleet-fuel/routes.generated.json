@@ -1,7 +1,7 @@
 {
   "slug": "fleet-fuel",
-  "generatedAt": "2026-10-19T19:48:29.881Z",
-  "routeCount": 207,
+  "generatedAt": "2026-10-19T20:31:10.560Z",
+  "routeCount": 208,
   "routes": [
     "DELETE ${BASE_PATH}/admin/evidence-inbox/gate-held/:transactionId",
     "DELETE ${BASE_PATH}/finalized-reports/:weekStart/:identityId",
@@ -110,6 +110,7 @@
     "POST ${BASE_PATH}/admin/platform-ops-delete-fills",
     "POST ${BASE_PATH}/admin/purge-synthetic",
     "POST ${BASE_PATH}/admin/reconcile-ledger-orphans",
+    "POST ${BASE_PATH}/admin/reheal-merchant-alias",
     "POST ${BASE_PATH}/admin/spatial-review/delete",
     "POST ${BASE_PATH}/admin/stress-test-evidence-bridge",
     "POST ${BASE_PATH}/admin/verify-record-forensics",

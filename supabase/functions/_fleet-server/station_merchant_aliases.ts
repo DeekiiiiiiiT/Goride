@@ -37,21 +37,34 @@ export type AliasUpsertAction =
   | { action: "noop" }
   | { action: "skip"; reason: string };
 
-/** Pure guard: never let heal_auto overwrite admin_link/seed station_id. */
+/**
+ * Pure guard: never let heal_auto overwrite admin_link/seed station_id.
+ * admin_link may correct a wrong seed (Rev 6 G5 duplicate repair).
+ */
 export function resolveAliasUpsertAction(
   existing: { station_id: string; source: MerchantAliasSource } | null,
   incoming: { stationId: string; source: MerchantAliasSource },
 ): AliasUpsertAction {
   if (!existing) return { action: "insert" };
-  if (existing.station_id === incoming.stationId) return { action: "noop" };
+  if (existing.station_id === incoming.stationId) {
+    // Same station — still allow seed → admin_link upgrade
+    if (existing.source === "seed" && incoming.source === "admin_link") {
+      return { action: "update" };
+    }
+    return { action: "noop" };
+  }
+  // Platform admin may re-point a bad seed to the real GOD station
+  if (incoming.source === "admin_link") {
+    return { action: "update" };
+  }
   if (PROTECTED_SOURCES.has(existing.source)) {
     return {
       action: "skip",
       reason: `protected source=${existing.source} keeps station_id=${existing.station_id}`,
     };
   }
-  // admin_link may re-point heal_auto; heal_auto may update other heal_auto
-  if (incoming.source === "admin_link" || existing.source === "heal_auto") {
+  // heal_auto may update other heal_auto
+  if (existing.source === "heal_auto") {
     return { action: "update" };
   }
   return { action: "skip", reason: "source conflict" };
@@ -67,6 +80,40 @@ export function entryMatchesAliasNormalizedName(
   return collectMerchantCandidateTexts(entry)
     .map((t) => normalizeVendorName(t))
     .includes(want);
+}
+
+const OPEN_HEALABLE_STATUSES = new Set([
+  "unknown",
+  "provisional",
+  "review_required",
+  "statement_vendor",
+  "",
+]);
+
+/**
+ * Open statuses, or verified merchant-heal pointing at the wrong station
+ * (Rev 6: re-point G5 GOD placeholders → real Jampet/Unipet).
+ */
+export function entryNeedsAliasReheal(
+  entry: Record<string, unknown>,
+  targetStationId: string,
+): boolean {
+  const meta = (entry.metadata || {}) as Record<string, unknown>;
+  const status = String(meta.locationStatus || "");
+  const method = String(meta.verificationMethod || "");
+  const matched = String(entry.matchedStationId || meta.matchedStationId || "");
+  const target = String(targetStationId || "").trim();
+  if (target && matched === target) return false;
+  if (OPEN_HEALABLE_STATUSES.has(status)) return true;
+  if (
+    status === "verified" &&
+    method === "jaa_match_merchant_heal" &&
+    matched &&
+    matched !== target
+  ) {
+    return true;
+  }
+  return false;
 }
 
 /** Exact registry hit for a merchant string (score 1.0 equivalent). */
@@ -243,20 +290,11 @@ export async function rehealOpenRowsForAlias(opts: {
     entries = all.filter((e) => String(e.organizationId || "") === opts.organizationId);
   }
 
-  const healable = new Set([
-    "unknown",
-    "provisional",
-    "review_required",
-    "statement_vendor",
-    "",
-  ]);
   const seenPair = new Set<string>();
   let healed = 0;
 
   for (const entry of entries) {
-    const meta = (entry.metadata || {}) as Record<string, unknown>;
-    const status = String(meta.locationStatus || "");
-    if (!healable.has(status)) continue;
+    if (!entryNeedsAliasReheal(entry, opts.stationId)) continue;
     if (!entryMatchesAliasNormalizedName(entry, opts.normalizedName)) continue;
 
     const id = String(entry.id || "");

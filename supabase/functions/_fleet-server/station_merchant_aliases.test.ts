@@ -5,6 +5,7 @@
 import { assertEquals } from "jsr:@std/assert";
 import {
   entryMatchesAliasNormalizedName,
+  entryNeedsAliasReheal,
   escapeIlike,
   resolveAliasUpsertAction,
 } from "./station_merchant_aliases.ts";
@@ -16,6 +17,52 @@ Deno.test("O4: heal_auto cannot overwrite seed station_id", () => {
     { stationId: "station-other", source: "heal_auto" },
   );
   assertEquals(decision.action, "skip");
+});
+
+Deno.test("Rev6: admin_link may overwrite seed station_id", () => {
+  const decision = resolveAliasUpsertAction(
+    { station_id: "god-super-lube-service-centre", source: "seed" },
+    { stationId: "8cbe8d0e-06a7-471b-b19b-39435cfbd331", source: "admin_link" },
+  );
+  assertEquals(decision.action, "update");
+});
+
+Deno.test("Rev6: admin_link upgrades seed→admin_link on same station", () => {
+  const decision = resolveAliasUpsertAction(
+    { station_id: "st-1", source: "seed" },
+    { stationId: "st-1", source: "admin_link" },
+  );
+  assertEquals(decision.action, "update");
+});
+
+Deno.test("Rev6: entryNeedsAliasReheal re-points wrong jaa_match_merchant_heal", () => {
+  assertEquals(
+    entryNeedsAliasReheal(
+      {
+        matchedStationId: "god-super-lube-service-centre",
+        metadata: {
+          locationStatus: "verified",
+          verificationMethod: "jaa_match_merchant_heal",
+          matchedStationId: "god-super-lube-service-centre",
+        },
+      },
+      "8cbe8d0e-06a7-471b-b19b-39435cfbd331",
+    ),
+    true,
+  );
+  assertEquals(
+    entryNeedsAliasReheal(
+      {
+        matchedStationId: "8cbe8d0e-06a7-471b-b19b-39435cfbd331",
+        metadata: {
+          locationStatus: "verified",
+          verificationMethod: "jaa_match_merchant_heal",
+        },
+      },
+      "8cbe8d0e-06a7-471b-b19b-39435cfbd331",
+    ),
+    false,
+  );
 });
 
 Deno.test("O4: heal_auto cannot overwrite admin_link station_id", () => {

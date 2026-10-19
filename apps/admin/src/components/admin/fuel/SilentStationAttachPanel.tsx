@@ -205,16 +205,19 @@ export function SilentStationAttachPanel({
     }
   }, [healingLinked, load, onResolved]);
 
-  /** R2: Re-heal open rows for SQL-seeded Super Lube / United Petroleum aliases. */
+  /** Rev 6: Re-heal Super Lube → Jampet / United → Unipet (incl. wrong GOD merchant heals). */
   const rehealSeededAliases = useCallback(async () => {
     if (rehealingAlias) return;
     setRehealingAlias(true);
     const orgId = '8cfa606a-f6ea-4ccb-a2b2-1d2cc323a823';
     const seeds = [
-      { rawName: 'SUPER LUBE SERVICE CENTRE', stationId: 'god-super-lube-service-centre' },
+      {
+        rawName: 'SUPER LUBE SERVICE CENTRE',
+        stationId: '8cbe8d0e-06a7-471b-b19b-39435cfbd331', // Jampet
+      },
       {
         rawName: 'UNITED PETROLEUM JA LTD LYNDHURST',
-        stationId: 'god-united-petroleum-lyndhurst',
+        stationId: 'st_145e8645', // Unipet Lyndhurst
       },
     ];
     try {
@@ -228,7 +231,7 @@ export function SilentStationAttachPanel({
         total += Number(result?.healed || 0);
       }
       if (total > 0) {
-        toast.success(`Re-healed ${total} open statement row(s) for seeded aliases`);
+        toast.success(`Re-healed ${total} row(s) to Jampet / Unipet`);
         onResolved?.();
       } else {
         toast.message('No open rows needed re-heal for Super Lube / United aliases');
@@ -552,14 +555,14 @@ export function SilentStationAttachPanel({
                 className="gap-1.5"
                 onClick={() => void rehealSeededAliases()}
                 disabled={loading || rehealingAlias || healingLinked}
-                title="Re-heal Super Lube / United Petroleum statement rows after SQL alias seed"
+                title="Re-heal Super Lube→Jampet / United→Unipet (incl. wrong GOD merchant heals)"
               >
                 {rehealingAlias ? (
                   <Loader2 className="h-3.5 w-3.5 animate-spin" />
                 ) : (
                   <ShieldCheck className="h-3.5 w-3.5" />
                 )}
-                Re-heal seeded aliases
+                Re-heal → Jampet / Unipet
               </Button>
               <Button variant="outline" size="sm" className="gap-1.5" onClick={() => void load()} disabled={loading}>
                 <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
@@ -600,14 +603,14 @@ export function SilentStationAttachPanel({
               className="gap-1.5"
               onClick={() => void rehealSeededAliases()}
               disabled={loading || rehealingAlias || healingLinked}
-              title="Re-heal Super Lube / United Petroleum statement rows after SQL alias seed"
+              title="Re-heal Super Lube→Jampet / United→Unipet (incl. wrong GOD merchant heals)"
             >
               {rehealingAlias ? (
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
               ) : (
                 <ShieldCheck className="h-3.5 w-3.5" />
               )}
-              Re-heal seeded aliases
+              Re-heal → Jampet / Unipet
             </Button>
             <Button variant="outline" size="sm" className="gap-1.5" onClick={() => void load()} disabled={loading}>
               <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />

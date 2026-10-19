@@ -35,6 +35,7 @@ ORDER BY distance_m
 LIMIT 50;
 
 -- C2: Approved JAA rows with no station, >3 days after import, by jaaStation
+-- Exclude Dominion hand-review holds (Rev 6 suspicious pairs — resolve in queue, not auto-heal)
 SELECT
   payload_json->'metadata'->>'jaaStation' AS jaa_station,
   count(*) AS rows
@@ -43,6 +44,7 @@ WHERE payload_json->'metadata'->>'jaaStation' IS NOT NULL
   AND (payload_json->'metadata'->>'matchedStationId') IS NULL
   AND (payload_json->>'type' ILIKE '%card%' OR payload_json->'metadata'->>'importSource' = 'jaa_raw')
   AND created_at < now() - interval '3 days'
+  AND coalesce(payload_json->'metadata'->'handReview'->>'reason', '') = ''
 GROUP BY 1
 ORDER BY rows DESC;
 
@@ -88,13 +90,43 @@ WHERE s.payload_json->>'status' = 'verified'
   ))) > 150;
 
 -- C5: GPS/provisional station ≠ statement-alias station on linked pair
-SELECT id,
-  payload_json->'metadata'->>'matchedStationId' AS gps_station,
-  payload_json->'metadata'->>'statementMismatchStationId' AS statement_station,
-  payload_json->'metadata'->>'statementMismatchMerchant' AS merchant
-FROM fleet.fuel_entries
-WHERE payload_json->'metadata'->>'statementMismatchStationId' IS NOT NULL
-   OR (payload_json->'metadata'->'stationResolution'->>'reason') = 'STATEMENT_MISMATCH';
+-- Also: linked pairs where statement jaaStation is fuzzy-similar (≥0.88) to a *different*
+-- verified station name than matchedStationId (pg_trgm; Rev 6 G5/G7 guard).
+SELECT fe.id,
+  fe.payload_json->'metadata'->>'matchedStationId' AS gps_station,
+  fe.payload_json->'metadata'->>'statementMismatchStationId' AS statement_station,
+  fe.payload_json->'metadata'->>'statementMismatchMerchant' AS merchant,
+  fe.payload_json->>'jaaStation' AS jaa_station,
+  alt.id AS fuzzy_alt_station_id,
+  alt.name AS fuzzy_alt_station_name,
+  similarity(
+    lower(trim(coalesce(fe.payload_json->>'jaaStation', ''))),
+    lower(trim(coalesce(alt.name, '')))
+  ) AS fuzzy_score
+FROM fleet.fuel_entries fe
+LEFT JOIN LATERAL (
+  SELECT s.id, s.name
+  FROM fleet.stations s
+  WHERE s.id IS DISTINCT FROM (fe.payload_json->'metadata'->>'matchedStationId')
+    AND coalesce(s.name, '') <> ''
+    AND coalesce(fe.payload_json->>'jaaStation', '') <> ''
+    AND similarity(
+      lower(trim(fe.payload_json->>'jaaStation')),
+      lower(trim(s.name))
+    ) >= 0.88
+  ORDER BY similarity(
+    lower(trim(fe.payload_json->>'jaaStation')),
+    lower(trim(s.name))
+  ) DESC
+  LIMIT 1
+) alt ON true
+WHERE fe.payload_json->'metadata'->>'statementMismatchStationId' IS NOT NULL
+   OR (fe.payload_json->'metadata'->'stationResolution'->>'reason') = 'STATEMENT_MISMATCH'
+   OR (
+     fe.payload_json->'metadata'->>'peerFuelEntryId' IS NOT NULL
+     AND fe.payload_json->'metadata'->>'matchedStationId' IS NOT NULL
+     AND alt.id IS NOT NULL
+   );
 
 -- C6: Per driver, last 30 days: % of fills that were LATE_LOG
 SELECT

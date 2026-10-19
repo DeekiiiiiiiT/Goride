@@ -97,3 +97,26 @@ ON CONFLICT (organization_id, issuer, normalized_name) DO UPDATE
 SET station_id = EXCLUDED.station_id,
     raw_name = EXCLUDED.raw_name,
     source = EXCLUDED.source;
+
+-- =============================================================================
+-- Rev 6 MUST-FIX: G5 aliases were wrong — Super Lube = Jampet, United = Unipet.
+-- NEVER invent GOD stations for issuer names until paired driver GPS is checked.
+-- After this UPDATE: POST .../admin/reheal-merchant-alias (both names), then DELETE GODs.
+-- =============================================================================
+UPDATE public.station_merchant_aliases
+SET station_id = '8cbe8d0e-06a7-471b-b19b-39435cfbd331',
+    source = 'admin_link'
+WHERE organization_id = '8cfa606a-f6ea-4ccb-a2b2-1d2cc323a823'
+  AND issuer = 'jaa'
+  AND normalized_name = 'super lube service centre';
+
+UPDATE public.station_merchant_aliases
+SET station_id = 'st_145e8645',
+    source = 'admin_link'
+WHERE organization_id = '8cfa606a-f6ea-4ccb-a2b2-1d2cc323a823'
+  AND issuer = 'jaa'
+  AND normalized_name = 'united petroleum ja ltd lyndhurst';
+
+-- Only after re-heal confirms zero fuel_entries still on god-super-lube / god-united:
+-- DELETE FROM fleet.stations
+-- WHERE id IN ('god-super-lube-service-centre', 'god-united-petroleum-lyndhurst');
