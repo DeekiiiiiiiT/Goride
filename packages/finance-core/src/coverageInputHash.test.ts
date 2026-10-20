@@ -28,6 +28,15 @@ describe('coverageInputHash (R3-06)', () => {
       coverageInputHash(covered, { rowCount: 5, amountMinor: 99 }),
     );
   });
+
+  // R4-05: close must hash live volume — null/zero (missing select) ≠ real late-row volume
+  it('null volume (stored-missing) differs from live late-row volume', () => {
+    const atComplete = coverageInputHash(covered, { rowCount: 10, amountMinor: 2500 });
+    const missingSelect = coverageInputHash(covered, { rowCount: null, amountMinor: null });
+    const afterLateRows = coverageInputHash(covered, { rowCount: 12, amountMinor: 2800 });
+    expect(missingSelect).not.toBe(atComplete);
+    expect(afterLateRows).not.toBe(atComplete);
+  });
 });
 
 describe('isReconHumanSourceStatus (R3-05)', () => {

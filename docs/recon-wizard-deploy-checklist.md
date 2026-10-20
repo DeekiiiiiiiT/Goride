@@ -52,17 +52,43 @@ supabase migration repair --status applied 20261019190000
 
 **Also applied (R3 close-out):** `20261020120000_recon_r3_indrive_stmt_and_line_gates` (InDrive stmt coverage, period `service_line`, `bulk_insert_toll_ledger`).
 
-## R3-03 · First prod wizard E2E (preview close only)
+**Also applied (R4-01):** `20261020140000_r4_01_revoke_public_sd_execute` (history repaired: MCP timestamp `20261020110650` reverted → repo version marked applied).
 
-Do this once before treating Week Reconciliation as live for ops:
+## R4-01 · SECURITY DEFINER revoke (2026-10-20)
+
+Applied `20261020140000_r4_01_revoke_public_sd_execute` on GoRide prod. Verified
+`has_function_privilege('anon'|authenticated, …, 'EXECUTE') = false` for:
+`bulk_insert_toll_ledger`, week-close claim/release, coverage/summaries,
+`fleet_compute_vehicle_tag_balance`, `fleet_toll_tag_balance_rows` (both overloads).
+`service_role` remains true. CI: `scripts/assert-public-fn-revoke-anon.mjs`.
+
+## R4-02 · Toll commit money path
+
+Edge: `prepareTollLedgerEntry` → `bulk_insert_toll_ledger` → KV mirror →
+`afterTollLedgerInsert` (canonical P&L + `toll_usage`). Redeploy `fleet-core` +
+`fleet-toll` before the E2E below.
+
+## R4-04 / R3-03 · First prod wizard E2E (preview close only)
+
+**Prerequisites:** R4-01 applied, R4-02 edge live. Do this once before treating
+Week Reconciliation as live for ops:
 
 1. Fleet → Week Reconciliation → open a recent unclosed **rideshare** week (creates `recon.week_runs`).
 2. Sources: upload toll CSV + Uber bundle → cards show **Covered**.
-3. Tolls: walk wizard → **Finish** → confirm `toll_reconciliation_period.state = ready` for that week (and `service_line = rideshare`).
-4. Fuel → Settlement → Close **preview only** (do not seal unless intentional).
-5. Optional: re-upload same Uber/gas period → register must supersede (no silent 500).
+3. **DB check:** each imported usage toll has an active `toll_usage` financial event (and a canonical toll). Close must not show `TOLL_EVENT_MISSING`.
+4. Tolls: walk wizard → **Finish** → confirm `toll_reconciliation_period.state = ready` for that week (and `service_line = rideshare`).
+5. Fuel → Settlement → Close **preview only** (do not seal unless intentional).
+6. Optional: re-upload same Uber/gas period → register must supersede (no silent 500).
+7. Optional R4-05 smoke: after Sources complete, add another toll row for a Covered day → Close preview should surface `STEP_STALE` until Sources is re-finished.
 
 Code confirmation already done: Finish calls `upsertTollPeriodRow(..., { state: "ready" })`.
+
+| Check | Result |
+|-------|--------|
+| R4-01 privileges revoked | OK (prod 2026-10-20) |
+| R4-02 prepare/afterInsert wired | OK (code + guard tests) |
+| R4-05 live volume at close | OK (code + guard tests) |
+| First rideshare E2E (this section) | **Pending ops walkthrough** |
 
 ## If applying on a new environment
 

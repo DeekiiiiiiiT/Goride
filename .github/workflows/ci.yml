@@ -44,6 +44,9 @@ jobs:
       - name: Check ledger view invoker
         run: node scripts/assert-ledger-view-invoker.mjs
 
+      - name: Check public function revoke from anon
+        run: node scripts/assert-public-fn-revoke-anon.mjs
+
       - name: Check no settlement saveTransaction fallback
         run: node scripts/assert-no-settlement-saveTransaction-fallback.mjs
 
@@ -245,6 +248,12 @@ jobs:
         run: >
           deno test --allow-read
           supabase/functions/_fleet-server/evaluate_run_mirror.drift.test.ts
+
+      - name: Deno test recon close volume + toll commit money
+        run: >
+          deno test --allow-read --allow-env
+          supabase/functions/_fleet-server/recon_close_live_volume.test.ts
+          supabase/functions/_fleet-server/recon_toll_commit_money.test.ts
 
       - name: Typecheck fleet Rush spine
         env:

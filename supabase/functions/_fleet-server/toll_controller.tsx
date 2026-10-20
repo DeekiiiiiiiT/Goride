@@ -2893,41 +2893,35 @@ interface TollLedgerFilters {
 const TOLL_LEDGER_PREFIX = "toll_ledger:";
 
 /**
- * Save a toll ledger entry to KV store.
- * Always mirrors usage/refund into the Business Finance canonical ledger
- * (idempotent). Callers must not skip this — that was the silent P&L miss.
- * @returns false when skipped as duplicate import; true when persisted.
+ * R4-02: Pre-persist enrich + dedupe for toll ledger rows.
+ * Shared by saveTollLedgerEntry and recon bulk_insert_toll_ledger commit.
+ * @returns prepared entry, or null when skipped as duplicate.
  */
-async function saveTollLedgerEntry(
+async function prepareTollLedgerEntry(
   entry: TollLedgerRecord,
   c?: Context,
-  /** R2-17: reuse one ledger load across a commit loop (mutated on successful save). */
+  /** R2-17: reuse one ledger load across a commit loop. */
   dedupCache?: TollLedgerRecord[],
-): Promise<boolean> {
-  // Validate required fields
+): Promise<TollLedgerRecord | null> {
   if (!entry.id) throw new Error("TollLedgerRecord.id is required");
   if (!entry.date) throw new Error("TollLedgerRecord.date is required");
   if (typeof entry.amount !== "number") throw new Error("TollLedgerRecord.amount must be a number");
 
-  // Stamp organizationId from rbacUser (service_role still enforces org from context).
   const ctx = c ?? getTollContext();
   if (ctx) {
     entry = stampOrg(entry as unknown as Record<string, unknown>, ctx) as TollLedgerRecord;
   }
 
-  // Ensure timestamps
   const now = new Date().toISOString();
   if (!entry.createdAt) entry.createdAt = now;
   entry.updatedAt = now;
 
-  // Normalize amount sign (usage = negative, top-up/refund = positive)
   if (entry.type === "usage" && entry.amount > 0) {
     entry.amount = -Math.abs(entry.amount);
   } else if ((entry.type === "top_up" || entry.type === "refund") && entry.amount < 0) {
     entry.amount = Math.abs(entry.amount);
   }
 
-  // Resolve plazaId from Toll Info / name when missing (Phase 3)
   if (!entry.plazaId) {
     try {
       const { loadTollRateStore, matchPlazaIdFromText } = await import("./toll_rate_schedule.ts");
@@ -2940,13 +2934,8 @@ async function saveTollLedgerEntry(
     }
   }
 
-  // Runs after plazaId enrichment so the rate lookup can match on id, not just
-  // the free-text plaza name. Every write funnels through here, which is what
-  // makes it the one place that can guarantee a settled toll keeps the price it
-  // was settled at.
   await stampTollRateProvenance(entry);
 
-  // WR-C2: full toll attribution ladder (trip → vehicle → driver → unattributed; top-up → org).
   try {
     const { ensureTollLedgerServiceLine } = await import("./service_line_attribution.ts");
     await ensureTollLedgerServiceLine(entry as unknown as Record<string, unknown>);
@@ -2966,7 +2955,7 @@ async function saveTollLedgerEntry(
       console.log(
         `[TollLedgerStorage] Skip duplicate (reference_number) for ${entry.id}; existing ${refDup.existingId}`,
       );
-      return false;
+      return null;
     }
   } else {
     const duplicate = findDuplicateTollLedgerEntry(entry, existingForDedup);
@@ -2974,19 +2963,18 @@ async function saveTollLedgerEntry(
       console.log(
         `[TollLedgerStorage] Skip duplicate (${duplicate.reason}) for ${entry.id}; existing ${duplicate.existingId}`,
       );
-      return false;
+      return null;
     }
   }
 
-  // Always persist via kv.set — fleet cutover writes fleet.toll_ledger in afterUpsert
-  // even when legacy kv_store island writes are off (LEDGER_LEGACY_WRITE_KV_TOLL_LEDGER=0).
-  // Skipping kv.set previously returned import success while leaving Tag Inventory empty.
-  await kv.set(`${TOLL_LEDGER_PREFIX}${entry.id}`, entry);
-  if (dedupCache) dedupCache.push(entry);
-  console.log(`[TollLedgerStorage] Saved toll_ledger:${entry.id}`);
+  return entry;
+}
 
-  // Business Finance P&L — usage/refund only (top_up deliberately excluded).
-  // Failures must not block the operational write; variance flags catch lag.
+/**
+ * R4-02: Post-persist money side effects (canonical P&L, unified dual-write, toll_usage).
+ * Must run after every successful insert — including bulk_insert_toll_ledger + kv mirror.
+ */
+async function afterTollLedgerInsert(entry: TollLedgerRecord, c?: Context): Promise<void> {
   try {
     const stubCtx = { get: () => undefined } as unknown as Context;
     await appendCanonicalTollIfEligible(entry, c ?? stubCtx);
@@ -3014,8 +3002,6 @@ async function saveTollLedgerEntry(
     console.error("[TollLedgerStorage] unified dual-write failed:", e);
   }
 
-  // Unified financial ledger — usage / top-up / refund as typed events.
-  // Failures must not block operational write; outbox/retry covers lag.
   try {
     const { postFinancialEvent } = await import("./financial_ledger.ts");
     const t = String(entry.type || "").toLowerCase();
@@ -3023,7 +3009,6 @@ async function saveTollLedgerEntry(
     if (abs > 0 && entry.driverId) {
       if (t === "usage") {
         if (isTollQuarantined(entry)) {
-          // Quarantined rows must not keep an active toll_usage (events path).
           try {
             const { reverseTollUsageEventsForQuarantine } = await import("./toll_financial_reset.ts");
             await reverseTollUsageEventsForQuarantine([String(entry.id)]);
@@ -3034,7 +3019,6 @@ async function saveTollLedgerEntry(
             );
           }
         } else {
-          // First post uses stable key; re-post after reverse uses generation suffix.
           const { ensureActiveTollUsagePostedForEntry } = await import("./toll_financial_reset.ts");
           const ensured = await ensureActiveTollUsagePostedForEntry(entry);
           if (ensured.error) {
@@ -3068,7 +3052,30 @@ async function saveTollLedgerEntry(
   } catch (e) {
     console.error("[TollLedgerStorage] financial event post failed:", e);
   }
+}
 
+/**
+ * Save a toll ledger entry to KV store.
+ * Always mirrors usage/refund into the Business Finance canonical ledger
+ * (idempotent). Callers must not skip this — that was the silent P&L miss.
+ * @returns false when skipped as duplicate import; true when persisted.
+ */
+async function saveTollLedgerEntry(
+  entry: TollLedgerRecord,
+  c?: Context,
+  /** R2-17: reuse one ledger load across a commit loop (mutated on successful save). */
+  dedupCache?: TollLedgerRecord[],
+): Promise<boolean> {
+  const prepared = await prepareTollLedgerEntry(entry, c, dedupCache);
+  if (!prepared) return false;
+
+  // Always persist via kv.set — fleet cutover writes fleet.toll_ledger in afterUpsert
+  // even when legacy kv_store island writes are off (LEDGER_LEGACY_WRITE_KV_TOLL_LEDGER=0).
+  await kv.set(`${TOLL_LEDGER_PREFIX}${prepared.id}`, prepared);
+  if (dedupCache) dedupCache.push(prepared);
+  console.log(`[TollLedgerStorage] Saved toll_ledger:${prepared.id}`);
+
+  await afterTollLedgerInsert(prepared, c);
   return true;
 }
 
@@ -10386,6 +10393,8 @@ export default app;
 
 // ── Exported helpers for dual-write (Phase 3) ───────────────────────────────
 export {
+  prepareTollLedgerEntry,
+  afterTollLedgerInsert,
   saveTollLedgerEntry,
   getTollLedgerEntry,
   getAllTollLedgerEntries,

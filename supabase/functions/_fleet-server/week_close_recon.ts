@@ -24,6 +24,7 @@ import {
   coverageInputHash,
   isReconHumanSourceStatus,
 } from "../../../packages/finance-core/src/coverageInputHash.ts";
+import { sourceVolumeMetrics } from "./recon_volume.ts";
 
 export type WeekCloseServiceLine = "rideshare" | "rush_delivery";
 
@@ -264,11 +265,8 @@ export async function loadWeekCloseReconContext(
       ? (persistedStatus as ReconSourceSnapshot["status"])
       : liveStatus;
 
-    // R3-06: prefer persisted volume columns when present (same hash as wizard).
-    const volume = {
-      rowCount: (persisted as { row_count?: number } | undefined)?.row_count ?? null,
-      amountMinor: (persisted as { amount_minor?: number } | undefined)?.amount_minor ?? null,
-    };
+    // R4-05: live volume (same as wizard materialize) so late rows flip STEP_STALE.
+    const volume = await sourceVolumeMetrics(orgId, def.id, week);
     sourceSnaps.push({ id: def.id, status, inputHash: coverageInputHash(coverage, volume) });
     evidenceSources.push({
       id: def.id,

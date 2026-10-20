@@ -1,60 +1,60 @@
 # Week Reconciliation — Guided Wizard & Service-Line Split
 
-**Rev 4 · 2026-10-19 · verification of working tree on `3dd5116b` (21 files uncommitted) + prod**
+**Rev 5 · 2026-10-20 · verification of working tree on `ff095c51` (16 files uncommitted) + prod (`fleet-core` v75)**
 Open items only. Earlier revisions are in git history.
 
 ## Status
 
-The wizard works on one screen (Product rule met). Of the Rev 3 items, R3-02, 04, 05, 07, 08, 09, 10, 11 and 13 are verified closed. **R3-06 is half done. R3-12 introduced a money regression (R4-02).** Running this round also found a **live security hole (R4-01)** that my Rev 3 check missed: I verified tables and views, not functions.
-
-Prod: schema and migration history match the repo, `fleet-core` v73 / `fleet-toll` v43 / `fleet-fuel` v72 run this code, and `recon_wizard` is on for all orgs. **0 week runs and 0 staged imports so far, so nothing has been damaged yet.**
+R4-01 (the six recon functions callable by anon), R4-02 (money events skipped on bulk commit) and R4-05 (close used stored volume) are **fixed and live**. Tests: finance-core 238/238, Deno 8/8, new `assert-public-fn-revoke-anon` guard passes. Still **0 week runs and 0 staged imports in prod.**
 
 ---
 
-## R4-01 · Anyone with the anon key can call 6 `SECURITY DEFINER` functions · Critical (live)
+## R5-01 · A bulk toll commit can charge for tolls that were never saved · High
 
-The recon migrations do `REVOKE ALL ... FROM PUBLIC`. On Supabase that isn't enough: default privileges grant `EXECUTE` on new `public` functions **directly to `anon` and `authenticated`**, and revoking from `PUBLIC` leaves those grants in place. Verified in prod with `has_function_privilege`:
+`fleet.bulk_insert_toll_ledger` returns only `{inserted, skipped}` counts, and it swallows every per-row error (`ON CONFLICT DO NOTHING` + `EXCEPTION WHEN others THEN skipped += 1`). The commit (`recon_import_routes.ts:727-743`) then mirrors to KV and runs `afterTollLedgerInsert` for **every prepared row, including skipped ones**.
+**Effect:** a duplicate ref+date row in one CSV, a double-submitted import, or a bad date cast produces a `toll_usage` charge (and a P&L entry) for a toll that isn't in `fleet.toll_ledger`. That's an orphan event and a possible double charge.
+Also, `afterTollLedgerInsert` errors are only logged (`:741`), so commit reports success even when money events are missing.
+**Fix:**
+- Make the RPC return the inserted ids (`RETURNING id`), and run the KV mirror + `afterTollLedgerInsert` only for those ids.
+- Drop `WHEN others`, so an unexpected error aborts the whole batch. That's the atomicity R3-12 was meant to add.
+- Count `afterTollLedgerInsert` failures, mark the staging row `partial`, and return a non-success.
+- Extend `recon_toll_commit_money.test.ts` with a skipped-row case: 0 events for skipped rows.
 
-| Function (public) | What an anonymous caller can do |
+## R5-02 · 23 other `public` `SECURITY DEFINER` functions are still callable by anon · High (older than recon)
+
+The R4-01 sweep found the same exposure outside the recon work. This is the open "anon-reachable ledger RPCs" finding from the Supabase RLS exposure audit, now named. **Verify each one; the body pattern check found no `auth.uid()`/JWT check:**
+
+| Risk | Functions |
 |---|---|
-| `bulk_insert_toll_ledger(jsonb)` | **Insert toll rows into any org** (any `organization_id`, driver, amount). There's no org or auth check in the body. |
-| `try_claim_week_close(...)` / `release_week_close_lock(...)` | Hold or release any org's Close Week lock (`p_actor` is caller-supplied) |
-| `compute_source_coverage(...)` / `list_week_source_summaries(...)` | Read any org's coverage and week summaries |
-| `fleet_compute_vehicle_tag_balance(text)` | Read any vehicle's tag balance |
+| **Write money state** | `rush_post_journal`, `rush_transition_money_state`, `rush_lock_week`, `rush_lock_lines`, `rush_week_payable`, `freeze_settlement_periods_batch`, `fleet_rebuild_operational_periods` |
+| **Change fleet state** | `fleet_assign_toll_tag`, `fleet_unassign_toll_tag`, `fleet_retire_toll_tag`, `fleet_scan_toll_low_balances`, `delivery_refresh_surge_now` |
+| **Read another org's data** | `fleet_driver_lifetime_totals`, `fleet_fare_earnings_by_driver`, `fleet_period_earnings_by_driver`, `fleet_operational_rollup_by_driver`, `fleet_trip_status_buckets_by_driver`, `sum_settlement_queue_totals`, `delivery_couriers_in_h3_cells`, `rides_drivers_in_h3_cells` (live locations) |
+| Ignore | `st_estimatedextent` ×3 (PostGIS) |
 
-**Fix now (one statement each):** `REVOKE EXECUTE ON FUNCTION public.<fn>(<args>) FROM anon, authenticated;`, then put the same lines in a migration. Add a CI guard: any migration that creates a function in `public` must explicitly revoke from `anon, authenticated` (next to `assert-ledger-view-invoker.mjs`). Then sweep older migrations for the same pattern; the week-close lock RPCs predate recon.
+**Root cause is still live.** `pg_default_acl` on `public` still grants `EXECUTE` on every new function to `anon` and `authenticated`. The new guard only checks migrations after `20261020140000`, so it can't catch these 23.
+**Fix:**
+- `REVOKE EXECUTE ... FROM anon, authenticated` on each one the server calls with the service role.
+- `ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public REVOKE EXECUTE ON FUNCTIONS FROM anon, authenticated;` so new functions start closed.
+- Add a **live** check (a SQL query over `has_function_privilege`) to the finance-recon/doctor job.
 
-## R4-02 · CSV tolls imported through the wizard skip their money events · High (live, not yet triggered)
+## R5-03 · Prod is running uncommitted code again · Medium
 
-R3-12 changed `/recon/imports/:id/commit` (`recon_import_routes.ts:680-726`) to insert via `bulk_insert_toll_ledger` and then mirror to KV. `kv.set` covers service-line stamping, the table upsert and the tag-balance refresh. Everything else `saveTollLedgerEntry` does (`toll_controller.tsx:2933-3045`) is **skipped**:
+16 files, including migration `20261020140000` (applied and recorded in prod), the guard script and two new tests, are deployed but not committed. Commit them.
 
-- plaza-ID match + toll-rate provenance (before the insert)
-- content fingerprint (future dedupe)
-- canonical toll append → **Business Finance P&L**
-- unified-ledger dual write
-- **`toll_usage` financial event → driver settlement**
+## R5-04 · New Deno tests aren't in CI · Medium
 
-**Effect on the next wizard upload:** the tolls appear in the toll lane but are never charged to drivers, never reach the P&L, and Close Week blocks with `TOLL_EVENT_MISSING`.
-**Fix:** split `saveTollLedgerEntry` into `prepareTollLedgerEntry()` (run before the bulk insert) and `afterTollLedgerInsert()` (run for each inserted row), and call both from the bulk path. Until that exists, go back to the per-row `saveTollLedgerEntry` path. Add a test: a toll committed through `/recon/imports` produces exactly one `toll_usage` event and one canonical toll.
+`recon_close_live_volume.test.ts` and `recon_toll_commit_money.test.ts` pass locally (8/8), but `ci.yml` lists Deno suites by name, and these aren't listed, so they can't fail a build. Add them in the same commit.
 
-## R4-03 · Prod is again running uncommitted code · High
+## R5-05 · First real end-to-end run still not done · High
 
-21 modified files and 3 new ones (including migration `20261020120000`, already applied to prod and recorded in its history) are deployed but not committed. Commit them, together with the R4-01 migration.
-
-## R4-04 · First real end-to-end run still not done · High
-
-0 `recon.week_runs`, 0 `recon.import_staging`. After R4-01 and R4-02, run one week: open run → upload toll CSV + Uber bundle → Sources show Covered → **check a `toll_usage` event exists for each imported toll** → Tolls Finish → Fuel → Close preview.
-
-## R4-05 · Close can't detect late rows · Medium (R3-06, half done)
-
-The wizard hashes **live** volume (`sourceVolumeMetrics`, `recon_routes.ts:112`). Close (`week_close_recon.ts:269-272`) hashes the **stored** `run_sources.row_count/amount_minor`. Rows added after the wizard last refreshed don't change close's hash, so `STEP_STALE` won't fire at close. Export `sourceVolumeMetrics` and use it at close.
+Unchanged from R4-04. After R5-01: open run → upload toll CSV + Uber bundle → Sources Covered → **exactly one `toll_usage` event per imported toll, none for duplicates** → Tolls Finish → Fuel → Close preview.
 
 ---
 
 ## Deferred with Delivery (unchanged)
 
-Delivery stays behind its readiness card: courier statement writer, courier close, vehicle link, Rush sign-off. Owner questions Q2 (shared-cost allocation), Q3 (payout netting), Q5 (toll statement closing balance) wait for it. Q1 is decided: waive is approver-only.
+Delivery stays behind its readiness card. Owner questions Q2 (shared-cost allocation), Q3 (payout netting) and Q5 (toll statement closing balance) wait for it.
 
 ## Order
 
-R4-01 (today) → R4-02 → R4-03 → R4-04 → R4-05.
+R5-03 + R5-04 (one commit) → R5-01 → R5-05 → R5-02 (security sweep; can run in parallel).

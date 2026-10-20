@@ -12,7 +12,9 @@ import { stampOrg } from "./org_scope.ts";
 import * as kv from "./kv_store.tsx";
 import { FEATURE_FLAGS, isFeatureEnabled } from "./feature_flags.ts";
 import {
+  afterTollLedgerInsert,
   getAllTollLedgerEntries,
+  prepareTollLedgerEntry,
   saveTollLedgerEntry,
   transactionToTollLedgerServer,
 } from "./toll_controller.tsx";
@@ -628,10 +630,10 @@ export function registerReconImportRoutes(app: Hono) {
         let skippedFp = 0;
         let rejected = 0;
 
-        // R2-17: one ledger load for dedupe. R3-12: prefer atomic bulk RPC; fall back to
-        // saveTollLedgerEntry only when the RPC is missing (pre-migration).
+        // R2-17: one ledger load for dedupe. R3-12/R4-02: bulk RPC + prepare/afterInsert
+        // so money events (canonical P&L, toll_usage) match saveTollLedgerEntry.
         const dedupCache = await getAllTollLedgerEntries(c);
-        const prepared: Array<Record<string, unknown>> = [];
+        const prepared: Array<Parameters<typeof saveTollLedgerEntry>[0]> = [];
 
         for (const row of rows) {
           if (row.classification === "duplicate_ref") {
@@ -670,18 +672,26 @@ export function registerReconImportRoutes(app: Hono) {
             },
           };
 
-          const tollRecord = stampOrg(transactionToTollLedgerServer(tx), c) as Record<
-            string,
-            unknown
-          >;
-          prepared.push(tollRecord);
+          const tollRecord = stampOrg(transactionToTollLedgerServer(tx), c) as Parameters<
+            typeof saveTollLedgerEntry
+          >[0];
+          // R4-02: plaza/fingerprint/dedupe before bulk insert (same as save path).
+          // Include already-prepared rows so within-batch dupes are caught.
+          const ready = await prepareTollLedgerEntry(tollRecord, c, [
+            ...dedupCache,
+            ...prepared,
+          ]);
+          if (!ready) continue;
+          prepared.push(ready);
         }
 
         let usedBulk = false;
         if (prepared.length > 0) {
           const sqlRows = prepared.map((tollRecord) => ({
             id: String(tollRecord.id),
-            organization_id: String(tollRecord.organizationId ?? orgId),
+            organization_id: String(
+              (tollRecord as { organizationId?: string }).organizationId ?? orgId,
+            ),
             date: tollRecord.date,
             amount: tollRecord.amount,
             type: tollRecord.type,
@@ -689,13 +699,22 @@ export function registerReconImportRoutes(app: Hono) {
             payment_method: tollRecord.paymentMethod,
             vehicle_id: tollRecord.vehicleId,
             driver_id: tollRecord.driverId,
-            toll_tag_id: tollRecord.tollTagId ?? tollRecord.tagId,
-            provider_ref: tollRecord.providerRef ?? tollRecord.referenceNumber,
+            toll_tag_id:
+              (tollRecord as { tollTagId?: string; tagId?: string }).tollTagId ??
+              (tollRecord as { tagId?: string }).tagId,
+            provider_ref:
+              (tollRecord as { providerRef?: string; referenceNumber?: string }).providerRef ??
+              (tollRecord as { referenceNumber?: string }).referenceNumber,
             plaza: tollRecord.plaza,
             plaza_id: tollRecord.plazaId,
             batch_id: batchId,
-            service_line: tollRecord.service_line ?? tollRecord.serviceLine,
-            service_line_source: tollRecord.service_line_source ?? tollRecord.serviceLineSource,
+            service_line:
+              (tollRecord as { service_line?: string; serviceLine?: string }).service_line ??
+              (tollRecord as { serviceLine?: string }).serviceLine,
+            service_line_source:
+              (tollRecord as { service_line_source?: string; serviceLineSource?: string })
+                .service_line_source ??
+              (tollRecord as { serviceLineSource?: string }).serviceLineSource,
             metadata: tollRecord.metadata ?? {},
             payload_json: tollRecord,
             legacy_kv_id: String(tollRecord.id),
@@ -708,13 +727,18 @@ export function registerReconImportRoutes(app: Hono) {
           if (!bulkErr && bulkResult) {
             usedBulk = true;
             committed = Number((bulkResult as { inserted?: number }).inserted) || 0;
-            // Mirror into KV so dual-write readers stay consistent with table.
+            // Mirror into KV + post money events (canonical / dual-write / toll_usage).
             for (const tollRecord of prepared) {
               try {
                 await kv.set(`toll_ledger:${String(tollRecord.id)}`, tollRecord);
-                dedupCache.push(tollRecord as Parameters<typeof saveTollLedgerEntry>[0]);
+                dedupCache.push(tollRecord);
               } catch (kvErr) {
                 console.warn("[recon-import] KV mirror after bulk insert failed", kvErr);
+              }
+              try {
+                await afterTollLedgerInsert(tollRecord, c);
+              } catch (afterErr) {
+                console.warn("[recon-import] afterTollLedgerInsert failed", afterErr);
               }
             }
           } else {
@@ -726,13 +750,16 @@ export function registerReconImportRoutes(app: Hono) {
         }
 
         if (!usedBulk) {
+          // prepare already ran — persist + money side effects only (no re-prepare).
           for (const tollRecord of prepared) {
-            const saved = await saveTollLedgerEntry(
-              tollRecord as Parameters<typeof saveTollLedgerEntry>[0],
-              c,
-              dedupCache,
-            );
-            if (saved) committed += 1;
+            try {
+              await kv.set(`toll_ledger:${String(tollRecord.id)}`, tollRecord);
+              dedupCache.push(tollRecord);
+              await afterTollLedgerInsert(tollRecord, c);
+              committed += 1;
+            } catch (rowErr) {
+              console.warn("[recon-import] per-row persist after prepare failed", rowErr);
+            }
           }
         }
 
