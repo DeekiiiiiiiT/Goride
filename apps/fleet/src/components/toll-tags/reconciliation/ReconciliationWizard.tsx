@@ -94,6 +94,8 @@ interface ReconciliationWizardProps {
   onExit: () => void;
   /** Deep-link from Close Week readiness (?step=). */
   initialStepId?: StepId;
+  /** R2-16: Week Recon embed — filter tolls to this service line. */
+  serviceLine?: 'rideshare' | 'rush_delivery';
 }
 
 /**
@@ -114,7 +116,14 @@ export function ReconciliationWizard(props: ReconciliationWizardProps) {
   );
 }
 
-function ReconciliationWizardInner({ period, driverId, drivers, onExit, initialStepId }: ReconciliationWizardProps) {
+function ReconciliationWizardInner({
+  period,
+  driverId,
+  drivers,
+  onExit,
+  initialStepId,
+  serviceLine,
+}: ReconciliationWizardProps) {
   const { runExclusive, busy: actionBusy, setMessage, setCancel } = useTollReconBusy();
   const handleRunTest = () => {
     if (!import.meta.env.DEV) return;
@@ -160,7 +169,7 @@ function ReconciliationWizardInner({ period, driverId, drivers, onExit, initialS
     applyDisputeMatch,
     applyDisputeUnmatch,
     refresh
-  } = useTollReconciliation(driverId, { startDate: period.startDate, endDate: period.endDate });
+  } = useTollReconciliation(driverId, { startDate: period.startDate, endDate: period.endDate }, serviceLine);
 
   const truncationMessage = tollReconTruncationMessage(truncation || {});
   const dataTruncated = Boolean(truncationMessage);

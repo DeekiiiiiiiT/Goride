@@ -80,21 +80,8 @@ export function LogTollUsageModal({
         }
       });
 
-      // 2. Update the Vehicle's Toll Balance
-      // Get the latest vehicle data first to ensure we don't overwrite other changes? 
-      // For now, we assume the prop passed 'currentBalance' is relatively fresh or we optimistically update.
-      // Ideally we fetch, update, save.
-      
-      const vehicles = await api.getVehicles();
-      const vehicle = vehicles.find((v: any) => v.id === vehicleId);
-      
-      if (vehicle) {
-          const newBalance = (vehicle.tollBalance || 0) - parseFloat(amount);
-          await api.saveVehicle({
-              ...vehicle,
-              tollBalance: newBalance
-          });
-      }
+      // R2-18: tag balance is derived from fleet.toll_ledger (fleet_compute_vehicle_tag_balance).
+      // Do not read-modify-write vehicle.tollBalance client-side.
 
       toast.success("Toll usage recorded");
       setAmount('');

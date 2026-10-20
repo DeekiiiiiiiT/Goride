@@ -1,6 +1,7 @@
 /**
  * Week Reconciliation landing API (P1 sources visibility).
  */
+import type { DeliveryReconReadinessItem } from '@roam/finance-core';
 import { requireAuthHeaders } from '../utils/authHeaders';
 import { fetchWithRetry } from './api';
 import { API_ENDPOINTS } from './apiConfig';
@@ -117,7 +118,7 @@ export type DeliveryReconReadinessResponse = {
   weekKey: string;
   weekEnd: string;
   ready: boolean;
-  items: Array<{ id: string; label: string; ok: boolean; detail: string }>;
+  items: DeliveryReconReadinessItem[];
 };
 
 export async function fetchWeeks(

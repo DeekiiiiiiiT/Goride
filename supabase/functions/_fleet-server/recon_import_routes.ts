@@ -4,13 +4,15 @@
  */
 import type { Hono } from "npm:hono@4.3.11";
 import type { Context } from "npm:hono@4.3.11";
-import { requireAuth, requirePermission } from "./rbac_middleware.ts";
+import { requireAuth, requireAnyPermission } from "./rbac_middleware.ts";
 import { getOrgId } from "./org_scope.ts";
 import { safeErrorResponse } from "./safe_error.ts";
 import { getServiceClient } from "./service_client.ts";
 import { stampOrg } from "./org_scope.ts";
 import * as kv from "./kv_store.tsx";
+import { FEATURE_FLAGS, isFeatureEnabled } from "./feature_flags.ts";
 import {
+  getAllTollLedgerEntries,
   saveTollLedgerEntry,
   transactionToTollLedgerServer,
 } from "./toll_controller.tsx";
@@ -37,6 +39,23 @@ const TOLL_SOURCE_IDS = new Set(["toll_usage", "toll_topup"]);
 function isFuelSource(sourceId: string): boolean {
   return FUEL_SOURCE_IDS.has(sourceId);
 }
+
+/** Staged recon import API is behind the same flag as the wizard UI (R2-22). */
+async function assertReconWizardEnabled(orgId: string | null): Promise<Response | null> {
+  const envOn = (Deno.env.get("RECON_WIZARD") || "").trim().toLowerCase();
+  if (envOn === "1" || envOn === "true" || envOn === "on") return null;
+  const flagOn = await isFeatureEnabled(FEATURE_FLAGS.RECON_WIZARD, orgId);
+  if (flagOn) return null;
+  return new Response(
+    JSON.stringify({
+      error: "RECON_WIZARD_OFF",
+      message: "Staged recon import requires RECON_WIZARD (env or feature flag)",
+    }),
+    { status: 501, headers: { "Content-Type": "application/json" } },
+  );
+}
+
+const prepareImport = requireAnyPermission("recon.prepare", "data.import");
 
 function isTollSource(sourceId: string): boolean {
   return TOLL_SOURCE_IDS.has(sourceId);
@@ -385,11 +404,13 @@ export function registerReconImportRoutes(app: Hono) {
   app.post(
     "/make-server-37f42386/recon/imports",
     requireAuth({ strict: true }),
-    requirePermission("data.import"),
+    prepareImport,
     async (c: Context) => {
       try {
         const orgId = getOrgId(c);
         if (!orgId) return c.json({ error: "ORG_REQUIRED" }, 400);
+        const gated = await assertReconWizardEnabled(orgId);
+        if (gated) return gated;
         const body = await c.req.json().catch(() => ({}));
         const sourceId = String(body.sourceId || "").trim();
         if (!sourceId) return c.json({ error: "sourceId required" }, 400);
@@ -423,11 +444,13 @@ export function registerReconImportRoutes(app: Hono) {
   app.post(
     "/make-server-37f42386/recon/imports/:id/parse",
     requireAuth({ strict: true }),
-    requirePermission("data.import"),
+    prepareImport,
     async (c: Context) => {
       try {
         const orgId = getOrgId(c);
         if (!orgId) return c.json({ error: "ORG_REQUIRED" }, 400);
+        const gated = await assertReconWizardEnabled(orgId);
+        if (gated) return gated;
         const importId = c.req.param("id");
         const staging = await getStagingImport(orgId, importId);
         if (!staging) return c.json({ error: "NOT_FOUND" }, 404);
@@ -509,11 +532,13 @@ export function registerReconImportRoutes(app: Hono) {
   app.post(
     "/make-server-37f42386/recon/imports/:id/commit",
     requireAuth({ strict: true }),
-    requirePermission("data.import"),
+    prepareImport,
     async (c: Context) => {
       try {
         const orgId = getOrgId(c);
         if (!orgId) return c.json({ error: "ORG_REQUIRED" }, 400);
+        const gated = await assertReconWizardEnabled(orgId);
+        if (gated) return gated;
         const importId = c.req.param("id");
         const staging = await getStagingImport(orgId, importId);
         if (!staging) return c.json({ error: "NOT_FOUND" }, 404);
@@ -603,6 +628,9 @@ export function registerReconImportRoutes(app: Hono) {
         let skippedFp = 0;
         let rejected = 0;
 
+        // R2-17: load ledger once for dedupe across the commit loop (not per row).
+        const dedupCache = await getAllTollLedgerEntries(c);
+
         for (const row of rows) {
           if (row.classification === "duplicate_ref") {
             skippedRef += 1;
@@ -641,7 +669,7 @@ export function registerReconImportRoutes(app: Hono) {
           };
 
           const tollRecord = stampOrg(transactionToTollLedgerServer(tx), c);
-          const saved = await saveTollLedgerEntry(tollRecord, c);
+          const saved = await saveTollLedgerEntry(tollRecord, c, dedupCache);
           if (saved) committed += 1;
         }
 
@@ -683,11 +711,13 @@ export function registerReconImportRoutes(app: Hono) {
   app.post(
     "/make-server-37f42386/recon/imports/:id/rollback",
     requireAuth({ strict: true }),
-    requirePermission("data.import"),
+    prepareImport,
     async (c: Context) => {
       try {
         const orgId = getOrgId(c);
         if (!orgId) return c.json({ error: "ORG_REQUIRED" }, 400);
+        const gated = await assertReconWizardEnabled(orgId);
+        if (gated) return gated;
         const importId = c.req.param("id");
         const staging = await getStagingImport(orgId, importId);
         if (!staging) return c.json({ error: "NOT_FOUND" }, 404);
@@ -719,11 +749,13 @@ export function registerReconImportRoutes(app: Hono) {
   app.post(
     "/make-server-37f42386/recon/imports/:id/register",
     requireAuth({ strict: true }),
-    requirePermission("data.import"),
+    prepareImport,
     async (c: Context) => {
       try {
         const orgId = getOrgId(c);
         if (!orgId) return c.json({ error: "ORG_REQUIRED" }, 400);
+        const gated = await assertReconWizardEnabled(orgId);
+        if (gated) return gated;
         const importId = c.req.param("id");
         const body = await c.req.json().catch(() => ({}));
         const batchId = body.batchId ? String(body.batchId) : importId;

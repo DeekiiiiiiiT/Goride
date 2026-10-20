@@ -395,12 +395,23 @@ export async function commitUberCashRefresh(
 
   await api.patchImportBatch(batchId, { status: 'completed' });
 
-  const orgId = tripsForSave[0]?.organizationId;
+  const appMeta = (session?.user?.app_metadata || {}) as Record<string, unknown>;
+  const orgId =
+    (typeof appMeta.organizationId === 'string' && appMeta.organizationId.trim()) ||
+    session?.user?.id ||
+    null;
+  // Coverage = statement period from payments_organization when present (R2-15).
+  const stmtStart = String(orgForBatch?.periodStart || '').slice(0, 10);
+  const stmtEnd = String(orgForBatch?.periodEnd || '').slice(0, 10);
+  const coverageStart = /^\d{4}-\d{2}-\d{2}$/.test(stmtStart) ? stmtStart : tripBounds.min || wk;
+  const coverageEnd = /^\d{4}-\d{2}-\d{2}$/.test(stmtEnd)
+    ? stmtEnd
+    : tripBounds.max || weekEndYmd(wk);
   await registerUberBundleWithRecon({
     batchId,
     organizationId: orgId,
-    dataPeriodStart: tripBounds.min || wk,
-    dataPeriodEnd: tripBounds.max || weekEndYmd(wk),
+    dataPeriodStart: coverageStart,
+    dataPeriodEnd: coverageEnd,
     rowsCommitted: tripsForSave.length,
   });
 

@@ -241,6 +241,11 @@ jobs:
           deno test --allow-read
           supabase/functions/_fleet-server/recon_sources_mirror.drift.test.ts
 
+      - name: Deno test evaluate_run mirror drift
+        run: >
+          deno test --allow-read
+          supabase/functions/_fleet-server/evaluate_run_mirror.drift.test.ts
+
       - name: Typecheck fleet Rush spine
         env:
           VITE_SUPABASE_URL: https://ci-placeholder.supabase.co

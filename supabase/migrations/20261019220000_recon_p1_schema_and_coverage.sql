@@ -3,6 +3,11 @@
 
 CREATE SCHEMA IF NOT EXISTS recon;
 
+REVOKE ALL ON SCHEMA recon FROM PUBLIC;
+REVOKE ALL ON SCHEMA recon FROM anon, authenticated;
+GRANT USAGE ON SCHEMA recon TO service_role;
+GRANT USAGE ON SCHEMA recon TO authenticated;
+
 CREATE TABLE IF NOT EXISTS recon.source_attestations (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   organization_id text NOT NULL,
@@ -19,6 +24,23 @@ CREATE TABLE IF NOT EXISTS recon.source_attestations (
 
 CREATE INDEX IF NOT EXISTS recon_source_attestations_org_week_idx
   ON recon.source_attestations (organization_id, service_line, week_key);
+
+ALTER TABLE recon.source_attestations ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS recon_source_attestations_org_select ON recon.source_attestations;
+CREATE POLICY recon_source_attestations_org_select ON recon.source_attestations
+  FOR SELECT TO authenticated
+  USING (
+    organization_id = COALESCE(
+      (auth.jwt() -> 'app_metadata' ->> 'organization_id'),
+      (auth.jwt() -> 'user_metadata' ->> 'organization_id')
+    )
+  );
+
+REVOKE ALL ON recon.source_attestations FROM PUBLIC;
+REVOKE ALL ON recon.source_attestations FROM anon, authenticated;
+GRANT SELECT ON recon.source_attestations TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON recon.source_attestations TO service_role;
 
 CREATE OR REPLACE FUNCTION recon._week_day_keys(p_week_key date)
 RETURNS date[]
@@ -89,12 +111,13 @@ BEGIN
           )
       );
     WHEN 'cash_fuel' THEN
+      -- fuel_entries has no import_batch_id column; batch lives in payload_json.batchId
       RETURN EXISTS (
         SELECT 1 FROM fleet.fuel_entries f
         WHERE f.organization_id = p_org
           AND f.date::date = p_day
           AND (
-            f.import_batch_id IS NULL
+            nullif(trim(coalesce(f.payload_json->>'batchId', '')), '') IS NULL
             OR coalesce(f.payload_json->>'source', '') IN ('driver', 'receipt', 'ocr')
           )
       );

@@ -36,6 +36,24 @@ function dateOnly(v: unknown): string | null {
   return s.slice(0, 10);
 }
 
+/** P0 trip backfill: Roam Rush → rush_delivery; everything else rideshare. */
+function tripServiceLine(v: Record<string, unknown>): string {
+  const explicit = str(v.service_line) ?? str(v.serviceLine);
+  if (explicit === "rideshare" || explicit === "rush_delivery") return explicit;
+  return str(v.platform) === "Roam Rush" ? "rush_delivery" : "rideshare";
+}
+
+function dateArray(v: unknown): string[] | null {
+  if (!Array.isArray(v)) return null;
+  const out = v.map((d) => dateOnly(d)).filter((d): d is string => !!d);
+  return out.length ? out : null;
+}
+
+function intOrNull(v: unknown): number | null {
+  const n = num(v);
+  return n != null ? Math.trunc(n) : null;
+}
+
 function orgOf(v: Record<string, unknown>): string | null {
   return str(v.organizationId) ?? str(v.organization_id);
 }
@@ -142,6 +160,7 @@ export const FLEET_DOMAINS: FleetDomainDef[] = [
         amount: num(v.amount),
         batch_id: str(v.batchId),
         payment_method: str(v.paymentMethod),
+        service_line: tripServiceLine(v),
       }),
   },
   {
@@ -153,10 +172,25 @@ export const FLEET_DOMAINS: FleetDomainDef[] = [
         file_name: str(v.fileName),
         upload_date: str(v.uploadDate) ?? str(v.createdAt),
         status: str(v.status),
-        record_count: num(v.recordCount) != null ? Math.trunc(num(v.recordCount)!) : null,
+        record_count: intOrNull(v.recordCount),
         type: str(v.type),
         period_start: dateOnly(v.periodStart) ?? dateOnly(v.dataPeriodStart),
         period_end: dateOnly(v.periodEnd) ?? dateOnly(v.dataPeriodEnd),
+        source_id: str(v.source_id) ?? str(v.sourceId),
+        service_line: str(v.service_line) ?? str(v.serviceLine),
+        coverage_start: dateOnly(v.coverageStart) ?? dateOnly(v.coverage_start),
+        coverage_end: dateOnly(v.coverageEnd) ?? dateOnly(v.coverage_end),
+        data_start: dateOnly(v.dataStart) ?? dateOnly(v.data_start) ?? dateOnly(v.dataPeriodStart),
+        data_end: dateOnly(v.dataEnd) ?? dateOnly(v.data_end) ?? dateOnly(v.dataPeriodEnd),
+        week_keys: dateArray(v.weekKeys) ?? dateArray(v.week_keys),
+        file_sha256: str(v.fileSha256) ?? str(v.file_sha256),
+        semantic_key: str(v.semanticKey) ?? str(v.semantic_key),
+        rows_parsed: intOrNull(v.rowsParsed) ?? intOrNull(v.rows_parsed),
+        rows_committed: intOrNull(v.rowsCommitted) ?? intOrNull(v.rows_committed),
+        rows_duplicate: intOrNull(v.rowsDuplicate) ?? intOrNull(v.rows_duplicate),
+        rows_rejected: intOrNull(v.rowsRejected) ?? intOrNull(v.rows_rejected),
+        rows_spilled: intOrNull(v.rowsSpilled) ?? intOrNull(v.rows_spilled),
+        supersedes: str(v.supersedes),
       }),
   },
   {
@@ -217,6 +251,16 @@ export const FLEET_DOMAINS: FleetDomainDef[] = [
         is_reconciled: bool(v.isReconciled),
         trip_id: str(v.tripId),
         service_line: str(v.service_line) ?? str(v.serviceLine),
+        service_line_source: str(v.service_line_source) ?? str(v.serviceLineSource),
+        service_line_set_at: str(v.service_line_set_at) ?? str(v.serviceLineSetAt),
+        service_line_set_by: str(v.service_line_set_by) ?? str(v.serviceLineSetBy),
+        provider_ref: str(v.provider_ref) ?? str(v.providerRef) ??
+          str(
+            v.metadata && typeof v.metadata === "object"
+              ? (v.metadata as Record<string, unknown>).referenceNumber
+              : null,
+          ) ??
+          str(v.referenceNumber),
         batch_id: str(v.batchId),
         audit_trail: Array.isArray(v.auditTrail) ? v.auditTrail : [],
         metadata: v.metadata && typeof v.metadata === "object" ? v.metadata : {},

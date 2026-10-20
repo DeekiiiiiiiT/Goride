@@ -220,6 +220,19 @@ export function tollLedgerToTxShape(entry: TollPeriodLedgerRow): any {
     officialAmount: entry.officialAmount ?? null,
     officialEffectiveFrom: entry.officialEffectiveFrom ?? null,
     batchId: entry.batchId,
+    // R2-16: surface attribution so Week Recon embeds can filter by line.
+    serviceLine: (entry as { serviceLine?: string | null }).serviceLine
+      ?? (entry as { service_line?: string | null }).service_line
+      ?? null,
+    service_line: (entry as { service_line?: string | null }).service_line
+      ?? (entry as { serviceLine?: string | null }).serviceLine
+      ?? null,
+    serviceLineSource: (entry as { serviceLineSource?: string | null }).serviceLineSource
+      ?? (entry as { service_line_source?: string | null }).service_line_source
+      ?? null,
+    service_line_source: (entry as { service_line_source?: string | null }).service_line_source
+      ?? (entry as { serviceLineSource?: string | null }).serviceLineSource
+      ?? null,
     metadata: {
       tollTagId: entry.tollTagId,
       tagNumber: entry.tagNumber,

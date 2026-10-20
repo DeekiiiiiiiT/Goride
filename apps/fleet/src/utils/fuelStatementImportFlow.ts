@@ -8,8 +8,8 @@ import {
   detectFileType,
   mergeAndProcessData,
   type FileData,
-  type ParsedRow,
 } from './csvHelpers';
+import type { ParsedRow } from '../types/data';
 import {
   isJaaStatementDetails,
   jaaFuelLinesToParsedRows,
@@ -191,10 +191,10 @@ export async function commitFuelStatementImport(opts: {
     sourceId: opts.sourceId,
     recordCount: prepared.length,
     processedBy: uploadedBy || 'Admin',
-    dataPeriodStart: bounds.min,
-    dataPeriodEnd: bounds.max,
-    periodStart: bounds.min,
-    periodEnd: bounds.max,
+    dataPeriodStart: bounds.min ?? undefined,
+    dataPeriodEnd: bounds.max ?? undefined,
+    periodStart: bounds.min ?? undefined,
+    periodEnd: bounds.max ?? undefined,
     uploadedBy,
   });
 

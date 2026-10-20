@@ -274,6 +274,16 @@ export const api = {
         | 'status'
         | 'usesPaymentLineSsot'
         | 'paymentLedgerLineCount'
+        | 'recordCount'
+        | 'rowsCommitted'
+        | 'rowsParsed'
+        | 'rowsDuplicate'
+        | 'rowsRejected'
+        | 'rowsSpilled'
+        | 'sourceId'
+        | 'coverageStart'
+        | 'coverageEnd'
+        | 'semanticKey'
       > & {
         paymentLedgerLinesImported?: number;
         paymentLedgerLinesSkipped?: number;

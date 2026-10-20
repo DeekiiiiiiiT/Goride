@@ -8,6 +8,8 @@ import { ReconAttributionStep } from './ReconAttributionStep';
 import { ReconCodRemittanceBanner } from './ReconCodRemittanceBanner';
 import { ReconTagAccountStep } from './ReconTagAccountStep';
 import { ReconTripsEarningsStep } from './ReconTripsEarningsStep';
+import { ReconSettlementStep } from './ReconSettlementStep';
+import { ReconCloseStep } from './ReconCloseStep';
 import { Button } from '../../ui/button';
 import { cn } from '../../ui/utils';
 
@@ -127,6 +129,7 @@ export function ReconRunPage({
   }
 
   const run = runQuery.data;
+  const refreshRun = () => void runQuery.refetch();
 
   return (
     <div className="grid gap-4 lg:grid-cols-[220px_minmax(0,1fr)_240px]">
@@ -169,20 +172,21 @@ export function ReconRunPage({
         </header>
 
         {activeStep === 'sources' ? (
-          <ReconSourcesStep
-            run={run}
-            onRefresh={() => void runQuery.refetch()}
-            onNavigateImports={() => onNavigate?.('imports')}
-          />
+          <ReconSourcesStep run={run} onRefresh={refreshRun} />
         ) : null}
 
         {activeStep === 'attribution' ? (
-          <ReconAttributionStep run={run} onRefresh={() => void runQuery.refetch()} />
+          <ReconAttributionStep run={run} onRefresh={refreshRun} />
         ) : null}
 
         {activeStep === 'tolls' ? (
           <Suspense fallback={<Loader2 className="mx-auto h-6 w-6 animate-spin" />}>
-            <TollReconciliationLazy embedded hideLanding initialWeekStart={weekKey} />
+            <TollReconciliationLazy
+              embedded
+              hideLanding
+              initialWeekStart={weekKey}
+              serviceLine={line}
+            />
           </Suspense>
         ) : null}
 
@@ -193,16 +197,27 @@ export function ReconRunPage({
               hideReconLanding
               defaultTab="reconciliation"
               initialWeekStart={weekKey}
+              serviceLine={line}
             />
           </Suspense>
         ) : null}
 
         {activeStep === 'tag_account' ? (
-          <ReconTagAccountStep run={run} onRefresh={() => void runQuery.refetch()} />
+          <ReconTagAccountStep run={run} onRefresh={refreshRun} />
         ) : null}
 
         {activeStep === 'trips_earnings' ? (
-          <ReconTripsEarningsStep run={run} onNavigate={onNavigate} />
+          <ReconTripsEarningsStep
+            run={run}
+            onNavigate={onNavigate}
+            onRefresh={refreshRun}
+          />
+        ) : null}
+
+        {activeStep === 'settlement_preview' ? <ReconSettlementStep run={run} /> : null}
+
+        {activeStep === 'close' ? (
+          <ReconCloseStep run={run} onRefresh={refreshRun} />
         ) : null}
 
         {activeStep !== 'sources' &&
@@ -210,10 +225,11 @@ export function ReconRunPage({
         activeStep !== 'tolls' &&
         activeStep !== 'fuel' &&
         activeStep !== 'tag_account' &&
-        activeStep !== 'trips_earnings' ? (
+        activeStep !== 'trips_earnings' &&
+        activeStep !== 'settlement_preview' &&
+        activeStep !== 'close' ? (
           <p className="text-sm text-slate-600">
-            {RECON_STEP_LABELS[activeStep]} opens in a later phase. Use sources, tolls, and fuel for
-            this week.
+            {RECON_STEP_LABELS[activeStep]} is not available in this build.
           </p>
         ) : null}
       </section>

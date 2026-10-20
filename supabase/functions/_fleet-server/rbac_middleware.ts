@@ -58,7 +58,7 @@ export type Permission =
   | 'data.import' | 'data.export' | 'data.backfill'
   | 'expenses.view' | 'expenses.export' | 'expenses.create' | 'expenses.manage_rules'
   | 'expenses.approve' | 'expenses.pay' | 'expenses.manage_vendors'
-  | 'recon.external_sources';
+  | 'recon.view' | 'recon.prepare' | 'recon.approve' | 'recon.external_sources';
 
 export interface RbacUser {
   userId: string;
@@ -311,6 +311,7 @@ const ALL_CUSTOMER_PERMISSIONS: Permission[] = [
   'data.import', 'data.export', 'data.backfill',
   'expenses.view', 'expenses.export', 'expenses.create', 'expenses.manage_rules',
   'expenses.approve', 'expenses.pay', 'expenses.manage_vendors',
+  'recon.view', 'recon.prepare', 'recon.approve',
 ];
 
 const FLEET_MANAGER_PERMISSIONS: Permission[] = ALL_CUSTOMER_PERMISSIONS.filter(
@@ -338,11 +339,13 @@ const FLEET_ACCOUNTANT_PERMISSIONS: Permission[] = [
   'reports.view', 'reports.export',
   'data.export',
   'expenses.view', 'expenses.export',
+  'recon.view', 'recon.prepare', 'recon.approve',
 ];
 
 const FLEET_VIEWER_PERMISSIONS: Permission[] = [
   'nav.dashboard',
   'reports.view',
+  'recon.view',
 ];
 
 const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
@@ -563,20 +566,26 @@ export function requireAuthWithOrg(options?: Omit<RequireAuthOptions, 'requireOr
 // ---------------------------------------------------------------------------
 
 export function requirePermission(permission: Permission) {
+  return requireAnyPermission(permission);
+}
+
+/** Pass if the role has any of the listed permissions (rollout aliases). */
+export function requireAnyPermission(...permissions: Permission[]) {
   return async (c: Context, next: Next) => {
     const user = c.get('rbacUser') as RbacUser | undefined;
 
     if (!user) {
-      console.log(`[RBAC] requirePermission(${permission}): No rbacUser in context — did you forget requireAuth()?`);
+      console.log(`[RBAC] requireAnyPermission(${permissions.join('|')}): No rbacUser in context — did you forget requireAuth()?`);
       return c.json({ error: 'Unauthorized: No user context' }, 401);
     }
 
-    if (!hasPermission(user.resolvedRole, permission)) {
-      console.log(`[RBAC] FORBIDDEN: User ${user.userId} (role=${user.resolvedRole}) missing permission "${permission}"`);
+    const ok = permissions.some((p) => hasPermission(user.resolvedRole, p));
+    if (!ok) {
+      console.log(`[RBAC] FORBIDDEN: User ${user.userId} (role=${user.resolvedRole}) missing any of "${permissions.join(', ')}"`);
       return c.json({
         error: 'Forbidden',
-        message: `You do not have the "${permission}" permission.`,
-        required: permission,
+        message: `You do not have the required permission.`,
+        required: permissions,
         currentRole: user.resolvedRole,
       }, 403);
     }

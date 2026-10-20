@@ -8,6 +8,7 @@ import { demoteSpuriousDeadheadMatch } from '../utils/deadheadMatchGuard';
 import { fleetCalendarDay, ymdToLocalDate } from '../utils/timezoneDisplay';
 import { TOLL_RECON_CAPS, type TollReconTruncation } from '../utils/tollReconCaps';
 import { getTollTransactionDate } from '../utils/tollDate';
+import { fuelEntryMatchesLineFilter } from '../utils/fuelServiceLineFilter';
 import { toast } from 'sonner';
 import * as Sentry from '@sentry/react';
 
@@ -241,7 +242,11 @@ export interface ReconciliationPeriodScope {
   endDate: string;
 }
 
-export function useTollReconciliation(driverId?: string, period?: ReconciliationPeriodScope) {
+export function useTollReconciliation(
+  driverId?: string,
+  period?: ReconciliationPeriodScope,
+  serviceLine?: 'rideshare' | 'rush_delivery',
+) {
   const queryClient = useQueryClient();
   const queryKey = useMemo(
     () =>
@@ -250,8 +255,9 @@ export function useTollReconciliation(driverId?: string, period?: Reconciliation
         driverId ?? null,
         period?.startDate ?? null,
         period?.endDate ?? null,
+        serviceLine ?? null,
       ] as const,
-    [driverId, period?.startDate, period?.endDate],
+    [driverId, period?.startDate, period?.endDate, serviceLine],
   );
 
   const [loading, setLoading] = useState(true);
@@ -337,8 +343,28 @@ export function useTollReconciliation(driverId?: string, period?: Reconciliation
         return rows.filter((r) => inPeriodFleetDay(r.date, period.startDate, period.endDate, fleetTz));
       };
 
-      const unreconciled: FinancialTransaction[] = trimToPeriod(unreconciledRes.data || []);
-      const reconciled: FinancialTransaction[] = trimToPeriod(reconciledRes.data || []);
+      // R2-16: Week Recon embed scopes tolls to the run's service line (same lens as fuel).
+      const matchesLine = <T extends Record<string, unknown>>(rows: T[]): T[] => {
+        if (!serviceLine) return rows;
+        return rows.filter((r) =>
+          fuelEntryMatchesLineFilter(
+            r as {
+              serviceLine?: string | null;
+              service_line?: string | null;
+              serviceLineSource?: string | null;
+              service_line_source?: string | null;
+            },
+            serviceLine,
+          ),
+        );
+      };
+
+      const unreconciled: FinancialTransaction[] = matchesLine(
+        trimToPeriod(unreconciledRes.data || []),
+      );
+      const reconciled: FinancialTransaction[] = matchesLine(
+        trimToPeriod(reconciledRes.data || []),
+      );
       const refundsRaw: Trip[] = trimToPeriod(refundsRes.data || []);
       // Belt: server may historically return duplicate trip ids from unordered pages.
       const seenRefundIds = new Set<string>();
@@ -429,7 +455,7 @@ export function useTollReconciliation(driverId?: string, period?: Reconciliation
         if (blockUi) setLoading(false);
       }
     }
-  }, [driverId, period?.startDate, period?.endDate, queryClient, queryKey]);
+  }, [driverId, period?.startDate, period?.endDate, serviceLine, queryClient, queryKey]);
 
   // TR-M1: register the wizard bundle with TanStack Query (staleTime mirrors periods landing).
   useQuery({

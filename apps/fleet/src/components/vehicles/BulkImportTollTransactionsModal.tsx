@@ -982,10 +982,11 @@ function BulkImportTollTransactionsModalInner({
       setIsAnalyzing(true);
       try {
           let res;
+          // Hoist file text so AI path + dedupe both see it (R2-19).
+          const text = isImage ? '' : await file.text();
           if (isImage) {
               res = await api.parseTollImageWithAI(file);
           } else {
-              const text = await file.text(); // Redundant but safe
               res = await api.parseTollCsvWithAI(text);
           }
 
@@ -1136,20 +1137,25 @@ function BulkImportTollTransactionsModalInner({
             setIsSubmitting(false);
             return true;
           } catch (stagedErr) {
+            // R2-17: never fall back to browser row-loop when a staged import exists.
             if (
-              !(
-                isReconUnavailable(stagedErr) ||
-                (stagedErr instanceof ReconApiError &&
-                  (stagedErr.status === 404 || stagedErr.status === 501))
-              )
+              isReconUnavailable(stagedErr) ||
+              (stagedErr instanceof ReconApiError &&
+                (stagedErr.status === 404 || stagedErr.status === 501))
             ) {
-              throw stagedErr;
+              console.error('Staged toll commit unavailable', stagedErr);
+              toast.error(
+                'Server toll commit is unavailable. Retry when the recon import API is up — client row-by-row import is disabled for staged files.',
+              );
+              setIsSubmitting(false);
+              setStep('preview');
+              return false;
             }
-            console.warn('Staged toll commit unavailable — falling back to row loop', stagedErr);
+            throw stagedErr;
           }
         }
 
-        // P0: persist import_batches so coverage / Delete Center can see toll CSVs (WR-C3 partial).
+        // Legacy / recovery path only (no stagedImportId): persist import_batches + row loop.
         const validRows = parsedTx.filter((t) => t.isValid && t.vehicleId);
         const dates = validRows
           .map((t) => String(t.date || '').slice(0, 10))

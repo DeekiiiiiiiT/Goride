@@ -15,7 +15,7 @@
  * 409 CLOSE_IN_PROGRESS. H-1: skipPrepare skips seal/rebuild when client synced.
  */
 import { Hono, type Context } from "npm:hono@4.3.11";
-import { requireAuth, requirePermission, type RbacUser } from "./rbac_middleware.ts";
+import { requireAuth, requirePermission, requireAnyPermission, type RbacUser } from "./rbac_middleware.ts";
 import { getOrgId } from "./org_scope.ts";
 import { safeErrorResponse } from "./safe_error.ts";
 import { closeWeek, previewWeekClose, prepareWeekClose, reopenWeek, retryFreezeWeek, listClosedWeeks, listOpenWeeks, acknowledgeCashSourceMismatch, WeekCloseError } from "./week_close.ts";
@@ -134,11 +134,11 @@ async function handleWeekSync(c: Context) {
   }
 }
 
-app.post(`${BASE}/prepare`, requirePermission("transactions.edit"), handleWeekSync);
-app.post(`${BASE}/sync`, requirePermission("transactions.edit"), handleWeekSync);
+app.post(`${BASE}/prepare`, requireAnyPermission("recon.prepare", "transactions.edit"), handleWeekSync);
+app.post(`${BASE}/sync`, requireAnyPermission("recon.prepare", "transactions.edit"), handleWeekSync);
 
 // ── POST /week-close/acknowledge-cash-source — accept statement Uber cash (M-1) ─
-app.post(`${BASE}/acknowledge-cash-source`, requirePermission("transactions.edit"), async (c) => {
+app.post(`${BASE}/acknowledge-cash-source`, requireAnyPermission("recon.prepare", "transactions.edit"), async (c) => {
   try {
     const org = requireOrg(c);
     if (typeof org !== "string") return org;
@@ -169,7 +169,7 @@ app.post(`${BASE}/acknowledge-cash-source`, requirePermission("transactions.edit
 });
 
 // ── POST /week-close ────────────────────────────────────────────────────────
-app.post(BASE, requirePermission("transactions.edit"), async (c) => {
+app.post(BASE, requireAnyPermission("recon.approve", "transactions.edit"), async (c) => {
   try {
     const org = requireOrg(c);
     if (typeof org !== "string") return org;
@@ -287,7 +287,7 @@ app.post(`${BASE}/retry-freeze`, requirePermission("transactions.edit"), async (
 });
 
 // ── POST /week-close/reopen ─────────────────────────────────────────────────
-app.post(`${BASE}/reopen`, requirePermission("transactions.edit"), async (c) => {
+app.post(`${BASE}/reopen`, requireAnyPermission("recon.approve", "transactions.edit"), async (c) => {
   try {
     const org = requireOrg(c);
     if (typeof org !== "string") return org;

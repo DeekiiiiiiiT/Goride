@@ -128,6 +128,8 @@ export function FuelManagement(props: {
   initialWeekStart?: string;
   /** Skip fuel period landing (Week Recon wizard embed). */
   hideReconLanding?: boolean;
+  /** R2-16: Week Recon embed — lock fuel lens to this service line. */
+  serviceLine?: 'rideshare' | 'rush_delivery';
 }) {
   return (
     <FuelReconBusyProvider>
@@ -145,6 +147,7 @@ function FuelManagementInner({
   embedded = false,
   initialWeekStart,
   hideReconLanding = false,
+  serviceLine,
 }: {
   defaultTab?: string;
   onViewDriverLedger?: (driverId: string) => void;
@@ -152,6 +155,7 @@ function FuelManagementInner({
   embedded?: boolean;
   initialWeekStart?: string;
   hideReconLanding?: boolean;
+  serviceLine?: 'rideshare' | 'rush_delivery';
 }) {
   const queryClient = useQueryClient();
   const { can } = usePermissions();
@@ -166,6 +170,15 @@ function FuelManagementInner({
     defaultTab === 'flags' ? 'integrity' : defaultTab,
   );
   const lastFuelDataLoadAtRef = useRef(0);
+
+  // R2-16: Week Recon embed locks the fuel lens to the run's service line.
+  // Prefer prop over URL tabs so filtering works even when line tabs are off.
+  const effectiveApiFilter = serviceLine ?? apiFilter;
+  useEffect(() => {
+    if (!serviceLine) return;
+    const tab = serviceLine === 'rush_delivery' ? 'delivery' : 'rideshare';
+    if (line !== tab) setLine(tab);
+  }, [serviceLine, line, setLine]);
 
   useEffect(() => {
     setActiveTab(defaultTab === 'flags' ? 'integrity' : defaultTab);
@@ -822,14 +835,14 @@ function FuelManagementInner({
 
   // When the full window is truncated, re-fetch with server serviceLine so the tab is complete.
   useEffect(() => {
-    if (!fuelDataTruncated || apiFilter === 'all') {
+    if (!fuelDataTruncated || effectiveApiFilter === 'all') {
       setServerFilteredLogs(null);
       return;
     }
     let cancelled = false;
     const { startDate, endDate } = fuelFetchWindow;
     void fuelService
-      .getAllFuelEntriesInRange({ startDate, endDate, serviceLine: apiFilter })
+      .getAllFuelEntriesInRange({ startDate, endDate, serviceLine: effectiveApiFilter })
       .then((rows) => {
         if (!cancelled) setServerFilteredLogs(rows);
       })
@@ -839,7 +852,7 @@ function FuelManagementInner({
     return () => {
       cancelled = true;
     };
-  }, [fuelDataTruncated, apiFilter, fuelFetchWindow]);
+  }, [fuelDataTruncated, effectiveApiFilter, fuelFetchWindow]);
 
   // S3: never badge from truncated logs — fetch honest per-line totals (or omit until ready).
   useEffect(() => {
@@ -876,10 +889,10 @@ function FuelManagementInner({
   const displayLogs = useMemo(() => {
     // Unlinked lens needs statement rows — skip service-line server filter.
     if (unlinkedCardChargesOnly) return logs;
-    if (serverFilteredLogs && apiFilter !== 'all') return serverFilteredLogs;
-    if (apiFilter === 'all') return logs;
-    return logs.filter((e) => fuelEntryMatchesLineFilter(e, apiFilter));
-  }, [logs, apiFilter, serverFilteredLogs, unlinkedCardChargesOnly]);
+    if (serverFilteredLogs && effectiveApiFilter !== 'all') return serverFilteredLogs;
+    if (effectiveApiFilter === 'all') return logs;
+    return logs.filter((e) => fuelEntryMatchesLineFilter(e, effectiveApiFilter));
+  }, [logs, effectiveApiFilter, serverFilteredLogs, unlinkedCardChargesOnly]);
 
   const serviceLineCounts = useMemo(() => {
     if (!showTabs) return undefined;
@@ -2251,7 +2264,7 @@ function FuelManagementInner({
           loading={reconLandingLoading}
           periodsLoadError={serverPeriodsError}
           vehicles={vehicles}
-          fuelEntries={logs}
+          fuelEntries={effectiveApiFilter === 'all' ? logs : displayLogs}
           adjustments={adjustments}
           disputes={disputes}
           scenarios={scenarios}

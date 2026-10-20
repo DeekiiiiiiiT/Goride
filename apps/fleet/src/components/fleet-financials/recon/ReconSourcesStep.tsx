@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { AlertCircle, Bell, CheckCircle2, Loader2, UploadCloud } from 'lucide-react';
 import { roamFuelExternalCopy, weekDayKeys } from '@roam/finance-core';
 import type { ReconRunPayload, ReconRunSource } from '../../../services/reconApi';
+import { usePermissions } from '../../../hooks/usePermissions';
 import { Button } from '../../ui/button';
 import {
   Dialog,
@@ -14,10 +15,20 @@ import {
 import { Textarea } from '../../ui/textarea';
 import { Label } from '../../ui/label';
 import { BulkImportTollTransactionsModal } from '../../vehicles/BulkImportTollTransactionsModal';
+import { CloseWeekUberReimportDialog } from '../CloseWeekUberReimportDialog';
 import { FuelCardSelfUploader } from './FuelCardSelfUploader';
+import { IndriveUploadDialog } from './IndriveUploadDialog';
 import { cn } from '../../ui/utils';
 
 const BLOCKING = new Set(['missing', 'partial', 'waiting_external']);
+
+const FLEET_UPLOAD_SOURCES = new Set([
+  'toll_usage',
+  'toll_topup',
+  'fuel_card_self',
+  'uber_bundle',
+  'indrive_trips',
+]);
 
 function statusTone(status: string): string {
   if (status === 'received' || status === 'not_applicable' || status === 'attested_none') {
@@ -61,6 +72,16 @@ function isRoamFuelWaiting(source: ReconRunSource): boolean {
   );
 }
 
+function canShowUpload(
+  source: ReconRunSource,
+  canUploadExternalSources: boolean,
+): boolean {
+  if (FLEET_UPLOAD_SOURCES.has(source.id)) return true;
+  // R2-28: Roam gas card upload is staff-only (recon.external_sources).
+  if (source.id === 'fuel_card_roam') return canUploadExternalSources;
+  return false;
+}
+
 export function ReconSourceCard({
   source,
   weekKey,
@@ -68,6 +89,7 @@ export function ReconSourceCard({
   onAttestNone,
   onRemindRoam,
   remindBusy,
+  canUploadExternalSources = false,
 }: {
   source: ReconRunSource;
   weekKey: string;
@@ -75,10 +97,15 @@ export function ReconSourceCard({
   onAttestNone?: (sourceId: string) => void;
   onRemindRoam?: (sourceId: string) => void;
   remindBusy?: boolean;
+  canUploadExternalSources?: boolean;
 }) {
   const needsAction = BLOCKING.has(source.status) || isRoamFuelWaiting(source);
   const roamWait = isRoamFuelWaiting(source);
   const roamCopy = roamWait ? roamFuelExternalCopy(weekKey) : null;
+  const showUpload = needsAction && onUpload && canShowUpload(source, canUploadExternalSources);
+  const uploadLabel =
+    source.id === 'uber_bundle' || source.id === 'indrive_trips' ? 'Upload' : 'Upload statement';
+
   return (
     <article
       className={cn('rounded-xl border p-4 shadow-sm', statusTone(source.status))}
@@ -120,14 +147,10 @@ export function ReconSourceCard({
               Remind Roam
             </Button>
           ) : null}
-          {(source.id === 'toll_usage' ||
-            source.id === 'toll_topup' ||
-            source.id === 'fuel_card_self' ||
-            source.id === 'fuel_card_roam') &&
-          onUpload ? (
-            <Button type="button" size="sm" variant="default" onClick={() => onUpload(source.id)}>
+          {showUpload ? (
+            <Button type="button" size="sm" variant="default" onClick={() => onUpload!(source.id)}>
               <UploadCloud className="mr-1.5 h-4 w-4" />
-              Upload statement
+              {uploadLabel}
             </Button>
           ) : null}
           {source.requirement !== 'not_applicable' && onAttestNone && !roamWait ? (
@@ -144,17 +167,19 @@ export function ReconSourceCard({
 export function ReconSourcesStep({
   run,
   onRefresh,
-  onNavigateImports,
 }: {
   run: ReconRunPayload;
   onRefresh: () => void;
-  onNavigateImports?: () => void;
 }) {
+  const { can } = usePermissions();
+  const canUploadExternalSources = can('recon.external_sources');
   const weekKey = run.run.weekKey;
   const [tollModalOpen, setTollModalOpen] = useState(false);
   const [tollMode, setTollMode] = useState<'usage' | 'topup'>('usage');
   const [fuelModalOpen, setFuelModalOpen] = useState(false);
   const [fuelSourceId, setFuelSourceId] = useState<'fuel_card_self' | 'fuel_card_roam'>('fuel_card_self');
+  const [uberOpen, setUberOpen] = useState(false);
+  const [indriveOpen, setIndriveOpen] = useState(false);
   const [attestSourceId, setAttestSourceId] = useState<string | null>(null);
   const [attestReason, setAttestReason] = useState('');
   const [attestBusy, setAttestBusy] = useState(false);
@@ -181,12 +206,23 @@ export function ReconSourcesStep({
       setTollModalOpen(true);
       return;
     }
-    if (sourceId === 'fuel_card_self' || sourceId === 'fuel_card_roam') {
-      setFuelSourceId(sourceId);
+    if (sourceId === 'fuel_card_self') {
+      setFuelSourceId('fuel_card_self');
       setFuelModalOpen(true);
       return;
     }
-    onNavigateImports?.();
+    if (sourceId === 'fuel_card_roam' && canUploadExternalSources) {
+      setFuelSourceId('fuel_card_roam');
+      setFuelModalOpen(true);
+      return;
+    }
+    if (sourceId === 'uber_bundle') {
+      setUberOpen(true);
+      return;
+    }
+    if (sourceId === 'indrive_trips') {
+      setIndriveOpen(true);
+    }
   };
 
   const submitAttest = async () => {
@@ -223,9 +259,34 @@ export function ReconSourcesStep({
             onAttestNone={(id) => setAttestSourceId(id)}
             onRemindRoam={(id) => void remindRoam(id)}
             remindBusy={remindSourceId === source.id}
+            canUploadExternalSources={canUploadExternalSources}
           />
         ))}
       </div>
+
+      {uberOpen ? (
+        <CloseWeekUberReimportDialog
+          open={uberOpen}
+          onOpenChange={setUberOpen}
+          weekLabel={weekKey}
+          weekKey={weekKey}
+          onImported={async () => {
+            onRefresh();
+          }}
+        />
+      ) : null}
+
+      {indriveOpen ? (
+        <IndriveUploadDialog
+          open={indriveOpen}
+          onOpenChange={setIndriveOpen}
+          weekLabel={weekKey}
+          weekKey={weekKey}
+          onImported={async () => {
+            onRefresh();
+          }}
+        />
+      ) : null}
 
       <BulkImportTollTransactionsModal
         isOpen={tollModalOpen}

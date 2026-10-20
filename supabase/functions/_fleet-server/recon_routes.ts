@@ -6,6 +6,7 @@ import type { Context } from "npm:hono@4.3.11";
 import {
   requireAuth,
   requirePermission,
+  requireAnyPermission,
   hasPlatformStaffAccess,
   hasPermission,
   type Permission,
@@ -40,7 +41,6 @@ import {
   computeTagAccountRollForward,
   tagLedgerAmountToRollForwardParts,
 } from "../../../packages/finance-core/src/tagAccountRollForward.ts";
-import { periodEndForAnchor } from "../../../packages/finance-core/src/periodKey.ts";
 
 const BASE = "/make-server-37f42386/recon";
 const WEEK_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -404,6 +404,91 @@ function sourcesStepCounts(
   return { actionable, informational: 0 };
 }
 
+/** Live lane actionable counts for run_steps + complete gates (R2-11). */
+async function computeLiveStepCounts(
+  orgId: string,
+  weekKey: string,
+  sources: Array<{ requirement: SourceRequirement; status: SourceAggregateStatus }>,
+): Promise<Partial<Record<RunStepId, { actionable: number; informational: number }>>> {
+  const sb = getServiceClient();
+  const attribution = await loadUnattributedForWeek(orgId, weekKey);
+
+  let tollActionable = 0;
+  const { data: tollPeriod } = await sb
+    .from("toll_reconciliation_period")
+    .select("state, blockers")
+    .eq("organization_id", orgId)
+    .eq("week_key", weekKey)
+    .maybeSingle();
+  if (!tollPeriod) {
+    tollActionable = 1;
+  } else {
+    const state = String((tollPeriod as { state?: string }).state || "");
+    if (state !== "ready" && state !== "sealed") {
+      const blockers = (tollPeriod as { blockers?: unknown }).blockers;
+      tollActionable = Array.isArray(blockers) && blockers.length > 0 ? blockers.length : 1;
+    }
+  }
+
+  let fuelActionable = 0;
+  const { data: fuelPeriod } = await sb
+    .from("fuel_reconciliation_period")
+    .select("status, counts")
+    .eq("org_id", orgId)
+    .eq("week_start", weekKey)
+    .maybeSingle();
+  if (!fuelPeriod) {
+    fuelActionable = 1;
+  } else {
+    const status = String((fuelPeriod as { status?: string }).status || "");
+    if (status !== "ready" && status !== "locked") {
+      const counts = (fuelPeriod as { counts?: Record<string, { actionable?: number }> }).counts;
+      if (counts && typeof counts === "object") {
+        fuelActionable = Object.values(counts).reduce(
+          (sum, c) => sum + (Number(c?.actionable) || 0),
+          0,
+        );
+      }
+      if (fuelActionable === 0) fuelActionable = 1;
+    }
+  }
+
+  return {
+    sources: sourcesStepCounts(sources),
+    attribution: { actionable: attribution.rowCount, informational: 0 },
+    trips_earnings: { actionable: 0, informational: 0 },
+    tolls: { actionable: tollActionable, informational: 0 },
+    tag_account: { actionable: 0, informational: 0 },
+    fuel: { actionable: fuelActionable, informational: 0 },
+    settlement_preview: { actionable: 0, informational: 0 },
+    close: { actionable: 0, informational: 0 },
+  };
+}
+
+async function persistLiveStepCounts(
+  runId: string,
+  live: Partial<Record<RunStepId, { actionable: number; informational: number }>>,
+) {
+  const existing = await loadRunSteps(runId);
+  const byId = new Map(existing.map((r) => [r.step_id, r]));
+  const rows = RECON_STEP_ORDER.map((stepId) => {
+    const prev = byId.get(stepId);
+    return {
+      run_id: runId,
+      step_id: stepId,
+      actionable: live[stepId]?.actionable ?? 0,
+      informational: live[stepId]?.informational ?? 0,
+      completed_at: prev?.completed_at ?? null,
+      completed_by: prev?.completed_by ?? null,
+      inputs_hash_at_complete: prev?.inputs_hash_at_complete ?? null,
+    };
+  });
+  await reconDb().from("run_steps").upsert(rows, {
+    onConflict: "run_id,step_id",
+    ignoreDuplicates: false,
+  });
+}
+
 async function buildRunPayload(
   orgId: string,
   line: ReconLine,
@@ -413,6 +498,8 @@ async function buildRunPayload(
   const profile = await loadOrgReconProfile(orgId);
   const run = await ensureWeekRun(orgId, line, weekKey, openedBy);
   const sources = await materializeRunSources(orgId, line, weekKey, run.id, profile);
+  const liveCounts = await computeLiveStepCounts(orgId, weekKey, sources);
+  await persistLiveStepCounts(run.id, liveCounts);
   const stepRows = await loadRunSteps(run.id);
 
   const sourceSnaps: ReconSourceSnapshot[] = sources.map((s) => ({
@@ -421,14 +508,18 @@ async function buildRunPayload(
     inputHash: s.inputHash,
   }));
 
-  const stepCounts: Partial<Record<RunStepId, { actionable: number; informational: number }>> = {};
+  const stepCounts: Partial<Record<RunStepId, { actionable: number; informational: number }>> = {
+    ...liveCounts,
+  };
   for (const row of stepRows) {
-    stepCounts[row.step_id as RunStepId] = {
-      actionable: row.actionable ?? 0,
-      informational: row.informational ?? 0,
-    };
+    // Preserve completed_* from DB; actionable comes from liveCounts.
+    if (!stepCounts[row.step_id as RunStepId]) {
+      stepCounts[row.step_id as RunStepId] = {
+        actionable: row.actionable ?? 0,
+        informational: row.informational ?? 0,
+      };
+    }
   }
-  stepCounts.sources = sourcesStepCounts(sources);
 
   const completedSteps = stepRows
     .filter((r) => r.completed_at)
@@ -469,15 +560,18 @@ async function buildRunPayload(
         inputHash: s.inputHash,
       };
     }),
-    steps: stepRows.map((r) => ({
-      id: r.step_id,
-      actionable: r.actionable,
-      informational: r.informational,
-      completedAt: r.completed_at,
-      completedBy: r.completed_by,
-      inputsHashAtComplete: r.inputs_hash_at_complete,
-      gateStatus: evaluation.steps.find((e) => e.id === r.step_id)?.status ?? "locked",
-    })),
+    steps: stepRows.map((r) => {
+      const live = liveCounts[r.step_id as RunStepId];
+      return {
+        id: r.step_id,
+        actionable: live?.actionable ?? r.actionable,
+        informational: live?.informational ?? r.informational,
+        completedAt: r.completed_at,
+        completedBy: r.completed_by,
+        inputsHashAtComplete: r.inputs_hash_at_complete,
+        gateStatus: evaluation.steps.find((e) => e.id === r.step_id)?.status ?? "locked",
+      };
+    }),
   };
 }
 
@@ -754,7 +848,7 @@ export function registerReconRoutes(app: Hono) {
   app.get(
     `${BASE}/weeks`,
     requireAuth({ strict: true }),
-    requirePermission("transactions.view"),
+    requireAnyPermission("recon.view", "transactions.view"),
     async (c: Context) => {
       try {
         const orgId = getOrgId(c);
@@ -845,7 +939,7 @@ export function registerReconRoutes(app: Hono) {
   app.get(
     `${BASE}/runs/:line/:weekKey`,
     requireAuth({ strict: true }),
-    requirePermission("transactions.view"),
+    requireAnyPermission("recon.view", "transactions.view"),
     async (c: Context) => {
       try {
         const orgId = getOrgId(c);
@@ -867,7 +961,7 @@ export function registerReconRoutes(app: Hono) {
   app.post(
     `${BASE}/runs/:line/:weekKey/sources/:sourceId/attest-none`,
     requireAuth({ strict: true }),
-    requirePermission("transactions.view"),
+    requirePermission("recon.prepare"),
     async (c: Context) => {
       try {
         const orgId = getOrgId(c);
@@ -956,7 +1050,7 @@ export function registerReconRoutes(app: Hono) {
   app.post(
     `${BASE}/runs/:line/:weekKey/sources/:sourceId/waive`,
     requireAuth({ strict: true }),
-    requirePermission("transactions.view"),
+    requirePermission("recon.prepare"),
     async (c: Context) => {
       try {
         const orgId = getOrgId(c);
@@ -1015,7 +1109,7 @@ export function registerReconRoutes(app: Hono) {
   app.get(
     `${BASE}/runs/:line/:weekKey/tag-account`,
     requireAuth({ strict: true }),
-    requirePermission("transactions.view"),
+    requireAnyPermission("recon.view", "transactions.view"),
     async (c: Context) => {
       try {
         const orgId = getOrgId(c);
@@ -1057,7 +1151,7 @@ export function registerReconRoutes(app: Hono) {
   app.post(
     `${BASE}/runs/:line/:weekKey/events`,
     requireAuth({ strict: true }),
-    requirePermission("transactions.view"),
+    requirePermission("recon.prepare"),
     async (c: Context) => {
       try {
         const orgId = getOrgId(c);
@@ -1100,7 +1194,7 @@ export function registerReconRoutes(app: Hono) {
   app.post(
     `${BASE}/runs/:line/:weekKey/attribution`,
     requireAuth({ strict: true }),
-    requirePermission("transactions.view"),
+    requirePermission("recon.prepare"),
     async (c: Context) => {
       try {
         const orgId = getOrgId(c);
@@ -1177,7 +1271,7 @@ export function registerReconRoutes(app: Hono) {
   app.post(
     `${BASE}/runs/:line/:weekKey/steps/:stepId/complete`,
     requireAuth({ strict: true }),
-    requirePermission("transactions.view"),
+    requirePermission("recon.prepare"),
     async (c: Context) => {
       try {
         const orgId = getOrgId(c);
@@ -1199,6 +1293,47 @@ export function registerReconRoutes(app: Hono) {
 
         const actor = actorFromContext(c);
         const run = await ensureWeekRun(orgId, line, weekKey, actor);
+
+        const profile = await loadOrgReconProfile(orgId);
+        const sources = await materializeRunSources(orgId, line, weekKey, run.id, profile);
+        const liveCounts = await computeLiveStepCounts(orgId, weekKey, sources);
+        await persistLiveStepCounts(run.id, liveCounts);
+
+        const sourceSnaps: ReconSourceSnapshot[] = sources.map((s) => ({
+          id: s.id,
+          status: s.status,
+          inputHash: s.inputHash,
+        }));
+        const stepRows = await loadRunSteps(run.id);
+        const completedSteps = stepRows
+          .filter((r) => r.completed_at)
+          .map((r) => ({
+            stepId: r.step_id as RunStepId,
+            completedAt: r.completed_at,
+            inputsHashAtComplete: r.inputs_hash_at_complete,
+          }));
+        const evaluation = evaluateRun({
+          sources: sourceSnaps,
+          stepCounts: liveCounts,
+          completedSteps,
+        });
+        const stepEval = evaluation.steps.find((s) => s.id === stepId);
+        const actionable = liveCounts[stepId]?.actionable ?? 0;
+        if (!stepEval || stepEval.status === "locked") {
+          return c.json({
+            error: "STEP_LOCKED",
+            message: "Step is locked until earlier steps and feeding sources are complete",
+            lockedBy: stepEval?.lockedBy ?? null,
+          }, 409);
+        }
+        if (actionable > 0) {
+          return c.json({
+            error: "STEP_HAS_ACTIONABLE",
+            message: "Cannot complete step while actionable items remain",
+            actionable,
+          }, 409);
+        }
+
         const bump = await bumpRunVersion(run.id, body.expectedVersion);
         if (!bump.ok) {
           return c.json({
@@ -1207,13 +1342,6 @@ export function registerReconRoutes(app: Hono) {
           }, 409);
         }
 
-        const profile = await loadOrgReconProfile(orgId);
-        const sources = await materializeRunSources(orgId, line, weekKey, run.id, profile);
-        const sourceSnaps: ReconSourceSnapshot[] = sources.map((s) => ({
-          id: s.id,
-          status: s.status,
-          inputHash: s.inputHash,
-        }));
         const currentHash = compositeInputsHashForStep(stepId, sourceSnaps);
         if (body.expectedInputsHash && body.expectedInputsHash !== currentHash) {
           return c.json({
@@ -1228,7 +1356,7 @@ export function registerReconRoutes(app: Hono) {
           run_id: run.id,
           step_id: stepId,
           actionable: 0,
-          informational: 0,
+          informational: liveCounts[stepId]?.informational ?? 0,
           completed_at: now,
           completed_by: actor,
           inputs_hash_at_complete: currentHash,
@@ -1246,7 +1374,7 @@ export function registerReconRoutes(app: Hono) {
   app.post(
     `${BASE}/runs/:line/:weekKey/sources/:sourceId/request`,
     requireAuth({ strict: true }),
-    requirePermission("transactions.view"),
+    requirePermission("recon.prepare"),
     async (c: Context) => {
       try {
         const orgId = getOrgId(c);

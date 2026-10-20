@@ -36,12 +36,17 @@ CREATE TRIGGER toll_ledger_provider_ref_biu
   FOR EACH ROW
   EXECUTE FUNCTION fleet.toll_ledger_sync_provider_ref();
 
-CREATE UNIQUE INDEX IF NOT EXISTS fleet_toll_ledger_org_provider_ref_uidx
-  ON fleet.toll_ledger (organization_id, provider_ref)
-  WHERE provider_ref IS NOT NULL AND trim(provider_ref) <> '';
+-- Provider reuses Txn IDs across dates; unique per org+ref+day, excluding voided
+-- (matches packages/finance-core refDedupKeysMatch).
+DROP INDEX IF EXISTS fleet.fleet_toll_ledger_org_provider_ref_uidx;
+CREATE UNIQUE INDEX IF NOT EXISTS fleet_toll_ledger_org_provider_ref_date_uidx
+  ON fleet.toll_ledger (organization_id, provider_ref, date)
+  WHERE provider_ref IS NOT NULL
+    AND trim(provider_ref) <> ''
+    AND lower(coalesce(status, '')) NOT IN ('voided', 'void');
 
 COMMENT ON COLUMN fleet.toll_ledger.provider_ref IS
-  'Provider transaction id (Txn ID). Authoritative dedupe key per org; do not rely on client fingerprint alone.';
+  'Provider transaction id (Txn ID). Dedupe key is (org, ref, date) excluding voided; do not rely on client fingerprint alone.';
 
 -- Staged import pipeline (recon schema).
 CREATE TABLE IF NOT EXISTS recon.import_staging (
@@ -118,14 +123,57 @@ REVOKE ALL ON FUNCTION public.fleet_compute_vehicle_tag_balance(text) FROM PUBLI
 GRANT EXECUTE ON FUNCTION fleet.compute_vehicle_tag_balance(text) TO service_role;
 GRANT EXECUTE ON FUNCTION public.fleet_compute_vehicle_tag_balance(text) TO service_role;
 
+-- RLS: service_role writes via edge; authenticated may SELECT own org only.
+ALTER TABLE recon.import_staging ENABLE ROW LEVEL SECURITY;
+ALTER TABLE recon.import_staging_rows ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS recon_import_staging_org_select ON recon.import_staging;
+CREATE POLICY recon_import_staging_org_select ON recon.import_staging
+  FOR SELECT TO authenticated
+  USING (
+    organization_id = COALESCE(
+      (auth.jwt() -> 'app_metadata' ->> 'organization_id'),
+      (auth.jwt() -> 'user_metadata' ->> 'organization_id')
+    )
+  );
+
+DROP POLICY IF EXISTS recon_import_staging_rows_org_select ON recon.import_staging_rows;
+CREATE POLICY recon_import_staging_rows_org_select ON recon.import_staging_rows
+  FOR SELECT TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1 FROM recon.import_staging s
+      WHERE s.id = import_id
+        AND s.organization_id = COALESCE(
+          (auth.jwt() -> 'app_metadata' ->> 'organization_id'),
+          (auth.jwt() -> 'user_metadata' ->> 'organization_id')
+        )
+    )
+  );
+
+REVOKE ALL ON recon.import_staging FROM PUBLIC;
+REVOKE ALL ON recon.import_staging_rows FROM PUBLIC;
+REVOKE ALL ON recon.import_staging FROM anon, authenticated;
+REVOKE ALL ON recon.import_staging_rows FROM anon, authenticated;
+
+GRANT SELECT ON recon.import_staging TO authenticated;
+GRANT SELECT ON recon.import_staging_rows TO authenticated;
 GRANT SELECT, INSERT, UPDATE, DELETE ON recon.import_staging TO service_role;
 GRANT SELECT, INSERT, UPDATE, DELETE ON recon.import_staging_rows TO service_role;
 
-CREATE OR REPLACE VIEW public.recon_import_staging AS
+-- N-1: security_invoker so PostgREST uses caller privileges (not view owner).
+CREATE OR REPLACE VIEW public.recon_import_staging
+WITH (security_invoker = true) AS
   SELECT * FROM recon.import_staging;
 
-CREATE OR REPLACE VIEW public.recon_import_staging_rows AS
+CREATE OR REPLACE VIEW public.recon_import_staging_rows
+WITH (security_invoker = true) AS
   SELECT * FROM recon.import_staging_rows;
+
+REVOKE ALL ON public.recon_import_staging FROM PUBLIC;
+REVOKE ALL ON public.recon_import_staging_rows FROM PUBLIC;
+REVOKE ALL ON public.recon_import_staging FROM anon, authenticated;
+REVOKE ALL ON public.recon_import_staging_rows FROM anon, authenticated;
 
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.recon_import_staging TO service_role;
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.recon_import_staging_rows TO service_role;

@@ -110,6 +110,12 @@ async function loadOrgReconProfile(orgId: string): Promise<OrgReconProfile> {
   };
 }
 
+/** Keep in sync with recon_routes.ts coverageInputHash — close stale detection. */
+function coverageInputHash(coverage: Record<string, string>): string {
+  const keys = Object.keys(coverage).sort();
+  return keys.map((k) => `${k}:${coverage[k] ?? ""}`).join("|");
+}
+
 async function fetchCoverageMap(
   orgId: string,
   line: WeekCloseServiceLine,
@@ -242,11 +248,12 @@ export async function loadWeekCloseReconContext(
   const evidenceSources: WeekCloseReconSourceEvidence[] = [];
   const coverageBySource = new Map<string, Record<string, string>>();
 
+  // R2-13: always live coverage (never prefer persisted run_sources.coverage).
+  // R2-14: inputHash must match recon_routes.materializeRunSources / coverageInputHash.
   for (const def of defs) {
     const requirement = reqById[def.id] ?? def.requiredWhen(profile, week);
     const persisted = runSourcesById.get(def.id);
-    const coverage = persisted?.coverage ??
-      await fetchCoverageMap(orgId, serviceLine, def.id, week);
+    const coverage = await fetchCoverageMap(orgId, serviceLine, def.id, week);
     coverageBySource.set(def.id, coverage);
     const status = persisted?.status
       ? (persisted.status as ReconSourceSnapshot["status"])
@@ -256,7 +263,7 @@ export async function loadWeekCloseReconContext(
           Object.values(coverage).every((v) => v === "missing"),
       });
 
-    sourceSnaps.push({ id: def.id, status, inputHash: null });
+    sourceSnaps.push({ id: def.id, status, inputHash: coverageInputHash(coverage) });
     evidenceSources.push({
       id: def.id,
       label: def.label,

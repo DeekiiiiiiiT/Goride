@@ -1229,11 +1229,19 @@ function ImportsPageInner({ onNavigate }: ImportsPageProps) {
           }
 
           if (verifyPassed && batchId) {
+              const appMeta = (session?.user?.app_metadata || {}) as Record<string, unknown>;
+              const orgId =
+                  (typeof appMeta.organizationId === 'string' && appMeta.organizationId.trim()) ||
+                  session?.user?.id ||
+                  null;
+              // Statement period from payments_organization when present (R2-15).
+              const coverageStart = periodStartYmd || tripBounds.min;
+              const coverageEnd = periodEndYmd || tripBounds.max;
               await registerUberBundleWithRecon({
                   batchId,
-                  organizationId: tripsForSave[0]?.organizationId,
-                  dataPeriodStart: tripBounds.min,
-                  dataPeriodEnd: tripBounds.max,
+                  organizationId: orgId,
+                  dataPeriodStart: coverageStart,
+                  dataPeriodEnd: coverageEnd,
                   rowsCommitted: tripsForSave.length,
               });
           }

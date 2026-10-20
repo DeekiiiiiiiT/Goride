@@ -326,7 +326,12 @@ export type Permission =
   // Data
   | 'data.import'
   | 'data.export'
-  | 'data.backfill';
+  | 'data.backfill'
+  // Week Reconciliation wizard
+  | 'recon.view'
+  | 'recon.prepare'
+  | 'recon.approve'
+  | 'recon.external_sources';
 
 // ---------------------------------------------------------------------------
 // 4. Role → Permissions map
@@ -388,6 +393,7 @@ const ALL_CUSTOMER_PERMISSIONS: Permission[] = [
   'settings.edit',
   'users.invite', 'users.edit_role', 'users.remove',
   'data.import', 'data.export', 'data.backfill',
+  'recon.view', 'recon.prepare', 'recon.approve',
 ];
 
 const FLEET_MANAGER_PERMISSIONS: Permission[] = ALL_CUSTOMER_PERMISSIONS.filter(
@@ -428,11 +434,15 @@ const FLEET_ACCOUNTANT_PERMISSIONS: Permission[] = [
   'reports.view',
   'reports.export',
   'data.export',
+  'recon.view',
+  'recon.prepare',
+  'recon.approve',
 ];
 
 const FLEET_VIEWER_PERMISSIONS: Permission[] = [
   'nav.dashboard',
   'reports.view',
+  'recon.view',
 ];
 
 /**
@@ -449,8 +459,8 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
   // Platform (empty for now — Phase 11)
   // platform_owner explicitly gets the catalog-gate bypass for emergency
   // overrides (e.g. backfill / migration tools). No customer role gets it.
-  platform_owner: [...ALL_CUSTOMER_PERMISSIONS, 'vehicles.bypass_catalog_gate'],
-  platform_support: [],
+  platform_owner: [...ALL_CUSTOMER_PERMISSIONS, 'vehicles.bypass_catalog_gate', 'recon.external_sources'],
+  platform_support: ['recon.external_sources'],
   platform_analyst: [],
 
   // Product Admin roles — operate in their own admin portals, not Fleet UI

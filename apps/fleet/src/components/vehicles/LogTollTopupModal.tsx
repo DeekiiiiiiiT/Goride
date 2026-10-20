@@ -69,18 +69,8 @@ export function LogTollTopupModal({
         }
       });
 
-      // Also update the vehicle's estimated balance if we want to track that directly
-      // Fetch fresh vehicle data to update balance
-      const vehicles = await api.getVehicles();
-      const vehicle = vehicles.find((v: any) => v.id === vehicleId);
-      
-      if (vehicle) {
-          const newBalance = (vehicle.tollBalance || 0) + parseFloat(amount);
-          await api.saveVehicle({
-              ...vehicle,
-              tollBalance: newBalance
-          });
-      }
+      // R2-18: tag balance is derived from fleet.toll_ledger (fleet_compute_vehicle_tag_balance).
+      // Do not read-modify-write vehicle.tollBalance client-side.
 
       toast.success("Top-up recorded successfully");
       setAmount('');

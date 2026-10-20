@@ -26,6 +26,7 @@ export function ReconciliationDashboard({
   focusVehicleId,
   focusVehicleLabel,
   hideLanding = false,
+  serviceLine,
 }: {
   initialDriverId?: string;
   /** Monday week start from Close Week Review / Week Reconciliation hub. */
@@ -33,6 +34,8 @@ export function ReconciliationDashboard({
   focusVehicleId?: string;
   focusVehicleLabel?: string;
   hideLanding?: boolean;
+  /** R2-16: Week Recon embed — filter tolls to this service line. */
+  serviceLine?: 'rideshare' | 'rush_delivery';
 } = {}) {
   const [drivers, setDrivers] = useState<any[]>([]);
   const [selectedDriverId, setSelectedDriverId] = useState<string>(initialDriverId || '');
@@ -121,6 +124,7 @@ export function ReconciliationDashboard({
         driverId={selectedDriverId || undefined}
         drivers={drivers}
         initialStepId={initialStepId}
+        serviceLine={serviceLine}
         onExit={() => {
           if (hideLanding) return;
           setSelectedPeriod(null);

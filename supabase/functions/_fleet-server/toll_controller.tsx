@@ -2898,7 +2898,12 @@ const TOLL_LEDGER_PREFIX = "toll_ledger:";
  * (idempotent). Callers must not skip this — that was the silent P&L miss.
  * @returns false when skipped as duplicate import; true when persisted.
  */
-async function saveTollLedgerEntry(entry: TollLedgerRecord, c?: Context): Promise<boolean> {
+async function saveTollLedgerEntry(
+  entry: TollLedgerRecord,
+  c?: Context,
+  /** R2-17: reuse one ledger load across a commit loop (mutated on successful save). */
+  dedupCache?: TollLedgerRecord[],
+): Promise<boolean> {
   // Validate required fields
   if (!entry.id) throw new Error("TollLedgerRecord.id is required");
   if (!entry.date) throw new Error("TollLedgerRecord.date is required");
@@ -2951,7 +2956,7 @@ async function saveTollLedgerEntry(entry: TollLedgerRecord, c?: Context): Promis
 
   ensureTollContentFingerprint(entry);
 
-  const existingForDedup = await getAllTollLedgerEntries(ctx);
+  const existingForDedup = dedupCache ?? await getAllTollLedgerEntries(ctx);
   const overrideFingerprint =
     entry.metadata?.importOverrideFingerprint === true ||
     entry.metadata?.skipFingerprintDedup === true;
@@ -2977,6 +2982,7 @@ async function saveTollLedgerEntry(entry: TollLedgerRecord, c?: Context): Promis
   // even when legacy kv_store island writes are off (LEDGER_LEGACY_WRITE_KV_TOLL_LEDGER=0).
   // Skipping kv.set previously returned import success while leaving Tag Inventory empty.
   await kv.set(`${TOLL_LEDGER_PREFIX}${entry.id}`, entry);
+  if (dedupCache) dedupCache.push(entry);
   console.log(`[TollLedgerStorage] Saved toll_ledger:${entry.id}`);
 
   // Business Finance P&L — usage/refund only (top_up deliberately excluded).

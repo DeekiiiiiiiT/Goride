@@ -34,6 +34,7 @@ CREATE POLICY recon_external_source_requests_org_select ON recon.external_source
   );
 
 REVOKE ALL ON recon.external_source_requests FROM PUBLIC;
+REVOKE ALL ON recon.external_source_requests FROM anon, authenticated;
 GRANT SELECT ON recon.external_source_requests TO authenticated;
 GRANT ALL ON recon.external_source_requests TO service_role;
 

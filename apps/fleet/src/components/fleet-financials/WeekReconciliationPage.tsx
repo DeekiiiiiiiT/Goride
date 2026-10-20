@@ -245,7 +245,7 @@ export function WeekReconciliationPage({
             {lineSegment}
           </div>
           <Button type="button" variant="outline" size="sm" onClick={() => setClassicMode(true)}>
-            Classic Fuel / Tolls
+            Classic fuel/tolls
           </Button>
         </div>
       ) : wizardEnabled && classicMode ? (
