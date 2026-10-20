@@ -1120,12 +1120,21 @@ function BulkImportTollTransactionsModalInner({
             const overrideFingerprintDupRowIds = parsedTx
               .filter((t) => t.dupKind === 'fingerprint' && t.overrideKeep && t.stagedRowId)
               .map((t) => t.stagedRowId as string);
-            const { committed, batchId } = await commitReconImport(stagedImportId, {
+            const commitResult = await commitReconImport(stagedImportId, {
               idempotencyKey: stagedImportId,
               overrideFingerprintDupRowIds,
             });
-            setCurrentBatchId(batchId);
-            toast.success(`Import complete. ${committed} toll row(s) committed.`);
+            if (commitResult.partial || !commitResult.success) {
+              toast.error(
+                commitResult.message ||
+                  `Import incomplete: ${commitResult.committed} saved, ${commitResult.moneyFailed ?? 0} money event(s) failed. Retry commit.`,
+              );
+              setIsSubmitting(false);
+              setStep('preview');
+              return false;
+            }
+            setCurrentBatchId(commitResult.batchId);
+            toast.success(`Import complete. ${commitResult.committed} toll row(s) committed.`);
             onSuccess();
             await new Promise((r) => setTimeout(r, 800));
             onClose();

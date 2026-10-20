@@ -547,7 +547,8 @@ export function registerReconImportRoutes(app: Hono) {
         if (staging.status === "committed") {
           return c.json({ success: true, importId, idempotent: true, batchId: staging.import_batch_id });
         }
-        if (staging.status !== "parsed") {
+        // R5-01: allow retry after money-side partial failure.
+        if (staging.status !== "parsed" && staging.status !== "partial") {
           return c.json({ error: "NOT_PARSED" }, 409);
         }
 
@@ -629,6 +630,7 @@ export function registerReconImportRoutes(app: Hono) {
         let skippedRef = 0;
         let skippedFp = 0;
         let rejected = 0;
+        let moneyFailed = 0;
 
         // R2-17: one ledger load for dedupe. R3-12/R4-02: bulk RPC + prepare/afterInsert
         // so money events (canonical P&L, toll_usage) match saveTollLedgerEntry.
@@ -724,28 +726,46 @@ export function registerReconImportRoutes(app: Hono) {
             "bulk_insert_toll_ledger",
             { p_rows: sqlRows },
           );
-          if (!bulkErr && bulkResult) {
+          if (bulkErr) {
+            // R5-01: unexpected SQL errors abort the batch (no WHEN others in RPC).
+            console.error("[recon-import] bulk_insert_toll_ledger failed", bulkErr.message);
+            return c.json({
+              success: false,
+              error: "BULK_INSERT_FAILED",
+              message: bulkErr.message || "Toll ledger bulk insert failed",
+              importId,
+            }, 500);
+          }
+          if (bulkResult) {
             usedBulk = true;
-            committed = Number((bulkResult as { inserted?: number }).inserted) || 0;
-            // Mirror into KV + post money events (canonical / dual-write / toll_usage).
+            const bulk = bulkResult as {
+              inserted?: number;
+              skipped?: number;
+              inserted_ids?: string[] | unknown;
+            };
+            committed = Number(bulk.inserted) || 0;
+            const rawIds = Array.isArray(bulk.inserted_ids) ? bulk.inserted_ids : [];
+            const insertedIdSet = new Set(
+              rawIds.map((id) => String(id)).filter(Boolean),
+            );
+            // R5-01: KV + money events only for rows actually inserted into toll_ledger.
             for (const tollRecord of prepared) {
+              const id = String(tollRecord.id);
+              if (!insertedIdSet.has(id)) continue;
               try {
-                await kv.set(`toll_ledger:${String(tollRecord.id)}`, tollRecord);
+                await kv.set(`toll_ledger:${id}`, tollRecord);
                 dedupCache.push(tollRecord);
               } catch (kvErr) {
                 console.warn("[recon-import] KV mirror after bulk insert failed", kvErr);
               }
               try {
-                await afterTollLedgerInsert(tollRecord, c);
+                const after = await afterTollLedgerInsert(tollRecord, c);
+                if (!after.ok) moneyFailed += 1;
               } catch (afterErr) {
                 console.warn("[recon-import] afterTollLedgerInsert failed", afterErr);
+                moneyFailed += 1;
               }
             }
-          } else {
-            console.warn(
-              "[recon-import] bulk_insert_toll_ledger unavailable; per-row save",
-              bulkErr?.message,
-            );
           }
         }
 
@@ -755,33 +775,58 @@ export function registerReconImportRoutes(app: Hono) {
             try {
               await kv.set(`toll_ledger:${String(tollRecord.id)}`, tollRecord);
               dedupCache.push(tollRecord);
-              await afterTollLedgerInsert(tollRecord, c);
-              committed += 1;
+              const after = await afterTollLedgerInsert(tollRecord, c);
+              if (!after.ok) {
+                moneyFailed += 1;
+              } else {
+                committed += 1;
+              }
             } catch (rowErr) {
               console.warn("[recon-import] per-row persist after prepare failed", rowErr);
+              moneyFailed += 1;
             }
           }
         }
 
+        const commitOk = moneyFailed === 0;
+        const stagingStatus = commitOk ? "committed" : "partial";
+
         await kv.set(`batch:${batchId}`, {
           ...batchPayload,
-          status: "committed",
+          status: stagingStatus,
           recordCount: committed,
           rowsCommitted: committed,
           rowsDuplicate: skippedRef + skippedFp,
           rowsRejected: rejected,
+          moneyFailed,
         });
 
         const sb = getServiceClient();
         await sb.from("recon_import_staging").update({
-          status: "committed",
+          status: stagingStatus,
           import_batch_id: batchId,
-          idempotency_key: idempotencyKey,
+          idempotency_key: commitOk ? idempotencyKey : null,
           preview: {
             ...(preview || {}),
-            commit: { committed, skippedRef, skippedFp, rejected },
+            commit: { committed, skippedRef, skippedFp, rejected, moneyFailed },
           },
         }).eq("id", importId);
+
+        if (!commitOk) {
+          return c.json({
+            success: false,
+            partial: true,
+            importId,
+            batchId,
+            committed,
+            skippedRef,
+            skippedFp,
+            rejected,
+            moneyFailed,
+            message:
+              "Some toll rows were saved but money events failed. Retry commit or contact support.",
+          }, 422);
+        }
 
         return c.json({
           success: true,
@@ -791,6 +836,7 @@ export function registerReconImportRoutes(app: Hono) {
           skippedRef,
           skippedFp,
           rejected,
+          moneyFailed: 0,
         });
       } catch (e) {
         return safeErrorResponse(c, e, "recon-import-commit");

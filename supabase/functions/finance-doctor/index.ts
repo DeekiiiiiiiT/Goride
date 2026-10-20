@@ -167,6 +167,31 @@ Deno.serve(async (req) => {
       return /91bae090/i.test(blob);
     });
 
+    // R5-02: live has_function_privilege check — anon/authenticated must not EXECUTE audited SD RPCs.
+    let anonExecuteAudit: { ok: boolean; leaks: unknown[]; checked?: string[] } = {
+      ok: true,
+      leaks: [],
+    };
+    try {
+      const { data: auditData, error: auditErr } = await supabase.rpc(
+        "finance_doctor_anon_execute_audit",
+      );
+      if (auditErr) {
+        console.warn("[finance-doctor] anon execute audit failed:", auditErr.message);
+        anonExecuteAudit = { ok: false, leaks: [{ error: auditErr.message }] };
+      } else if (auditData && typeof auditData === "object") {
+        const a = auditData as { ok?: boolean; leaks?: unknown[]; checked?: string[] };
+        anonExecuteAudit = {
+          ok: a.ok !== false,
+          leaks: Array.isArray(a.leaks) ? a.leaks : [],
+          checked: a.checked,
+        };
+      }
+    } catch (auditCatch) {
+      console.warn("[finance-doctor] anon execute audit exception:", auditCatch);
+      anonExecuteAudit = { ok: false, leaks: [{ error: errMsg(auditCatch) }] };
+    }
+
     const report = {
       generatedAt: new Date().toISOString(),
       rowCount: entries.length,
@@ -201,6 +226,7 @@ Deno.serve(async (req) => {
         rows: c6.length,
         dollars: c6.reduce((s, e) => s + Math.abs(dollars(e.amount_minor)), 0),
       },
+      R5_02_anon_execute: anonExecuteAudit,
     };
 
     const blocking =
@@ -209,7 +235,8 @@ Deno.serve(async (req) => {
       uniqueness.length > 0 ||
       c3.length > 0 ||
       c6.length > 1 ||
-      c4.filter((e) => e.entry_type === "payout_cash").length > 0;
+      c4.filter((e) => e.entry_type === "payout_cash").length > 0 ||
+      !anonExecuteAudit.ok;
 
     const { error: persistErr } = await supabase.from("finance_doctor_runs").insert({
       ok: !blocking,

@@ -1,6 +1,6 @@
 /**
- * R4-02: wizard toll commit must post money events (canonical + toll_usage),
- * not only bulk_insert_toll_ledger + kv.set.
+ * R4-02 / R5-01: wizard toll commit must post money events (canonical + toll_usage),
+ * not only bulk_insert_toll_ledger + kv.set — and only for rows the RPC actually inserted.
  */
 import { assert } from "https://deno.land/std@0.224.0/assert/mod.ts";
 
@@ -34,7 +34,7 @@ Deno.test("afterTollLedgerInsert posts canonical toll and toll_usage", async () 
   const afterIdx = src.indexOf("async function afterTollLedgerInsert");
   assert(afterIdx >= 0, "afterTollLedgerInsert not found");
   const nextFn = src.indexOf("\nasync function ", afterIdx + 10);
-  const body = src.slice(afterIdx, nextFn > 0 ? nextFn : afterIdx + 2500);
+  const body = src.slice(afterIdx, nextFn > 0 ? nextFn : afterIdx + 3500);
   assert(
     /appendCanonicalTollIfEligible/.test(body),
     "afterInsert must call appendCanonicalTollIfEligible (Business Finance P&L)",
@@ -46,6 +46,10 @@ Deno.test("afterTollLedgerInsert posts canonical toll and toll_usage", async () 
   assert(
     /ensureActiveTollUsagePostedForEntry/.test(body),
     "afterInsert must ensure toll_usage financial event",
+  );
+  assert(
+    /ok:\s*errors\.length\s*===\s*0|return \{\s*ok:/.test(body),
+    "afterInsert must return { ok } so recon can count money failures",
   );
 });
 
@@ -62,5 +66,43 @@ Deno.test("recon import commit uses prepare + afterInsert on bulk path", async (
   assert(
     /bulk_insert_toll_ledger[\s\S]*afterTollLedgerInsert/.test(src),
     "afterInsert must run on the bulk success path (not only fallback)",
+  );
+});
+
+Deno.test("R5-01: commit money-posts only inserted_ids (skipped rows get 0 events)", async () => {
+  const src = await Deno.readTextFile(IMPORT_ROUTES);
+  assert(
+    /inserted_ids/.test(src),
+    "commit must read inserted_ids from bulk_insert_toll_ledger",
+  );
+  assert(
+    /insertedIdSet/.test(src) || /inserted_ids/.test(src),
+    "commit must build a set of inserted ids",
+  );
+  assert(
+    /if\s*\(\s*!insertedIdSet\.has\(id\)\s*\)\s*continue/.test(src),
+    "afterInsert must skip prepared rows that were not inserted (duplicates)",
+  );
+});
+
+Deno.test("R5-01: afterInsert failure marks staging partial and returns non-success", async () => {
+  const src = await Deno.readTextFile(IMPORT_ROUTES);
+  assert(
+    /moneyFailed/.test(src),
+    "commit must count afterTollLedgerInsert failures",
+  );
+  assert(
+    /status:\s*stagingStatus|status:\s*"partial"/.test(src) &&
+      /partial/.test(src),
+    "money failure must mark staging partial",
+  );
+  assert(
+    /success:\s*false/.test(src) && /422/.test(src),
+    "money failure must return non-success (422)",
+  );
+  assert(
+    /staging\.status\s*!==\s*"parsed"\s*&&\s*staging\.status\s*!==\s*"partial"/.test(src) ||
+      /status\s*!==\s*"partial"/.test(src),
+    "partial staging must be retriable on commit",
   );
 });

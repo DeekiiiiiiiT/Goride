@@ -2971,15 +2971,23 @@ async function prepareTollLedgerEntry(
 }
 
 /**
- * R4-02: Post-persist money side effects (canonical P&L, unified dual-write, toll_usage).
+ * R4-02 / R5-01: Post-persist money side effects (canonical P&L, unified dual-write, toll_usage).
  * Must run after every successful insert — including bulk_insert_toll_ledger + kv mirror.
+ * Returns ok:false when any money side-effect fails so recon commit can mark partial.
  */
-async function afterTollLedgerInsert(entry: TollLedgerRecord, c?: Context): Promise<void> {
+async function afterTollLedgerInsert(
+  entry: TollLedgerRecord,
+  c?: Context,
+): Promise<{ ok: boolean; errors: string[] }> {
+  const errors: string[] = [];
+
   try {
     const stubCtx = { get: () => undefined } as unknown as Context;
     await appendCanonicalTollIfEligible(entry, c ?? stubCtx);
   } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
     console.error("[TollLedgerStorage] canonical toll append failed:", e);
+    errors.push(`canonical:${msg}`);
   }
 
   try {
@@ -2999,7 +3007,9 @@ async function afterTollLedgerInsert(entry: TollLedgerRecord, c?: Context): Prom
       serviceLine: (entry as { service_line?: string }).service_line,
     });
   } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
     console.error("[TollLedgerStorage] unified dual-write failed:", e);
+    errors.push(`dual_write:${msg}`);
   }
 
   try {
@@ -3023,6 +3033,7 @@ async function afterTollLedgerInsert(entry: TollLedgerRecord, c?: Context): Prom
           const ensured = await ensureActiveTollUsagePostedForEntry(entry);
           if (ensured.error) {
             console.warn(`[TollLedgerStorage] toll_usage ensure failed:`, ensured.error);
+            errors.push(`toll_usage:${ensured.error}`);
           }
         }
       } else if (t === "top_up") {
@@ -3050,8 +3061,12 @@ async function afterTollLedgerInsert(entry: TollLedgerRecord, c?: Context): Prom
       }
     }
   } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
     console.error("[TollLedgerStorage] financial event post failed:", e);
+    errors.push(`financial_event:${msg}`);
   }
+
+  return { ok: errors.length === 0, errors };
 }
 
 /**

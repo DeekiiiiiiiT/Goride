@@ -19,7 +19,7 @@ const migrationsDir = join(__dirname, "..", "supabase", "migrations");
 /** Migrations at/after R4-01 must revoke on every new public function create. */
 const FORWARD_CUTOFF = "20261020140000";
 
-/** Always assert these (audit R4-01 + adjacent sweep). */
+/** Always assert these (audit R4-01 + R5-02 legacy SD sweep). */
 const AUDITED_NAMES = new Set([
   "bulk_insert_toll_ledger",
   "try_claim_week_close",
@@ -28,6 +28,29 @@ const AUDITED_NAMES = new Set([
   "list_week_source_summaries",
   "fleet_compute_vehicle_tag_balance",
   "fleet_toll_tag_balance_rows",
+  // R5-02 — write money state
+  "rush_post_journal",
+  "rush_transition_money_state",
+  "rush_lock_week",
+  "rush_lock_lines",
+  "rush_week_payable",
+  "freeze_settlement_periods_batch",
+  "fleet_rebuild_operational_periods",
+  // R5-02 — change fleet state
+  "fleet_assign_toll_tag",
+  "fleet_unassign_toll_tag",
+  "fleet_retire_toll_tag",
+  "fleet_scan_toll_low_balances",
+  "delivery_refresh_surge_now",
+  // R5-02 — read another org / live locations
+  "fleet_driver_lifetime_totals",
+  "fleet_fare_earnings_by_driver",
+  "fleet_period_earnings_by_driver",
+  "fleet_operational_rollup_by_driver",
+  "fleet_trip_status_buckets_by_driver",
+  "sum_settlement_queue_totals",
+  "delivery_couriers_in_h3_cells",
+  "rides_drivers_in_h3_cells",
 ]);
 
 const CREATE_FN_RE =

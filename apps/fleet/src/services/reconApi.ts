@@ -374,22 +374,64 @@ export async function parseReconImport(
   return { preview: body.preview };
 }
 
+export type ReconImportCommitResult = {
+  success: boolean;
+  partial?: boolean;
+  batchId: string;
+  committed: number;
+  moneyFailed?: number;
+  skippedRef?: number;
+  skippedFp?: number;
+  rejected?: number;
+  message?: string;
+};
+
 export async function commitReconImport(
   importId: string,
   input: {
     idempotencyKey: string;
     overrideFingerprintDupRowIds?: string[];
   },
-): Promise<{ batchId: string; committed: number }> {
+): Promise<ReconImportCommitResult> {
   const response = await reconImportFetch(`/${importId}/commit`, {
     method: 'POST',
     body: JSON.stringify(input),
   });
-  if (!response.ok) {
-    throw new ReconApiError('Failed to commit recon import', response.status);
+  const body = (await response.json().catch(() => ({}))) as Partial<ReconImportCommitResult> & {
+    error?: string;
+    message?: string;
+  };
+  // R5-01: 422 partial = rows may be in ledger but money events failed — surface clearly.
+  if (response.status === 422 && body.partial) {
+    return {
+      success: false,
+      partial: true,
+      batchId: String(body.batchId || ''),
+      committed: Number(body.committed) || 0,
+      moneyFailed: Number(body.moneyFailed) || 0,
+      skippedRef: Number(body.skippedRef) || 0,
+      skippedFp: Number(body.skippedFp) || 0,
+      rejected: Number(body.rejected) || 0,
+      message:
+        body.message ||
+        'Some toll rows were saved but money events failed. Retry commit or contact support.',
+    };
   }
-  const body = (await response.json()) as { batchId: string; committed: number };
-  return { batchId: body.batchId, committed: body.committed };
+  if (!response.ok) {
+    throw new ReconApiError(
+      body.message || body.error || 'Failed to commit recon import',
+      response.status,
+    );
+  }
+  return {
+    success: body.success !== false,
+    batchId: String(body.batchId || ''),
+    committed: Number(body.committed) || 0,
+    moneyFailed: Number(body.moneyFailed) || 0,
+    skippedRef: Number(body.skippedRef) || 0,
+    skippedFp: Number(body.skippedFp) || 0,
+    rejected: Number(body.rejected) || 0,
+  };
 }
 
 export async function registerReconImport(
