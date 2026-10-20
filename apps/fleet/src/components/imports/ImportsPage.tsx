@@ -113,6 +113,9 @@ import type { UberSsotTotals } from '../../utils/uberSsot';
 import { computeImportBundleFingerprint } from '../../utils/importBundleFingerprint';
 import { validateMergedImportPreview } from '../../utils/importValidation';
 import { buildCanonicalImportEvents, tripDateBounds } from '../../utils/buildCanonicalImportEvents';
+import { registerUberBundleWithRecon } from '../../utils/commitUberImportFromFiles';
+import { registerFuelCardWithRecon } from '../../utils/registerFuelCardWithRecon';
+import { fuelDateBounds } from '../../utils/fuelStatementImportFlow';
 import { buildPaymentLedgerCanonicalEvents } from '../../utils/buildPaymentLedgerCanonicalEvents';
 import type { PaymentLedgerLine } from '@roam/types/paymentLedgerLine';
 import type { DriverQualitySnapshot } from '../../types/data';
@@ -1065,6 +1068,17 @@ function ImportsPageInner({ onNavigate }: ImportsPageProps) {
 
               const saved = await Promise.all(entriesToSave.map((entry) => fuelService.createFuelEntry(entry)));
 
+              if (hasSelfServeJaa && saved.length > 0 && batchId) {
+                const bounds = fuelDateBounds(saved);
+                await registerFuelCardWithRecon({
+                  batchId,
+                  sourceId: 'fuel_card_self',
+                  dataPeriodStart: bounds.min,
+                  dataPeriodEnd: bounds.max,
+                  rowsCommitted: saved.length,
+                });
+              }
+
               try {
                   const [existing, inventory] = await Promise.all([
                       fuelService.getFuelEntries({
@@ -1212,6 +1226,16 @@ function ImportsPageInner({ onNavigate }: ImportsPageProps) {
               });
           } catch (statusErr) {
               console.warn('[Import] Failed to finalize batch status', statusErr);
+          }
+
+          if (verifyPassed && batchId) {
+              await registerUberBundleWithRecon({
+                  batchId,
+                  organizationId: tripsForSave[0]?.organizationId,
+                  dataPeriodStart: tripBounds.min,
+                  dataPeriodEnd: tripBounds.max,
+                  rowsCommitted: tripsForSave.length,
+              });
           }
 
           setImportCanonicalSummary({

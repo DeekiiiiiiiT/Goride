@@ -166,6 +166,7 @@ import {
   isSuspiciousVineyardsCashRate,
   isTollQuarantined,
 } from "../../../packages/finance-core/src/tollLedgerIntegrity.ts";
+import { findDuplicateTollByReferenceOnly } from "../../../packages/finance-core/src/reconTollImport.ts";
 
 const app = new Hono();
 
@@ -2940,33 +2941,36 @@ async function saveTollLedgerEntry(entry: TollLedgerRecord, c?: Context): Promis
   // was settled at.
   await stampTollRateProvenance(entry);
 
-  if (entry.tripId && !(entry as { service_line?: string }).service_line) {
-    try {
-      const trip = await kv.get(`trip:${entry.tripId}`);
-      if (trip && typeof trip === "object") {
-        const t = trip as Record<string, unknown>;
-        const explicit = t.serviceLine ?? t.service_line;
-        const sl =
-          explicit === "rush_delivery" || explicit === "rideshare"
-            ? explicit
-            : String(t.platform ?? "") === "Roam Rush"
-              ? "rush_delivery"
-              : "rideshare";
-        (entry as { service_line?: string }).service_line = sl;
-      }
-    } catch {
-      /* optional enrichment */
-    }
+  // WR-C2: full toll attribution ladder (trip → vehicle → driver → unattributed; top-up → org).
+  try {
+    const { ensureTollLedgerServiceLine } = await import("./service_line_attribution.ts");
+    await ensureTollLedgerServiceLine(entry as unknown as Record<string, unknown>);
+  } catch (e: any) {
+    console.warn(`[TollLedgerStorage] service_line stamp skipped: ${e?.message || e}`);
   }
 
   ensureTollContentFingerprint(entry);
 
-  const duplicate = findDuplicateTollLedgerEntry(entry, await getAllTollLedgerEntries(ctx));
-  if (duplicate) {
-    console.log(
-      `[TollLedgerStorage] Skip duplicate (${duplicate.reason}) for ${entry.id}; existing ${duplicate.existingId}`,
-    );
-    return false;
+  const existingForDedup = await getAllTollLedgerEntries(ctx);
+  const overrideFingerprint =
+    entry.metadata?.importOverrideFingerprint === true ||
+    entry.metadata?.skipFingerprintDedup === true;
+  if (overrideFingerprint) {
+    const refDup = findDuplicateTollByReferenceOnly(entry, existingForDedup);
+    if (refDup) {
+      console.log(
+        `[TollLedgerStorage] Skip duplicate (reference_number) for ${entry.id}; existing ${refDup.existingId}`,
+      );
+      return false;
+    }
+  } else {
+    const duplicate = findDuplicateTollLedgerEntry(entry, existingForDedup);
+    if (duplicate) {
+      console.log(
+        `[TollLedgerStorage] Skip duplicate (${duplicate.reason}) for ${entry.id}; existing ${duplicate.existingId}`,
+      );
+      return false;
+    }
   }
 
   // Always persist via kv.set — fleet cutover writes fleet.toll_ledger in afterUpsert

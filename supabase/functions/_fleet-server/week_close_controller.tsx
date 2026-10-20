@@ -31,6 +31,7 @@ import {
   failWeekCloseRun,
   findWeekCloseRun,
 } from "./week_close_lock.ts";
+import { normalizeWeekCloseServiceLine } from "./week_close_recon.ts";
 
 const app = new Hono();
 app.use("*", requireAuth({ strict: true }));
@@ -90,7 +91,8 @@ app.get(`${BASE}/preview`, requirePermission("transactions.view"), async (c) => 
     if (!WEEK_RE.test(weekKey)) {
       return c.json({ error: "weekKey (YYYY-MM-DD) is required" }, 400);
     }
-    const preview = await previewWeekClose(org, weekKey);
+    const serviceLine = normalizeWeekCloseServiceLine(c.req.query("serviceLine"));
+    const preview = await previewWeekClose(org, weekKey, { serviceLine });
     return c.json(preview);
   } catch (e) {
     return safeErrorResponse(c, e, "week-close");
@@ -106,6 +108,7 @@ async function handleWeekSync(c: Context) {
     const user = c.get("rbacUser") as RbacUser;
     const body = (await c.req.json().catch(() => ({}))) as {
       weekKey?: string;
+      serviceLine?: string;
       forceFuelReseal?: boolean;
       forceTollReseal?: boolean;
       forceEarningsReseal?: boolean;
@@ -116,6 +119,7 @@ async function handleWeekSync(c: Context) {
       return c.json({ error: "weekKey (YYYY-MM-DD) is required" }, 400);
     }
     const preview = await prepareWeekClose(org, weekKey, user.userId, {
+      serviceLine: normalizeWeekCloseServiceLine(body.serviceLine),
       forceFuelReseal: Boolean(body.forceFuelReseal),
       forceTollReseal: Boolean(body.forceTollReseal),
       forceEarningsReseal: Boolean(body.forceEarningsReseal),
@@ -172,6 +176,7 @@ app.post(BASE, requirePermission("transactions.edit"), async (c) => {
     const user = c.get("rbacUser") as RbacUser;
     const body = (await c.req.json()) as {
       weekKey?: string;
+      serviceLine?: string;
       reason?: string;
       idempotencyKey?: string;
       skipPrepare?: boolean;
@@ -183,6 +188,7 @@ app.post(BASE, requirePermission("transactions.edit"), async (c) => {
     const reason = String(body.reason || "").trim() || "Manual week close";
     const idempotencyKey = String(body.idempotencyKey || "").trim();
     const skipPrepare = body.skipPrepare === true;
+    const serviceLine = normalizeWeekCloseServiceLine(body.serviceLine);
 
     // C-3: return stored outcome for a completed idempotency key.
     if (idempotencyKey) {
@@ -205,6 +211,7 @@ app.post(BASE, requirePermission("transactions.edit"), async (c) => {
         weekKey,
         idempotencyKey,
         actorId: user.userId,
+        serviceLine,
       });
       if (!created) {
         if (run.status === "completed" && run.result) {
@@ -223,7 +230,7 @@ app.post(BASE, requirePermission("transactions.edit"), async (c) => {
     }
 
     try {
-      const result = await closeWeek(org, weekKey, user.userId, reason, { skipPrepare });
+      const result = await closeWeek(org, weekKey, user.userId, reason, { skipPrepare, serviceLine });
       if (idempotencyKey) {
         await completeWeekCloseRun(org, idempotencyKey, result as unknown as Record<string, unknown>);
       }
@@ -257,13 +264,19 @@ app.post(`${BASE}/retry-freeze`, requirePermission("transactions.edit"), async (
     const org = requireOrg(c);
     if (typeof org !== "string") return org;
     const user = c.get("rbacUser") as RbacUser;
-    const body = (await c.req.json().catch(() => ({}))) as { weekKey?: string; reason?: string };
+    const body = (await c.req.json().catch(() => ({}))) as {
+      weekKey?: string;
+      reason?: string;
+      serviceLine?: string;
+    };
     const weekKey = String(body.weekKey || "").slice(0, 10);
     if (!WEEK_RE.test(weekKey)) {
       return c.json({ error: "weekKey (YYYY-MM-DD) is required" }, 400);
     }
     const reason = String(body.reason || "").trim() || "Retry freeze after ATOMIC_FREEZE_FAILED";
-    const result = await retryFreezeWeek(org, weekKey, user.userId, reason);
+    const result = await retryFreezeWeek(org, weekKey, user.userId, reason, {
+      serviceLine: normalizeWeekCloseServiceLine(body.serviceLine),
+    });
     return c.json(result);
   } catch (e) {
     if (e instanceof WeekCloseError) {
@@ -281,6 +294,7 @@ app.post(`${BASE}/reopen`, requirePermission("transactions.edit"), async (c) => 
     const user = c.get("rbacUser") as RbacUser;
     const body = (await c.req.json()) as {
       weekKey?: string;
+      serviceLine?: string;
       reason?: string;
       acknowledgeSettlementRisk?: boolean;
     };
@@ -298,6 +312,7 @@ app.post(`${BASE}/reopen`, requirePermission("transactions.edit"), async (c) => 
       user.userId,
       reason,
       body.acknowledgeSettlementRisk === true,
+      normalizeWeekCloseServiceLine(body.serviceLine),
     );
     return c.json(result);
   } catch (e) {

@@ -72,9 +72,11 @@ if (fs.existsSync(remittanceRoot)) {
 
 // S-4: fleet-financials must not call remittance write APIs
 const financials = path.join(ROOT, 'apps', 'fleet', 'src', 'components', 'fleet-financials');
+const reconFinancials = path.join(financials, 'recon');
 const forbidFinancials = [/\bapply_remittance_event\b/, /\bcourier_remittance_/, /\bremitRemittance\b/];
-if (fs.existsSync(financials)) {
-  for (const abs of walk(financials)) {
+for (const root of [financials, reconFinancials]) {
+  if (!fs.existsSync(root)) continue;
+  for (const abs of walk(root)) {
     const code = stripComments(fs.readFileSync(abs, 'utf8'));
     for (const re of forbidFinancials) {
       if (re.test(code)) {

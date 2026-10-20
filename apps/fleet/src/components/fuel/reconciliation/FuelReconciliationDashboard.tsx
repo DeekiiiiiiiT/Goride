@@ -216,6 +216,7 @@ export function FuelReconciliationDashboard({
   secondApproverThreshold,
   autoCloseDualApprovalMode,
   initialWeekStart,
+  hideLanding = false,
   dispositions,
   onOpenIntegrityStopToStop,
 }: {
@@ -264,6 +265,8 @@ export function FuelReconciliationDashboard({
   autoCloseDualApprovalMode?: FuelAutoCloseDualApprovalMode;
   /** Monday week start from Close Week Review / Week Reconciliation hub. */
   initialWeekStart?: string;
+  /** When true with initialWeekStart, skip period landing (embedded in recon run). */
+  hideLanding?: boolean;
   dispositions?: import('../../../utils/fuelFlagDisposition').FuelFlagDispositionMap;
   onOpenIntegrityStopToStop?: (args: { weekStart: string; vehicleId?: string }) => void;
 }) {
@@ -288,6 +291,7 @@ export function FuelReconciliationDashboard({
   // Deep-link: /fuel-reconciliation?week=YYYY-MM-DD&step=finalize OR initialWeekStart prop
   useEffect(() => {
     if (deepLinkConsumed || loading || allPeriods.length === 0) return;
+    if (hideLanding && !initialWeekStart) return;
     const fromQuery =
       typeof window !== 'undefined'
         ? String(new URLSearchParams(window.location.search).get('week') || '').split('T')[0]
@@ -310,7 +314,7 @@ export function FuelReconciliationDashboard({
         : undefined;
     setView({ kind: 'wizard', period, initialStepId: stepId });
     setDeepLinkConsumed(true);
-  }, [allPeriods, deepLinkConsumed, loading, onSelectPeriodWeek, initialWeekStart]);
+  }, [allPeriods, deepLinkConsumed, loading, onSelectPeriodWeek, initialWeekStart, hideLanding]);
 
   const weeksWithSnapshots = useMemo(() => {
     const set = new Set<string>();
@@ -380,6 +384,7 @@ export function FuelReconciliationDashboard({
         onAcceptFuelException={onAcceptFuelException}
         onEditFuelEntry={onEditFuelEntry}
         onBack={() => {
+          if (hideLanding) return;
           setView({ kind: 'landing' });
           onRefresh();
         }}
@@ -404,6 +409,14 @@ export function FuelReconciliationDashboard({
       ),
     })),
   );
+
+  if (hideLanding && view.kind === 'landing' && initialWeekStart) {
+    return (
+      <div className="flex h-40 items-center justify-center text-sm text-slate-500">
+        Opening fuel reconciliation for {initialWeekStart}…
+      </div>
+    );
+  }
 
   return (
     <>

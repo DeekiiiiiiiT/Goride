@@ -126,6 +126,33 @@ export {
   matchesSyntheticTollStructuralSignature,
 } from './tollLedgerIntegrity.ts';
 export type { TollIntegrityLike } from './tollLedgerIntegrity.ts';
+export {
+  classifyTollImportRow,
+  findDuplicateTollByReferenceOnly,
+  normalizeProviderRefForIndex,
+  parseStagingRowOverrideId,
+  stagingRowOverrideId,
+} from './reconTollImport.ts';
+export {
+  computeTagAccountRollForward,
+  tagLedgerAmountToRollForwardParts,
+} from './tagAccountRollForward.ts';
+export type {
+  TagAccountRollForwardInput,
+  TagAccountRollForwardResult,
+} from './tagAccountRollForward.ts';
+export type {
+  ClassifyTollImportRowResult,
+  StagedTollRowClassification,
+} from './reconTollImport.ts';
+export {
+  classifyFuelImportRow,
+  fuelReceiptKey,
+} from './reconFuelImport.ts';
+export type {
+  FuelImportRowLike,
+  StagedFuelRowClassification,
+} from './reconFuelImport.ts';
 export { sumExcludedCashFromWeek, isCashPaidTollRow } from './periodTollCashSpend.ts';
 export type { PeriodTollLike } from './periodTollCashSpend.ts';
 export type {
@@ -144,7 +171,17 @@ export {
 } from './closeHash.ts';
 export type { PeriodCloseHashRow, PeriodCloseHashVerifyResult } from './closeHash.ts';
 export {
+  evaluateDeliveryReconReadiness,
+} from './deliveryReconReadiness.ts';
+export type {
+  DeliveryReconReadinessInput,
+  DeliveryReconReadinessResult,
+  DeliveryReconReadinessItem,
+  DeliveryReconReadinessItemId,
+} from './deliveryReconReadiness.ts';
+export {
   WEEK_STATEMENT_KINDS,
+  COURIER_EARNINGS_STATEMENT_KIND,
   StatementsNotClosedError,
   assertStatementsClosedForSettlement,
   mapRowToWeekStatement,
@@ -216,3 +253,57 @@ export * from './maintenanceScheduleEngine.ts';
 export * from './maintenanceOverdueDetails.ts';
 export * from './canonicalOdometerMath.ts';
 export * from './statementTollNetting.ts';
+export {
+  RECON_SOURCES,
+  RECON_SOURCE_IDS,
+  resolveSourceRequirements,
+  weekDayKeys,
+  weekSpanLabel,
+  computeSourceStatusFromCoverage,
+  sourcesForLine,
+} from './reconSources.ts';
+export type {
+  SourceKind,
+  CoverageMode,
+  ReconSourceId,
+  ReconServiceLine,
+  ReconSourceDef,
+  OrgReconProfile,
+  SourceRequirement,
+  ResolvedSourceRequirement,
+  SourceCoverageDay,
+  SourceAggregateStatus,
+  RunStepId,
+} from './reconSources.ts';
+export {
+  evaluateRun,
+  compositeInputsHashForStep,
+  RECON_STEP_ORDER,
+  RECON_STEP_LABELS,
+} from './evaluateRun.ts';
+export {
+  roamFuelExternalCopy,
+  roamFuelStatementDeadlineYmd,
+} from './reconExternalRoam.ts';
+export type { RoamFuelExternalCopy } from './reconExternalRoam.ts';
+export {
+  buildReconSourceCloseBlockers,
+  reconSourceBlockerSeverity,
+  RECON_SOURCE_BLOCKER_CODES,
+} from './closeSourceBlockers.ts';
+export type {
+  ReconSourceCloseBlockerInput,
+  ReconSourceBlockerCode,
+  ReconStepStaleInput,
+  LineUnattributedInput,
+} from './closeSourceBlockers.ts';
+export type {
+  StepStatus,
+  EvaluateRunResult,
+  EvaluatedStep,
+  NextAction,
+  ReconSourceSnapshot,
+  StepCounts,
+  CompletedStepSnapshot,
+  EvaluateRunStage,
+} from './evaluateRun.ts';

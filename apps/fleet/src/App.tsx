@@ -164,13 +164,15 @@ function PlatformSessionFromAuth({ children }: { children: React.ReactNode }) {
 
 function AppContent() {
   const { user, role, resolvedRole, loading, needsProvision, signOut } = useAuth();
-  const { canView } = usePermissions();
+  const { canView, permissions } = usePermissions();
   const { rideshareVisible } = useServiceLineScope();
   /** Close Week / Restatements live on Driver Settlements when that desk is available. */
   const canUseSettlementsHub = canView('driver-settlements') && rideshareVisible;
   /** Fuel / Toll recon live on Week Reconciliation hub. */
   const canUseWeekReconHub =
-    canView('fuel-reconciliation') || canView('toll-tags');
+    canView('fuel-reconciliation') ||
+    canView('toll-tags') ||
+    permissions.some((p) => String(p) === 'recon.view' || String(p) === 'nav.recon');
   
   const [currentPage, setCurrentPage] = useState(() =>
     typeof window !== 'undefined' ? resolvePageFromPathname(window.location.pathname) : 'dashboard',

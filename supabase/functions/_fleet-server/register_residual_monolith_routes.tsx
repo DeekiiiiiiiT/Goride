@@ -241,6 +241,7 @@ import {
   runDailyRushTripRecon,
 } from "./rush_projection_helpers.ts";
 import { registerRushSettlementRoutes } from "./rush_settlement_routes.ts";
+import { registerReconRoutes } from "./recon_routes.ts";
 import { ensureCustomerOrganization } from "./ensure_customer_org.ts";
 import {
   buildEphemeralStoragePath,
@@ -12566,6 +12567,7 @@ export function registerResidualMonolithRoutes(app: Hono) {
   });
 
   registerRushSettlementRoutes(app, { supabase, requireAuth, getOrgId });
+  registerReconRoutes(app);
 
   // Fleet owners cannot self-serve service lines — Roam staff use fleet-admin / Dominion.
   app.patch("/make-server-37f42386/org/service-lines", requireAuth(), async (c) => {

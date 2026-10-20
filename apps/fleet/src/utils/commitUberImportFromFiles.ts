@@ -4,6 +4,11 @@
  * duplicate hard-block, and no auto week sync (caller decides).
  */
 import { api, fetchFleetTimezone } from '../services/api';
+import {
+  isReconUnavailable,
+  ReconApiError,
+  registerReconImport,
+} from '../services/reconApi';
 import { tripCalibrationService } from '../services/tripCalibrationService';
 import { supabase } from '../utils/supabase/client';
 import {
@@ -213,6 +218,37 @@ export async function commitUberImportFromFiles(
   });
 }
 
+/** P2: wrap legacy Uber commit with recon import_batches coverage metadata. */
+export async function registerUberBundleWithRecon(opts: {
+  batchId: string;
+  organizationId?: string | null;
+  dataPeriodStart?: string | null;
+  dataPeriodEnd?: string | null;
+  rowsCommitted?: number;
+}): Promise<void> {
+  const dataStart = opts.dataPeriodStart?.slice(0, 10);
+  const dataEnd = opts.dataPeriodEnd?.slice(0, 10);
+  if (!dataStart || !dataEnd) return;
+  const importId = crypto.randomUUID();
+  try {
+    await registerReconImport(importId, {
+      batchId: opts.batchId,
+      sourceId: 'uber_bundle',
+      coverageStart: dataStart,
+      coverageEnd: dataEnd,
+      dataStart,
+      dataEnd,
+      semanticKey: opts.organizationId
+        ? `uber:${opts.organizationId}:${dataStart}:${dataEnd}`
+        : undefined,
+      rowsCommitted: opts.rowsCommitted,
+    });
+  } catch (e) {
+    if (isReconUnavailable(e) || (e instanceof ReconApiError && e.status === 404)) return;
+    console.warn('[Uber import] recon register failed', e);
+  }
+}
+
 export async function commitUberCashRefresh(
   uploadedFiles: FileData[],
   weekKey: string,
@@ -358,6 +394,15 @@ export async function commitUberCashRefresh(
   }
 
   await api.patchImportBatch(batchId, { status: 'completed' });
+
+  const orgId = tripsForSave[0]?.organizationId;
+  await registerUberBundleWithRecon({
+    batchId,
+    organizationId: orgId,
+    dataPeriodStart: tripBounds.min || wk,
+    dataPeriodEnd: tripBounds.max || weekEndYmd(wk),
+    rowsCommitted: tripsForSave.length,
+  });
 
   return {
     batchId,

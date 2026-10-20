@@ -273,6 +273,26 @@ export interface ImportBatch {
   paymentLedgerLineCount?: number;
   paymentLedgerLinesImported?: number;
   paymentLedgerLinesSkipped?: number;
+  /** Recon P0: manifest source id (uber_bundle, toll_usage, …). */
+  sourceId?: string;
+  serviceLine?: 'rideshare' | 'rush_delivery' | null;
+  /** Provider-declared statement period (coverage). */
+  coverageStart?: string;
+  coverageEnd?: string;
+  /** Min/max row dates actually present (alias of dataPeriod* for SQL columns). */
+  dataStart?: string;
+  dataEnd?: string;
+  /** Fleet week Mondays touched by this import. */
+  weekKeys?: string[];
+  fileSha256?: string;
+  /** e.g. uber:<org>:<stmtStart>:<stmtEnd> — one live import per key. */
+  semanticKey?: string;
+  rowsParsed?: number;
+  rowsCommitted?: number;
+  rowsDuplicate?: number;
+  rowsRejected?: number;
+  rowsSpilled?: number;
+  supersedes?: string;
 }
 
 /** Phase 7: live recount of `ledger_event:*` rows tagged with `batchId`. */

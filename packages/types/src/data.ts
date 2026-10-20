@@ -228,6 +228,14 @@ export interface ImportBatch {
   status: 'completed' | 'error';
   recordCount: number;
   type: string; // 'uber_trip', 'uber_payment', 'merged', etc.
+  /** Recon P0+: manifest source id (uber_bundle, toll_usage, …). */
+  sourceId?: string;
+  coverageStart?: string;
+  coverageEnd?: string;
+  dataStart?: string;
+  dataEnd?: string;
+  weekKeys?: string[];
+  semanticKey?: string;
   processedBy?: string;
   /** Phase 3: SHA-256 of sorted name:rowCount for the uploaded file set (audit). */
   contentFingerprint?: string;

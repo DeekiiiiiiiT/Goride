@@ -57,7 +57,8 @@ export type Permission =
   | 'users.invite' | 'users.edit_role' | 'users.remove'
   | 'data.import' | 'data.export' | 'data.backfill'
   | 'expenses.view' | 'expenses.export' | 'expenses.create' | 'expenses.manage_rules'
-  | 'expenses.approve' | 'expenses.pay' | 'expenses.manage_vendors';
+  | 'expenses.approve' | 'expenses.pay' | 'expenses.manage_vendors'
+  | 'recon.external_sources';
 
 export interface RbacUser {
   userId: string;
@@ -345,8 +346,8 @@ const FLEET_VIEWER_PERMISSIONS: Permission[] = [
 ];
 
 const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
-  platform_owner:   [...ALL_CUSTOMER_PERMISSIONS, 'vehicles.bypass_catalog_gate'],
-  platform_support: [],
+  platform_owner:   [...ALL_CUSTOMER_PERMISSIONS, 'vehicles.bypass_catalog_gate', 'recon.external_sources'],
+  platform_support: ['recon.external_sources'],
   platform_analyst: [],
   fleet_owner:      ALL_CUSTOMER_PERMISSIONS,
   fleet_manager:    FLEET_MANAGER_PERMISSIONS,

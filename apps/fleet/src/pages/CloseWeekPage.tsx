@@ -20,6 +20,7 @@ import {
   Receipt,
   RefreshCw,
   Unlock,
+  FileDown,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { computeTollCardIdentityResidual } from '@roam/toll-core';
@@ -58,6 +59,7 @@ import {
   isCashResidualOnlyBlockers,
   laneStatusFromBlockers,
   summarizeBlockersByLane,
+  laneForBlockerCode,
   type CloseLane,
   type CloseLaneStatus,
   type SettlementLaneMetrics,
@@ -347,8 +349,16 @@ export function CloseWeekPage({
     );
   }, [collectQuery.data?.rows, payQuery.data?.rows]);
 
-  const byLane = useMemo(() => summarizeBlockersByLane(preview?.blockers), [preview?.blockers]);
+  const byLane = useMemo(() => {
+    const base = summarizeBlockersByLane(preview?.blockers);
+    for (const b of preview?.weekBlockers ?? []) {
+      base[laneForBlockerCode(b.code)].push(b);
+    }
+    return base;
+  }, [preview?.blockers, preview?.weekBlockers]);
   const previewLoading = previewQuery.isLoading;
+  const sourcesStatus = laneStatusFromBlockers(byLane.sources, { loading: previewLoading });
+  const reconEvidence = preview?.reconEvidence;
   const settlementLoading = collectQuery.isLoading || payQuery.isLoading;
 
   const fuelStatus = laneStatusFromBlockers(byLane.fuel, { loading: previewLoading });
@@ -756,7 +766,60 @@ export function CloseWeekPage({
     }
   };
 
+  const downloadWeekPack = () => {
+    if (!preview) {
+      toast.message('Refresh preview first');
+      return;
+    }
+    const pack = {
+      exportedAt: new Date().toISOString(),
+      weekKey: preview.weekKey,
+      serviceLine: preview.serviceLine ?? 'rideshare',
+      preview,
+      reconEvidence: preview.reconEvidence ?? null,
+    };
+    const json = JSON.stringify(pack, null, 2);
+    const blob = new Blob([json], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `week-pack-${preview.weekKey}-${preview.serviceLine ?? 'rideshare'}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+
+    const csvLines = [
+      'kind,id,label,status,requirement,note',
+      ...(reconEvidence?.sources ?? []).map((s) =>
+        [
+          'source',
+          s.id,
+          `"${String(s.label).replace(/"/g, '""')}"`,
+          s.status,
+          s.requirement,
+          s.waived ? 'waived' : s.attestedBy ? `attested:${s.attestedBy}` : '',
+        ].join(','),
+      ),
+      ...(reconEvidence?.staleSteps ?? []).map((s) =>
+        ['stale_step', s.stepId, `"${s.label}"`, 'stale', '', ''].join(','),
+      ),
+    ];
+    if (csvLines.length > 1) {
+      const csvBlob = new Blob([csvLines.join('\n')], { type: 'text/csv' });
+      const csvUrl = URL.createObjectURL(csvBlob);
+      const csvA = document.createElement('a');
+      csvA.href = csvUrl;
+      csvA.download = `week-pack-${preview.weekKey}-sources.csv`;
+      csvA.click();
+      URL.revokeObjectURL(csvUrl);
+    }
+    toast.success('Week pack downloaded (JSON + sources CSV when available)');
+  };
+
   const reviewLane = (lane: CloseLane, step?: StepId) => {
+    if (lane === 'sources') {
+      onNavigate?.(LANE_REVIEW_PAGE.sources, { weekKey });
+      return;
+    }
     if (lane === 'settlement' && openCashMismatches.length === 1) {
       onNavigate?.(LANE_REVIEW_PAGE[lane], {
         startYmd: weekKey,
@@ -844,6 +907,17 @@ export function CloseWeekPage({
           </Select>
           {closeSubTab === 'open' ? (
             <>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-9 gap-1.5"
+                onClick={downloadWeekPack}
+                disabled={!preview || previewLoading}
+              >
+                <FileDown className="h-3.5 w-3.5" />
+                Download week pack
+              </Button>
               <Select value={weekKey} onValueChange={onWeekChange}>
                 <SelectTrigger className="h-9 w-[240px]" aria-label="Close week">
                   <SelectValue />
@@ -1085,6 +1159,62 @@ export function CloseWeekPage({
               <span className="text-amber-900/90"> — finish Collect/Pay on Cash desk</span>
             </>
           )}
+        </div>
+      ) : null}
+
+      {reconEvidence || byLane.sources.length > 0 ? (
+        <div className="rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="font-medium text-slate-900">Evidence — inputs & attestations</p>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-8 gap-1 text-xs"
+              onClick={() => reviewLane('sources')}
+            >
+              Open week recon
+              <ArrowRight className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+          <p className="mt-1 text-xs text-slate-500">
+            Line: {preview?.serviceLine ?? 'rideshare'}
+            {reconEvidence?.runState ? ` · run ${reconEvidence.runState}` : ''}
+            {sourcesStatus !== 'clear' ? ` · ${laneBlockLabels('sources').length || byLane.sources.length} note(s)` : ' · sources look complete'}
+          </p>
+          {reconEvidence?.sources?.length ? (
+            <ul className="mt-2 grid gap-1.5 sm:grid-cols-2">
+              {reconEvidence.sources
+                .filter((s) => s.requirement !== 'not_applicable')
+                .map((s) => (
+                  <li
+                    key={s.id}
+                    className="flex items-center justify-between gap-2 rounded-md border border-slate-100 bg-slate-50 px-2 py-1.5 text-xs"
+                  >
+                    <span className="font-medium text-slate-800">{s.label}</span>
+                    <span className="text-slate-600">
+                      {s.status.replace(/_/g, ' ')}
+                      {s.waived && s.attestReason ? ` — ${s.attestReason}` : ''}
+                    </span>
+                  </li>
+                ))}
+            </ul>
+          ) : (
+            <p className="mt-2 text-xs text-slate-500">Source manifest will appear after recon sync.</p>
+          )}
+          {(reconEvidence?.unattributed?.rowCount ?? 0) > 0 ? (
+            <p className="mt-2 text-xs text-amber-800">
+              {reconEvidence!.unattributed.rowCount} unattributed row(s) (
+              {MONEY(reconEvidence!.unattributed.amountMajor)}) — assign lines before enforce flip.
+            </p>
+          ) : null}
+          {byLane.sources.filter((b) => b.severity === 'warn').length > 0 ? (
+            <ul className="mt-2 list-disc pl-4 text-xs text-amber-900">
+              {laneWarnLabels('sources').map((label) => (
+                <li key={label}>{label}</li>
+              ))}
+            </ul>
+          ) : null}
         </div>
       ) : null}
 

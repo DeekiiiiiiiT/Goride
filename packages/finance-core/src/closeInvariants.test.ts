@@ -5,6 +5,7 @@ import {
   checkCloseInvariants,
   type CloseInvariantInput,
 } from './closeInvariants.ts';
+import { buildReconSourceCloseBlockers } from './closeSourceBlockers.ts';
 
 const tyingWeek: CloseInvariantInput = {
   period: {
@@ -519,6 +520,28 @@ describe('checkCloseInvariants (§6.4)', () => {
     // The split gap is fully explained — do not also raise TOLL_SPEND_SPLIT.
     expect(blockers.filter((b) => b.code === 'TOLL_SPEND_SPLIT')).toHaveLength(0);
     expect(canCloseWeek(blockers)).toBe(false);
+  });
+
+  it('P4: SOURCE_MISSING from sourceBlockers is warn until SOURCE_ENFORCE', () => {
+    const sourceBlockers = buildReconSourceCloseBlockers({
+      week: '2026-08-31',
+      sources: [
+        {
+          sourceId: 'uber_bundle',
+          label: 'Uber weekly reports',
+          status: 'missing',
+          requirement: 'required',
+        },
+      ],
+      enforce: false,
+    });
+    const blockers = checkCloseInvariants({
+      ...tyingWeek,
+      sourceBlockers,
+    });
+    const src = blockers.find((b) => b.code === 'SOURCE_MISSING');
+    expect(src?.severity).toBe('warn');
+    expect(canCloseWeek(blockers)).toBe(true);
   });
 
   it('still raises TOLL_SPEND_SPLIT when unknown PM does not explain the gap', () => {

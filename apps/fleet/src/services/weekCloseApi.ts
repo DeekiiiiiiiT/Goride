@@ -54,6 +54,26 @@ export type WeekClosePreview = {
   cashSourceMismatches?: WeekCloseCashSourceMismatch[];
   /** Drivers with a still-valid Accept statement cash ack this week. */
   cashSourceAckCount?: number;
+  serviceLine?: 'rideshare' | 'rush_delivery';
+  reconEvidence?: WeekCloseReconEvidence | null;
+};
+
+export type WeekCloseReconSourceEvidence = {
+  id: string;
+  label: string;
+  status: string;
+  requirement: string;
+  attestedBy?: string | null;
+  attestReason?: string | null;
+  waived?: boolean;
+};
+
+export type WeekCloseReconEvidence = {
+  serviceLine: 'rideshare' | 'rush_delivery';
+  sources: WeekCloseReconSourceEvidence[];
+  staleSteps: Array<{ stepId: string; label: string }>;
+  unattributed: { rowCount: number; amountMajor: number };
+  runState?: string | null;
 };
 
 export type WeekCloseCashSourceAck = {
@@ -163,8 +183,11 @@ async function parseErrorPayload(
 }
 
 export const weekCloseApi = {
-  async preview(weekKey: string): Promise<WeekClosePreview> {
-    const qs = new URLSearchParams({ weekKey });
+  async preview(
+    weekKey: string,
+    serviceLine: 'rideshare' | 'rush_delivery' = 'rideshare',
+  ): Promise<WeekClosePreview> {
+    const qs = new URLSearchParams({ weekKey, serviceLine });
     const response = await fetchWithRetry(`${BASE}/preview?${qs.toString()}`, {
       headers: await requireAuthHeaders(null),
     });
@@ -211,6 +234,7 @@ export const weekCloseApi = {
   async prepare(
     weekKey: string,
     hints?: {
+      serviceLine?: 'rideshare' | 'rush_delivery';
       forceFuelReseal?: boolean;
       forceTollReseal?: boolean;
       forceEarningsReseal?: boolean;
@@ -224,6 +248,7 @@ export const weekCloseApi = {
   async sync(
     weekKey: string,
     hints?: {
+      serviceLine?: 'rideshare' | 'rush_delivery';
       forceFuelReseal?: boolean;
       forceTollReseal?: boolean;
       forceEarningsReseal?: boolean;
@@ -232,6 +257,7 @@ export const weekCloseApi = {
   ): Promise<WeekClosePreview> {
     const body = {
       weekKey,
+      serviceLine: hints?.serviceLine ?? 'rideshare',
       ...(hints?.forceFuelReseal ? { forceFuelReseal: true } : {}),
       ...(hints?.forceTollReseal ? { forceTollReseal: true } : {}),
       ...(hints?.forceEarningsReseal ? { forceEarningsReseal: true } : {}),
@@ -265,13 +291,18 @@ export const weekCloseApi = {
   async close(
     weekKey: string,
     reason: string,
-    opts?: { idempotencyKey?: string; skipPrepare?: boolean },
+    opts?: {
+      idempotencyKey?: string;
+      skipPrepare?: boolean;
+      serviceLine?: 'rideshare' | 'rush_delivery';
+    },
   ): Promise<WeekCloseResult> {
     const response = await fetchWithRetry(BASE, {
       method: 'POST',
       headers: await requireAuthHeaders(),
       body: JSON.stringify({
         weekKey,
+        serviceLine: opts?.serviceLine ?? 'rideshare',
         reason,
         ...(opts?.idempotencyKey ? { idempotencyKey: opts.idempotencyKey } : {}),
         ...(opts?.skipPrepare ? { skipPrepare: true } : {}),
@@ -305,11 +336,12 @@ export const weekCloseApi = {
     weekKey: string,
     reason: string,
     acknowledgeSettlementRisk = false,
+    serviceLine: 'rideshare' | 'rush_delivery' = 'rideshare',
   ): Promise<WeekReopenResult> {
     const response = await fetchWithRetry(`${BASE}/reopen`, {
       method: 'POST',
       headers: await requireAuthHeaders({ 'Content-Type': 'application/json' }),
-      body: JSON.stringify({ weekKey, reason, acknowledgeSettlementRisk }),
+      body: JSON.stringify({ weekKey, reason, acknowledgeSettlementRisk, serviceLine }),
     });
     if (!response.ok) {
       const err = await parseErrorPayload(response, 'Re-open week failed');

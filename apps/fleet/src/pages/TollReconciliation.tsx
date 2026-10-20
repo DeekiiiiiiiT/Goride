@@ -8,6 +8,7 @@ export function TollReconciliation({
   focusVehicleLabel,
   initialWeekStart,
   embedded = false,
+  hideLanding = false,
 }: {
   focusVehicleId?: string;
   focusDriverId?: string;
@@ -16,6 +17,7 @@ export function TollReconciliation({
   initialWeekStart?: string;
   /** When true, omit outer page padding — Week Reconciliation hub owns chrome. */
   embedded?: boolean;
+  hideLanding?: boolean;
 } = {}) {
   return (
     <div className={cn(embedded ? undefined : 'p-6')}>
@@ -24,6 +26,7 @@ export function TollReconciliation({
         initialWeekStart={initialWeekStart}
         focusVehicleId={focusVehicleId}
         focusVehicleLabel={focusVehicleLabel}
+        hideLanding={hideLanding}
       />
     </div>
   );

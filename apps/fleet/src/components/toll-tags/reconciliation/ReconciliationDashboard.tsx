@@ -25,12 +25,14 @@ export function ReconciliationDashboard({
   initialWeekStart,
   focusVehicleId,
   focusVehicleLabel,
+  hideLanding = false,
 }: {
   initialDriverId?: string;
   /** Monday week start from Close Week Review / Week Reconciliation hub. */
   initialWeekStart?: string;
   focusVehicleId?: string;
   focusVehicleLabel?: string;
+  hideLanding?: boolean;
 } = {}) {
   const [drivers, setDrivers] = useState<any[]>([]);
   const [selectedDriverId, setSelectedDriverId] = useState<string>(initialDriverId || '');
@@ -120,11 +122,20 @@ export function ReconciliationDashboard({
         drivers={drivers}
         initialStepId={initialStepId}
         onExit={() => {
+          if (hideLanding) return;
           setSelectedPeriod(null);
           setInitialStepId(undefined);
           void periodData.refresh();
         }}
       />
+    );
+  }
+
+  if (hideLanding && initialWeekStart) {
+    return (
+      <div className="flex h-40 items-center justify-center text-sm text-slate-500">
+        Opening toll reconciliation for {String(initialWeekStart).split('T')[0]}…
+      </div>
     );
   }
 

@@ -11,20 +11,22 @@ import type { CloseBlocker } from '@roam/finance-core';
 
 export type { CloseBlocker } from '@roam/finance-core';
 
-/** The three lanes a week must clear before it can close. */
-export type CloseLane = 'fuel' | 'toll' | 'settlement';
+/** Lanes a week must clear before it can close (P4 adds sources). */
+export type CloseLane = 'sources' | 'fuel' | 'toll' | 'settlement';
 
 /** Lane state shown on each card. */
 export type CloseLaneStatus = 'clear' | 'blocked' | 'unverified' | 'pending' | 'loading';
 
 /** Page id each lane's Review button deep-links to (see pageRegistry / App.tsx). */
 export const LANE_REVIEW_PAGE: Record<CloseLane, string> = {
+  sources: 'week-reconciliation',
   fuel: 'fuel-reconciliation',
   toll: 'toll-tags',
   settlement: 'driver-settlements',
 };
 
 export const LANE_LABEL: Record<CloseLane, string> = {
+  sources: 'Sources',
   fuel: 'Fuel',
   toll: 'Tolls',
   settlement: 'Settlement',
@@ -43,6 +45,9 @@ export const CLOSE_VOCABULARY = {
 /** Map an invariant code to its owning lane. */
 export function laneForBlockerCode(code: string): CloseLane {
   const c = String(code || '').toUpperCase();
+  if (c.startsWith('SOURCE_')) return 'sources';
+  if (c === 'STEP_STALE') return 'sources';
+  if (c === 'LINE_UNATTRIBUTED') return 'sources';
   if (c.startsWith('FUEL')) return 'fuel';
   if (c.startsWith('TOLL')) return 'toll';
   // CASH_*, EARNINGS_*, STATEMENT_*, SETTLEMENT_* all settle in the money lane.
@@ -88,6 +93,14 @@ const BLOCKER_LABELS: Record<string, string> = {
   PRIOR_CLOSE_HASH_CHANGED:
     'Re-close hash differs from the prior seal — money may have changed while reopened',
   PERIOD_REBUILD_FAILED: 'Couldn’t refresh books — retry',
+  SOURCE_MISSING: 'Required source not uploaded for this week',
+  SOURCE_PARTIAL: 'Source missing one or more days this week',
+  SOURCE_WAITING_EXTERNAL: 'Waiting on an external provider for a required source',
+  SOURCE_WAIVED: 'Source waived — confirm before close',
+  SOURCE_ATTESTED_NONE: 'No activity attested for one or more days',
+  STEP_STALE: 'A recon step was reviewed before new data arrived — re-review',
+  LINE_UNATTRIBUTED: 'Rows not assigned to Rideshare or Delivery',
+  CASH_HELD_OVER_RETURNED: 'Fleet returned more cash than the driver held — resolve before close',
 };
 
 const CASH_RESIDUAL_CODES = new Set([
@@ -116,7 +129,12 @@ export function humanBlockerLabel(blocker: Pick<CloseBlocker, 'code' | 'message'
 export function summarizeBlockersByLane(
   blockers: readonly CloseBlocker[] | null | undefined,
 ): Record<CloseLane, CloseBlocker[]> {
-  const out: Record<CloseLane, CloseBlocker[]> = { fuel: [], toll: [], settlement: [] };
+  const out: Record<CloseLane, CloseBlocker[]> = {
+    sources: [],
+    fuel: [],
+    toll: [],
+    settlement: [],
+  };
   for (const b of blockers ?? []) {
     out[laneForBlockerCode(b.code)].push(b);
   }

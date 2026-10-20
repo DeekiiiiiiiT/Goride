@@ -10,6 +10,7 @@ import {
   inferTripServiceLine,
   markCostRowUnattributedOnStampFailure,
   resolveFuelEntryServiceLine,
+  resolveTollLedgerServiceLine,
   setExplicitServiceLine,
   stampServiceLineFromTripLink,
 } from "./service_line_attribution.ts";
@@ -129,4 +130,23 @@ Deno.test("S4 stamp failure path stamps unattributed (not NULL source)", () => {
   assertEquals(record.service_line, null);
   assertEquals(record.service_line_source, "unattributed");
   assertEquals(record.serviceLineSource, "unattributed");
+});
+
+Deno.test("resolveTollLedgerServiceLine top-up is org (not a line cost)", () => {
+  const r = resolveTollLedgerServiceLine({
+    isTopUp: true,
+    tripServiceLine: "rideshare",
+    vehicleServiceLines: ["rideshare"],
+  });
+  assertEquals(r.serviceLine, null);
+  assertEquals(r.source, "org");
+});
+
+Deno.test("resolveTollLedgerServiceLine usage follows trip before vehicle", () => {
+  const r = resolveTollLedgerServiceLine({
+    tripServiceLine: "rush_delivery",
+    vehicleServiceLines: ["rideshare"],
+  });
+  assertEquals(r.serviceLine, "rush_delivery");
+  assertEquals(r.source, "trip");
 });

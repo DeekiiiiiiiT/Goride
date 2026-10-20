@@ -13,7 +13,9 @@ export type ServiceLineSource =
   | "trip"
   | "vehicle"
   | "driver"
-  | "unattributed";
+  | "unattributed"
+  /** Top-ups fund a shared tag account — not a line cost (WR-C2 / recon P0). */
+  | "org";
 
 export type ResolvedFuelServiceLine = {
   /** Null when source is unattributed — conservation bucket, not a guess. */
@@ -46,8 +48,81 @@ function isServiceLineSource(v: unknown): v is ServiceLineSource {
     v === "trip" ||
     v === "vehicle" ||
     v === "driver" ||
-    v === "unattributed"
+    v === "unattributed" ||
+    v === "org"
   );
+}
+
+function isTollTopUp(record: Record<string, unknown>): boolean {
+  const t = String(record.type ?? record.originalType ?? "").toLowerCase().replace(/-/g, "_");
+  return t === "top_up" || t === "topup";
+}
+
+/**
+ * Toll ledger ladder (WR-C2): top-ups → org; else trip → vehicle → driver → unattributed.
+ * No program tier (tolls are not JAA-scoped).
+ */
+export function resolveTollLedgerServiceLine(
+  input: ResolveFuelServiceLineInput & { isTopUp?: boolean },
+): ResolvedFuelServiceLine {
+  if (input.isTopUp) {
+    return { serviceLine: null, source: "org" };
+  }
+  return resolveFuelEntryServiceLine({
+    existingLine: input.existingLine,
+    existingSource: input.existingSource,
+    tripServiceLine: input.tripServiceLine,
+    vehicleServiceLines: input.vehicleServiceLines,
+    driverServiceLines: input.driverServiceLines,
+  });
+}
+
+/**
+ * Resolve + stamp service line on a toll_ledger record.
+ * Safe on every write; never overwrites source=explicit.
+ */
+export async function ensureTollLedgerServiceLine(
+  record: Record<string, unknown>,
+  opts?: { lookupCache?: ServiceLineLookupCache },
+): Promise<Record<string, unknown>> {
+  if (!record || typeof record !== "object") return record;
+
+  const existingSource = record.service_line_source ?? record.serviceLineSource;
+  if (existingSource === "explicit") {
+    const line = record.service_line ?? record.serviceLine;
+    if (isServiceLine(line)) {
+      record.service_line = line;
+      record.serviceLine = line;
+      record.service_line_source = "explicit";
+      record.serviceLineSource = "explicit";
+    }
+    return record;
+  }
+  // Sticky org (top-up) — do not re-ladder into a line.
+  if (existingSource === "org") {
+    return applyServiceLineResolution(record, { serviceLine: null, source: "org" });
+  }
+
+  if (isTollTopUp(record)) {
+    return applyServiceLineResolution(record, { serviceLine: null, source: "org" });
+  }
+
+  const cache = opts?.lookupCache;
+  const [tripServiceLine, vehicleServiceLines, driverServiceLines] = await Promise.all([
+    loadTripServiceLine(record, cache),
+    loadVehicleServiceLines(record, cache),
+    loadDriverServiceLines(record, cache),
+  ]);
+
+  const resolved = resolveTollLedgerServiceLine({
+    existingLine: record.service_line ?? record.serviceLine,
+    existingSource,
+    tripServiceLine,
+    vehicleServiceLines,
+    driverServiceLines,
+  });
+
+  return applyServiceLineResolution(record, resolved);
 }
 
 function normalizeLines(raw: unknown): ServiceLine[] {

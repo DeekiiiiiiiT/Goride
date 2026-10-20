@@ -100,6 +100,13 @@ import {
   tryClaimWeekCloseLock,
 } from "./week_close_lock.ts";
 import { persistPeriodRowWithVersion } from "./period_persist.ts";
+import {
+  loadWeekCloseReconContext,
+  normalizeWeekCloseServiceLine,
+  reopenReconWeekRun,
+  type WeekCloseReconEvidence,
+  type WeekCloseServiceLine,
+} from "./week_close_recon.ts";
 
 export type { CloseLaneForceOpts, CloseWeekOpts, PrepareWeekCloseOpts } from "./week_close_force_opts.ts";
 export { closeWeekLaneForceOpts, resolveCloseLaneForceOpts } from "./week_close_force_opts.ts";
@@ -773,6 +780,10 @@ export type WeekClosePreview = {
   cashSourceAckCount?: number;
   /** P-2: statement engine version used when this preview was built. */
   statementEngineVersion?: string;
+  /** P4: service line scope for lock + recon evidence. */
+  serviceLine?: WeekCloseServiceLine;
+  /** P4: sources / attestations / stale steps for accountant pack. */
+  reconEvidence?: WeekCloseReconEvidence | null;
 };
 
 type FinanceCoreCashSlice = {
@@ -1314,8 +1325,23 @@ async function orgWeekNeedsForceTollReseal(orgId: string, week: string): Promise
  * H-1: Pure read preview — does NOT seal lanes or write recon drifts.
  * Use {@link prepareWeekClose} before close when lanes need sealing.
  */
-export async function previewWeekClose(orgId: string, weekKey: string): Promise<WeekClosePreview> {
+export async function previewWeekClose(
+  orgId: string,
+  weekKey: string,
+  opts?: { serviceLine?: WeekCloseServiceLine },
+): Promise<WeekClosePreview> {
   const week = String(weekKey).slice(0, 10);
+  const serviceLine = normalizeWeekCloseServiceLine(opts?.serviceLine);
+
+  let reconEvidence: WeekCloseReconEvidence | null = null;
+  const reconSourceBlockers: CloseBlocker[] = [];
+  try {
+    const recon = await loadWeekCloseReconContext(orgId, week, serviceLine);
+    reconEvidence = recon.evidence;
+    reconSourceBlockers.push(...recon.sourceBlockers);
+  } catch (e) {
+    console.warn("[week_close] recon evidence load failed (non-fatal)", week, e);
+  }
 
   const { data: periods, error } = await sb()
     .from("driver_financial_periods")
@@ -1326,7 +1352,7 @@ export async function previewWeekClose(orgId: string, weekKey: string): Promise<
 
   const rows = periods ?? [];
   const blockers: CloseBlocker[] = [];
-  const weekBlockers: CloseBlocker[] = [];
+  const weekBlockers: CloseBlocker[] = [...reconSourceBlockers];
   let driversReady = 0;
   let driversFrozen = 0;
   let driversSettled = 0;
@@ -1567,6 +1593,8 @@ export async function previewWeekClose(orgId: string, weekKey: string): Promise<
     cashSourceMismatches,
     cashSourceAckCount,
     statementEngineVersion: WEEK_STATEMENT_ENGINE_VERSION,
+    serviceLine,
+    reconEvidence,
   };
 }
 
@@ -1693,6 +1721,7 @@ export async function prepareWeekClose(
   opts?: PrepareWeekCloseOpts,
 ): Promise<WeekClosePreview> {
   const week = String(weekKey).slice(0, 10);
+  const serviceLine = normalizeWeekCloseServiceLine(opts?.serviceLine);
   try {
     assertPeriodEndedForReconciliation(week);
   } catch (e) {
@@ -1705,13 +1734,13 @@ export async function prepareWeekClose(
   // C-3: mutual exclusion — skip when caller (closeWeek) already holds the lock.
   const manageLock = !opts?.skipCloseLock;
   if (manageLock) {
-    const claimed = await tryClaimWeekCloseLock(orgId, week, actorId);
+    const claimed = await tryClaimWeekCloseLock(orgId, week, actorId, undefined, serviceLine);
     if (!claimed) {
       throw new WeekCloseError(
         "CLOSE_IN_PROGRESS",
         "Week close or sync already in progress for this week — retry shortly",
         409,
-        { weekKey: week },
+        { weekKey: week, serviceLine },
       );
     }
   }
@@ -1720,7 +1749,7 @@ export async function prepareWeekClose(
     return await prepareWeekCloseBody(orgId, week, actorId, opts);
   } finally {
     if (manageLock) {
-      await releaseWeekCloseLock(orgId, week, actorId);
+      await releaseWeekCloseLock(orgId, week, actorId, serviceLine);
     }
   }
 }
@@ -1742,7 +1771,9 @@ async function prepareWeekCloseBody(
     !assess.needsForceTollReseal &&
     assess.periodDriftCount === 0
   ) {
-    const preview = await previewWeekClose(orgId, week);
+    const preview = await previewWeekClose(orgId, week, {
+      serviceLine: normalizeWeekCloseServiceLine(opts?.serviceLine),
+    });
     preview.tollPeriodSealDriftCount = 0;
     preview.periodsRebuiltAfterSeal = 0;
     return preview;
@@ -1829,7 +1860,9 @@ async function prepareWeekCloseBody(
     }
   }
 
-  const preview = await previewWeekClose(orgId, week);
+  const preview = await previewWeekClose(orgId, week, {
+    serviceLine: normalizeWeekCloseServiceLine(opts?.serviceLine),
+  });
   preview.tollPeriodSealDriftCount = periodSync.preRebuildTollDriftCount;
   preview.periodsRebuiltAfterSeal = periodSync.rebuilt;
   if (periodSync.failedDriverIds.length > 0) {
@@ -1886,6 +1919,7 @@ export async function closeWeek(
   opts?: CloseWeekOpts,
 ): Promise<CloseWeekResult> {
   const week = String(weekKey).slice(0, 10);
+  const serviceLine = normalizeWeekCloseServiceLine(opts?.serviceLine);
   try {
     assertPeriodEndedForReconciliation(week);
   } catch (e) {
@@ -1896,20 +1930,20 @@ export async function closeWeek(
   }
 
   // C-3: one close/sync at a time per org-week.
-  const claimed = await tryClaimWeekCloseLock(orgId, week, actorId);
+  const claimed = await tryClaimWeekCloseLock(orgId, week, actorId, undefined, serviceLine);
   if (!claimed) {
     throw new WeekCloseError(
       "CLOSE_IN_PROGRESS",
       "Week close already in progress for this week — retry shortly",
       409,
-      { weekKey: week },
+      { weekKey: week, serviceLine },
     );
   }
 
   try {
     return await closeWeekBody(orgId, week, actorId, reason, opts);
   } finally {
-    await releaseWeekCloseLock(orgId, week, actorId);
+    await releaseWeekCloseLock(orgId, week, actorId, serviceLine);
   }
 }
 
@@ -1927,6 +1961,7 @@ async function closeWeekBody(
     prepared = await prepareWeekClose(orgId, week, actorId, {
       ...closeWeekLaneForceOpts(),
       skipCloseLock: true,
+      serviceLine: normalizeWeekCloseServiceLine(opts?.serviceLine),
     });
     const rebuildBlocker = (prepared.weekBlockers || []).find(
       (b) => b.code === "PERIOD_REBUILD_FAILED",
@@ -1953,6 +1988,7 @@ async function closeWeekBody(
   const allBlockers: CloseBlocker[] = [];
   const periodRows = periods ?? [];
   const driverIds = periodRows.map((p) => String(p.driver_id)).filter(Boolean);
+  const serviceLine = normalizeWeekCloseServiceLine(opts?.serviceLine);
 
   // P-2: after prepare, reuse P&L weekBlockers and only reload statements (skip engine P&L).
   let statementsByDriver: Map<string, WeekStatement[]>;
@@ -1984,7 +2020,58 @@ async function closeWeekBody(
       (b) => b.code === "BUSINESS_WEEK_PNL_UNAVAILABLE",
     );
     if (pnlWarn) allBlockers.push(pnlWarn);
+    for (const b of prepared.weekBlockers || []) {
+      if (b.code === "SETTLEMENT_PNL_MISMATCH" || b.code === "BUSINESS_WEEK_PNL_UNAVAILABLE") {
+        continue;
+      }
+      if (!allBlockers.some((x) => x.code === b.code && x.message === b.message)) {
+        allBlockers.push(b);
+      }
+    }
+    const blockingWeek = (prepared.weekBlockers || []).filter(
+      (b) =>
+        b.severity === "block" &&
+        b.code !== "SETTLEMENT_PNL_MISMATCH",
+    );
+    if (blockingWeek.length > 0) {
+      return {
+        organizationId: orgId,
+        weekKey: week,
+        closed: false,
+        driversClosed: 0,
+        driversBlocked: periodRows.length,
+        blockers: allBlockers,
+        perDriver: periodRows.map((p) => ({
+          driverId: String(p.driver_id),
+          closed: false,
+          blockers: allBlockers,
+        })),
+      };
+    }
   } else {
+    try {
+      const recon = await loadWeekCloseReconContext(orgId, week, serviceLine);
+      for (const b of recon.sourceBlockers) {
+        allBlockers.push(b);
+      }
+      if (recon.sourceBlockers.some((b) => b.severity === "block")) {
+        return {
+          organizationId: orgId,
+          weekKey: week,
+          closed: false,
+          driversClosed: 0,
+          driversBlocked: periodRows.length,
+          blockers: allBlockers,
+          perDriver: periodRows.map((p) => ({
+            driverId: String(p.driver_id),
+            closed: false,
+            blockers: allBlockers,
+          })),
+        };
+      }
+    } catch (e) {
+      console.warn("[week_close] recon gate on close failed (non-fatal)", week, e);
+    }
     const sides = await weekPnlTieSides(orgId, week, driverIds);
     statementsByDriver = sides.statementsByDriver;
     const { settlementSumForWeek, businessWeekPnl } = sides;
@@ -2490,24 +2577,26 @@ export async function retryFreezeWeek(
   weekKey: string,
   actorId: string,
   reason: string,
+  opts?: CloseWeekOpts,
 ): Promise<CloseWeekResult> {
   const week = String(weekKey).slice(0, 10);
+  const serviceLine = normalizeWeekCloseServiceLine(opts?.serviceLine);
   const closeReason = String(reason || "").trim() || "Retry freeze after ATOMIC_FREEZE_FAILED";
 
-  const claimed = await tryClaimWeekCloseLock(orgId, week, actorId);
+  const claimed = await tryClaimWeekCloseLock(orgId, week, actorId, undefined, serviceLine);
   if (!claimed) {
     throw new WeekCloseError(
       "CLOSE_IN_PROGRESS",
       "Week close already in progress for this week — retry shortly",
       409,
-      { weekKey: week },
+      { weekKey: week, serviceLine },
     );
   }
 
   try {
     return await retryFreezeWeekBody(orgId, week, actorId, closeReason);
   } finally {
-    await releaseWeekCloseLock(orgId, week, actorId);
+    await releaseWeekCloseLock(orgId, week, actorId, serviceLine);
   }
 }
 
@@ -2818,8 +2907,10 @@ export async function reopenWeek(
   actorId: string,
   reason: string,
   acknowledgeSettlementRisk = false,
+  serviceLineRaw?: WeekCloseServiceLine,
 ): Promise<ReopenWeekResult> {
   const week = String(weekKey).slice(0, 10);
+  const serviceLine = normalizeWeekCloseServiceLine(serviceLineRaw);
   const trimmedReason = String(reason || "").trim();
   if (!trimmedReason) {
     throw new WeekCloseError("REASON_REQUIRED", "A reopen reason is required", 400);
@@ -2947,6 +3038,12 @@ export async function reopenWeek(
       .eq("id", period.id);
     if (updErr) throw new Error(updErr.message);
     driversReopened += 1;
+  }
+
+  try {
+    await reopenReconWeekRun(orgId, week, serviceLine);
+  } catch (e) {
+    console.warn("[week_close] recon run reopen failed (non-fatal)", week, e);
   }
 
   return {

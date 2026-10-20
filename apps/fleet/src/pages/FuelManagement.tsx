@@ -126,6 +126,8 @@ export function FuelManagement(props: {
   embedded?: boolean;
   /** Monday week start (yyyy-MM-dd) from Close Week Review / deep link. */
   initialWeekStart?: string;
+  /** Skip fuel period landing (Week Recon wizard embed). */
+  hideReconLanding?: boolean;
 }) {
   return (
     <FuelReconBusyProvider>
@@ -142,12 +144,14 @@ function FuelManagementInner({
   onTabChange,
   embedded = false,
   initialWeekStart,
+  hideReconLanding = false,
 }: {
   defaultTab?: string;
   onViewDriverLedger?: (driverId: string) => void;
   onTabChange?: (tab: string) => void;
   embedded?: boolean;
   initialWeekStart?: string;
+  hideReconLanding?: boolean;
 }) {
   const queryClient = useQueryClient();
   const { can } = usePermissions();
@@ -2260,6 +2264,7 @@ function FuelManagementInner({
           secondApproverThreshold={secondApproverThreshold}
           autoCloseDualApprovalMode={autoCloseDualApprovalMode}
           initialWeekStart={initialWeekStart}
+          hideLanding={hideReconLanding}
           dispositions={flagDispositions}
           onOpenIntegrityStopToStop={({ weekStart, vehicleId }) => {
             setFlagsWeekStart(weekStart);

@@ -21,21 +21,28 @@ const KV_PAGE_SIZE = 1000;
 /** Optional shared lookup cache for batch mset (S6). */
 type StampOpts = { lookupCache?: import("./service_line_attribution.ts").ServiceLineLookupCache };
 
-/** Fuel/expense service-line ladder — one choke point for every write path (Phase 0). */
+/** Fuel/expense/toll service-line ladder — one choke point for every write path. */
 async function stampCostRowServiceLine(
   key: string,
   value: any,
   opts?: StampOpts,
 ): Promise<any> {
   if (!value || typeof value !== "object" || Array.isArray(value)) return value;
-  if (
-    !key.startsWith("fuel_entry:") &&
-    !key.startsWith("fuel-entry:") &&
-    !key.startsWith("expense_journal:")
-  ) {
-    return value;
-  }
+  const isFuel =
+    key.startsWith("fuel_entry:") ||
+    key.startsWith("fuel-entry:") ||
+    key.startsWith("expense_journal:");
+  const isToll =
+    key.startsWith("toll_ledger:") ||
+    key.startsWith("toll-ledger:");
+  if (!isFuel && !isToll) return value;
   try {
+    if (isToll) {
+      const { ensureTollLedgerServiceLine } = await import("./service_line_attribution.ts");
+      return await ensureTollLedgerServiceLine(value as Record<string, unknown>, {
+        lookupCache: opts?.lookupCache,
+      });
+    }
     const { ensureCostRowServiceLine } = await import("./service_line_attribution.ts");
     return await ensureCostRowServiceLine(value as Record<string, unknown>, {
       lookupCache: opts?.lookupCache,

@@ -88,6 +88,11 @@ export const FEATURE_FLAGS = {
    * Env defaults to enforce; this KV name is reserved for future org overrides.
    */
   TOLL_PERIOD_WRITE_GUARD: "tollPeriodWriteGuard",
+  /**
+   * Week Reconciliation guided wizard (runs + sources step). Default off until rollout.
+   * Client may also enable via VITE_RECON_WIZARD.
+   */
+  RECON_WIZARD: "recon_wizard",
   /** Tiered parts search (OEM / sister / engine / aftermarket). Default off. */
   PARTS_TIERED_SEARCH: "parts_tiered_search",
   /** Live supplier price/stock adapter. Default off until a vendor feed exists. */

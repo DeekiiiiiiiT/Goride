@@ -40,6 +40,17 @@ export function classifyPostedBusinessTransaction(
   if (!['completed', 'approved', 'verified', 'reconciled'].includes(status)) return null;
 
   const category = String(categoryInput ?? '').trim().toLowerCase();
+  // Toll tag ledger categories — canonical toll writers own P&L; never double-count top-ups.
+  if (
+    category === 'toll top-up' ||
+    category === 'toll usage' ||
+    category === 'toll refund' ||
+    category === 'toll adjustment' ||
+    category === 'tolls' ||
+    category === 'toll'
+  ) {
+    return null;
+  }
   if (category === 'maintenance') {
     return { eventType: 'maintenance', direction: 'outflow' };
   }

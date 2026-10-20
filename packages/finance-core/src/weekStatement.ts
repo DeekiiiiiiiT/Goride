@@ -13,10 +13,13 @@
 import { round2 } from './money.ts';
 import { buildCloseHash } from './closeHash.ts';
 
-export type WeekStatementKind = 'fuel' | 'toll' | 'earnings';
+export type WeekStatementKind = 'fuel' | 'toll' | 'earnings' | 'courier_earnings';
 export type WeekStatementStatus = 'draft' | 'closed' | 'restated';
 
+/** Rideshare driver-week lanes required before settlement sign-off. */
 export const WEEK_STATEMENT_KINDS: readonly WeekStatementKind[] = ['fuel', 'toll', 'earnings'];
+
+export const COURIER_EARNINGS_STATEMENT_KIND = 'courier_earnings' as const satisfies WeekStatementKind;
 
 /** Amounts held as integer minor units (cents), keyed by canonical field name. */
 export type StatementAmountsMinor = Record<string, number>;

@@ -19,12 +19,14 @@ export async function tryClaimWeekCloseLock(
   weekKey: string,
   actorId: string,
   ttlSeconds = WEEK_CLOSE_LOCK_TTL_SECONDS,
+  serviceLine = "rideshare",
 ): Promise<boolean> {
   const { data, error } = await sb().rpc("try_claim_week_close", {
     p_org_id: orgId,
     p_week_key: weekKey,
     p_actor: actorId,
     p_ttl_seconds: ttlSeconds,
+    p_service_line: serviceLine,
   });
   if (error) {
     console.warn("[week_close_lock] claim failed", error.message);
@@ -37,11 +39,13 @@ export async function releaseWeekCloseLock(
   orgId: string,
   weekKey: string,
   actorId: string,
+  serviceLine = "rideshare",
 ): Promise<void> {
   const { error } = await sb().rpc("release_week_close_lock", {
     p_org_id: orgId,
     p_week_key: weekKey,
     p_actor: actorId,
+    p_service_line: serviceLine,
   });
   if (error) {
     console.warn("[week_close_lock] release failed", error.message);
@@ -51,6 +55,7 @@ export async function releaseWeekCloseLock(
 export type WeekCloseRunRow = {
   id: string;
   organization_id: string;
+  service_line?: string;
   week_key: string;
   idempotency_key: string;
   status: "in_progress" | "completed" | "failed";
@@ -82,7 +87,9 @@ export async function beginWeekCloseRun(opts: {
   weekKey: string;
   idempotencyKey: string;
   actorId: string;
+  serviceLine?: string;
 }): Promise<{ run: WeekCloseRunRow; created: boolean }> {
+  const serviceLine = opts.serviceLine ?? "rideshare";
   const existing = await findWeekCloseRun(opts.orgId, opts.idempotencyKey);
   if (existing) {
     // Allow retry after a prior failure with the same key.
@@ -117,6 +124,7 @@ export async function beginWeekCloseRun(opts: {
     .from("week_close_runs")
     .insert({
       organization_id: opts.orgId,
+      service_line: serviceLine,
       week_key: opts.weekKey,
       idempotency_key: opts.idempotencyKey,
       status: "in_progress",

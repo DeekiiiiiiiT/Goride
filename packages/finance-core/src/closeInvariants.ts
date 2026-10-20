@@ -202,6 +202,10 @@ export type CloseInvariantInput = {
     amountMismatchAmountMajor?: number;
   } | null;
   eps?: number;
+  /**
+   * P4: week-level recon source / step blockers (merged when provided — typically once per week preview).
+   */
+  sourceBlockers?: CloseBlocker[] | null;
 };
 
 function num(v: unknown): number {
@@ -661,6 +665,16 @@ export function checkCloseInvariants(input: CloseInvariantInput): CloseBlocker[]
         expected: round2(d.expected),
         delta: round2(d.delta),
         message: d.message,
+      });
+    }
+  }
+
+  if (input.sourceBlockers?.length) {
+    for (const b of input.sourceBlockers) {
+      out.push({
+        ...b,
+        week: b.week ?? ctx.week,
+        severity: b.severity === 'warn' ? 'warn' : 'block',
       });
     }
   }

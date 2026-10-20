@@ -5,7 +5,12 @@ export type CloseLaneForceOpts = {
   forceEarningsReseal?: boolean;
 };
 
-export type PrepareWeekCloseOpts = CloseLaneForceOpts & {
+export type WeekCloseServiceLineOpts = {
+  /** P4: close lock + recon evidence scoped to a service line (default rideshare). */
+  serviceLine?: "rideshare" | "rush_delivery";
+};
+
+export type PrepareWeekCloseOpts = CloseLaneForceOpts & WeekCloseServiceLineOpts & {
   /**
    * Mass heal / explicit Refresh only: force closed→closed reseal on all three lanes.
    * Never pass this from Close — Sync owns repairs; Close verifies + freezes.
@@ -19,7 +24,7 @@ export type PrepareWeekCloseOpts = CloseLaneForceOpts & {
 };
 
 /** H-1: close can skip prepare when client already synced fresh books. */
-export type CloseWeekOpts = {
+export type CloseWeekOpts = WeekCloseServiceLineOpts & {
   skipPrepare?: boolean;
 };
 

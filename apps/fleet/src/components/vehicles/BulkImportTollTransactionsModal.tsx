@@ -4,10 +4,19 @@ import { Button } from "../ui/button";
 import { Textarea } from "../ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 import { Label } from "../ui/label";
+import { Checkbox } from "../ui/checkbox";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui/table";
 import { Alert, AlertDescription, AlertTitle } from "../ui/alert";
 import { Loader2, AlertCircle, CheckCircle2, ArrowUpRight, ArrowDownLeft, MinusCircle, Sparkles, UploadCloud, Copy } from "lucide-react";
 import { api } from "../../services/api";
+import {
+  commitReconImport,
+  createReconImport,
+  isReconUnavailable,
+  parseReconImport,
+  ReconApiError,
+  type ReconImportPreview,
+} from "../../services/reconApi";
 import { toast } from "sonner";
 import Papa from 'papaparse';
 import { FleetBusyProvider, useFleetBusy } from '../shared/FleetBusyLock';
@@ -127,6 +136,8 @@ interface BulkImportTollTransactionsModalProps {
   tollTagUuid?: string;
   onSuccess: () => void;
   mode?: 'usage' | 'topup' | 'recovery'; // Defaults to 'usage' if not provided
+  /** Recon wizard week — rows outside this Mon week appear as spill in preview. */
+  weekKey?: string;
 }
 
 interface ParsedTransaction {
@@ -154,6 +165,58 @@ interface ParsedTransaction {
   description?: string;
   referenceNumber?: string;
   isDuplicate?: boolean;
+  dupKind?: 'ref' | 'fingerprint';
+  stagedRowId?: string;
+  overrideKeep?: boolean;
+}
+
+async function sha256Hex(text: string): Promise<string> {
+  if (!text) return '';
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+  return Array.from(new Uint8Array(buf))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
+}
+
+function buildNormalizedImportRow(tx: ParsedTransaction, mode: 'usage' | 'topup' | 'recovery') {
+  const wall = wallClockStorageFromDate(tx.date);
+  const finalPaymentMethod = tx.paymentMethod || 'Tag Balance';
+  const finalCategory =
+    tx.category || (tx.type === 'Usage' ? 'Toll Usage' : tx.type === 'Refund' ? 'Toll Refund' : 'Toll Top-up');
+  const plazaName =
+    tx.location && tx.location !== 'Top-up' && tx.location !== 'Unknown' ? tx.location : undefined;
+  const finalDescription =
+    tx.description ||
+    (tx.type === 'Top-up' && (!tx.location || tx.location === 'Unknown')
+      ? 'Balance Top-up'
+      : `${tx.location} ${tx.laneId ? `(${tx.laneId})` : ''}`.trim());
+  return {
+    date: wall.date,
+    time: wall.time,
+    amount: tx.amount,
+    type: tx.type === 'Usage' ? 'Usage' : 'Expense',
+    category: finalCategory,
+    description: finalDescription,
+    vendor: plazaName,
+    vehicleId: tx.vehicleId,
+    vehiclePlate: tx.matchedVehicleName || tx.vehiclePlate || 'Unknown Vehicle',
+    driverId: tx.driverId,
+    driverName: tx.driverName,
+    paymentMethod: finalPaymentMethod,
+    status: tx.status || 'Completed',
+    isReconciled: false,
+    referenceNumber: tx.referenceNumber || undefined,
+    metadata: {
+      tollTagId: tx.tagId,
+      tagNumber: normalizeCsvTagId(tx.tagId || ''),
+      tollPlaza: plazaName,
+      laneId: tx.laneId,
+      imported: true,
+      originalType: tx.type,
+      referenceNumber: tx.referenceNumber,
+      importMode: mode,
+    },
+  };
 }
 
 export function BulkImportTollTransactionsModal(props: BulkImportTollTransactionsModalProps) {
@@ -172,7 +235,8 @@ function BulkImportTollTransactionsModalInner({
   tollTagId,
   tollTagUuid,
   onSuccess,
-  mode = 'usage'
+  mode = 'usage',
+  weekKey: reconWeekKey,
 }: BulkImportTollTransactionsModalProps) {
   const { runExclusive, setMessage } = useFleetBusy();
   const [csvContent, setCsvContent] = useState('');
@@ -189,6 +253,9 @@ function BulkImportTollTransactionsModalInner({
   const [currentBatchName, setCurrentBatchName] = useState<string>('');
   const [detectedFormatLabel, setDetectedFormatLabel] = useState<string>('');
   const [duplicateCount, setDuplicateCount] = useState(0);
+  const [fingerprintDupCount, setFingerprintDupCount] = useState(0);
+  const [stagedImportId, setStagedImportId] = useState<string | null>(null);
+  const [stagedPreview, setStagedPreview] = useState<ReconImportPreview | null>(null);
   const [csvHasPaymentMethod, setCsvHasPaymentMethod] = useState(true);
   const [paymentMethodOverride, setPaymentMethodOverride] = useState<'Tag Balance' | 'Cash'>('Tag Balance');
   
@@ -702,7 +769,97 @@ function BulkImportTollTransactionsModalInner({
         });
   };
 
-  // Duplicate detection against toll_ledger (Phase-6 SSOT) + intra-batch refs
+  const applyStagedPreviewToParsed = (
+    parsed: ParsedTransaction[],
+    preview: ReconImportPreview,
+  ): ParsedTransaction[] => {
+    const byIndex = new Map<number, { kind: 'new' | 'ref' | 'fp'; rowId?: string }>();
+    preview.new.forEach((i) => byIndex.set(i.rowIndex, { kind: 'new', rowId: i.rowId }));
+    preview.duplicate.byRef.forEach((i) => byIndex.set(i.rowIndex, { kind: 'ref', rowId: i.rowId }));
+    preview.duplicate.byFingerprint.forEach((i) =>
+      byIndex.set(i.rowIndex, { kind: 'fp', rowId: i.rowId }),
+    );
+    return parsed.map((tx, idx) => {
+      const hit = byIndex.get(idx);
+      if (!hit || hit.kind === 'new') {
+        return hit?.rowId ? { ...tx, stagedRowId: hit.rowId } : tx;
+      }
+      if (hit.kind === 'ref') {
+        return {
+          ...tx,
+          isValid: false,
+          isDuplicate: true,
+          dupKind: 'ref',
+          stagedRowId: hit.rowId,
+          error: `Duplicate (Txn ID: ${tx.referenceNumber || 'unknown'})`,
+        };
+      }
+      return {
+        ...tx,
+        isValid: !!tx.vehicleId && !isNaN(tx.date.getTime()),
+        isDuplicate: true,
+        dupKind: 'fingerprint',
+        stagedRowId: hit.rowId,
+        overrideKeep: false,
+        error: 'Possible duplicate (fingerprint) — skipped unless you choose Keep both',
+      };
+    });
+  };
+
+  const runServerSideDedupe = async (
+    parsed: ParsedTransaction[],
+    fileName: string,
+    csvText: string,
+  ): Promise<ParsedTransaction[]> => {
+    if (mode === 'recovery') {
+      return checkForDuplicates(parsed);
+    }
+    const sourceId = mode === 'topup' ? 'toll_topup' : 'toll_usage';
+    try {
+      const sha = await sha256Hex(csvText);
+      const { importId } = await createReconImport({
+        sourceId,
+        fileName,
+        sha256: sha || undefined,
+        weekKey: reconWeekKey,
+      });
+      const rows = parsed.map((tx) => buildNormalizedImportRow(tx, mode));
+      const { preview } = await parseReconImport(importId, {
+        mode: mode === 'topup' ? 'topup' : 'usage',
+        weekKey: reconWeekKey,
+        csvText,
+        rows,
+      });
+      setStagedImportId(importId);
+      setStagedPreview(preview);
+      const merged = applyStagedPreviewToParsed(parsed, preview);
+      const refBlocked = preview.duplicate.byRef.length;
+      const fpWarn = preview.duplicate.byFingerprint.length;
+      setDuplicateCount(refBlocked);
+      setFingerprintDupCount(fpWarn);
+      if (refBlocked > 0) {
+        toast.warning(`${refBlocked} duplicate Txn ID(s) will be skipped on commit.`);
+      }
+      if (fpWarn > 0) {
+        toast.message(
+          `${fpWarn} possible duplicate(s) by amount/date/plaza — review or tick Keep both per row.`,
+        );
+      }
+      return merged;
+    } catch (err) {
+      if (
+        isReconUnavailable(err) ||
+        (err instanceof ReconApiError && (err.status === 404 || err.status === 501))
+      ) {
+        setStagedImportId(null);
+        setStagedPreview(null);
+        return checkForDuplicates(parsed);
+      }
+      throw err;
+    }
+  };
+
+  // Legacy duplicate detection (fallback when staged API unavailable)
   const checkForDuplicates = async (parsed: ParsedTransaction[]): Promise<ParsedTransaction[]> => {
     try {
       // Tolls live in toll_ledger — GET /transactions no longer sees them
@@ -812,7 +969,7 @@ function BulkImportTollTransactionsModalInner({
           
           // If we have valid results, use them
           if (localParsed.length > 0 && localParsed.some(t => t.isValid)) {
-              const deduped = await checkForDuplicates(localParsed);
+              const deduped = await runServerSideDedupe(localParsed, file.name, text);
               setParsedTx(deduped);
               setStep('preview');
               toast.success("File parsed successfully");
@@ -888,7 +1045,7 @@ function BulkImportTollTransactionsModalInner({
                const aiHasPaymentMethod = res.data.some((tx: any) => tx.paymentMethod);
                setCsvHasPaymentMethod(aiHasPaymentMethod);
                
-               const deduped = await checkForDuplicates(parsed);
+               const deduped = await runServerSideDedupe(parsed, file.name, text);
                setParsedTx(deduped);
                setStep('preview');
                toast.success("AI Analysis Complete");
@@ -918,7 +1075,7 @@ function BulkImportTollTransactionsModalInner({
         return;
     }
 
-    const deduped = await checkForDuplicates(parsed);
+    const deduped = await runServerSideDedupe(parsed, `Manual Import ${new Date().toLocaleString()}`, csvContent);
     setParsedTx(deduped);
     setStep('preview');
   };
@@ -956,10 +1113,76 @@ function BulkImportTollTransactionsModalInner({
         let successCount = 0;
         let failCount = 0;
         setMessage(`Importing tolls…`);
-        
-        // Track balance changes per vehicle: vehicleId -> change amount
-        const vehicleBalanceChanges: Record<string, number> = {};
 
+        if (stagedImportId && mode !== 'recovery') {
+          try {
+            const overrideFingerprintDupRowIds = parsedTx
+              .filter((t) => t.dupKind === 'fingerprint' && t.overrideKeep && t.stagedRowId)
+              .map((t) => t.stagedRowId as string);
+            const { committed, batchId } = await commitReconImport(stagedImportId, {
+              idempotencyKey: stagedImportId,
+              overrideFingerprintDupRowIds,
+            });
+            setCurrentBatchId(batchId);
+            toast.success(`Import complete. ${committed} toll row(s) committed.`);
+            onSuccess();
+            await new Promise((r) => setTimeout(r, 800));
+            onClose();
+            setStep('input');
+            setCsvContent('');
+            setParsedTx([]);
+            setStagedImportId(null);
+            setStagedPreview(null);
+            setIsSubmitting(false);
+            return true;
+          } catch (stagedErr) {
+            if (
+              !(
+                isReconUnavailable(stagedErr) ||
+                (stagedErr instanceof ReconApiError &&
+                  (stagedErr.status === 404 || stagedErr.status === 501))
+              )
+            ) {
+              throw stagedErr;
+            }
+            console.warn('Staged toll commit unavailable — falling back to row loop', stagedErr);
+          }
+        }
+
+        // P0: persist import_batches so coverage / Delete Center can see toll CSVs (WR-C3 partial).
+        const validRows = parsedTx.filter((t) => t.isValid && t.vehicleId);
+        const dates = validRows
+          .map((t) => String(t.date || '').slice(0, 10))
+          .filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d))
+          .sort();
+        const dataStart = dates[0];
+        const dataEnd = dates[dates.length - 1];
+        const sourceId = mode === 'topup' ? 'toll_topup' : 'toll_usage';
+        try {
+          await api.createBatch({
+            id: currentBatchId,
+            fileName: currentBatchName || 'toll_import.csv',
+            uploadDate: new Date().toISOString(),
+            status: 'processing',
+            recordCount: validRows.length,
+            type: sourceId,
+            sourceId,
+            coverageStart: dataStart,
+            coverageEnd: dataEnd,
+            dataStart,
+            dataEnd,
+            dataPeriodStart: dataStart,
+            dataPeriodEnd: dataEnd,
+            rowsParsed: parsedTx.length,
+          });
+        } catch (batchErr) {
+          console.error('Failed to create toll import batch', batchErr);
+          toast.error('Could not start import batch. Try again.');
+          setIsSubmitting(false);
+          setStep('preview');
+          return false;
+        }
+        
         for (const tx of parsedTx) {
             if (!tx.isValid || !tx.vehicleId) {
                 failCount++;
@@ -1027,13 +1250,6 @@ function BulkImportTollTransactionsModalInner({
                     }
                 });
                 
-                // Aggregate balance change ONLY if paid by Tag Balance
-                // Cash payments do not affect the Vehicle's "Toll Balance" (which represents the Tag account)
-                // In Recovery Mode, we rely on finalPaymentMethod to be accurate (from Universal CSV).
-                if (finalPaymentMethod !== 'Cash') {
-                    vehicleBalanceChanges[tx.vehicleId] = (vehicleBalanceChanges[tx.vehicleId] || 0) + tx.amount;
-                }
-                
                 successCount++;
             } catch (error) {
                 console.error(`Failed to import tx ${tx.date}`, error);
@@ -1043,30 +1259,15 @@ function BulkImportTollTransactionsModalInner({
             setImportStats(prev => ({ ...prev, success: successCount, failed: failCount }));
         }
 
-        // 3. Update balances for all affected vehicles
-        const vehiclesToUpdate = Object.keys(vehicleBalanceChanges);
-        if (vehiclesToUpdate.length > 0) {
-            for (const vId of vehiclesToUpdate) {
-                try {
-                    const vehicle = vehicles.find((v: any) => v.id === vId);
-                    if (vehicle) {
-                        const change = vehicleBalanceChanges[vId];
-                        if (change !== 0) {
-                            const newBalance = (vehicle.tollBalance || 0) + change;
-                            await api.saveVehicle({
-                                ...vehicle,
-                                tollBalance: newBalance
-                            });
-                        }
-                    }
-                } catch (err) {
-                    console.error(`Failed to update balance for vehicle ${vId}`, err);
-                    // Don't fail the whole import for this
-                }
-            }
+        // 3. Finish — mark batch completed/error for coverage (P0).
+        try {
+          await api.patchImportBatch(currentBatchId, {
+            status: successCount === 0 && failCount > 0 ? 'error' : 'completed',
+          });
+        } catch (e) {
+          console.warn('Toll import batch status update failed', e);
         }
 
-        // 4. Finish
         if (successCount === 0 && failCount > 0) {
             toast.error(`Import failed. ${failCount} transactions failed.`);
             setIsSubmitting(false); // Let user try again or fix
@@ -1092,6 +1293,9 @@ function BulkImportTollTransactionsModalInner({
             setCsvHasPaymentMethod(true);
             setPaymentMethodOverride('Tag Balance');
             setDuplicateCount(0);
+            setFingerprintDupCount(0);
+            setStagedImportId(null);
+            setStagedPreview(null);
         }
 
     } catch (e) {
@@ -1211,7 +1415,25 @@ function BulkImportTollTransactionsModalInner({
                          <div className="flex items-center gap-2 px-3 py-1.5 bg-amber-50 border border-amber-200 rounded-md">
                              <Copy className="h-3.5 w-3.5 text-amber-600 shrink-0" />
                              <span className="text-xs text-amber-800">
-                                 <strong>{duplicateCount}</strong> duplicate{duplicateCount > 1 ? 's' : ''} detected and blocked. These transactions already exist in the system (matched by Transaction ID or date+amount+vehicle).
+                                 <strong>{duplicateCount}</strong> duplicate Txn ID{duplicateCount > 1 ? 's' : ''} will be skipped on commit.
+                             </span>
+                         </div>
+                     )}
+                     {fingerprintDupCount > 0 && (
+                         <div className="flex items-center gap-2 px-3 py-1.5 bg-yellow-50 border border-yellow-200 rounded-md">
+                             <Copy className="h-3.5 w-3.5 text-yellow-700 shrink-0" />
+                             <span className="text-xs text-yellow-900">
+                                 <strong>{fingerprintDupCount}</strong> possible duplicate{fingerprintDupCount > 1 ? 's' : ''} (same day/amount/plaza). Use <strong>Keep both</strong> on a row to import anyway.
+                             </span>
+                         </div>
+                     )}
+                     {(stagedPreview?.spill?.length ?? 0) > 0 && (
+                         <div className="flex items-center gap-2 px-3 py-1.5 bg-violet-50 border border-violet-200 rounded-md">
+                             <AlertCircle className="h-3.5 w-3.5 text-violet-700 shrink-0" />
+                             <span className="text-xs text-violet-900">
+                                 <strong>{stagedPreview!.spill.length}</strong> row
+                                 {stagedPreview!.spill.length > 1 ? 's fall' : ' falls'} in neighbouring week
+                                 {reconWeekKey ? ` (outside ${reconWeekKey})` : ''}. They won&apos;t commit to this week.
                              </span>
                          </div>
                      )}
@@ -1273,11 +1495,18 @@ function BulkImportTollTransactionsModalInner({
                                     {mode === 'topup' && <TableHead className="text-right whitespace-nowrap">Net Paid</TableHead>}
                                     <TableHead className="text-right whitespace-nowrap">Amount</TableHead>
                                     <TableHead className="whitespace-nowrap text-center">Valid</TableHead>
+                                    {stagedImportId && (
+                                      <TableHead className="whitespace-nowrap text-center">Keep both</TableHead>
+                                    )}
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
                                 {parsedTx.map((tx, i) => (
-                                    <TableRow key={i} className={`[&>td]:py-1 [&>td]:px-2 ${tx.isDuplicate ? 'bg-amber-50/60' : !tx.isValid ? 'bg-red-50/50' : ''}`}>
+                                    <TableRow key={i} className={`[&>td]:py-1 [&>td]:px-2 ${
+                                      tx.dupKind === 'fingerprint' ? 'bg-yellow-50/70'
+                                      : tx.isDuplicate ? 'bg-amber-50/60'
+                                      : !tx.isValid ? 'bg-red-50/50' : ''
+                                    }`}>
                                         <TableCell className="whitespace-nowrap text-slate-700">
                                             {tx.isValid ? tx.date.toLocaleString() : <span className="text-red-500">{tx.rawDate || '\u2014'}</span>}
                                         </TableCell>
@@ -1330,11 +1559,15 @@ function BulkImportTollTransactionsModalInner({
                                             {tx.isValid ? `$${tx.amount.toFixed(2)}` : '\u2014'}
                                         </TableCell>
                                         <TableCell className="text-center">
-                                            {tx.isValid ? (
+                                            {tx.isValid && !tx.isDuplicate ? (
                                                 <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 mx-auto" />
+                                            ) : tx.dupKind === 'fingerprint' ? (
+                                                <span className="text-yellow-800 text-[10px] font-medium leading-tight block max-w-[100px] mx-auto" title={tx.error}>
+                                                    Warn
+                                                </span>
                                             ) : tx.isDuplicate ? (
                                                 <span className="text-amber-600 text-[10px] font-medium leading-tight block max-w-[100px] mx-auto flex items-center gap-0.5 justify-center" title={tx.error}>
-                                                    <Copy className="h-3 w-3 shrink-0" /> Duplicate
+                                                    <Copy className="h-3 w-3 shrink-0" /> Skip
                                                 </span>
                                             ) : (
                                                 <span className="text-red-500 text-[10px] font-medium leading-tight block max-w-[80px] mx-auto" title={tx.error}>
@@ -1342,6 +1575,29 @@ function BulkImportTollTransactionsModalInner({
                                                 </span>
                                             )}
                                         </TableCell>
+                                        {stagedImportId && (
+                                          <TableCell className="text-center">
+                                            {tx.dupKind === 'fingerprint' ? (
+                                              <label className="inline-flex items-center gap-1 text-[10px] text-slate-600 cursor-pointer">
+                                                <Checkbox
+                                                  checked={!!tx.overrideKeep}
+                                                  onCheckedChange={(checked) => {
+                                                    setParsedTx((prev) =>
+                                                      prev.map((row, idx) =>
+                                                        idx === i
+                                                          ? { ...row, overrideKeep: checked === true }
+                                                          : row,
+                                                      ),
+                                                    );
+                                                  }}
+                                                />
+                                                Keep both
+                                              </label>
+                                            ) : (
+                                              <span className="text-slate-300">—</span>
+                                            )}
+                                          </TableCell>
+                                        )}
                                     </TableRow>
                                 ))}
                             </TableBody>

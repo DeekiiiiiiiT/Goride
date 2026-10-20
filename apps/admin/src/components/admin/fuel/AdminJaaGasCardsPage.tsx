@@ -3,7 +3,8 @@
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
-import { CreditCard, Upload, Building2, AlertCircle, Loader2, CheckCircle2, Trash2, Link2 } from 'lucide-react';
+import { CreditCard, Upload, Building2, AlertCircle, Loader2, CheckCircle2, Trash2, Link2, Clock } from 'lucide-react';
+import { ReconExternalQueuePanel } from './ReconExternalQueuePanel';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -43,7 +44,7 @@ import {
   isJaaStatementLedgerRow,
 } from '../../../../../../packages/roam-shared/src/fuel/jaaFuelStatementMatcher';
 
-type TabId = 'programs' | 'cards' | 'import' | 'matched' | 'unmatched';
+type TabId = 'programs' | 'cards' | 'import' | 'matched' | 'unmatched' | 'waiting-roam';
 
 type OrgOption = { id: string; name: string };
 
@@ -687,6 +688,7 @@ export function AdminJaaGasCardsPage() {
       icon: <CheckCircle2 className="h-4 w-4" />,
     },
     { id: 'unmatched', label: `Unmatched (${unmatched.length})`, icon: <AlertCircle className="h-4 w-4" /> },
+    { id: 'waiting-roam', label: 'Waiting on Roam', icon: <Clock className="h-4 w-4" /> },
   ];
 
   if (loading && !programs.length) {
@@ -719,6 +721,8 @@ export function AdminJaaGasCardsPage() {
           </button>
         ))}
       </div>
+
+      {tab === 'waiting-roam' && <ReconExternalQueuePanel />}
 
       {tab === 'programs' && (
         <div className="grid gap-6 lg:grid-cols-2">
