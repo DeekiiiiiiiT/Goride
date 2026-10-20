@@ -1,7 +1,11 @@
 import React, { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Loader2, AlertCircle } from 'lucide-react';
-import { isCashSourceAckValid, type CloseBlocker } from '@roam/finance-core';
+import {
+  isCashSourceAckValid,
+  TRIPS_EARNINGS_BLOCKER_CODES,
+  type CloseBlocker,
+} from '@roam/finance-core';
 import type { ReconRunPayload } from '../../../services/reconApi';
 import {
   weekCloseApi,
@@ -21,14 +25,7 @@ import {
 } from '../../ui/dialog';
 import { Textarea } from '../../ui/textarea';
 
-const TRIPS_EARNINGS_CODES = new Set([
-  'CASH_SOURCE_MISMATCH',
-  'EARNINGS_STATEMENT_MISSING',
-  'EARNINGS_STATEMENT_UNVERIFIED',
-  'EARNINGS_ENGINE_DRIFT',
-  'EARNINGS_GROSS_IDENTITY',
-  'CASH_COLLECTED_MISMATCH',
-]);
+const TRIPS_EARNINGS_CODES = new Set<string>(TRIPS_EARNINGS_BLOCKER_CODES);
 
 const MONEY = (n: number | null | undefined) => {
   if (n == null || !Number.isFinite(n)) return '—';

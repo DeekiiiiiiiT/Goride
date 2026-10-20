@@ -227,7 +227,13 @@ async function rebuildExpensesForFuelWeek(weekStart: string, driverIds: Iterable
   }
 }
 
-function periodIdFor(orgId: string, weekStart: string): string {
+function periodIdFor(
+  orgId: string,
+  weekStart: string,
+  serviceLine: string = "rideshare",
+): string {
+  // R3-11: Delivery periods get a distinct id; rideshare keeps legacy org:week shape.
+  if (serviceLine === "rush_delivery") return `${orgId}:${weekStart}:rush_delivery`;
   return `${orgId}:${weekStart}`;
 }
 

@@ -262,6 +262,14 @@ export {
   computeSourceStatusFromCoverage,
   sourcesForLine,
 } from './reconSources.ts';
+export {
+  coverageInputHash,
+  isReconHumanSourceStatus,
+  RECON_HUMAN_SOURCE_STATUSES,
+  TRIPS_EARNINGS_BLOCKER_CODES,
+  countTripsEarningsBlockers,
+} from './coverageInputHash.ts';
+export type { CoverageVolume } from './coverageInputHash.ts';
 export type {
   SourceKind,
   CoverageMode,

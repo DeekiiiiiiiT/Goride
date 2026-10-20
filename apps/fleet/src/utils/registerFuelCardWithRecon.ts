@@ -56,7 +56,8 @@ export async function registerFuelCardWithRecon(opts: {
   try {
     await registerReconImport(importId, body);
   } catch (e) {
+    // R3-10: only swallow when recon wizard API is not deployed; otherwise surface.
     if (isReconUnavailable(e) || (e instanceof ReconApiError && e.status === 404)) return;
-    console.warn('[Fuel import] recon register failed', e);
+    throw e instanceof Error ? e : new Error(String(e));
   }
 }

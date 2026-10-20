@@ -18,6 +18,7 @@ import {
   type ReconWeekSummary,
 } from '../../services/reconApi';
 import { useBusinessConfig } from '../auth/BusinessConfigContext';
+import { useFeatureFlags } from '../auth/FeatureFlagContext';
 import { ReconWeekLanding } from './recon/ReconWeekLanding';
 import { ReconRunPage } from './recon/ReconRunPage';
 import { ReconDeliveryReadinessCard } from './recon/ReconDeliveryReadinessCard';
@@ -98,7 +99,14 @@ export function WeekReconciliationPage({
   const { canView, permissions } = usePermissions();
   const wizardEnabled = useReconWizardEnabled();
   const { serviceLines } = useBusinessConfig();
-  const hasRushDeliveryLine = serviceLines.includes('rush_delivery');
+  const { serviceLines: flagServiceLines, isModuleEnabled } = useFeatureFlags();
+  // Org already has rush_delivery in DB; also accept modules/flags so a stale
+  // session cache of rideshare-only does not hide the Delivery tab.
+  const hasRushDeliveryLine =
+    serviceLines.includes('rush_delivery') ||
+    flagServiceLines.includes('rush_delivery') ||
+    isModuleEnabled('rush_couriers') ||
+    isModuleEnabled('rush_deliveries');
   const canFuel = canView('fuel-reconciliation');
   const canTolls = canView('toll-tags');
   const canReconDesk =
@@ -197,8 +205,10 @@ export function WeekReconciliationPage({
     );
   }
 
-  const showWizardShell = wizardEnabled && !classicMode && !reconUnavailable;
-  const inRun = showWizardShell && !!runWeek;
+  // R3 UX: never hide Rideshare|Delivery because /recon/weeks failed — that dumped
+  // orgs with rush_delivery into classic Fuel/Tolls with no line toggle (silent bug).
+  const showWizardShell = wizardEnabled && !classicMode;
+  const inRun = showWizardShell && !!runWeek && !reconUnavailable;
   const deliveryGated =
     inRun &&
     runLine === 'rush_delivery' &&
@@ -249,7 +259,8 @@ export function WeekReconciliationPage({
           </Button>
         </div>
       ) : wizardEnabled && classicMode ? (
-        <div className="flex justify-end">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          {lineSegment}
           <Button type="button" variant="ghost" size="sm" onClick={() => setClassicMode(false)}>
             Back to week list
           </Button>
@@ -295,7 +306,31 @@ export function WeekReconciliationPage({
         />
       ) : null}
 
-      {showWizardShell && !inRun ? (
+      {showWizardShell && !inRun && reconUnavailable ? (
+        <div className="rounded-xl border border-amber-200 bg-amber-50/80 px-4 py-3 text-sm text-amber-950">
+          <p className="font-medium">Week list could not load</p>
+          <p className="mt-1 text-amber-900/80">
+            The guided Rideshare / Delivery desk is still here — retry, or open classic fuel/tolls
+            below if you only need those lanes.
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Button
+              type="button"
+              size="sm"
+              onClick={() => {
+                void reconQuery.refetch();
+              }}
+            >
+              Retry week list
+            </Button>
+            <Button type="button" size="sm" variant="outline" onClick={() => setClassicMode(true)}>
+              Open classic fuel/tolls
+            </Button>
+          </div>
+        </div>
+      ) : null}
+
+      {showWizardShell && !inRun && !reconUnavailable ? (
         <ReconWeekLanding
           weeks={reconWeeks}
           loading={reconQuery.isLoading}
@@ -304,7 +339,7 @@ export function WeekReconciliationPage({
         />
       ) : null}
 
-      {(!wizardEnabled || classicMode || reconUnavailable) && (
+      {(!wizardEnabled || classicMode) && (
         <Tabs
           value={hubTab}
           onValueChange={(v) => setHubTab(v as WeekReconciliationHubTab)}

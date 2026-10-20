@@ -53,8 +53,16 @@ export function getTollPeriodWriteGuardMode(): TollPeriodWriteGuardMode {
   return "enforce";
 }
 
-export function tollPeriodIdFor(organizationId: string, weekKey: string): string {
-  return `${organizationId}:${weekKey}`;
+export function tollPeriodIdFor(
+  organizationId: string,
+  weekKey: string,
+  serviceLine: string = "rideshare",
+): string {
+  // R3-11: period id is per service line.
+  const line = serviceLine === "rush_delivery" ? "rush_delivery" : "rideshare";
+  return line === "rideshare"
+    ? `${organizationId}:${weekKey}`
+    : `${organizationId}:${weekKey}:${line}`;
 }
 
 export type TollPeriodSealedProbe = {
@@ -177,11 +185,15 @@ export async function upsertTollPeriodRow(
   organizationId: string,
   weekKey: string,
   patch: Record<string, unknown>,
-  opts?: { expectedVersion?: number | null },
+  opts?: { expectedVersion?: number | null; serviceLine?: string | null },
 ): Promise<Record<string, unknown>> {
   const sb = getServiceClient();
   const wk = String(weekKey).slice(0, 10);
-  const id = tollPeriodIdFor(organizationId, wk);
+  const serviceLine =
+    opts?.serviceLine === "rush_delivery" || patch.service_line === "rush_delivery"
+      ? "rush_delivery"
+      : "rideshare";
+  const id = tollPeriodIdFor(organizationId, wk, serviceLine);
   const now = new Date().toISOString();
 
   const { data: existing } = await sb
@@ -189,6 +201,7 @@ export async function upsertTollPeriodRow(
     .select("version")
     .eq("organization_id", organizationId)
     .eq("week_key", wk)
+    .eq("service_line", serviceLine)
     .maybeSingle();
 
   const currentVersion = Number((existing as any)?.version) || 1;
@@ -206,11 +219,12 @@ export async function upsertTollPeriodRow(
     week_key: wk,
     updated_at: now,
     ...patch,
+    service_line: serviceLine,
     version: nextVersion,
   };
   const { data, error } = await sb
     .from("toll_reconciliation_period")
-    .upsert(row, { onConflict: "organization_id,week_key" })
+    .upsert(row, { onConflict: "organization_id,week_key,service_line" })
     .select("*")
     .single();
   if (error) throw new Error(error.message);

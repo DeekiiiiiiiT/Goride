@@ -41,6 +41,11 @@ import {
   computeTagAccountRollForward,
   tagLedgerAmountToRollForwardParts,
 } from "../../../packages/finance-core/src/tagAccountRollForward.ts";
+import {
+  coverageInputHash,
+  countTripsEarningsBlockers,
+  isReconHumanSourceStatus,
+} from "../../../packages/finance-core/src/coverageInputHash.ts";
 
 const BASE = "/make-server-37f42386/recon";
 const WEEK_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -101,12 +106,96 @@ function parseLine(raw: string): ReconLine | null {
   return null;
 }
 
-function coverageInputHash(coverage: Record<string, string>): string {
-  const keys = Object.keys(coverage).sort();
-  return keys.map((k) => `${k}:${coverage[k] ?? ""}`).join("|");
-}
-
 const ATTRIBUTION_ROW_CAP = 200;
+
+/** R3-06: live volume that feeds coverageInputHash (late rows on Covered days). */
+async function sourceVolumeMetrics(
+  orgId: string,
+  sourceId: ReconSourceId,
+  weekKey: string,
+): Promise<{ rowCount: number; amountMinor: number }> {
+  const sb = getServiceClient();
+  const end = periodEndForAnchor(weekKey);
+
+  if (sourceId === "toll_usage" || sourceId === "toll_topup" || sourceId === "cash_tolls") {
+    const typeFilter = sourceId === "toll_topup"
+      ? ["top_up", "topup", "Top-up"]
+      : sourceId === "cash_tolls"
+      ? null
+      : ["usage", "Usage", "toll_usage"];
+    let q = sb
+      .from("fleet_toll_ledger")
+      .select("id, amount, payment_method, type")
+      .eq("organization_id", orgId)
+      .gte("date", weekKey)
+      .lte("date", end)
+      .limit(100000);
+    if (typeFilter) q = q.in("type", typeFilter);
+    const { data } = await q;
+    const rows = data ?? [];
+    let amountMinor = 0;
+    let rowCount = 0;
+    for (const r of rows) {
+      const pm = String((r as { payment_method?: string }).payment_method || "").toLowerCase();
+      if (sourceId === "cash_tolls" && !(pm.includes("cash"))) continue;
+      if (sourceId !== "cash_tolls" && pm.includes("cash")) continue;
+      rowCount += 1;
+      amountMinor += Math.round(Math.abs(Number((r as { amount?: number }).amount) || 0) * 100);
+    }
+    return { rowCount, amountMinor };
+  }
+
+  if (
+    sourceId === "uber_bundle" ||
+    sourceId === "indrive_trips" ||
+    sourceId === "fuel_card_roam" ||
+    sourceId === "fuel_card_self"
+  ) {
+    const { data } = await sb
+      .from("fleet_import_batches")
+      .select("record_count, rows_committed, coverage_start, coverage_end")
+      .eq("organization_id", orgId)
+      .eq("source_id", sourceId)
+      .in("status", ["completed", "committed"])
+      .lte("coverage_start", end)
+      .gte("coverage_end", weekKey)
+      .limit(50);
+    let rowCount = 0;
+    for (const b of data ?? []) {
+      rowCount += Number(
+        (b as { rows_committed?: number }).rows_committed ??
+          (b as { record_count?: number }).record_count ??
+          0,
+      ) || 0;
+    }
+    return { rowCount, amountMinor: 0 };
+  }
+
+  if (sourceId === "roam_trips" || sourceId === "rush_deliveries") {
+    let q = sb
+      .from("fleet_trips")
+      .select("id", { count: "exact", head: true })
+      .eq("organization_id", orgId)
+      .gte("date", weekKey)
+      .lte("date", end);
+    if (sourceId === "roam_trips") q = q.ilike("platform", "%roam%");
+    if (sourceId === "rush_deliveries") q = q.eq("service_line", "rush_delivery");
+    const { count } = await q;
+    return { rowCount: count ?? 0, amountMinor: 0 };
+  }
+
+  if (sourceId === "cash_fuel" || sourceId === "fuel_card_roam" || sourceId === "fuel_card_self") {
+    const { count } = await sb
+      .from("fleet_fuel_entries")
+      .select("id", { count: "exact", head: true })
+      .eq("organization_id", orgId)
+      .gte("date", weekKey)
+      .lte("date", end);
+    return { rowCount: count ?? 0, amountMinor: 0 };
+  }
+
+  return { rowCount: 0, amountMinor: 0 };
+}
 
 async function loadUnattributedForWeek(
   orgId: string,
@@ -301,7 +390,8 @@ async function materializeRunSources(
         requirement === "required" &&
         Object.values(coverage).every((v) => v === "missing"),
     });
-    const inputHash = coverageInputHash(coverage);
+    const volume = await sourceVolumeMetrics(orgId, def.id, weekKey);
+    const inputHash = coverageInputHash(coverage, volume);
     out.push({
       id: def.id,
       label: def.label,
@@ -319,6 +409,8 @@ async function materializeRunSources(
         status,
         coverage,
         input_hash: inputHash,
+        row_count: volume.rowCount,
+        amount_minor: volume.amountMinor,
       },
       { onConflict: "run_id,source_id" },
     );
@@ -404,11 +496,13 @@ function sourcesStepCounts(
   return { actionable, informational: 0 };
 }
 
-/** Live lane actionable counts for run_steps + complete gates (R2-11). */
+/** Live lane actionable counts for run_steps + complete gates (R2-11 / R3-04/08/11). */
 async function computeLiveStepCounts(
   orgId: string,
   weekKey: string,
+  line: ReconLine,
   sources: Array<{ requirement: SourceRequirement; status: SourceAggregateStatus }>,
+  runId?: string,
 ): Promise<Partial<Record<RunStepId, { actionable: number; informational: number }>>> {
   const sb = getServiceClient();
   const attribution = await loadUnattributedForWeek(orgId, weekKey);
@@ -419,8 +513,22 @@ async function computeLiveStepCounts(
     .select("state, blockers")
     .eq("organization_id", orgId)
     .eq("week_key", weekKey)
+    .eq("service_line", line)
     .maybeSingle();
-  if (!tollPeriod) {
+  // R3-04: also treat closed toll week_statement as complete (historical path).
+  const { data: tollStmt } = await sb
+    .from("week_statements")
+    .select("id")
+    .eq("organization_id", orgId)
+    .eq("week_key", weekKey)
+    .eq("kind", "toll")
+    .eq("status", "closed")
+    .limit(1)
+    .maybeSingle();
+  const tollDoneViaStatement = Boolean(tollStmt);
+  if (tollDoneViaStatement) {
+    tollActionable = 0;
+  } else if (!tollPeriod) {
     tollActionable = 1;
   } else {
     const state = String((tollPeriod as { state?: string }).state || "");
@@ -436,6 +544,7 @@ async function computeLiveStepCounts(
     .select("status, counts")
     .eq("org_id", orgId)
     .eq("week_start", weekKey)
+    .eq("service_line", line)
     .maybeSingle();
   if (!fuelPeriod) {
     fuelActionable = 1;
@@ -453,12 +562,41 @@ async function computeLiveStepCounts(
     }
   }
 
+  // R3-08: Trips & Tag from close-preview blockers / roll-forward variance.
+  let tripsActionable = 0;
+  try {
+    const { previewWeekClose } = await import("./week_close.ts");
+    const preview = await previewWeekClose(orgId, weekKey, { serviceLine: line });
+    const all = [...(preview.blockers ?? []), ...(preview.weekBlockers ?? [])];
+    tripsActionable = countTripsEarningsBlockers(all);
+  } catch (e) {
+    console.warn("[recon] trips_earnings actionable probe failed", e);
+  }
+
+  let tagActionable = 0;
+  try {
+    const { openingMinor } = await loadPriorTagClosingMinor(orgId, weekKey);
+    const { topUpsMinor, tagUsageMinor } = await sumTagLedgerWeekMinor(orgId, weekKey);
+    const statementClosingMinor = runId
+      ? await loadStoredStatementClosingMinor(runId)
+      : null;
+    const roll = computeTagAccountRollForward({
+      openingMinor,
+      topUpsMinor,
+      tagUsageMinor,
+      statementClosingMinor,
+    });
+    if (roll.varianceMinor != null && !roll.ties) tagActionable = 1;
+  } catch (e) {
+    console.warn("[recon] tag_account actionable probe failed", e);
+  }
+
   return {
     sources: sourcesStepCounts(sources),
     attribution: { actionable: attribution.rowCount, informational: 0 },
-    trips_earnings: { actionable: 0, informational: 0 },
+    trips_earnings: { actionable: tripsActionable, informational: 0 },
     tolls: { actionable: tollActionable, informational: 0 },
-    tag_account: { actionable: 0, informational: 0 },
+    tag_account: { actionable: tagActionable, informational: 0 },
     fuel: { actionable: fuelActionable, informational: 0 },
     settlement_preview: { actionable: 0, informational: 0 },
     close: { actionable: 0, informational: 0 },
@@ -498,7 +636,7 @@ async function buildRunPayload(
   const profile = await loadOrgReconProfile(orgId);
   const run = await ensureWeekRun(orgId, line, weekKey, openedBy);
   const sources = await materializeRunSources(orgId, line, weekKey, run.id, profile);
-  const liveCounts = await computeLiveStepCounts(orgId, weekKey, sources);
+  const liveCounts = await computeLiveStepCounts(orgId, weekKey, line, sources, run.id);
   await persistLiveStepCounts(run.id, liveCounts);
   const stepRows = await loadRunSteps(run.id);
 
@@ -1023,7 +1161,8 @@ export function registerReconRoutes(app: Hono) {
           coverage = { ...coverage, [day]: "zero_attested" };
         }
         const status = computeSourceStatusFromCoverage(coverage, requirement);
-        const inputHash = coverageInputHash(coverage);
+        const volume = await sourceVolumeMetrics(orgId, sourceId, weekKey);
+        const inputHash = coverageInputHash(coverage, volume);
 
         await recon.from("run_sources").upsert({
           run_id: run.id,
@@ -1032,6 +1171,8 @@ export function registerReconRoutes(app: Hono) {
           status,
           coverage,
           input_hash: inputHash,
+          row_count: volume.rowCount,
+          amount_minor: volume.amountMinor,
           attested_by: actor,
           attested_at: new Date().toISOString(),
           attest_reason: reason,
@@ -1050,7 +1191,8 @@ export function registerReconRoutes(app: Hono) {
   app.post(
     `${BASE}/runs/:line/:weekKey/sources/:sourceId/waive`,
     requireAuth({ strict: true }),
-    requirePermission("recon.prepare"),
+    // R3-09: waive is approver-only (Rev 1) — preparer must not skip what they sign off.
+    requirePermission("recon.approve"),
     async (c: Context) => {
       try {
         const orgId = getOrgId(c);
@@ -1084,6 +1226,7 @@ export function registerReconRoutes(app: Hono) {
         if (!def) return c.json({ error: "INVALID_SOURCE", message: "Unknown source" }, 400);
         const requirement = def.requiredWhen(profile, weekKey);
         const coverage = await fetchCoverageMap(orgId, line, sourceId, weekKey);
+        const volume = await sourceVolumeMetrics(orgId, sourceId, weekKey);
 
         await reconDb().from("run_sources").upsert({
           run_id: run.id,
@@ -1091,7 +1234,9 @@ export function registerReconRoutes(app: Hono) {
           requirement,
           status: "waived",
           coverage,
-          input_hash: coverageInputHash(coverage),
+          input_hash: coverageInputHash(coverage, volume),
+          row_count: volume.rowCount,
+          amount_minor: volume.amountMinor,
           attested_by: actor,
           attested_at: new Date().toISOString(),
           attest_reason: reason,
@@ -1296,7 +1441,7 @@ export function registerReconRoutes(app: Hono) {
 
         const profile = await loadOrgReconProfile(orgId);
         const sources = await materializeRunSources(orgId, line, weekKey, run.id, profile);
-        const liveCounts = await computeLiveStepCounts(orgId, weekKey, sources);
+        const liveCounts = await computeLiveStepCounts(orgId, weekKey, line, sources, run.id);
         await persistLiveStepCounts(run.id, liveCounts);
 
         const sourceSnaps: ReconSourceSnapshot[] = sources.map((s) => ({
@@ -1455,13 +1600,16 @@ export function registerReconRoutes(app: Hono) {
             ? "waiting_external"
             : status;
 
+          const volume = await sourceVolumeMetrics(orgId, sourceId, weekKey);
           await recon.from("run_sources").upsert({
             run_id: run.id,
             source_id: sourceId,
             requirement,
             status: effectiveStatus,
             coverage,
-            input_hash: coverageInputHash(coverage),
+            input_hash: coverageInputHash(coverage, volume),
+            row_count: volume.rowCount,
+            amount_minor: volume.amountMinor,
           }, { onConflict: "run_id,source_id" });
         }
 

@@ -344,7 +344,8 @@ export function useTollReconciliation(
       };
 
       // R2-16: Week Recon embed scopes tolls to the run's service line (same lens as fuel).
-      const matchesLine = <T extends Record<string, unknown>>(rows: T[]): T[] => {
+      // R3-13: FinancialTransaction is an interface (no index signature) — use object.
+      const matchesLine = <T extends object>(rows: T[]): T[] => {
         if (!serviceLine) return rows;
         return rows.filter((r) =>
           fuelEntryMatchesLineFilter(

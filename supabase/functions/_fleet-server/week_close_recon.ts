@@ -20,6 +20,10 @@ import {
   type StepCounts,
 } from "../../../packages/finance-core/src/evaluateRun.ts";
 import { periodEndForAnchor } from "../../../packages/finance-core/src/periodKey.ts";
+import {
+  coverageInputHash,
+  isReconHumanSourceStatus,
+} from "../../../packages/finance-core/src/coverageInputHash.ts";
 
 export type WeekCloseServiceLine = "rideshare" | "rush_delivery";
 
@@ -108,12 +112,6 @@ async function loadOrgReconProfile(orgId: string): Promise<OrgReconProfile> {
     hasSelfServeJaa: false,
     rushDeliveryEnabled,
   };
-}
-
-/** Keep in sync with recon_routes.ts coverageInputHash — close stale detection. */
-function coverageInputHash(coverage: Record<string, string>): string {
-  const keys = Object.keys(coverage).sort();
-  return keys.map((k) => `${k}:${coverage[k] ?? ""}`).join("|");
 }
 
 async function fetchCoverageMap(
@@ -255,15 +253,23 @@ export async function loadWeekCloseReconContext(
     const persisted = runSourcesById.get(def.id);
     const coverage = await fetchCoverageMap(orgId, serviceLine, def.id, week);
     coverageBySource.set(def.id, coverage);
-    const status = persisted?.status
-      ? (persisted.status as ReconSourceSnapshot["status"])
-      : computeSourceStatusFromCoverage(coverage, requirement, {
-        waitingExternal: def.id === "fuel_card_roam" &&
-          requirement === "required" &&
-          Object.values(coverage).every((v) => v === "missing"),
-      });
+    // R3-05: live coverage status; keep only human decisions (waived / attested_none).
+    const liveStatus = computeSourceStatusFromCoverage(coverage, requirement, {
+      waitingExternal: def.id === "fuel_card_roam" &&
+        requirement === "required" &&
+        Object.values(coverage).every((v) => v === "missing"),
+    });
+    const persistedStatus = persisted?.status as ReconSourceSnapshot["status"] | undefined;
+    const status = isReconHumanSourceStatus(persistedStatus)
+      ? (persistedStatus as ReconSourceSnapshot["status"])
+      : liveStatus;
 
-    sourceSnaps.push({ id: def.id, status, inputHash: coverageInputHash(coverage) });
+    // R3-06: prefer persisted volume columns when present (same hash as wizard).
+    const volume = {
+      rowCount: (persisted as { row_count?: number } | undefined)?.row_count ?? null,
+      amountMinor: (persisted as { amount_minor?: number } | undefined)?.amount_minor ?? null,
+    };
+    sourceSnaps.push({ id: def.id, status, inputHash: coverageInputHash(coverage, volume) });
     evidenceSources.push({
       id: def.id,
       label: def.label,

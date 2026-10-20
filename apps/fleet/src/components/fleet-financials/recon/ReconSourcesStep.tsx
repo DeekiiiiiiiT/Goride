@@ -87,22 +87,34 @@ export function ReconSourceCard({
   weekKey,
   onUpload,
   onAttestNone,
+  onWaive,
   onRemindRoam,
   remindBusy,
   canUploadExternalSources = false,
+  canWaive = false,
 }: {
   source: ReconRunSource;
   weekKey: string;
   onUpload?: (sourceId: string) => void;
   onAttestNone?: (sourceId: string) => void;
+  onWaive?: (sourceId: string) => void;
   onRemindRoam?: (sourceId: string) => void;
   remindBusy?: boolean;
   canUploadExternalSources?: boolean;
+  /** R3-09: waive is approver-only. */
+  canWaive?: boolean;
 }) {
   const needsAction = BLOCKING.has(source.status) || isRoamFuelWaiting(source);
   const roamWait = isRoamFuelWaiting(source);
   const roamCopy = roamWait ? roamFuelExternalCopy(weekKey) : null;
   const showUpload = needsAction && onUpload && canShowUpload(source, canUploadExternalSources);
+  const showWaive =
+    canWaive &&
+    needsAction &&
+    onWaive &&
+    source.requirement === 'required' &&
+    !roamWait &&
+    BLOCKING.has(source.status);
   const uploadLabel =
     source.id === 'uber_bundle' || source.id === 'indrive_trips' ? 'Upload' : 'Upload statement';
 
@@ -158,6 +170,11 @@ export function ReconSourceCard({
               No activity this week
             </Button>
           ) : null}
+          {showWaive ? (
+            <Button type="button" size="sm" variant="outline" onClick={() => onWaive!(source.id)}>
+              Waive (approver)
+            </Button>
+          ) : null}
         </div>
       ) : null}
     </article>
@@ -173,6 +190,7 @@ export function ReconSourcesStep({
 }) {
   const { can } = usePermissions();
   const canUploadExternalSources = can('recon.external_sources');
+  const canWaive = can('recon.approve');
   const weekKey = run.run.weekKey;
   const [tollModalOpen, setTollModalOpen] = useState(false);
   const [tollMode, setTollMode] = useState<'usage' | 'topup'>('usage');
@@ -183,6 +201,9 @@ export function ReconSourcesStep({
   const [attestSourceId, setAttestSourceId] = useState<string | null>(null);
   const [attestReason, setAttestReason] = useState('');
   const [attestBusy, setAttestBusy] = useState(false);
+  const [waiveSourceId, setWaiveSourceId] = useState<string | null>(null);
+  const [waiveReason, setWaiveReason] = useState('');
+  const [waiveBusy, setWaiveBusy] = useState(false);
   const [remindSourceId, setRemindSourceId] = useState<string | null>(null);
 
   const applicable = run.sources.filter((s) => s.requirement !== 'not_applicable');
@@ -243,6 +264,23 @@ export function ReconSourcesStep({
     }
   };
 
+  const submitWaive = async () => {
+    if (!waiveSourceId || !waiveReason.trim()) return;
+    setWaiveBusy(true);
+    try {
+      const { waiveSource } = await import('../../../services/reconApi');
+      await waiveSource(run.run.serviceLine as 'rideshare', weekKey, waiveSourceId, {
+        reason: waiveReason.trim(),
+        expectedVersion: run.run.version,
+      });
+      setWaiveSourceId(null);
+      setWaiveReason('');
+      onRefresh();
+    } finally {
+      setWaiveBusy(false);
+    }
+  };
+
   return (
     <div className="space-y-4">
       <p className="text-sm text-slate-600">
@@ -257,9 +295,11 @@ export function ReconSourcesStep({
             weekKey={weekKey}
             onUpload={openUpload}
             onAttestNone={(id) => setAttestSourceId(id)}
+            onWaive={(id) => setWaiveSourceId(id)}
             onRemindRoam={(id) => void remindRoam(id)}
             remindBusy={remindSourceId === source.id}
             canUploadExternalSources={canUploadExternalSources}
+            canWaive={canWaive}
           />
         ))}
       </div>
@@ -338,6 +378,38 @@ export function ReconSourcesStep({
               onClick={() => void submitAttest()}
             >
               Confirm
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!waiveSourceId} onOpenChange={(o) => !o && setWaiveSourceId(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Waive required source</DialogTitle>
+            <DialogDescription>
+              Approver-only. Skips this required source for the week — record why so close can audit it.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <Label htmlFor="recon-waive-reason">Reason</Label>
+            <Textarea
+              id="recon-waive-reason"
+              value={waiveReason}
+              onChange={(e) => setWaiveReason(e.target.value)}
+              placeholder="e.g. Provider export delayed; using attested zero-activity days"
+            />
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setWaiveSourceId(null)}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              disabled={waiveBusy || !waiveReason.trim()}
+              onClick={() => void submitWaive()}
+            >
+              Waive source
             </Button>
           </DialogFooter>
         </DialogContent>

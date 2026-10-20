@@ -76,7 +76,8 @@ export const RECON_SOURCES: readonly ReconSourceDef[] = [
     line: "rideshare",
     kind: "upload",
     label: "InDrive trip export",
-    coverage: "daily_rows",
+    // R3-07: statement-period (export range), not daily trip rows — sparse weeks.
+    coverage: "statement_period",
     feeds: ["trips_earnings"],
     requiredWhen: (p) =>
       lineActive(p, "rideshare") && p.hasIndriveDrivers ? "required" : "not_applicable",

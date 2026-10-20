@@ -628,8 +628,10 @@ export function registerReconImportRoutes(app: Hono) {
         let skippedFp = 0;
         let rejected = 0;
 
-        // R2-17: load ledger once for dedupe across the commit loop (not per row).
+        // R2-17: one ledger load for dedupe. R3-12: prefer atomic bulk RPC; fall back to
+        // saveTollLedgerEntry only when the RPC is missing (pre-migration).
         const dedupCache = await getAllTollLedgerEntries(c);
+        const prepared: Array<Record<string, unknown>> = [];
 
         for (const row of rows) {
           if (row.classification === "duplicate_ref") {
@@ -668,9 +670,70 @@ export function registerReconImportRoutes(app: Hono) {
             },
           };
 
-          const tollRecord = stampOrg(transactionToTollLedgerServer(tx), c);
-          const saved = await saveTollLedgerEntry(tollRecord, c, dedupCache);
-          if (saved) committed += 1;
+          const tollRecord = stampOrg(transactionToTollLedgerServer(tx), c) as Record<
+            string,
+            unknown
+          >;
+          prepared.push(tollRecord);
+        }
+
+        let usedBulk = false;
+        if (prepared.length > 0) {
+          const sqlRows = prepared.map((tollRecord) => ({
+            id: String(tollRecord.id),
+            organization_id: String(tollRecord.organizationId ?? orgId),
+            date: tollRecord.date,
+            amount: tollRecord.amount,
+            type: tollRecord.type,
+            status: tollRecord.status,
+            payment_method: tollRecord.paymentMethod,
+            vehicle_id: tollRecord.vehicleId,
+            driver_id: tollRecord.driverId,
+            toll_tag_id: tollRecord.tollTagId ?? tollRecord.tagId,
+            provider_ref: tollRecord.providerRef ?? tollRecord.referenceNumber,
+            plaza: tollRecord.plaza,
+            plaza_id: tollRecord.plazaId,
+            batch_id: batchId,
+            service_line: tollRecord.service_line ?? tollRecord.serviceLine,
+            service_line_source: tollRecord.service_line_source ?? tollRecord.serviceLineSource,
+            metadata: tollRecord.metadata ?? {},
+            payload_json: tollRecord,
+            legacy_kv_id: String(tollRecord.id),
+            is_reconciled: Boolean(tollRecord.isReconciled),
+          }));
+          const { data: bulkResult, error: bulkErr } = await getServiceClient().rpc(
+            "bulk_insert_toll_ledger",
+            { p_rows: sqlRows },
+          );
+          if (!bulkErr && bulkResult) {
+            usedBulk = true;
+            committed = Number((bulkResult as { inserted?: number }).inserted) || 0;
+            // Mirror into KV so dual-write readers stay consistent with table.
+            for (const tollRecord of prepared) {
+              try {
+                await kv.set(`toll_ledger:${String(tollRecord.id)}`, tollRecord);
+                dedupCache.push(tollRecord as Parameters<typeof saveTollLedgerEntry>[0]);
+              } catch (kvErr) {
+                console.warn("[recon-import] KV mirror after bulk insert failed", kvErr);
+              }
+            }
+          } else {
+            console.warn(
+              "[recon-import] bulk_insert_toll_ledger unavailable; per-row save",
+              bulkErr?.message,
+            );
+          }
+        }
+
+        if (!usedBulk) {
+          for (const tollRecord of prepared) {
+            const saved = await saveTollLedgerEntry(
+              tollRecord as Parameters<typeof saveTollLedgerEntry>[0],
+              c,
+              dedupCache,
+            );
+            if (saved) committed += 1;
+          }
         }
 
         await kv.set(`batch:${batchId}`, {
@@ -777,6 +840,46 @@ export function registerReconImportRoutes(app: Hono) {
         const weekKeys = Array.isArray(body.weekKeys) ? body.weekKeys.map(String) : [];
         const rowsCommitted = typeof body.rowsCommitted === "number" ? body.rowsCommitted : null;
 
+        // R3-10: supersede any live batch with the same semantic_key before write
+        // (import_batches_semantic_live unique index) so re-register does not 500.
+        let effectiveSupersedes = supersedes;
+        if (semanticKey) {
+          const sbFind = getServiceClient();
+          const { data: livePeers } = await sbFind
+            .from("fleet_import_batches")
+            .select("id, legacy_kv_id, status")
+            .eq("organization_id", orgId)
+            .eq("semantic_key", semanticKey)
+            .in("status", ["completed", "committed"])
+            .neq("id", batchId)
+            .limit(20);
+          for (const peer of livePeers ?? []) {
+            const peerId = String(
+              (peer as { legacy_kv_id?: string; id?: string }).legacy_kv_id ||
+                (peer as { id?: string }).id ||
+                "",
+            );
+            if (!peerId || peerId === batchId) continue;
+            if (!effectiveSupersedes) effectiveSupersedes = peerId;
+            const peerKey = peerId.startsWith("batch:") ? peerId : `batch:${peerId}`;
+            const peerBatch = await kv.get(peerKey);
+            if (peerBatch) {
+              await kv.set(peerKey, {
+                ...peerBatch,
+                status: "superseded",
+                supersededAt: new Date().toISOString(),
+                supersededBy: batchId,
+              });
+            } else {
+              await sbFind
+                .from("fleet_import_batches")
+                .update({ status: "superseded" })
+                .eq("organization_id", orgId)
+                .eq("id", (peer as { id: string }).id);
+            }
+          }
+        }
+
         const batch = await kv.get(`batch:${batchId}`);
         const merged = stampOrg({
           ...(batch || { id: batchId }),
@@ -788,7 +891,7 @@ export function registerReconImportRoutes(app: Hono) {
           dataPeriodStart: dataStart,
           dataPeriodEnd: dataEnd,
           semanticKey,
-          supersedes,
+          supersedes: effectiveSupersedes,
           weekKeys,
           rowsCommitted,
           status: batch?.status || "committed",
