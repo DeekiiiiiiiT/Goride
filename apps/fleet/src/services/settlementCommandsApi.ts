@@ -55,7 +55,7 @@ export function isPeriodFrozenError(err: unknown): boolean {
   return typeof err === 'string' && (err.includes('PERIOD_FROZEN') || /settlement week is closed/i.test(err));
 }
 
-/** Fuel/toll not cleared — show MoneyLockedDialog, not a raw MONEY_LOCKED toast. */
+/** Legacy unlock 409 — Log Cash treats as redeploy lag; Pay may still surface MoneyLockedDialog. */
 export function isMoneyLockedError(err: unknown): boolean {
   if (err instanceof SettlementCommandApiError && err.code === 'MONEY_LOCKED') return true;
   if (err instanceof Error) {
@@ -72,11 +72,12 @@ export type SettlementCollectBody = {
   method?: string;
   reference?: string;
   note?: string;
-  /** First-class over-collection / write reason (N-4). */
+  /** Soft note only — server ignores for receipt-first Log Cash. */
   reason?: string;
   allowOverCollect?: boolean;
   idempotencyKey: string;
-  expectedOutstanding: number;
+  /** Advisory / backward compat — server ignores for Log Cash receipt. */
+  expectedOutstanding?: number;
 };
 
 export type SettlementPayBody = {

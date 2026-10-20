@@ -92,7 +92,18 @@ export function normalizeFleetCorePathname(pathname: string): string {
     return pathname.slice("/fleet-core".length) || "/";
   }
   if (pathname === "/fleet-core" || pathname.startsWith("/fleet-core/")) {
-    pathname = `/make-server-37f42386${pathname.slice("/fleet-core".length)}`;
+    const rest = pathname.slice("/fleet-core".length);
+    // Clients that still append the legacy make-server prefix after the
+    // fleet-core slug must not get a double /make-server-37f42386/… path
+    // (that 404s — Week Reconciliation /recon/weeks was hit this way).
+    if (
+      rest === "/make-server-37f42386" ||
+      rest.startsWith("/make-server-37f42386/")
+    ) {
+      pathname = rest;
+    } else {
+      pathname = `/make-server-37f42386${rest}`;
+    }
   }
   return normalizeMonolithPathname(pathname);
 }

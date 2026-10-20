@@ -5513,6 +5513,41 @@ export function registerResidualMonolithRoutes(app: Hono) {
           details: `status=${patch.status}`,
         });
       }
+      // Coverage truth bridge: Uber (and similar) classic batches get source_id + coverage.
+      if (patch.status === "completed" || String(merged.status) === "completed") {
+        try {
+          const { ensureReconImportBatch } = await import("./recon_batch_bridge.ts");
+          const { getOrgId } = await import("./org_scope.ts");
+          const orgId = getOrgId(c) || String(merged.organizationId || merged.organization_id || "");
+          const type = String(merged.type || "").toLowerCase();
+          const covStart = String(
+            merged.coverageStart || merged.coverage_start || merged.dataPeriodStart ||
+              merged.data_period_start || merged.periodStart || "",
+          ).slice(0, 10);
+          const covEnd = String(
+            merged.coverageEnd || merged.coverage_end || merged.dataPeriodEnd ||
+              merged.data_period_end || merged.periodEnd || "",
+          ).slice(0, 10);
+          let sourceId: "uber_bundle" | "indrive_trips" | null = null;
+          if (type === "merged_import" || type.includes("uber")) sourceId = "uber_bundle";
+          if (type.includes("indrive")) sourceId = "indrive_trips";
+          if (orgId && sourceId && /^\d{4}-\d{2}-\d{2}$/.test(covStart) && /^\d{4}-\d{2}-\d{2}$/.test(covEnd)) {
+            await ensureReconImportBatch({
+              batchId: id,
+              orgId,
+              sourceId,
+              coverageStart: covStart,
+              coverageEnd: covEnd,
+              status: "completed",
+              rowsCommitted: typeof merged.recordCount === "number" ? merged.recordCount : null,
+              fileName: typeof merged.fileName === "string" ? merged.fileName : null,
+              type: String(merged.type || sourceId),
+            });
+          }
+        } catch (bridgeErr) {
+          console.warn("[batches] recon coverage bridge skipped", bridgeErr);
+        }
+      }
       return c.json({ success: true, data: merged });
     } catch (e: any) {
       return c.json({ error: e.message }, 500);

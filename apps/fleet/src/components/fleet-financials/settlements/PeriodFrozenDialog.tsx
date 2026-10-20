@@ -58,8 +58,9 @@ export function PeriodFrozenDialog({
               <span className="font-medium text-slate-800">{weekLabel(weekKey)}</span>
             </span>
             <span className="block">
-              Pay and Collect are locked. Open Close Week and use <strong>Re-open week</strong> if you
-              still need to move money, then close again when the desk is clear.
+              Log cash and Pay are locked on a closed week. Open Close Week and use{' '}
+              <strong>Re-open week</strong> if you still need to move money, then close again when
+              the desk is clear.
             </span>
           </AlertDialogDescription>
         </AlertDialogHeader>

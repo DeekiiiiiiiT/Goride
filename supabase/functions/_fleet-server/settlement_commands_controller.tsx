@@ -22,8 +22,7 @@ import {
 import { getOrgId, stampOrg } from "./org_scope.ts";
 import { getServiceClient } from "./service_client.ts";
 import { safeErrorResponse } from "./safe_error.ts";
-import { periodEndForAnchor, periodKeyFor } from "../../../packages/finance-core/src/periodKey.ts";
-import { isSettlementPeriodEnded } from "../../../packages/finance-core/src/settlementPeriodGate.ts";
+import { periodEndForAnchor } from "../../../packages/finance-core/src/periodKey.ts";
 import {
   syncPeriodCashFromTransactions,
   getDriverFinancialPeriodDetail,
@@ -46,7 +45,6 @@ import {
   assertPeriodNotFrozen,
   assertFrozenPeriodHashIntact,
   assertMovementAllowed,
-  assertPeriodEndedForSettlement,
 } from "./settlement_period_freeze.ts";
 import {
   SETTLEMENT_APPROVAL_THRESHOLD,
@@ -337,12 +335,19 @@ async function insertMovementAndDualWrite(
     metadata?: Record<string, unknown>;
     /** Version observed when residual/caps were computed — required for load-bearing CAS. */
     expectedRowVersion: number;
-    /** Current-week desk cash: record now, reconcile later. */
+    /**
+     * Log Cash receipt: record now, reconcile residual later.
+     * Collect always passes true; other kinds omit / false.
+     */
+    isCashReceipt?: boolean;
+    /** @deprecated Prefer isCashReceipt. */
     allowOpenWeekDeskCollect?: boolean;
   },
 ): Promise<{ movement: Record<string, unknown>; period: DriverFinancialPeriodRow | null }> {
-  // C-1/C-5: single chokepoint — ended ∧ unlocked(collect) ∧ not-frozen ∧ hash intact.
-  // Current-week desk cash skips the ended/unlock checks; a frozen week still refuses.
+  // Collect = cash receipt: not frozen only. Pay/write-off keep settle gates.
+  // Residual / fuel-toll unlock are recomputed after sync — never block Log Cash.
+  const isCashReceipt =
+    opts.kind === "collect" || !!(opts.isCashReceipt || opts.allowOpenWeekDeskCollect);
   const periodForGate = await loadPeriodDb(opts.driverId, opts.weekAnchor, opts.organizationId);
   assertMovementAllowed({
     weekAnchor: opts.weekAnchor,
@@ -351,8 +356,8 @@ async function insertMovementAndDualWrite(
       settlementStatus: periodForGate ? String(periodForGate.settlement_status || "") : null,
       signedAt: periodForGate?.signed_at ? String(periodForGate.signed_at) : null,
     },
-    requireMoneyUnlocked: opts.kind === "collect",
-    allowOpenWeekDeskCollect: opts.allowOpenWeekDeskCollect,
+    requireMoneyUnlocked: false,
+    isCashReceipt,
   });
   if (periodForGate) {
     await assertFrozenPeriodHashIntact(
@@ -479,14 +484,17 @@ app.post(`${BASE}/collect`, requireSettlementPerm("settlements.collect"), async 
     const overFromNote = note?.match(/\[Over-collection\]\s*(.+)/i)?.[1]?.trim() || "";
     const reason = reasonFromBody || overFromNote || undefined;
     const idempotencyKey = String(body.idempotencyKey || "").trim();
-    const expectedOutstanding = Number(body.expectedOutstanding);
-    const allowOver =
-      !!body.allowOverCollect ||
-      !!body.allowOver ||
-      (!!reason && Number(body.amount) > Number(body.expectedOutstanding) + 0.005);
+    // expectedOutstanding / allowOverCollect accepted for backward compat — ignored for receipt.
 
     if (!driverId || !/^\d{4}-\d{2}-\d{2}$/.test(weekAnchor) || !idempotencyKey) {
       return c.json({ error: "driverId, weekAnchor, and idempotencyKey are required" }, 400);
+    }
+    if (!(Number.isFinite(amount) && amount > 0.005)) {
+      throw new SettlementCommandError(
+        "INVALID_AMOUNT",
+        "Collection amount must be greater than zero",
+        400,
+      );
     }
 
     const existing = await findMovementByIdempotency(organizationId, idempotencyKey);
@@ -495,13 +503,9 @@ app.post(`${BASE}/collect`, requireSettlementPerm("settlements.collect"), async 
       return c.json({ success: true, idempotent: true, movement: mapMovement(existing), period: mapPeriod(period) });
     }
 
-    const currentWeekAnchor = periodKeyFor(new Date().toISOString()) || "";
-    const deskCollectThisWeek =
-      weekAnchor === String(currentWeekAnchor) &&
-      !isSettlementPeriodEnded({ weekAnchor });
-
+    // Receipt-first: load or create period stub so cash can be tagged before recon exists.
     let periodDb = await loadPeriodDb(driverId, weekAnchor, organizationId);
-    if (!periodDb && deskCollectThisWeek) {
+    if (!periodDb) {
       const { error: insErr } = await sb()
         .from("driver_financial_periods")
         .insert({
@@ -510,7 +514,7 @@ app.post(`${BASE}/collect`, requireSettlementPerm("settlements.collect"), async 
           period_end: periodEndForAnchor(weekAnchor),
           timezone: "America/Jamaica",
           organization_id: organizationId,
-          metadata: { financeCore: { deskCash: true } },
+          metadata: { financeCore: { deskCash: true, cashReceipt: true } },
         });
       if (insErr && !/duplicate|unique/i.test(insErr.message || "")) {
         throw new Error(insErr.message);
@@ -526,12 +530,6 @@ app.post(`${BASE}/collect`, requireSettlementPerm("settlements.collect"), async 
       signedAt: periodDb.signed_at ? String(periodDb.signed_at) : null,
     });
     await assertFrozenPeriodHashIntact(periodDb as Parameters<typeof assertFrozenPeriodHashIntact>[0]);
-    const settlementAmount = Number(periodDb.settlement_amount) || 0;
-    const owed = driverOwesResidual(settlementAmount);
-    if (!deskCollectThisWeek) {
-      assertExpectedOutstanding(owed, expectedOutstanding);
-      enforceCollectCap(owed, amount, allowOver, reason);
-    }
     const observedVersion = Number(periodDb.row_version) || 1;
 
     const { movement, period } = await insertMovementAndDualWrite(c, {
@@ -546,7 +544,7 @@ app.post(`${BASE}/collect`, requireSettlementPerm("settlements.collect"), async 
       reason,
       idempotencyKey,
       expectedRowVersion: observedVersion,
-      allowOpenWeekDeskCollect: deskCollectThisWeek,
+      isCashReceipt: true,
     });
     return c.json({ success: true, movement: mapMovement(movement), period: mapPeriod(period) });
   } catch (e) {
@@ -1197,9 +1195,14 @@ app.post(`${BASE}/runs`, requireSettlementPerm("settlements.pay"), async (c) => 
           });
           movementId = String(movement.id);
         } else {
-          const owed = driverOwesResidual(settlementAmount);
-          assertExpectedOutstanding(owed, expectedOutstanding);
-          enforceCollectCap(owed, amount, false);
+          // Batch collect = same receipt-first Log Cash path (no residual/unlock gates).
+          if (!(Number.isFinite(amount) && amount > 0.005)) {
+            throw new SettlementCommandError(
+              "INVALID_AMOUNT",
+              "Collection amount must be greater than zero",
+              400,
+            );
+          }
           const observedVersion = Number(periodDb.row_version) || 1;
           const { movement } = await insertMovementAndDualWrite(c, {
             organizationId,
@@ -1211,6 +1214,7 @@ app.post(`${BASE}/runs`, requireSettlementPerm("settlements.pay"), async (c) => 
             method,
             idempotencyKey: rowKey,
             expectedRowVersion: observedVersion,
+            isCashReceipt: true,
           });
           movementId = String(movement.id);
         }
@@ -1557,6 +1561,7 @@ app.get(`${BASE}/queue`, requirePermission("transactions.view"), async (c) => {
           settlementAmount: r.settlementAmount,
           settlementPaid: r.settlementPaid,
           cashCollected: r.cashCollected,
+          cashReturned: r.cashReturned,
           cashStillHeld: r.cashStillHeld,
           tripCount: r.tripCount,
           settlementStatus: r.settlementStatus,
@@ -1579,6 +1584,7 @@ app.get(`${BASE}/queue`, requirePermission("transactions.view"), async (c) => {
           settlementAmount: r.settlementAmount,
           settlementPaid: r.settlementPaid,
           cashCollected: r.cashCollected,
+          cashReturned: r.cashReturned,
           cashStillHeld: r.cashStillHeld,
           tripCount: r.tripCount,
           settlementStatus: r.settlementStatus,
@@ -1793,10 +1799,32 @@ app.get(`${BASE}/movements`, requirePermission("transactions.view"), async (c) =
 
     const { data, error } = await q;
     if (error) throw new Error(error.message);
+    const rows = (data || []).map((r) => mapMovement(r as Record<string, unknown>));
+    // Same name hydrate as /queue — settlement_movements has driver_id only.
+    try {
+      const ids = [...new Set(rows.map((r) => String(r.driverId || "")).filter(Boolean))];
+      const nameById = new Map<string, string>();
+      await Promise.all(
+        ids.map(async (id) => {
+          try {
+            const d = (await kv.get(`driver:${id}`)) as { name?: string } | null;
+            if (d?.name) nameById.set(id, String(d.name));
+          } catch {
+            /* ignore */
+          }
+        }),
+      );
+      for (const r of rows) {
+        const id = String(r.driverId || "");
+        (r as { driverName?: string }).driverName = nameById.get(id) || id;
+      }
+    } catch {
+      /* ignore */
+    }
     return c.json({
       success: true,
-      rows: (data || []).map((r) => mapMovement(r as Record<string, unknown>)),
-      page: { total: (data || []).length, hasMore: (data || []).length >= limit },
+      rows,
+      page: { total: rows.length, hasMore: rows.length >= limit },
     });
   } catch (e) {
     return commandErrorResponse(c, e);

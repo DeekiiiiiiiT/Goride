@@ -4,7 +4,6 @@
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Banknote, Loader2, Plus, Search } from 'lucide-react';
-import { DEFAULT_FLEET_TZ, periodKeyFor } from '@roam/finance-core';
 import { toast } from 'sonner';
 import {
   CashGateError,
@@ -12,7 +11,7 @@ import {
   type CashDriver,
 } from '../../hooks/useCashCollection';
 import { usePermissions } from '../../hooks/usePermissions';
-import { SettlementCommandApiError, isSettlementCommandUnavailable } from '../../services/settlementCommandsApi';
+import { isSettlementCommandUnavailable } from '../../services/settlementCommandsApi';
 import { formatJMD } from '../../utils/formatJMD';
 import { LogCashPaymentModal } from '../drivers/LogCashPaymentModal';
 import { Button } from '../ui/button';
@@ -150,6 +149,9 @@ export function LogCashQuickActionHost({
       if (r.periodFrozen === true) {
         map[r.driverId] = { collectable: false, reason: 'Week closed — reopen it in Close Week' };
         seen.add(r.driverId);
+      } else if (r.sealBroken === true) {
+        map[r.driverId] = { collectable: false, reason: 'Close seal broken — resolve in Close Week' };
+        seen.add(r.driverId);
       }
     }
     onGateMapChange(map);
@@ -248,62 +250,51 @@ export function LogCashQuickActionHost({
       throw err;
     }
     const weekAnchor = String(payment.workPeriodStart || '').slice(0, 10);
-    const currentAnchor = String(periodKeyFor(new Date().toISOString(), DEFAULT_FLEET_TZ) || '');
     const week = selected.weeks.find((w) => w.periodAnchor === weekAnchor);
-    const expectedOutstanding =
-      weekAnchor === currentAnchor ? (week?.owedMajor ?? 0) : (week?.owedMajor ?? selected.totalOwed);
-    const beforeAmt = expectedOutstanding;
+    const beforeHeld = Math.max(
+      0,
+      Number(week?.cashStillHeld) || Number(week?.owedMajor) || 0,
+    );
     try {
       const res = await cash.collect({
         driverId: selected.driverId,
         weekAnchor,
         amount: Math.abs(Number(payment.amount) || 0),
-        expectedOutstanding,
         method: payment.paymentMethod,
         reference: payment.referenceNumber,
         note: payment.notes,
       });
-      const afterAmt =
-        res.afterOwed != null
-          ? res.afterOwed
-          : Math.max(0, beforeAmt - Math.abs(Number(payment.amount) || 0));
+      const afterHeld =
+        res.cashStillHeld != null
+          ? res.cashStillHeld
+          : res.afterOwed != null
+            ? res.afterOwed
+            : Math.max(0, beforeHeld - Math.abs(Number(payment.amount) || 0));
       toast.success(
-        `Collected ${formatJMD(payment.amount, 2)} — ${selected.driverName} now owes ${formatJMD(afterAmt, 2)}`,
+        `Logged ${formatJMD(payment.amount, 2)} — ${selected.driverName} still held ${formatJMD(afterHeld, 2)}`,
         { duration: 7000 },
       );
       savedThisOpen.current = true;
     } catch (err) {
       if (err instanceof CashGateError) {
         savedThisOpen.current = false;
-        const msg =
-          err.code === 'PERIOD_FROZEN'
-            ? 'Week closed — reopen it in Close Week'
-            : 'Fuel/toll not cleared for this week';
-        toast.error(msg, {
-          action: onNavigate
-            ? {
-                label: 'Open Close Week',
-                onClick: () => onNavigate('close-week', { weekKey: err.weekAnchor }),
-              }
-            : undefined,
-        });
-        setModalOpen(false);
-        setSelected(null);
-        if (!stayInSession) closePicker();
-        const quiet = new Error('cash_gate');
-        (quiet as Error & { quiet?: boolean }).quiet = true;
-        throw quiet;
-      }
-      if (err instanceof SettlementCommandApiError && err.status === 409) {
-        toast.error('Amount changed — refresh', {
-          action: {
-            label: 'Refresh',
-            onClick: () => {
-              void cash.refetch();
-            },
-          },
-        });
-        await cash.refetch();
+        if (err.code === 'PERIOD_FROZEN') {
+          toast.error('Week closed — reopen it in Close Week', {
+            action: onNavigate
+              ? {
+                  label: 'Open Close Week',
+                  onClick: () => onNavigate('close-week', { weekKey: err.weekAnchor }),
+                }
+              : undefined,
+          });
+          setModalOpen(false);
+          setSelected(null);
+          if (!stayInSession) closePicker();
+          const quiet = new Error('cash_gate');
+          (quiet as Error & { quiet?: boolean }).quiet = true;
+          throw quiet;
+        }
+        toast.error('Settlement commands unavailable — redeploy fleet-server');
         throw err;
       }
       if (isSettlementCommandUnavailable(err)) {

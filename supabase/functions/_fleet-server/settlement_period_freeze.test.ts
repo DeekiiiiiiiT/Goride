@@ -48,6 +48,37 @@ Deno.test("assertMovementAllowed fails closed when moneyUnlocked missing", async
   }
 });
 
+Deno.test("assertMovementAllowed cash receipt allows unlocked=false", async () => {
+  const { assertMovementAllowed } = await import("./settlement_period_freeze.ts");
+  // Log Cash: receipt skips unlock + period-ended; Kenny Sep-shaped locked week must pass.
+  assertMovementAllowed({
+    weekAnchor: "2026-09-07",
+    period: { metadata: { financeCore: { moneyUnlocked: false } } },
+    requireMoneyUnlocked: true,
+    isCashReceipt: true,
+    now: "2026-10-20",
+  });
+});
+
+Deno.test("assertMovementAllowed cash receipt still blocks frozen week", async () => {
+  const { assertMovementAllowed } = await import("./settlement_period_freeze.ts");
+  try {
+    assertMovementAllowed({
+      weekAnchor: "2026-09-07",
+      period: {
+        metadata: { financeCore: { moneyUnlocked: false, periodFrozen: true } },
+      },
+      isCashReceipt: true,
+      now: "2026-10-20",
+    });
+    throw new Error("expected throw");
+  } catch (e) {
+    assertEquals(e instanceof SettlementCommandError, true);
+    assertEquals((e as SettlementCommandError).code, "PERIOD_FROZEN");
+    assertEquals((e as SettlementCommandError).status, 409);
+  }
+});
+
 Deno.test("assertMovementAllowed blocks frozen week with 409", async () => {
   const { assertMovementAllowed } = await import("./settlement_period_freeze.ts");
   try {

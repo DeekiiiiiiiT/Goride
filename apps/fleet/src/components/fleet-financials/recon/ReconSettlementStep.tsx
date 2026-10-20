@@ -1,14 +1,16 @@
 /**
  * Read-only per-driver settlement amounts (Close Week confirm pattern) — R2-26.
+ * Cash desk link lives here — after fuel/tolls — not on Trips & earnings.
  */
 import React, { useMemo } from 'react';
 import { addDays, format, parseISO } from 'date-fns';
 import { Loader2 } from 'lucide-react';
-import { MONEY_EPS } from '@roam/finance-core';
+import { MONEY_EPS, periodEndForAnchor } from '@roam/finance-core';
 import type { ReconRunPayload } from '../../../services/reconApi';
 import { useSettlementQueue } from '../../../hooks/useSettlementQueue';
 import { resolvePayQueueOwed } from '../../../utils/driverSettlementsPayAmount';
 import { computeSettlementLaneMetrics } from '../../../utils/settlementLaneMetrics';
+import { Button } from '../../ui/button';
 
 const MONEY = (n: number | null | undefined) => {
   if (n == null || !Number.isFinite(n)) return '—';
@@ -30,7 +32,16 @@ function collectOwedMajor(r: {
   return Math.max(0, Math.abs(Number(r.settlementAmount) || 0));
 }
 
-export function ReconSettlementStep({ run }: { run: ReconRunPayload }) {
+export function ReconSettlementStep({
+  run,
+  onNavigate,
+}: {
+  run: ReconRunPayload;
+  onNavigate?: (
+    page: string,
+    opts?: { startYmd: string; endYmd?: string; driverId?: string },
+  ) => void;
+}) {
   const weekKey = run.run.weekKey;
   const periodEnd = useMemo(
     () => format(addDays(parseISO(`${weekKey}T12:00:00`), 6), 'yyyy-MM-dd'),
@@ -112,9 +123,23 @@ export function ReconSettlementStep({ run }: { run: ReconRunPayload }) {
   return (
     <div className="space-y-4">
       <p className="text-sm text-slate-600">
-        Read-only Collect / Pay residuals for week of {weekKey}. Finish cash movement on Cash desk if
-        anything remains open; closing happens on the next step.
+        Who owes whom for week of {weekKey} after fuel and tolls. Finish Collect / Pay on Cash desk
+        if anything remains open; closing happens on the next step.
       </p>
+
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        onClick={() =>
+          onNavigate?.('driver-settlements', {
+            startYmd: weekKey,
+            endYmd: periodEndForAnchor(weekKey),
+          })
+        }
+      >
+        Open in Driver Settlements
+      </Button>
 
       <dl className="grid gap-2 sm:grid-cols-3 rounded-xl border border-slate-200 bg-slate-50/80 p-3 text-sm">
         <div>

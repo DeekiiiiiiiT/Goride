@@ -238,14 +238,10 @@ function owedMajor(r: SettlementQueueRow): number {
     : Math.max(0, (Number(r.amountOwedMinor) || 0) / 100);
 }
 
-/** Every refusal the desk applies, in one place. Returns null when collectable. */
-export function collectBlockReason(r: SettlementQueueRow): string | null {
-  if (!isSettlementPeriodEnded({ periodAnchor: r.periodAnchor, periodEnd: r.periodEnd })) {
-    return 'Week still open — settle after it ends';
-  }
+/** Receipt-first: only frozen / seal-broken weeks refuse Log Cash. */
+export function receiptBlockReason(r: SettlementQueueRow): string | null {
   if (r.sealBroken === true) return 'Close seal broken — resolve in Close Week';
   if (r.periodFrozen === true) return 'Week closed — reopen it in Close Week';
-  if (r.moneyUnlocked !== true) return 'Fuel/toll not cleared for this week';
   return null;
 }
 
@@ -406,20 +402,24 @@ it above the ternary.
 
 ## 6. Behaviour matrix
 
-### 6.1 Gates
+### 6.1 Gates (receipt-first Log Cash)
+
+Log Cash is a **cash receipt** tagged to a Settlement Week. Settlement residual (who owes whom) and fuel/toll unlock are **display / recon** concerns — they do not block logging cash.
 
 | Condition | Where checked | What the operator sees |
 |---|---|---|
 | Role lacks `settlements.collect` | client + server | Button not rendered |
 | `activeLine === 'delivery'` | `Dashboard.tsx` ternary | Button not rendered |
-| Week not ended | `isSettlementPeriodEnded` | Driver hidden from picker / "Week still open — settle after it ends" |
 | `periodFrozen` | queue row + server `assertPeriodNotFrozen` | "Week closed — reopen in Close Week" + deep link |
-| `moneyUnlocked !== true` | queue row + server | "Fuel/toll not cleared for this week" |
 | `sealBroken` | queue row + server hash verify | Blocked, send to Close Week |
-| `amount > owed` | modal + server `enforceCollectCap` | Reason textarea appears, required |
-| Owed changed since load | server `assertExpectedOutstanding` → 409 | "Amount changed — refresh" (refetch the queue and reopen) |
+| `moneyUnlocked !== true` | queue / chip only | Informational: residual still provisional — **Log Cash still allowed** |
+| Open / current week | client | Allowed (default “This week”); not a refusal |
+| `amount > cash still held` | modal soft warn | Optional note; confirm still succeeds |
+| `amount <= 0` | client + server | Invalid amount |
 | Duplicate submit | `idempotencyKey` replay | Returns the original movement, no double-count |
-| Endpoint missing | `isSettlementCommandUnavailable` | "Settlement commands unavailable — redeploy fleet-server". **Never writes a transaction instead.** |
+| Endpoint missing / legacy unlock 409 | `isSettlementCommandUnavailable` / deploy lag | "Settlement commands unavailable — redeploy fleet-server". **Never writes a transaction instead.** |
+
+**Removed (do not reintroduce):** hard refuse on `moneyUnlocked`, week-not-ended, `assertExpectedOutstanding`, or `enforceCollectCap` for Log Cash.
 
 ### 6.2 Data & performance
 
@@ -449,8 +449,8 @@ failure. Keep the modal open on error (`LogCashPaymentModal` already does this: 
 
 | Test | Asserts |
 |---|---|
-| `useCashCollection.test.ts` | `collectBlockReason` returns non-null for: open week, `periodFrozen`, `moneyUnlocked !== true`, `sealBroken`; null for a clean ended week |
-| `useCashCollection.test.ts` | driver grouping sums only collectable weeks; a driver whose every week is blocked is excluded from `drivers` but counted in `blockedCount` |
+| `useCashCollection.test.ts` | `receiptBlockReason` returns non-null for: `periodFrozen`, `sealBroken`; null when unlocked=false or week still open (receipt allowed) |
+| `useCashCollection.test.ts` | driver grouping includes weeks with cash to log even when `moneyUnlocked` is false; frozen/seal-broken weeks counted in `blockedCount` |
 | `logCashDeliveryHidden.test.tsx` | Dashboard with `activeLine='delivery'` renders no element matching `/log cash/i` — **this is the S-6 regression guard, do not skip it** |
 | `logCashPermission.test.tsx` | `fleet_viewer` / `fleet_accountant` see no button |
 | Existing | `node scripts/check-remittance-separation.mjs` still passes (CI already runs it with `REMITTANCE_S6_DIFF=1`) |

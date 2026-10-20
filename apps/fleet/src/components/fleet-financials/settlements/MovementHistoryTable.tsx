@@ -23,6 +23,8 @@ import { Label } from '../../ui/label';
 import { Textarea } from '../../ui/textarea';
 import { useWindowedRows } from './useWindowedRows';
 import { periodEndForAnchor } from '@roam/finance-core';
+import type { WeekCashSummary } from '../../../utils/settlementWeekCashSummary';
+import { WeekCashStatsLine } from './WeekCashStatsLine';
 
 const MONEY = (n: number | null | undefined) => {
   if (n == null || !Number.isFinite(n)) return '—';
@@ -73,6 +75,8 @@ export type MovementHistoryTableProps = {
   onUndo: (row: SettlementMovementRow, reason: string) => void;
   /** Optional external reason dialog — when provided, parent owns the dialog. */
   onRequestUndo?: (row: SettlementMovementRow) => void;
+  /** Collect: passenger / returned / still held by week (Cash logged tab). */
+  weekCashByAnchor?: Record<string, WeekCashSummary>;
 };
 
 function groupByPeriod(rows: SettlementMovementRow[]) {
@@ -99,7 +103,7 @@ function groupByPeriod(rows: SettlementMovementRow[]) {
 }
 
 /**
- * Unified Done table for pay + collect (replaces DonePay/DoneCollect duplicates).
+ * Cash logged / Paid out history (collect + pay movements).
  */
 export function MovementHistoryTable({
   rows,
@@ -108,8 +112,16 @@ export function MovementHistoryTable({
   onVerify,
   onUndo,
   onRequestUndo,
+  weekCashByAnchor,
 }: MovementHistoryTableProps) {
   const groups = useMemo(() => groupByPeriod(rows), [rows]);
+  const amountColLabel = mode === 'pay' ? 'Paid' : mode === 'collect' ? 'Logged' : 'Amount';
+  const emptyCopy =
+    mode === 'pay'
+      ? 'No cleared payouts in this range.'
+      : mode === 'collect'
+        ? 'No cash logged in this range. Log cash receipts show here by Settlement Week.'
+        : 'No cash collections or payouts in this range.';
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
   const [undoTarget, setUndoTarget] = useState<SettlementMovementRow | null>(null);
   const [undoReason, setUndoReason] = useState('');
@@ -175,7 +187,7 @@ export function MovementHistoryTable({
               <TableHead className="w-10" />
               <TableHead>Week</TableHead>
               <TableHead>Driver</TableHead>
-              <TableHead className="text-right">Amount</TableHead>
+              <TableHead className="text-right">{amountColLabel}</TableHead>
               <TableHead>Method</TableHead>
               <TableHead>Status</TableHead>
               <TableHead className="w-[160px]">Actions</TableHead>
@@ -185,8 +197,7 @@ export function MovementHistoryTable({
             {groups.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={7} className="h-24 text-center text-slate-500">
-                  No cash collections or payouts in this range.
-                  Log cash and Collect receipts both show here.
+                  {emptyCopy}
                 </TableCell>
               </TableRow>
             ) : (
@@ -200,6 +211,7 @@ export function MovementHistoryTable({
                   if (item.kind === 'header') {
                     const g = item.group;
                     const open = expanded.has(g.key);
+                    const cash = mode === 'collect' ? weekCashByAnchor?.[g.key] : undefined;
                     return (
                       <TableRow
                         key={`h:${g.key}`}
@@ -214,18 +226,26 @@ export function MovementHistoryTable({
                           }
                         }}
                       >
-                        <TableCell className="w-10 pr-0">
+                        <TableCell className="w-10 pr-0 align-top pt-3">
                           {open ? (
                             <ChevronDown className="h-4 w-4 text-slate-500" />
                           ) : (
                             <ChevronRight className="h-4 w-4 text-slate-500" />
                           )}
                         </TableCell>
-                        <TableCell className="font-medium text-slate-900">{g.label}</TableCell>
-                        <TableCell className="text-sm text-slate-500">
-                          {g.rows.length} movement{g.rows.length !== 1 ? 's' : ''}
+                        <TableCell className="align-top pt-3">
+                          <p className="font-medium text-slate-900">{g.label}</p>
+                          {cash ? <WeekCashStatsLine cash={cash} /> : null}
                         </TableCell>
-                        <TableCell className={`text-right tabular-nums font-semibold ${amountTone}`}>
+                        <TableCell className="text-sm text-slate-500 align-top pt-3">
+                          {g.rows.length}{' '}
+                          {mode === 'pay'
+                            ? `payout${g.rows.length !== 1 ? 's' : ''}`
+                            : `receipt${g.rows.length !== 1 ? 's' : ''}`}
+                        </TableCell>
+                        <TableCell
+                          className={`text-right tabular-nums font-semibold align-top pt-3 ${amountTone}`}
+                        >
                           {MONEY(g.total)}
                         </TableCell>
                         <TableCell />

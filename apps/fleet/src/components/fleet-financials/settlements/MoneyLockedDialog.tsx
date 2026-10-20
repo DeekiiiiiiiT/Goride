@@ -1,6 +1,7 @@
 /**
- * Operator-facing gate when Pay/Collect hits moneyUnlocked !== true.
- * Points them at fuel/toll reconciliation instead of a raw MONEY_LOCKED toast.
+ * Informational dialog when residual settle-up is provisional (fuel/tolls not clear).
+ * Log Cash is receipt-first and must NOT use this as a hard block — callers should
+ * only open this for Pay residual or legacy paths, never to refuse a cash receipt.
  */
 import React from 'react';
 import { addDays, format, parseISO } from 'date-fns';
@@ -46,7 +47,7 @@ export function MoneyLockedDialog({
     <AlertDialog open={!!state} onOpenChange={onOpenChange}>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Money is still locked</AlertDialogTitle>
+          <AlertDialogTitle>Settlement residual still provisional</AlertDialogTitle>
           <AlertDialogDescription className="space-y-2 text-left">
             <span className="block">
               {driver ? (
@@ -58,8 +59,9 @@ export function MoneyLockedDialog({
               <span className="font-medium text-slate-800">{weekLabel(weekKey)}</span>
             </span>
             <span className="block">
-              Finish fuel and toll reconciliation for this week first. Pay and Collect unlock only
-              when both lanes are cleared — then return here to move money.
+              Fuel and toll reconciliation for this week is not finished yet, so who-owes figures
+              may still change. You can still Log cash (tagged to this week) — finish recon when
+              ready so residual settles cleanly.
             </span>
           </AlertDialogDescription>
         </AlertDialogHeader>

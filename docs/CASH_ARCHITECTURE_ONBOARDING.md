@@ -211,9 +211,11 @@ This is the **office / remittance** step.
 
 | Action | Direction | What it does |
 |--------|-----------|--------------|
-| **Log Cash** (Collect) | Driver → Fleet | Increases **Cash Returned** for a Settlement Week |
+| **Log Cash** (Collect desk) | Driver → Fleet | **Cash receipt** — increases **Cash Returned** for a Settlement Week. Who owes whom is recomputed after the fact. |
 | **Record Payout** (Pay) | Fleet → Driver | Increases **settlement_paid** when the company owes the driver |
 | **Cash write-off** | Forgive held cash | Reduces held cash; **not** returned; **not** a payout |
+
+**Receipt-first rule:** Log Cash records physical cash tagged to a week. It does **not** wait on fuel finalize, toll clear, or an “amount owed” match. Soft warnings (e.g. amount above cash still held) are UX only. The only hard block for Log Cash is a **frozen / closed** week (reopen on Close Week) or a broken close seal.
 
 Where in product:
 
@@ -223,7 +225,7 @@ Where in product:
 
 Server path (modern desk):
 
-- `POST /settlements/collect` → movement + dual-write + period cash sync  
+- `POST /settlements/collect` → cash-receipt movement + dual-write + period cash sync (no money-unlock / residual-cap gates)  
 - Client: `settlementCommandsApi.collect` / `LogCashPaymentModal`
 
 #### Settlement Week
@@ -253,8 +255,9 @@ grossSettlement = netPayout − cash_still_held
 ```
 
 - Positive outstanding → **fleet owes driver** → use **Pay / Record Payout**  
-- Negative outstanding → **driver owes fleet** → use **Collect / Log Cash**  
+- Negative outstanding → **driver owes fleet** (display outcome after Log Cash / recon; not a gate on logging cash)  
 - Near zero → settled  
+- Fuel/toll not cleared yet → residual is **provisional**; operators may still Log Cash
 
 Exact formulas live in finance-core / period settlement code; product rule of thumb above is enough for onboarding.
 

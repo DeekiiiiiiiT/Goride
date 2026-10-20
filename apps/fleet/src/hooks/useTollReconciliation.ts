@@ -479,21 +479,29 @@ export function useTollReconciliation(
         idempotencyKey,
       });
       const autoCount = res.autoReconciled || 0;
+      const failCount = res.failed || 0;
       setAutoReconciledCount(autoCount);
+      if (autoCount > 0 || failCount > 0) {
+        await fetchData();
+      }
       if (autoCount > 0) {
         toast.info(`${autoCount} toll${autoCount === 1 ? '' : 's'} auto-matched to trips`, {
           description: 'Perfect matches confirmed automatically. View in Matched History.',
           duration: 5000,
         });
-        await fetchData();
       }
-      if (res.failed && res.failed > 0) {
+      if (failCount > 0) {
         console.error('[Reconciliation] Auto-match errors:', res.errors);
-        toast.error(`${res.failed} auto-match(es) failed — see console`);
+        // Partial failures stay in Needs Review — don't block the wizard with a hard error.
+        if (autoCount === 0) {
+          toast.message(`${failCount} toll${failCount === 1 ? '' : 's'} still need review`, {
+            description: 'Open Needs Review to link trips manually.',
+          });
+        }
       }
     } catch (err) {
       console.error('[Reconciliation] POST /auto-match failed:', err);
-      toast.error('Auto-match failed');
+      toast.message('Auto-match skipped — continue in Needs Review');
     }
   }, [driverId, period?.startDate, period?.endDate, fetchData]);
 

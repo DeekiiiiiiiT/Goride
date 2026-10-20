@@ -7,13 +7,17 @@ export type SettlementStatusTabsProps = {
   className?: string;
   /** Compact pill style for mobile sticky chrome. */
   variant?: 'default' | 'pills';
+  /** Collect = Cash logged; Pay = Paid out. */
+  direction?: 'collect' | 'pay';
 };
 
 /** Status triggers only — parent owns `<Tabs value={deskTab}>`. */
 export function SettlementStatusTabs({
   className,
   variant = 'default',
+  direction = 'collect',
 }: SettlementStatusTabsProps) {
+  const historyLabel = direction === 'pay' ? 'Paid out' : 'Cash logged';
   return (
     <TabsList
       className={cn(
@@ -38,7 +42,7 @@ export function SettlementStatusTabs({
         value="done"
         className={cn(variant === 'pills' && 'flex-1 rounded-md data-[state=active]:shadow-sm')}
       >
-        Done
+        {historyLabel}
       </TabsTrigger>
     </TabsList>
   );

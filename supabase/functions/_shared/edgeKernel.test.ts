@@ -49,6 +49,21 @@ Deno.test("normalizeFleetCorePathname maps /fleet-core to make-server paths", ()
   );
 });
 
+Deno.test("normalizeFleetCorePathname does not double-prefix legacy make-server paths", () => {
+  assertEquals(
+    normalizeFleetCorePathname(
+      "/fleet-core/make-server-37f42386/recon/weeks",
+    ),
+    "/make-server-37f42386/recon/weeks",
+  );
+  assertEquals(
+    normalizeFleetCorePathname(
+      "/functions/v1/fleet-core/make-server-37f42386/recon/weeks",
+    ),
+    "/make-server-37f42386/recon/weeks",
+  );
+});
+
 Deno.test("createFleetFunction exposes /health and guards /internal without service role", async () => {
   const domain = new Hono();
   domain.get("/ping", (c) => c.json({ ok: true }));

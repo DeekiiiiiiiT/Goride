@@ -97,6 +97,35 @@ Deno.test("runPerfectMatchAutoMatch: compensates after sync failure", async () =
   assertEquals(actions, ["reconciled", "unreconciled"]);
 });
 
+Deno.test("runPerfectMatchAutoMatch: keeps link when audit fails after sync", async () => {
+  const actions: string[] = [];
+  const result = await runPerfectMatchAutoMatch(
+    {
+      unreconciled: [{ id: "tx3", amount: -40, isReconciled: false, date: "2026-10-12" }],
+      trips: [{ id: "trip3", driverId: "d3", pickupLocation: "A", dropoffLocation: "B" }],
+      timezone: "UTC",
+      driverAliasMap: {},
+      actorId: "actor",
+    },
+    {
+      resolveExpectedCostsBatch: async () => [{ expectedCost: 40 }],
+      findMatches: () => [
+        { tripId: "trip3", confidenceScore: 99, matchType: "PERFECT_MATCH" },
+      ],
+      updateTollLedgerEntry: async (_id, _patch, action) => {
+        actions.push(String(action));
+      },
+      syncTripRefundOnTollLink: async () => {},
+      writeTollLedgerEntry: async () => {
+        throw new Error("audit boom");
+      },
+    },
+  );
+  assertEquals(result.autoReconciled, 1);
+  assertEquals(result.errors.length, 0);
+  assertEquals(actions, ["reconciled"]);
+});
+
 Deno.test("AUTO_MATCH_SCAN_CAP is bounded", () => {
   assertEquals(AUTO_MATCH_SCAN_CAP, 3000);
 });

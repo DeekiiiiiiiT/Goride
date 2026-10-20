@@ -1,21 +1,16 @@
 /**
- * Unit tests for shared Collect-cash gates (Dashboard + Settlements desk).
+ * Unit tests for receipt-first Log Cash gates (Dashboard + Settlements desk).
  */
-import { describe, expect, it, vi, afterEach } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import {
+  receiptBlockReason,
   collectBlockReason,
   groupCashDrivers,
   owedMajor,
+  receiptProvisionalHint,
   type CashDriver,
 } from './useCashCollection';
 import type { SettlementQueueRow } from './useSettlementQueue';
-import { isSettlementPeriodEnded } from '../utils/settlementPeriodGate';
-
-vi.mock('../utils/settlementPeriodGate', () => ({
-  isSettlementPeriodEnded: vi.fn(),
-}));
-
-const ended = isSettlementPeriodEnded as unknown as ReturnType<typeof vi.fn>;
 
 function row(partial: Partial<SettlementQueueRow> & Pick<SettlementQueueRow, 'driverId'>): SettlementQueueRow {
   return {
@@ -25,52 +20,61 @@ function row(partial: Partial<SettlementQueueRow> & Pick<SettlementQueueRow, 'dr
     periodEnd: partial.periodEnd ?? '2026-09-07',
     amountOwedMinor: partial.amountOwedMinor ?? 0,
     amountOwed: partial.amountOwed,
+    cashStillHeld: partial.cashStillHeld,
+    cashReturned: partial.cashReturned,
     moneyUnlocked: partial.moneyUnlocked,
     periodFrozen: partial.periodFrozen,
     sealBroken: partial.sealBroken,
   };
 }
 
-afterEach(() => {
-  vi.clearAllMocks();
-});
-
-describe('collectBlockReason', () => {
-  it('blocks open weeks', () => {
-    ended.mockReturnValue(false);
+describe('receiptBlockReason', () => {
+  it('does not block open weeks (receipt allowed)', () => {
     expect(
-      collectBlockReason(row({ driverId: 'd1', moneyUnlocked: true })),
-    ).toBe('Week still open — settle after it ends');
+      receiptBlockReason(row({ driverId: 'd1', moneyUnlocked: true })),
+    ).toBeNull();
   });
 
   it('blocks sealBroken', () => {
-    ended.mockReturnValue(true);
     expect(
-      collectBlockReason(row({ driverId: 'd1', moneyUnlocked: true, sealBroken: true })),
+      receiptBlockReason(row({ driverId: 'd1', moneyUnlocked: true, sealBroken: true })),
     ).toBe('Close seal broken — resolve in Close Week');
   });
 
   it('blocks periodFrozen', () => {
-    ended.mockReturnValue(true);
     expect(
-      collectBlockReason(row({ driverId: 'd1', moneyUnlocked: true, periodFrozen: true })),
+      receiptBlockReason(row({ driverId: 'd1', moneyUnlocked: true, periodFrozen: true })),
     ).toBe('Week closed — reopen it in Close Week');
   });
 
-  it('blocks when moneyUnlocked is not true', () => {
-    ended.mockReturnValue(true);
-    expect(collectBlockReason(row({ driverId: 'd1', moneyUnlocked: false }))).toBe(
-      'Fuel/toll not cleared for this week',
+  it('does not block when moneyUnlocked is false', () => {
+    expect(receiptBlockReason(row({ driverId: 'd1', moneyUnlocked: false }))).toBeNull();
+    expect(receiptBlockReason(row({ driverId: 'd1' }))).toBeNull();
+  });
+
+  it('returns null for a clean week', () => {
+    expect(
+      receiptBlockReason(row({ driverId: 'd1', moneyUnlocked: true, amountOwed: 100 })),
+    ).toBeNull();
+  });
+
+  it('collectBlockReason aliases receiptBlockReason', () => {
+    expect(collectBlockReason(row({ driverId: 'd1', periodFrozen: true }))).toBe(
+      receiptBlockReason(row({ driverId: 'd1', periodFrozen: true })),
     );
-    expect(collectBlockReason(row({ driverId: 'd1' }))).toBe(
-      'Fuel/toll not cleared for this week',
+  });
+});
+
+describe('receiptProvisionalHint', () => {
+  it('hints when unlocked is false and week is loggable', () => {
+    expect(receiptProvisionalHint(row({ driverId: 'd1', moneyUnlocked: false }))).toMatch(
+      /provisional/i,
     );
   });
 
-  it('returns null for a clean ended week', () => {
-    ended.mockReturnValue(true);
+  it('is null when frozen', () => {
     expect(
-      collectBlockReason(row({ driverId: 'd1', moneyUnlocked: true, amountOwed: 100 })),
+      receiptProvisionalHint(row({ driverId: 'd1', moneyUnlocked: false, periodFrozen: true })),
     ).toBeNull();
   });
 });
@@ -86,12 +90,7 @@ describe('owedMajor', () => {
 });
 
 describe('groupCashDrivers', () => {
-  it('sums only collectable weeks and excludes fully blocked drivers', () => {
-    ended.mockImplementation((input: { periodAnchor?: string }) => {
-      // Open week: periodAnchor 2026-09-15
-      return String(input.periodAnchor || '') !== '2026-09-15';
-    });
-
+  it('includes unlocked=false weeks and excludes only frozen/seal-broken', () => {
     const rows: SettlementQueueRow[] = [
       row({
         driverId: 'kenny',
@@ -99,7 +98,7 @@ describe('groupCashDrivers', () => {
         periodAnchor: '2026-09-01',
         periodEnd: '2026-09-07',
         amountOwed: 100,
-        moneyUnlocked: true,
+        moneyUnlocked: false,
       }),
       row({
         driverId: 'kenny',
@@ -111,8 +110,8 @@ describe('groupCashDrivers', () => {
         periodFrozen: true,
       }),
       row({
-        driverId: 'blocked',
-        driverName: 'Blocked Only',
+        driverId: 'locked',
+        driverName: 'Locked Fuel',
         periodAnchor: '2026-09-01',
         periodEnd: '2026-09-07',
         amountOwed: 80,
@@ -129,14 +128,19 @@ describe('groupCashDrivers', () => {
     ];
 
     const drivers = groupCashDrivers(rows);
-    expect(drivers.map((d: CashDriver) => d.driverId)).toEqual(['kenny']);
-    expect(drivers[0].totalOwed).toBe(100);
-    expect(drivers[0].weeks).toHaveLength(1);
-    expect(drivers[0].blockedCount).toBe(1);
+    expect(drivers.map((d: CashDriver) => d.driverId).sort()).toEqual([
+      'kenny',
+      'locked',
+      'open-only',
+    ]);
+    const kenny = drivers.find((d) => d.driverId === 'kenny')!;
+    expect(kenny.totalOwed).toBe(100);
+    expect(kenny.weeks).toHaveLength(1);
+    expect(kenny.blockedCount).toBe(1);
+    expect(drivers.find((d) => d.driverId === 'locked')!.totalOwed).toBe(80);
   });
 
   it('sorts weeks newest first and drivers by total owed desc', () => {
-    ended.mockReturnValue(true);
     const rows: SettlementQueueRow[] = [
       row({
         driverId: 'a',
@@ -160,7 +164,7 @@ describe('groupCashDrivers', () => {
         periodAnchor: '2026-09-01',
         periodEnd: '2026-09-07',
         amountOwed: 200,
-        moneyUnlocked: true,
+        moneyUnlocked: false,
       }),
     ];
     const drivers = groupCashDrivers(rows);

@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { AlertCircle, Bell, CheckCircle2, Loader2, UploadCloud } from 'lucide-react';
 import { roamFuelExternalCopy, weekDayKeys } from '@roam/finance-core';
 import type { ReconRunPayload, ReconRunSource } from '../../../services/reconApi';
+
+type RefreshRun = (payload?: ReconRunPayload) => void | Promise<void>;
 import { usePermissions } from '../../../hooks/usePermissions';
 import { Button } from '../../ui/button';
 import {
@@ -14,11 +16,29 @@ import {
 } from '../../ui/dialog';
 import { Textarea } from '../../ui/textarea';
 import { Label } from '../../ui/label';
+import { Tooltip, TooltipContent, TooltipTrigger } from '../../ui/tooltip';
 import { BulkImportTollTransactionsModal } from '../../vehicles/BulkImportTollTransactionsModal';
 import { CloseWeekUberReimportDialog } from '../CloseWeekUberReimportDialog';
 import { FuelCardSelfUploader } from './FuelCardSelfUploader';
 import { IndriveUploadDialog } from './IndriveUploadDialog';
 import { cn } from '../../ui/utils';
+
+function ActionTip({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactElement;
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>{children}</TooltipTrigger>
+      <TooltipContent side="bottom" className="max-w-xs text-left leading-relaxed">
+        {label}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
 
 const BLOCKING = new Set(['missing', 'partial', 'waiting_external']);
 
@@ -90,6 +110,7 @@ export function ReconSourceCard({
   onWaive,
   onRemindRoam,
   remindBusy,
+  attestBusy,
   canUploadExternalSources = false,
   canWaive = false,
 }: {
@@ -100,6 +121,7 @@ export function ReconSourceCard({
   onWaive?: (sourceId: string) => void;
   onRemindRoam?: (sourceId: string) => void;
   remindBusy?: boolean;
+  attestBusy?: boolean;
   canUploadExternalSources?: boolean;
   /** R3-09: waive is approver-only. */
   canWaive?: boolean;
@@ -144,36 +166,51 @@ export function ReconSourceCard({
       {needsAction ? (
         <div className="mt-3 flex flex-wrap gap-2">
           {roamWait && onRemindRoam ? (
-            <Button
-              type="button"
-              size="sm"
-              variant="default"
-              disabled={remindBusy}
-              onClick={() => onRemindRoam(source.id)}
-            >
-              {remindBusy ? (
-                <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
-              ) : (
-                <Bell className="mr-1.5 h-4 w-4" />
-              )}
-              Remind Roam
-            </Button>
+            <ActionTip label="Sends a reminder that this week’s Roam Fuels / Gas Card statement is still outstanding.">
+              <Button
+                type="button"
+                size="sm"
+                variant="default"
+                disabled={remindBusy}
+                onClick={() => onRemindRoam(source.id)}
+              >
+                {remindBusy ? (
+                  <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+                ) : (
+                  <Bell className="mr-1.5 h-4 w-4" />
+                )}
+                Remind Roam
+              </Button>
+            </ActionTip>
           ) : null}
           {showUpload ? (
-            <Button type="button" size="sm" variant="default" onClick={() => onUpload!(source.id)}>
-              <UploadCloud className="mr-1.5 h-4 w-4" />
-              {uploadLabel}
-            </Button>
+            <ActionTip label={`Upload the ${source.label} file for this Monday–Sunday week so the source can be marked received.`}>
+              <Button type="button" size="sm" variant="default" onClick={() => onUpload!(source.id)}>
+                <UploadCloud className="mr-1.5 h-4 w-4" />
+                {uploadLabel}
+              </Button>
+            </ActionTip>
           ) : null}
           {source.requirement !== 'not_applicable' && onAttestNone && !roamWait ? (
-            <Button type="button" size="sm" variant="outline" onClick={() => onAttestNone(source.id)}>
-              No activity this week
-            </Button>
+            <ActionTip label="Confirm there was no activity for this source this week. Use this when nothing happened — not when the file is missing.">
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={attestBusy}
+                onClick={() => onAttestNone(source.id)}
+              >
+                {attestBusy ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : null}
+                No activity this week
+              </Button>
+            </ActionTip>
           ) : null}
           {showWaive ? (
-            <Button type="button" size="sm" variant="outline" onClick={() => onWaive!(source.id)}>
-              Waive (approver)
-            </Button>
+            <ActionTip label="Approver-only: skip this required source for the week with a written reason. Unlocks later steps without an upload; leave an audit trail as waived.">
+              <Button type="button" size="sm" variant="outline" onClick={() => onWaive!(source.id)}>
+                Waive (approver)
+              </Button>
+            </ActionTip>
           ) : null}
         </div>
       ) : null}
@@ -186,7 +223,7 @@ export function ReconSourcesStep({
   onRefresh,
 }: {
   run: ReconRunPayload;
-  onRefresh: () => void;
+  onRefresh: RefreshRun;
 }) {
   const { can } = usePermissions();
   const canUploadExternalSources = can('recon.external_sources');
@@ -198,9 +235,7 @@ export function ReconSourcesStep({
   const [fuelSourceId, setFuelSourceId] = useState<'fuel_card_self' | 'fuel_card_roam'>('fuel_card_self');
   const [uberOpen, setUberOpen] = useState(false);
   const [indriveOpen, setIndriveOpen] = useState(false);
-  const [attestSourceId, setAttestSourceId] = useState<string | null>(null);
-  const [attestReason, setAttestReason] = useState('');
-  const [attestBusy, setAttestBusy] = useState(false);
+  const [attestBusyId, setAttestBusyId] = useState<string | null>(null);
   const [waiveSourceId, setWaiveSourceId] = useState<string | null>(null);
   const [waiveReason, setWaiveReason] = useState('');
   const [waiveBusy, setWaiveBusy] = useState(false);
@@ -212,10 +247,13 @@ export function ReconSourcesStep({
     setRemindSourceId(sourceId);
     try {
       const { requestExternalSource } = await import('../../../services/reconApi');
-      await requestExternalSource(run.run.serviceLine as 'rideshare', weekKey, sourceId, {
-        expectedVersion: run.run.version,
-      });
-      onRefresh();
+      const payload = await requestExternalSource(
+        run.run.serviceLine as 'rideshare',
+        weekKey,
+        sourceId,
+        { expectedVersion: run.run.version },
+      );
+      await onRefresh(payload);
     } finally {
       setRemindSourceId(null);
     }
@@ -246,21 +284,23 @@ export function ReconSourcesStep({
     }
   };
 
-  const submitAttest = async () => {
-    if (!attestSourceId || !attestReason.trim()) return;
-    setAttestBusy(true);
+  const submitAttestNone = async (sourceId: string) => {
+    if (attestBusyId) return;
+    setAttestBusyId(sourceId);
     try {
       const { attestSourceNone } = await import('../../../services/reconApi');
-      await attestSourceNone(run.run.serviceLine as 'rideshare', weekKey, attestSourceId, {
-        days: weekDayKeys(weekKey),
-        reason: attestReason.trim(),
-        expectedVersion: run.run.version,
-      });
-      setAttestSourceId(null);
-      setAttestReason('');
-      onRefresh();
+      const payload = await attestSourceNone(
+        run.run.serviceLine as 'rideshare',
+        weekKey,
+        sourceId,
+        {
+          days: weekDayKeys(weekKey),
+          expectedVersion: run.run.version,
+        },
+      );
+      await onRefresh(payload);
     } finally {
-      setAttestBusy(false);
+      setAttestBusyId(null);
     }
   };
 
@@ -269,13 +309,13 @@ export function ReconSourcesStep({
     setWaiveBusy(true);
     try {
       const { waiveSource } = await import('../../../services/reconApi');
-      await waiveSource(run.run.serviceLine as 'rideshare', weekKey, waiveSourceId, {
+      const payload = await waiveSource(run.run.serviceLine as 'rideshare', weekKey, waiveSourceId, {
         reason: waiveReason.trim(),
         expectedVersion: run.run.version,
       });
       setWaiveSourceId(null);
       setWaiveReason('');
-      onRefresh();
+      await onRefresh(payload);
     } finally {
       setWaiveBusy(false);
     }
@@ -294,10 +334,11 @@ export function ReconSourcesStep({
             source={source}
             weekKey={weekKey}
             onUpload={openUpload}
-            onAttestNone={(id) => setAttestSourceId(id)}
+            onAttestNone={(id) => void submitAttestNone(id)}
             onWaive={(id) => setWaiveSourceId(id)}
             onRemindRoam={(id) => void remindRoam(id)}
             remindBusy={remindSourceId === source.id}
+            attestBusy={attestBusyId === source.id}
             canUploadExternalSources={canUploadExternalSources}
             canWaive={canWaive}
           />
@@ -311,7 +352,7 @@ export function ReconSourcesStep({
           weekLabel={weekKey}
           weekKey={weekKey}
           onImported={async () => {
-            onRefresh();
+            await onRefresh();
           }}
         />
       ) : null}
@@ -323,7 +364,7 @@ export function ReconSourcesStep({
           weekLabel={weekKey}
           weekKey={weekKey}
           onImported={async () => {
-            onRefresh();
+            await onRefresh();
           }}
         />
       ) : null}
@@ -335,7 +376,7 @@ export function ReconSourcesStep({
         weekKey={weekKey}
         onSuccess={() => {
           setTollModalOpen(false);
-          onRefresh();
+          void onRefresh();
         }}
       />
 
@@ -346,42 +387,9 @@ export function ReconSourcesStep({
         sourceId={fuelSourceId}
         onSuccess={() => {
           setFuelModalOpen(false);
-          onRefresh();
+          void onRefresh();
         }}
       />
-
-      <Dialog open={!!attestSourceId} onOpenChange={(o) => !o && setAttestSourceId(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>No activity attestation</DialogTitle>
-            <DialogDescription>
-              Confirm there was no activity for this source on any day this week. Approvers see this
-              at close.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-2">
-            <Label htmlFor="recon-attest-reason">Reason</Label>
-            <Textarea
-              id="recon-attest-reason"
-              value={attestReason}
-              onChange={(e) => setAttestReason(e.target.value)}
-              placeholder="e.g. Fleet parked for maintenance all week"
-            />
-          </div>
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setAttestSourceId(null)}>
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              disabled={attestBusy || !attestReason.trim()}
-              onClick={() => void submitAttest()}
-            >
-              Confirm
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       <Dialog open={!!waiveSourceId} onOpenChange={(o) => !o && setWaiveSourceId(null)}>
         <DialogContent>

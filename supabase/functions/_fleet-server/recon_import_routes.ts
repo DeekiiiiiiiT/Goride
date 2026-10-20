@@ -31,6 +31,10 @@ import {
 } from "../../../packages/finance-core/src/reconFuelImport.ts";
 import type { TollIntegrityLike } from "../../../packages/finance-core/src/tollLedgerIntegrity.ts";
 import { periodKeyFor } from "../../../packages/finance-core/src/periodKey.ts";
+import {
+  ensureReconImportBatch,
+  type ReconBatchSourceId,
+} from "./recon_batch_bridge.ts";
 
 const IMPORTS = "/make-server-37f42386/recon/imports";
 const FLEET_TZ = "America/Jamaica";
@@ -573,6 +577,27 @@ export function registerReconImportRoutes(app: Hono) {
             return c.json({ success: true, importId, idempotent: true, batchId: staging.import_batch_id });
           }
           const rowsCommitted = typeof body.rowsCommitted === "number" ? body.rowsCommitted : null;
+          const coverageStart =
+            body.coverageStart
+              ? String(body.coverageStart).slice(0, 10)
+              : (staging.preview as { coverage_start?: string } | null)?.coverage_start || null;
+          const coverageEnd =
+            body.coverageEnd
+              ? String(body.coverageEnd).slice(0, 10)
+              : (staging.preview as { coverage_end?: string } | null)?.coverage_end || null;
+          if (coverageStart && coverageEnd) {
+            await ensureReconImportBatch({
+              batchId: clientBatchId,
+              orgId,
+              sourceId: sourceId as ReconBatchSourceId,
+              coverageStart,
+              coverageEnd,
+              status: "completed",
+              rowsCommitted,
+              fileName: staging.file_name || "fuel_import.csv",
+              type: sourceId,
+            });
+          }
           const sb = getServiceClient();
           await sb.from("recon_import_staging").update({
             status: "committed",
@@ -793,13 +818,27 @@ export function registerReconImportRoutes(app: Hono) {
 
         await kv.set(`batch:${batchId}`, {
           ...batchPayload,
-          status: stagingStatus,
+          status: commitOk ? "completed" : stagingStatus,
           recordCount: committed,
           rowsCommitted: committed,
           rowsDuplicate: skippedRef + skippedFp,
           rowsRejected: rejected,
           moneyFailed,
         });
+
+        if (commitOk && coverageStart && coverageEnd && isTollSource(sourceId)) {
+          await ensureReconImportBatch({
+            batchId,
+            orgId,
+            sourceId: sourceId as ReconBatchSourceId,
+            coverageStart,
+            coverageEnd,
+            status: "completed",
+            rowsCommitted: committed,
+            fileName: staging.file_name || "toll_import.csv",
+            type: sourceId,
+          });
+        }
 
         const sb = getServiceClient();
         await sb.from("recon_import_staging").update({
@@ -971,6 +1010,24 @@ export function registerReconImportRoutes(app: Hono) {
           reconImportId: importId,
         }, c);
         await kv.set(`batch:${batchId}`, merged);
+
+        if (
+          coverageStart &&
+          coverageEnd &&
+          (isTollSource(sourceId) || isFuelSource(sourceId) || sourceId === "uber_bundle" ||
+            sourceId === "indrive_trips")
+        ) {
+          await ensureReconImportBatch({
+            batchId,
+            orgId,
+            sourceId: sourceId as ReconBatchSourceId,
+            coverageStart,
+            coverageEnd,
+            status: "completed",
+            rowsCommitted,
+            type: sourceId,
+          });
+        }
 
         const sb = getServiceClient();
         const existing = await getStagingImport(orgId, importId);

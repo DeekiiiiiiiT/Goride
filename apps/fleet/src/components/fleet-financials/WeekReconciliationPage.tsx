@@ -4,11 +4,17 @@
  */
 import React, { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Loader2 } from 'lucide-react';
+import { Loader2, MoreHorizontal } from 'lucide-react';
 import type { RunStepId } from '@roam/finance-core';
 import { BusinessFinanceDeskChrome } from '../business-finance/BusinessFinanceDeskChrome';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import { Button } from '../ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '../ui/dropdown-menu';
 import { usePermissions } from '../../hooks/usePermissions';
 import { useReconWizardEnabled } from '../../hooks/useReconWizardFlag';
 import {
@@ -71,7 +77,7 @@ function pushRunQuery(line: string, week: string, step?: string) {
 }
 
 type WeekReconNavigateOpts =
-  | { startYmd: string; endYmd?: string }
+  | { startYmd: string; endYmd?: string; driverId?: string }
   | { weekKey: string }
   | { vehicleId?: string; driverId?: string; vehicleLabel?: string };
 
@@ -254,9 +260,22 @@ export function WeekReconciliationPage({
             <p className="text-sm text-slate-600">Guided week reconciliation</p>
             {lineSegment}
           </div>
-          <Button type="button" variant="outline" size="sm" onClick={() => setClassicMode(true)}>
-            Classic fuel/tolls
-          </Button>
+          {/* Escape hatch only on week list — Fuel/Tolls live in the run stepper. */}
+          {!inRun ? (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button type="button" variant="ghost" size="sm" className="text-slate-500">
+                  <MoreHorizontal className="mr-1 h-4 w-4" />
+                  Advanced
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => setClassicMode(true)}>
+                  Open classic fuel/tolls
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          ) : null}
         </div>
       ) : wizardEnabled && classicMode ? (
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -301,7 +320,7 @@ export function WeekReconciliationPage({
               window.history.pushState({ page: 'week-reconciliation' }, '', '/week-reconciliation');
             }
           }}
-          onNavigate={(page) => onNavigate?.(page)}
+          onNavigate={onNavigate}
           onOpenRemittance={() => onNavigate?.('courier-settlements')}
         />
       ) : null}
@@ -335,6 +354,7 @@ export function WeekReconciliationPage({
           weeks={reconWeeks}
           loading={reconQuery.isLoading}
           kpis={reconKpis}
+          deskLine={deskLine}
           onOpenWeek={openRunWeek}
         />
       ) : null}

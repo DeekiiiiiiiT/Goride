@@ -1,8 +1,12 @@
+import { useMemo } from 'react';
 import { format, parseISO } from 'date-fns';
 import { Trash2 } from 'lucide-react';
+import { periodEndForAnchor } from '@roam/finance-core';
 import { Badge } from '../../ui/badge';
 import { Button } from '../../ui/button';
 import type { SettlementMovementRow } from './MovementHistoryTable';
+import type { WeekCashSummary } from '../../../utils/settlementWeekCashSummary';
+import { WeekCashStatsLine } from './WeekCashStatsLine';
 
 const MONEY = (n: number | null | undefined) => {
   if (n == null || !Number.isFinite(n)) return '—';
@@ -22,6 +26,14 @@ function dateLabel(value?: string) {
   }
 }
 
+function weekLabel(anchor: string, end: string) {
+  try {
+    return `${format(parseISO(`${anchor}T12:00:00`), 'MMM d')} – ${format(parseISO(`${end}T12:00:00`), 'MMM d, yyyy')}`;
+  } catch {
+    return `${anchor} – ${end}`;
+  }
+}
+
 export type MovementHistoryListProps = {
   rows: SettlementMovementRow[];
   mode?: 'collect' | 'pay' | 'all';
@@ -30,17 +42,30 @@ export type MovementHistoryListProps = {
   onRequestUndo?: (row: SettlementMovementRow) => void;
   emptyTitle?: string;
   emptyHint?: string;
+  /** Collect: passenger / returned / held by week. */
+  weekCashByAnchor?: Record<string, WeekCashSummary>;
 };
 
-/** Mobile card list for Awaiting / Done movements. */
+/** Mobile card list for Awaiting / Cash logged / Paid out. */
 export function MovementHistoryList({
   rows,
+  mode = 'all',
   onOpenDriver,
   onVerify,
   onRequestUndo,
   emptyTitle = 'Nothing here yet',
   emptyHint = 'Movements will show up after you Collect or Pay.',
+  weekCashByAnchor,
 }: MovementHistoryListProps) {
+  const weekOrder = useMemo(() => {
+    const keys = new Set<string>();
+    for (const row of rows) {
+      const a = String(row.periodAnchor || '').slice(0, 10);
+      if (a) keys.add(a);
+    }
+    return [...keys].sort((a, b) => b.localeCompare(a));
+  }, [rows]);
+
   if (rows.length === 0) {
     return (
       <div className="rounded-xl border border-dashed border-slate-200 bg-white px-4 py-10 text-center">
@@ -51,6 +76,25 @@ export function MovementHistoryList({
   }
 
   return (
+    <div className="space-y-4">
+      {mode === 'collect' && weekOrder.length > 0 ? (
+        <ul className="space-y-2">
+          {weekOrder.map((anchor) => {
+            const cash = weekCashByAnchor?.[anchor];
+            if (!cash) return null;
+            const end = periodEndForAnchor(anchor);
+            return (
+              <li
+                key={`cash:${anchor}`}
+                className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2"
+              >
+                <p className="text-sm font-medium text-slate-800">{weekLabel(anchor, end)}</p>
+                <WeekCashStatsLine cash={cash} />
+              </li>
+            );
+          })}
+        </ul>
+      ) : null}
     <ul className="space-y-3">
       {rows.map((row) => (
         <li
@@ -108,5 +152,6 @@ export function MovementHistoryList({
         </li>
       ))}
     </ul>
+    </div>
   );
 }

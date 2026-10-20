@@ -74,4 +74,18 @@ describe('computeSourceStatusFromCoverage', () => {
     };
     expect(computeSourceStatusFromCoverage(cov, 'required')).toBe('partial');
   });
+
+  it('marks full Mon–Sun covered as received (statement-period / dual-read)', () => {
+    const cov = Object.fromEntries(
+      weekDayKeys('2026-10-12').map((d) => [d, 'covered']),
+    );
+    expect(computeSourceStatusFromCoverage(cov, 'required')).toBe('received');
+  });
+
+  it('keeps optional empty weeks as missing (landing mutes display)', () => {
+    const cov = Object.fromEntries(
+      weekDayKeys('2026-10-12').map((d) => [d, 'missing']),
+    );
+    expect(computeSourceStatusFromCoverage(cov, 'optional')).toBe('missing');
+  });
 });

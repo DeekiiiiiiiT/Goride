@@ -26,9 +26,9 @@ export type SettlementQueueRow = {
   tripCount?: number;
   settlementStatus?: string;
   fuelFinalized?: boolean;
-  /** H-1: reconciliation-close gate. When false, `collect` must be blocked. */
+  /** When false, residual is provisional until fuel/tolls clear — does not block Log Cash. */
   moneyUnlocked?: boolean;
-  /** Close Week freeze — Pay/Collect disabled until reopen. */
+  /** Close Week freeze — Log Cash / Pay disabled until reopen. */
   periodFrozen?: boolean;
   /**
    * Close seal failed verify-on-read (hash mismatch). When absent, UI still shows

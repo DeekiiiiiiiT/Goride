@@ -43,8 +43,9 @@ export function assertPeriodNotFrozen(period: Parameters<typeof isPeriodFrozen>[
 }
 
 /**
- * Single money-path chokepoint (audit C-1 / C-5):
- * period ended ∧ moneyUnlocked ∧ not frozen.
+ * Money-path chokepoint:
+ * - Cash receipt (Log Cash / collect): not frozen only. Residual/unlock computed later.
+ * - Other settle moves: period ended ∧ moneyUnlocked (when required) ∧ not frozen.
  * Hash integrity is async — callers await assertFrozenPeriodHashIntact after this.
  */
 export function assertMovementAllowed(opts: {
@@ -52,26 +53,32 @@ export function assertMovementAllowed(opts: {
   period: Parameters<typeof isPeriodFrozen>[0] & {
     metadata?: Record<string, unknown> | null;
   };
-  /** Collect / batch-collect require unlock; pay/write-off/reverse/verify/approve skip. */
+  /**
+   * When true (Pay residual settle-up, legacy paths): require financeCore.moneyUnlocked.
+   * Log Cash / collect must pass false — receipt never waits on fuel/toll unlock.
+   */
   requireMoneyUnlocked?: boolean;
   now?: Date | string;
   /**
-   * Desk cash taken during the current week. Reconciliation still computes what
-   * is owed later, so this collect is not waiting on week-end or fuel unlock.
-   * A frozen week still refuses.
+   * Cash receipt (Log Cash): skip period-ended + money-unlock.
+   * Reconciliation still computes what is owed later. A frozen week still refuses.
+   * Prefer this name; `allowOpenWeekDeskCollect` kept as alias for older call sites.
    */
+  isCashReceipt?: boolean;
+  /** @deprecated Use isCashReceipt — same semantics (receipt skips ended/unlock). */
   allowOpenWeekDeskCollect?: boolean;
 }): void {
-  if (!opts.allowOpenWeekDeskCollect) {
+  const isCashReceipt = !!(opts.isCashReceipt || opts.allowOpenWeekDeskCollect);
+  if (!isCashReceipt) {
     assertPeriodEndedForSettlement(opts.weekAnchor, opts.now);
   }
   assertPeriodNotFrozen(opts.period);
 
-  if (opts.requireMoneyUnlocked && !opts.allowOpenWeekDeskCollect) {
+  if (opts.requireMoneyUnlocked && !isCashReceipt) {
     const fc = (opts.period?.metadata?.financeCore || {}) as Record<string, unknown>;
     const meta = opts.period?.metadata || {};
     const forceRelease = !!(meta.forceRelease || fc.forceRelease);
-    // Fail closed: missing flag ⇒ locked (C-5).
+    // Fail closed: missing flag ⇒ locked (C-5) for non-receipt settle paths.
     const moneyUnlocked = fc.moneyUnlocked === true || forceRelease;
     if (!moneyUnlocked) {
       throw new SettlementCommandError(

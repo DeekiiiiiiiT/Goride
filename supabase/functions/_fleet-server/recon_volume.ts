@@ -43,12 +43,73 @@ export async function sourceVolumeMetrics(
     return { rowCount, amountMinor };
   }
 
-  if (
-    sourceId === "uber_bundle" ||
-    sourceId === "indrive_trips" ||
-    sourceId === "fuel_card_roam" ||
-    sourceId === "fuel_card_self"
-  ) {
+  if (sourceId === "uber_bundle" || sourceId === "indrive_trips") {
+    // Prefer live trips so close-hash matches dual-read coverage when batches lag.
+    let tripQ = sb
+      .from("fleet_trips")
+      .select("id", { count: "exact", head: true })
+      .eq("organization_id", orgId)
+      .gte("date", weekKey)
+      .lte("date", end);
+    if (sourceId === "uber_bundle") tripQ = tripQ.ilike("platform", "%uber%");
+    if (sourceId === "indrive_trips") tripQ = tripQ.ilike("platform", "%indrive%");
+    const { count: tripCount } = await tripQ;
+    if ((tripCount ?? 0) > 0) return { rowCount: tripCount ?? 0, amountMinor: 0 };
+
+    const { data } = await sb
+      .from("fleet_import_batches")
+      .select("record_count, rows_committed, coverage_start, coverage_end")
+      .eq("organization_id", orgId)
+      .eq("source_id", sourceId)
+      .in("status", ["completed", "committed"])
+      .lte("coverage_start", end)
+      .gte("coverage_end", weekKey)
+      .limit(50);
+    let rowCount = 0;
+    for (const b of data ?? []) {
+      rowCount += Number(
+        (b as { rows_committed?: number }).rows_committed ??
+          (b as { record_count?: number }).record_count ??
+          0,
+      ) || 0;
+    }
+    return { rowCount, amountMinor: 0 };
+  }
+
+  if (sourceId === "fuel_card_roam" || sourceId === "fuel_card_self") {
+    const { data: fuelRows } = await sb
+      .from("fleet_fuel_entries")
+      .select("id, type, payload_json")
+      .eq("organization_id", orgId)
+      .gte("date", weekKey)
+      .lte("date", end)
+      .limit(100000);
+    let live = 0;
+    for (const f of fuelRows ?? []) {
+      const payload = (f as { payload_json?: Record<string, unknown> }).payload_json || {};
+      const importSrc = String(payload.importSource || "").toLowerCase();
+      const entrySource = String(payload.entrySource || "").toLowerCase();
+      const type = String((f as { type?: string }).type || "");
+      const cardId = String(payload.cardId || "").trim();
+      const paid = String(payload.paymentMethod || payload.paidBy || "").toLowerCase();
+      if (sourceId === "fuel_card_roam") {
+        // Gas Card / Roam Fuels inventory fills (issuer may be JAA Advance rental).
+        if (
+          type === "Card_Transaction" ||
+          entrySource === "fuel-card" ||
+          paid === "gas card" ||
+          paid === "company_card" ||
+          paid === "gas_card" ||
+          !!cardId
+        ) {
+          live += 1;
+        }
+      } else if (importSrc.includes("jaa") || importSrc.includes("self_serve")) {
+        live += 1;
+      }
+    }
+    if (live > 0) return { rowCount: live, amountMinor: 0 };
+
     const { data } = await sb
       .from("fleet_import_batches")
       .select("record_count, rows_committed, coverage_start, coverage_end")
@@ -82,7 +143,7 @@ export async function sourceVolumeMetrics(
     return { rowCount: count ?? 0, amountMinor: 0 };
   }
 
-  if (sourceId === "cash_fuel" || sourceId === "fuel_card_roam" || sourceId === "fuel_card_self") {
+  if (sourceId === "cash_fuel") {
     const { count } = await sb
       .from("fleet_fuel_entries")
       .select("id", { count: "exact", head: true })

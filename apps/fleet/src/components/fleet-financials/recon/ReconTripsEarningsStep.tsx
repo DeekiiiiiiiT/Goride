@@ -1,17 +1,23 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Loader2, AlertCircle } from 'lucide-react';
+import { AlertCircle, Loader2 } from 'lucide-react';
 import {
   isCashSourceAckValid,
   TRIPS_EARNINGS_BLOCKER_CODES,
   type CloseBlocker,
 } from '@roam/finance-core';
 import type { ReconRunPayload } from '../../../services/reconApi';
+import { api } from '../../../services/api';
 import {
   weekCloseApi,
   isWeekCloseUnavailable,
+  WeekCloseApiError,
   type WeekCloseCashSourceMismatch,
 } from '../../../services/weekCloseApi';
+import {
+  CLOSE_WEEK_SYNC_FIXABLE_CODES,
+  forceResealHintsFromPreview,
+} from '../../../utils/closeWeekAutoSync';
 import { humanBlockerLabel } from '../../../utils/weekCloseBlockers';
 import { CloseWeekUberReimportDialog } from '../CloseWeekUberReimportDialog';
 import { Button } from '../../ui/button';
@@ -24,6 +30,20 @@ import {
   DialogTitle,
 } from '../../ui/dialog';
 import { Textarea } from '../../ui/textarea';
+import { toast } from 'sonner';
+
+function driverDisplayName(d: {
+  id?: string;
+  driverId?: string;
+  name?: string;
+  fullName?: string;
+  firstName?: string;
+  lastName?: string;
+}): string {
+  const named = String(d.name || d.fullName || '').trim();
+  if (named) return named;
+  return [d.firstName, d.lastName].filter(Boolean).join(' ').trim();
+}
 
 const TRIPS_EARNINGS_CODES = new Set<string>(TRIPS_EARNINGS_BLOCKER_CODES);
 
@@ -40,13 +60,20 @@ function filterTripsBlockers(blockers: CloseBlocker[]): CloseBlocker[] {
   return blockers.filter((b) => TRIPS_EARNINGS_CODES.has(String(b.code || '').toUpperCase()));
 }
 
+function blockerNeedsEarningsRefresh(code: string): boolean {
+  const c = code.toUpperCase();
+  return (
+    c === 'EARNINGS_STATEMENT_MISSING' ||
+    c === 'EARNINGS_STATEMENT_UNVERIFIED' ||
+    c === 'EARNINGS_ENGINE_DRIFT'
+  );
+}
+
 export function ReconTripsEarningsStep({
   run,
-  onNavigate,
   onRefresh,
 }: {
   run: ReconRunPayload;
-  onNavigate?: (page: string) => void;
   onRefresh?: () => void;
 }) {
   const weekKey = run.run.weekKey;
@@ -55,6 +82,9 @@ export function ReconTripsEarningsStep({
   const [cashAckTarget, setCashAckTarget] = useState<WeekCloseCashSourceMismatch | null>(null);
   const [cashAckReason, setCashAckReason] = useState('');
   const [cashAckBusy, setCashAckBusy] = useState(false);
+  const [autoSealBusy, setAutoSealBusy] = useState(false);
+  const [autoSealError, setAutoSealError] = useState<string | null>(null);
+  const autoSealKeyRef = useRef<string | null>(null);
 
   const previewQuery = useQuery({
     queryKey: ['recon-trips-earnings', weekKey, line],
@@ -62,6 +92,32 @@ export function ReconTripsEarningsStep({
     staleTime: 30_000,
     retry: false,
   });
+
+  const driversQuery = useQuery({
+    queryKey: ['drivers', 'recon-trips-earnings'],
+    queryFn: () => api.getDrivers().catch(() => []),
+    staleTime: 60_000,
+  });
+
+  const driverNameById = useMemo(() => {
+    const map = new Map<string, string>();
+    const raw = driversQuery.data;
+    const list = Array.isArray(raw) ? raw : (raw as { data?: unknown[] } | null)?.data || [];
+    for (const row of list) {
+      const d = row as {
+        id?: string;
+        driverId?: string;
+        name?: string;
+        fullName?: string;
+        firstName?: string;
+        lastName?: string;
+      };
+      const id = String(d.id || d.driverId || '').trim();
+      const name = driverDisplayName(d);
+      if (id && name) map.set(id, name);
+    }
+    return map;
+  }, [driversQuery.data]);
 
   const blockers = useMemo(() => {
     if (!previewQuery.data) return [];
@@ -72,6 +128,12 @@ export function ReconTripsEarningsStep({
     return filterTripsBlockers(all);
   }, [previewQuery.data]);
 
+  const labelForDriver = (driverId: string | undefined | null): string | null => {
+    const id = String(driverId || '').trim();
+    if (!id) return null;
+    return driverNameById.get(id) || `Driver ${id.slice(0, 8)}…`;
+  };
+
   const openCashMismatches = useMemo(() => {
     const rows = previewQuery.data?.cashSourceMismatches || [];
     return rows.filter(
@@ -80,6 +142,53 @@ export function ReconTripsEarningsStep({
   }, [previewQuery.data]);
 
   const weekAlreadyClosed = !!previewQuery.data?.weekClosed;
+
+  const needsEarningsSeal = useMemo(
+    () =>
+      blockers.some((b) => blockerNeedsEarningsRefresh(String(b.code || ''))) ||
+      blockers.some((b) => CLOSE_WEEK_SYNC_FIXABLE_CODES.has(String(b.code || '').toUpperCase())),
+    [blockers],
+  );
+
+  // Seal earnings from data already uploaded — no manual Refresh.
+  useEffect(() => {
+    if (!previewQuery.data || weekAlreadyClosed || !needsEarningsSeal || autoSealBusy) return;
+    const key = `${weekKey}:${line}:${blockers.map((b) => b.code).sort().join(',')}`;
+    if (autoSealKeyRef.current === key) return;
+    autoSealKeyRef.current = key;
+
+    let cancelled = false;
+    setAutoSealBusy(true);
+    setAutoSealError(null);
+    void (async () => {
+      try {
+        const hints = forceResealHintsFromPreview(previewQuery.data || {});
+        hints.forceEarningsReseal = true;
+        await weekCloseApi.sync(weekKey, { ...hints, serviceLine: line });
+        if (cancelled) return;
+        await previewQuery.refetch();
+        onRefresh?.();
+      } catch (e) {
+        if (cancelled) return;
+        // Keep key so we don't infinite-loop; Re-upload clears the key.
+        if (isWeekCloseUnavailable(e)) {
+          setAutoSealError('Earnings seal is not available on this environment yet.');
+        } else if (e instanceof WeekCloseApiError) {
+          setAutoSealError(e.message);
+        } else {
+          setAutoSealError(e instanceof Error ? e.message : 'Could not seal earnings');
+        }
+      } finally {
+        if (!cancelled) setAutoSealBusy(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+    // Intentionally keyed off preview + needsSeal; busy/ref guard double-fires.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- auto-seal once per blocker set
+  }, [previewQuery.data, needsEarningsSeal, weekAlreadyClosed, weekKey, line]);
 
   const doAcknowledgeCashSource = async () => {
     if (!cashAckTarget) return;
@@ -97,11 +206,13 @@ export function ReconTripsEarningsStep({
     }
   };
 
-  if (previewQuery.isLoading) {
+  if (previewQuery.isLoading || autoSealBusy) {
     return (
       <div className="flex h-32 items-center justify-center text-sm text-slate-500">
         <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-        Checking trips &amp; earnings…
+        {autoSealBusy
+          ? 'Sealing earnings from uploaded trips…'
+          : 'Checking trips & earnings…'}
       </div>
     );
   }
@@ -109,7 +220,7 @@ export function ReconTripsEarningsStep({
   if (previewQuery.isError && isWeekCloseUnavailable(previewQuery.error)) {
     return (
       <p className="text-sm text-slate-500">
-        Week-close preview is not available yet — re-upload Uber below or open Driver Settlements.
+        Week-close preview is not available yet — open Settlement preview after fuel and tolls.
       </p>
     );
   }
@@ -120,10 +231,11 @@ export function ReconTripsEarningsStep({
 
   return (
     <div className="space-y-4">
-      <p className="text-sm text-slate-600">
-        Trip imports and earnings must tie before you close the week. Fix blockers here without leaving
-        Week Reconciliation.
-      </p>
+      {autoSealError ? (
+        <div className="rounded-xl border border-rose-200 bg-rose-50/70 px-4 py-3 text-sm text-rose-900">
+          {autoSealError}
+        </div>
+      ) : null}
 
       {openCashMismatches.length > 0 ? (
         <div className="space-y-2">
@@ -142,7 +254,9 @@ export function ReconTripsEarningsStep({
               <tbody>
                 {openCashMismatches.map((m) => (
                   <tr key={m.driverId} className="border-t border-rose-100 text-slate-800">
-                    <td className="px-3 py-2">{m.driverName || m.driverId.slice(0, 8)}</td>
+                    <td className="px-3 py-2">
+                      {m.driverName || labelForDriver(m.driverId) || m.driverId.slice(0, 8)}
+                    </td>
                     <td className="px-3 py-2 tabular-nums">{MONEY(m.uberCash)}</td>
                     <td className="px-3 py-2 tabular-nums">{MONEY(m.uberTripCash)}</td>
                     <td className="px-3 py-2 tabular-nums">{MONEY(m.mismatch)}</td>
@@ -170,39 +284,45 @@ export function ReconTripsEarningsStep({
 
       {blockers.length === 0 && openCashMismatches.length === 0 ? (
         <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 px-4 py-3 text-sm text-emerald-900">
-          No trips or earnings blockers for this week in the close preview.
+          Earnings sealed from uploaded trips — continue when ready.
         </div>
       ) : blockers.length > 0 ? (
         <ul className="space-y-2">
-          {blockers.map((b, i) => (
-            <li
-              key={`${b.code}-${i}`}
-              className="flex gap-3 rounded-xl border border-amber-200 bg-amber-50/60 px-4 py-3 text-sm text-amber-950"
-            >
-              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
-              <div>
-                <p className="font-medium">{humanBlockerLabel(b)}</p>
-                {b.driverId ? (
-                  <p className="text-xs text-amber-800/80">Driver {b.driverId.slice(0, 8)}…</p>
-                ) : null}
-              </div>
-            </li>
-          ))}
+          {blockers.map((b, i) => {
+            const code = String(b.code || '').toUpperCase();
+            const earningsThis = blockerNeedsEarningsRefresh(code);
+            return (
+              <li
+                key={`${b.code}-${i}`}
+                className="flex gap-3 rounded-xl border border-amber-200 bg-amber-50/60 px-4 py-3 text-sm text-amber-950"
+              >
+                <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+                <div className="min-w-0 flex-1 space-y-1">
+                  <p className="font-medium">{humanBlockerLabel(b)}</p>
+                  {b.driverId ? (
+                    <p className="text-xs text-amber-800/80">{labelForDriver(b.driverId)}</p>
+                  ) : null}
+                  {earningsThis ? (
+                    <p className="text-xs text-amber-900/70">
+                      Still blocked after auto-seal — re-upload the Uber week only if the file looks
+                      wrong.
+                    </p>
+                  ) : null}
+                </div>
+              </li>
+            );
+          })}
         </ul>
       ) : null}
 
-      <div className="flex flex-wrap gap-2">
-        <Button type="button" variant="default" size="sm" onClick={() => setUberOpen(true)}>
-          Re-upload Uber week
-        </Button>
+      <div className="flex flex-wrap items-center gap-2">
         <Button
           type="button"
-          variant="ghost"
+          variant="outline"
           size="sm"
-          className="text-slate-600"
-          onClick={() => onNavigate?.('driver-settlements')}
+          onClick={() => setUberOpen(true)}
         >
-          Open in Driver Settlements
+          Re-upload Uber week
         </Button>
       </div>
 
@@ -213,6 +333,7 @@ export function ReconTripsEarningsStep({
           weekLabel={weekKey}
           weekKey={weekKey}
           onImported={async () => {
+            autoSealKeyRef.current = null;
             await previewQuery.refetch();
             onRefresh?.();
           }}

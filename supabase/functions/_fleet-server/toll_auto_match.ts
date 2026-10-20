@@ -108,6 +108,7 @@ export async function runPerfectMatchAutoMatch(
     if (!trip) continue;
 
     let ledgerWritten = false;
+    let tripSynced = false;
     try {
       await deps.updateTollLedgerEntry(
         txId,
@@ -133,30 +134,40 @@ export async function runPerfectMatchAutoMatch(
         source: "system:toll_reconcile_sync:auto_match",
         actorId,
       });
+      tripSynced = true;
 
-      await deps.writeTollLedgerEntry({
-        eventType: "toll_reconciled",
-        category: "Toll Reconciliation",
-        description: `Auto-matched toll to trip: ${(trip.pickupLocation || "").substring(0, 30)} \u2192 ${(trip.dropoffLocation || "").substring(0, 30)}`,
-        grossAmount: Math.abs(Number(tx.amount) || 0),
-        netAmount: 0,
-        direction: "neutral",
-        sourceType: "reconciliation",
-        sourceId: txId,
-        driverId: tx.driverId || trip.driverId || "unknown",
-        driverName: tx.driverName || trip.driverName || "Unknown",
-        vehicleId: tx.vehicleId || trip.vehicleId,
-        date: tx.date,
-        actorId: actorId || "system-auto",
-        strict: true,
-        metadata: {
-          tripId,
-          matchedAt: new Date().toISOString(),
-          matchedBy: "system-auto",
-          tollAmount: Math.abs(Number(tx.amount) || 0),
-          tripTollCharges: trip.tollCharges || 0,
-        },
-      });
+      // Audit is best-effort after a successful link. Rolling back a good match
+      // because the audit row failed left operators with "N auto-match(es) failed"
+      // and the same tolls still in Needs Review.
+      try {
+        await deps.writeTollLedgerEntry({
+          eventType: "toll_reconciled",
+          category: "Toll Reconciliation",
+          description: `Auto-matched toll to trip: ${(trip.pickupLocation || "").substring(0, 30)} \u2192 ${(trip.dropoffLocation || "").substring(0, 30)}`,
+          grossAmount: Math.abs(Number(tx.amount) || 0),
+          netAmount: 0,
+          direction: "neutral",
+          sourceType: "reconciliation",
+          sourceId: txId,
+          driverId: tx.driverId || trip.driverId || "unknown",
+          driverName: tx.driverName || trip.driverName || "Unknown",
+          vehicleId: tx.vehicleId || trip.vehicleId,
+          date: tx.date,
+          actorId: actorId || "system-auto",
+          strict: false,
+          metadata: {
+            tripId,
+            matchedAt: new Date().toISOString(),
+            matchedBy: "system-auto",
+            tollAmount: Math.abs(Number(tx.amount) || 0),
+            tripTollCharges: trip.tollCharges || 0,
+          },
+        });
+      } catch (auditErr: any) {
+        console.warn(
+          `[TollReconciliation] Auto-match audit skipped for tx ${txId}: ${auditErr?.message || auditErr}`,
+        );
+      }
 
       autoReconciled++;
       console.log(
@@ -166,8 +177,8 @@ export async function runPerfectMatchAutoMatch(
       const msg = err?.message || String(err);
       console.error(`[TollReconciliation] Auto-confirm failed for tx ${txId}: ${msg}`);
       errors.push(`${txId}: ${msg}`);
-      // TR-H4: compensate partial write so we do not leave reconciled-without-audit.
-      if (ledgerWritten) {
+      // Compensate only when trip sync never completed — keep linked rows if sync succeeded.
+      if (ledgerWritten && !tripSynced) {
         try {
           await deps.updateTollLedgerEntry(
             txId,

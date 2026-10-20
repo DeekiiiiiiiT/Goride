@@ -6,7 +6,9 @@ import { requireAuthHeaders } from '../utils/authHeaders';
 import { fetchWithRetry } from './api';
 import { API_ENDPOINTS } from './apiConfig';
 
-const BASE = `${API_ENDPOINTS.fleetCore}/make-server-37f42386/recon`;
+// fleet-core kernel maps /fleet-core/X → /make-server-37f42386/X — do not
+// insert the legacy make-server segment again (double prefix → 404).
+const BASE = `${API_ENDPOINTS.fleetCore}/recon`;
 const IMPORTS_BASE = `${BASE}/imports`;
 
 export type ReconImportPreview = {
@@ -176,7 +178,7 @@ export async function attestSourceNone(
   line: 'rideshare' | 'rush_delivery',
   weekKey: string,
   sourceId: string,
-  body: { days: string[]; reason: string; expectedVersion: number },
+  body: { days: string[]; expectedVersion: number; reason?: string },
 ): Promise<ReconRunPayload> {
   const response = await reconFetch(
     `/runs/${encodeURIComponent(line)}/${encodeURIComponent(weekKey)}/sources/${encodeURIComponent(sourceId)}/attest-none`,
@@ -318,7 +320,14 @@ export async function completeRunStep(
     { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) },
   );
   if (!response.ok) {
-    throw new ReconApiError('Step complete failed', response.status);
+    let message = 'Step complete failed';
+    try {
+      const j = (await response.json()) as { message?: string };
+      if (typeof j?.message === 'string' && j.message.trim()) message = j.message;
+    } catch {
+      /* ignore */
+    }
+    throw new ReconApiError(message, response.status);
   }
   return (await response.json()) as ReconRunPayload;
 }

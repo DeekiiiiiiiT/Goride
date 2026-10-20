@@ -59,10 +59,12 @@ After weekly math (passenger cash, Log Cash, fuel credits, tolls, driver share):
 
 | Desk | Direction | Action | Effect |
 |------|-----------|--------|--------|
-| **Collect** | Driver → fleet | Log Cash (`Payment_Received` / Cash Collection) | Increases Cash Returned |
+| **Collect** | Driver → fleet | Log Cash (`Payment_Received` / Cash Collection) | Cash **receipt** — increases Cash Returned for the tagged Settlement Week |
 | **Pay** | Fleet → driver | Record Payout (`Payout` / Driver Payouts) | Increases `settlement_paid`; clears `company_owes` |
 
-Formula (finalized weeks):
+**Log Cash (receipt-first):** Allowed for any Settlement Week that is not frozen (and seal intact). Does **not** require fuel finalize, toll clear, or matching “driver owes.” Amount may exceed residual or cash still held (soft warn in UI). Period sync recalculates `cash_still_held` and who-owes after the write; fuel/toll recon later updates residual without re-logging cash.
+
+Formula (after Log Cash and/or finalized fuel/tolls):
 
 ```
 grossSettlement = netPayout − cashStillHeld
@@ -72,7 +74,7 @@ outstanding     = grossSettlement > 0
 ```
 
 - Positive outstanding → company owes driver (`company_owes`)
-- Negative → driver owes fleet (`driver_owes`)
+- Negative → driver owes fleet (`driver_owes`) — display outcome, not a Log Cash gate
 - Near zero → `settled`
 
 Write-offs forgive **driver** cash held only. They never count as Cash Returned or as a Driver Payout.
@@ -82,9 +84,9 @@ Fleet-wide collect + pay runs from **Business Finance → Driver Settlements** (
 **Inputs**
 
 - Cash trips in fleet KV (manual, Start Trip, synced Roam cash trips, Uber cash, etc.).
-- Log Cash (Cash Returned).
+- Log Cash (Cash Returned) — receipt write, not settle-up.
 - Driver Payouts (`settlement_paid`).
-- Fuel finalize / toll decisions.
+- Fuel finalize / toll decisions (update residual; do not block Log Cash).
 
 **Drivers must see** Weekly Settlement + Fuel Wallet in the driver app under **Fleet Settlement** (separate from Roam Earnings). Admins see the same desk on roamfleet.co.
 

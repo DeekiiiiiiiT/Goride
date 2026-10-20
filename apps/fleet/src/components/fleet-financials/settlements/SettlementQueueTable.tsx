@@ -38,8 +38,8 @@ function weekOpenTitle(r: Pick<SettlementQueueRow, 'periodAnchor' | 'periodEnd'>
   });
 }
 
-/** Reconciliation gate — fail closed when unlock flag is missing (C-5). */
-function collectGateBlocked(r: Pick<SettlementQueueRow, 'moneyUnlocked'>): boolean {
+/** Unlock missing → residual still provisional (informational; does not block Log Cash). */
+function collectProvisional(r: Pick<SettlementQueueRow, 'moneyUnlocked'>): boolean {
   return r.moneyUnlocked !== true;
 }
 
@@ -48,14 +48,13 @@ function periodFrozenBlocked(r: Pick<SettlementQueueRow, 'periodFrozen'>): boole
   return r.periodFrozen === true;
 }
 
-const GATE_TITLE = 'Not yet reconciled — fuel must be finalized and tolls clear before Collect.';
 const FROZEN_TITLE = 'Week closed — reopen on Close Week to change money';
 const SEAL_BROKEN_TITLE =
-  'Seal broken — close hash no longer matches; reopen on Close Week before Pay/Collect';
+  'Seal broken — close hash no longer matches; reopen on Close Week before Log Cash / Pay';
 
 /** Short action-oriented chip labels — what to do, not only state. */
-const CHIP_OPEN = 'Week still open — act after it ends';
-const CHIP_LOCKED = 'Reconcile fuel/tolls before Collect';
+const CHIP_OPEN = 'Week still open — Log cash allowed';
+const CHIP_PROVISIONAL = 'Fuel/tolls provisional — Log cash OK';
 const CHIP_CLOSED = 'Reopen on Close Week';
 const CHIP_SEAL_BROKEN = 'Seal broken — reopen';
 
@@ -63,7 +62,7 @@ function sealBroken(r: Pick<SettlementQueueRow, 'sealBroken'>): boolean {
   return r.sealBroken === true;
 }
 
-/** Row block reason shown as visible helper text (U-5), not only title tooltips. */
+/** Hard block reason for disabled actions (not unlock — unlock is informational). */
 export function settlementRowBlockReason(
   r: Pick<
     SettlementQueueRow,
@@ -83,8 +82,9 @@ function actionTitle(
 ): string | undefined {
   if (sealBroken(r)) return SEAL_BROKEN_TITLE;
   if (periodFrozenBlocked(r)) return FROZEN_TITLE;
-  if (mode === 'collect' && collectGateBlocked(r)) return GATE_TITLE;
-  return weekOpenTitle(r);
+  // Collect / Log Cash: open week + unlock are not hard blocks (receipt-first).
+  if (mode === 'pay') return weekOpenTitle(r);
+  return undefined;
 }
 
 function blockReasonChip(
@@ -94,17 +94,20 @@ function blockReasonChip(
   >,
   mode: 'collect' | 'pay',
 ): { label: string; className: string } | undefined {
-  if (!weekActionable(r)) {
-    return { label: CHIP_OPEN, className: 'text-amber-700' };
-  }
   if (sealBroken(r)) {
     return { label: CHIP_SEAL_BROKEN, className: 'text-rose-800' };
   }
   if (periodFrozenBlocked(r)) {
     return { label: CHIP_CLOSED, className: 'text-slate-600' };
   }
-  if (mode === 'collect' && collectGateBlocked(r)) {
-    return { label: CHIP_LOCKED, className: 'text-rose-700' };
+  if (mode === 'collect' && collectProvisional(r)) {
+    return { label: CHIP_PROVISIONAL, className: 'text-amber-700' };
+  }
+  if (mode === 'collect' && !weekActionable(r)) {
+    return { label: CHIP_OPEN, className: 'text-amber-700' };
+  }
+  if (mode === 'pay' && !weekActionable(r)) {
+    return { label: CHIP_OPEN, className: 'text-amber-700' };
   }
   return undefined;
 }
@@ -132,19 +135,14 @@ function blockReasonDomId(scope: string, key: string): string {
   return `sq-block-${scope}-${key.replace(/[^a-zA-Z0-9_-]/g, '_')}`;
 }
 
-/** Collect is allowed only when the calendar week ended AND the money is unlocked AND not frozen. */
+/** Log Cash (Collect): any non-frozen, seal-intact week — unlock / week-ended not required. */
 export function canCollect(
   r: Pick<
     SettlementQueueRow,
     'periodAnchor' | 'periodEnd' | 'moneyUnlocked' | 'periodFrozen' | 'sealBroken'
   >,
 ): boolean {
-  return (
-    weekActionable(r) &&
-    !collectGateBlocked(r) &&
-    !periodFrozenBlocked(r) &&
-    !sealBroken(r)
-  );
+  return !periodFrozenBlocked(r) && !sealBroken(r);
 }
 
 export function canPay(

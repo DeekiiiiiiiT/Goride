@@ -53,13 +53,14 @@ export type EvaluateRunResult = {
   nextAction: NextAction;
 };
 
+/** Expense lanes (tolls/fuel) before earnings seal — final who-owes needs the split first. */
 export const RECON_STEP_ORDER: readonly RunStepId[] = [
   "sources",
   "attribution",
-  "trips_earnings",
   "tolls",
   "tag_account",
   "fuel",
+  "trips_earnings",
   "settlement_preview",
   "close",
 ] as const;

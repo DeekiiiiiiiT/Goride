@@ -30,11 +30,17 @@ describe('evaluateRun', () => {
       stepCounts: {
         sources: zero,
         attribution: zero,
+        tolls: zero,
+        tag_account: zero,
+        fuel: zero,
         trips_earnings: zero,
       },
       completedSteps: [
         { stepId: 'sources', inputsHashAtComplete: '' },
         { stepId: 'attribution', inputsHashAtComplete: '' },
+        { stepId: 'tolls', inputsHashAtComplete: '' },
+        { stepId: 'tag_account', inputsHashAtComplete: '' },
+        { stepId: 'fuel', inputsHashAtComplete: '' },
         { stepId: 'trips_earnings', inputsHashAtComplete: priorTripsHash },
       ],
     });
@@ -54,18 +60,12 @@ describe('evaluateRun', () => {
       stepCounts: {
         sources: zero,
         attribution: zero,
-        trips_earnings: zero,
         tolls: zero,
         tag_account: zero,
       },
       completedSteps: [
         { stepId: 'sources', inputsHashAtComplete: 's' },
         { stepId: 'attribution', inputsHashAtComplete: 'a' },
-        {
-          stepId: 'trips_earnings',
-          inputsHashAtComplete:
-            'indrive_trips::|roam_trips::|rush_deliveries::|uber_bundle:u1:received',
-        },
         { stepId: 'tolls', inputsHashAtComplete: priorTollsHash },
       ],
     });
@@ -89,18 +89,12 @@ describe('evaluateRun', () => {
       stepCounts: {
         sources: zero,
         attribution: zero,
-        trips_earnings: zero,
         tolls: zero,
         tag_account: zero,
       },
       completedSteps: [
         { stepId: 'sources', inputsHashAtComplete: 's' },
         { stepId: 'attribution', inputsHashAtComplete: 'a' },
-        {
-          stepId: 'trips_earnings',
-          inputsHashAtComplete:
-            'indrive_trips::|roam_trips::|rush_deliveries::|uber_bundle:u1:received',
-        },
         { stepId: 'tolls', inputsHashAtComplete: priorTollsHash },
       ],
     });

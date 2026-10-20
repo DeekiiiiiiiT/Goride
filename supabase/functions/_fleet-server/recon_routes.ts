@@ -36,7 +36,11 @@ import {
 } from "./evaluate_run_mirror.ts";
 import { registerReconImportRoutes } from "./recon_import_routes.ts";
 import * as kv from "./kv_store.tsx";
-import { periodEndForAnchor } from "../../../packages/finance-core/src/periodKey.ts";
+import {
+  periodEndForAnchor,
+  periodKeyFor,
+  DEFAULT_FLEET_TZ,
+} from "../../../packages/finance-core/src/periodKey.ts";
 import {
   computeTagAccountRollForward,
   tagLedgerAmountToRollForwardParts,
@@ -95,6 +99,111 @@ function recentWeekKeys(count: number, year?: number): string[] {
     anchor = addDaysYmd(anchor, -7);
   }
   return keys;
+}
+
+function markWeekFromDay(
+  active: Set<string>,
+  candidateSet: Set<string>,
+  dayRaw: string,
+): void {
+  const day = String(dayRaw || "").slice(0, 10);
+  if (!WEEK_RE.test(day)) return;
+  const monday = periodKeyFor(day, DEFAULT_FLEET_TZ);
+  if (monday && candidateSet.has(monday)) active.add(monday);
+}
+
+/** Mark every candidate Monday that overlaps [start, end] inclusive. */
+function markWeeksOverlappingRange(
+  active: Set<string>,
+  candidateSet: Set<string>,
+  startRaw: string,
+  endRaw: string,
+): void {
+  const startDay = String(startRaw || "").slice(0, 10);
+  const endDay = String(endRaw || "").slice(0, 10);
+  if (!WEEK_RE.test(startDay) || !WEEK_RE.test(endDay)) return;
+  let monday = periodKeyFor(startDay, DEFAULT_FLEET_TZ);
+  if (!monday) return;
+  while (monday <= endDay) {
+    if (candidateSet.has(monday)) active.add(monday);
+    monday = addDaysYmd(monday, 7);
+  }
+}
+
+/**
+ * Do not invent empty calendar weeks. Shared org sources (toll usage / top-ups)
+ * stay required when tags exist — without this filter every blank Monday shows
+ * “Provide Tag account…” with zero line activity.
+ *
+ * Rideshare activity = completed non-delivery trips and/or rideshare import
+ * batches that cover the week. Delivery activity = completed rush_delivery trips.
+ */
+async function weekKeysWithLineActivity(
+  orgId: string,
+  line: ReconLine,
+  candidates: string[],
+): Promise<string[]> {
+  if (candidates.length === 0) return [];
+  const sorted = [...candidates].filter((k) => WEEK_RE.test(k)).sort();
+  if (sorted.length === 0) return [];
+  const rangeStart = sorted[0];
+  const rangeEnd = periodEndForAnchor(sorted[sorted.length - 1]);
+  const candidateSet = new Set(sorted);
+  const active = new Set<string>();
+  const sb = getServiceClient();
+
+  let tripQuery = sb
+    .from("fleet_trips")
+    .select("date, service_line")
+    .eq("organization_id", orgId)
+    .eq("status", "Completed")
+    .gte("date", rangeStart)
+    .lte("date", rangeEnd)
+    .limit(100000);
+
+  if (line === "rush_delivery") {
+    tripQuery = tripQuery.eq("service_line", "rush_delivery");
+  }
+
+  const { data: trips, error: tripErr } = await tripQuery;
+  if (tripErr) {
+    console.warn(`[recon-weeks] ${line} trip activity lookup failed`, tripErr.message);
+  } else {
+    for (const row of trips ?? []) {
+      const sl = String((row as { service_line?: string | null }).service_line || "");
+      // Null / rideshare / other → rideshare desk; delivery-only → Delivery desk.
+      if (line === "rideshare" && sl === "rush_delivery") continue;
+      if (line === "rush_delivery" && sl !== "rush_delivery") continue;
+      markWeekFromDay(active, candidateSet, String((row as { date?: string }).date || ""));
+    }
+  }
+
+  if (line === "rideshare") {
+    const { data: batches, error: batchErr } = await sb
+      .from("fleet_import_batches")
+      .select("coverage_start, coverage_end, source_id")
+      .eq("organization_id", orgId)
+      .in("source_id", ["uber_bundle", "indrive_trips"])
+      .in("status", ["completed", "committed"])
+      .lte("coverage_start", rangeEnd)
+      .gte("coverage_end", rangeStart)
+      .limit(500);
+
+    if (batchErr) {
+      console.warn("[recon-weeks] rideshare import activity lookup failed", batchErr.message);
+    } else {
+      for (const b of batches ?? []) {
+        const start = String((b as { coverage_start?: string }).coverage_start || "").slice(0, 10);
+        const end = String((b as { coverage_end?: string }).coverage_end || "").slice(0, 10);
+        if (WEEK_RE.test(start) && WEEK_RE.test(end)) {
+          markWeeksOverlappingRange(active, candidateSet, start, end);
+        }
+      }
+    }
+  }
+
+  // Keep candidate order (newest first).
+  return candidates.filter((k) => active.has(k));
 }
 
 function actorFromContext(c: Context): string {
@@ -294,13 +403,27 @@ async function materializeRunSources(
   const defs = sourcesForLine(line);
   const out = [];
 
+  const recon = reconDb();
+  const { data: priorRows } = await recon
+    .from("run_sources")
+    .select("source_id, status")
+    .eq("run_id", runId);
+  const priorStatus = new Map(
+    (priorRows ?? []).map((r) => [
+      String((r as { source_id: string }).source_id),
+      String((r as { status: string }).status),
+    ]),
+  );
+
   for (const def of defs) {
     const requirement = reqById[def.id] ?? def.requiredWhen(profile, weekKey);
     const coverage = await fetchCoverageMap(orgId, line, def.id, weekKey);
-    const status = computeSourceStatusFromCoverage(coverage, requirement, {
+    let status = computeSourceStatusFromCoverage(coverage, requirement, {
       waitingExternal: def.id === "fuel_card_roam" &&
         requirement === "required" &&
         Object.values(coverage).every((v) => v === "missing"),
+      // Keep approver waive across rematerialize (coverage alone cannot express waived).
+      waived: priorStatus.get(def.id) === "waived",
     });
     const volume = await sourceVolumeMetrics(orgId, def.id, weekKey);
     const inputHash = coverageInputHash(coverage, volume);
@@ -313,7 +436,7 @@ async function materializeRunSources(
       inputHash,
     });
 
-    await reconDb().from("run_sources").upsert(
+    await recon.from("run_sources").upsert(
       {
         run_id: runId,
         source_id: def.id,
@@ -922,6 +1045,12 @@ export function registerReconRoutes(app: Hono) {
         const reqById = Object.fromEntries(requirements.map((r) => [r.sourceId, r.requirement]));
         const defs = sourcesForLine(line);
 
+        // Delivery tab with rush not actually active: no line sources → do not
+        // surface shared toll/fuel as fake Delivery work.
+        if (line === "rush_delivery" && reqById.rush_deliveries === "not_applicable") {
+          return c.json({ success: true, weeks: [], line, year: year ?? null });
+        }
+
         const sb = getServiceClient();
         let weekKeys = recentWeekKeys(12, year);
 
@@ -934,6 +1063,8 @@ export function registerReconRoutes(app: Hono) {
         if (!rpcErr && Array.isArray(rpcRows) && rpcRows.length > 0) {
           weekKeys = rpcRows.map((r: { week_key: string }) => String(r.week_key).slice(0, 10));
         }
+
+        weekKeys = await weekKeysWithLineActivity(orgId, line, weekKeys);
 
         const weeks = [];
         for (const weekKey of weekKeys) {
@@ -1032,9 +1163,10 @@ export function registerReconRoutes(app: Hono) {
           expectedVersion?: number;
         };
         const days = Array.isArray(body.days) ? body.days.map((d) => String(d).slice(0, 10)) : [];
-        const reason = String(body.reason ?? "").trim();
-        if (!days.length || !reason) {
-          return c.json({ error: "VALIDATION", message: "days[] and reason are required" }, 400);
+        // Reason is optional — "No activity this week" is the attestation itself.
+        const reason = String(body.reason ?? "").trim() || "No activity this week";
+        if (!days.length) {
+          return c.json({ error: "VALIDATION", message: "days[] is required" }, 400);
         }
 
         const actor = actorFromContext(c);

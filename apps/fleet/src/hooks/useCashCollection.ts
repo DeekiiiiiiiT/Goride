@@ -1,6 +1,9 @@
 /**
- * Shared Collect-cash logic for the Settlements desk and the Dashboard quick action.
+ * Shared Log Cash (receipt) logic for Settlements desk + Dashboard quick action.
  * Rideshare Layer B only — delivery COD is Roam's receivable (see Layer A′ remittance).
+ *
+ * Receipt-first: Log Cash is never blocked by fuel/toll unlock or residual match.
+ * Only frozen / seal-broken weeks refuse. Settlement math updates after the write.
  */
 import { useMemo, useState } from 'react';
 import { useQueryClient, type QueryClient } from '@tanstack/react-query';
@@ -11,8 +14,8 @@ import {
   settlementCommandsApi,
   isPeriodFrozenError,
   isMoneyLockedError,
+  SettlementCommandApiError,
 } from '../services/settlementCommandsApi';
-import { isSettlementPeriodEnded } from '../utils/settlementPeriodGate';
 
 export const MONEY_EPS = 0.005;
 
@@ -29,7 +32,8 @@ export type CashCollectInput = {
   driverId: string;
   weekAnchor: string;
   amount: number;
-  expectedOutstanding: number;
+  /** Advisory only — server ignores for receipt; kept for backward-compatible clients. */
+  expectedOutstanding?: number;
   method?: string;
   reference?: string;
   note?: string;
@@ -38,11 +42,13 @@ export type CashCollectInput = {
 export type CashCollectResult = {
   period?: Record<string, unknown>;
   afterOwed: number | null;
+  cashReturned?: number | null;
+  cashStillHeld?: number | null;
 };
 
 export class CashGateError extends Error {
   constructor(
-    readonly code: 'PERIOD_FROZEN' | 'MONEY_LOCKED',
+    readonly code: 'PERIOD_FROZEN' | 'MONEY_LOCKED' | 'SERVER_STALE',
     readonly weekAnchor: string,
   ) {
     super(code);
@@ -56,18 +62,31 @@ export function owedMajor(r: SettlementQueueRow): number {
     : Math.max(0, (Number(r.amountOwedMinor) || 0) / 100);
 }
 
-/** Every refusal the desk applies, in one place. Returns null when collectable. */
+/**
+ * Receipt-first Log Cash refusals only. Unlock / open-week are not blocks.
+ * @deprecated Prefer receiptBlockReason — alias kept for older imports.
+ */
 export function collectBlockReason(r: SettlementQueueRow): string | null {
-  if (!isSettlementPeriodEnded({ periodAnchor: r.periodAnchor, periodEnd: r.periodEnd })) {
-    return 'Week still open — settle after it ends';
-  }
+  return receiptBlockReason(r);
+}
+
+/** Receipt-first: only frozen / seal-broken weeks refuse Log Cash. */
+export function receiptBlockReason(r: SettlementQueueRow): string | null {
   if (r.sealBroken === true) return 'Close seal broken — resolve in Close Week';
   if (r.periodFrozen === true) return 'Week closed — reopen it in Close Week';
-  if (r.moneyUnlocked !== true) return 'Fuel/toll not cleared for this week';
   return null;
 }
 
-/** Group raw queue rows into drivers with only collectable weeks. Keeps SettlementQueueRow flags. */
+/** Informational only — residual still provisional until fuel/tolls clear. */
+export function receiptProvisionalHint(r: SettlementQueueRow): string | null {
+  if (receiptBlockReason(r)) return null;
+  if (r.moneyUnlocked !== true) {
+    return 'Fuel/tolls not cleared — settlement residual still provisional';
+  }
+  return null;
+}
+
+/** Group queue rows into drivers with weeks that can receive Log Cash. */
 export function groupCashDrivers(rows: SettlementQueueRow[]): CashDriver[] {
   const byDriver = new Map<string, CashDriver>();
   for (const row of rows) {
@@ -83,7 +102,7 @@ export function groupCashDrivers(rows: SettlementQueueRow[]): CashDriver[] {
         weeks: [],
         blockedCount: 0,
       };
-    if (collectBlockReason(row)) entry.blockedCount += 1;
+    if (receiptBlockReason(row)) entry.blockedCount += 1;
     else {
       entry.weeks.push({ ...row, owedMajor: amount });
       entry.totalOwed += amount;
@@ -101,38 +120,45 @@ export function groupCashDrivers(rows: SettlementQueueRow[]): CashDriver[] {
 
 /** Shape weeks for LogCashPaymentModal's `periods` prop. */
 export function periodsForCashDriver(d: CashDriver) {
-  return d.weeks.map((w) => ({
-    start: parseISO(`${w.periodAnchor}T12:00:00`),
-    end: parseISO(`${w.periodEnd}T12:00:00`),
-    amountOwed: w.owedMajor,
-    amountPaid: 0,
-    balance: w.owedMajor,
-    status: 'Unpaid',
-  }));
+  return d.weeks.map((w) => {
+    const held = Number(w.cashStillHeld);
+    const returned = Number(w.cashReturned);
+    const amountOwed = w.owedMajor;
+    const amountPaid = Number.isFinite(returned) && returned > 0 ? returned : 0;
+    const balance =
+      Number.isFinite(held) && held > MONEY_EPS
+        ? held
+        : Math.max(0, amountOwed - amountPaid);
+    return {
+      start: parseISO(`${w.periodAnchor}T12:00:00`),
+      end: parseISO(`${w.periodEnd}T12:00:00`),
+      amountOwed: Math.max(amountOwed, balance),
+      amountPaid,
+      balance,
+      status: balance <= MONEY_EPS ? 'Paid' : amountPaid > MONEY_EPS ? 'Partial' : 'Unpaid',
+    };
+  });
 }
 
 function afterOwedFromPeriod(period: Record<string, unknown> | undefined): number | null {
   if (!period) return null;
+  const held = Number(period.cashStillHeld);
+  if (Number.isFinite(held)) return Math.max(0, held);
   const owed = Math.max(
     0,
-    Number(period.amountOwed) ||
-      Math.abs(Number(period.settlementAmount) || 0) ||
-      Number(period.cashStillHeld) ||
-      0,
+    Number(period.amountOwed) || Math.abs(Number(period.settlementAmount) || 0) || 0,
   );
   return Number.isFinite(owed) ? owed : null;
 }
 
 /**
- * Single write path for cash *payment* collections.
- * Throws CashGateError / rethrows so callers keep modal open on failure.
+ * Single write path for Log Cash receipts.
+ * Throws CashGateError for frozen weeks; MONEY_LOCKED from an old server → SERVER_STALE.
  */
 export async function collectCashPayment(
   qc: QueryClient,
   input: CashCollectInput,
 ): Promise<CashCollectResult> {
-  const overCollect = input.amount > input.expectedOutstanding + MONEY_EPS;
-  const reason = input.note?.match(/\[Over-collection\]\s*(.+)/i)?.[1]?.trim();
   try {
     const res = await settlementCommandsApi.collect({
       driverId: input.driverId,
@@ -142,16 +168,29 @@ export async function collectCashPayment(
       reference: input.reference,
       note: input.note,
       idempotencyKey: newIdempotencyKey(),
-      expectedOutstanding: input.expectedOutstanding,
-      ...(overCollect ? { allowOverCollect: true, reason: reason || 'Over-collection' } : {}),
+      expectedOutstanding: Number(input.expectedOutstanding) || 0,
     });
     const period = (res as { period?: Record<string, unknown> })?.period;
     invalidateSettlementQueries(qc);
     await qc.refetchQueries({ queryKey: ['settlements', 'queue'] });
-    return { period, afterOwed: afterOwedFromPeriod(period) };
+    const cashReturned = period != null ? Number(period.cashReturned) : null;
+    const cashStillHeld = period != null ? Number(period.cashStillHeld) : null;
+    return {
+      period,
+      afterOwed: afterOwedFromPeriod(period),
+      cashReturned: Number.isFinite(cashReturned as number) ? cashReturned : null,
+      cashStillHeld: Number.isFinite(cashStillHeld as number) ? cashStillHeld : null,
+    };
   } catch (err) {
     if (isPeriodFrozenError(err)) throw new CashGateError('PERIOD_FROZEN', input.weekAnchor);
-    if (isMoneyLockedError(err)) throw new CashGateError('MONEY_LOCKED', input.weekAnchor);
+    // Legacy deploy still returning MONEY_LOCKED — treat as redeploy needed, not fuel dialog.
+    if (isMoneyLockedError(err)) throw new CashGateError('SERVER_STALE', input.weekAnchor);
+    if (err instanceof SettlementCommandApiError && err.status === 409) {
+      const code = String(err.code || '');
+      if (code === 'MONEY_LOCKED' || code === 'STALE_RESIDUAL' || code === 'OVER_COLLECT_CAP') {
+        throw new CashGateError('SERVER_STALE', input.weekAnchor);
+      }
+    }
     throw err;
   }
 }
@@ -173,7 +212,7 @@ export function useCashCollection(opts: { enabled?: boolean; loadWhenOpen?: bool
     [queue.data?.rows],
   );
 
-  /** True when queue returned rows but none are collectable (all gated). */
+  /** True when queue returned rows but none are loggable (all frozen/seal-broken). */
   const hasBlockedOutstanding = useMemo(() => {
     const rows = queue.data?.rows ?? [];
     if (rows.length === 0) return false;
@@ -181,7 +220,7 @@ export function useCashCollection(opts: { enabled?: boolean; loadWhenOpen?: bool
     for (const row of rows) {
       if (owedMajor(row) <= MONEY_EPS) continue;
       anyOwed = true;
-      if (!collectBlockReason(row)) return false;
+      if (!receiptBlockReason(row)) return false;
     }
     return anyOwed && drivers.length === 0;
   }, [queue.data?.rows, drivers.length]);
@@ -193,13 +232,13 @@ export function useCashCollection(opts: { enabled?: boolean; loadWhenOpen?: bool
   const findDriver = (driverId: string): CashDriver | undefined =>
     drivers.find((d) => d.driverId === driverId);
 
-  /** Best human reason when a driver has owed cash but no collectable week. */
+  /** Best human reason when a driver has cash to log but every week is blocked. */
   const blockReasonForDriver = (driverId: string): string | null => {
     const rows = (queue.data?.rows ?? []).filter((r) => r.driverId === driverId);
     const owed = rows.filter((r) => owedMajor(r) > MONEY_EPS);
     if (owed.length === 0) return 'No cash outstanding for this driver';
     for (const r of owed) {
-      const reason = collectBlockReason(r);
+      const reason = receiptBlockReason(r);
       if (reason) return reason;
     }
     return null;

@@ -6167,6 +6167,19 @@ app.post(`${BASE}/personal-use/auto-charge`, requirePermission('toll.manage'), a
  * Create a toll-related audit ledger entry (now writes to canonical ledger_event:*).
  * Used for reconciliation audit trail entries.
  */
+function normalizeTollAuditDate(raw: unknown): string {
+  const fallback = new Date().toISOString().split("T")[0];
+  if (raw == null) return fallback;
+  if (typeof raw === "string") {
+    const ymd = raw.trim().slice(0, 10);
+    return /^\d{4}-\d{2}-\d{2}$/.test(ymd) ? ymd : fallback;
+  }
+  if (raw instanceof Date && !Number.isNaN(raw.getTime())) {
+    return raw.toISOString().split("T")[0];
+  }
+  return fallback;
+}
+
 async function writeTollLedgerEntry(params: {
   eventType: string;
   category: string;
@@ -6187,19 +6200,25 @@ async function writeTollLedgerEntry(params: {
   strict?: boolean;
 }): Promise<string> {
   const id = crypto.randomUUID();
-  const date = params.date?.split("T")[0] || new Date().toISOString().split("T")[0];
-  
+  const date = normalizeTollAuditDate(params.date);
+  // Map legacy audit source labels onto canonical allow-list.
+  const sourceType =
+    params.sourceType === "refund_resolution" ? "toll_resolution" : params.sourceType;
+  const eventType = String(params.eventType || "").startsWith("refund_resolved_")
+    ? "toll_reconciled"
+    : params.eventType;
+
   // Write to canonical ledger_event:* instead of legacy ledger:%
   const canonicalEvent = {
-    idempotencyKey: `toll_audit:${id}|${params.eventType}`,
+    idempotencyKey: `toll_audit:${id}|${eventType}`,
     date,
     driverId: params.driverId || "unknown",
-    eventType: params.eventType,
+    eventType,
     direction: params.direction,
     netAmount: params.netAmount,
     grossAmount: params.grossAmount,
     currency: "JMD",
-    sourceType: params.sourceType,
+    sourceType,
     sourceId: params.sourceId,
     vehicleId: params.vehicleId,
     platform: "Roam",
@@ -6209,40 +6228,42 @@ async function writeTollLedgerEntry(params: {
       category: params.category,
       driverName: params.driverName,
       auditEntryId: id,
+      originalEventType: params.eventType,
       ...(params.actorId ? { actorId: params.actorId } : {}),
     },
   };
-  
+
   // Import appendCanonicalLedgerEvents dynamically to avoid circular deps
   const { appendCanonicalLedgerEvents } = await import("./ledger_canonical.ts");
-  
-  // Create a minimal context-like object for the append (no org scoping for audit entries)
+
+  // Prefer live request org context so audit rows stamp organizationId.
+  const liveCtx = getTollContext();
   const mockContext = { get: () => undefined } as any;
-  
+
   try {
-    const result = await appendCanonicalLedgerEvents([canonicalEvent], mockContext);
+    const result = await appendCanonicalLedgerEvents([canonicalEvent], liveCtx ?? mockContext);
     if (!result?.success || (result.failed || 0) > 0) {
       // Do NOT log "Written" — the event was rejected (e.g. invalid eventType/
       // sourceType) and never actually landed in the canonical ledger.
       console.error(
-        `[TollLedger] Canonical event ${params.eventType} for tx ${params.sourceId} was rejected:`,
+        `[TollLedger] Canonical event ${eventType} for tx ${params.sourceId} was rejected:`,
         result?.details,
       );
       if (params.strict) {
         throw new Error(
-          `Failed to write toll audit event ${params.eventType} for ${params.sourceId}`,
+          `Failed to write toll audit event ${eventType} for ${params.sourceId}`,
         );
       }
     } else {
       console.log(
-        `[TollLedger] Written ${params.eventType} canonical event for tx ${params.sourceId}`,
+        `[TollLedger] Written ${eventType} canonical event for tx ${params.sourceId}`,
       );
     }
   } catch (err) {
     console.error(`[TollLedger] Failed to write canonical event:`, err);
     if (params.strict) throw err;
   }
-  
+
   return id;
 }
 

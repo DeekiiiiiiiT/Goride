@@ -25,10 +25,7 @@ import { Loader2, DollarSign, Wallet, ArrowRightLeft, Calendar } from "lucide-re
 import { FinancialTransaction } from '../../types/data';
 import { format, parseISO } from "date-fns";
 import { DEFAULT_FLEET_TZ, periodEndForAnchor, periodKeyFor } from "@roam/finance-core";
-import {
-  isSettlementPeriodEnded,
-  settlementPeriodOpenMessage,
-} from "../../utils/settlementPeriodGate";
+import { isSettlementPeriodEnded } from "../../utils/settlementPeriodGate";
 
 interface SettlementPeriod {
   start: Date;
@@ -240,51 +237,21 @@ export function LogCashPaymentModal({
     }
 
     const parsed = parseFloat(amount);
-    // S1-5: cap Log Cash against owed — soft warn + hard block above tolerance.
-    const owedCap =
+    // Soft context only — cash still held for the selected week (not a hard residual cap).
+    const heldCap =
       transactionType === "payment"
-        ? Math.max(
-            0,
-            Number(selectedPeriodObj?.balance ?? cashOwed) || 0,
-          )
+        ? Math.max(0, Number(selectedPeriodObj?.balance ?? cashOwed) || 0)
         : Infinity;
-    const OVER_COLLECT_HARD_TOLERANCE = 0.005;
-    if (
+    const OVER_HELD_SOFT = 0.005;
+    const overHeld =
       transactionType === "payment" &&
       !collectingThisWeek &&
-      owedCap > 0 &&
-      parsed > owedCap + OVER_COLLECT_HARD_TOLERANCE
-    ) {
-      if (!overCollectReason.trim()) {
-        toast.error(
-          `Amount exceeds cash owed (${formatJMD(owedCap, 2)}). Enter a reason to allow over-collection, or lower the amount.`,
-        );
-        return;
-      }
-    }
+      heldCap > 0 &&
+      parsed > heldCap + OVER_HELD_SOFT;
 
-    // Cash Collection must be tagged to a Settlement Week (Cash Returned SSOT)
+    // Cash receipt must be tagged to a Settlement Week (Cash Returned SSOT)
     if (transactionType === 'payment' && (!workPeriodStart || !workPeriodEnd)) {
-      toast.error("Select a Settlement Week for this cash payment");
-      return;
-    }
-
-    if (
-      transactionType === 'payment' &&
-      !collectingThisWeek &&
-      workPeriodStart &&
-      workPeriodEnd &&
-      !isSettlementPeriodEnded({
-        periodAnchor: workPeriodStart,
-        periodEnd: workPeriodEnd,
-      })
-    ) {
-      toast.error(
-        settlementPeriodOpenMessage({
-          periodAnchor: workPeriodStart,
-          periodEnd: workPeriodEnd,
-        }),
-      );
+      toast.error("Select a Settlement Week for this cash");
       return;
     }
 
@@ -307,11 +274,8 @@ export function LogCashPaymentModal({
     setIsSubmitting(true);
     try {
       const notesWithOver =
-        transactionType === "payment" &&
-        owedCap > 0 &&
-        parsed > owedCap + OVER_COLLECT_HARD_TOLERANCE &&
-        overCollectReason.trim()
-          ? `${notes ? notes + "\n" : ""}[Over-collection] ${overCollectReason.trim()}`
+        overHeld && overCollectReason.trim()
+          ? `${notes ? notes + "\n" : ""}[Over-held] ${overCollectReason.trim()}`
           : notes;
       await onSave({
         id: initialTransaction?.id,
@@ -325,7 +289,7 @@ export function LogCashPaymentModal({
         workPeriodEnd: workPeriodEnd ? `${workPeriodEnd}T12:00:00.000Z` : undefined,
       });
       if (!suppressSuccessToast) {
-        toast.success(initialTransaction ? "Transaction updated successfully" : "Transaction recorded successfully");
+        toast.success(initialTransaction ? "Transaction updated successfully" : "Cash logged successfully");
       }
       onClose();
     } catch (error: any) {
@@ -339,11 +303,13 @@ export function LogCashPaymentModal({
         toast.error(
           "Cash logged but the settlement week didn’t update. Refresh the Settlements desk and try again.",
         );
+      } else if (msg && msg !== "Error" && !/failed to fetch/i.test(msg)) {
+        toast.error(msg);
       } else {
         toast.error(
           initialTransaction
             ? "Failed to update transaction"
-            : "Failed to record transaction — the week may not have moved.",
+            : "Failed to log cash — try again or redeploy fleet-server if this persists.",
         );
       }
     } finally {
@@ -378,28 +344,41 @@ export function LogCashPaymentModal({
   };
 
   const formatPeriodSublabel = (period: SettlementPeriod): string => {
-    if (period.status === 'Paid' || period.status === 'Over-collected') return 'Collected';
-    if (period.balance > 0.005) return `${formatJMD(period.balance, 2)} collection gap`;
-    return 'No gap';
+    if (period.status === 'Paid' || period.status === 'Over-collected') return 'Fully returned';
+    if (period.balance > 0.005) return `${formatJMD(period.balance, 2)} still held`;
+    return 'No cash held';
   };
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
-          <DialogTitle>{initialTransaction ? 'Edit Transaction' : 'Log Transaction'}</DialogTitle>
+          <DialogTitle>{initialTransaction ? 'Edit cash entry' : 'Log cash'}</DialogTitle>
           <DialogDescription>
-            {initialTransaction ? 'Update financial transaction details.' : `Record a financial transaction for ${driverName}.`}
+            {initialTransaction
+              ? 'Update cash receipt details.'
+              : `Record cash received from ${driverName}. Tag a Settlement Week — who owes whom updates after.`}
           </DialogDescription>
         </DialogHeader>
         
         <div className={`p-4 mb-2 rounded-lg border flex justify-between items-center ${getTransactionColor()}`}>
             <div>
-                <p className="text-xs text-slate-500 font-medium uppercase tracking-wider">Current Outstanding</p>
-                <p className="text-sm text-slate-600">Owed by driver</p>
+                <p className="text-xs text-slate-500 font-medium uppercase tracking-wider">
+                  {selectedPeriodObj ? 'Cash still held' : 'Cash context'}
+                </p>
+                <p className="text-sm text-slate-600">
+                  {selectedPeriodObj ? 'For selected week (context only)' : 'Driver week total'}
+                </p>
             </div>
             <div className="text-right">
-                <p className="text-xl font-bold text-slate-900">{formatJMD((cashOwed || 0), 2)}</p>
+                <p className="text-xl font-bold text-slate-900">
+                  {formatJMD(
+                    selectedPeriodObj
+                      ? Number(selectedPeriodObj.balance) || 0
+                      : cashOwed || 0,
+                    2,
+                  )}
+                </p>
             </div>
         </div>
 
@@ -488,12 +467,16 @@ export function LogCashPaymentModal({
             !collectingThisWeek &&
             Number(amount) > Math.max(0, Number(selectedPeriodObj?.balance ?? cashOwed) || 0) + 0.005 && (
             <div className="space-y-2 rounded-md border border-amber-200 bg-amber-50 p-3">
-              <Label htmlFor="over-collect-reason">Over-collection reason *</Label>
+              <p className="text-xs text-amber-900">
+                Amount is above cash still held for this week. You can still confirm — settlement
+                math will update after. Optional note:
+              </p>
+              <Label htmlFor="over-collect-reason">Note (optional)</Label>
               <Textarea
                 id="over-collect-reason"
                 value={overCollectReason}
                 onChange={(e) => setOverCollectReason(e.target.value)}
-                placeholder="Required when collecting more than the week owes"
+                placeholder="e.g. partial advanced remittance"
                 rows={2}
               />
             </div>
@@ -606,7 +589,7 @@ export function LogCashPaymentModal({
                     <p className="font-semibold text-emerald-600">{formatJMD(selectedPeriodObj.amountPaid, 2)}</p>
                   </div>
                   <div>
-                    <p className="text-slate-400 text-[10px] uppercase tracking-wide">Gap</p>
+                    <p className="text-slate-400 text-[10px] uppercase tracking-wide">Still held</p>
                     <p className={`font-semibold ${selectedPeriodObj.balance > 0 ? 'text-red-600' : 'text-emerald-600'}`}>
                       {formatJMD(selectedPeriodObj.balance, 2)}
                     </p>
@@ -693,7 +676,7 @@ export function LogCashPaymentModal({
                   Saving...
                 </>
               ) : (
-                initialTransaction ? 'Update Transaction' : (transactionType === 'payment' ? 'Confirm Payment' : 'Confirm Transaction')
+                initialTransaction ? 'Update' : (transactionType === 'payment' ? 'Confirm receipt' : 'Confirm')
               )}
             </Button>
           </DialogFooter>
