@@ -63,6 +63,10 @@ begin
 end;
 $$;
 
+-- Trigger only. The API must not call this. Inserts run as service_role.
+revoke all on function public.mark_vehicle_week_distance_stale() from public, anon, authenticated;
+grant execute on function public.mark_vehicle_week_distance_stale() to service_role;
+
 drop trigger if exists fuel_entries_mark_distance_stale on fleet.fuel_entries;
 create trigger fuel_entries_mark_distance_stale
 after insert or update or delete on fleet.fuel_entries

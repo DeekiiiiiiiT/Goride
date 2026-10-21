@@ -57,7 +57,7 @@ Deno.test("N-19: trip_agg authority appears on fuel_engine_diff payload", () => 
   }
 });
 
-Deno.test("N-19: server_entries authority appears on fuel_engine_diff payload", () => {
+Deno.test("N-19: tagged purchase rows do not replace trip distance authority", () => {
   const snap = {
     driverId: "d1",
     vehicleId: "v1",
@@ -76,11 +76,14 @@ Deno.test("N-19: server_entries authority appears on fuel_engine_diff payload", 
       },
     },
   };
+  // A gas-card fill is purchase spend. Summing it as distance cost double-counts the week.
   const serverTagged = [
     { amount: 400, usageCategory: "ride", driverId: "d1", vehicleId: "v1" },
   ];
   const payload = buildEngineDiffPayload([snap], serverTagged, "shadow");
-  assertEquals(payload.authoritySourceByDriver.d1, "server_entries");
+  assertEquals(payload.authoritySourceByDriver.d1, "trip_agg");
+  const { authority } = resolveEngineCategoryCosts(snap, serverTagged);
+  assertEquals(authority.rideShareCost, 999);
 });
 
 Deno.test("N-19: mismatch rows carry per-driver authoritySource", () => {

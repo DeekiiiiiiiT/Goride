@@ -4,6 +4,7 @@
 import { assertEquals } from "jsr:@std/assert";
 import { evaluateFuelWeekClosable } from "../../../packages/fuel-core/src/evaluateFuelWeekClosable.ts";
 import {
+  __closableKvCacheSizeForTest,
   __seedClosableKvCacheForTest,
   buildFuelWeekClosableInputForPeriod,
   clearFuelWeekClosableKvCache,
@@ -23,29 +24,31 @@ Deno.test("N-12: invalidate-on-evaluate surfaces exception after stale empty cac
     transactions: [],
   });
 
-  // Without invalidation, weekHasUnackedExceptionFills would return false from seed.
-  // buildFuelWeekClosableInputForPeriod must invalidate first, then reload from KV
-  // (empty in this unit env) — so we assert the invalidate helper path via seed size
-  // and evaluateFuelWeekClosable with the exception signal set explicitly after reload.
-  const input = await buildFuelWeekClosableInputForPeriod(
-    ORG,
-    {
-      week_start: WEEK_START,
-      week_end: WEEK_END,
-      counts: { finalize: { actionable: 0 } },
-      unexplained: 0,
-      total_spend: 100,
-      leakage_reviewed_at: new Date().toISOString(),
-    },
-    [],
-  );
-  // Fresh load from empty KV → no exceptions; proves we did not keep the seed forever
-  // as the sole source after invalidate (seed key deleted).
-  assertEquals(input.hasUnacknowledgedExceptionFills, false);
+  // A failed live fuel read must not look like a clean week. The stale empty
+  // seed would have answered "no exceptions" and let the week close.
+  let surfaced: unknown = null;
+  try {
+    await buildFuelWeekClosableInputForPeriod(
+      ORG,
+      {
+        week_start: WEEK_START,
+        week_end: WEEK_END,
+        counts: { finalize: { actionable: 0 } },
+        unexplained: 0,
+        total_spend: 100,
+        leakage_reviewed_at: new Date().toISOString(),
+      },
+      [],
+    );
+  } catch (e) {
+    surfaced = e;
+  }
+  const message = surfaced instanceof Error ? surfaced.message : String(surfaced ?? "");
+  assertEquals(message.includes("fleet read failed"), true);
+  // Invalidate dropped the seed before the live read; it was not reused.
+  assertEquals(__closableKvCacheSizeForTest(), 0);
 
-  // Failing input that must block: exception signal present.
   const blockers = evaluateFuelWeekClosable({
-    ...input,
     hasUnacknowledgedExceptionFills: true,
   });
   assertEquals(blockers.some((b) => b.code === "exception_fills"), true);

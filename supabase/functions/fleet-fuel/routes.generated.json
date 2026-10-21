@@ -1,7 +1,7 @@
 {
   "slug": "fleet-fuel",
-  "generatedAt": "2026-10-19T21:36:30.593Z",
-  "routeCount": 209,
+  "generatedAt": "2026-10-21T01:47:56.711Z",
+  "routeCount": 212,
   "routes": [
     "DELETE ${BASE_PATH}/admin/evidence-inbox/gate-held/:transactionId",
     "DELETE ${BASE_PATH}/finalized-reports/:weekStart/:identityId",
@@ -51,6 +51,7 @@
     "GET ${BASE}/fuel/jobs/:jobId",
     "GET ${BASE}/fuel/periods",
     "GET ${BASE}/fuel/periods/:id",
+    "GET ${BASE}/fuel/periods/:id/closable",
     "GET ${BASE}/fuel/periods/:id/evidence-pack",
     "GET ${BASE}/fuel/periods/:id/gap-charges",
     "GET ${BASE}/fuel/weeks/:weekStart/bundle",
@@ -160,7 +161,9 @@
     "POST ${BASE}/claims-toll-sync/repair",
     "POST ${BASE}/fuel/flags/disposition",
     "POST ${BASE}/fuel/period-jobs/process",
+    "POST ${BASE}/fuel/period-jobs/sweep",
     "POST ${BASE}/fuel/periods/:id/build-snapshots",
+    "POST ${BASE}/fuel/periods/:id/compute",
     "POST ${BASE}/fuel/periods/:id/data-quality-vehicle-review",
     "POST ${BASE}/fuel/periods/:id/finalize",
     "POST ${BASE}/fuel/periods/:id/gap-charges/approve",
