@@ -237,21 +237,26 @@ export function LogCashPaymentModal({
     }
 
     const parsed = parseFloat(amount);
-    // Soft context only — cash still held for the selected week (not a hard residual cap).
+    // R6-04 soft guard: amount above cash still held / owed needs a reason.
     const heldCap =
       transactionType === "payment"
         ? Math.max(0, Number(selectedPeriodObj?.balance ?? cashOwed) || 0)
         : Infinity;
     const OVER_HELD_SOFT = 0.005;
+    const FAT_FINGER_FLOOR = 50_000;
     const overHeld =
       transactionType === "payment" &&
-      !collectingThisWeek &&
-      heldCap > 0 &&
-      parsed > heldCap + OVER_HELD_SOFT;
+      ((heldCap > OVER_HELD_SOFT && parsed > heldCap + OVER_HELD_SOFT) ||
+        (heldCap <= OVER_HELD_SOFT && parsed > FAT_FINGER_FLOOR + OVER_HELD_SOFT));
 
     // Cash receipt must be tagged to a Settlement Week (Cash Returned SSOT)
     if (transactionType === 'payment' && (!workPeriodStart || !workPeriodEnd)) {
       toast.error("Select a Settlement Week for this cash");
+      return;
+    }
+
+    if (overHeld && !overCollectReason.trim()) {
+      toast.error("Amount is above what is owed — add a reason to continue");
       return;
     }
 
@@ -275,7 +280,7 @@ export function LogCashPaymentModal({
     try {
       const notesWithOver =
         overHeld && overCollectReason.trim()
-          ? `${notes ? notes + "\n" : ""}[Over-held] ${overCollectReason.trim()}`
+          ? `${notes ? notes + "\n" : ""}[Over-collection] ${overCollectReason.trim()}`
           : notes;
       await onSave({
         id: initialTransaction?.id,
@@ -464,20 +469,24 @@ export function LogCashPaymentModal({
           </div>
 
           {transactionType === 'payment' &&
-            !collectingThisWeek &&
-            Number(amount) > Math.max(0, Number(selectedPeriodObj?.balance ?? cashOwed) || 0) + 0.005 && (
+            ((Math.max(0, Number(selectedPeriodObj?.balance ?? cashOwed) || 0) > 0.005 &&
+              Number(amount) >
+                Math.max(0, Number(selectedPeriodObj?.balance ?? cashOwed) || 0) + 0.005) ||
+              (Math.max(0, Number(selectedPeriodObj?.balance ?? cashOwed) || 0) <= 0.005 &&
+                Number(amount) > 50_000.005)) && (
             <div className="space-y-2 rounded-md border border-amber-200 bg-amber-50 p-3">
               <p className="text-xs text-amber-900">
-                Amount is above cash still held for this week. You can still confirm — settlement
-                math will update after. Optional note:
+                Amount is above what is owed for this week. Add a reason to confirm — settlement
+                math will update after.
               </p>
-              <Label htmlFor="over-collect-reason">Note (optional)</Label>
+              <Label htmlFor="over-collect-reason">Reason (required)</Label>
               <Textarea
                 id="over-collect-reason"
                 value={overCollectReason}
                 onChange={(e) => setOverCollectReason(e.target.value)}
-                placeholder="e.g. partial advanced remittance"
+                placeholder="e.g. driver brought extra cash"
                 rows={2}
+                required
               />
             </div>
           )}

@@ -192,6 +192,11 @@ export function serverRowsToLandingPeriods(rows: FuelPeriodRow[]): FuelReconcili
         ? s.stopToStopGapAccepts
         : [],
       fuelSealError: s.fuelSealError ? String(s.fuelSealError) : null,
+      sqlStatus: s.status,
+      gasCardSpend: Number(s.gasCardSpend) || 0,
+      cashFromEarnings: Number(s.cashFromEarnings) || 0,
+      lockedAt: s.lockedAt || null,
+      version: s.version,
     });
   }
   return out;

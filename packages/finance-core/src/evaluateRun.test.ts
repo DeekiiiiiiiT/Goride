@@ -49,6 +49,48 @@ describe('evaluateRun', () => {
     expect(result.nextAction.label).toMatch(/Re-review/);
   });
 
+  it('marks fuel complete when nothing is left to do, without a continue click', () => {
+    const zero = { actionable: 0, informational: 0 };
+    const result = evaluateRun({
+      sources: [],
+      stepCounts: {
+        sources: zero,
+        attribution: zero,
+        tolls: zero,
+        tag_account: zero,
+        fuel: zero,
+      },
+      completedSteps: [
+        { stepId: 'sources', inputsHashAtComplete: '' },
+        { stepId: 'attribution', inputsHashAtComplete: '' },
+        { stepId: 'tolls', inputsHashAtComplete: '' },
+        { stepId: 'tag_account', inputsHashAtComplete: '' },
+      ],
+    });
+    expect(result.steps.find((s) => s.id === 'fuel')?.status).toBe('complete');
+  });
+
+  it('keeps fuel open while it still has work', () => {
+    const zero = { actionable: 0, informational: 0 };
+    const result = evaluateRun({
+      sources: [],
+      stepCounts: {
+        sources: zero,
+        attribution: zero,
+        tolls: zero,
+        tag_account: zero,
+        fuel: { actionable: 2, informational: 0 },
+      },
+      completedSteps: [
+        { stepId: 'sources', inputsHashAtComplete: '' },
+        { stepId: 'attribution', inputsHashAtComplete: '' },
+        { stepId: 'tolls', inputsHashAtComplete: '' },
+        { stepId: 'tag_account', inputsHashAtComplete: '' },
+      ],
+    });
+    expect(result.steps.find((s) => s.id === 'fuel')?.status).not.toBe('complete');
+  });
+
   it('marks tolls stale when toll_usage hash changes after tolls step complete', () => {
     const zero = { actionable: 0, informational: 0 };
     const priorTollsHash = 'cash_tolls::|toll_usage:hash-v1:received|uber_bundle::';

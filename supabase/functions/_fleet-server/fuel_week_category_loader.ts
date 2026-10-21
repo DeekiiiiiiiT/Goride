@@ -125,19 +125,12 @@ export function resolveEngineCategoryCosts(
     const vid = String(e.vehicleId || "").trim();
     if (snapDriver && did && did === snapDriver) return true;
     if (snapVehicle && vid && vid === snapVehicle) return true;
-    // Untargeted rows (no driver/vehicle on entry) never become authority.
     return false;
   });
-
-  // Phase 4: server week entries with usage tags are independent of client stamp.
-  if (serverTagged.length > 0) {
-    return {
-      authority: categoryCostsFromEntriesAndTrips(serverTagged, null),
-      snapCats,
-      fromLoader: true,
-      authoritySource: "server_entries",
-    };
-  }
+  // Tagged row amounts are purchase spend, not distance cost. Summing them
+  // double-counts a gas-card fill that exists as both a manual row and a card
+  // row, and it refuses a correct week. Spend is checked separately.
+  void serverTagged;
 
   // N-15: untagged settledEntries are wallet evidence only — not category authority.
   const hasTaggedSnap = hasTaggedUsage(entries);
@@ -277,4 +270,119 @@ export function materialCategoryCostDeltas(
     }
   }
   return out;
+}
+
+/** Spend and payment split only. Distance categories are not raw fill sums. */
+export function diffFuelSpendAgainstFills(args: {
+  clientSpend: number;
+  clientGasCard?: number;
+  clientCash?: number;
+  clientRideShare?: number;
+  serverSpend: number;
+  serverGasCard: number;
+  serverCash: number;
+  /** Independent engine rideshare, when a saved week snapshot has one. */
+  serverRideShare?: number | null;
+}): Array<{ field: string; delta: number }> {
+  const out: Array<{ field: string; delta: number }> = [];
+  const push = (field: string, client: number, server: number) => {
+    const delta = Math.round((client - server) * 100) / 100;
+    if (Math.abs(delta) > 0.05) out.push({ field, delta });
+  };
+  push("totalSpend", args.clientSpend, args.serverSpend);
+  if (args.clientGasCard != null) push("gasCard", args.clientGasCard, args.serverGasCard);
+  if (args.clientCash != null) push("cash", args.clientCash, args.serverCash);
+  if (args.serverRideShare != null && args.clientRideShare != null) {
+    push("rideShareCost", args.clientRideShare, args.serverRideShare);
+  }
+  return out;
+}
+
+export async function runFuelSpendShadow(args: {
+  orgId: string;
+  periodId?: string;
+  snapshotVersion?: number;
+  period: { week_start?: unknown; week_end?: unknown };
+  snapshots: unknown[];
+  forceClientMoney?: boolean;
+  forceReason?: string;
+}): Promise<{ blocked: boolean; mismatches: Array<Record<string, unknown>> }> {
+  const engineMode = String(Deno.env.get("FUEL_SERVER_ENGINE") || "off").toLowerCase();
+  if (engineMode !== "shadow" && engineMode !== "enforce") {
+    return { blocked: false, mismatches: [] };
+  }
+  const { loadWeekFuelEntries } = await import("./fuel_period_build_snapshots.ts");
+  const { selectWeekFuelFills, sumWeekFuelFills } = await import(
+    "../../../packages/fuel-core/src/selectWeekFuelFills.ts"
+  );
+  const weekStart = String(args.period.week_start || "").split("T")[0];
+  const weekEnd = String(args.period.week_end || weekStart).split("T")[0];
+  const entries = await loadWeekFuelEntries(args.orgId, weekStart, weekEnd);
+  const totals = sumWeekFuelFills(selectWeekFuelFills(entries as never));
+  const mismatches: Array<Record<string, unknown>> = [];
+  let clientSpend = 0;
+  let clientRide = 0;
+  let clientGas = 0;
+  let clientCash = 0;
+  let sawPay = false;
+  for (const snap of args.snapshots) {
+    const row = (snap && typeof snap === "object" ? snap : {}) as Record<string, unknown>;
+    clientSpend += Number(row.totalGasCardCost) || Number(row.totalSpend) || 0;
+    const cats = (row.categoryCosts || {}) as Record<string, unknown>;
+    clientRide += Number(row.rideShareCost) || Number(cats.rideShareCost) || 0;
+    if (row.gasCardSpend != null) {
+      sawPay = true;
+      clientGas += Number(row.gasCardSpend) || 0;
+    }
+    if (row.cashFromEarnings != null || row.totalCashCost != null) {
+      sawPay = true;
+      clientCash += Number(row.cashFromEarnings) || Number(row.totalCashCost) || 0;
+    }
+  }
+  let serverRideShare: number | null = null;
+  const version = Number(args.snapshotVersion) || 0;
+  if (args.periodId && version > 0) {
+    try {
+      const { loadFuelWeekSnapshotVersion } = await import("./fuel_week_compute.ts");
+      const loaded = await loadFuelWeekSnapshotVersion({
+        orgId: args.orgId,
+        periodId: args.periodId,
+        version,
+      });
+      if (loaded.ok) {
+        const reports = (loaded.row.money as { reports?: unknown[] } | null)?.reports || [];
+        let ride = 0;
+        let sawRide = false;
+        for (const report of reports) {
+          const row = (report && typeof report === "object" ? report : {}) as Record<string, unknown>;
+          const cats = (row.categoryCosts || {}) as Record<string, unknown>;
+          const value = Number(row.rideShareCost) || Number(cats.rideShareCost);
+          if (Number.isFinite(value) && (row.rideShareCost != null || cats.rideShareCost != null)) {
+            sawRide = true;
+            ride += value;
+          }
+        }
+        if (sawRide) serverRideShare = ride;
+      }
+    } catch (e) {
+      console.warn("[fuel_spend_shadow] snapshot ride share unavailable", e);
+    }
+  }
+  const deltas = diffFuelSpendAgainstFills({
+    clientSpend,
+    clientRideShare: clientRide,
+    clientGasCard: sawPay ? clientGas : undefined,
+    clientCash: sawPay ? clientCash : undefined,
+    serverSpend: totals.totalSpend,
+    serverGasCard: totals.gasCard,
+    serverCash: totals.cash,
+    serverRideShare,
+  });
+  if (deltas.length) {
+    mismatches.push({ driverId: "*", authoritySource: "week_fills", deltas });
+  }
+  const force =
+    args.forceClientMoney === true && String(args.forceReason || "").trim().length >= 8;
+  const blocked = engineMode === "enforce" && mismatches.length > 0 && !force;
+  return { blocked, mismatches };
 }

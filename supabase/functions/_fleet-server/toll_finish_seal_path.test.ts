@@ -7,6 +7,7 @@ import {
   computeTollPeriodReadiness,
   decideTollFinishAllowed,
 } from "../../../packages/toll-core/src/tollPeriodReadiness.ts";
+import { scopeTollReadinessWeekInputs } from "../../../packages/toll-core/src/tollPeriodReadinessScope.ts";
 import { incrementUnlinkedRefundCount } from "../../../packages/toll-core/src/tollPeriodCounts.ts";
 import { isUnlinkedRefundActionableNow } from "../../../packages/toll-core/src/unlinkedShortfallEligibility.ts";
 import {
@@ -160,4 +161,41 @@ Deno.test("pending-hold actionable parity: wizard count matches readiness blocke
     readiness.blockers.find((b) => b.stepId === "unlinked-refunds")?.count,
     1,
   );
+});
+
+Deno.test("Finish readiness week-scope: prior-week dispute + pad trips do not block", () => {
+  const TZ = "America/Jamaica";
+  const weekKey = "2026-10-12";
+  const scoped = scopeTollReadinessWeekInputs({
+    weekKey,
+    fleetTz: TZ,
+    tollTx: [
+      { id: "toll-pad", date: "2026-10-10" },
+      { id: "toll-week", date: "2026-10-15" },
+    ],
+    trips: [
+      { id: "pad-unlinked", date: "2026-10-10" },
+      { id: "week-cleared", date: "2026-10-15" },
+    ],
+    disputeRefunds: [
+      {
+        date: "2026-10-11T23:55:31.524Z",
+        matchedClaimId: null,
+        matchedTollId: null,
+      },
+    ],
+  });
+  assertEquals(scoped.weekDisputes.length, 0);
+  assertEquals(scoped.weekTrips.map((t) => t.id), ["week-cleared"]);
+
+  const steps = zeroSteps();
+  // Only week-scoped unlinked would be counted — pad trip omitted.
+  const readiness = computeTollPeriodReadiness({
+    weekKey,
+    steps,
+    cardsNetLoss: 0,
+    eventsNetLoss: 0,
+  });
+  assertEquals(decideTollFinishAllowed(readiness).allowed, true);
+  assertEquals(readiness.blockers.length, 0);
 });

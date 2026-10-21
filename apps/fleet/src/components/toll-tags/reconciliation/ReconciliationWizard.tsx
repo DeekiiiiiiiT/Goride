@@ -96,6 +96,11 @@ interface ReconciliationWizardProps {
   initialStepId?: StepId;
   /** R2-16: Week Recon embed — filter tolls to this service line. */
   serviceLine?: 'rideshare' | 'rush_delivery';
+  /**
+   * Week Recon hub: after tolls are marked reviewed, advance the left-rail
+   * run (complete Tolls → next ready step). When set, replaces exit-only Finish.
+   */
+  onPeriodFinished?: () => void | Promise<void>;
 }
 
 /**
@@ -123,6 +128,7 @@ function ReconciliationWizardInner({
   onExit,
   initialStepId,
   serviceLine,
+  onPeriodFinished,
 }: ReconciliationWizardProps) {
   const { runExclusive, busy: actionBusy, setMessage, setCancel } = useTollReconBusy();
   const handleRunTest = () => {
@@ -672,7 +678,7 @@ function ReconciliationWizardInner({
         disputeRefunds: disputeRefunds || [],
         periodWeekKey: period.startDate,
         fleetTz,
-        // Fully covered pending (netLoss ~$0) do not block Finish — offer Clear covered banner.
+        // Fully covered pending (netLoss ~$0) do not block Finish — cleared on Finish.
         pendingUnderpaidTolls: classifiedAllPlatforms.underpaid,
         suggestions,
       });
@@ -692,7 +698,7 @@ function ReconciliationWizardInner({
     ],
   );
 
-  // TR-H3: preview fully covered underpaid leftovers — never auto-write on mount.
+  // TR-H3: never auto-write on mount. Finish runs clear-covered + claim-sync housekeeping.
   const coveredPendingRows = useMemo(() => {
     if (isLoading) return [] as ReturnType<typeof listFullyCoveredPendingUnderpaid>;
     const tripMapLocal = new Map(trips.filter((t) => t?.id).map((t) => [t.id, t]));
@@ -722,27 +728,6 @@ function ReconciliationWizardInner({
     period.startDate,
     fleetTz,
   ]);
-
-  const handleClearCoveredPending = useCallback(async () => {
-    if (coveredPendingRows.length === 0) return;
-    let cleared = 0;
-    for (const row of coveredPendingRows) {
-      try {
-        await reconcile(row.transaction, row.trip);
-        cleared++;
-      } catch {
-        /* best-effort per row */
-      }
-    }
-    if (cleared > 0) {
-      toast.success(
-        cleared === 1
-          ? 'Cleared 1 fully covered toll from Underpaid'
-          : `Cleared ${cleared} fully covered tolls from Underpaid`,
-      );
-      await refresh();
-    }
-  }, [coveredPendingRows, reconcile, refresh]);
 
   // Unlinked step counts: pending-hold is actionable (policy A / TR-C1).
   const unlinkedSuggestionStatusByTripId = useMemo(() => {
@@ -858,32 +843,6 @@ function ReconciliationWizardInner({
       setBusyUnlinkedTripId(null);
     }
   }, [undoApplyToUnderpaid, refreshClaims]);
-
-  // TR-H3: offer repair as an explicit action — never write on mount.
-  const showRepairSplitBanner = useMemo(() => {
-    const unlinked = period.counts?.['unlinked-refunds'];
-    const hasUnlinkedSignal =
-      (unlinked?.actionable ?? 0) > 0 || (unlinked?.informational ?? 0) > 0;
-    return !isLoading && unclaimedRefunds.length > 0 && hasUnlinkedSignal;
-  }, [isLoading, period.counts, unclaimedRefunds.length]);
-
-  const handleRepairUnlinkedSplits = useCallback(async () => {
-    try {
-      const res = await repairUnlinkedApplySplits({ driverId: driverId || undefined });
-      if (!res.repaired) {
-        toast.message('No out-of-sync claims to repair');
-        return;
-      }
-      await Promise.all([refresh(), refreshClaims()]);
-      toast.success(
-        res.repaired === 1
-          ? 'Repaired 1 claim that was out of sync with an unlinked refund.'
-          : `Repaired ${res.repaired} claims that were out of sync with unlinked refunds.`,
-      );
-    } catch (e: any) {
-      toast.error(e?.message || 'Failed to repair split state');
-    }
-  }, [driverId, repairUnlinkedApplySplits, refresh, refreshClaims]);
 
   useEffect(() => {
     if (isLoading) return;
@@ -1189,6 +1148,26 @@ function ReconciliationWizardInner({
       return;
     }
     try {
+      // Housekeeping on Finish only (never on mount) — same work the old banners did.
+      for (const row of coveredPendingRows) {
+        try {
+          await reconcile(row.transaction, row.trip);
+        } catch {
+          /* best-effort — do not block Finish */
+        }
+      }
+      const unlinked = period.counts?.['unlinked-refunds'];
+      const hasUnlinkedSignal =
+        (unlinked?.actionable ?? 0) > 0 || (unlinked?.informational ?? 0) > 0;
+      if (unclaimedRefunds.length > 0 && hasUnlinkedSignal) {
+        try {
+          await repairUnlinkedApplySplits({ driverId: driverId || undefined });
+          await refreshClaims();
+        } catch {
+          /* best-effort — do not block Finish */
+        }
+      }
+
       await api.finishTollReconciliationPeriod(period.startDate);
     } catch (e: any) {
       const blockers = e?.data?.readiness?.blockers;
@@ -1201,6 +1180,20 @@ function ReconciliationWizardInner({
     }
     await queryClient.invalidateQueries({ queryKey: [TOLL_RECONCILIATION_PERIODS_KEY] });
     invalidateSharedPeriods();
+
+    // Week Recon embed: hand off to the hub so left-rail advances (Tag account / Fuel / …).
+    if (onPeriodFinished) {
+      try {
+        await onPeriodFinished();
+      } catch (e: any) {
+        toast.error('Tolls marked reviewed, but could not open the next step', {
+          description: e?.message || 'Use Continue on the week rail.',
+        });
+        onExit();
+      }
+      return;
+    }
+
     toast.success(`Week ${period.label} marked reviewed`, {
       description: 'Seal and unlock payouts from Close Week when ready.',
       action: {
@@ -1215,17 +1208,6 @@ function ReconciliationWizardInner({
     });
     onExit();
   };
-
-  const renderAdvancePrompt = (compact = false) => (
-    <StepAdvancePrompt
-      currentStepLabel={STEP_LABELS[activeStepId]}
-      nextStepLabel={nextStepLabel}
-      isLastStep={isLastStep}
-      onAdvance={isLastStep ? handleFinish : handleNext}
-      informationalWaitingCount={isLastStep ? informationalWaitingTotal : 0}
-      compact={compact}
-    />
-  );
 
   const handleApplyUnlinkedShortfall = async (
     tripId: string,
@@ -1297,8 +1279,18 @@ function ReconciliationWizardInner({
   const lockedRefresh = lock('Refreshing…', async () => {
     await refresh({ autoMatch: true });
   });
-  const lockedClearCovered = lock('Clearing covered tolls…', handleClearCoveredPending);
-  const lockedRepairSplits = lock('Repairing claim sync…', handleRepairUnlinkedSplits);
+  const lockedFinish = lock('Finishing week…', handleFinish);
+
+  const renderAdvancePrompt = (compact = false) => (
+    <StepAdvancePrompt
+      currentStepLabel={STEP_LABELS[activeStepId]}
+      nextStepLabel={nextStepLabel}
+      isLastStep={isLastStep}
+      onAdvance={isLastStep ? () => void lockedFinish() : handleNext}
+      informationalWaitingCount={isLastStep ? informationalWaitingTotal : 0}
+      compact={compact}
+    />
+  );
 
   const lockedAutoChargePersonal = lock('Auto-charging personal…', async () => {
     try {
@@ -1348,39 +1340,6 @@ function ReconciliationWizardInner({
       {truncationMessage && (
         <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
           {truncationMessage}
-        </div>
-      )}
-      {coveredPendingRows.length > 0 && (
-        <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900">
-          <span>
-            {coveredPendingRows.length === 1
-              ? '1 underpaid toll is already fully covered by a trip refund — review and clear it.'
-              : `${coveredPendingRows.length} underpaid tolls are already fully covered by trip refunds — review and clear them.`}
-          </span>
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={actionBusy}
-            className="border-emerald-300 text-emerald-800 hover:bg-emerald-100"
-            onClick={() => void lockedClearCovered()}
-          >
-            Clear covered ({coveredPendingRows.length})
-          </Button>
-        </div>
-      )}
-      {showRepairSplitBanner && (
-        <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-800">
-          <span>
-            Some claims may be out of sync with unlinked refunds. Preview and repair before finishing.
-          </span>
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={actionBusy}
-            onClick={() => void lockedRepairSplits()}
-          >
-            Repair claim sync
-          </Button>
         </div>
       )}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">

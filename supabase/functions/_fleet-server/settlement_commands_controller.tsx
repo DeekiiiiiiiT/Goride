@@ -37,6 +37,7 @@ import {
   driverOwesResidual,
   enforcePayCap,
   enforceCollectCap,
+  assertCashReceiptSoftGuards,
   buildMovementRow,
   SettlementCommandError,
   type SettlementMovementKind,
@@ -481,10 +482,14 @@ app.post(`${BASE}/collect`, requireSettlementPerm("settlements.collect"), async 
     const reference = body.reference ? String(body.reference) : undefined;
     const note = body.note ? String(body.note) : undefined;
     const reasonFromBody = body.reason ? String(body.reason).trim() : "";
-    const overFromNote = note?.match(/\[Over-collection\]\s*(.+)/i)?.[1]?.trim() || "";
+    const overFromNote =
+      note?.match(/\[Over-(?:collection|held)\]\s*(.+)/i)?.[1]?.trim() || "";
     const reason = reasonFromBody || overFromNote || undefined;
     const idempotencyKey = String(body.idempotencyKey || "").trim();
-    // expectedOutstanding / allowOverCollect accepted for backward compat — ignored for receipt.
+    const expectedOutstanding =
+      body.expectedOutstanding !== undefined && body.expectedOutstanding !== null
+        ? Number(body.expectedOutstanding)
+        : undefined;
 
     if (!driverId || !/^\d{4}-\d{2}-\d{2}$/.test(weekAnchor) || !idempotencyKey) {
       return c.json({ error: "driverId, weekAnchor, and idempotencyKey are required" }, 400);
@@ -530,6 +535,10 @@ app.post(`${BASE}/collect`, requireSettlementPerm("settlements.collect"), async 
       signedAt: periodDb.signed_at ? String(periodDb.signed_at) : null,
     });
     await assertFrozenPeriodHashIntact(periodDb as Parameters<typeof assertFrozenPeriodHashIntact>[0]);
+    const settlementAmount = Number(periodDb.settlement_amount) || 0;
+    const owed = driverOwesResidual(settlementAmount);
+    // R6-04: soft over-collect + stale-view guards (receipt-first unlock/period gates stay off).
+    assertCashReceiptSoftGuards({ owed, amount, expectedOutstanding, reason });
     const observedVersion = Number(periodDb.row_version) || 1;
 
     const { movement, period } = await insertMovementAndDualWrite(c, {
@@ -1195,7 +1204,7 @@ app.post(`${BASE}/runs`, requireSettlementPerm("settlements.pay"), async (c) => 
           });
           movementId = String(movement.id);
         } else {
-          // Batch collect = same receipt-first Log Cash path (no residual/unlock gates).
+          // Batch collect = receipt-first + R6-04 soft guards (no unlock/period-ended hard block).
           if (!(Number.isFinite(amount) && amount > 0.005)) {
             throw new SettlementCommandError(
               "INVALID_AMOUNT",
@@ -1203,6 +1212,17 @@ app.post(`${BASE}/runs`, requireSettlementPerm("settlements.pay"), async (c) => 
               400,
             );
           }
+          const settlementAmountCollect = Number(periodDb.settlement_amount) || 0;
+          const owedCollect = driverOwesResidual(settlementAmountCollect);
+          const rowReason = raw.reason != null ? String(raw.reason).trim() : "";
+          assertCashReceiptSoftGuards({
+            owed: owedCollect,
+            amount,
+            expectedOutstanding: Number.isFinite(expectedOutstanding)
+              ? expectedOutstanding
+              : undefined,
+            reason: rowReason || undefined,
+          });
           const observedVersion = Number(periodDb.row_version) || 1;
           const { movement } = await insertMovementAndDualWrite(c, {
             organizationId,
@@ -1212,6 +1232,7 @@ app.post(`${BASE}/runs`, requireSettlementPerm("settlements.pay"), async (c) => 
             weekAnchor,
             amount,
             method,
+            reason: rowReason || undefined,
             idempotencyKey: rowKey,
             expectedRowVersion: observedVersion,
             isCashReceipt: true,

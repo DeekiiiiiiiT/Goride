@@ -1,6 +1,30 @@
 import { describe, expect, it } from 'vitest';
-import { assembleLeftoverWeekMoney, computeMiscellaneousCost } from './fuelCoverageSplit';
+import {
+  assembleLeftoverWeekMoney,
+  capPurposeKmToOdometer,
+  computeMiscellaneousCost,
+} from './fuelCoverageSplit';
 import { assembleWeekSnapshotsFromCalcInput } from './weekSnapshotEngine';
+
+describe('capPurposeKmToOdometer', () => {
+  it('scales platform km down to the dash span', () => {
+    const capped = capPurposeKmToOdometer({
+      odometerDeltaKm: 806,
+      tripKm: 869.17,
+      companyKm: 0,
+    });
+    expect(capped.tripKm).toBeCloseTo(806, 5);
+    expect(capped.companyKm).toBe(0);
+  });
+
+  it('leaves km alone when the dash moved farther than the trips', () => {
+    expect(capPurposeKmToOdometer({
+      odometerDeltaKm: 806,
+      tripKm: 500,
+      companyKm: 20,
+    })).toEqual({ tripKm: 500, companyKm: 20 });
+  });
+});
 
 describe('leftover / misc engine', () => {
   it('computes residual spend after categorized costs', () => {

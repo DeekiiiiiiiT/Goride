@@ -229,6 +229,8 @@ export function evaluateRun(input: {
 
       if (stale) {
         status = 'stale';
+      } else if (stepId === 'fuel' && completeByCounts) {
+        status = 'complete';
       } else if (done && completeByCounts) {
         status = 'complete';
       } else if (!completeByCounts) {

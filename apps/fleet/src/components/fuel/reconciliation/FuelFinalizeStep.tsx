@@ -149,26 +149,14 @@ export function FuelFinalizeStep(props: FuelFinalizeStepProps) {
           role="status"
           aria-live="polite"
         >
-          <p className="font-semibold text-slate-900">Data provenance (signature)</p>
+          <p className="font-semibold text-slate-900">What this week used</p>
           <ul className="mt-1 list-inside list-disc space-y-0.5 text-slate-700">
             <li>
-              Trips: {provenance.tripCount}
-              {provenance.tripsTimedOut ? ' (timed out — incomplete)' : ''}
+              Trips: {provenance.tripsTimedOut ? 'failed' : provenance.tripCount ? 'loaded' : 'loading'}
             </li>
-            <li>
-              Deadhead:{' '}
-              {provenance.deadheadTimedOut ? 'timed out — incomplete' : 'loaded'}
-            </li>
-            <li>
-              Personal allowance:{' '}
-              {provenance.personalAllowanceTimedOut ? 'timed out — incomplete' : 'loaded'}
-            </li>
-            <li>
-              Fuel cards: {provenance.fuelCardsLoaded}
-              {provenance.fuelCardsMissing ? ' (required cards missing)' : ''}
-            </li>
-            <li>Vehicles in scope: {provenance.vehicleCount}</li>
-            {provenance.brainTimedOut ? <li>Fuel brain: timed out (legacy residual used)</li> : null}
+            <li>Distances: {provenance.deadheadTimedOut ? 'failed' : 'loaded'}</li>
+            <li>Allowance: {provenance.personalAllowanceTimedOut ? 'failed' : 'loaded'}</li>
+            <li>Cards: {provenance.fuelCardsMissing ? 'failed' : 'loaded'}</li>
           </ul>
         </div>
       )}

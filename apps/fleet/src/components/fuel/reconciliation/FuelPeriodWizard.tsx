@@ -3,7 +3,6 @@ import { DateRange } from 'react-day-picker';
 import { ShieldCheck } from 'lucide-react';
 import { FuelPeriodStepper } from './FuelPeriodStepper';
 import { FuelWeekMoneyStrip } from './FuelWeekMoneyStrip';
-import { FuelWizardProgressPill } from './FuelWizardProgressPill';
 import {
   FuelWizardOverflowMenu,
   type FuelWizardOverflowMenuHandle,
@@ -23,6 +22,8 @@ import {
   fuelWeekClosableBlockerMessage,
   reportsHaveOdometerChainUnusable,
 } from '../../../utils/fuelWeekClosableGate';
+import { fuelWeekStatusLabel } from '../../../utils/fuelReconGlossary';
+import { rememberFuelSnapshotVersion } from '../../../utils/fuelPreparedSnapshot';
 import { FUEL_SPEND_EPS } from '../../../utils/fuelMoneyEpsilon';
 import {
   isUnattributedBeyondGate,
@@ -223,6 +224,7 @@ function FuelPeriodWizardInner({
   const [secondApproveBusy, setSecondApproveBusy] = useState(false);
   const [serverPeriodId, setServerPeriodId] = useState<string | null>(null);
   const [serverPeriodVersion, setServerPeriodVersion] = useState<number | null>(null);
+  const [serverBlockers, setServerBlockers] = useState<Array<{ code: string; message: string }> | null>(null);
   const [secondApproverThreshold, setSecondApproverThreshold] = useState(
     FUEL_SECOND_APPROVER_THRESHOLD,
   );
@@ -272,6 +274,52 @@ function FuelPeriodWizardInner({
     dispositions,
   });
   const liveReports = weekReports.reports;
+  const clientSpendForSnapshot = liveReports.reduce(
+    (sum, row) => sum + (Number(row.totalGasCardCost) || 0),
+    0,
+  );
+  const clientDriverForSnapshot = liveReports.reduce(
+    (sum, row) => sum + (Number(row.driverShare) || 0),
+    0,
+  );
+  useEffect(() => {
+    if (!serverPeriodId || periodLocked) {
+      rememberFuelSnapshotVersion(null);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      const [closable, computed] = await Promise.all([
+        api.getFuelPeriodClosable(serverPeriodId).catch(() => null),
+        api.computeFuelWeek(serverPeriodId).catch(() => null),
+      ]);
+      if (cancelled) return;
+      if (closable) setServerBlockers(Array.isArray(closable.blockers) ? closable.blockers : []);
+      const reports = Array.isArray(computed?.reports) ? computed.reports : [];
+      const serverSpend = reports.reduce(
+        (sum, row) => sum + (Number(row?.totalGasCardCost) || Number(row?.totalSpend) || 0),
+        0,
+      );
+      const serverDriver = reports.reduce(
+        (sum, row) => sum + (Number(row?.driverShare) || 0),
+        0,
+      );
+      const hasDriver = reports.some((row) => row && row.driverShare != null);
+      const hasCategories = reports.length > 0 && reports.every((row) => {
+        const cats = row?.categoryCosts;
+        return cats && typeof cats === 'object' && 'rideShareCost' in cats;
+      });
+      const spendMatches = Math.abs(serverSpend - clientSpendForSnapshot) <= 0.02 && serverSpend > 0;
+      const driverMatches = hasDriver && Math.abs(serverDriver - clientDriverForSnapshot) <= 0.02;
+      const version = Number(computed?.version) || 0;
+      rememberFuelSnapshotVersion(
+        version && spendMatches && driverMatches && hasCategories ? version : null,
+      );
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [serverPeriodId, periodLocked, clientSpendForSnapshot, clientDriverForSnapshot]);
   const weekTrips = weekReports.trips.length ? weekReports.trips : trips;
   const weekDegraded: FuelWeekDegradedInputs | undefined = weekReports.degraded;
   const hasDegradedInputs = fuelWeekHasDegradedInputs(weekDegraded);
@@ -321,8 +369,14 @@ function FuelPeriodWizardInner({
     transactions,
     countsUnevaluated: !period.counts || Object.keys(period.counts).length === 0,
     degradedInputs: hasDegradedInputs,
-    periodTotalSpend: period.totalSpend,
-    periodUnexplained: period.netLeakage,
+    // Landing card leftover is a placeholder (full spend) until the week engine runs.
+    // Once live reports exist, they are the same money on screen — do not let the stale card block Finalize.
+    periodTotalSpend: liveReports.length
+      ? liveReports.reduce((s, r) => s + (Number(r.totalGasCardCost) || 0), 0)
+      : period.totalSpend,
+    periodUnexplained: liveReports.length
+      ? liveReports.reduce((s, r) => s + (Number(r.miscellaneousCost) || 0), 0)
+      : period.netLeakage,
     dispositions,
   });
 
@@ -571,17 +625,8 @@ function FuelPeriodWizardInner({
     }
   }, [gatedStates, activeStepId]);
 
-  /** Stepper: hard-gates still apply; green check = walked past in this session (or locked week). */
-  const stepperStates = useMemo(() => {
-    return gatedStates.map((s, i) => {
-      const walkedPast = i < progressIndex;
-      return {
-        ...s,
-        complete: periodLocked ? s.complete : walkedPast,
-        locked: s.locked || (!periodLocked && i > progressIndex),
-      };
-    });
-  }, [gatedStates, progressIndex, periodLocked]);
+  /** Stepper marks a step done from the close checklist, not from walking past it. */
+  const stepperStates = gatedStates;
 
   const handleContinue = () => {
     if (!canContinueStep || isLast) return;
@@ -829,7 +874,6 @@ function FuelPeriodWizardInner({
 
   const handleRetryWeek = () => {
     void weekReports.refresh();
-    onRefresh();
   };
 
   const bucketVehicle =
@@ -1071,9 +1115,9 @@ function FuelPeriodWizardInner({
               }
             : hasDegradedInputs
             ? {
-                title: 'Can’t finalize — incomplete inputs',
-                body: 'Trips, deadhead, personal allowance, cards, or brain classify timed out or failed to load. Retry until provenance is complete — silent empty data must not change charges.',
-                actionLabel: 'Retry week data',
+                title: 'We couldn’t load trip distances for this week',
+                body: 'Your numbers haven’t changed. Try again.',
+                actionLabel: 'Try again',
                 onAction: handleRetryWeek,
               }
             : {
@@ -1085,12 +1129,16 @@ function FuelPeriodWizardInner({
     }
   })();
 
+  const serverBlockMessages = (serverBlockers || []).map((blocker) => blocker.message).filter(Boolean);
+  const listedBlockerCount = serverBlockers != null ? serverBlockers.length : closableBlockers.length;
+
   const finalizeDisabled =
     finalizing ||
     periodLocked ||
     liveReports.length === 0 ||
     hasDegradedInputs ||
     closableBlockers.length > 0 ||
+    serverBlockMessages.length > 0 ||
     !!gateResult.hasExceptionBlockers ||
     !!gateResult.hasUnapprovedFuelTxBlockers ||
     !!gateResult.hasOverExplainedBlockers ||
@@ -1108,8 +1156,9 @@ function FuelPeriodWizardInner({
     if (finalizing) return 'Finalizing…';
     if (liveReports.length === 0) return 'No fuel spend reports loaded for this week yet.';
     if (hasDegradedInputs) {
-      return 'Trips, deadhead, personal allowance, cards, or brain data is incomplete — tap Retry week data.';
+      return 'We couldn’t load trip distances for this week. Your numbers haven’t changed.';
     }
+    if (serverBlockMessages.length > 0) return serverBlockMessages[0];
     if (closableBlockers.length > 0) {
       return fuelWeekClosableBlockerMessage(closableBlockers[0]);
     }
@@ -1225,6 +1274,24 @@ function FuelPeriodWizardInner({
     scenarios,
   };
 
+  const statusLabel = fuelWeekStatusLabel({
+    locked: periodLocked,
+    sqlStatus: period.sqlStatus,
+    locking: finalizing,
+    blockerCount:
+      weekReports.loading || periodLocked || finalizing
+        ? listedBlockerCount
+        : finalizeDisabled
+          ? Math.max(listedBlockerCount, 1)
+          : listedBlockerCount,
+    ready:
+      !weekReports.loading &&
+      !periodLocked &&
+      !finalizing &&
+      !finalizeDisabled &&
+      liveReports.length > 0,
+  });
+
   const overflowRef = useRef<FuelWizardOverflowMenuHandle>(null);
 
   const selectStep = (id: FuelStepId) => {
@@ -1242,6 +1309,7 @@ function FuelPeriodWizardInner({
         <FuelPeriodWizardHeader
           period={period}
           periodLocked={periodLocked}
+          statusLabel={statusLabel}
           onBack={onBack}
         />
         <div className="shrink-0 pt-1">
@@ -1266,15 +1334,6 @@ function FuelPeriodWizardInner({
         updating={weekReports.updating}
         onRetry={handleRetryWeek}
       >
-      {/* Stitch C desktop progress bar */}
-      <div className="hidden md:block">
-        <FuelWizardProgressPill
-          activeStepId={activeStepId}
-          states={stepperStates}
-          variant="bar"
-        />
-      </div>
-
       <div className="grid grid-cols-1 gap-4 md:grid-cols-[minmax(0,1.65fr)_minmax(280px,1fr)] md:items-start md:gap-5">
         <div className="space-y-4">
           {/* Stitch B order: coach → money → steps → queue */}
@@ -1291,23 +1350,13 @@ function FuelPeriodWizardInner({
             <FuelWeekMoneyStrip {...moneyStripProps} variant="collapsed" />
           </div>
 
-          <div className="md:hidden">
-            <FuelWizardProgressPill
-              activeStepId={activeStepId}
-              states={stepperStates}
-              variant="timeline"
-            />
-          </div>
-
-          <div className="hidden md:block">
-            <FuelPeriodStepper
-              states={stepperStates}
-              activeStepId={activeStepId}
-              onSelect={selectStep}
-              labels={FUEL_STEP_LABELS}
-              icons={FUEL_STEP_ICONS}
-            />
-          </div>
+          <FuelPeriodStepper
+            states={stepperStates}
+            activeStepId={activeStepId}
+            onSelect={selectStep}
+            labels={FUEL_STEP_LABELS}
+            icons={FUEL_STEP_ICONS}
+          />
 
           <div className="sr-only" aria-live="assertive" aria-atomic="true">
             {gateLiveMessage}
@@ -1457,7 +1506,12 @@ function FuelPeriodWizardInner({
                 dualApprovalUiMode={dualApprovalUiMode}
                 onRecordSecondApproval={() => void handleRecordSecondApproval()}
                 settlementRows={settlementRows}
-                closableBlockMessages={closableBlockers.map(fuelWeekClosableBlockerMessage)}
+                closableBlockMessages={[
+                  ...serverBlockMessages,
+                  ...closableBlockers
+                    .map(fuelWeekClosableBlockerMessage)
+                    .filter((message) => !serverBlockMessages.includes(message)),
+                ]}
                 stopToStopSummary={stopToStopSummary}
                 onFixStopToStop={() => openStopToStopRemediation()}
                 onOpenIntegrityStopToStop={
@@ -1487,7 +1541,7 @@ function FuelPeriodWizardInner({
 
           <p className="flex items-center justify-center gap-1.5 py-2 text-center text-xs text-slate-400 md:justify-start">
             <ShieldCheck className="h-4 w-4" aria-hidden />
-            Reconciliation can be reopened at any time until closed
+            Reopening a locked week reverses the fuel charges posted for that week. It asks for a reason.
           </p>
         </div>
 

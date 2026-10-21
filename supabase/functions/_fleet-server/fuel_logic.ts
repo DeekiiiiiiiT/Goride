@@ -1268,7 +1268,13 @@ export function auditOdometerSequence(params: {
   maxExpectedDistance: number // e.g., 2x vehicle range
 }) {
   const { currentOdo, prevOdo, maxExpectedDistance } = params;
-  
+
+  // Blank/zero is not a reading. Number(null) is 0, which used to compare as
+  // "lower than the previous fill" and stamp a false Odometer Regression.
+  if (!(currentOdo > 0)) {
+    return { status: 'warning' as const, reason: 'Missing odometer', auditStatus: 'Flagged' as const };
+  }
+
   if (prevOdo <= 0) return { status: 'valid' as const, reason: null };
 
   // Regression check

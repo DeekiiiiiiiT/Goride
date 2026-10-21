@@ -3,8 +3,6 @@
  * Emergency / entries-mode path: shared fuel-core assembler with explicit 50% default rule
  * (stamped entry ratios still win via resolveEntryDriverRatio).
  */
-import * as kv from "./kv_store.tsx";
-import { filterRecordsByOrganizationId } from "./org_scope.ts";
 import { assembleWeekSnapshotsFromRawEntries } from "../_shared/fuelCore.ts";
 import { isJaaStatementLedgerRow } from "./fuel_jaa_ledger.ts";
 
@@ -43,15 +41,32 @@ function entryDriverShareRatio(e: Record<string, unknown>): number | null {
   return null;
 }
 
-/** Org-scoped week entries eligible for settlement. */
+/** Org-scoped week entries eligible for settlement. A failed read throws — never an empty week. */
 export async function loadWeekFuelEntries(
   orgId: string,
   weekStart: string,
   weekEnd: string,
 ): Promise<Record<string, unknown>[]> {
-  const raw = ((await kv.getByPrefix("fuel_entry:")) || []) as Record<string, unknown>[];
-  const scoped = filterRecordsByOrganizationId(raw, orgId);
-  return scoped.filter((e) => {
+  const { queryFleet } = await import("./repos/baseRepo.ts");
+  const page = 1000;
+  const raw: Record<string, unknown>[] = [];
+  let offset = 0;
+  for (;;) {
+    const res = await queryFleet("fuel_entries", {
+      org: orgId,
+      dateFrom: weekStart,
+      dateTo: weekEnd,
+      limit: page,
+      offset,
+    });
+    if (res.error) throw res.error;
+    const rows = (res.data || []) as Record<string, unknown>[];
+    raw.push(...rows);
+    if (rows.length < page) break;
+    offset += rows.length;
+    if (offset > 50000) break;
+  }
+  return raw.filter((e) => {
     // F2: statement ledger rows stay on Card Inventory — money lives on the ops row after match.
     if (isJaaStatementLedgerRow(e as { entrySource?: string; metadata?: Record<string, unknown> })) {
       return false;

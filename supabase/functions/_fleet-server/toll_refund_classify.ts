@@ -80,6 +80,8 @@ export function classifyRefundServer(params: {
   nearestPlazaMeters: number | null;
   plazaRadiusMeters?: number;
   pendingTagImport?: boolean;
+  /** Open same-driver same-week tag tolls can absorb this credit (multi-plaza path). */
+  hasAbsorbingTagTolls?: boolean;
   /** True when trip.tollCharges matches a Super Admin Toll Info rate. */
   matchesOfficialRate?: boolean;
 }): RefundClassification {
@@ -90,16 +92,26 @@ export function classifyRefundServer(params: {
     nearestPlazaMeters,
     plazaRadiusMeters = DEFAULT_PLAZA_RADIUS_M,
     pendingTagImport = false,
+    hasAbsorbingTagTolls = false,
   } = params;
 
   if (!(tollCharges > 0)) {
     return { status: "pending", confidence: 0, reason: "No positive toll refund on this trip." };
   }
-  if (pendingTagImport) {
+  // Never say "waiting on tag statement" when open tag plazas already exist.
+  if (pendingTagImport && !hasAbsorbingTagTolls) {
     return {
       status: "pending",
       confidence: 60,
       reason: "A tag statement for this period is expected; will auto-match on import.",
+    };
+  }
+  if (hasAbsorbingTagTolls) {
+    return {
+      status: "pending",
+      confidence: 88,
+      reason:
+        "Open tag plazas can absorb this credit — apply across matching underpaid tolls.",
     };
   }
   const cashSettled = isCashSettledServer(platform, paymentMethod);

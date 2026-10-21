@@ -562,14 +562,35 @@ export function FuelBulkFinalizeDialog({
                   if (!forceReason) throw lockErr;
                   return api.enqueueFuelPeriodFinalize({ ...enqueueArgs, forceReason });
                 }
-                // Worker may OOM after lock — treat already-locked as success.
+                if (
+                  lockErr?.code === 'period_locked' ||
+                  lockErr?.code === 'version_conflict' ||
+                  lockErr?.code === 'inputs_changed' ||
+                  lockErr?.code === 'snapshot_stale'
+                ) {
+                  const fresh = await api.getFuelReconciliationPeriod(periodRow.id).catch(() => null);
+                  if (fresh && (fresh.status === 'locked' || fresh.lockedAt || fresh.locked_at)) {
+                    return { state: 'succeeded', ok: true, alreadyLocked: true };
+                  }
+                  return {
+                    state: 'failed',
+                    ok: false,
+                    error: 'This week changed. Showing the latest status.',
+                    failures: [],
+                  };
+                }
                 const fresh = await api.getFuelReconciliationPeriod(periodRow.id).catch(() => null);
                 if (fresh && (fresh.status === 'locked' || fresh.lockedAt || fresh.locked_at)) {
                   return { state: 'succeeded', ok: true, alreadyLocked: true };
                 }
                 throw lockErr;
               });
-              const jobInterp = interpretFuelFinalizeJobResult(jobRes);
+              let settled = jobRes;
+              const jobId = String((jobRes as { jobId?: string })?.jobId || '');
+              if (jobId && (jobRes as { state?: string }).state !== 'succeeded') {
+                settled = await api.pollFuelPeriodJob(jobId);
+              }
+              const jobInterp = interpretFuelFinalizeJobResult(settled);
               if (jobInterp.incomplete) {
                 const fresh = await api.getFuelReconciliationPeriod(periodRow.id).catch(() => null);
                 if (fresh && (fresh.status === 'locked' || fresh.lockedAt || fresh.locked_at)) {

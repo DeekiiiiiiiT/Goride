@@ -93,22 +93,50 @@ export interface PaginatedTripResponse {
     total: number;
 }
 
+function headerValue(headers: HeadersInit | undefined, name: string): string {
+  if (!headers) return '';
+  const target = name.toLowerCase();
+  if (headers instanceof Headers) return headers.get(name) || '';
+  if (Array.isArray(headers)) {
+    const hit = headers.find(([key]) => String(key).toLowerCase() === target);
+    return hit ? String(hit[1] ?? '') : '';
+  }
+  for (const [key, value] of Object.entries(headers as Record<string, string>)) {
+    if (key.toLowerCase() === target) return String(value ?? '');
+  }
+  return '';
+}
+
+/**
+ * GET/HEAD may retry. A POST retries only when the caller opted in with an
+ * Idempotency-Key and did not send If-Match (a version lock makes the replay a
+ * different request). Fuel finalize sends both, so a 546 is not re-posted.
+ */
+export function requestMayAutoRetry(options: RequestInit = {}): boolean {
+  const method = String(options.method || 'GET').toUpperCase();
+  if (method === 'GET' || method === 'HEAD') return true;
+  const idem = headerValue(options.headers, 'Idempotency-Key');
+  const ifMatch = headerValue(options.headers, 'If-Match');
+  return Boolean(idem) && !ifMatch;
+}
+
 // Performance optimization: Reduced to 1 retry (2 total attempts)
 // Server already retries 2x, so total attempts = 2 server × 2 frontend = 4
 export async function fetchWithRetry(url: string, options: RequestInit = {}, retries = 1, backoff = 500): Promise<Response> {
+  const attempts = requestMayAutoRetry(options) ? retries : 0;
   try {
     const response = await fetch(url, options);
     // If 5xx error, retry
-    if (response.status >= 500 && retries > 0) {
+    if (response.status >= 500 && attempts > 0) {
         throw new Error(`Server error: ${response.status}`);
     }
     return response;
   } catch (err: any) {
     if (err?.name === 'AbortError') throw err;
-    if (retries > 0) {
+    if (attempts > 0) {
       // Wait before retrying
       await new Promise(resolve => setTimeout(resolve, backoff));
-      return fetchWithRetry(url, options, retries - 1, backoff * 2);
+      return fetchWithRetry(url, options, attempts - 1, backoff * 2);
     }
     throw err;
   }
@@ -5019,14 +5047,19 @@ export const api = {
   },
 
   // Phase 8 (Deadhead): Fleet-wide and per-vehicle deadhead attribution
-  async getFleetDeadhead(periodStart?: string, periodEnd?: string) {
+  async getFleetDeadhead(periodStart?: string, periodEnd?: string, vehicleIds?: string[]) {
     const params = new URLSearchParams();
     if (periodStart) params.set('periodStart', periodStart);
     if (periodEnd) params.set('periodEnd', periodEnd);
+    if (vehicleIds?.length) params.set('vehicleIds', vehicleIds.join(','));
     const qs = params.toString() ? `?${params.toString()}` : '';
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/fuel-audit/deadhead/fleet${qs}`, {
         headers: await requireAuthHeaders(null)
     });
+    if (response.status === 503) {
+      const body = await response.json().catch(() => ({}));
+      throw new Error(body.error || 'We couldn\'t load trip distances for this week. Your numbers haven\'t changed.');
+    }
     if (!response.ok) throw new Error("Failed to fetch fleet deadhead attribution");
     return response.json();
   },
@@ -5090,6 +5123,43 @@ export const api = {
     return response.json();
   },
 
+  async getFuelPeriodClosable(periodId: string): Promise<{
+    blockers: Array<{ code: string; message: string }>;
+    inputsVersion?: number;
+    status?: string;
+  }> {
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.fuel}/fuel/periods/${encodeURIComponent(periodId)}/closable`,
+      { headers: await requireAuthHeaders(null) },
+    );
+    if (!response.ok) {
+      const errText = await response.text().catch(() => '');
+      throw new Error(errText || 'Could not check whether this week can lock');
+    }
+    return response.json();
+  },
+
+  async computeFuelWeek(periodId: string): Promise<{
+    version: number | null;
+    reports: any[];
+    reused?: boolean;
+    totalSpend?: number | null;
+  }> {
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.fuel}/fuel/periods/${encodeURIComponent(periodId)}/compute`,
+      {
+        method: 'POST',
+        headers: await requireAuthHeaders(),
+        body: '{}',
+      },
+    );
+    if (!response.ok) {
+      const errText = await response.text().catch(() => '');
+      throw new Error(errText || 'Could not prepare this week');
+    }
+    return response.json();
+  },
+
   async enqueueFuelPeriodFinalize(args: {
     periodId: string;
     version: number;
@@ -5100,6 +5170,7 @@ export const api = {
     /** Bulk finalize ack — server may stamp system second_approve for high-spend weeks. */
     allowServiceSecondApprove?: boolean;
     /** Rev6 break-glass: force client money despite SNAPSHOT_MISMATCH (reason ≥8). */
+    snapshotVersion?: number | null;
     forceReason?: string;
   }) {
     const forceReason = String(args.forceReason || '').trim();
@@ -5119,14 +5190,17 @@ export const api = {
           totalSpend: args.totalSpend,
           secondApproverThreshold: args.secondApproverThreshold,
           allowServiceSecondApprove: args.allowServiceSecondApprove === true,
+          ...(args.snapshotVersion ? { snapshotVersion: args.snapshotVersion } : {}),
           ...(force ? { forceReason } : {}),
         }),
       },
     );
     if (response.status === 409) {
-      const body = await response.json().catch(() => ({}));
-      const err = new Error('version_conflict') as Error & { status?: number; body?: unknown };
+      const body = (await response.json().catch(() => ({}))) as { error?: string };
+      const code = body.error || 'version_conflict';
+      const err = new Error(code) as Error & { status?: number; code?: string; body?: unknown };
       err.status = 409;
+      err.code = code;
       err.body = body;
       throw err;
     }
@@ -5685,6 +5759,21 @@ export const api = {
       throw new Error(errText || 'Job not found');
     }
     return response.json();
+  },
+
+  async pollFuelPeriodJob(
+    jobId: string,
+    onTick?: (job: { state?: string; cursor?: { step?: string }; progress_done?: number; progress_total?: number }) => void,
+  ) {
+    const deadline = Date.now() + 120_000;
+    let latest = await this.getFuelPeriodJob(jobId);
+    while (Date.now() < deadline) {
+      onTick?.(latest);
+      if (latest?.state === 'succeeded' || latest?.state === 'failed') return latest;
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+      latest = await this.getFuelPeriodJob(jobId);
+    }
+    return latest;
   },
 
   async getFinalizedReports(opts?: {

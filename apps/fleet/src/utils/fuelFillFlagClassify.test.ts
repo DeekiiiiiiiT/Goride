@@ -209,12 +209,30 @@ describe('buildFuelFlagDeskRows', () => {
         id: 'dup',
         date: '2026-09-10',
         isFlagged: true,
+        odometer: 192213,
         metadata: { integrityStatus: 'warning', anomalyReason: 'Odometer Regression' },
       }),
     );
     const labels = c.reasons.map((r) => r.label);
     expect(labels.filter((l) => l === 'Odometer Regression')).toHaveLength(1);
     expect(c.reasons.some((r) => r.code === 'is_flagged')).toBe(false);
+  });
+
+  it('does not treat a blank odometer as a regression that blocks finalize', () => {
+    const c = classifyFuelFillFlags(
+      entry({
+        id: 'blank-odo',
+        date: '2026-10-17',
+        odometer: null as unknown as number,
+        metadata: {
+          integrityStatus: 'critical',
+          signalTier: 'observe',
+          anomalyReason: 'Odometer Regression',
+        },
+      }),
+    );
+    expect(c.hasOpenCritical).toBe(false);
+    expect(c.reasons.map((r) => r.label)).toEqual(['Missing odometer']);
   });
 });
 

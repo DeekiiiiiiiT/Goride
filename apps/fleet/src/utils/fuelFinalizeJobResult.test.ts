@@ -30,6 +30,12 @@ describe('interpretFuelFinalizeJobResult (NEW-7)', () => {
     expect(r.incomplete).toBe(true);
   });
 
+  it('treats a job that is still locking as incomplete', () => {
+    const r = interpretFuelFinalizeJobResult({ state: 'queued', ok: true, failures: [] });
+    expect(r.incomplete).toBe(true);
+    expect(r.toastMessage).toMatch(/Still locking/);
+  });
+
   it('all-fail without driversDone still incomplete', () => {
     const r = interpretFuelFinalizeJobResult({
       state: 'failed',

@@ -83,6 +83,7 @@ function actionTitle(
   if (sealBroken(r)) return SEAL_BROKEN_TITLE;
   if (periodFrozenBlocked(r)) return FROZEN_TITLE;
   // Collect / Log Cash: open week + unlock are not hard blocks (receipt-first).
+  // Over-collect / stale residual are soft server guards (reason / reload) — not unlock dialogs.
   if (mode === 'pay') return weekOpenTitle(r);
   return undefined;
 }

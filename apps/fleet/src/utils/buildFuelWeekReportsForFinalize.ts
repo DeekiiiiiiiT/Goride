@@ -116,24 +116,21 @@ export function fuelWeekHasDegradedInputs(d?: FuelWeekDegradedInputs | null): bo
 export async function fetchDeadheadMap(
   weekStartYmd: string,
   weekEndYmd: string,
+  vehicleIds?: string[],
 ): Promise<Map<string, VehicleDeadheadInput>> {
   const map = new Map<string, VehicleDeadheadInput>();
-  try {
-    const data = await api.getFleetDeadhead(weekStartYmd, weekEndYmd);
-    for (const v of (data as any)?.vehicles || []) {
-      map.set(v.vehicleId, {
-        vehicleId: v.vehicleId,
-        deadheadKm: v.deadheadKm || 0,
-        personalKm: v.personalKm || 0,
-        totalOdometerKm: v.totalOdometerKm || 0,
-        tripKm: v.tripKm || 0,
-        method: v.method || 'fallback',
-        confidenceLevel: v.confidenceLevel || 'low',
-        confidenceReason: v.confidenceReason || 'No data',
-      });
-    }
-  } catch (e) {
-    console.warn('[buildFuelWeekReports] deadhead fetch failed — continuing without', e);
+  const data = await api.getFleetDeadhead(weekStartYmd, weekEndYmd, vehicleIds);
+  for (const v of (data as any)?.vehicles || []) {
+    map.set(v.vehicleId, {
+      vehicleId: v.vehicleId,
+      deadheadKm: v.deadheadKm || 0,
+      personalKm: v.personalKm || 0,
+      totalOdometerKm: v.totalOdometerKm || 0,
+      tripKm: v.tripKm || 0,
+      method: v.method || 'fallback',
+      confidenceLevel: v.confidenceLevel || 'low',
+      confidenceReason: v.confidenceReason || 'No data',
+    });
   }
   return map;
 }
@@ -235,7 +232,20 @@ export async function buildFuelWeekReportsForFinalize(
     needTripFetch
       ? withSoftTimeout(fetchTripsForFuelWeek(weekStartYmd, weekEndYmd), 20_000, [], 'trips')
       : Promise.resolve({ value: input.trips as Trip[], timedOut: false }),
-    withSoftTimeout(fetchDeadheadMap(weekStartYmd, weekEndYmd), 15_000, new Map(), 'deadhead'),
+    withSoftTimeout(
+      fetchDeadheadMap(
+        weekStartYmd,
+        weekEndYmd,
+        [...new Set((input.fuelEntries || []).map((e) => e.vehicleId).filter(Boolean) as string[])],
+      ),
+      15_000,
+      new Map(),
+      'deadhead',
+    ).catch((e) => {
+      console.warn('[buildFuelWeekReports] deadhead fetch failed', e);
+      degraded.deadhead = true;
+      return { value: new Map<string, VehicleDeadheadInput>(), timedOut: false };
+    }),
     needPa
       ? withSoftTimeout(
           buildPersonalAllowanceReconContext({

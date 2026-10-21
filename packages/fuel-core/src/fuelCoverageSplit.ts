@@ -190,6 +190,26 @@ export function computeUnattributedFillCost(
 }
 
 /**
+ * Platform trip km can run past the fill-to-fill odometer span (driving after the
+ * last reading, or GPS stack above the dash). Those km are not extra fuel.
+ * Scale ride-share + company km down so priced distance cannot exceed the dash.
+ */
+export function capPurposeKmToOdometer(params: {
+  odometerDeltaKm: number;
+  tripKm: number;
+  companyKm: number;
+}): { tripKm: number; companyKm: number } {
+  const tripKm = Math.max(0, Number(params.tripKm) || 0);
+  const companyKm = Math.max(0, Number(params.companyKm) || 0);
+  const odometerDeltaKm = Number(params.odometerDeltaKm) || 0;
+  if (!(odometerDeltaKm > 0)) return { tripKm, companyKm };
+  const purpose = tripKm + companyKm;
+  if (!(purpose > odometerDeltaKm) || purpose <= 0) return { tripKm, companyKm };
+  const scale = odometerDeltaKm / purpose;
+  return { tripKm: tripKm * scale, companyKm: companyKm * scale };
+}
+
+/**
  * True unexplained after Ride Share / Ops / Deadhead / Personal, timing, and unattributed.
  * F-1/N-2: miscellaneousCost must NOT include first-fill timing or no-odo fills.
  */

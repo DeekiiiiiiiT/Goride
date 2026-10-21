@@ -100,9 +100,12 @@ import {
   hasMaterialExcessRefund,
   proposeUnlinkedPoolAllocation,
   filterSameWeekUnlinkedShortfalls,
+  platformRefundForShortfall,
+  openTagTollsCanAbsorbCredit,
   UNLINKED_PICKER_MIN_CONFIDENCE,
   UNLINKED_SHORTFALL_TOLERANCE,
 } from "./unlinked_shortfall_eligibility.ts";
+import { dateWeekKey } from "../../../packages/finance-core/src/periodKey.ts";
 import { computeChargeShortfall } from "./claim_charge_guard.ts";
 import {
   applySettlementAllocation,
@@ -7797,7 +7800,12 @@ function resolveLinkedTripForShortfall(
   // to hide a trip from the Unlinked queue (see collectLinkedTripIds).
   let id: string | null = toll.tripId ? String(toll.tripId) : null;
   if (!id && toll.metadata?.tripId) id = String(toll.metadata.tripId);
-  const matchedTripId = toll.matchedTripId ?? toll.metadata?.matchedTripId ?? null;
+  const matchedTripId =
+    toll.matchedTripId ??
+    toll.metadata?.matchedTripId ??
+    toll.payload_json?.matchedTripId ??
+    toll.payloadJson?.matchedTripId ??
+    null;
   if (!id && matchedTripId) id = String(matchedTripId);
   if (!id && toll.preUnlinkedTripId) id = String(toll.preUnlinkedTripId);
   if (id && toll.unlinkedSourceTripId && id === String(toll.unlinkedSourceTripId)) {
@@ -7828,7 +7836,9 @@ async function liveTollShortfallAfterMatch(
         officialAmount: null,
       };
   const matchedTrip = resolveLinkedTripForShortfall(source, tripById);
-  const platformRefund = Math.abs(Number(matchedTrip?.tollCharges) || 0);
+  // Soft matchedTripId to an unresolved unlinked trip is not money applied yet —
+  // otherwise multi-plaza credits ($645 vs $275+$370) net to $0 on every toll.
+  const platformRefund = platformRefundForShortfall({ toll: source, trip: matchedTrip });
   const remaining = computeChargeShortfall(costBasis.expectedCost, platformRefund, 0);
   return { expectedCost: costBasis.expectedCost, platformRefund, remaining };
 }
@@ -8039,6 +8049,7 @@ app.get(`${BASE}/refund-suggestions`, async (c) => {
     const linkedTripIds = collectLinkedTripIds(tollTx);
     const unresolved = trips.filter((t: any) => isUnresolvedRefund(t, linkedTripIds));
     const plazas = await loadActivePlazaPoints();
+    const fleetTz = await getFleetTimezone();
 
     const suggestions: Record<string, RefundClassification> = {};
     const { amountMatchesAnyOfficialRate } = await import("./toll_rate_schedule.ts");
@@ -8048,12 +8059,30 @@ app.get(`${BASE}/refund-suggestions`, async (c) => {
         Number(t.tollCharges) || 0,
         t.date,
       );
+      const tripWeek = dateWeekKey(t.date, fleetTz);
+      const openSameDriverWeekTolls = (tollTx || []).filter((tx: any) => {
+        if (!tx || !t.driverId || String(tx.driverId) !== String(t.driverId)) return false;
+        if (!isEligibleUnlinkedShortfallToll(tx) && !isPlazaUsageTollRow(tx)) return false;
+        // Hard-linked tolls already absorbed a credit elsewhere
+        if (tx.tripId || tx.metadata?.tripId) return false;
+        if (String(tx.status || "").toLowerCase() === "reconciled") return false;
+        const tollDate = tx.date || tx.transactionDate || tx.timestamp;
+        return !!tripWeek && dateWeekKey(tollDate, fleetTz) === tripWeek;
+      });
+      const hasAbsorbingTagTolls = openTagTollsCanAbsorbCredit({
+        tripId: String(t.id),
+        tripRefund: Number(t.tollCharges) || 0,
+        openSameDriverWeekTolls,
+      });
       suggestions[t.id] = classifyRefundServer({
         tollCharges: Number(t.tollCharges) || 0,
         platform: t.platform,
         paymentMethod: t.paymentMethod,
         nearestPlazaMeters: nearest,
         matchesOfficialRate,
+        // Pending-import only when no open same-week tag tolls can take the credit
+        pendingTagImport: !hasAbsorbingTagTolls && openSameDriverWeekTolls.length === 0,
+        hasAbsorbingTagTolls,
       });
     }
 

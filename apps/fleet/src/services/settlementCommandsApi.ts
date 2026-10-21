@@ -72,11 +72,11 @@ export type SettlementCollectBody = {
   method?: string;
   reference?: string;
   note?: string;
-  /** Soft note only — server ignores for receipt-first Log Cash. */
+  /** Required when amount exceeds owed (R6-04 soft over-collect). */
   reason?: string;
   allowOverCollect?: boolean;
   idempotencyKey: string;
-  /** Advisory / backward compat — server ignores for Log Cash receipt. */
+  /** Desk residual when form loaded — server 409s if balance changed (R6-04). */
   expectedOutstanding?: number;
 };
 

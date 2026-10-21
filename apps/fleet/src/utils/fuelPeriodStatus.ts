@@ -58,6 +58,12 @@ export interface FuelReconciliationPeriod {
   stopToStopGapAccepts?: import('@roam/fuel-core').StopToStopGapAccept[];
   /** N-7: locked week whose statement seal failed — retry seal. */
   fuelSealError?: string | null;
+  /** SQL status (open, ready, locked, reopened) when this card came from the server. */
+  sqlStatus?: 'open' | 'in_review' | 'ready' | 'locked' | 'reopened';
+  gasCardSpend?: number;
+  cashFromEarnings?: number;
+  lockedAt?: string | null;
+  version?: number;
 }
 
 export interface BuildFuelStepCountsInput {

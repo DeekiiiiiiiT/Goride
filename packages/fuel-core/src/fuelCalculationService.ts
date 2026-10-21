@@ -52,6 +52,7 @@ import {
 import { resolvePricePerLiter } from './resolvePricePerLiter.ts';
 import {
   assembleLeftoverWeekMoney,
+  capPurposeKmToOdometer,
   computeMiscellaneousCost,
   splitAllCategoryCosts,
   getCategoryCoverageSplit as splitCategory,
@@ -304,12 +305,17 @@ export const FuelCalculationService = {
             : 0;
 
         let observedEfficiency = 0;
+        // Fill-to-fill span this week. Ledger buckets can be wider; fuel $ must use this span.
+        const weekOdoSpan = entriesWithOdo.length >= 2
+            ? Math.max(
+                0,
+                (Number(entriesWithOdo[entriesWithOdo.length - 1].odometer) || 0)
+                  - (Number(entriesWithOdo[0].odometer) || 0),
+              )
+            : 0;
         // Step 2.4: >= 3 entries for reliability, use efficiencyFuel (not totalLiters)
-        if (entriesWithOdo.length >= 3 && efficiencyFuel > 0) {
-            const odoDistance = (entriesWithOdo[entriesWithOdo.length - 1].odometer || 0) - (entriesWithOdo[0].odometer || 0);
-            if (odoDistance > 0) {
-                observedEfficiency = odoDistance / efficiencyFuel;
-            }
+        if (entriesWithOdo.length >= 3 && efficiencyFuel > 0 && weekOdoSpan > 0) {
+            observedEfficiency = weekOdoSpan / efficiencyFuel;
         }
 
         // Fallback chain: vehicle.fuelSettings.efficiencyCity (L/100km -> km/L) -> 10 km/L default
@@ -351,10 +357,18 @@ export const FuelCalculationService = {
         const odometerIncomplete = buckets.length === 0 && vehicleEntries.length > 0;
         const totalOdometerDelta = buckets.reduce((sum, b) => sum + (b.endOdometer - b.startOdometer), 0);
         const evidencedPersonalFromBuckets = buckets.reduce((sum, b) => sum + (b.personalDistance || 0), 0);
+        // Price km against the week's fill-to-fill span, not a wider ledger chain.
+        // Platform km after the last reading was being billed as extra fuel.
+        const priceSpanKm = weekOdoSpan > 0 ? weekOdoSpan : totalOdometerDelta;
+        const pricedPurpose = capPurposeKmToOdometer({
+            odometerDeltaKm: priceSpanKm,
+            tripKm: totalTripDistance,
+            companyKm: companyMiscDistance,
+        });
 
         // Residual after RS + company (diagnostic only). Personal cost uses evidenced personal on non-Brain path.
-        const rawResidual = totalOdometerDelta > 0
-            ? Math.max(0, totalOdometerDelta - totalTripDistance - companyMiscDistance)
+        const rawResidual = priceSpanKm > 0
+            ? Math.max(0, priceSpanKm - pricedPurpose.tripKm - pricedPurpose.companyKm)
             : evidencedPersonalFromBuckets;
 
         let deadheadDistance = 0;
@@ -386,10 +400,10 @@ export const FuelCalculationService = {
         // 5. Costs need a real JMD/L — when unavailable, keep km but charge $0 (fail loud)
         const rideShareCost = priceUnavailable
             ? 0
-            : (totalTripDistance / observedEfficiency) * actualPricePerLiter;
+            : (pricedPurpose.tripKm / observedEfficiency) * actualPricePerLiter;
         const companyUsageCost = priceUnavailable
             ? 0
-            : (companyMiscDistance / observedEfficiency) * actualPricePerLiter;
+            : (pricedPurpose.companyKm / observedEfficiency) * actualPricePerLiter;
         const deadheadCost = priceUnavailable
             ? 0
             : (deadheadDistance / observedEfficiency) * actualPricePerLiter;

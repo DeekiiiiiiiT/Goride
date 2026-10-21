@@ -50,6 +50,19 @@ describe("classifyRefund", () => {
       pendingTagImport: true,
     });
     expect(r.status).toBe("pending");
+    expect(r.confidence).toBe(60);
+  });
+
+  it("does not claim waiting on tag when open plazas can absorb credit", () => {
+    const r = classifyRefund({
+      tollCharges: 645,
+      platform: "Uber",
+      pendingTagImport: true,
+      hasAbsorbingTagTolls: true,
+    });
+    expect(r.status).toBe("pending");
+    expect(r.confidence).toBe(88);
+    expect(r.reason).toMatch(/absorb|underpaid|plazas/i);
   });
 
   it("classifies cash-settled + on-route plaza as high-confidence cash_wash", () => {

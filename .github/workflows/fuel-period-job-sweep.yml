@@ -1,0 +1,38 @@
+name: Fuel close job sweeper
+
+# Picks up fuel close jobs the button request queued, including a job whose
+# worker died after the money was posted. Does not post a second time.
+
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+
+jobs:
+  sweep:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Finish queued fuel close jobs
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          FLEET_CRON_SECRET: ${{ secrets.FLEET_CRON_SECRET }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          set -euo pipefail
+          SUPABASE_URL="$(printf '%s' "$SUPABASE_URL" | tr -d '\r\n' | sed 's/[[:space:]]*$//;s/^[[:space:]]*//')"
+          SERVICE_KEY="$(printf '%s' "$SUPABASE_SERVICE_ROLE_KEY" | tr -d '\r\n' | sed 's/[[:space:]]*$//;s/^[[:space:]]*//')"
+          CRON_VAL="$(printf '%s' "${FLEET_CRON_SECRET:-${CRON_SECRET:-}}" | tr -d '\r\n' | sed 's/[[:space:]]*$//;s/^[[:space:]]*//')"
+          if [ -z "$SUPABASE_URL" ] || [ -z "$SERVICE_KEY" ] || [ -z "$CRON_VAL" ]; then
+            echo "Missing SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, or FLEET_CRON_SECRET"
+            exit 1
+          fi
+          RESP="$(curl -sS -w "\nHTTP_CODE:%{http_code}\n" -X POST \
+            "${SUPABASE_URL}/functions/v1/fleet-fuel/fuel/period-jobs/sweep" \
+            -H "Authorization: Bearer ${SERVICE_KEY}" \
+            -H "apikey: ${SERVICE_KEY}" \
+            -H "Content-Type: application/json" \
+            -H "X-Fleet-Cron-Secret: ${CRON_VAL}" \
+            -d '{}')"
+          echo "$RESP"
+          echo "$RESP" | grep -q 'HTTP_CODE:200' || exit 1

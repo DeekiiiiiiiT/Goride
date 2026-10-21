@@ -227,7 +227,9 @@ REVOKE ALL ON FUNCTION recon._week_batch_overlaps(text, text, date) FROM PUBLIC;
 REVOKE ALL ON FUNCTION recon._day_has_statement_live(text, text, date) FROM PUBLIC;
 REVOKE ALL ON FUNCTION recon._week_has_statement_live(text, text, date) FROM PUBLIC;
 REVOKE ALL ON FUNCTION recon.compute_source_coverage(text, text, text, date) FROM PUBLIC;
-REVOKE ALL ON FUNCTION public.compute_source_coverage(text, text, text, date) FROM PUBLIC;
+-- R6-02: REVOKE FROM PUBLIC alone leaves Supabase default grants to anon + authenticated.
+REVOKE ALL ON FUNCTION public.compute_source_coverage(text, text, text, date)
+  FROM PUBLIC, anon, authenticated;
 
 GRANT EXECUTE ON FUNCTION recon._week_batch_overlaps(text, text, date) TO service_role;
 GRANT EXECUTE ON FUNCTION recon._day_has_statement_live(text, text, date) TO service_role;

@@ -585,7 +585,9 @@ async function computeLiveStepCounts(
     fuelActionable = 1;
   } else {
     const status = String((fuelPeriod as { status?: string }).status || "");
-    if (status !== "ready" && status !== "locked") {
+    if (status === "locked") {
+      fuelActionable = 0;
+    } else {
       const counts = (fuelPeriod as { counts?: Record<string, { actionable?: number }> }).counts;
       if (counts && typeof counts === "object") {
         fuelActionable = Object.values(counts).reduce(

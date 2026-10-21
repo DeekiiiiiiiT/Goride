@@ -89,6 +89,21 @@ describe('owedMajor', () => {
   });
 });
 
+describe('CashGateError codes (R6-04)', () => {
+  it('exposes STALE_RESIDUAL and OVER_COLLECT codes for desk copy', async () => {
+    const { CashGateError } = await import('./useCashCollection');
+    const stale = new CashGateError(
+      'STALE_RESIDUAL',
+      '2026-09-01',
+      'Balance changed since you loaded this week. Reload and try again.',
+    );
+    expect(stale.code).toBe('STALE_RESIDUAL');
+    expect(stale.message).toMatch(/reload/i);
+    const over = new CashGateError('OVER_COLLECT', '2026-09-01', 'Amount exceeds what is owed');
+    expect(over.code).toBe('OVER_COLLECT');
+  });
+});
+
 describe('groupCashDrivers', () => {
   it('includes unlocked=false weeks and excludes only frozen/seal-broken', () => {
     const rows: SettlementQueueRow[] = [

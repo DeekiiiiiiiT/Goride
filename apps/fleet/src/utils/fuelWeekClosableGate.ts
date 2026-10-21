@@ -165,7 +165,7 @@ export function fuelWeekClosableBlockerMessage(blocker: FuelWeekClosableBlocker)
     case 'counts_unevaluated':
       return 'Blocked — step counts never evaluated for this week';
     case 'degraded_inputs':
-      return 'Blocked — money-bearing inputs incomplete or timed out';
+      return 'We couldn’t load trip distances for this week. Your numbers haven’t changed.';
     case 'missing_category_costs':
       return 'Blocked — snapshots missing categoryCosts';
     case 'unresolved_coverage_rule':

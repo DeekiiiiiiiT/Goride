@@ -59,6 +59,39 @@ function statusTone(status: string): string {
   return 'border-slate-200 bg-white';
 }
 
+/** Days still empty (gray) — only these should get attest_none. */
+export function uncoveredDaysForSource(
+  weekKey: string,
+  coverage: Record<string, string> | undefined,
+): string[] {
+  return weekDayKeys(weekKey).filter((d) => {
+    const v = coverage?.[d] ?? 'missing';
+    return v !== 'covered' && v !== 'zero_attested';
+  });
+}
+
+/** Short weekday labels (Mon, Tue…) for UTC YMD keys. */
+export function formatUncoveredDayLabels(days: string[]): string {
+  return days
+    .map((ymd) => {
+      const [y, m, d] = ymd.split('-').map(Number);
+      if (!y || !m || !d) return ymd;
+      return new Date(Date.UTC(y, m - 1, d, 12)).toLocaleDateString('en-US', {
+        weekday: 'short',
+        timeZone: 'UTC',
+      });
+    })
+    .join(', ');
+}
+
+export function attestNoneButtonLabel(uncoveredDays: string[]): string {
+  if (uncoveredDays.length === 0) return 'No empty days';
+  if (uncoveredDays.length === 7) return 'No activity on empty days (all 7)';
+  const labels = formatUncoveredDayLabels(uncoveredDays);
+  if (uncoveredDays.length <= 3) return `No activity on ${labels}`;
+  return `No activity on ${uncoveredDays.length} empty days`;
+}
+
 function CoverageMini({
   weekKey,
   coverage,
@@ -68,17 +101,40 @@ function CoverageMini({
 }) {
   const keys = weekDayKeys(weekKey);
   return (
-    <div className="flex gap-0.5" aria-hidden>
-      {keys.map((d) => {
-        const v = coverage[d] ?? 'missing';
-        const ok = v === 'covered' || v === 'zero_attested';
-        return (
-          <span
-            key={d}
-            className={cn('h-2.5 w-2.5 rounded-sm border', ok ? 'bg-emerald-400 border-emerald-500' : 'bg-slate-100')}
-          />
-        );
-      })}
+    <div className="space-y-0.5" aria-hidden>
+      <div className="flex gap-0.5">
+        {keys.map((d) => {
+          const [y, m, day] = d.split('-').map(Number);
+          const label =
+            y && m && day
+              ? new Date(Date.UTC(y, m - 1, day, 12)).toLocaleDateString('en-US', {
+                  weekday: 'narrow',
+                  timeZone: 'UTC',
+                })
+              : '·';
+          return (
+            <span key={`l-${d}`} className="w-2.5 text-center text-[9px] leading-none text-slate-400">
+              {label}
+            </span>
+          );
+        })}
+      </div>
+      <div className="flex gap-0.5">
+        {keys.map((d) => {
+          const v = coverage[d] ?? 'missing';
+          const ok = v === 'covered' || v === 'zero_attested';
+          return (
+            <span
+              key={d}
+              title={`${d}: ${ok ? 'has activity' : 'empty'}`}
+              className={cn(
+                'h-2.5 w-2.5 rounded-sm border',
+                ok ? 'bg-emerald-400 border-emerald-500' : 'bg-slate-100 border-slate-200',
+              )}
+            />
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -117,7 +173,7 @@ export function ReconSourceCard({
   source: ReconRunSource;
   weekKey: string;
   onUpload?: (sourceId: string) => void;
-  onAttestNone?: (sourceId: string) => void;
+  onAttestNone?: (sourceId: string, days: string[]) => void;
   onWaive?: (sourceId: string) => void;
   onRemindRoam?: (sourceId: string) => void;
   remindBusy?: boolean;
@@ -139,6 +195,12 @@ export function ReconSourceCard({
     BLOCKING.has(source.status);
   const uploadLabel =
     source.id === 'uber_bundle' || source.id === 'indrive_trips' ? 'Upload' : 'Upload statement';
+  const uncoveredDays = uncoveredDaysForSource(weekKey, source.coverage);
+  const attestLabel = attestNoneButtonLabel(uncoveredDays);
+  const attestTip =
+    uncoveredDays.length === 0
+      ? 'Every day already has activity or was marked empty.'
+      : `Marks only the empty (gray) days as no activity: ${formatUncoveredDayLabels(uncoveredDays)}. Green days with data are left alone.`;
 
   return (
     <article
@@ -191,17 +253,20 @@ export function ReconSourceCard({
               </Button>
             </ActionTip>
           ) : null}
-          {source.requirement !== 'not_applicable' && onAttestNone && !roamWait ? (
-            <ActionTip label="Confirm there was no activity for this source this week. Use this when nothing happened — not when the file is missing.">
+          {source.requirement !== 'not_applicable'
+            && onAttestNone
+            && !roamWait
+            && uncoveredDays.length > 0 ? (
+            <ActionTip label={attestTip}>
               <Button
                 type="button"
                 size="sm"
                 variant="outline"
                 disabled={attestBusy}
-                onClick={() => onAttestNone(source.id)}
+                onClick={() => onAttestNone(source.id, uncoveredDays)}
               >
                 {attestBusy ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : null}
-                No activity this week
+                {attestLabel}
               </Button>
             </ActionTip>
           ) : null}
@@ -284,8 +349,8 @@ export function ReconSourcesStep({
     }
   };
 
-  const submitAttestNone = async (sourceId: string) => {
-    if (attestBusyId) return;
+  const submitAttestNone = async (sourceId: string, days: string[]) => {
+    if (attestBusyId || !days.length) return;
     setAttestBusyId(sourceId);
     try {
       const { attestSourceNone } = await import('../../../services/reconApi');
@@ -294,7 +359,12 @@ export function ReconSourcesStep({
         weekKey,
         sourceId,
         {
-          days: weekDayKeys(weekKey),
+          // Only empty (gray) days — never overwrite days that already have activity.
+          days,
+          reason:
+            days.length === 7
+              ? 'No activity this week'
+              : `No activity on ${formatUncoveredDayLabels(days)}`,
           expectedVersion: run.run.version,
         },
       );
@@ -334,7 +404,7 @@ export function ReconSourcesStep({
             source={source}
             weekKey={weekKey}
             onUpload={openUpload}
-            onAttestNone={(id) => void submitAttestNone(id)}
+            onAttestNone={(id, days) => void submitAttestNone(id, days)}
             onWaive={(id) => setWaiveSourceId(id)}
             onRemindRoam={(id) => void remindRoam(id)}
             remindBusy={remindSourceId === source.id}

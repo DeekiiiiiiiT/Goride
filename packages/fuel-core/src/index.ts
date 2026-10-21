@@ -56,6 +56,7 @@ export {
 
 export {
   assembleLeftoverWeekMoney,
+  capPurposeKmToOdometer,
   computeMiscellaneousCost,
   computeWindowTimingCost,
   computeWindowTimingLiters,
@@ -323,6 +324,8 @@ export {
 } from './fuelPolicyVersion.ts';
 
 export { resolveFuelFillDriver, stampAttributedDriverIds } from './resolveFuelFillDriver.ts';
+
+export { selectWeekFuelFills, sumWeekFuelFills, type WeekFuelFill } from './selectWeekFuelFills.ts';
 
 export {
   filterFuelOpsLogEntries,

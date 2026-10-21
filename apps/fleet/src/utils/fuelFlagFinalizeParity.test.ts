@@ -18,6 +18,9 @@ function serverBlocksFinalizeForFlags(
   const meta = e.metadata || {};
   const signalTier = String(meta.signalTier || '').toLowerCase();
   const integrity = String(meta.integrityStatus || '').toLowerCase();
+  const reason = String(meta.anomalyReason || '').trim().toLowerCase();
+  const odo = Number((e as { odometer?: unknown }).odometer);
+  if (reason === 'odometer regression' && !(Number.isFinite(odo) && odo > 0)) return false;
   const codes: string[] = [];
   if (signalTier === 'exception') codes.push('signal_exception');
   if (integrity === 'critical') codes.push('integrity_critical');
@@ -68,6 +71,7 @@ describe('fuel flag finalize parity (client ↔ server)', () => {
   it('disposed integrity_critical does not block either side', () => {
     const entry = {
       id: AUDIT_ENTRY_ID,
+      odometer: 184476,
       metadata: {
         integrityStatus: 'critical',
         signalTier: 'observe',

@@ -16,6 +16,8 @@ import {
   hasMaterialExcessRefund,
   proposeUnlinkedPoolAllocation,
   filterSameWeekUnlinkedShortfalls,
+  platformRefundForShortfall,
+  openTagTollsCanAbsorbCredit,
 } from './unlinkedShortfallEligibility';
 import { normalizePlatform, platformsEqual } from './normalizePlatform';
 
@@ -273,6 +275,99 @@ describe('unlinked shortfall eligibility', () => {
     expect(shares.map((s) => s.tollId)).toEqual(['t285', 't380']);
     expect(shares[0].proposedShare).toBe(285);
     expect(shares[1].proposedShare).toBe(360);
+  });
+
+  // Kenny Oct 15: Uber $645 soft-matched to Spanish Town East $275 + Portmore East $370
+  describe('Kenny-shaped multi-plaza shortfall', () => {
+    const tripId = 'kenny-645';
+    const unresolvedTrip = {
+      id: tripId,
+      tollCharges: 645,
+      tollRefundResolution: { status: 'pending' as const },
+    };
+
+    it('soft match to unresolved trip does not net full $645 (remaining stays open)', () => {
+      const softToll370 = {
+        matchedTripId: tripId,
+        tripId: null as string | null,
+        status: 'pending',
+      };
+      expect(platformRefundForShortfall({ toll: softToll370, trip: unresolvedTrip })).toBe(0);
+      // Live remaining = expected − platformRefund = 370 − 0
+      expect(370 - platformRefundForShortfall({ toll: softToll370, trip: unresolvedTrip })).toBe(370);
+
+      const softToll275 = { matchedTripId: tripId, status: 'pending' };
+      expect(platformRefundForShortfall({ toll: softToll275, trip: unresolvedTrip })).toBe(0);
+      expect(275 - 0).toBe(275);
+    });
+
+    it('soft match to resolved / expense_logged trip still nets (regression)', () => {
+      const softToll = { matchedTripId: tripId, status: 'pending' };
+      expect(
+        platformRefundForShortfall({
+          toll: softToll,
+          trip: {
+            ...unresolvedTrip,
+            tollRefundResolution: { status: 'expense_logged' },
+          },
+        }),
+      ).toBe(645);
+      expect(
+        platformRefundForShortfall({
+          toll: softToll,
+          trip: {
+            ...unresolvedTrip,
+            tollRefundResolution: { status: 'cash_wash' },
+          },
+        }),
+      ).toBe(645);
+    });
+
+    it('hard tripId reconciled still nets full charges', () => {
+      expect(
+        platformRefundForShortfall({
+          toll: { tripId, matchedTripId: tripId, status: 'reconciled' },
+          trip: unresolvedTrip,
+        }),
+      ).toBe(645);
+    });
+
+    it('pool $645 → shares $275 + $370, multi-target leftover $0', () => {
+      expect(hasMaterialExcessRefund(645, 370)).toBe(true);
+      const shares = proposeUnlinkedPoolAllocation(645, [
+        { tollId: 'portmore', remainingShortfall: 370, date: '2026-10-15T14:00:00' },
+        { tollId: 'spanish', remainingShortfall: 275, date: '2026-10-15T10:00:00' },
+      ]);
+      expect(shares[0].tollId).toBe('spanish');
+      expect(shares[0].proposedShare).toBe(275);
+      expect(shares[1].tollId).toBe('portmore');
+      expect(shares[1].proposedShare).toBe(370);
+      const leftover =
+        645 - shares.reduce((s, x) => s + x.proposedShare, 0);
+      expect(leftover).toBe(0);
+      // Same rule annotateUnlinkedPoolSuggestions uses for requiresMultiTarget
+      expect(shares.filter((s) => s.proposedShare > 0.05).length).toBeGreaterThanOrEqual(2);
+    });
+
+    it('openTagTollsCanAbsorbCredit true when soft-matched plazas exist', () => {
+      expect(
+        openTagTollsCanAbsorbCredit({
+          tripId,
+          tripRefund: 645,
+          openSameDriverWeekTolls: [
+            { amount: 275, matchedTripId: tripId },
+            { amount: 370, matchedTripId: tripId },
+          ],
+        }),
+      ).toBe(true);
+      expect(
+        openTagTollsCanAbsorbCredit({
+          tripId,
+          tripRefund: 645,
+          openSameDriverWeekTolls: [],
+        }),
+      ).toBe(false);
+    });
   });
 
   it('recommended shortcut hidden for multi-target or material excess full dump', () => {

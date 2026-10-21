@@ -12,6 +12,10 @@ const CONTROLLER = path.join(
   ROOT,
   'supabase/functions/_fleet-server/fuel_controller.tsx',
 );
+const PERIOD_ROUTES = path.join(
+  ROOT,
+  'supabase/functions/_fleet-server/fuel_period_routes.ts',
+);
 
 let failed = false;
 
@@ -63,6 +67,21 @@ if (!fs.existsSync(CONTROLLER)) {
 
   for (const [re, msg] of checks) {
     if (!re.test(src)) fail(`fuel_controller.tsx: ${msg}`);
+  }
+}
+
+if (!fs.existsSync(PERIOD_ROUTES)) {
+  fail('missing fuel_period_routes.ts');
+} else {
+  const routes = fs.readFileSync(PERIOD_ROUTES, 'utf8');
+  if (!/function snapshotBelongsToOrg/.test(routes)) {
+    fail('fuel_period_routes.ts: recompute and backfill must use snapshotBelongsToOrg');
+  }
+  if (!/snapshotBelongsToOrg\(snap/.test(routes)) {
+    fail('fuel_period_routes.ts: snapshot org check is not called');
+  }
+  if (/if\s*\(\s*snapOrg\s*&&\s*snapOrg\s*!==\s*orgId\s*\)/.test(routes)) {
+    fail('fuel_period_routes.ts: org filter must fail closed when the stamp is missing');
   }
 }
 

@@ -77,22 +77,34 @@ export function classifyFuelFillFlags(
   const signalTier = String(m.signalTier || '').trim().toLowerCase();
   const integrity = String(m.integrityStatus || '').trim().toLowerCase();
   const location = String(entry.locationStatus || '').trim();
+  const odo = Number(entry.odometer);
+  // Stamped before blank readings were excluded: 0 was compared to the last fill.
+  const falseRegression =
+    anomalyReason.toLowerCase() === 'odometer regression' && !(Number.isFinite(odo) && odo > 0);
+  const shownReason = falseRegression ? 'Missing odometer' : anomalyReason;
 
-  if (signalTier === 'exception') {
+  if (signalTier === 'exception' && !falseRegression) {
     pushReason(reasons, categories, {
       code: 'signal_exception',
-      label: anomalyReason || 'Exception fill',
+      label: shownReason || 'Exception fill',
       category: 'Integrity',
       severity: 'critical',
     });
   }
 
-  if (integrity === 'critical') {
+  if (integrity === 'critical' && !falseRegression) {
     pushReason(reasons, categories, {
       code: 'integrity_critical',
-      label: anomalyReason || 'Integrity critical',
+      label: shownReason || 'Integrity critical',
       category: 'Integrity',
       severity: 'critical',
+    });
+  } else if (falseRegression) {
+    pushReason(reasons, categories, {
+      code: 'integrity_warning',
+      label: 'Missing odometer',
+      category: 'Integrity',
+      severity: 'warning',
     });
   } else if (integrity === 'warning') {
     pushReason(reasons, categories, {
@@ -106,7 +118,7 @@ export function classifyFuelFillFlags(
   if (entry.isFlagged) {
     pushReason(reasons, categories, {
       code: 'is_flagged',
-      label: anomalyReason || 'Fill flagged',
+      label: shownReason || 'Fill flagged',
       category: 'Integrity',
       severity: 'warning',
     });

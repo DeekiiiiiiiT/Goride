@@ -142,6 +142,10 @@ export function FuelPeriodResetDialog({
         queryClient.invalidateQueries({ queryKey: ['finalizedReports'] }),
         queryClient.invalidateQueries({ queryKey: [DRIVER_FINANCIAL_PERIODS_KEY] }),
       ]);
+      void api.recomputeFuelReconciliationPeriods({
+        from: period.startDate,
+        to: period.endDate || period.startDate,
+      }).catch(() => undefined);
 
       // Server already reverses fuel ledger + rebuilds Expenses (reverseFuelFinancialEventsAndRebuild).
       // Only retry from the client when that sync reported failure — a second rebuild after a

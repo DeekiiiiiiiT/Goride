@@ -1321,13 +1321,16 @@ export function DriverSettlementsPage({
     let serverReturned: number | null = null;
     let serverHeld: number | null = null;
     const amount = Math.abs(Number(payment.amount) || 0);
-    // Context for toast only ? never used as a residual assert (receipt-first).
+    // Desk residual for toast + R6-04 expectedOutstanding soft check.
     const weekRow = collectOutstanding.find(
       (r) => r.driverId === collectModal.driverId && ymdKey(r.periodAnchor) === weekStart,
     );
     const beforeHeld = weekRow
       ? Math.max(0, Number(weekRow.cashStillHeld) || collectAmount(weekRow) || 0)
       : collectModal.maxAmount;
+    const expectedOwed = weekRow
+      ? Math.max(0, collectAmount(weekRow) || Number(weekRow.amountOwed) || 0)
+      : Math.max(0, Number(collectModal.maxAmount) || 0);
 
     // R-3: intentional float/adjustment only (no settlement command yet). Never a pay/collect fallback.
     if (payment.transactionType !== 'payment' || !weekStart) {
@@ -1345,6 +1348,9 @@ export function DriverSettlementsPage({
       await api.saveTransaction(newTx);
     } else {
       try {
+        const overReason =
+          String(payment.notes || '').match(/\[Over-(?:collection|held)\]\s*(.+)/i)?.[1]?.trim() ||
+          undefined;
         const res = await collectCashPayment(qc, {
           driverId: collectModal.driverId,
           weekAnchor: weekStart,
@@ -1352,6 +1358,8 @@ export function DriverSettlementsPage({
           method: payment.paymentMethod,
           reference: payment.referenceNumber,
           note: payment.notes,
+          reason: overReason,
+          expectedOutstanding: Number.isFinite(expectedOwed) ? expectedOwed : 0,
         });
         serverAfter = res.afterOwed;
         serverReturned =
@@ -1364,6 +1372,18 @@ export function DriverSettlementsPage({
             setCollectModal((m) => ({ ...m, isOpen: false }));
             showPeriodFrozen(weekStart, collectModal.driverName);
             const quiet = new Error('period_frozen');
+            (quiet as Error & { quiet?: boolean }).quiet = true;
+            throw quiet;
+          }
+          if (err.code === 'STALE_RESIDUAL') {
+            toast.error(err.message || 'Balance changed ? reload and try again');
+            const quiet = new Error('stale_residual');
+            (quiet as Error & { quiet?: boolean }).quiet = true;
+            throw quiet;
+          }
+          if (err.code === 'OVER_COLLECT') {
+            toast.error(err.message || 'Amount exceeds owed ? add a reason');
+            const quiet = new Error('over_collect');
             (quiet as Error & { quiet?: boolean }).quiet = true;
             throw quiet;
           }

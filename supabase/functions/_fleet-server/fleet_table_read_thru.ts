@@ -38,9 +38,18 @@ export async function readMappedKvKeys(keys: string[]): Promise<Map<string, any>
 
 /**
  * Returns null if prefix is not a mapped fleet domain (caller should hit KV).
- * Returns array (possibly empty) for mapped domains.
- * Uses paged iterate — never a single unbounded PostgREST response.
+ * Throws on a failed mapped read. Never returns [] for an error.
  */
+export class FleetReadThruError extends Error {
+  prefix: string;
+  constructor(prefix: string, cause: unknown) {
+    const message = cause instanceof Error ? cause.message : String(cause);
+    super(`fleet read failed for ${prefix}: ${message}`);
+    this.name = "FleetReadThruError";
+    this.prefix = prefix;
+  }
+}
+
 export async function readMappedKvPrefix(prefix: string): Promise<any[] | null> {
   const domainDef = FLEET_DOMAINS.find((d) =>
     d.prefixes.some((p) => prefix === p || prefix.startsWith(p) || p.startsWith(prefix)),
@@ -68,31 +77,28 @@ export async function readMappedKvPrefix(prefix: string): Promise<any[] | null> 
       return out;
     }
 
-    // Partial / multi-prefix: filter legacy_kv_id in SQL with pagination
-    const res = await queryFleet(domainDef.domain, {
-      legacyPrefix: matchPrefix,
-      order: { col: "legacy_kv_id", ascending: true },
-      limit: 50000,
-      offset: 0,
-    });
-    // queryFleet caps at 5000 per call — page remaining
-    const out = [...(res.data as any[])];
-    let offset = out.length;
-    while (out.length >= 5000 && out.length % 5000 === 0) {
+    // Page every mapped prefix, including domains with more than one key prefix.
+    const page = 1000;
+    const out: any[] = [];
+    let offset = 0;
+    for (;;) {
       const more = await queryFleet(domainDef.domain, {
         legacyPrefix: matchPrefix,
         order: { col: "legacy_kv_id", ascending: true },
-        limit: 5000,
+        limit: page,
         offset,
       });
-      if (more.error || more.data.length === 0) break;
-      out.push(...(more.data as any[]));
-      offset += more.data.length;
-      if (more.data.length < 5000) break;
+      if (more.error) throw new FleetReadThruError(prefix, more.error);
+      const rows = (more.data || []) as any[];
+      out.push(...rows);
+      if (rows.length < page) break;
+      offset += rows.length;
+      if (offset > 200000) throw new FleetReadThruError(prefix, "page cap");
     }
     return out;
   } catch (e) {
+    if (e instanceof FleetReadThruError) throw e;
     console.error("[fleetReadThru] prefix", prefix, e);
-    return [];
+    throw new FleetReadThruError(prefix, e);
   }
 }

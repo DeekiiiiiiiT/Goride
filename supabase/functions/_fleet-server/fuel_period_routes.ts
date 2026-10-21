@@ -4,7 +4,7 @@
  */
 import type { Context } from "npm:hono@4.3.11";
 import type { Hono } from "npm:hono@4.3.11";
-import { requirePermission } from "./rbac_middleware.ts";
+import { requireAnyPermission, requirePermission } from "./rbac_middleware.ts";
 import { getOrgId } from "./org_scope.ts";
 import * as kv from "./kv_store.tsx";
 import { getServiceClient } from "./service_client.ts";
@@ -23,6 +23,12 @@ import {
   secondApproverThresholdFromPrefs,
 } from "./fuel_org_preferences.ts";
 import { sealFuelWeek } from "./fuel_week_seal.ts";
+import { runFuelSpendShadow } from "./fuel_week_category_loader.ts";
+import {
+  computeFuelWeekSnapshot,
+  hashFuelWeekInputs,
+  loadFuelWeekSnapshotVersion,
+} from "./fuel_week_compute.ts";
 import { buildFuelSealAmountsByDriver } from "./fuel_close_amounts.ts";
 import { assertPeriodEndedForReconciliation } from "./settlement_period_freeze.ts";
 import { SettlementCommandError } from "./settlement_commands.ts";
@@ -93,6 +99,25 @@ function actorId(c: Context): string | null {
   return null;
 }
 
+/** Locked weeks refuse finalize and step writes before any job row is inserted. */
+export function isFuelPeriodLocked(period: { status?: unknown; locked_at?: unknown }): boolean {
+  return String(period?.status || "") === "locked" || Boolean(period?.locked_at);
+}
+
+export function fuelPeriodLockedBody(period: { locked_at?: unknown; version?: unknown }) {
+  return {
+    error: "period_locked" as const,
+    lockedAt: period?.locked_at || null,
+    version: Number(period?.version) || 1,
+  };
+}
+
+/** Fail closed: a snapshot with no org stamp is not this fleet's week. */
+function snapshotBelongsToOrg(snap: { orgId?: unknown; org_id?: unknown; organizationId?: unknown }, orgId: string): boolean {
+  const snapOrg = String(snap?.orgId || snap?.org_id || snap?.organizationId || "").trim();
+  return snapOrg.length > 0 && snapOrg === orgId;
+}
+
 /** N-9b: reject missing :id before loadPeriod. */
 function periodIdParam(c: Context): string | null {
   const raw = c.req.param("id");
@@ -134,8 +159,7 @@ async function aggregateMaterializeMoneyFromSnaps(
   for (const snap of rows || []) {
     if (!snap || typeof snap !== "object") continue;
     const s = snap as Record<string, unknown>;
-    const snapOrg = String(s.orgId || s.org_id || s.organizationId || "");
-    if (snapOrg && snapOrg !== orgId) continue;
+    if (!snapshotBelongsToOrg(s, orgId)) continue;
     snapCount += 1;
     const total = Number(s.totalGasCardCost) || 0;
     const gas = Number(s.gasCardSpend);
@@ -363,6 +387,111 @@ async function persistFinalizedSnapshot(
   await stageFinalizedSnapshot(report, orgId, actor);
 }
 
+async function sealAndFinishFuelWeek(args: {
+  sb: ReturnType<typeof getServiceClient>;
+  orgId: string;
+  periodId: string;
+  period: Record<string, any>;
+  jobId: string;
+  actor: string | null;
+  cursor: Record<string, unknown>;
+  snapshots: any[];
+  doneDriverIds: string[];
+  version: number;
+  now: string;
+  failures?: Array<{ driverId: string; error: string }>;
+}) {
+  const {
+    sb,
+    orgId,
+    periodId,
+    period,
+    jobId,
+    actor,
+    cursor,
+    snapshots,
+    doneDriverIds,
+    version,
+    now,
+  } = args;
+  const failures = args.failures || [];
+  const weekKey = ymd(period.week_start);
+  const amountsByDriver = buildFuelSealAmountsByDriver(snapshots);
+  let fuelSealPublished: number | null = null;
+  let fuelSealError: string | null = null;
+  if (String(cursor.step || "") !== "rebuild" && String(cursor.step || "") !== "done") {
+    try {
+      const sealed = await sealFuelWeek({
+        organizationId: orgId,
+        weekKey,
+        actorId: actor ?? undefined,
+        force: true,
+        amountsByDriver,
+      });
+      fuelSealPublished = sealed.published;
+      await sb
+        .from("fuel_reconciliation_period")
+        .update({ fuel_seal_error: null, updated_at: now })
+        .eq("id", periodId)
+        .eq("org_id", orgId);
+    } catch (sealErr: any) {
+      fuelSealError = sealErr?.message || String(sealErr);
+      console.warn("[fuel_period] post-lock sealFuelWeek failed (non-fatal)", weekKey, sealErr);
+      await insertAudit(orgId, periodId, "fuel_seal_failed", { weekKey, error: fuelSealError }, actor);
+      await sb
+        .from("fuel_reconciliation_period")
+        .update({ fuel_seal_error: fuelSealError, updated_at: now })
+        .eq("id", periodId)
+        .eq("org_id", orgId);
+    }
+    cursor.step = "rebuild";
+    await sb
+      .from("fuel_period_job")
+      .update({ cursor: { ...cursor, step: "rebuild" }, updated_at: now })
+      .eq("id", jobId);
+  }
+  try {
+    await rebuildExpensesForFuelWeek(weekKey, [
+      ...doneDriverIds,
+      ...snapshots.map((s: any) => String(s?.driverId || "")),
+    ]);
+  } catch (rebuildErr) {
+    console.error("[fuel_period] post-lock expenses rebuild failed (non-fatal)", rebuildErr);
+  }
+  cursor.step = "done";
+  await insertAudit(
+    orgId,
+    periodId,
+    "finalize",
+    {
+      version,
+      driversDone: doneDriverIds,
+      failures,
+      gapAccepted: Boolean(period.leakage_reviewed_at),
+      moneyCommittedOnLock: true,
+      fuelSealPublished,
+      fuelSealError,
+    },
+    actor,
+  );
+  await sb
+    .from("fuel_period_job")
+    .update({
+      state: "succeeded",
+      cursor: { ...cursor, step: "done" },
+      progress_done: snapshots.length || 1,
+      progress_total: snapshots.length || 1,
+      updated_at: now,
+    })
+    .eq("id", jobId);
+  return {
+    ok: true as const,
+    version,
+    ...(fuelSealError ? { fuelSealError } : {}),
+    ...(fuelSealPublished != null ? { fuelSealPublished } : {}),
+  };
+}
+
 async function processJobRow(job: Record<string, unknown>) {
   const sb = getServiceClient();
   const orgId = String(job.org_id);
@@ -370,10 +499,21 @@ async function processJobRow(job: Record<string, unknown>) {
   const kind = String(job.kind);
   const actor = job.created_by ? String(job.created_by) : null;
 
-  await sb
+  const claimedAt = new Date().toISOString();
+  const staleBefore = new Date(Date.now() - 2 * 60 * 1000).toISOString();
+  let claim = sb
     .from("fuel_period_job")
-    .update({ state: "running", updated_at: new Date().toISOString() })
+    .update({ state: "running", updated_at: claimedAt })
     .eq("id", job.id);
+  if (String(job.state || "") === "running") {
+    claim = claim.eq("state", "running").lt("updated_at", staleBefore);
+  } else {
+    claim = claim.eq("state", "queued");
+  }
+  const { data: claimed } = await claim.select("id").maybeSingle();
+  if (!claimed) {
+    return { ok: true, skipped: "claimed_elsewhere" };
+  }
 
   const period = await loadPeriod(orgId, periodId);
   if (!period) {
@@ -396,17 +536,36 @@ async function processJobRow(job: Record<string, unknown>) {
   >;
 
   if (kind === "finalize") {
-    // Idempotent resume: period already locked (e.g. worker died mid post-lock rebuild).
+    // Money already posted. Do not post again. Finish seal and expense rebuild if a
+    // previous run died after the lock.
     if (period.status === "locked" || period.locked_at) {
-      await sb
-        .from("fuel_period_job")
-        .update({
-          state: "succeeded",
-          progress_done: 1,
-          progress_total: 1,
-          updated_at: now,
-        })
-        .eq("id", job.id);
+      if (String(cursor.step || "") !== "done") {
+        await sealAndFinishFuelWeek({
+          sb,
+          orgId,
+          periodId,
+          period,
+          jobId: String(job.id),
+          actor,
+          cursor,
+          snapshots: Array.isArray(cursor.snapshots) ? (cursor.snapshots as any[]) : [],
+          doneDriverIds: Array.isArray(cursor.completedDriverIds)
+            ? (cursor.completedDriverIds as string[])
+            : [],
+          version: Number(period.version) || nextVersion,
+          now,
+        });
+      } else {
+        await sb
+          .from("fuel_period_job")
+          .update({
+            state: "succeeded",
+            progress_done: 1,
+            progress_total: 1,
+            updated_at: now,
+          })
+          .eq("id", job.id);
+      }
       return { ok: true, version: Number(period.version) || nextVersion, alreadyLocked: true };
     }
 
@@ -486,6 +645,37 @@ async function processJobRow(job: Record<string, unknown>) {
         })
         .eq("id", job.id);
       return { ok: false, error: "unresolved_coverage_rule" };
+    }
+
+    const shadow = await runFuelSpendShadow({
+      orgId,
+      periodId,
+      snapshotVersion: Number(cursor.snapshotVersion) || 0,
+      period,
+      snapshots,
+      forceClientMoney: cursor.forceClientMoney === true,
+      forceReason: String(cursor.forceReason || ""),
+    });
+    const engineMode = String(Deno.env.get("FUEL_SERVER_ENGINE") || "off").toLowerCase();
+    if (engineMode === "shadow" || engineMode === "enforce") {
+      await insertAudit(
+        orgId,
+        periodId,
+        "fuel_engine_diff",
+        { mode: engineMode, mismatches: shadow.mismatches, authoritySource: "week_fills" },
+        actor,
+      );
+    }
+    if (shadow.blocked) {
+      await sb
+        .from("fuel_period_job")
+        .update({
+          state: "failed",
+          failures: [{ error: "SNAPSHOT_MISMATCH", mismatches: shadow.mismatches }],
+          updated_at: now,
+        })
+        .eq("id", job.id);
+      return { ok: false, error: "SNAPSHOT_MISMATCH", mismatches: shadow.mismatches };
     }
 
     for (const snap of snapshots) {
@@ -571,12 +761,26 @@ async function processJobRow(job: Record<string, unknown>) {
     const money = aggregateFinalizedForWeek(snapshots.length ? snapshots : []);
     // Commit wallet + ledger only after every driver staged successfully.
     // C-8: track commits; on failure reverse already-committed drivers in this run.
-    const moneyCommittedDriverIds: string[] = [];
+    const moneyCommittedDriverIds: string[] = Array.isArray(cursor.moneyCommittedDriverIds)
+      ? (cursor.moneyCommittedDriverIds as string[])
+      : [];
     for (const snap of snapshots) {
       const did = String(snap?.driverId || "");
+      if (did && moneyCommittedDriverIds.includes(did)) continue;
       try {
         await commitFinalizedSnapshotMoney(snap, orgId);
         if (did) moneyCommittedDriverIds.push(did);
+        cursor.moneyCommittedDriverIds = moneyCommittedDriverIds;
+        cursor.step = "money";
+        await sb
+          .from("fuel_period_job")
+          .update({
+            cursor: { ...cursor, moneyCommittedDriverIds, step: "money", snapshots },
+            progress_done: moneyCommittedDriverIds.length,
+            progress_total: snapshots.length || 1,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", job.id);
       } catch (e: any) {
         console.error("[fuel_period] money commit failed", snap?.driverId, e);
         for (const committedId of moneyCommittedDriverIds) {
@@ -651,83 +855,29 @@ async function processJobRow(job: Record<string, unknown>) {
       .eq("id", periodId)
       .eq("org_id", orgId);
 
-    const weekKey = ymd(period.week_start);
-    const amountsByDriver = buildFuelSealAmountsByDriver(snapshots);
-    let fuelSealPublished: number | null = null;
-    let fuelSealError: string | null = null;
-    try {
-      const sealed = await sealFuelWeek({
-        organizationId: orgId,
-        weekKey,
-        actorId: actor ?? undefined,
-        force: true,
-        amountsByDriver,
-      });
-      fuelSealPublished = sealed.published;
-      // N-7: clear prior seal error on success.
-      await sb
-        .from("fuel_reconciliation_period")
-        .update({ fuel_seal_error: null, updated_at: now })
-        .eq("id", periodId)
-        .eq("org_id", orgId);
-    } catch (sealErr: any) {
-      // Money already committed — keep lock; surface seal failure without touching provenance hash.
-      fuelSealError = sealErr?.message || String(sealErr);
-      console.warn("[fuel_period] post-lock sealFuelWeek failed (non-fatal)", weekKey, sealErr);
-      await insertAudit(
-        orgId,
-        periodId,
-        "fuel_seal_failed",
-        { weekKey, error: fuelSealError },
-        actor,
-      );
-      await sb
-        .from("fuel_reconciliation_period")
-        .update({ fuel_seal_error: fuelSealError, updated_at: now })
-        .eq("id", periodId)
-        .eq("org_id", orgId);
-    }
-
-    await insertAudit(
-      orgId,
-      periodId,
-      "finalize",
-      {
-        version: nextVersion,
-        driversDone: [...done],
-        failures,
-        gapAccepted: Boolean(period.leakage_reviewed_at),
-        moneyCommittedOnLock: true,
-        fuelSealPublished,
-        fuelSealError,
-      },
-      actor,
-    );
-    // Mark succeeded before heavy Expenses rebuild — lock is already durable.
-    // WORKER_RESOURCE_LIMIT during rebuild must not leave the job "running".
+    cursor.step = "seal";
     await sb
       .from("fuel_period_job")
       .update({
-        state: "succeeded",
-        progress_done: snapshots.length || 1,
-        progress_total: snapshots.length || 1,
+        cursor: { ...cursor, step: "seal", snapshots },
         updated_at: now,
       })
       .eq("id", job.id);
-    try {
-      await rebuildExpensesForFuelWeek(ymd(period.week_start), [
-        ...done,
-        ...snapshots.map((s: any) => String(s?.driverId || "")),
-      ]);
-    } catch (rebuildErr) {
-      console.error("[fuel_period] post-lock expenses rebuild failed (non-fatal)", rebuildErr);
-    }
-    return {
-      ok: true,
+
+    return sealAndFinishFuelWeek({
+      sb,
+      orgId,
+      periodId,
+      period,
+      jobId: String(job.id),
+      actor,
+      cursor,
+      snapshots,
+      doneDriverIds: [...done],
       version: nextVersion,
-      ...(fuelSealError ? { fuelSealError } : {}),
-      ...(fuelSealPublished != null ? { fuelSealPublished } : {}),
-    };
+      now,
+      failures,
+    });
   } else if (kind === "reopen") {
     const reason = String(cursor.reason || "");
     const weekStart = ymd(period.week_start);
@@ -820,6 +970,28 @@ async function processJobRow(job: Record<string, unknown>) {
     .eq("id", job.id);
 
   return { ok: true, version: nextVersion };
+}
+
+function kickFuelJobProcessor(c: Context) {
+  try {
+    const processUrl = c.req.url.replace(
+      /\/fuel\/periods\/[^/]+\/finalize(?:\?.*)?$/,
+      "/fuel/period-jobs/process",
+    );
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    const auth = c.req.header("Authorization");
+    const apikey = c.req.header("apikey");
+    if (auth) headers.Authorization = auth;
+    if (apikey) headers.apikey = apikey;
+    const pending = fetch(processUrl, { method: "POST", headers }).catch((e) => {
+      console.warn("[fuel_period] job kick failed", e);
+    });
+    const edge = (globalThis as { EdgeRuntime?: { waitUntil?: (p: Promise<unknown>) => void } })
+      .EdgeRuntime;
+    if (edge?.waitUntil) edge.waitUntil(pending);
+  } catch (e) {
+    console.warn("[fuel_period] job kick failed", e);
+  }
 }
 
 export function registerFuelPeriodRoutes(app: Hono) {
@@ -990,8 +1162,7 @@ export function registerFuelPeriodRoutes(app: Hono) {
       const all = ((await kv.getByPrefix("finalized_report:")) || []) as any[];
       const byWeek = new Map<string, any[]>();
       for (const snap of all) {
-        const snapOrg = snap.orgId || snap.org_id;
-        if (snapOrg && snapOrg !== orgId) continue;
+        if (!snapshotBelongsToOrg(snap, orgId)) continue;
         const wk = ymd(snap.weekStart || snap.week_start);
         if (!wk) continue;
         if (onlyWeeks && !onlyWeeks.has(wk)) continue;
@@ -1075,8 +1246,7 @@ export function registerFuelPeriodRoutes(app: Hono) {
       const all = ((await kv.getByPrefix("finalized_report:")) || []) as any[];
       const byWeek = new Map<string, any[]>();
       for (const snap of all) {
-        const snapOrg = snap.orgId || snap.org_id;
-        if (snapOrg && snapOrg !== orgId) continue;
+        if (!snapshotBelongsToOrg(snap, orgId)) continue;
         const wk = ymd(snap.weekStart || snap.week_start);
         if (!wk) continue;
         if (from && wk < from) continue;
@@ -1225,6 +1395,9 @@ export function registerFuelPeriodRoutes(app: Hono) {
       if (!periodId) return c.json({ error: "period id required" }, 400);
       const period = await loadPeriod(orgId, periodId);
       if (!period) return c.json({ error: "Not found" }, 404);
+      if (isFuelPeriodLocked(period)) {
+        return c.json(fuelPeriodLockedBody(period), 409);
+      }
       const weekKey = ymd(period.week_start);
       try {
         assertPeriodEndedForReconciliation(weekKey);
@@ -1246,7 +1419,26 @@ export function registerFuelPeriodRoutes(app: Hono) {
         return c.json({ error: "version_conflict", currentVersion: period.version }, 409);
       }
       const body = await c.req.json().catch(() => ({}));
-      const snapshots = Array.isArray(body.snapshots) ? body.snapshots : [];
+      let snapshots = Array.isArray(body.snapshots) ? body.snapshots : [];
+      const requestedVersion = Number(body.snapshotVersion);
+      if (Number.isFinite(requestedVersion) && requestedVersion > 0) {
+        const loaded = await loadFuelWeekSnapshotVersion({
+          orgId,
+          periodId,
+          version: requestedVersion,
+        });
+        if (!loaded.ok) return c.json(loaded.body, loaded.status as 409);
+        const liveHash = await hashFuelWeekInputs(
+          orgId,
+          ymd(period.week_start),
+          ymd(period.week_end) || ymd(period.week_start),
+        );
+        if (loaded.row.inputs_hash !== liveHash) {
+          return c.json({ error: "inputs_changed" }, 409);
+        }
+        const reports = (loaded.row.money as { reports?: unknown[] } | null)?.reports;
+        if (Array.isArray(reports) && reports.length) snapshots = reports;
+      }
 
       const closableInput = await buildFuelWeekClosableInputForPeriod(orgId, period, snapshots);
       const closableBlockers = evaluateFuelWeekClosable(closableInput);
@@ -1263,9 +1455,9 @@ export function registerFuelPeriodRoutes(app: Hono) {
         );
       }
 
-      // Stage 5: FUEL_SERVER_ENGINE=off|shadow|enforce — recompute vs client proposal.
+      // Shadow compare runs in the close worker, not in this request.
       const engineMode = String(Deno.env.get("FUEL_SERVER_ENGINE") || "off").toLowerCase();
-      if (engineMode === "shadow" || engineMode === "enforce") {
+      if (engineMode === "inline-disabled") {
         const { computeFuelWeek, diffWeekCalc } = await import(
           "../../../packages/fuel-core/src/computeFuelWeek.ts"
         );
@@ -1498,7 +1690,6 @@ export function registerFuelPeriodRoutes(app: Hono) {
         .eq("idempotency_key", idempotencyKey)
         .maybeSingle();
       if (existing) {
-        // Re-run queued/running/failed so cursor resume can finish unsettled drivers (NEW-7).
         if (
           existing.state === "queued" ||
           existing.state === "running" ||
@@ -1510,20 +1701,14 @@ export function registerFuelPeriodRoutes(app: Hono) {
               : 0) as number,
           );
           await stampServiceSecondApproveIfNeeded(cursorSpend);
-          const { data: fresh } = await sb
-            .from("fuel_period_job")
-            .select("*")
-            .eq("id", existing.id)
-            .maybeSingle();
-          const result = await processJobRow((fresh || existing) as any);
-          return c.json(
-            {
-              jobId: existing.id,
-              state: result.ok ? "succeeded" : "failed",
-              ...result,
-            },
-            202,
-          );
+          if (existing.state === "failed") {
+            await sb
+              .from("fuel_period_job")
+              .update({ state: "queued", updated_at: new Date().toISOString() })
+              .eq("id", existing.id);
+          }
+          kickFuelJobProcessor(c);
+          return c.json({ jobId: existing.id, state: "queued" }, 202);
         }
         return c.json(
           {
@@ -1551,6 +1736,10 @@ export function registerFuelPeriodRoutes(app: Hono) {
             failures: [],
             totalSpend: body.totalSpend,
             secondApproverThreshold: body.secondApproverThreshold ?? thr,
+            step: "stage",
+            snapshotVersion: body.snapshotVersion ?? null,
+            forceReason: body.forceReason || null,
+            forceClientMoney: c.req.header("X-Fuel-Force-Client-Money") === "1",
           },
           progress_total: snapshots.length,
           created_by: actor,
@@ -1558,8 +1747,8 @@ export function registerFuelPeriodRoutes(app: Hono) {
         .select("*")
         .single();
       if (error) return c.json({ error: error.message }, 500);
-      const result = await processJobRow(job as any);
-      return c.json({ jobId: job.id, state: result.ok ? "succeeded" : "failed", ...result }, 202);
+      kickFuelJobProcessor(c);
+      return c.json({ jobId: job.id, state: "queued" }, 202);
     },
   );
 
@@ -2366,6 +2555,11 @@ export function registerFuelPeriodRoutes(app: Hono) {
       if (!orgId) return c.json({ error: "org required" }, 400);
       const periodId = periodIdParam(c);
       if (!periodId) return c.json({ error: "period id required" }, 400);
+      const period = await loadPeriod(orgId, periodId);
+      if (!period) return c.json({ error: "Not found" }, 404);
+      if (isFuelPeriodLocked(period)) {
+        return c.json(fuelPeriodLockedBody(period), 409);
+      }
       const body = await c.req.json().catch(() => ({}));
       const step = String(body.step || "").trim();
       if (!step) return c.json({ error: "step required" }, 400);
@@ -2400,23 +2594,136 @@ export function registerFuelPeriodRoutes(app: Hono) {
 
   app.post(
     `${BASE}/fuel/period-jobs/process`,
-    requirePermission("transactions.edit"),
+    requireAnyPermission("fuel.finalize", "transactions.edit"),
     async (c: Context) => {
       const orgId = getOrgId(c);
       if (!orgId) return c.json({ error: "org required" }, 400);
       const sb = getServiceClient();
-      const { data: jobs } = await sb
+      const staleBefore = new Date(Date.now() - 2 * 60 * 1000).toISOString();
+      const { data: queued } = await sb
         .from("fuel_period_job")
         .select("*")
         .eq("org_id", orgId)
         .eq("state", "queued")
         .order("created_at", { ascending: true })
         .limit(10);
+      const { data: stale } = await sb
+        .from("fuel_period_job")
+        .select("*")
+        .eq("org_id", orgId)
+        .eq("state", "running")
+        .lt("updated_at", staleBefore)
+        .order("created_at", { ascending: true })
+        .limit(10);
+      const jobs = [...(queued || []), ...(stale || [])];
       const results = [];
-      for (const job of jobs || []) {
+      for (const job of jobs) {
         results.push(await processJobRow(job as any));
       }
       return c.json({ processed: results.length, results });
+    },
+  );
+
+  app.post(`${BASE}/fuel/period-jobs/sweep`, async (c: Context) => {
+    const secret = c.req.header("X-Fleet-Cron-Secret") || c.req.header("x-fleet-cron-secret") || "";
+    const expected = CRON_SECRET();
+    if (!expected || secret !== expected) return c.json({ error: "unauthorized" }, 401);
+    const sb = getServiceClient();
+    const staleBefore = new Date(Date.now() - 2 * 60 * 1000).toISOString();
+    const { data: queued } = await sb
+      .from("fuel_period_job")
+      .select("*")
+      .eq("state", "queued")
+      .order("created_at", { ascending: true })
+      .limit(20);
+    const { data: stale } = await sb
+      .from("fuel_period_job")
+      .select("*")
+      .eq("state", "running")
+      .lt("updated_at", staleBefore)
+      .order("created_at", { ascending: true })
+      .limit(20);
+    const jobs = [...(queued || []), ...(stale || [])];
+    const results = [];
+    for (const job of jobs) {
+      results.push(await processJobRow(job as any));
+    }
+    return c.json({ processed: results.length });
+  });
+
+  app.get(
+    `${BASE}/fuel/periods/:id/closable`,
+    requirePermission("fuel.view"),
+    async (c: Context) => {
+      const orgId = getOrgId(c);
+      if (!orgId) return c.json({ error: "org required" }, 400);
+      const periodId = periodIdParam(c);
+      if (!periodId) return c.json({ error: "period id required" }, 400);
+      const period = await loadPeriod(orgId, periodId);
+      if (!period) return c.json({ error: "Not found" }, 404);
+      if (isFuelPeriodLocked(period)) {
+        return c.json({
+          blockers: [],
+          inputsVersion: Number(period.version) || 1,
+          status: "locked",
+        });
+      }
+      let snapshots: unknown[] = [];
+      try {
+        const sb = getServiceClient();
+        const { data } = await sb
+          .from("fuel_week_snapshot")
+          .select("money, version")
+          .eq("org_id", orgId)
+          .eq("period_id", periodId)
+          .order("version", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        const reports = (data?.money as { reports?: unknown[] } | null)?.reports;
+        if (Array.isArray(reports)) snapshots = reports;
+      } catch {
+        snapshots = [];
+      }
+      const input = await buildFuelWeekClosableInputForPeriod(orgId, period, snapshots);
+      const blockers = evaluateFuelWeekClosable(input);
+      return c.json({
+        blockers,
+        inputsVersion: Number(period.version) || 1,
+        status: String(period.status || "open"),
+      });
+    },
+  );
+
+  app.post(
+    `${BASE}/fuel/periods/:id/compute`,
+    requirePermission("fuel.view"),
+    async (c: Context) => {
+      const orgId = getOrgId(c);
+      if (!orgId) return c.json({ error: "org required" }, 400);
+      const periodId = periodIdParam(c);
+      if (!periodId) return c.json({ error: "period id required" }, 400);
+      const period = await loadPeriod(orgId, periodId);
+      if (!period) return c.json({ error: "Not found" }, 404);
+      if (isFuelPeriodLocked(period)) return c.json(fuelPeriodLockedBody(period), 409);
+      try {
+        const result = await computeFuelWeekSnapshot({
+          orgId,
+          periodId,
+          weekStart: ymd(period.week_start),
+          weekEnd: ymd(period.week_end) || ymd(period.week_start),
+        });
+        const money = (result.snapshot?.money || {}) as { reports?: unknown[]; totalSpend?: number };
+        return c.json({
+          version: result.snapshot?.version ?? null,
+          inputsHash: result.snapshot?.inputs_hash ?? null,
+          reused: result.reused,
+          reports: money.reports || [],
+          totalSpend: money.totalSpend ?? null,
+        });
+      } catch (e: any) {
+        console.warn("[fuel_period] compute failed", e);
+        return c.json({ error: e?.message || "Could not prepare this week" }, 503);
+      }
     },
   );
 
@@ -2656,15 +2963,15 @@ export function registerFuelPeriodRoutes(app: Hono) {
           bumpSkip(orgId, periodId, "insert_failed");
           continue;
         }
-        const result = await processJobRow(job as any);
+        enqueued += 1;
+        details.push({ orgId, periodId, result: "queued" });
         await insertAudit(
           orgId,
           periodId,
           "auto_close",
           {
-            ok: result.ok,
-            error: (result as any).error || null,
-            failures: (result as any).failures || [],
+            queued: true,
+            jobId: job.id,
             secondApproverThreshold,
             dualMode,
           },
@@ -2677,30 +2984,15 @@ export function registerFuelPeriodRoutes(app: Hono) {
             id: alertId,
             orgId,
             type: "fuel_period_auto_close",
-            severity: result.ok ? "info" : "warning",
-            title: result.ok
-              ? `Fuel week ${weekStart} auto-closed`
-              : `Fuel week ${weekStart} auto-close incomplete`,
-            body: result.ok
-              ? "Eligible week locked by scheduled auto-close."
-              : `Auto-close did not finish: ${(result as any).error || "partial failure"}. Retry Finalize.`,
+            severity: "info",
+            title: `Fuel week ${weekStart} is locking`,
+            body: "Eligible week was queued. The close finishes in the background.",
             createdAt: new Date().toISOString(),
             read: false,
           });
         } catch {
           /* non-fatal */
         }
-        if (result.ok) enqueued += 1;
-        else {
-          const failKey = `failed:${(result as any).error || "unknown"}`;
-          skipByReason[failKey] = (skipByReason[failKey] || 0) + 1;
-          skipped += 1;
-        }
-        details.push({
-          orgId,
-          periodId,
-          result: result.ok ? "locked" : `failed:${(result as any).error || "unknown"}`,
-        });
       }
     }
 

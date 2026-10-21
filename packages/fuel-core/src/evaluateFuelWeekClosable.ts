@@ -152,7 +152,7 @@ export function evaluateFuelWeekClosable(
   if (input.degradedInputs) {
     blockers.push({
       code: 'degraded_inputs',
-      message: 'Money-bearing inputs timed out or missing',
+      message: 'We could not load everything needed to price this week. Try again before locking.',
     });
   }
   if (input.missingCategoryCosts) {

@@ -88,6 +88,29 @@ Applied `20261020160000_r5_02_revoke_legacy_public_sd`.
 Default privileges closed for new `public` functions. CI guard lists all 27
 audited names. `finance-doctor` edge redeployed with live privilege check.
 
+## R6-01 / R6-02 / R6-03 · Coverage truth + revoke + history (2026-10-20)
+
+Applied `20261020190000_r6_01_coverage_truth_and_revoke` on GoRide prod (SQL via
+linked project, then marked applied). Also repaired dual-read drift:
+
+```bash
+supabase migration repair --status reverted 20261020134956
+supabase migration repair --status reverted 20261020140015
+supabase migration repair --status applied 20261020170000
+supabase migration repair --status applied 20261020180000
+supabase migration repair --status applied 20261020190000
+```
+
+**Rule:** always apply through the repo filename — never hand-SQL under a foreign version.
+
+- Coverage is **per day**: batch only marks days inside `coverage_start…coverage_end`.
+- Live-row fallback only for `week_key < 2026-10-19` (bridge go-live Monday), per day.
+- `public.compute_source_coverage`: anon/authenticated EXECUTE = false; service_role = true.
+- CI: `node scripts/assert-public-fn-revoke-anon.mjs` OK.
+- Smoke (org `8cfa606a-…`): Oct 12 toll_usage Covered only on live days (not whole week);
+  uber_bundle Covered Tue–Sun from batch `2026-10-13…18`, Mon Missing; Oct 19 post-bridge
+  toll_usage all Missing with no batch.
+
 ## R4-04 / R3-03 / R5-05 · First prod wizard E2E (preview close only)
 
 **Prerequisites:** R5-01 + R5-02 live (migrations + edge). Redeploy fleet **web**
@@ -112,7 +135,10 @@ Code confirmation already done: Finish calls `upsertTollPeriodRow(..., { state: 
 | R4-05 live volume at close | OK (code + guard tests) |
 | R5-01 bulk inserted_ids + partial | OK (prod 2026-10-20, SQL smoke + edge) |
 | R5-02 anon SD sweep + doctor | OK (prod 2026-10-20, audit ok) |
-| First rideshare E2E (this section) | **Ready for ops** — needs real toll CSV + Uber bundle in Fleet UI |
+| First rideshare E2E (this section) | **In progress** — R6-01 coverage truth live; Oct 12–18 Sources+Attribution done; Tolls Finish → Fuel → Close preview remain in Fleet UI |
+| R6 coverage + revoke + history | OK (prod 2026-10-20 — see R6 section above) |
+| R6-04 Log Cash soft guards | OK (`fleet-pay` redeployed 2026-10-20; Deno 16/16) |
+| R6 view `provider_ref` | OK — recreated `public.fleet_toll_ledger` (`20261020192000`) so Link all / reconcile dual-write works |
 
 ## If applying on a new environment
 

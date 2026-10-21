@@ -10,6 +10,7 @@ export function TollReconciliation({
   embedded = false,
   hideLanding = false,
   serviceLine,
+  onPeriodFinished,
 }: {
   focusVehicleId?: string;
   focusDriverId?: string;
@@ -21,6 +22,8 @@ export function TollReconciliation({
   hideLanding?: boolean;
   /** R2-16: Week Recon embed — filter tolls to this service line. */
   serviceLine?: 'rideshare' | 'rush_delivery';
+  /** Week Recon hub: advance left-rail after tolls Finish. */
+  onPeriodFinished?: () => void | Promise<void>;
 } = {}) {
   return (
     <div className={cn(embedded ? undefined : 'p-6')}>
@@ -31,6 +34,7 @@ export function TollReconciliation({
         focusVehicleLabel={focusVehicleLabel}
         hideLanding={hideLanding}
         serviceLine={serviceLine}
+        onPeriodFinished={onPeriodFinished}
       />
     </div>
   );

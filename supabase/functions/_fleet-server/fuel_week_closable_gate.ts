@@ -321,6 +321,10 @@ export function entryHasOpenCriticalFlag(
     : {}) as Record<string, unknown>;
   const signalTier = String(meta.signalTier || e.signalTier || "").toLowerCase();
   const integrity = String(meta.integrityStatus || "").toLowerCase();
+  const reason = String(meta.anomalyReason || "").trim().toLowerCase();
+  const odo = Number(e.odometer);
+  // Blank reading was stored as Odometer Regression (compared as 0). Not a backward reading.
+  if (reason === "odometer regression" && !(Number.isFinite(odo) && odo > 0)) return false;
   const codes: string[] = [];
   if (signalTier === "exception") codes.push("signal_exception");
   if (integrity === "critical") codes.push("integrity_critical");
@@ -472,17 +476,7 @@ export async function buildFuelWeekClosableInputForPeriod(
   const unresolvedCoverageRule =
     snaps.length > 0 && snapshotsHaveUnresolvedCoverageRule(snaps);
 
-  // F-5: client hydrate may stamp degraded_inputs; missing category costs also degrade auto-close.
-  const meta =
-    period.metadata && typeof period.metadata === "object"
-      ? (period.metadata as Record<string, unknown>)
-      : {};
-  const degradedFromPeriod =
-    period.degraded_inputs === true ||
-    period.degradedInputs === true ||
-    meta.degradedInputs === true ||
-    meta.degraded_inputs === true;
-  const degradedInputs = degradedFromPeriod || Boolean(missingCategoryCosts);
+  const degradedInputs = Boolean(missingCategoryCosts);
 
   // R-3: stop-to-stop conservation — week-closing buckets only (not ledger history).
   const { entries: weekEntries } = await loadWeekClosableKvBundle(orgId, weekStart, weekEnd);

@@ -28,6 +28,8 @@ export interface RefundClassifierInput {
   plazaRadiusMeters?: number;
   /** True when a tag statement covering this trip's period is still expected. */
   pendingTagImport?: boolean;
+  /** Open same-driver same-week tag tolls can absorb this credit. */
+  hasAbsorbingTagTolls?: boolean;
 }
 
 export interface RefundClassification {
@@ -56,18 +58,26 @@ export function classifyRefund(input: RefundClassifierInput): RefundClassificati
     nearestPlazaMeters = null,
     plazaRadiusMeters = DEFAULT_PLAZA_RADIUS_M,
     pendingTagImport = false,
+    hasAbsorbingTagTolls = false,
   } = input;
 
   if (!(tollCharges > 0)) {
     return { status: 'pending', confidence: 0, reason: 'No positive toll refund on this trip.' };
   }
 
-  // A tag charge is still expected — leave it to auto-match on import.
-  if (pendingTagImport) {
+  if (pendingTagImport && !hasAbsorbingTagTolls) {
     return {
       status: 'pending',
       confidence: 60,
       reason: 'A tag statement for this period is expected; will auto-match on import.',
+    };
+  }
+  if (hasAbsorbingTagTolls) {
+    return {
+      status: 'pending',
+      confidence: 88,
+      reason:
+        'Open tag plazas can absorb this credit — apply across matching underpaid tolls.',
     };
   }
 

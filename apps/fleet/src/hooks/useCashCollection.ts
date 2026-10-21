@@ -32,11 +32,13 @@ export type CashCollectInput = {
   driverId: string;
   weekAnchor: string;
   amount: number;
-  /** Advisory only — server ignores for receipt; kept for backward-compatible clients. */
+  /** Desk residual when the form loaded — server 409s if balance changed (R6-04). */
   expectedOutstanding?: number;
   method?: string;
   reference?: string;
   note?: string;
+  /** Required by server when amount exceeds owed (or fat-finger floor). */
+  reason?: string;
 };
 
 export type CashCollectResult = {
@@ -48,10 +50,11 @@ export type CashCollectResult = {
 
 export class CashGateError extends Error {
   constructor(
-    readonly code: 'PERIOD_FROZEN' | 'MONEY_LOCKED' | 'SERVER_STALE',
+    readonly code: 'PERIOD_FROZEN' | 'MONEY_LOCKED' | 'SERVER_STALE' | 'STALE_RESIDUAL' | 'OVER_COLLECT',
     readonly weekAnchor: string,
+    message?: string,
   ) {
-    super(code);
+    super(message || code);
     this.name = 'CashGateError';
   }
 }
@@ -160,6 +163,10 @@ export async function collectCashPayment(
   input: CashCollectInput,
 ): Promise<CashCollectResult> {
   try {
+    const expected =
+      input.expectedOutstanding !== undefined && input.expectedOutstanding !== null
+        ? Number(input.expectedOutstanding)
+        : undefined;
     const res = await settlementCommandsApi.collect({
       driverId: input.driverId,
       weekAnchor: input.weekAnchor,
@@ -167,8 +174,9 @@ export async function collectCashPayment(
       method: input.method || 'Cash',
       reference: input.reference,
       note: input.note,
+      reason: input.reason,
       idempotencyKey: newIdempotencyKey(),
-      expectedOutstanding: Number(input.expectedOutstanding) || 0,
+      ...(Number.isFinite(expected as number) ? { expectedOutstanding: expected } : {}),
     });
     const period = (res as { period?: Record<string, unknown> })?.period;
     invalidateSettlementQueries(qc);
@@ -185,9 +193,23 @@ export async function collectCashPayment(
     if (isPeriodFrozenError(err)) throw new CashGateError('PERIOD_FROZEN', input.weekAnchor);
     // Legacy deploy still returning MONEY_LOCKED — treat as redeploy needed, not fuel dialog.
     if (isMoneyLockedError(err)) throw new CashGateError('SERVER_STALE', input.weekAnchor);
-    if (err instanceof SettlementCommandApiError && err.status === 409) {
+    if (err instanceof SettlementCommandApiError) {
       const code = String(err.code || '');
-      if (code === 'MONEY_LOCKED' || code === 'STALE_RESIDUAL' || code === 'OVER_COLLECT_CAP') {
+      if (code === 'STALE_RESIDUAL' || err.status === 409 && code === 'STALE_RESIDUAL') {
+        throw new CashGateError(
+          'STALE_RESIDUAL',
+          input.weekAnchor,
+          'Balance changed since you loaded this week. Reload and try again.',
+        );
+      }
+      if (code === 'OVER_COLLECT_CAP' || code === 'OVER_COLLECT_REASON_REQUIRED') {
+        throw new CashGateError(
+          'OVER_COLLECT',
+          input.weekAnchor,
+          err.message || 'Amount exceeds what is owed — add a reason to continue.',
+        );
+      }
+      if (err.status === 409 && code === 'MONEY_LOCKED') {
         throw new CashGateError('SERVER_STALE', input.weekAnchor);
       }
     }

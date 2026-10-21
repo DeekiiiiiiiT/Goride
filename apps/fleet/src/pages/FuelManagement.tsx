@@ -66,7 +66,8 @@ import {
 } from '../utils/fuelPeriodServerMerge';
 import { parseDataQualityVehicleReviews, reviewedVehicleIdSet } from '../utils/fuelDataQualityReview';
 import { fuelPeriodFinalizeIdempotencyKey } from '../utils/fuelPeriodIdempotency';
-import { interpretFuelFinalizeJobResult } from '../utils/fuelFinalizeJobResult';
+import { fuelFinalizeProgressLabel, interpretFuelFinalizeJobResult } from '../utils/fuelFinalizeJobResult';
+import { currentFuelSnapshotVersion } from '../utils/fuelPreparedSnapshot';
 import {
   hasDistinctSecondApprove,
   needsHumanSecondApprover,
@@ -409,28 +410,13 @@ function FuelManagementInner({
     };
   }, [fleetTz]);
 
-  // Recompute first, then enable the periods query once — avoids GET+POST+GET storm (ROAM-FLEET-10).
   const [periodsQueryReady, setPeriodsQueryReady] = useState(false);
   useEffect(() => {
     if (activeTab !== 'reconciliation') {
       setPeriodsQueryReady(false);
       return;
     }
-    if (!landingPeriodRange.from || !landingPeriodRange.to) return;
-    let cancelled = false;
-    setPeriodsQueryReady(false);
-    void api
-      .recomputeFuelReconciliationPeriods({
-        from: landingPeriodRange.from,
-        to: landingPeriodRange.to,
-      })
-      .catch(() => undefined)
-      .finally(() => {
-        if (!cancelled) setPeriodsQueryReady(true);
-      });
-    return () => {
-      cancelled = true;
-    };
+    setPeriodsQueryReady(Boolean(landingPeriodRange.from && landingPeriodRange.to));
   }, [activeTab, landingPeriodRange.from, landingPeriodRange.to]);
 
   const {
@@ -2040,6 +2026,7 @@ function FuelManagementInner({
             snapshots: weekResult.snapshots || [],
             totalSpend,
             secondApproverThreshold: threshold,
+            snapshotVersion: currentFuelSnapshotVersion(),
           };
           try {
             jobRes = await api.enqueueFuelPeriodFinalize(enqueueArgs);
@@ -2063,11 +2050,31 @@ function FuelManagementInner({
                 if (await recoverIfAlreadyLocked()) return true;
                 throw forceErr;
               }
+            } else if (
+              lockErr?.code === 'inputs_changed' ||
+              lockErr?.code === 'snapshot_stale'
+            ) {
+              await queryClient.invalidateQueries({ queryKey: [FUEL_PERIODS_KEY] });
+              toast.message('The week changed after it was prepared. Refresh, then lock again.');
+              return false;
+            } else if (
+              lockErr?.code === 'period_locked' ||
+              lockErr?.code === 'version_conflict'
+            ) {
+              await queryClient.invalidateQueries({ queryKey: [FUEL_PERIODS_KEY] });
+              if (await recoverIfAlreadyLocked()) return true;
+              toast.message('This week changed. Showing the latest status.');
+              return false;
             } else {
-              // Worker may OOM after lock, or retry hits version_conflict — both can mean success.
               if (await recoverIfAlreadyLocked()) return true;
               throw lockErr;
             }
+          }
+          const jobId = String((jobRes as { jobId?: string })?.jobId || '');
+          if (jobId && (jobRes as { state?: string }).state !== 'succeeded') {
+            jobRes = await api.pollFuelPeriodJob(jobId, (latest) => {
+              setMessage(fuelFinalizeProgressLabel(latest));
+            });
           }
           const jobInterp = interpretFuelFinalizeJobResult(jobRes);
           if (jobInterp.incomplete) {
@@ -2080,6 +2087,10 @@ function FuelManagementInner({
           await queryClient.invalidateQueries({ queryKey: ['finalizedReports'] });
           await queryClient.invalidateQueries({ queryKey: ['driverFinancialPeriods'] });
           await queryClient.invalidateQueries({ queryKey: [FUEL_PERIODS_KEY] });
+          void api.recomputeFuelReconciliationPeriods({
+            from: weekStart,
+            to: weekStart,
+          }).catch(() => undefined);
 
           if (weekResult.failures?.length) {
             toast.warning(

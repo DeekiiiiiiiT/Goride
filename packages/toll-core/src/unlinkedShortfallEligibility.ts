@@ -79,6 +79,111 @@ export interface UnlinkedPoolShare extends UnlinkedPoolTarget {
  * Shared-pool split (same rule as allocateTripRefundAcrossTolls):
  * chronological order, each share capped at remaining shortfall.
  */
+function tollPayloadMatchedTripId(toll: {
+  matchedTripId?: string | null;
+  metadata?: { matchedTripId?: string | null } | null;
+  payload_json?: { matchedTripId?: string | null } | null;
+  payloadJson?: { matchedTripId?: string | null } | null;
+}): string | null {
+  const soft =
+    toll.matchedTripId ??
+    toll.metadata?.matchedTripId ??
+    toll.payload_json?.matchedTripId ??
+    toll.payloadJson?.matchedTripId ??
+    null;
+  return soft != null && String(soft).trim() ? String(soft) : null;
+}
+
+/** Hard tripId (or reconciled status) means platform credit is already applied. */
+export function tollHasHardTripLink(toll: {
+  tripId?: string | null;
+  status?: string | null;
+  metadata?: { tripId?: string | null } | null;
+}): boolean {
+  const hardId = toll.tripId ?? toll.metadata?.tripId ?? null;
+  if (hardId != null && String(hardId).trim()) return true;
+  return String(toll.status || '').toLowerCase() === 'reconciled';
+}
+
+/** Soft matchedTripId only — suggestion pointer, not money applied. */
+export function isSoftMatchOnlyPointer(toll: {
+  tripId?: string | null;
+  matchedTripId?: string | null;
+  status?: string | null;
+  metadata?: { tripId?: string | null; matchedTripId?: string | null } | null;
+  payload_json?: { matchedTripId?: string | null } | null;
+  payloadJson?: { matchedTripId?: string | null } | null;
+}): boolean {
+  if (tollHasHardTripLink(toll)) return false;
+  return tollPayloadMatchedTripId(toll) != null;
+}
+
+/** Trip still sits in the Unlinked Refunds queue (no non-pending resolution). */
+export function tripIsUnresolvedUnlinkedRefund(trip: {
+  tollCharges?: number;
+  tollRefundResolution?: { status?: string } | null;
+} | null | undefined): boolean {
+  if (!trip) return false;
+  if (!(Number(trip.tollCharges) > 0)) return false;
+  const status = trip.tollRefundResolution?.status;
+  if (status && status !== 'pending') return false;
+  return true;
+}
+
+/**
+ * Platform refund that should net against a toll for shortfall math.
+ * Soft matchedTripId → unresolved unlinked trip is NOT applied yet (multi-plaza).
+ */
+export function platformRefundForShortfall(args: {
+  toll: {
+    tripId?: string | null;
+    matchedTripId?: string | null;
+    status?: string | null;
+    metadata?: { tripId?: string | null; matchedTripId?: string | null } | null;
+    payload_json?: { matchedTripId?: string | null } | null;
+    payloadJson?: { matchedTripId?: string | null } | null;
+  };
+  trip: {
+    tollCharges?: number;
+    tollRefundResolution?: { status?: string } | null;
+  } | null | undefined;
+}): number {
+  const trip = args.trip;
+  if (!trip) return 0;
+  const charges = Math.abs(Number(trip.tollCharges) || 0);
+  if (charges <= 0) return 0;
+  if (tollHasHardTripLink(args.toll)) return charges;
+  if (isSoftMatchOnlyPointer(args.toll) && tripIsUnresolvedUnlinkedRefund(trip)) {
+    return 0;
+  }
+  return charges;
+}
+
+/**
+ * True when open same-driver same-week tag tolls can absorb this unlinked credit
+ * (soft-matched to the trip, or amounts sum to at least the credit).
+ */
+export function openTagTollsCanAbsorbCredit(args: {
+  tripId: string;
+  tripRefund: number;
+  openSameDriverWeekTolls: Array<{
+    amount?: number | null;
+    matchedTripId?: string | null;
+    metadata?: { matchedTripId?: string | null } | null;
+    payload_json?: { matchedTripId?: string | null } | null;
+    payloadJson?: { matchedTripId?: string | null } | null;
+  }>;
+}): boolean {
+  const open = args.openSameDriverWeekTolls || [];
+  if (!open.length) return false;
+  const tripId = String(args.tripId);
+  if (open.some((t) => tollPayloadMatchedTripId(t) === tripId)) {
+    return true;
+  }
+  const sum = open.reduce((s, t) => s + Math.abs(Number(t.amount) || 0), 0);
+  return sum + UNLINKED_SHORTFALL_TOLERANCE >= Math.abs(Number(args.tripRefund) || 0);
+}
+
 export function proposeUnlinkedPoolAllocation(
   tripRefund: number,
   targets: UnlinkedPoolTarget[],

@@ -12,11 +12,13 @@ import { fuelPeriodLockBadge } from '../../../utils/fuelReconGlossary';
 export function FuelPeriodWizardHeader({
   period,
   periodLocked,
+  statusLabel,
   onBack,
   onResetPeriod,
 }: {
   period: FuelReconciliationPeriod;
   periodLocked: boolean;
+  statusLabel?: string;
   onBack: () => void;
   onResetPeriod?: () => void;
 }) {
@@ -35,11 +37,11 @@ export function FuelPeriodWizardHeader({
           <h2 className="text-lg font-bold text-slate-900">Fuel Reconciliation</h2>
           <Badge
             variant={periodLocked ? 'secondary' : 'outline'}
-            className={`uppercase tracking-wider ${
+            className={
               periodLocked
                 ? ''
                 : 'border-emerald-200/60 bg-emerald-50 text-emerald-800'
-            }`}
+            }
           >
             <span
               className={`mr-1.5 inline-block h-1.5 w-1.5 rounded-full ${
@@ -47,7 +49,7 @@ export function FuelPeriodWizardHeader({
               }`}
               aria-hidden
             />
-            {fuelPeriodLockBadge(periodLocked)}
+            {statusLabel || fuelPeriodLockBadge(periodLocked)}
           </Badge>
         </div>
         <p className="mt-1 text-sm text-slate-500">{period.label}</p>

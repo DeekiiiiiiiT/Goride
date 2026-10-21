@@ -316,11 +316,29 @@ export function UnclaimedRefundsList({
                                     ) : shortfall?.requiresMultiTarget ? (
                                       <div className="flex flex-col gap-0.5">
                                         <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold border border-amber-200 bg-amber-50 text-amber-900">
-                                          Multi-plaza credit
+                                          Split across plazas
                                         </span>
                                         <span className="text-[10px] text-slate-500">
-                                          ${shortfall.tripRefund.toFixed(2)} may cover{' '}
-                                          {shortfall.multiTargetTollIds?.length || 2} underpaid tolls — Review to split
+                                          ${shortfall.tripRefund.toFixed(2)} covers{' '}
+                                          {shortfall.multiTargetTollIds?.length || 2} underpaid tolls — Review to apply
+                                        </span>
+                                      </div>
+                                    ) : shortfall ? (
+                                      <div className="flex flex-col gap-0.5">
+                                        <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold border border-orange-200 bg-orange-50 text-orange-800">
+                                          Apply to underpaid · {shortfall.confidence}%
+                                        </span>
+                                        <span className="text-[10px] text-slate-500">
+                                          Shortfall ${shortfall.remainingShortfall.toFixed(2)} — Review to apply
+                                        </span>
+                                      </div>
+                                    ) : s && s.confidence >= 80 && s.status === 'pending' && /absorb|plazas|underpaid/i.test(s.reason || '') ? (
+                                      <div className="flex flex-col gap-0.5">
+                                        <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold border border-amber-200 bg-amber-50 text-amber-900">
+                                          Split across plazas
+                                        </span>
+                                        <span className="text-[10px] text-slate-500">
+                                          Tag plazas ready — Review to apply credit
                                         </span>
                                       </div>
                                     ) : s ? (

@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect, type Dispatch, type SetStateAction } from 'react';
 import { FuelPeriodLandingPage } from './FuelPeriodLandingPage';
 import { FuelPeriodWizard } from './FuelPeriodWizard';
+import { FuelWeekLockedReceipt } from './FuelWeekLockedReceipt';
 import { FuelPeriodResetDialog } from './FuelPeriodResetDialog';
 import { FuelBulkFinalizeDialog } from './FuelBulkFinalizeDialog';
 import { FuelBulkResetDialog, finalizedWeekOptionsFromGroups } from './FuelBulkResetDialog';
@@ -29,7 +30,7 @@ export const FUEL_RECON_WIZARD_PRIMARY =
 
 type View =
   | { kind: 'landing' }
-  | { kind: 'wizard'; period: FuelReconciliationPeriod; initialStepId?: FuelStepId }
+  | { kind: 'wizard'; periodId: string; initialStepId?: FuelStepId }
   | { kind: 'archive' };
 
 function parseDeepLinkStep(raw: string | null): FuelStepId | undefined {
@@ -312,7 +313,7 @@ export function FuelReconciliationDashboard({
       typeof window !== 'undefined'
         ? parseDeepLinkStep(new URLSearchParams(window.location.search).get('step'))
         : undefined;
-    setView({ kind: 'wizard', period, initialStepId: stepId });
+    setView({ kind: 'wizard', periodId: period.startDate, initialStepId: stepId });
     setDeepLinkConsumed(true);
   }, [allPeriods, deepLinkConsumed, loading, onSelectPeriodWeek, initialWeekStart, hideLanding]);
 
@@ -334,7 +335,7 @@ export function FuelReconciliationDashboard({
     }
     setDeepLinkSealedMessage(null);
     onSelectPeriodWeek?.(period);
-    setView({ kind: 'wizard', period, initialStepId: stepId });
+    setView({ kind: 'wizard', periodId: period.startDate, initialStepId: stepId });
   };
 
   const unlockedOpenPeriods = useMemo(
@@ -358,9 +359,47 @@ export function FuelReconciliationDashboard({
   }
 
   if (view.kind === 'wizard') {
+    const period = allPeriods.find((p) => p.startDate === view.periodId);
+    if (!period) {
+      return (
+        <div className="flex h-40 items-center justify-center text-sm text-slate-500">
+          This week is no longer on the list.
+        </div>
+      );
+    }
+    const leaveWizard = () => {
+      if (hideLanding) return;
+      setView({ kind: 'landing' });
+      onRefresh();
+    };
+    if (period.locked) {
+      return (
+        <>
+          <FuelWeekLockedReceipt
+            period={period}
+            onBack={leaveWizard}
+            onReopen={() => setResetPeriod(period)}
+          />
+          {resetPeriod && (
+            <FuelPeriodResetDialog
+              open={!!resetPeriod}
+              onOpenChange={(open) => !open && setResetPeriod(null)}
+              period={resetPeriod}
+              finalizedReports={finalizedReports}
+              fuelEntries={fuelEntries}
+              onComplete={() => {
+                setResetPeriod(null);
+                setWizardSession((n) => n + 1);
+                onRefresh();
+              }}
+            />
+          )}
+        </>
+      );
+    }
     return (
       <FuelReconciliationWizardView
-        period={view.period}
+        period={period}
         wizardSession={wizardSession}
         initialStepId={view.initialStepId}
         vehicles={vehicles}
@@ -383,12 +422,7 @@ export function FuelReconciliationDashboard({
         onOpenReviewQueue={onOpenReviewQueue}
         onAcceptFuelException={onAcceptFuelException}
         onEditFuelEntry={onEditFuelEntry}
-        onBack={() => {
-          if (hideLanding) return;
-          setView({ kind: 'landing' });
-          onRefresh();
-        }}
-        onResetPeriod={view.period.locked ? () => setResetPeriod(view.period) : undefined}
+        onBack={leaveWizard}
         resetPeriod={resetPeriod}
         setResetPeriod={setResetPeriod}
         setWizardSession={setWizardSession}

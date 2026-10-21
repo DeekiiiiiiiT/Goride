@@ -26,6 +26,22 @@ export function residualVsSpendPhrase(absPct: number | null): string {
 }
 
 /** Period badge: unlocked weeks are Open, not "Draft". */
+export function fuelWeekStatusLabel(args: {
+  locked: boolean;
+  sqlStatus?: string | null;
+  locking?: boolean;
+  blockerCount?: number;
+  ready?: boolean;
+}): string {
+  if (args.locked || args.sqlStatus === 'locked') return 'Locked';
+  if (args.sqlStatus === 'reopened') return 'Reopened';
+  if (args.locking) return 'Locking';
+  const n = Number(args.blockerCount) || 0;
+  if (n > 0) return `Blocked (${n})`;
+  if (args.ready) return 'Ready';
+  return 'Open';
+}
+
 export function fuelPeriodLockBadge(locked: boolean): 'Locked' | 'Open' {
   return locked ? 'Locked' : 'Open';
 }

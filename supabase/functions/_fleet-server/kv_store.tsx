@@ -235,6 +235,7 @@ export const getByPrefix = async (prefix: string): Promise<any[]> => {
     if (mapped !== null) return mapped;
   } catch (e) {
     console.error("[kv] fleet read-thru prefix failed:", prefix, e);
+    throw e;
   }
   const supabase = client();
   const out: any[] = [];

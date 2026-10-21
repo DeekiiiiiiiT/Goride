@@ -383,8 +383,8 @@ export function RefundResolutionDrawer({
             ) : multiMode && !forceSingleOpen ? (
               <div className="space-y-2">
                 <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
-                  This credit looks like multiple plazas. Apply across both underpaid tolls so leftover
-                  credit is not burned on one shortfall.
+                  Split across plazas: apply this credit to the underpaid tolls below so leftover is
+                  not burned on one shortfall.
                 </div>
                 {poolCandidates.map((c) => {
                   const key = candidateKey(c);

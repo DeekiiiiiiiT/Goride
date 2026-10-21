@@ -7560,131 +7560,32 @@ app.post(`${BASE_PATH}/parent-companies`, requirePermission("fuel.edit_entry"), 
  */
 app.get(`${BASE_PATH}/fuel-audit/deadhead/fleet`, requirePermission("fuel.view"), async (c) => {
   try {
-    const startTime = Date.now(); // Phase 9 (Step 9.3): performance timing
-    const periodStart = c.req.query("periodStart") || undefined;
-    const periodEnd = c.req.query("periodEnd") || undefined;
-
-    // MUST use paginated kv.getByPrefix ? raw .select().like truncates at 1000 rows
-    // (fleet has 2000+ trips; missing trips ? tripKm=0 ? industry fallback over-deadheads).
-    const [allEntriesRaw, vehiclesRaw, allTripsRaw, brainPolicy] = await Promise.all([
-      kv.getByPrefix("fuel_entry:"),
-      kv.getByPrefix("vehicle:"),
-      kv.getByPrefix("trip:"),
-      loadDeadheadBrainPolicy(),
-    ]);
-
-    const allEntries = narrowPlatformOrg(
-      filterByOrg(allEntriesRaw as Record<string, unknown>[], c, {
-        endpoint: "/fuel-audit/deadhead/fleet",
-      }),
-      c,
-    ) as any[];
-    const vehicles = narrowPlatformOrg(
-      filterByOrg(vehiclesRaw as Record<string, unknown>[], c, {
-        endpoint: "/fuel-audit/deadhead/fleet",
-      }),
-      c,
-    ) as any[];
-    const allTrips = narrowPlatformOrg(
-      filterByOrg(allTripsRaw as Record<string, unknown>[], c, {
-        endpoint: "/fuel-audit/deadhead/fleet",
-      }),
-      c,
-    ) as any[];
-
-
-    // Per-vehicle deadhead attribution
-    const vehicleResults: any[] = [];
-    for (const v of vehicles) {
-      if (!v.id) continue;
-
-      // Filter entries and trips for this vehicle
-      const vEntries = allEntries.filter((e: any) => e.vehicleId === v.id);
-      const vTrips = allTrips.filter((t: any) =>
-        t.vehicleId === v.id ||
-        t.vehicleId === v.licensePlate ||
-        t.vehicleId === v.plateNumber
-      );
-
-      // Also match trips via driver assignment (Step 7.3)
-      if (v.currentDriverId) {
-        const driverTrips = allTrips.filter((t: any) =>
-          t.driverId === v.currentDriverId &&
-          !vTrips.some((vt: any) => vt.id === t.id)
-        );
-        vTrips.push(...driverTrips);
-      }
-
-      // Date filtering if provided
-      const filteredEntries = deadheadFilterByDateRange(vEntries, periodStart, periodEnd);
-      const filteredTrips = deadheadFilterByDateRange(vTrips, periodStart, periodEnd);
-
-      const attribution = fuelLogic.calculateDeadheadAttribution({
-        vehicleId: v.id,
-        fuelEntries: filteredEntries,
-        trips: filteredTrips,
-        periodStart,
-        periodEnd,
-        policy: brainPolicy,
-      });
-
-      vehicleResults.push({
-        ...attribution,
-        vehicleName: v.name || v.licensePlate || v.plateNumber || v.id
-      });
-    }
-
-    // Aggregate fleet summary
-    const fleetSummary = {
-      vehicleCount: vehicleResults.length,
-      totalOdometerKm: 0,
-      totalTripKm: 0,
-      totalDeadheadKm: 0,
-      totalPersonalKm: 0,
-      totalUnaccountedKm: 0,
-      fleetDeadheadPct: 0,
-      fleetPersonalPct: 0,
-      avgConfidence: '' as string,
-      methodBreakdown: { A: 0, C: 0, combined: 0, fallback: 0 } as Record<string, number>
-    };
-
-    for (const vr of vehicleResults) {
-      fleetSummary.totalOdometerKm += vr.totalOdometerKm || 0;
-      fleetSummary.totalTripKm += vr.tripKm || 0;
-      fleetSummary.totalDeadheadKm += vr.deadheadKm || 0;
-      fleetSummary.totalPersonalKm += vr.personalKm || 0;
-      fleetSummary.totalUnaccountedKm += vr.unaccountedKm || 0;
-      fleetSummary.methodBreakdown[vr.method] = (fleetSummary.methodBreakdown[vr.method] || 0) + 1;
-    }
-
-    // Fleet-level percentages
-    if (fleetSummary.totalOdometerKm > 0) {
-      fleetSummary.fleetDeadheadPct = Number(((fleetSummary.totalDeadheadKm / fleetSummary.totalOdometerKm) * 100).toFixed(1));
-      fleetSummary.fleetPersonalPct = Number(((fleetSummary.totalPersonalKm / fleetSummary.totalOdometerKm) * 100).toFixed(1));
-    }
-
-    // Average confidence: majority wins
-    const confCounts = { high: 0, medium: 0, low: 0 };
-    for (const vr of vehicleResults) {
-      confCounts[vr.confidenceLevel as 'high' | 'medium' | 'low']++;
-    }
-    fleetSummary.avgConfidence = confCounts.high >= confCounts.medium && confCounts.high >= confCounts.low
-      ? 'high' : confCounts.medium >= confCounts.low ? 'medium' : 'low';
-
-    const elapsed = Date.now() - startTime;
-    const zeroTripWithOdo = vehicleResults.filter((vr) => (vr.totalOdometerKm || 0) > 0 && (vr.tripKm || 0) === 0).length;
-    console.log(
-      `[deadhead/fleet] Completed in ${elapsed}ms ? ${vehicleResults.length} vehicles, ${allEntries.length} entries, ${allTrips.length} trips` +
-        (zeroTripWithOdo ? ` | WARN ${zeroTripWithOdo} vehicle(s) odo>0 but tripKm=0` : ""),
-    );
-
-    return c.json({
-      fleet: fleetSummary,
-      vehicles: vehicleResults
+    const orgId = getOrgId(c);
+    if (!orgId) return c.json({ error: "org required" }, 400);
+    const { computeFleetDeadhead, FuelDistanceReadError } = await import("./fuel_distance.ts");
+    const vehicleIds = String(c.req.query("vehicleIds") || "")
+      .split(",")
+      .map((id) => id.trim())
+      .filter(Boolean);
+    const body = await computeFleetDeadhead({
+      orgId,
+      periodStart: c.req.query("periodStart") || undefined,
+      periodEnd: c.req.query("periodEnd") || undefined,
+      vehicleIds,
     });
+    return c.json(body);
   } catch (e: any) {
-    console.log(`[deadhead/fleet] Error: ${e.message}`);
-    return c.json({ error: `Fleet deadhead attribution failed: ${e.message}` }, 500);
+    const degraded = Array.isArray(e?.degraded) ? e.degraded : ["trips"];
+    console.log(`[deadhead/fleet] Error: ${e?.message}`);
+    return c.json(
+      {
+        error: e instanceof Error && e.name === "FuelDistanceReadError"
+          ? "Trips could not be loaded"
+          : `Fleet deadhead attribution failed: ${e?.message}`,
+        degraded,
+      },
+      e instanceof Error && (e.name === "FuelDistanceReadError" || e?.degraded) ? 503 : 500,
+    );
   }
 });
 
@@ -7696,74 +7597,26 @@ app.get(`${BASE_PATH}/fuel-audit/deadhead/fleet`, requirePermission("fuel.view")
  */
 app.get(`${BASE_PATH}/fuel-audit/deadhead/:vehicleId`, requirePermission("fuel.view"), async (c) => {
   try {
+    const orgId = getOrgId(c);
+    if (!orgId) return c.json({ error: "org required" }, 400);
     const vehicleId = c.req.param("vehicleId");
-    const periodStart = c.req.query("periodStart") || undefined;
-    const periodEnd = c.req.query("periodEnd") || undefined;
-
-    // Paginated KV load ? same trap as fleet route (raw like ? 1000-row truncate).
-    const [allEntriesRaw, allTripsRaw, vehicle, brainPolicy] = await Promise.all([
-      kv.getByPrefix("fuel_entry:"),
-      kv.getByPrefix("trip:"),
-      kv.get(`vehicle:${vehicleId}`),
-      loadDeadheadBrainPolicy(),
-    ]);
-
-    if (!vehicle) return c.json({ error: "Vehicle not found" }, 404);
-    if (!belongsToOrg(vehicle as Record<string, unknown>, c) && !isPlatformCaller(c)) {
-      return c.json({ error: "Forbidden" }, 403);
-    }
-
-    const allEntries = narrowPlatformOrg(
-      filterByOrg(allEntriesRaw as Record<string, unknown>[], c, {
-        endpoint: "/fuel-audit/deadhead/:vehicleId",
-      }),
-      c,
-    ) as any[];
-    const allTrips = narrowPlatformOrg(
-      filterByOrg(allTripsRaw as Record<string, unknown>[], c, {
-        endpoint: "/fuel-audit/deadhead/:vehicleId",
-      }),
-      c,
-    ) as any[];
-
-    const vEntries = allEntries.filter((e: any) => e.vehicleId === vehicleId);
-
-    const vTrips = allTrips.filter((t: any) =>
-      t.vehicleId === vehicleId ||
-      (vehicle && (t.vehicleId === vehicle.licensePlate || t.vehicleId === vehicle.plateNumber))
-    );
-
-    if (vehicle?.currentDriverId) {
-      const driverTrips = allTrips.filter((t: any) =>
-        t.driverId === vehicle.currentDriverId &&
-        !vTrips.some((vt: any) => vt.id === t.id)
-      );
-      vTrips.push(...driverTrips);
-    }
-
-    const filteredEntries = deadheadFilterByDateRange(vEntries, periodStart, periodEnd);
-    const filteredTrips = deadheadFilterByDateRange(vTrips, periodStart, periodEnd);
-
-    if ((filteredEntries.length >= 2) && filteredTrips.length === 0) {
-      console.log(
-        `[deadhead/${vehicleId}] WARN odo anchors present but 0 trips in range ` +
-          `(loaded ${allTrips.length} trips total) ? period ${periodStart}..${periodEnd}`,
-      );
-    }
-
-    const attribution = fuelLogic.calculateDeadheadAttribution({
-      vehicleId,
-      fuelEntries: filteredEntries,
-      trips: filteredTrips,
-      periodStart,
-      periodEnd,
-      policy: brainPolicy,
+    const { computeFleetDeadhead } = await import("./fuel_distance.ts");
+    const body = await computeFleetDeadhead({
+      orgId,
+      periodStart: c.req.query("periodStart") || undefined,
+      periodEnd: c.req.query("periodEnd") || undefined,
+      vehicleIds: [vehicleId],
     });
-
-    return c.json(attribution);
+    const row = (body.vehicles || []).find((v: any) => v.vehicleId === vehicleId);
+    if (!row) return c.json({ error: "Vehicle not found" }, 404);
+    return c.json(row);
   } catch (e: any) {
-    console.log(`[deadhead/${c.req.param("vehicleId")}] Error: ${e.message}`);
-    return c.json({ error: `Vehicle deadhead attribution failed: ${e.message}` }, 500);
+    const degraded = Array.isArray(e?.degraded) ? e.degraded : ["trips"];
+    console.log(`[deadhead/${c.req.param("vehicleId")}] Error: ${e?.message}`);
+    return c.json(
+      { error: "Trips could not be loaded", degraded },
+      e?.name === "FuelDistanceReadError" ? 503 : 500,
+    );
   }
 });
 

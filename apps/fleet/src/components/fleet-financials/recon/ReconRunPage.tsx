@@ -254,13 +254,25 @@ export function ReconRunPage({
     [line, weekKey],
   );
 
+  /**
+   * Land on the next openable step after `afterStep` (not from the top of the
+   * rail — Upload inputs staying "in progress" must not yank you back to step 1).
+   */
   const landAfterAdvance = useCallback(
-    (payload: ReconRunPayload, fallback: RunStepId) => {
+    (payload: ReconRunPayload, fallback: RunStepId, afterStep?: RunStepId) => {
+      const isOpenable = (id: RunStepId) => {
+        const st = stepStatus(payload, id);
+        return st === 'ready' || st === 'in_progress' || st === 'stale';
+      };
+      const startIdx = afterStep
+        ? Math.max(0, RECON_STEP_ORDER.indexOf(afterStep) + 1)
+        : 0;
+      const forward = RECON_STEP_ORDER.slice(startIdx);
       const target =
-        RECON_STEP_ORDER.find((id) => {
-          const st = stepStatus(payload, id);
-          return st === 'ready' || st === 'in_progress' || st === 'stale';
-        }) ?? fallback;
+        forward.find(isOpenable) ??
+        (isOpenable(fallback) ? fallback : null) ??
+        // Nothing ahead unlocked — stay on the step just finished when complete
+        (afterStep && stepStatus(payload, afterStep) === 'complete' ? afterStep : fallback);
       setStep(target);
     },
     [setStep],
@@ -289,7 +301,7 @@ export function ReconRunPage({
         await refreshRun(payload);
         if (cancelled) return;
         autoSkipKey.current = key;
-        landAfterAdvance(payload, 'tolls');
+        landAfterAdvance(payload, 'tolls', 'attribution');
       } catch (err) {
         if (cancelled) return;
         const msg =
@@ -319,6 +331,51 @@ export function ReconRunPage({
     }
     return nextStepId;
   }, [nextStepId, runQuery.data]);
+
+  /** Tolls embed Finish → mark run step complete and open next ready left-rail step. */
+  const handleTollsPeriodFinished = useCallback(async () => {
+    setAdvancing(true);
+    try {
+      let payload = runQuery.data;
+      if (!payload) payload = await fetchRun(line, weekKey);
+      const status = stepStatus(payload, 'tolls');
+      // completeThroughSkips only auto-completes ready/stale — force in_progress too.
+      if (status === 'in_progress') {
+        payload = await completeRunStep(line, weekKey, 'tolls', {
+          expectedVersion: payload.run.version,
+        });
+      }
+      if (stepStatus(payload, 'tolls') !== 'complete' && stepStatus(payload, 'tolls') !== 'locked') {
+        payload = await completeThroughSkips('tolls', payload);
+      } else if (nextStepId && isEmptyAutoSkip(payload, nextStepId)) {
+        payload = await completeThroughSkips(nextStepId, payload);
+      }
+      await refreshRun(payload);
+      landAfterAdvance(payload, nextStepId ?? 'tag_account', 'tolls');
+      toast.success('Tolls complete', {
+        description: 'Moved you to the next open week step.',
+      });
+    } catch (err) {
+      const msg =
+        err instanceof ReconApiError
+          ? err.message
+          : err instanceof Error
+            ? err.message
+            : 'Could not open the next week step';
+      toast.error(msg);
+      throw err instanceof Error ? err : new Error(msg);
+    } finally {
+      setAdvancing(false);
+    }
+  }, [
+    completeThroughSkips,
+    landAfterAdvance,
+    line,
+    nextStepId,
+    refreshRun,
+    runQuery.data,
+    weekKey,
+  ]);
 
   if (runQuery.isLoading) {
     return (
@@ -360,7 +417,7 @@ export function ReconRunPage({
         return;
       }
       await refreshRun(payload);
-      landAfterAdvance(payload, nextStepId);
+      landAfterAdvance(payload, nextStepId, activeStep);
     } catch (err) {
       const msg =
         err instanceof ReconApiError
@@ -439,6 +496,7 @@ export function ReconRunPage({
               hideLanding
               initialWeekStart={weekKey}
               serviceLine={line}
+              onPeriodFinished={handleTollsPeriodFinished}
             />
           </Suspense>
         ) : null}
@@ -484,7 +542,8 @@ export function ReconRunPage({
           </p>
         ) : null}
 
-        {(canMarkComplete || canSkipToNext) && continueLabelStep ? (
+        {/* Tolls Finish CTA lives inside the embed — avoid a second Continue. */}
+        {(canMarkComplete || canSkipToNext) && continueLabelStep && activeStep !== 'tolls' ? (
           <div className="mt-6 flex items-center justify-between gap-3 border-t border-slate-100 pt-4">
             <p className="text-sm text-slate-600">
               {canMarkComplete

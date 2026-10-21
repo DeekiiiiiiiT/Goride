@@ -139,6 +139,14 @@ const FLAG_CHECK_GUIDES: Record<string, FuelFlagCheckGuide> = {
       'Edit bad odometer/$ rows; Accept only if spend vs distance is explained',
     ],
   },
+  'missing odometer': {
+    summary: 'This fill has no odometer reading, so it cannot be compared with the fill before it.',
+    checks: [
+      'Open the fill and enter the dash reading if you have it',
+      'If this is a declined or duplicate card line, the real fill is the one that already has a reading',
+      'Do not treat a blank reading as the mileage going backwards',
+    ],
+  },
   'odometer regression': {
     summary: 'This odometer reading is lower than the previous one — distance math breaks.',
     checks: [
