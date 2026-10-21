@@ -92,8 +92,8 @@ export async function loadPlazaTollCardsForDriverWeek(
 
   // Matched dispute refunds count on the Reimbursed card (wizard parity).
   try {
-    const { getByPrefix } = await import("./kv_store.tsx");
-    const raw = (await getByPrefix("dispute-refund:")) || [];
+    const { loadIndexedDocs } = await import("./kv_doc_index.ts");
+    const raw = await loadIndexedDocs({ kind: "dispute_refund", driverIds: [driver] });
     for (const r of raw as Record<string, unknown>[]) {
       if (!r || typeof r !== "object" || !r.id || !r.supportCaseId) continue;
       if (String(r.driverId || r.driver_id || "") !== driver) continue;

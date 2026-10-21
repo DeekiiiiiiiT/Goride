@@ -43,7 +43,6 @@ import {
   loadAllTollLedgerWithTrips,
   isReconcilableTollExpense,
   filterByDriver,
-  loadAllByPrefix,
   getDriverAliasMap,
 } from "./toll_controller.tsx";
 import { driverIdsReferToSamePerson } from "./driver_identity.ts";
@@ -59,6 +58,7 @@ app.use("*", async (c, next) => {
 });
 
 import { PAY_HTTP_PREFIX } from "./pay_http_prefix.ts";
+import { loadIndexedDocs } from "./kv_doc_index.ts";
 
 const BASE = `${PAY_HTTP_PREFIX}/driver-financial-periods`;
 
@@ -814,7 +814,10 @@ app.post(`${BASE}/backfill`, requirePermission('transactions.edit'), async (c) =
     }
 
     // Finalized fuel
-    const reports = ((await loadAllByPrefix("finalized_report:")) || []).filter(
+    const reports = (await loadIndexedDocs({
+      kind: "finalized_report",
+      driverIds: onlyDriver ? [onlyDriver] : undefined,
+    })).filter(
       (r: any) => r?.status === "Finalized" && (!onlyDriver || String(r.driverId) === onlyDriver),
     );
     for (const fr of reports) {

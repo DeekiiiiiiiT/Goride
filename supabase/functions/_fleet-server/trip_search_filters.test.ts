@@ -31,6 +31,24 @@ Deno.test("rideshare includes null platform", () => {
   );
 });
 
+Deno.test("driver ids use the typed column, not a name ilike", () => {
+  const calls = describeTripFilters(
+    { driverIds: ["driver-1", "driver-2"] },
+    { effectiveOrgId: "org-1", useStrict: true },
+  );
+  assertEquals(calls.some((c) => c.startsWith("in:value->>driverId=")), true);
+  assertEquals(calls.some((c) => c.includes("driverName")), false);
+});
+
+Deno.test("an unresolved name does not scan trip JSON", () => {
+  const calls = describeTripFilters(
+    { driverName: "Ann" },
+    { effectiveOrgId: "org-1", useStrict: true },
+  );
+  assertEquals(calls.some((c) => c.includes("driverName")), false);
+  assertEquals(calls.some((c) => c.includes("ilike")), false);
+});
+
 Deno.test("same matrix for Completed + platform Roam", () => {
   const body = {
     status: "Completed",

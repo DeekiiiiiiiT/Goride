@@ -941,9 +941,11 @@ export function registerResidualMonolithRoutes(app: Hono) {
       const rbacOrgId = getOrgId(c);
       const effectiveOrgId = organizationId || rbacOrgId;
       const useStrict = await isFeatureEnabled(FEATURE_FLAGS.STRICT_ORG_FILTER, effectiveOrgId);
-      const { applyTripFilters } = await import("./trip_search_filters.ts");
+      const { applyTripFilters, resolveTripDriverFilter } = await import("./trip_search_filters.ts");
+      const resolvedDrivers = await resolveTripDriverFilter({ driverId, driverName, driverIds });
       const applied = applyTripFilters(query, {
-          driverId, driverName, driverIds, startDate, endDate, status,
+          ...resolvedDrivers,
+          startDate, endDate, status,
           platform, vehicleId, anchorPeriodId, serviceLine,
       }, { effectiveOrgId, useStrict });
       if (applied.empty) {
@@ -1044,9 +1046,11 @@ export function registerResidualMonolithRoutes(app: Hono) {
         const rbacOrgId = getOrgId(c);
         const effectiveOrgId = organizationId || rbacOrgId;
         const useStrict = await isFeatureEnabled(FEATURE_FLAGS.STRICT_ORG_FILTER, effectiveOrgId);
-        const { applyTripFilters } = await import("./trip_search_filters.ts");
+        const { applyTripFilters, resolveTripDriverFilter } = await import("./trip_search_filters.ts");
+        const resolvedDrivers = await resolveTripDriverFilter({ driverId, driverName });
         const applied = applyTripFilters(query, {
-          driverId, driverName, startDate, endDate, status,
+          ...resolvedDrivers,
+          startDate, endDate, status,
           platform, vehicleId, anchorPeriodId, serviceLine,
         }, { effectiveOrgId, useStrict });
         if (applied.empty) {
@@ -1142,7 +1146,8 @@ export function registerResidualMonolithRoutes(app: Hono) {
           return c.json(cachedStats);
       }
 
-      const { applyTripFilters } = await import("./trip_search_filters.ts");
+      const { applyTripFilters, resolveTripDriverFilter } = await import("./trip_search_filters.ts");
+      const resolvedDrivers = await resolveTripDriverFilter({ driverId, driverName });
       let statsStart = startDate;
       let statsEnd = endDate;
       if (status === 'Processing') {
@@ -1156,7 +1161,8 @@ export function registerResidualMonolithRoutes(app: Hono) {
             .like("key", "trip:%");
 
         const applied = applyTripFilters(query, {
-          driverId, driverName, startDate: statsStart, endDate: statsEnd, status,
+          ...resolvedDrivers,
+          startDate: statsStart, endDate: statsEnd, status,
           platform, vehicleId, anchorPeriodId, serviceLine,
         }, { effectiveOrgId, useStrict });
         query = applied.query;
@@ -5583,12 +5589,7 @@ export function registerResidualMonolithRoutes(app: Hono) {
       let deletedDisputeRefundKeys = 0;
       let deletedDisputeRefundDedupKeys = 0;
       try {
-        const allDr = await kv.getByPrefix("dispute-refund:");
-        const mainRows = allDr.filter((v: any) => String(v?.batchId || "") === batchId);
-        if (mainRows.length > 0) {
-          const keysToDel = mainRows.map((v: any) => `dispute-refund:${v.id || v.supportCaseId}`);
-          // Prefer keys discovered via prefix scan of live KV keys
-          const keyed = await fromKvStore()
+        const keyed = await fromKvStore()
             .select("key, value")
             .like("key", "dispute-refund:%")
             .eq("value->>batchId", batchId);
@@ -5612,7 +5613,6 @@ export function registerResidualMonolithRoutes(app: Hono) {
               deletedDisputeRefundDedupKeys++;
             } catch { /* non-fatal */ }
           }
-        }
         console.log(
           `[Batch delete] Removed ${deletedDisputeRefundKeys} dispute-refund record(s), ${deletedDisputeRefundDedupKeys} dedup key(s)`,
         );

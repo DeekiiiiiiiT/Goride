@@ -460,35 +460,69 @@ async function ingestAdminLane(sb: SupabaseClient, driverIdFilter?: string): Pro
   ok: boolean;
 }> {
   try {
-    const prefix = driverIdFilter ? `driver_audit:${driverIdFilter}:` : "driver_audit:";
-    const rows = await kv.getByPrefix(prefix);
     const projection: Array<Omit<ProjectionRow, "id" | "ingested_at">> = [];
-    for (const r of rows || []) {
-      if (!r || typeof r !== "object") continue;
-      const driverId = String((r as any).driverId || "").trim();
-      if (!driverId) continue;
-      const at = String((r as any).at || "");
-      if (!at) continue;
-      const orgId = String((r as any).organizationId || (await orgForDriver(driverId)) || "unknown");
+    const pushRow = async (r: any) => {
+      if (!r || typeof r !== "object") return;
+      const driverId = String(r.driverId || "").trim();
+      if (!driverId) return;
+      const at = String(r.at || "");
+      if (!at) return;
+      const orgId = String(r.organizationId || (await orgForDriver(driverId)) || "unknown");
       projection.push({
         organization_id: orgId,
         driver_id: driverId,
         service_line: "fleet_ops",
         source: "fleet.driver_audit",
-        source_event_id: String((r as any).id || `${driverId}:${at}`),
+        source_event_id: String(r.id || `${driverId}:${at}`),
         event_type: "admin_action",
         occurred_at: at,
         job_ref: null,
         job_seq: null,
         payload: {
-          action: (r as any).action,
-          reason: (r as any).reason,
-          actorId: (r as any).actorId,
+          action: r.action,
+          reason: r.reason,
+          actorId: r.actorId,
         },
       });
+    };
+
+    if (driverIdFilter) {
+      const rows = await kv.getByPrefix(`driver_audit:${driverIdFilter}:`);
+      for (const r of rows || []) await pushRow(r);
+      const result = await insertProjectionRows(sb, projection);
+      return { scanned: projection.length, inserted: result.inserted, ok: true };
     }
-    const result = await insertProjectionRows(sb, projection);
-    return { scanned: projection.length, inserted: result.inserted, ok: true };
+
+    const wm = await getWatermark(sb, "fleet.driver_audit");
+    let afterAt = wm?.last_occurred_at ?? null;
+    let afterKey = wm?.last_source_id ?? null;
+    let scanned = 0;
+    let inserted = 0;
+    for (let page = 0; page < 5; page++) {
+      const { data, error } = await sb.rpc("driver_audit_events_since", {
+        p_after: afterAt,
+        p_after_key: afterKey,
+        p_limit: 500,
+      });
+      if (error) throw new Error(error.message);
+      const batch = (data || []) as Array<{ kv_key?: string; value?: any }>;
+      if (batch.length === 0) break;
+      projection.length = 0;
+      for (const row of batch) await pushRow(row.value);
+      const result = await insertProjectionRows(sb, projection);
+      scanned += batch.length;
+      inserted += result.inserted;
+      const last = batch[batch.length - 1];
+      const lastAt = String(last?.value?.at || "");
+      const lastKey = String(last?.kv_key || "");
+      if (lastAt && lastKey) {
+        await setWatermark(sb, "fleet.driver_audit", lastAt, lastKey);
+        afterAt = lastAt;
+        afterKey = lastKey;
+      }
+      if (batch.length < 500) break;
+    }
+    return { scanned, inserted, ok: true };
   } catch {
     return { scanned: 0, inserted: 0, ok: false };
   }
@@ -540,7 +574,12 @@ export function registerDriverActivityRoutes(app: Hono) {
     async (c) => {
       if (!cronAuthorized(c)) return c.json({ error: "Unauthorized" }, 401);
       const sb = serviceClient();
-      const sources = ["rides.audit_events", "delivery.order_events", "fleet.driver_presence_log"];
+      const sources = [
+        "rides.audit_events",
+        "delivery.order_events",
+        "fleet.driver_presence_log",
+        "fleet.driver_audit",
+      ];
       for (const source of sources) {
         await sb.from("fleet_activity_ingest_watermarks").delete().eq("source", source);
       }

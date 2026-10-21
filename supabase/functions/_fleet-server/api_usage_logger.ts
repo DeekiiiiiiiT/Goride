@@ -6,15 +6,13 @@
  *   - Writing a detailed call row + atomic aggregate updates.
  *   - Cost estimation via `api_pricing.ts`.
  *
- * KV key layout:
- *   api_usage:{YYYY-MM-DD}:{hhmmssSSS}:{uuid8}   — detailed call row (90-day window)
- *   api_usage_agg:{provider}:{YYYY-MM}            — monthly totals
- *   api_usage_agg:{provider}:{YYYY-MM-DD}         — daily totals
+ * KV key layout (guards only — call rows live in private.api_usage_*):
  *   api_killswitch:{provider}                     — { disabled, reason, by, at }
  *   api_budget:{provider}                         — { monthlyBudgetUSD, dailyBudgetUSD, hardStop }
  */
 
 import * as kv from "./kv_store.tsx";
+import { getServiceClient } from "./service_client.ts";
 import { estimateCostUSD, type Provider, type UsageInput } from "./api_pricing.ts";
 
 // ---------------------------------------------------------------------------
@@ -98,29 +96,11 @@ function thisMonthYM(d: Date = new Date()): string {
   return d.toISOString().slice(0, 7);
 }
 
-function aggKey(provider: Provider, period: string): string {
-  return `api_usage_agg:${provider}:${period}`;
-}
 function killswitchKey(provider: Provider): string {
   return `api_killswitch:${provider}`;
 }
 function budgetKey(provider: Provider): string {
   return `api_budget:${provider}`;
-}
-
-function emptyAgg(provider: Provider, period: string): ProviderAggregate {
-  return {
-    provider,
-    period,
-    calls: 0,
-    errors: 0,
-    costUSD: 0,
-    inputTokens: 0,
-    outputTokens: 0,
-    images: 0,
-    requests: 0,
-    lastUpdated: new Date().toISOString(),
-  };
 }
 
 // ---------------------------------------------------------------------------
@@ -156,10 +136,9 @@ export async function checkProviderGuards(provider: Provider): Promise<void> {
   if (budget && budget.hardStop) {
     const month = thisMonthYM();
     const day = todayYMD();
-    const [monthAgg, dayAgg] = await Promise.all([
-      kv.get(aggKey(provider, month)) as Promise<ProviderAggregate | null>,
-      kv.get(aggKey(provider, day)) as Promise<ProviderAggregate | null>,
-    ]);
+    const totals = await readUsageTotals(provider, [month, day]);
+    const monthAgg = totals.get(month) ?? null;
+    const dayAgg = totals.get(day) ?? null;
 
     if (budget.monthlyBudgetUSD > 0 && monthAgg && monthAgg.costUSD >= budget.monthlyBudgetUSD) {
       throw new ProviderBlockedError(
@@ -182,8 +161,99 @@ export async function checkProviderGuards(provider: Provider): Promise<void> {
 // Write path
 // ---------------------------------------------------------------------------
 
-function uuid8(): string {
-  return crypto.randomUUID().split("-")[0];
+function num(v: unknown): number {
+  const n = Number(v ?? 0);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function rowToAggregate(
+  row: Record<string, unknown>,
+  provider: Provider,
+  period: string,
+): ProviderAggregate {
+  return {
+    provider,
+    period,
+    calls: num(row.calls),
+    errors: num(row.errors),
+    costUSD: num(row.cost_usd ?? row.costUSD),
+    inputTokens: num(row.input_tokens ?? row.inputTokens),
+    outputTokens: num(row.output_tokens ?? row.outputTokens),
+    images: num(row.images),
+    requests: num(row.requests),
+    lastUpdated: String(row.updated_at || new Date().toISOString()),
+  };
+}
+
+/** Day and month totals. One read, updated in the database so two calls cannot lose a count. */
+export async function readUsageTotals(
+  provider: Provider,
+  periods: string[],
+): Promise<Map<string, ProviderAggregate>> {
+  const map = new Map<string, ProviderAggregate>();
+  if (periods.length === 0) return map;
+  const { data, error } = await getServiceClient().rpc("api_usage_totals", {
+    p_provider: provider,
+    p_periods: periods,
+  });
+  if (error) throw new Error(error.message);
+  for (const row of (data || []) as Array<Record<string, unknown>>) {
+    const period = String(row.period || "");
+    if (!period) continue;
+    map.set(period, rowToAggregate(row, provider, period));
+  }
+  return map;
+}
+
+export async function readTopRoutes(provider: string, day: string) {
+  const { data, error } = await getServiceClient().rpc("api_usage_top_routes", {
+    p_provider: provider,
+    p_day: day,
+  });
+  if (error) throw new Error(error.message);
+  return ((data || []) as Array<Record<string, unknown>>).map((row) => ({
+    route: String(row.route || "(unknown)"),
+    calls: num(row.calls),
+    costUSD: num(row.cost_usd ?? row.costUSD),
+  }));
+}
+
+export async function readUsageEvents(opts: {
+  provider?: string;
+  status?: string;
+  q?: string;
+  fromDay: string;
+  toDay: string;
+  limit: number;
+}) {
+  const { data, error } = await getServiceClient().rpc("api_usage_events_between", {
+    p_provider: opts.provider || null,
+    p_status: opts.status || null,
+    p_q: opts.q || null,
+    p_from: opts.fromDay,
+    p_to: opts.toDay,
+    p_limit: opts.limit,
+  });
+  if (error) throw new Error(error.message);
+  return ((data || []) as Array<Record<string, unknown>>).map((row) => ({
+    provider: row.provider,
+    service: row.service,
+    route: row.route,
+    model: row.model,
+    status: row.status,
+    httpStatus: row.http_status,
+    latencyMs: row.latency_ms,
+    inputTokens: row.input_tokens,
+    outputTokens: row.output_tokens,
+    images: row.images,
+    requests: row.requests,
+    costUSD: num(row.cost_usd),
+    errorCode: row.error_code,
+    errorMessage: row.error_message,
+    userId: row.user_id,
+    orgId: row.org_id,
+    timestamp: row.occurred_at,
+  }));
 }
 
 export async function logProviderCall(entry: ProviderCallEntry): Promise<void> {
@@ -200,53 +270,30 @@ export async function logProviderCall(entry: ProviderCallEntry): Promise<void> {
         ? entry.costUSDOverride
         : estimateCostUSD(entry.provider, entry.model, entry.service, usage);
 
-    const ymd = now.toISOString().slice(0, 10);
-    const hms = now.toISOString().slice(11, 23).replace(/[:.]/g, "");
-    const detailKey = `api_usage:${ymd}:${hms}:${uuid8()}`;
-
-    const detail = {
-      ...entry,
-      costUSD,
-      timestamp: now.toISOString(),
-    };
-
-    // Write the detail row. We intentionally do NOT await aggregates first — a
-    // failure to update an aggregate should not erase the detail row, and vice
-    // versa.
-    await kv.set(detailKey, detail);
-
-    // Update aggregates sequentially — Supabase KV has no atomic increment, so
-    // we read-modify-write. The collision window is tiny (edge workers are
-    // short-lived), and the Overview UI tolerates small under-counts.
-    await Promise.all([
-      bumpAggregate(entry.provider, thisMonthYM(now), entry, costUSD),
-      bumpAggregate(entry.provider, ymd, entry, costUSD),
-    ]);
+    const { error } = await getServiceClient().rpc("log_api_usage", {
+      p_provider: entry.provider,
+      p_service: entry.service ?? null,
+      p_route: entry.route ?? null,
+      p_model: entry.model ?? null,
+      p_status: entry.status,
+      p_http_status: entry.httpStatus ?? null,
+      p_latency_ms: entry.latencyMs ?? null,
+      p_input_tokens: entry.inputTokens ?? null,
+      p_output_tokens: entry.outputTokens ?? null,
+      p_images: entry.images ?? null,
+      p_requests: entry.requests ?? null,
+      p_cost_usd: costUSD,
+      p_error_code: entry.errorCode ?? null,
+      p_error_message: entry.errorMessage ?? null,
+      p_user_id: entry.userId ?? null,
+      p_org_id: entry.orgId ?? null,
+      p_occurred_at: now.toISOString(),
+    });
+    if (error) throw new Error(error.message);
   } catch (e: any) {
     // Never break the primary call because of a logging failure.
     console.warn(`[ApiUsageLogger] Failed to log provider call: ${e.message}`);
   }
-}
-
-async function bumpAggregate(
-  provider: Provider,
-  period: string,
-  entry: ProviderCallEntry,
-  costUSD: number
-): Promise<void> {
-  const key = aggKey(provider, period);
-  const current: ProviderAggregate = (await kv.get(key)) || emptyAgg(provider, period);
-
-  current.calls += 1;
-  if (entry.status === "error") current.errors += 1;
-  current.costUSD += costUSD;
-  current.inputTokens += entry.inputTokens || 0;
-  current.outputTokens += entry.outputTokens || 0;
-  current.images += entry.images || 0;
-  current.requests += entry.requests || 0;
-  current.lastUpdated = new Date().toISOString();
-
-  await kv.set(key, current);
 }
 
 // ---------------------------------------------------------------------------

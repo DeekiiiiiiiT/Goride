@@ -3817,6 +3817,7 @@ async function queryTollLedgerEntries(filters: TollLedgerFilters): Promise<TollL
         sourceSystem: "kv_toll_ledger",
         limit: 5000,
         offset: 0,
+        skipCount: true,
       });
       return entries.map((e) => {
         const meta = (e.metadata ?? {}) as Record<string, unknown>;

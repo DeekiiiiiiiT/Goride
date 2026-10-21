@@ -19,10 +19,13 @@ import { requireAuth, type RbacUser } from "./rbac_middleware.ts";
 import { logAdminAction } from "./audit_log.ts";
 import { getPricingTable } from "./api_pricing.ts";
 import type { Provider } from "./api_pricing.ts";
-import type {
-  BudgetConfig,
-  KillswitchConfig,
-  ProviderAggregate,
+import {
+  readTopRoutes,
+  readUsageEvents,
+  readUsageTotals,
+  type BudgetConfig,
+  type KillswitchConfig,
+  type ProviderAggregate,
 } from "./api_usage_logger.ts";
 import {
   buildRadar,
@@ -101,11 +104,11 @@ app.get(`${BASE}/api-center/summary`, requireAuth(), requirePlatform("read"), as
                                ymdNDaysAgo(new Date().getUTCDate()); // mtd
 
     const perProvider = await Promise.all(SUPPORTED_PROVIDERS.map(async (provider) => {
-      const monthAgg: ProviderAggregate | null = await kv.get(`api_usage_agg:${provider}:${month}`);
-      const todayAgg: ProviderAggregate | null = await kv.get(`api_usage_agg:${provider}:${today}`);
-      const rangeAggs: Array<ProviderAggregate | null> = await Promise.all(
-        days.map((d) => kv.get(`api_usage_agg:${provider}:${d}`))
-      );
+      const periods = [...new Set([month, today, ...days])];
+      const totals = await readUsageTotals(provider, periods);
+      const monthAgg = totals.get(month) ?? null;
+      const todayAgg = totals.get(today) ?? null;
+      const rangeAggs = days.map((d) => totals.get(d) ?? null);
       const budget: BudgetConfig | null = await kv.get(`api_budget:${provider}`);
       const killswitch: KillswitchConfig | null = await kv.get(`api_killswitch:${provider}`);
 
@@ -168,8 +171,9 @@ app.get(`${BASE}/api-center/usage`, requireAuth(), requirePlatform("read"), asyn
     const n = rangeParam === "7d" ? 7 : rangeParam === "mtd" ? new Date().getUTCDate() : 30;
     const days = ymdNDaysAgo(n).reverse();
 
-    const series = await Promise.all(days.map(async (d) => {
-      const agg: ProviderAggregate | null = await kv.get(`api_usage_agg:${provider}:${d}`);
+    const totals = await readUsageTotals(provider, days);
+    const series = days.map((d) => {
+      const agg = totals.get(d) ?? null;
       return {
         date: d,
         calls: agg?.calls || 0,
@@ -179,21 +183,9 @@ app.get(`${BASE}/api-center/usage`, requireAuth(), requirePlatform("read"), asyn
         outputTokens: agg?.outputTokens || 0,
         requests: agg?.requests || 0,
       };
-    }));
+    });
 
-    // Top routes within the window: scan last 24h of detail rows and bucket by route.
-    // (For a tiny implementation this is acceptable; larger datasets can move to
-    //  a dedicated aggregation key in a follow-up.)
-    const recent = await kv.getByPrefix(`api_usage:${todayYMD()}:`);
-    const filtered = (recent || []).filter((r: any) => r?.provider === provider);
-    const byRoute: Record<string, { route: string; calls: number; costUSD: number }> = {};
-    for (const r of filtered) {
-      const k = r.route || "(unknown)";
-      byRoute[k] = byRoute[k] || { route: k, calls: 0, costUSD: 0 };
-      byRoute[k].calls += 1;
-      byRoute[k].costUSD += r.costUSD || 0;
-    }
-    const topRoutes = Object.values(byRoute).sort((a, b) => b.costUSD - a.costUSD).slice(0, 10);
+    const topRoutes = await readTopRoutes(provider, todayYMD());
 
     return c.json({ provider, range: rangeParam, series, topRoutes });
   } catch (e: any) {
@@ -213,24 +205,17 @@ app.get(`${BASE}/api-center/logs`, requireAuth(), requirePlatform("read"), async
     const limit = Math.min(200, parseInt(c.req.query("limit") || "100"));
     const cursor = c.req.query("cursor"); // YMD
 
-    // Sweep the last 7 days of detail rows; fine for the initial implementation.
     const days = cursor ? [cursor] : ymdNDaysAgo(7);
-    const collected: any[] = [];
-    for (const d of days) {
-      const rows = await kv.getByPrefix(`api_usage:${d}:`);
-      for (const r of rows || []) {
-        if (provider && r.provider !== provider) continue;
-        if (status && r.status !== status) continue;
-        if (q) {
-          const hay = `${r.route || ""} ${r.model || ""} ${r.errorMessage || ""}`.toLowerCase();
-          if (!hay.includes(q)) continue;
-        }
-        collected.push(r);
-      }
-      if (collected.length >= limit) break;
-    }
-
-    collected.sort((a, b) => (b.timestamp || "").localeCompare(a.timestamp || ""));
+    const fromDay = days[days.length - 1];
+    const toDay = days[0];
+    const collected = await readUsageEvents({
+      provider,
+      status,
+      q,
+      fromDay,
+      toDay,
+      limit,
+    });
     const slice = collected.slice(0, limit);
 
     return c.json({

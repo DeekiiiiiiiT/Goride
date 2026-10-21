@@ -104,6 +104,9 @@ export function LoginPage() {
       });
 
       const data = await res.json().catch(() => null);
+      // #region agent log
+      fetch('http://127.0.0.1:7418/ingest/a3d13dc6-6745-44ac-a4fd-f2bafc5169ae',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'52aa7f'},body:JSON.stringify({sessionId:'52aa7f',runId:'post-fix',hypothesisId:'A',location:'LoginPage.tsx:login',message:'fleet-login response',data:{status:res.status,ok:res.ok,hasError:Boolean(data?.error),hasSession:Boolean(data?.access_token)},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
 
       if (res.status === 429) {
         // Rate limited — show lockout countdown

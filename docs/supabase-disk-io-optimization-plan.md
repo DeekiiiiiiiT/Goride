@@ -15,14 +15,14 @@ The fix is to change those few queries so they don't need the big sort. Upgradin
 | P0 | Baseline numbers + find what's hot | ✅ Done |
 | P1.1 | Raise working memory for API roles | ❌ **Caused a 26-min outage, reverted.** Don't retry without §1.3 |
 | P1.2 | Nightly cleanup of cron history | ✅ Live |
-| P1.3 | Slow down every-minute cron jobs | ⏳ Your decision (§4) |
-| — | **Measure** (24 h after P0) | ⏳ Due 2026-10-21 after 22:50 UTC (§5) |
-| P2 | Fix the ledger query (biggest offender) | 🟡 DB part live but unused; parity test + code switch left (§6) |
-| P3 | KV prefix reads | ⏳ Not started (§7) |
-| P4 | Driver trips/transactions reads | ⏳ Not started (§8) |
-| P5 | Write volume (API usage logging) | ⏳ Not started (§9) |
-| P6 | PostgREST schema reloads | ⏳ Not started (§10) |
-| P7 | Upgrade compute or not | ⏳ After P2–P4 (§11) |
+| P1.3 | Slow down every-minute cron jobs | ✅ `rush-config-apply-pending` is every 5 minutes. Customer-facing jobs stay every minute |
+| — | **Measure** (24 h after P0) | ⏳ Official row still due 2026-10-21 after 22:50 UTC. Early read is in §13 |
+| P2 | Fix the ledger query (biggest offender) | ✅ Function is live and the app switch is published |
+| P3 | KV prefix reads | ✅ Index, watermark, and the app switch are published |
+| P4 | Driver trips/transactions reads | ✅ Transactions index is live. Keyset and name search are published |
+| P5 | Write volume (API usage logging) | ✅ New tables, totals, nightly purge, and the logger switch are published |
+| P6 | PostgREST schema reloads | ✅ No schema removed. Figma Make disconnect is an owner settings step (§10) |
+| P7 | Upgrade compute or not | ⏳ Do not upgrade. Recheck the Disk IO chart 7 days after the app switch is published |
 
 ---
 
@@ -36,7 +36,7 @@ The fix is to change those few queries so they don't need the big sort. Upgradin
 | cron job `purge-cron-run-details-7d` (jobid 33, daily **05:40 UTC**) | P1.2 | Deletes cron history older than 7 days. First run deletes ~359k rows at once | `select cron.unschedule('purge-cron-run-details-7d');` |
 | Index `ledger.idx_ledger_entries_debit_eff` | P2 | Slightly larger writes on `ledger.entries`; not yet used by reads | `drop index ledger.idx_ledger_entries_debit_eff;` |
 | Index `ledger.idx_ledger_entries_credit_eff` | P2 | Same | `drop index ledger.idx_ledger_entries_credit_eff;` |
-| Function `public.ledger_entries_for_driver(...)` | P2 | **None. Nothing calls it yet.** Execute granted to `service_role` only | `drop function public.ledger_entries_for_driver(text, uuid, text[], text[], timestamptz, timestamptz, int, int);` |
+| Function `public.ledger_entries_for_driver(...)` | P2 | Takes `p_skip_count`. Nothing in production calls it until fleet functions are published. Execute granted to `service_role` only | `drop function public.ledger_entries_for_driver(text, uuid, text[], text[], timestamptz, timestamptz, int, int, boolean);` |
 
 `pg_stat_statements` was reset at **2026-10-20 22:48:05 UTC**. `pg_stat_database.temp_bytes` at that moment was **1,477,770,294,817** (that counter was not reset).
 
@@ -46,7 +46,7 @@ The fix is to change those few queries so they don't need the big sort. Upgradin
 |---|---|---|
 | `supabase/migrations/20261020224911_db_io_p1_work_mem_cron_purge.sql` | ✅ version recorded in prod | Contains the work_mem lines that caused the outage, marked with a warning. The cron part is live |
 | `supabase/migrations/20261020231225_db_io_p2_ledger_entries_for_driver.sql` | ✅ version recorded in prod | The P2 indexes + function |
-| `supabase/migrations/20261020231600_db_io_p1_revert_work_mem.sql` | ⚠️ **not** in prod's migration table (the revert ran by hand) | Safe to apply again (it only resets). Keep it so a fresh environment doesn't inherit the bad setting |
+| `supabase/migrations/20261020231600_db_io_p1_revert_work_mem.sql` | ✅ version recorded in prod | Safe to apply again (it only resets). Keep it so a fresh environment doesn't inherit the bad setting |
 
 Nothing else in the repo was changed. No edge functions were built or deployed.
 
@@ -380,7 +380,38 @@ Upgrading first would only hide the waste until the data grows.
 
 | When (UTC) | Temp written since 22:48:05 reset | Top temp writer | Notes |
 |---|---|---|---|
-| 2026-10-20 22:48 | 0 (reset) | — | Baseline in `private.io_baseline_20261020` |
-| 2026-10-21 ≥ 22:50 | | | §5, before P2 |
-| after P2 + 1 day | | | |
-| after P4 + 7 days | | | P7 decision |
+| 2026-10-20 22:48 | 0 (reset) | — | Baseline in `private.io_baseline_20261020`. Counter at reset: 1,477,770,294,817 |
+| 2026-10-21 ~02:00 | 191 MB | Driver trip read (`fleet_trips` by driver), about 1.2 s, ~11,060 temp blocks | About 3 hours after the reset. `temp_bytes` 1,477,970,766,838. This is the early picture, not the official 24-hour row |
+| 2026-10-21 during this change | Still 191 MB (`temp_bytes` unchanged at 1,477,970,766,838) | Same counter, no new temp since the early read | Ledger read for one driver uses the debit and credit indexes and an in-memory top-50 sort (30 kB, no disk sort). Wall time was about a minute because vacuum was cleaning the old backup rows, not because the sort spilled |
+| 2026-10-21 ≥ 22:50 | | | Official 24-hour row. Not due yet |
+| after the app switch + 1 day | | | Ledger temp for `ledger_entries_for_driver` should be 0 |
+| after the app switch + 7 days | | | P7 decision. Stay on this size if Disk IO is under half the budget |
+
+### 13.1 What is live, and what is waiting on publish
+
+Live in the database, screens unchanged until publish:
+
+- Working memory stays at the reset value. The bad unit-suffixed setting is not in use.
+- `fleet.transactions (driver_id, date, id)` index.
+- Rush config cron every 5 minutes. Ride cleanup, delivery surge, presence, and Rush in-house claims stay every minute.
+- Anonymous and public access removed from `public.ledger_entries`. The edge function still reads it.
+- `ledger_entries_for_driver` skips the full count when asked. Explain shows index scans on `idx_ledger_entries_debit` and `idx_ledger_entries_credit`, a 931-row in-memory sort, and no full scan of the ledger. That driver’s row count matches the old read (931).
+- Thin index for finalized fuel reports and dispute refunds, plus the driver-audit “since last time” read.
+- API call log tables, 2,591 old detail rows copied, day and month totals rebuilt (day totals add up to 2,591). Nightly 90-day purge is scheduled at 05:50 UTC. Old key-value detail rows stay until that purge. `config:cache_version:stats` is not deleted.
+- Unused `fleet_kv_backup:` rows were deleted in batches. A vacuum of that table was still running at the end of this change.
+
+Published with this release:
+
+- Driver ledger reads call the new function and keep the same `{ entries, total }` shape.
+- Admin activity remembers the last audit time.
+- Fuel and refund lists read the thin index. Fuel catalogs cache for 60 seconds.
+- Expenses rebuild pages by date and id. Trip search uses the driver column and the drivers table for names.
+- API Command Center reads the new totals and a date-bounded call log.
+
+Published 2026-10-21. Open one driver’s earnings and the settlement ledger and confirm they load. The API log for `ledger_entries_for_driver` should show no errors.
+
+Schemas exposed to the API stay as they are (13 names, including `accounting`, `rush_config`, and `recon`). `recon` and `rush_config` are used. `accounting` stays until a branch loads the real screens. Do not guess.
+
+Do not change compute size. Seven days after the ledger and trip reads are actually published, read the Disk IO chart. Under half the budget: stay. Still near the limit: move up one size.
+
+Figma Make is the outside tool that reloads the schema list and has been running setup SQL. If it is no longer used with this project, disconnect it in Figma Make’s Supabase settings. That is not a code change.

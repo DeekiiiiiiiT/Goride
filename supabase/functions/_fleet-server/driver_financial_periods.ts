@@ -10,7 +10,6 @@ import {
   loadTollLedgerWithTripsForDrivers,
   isReconcilableTollExpense,
   filterByDriver,
-  loadDisputeRefundRecords,
   loadAllByPrefix,
   collectLinkedTripIds,
 } from "./toll_period_inputs.ts";
@@ -673,8 +672,14 @@ export async function loadRebuildContext(
   ] = await Promise.all([
     // Driver-scoped — full-fleet dump was timing out Expenses rebuild after toll reconcile.
     loadTollLedgerWithTripsForDrivers(driverIds),
-    loadDisputeRefundRecords(),
-    loadAllByPrefix("finalized_report:"),
+    (async () => {
+      const { loadIndexedDocs } = await import("./kv_doc_index.ts");
+      return loadIndexedDocs({ kind: "dispute_refund", driverIds });
+    })(),
+    (async () => {
+      const { loadIndexedDocs } = await import("./kv_doc_index.ts");
+      return loadIndexedDocs({ kind: "finalized_report", driverIds });
+    })(),
     loadAllByPrefix("claim:"),
     loadLedgerEventsForDriverIds(driverIds),
     kv.get("preferences:general"),

@@ -18,6 +18,17 @@ const client = () =>
 /** PostgREST default max rows is 1000 — must page or trips/fuel silently truncate. */
 const KV_PAGE_SIZE = 1000;
 
+/** Short catalogs. A 60s cache stops fuel settings and week recon from re-sorting them. */
+const CACHED_PREFIXES = new Set(["jaa_program:", "fuel_scenario:"]);
+const PREFIX_CACHE_TTL_MS = 60_000;
+const prefixCache = new Map<string, { at: number; rows: any[] }>();
+
+function invalidateCatalogCache(key: string) {
+  for (const prefix of CACHED_PREFIXES) {
+    if (key.startsWith(prefix)) prefixCache.delete(prefix);
+  }
+}
+
 /** Optional shared lookup cache for batch mset (S6). */
 type StampOpts = { lookupCache?: import("./service_line_attribution.ts").ServiceLineLookupCache };
 
@@ -98,6 +109,7 @@ export const set = async (key: string, value: any): Promise<void> => {
       throw new Error(error.message);
     }
   }
+  invalidateCatalogCache(key);
   await afterUpsert(key, stamped);
   if (key.startsWith("toll_ledger:") && stamped && typeof stamped === "object") {
     try {
@@ -154,6 +166,7 @@ export const del = async (key: string): Promise<void> => {
       throw new Error(error.message);
     }
   }
+  invalidateCatalogCache(key);
   await afterDelete(key);
   await afterSettlementTxDelete(key);
 };
@@ -182,6 +195,7 @@ export const mset = async (keys: string[], values: any[]): Promise<void> => {
       throw new Error(error.message);
     }
   }
+  for (const k of keys) invalidateCatalogCache(k);
   await Promise.all(keys.map((k, i) => afterUpsert(k, stampedValues[i])));
 };
 
@@ -221,6 +235,7 @@ export const mdel = async (keys: string[]): Promise<void> => {
       throw new Error(error.message);
     }
   }
+  for (const k of keys) invalidateCatalogCache(k);
   await Promise.all(keys.map((k) => afterDelete(k)));
   await Promise.all(keys.map((k) => afterSettlementTxDelete(k)));
 };
@@ -238,6 +253,10 @@ export const getByPrefix = async (prefix: string): Promise<any[]> => {
     throw e;
   }
   const supabase = client();
+  if (CACHED_PREFIXES.has(prefix)) {
+    const hit = prefixCache.get(prefix);
+    if (hit && Date.now() - hit.at < PREFIX_CACHE_TTL_MS) return hit.rows;
+  }
   const out: any[] = [];
   let from = 0;
   for (;;) {
@@ -254,6 +273,9 @@ export const getByPrefix = async (prefix: string): Promise<any[]> => {
     for (const row of rows) out.push(row.value);
     if (rows.length < KV_PAGE_SIZE) break;
     from += KV_PAGE_SIZE;
+  }
+  if (CACHED_PREFIXES.has(prefix)) {
+    prefixCache.set(prefix, { at: Date.now(), rows: out });
   }
   return out;
 };

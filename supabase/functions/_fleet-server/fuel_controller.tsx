@@ -916,42 +916,28 @@ app.get(`${BASE_PATH}/finalized-reports`, requirePermission('transactions.view')
     const uniqueVehicleIds = Array.from(new Set(vehicleIds));
     const uniqueDriverIds = Array.from(new Set(driverIds));
 
+    const { loadIndexedDocs } = await import("./kv_doc_index.ts");
     let all: any[] = [];
+    const seen = new Set<string>();
+    const pushDocs = (rows: any[]) => {
+      for (const v of rows || []) {
+        if (!v) continue;
+        const dedupe = `${v.weekStart || ""}:${v.driverId || ""}:${v.vehicleId || ""}:${v.id || ""}`;
+        if (seen.has(dedupe)) continue;
+        seen.add(dedupe);
+        all.push(v);
+      }
+    };
 
     if (uniqueDriverIds.length > 0 || uniqueVehicleIds.length > 0) {
-      const seenKeys = new Set<string>();
-
-      const pushPages = async (filterCol: string, filterVal: string) => {
-        let offset = 0;
-        const pageSize = 1000;
-        for (;;) {
-          const { data, error } = await fromKvStore()
-            .select("value")
-            .like("key", "finalized_report:%")
-            .eq(filterCol, filterVal)
-            .range(offset, offset + pageSize - 1);
-          if (error) throw error;
-          for (const d of data || []) {
-            const v = d.value;
-            if (!v) continue;
-            const dedupe = `${v.weekStart || ""}:${v.driverId || ""}:${v.vehicleId || ""}:${v.id || ""}`;
-            if (seenKeys.has(dedupe)) continue;
-            seenKeys.add(dedupe);
-            all.push(v);
-          }
-          if ((data || []).length < pageSize) break;
-          offset += pageSize;
-        }
-      };
-
-      for (const driverId of uniqueDriverIds) {
-        await pushPages("value->>driverId", driverId);
+      if (uniqueDriverIds.length > 0) {
+        pushDocs(await loadIndexedDocs({ kind: "finalized_report", driverIds: uniqueDriverIds }));
       }
       for (const vehicleId of uniqueVehicleIds) {
-        await pushPages("value->>vehicleId", vehicleId);
+        pushDocs(await loadIndexedDocs({ kind: "finalized_report", vehicleId }));
       }
     } else {
-      all = (await kv.getByPrefix("finalized_report:")) || [];
+      pushDocs(await loadIndexedDocs({ kind: "finalized_report" }));
     }
 
     let scoped = filterByOrg(all as Record<string, unknown>[], c, { endpoint: "/finalized-reports" });
@@ -1169,7 +1155,8 @@ app.post(`${BASE_PATH}/finalized-reports/migrate-driver-keys`, requirePermission
   try {
     const body = await c.req.json().catch(() => ({}));
     const dryRun = !!body.dryRun;
-    const snapshots = (await kv.getByPrefix("finalized_report:")) || [];
+    const { loadIndexedDocs } = await import("./kv_doc_index.ts");
+    const snapshots = await loadIndexedDocs({ kind: "finalized_report" });
     let migrated = 0;
     let skipped = 0;
     const details: { from: string; to: string }[] = [];
@@ -1241,7 +1228,8 @@ app.post(`${BASE_PATH}/finalized-reports/cleanup-orphaned-settlements`, requireP
       );
     }
 
-    const snapshots = (await kv.getByPrefix("finalized_report:")) || [];
+    const { loadIndexedDocs } = await import("./kv_doc_index.ts");
+    const snapshots = await loadIndexedDocs({ kind: "finalized_report" });
     const finalizedKeys = new Set<string>();
     for (const s of snapshots) {
       if (!s?.weekStart) continue;
@@ -1398,8 +1386,9 @@ app.delete(`${BASE_PATH}/finalized-reports/:weekStart/:identityId`, requirePermi
     }
     // Org-scoped fallback only — never scan all tenants
     if (!snapshot && identityId) {
+      const { loadIndexedDocs } = await import("./kv_doc_index.ts");
       const orgScoped = filterByOrg(
-        ((await kv.getByPrefix("finalized_report:")) || []) as Record<string, unknown>[],
+        (await loadIndexedDocs({ kind: "finalized_report", weekKey })) as Record<string, unknown>[],
         c,
         { endpoint: "/finalized-reports/delete" },
       );
@@ -1678,7 +1667,7 @@ app.post(`${BASE_PATH}/finalized-reports/reset-period`, requirePermission('trans
 
     const snapshots = narrowPlatformOrg(
       filterByOrg(
-        ((await kv.getByPrefix("finalized_report:")) || []) as Record<string, unknown>[],
+        ((await kv.getByPrefix(`finalized_report:${weekKey}:`)) || []) as Record<string, unknown>[],
         c,
         { endpoint: "/finalized-reports/reset-period" },
       ),
@@ -2114,7 +2103,12 @@ app.post(
         : null;
       const onlyDriver = body.driverId ? String(body.driverId) : null;
 
-      const snapshots = ((await kv.getByPrefix("finalized_report:")) || []).filter(
+      const { loadIndexedDocs } = await import("./kv_doc_index.ts");
+      const snapshots = (await loadIndexedDocs({
+        kind: "finalized_report",
+        weekKey: onlyWeek || undefined,
+        driverIds: onlyDriver ? [onlyDriver] : undefined,
+      })).filter(
         (s: any) => {
           if (!s?.driverId) return false;
           const wk = String(s.weekStart || "").split("T")[0];
@@ -2305,7 +2299,8 @@ app.patch(`${BASE_PATH}/fuel-reconciliation/settings`, requirePermission("fuel.e
 app.get(`${BASE_PATH}/fuel-reconciliation/periods-health`, requirePermission("fuel.view"), async (c) => {
   try {
     const { queryFleet } = await import("./repos/baseRepo.ts");
-    const snapshotsRaw = (await kv.getByPrefix("finalized_report:")) || [];
+    const { loadIndexedDocs } = await import("./kv_doc_index.ts");
+    const snapshotsRaw = await loadIndexedDocs({ kind: "finalized_report" });
     const cutoff = new Date();
     cutoff.setUTCDate(cutoff.getUTCDate() - 90);
     const cutoffYmd = cutoff.toISOString().slice(0, 10);
@@ -2398,7 +2393,8 @@ interface FuelPnlOffsetBackfillCandidate {
 }
 
 async function findFuelPnlOffsetBackfillCandidates(): Promise<FuelPnlOffsetBackfillCandidate[]> {
-  const snapshots = (await kv.getByPrefix("finalized_report:")) || [];
+  const { loadIndexedDocs } = await import("./kv_doc_index.ts");
+  const snapshots = await loadIndexedDocs({ kind: "finalized_report" });
   const allEntries = (await kv.getByPrefix("fuel_entry:")) || [];
   const candidates: FuelPnlOffsetBackfillCandidate[] = [];
 

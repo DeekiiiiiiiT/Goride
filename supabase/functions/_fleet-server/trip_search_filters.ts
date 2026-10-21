@@ -14,6 +14,8 @@ export type TripFilterBody = {
   vehicleId?: string;
   anchorPeriodId?: string;
   serviceLine?: string;
+  /** Set when a name search matched no driver. The list must come back empty. */
+  driverFilterMiss?: boolean;
 };
 
 export type TripFilterCtx = {
@@ -55,35 +57,18 @@ export function applyTripFilters(
     return { query, startDate, endDate, empty: true };
   }
 
+  if (body.driverFilterMiss) {
+    return { query, startDate, endDate, empty: true };
+  }
+
+  // Driver id hits the typed column. Name search is resolved to those ids
+  // before this runs (fleet.drivers.name), so the list is not a JSON or/ilike.
   if (driverIds && Array.isArray(driverIds) && driverIds.length > 0) {
-    const orParts: string[] = [];
-    for (const id of driverIds) {
-      orParts.push(`value->>driverId.eq.${id}`);
-      const idTerm = String(id).includes("%") ? String(id) : `%${id}%`;
-      orParts.push(`value->>driverName.ilike.${idTerm.replace(/,/g, "")}`);
-    }
-    if (driverName) {
-      const nameTerm = String(driverName).includes("%") ? String(driverName) : `%${driverName}%`;
-      const safe = nameTerm.replace(/,/g, "");
-      orParts.push(`value->>driverName.ilike.${safe}`);
-      orParts.push(`value->>driverId.ilike.${safe}`);
-    }
-    query = query.or(orParts.join(","));
+    query = query.in("value->>driverId", driverIds);
   } else if (driverId) {
-    if (driverName) {
-      const nameTerm = String(driverName).includes("%") ? String(driverName) : `%${driverName}%`;
-      const safe = nameTerm.replace(/,/g, "");
-      query = query.or(`value->>driverId.eq.${driverId},value->>driverName.ilike.${safe}`);
-    } else {
-      query = query.eq("value->>driverId", driverId);
-    }
+    query = query.eq("value->>driverId", driverId);
   } else if (driverName) {
-    const raw = String(driverName).trim();
-    const term = raw.includes("%") ? raw : `%${raw}%`;
-    const safe = term.replace(/,/g, "");
-    query = query.or(
-      `value->>driverName.ilike.${safe},value->>id.ilike.${safe},legacy_kv_id.ilike.${safe}`,
-    );
+    return { query, startDate, endDate, empty: true };
   }
 
   if (anchorPeriodId) {
@@ -130,12 +115,54 @@ export function applyTripFilters(
   return { query, startDate, endDate };
 }
 
+/** Turn a typed name into driver ids on fleet.drivers so trip search does not ilike JSON. */
+export async function resolveTripDriverFilter(body: TripFilterBody): Promise<TripFilterBody> {
+  const name = String(body.driverName || "").trim();
+  if (!name) return body;
+  const { fleetDb } = await import("./repos/baseRepo.ts");
+  const term = (name.includes("%") ? name : `%${name}%`).replace(/,/g, "");
+  const { data, error } = await fleetDb()
+    .from("fleet_drivers")
+    .select("id")
+    .ilike("name", term)
+    .limit(500);
+  if (error) throw new Error(error.message);
+  const fromName = (data || [])
+    .map((row: { id: string }) => String(row.id || ""))
+    .filter(Boolean);
+  const explicit = [
+    ...(body.driverId ? [String(body.driverId)] : []),
+    ...((body.driverIds || []).map((id) => String(id))),
+  ].filter(Boolean);
+  const merged = [...new Set([...explicit, ...fromName])];
+  if (merged.length === 0) {
+    return {
+      ...body,
+      driverName: undefined,
+      driverId: undefined,
+      driverIds: undefined,
+      driverFilterMiss: true,
+    };
+  }
+  return {
+    ...body,
+    driverName: undefined,
+    driverId: undefined,
+    driverIds: merged,
+  };
+}
+
 /** Snapshot of filter predicates for parity tests (R-02). */
 export function describeTripFilters(body: TripFilterBody, ctx: TripFilterCtx): string[] {
   const calls: string[] = [];
   const fake = {
     eq: (a: string, b: unknown) => {
       calls.push(`eq:${a}=${b}`);
+      return fake;
+    },
+    in: (a: string, b: unknown) => {
+      const list = Array.isArray(b) ? b.join(",") : String(b);
+      calls.push(`in:${a}=${list}`);
       return fake;
     },
     or: (v: string) => {

@@ -352,7 +352,8 @@ export async function loadTollLedgerWithTripsForDrivers(
 
 /** Support adjustments (`dispute-refund:*`), excluding dedup index keys. */
 export async function loadDisputeRefundRecords(): Promise<any[]> {
-  const raw = await loadAllByPrefix("dispute-refund:");
+  const { loadIndexedDocs } = await import("./kv_doc_index.ts");
+  const raw = await loadIndexedDocs({ kind: "dispute_refund" });
   return (raw || []).filter(
     (item: any) => item && typeof item === "object" && item.id && item.supportCaseId,
   );

@@ -52,6 +52,7 @@ import {
 } from "./fuel_week_closable_gate.ts";
 
 import { FUEL_HTTP_PREFIX } from "./fuel_http_prefix.ts";
+import { loadIndexedDocs } from "./kv_doc_index.ts";
 
 const BASE = FUEL_HTTP_PREFIX;
 const CRON_SECRET = () => Deno.env.get("FLEET_CRON_SECRET") || Deno.env.get("CRON_SECRET") || "";
@@ -1159,7 +1160,7 @@ export function registerFuelPeriodRoutes(app: Hono) {
         );
       }
       const sb = getServiceClient();
-      const all = ((await kv.getByPrefix("finalized_report:")) || []) as any[];
+      const all = (await loadIndexedDocs({ kind: "finalized_report" })) as any[];
       const byWeek = new Map<string, any[]>();
       for (const snap of all) {
         if (!snapshotBelongsToOrg(snap, orgId)) continue;
@@ -1243,7 +1244,7 @@ export function registerFuelPeriodRoutes(app: Hono) {
       const from = ymd(body.from);
       const to = ymd(body.to);
       const sb = getServiceClient();
-      const all = ((await kv.getByPrefix("finalized_report:")) || []) as any[];
+      const all = (await loadIndexedDocs({ kind: "finalized_report" })) as any[];
       const byWeek = new Map<string, any[]>();
       for (const snap of all) {
         if (!snapshotBelongsToOrg(snap, orgId)) continue;

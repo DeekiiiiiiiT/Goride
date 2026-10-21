@@ -2,7 +2,7 @@
  * @vitest-environment jsdom
  */
 import { describe, expect, it, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {
   ReconSourceCard,
@@ -79,6 +79,7 @@ describe('ReconSourceCard', () => {
       />,
     );
     const btn = screen.getByRole('button', { name: /No activity on Fri, Sat, Sun/i });
+    fireEvent.pointerMove(btn, { pointerType: 'mouse' });
     await user.click(btn);
     expect(onAttestNone).toHaveBeenCalledWith('toll_usage', [
       '2026-10-09',

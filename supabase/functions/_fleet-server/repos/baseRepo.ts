@@ -59,6 +59,7 @@ export function rowToKvValue(row: Record<string, unknown>): Record<string, unkno
   if (payload.value == null && row.reading != null) payload.value = row.reading;
   if (payload.odometer == null && row.odometer != null) payload.odometer = row.odometer;
   if (!payload.driverId && row.driver_id) payload.driverId = row.driver_id;
+  if (!payload.date && row.date) payload.date = row.date;
   // Toll rows carry attribution in the typed column; without mirroring it the
   // payload looks unattributed and every consumer falls back to plaza-name text.
   if (!payload.plazaId && row.plaza_id) payload.plazaId = row.plaza_id;
@@ -122,6 +123,8 @@ export type FleetQueryOpts = {
   withKeys?: boolean;
   /** Filter legacy_kv_id by this prefix (defaults to domain's first prefix). */
   legacyPrefix?: string;
+  /** Next page after this (date, id). Skips OFFSET so a long driver history is not re-sorted. */
+  keysetAfter?: { date: string; id: string };
 };
 
 export type FleetQueryResult = {
@@ -229,13 +232,21 @@ export async function queryFleet(
         : opts.order
           ? [opts.order]
           : [QUERY_FLEET_DEFAULT_ORDER];
-    for (const o of orderList) {
+    const orders = opts.keysetAfter && !orderList.some((o) => o.col === "id")
+      ? [...orderList, { col: "id", ascending: true }]
+      : orderList;
+    for (const o of orders) {
       const orderCol = resolveFleetColumn(o.col) ?? o.col;
       // Explicit false stays DESC; only ascending === true sorts ASC (N-04)
       q = q.order(orderCol, { ascending: o.ascending === true });
     }
 
-    if (opts.offset != null || opts.limit != null) {
+    if (opts.keysetAfter?.date && opts.keysetAfter?.id) {
+      const d = String(opts.keysetAfter.date).slice(0, 10);
+      const id = String(opts.keysetAfter.id).replace(/,/g, "");
+      q = q.or(`date.gt.${d},and(date.eq.${d},id.gt.${id})`);
+      q = q.limit(opts.limit ?? 1000);
+    } else if (opts.offset != null || opts.limit != null) {
       const from = opts.offset ?? 0;
       const to = from + (opts.limit ?? 1000) - 1;
       q = q.range(from, to);
@@ -321,13 +332,38 @@ export async function* iterateFleet(
   opts: Omit<FleetQueryOpts, "limit" | "offset" | "head"> = {},
 ): AsyncGenerator<Record<string, unknown> | { key: string; value: Record<string, unknown> }> {
   const PAGE = 1000;
-  let offset = 0;
-  for (;;) {
-    const res = await queryFleet(domain, { ...opts, limit: PAGE, offset });
+  const dateAsc = opts.order?.col === "date" && opts.order.ascending === true && !opts.orders?.length;
+  if (!dateAsc) {
+    let offset = 0;
+    for (;;) {
+      const res = await queryFleet(domain, { ...opts, limit: PAGE, offset });
+      if (res.error) throw res.error;
+      for (const row of res.data) yield row;
+      if (res.data.length < PAGE) break;
+      offset += PAGE;
+    }
+    return;
+  }
+
+  let after: { date: string; id: string } | undefined;
+  for (let guard = 0; guard < 200; guard++) {
+    const res = await queryFleet(domain, {
+      ...opts,
+      limit: PAGE,
+      keysetAfter: after,
+      orders: [
+        { col: "date", ascending: true },
+        { col: "id", ascending: true },
+      ],
+    });
     if (res.error) throw res.error;
     for (const row of res.data) yield row;
     if (res.data.length < PAGE) break;
-    offset += PAGE;
+    const last = res.data[res.data.length - 1] as Record<string, unknown>;
+    const date = String(last.date || "").slice(0, 10);
+    const id = String(last.id || "");
+    if (!date || !id || (after && after.date === date && after.id === id)) break;
+    after = { date, id };
   }
 }
 

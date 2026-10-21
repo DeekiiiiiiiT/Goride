@@ -278,54 +278,46 @@ async function listEntriesForDriver(
     skipCount?: boolean;
   },
 ): Promise<{ entries: Record<string, unknown>[]; total: number }> {
-  const driverAccountKey = `user:${opts.driverId}:driver:`;
-
-  const { data: accounts, error: accountsError } = await client
-    .from("ledger_accounts")
-    .select("id")
-    .like("account_key", `${driverAccountKey}%`);
-
-  if (accountsError) {
-    console.error("[unifiedLedger] driver accounts:", accountsError.message);
-    throw new Error(`ledger_accounts lookup failed: ${accountsError.message}`);
-  }
-
-  if (!accounts || accounts.length === 0) {
-    return { entries: [], total: 0 };
-  }
-
-  const accountIds = accounts.map((a: { id: string }) => a.id);
-
-  let q = client
-    .from("ledger_entries")
-    .select("*", opts.skipCount ? undefined : { count: "exact" })
-    .or(`debit_account_id.in.(${accountIds.join(",")}),credit_account_id.in.(${accountIds.join(",")})`)
-    .order("effective_at", { ascending: false });
-
-  if (opts.organizationId) q = q.eq("organization_id", opts.organizationId);
-  if (opts.products && opts.products.length > 0) {
-    q = q.in("product", opts.products);
-  } else if (opts.product) {
-    q = q.eq("product", opts.product);
-  }
-  if (opts.entryTypes && opts.entryTypes.length === 1) {
-    q = q.eq("entry_type", opts.entryTypes[0]);
-  } else if (opts.entryTypes && opts.entryTypes.length > 1) {
-    q = q.in("entry_type", opts.entryTypes);
-  }
-  if (opts.from) q = q.gte("effective_at", opts.from);
-  if (opts.to) q = q.lte("effective_at", opts.to);
-
   const limit = Math.min(opts.limit ?? 50, 1000);
   const offset = opts.offset ?? 0;
-  const { data, error, count } = await q.range(offset, offset + limit - 1);
+  const products = opts.products && opts.products.length > 0
+    ? opts.products
+    : opts.product ? [opts.product] : null;
+  const skip = !!opts.skipCount;
 
+  const callRpc = (pLimit: number, pOffset: number, pSkipCount: boolean) =>
+    client.rpc("ledger_entries_for_driver", {
+      p_driver_id: opts.driverId,
+      p_org: opts.organizationId ?? null,
+      p_products: products,
+      p_entry_types: opts.entryTypes && opts.entryTypes.length > 0 ? opts.entryTypes : null,
+      p_from: opts.from ?? null,
+      p_to: opts.to ?? null,
+      p_limit: pLimit,
+      p_offset: pOffset,
+      p_skip_count: pSkipCount,
+    });
+
+  const { data, error } = await callRpc(limit, offset, skip);
   if (error) {
     console.error("[unifiedLedger] list entries for driver:", error.message);
     throw new Error(`ledger_entries driver list failed: ${error.message}`);
   }
 
-  return { entries: (data ?? []) as Record<string, unknown>[], total: count ?? 0 };
+  const rows = (data ?? []) as Array<Record<string, unknown>>;
+  let total = rows.length > 0 ? Number(rows[0].total_count ?? 0) : 0;
+  // A page past the end has no rows, so the total has to come from the first page.
+  if (!skip && rows.length === 0 && offset > 0) {
+    const head = await callRpc(1, 0, false);
+    if (head.error) {
+      console.error("[unifiedLedger] list entries for driver count:", head.error.message);
+      throw new Error(`ledger_entries driver list failed: ${head.error.message}`);
+    }
+    const headRows = (head.data ?? []) as Array<Record<string, unknown>>;
+    total = headRows.length > 0 ? Number(headRows[0].total_count ?? 0) : 0;
+  }
+  const entries = rows.map(({ total_count: _total, ...entry }) => entry);
+  return { entries, total: skip ? 0 : total };
 }
 
 /** Map unified ledger.entries row → legacy canonical ledger_event DTO (Bank Deposits / Settlement). */
