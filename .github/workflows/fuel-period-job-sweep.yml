@@ -23,16 +23,21 @@ jobs:
           SUPABASE_URL="$(printf '%s' "$SUPABASE_URL" | tr -d '\r\n' | sed 's/[[:space:]]*$//;s/^[[:space:]]*//')"
           SERVICE_KEY="$(printf '%s' "$SUPABASE_SERVICE_ROLE_KEY" | tr -d '\r\n' | sed 's/[[:space:]]*$//;s/^[[:space:]]*//')"
           CRON_VAL="$(printf '%s' "${FLEET_CRON_SECRET:-${CRON_SECRET:-}}" | tr -d '\r\n' | sed 's/[[:space:]]*$//;s/^[[:space:]]*//')"
-          if [ -z "$SUPABASE_URL" ] || [ -z "$SERVICE_KEY" ] || [ -z "$CRON_VAL" ]; then
-            echo "Missing SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, or FLEET_CRON_SECRET"
+          if [ -z "$SUPABASE_URL" ] || [ -z "$SERVICE_KEY" ]; then
+            echo "Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY"
             exit 1
           fi
-          RESP="$(curl -sS -w "\nHTTP_CODE:%{http_code}\n" -X POST \
-            "${SUPABASE_URL}/functions/v1/fleet-fuel/fuel/period-jobs/sweep" \
-            -H "Authorization: Bearer ${SERVICE_KEY}" \
-            -H "apikey: ${SERVICE_KEY}" \
-            -H "Content-Type: application/json" \
-            -H "X-Fleet-Cron-Secret: ${CRON_VAL}" \
-            -d '{}')"
+          CURL_ARGS=(
+            -sS -w "\nHTTP_CODE:%{http_code}\n" -X POST
+            "${SUPABASE_URL}/functions/v1/fleet-fuel/fuel/period-jobs/sweep"
+            -H "Authorization: Bearer ${SERVICE_KEY}"
+            -H "apikey: ${SERVICE_KEY}"
+            -H "Content-Type: application/json"
+            -d '{}'
+          )
+          if [ -n "$CRON_VAL" ]; then
+            CURL_ARGS+=(-H "X-Fleet-Cron-Secret: ${CRON_VAL}")
+          fi
+          RESP="$(curl "${CURL_ARGS[@]}")"
           echo "$RESP"
           echo "$RESP" | grep -q 'HTTP_CODE:200' || exit 1

@@ -304,6 +304,57 @@ export function mergeTollLedgerAndLegacyTx(
 }
 
 /**
+ * Columns the Expenses rebuild and toll match actually read.
+ * payload_json stays out — it carries route geometry the screen does not show.
+ */
+const TRIP_DRIVER_COLUMNS = [
+  "id",
+  "organization_id",
+  "date",
+  "driver_id",
+  "vehicle_id",
+  "platform",
+  "status",
+  "amount",
+  "payment_method",
+  "service_line",
+  "distance",
+  "duration",
+  "net_to_driver",
+  "tollCharges:payload_json->tollCharges",
+  "dropoffTime:payload_json->dropoffTime",
+  "requestTime:payload_json->requestTime",
+  "startTime:payload_json->startTime",
+  "pickupTime:payload_json->pickupTime",
+  "tollRefundResolution:payload_json->tollRefundResolution",
+].join(",");
+
+const TX_DRIVER_COLUMNS = [
+  "id",
+  "organization_id",
+  "date",
+  "driver_id",
+  "vehicle_id",
+  "trip_id",
+  "type",
+  "category",
+  "amount",
+  "status",
+  "description:payload_json->description",
+  "vendor:payload_json->vendor",
+  "paymentMethod:payload_json->paymentMethod",
+  "time:payload_json->time",
+  "driverName:payload_json->driverName",
+  "vehiclePlate:payload_json->vehiclePlate",
+  "referenceNumber:payload_json->referenceNumber",
+  "isReconciled:payload_json->isReconciled",
+  "resolution:payload_json->resolution",
+  "preUnlinkedTripId:payload_json->preUnlinkedTripId",
+  "metaTripId:payload_json->metadata->>tripId",
+  "metaPreUnlinkedTripId:payload_json->metadata->>preUnlinkedTripId",
+].join(",");
+
+/**
  * Driver-scoped rebuild loader — never dumps the whole fleet into Expenses rebuild.
  */
 export async function loadTollLedgerWithTripsForDrivers(
@@ -330,6 +381,7 @@ export async function loadTollLedgerWithTripsForDrivers(
       for await (const row of iterateFleet("trips", {
         filters: [{ op: "in", col: "driver_id", value: ids }],
         order: { col: "date", ascending: true },
+        columns: TRIP_DRIVER_COLUMNS,
       })) {
         tripRows.push(row);
       }
@@ -338,6 +390,7 @@ export async function loadTollLedgerWithTripsForDrivers(
       for await (const row of iterateFleet("transactions", {
         filters: [{ op: "in", col: "driver_id", value: ids }],
         order: { col: "date", ascending: true },
+        columns: TX_DRIVER_COLUMNS,
       })) {
         if (isTollCategory((row as { category?: string }).category)) legacyTollTx.push(row);
       }

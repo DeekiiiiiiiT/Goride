@@ -1,6 +1,6 @@
 import { assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
 import { resolveFleetColumn } from "./fleet_column_map.ts";
-import { QUERY_FLEET_DEFAULT_ORDER, rowToKvValue } from "./baseRepo.ts";
+import { QUERY_FLEET_DEFAULT_ORDER, rowToKvValue, shapeFleetRow } from "./baseRepo.ts";
 
 Deno.test("typed aliases win over JSON paths", () => {
   assertEquals(resolveFleetColumn("value->>transactionId"), "transaction_id");
@@ -46,6 +46,56 @@ Deno.test("rowToKvValue typed null trip_id clears stale payload tripId", () => {
     payload_json: { tripId: "json-trip" },
   });
   assertEquals(payload.tripId, null);
+});
+
+Deno.test("rowToKvValue mirrors typed trip columns when payload is empty", () => {
+  const payload = rowToKvValue({
+    id: "t1",
+    platform: "Uber",
+    status: "Completed",
+    amount: 1200,
+    service_line: "rideshare",
+    distance: 12.5,
+    duration: 18,
+    payload_json: {},
+  });
+  assertEquals(payload.platform, "Uber");
+  assertEquals(payload.status, "Completed");
+  assertEquals(payload.amount, 1200);
+  assertEquals(payload.serviceLine, "rideshare");
+  assertEquals(payload.distance, 12.5);
+  assertEquals(payload.duration, 18);
+});
+
+Deno.test("rowToKvValue keeps payload platform when the blob is present", () => {
+  const payload = rowToKvValue({
+    platform: "Uber",
+    payload_json: { platform: "Roam Rush" },
+  });
+  assertEquals(payload.platform, "Roam Rush");
+});
+
+Deno.test("shapeFleetRow keeps named JSON fields and hides the blob", () => {
+  const payload = shapeFleetRow({
+    id: "t1",
+    driver_id: "d1",
+    date: "2026-10-01",
+    platform: "Uber",
+    status: "Completed",
+    amount: 500,
+    service_line: "rideshare",
+    tollCharges: 275,
+    dropoffTime: "2026-10-01T18:00:00Z",
+    tollRefundResolution: { status: "pending" },
+    metaTripId: "trip-9",
+  });
+  assertEquals(payload.tollCharges, 275);
+  assertEquals(payload.dropoffTime, "2026-10-01T18:00:00Z");
+  assertEquals((payload.tollRefundResolution as { status: string }).status, "pending");
+  assertEquals((payload.metadata as { tripId: string }).tripId, "trip-9");
+  assertEquals(payload.platform, "Uber");
+  assertEquals(payload.driverId, "d1");
+  assertEquals("payload_json" in payload, false);
 });
 
 Deno.test("queryFleet default order is updated_at DESC (N-04)", () => {

@@ -24,6 +24,7 @@ import {
 } from "./fuel_org_preferences.ts";
 import { sealFuelWeek } from "./fuel_week_seal.ts";
 import { runFuelSpendShadow } from "./fuel_week_category_loader.ts";
+import { authorizeCronOrServiceRole } from "../_shared/authorizeCronOrServiceRole.ts";
 import {
   computeFuelWeekSnapshot,
   hashFuelWeekInputs,
@@ -1458,7 +1459,8 @@ export function registerFuelPeriodRoutes(app: Hono) {
 
       // Shadow compare runs in the close worker, not in this request.
       const engineMode = String(Deno.env.get("FUEL_SERVER_ENGINE") || "off").toLowerCase();
-      if (engineMode === "inline-disabled") {
+      const runInlineEngine = false;
+      if (runInlineEngine && (engineMode === "shadow" || engineMode === "enforce")) {
         const { computeFuelWeek, diffWeekCalc } = await import(
           "../../../packages/fuel-core/src/computeFuelWeek.ts"
         );
@@ -2626,9 +2628,13 @@ export function registerFuelPeriodRoutes(app: Hono) {
   );
 
   app.post(`${BASE}/fuel/period-jobs/sweep`, async (c: Context) => {
-    const secret = c.req.header("X-Fleet-Cron-Secret") || c.req.header("x-fleet-cron-secret") || "";
-    const expected = CRON_SECRET();
-    if (!expected || secret !== expected) return c.json({ error: "unauthorized" }, 401);
+    const cronSecret = c.req.header("X-Fleet-Cron-Secret") || c.req.header("x-fleet-cron-secret") || "";
+    const expectedCron = CRON_SECRET();
+    const cronOk = Boolean(expectedCron && cronSecret === expectedCron);
+    const serviceAuth = cronOk ? { ok: true as const } : await authorizeCronOrServiceRole(c.req.raw);
+    if (!cronOk && !serviceAuth.ok) {
+      return c.json({ error: "unauthorized" }, serviceAuth.status === 500 ? 500 : 401);
+    }
     const sb = getServiceClient();
     const staleBefore = new Date(Date.now() - 2 * 60 * 1000).toISOString();
     const { data: queued } = await sb

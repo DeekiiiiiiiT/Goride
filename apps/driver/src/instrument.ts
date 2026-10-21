@@ -45,6 +45,15 @@ if (dsn) {
   );
 }
 
+/**
+ * OS memory kills are already recovered by MainActivity.recreate().
+ * Only a real renderer crash should open a Sentry error.
+ * Returns null when there is nothing to report.
+ */
+export function webViewGoneReportLevel(raw: string): 'error' | null {
+  return String(raw).includes('crash') ? 'error' : null;
+}
+
 /** Report a prior WebView renderer death (flag set by MainActivity SharedPreferences). */
 export async function reportPriorWebViewCrashIfAny(): Promise<void> {
   if (!dsn || !Capacitor.isNativePlatform()) return;
@@ -52,16 +61,14 @@ export async function reportPriorWebViewCrashIfAny(): Promise<void> {
     const { value } = await Preferences.get({ key: WEBVIEW_RENDER_GONE_PREF });
     if (!value) return;
     await Preferences.remove({ key: WEBVIEW_RENDER_GONE_PREF });
-    // OS low-RAM kills (raw "kill") are recovered via MainActivity.recreate() —
-    // warning only. Chromium renderer crashes stay error-level.
-    const didCrash = String(value).includes('crash');
-    Sentry.captureMessage('webview_render_process_gone', {
-      level: didCrash ? 'error' : 'warning',
-      tags: {
-        platform: Capacitor.getPlatform(),
-        didCrash: didCrash ? 'true' : 'false',
-      },
-      extra: { raw: value },
+    const level = webViewGoneReportLevel(value);
+    if (!level) return;
+    Sentry.withScope((scope) => {
+      scope.setLevel(level);
+      scope.setTag('platform', Capacitor.getPlatform());
+      scope.setTag('didCrash', 'true');
+      scope.setExtra('raw', value);
+      Sentry.captureMessage('webview_render_process_gone');
     });
   } catch {
     /* Preferences unavailable in some web shells */

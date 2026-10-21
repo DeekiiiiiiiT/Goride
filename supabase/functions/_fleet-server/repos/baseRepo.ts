@@ -86,7 +86,61 @@ export function rowToKvValue(row: Record<string, unknown>): Record<string, unkno
   if (!payload.resolution && row.resolution) payload.resolution = row.resolution;
   if (!payload.paymentMethod && row.payment_method) payload.paymentMethod = row.payment_method;
   if (!payload.paymentSource && row.payment_source) payload.paymentSource = row.payment_source;
+  // Typed columns the list screens show. Only fill gaps so a full payload_json row stays unchanged.
+  if (!payload.platform && row.platform) payload.platform = row.platform;
+  if (!payload.status && row.status) payload.status = row.status;
+  if (payload.amount == null && row.amount != null) payload.amount = row.amount;
+  if (!payload.category && row.category) payload.category = row.category;
+  if (!payload.type && row.type) payload.type = row.type;
+  if (!payload.serviceLine && row.service_line) payload.serviceLine = row.service_line;
+  if (payload.distance == null && row.distance != null) payload.distance = row.distance;
+  if (payload.duration == null && row.duration != null) payload.duration = row.duration;
+  if (payload.netToDriver == null && row.net_to_driver != null) payload.netToDriver = row.net_to_driver;
   return payload;
+}
+
+/** JSON keys pulled with PostgREST aliases (`tollCharges:payload_json->tollCharges`). */
+const JSON_KEY_ALIASES = [
+  "tollCharges",
+  "dropoffTime",
+  "requestTime",
+  "startTime",
+  "pickupTime",
+  "tollRefundResolution",
+  "description",
+  "vendor",
+  "time",
+  "driverName",
+  "vehiclePlate",
+  "referenceNumber",
+  "isReconciled",
+  "resolution",
+  "paymentMethod",
+  "preUnlinkedTripId",
+] as const;
+
+/**
+ * KV shape for list reads. When the select list omits payload_json, keep the
+ * few JSON fields that were asked for by name. A full `select *` row is unchanged.
+ */
+export function shapeFleetRow(row: Record<string, unknown>): Record<string, unknown> {
+  const shaped = rowToKvValue(row);
+  for (const key of JSON_KEY_ALIASES) {
+    if (shaped[key] == null && row[key] != null) shaped[key] = row[key];
+  }
+  // trip_id column is the source of truth, including when it is null.
+  if (!Object.prototype.hasOwnProperty.call(row, "trip_id") && shaped.tripId == null && row.tripId != null) {
+    shaped.tripId = row.tripId;
+  }
+  const metaTripId = row.metaTripId;
+  const metaPre = row.metaPreUnlinkedTripId;
+  if ((metaTripId != null || metaPre != null) && (shaped.metadata == null || typeof shaped.metadata !== "object")) {
+    shaped.metadata = {
+      ...(metaTripId != null ? { tripId: metaTripId } : {}),
+      ...(metaPre != null ? { preUnlinkedTripId: metaPre } : {}),
+    };
+  }
+  return shaped;
 }
 
 export type FleetQueryFilter =
@@ -125,6 +179,11 @@ export type FleetQueryOpts = {
   legacyPrefix?: string;
   /** Next page after this (date, id). Skips OFFSET so a long driver history is not re-sorted. */
   keysetAfter?: { date: string; id: string };
+  /**
+   * PostgREST select list. Default `*` (full row, including payload_json).
+   * List screens pass only the columns they show.
+   */
+  columns?: string;
 };
 
 export type FleetQueryResult = {
@@ -196,7 +255,7 @@ export async function queryFleet(
       : opts.head
         ? ({ count: "exact", head: true } as const)
         : undefined;
-    let q = fleetDb().from(fleetTable(def.table)).select("*", selectOpts);
+    let q: any = fleetDb().from(fleetTable(def.table)).select(opts.columns ?? "*", selectOpts);
 
     if (opts.legacyPrefix) {
       q = q.like("legacy_kv_id", `${opts.legacyPrefix}%`);
@@ -267,14 +326,14 @@ export async function queryFleet(
       return {
         data: rows.map((r) => ({
           key: String(r.legacy_kv_id || `${def.prefixes[0]}${r.id}`),
-          value: rowToKvValue(r),
+          value: shapeFleetRow(r),
         })),
         count: count ?? null,
         error: null,
       };
     }
     return {
-      data: rows.map((r) => rowToKvValue(r)),
+      data: rows.map((r) => shapeFleetRow(r)),
       count: count ?? null,
       error: null,
     };
