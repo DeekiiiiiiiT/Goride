@@ -110,12 +110,20 @@ export function assembleSnapshotsFromEntries(
   return snaps as BuiltSnapshot[];
 }
 
-/** Full build for a period week — used by route + auto-close. */
+/** Full build for a period week — used by route + auto-close. Same engine as /compute. */
 export async function buildFuelPeriodSnapshots(input: {
   orgId: string;
   weekStart: string;
   weekEnd: string;
 }): Promise<BuildSnapshotsResult> {
-  const { buildFuelPeriodSnapshotsFull } = await import("./fuel_week_engine.ts");
-  return buildFuelPeriodSnapshotsFull(input);
+  const { prepareFuelWeekReports } = await import("./fuel_week_prepare.ts");
+  const prepared = await prepareFuelWeekReports(input);
+  if (!prepared.ok) {
+    return { ok: false, snapshots: [], totalSpend: 0, error: prepared.error };
+  }
+  return {
+    ok: true,
+    snapshots: prepared.reports as BuildSnapshotsResult["snapshots"],
+    totalSpend: prepared.totalSpend,
+  };
 }

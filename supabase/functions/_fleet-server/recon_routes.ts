@@ -41,6 +41,7 @@ import {
   periodKeyFor,
   DEFAULT_FLEET_TZ,
 } from "../../../packages/finance-core/src/periodKey.ts";
+import { isSettlementPeriodEnded } from "../../../packages/finance-core/src/settlementPeriodGate.ts";
 import {
   computeTagAccountRollForward,
   tagLedgerAmountToRollForwardParts,
@@ -1067,6 +1068,11 @@ export function registerReconRoutes(app: Hono) {
         }
 
         weekKeys = await weekKeysWithLineActivity(orgId, line, weekKeys);
+        // Statements are not due until the day after Sunday. The current
+        // Mon–Sun week stays off the list so it is not shown as missing data.
+        weekKeys = weekKeys.filter((weekKey) =>
+          isSettlementPeriodEnded({ periodAnchor: weekKey })
+        );
 
         const weeks = [];
         for (const weekKey of weekKeys) {

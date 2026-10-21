@@ -45,6 +45,21 @@ export function FuelWeekLockedReceipt({
         <p className="mt-3 text-sm text-slate-600">
           Reopening this week reverses the posted fuel lines and asks for a reason.
         </p>
+        {period.closeReceipt?.statementIds?.length ? (
+          <p className="mt-3 text-sm text-slate-700">
+            Statement {period.closeReceipt.statementIds.join(', ')}
+          </p>
+        ) : null}
+        {period.closeReceipt?.ledgerEventIds?.length ? (
+          <p className="mt-1 text-sm text-slate-700">
+            Posted lines {period.closeReceipt.ledgerEventIds.join(', ')}
+          </p>
+        ) : null}
+        {period.fuelSealError ? (
+          <p className="mt-3 text-sm text-amber-800">
+            The statement did not finish posting. {period.fuelSealError}
+          </p>
+        ) : null}
         {onReopen ? (
           <Button type="button" variant="outline" className="mt-3" onClick={onReopen}>
             Reopen

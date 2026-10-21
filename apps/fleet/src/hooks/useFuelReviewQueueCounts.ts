@@ -19,6 +19,7 @@ async function fetchReviewQueueCounts(): Promise<FuelReviewQueueNavCounts> {
       endDate,
       pageSize: FUEL_REVIEW_QUEUE_TX_PAGE_SIZE,
       maxPages: FUEL_REVIEW_QUEUE_TX_MAX_PAGES,
+      fuelQueue: true,
     }) as Promise<FinancialTransaction[]>,
     fuelService.getFuelEntryLineCounts({ startDate, endDate }).catch(() => ({
       all: 0,

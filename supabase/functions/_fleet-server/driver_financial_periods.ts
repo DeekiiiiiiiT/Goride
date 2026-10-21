@@ -70,6 +70,7 @@ import {
 } from "./period_projection_flags.ts";
 import { isFeatureEnabled, FEATURE_FLAGS } from "./feature_flags.ts";
 import { publishWeekStatement, getLatestWeekStatement, getLatestWeekStatements, PROJECTION_READS_WEEK_STATEMENTS } from "./week_statements.ts";
+import { shouldSkipUnchangedStatement } from "./week_statements_guard.ts";
 import { statementAmountMajor } from "../../../packages/finance-core/src/weekStatement.ts";
 
 function sb() {
@@ -1536,13 +1537,13 @@ export async function rebuildDriverFinancialPeriod(
         periodAnchor,
         "earnings",
       );
-      const unchanged =
-        latestEarnings &&
-        latestEarnings.status === "draft" &&
+      const amountsMatch =
+        !!latestEarnings &&
         JSON.stringify(latestEarnings.amountsMinor) === JSON.stringify(earningsAmountsMinor);
 
       // Closed earnings seal + late trip/ledger facts → restatement draft so Pass E
       // does not stamp stale gross/cash onto DFP (Overview/Settlements drift).
+      // A signed row stays signed unless gross or cash moved by more than 5 cents.
       if (latestEarnings?.status === "closed") {
         const sealedGross = statementAmountMajor(latestEarnings, "gross");
         const sealedCash = statementAmountMajor(latestEarnings, "passengerCash");
@@ -1563,7 +1564,13 @@ export async function rebuildDriverFinancialPeriod(
             closeReason: "late_trip_backfill_restatement",
           });
         }
-      } else if (!unchanged) {
+      } else if (
+        !shouldSkipUnchangedStatement({
+          latestStatus: latestEarnings?.status,
+          nextStatus: "draft",
+          amountsMatch,
+        })
+      ) {
         await publishWeekStatement({
           kind: "earnings",
           organizationId: organizationIdResolved,

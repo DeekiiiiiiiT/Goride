@@ -15,22 +15,26 @@ export function buildFuelReconRegisterPayload(opts: {
   organizationId?: string | null;
   dataPeriodStart?: string | null;
   dataPeriodEnd?: string | null;
+  coverageStart?: string | null;
+  coverageEnd?: string | null;
   rowsCommitted?: number;
   weekKeys?: string[];
 }): Record<string, unknown> {
   const dataStart = opts.dataPeriodStart?.slice(0, 10);
   const dataEnd = opts.dataPeriodEnd?.slice(0, 10);
+  const coverageStart = opts.coverageStart?.slice(0, 10) || dataStart;
+  const coverageEnd = opts.coverageEnd?.slice(0, 10) || dataEnd;
   const orgId = opts.organizationId?.trim() || null;
   return {
     batchId: opts.batchId,
     sourceId: opts.sourceId,
-    coverageStart: dataStart,
-    coverageEnd: dataEnd,
+    coverageStart,
+    coverageEnd,
     dataStart,
     dataEnd,
     semanticKey:
-      orgId && dataStart && dataEnd
-        ? `fuel:${opts.sourceId}:${orgId}:${dataStart}:${dataEnd}`
+      orgId && coverageStart && coverageEnd
+        ? `fuel:${opts.sourceId}:${orgId}:${coverageStart}:${coverageEnd}`
         : undefined,
     rowsCommitted: opts.rowsCommitted,
     weekKeys: opts.weekKeys,
@@ -43,6 +47,8 @@ export async function registerFuelCardWithRecon(opts: {
   organizationId?: string | null;
   dataPeriodStart?: string | null;
   dataPeriodEnd?: string | null;
+  coverageStart?: string | null;
+  coverageEnd?: string | null;
   rowsCommitted?: number;
   weekKeys?: string[];
   importId?: string;

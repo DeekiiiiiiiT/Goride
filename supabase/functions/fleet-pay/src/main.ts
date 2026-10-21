@@ -16,10 +16,8 @@ const app = createFleetFunction({
   pathStyle: "slug",
   domainApp: settlementCommandsApp,
   registerParentRoutes: (parent) => {
-    parent.route("/", driverFinancialPeriodApp);
-    parent.route("/", disputeRefundApp);
-    parent.route("/", paymentLedgerLineApp);
-
+    // Register before the pay apps. Those apps require a user login on every
+    // path, and a later route never runs once that gate answers.
     parent.post("/internal/seal-earnings-week", async (c) => {
       const body = await c.req.json();
       const organizationId = String(body.organizationId ?? "");
@@ -81,6 +79,10 @@ const app = createFleetFunction({
         return c.json({ error: msg }, 500);
       }
     });
+
+    parent.route("/", driverFinancialPeriodApp);
+    parent.route("/", disputeRefundApp);
+    parent.route("/", paymentLedgerLineApp);
   },
 });
 

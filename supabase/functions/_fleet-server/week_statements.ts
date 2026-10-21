@@ -130,6 +130,23 @@ export async function publishWeekStatement(input: PublishWeekStatementInput): Pr
     .single();
   if (insErr) throw new Error(insErr.message);
 
+  const insertedId = String((inserted as { id?: string }).id || "");
+
+  // Older unsigned rows for this lane are history. A standing signed row stays
+  // until this publish is itself signed.
+  if (insertedId) {
+    const { error: retireDraftErr } = await sb()
+      .from("week_statements")
+      .update({ status: "restated" })
+      .eq("organization_id", statement.organizationId)
+      .eq("driver_id", statement.driverId)
+      .eq("week_key", statement.weekKey)
+      .eq("kind", statement.kind)
+      .eq("status", "draft")
+      .neq("id", insertedId);
+    if (retireDraftErr) throw new Error(retireDraftErr.message);
+  }
+
   // Retire the prior closed version ONLY when this publish is itself closed —
   // a draft restatement must leave the standing closed row until it is signed.
   if (priorClosed && status === "closed") {
@@ -263,15 +280,15 @@ export async function closeWeekStatements(
       if (retireErr) throw new Error(retireErr.message);
     }
   }
-  // Older draft restatements for this week are history — retire so the queue stays clean.
+  // Any unsigned row still left (including preview drafts with no supersedes link)
+  // is history once the latest row for the week is signed.
   const { error: dropErr } = await sb()
     .from("week_statements")
     .update({ status: "restated" })
     .eq("organization_id", organizationId)
     .eq("driver_id", driverId)
     .eq("week_key", WEEK_KEY(weekKey))
-    .eq("status", "draft")
-    .not("supersedes", "is", null);
+    .eq("status", "draft");
   if (dropErr) throw new Error(dropErr.message);
   return ids.length;
 }
@@ -323,21 +340,12 @@ export async function requestRestatement(input: RequestRestatementInput): Promis
   });
 
   // Annotate the restatement request on the new draft for audit trace.
+  // publishWeekStatement already restated older unsigned rows for this lane.
   if (draft.id) {
     await sb()
       .from("week_statements")
       .update({ close_reason: `restatement:${input.reason} (actor:${input.actorId})` })
       .eq("id", draft.id);
-    // Retire any older drafts for this lane so operators only see the latest.
-    await sb()
-      .from("week_statements")
-      .update({ status: "restated" })
-      .eq("organization_id", priorStmt.organizationId)
-      .eq("driver_id", priorStmt.driverId)
-      .eq("week_key", WEEK_KEY(priorStmt.weekKey))
-      .eq("kind", priorStmt.kind)
-      .eq("status", "draft")
-      .neq("id", draft.id);
   }
   return draft;
 }

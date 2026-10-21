@@ -3,8 +3,7 @@
  * The screen reviews this result. It does not recompute the week.
  */
 import { getServiceClient } from "./service_client.ts";
-import { buildFuelPeriodSnapshotsFull } from "./fuel_week_engine.ts";
-import { computeFleetDeadhead } from "./fuel_distance.ts";
+import { prepareFuelWeekReports } from "./fuel_week_prepare.ts";
 import { loadWeekFuelEntries } from "./fuel_period_build_snapshots.ts";
 import { queryFleet } from "./repos/baseRepo.ts";
 
@@ -28,8 +27,12 @@ export async function hashFuelWeekInputs(orgId: string, weekStart: string, weekE
   });
   if (trips.error) throw trips.error;
   const parts = [
-    ...entries.map((e) => `${e.id}:${e.amount}:${e.odometer}:${e.liters}`),
+    ...entries.map((e) => {
+      const meta = e.metadata && typeof e.metadata === "object" ? e.metadata as Record<string, unknown> : {};
+      return `${e.id}:${e.amount}:${e.odometer}:${e.liters}:${e.type || ""}:${meta.jaaMatchedDriverEntryId || ""}`;
+    }),
     ...((trips.data || []) as any[]).map((t) => `${t.id}:${t.distance || t.tripDistance || t.km || ""}`),
+    "shape:fuel-rule-v1",
   ];
   return hashParts(parts);
 }
@@ -53,7 +56,7 @@ export async function computeFuelWeekSnapshot(args: {
   if (latest && latest.inputs_hash === inputsHash) {
     return { snapshot: latest, reused: true };
   }
-  const built = await buildFuelPeriodSnapshotsFull({
+  const built = await prepareFuelWeekReports({
     orgId: args.orgId,
     weekStart: args.weekStart,
     weekEnd: args.weekEnd,
@@ -62,7 +65,7 @@ export async function computeFuelWeekSnapshot(args: {
     throw new Error(built.error || "fuel week compute failed");
   }
   const version = (Number(latest?.version) || 0) + 1;
-  const money = { reports: built.snapshots, totalSpend: built.totalSpend };
+  const money = { reports: built.reports, totalSpend: built.totalSpend };
   const { data: inserted, error } = await sb
     .from("fuel_week_snapshot")
     .insert({
@@ -73,44 +76,11 @@ export async function computeFuelWeekSnapshot(args: {
       inputs_hash: inputsHash,
       money,
       blockers: [],
-      provenance: { engine: "buildFuelPeriodSnapshotsFull" },
+      provenance: { engine: "generateDriverFleetReport" },
     })
     .select("id, version, inputs_hash, money")
     .single();
   if (error) throw new Error(error.message);
-
-  try {
-    const vehicleIds = [
-      ...new Set(
-        (built.snapshots || []).map((s: any) => String(s.vehicleId || "")).filter(Boolean),
-      ),
-    ];
-    const distance = await computeFleetDeadhead({
-      orgId: args.orgId,
-      periodStart: args.weekStart,
-      periodEnd: args.weekEnd,
-      vehicleIds,
-    });
-    for (const row of distance.vehicles || []) {
-      await sb.from("vehicle_week_distance").upsert(
-        {
-          organization_id: args.orgId,
-          vehicle_id: String(row.vehicleId || ""),
-          week_start: args.weekStart,
-          deadhead_km: Number(row.deadheadKm) || 0,
-          rideshare_km: Number(row.tripKm) || 0,
-          trip_km: Number(row.tripKm) || 0,
-          personal_km: Number(row.personalKm) || 0,
-          computed_from_hash: inputsHash,
-          stale: false,
-          computed_at: new Date().toISOString(),
-        },
-        { onConflict: "organization_id,vehicle_id,week_start" },
-      );
-    }
-  } catch (distanceErr) {
-    console.warn("[fuel_week_compute] distance save failed", distanceErr);
-  }
 
   return { snapshot: inserted, reused: false };
 }

@@ -3,7 +3,6 @@ import { useEffect, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { api } from '../../../services/api';
 import { fuelService } from '../../../services/fuelService';
-import { finalizeFuelWeekReports } from '../../../services/fuelFinalizeService';
 import {
   buildFuelWeekReportsWithGating,
   FUEL_BULK_FINALIZE_MAX_WEEKS,
@@ -492,68 +491,48 @@ export function FuelBulkFinalizeDialog({
 
         for (let i = 0; i < prepared.length; i++) {
           const item = prepared[i];
-          const { period, label, reports, trips, weekEntries, dispositions: weekDispositions } =
-            item;
+          const { period, label } = item;
           onProgress(formatFuelBulkProgress(i + 1, prepared.length, label));
 
           try {
-            const result = await finalizeFuelWeekReports(
-              reports,
-              {
-                vehicles,
-                drivers,
-                fuelCards,
-                fuelEntries: weekEntries,
-                scenarios,
-                trips,
-                transactions,
-                disputes,
-                ...bulkFinalizeExecuteGateFields(period),
-                totalSpend: period.totalSpend,
-                unexplained: period.netLeakage,
-                dispositions: weekDispositions,
-              },
-              {
-                priorReports,
-                skipCacheInvalidation: true,
-                deferSnapshotPersist: true,
-                onProgress: (msg) => onProgress(`${formatFuelBulkProgress(i + 1, prepared.length, label)} ${msg}`),
-              },
-            );
-
-            if (result.snapshotCount === 0) {
-              weekResults.push({
-                id: period.id,
-                label,
-                status: 'skipped',
-                message: result.message || 'Nothing to post',
-              });
-            } else if (!result.ok || result.failures?.length) {
+            const periodRow = await api.ensureFuelReconciliationPeriod({
+              weekStart: period.startDate,
+              weekEnd: period.endDate,
+            });
+            let preparedWeek: { version?: number | null; totalSpend?: number | null };
+            try {
+              preparedWeek = await api.computeFuelWeek(periodRow.id);
+            } catch {
               weekResults.push({
                 id: period.id,
                 label,
                 status: 'failed',
-                message: result.failures?.[0]?.error || result.message || 'Partial failure',
+                message: "We couldn't prepare this week's numbers. Nothing was locked.",
               });
-            } else {
-              const weekStart = period.startDate;
-              const weekEnd = period.endDate;
-              const periodRow = await api.ensureFuelReconciliationPeriod({ weekStart, weekEnd });
-              const totalSpend = (result.snapshots || []).reduce(
-                (s, r) => s + (Number(r.totalGasCardCost) || 0),
-                0,
-              );
-              const enqueueArgs = {
-                periodId: periodRow.id,
-                version: periodRow.version || 1,
-                idempotencyKey: fuelPeriodFinalizeIdempotencyKey(
-                  periodRow.id,
-                  periodRow.version || 1,
-                ),
-                snapshots: result.snapshots || [],
-                totalSpend,
-                secondApproverThreshold,
-              };
+              continue;
+            }
+            const snapshotVersion = Number(preparedWeek.version) || 0;
+            if (!snapshotVersion) {
+              weekResults.push({
+                id: period.id,
+                label,
+                status: 'failed',
+                message: "We couldn't prepare this week's numbers. Nothing was locked.",
+              });
+              continue;
+            }
+            const enqueueArgs = {
+              periodId: periodRow.id,
+              version: periodRow.version || 1,
+              idempotencyKey: fuelPeriodFinalizeIdempotencyKey(
+                periodRow.id,
+                periodRow.version || 1,
+              ),
+              snapshots: [] as any[],
+              totalSpend: Number(preparedWeek.totalSpend) || period.totalSpend,
+              secondApproverThreshold,
+              snapshotVersion,
+            };
               const jobRes = await api.enqueueFuelPeriodFinalize(enqueueArgs).catch(async (lockErr: any) => {
                 if (lockErr?.code === 'SNAPSHOT_MISMATCH') {
                   const forceReason = await confirmForceClientMoney(
@@ -598,14 +577,14 @@ export function FuelBulkFinalizeDialog({
                     id: period.id,
                     label,
                     status: 'ok',
-                    message: `${result.successCount} posted · already locked`,
+                    message: 'Week locked',
                   });
                 } else {
                   weekResults.push({
                     id: period.id,
                     label,
                     status: 'failed',
-                    message: jobInterp.toastMessage || jobRes.error || 'Server finalize failed',
+                    message: jobInterp.toastMessage || (jobRes as { error?: string }).error || 'Server finalize failed',
                   });
                 }
               } else {
@@ -613,10 +592,9 @@ export function FuelBulkFinalizeDialog({
                   id: period.id,
                   label,
                   status: 'ok',
-                  message: `${result.successCount} posted · ${result.snapshotCount} locked`,
+                  message: 'Week locked',
                 });
               }
-            }
           } catch (e: any) {
             console.error('[FuelBulkFinalize] week failed', period.id, e);
             weekResults.push({ id: period.id, label, status: 'failed', message: e?.message || 'Failed' });

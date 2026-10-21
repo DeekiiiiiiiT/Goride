@@ -1,6 +1,6 @@
 import { assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
 import { resolveFleetColumn } from "./fleet_column_map.ts";
-import { QUERY_FLEET_DEFAULT_ORDER, rowToKvValue, shapeFleetRow } from "./baseRepo.ts";
+import { QUERY_FLEET_DEFAULT_ORDER, isFuelQueueTransactionRow, rowToKvValue, shapeFleetRow } from "./baseRepo.ts";
 
 Deno.test("typed aliases win over JSON paths", () => {
   assertEquals(resolveFleetColumn("value->>transactionId"), "transaction_id");
@@ -96,6 +96,40 @@ Deno.test("shapeFleetRow keeps named JSON fields and hides the blob", () => {
   assertEquals(payload.platform, "Uber");
   assertEquals(payload.driverId, "d1");
   assertEquals("payload_json" in payload, false);
+});
+
+Deno.test("shapeFleetRow keeps fuel-queue aliases and drops receipt blobs", () => {
+  const payload = shapeFleetRow({
+    id: "tx1",
+    date: "2026-04-24",
+    driver_id: "d1",
+    type: "Expense",
+    category: "Fuel",
+    amount: -12.5,
+    status: "Pending",
+    description: "Fuel expense",
+    paymentMethod: "Cash",
+    driverName: "Ada",
+    quantity: 8,
+    odometer: 12000,
+    metadata: { source: "Fuel Log", receiptBase64: "abc", stationGateHold: false },
+  });
+  assertEquals(payload.driverName, "Ada");
+  assertEquals(payload.quantity, 8);
+  assertEquals(payload.paymentMethod, "Cash");
+  assertEquals((payload.metadata as { source: string }).source, "Fuel Log");
+  assertEquals("receiptBase64" in (payload.metadata as object), false);
+  const full = shapeFleetRow({
+    id: "tx2",
+    payload_json: { metadata: { receiptBase64: "keep", source: "Manual" } },
+  });
+  assertEquals((full.metadata as { receiptBase64: string }).receiptBase64, "keep");
+});
+
+Deno.test("isFuelQueueTransactionRow matches fuel categories and manual fuel", () => {
+  assertEquals(isFuelQueueTransactionRow({ category: "Fuel Reimbursement Credit", type: "Expense" }), true);
+  assertEquals(isFuelQueueTransactionRow({ category: "Cash Collection", type: "Payment_Received" }), false);
+  assertEquals(isFuelQueueTransactionRow({ category: "Other", type: "Fuel_Manual_Entry" }), true);
 });
 
 Deno.test("queryFleet default order is updated_at DESC (N-04)", () => {

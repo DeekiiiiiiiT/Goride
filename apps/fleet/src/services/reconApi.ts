@@ -22,6 +22,10 @@ export type ReconImportPreview = {
   totals_minor: number;
   coverage_start: string | null;
   coverage_end: string | null;
+  data_start?: string | null;
+  data_end?: string | null;
+  saved_start?: string | null;
+  saved_end?: string | null;
 };
 
 export type ReconWeekSource = {
@@ -400,6 +404,8 @@ export async function commitReconImport(
   input: {
     idempotencyKey: string;
     overrideFingerprintDupRowIds?: string[];
+    coverageStart?: string | null;
+    coverageEnd?: string | null;
   },
 ): Promise<ReconImportCommitResult> {
   const response = await reconImportFetch(`/${importId}/commit`, {

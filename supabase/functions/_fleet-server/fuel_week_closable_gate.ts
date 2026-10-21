@@ -442,10 +442,21 @@ export async function buildFuelWeekClosableInputForPeriod(
   // N-12a: never evaluate against a warm-isolate stale bundle.
   invalidateFuelWeekClosableKvCache(orgId, weekStart, weekEnd);
 
-  const counts = (period.counts && typeof period.counts === "object" ? period.counts : {}) as Record<
+  const countsStored = (period.counts && typeof period.counts === "object" ? period.counts : {}) as Record<
     string,
     unknown
   >;
+  const counts = Object.keys(countsStored).length > 0
+    ? countsStored
+    : await serverFuelStepCountsForPeriod(orgId, weekStart, weekEnd, period);
+  if (Object.keys(countsStored).length === 0 && period.id) {
+    period.counts = counts;
+    await getServiceClient()
+      .from("fuel_reconciliation_period")
+      .update({ counts, updated_at: new Date().toISOString() })
+      .eq("id", String(period.id))
+      .eq("org_id", orgId);
+  }
   const countsUnevaluated = Object.keys(counts).length === 0;
 
   const [hasOpenDisputes, flagState, unapprovedFuel] = await Promise.all([

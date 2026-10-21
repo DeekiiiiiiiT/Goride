@@ -1380,7 +1380,7 @@ export const api = {
     );
   },
 
-  async getTransactions(driverIdOrIds?: string | string[], options?: { limit?: number; offset?: number; startDate?: string; endDate?: string; desk?: 'settlements' }) {
+  async getTransactions(driverIdOrIds?: string | string[], options?: { limit?: number; offset?: number; startDate?: string; endDate?: string; desk?: 'settlements'; fuelQueue?: boolean }) {
     let url = `${API_ENDPOINTS.financial}/transactions`;
     const params = new URLSearchParams();
     if (driverIdOrIds) {
@@ -1394,6 +1394,7 @@ export const api = {
     if (options?.startDate) params.set('startDate', options.startDate);
     if (options?.endDate) params.set('endDate', options.endDate);
     if (options?.desk) params.set('desk', options.desk);
+    if (options?.fuelQueue) params.set('fuelQueue', '1');
     const qs = params.toString();
     if (qs) url += `?${qs}`;
     // Phase 1: Use JWT for proper org scoping
@@ -1409,7 +1410,7 @@ export const api = {
     driverIdOrIds: string | string[],
     pageSize = 5000,
     maxRows = 50000,
-    opts?: { startDate?: string; endDate?: string },
+    opts?: { startDate?: string; endDate?: string; fuelQueue?: boolean },
   ) {
     const ids = Array.isArray(driverIdOrIds) ? driverIdOrIds.filter(Boolean) : [driverIdOrIds].filter(Boolean);
     if (ids.length === 0) return [] as FinancialTransaction[];
@@ -1422,6 +1423,7 @@ export const api = {
         offset,
         startDate: opts?.startDate,
         endDate: opts?.endDate,
+        fuelQueue: opts?.fuelQueue,
       });
       const batch = Array.isArray(page) ? page.filter(Boolean) : [];
       all.push(...batch);
@@ -1440,6 +1442,8 @@ export const api = {
     endDate: string;
     pageSize?: number;
     maxPages?: number;
+    /** Fuel Review Queue: fuel rows and the columns that screen shows. */
+    fuelQueue?: boolean;
   }): Promise<FinancialTransaction[]> {
     const pageSize = options.pageSize ?? 1500;
     const maxPages = options.maxPages ?? 40;
@@ -1451,6 +1455,7 @@ export const api = {
         endDate: options.endDate,
         limit: pageSize,
         offset: page * pageSize,
+        fuelQueue: options.fuelQueue,
       });
       const rows = Array.isArray(batch) ? batch.filter(Boolean) : [];
       if (rows.length === 0) break;
@@ -5196,9 +5201,9 @@ export const api = {
       },
     );
     if (response.status === 409) {
-      const body = (await response.json().catch(() => ({}))) as { error?: string };
+      const body = (await response.json().catch(() => ({}))) as { error?: string; message?: string };
       const code = body.error || 'version_conflict';
-      const err = new Error(code) as Error & { status?: number; code?: string; body?: unknown };
+      const err = new Error(body.message || code) as Error & { status?: number; code?: string; body?: unknown };
       err.status = 409;
       err.code = code;
       err.body = body;

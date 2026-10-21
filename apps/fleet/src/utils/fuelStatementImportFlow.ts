@@ -169,6 +169,8 @@ export async function commitFuelStatementImport(opts: {
   reconImportId?: string;
   weekKey?: string;
   organizationId?: string | null;
+  coverageStart?: string | null;
+  coverageEnd?: string | null;
 }): Promise<{ batchId: string; savedCount: number }> {
   const prepared = await prepareFuelEntriesForSave(opts.entries);
   if (prepared.length === 0) {
@@ -177,6 +179,8 @@ export async function commitFuelStatementImport(opts: {
 
   const batchId = crypto.randomUUID();
   const bounds = fuelDateBounds(prepared);
+  const coverageStart = opts.coverageStart?.slice(0, 10) || bounds.min;
+  const coverageEnd = opts.coverageEnd?.slice(0, 10) || bounds.max;
   const {
     data: { session },
   } = await supabase.auth.getSession();
@@ -193,8 +197,8 @@ export async function commitFuelStatementImport(opts: {
     processedBy: uploadedBy || 'Admin',
     dataPeriodStart: bounds.min ?? undefined,
     dataPeriodEnd: bounds.max ?? undefined,
-    periodStart: bounds.min ?? undefined,
-    periodEnd: bounds.max ?? undefined,
+    periodStart: coverageStart ?? undefined,
+    periodEnd: coverageEnd ?? undefined,
     uploadedBy,
   });
 
@@ -215,6 +219,8 @@ export async function commitFuelStatementImport(opts: {
     organizationId: opts.organizationId,
     dataPeriodStart: bounds.min,
     dataPeriodEnd: bounds.max,
+    coverageStart,
+    coverageEnd,
     rowsCommitted: withBatch.length,
     weekKeys: opts.weekKey ? [opts.weekKey.slice(0, 10)] : undefined,
   });

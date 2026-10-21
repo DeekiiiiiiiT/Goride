@@ -19,35 +19,38 @@ import type { FuelReconciliationPeriod } from '../../../utils/fuelPeriodStatus';
 import type { FuelDispute } from '../../../types/fuel';
 import type { Vehicle } from '../../../types/vehicle';
 
-const finalizeFuelWeekReports = vi.fn();
-const listFuelFlagDispositions = vi.fn(async () => ({
-  dispositions: [],
-  truncated: false,
-}));
-const getAllFuelEntriesInRange = vi.fn(async () => []);
-const buildFuelWeekReportsWithGating = vi.fn(async (input: { weekStartYmd: string; weekEndYmd: string }) => ({
-  reports: [
-    {
-      driverId: 'd1',
-      vehicleId: 'v1',
-      vehicleIds: ['v1'],
-      weekStart: input.weekStartYmd,
-      weekEnd: input.weekEndYmd,
-      totalGasCardCost: 1_000,
-      driverShare: 500,
-      companyShare: 500,
-      miscellaneousCost: 0,
+const { computeFuelWeek, enqueueFuelPeriodFinalize, listFuelFlagDispositions, getAllFuelEntriesInRange, buildFuelWeekReportsWithGating } = vi.hoisted(() => ({
+  computeFuelWeek: vi.fn(async () => ({ version: 3, totalSpend: 1000, reports: [] as unknown[] })),
+  enqueueFuelPeriodFinalize: vi.fn(async () => ({ state: 'succeeded', ok: true })),
+  listFuelFlagDispositions: vi.fn(async () => ({
+    dispositions: [] as unknown[],
+    truncated: false,
+  })),
+  getAllFuelEntriesInRange: vi.fn(async () => [] as unknown[]),
+  buildFuelWeekReportsWithGating: vi.fn(async (input: { weekStartYmd: string; weekEndYmd: string }) => ({
+    reports: [
+      {
+        driverId: 'd1',
+        vehicleId: 'v1',
+        vehicleIds: ['v1'],
+        weekStart: input.weekStartYmd,
+        weekEnd: input.weekEndYmd,
+        totalGasCardCost: 1_000,
+        driverShare: 500,
+        companyShare: 500,
+        miscellaneousCost: 0,
+      },
+    ],
+    trips: [],
+    gateResult: {
+      hasExceptionBlockers: false,
+      exceptionBlockers: [],
+      hasUnapprovedFuelTxBlockers: false,
+      unapprovedFuelTxBlockers: [],
+      hasOverExplainedBlockers: false,
+      overExplainedBlockers: [],
     },
-  ],
-  trips: [],
-  gateResult: {
-    hasExceptionBlockers: false,
-    exceptionBlockers: [],
-    hasUnapprovedFuelTxBlockers: false,
-    unapprovedFuelTxBlockers: [],
-    hasOverExplainedBlockers: false,
-    overExplainedBlockers: [],
-  },
+  })),
 }));
 
 vi.mock('../../../services/api', () => ({
@@ -55,8 +58,9 @@ vi.mock('../../../services/api', () => ({
     getPreferences: vi.fn(async () => ({})),
     getFinalizedReports: vi.fn(async () => []),
     ensureFuelReconciliationPeriod: vi.fn(async () => ({ id: 'p1', version: 1 })),
+    computeFuelWeek: (...args: unknown[]) => computeFuelWeek(...args),
     reviewFuelPeriodLeakage: vi.fn(async () => ({ ok: true })),
-    enqueueFuelPeriodFinalize: vi.fn(async () => ({ state: 'succeeded', ok: true })),
+    enqueueFuelPeriodFinalize: (...args: unknown[]) => enqueueFuelPeriodFinalize(...args),
     getFuelReconciliationPeriod: vi.fn(async () => null),
     listFuelFlagDispositions: (...args: unknown[]) => listFuelFlagDispositions(...args),
   },
@@ -69,19 +73,17 @@ vi.mock('../../../services/fuelService', () => ({
 }));
 
 vi.mock('../../../services/fuelFinalizeService', () => ({
-  finalizeFuelWeekReports: (...args: unknown[]) => finalizeFuelWeekReports(...args),
+  finalizeFuelWeekReports: vi.fn(),
 }));
 
-vi.mock('../../../utils/buildFuelWeekReportsForFinalize', async () => {
-  const actual = await vi.importActual<typeof import('../../../utils/buildFuelWeekReportsForFinalize')>(
-    '../../../utils/buildFuelWeekReportsForFinalize',
-  );
-  return {
-    ...actual,
-    buildFuelWeekReportsWithGating: (...args: unknown[]) =>
-      buildFuelWeekReportsWithGating(...(args as [Parameters<typeof buildFuelWeekReportsWithGating>[0]])),
-  };
-});
+vi.mock('../../../utils/buildFuelWeekReportsForFinalize', () => ({
+  buildFuelWeekReportsWithGating: (...args: unknown[]) =>
+    buildFuelWeekReportsWithGating(...(args as [Parameters<typeof buildFuelWeekReportsWithGating>[0]])),
+  FUEL_BULK_FINALIZE_MAX_WEEKS: 8,
+  formatFuelBulkProgress: (done: number, total: number, label: string) =>
+    `${done} of ${total} — ${label}`,
+  fuelBulkConfirmPhrase: (count: number) => `FINALIZE ${count} WEEKS`,
+}));
 
 vi.mock('../../../utils/fuelWeekClosableGate', () => ({
   evaluateFuelWeekClosableClient: vi.fn(() => []),
@@ -138,13 +140,8 @@ describe('FuelBulkFinalizeDialog', () => {
     vi.clearAllMocks();
     listFuelFlagDispositions.mockResolvedValue({ dispositions: [], truncated: false });
     getAllFuelEntriesInRange.mockResolvedValue([]);
-    finalizeFuelWeekReports.mockResolvedValue({
-      ok: true,
-      snapshotCount: 1,
-      successCount: 1,
-      snapshots: [{ totalGasCardCost: 1_000 }],
-      failures: [],
-    });
+    computeFuelWeek.mockResolvedValue({ version: 3, totalSpend: 1000, reports: [] });
+    enqueueFuelPeriodFinalize.mockResolvedValue({ state: 'succeeded', ok: true });
   });
 
   it('renders empty outstanding copy when nothing to finalize', () => {
@@ -281,10 +278,10 @@ describe('FuelBulkFinalizeDialog', () => {
     await user.type(confirm, 'FINALIZE 1 WEEKS');
     await user.click(screen.getByRole('button', { name: /finalize 1 week/i }));
 
-    await waitFor(() => expect(finalizeFuelWeekReports).toHaveBeenCalled());
-    const opts = finalizeFuelWeekReports.mock.calls[0][1];
-    expect(opts.leakageReviewed).toBe(true);
-    expect(opts.periodCounts).toEqual(p.counts);
+    await waitFor(() => expect(computeFuelWeek).toHaveBeenCalled());
+    await waitFor(() => expect(enqueueFuelPeriodFinalize).toHaveBeenCalled());
+    const args = enqueueFuelPeriodFinalize.mock.calls[0][0] as { snapshotVersion?: number };
+    expect(args.snapshotVersion).toBe(3);
   });
 
   it('hydrates dispositions per week so week B dispositioned criticals finalize (R3-2)', async () => {
@@ -354,7 +351,7 @@ describe('FuelBulkFinalizeDialog', () => {
     await user.type(confirm, 'FINALIZE 2 WEEKS');
     await user.click(screen.getByRole('button', { name: /finalize 2 weeks/i }));
 
-    await waitFor(() => expect(finalizeFuelWeekReports).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(computeFuelWeek).toHaveBeenCalledTimes(2));
 
     expect(listFuelFlagDispositions).toHaveBeenCalled();
     const listCalls = listFuelFlagDispositions.mock.calls.map(
@@ -363,12 +360,12 @@ describe('FuelBulkFinalizeDialog', () => {
     expect(listCalls.some((ids) => ids.includes('ea'))).toBe(true);
     expect(listCalls.some((ids) => ids.includes('eb'))).toBe(true);
 
-    const weekBFinalize = finalizeFuelWeekReports.mock.calls.find((call) => {
-      const reports = call[0] as Array<{ weekStart?: string }>;
-      return reports?.[0]?.weekStart === '2026-07-13';
+    const weekBBuild = buildFuelWeekReportsWithGating.mock.calls.find((call) => {
+      const input = call[0] as { weekStartYmd?: string; dispositions?: Map<string, Map<string, unknown>> };
+      return input?.weekStartYmd === '2026-07-13';
     });
-    expect(weekBFinalize).toBeTruthy();
-    const weekBMap = weekBFinalize![1].dispositions as Map<string, Map<string, unknown>>;
+    expect(weekBBuild).toBeTruthy();
+    const weekBMap = (weekBBuild![0] as { dispositions: Map<string, Map<string, unknown>> }).dispositions;
     expect(weekBMap.get('eb')?.has('integrity_critical')).toBe(true);
   });
 
@@ -410,7 +407,7 @@ describe('FuelBulkFinalizeDialog', () => {
     await waitFor(() => {
       expect(screen.getByText(new RegExp(FUEL_BULK_DISPOSITIONS_LOAD_SKIP))).toBeInTheDocument();
     });
-    expect(finalizeFuelWeekReports).not.toHaveBeenCalled();
+    expect(computeFuelWeek).not.toHaveBeenCalled();
   });
 
   it('skips week with retry copy when disposition list is truncated (R4-3)', async () => {
@@ -454,7 +451,7 @@ describe('FuelBulkFinalizeDialog', () => {
     await waitFor(() => {
       expect(screen.getByText(new RegExp(FUEL_BULK_DISPOSITIONS_LOAD_SKIP))).toBeInTheDocument();
     });
-    expect(finalizeFuelWeekReports).not.toHaveBeenCalled();
+    expect(computeFuelWeek).not.toHaveBeenCalled();
   });
 
   it('loadWeekFlagDispositions returns typed failure reasons (R4-2 / R4-3)', async () => {

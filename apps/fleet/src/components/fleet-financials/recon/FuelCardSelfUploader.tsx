@@ -31,6 +31,11 @@ import {
 } from '../../../utils/fuelStatementImportFlow';
 import type { FuelReconSourceId } from '../../../utils/registerFuelCardWithRecon';
 import type { FuelEntry } from '../../../types/fuel';
+import { defaultDeclaredCoverage } from '@roam/finance-core';
+import {
+  StatementCoverageFields,
+  statementCoverageError,
+} from './StatementCoverageFields';
 
 type Props = {
   isOpen: boolean;
@@ -45,6 +50,8 @@ export function FuelCardSelfUploader({ isOpen, onClose, onSuccess, weekKey, sour
   const [fileData, setFileData] = useState<FileData | null>(null);
   const [entries, setEntries] = useState<FuelEntry[]>([]);
   const [preview, setPreview] = useState<ReconImportPreview | null>(null);
+  const [coverageStart, setCoverageStart] = useState('');
+  const [coverageEnd, setCoverageEnd] = useState('');
   const [importId, setImportId] = useState<string | null>(null);
   const [fuelCards, setFuelCards] = useState<FuelCard[]>([]);
   const [jaaPrograms, setJaaPrograms] = useState<JaaProgram[]>([]);
@@ -78,9 +85,17 @@ export function FuelCardSelfUploader({ isOpen, onClose, onSuccess, weekKey, sour
     setFileData(null);
     setEntries([]);
     setPreview(null);
+    setCoverageStart('');
+    setCoverageEnd('');
     setImportId(null);
     setBusy(false);
   };
+
+  useEffect(() => {
+    if (!preview?.coverage_start || !preview?.coverage_end) return;
+    setCoverageStart(preview.coverage_start);
+    setCoverageEnd(preview.coverage_end);
+  }, [preview]);
 
   const handleClose = () => {
     reset();
@@ -107,6 +122,13 @@ export function FuelCardSelfUploader({ isOpen, onClose, onSuccess, weekKey, sour
         }
         setFileData(parsed);
         setEntries(fuelEntries);
+        const prefill = defaultDeclaredCoverage({
+          weekKey,
+          dataStart: fuelDateBounds(fuelEntries).min,
+          dataEnd: fuelDateBounds(fuelEntries).max,
+        });
+        setCoverageStart(prefill.coverageStart || '');
+        setCoverageEnd(prefill.coverageEnd || '');
 
         const { importId: stagedId } = await createReconImport({
           sourceId,
@@ -116,9 +138,11 @@ export function FuelCardSelfUploader({ isOpen, onClose, onSuccess, weekKey, sour
         setImportId(stagedId);
 
         try {
+          const csvText = file.name.toLowerCase().endsWith('.csv') ? await file.text() : '';
           const { preview: serverPreview } = await parseReconImport(stagedId, {
             mode: 'fuel',
             weekKey: weekKey.slice(0, 10),
+            csvText: csvText || undefined,
             rows: fuelEntries as unknown as Record<string, unknown>[],
           });
           setPreview(serverPreview);
@@ -127,6 +151,11 @@ export function FuelCardSelfUploader({ isOpen, onClose, onSuccess, weekKey, sour
             console.warn('[Fuel recon] parse staging failed', e);
           }
           const bounds = fuelDateBounds(fuelEntries);
+          const declared = defaultDeclaredCoverage({
+            weekKey,
+            dataStart: bounds.min,
+            dataEnd: bounds.max,
+          });
           setPreview({
             new: fuelEntries.map((_, i) => ({
               rowIndex: i,
@@ -140,8 +169,12 @@ export function FuelCardSelfUploader({ isOpen, onClose, onSuccess, weekKey, sour
             totals_minor: Math.round(
               fuelEntries.reduce((s, e) => s + Math.abs(Number(e.amount) || 0), 0) * 100,
             ),
-            coverage_start: bounds.min,
-            coverage_end: bounds.max,
+            coverage_start: declared.coverageStart,
+            coverage_end: declared.coverageEnd,
+            data_start: bounds.min,
+            data_end: bounds.max,
+            saved_start: bounds.min,
+            saved_end: bounds.max,
           });
         }
       } catch (e) {
@@ -173,8 +206,21 @@ export function FuelCardSelfUploader({ isOpen, onClose, onSuccess, weekKey, sour
     disabled: busy,
   });
 
+  const coverageError = fileData
+    ? statementCoverageError({
+        coverageStart,
+        coverageEnd,
+        savedStart: preview?.saved_start || preview?.data_start,
+        savedEnd: preview?.saved_end || preview?.data_end,
+      })
+    : null;
+
   const commit = async () => {
     if (!fileData || entries.length === 0) return;
+    if (coverageError) {
+      toast.error(coverageError);
+      return;
+    }
     setBusy(true);
     try {
       const { savedCount } = await commitFuelStatementImport({
@@ -183,6 +229,8 @@ export function FuelCardSelfUploader({ isOpen, onClose, onSuccess, weekKey, sour
         sourceId,
         reconImportId: importId || undefined,
         weekKey,
+        coverageStart,
+        coverageEnd,
       });
       toast.success(`Imported ${savedCount} fuel fill(s)`);
       handleClose();
@@ -242,11 +290,16 @@ export function FuelCardSelfUploader({ isOpen, onClose, onSuccess, weekKey, sour
                 week
               </AlertDescription>
             </Alert>
-            {preview?.coverage_start && preview?.coverage_end ? (
-              <p className="text-xs text-slate-500">
-                Coverage {preview.coverage_start} – {preview.coverage_end}
-              </p>
-            ) : null}
+            <StatementCoverageFields
+              coverageStart={coverageStart}
+              coverageEnd={coverageEnd}
+              dataStart={preview?.data_start}
+              dataEnd={preview?.data_end}
+              savedStart={preview?.saved_start || preview?.data_start}
+              savedEnd={preview?.saved_end || preview?.data_end}
+              onCoverageStart={setCoverageStart}
+              onCoverageEnd={setCoverageEnd}
+            />
           </div>
         )}
 
@@ -255,7 +308,7 @@ export function FuelCardSelfUploader({ isOpen, onClose, onSuccess, weekKey, sour
             Cancel
           </Button>
           {fileData ? (
-            <Button type="button" onClick={() => void commit()} disabled={busy || newCount === 0}>
+            <Button type="button" onClick={() => void commit()} disabled={busy || newCount === 0 || !!coverageError}>
               {busy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
               Commit import
             </Button>

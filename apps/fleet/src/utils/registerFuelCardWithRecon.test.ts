@@ -22,4 +22,21 @@ describe('buildFuelReconRegisterPayload', () => {
     expect(body.weekKeys).toEqual(['2026-10-05']);
     expect(body.semanticKey).toBe('fuel:fuel_card_self:org-9:2026-10-05:2026-10-11');
   });
+
+  it('keeps the transaction span when the operator declares the whole week', () => {
+    const body = buildFuelReconRegisterPayload({
+      batchId: 'batch-2',
+      sourceId: 'fuel_card_roam',
+      organizationId: 'org-9',
+      dataPeriodStart: '2026-10-14',
+      dataPeriodEnd: '2026-10-16',
+      coverageStart: '2026-10-12',
+      coverageEnd: '2026-10-18',
+    });
+    expect(body.coverageStart).toBe('2026-10-12');
+    expect(body.coverageEnd).toBe('2026-10-18');
+    expect(body.dataStart).toBe('2026-10-14');
+    expect(body.dataEnd).toBe('2026-10-16');
+    expect(body.semanticKey).toBe('fuel:fuel_card_roam:org-9:2026-10-12:2026-10-18');
+  });
 });

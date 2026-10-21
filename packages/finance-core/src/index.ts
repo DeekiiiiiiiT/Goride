@@ -293,6 +293,14 @@ export {
   roamFuelExternalCopy,
   roamFuelStatementDeadlineYmd,
 } from './reconExternalRoam.ts';
+export {
+  asYmd,
+  ymdSpan,
+  formatCoverDay,
+  parseStatementPeriodBanner,
+  defaultDeclaredCoverage,
+  coverageGapMessage,
+} from './statementCoverage.ts';
 export type { RoamFuelExternalCopy } from './reconExternalRoam.ts';
 export {
   buildReconSourceCloseBlockers,

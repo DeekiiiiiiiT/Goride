@@ -227,6 +227,9 @@ function mapPeriod(row: Record<string, unknown>) {
       : [],
     lockedAt: row.locked_at,
     lockedBy: row.locked_by,
+    closeReceipt: row.close_receipt && typeof row.close_receipt === "object"
+      ? row.close_receipt
+      : null,
     reopenedAt: row.reopened_at,
     reopenReason: row.reopen_reason,
     computedAt: row.computed_at,
@@ -357,15 +360,18 @@ async function stageFinalizedSnapshot(
 async function commitFinalizedSnapshotMoney(
   report: Record<string, any>,
   orgId: string,
-): Promise<void> {
+): Promise<{ ledgerEventIds: string[] }> {
   await reverseEnterpriseFuelSyncForSnapshot(report);
   await settleEnterpriseFuelFromSnapshot(report, orgId);
-  await postFuelFinalizedEventsFromReport({
+  const posted = await postFuelFinalizedEventsFromReport({
     ...report,
     orgId,
     org_id: orgId,
     moneyCommitted: true,
   });
+  const ledgerEventIds = (posted.results || [])
+    .map((row) => String(row.ledgerEntryId || row.eventId || ""))
+    .filter(Boolean);
   const weekKey = ymd(report.weekStart);
   const driverId = String(report.driverId || "");
   if (weekKey && driverId) {
@@ -378,6 +384,7 @@ async function commitFinalizedSnapshotMoney(
       moneyCommittedAt: new Date().toISOString(),
     });
   }
+  return { ledgerEventIds };
 }
 
 /** @deprecated name — stages only; money commits on lock. */
@@ -431,9 +438,15 @@ async function sealAndFinishFuelWeek(args: {
         amountsByDriver,
       });
       fuelSealPublished = sealed.published;
+      const closeReceipt = {
+        statementIds: sealed.statementIds || [],
+        ledgerEventIds: Array.isArray(cursor.ledgerEventIds)
+          ? (cursor.ledgerEventIds as string[])
+          : [],
+      };
       await sb
         .from("fuel_reconciliation_period")
-        .update({ fuel_seal_error: null, updated_at: now })
+        .update({ fuel_seal_error: null, close_receipt: closeReceipt, updated_at: now })
         .eq("id", periodId)
         .eq("org_id", orgId);
     } catch (sealErr: any) {
@@ -770,7 +783,11 @@ async function processJobRow(job: Record<string, unknown>) {
       const did = String(snap?.driverId || "");
       if (did && moneyCommittedDriverIds.includes(did)) continue;
       try {
-        await commitFinalizedSnapshotMoney(snap, orgId);
+        const committed = await commitFinalizedSnapshotMoney(snap, orgId);
+        const priorLedgerIds = Array.isArray(cursor.ledgerEventIds)
+          ? (cursor.ledgerEventIds as string[])
+          : [];
+        cursor.ledgerEventIds = [...priorLedgerIds, ...committed.ledgerEventIds];
         if (did) moneyCommittedDriverIds.push(did);
         cursor.moneyCommittedDriverIds = moneyCommittedDriverIds;
         cursor.step = "money";
@@ -856,6 +873,23 @@ async function processJobRow(job: Record<string, unknown>) {
       })
       .eq("id", periodId)
       .eq("org_id", orgId);
+
+    const cycleVehicleIds = [
+      ...new Set(
+        snapshots.flatMap((snap: any) => {
+          const ids = Array.isArray(snap?.vehicleIds) ? snap.vehicleIds : [snap?.vehicleId];
+          return ids.map((id: unknown) => String(id || "")).filter(Boolean);
+        }),
+      ),
+    ];
+    const { closeOpenCyclesForWeek } = await import("./fuel_cycle_stamp.ts");
+    for (const vehicleId of cycleVehicleIds) {
+      try {
+        await closeOpenCyclesForWeek(vehicleId, ymd(period.week_end) || ymd(period.week_start));
+      } catch (cycleErr) {
+        console.warn("[fuel_period] cycle close failed", vehicleId, cycleErr);
+      }
+    }
 
     cursor.step = "seal";
     await sb
@@ -1421,26 +1455,38 @@ export function registerFuelPeriodRoutes(app: Hono) {
         return c.json({ error: "version_conflict", currentVersion: period.version }, 409);
       }
       const body = await c.req.json().catch(() => ({}));
-      let snapshots = Array.isArray(body.snapshots) ? body.snapshots : [];
       const requestedVersion = Number(body.snapshotVersion);
-      if (Number.isFinite(requestedVersion) && requestedVersion > 0) {
-        const loaded = await loadFuelWeekSnapshotVersion({
-          orgId,
-          periodId,
-          version: requestedVersion,
-        });
-        if (!loaded.ok) return c.json(loaded.body, loaded.status as 409);
-        const liveHash = await hashFuelWeekInputs(
-          orgId,
-          ymd(period.week_start),
-          ymd(period.week_end) || ymd(period.week_start),
-        );
-        if (loaded.row.inputs_hash !== liveHash) {
-          return c.json({ error: "inputs_changed" }, 409);
-        }
-        const reports = (loaded.row.money as { reports?: unknown[] } | null)?.reports;
-        if (Array.isArray(reports) && reports.length) snapshots = reports;
+      if (!Number.isFinite(requestedVersion) || requestedVersion <= 0) {
+        return c.json({
+          error: "snapshot_required",
+          message: "We couldn't prepare this week's numbers. Nothing was locked.",
+        }, 409);
       }
+      const loaded = await loadFuelWeekSnapshotVersion({
+        orgId,
+        periodId,
+        version: requestedVersion,
+      });
+      if (!loaded.ok) return c.json(loaded.body, loaded.status as 409);
+      const liveHash = await hashFuelWeekInputs(
+        orgId,
+        ymd(period.week_start),
+        ymd(period.week_end) || ymd(period.week_start),
+      );
+      if (loaded.row.inputs_hash !== liveHash) {
+        return c.json({
+          error: "inputs_changed",
+          message: "This week changed. Prepare it again before locking.",
+        }, 409);
+      }
+      const reports = (loaded.row.money as { reports?: unknown[] } | null)?.reports;
+      if (!Array.isArray(reports) || reports.length === 0) {
+        return c.json({
+          error: "snapshot_required",
+          message: "We couldn't prepare this week's numbers. Nothing was locked.",
+        }, 409);
+      }
+      const snapshots = reports;
 
       const closableInput = await buildFuelWeekClosableInputForPeriod(orgId, period, snapshots);
       const closableBlockers = evaluateFuelWeekClosable(closableInput);
@@ -1457,196 +1503,6 @@ export function registerFuelPeriodRoutes(app: Hono) {
         );
       }
 
-      // Shadow compare runs in the close worker, not in this request.
-      const engineMode = String(Deno.env.get("FUEL_SERVER_ENGINE") || "off").toLowerCase();
-      const runInlineEngine = false;
-      if (runInlineEngine && (engineMode === "shadow" || engineMode === "enforce")) {
-        const { computeFuelWeek, diffWeekCalc } = await import(
-          "../../../packages/fuel-core/src/computeFuelWeek.ts"
-        );
-        const {
-          materialCategoryCostDeltas,
-          resolveEngineCategoryCosts,
-          loadServerTaggedFuelEntriesForWeek,
-          loadServerWindowMoneyEntriesForWeek,
-        } = await import("./fuel_week_category_loader.ts");
-        const { deriveWindowMoneyFromEntries } = await import(
-          "../../../packages/fuel-core/src/deriveWindowMoneyFromEntries.ts"
-        );
-        const { upsertFinanceReconDrifts } = await import("./finance_recon_drift.ts");
-        type EngineAuthoritySource =
-          | "server_entries"
-          | "trip_agg"
-          | "tagged_snap_entries"
-          | "snap_category_costs";
-        const mismatches: Array<{
-          driverId: string;
-          authoritySource: EngineAuthoritySource;
-          deltas: { field: string; delta: number }[];
-        }> = [];
-        // N-19: soak must prove which ladder tier produced each comparison.
-        const authoritySourceByDriver: Record<string, EngineAuthoritySource> = {};
-        const weekKey = ymd(period.week_start);
-        const weekEnd = ymd(period.week_end) || weekKey;
-        const serverTaggedEntries = await loadServerTaggedFuelEntriesForWeek(
-          orgId,
-          weekKey,
-          weekEnd,
-        );
-        const windowMoneyEntries = await loadServerWindowMoneyEntriesForWeek(
-          orgId,
-          weekKey,
-          weekEnd,
-        );
-        for (const snap of snapshots) {
-          const snapObj = (snap && typeof snap === "object" ? snap : {}) as Record<string, unknown>;
-          const { authority: cats, snapCats, authoritySource } = resolveEngineCategoryCosts(
-            snapObj,
-            serverTaggedEntries,
-          );
-          const driverId = String(snapObj.driverId || "");
-          if (driverId) authoritySourceByDriver[driverId] = authoritySource;
-          const hasCats =
-            cats.rideShareCost + cats.companyUsageCost + cats.deadheadCost + cats.personalUsageCost >
-              0.009 ||
-            snapCats != null;
-          if (!hasCats) continue;
-          const meta = (snapObj.metadata && typeof snapObj.metadata === "object"
-            ? snapObj.metadata
-            : {}) as Record<string, unknown>;
-          // R-3: derive JMD/L from entries — ignore client stamp.
-          const driverWindowEntries = windowMoneyEntries.filter(
-            (e) => !driverId || String(e.driverId || "") === driverId,
-          );
-          const derivedWindow = deriveWindowMoneyFromEntries(driverWindowEntries);
-          const clientTiming = Number(meta.windowTimingCost) || 0;
-          const clientUnattr = Number(meta.unattributedFillCost) || 0;
-          const clientCalc = {
-            totalSpend: Number(snapObj.totalGasCardCost) || 0,
-            companyShare: Number(snapObj.companyShare) || 0,
-            driverShare: Number(snapObj.driverShare) || 0,
-            miscellaneousCost: Number(snapObj.miscellaneousCost) || 0,
-            windowTimingCost: clientTiming,
-            unattributedFillCost: clientUnattr,
-          };
-          const paEarned =
-            Number(snapObj.personalAllowanceEarnedCost) ||
-            Number(meta.personalAllowanceEarnedCost) ||
-            0;
-          const recomputed = computeFuelWeek({
-            totalSpend:
-              Number(snapObj.totalGasCardCost) ||
-              Number(snapObj.totalSpend) ||
-              0,
-            rideShareCost: Number(cats.rideShareCost) || 0,
-            companyUsageCost: Number(cats.companyUsageCost) || 0,
-            deadheadCost: Number(cats.deadheadCost) || 0,
-            personalUsageCost: Number(cats.personalUsageCost) || 0,
-            windowTimingCost: derivedWindow.windowTimingCost,
-            unattributedFillCost: derivedWindow.unattributedFillCost,
-            rule:
-              snapObj.fuelRule ||
-              meta.fuelRule ||
-              null,
-            driverId: String(snapObj.driverId || ""),
-            // N-17: same PA absorb as client freeze.
-            personalAllowanceEarnedCost: paEarned,
-          });
-          const deltas = [
-            ...diffWeekCalc(clientCalc, recomputed),
-            ...materialCategoryCostDeltas(snapCats, cats),
-          ];
-          if (deltas.length) {
-            mismatches.push({ driverId, authoritySource, deltas });
-            const engineDrifts = deltas
-              .filter((d) => d.field === "driverShare" || d.field === "companyShare")
-              .map((d) => {
-                const statementMinor = Math.round(
-                  (Number(clientCalc[d.field as keyof typeof clientCalc]) || 0) * 100,
-                );
-                const engineMinor = Math.round(
-                  (Number(recomputed[d.field as keyof typeof recomputed]) || 0) * 100,
-                );
-                return {
-                  kind: "fuel" as const,
-                  field: d.field,
-                  statementMinor,
-                  engineMinor,
-                  deltaMinor: statementMinor - engineMinor,
-                };
-              });
-            if (driverId && engineDrifts.length) {
-              try {
-                await upsertFinanceReconDrifts({
-                  organizationId: orgId,
-                  driverId,
-                  weekKey,
-                  source: "close",
-                  drifts: engineDrifts,
-                });
-              } catch (driftErr) {
-                console.warn("[fuel_period] fuel_engine_diff drift persist failed", driftErr);
-              }
-            }
-          }
-        }
-        // Always audit in shadow/enforce so clean weeks still prove authoritySource (N-19).
-        const stopToStopSummary = snapshots.map((snap: unknown) => {
-          const snapObj = (snap && typeof snap === "object" ? snap : {}) as Record<string, unknown>;
-          const meta = (snapObj.metadata && typeof snapObj.metadata === "object"
-            ? snapObj.metadata
-            : {}) as Record<string, unknown>;
-          const buckets = Array.isArray(snapObj.odometerBuckets)
-            ? snapObj.odometerBuckets
-            : [];
-          return {
-            driverId: String(snapObj.driverId || ""),
-            bucketCount: buckets.length,
-            engineVersion: meta.stopToStopEngineVersion || null,
-            frozenAt: meta.stopToStopFrozenAt || null,
-          };
-        });
-        const engineDiffPayload = {
-          mode: engineMode,
-          mismatches,
-          authoritySourceByDriver,
-          reviewedHash: body.reviewedHash || null,
-          stopToStop: stopToStopSummary,
-        };
-        await insertAudit(
-          orgId,
-          periodId,
-          "fuel_engine_diff",
-          engineDiffPayload,
-          actorId(c),
-        );
-        if (mismatches.length) {
-          console.warn("[fuel_period] FUEL_SERVER_ENGINE diff", engineMode, mismatches);
-          if (engineMode === "enforce") {
-            const force =
-              c.req.header("X-Fuel-Force-Client-Money") === "1" &&
-              String(body.forceReason || "").trim().length >= 8;
-            if (!force) {
-              return c.json(
-                { error: "SNAPSHOT_MISMATCH", code: "SNAPSHOT_MISMATCH", mismatches },
-                422,
-              );
-            }
-            await insertAudit(
-              orgId,
-              periodId,
-              "fuel_force_client_money",
-              {
-                forceReason: String(body.forceReason || "").trim(),
-                mismatches,
-                authoritySourceByDriver,
-                mode: engineMode,
-              },
-              actorId(c),
-            );
-          }
-        }
-      }
       const idempotencyKey =
         c.req.header("Idempotency-Key") ||
         `finalize:${periodId}:v${Number(period.version) || 1}`;

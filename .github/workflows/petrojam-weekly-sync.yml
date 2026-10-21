@@ -2,8 +2,8 @@ name: Petrojam weekly sync
 
 on:
   schedule:
-    # Mondays 14:00 UTC — Petrojam typically publishes weekly
-    - cron: '0 14 * * 1'
+    # Thursdays 17:00 UTC (12:00 PM Jamaica) — after Petrojam's weekly price post
+    - cron: '0 17 * * 4'
   workflow_dispatch:
 
 jobs:

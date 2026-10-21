@@ -37,6 +37,9 @@ export type EnsureReconImportBatchInput = {
   sourceId: ReconBatchSourceId;
   coverageStart: string;
   coverageEnd: string;
+  /** First/last transaction date. Defaults to the declared coverage when omitted. */
+  dataStart?: string | null;
+  dataEnd?: string | null;
   status?: "completed" | "committed";
   rowsCommitted?: number | null;
   fileName?: string | null;
@@ -54,7 +57,9 @@ export async function ensureReconImportBatch(
   const orgId = String(input.orgId || "").trim();
   const coverageStart = ymd(input.coverageStart);
   const coverageEnd = ymd(input.coverageEnd);
-  if (!batchId || !orgId || !coverageStart || !coverageEnd) {
+  const dataStart = ymd(input.dataStart) ?? coverageStart;
+  const dataEnd = ymd(input.dataEnd) ?? coverageEnd;
+  if (!batchId || !orgId || !coverageStart || !coverageEnd || !dataStart || !dataEnd) {
     return { ok: false, error: "batchId, orgId, coverageStart, coverageEnd required" };
   }
 
@@ -96,8 +101,8 @@ export async function ensureReconImportBatch(
     source_id: input.sourceId,
     coverage_start: coverageStart,
     coverage_end: coverageEnd,
-    data_start: coverageStart,
-    data_end: coverageEnd,
+    data_start: dataStart,
+    data_end: dataEnd,
     semantic_key: semanticKey,
     rows_committed: input.rowsCommitted ?? null,
     updated_at: now,
@@ -105,6 +110,8 @@ export async function ensureReconImportBatch(
       sourceId: input.sourceId,
       coverageStart,
       coverageEnd,
+      dataStart,
+      dataEnd,
       reconBridge: true,
     },
   };

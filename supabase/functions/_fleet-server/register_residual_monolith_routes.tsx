@@ -2262,6 +2262,8 @@ export function registerResidualMonolithRoutes(app: Hono) {
 
       const isDriverScoped = idsToFilter.size > 0;
       const isSettlementDesk = c.req.query("desk") === "settlements";
+      // Fuel Review Queue only. Other screens keep the full row.
+      const isFuelQueue = c.req.query("fuelQueue") === "1" && !isSettlementDesk;
 
       // Unscoped list reads must be dated — all-time dumps are the egress leak.
       // Settlement desk always sends the Week from/to range so Done/Awaiting are not
@@ -2275,22 +2277,28 @@ export function registerResidualMonolithRoutes(app: Hono) {
       const TX_UNSCOPED_MAX = 500;
       const TX_DRIVER_MAX = 5000;
       const TX_SETTLEMENT_MAX = 5000;
+      const TX_FUEL_QUEUE_MAX = 1500;
       const parsedLimit = limitParam ? parseInt(limitParam, 10) : NaN;
       const requested = Number.isFinite(parsedLimit) && parsedLimit > 0
         ? parsedLimit
         : (isDriverScoped || isSettlementDesk ? 5000 : 100);
-      const cap = isSettlementDesk ? TX_SETTLEMENT_MAX : (isDriverScoped ? TX_DRIVER_MAX : TX_UNSCOPED_MAX);
+      const cap = isFuelQueue
+        ? TX_FUEL_QUEUE_MAX
+        : isSettlementDesk ? TX_SETTLEMENT_MAX : (isDriverScoped ? TX_DRIVER_MAX : TX_UNSCOPED_MAX);
       const limit = Math.min(requested, cap);
 
       const SETTLEMENT_KV_OR =
         "value->>type.eq.Payment_Received,value->>type.eq.Payout,value->>type.eq.Cash_Write_Off,value->>category.eq.Cash Collection,value->>category.eq.Driver Payouts,value->>category.eq.Cash Write Off";
 
-      const { shouldReadTable, queryFleet } = await import("./repos/baseRepo.ts");
+      const { shouldReadTable, queryFleet, FUEL_QUEUE_TX_COLUMNS, FUEL_QUEUE_TX_OR, isFuelQueueTransactionRow } = await import("./repos/baseRepo.ts");
       if (shouldReadTable("transactions")) {
         const orgId = getOrgId(c);
         const filters: import("./repos/baseRepo.ts").FleetQueryFilter[] = [];
         if (isDriverScoped) {
           filters.push({ op: "in", col: "driver_id", value: Array.from(idsToFilter) });
+        }
+        if (isFuelQueue) {
+          filters.push({ op: "or", value: FUEL_QUEUE_TX_OR });
         }
         if (isSettlementDesk) {
           filters.push({
@@ -2307,6 +2315,7 @@ export function registerResidualMonolithRoutes(app: Hono) {
           dateFrom: startDate || undefined,
           dateTo: endDate || undefined,
           filters,
+          columns: isFuelQueue ? FUEL_QUEUE_TX_COLUMNS : undefined,
           order: { col: "date", ascending: false },
           limit: isSettlementDesk ? Math.min(limit * 3, 5000) : limit,
           offset: isSettlementDesk ? 0 : offset,
@@ -2346,6 +2355,11 @@ export function registerResidualMonolithRoutes(app: Hono) {
       if (isSettlementDesk) {
           query = query.or(SETTLEMENT_KV_OR);
       }
+      if (isFuelQueue) {
+          query = query.or(
+            'value->>category.eq.Fuel,value->>category.eq.Fuel Reimbursement,value->>category.eq.Fuel Reimbursement Credit,value->>type.eq.Fuel_Manual_Entry',
+          );
+      }
       // S1-10: KV path — filter by posting date in SQL (indexed), refine by workPeriodStart in JS.
       // Nested `value->metadata->>workPeriodStart` filters are fragile on PostgREST and dropped rows.
       if (startDate) query = query.gte("value->>date", startDate);
@@ -2366,6 +2380,11 @@ export function registerResidualMonolithRoutes(app: Hono) {
           }
           return v;
       });
+      if (isFuelQueue) {
+          transactions = transactions.filter((t: { category?: unknown; type?: unknown }) =>
+            isFuelQueueTransactionRow(t),
+          );
+      }
 
       if (isSettlementDesk && (startDate || endDate)) {
         // Prefer settlement-week tag when present; keep date-axis rows as fallback.

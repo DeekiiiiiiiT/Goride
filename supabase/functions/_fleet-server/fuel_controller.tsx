@@ -116,7 +116,8 @@ const app = new Hono();
 /** fleet-fuel (and any standalone mount) — register before auth gate. */
 app.get("/health", (c) => c.json({ service: "fleet-fuel", status: "ok" }));
 
-// Auth gate: every route in this controller requires a valid user JWT (Wave 1B).
+// User routes need a logged-in session. Sweep and auto-close skip this gate
+// (see requireAuth) and prove they are the cron job or the service key.
 app.use("*", requireAuth({ strict: true }));
 
 /** Platform staff may pass ?organizationId= / body.organizationId; fleet is always JWT-stamped. */

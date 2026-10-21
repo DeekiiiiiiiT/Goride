@@ -1240,8 +1240,10 @@ function ImportsPageInner({ onNavigate }: ImportsPageProps) {
               await registerUberBundleWithRecon({
                   batchId,
                   organizationId: orgId,
-                  dataPeriodStart: coverageStart,
-                  dataPeriodEnd: coverageEnd,
+                  coverageStart,
+                  coverageEnd,
+                  dataPeriodStart: tripBounds.min || coverageStart,
+                  dataPeriodEnd: tripBounds.max || coverageEnd,
                   rowsCommitted: tripsForSave.length,
               });
           }

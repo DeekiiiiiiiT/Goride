@@ -255,6 +255,14 @@ jobs:
           supabase/functions/_fleet-server/recon_close_live_volume.test.ts
           supabase/functions/_fleet-server/recon_toll_commit_money.test.ts
 
+      - name: Deno test settlement commands
+        run: >
+          deno test --allow-read --allow-env
+          supabase/functions/_fleet-server/settlement_commands.test.ts
+          supabase/functions/_fleet-server/week_statements_restatement_guard.test.ts
+          supabase/functions/_fleet-server/recon_statement_coverage.test.ts
+          supabase/functions/_shared/edgeKernel.test.ts
+
       - name: Typecheck fleet Rush spine
         env:
           VITE_SUPABASE_URL: https://ci-placeholder.supabase.co

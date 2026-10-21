@@ -18,12 +18,6 @@ import {
   type BuiltSnapshot,
 } from "./fuel_period_build_snapshots.ts";
 
-// N-9: do not statically import fuel_cycle_stamp (pulls fuel_logic KV builder debt into CI deno check).
-async function closeOpenCyclesForWeekSafe(vehicleId: string, weekEnd: string): Promise<void> {
-  const { closeOpenCyclesForWeek } = await import("./fuel_cycle_stamp.ts");
-  await closeOpenCyclesForWeek(vehicleId, weekEnd);
-}
-
 const EPS = 0.009;
 
 function ymd(v: unknown): string {
@@ -253,19 +247,6 @@ export async function buildFuelPeriodSnapshotsFull(input: {
         totalSpend: 0,
         error: "missing_category_costs",
       };
-    }
-
-    const vehicleIds = [
-      ...new Set(
-        snapshots.flatMap((s) => (Array.isArray(s.vehicleIds) ? s.vehicleIds : [s.vehicleId])),
-      ),
-    ].filter(Boolean) as string[];
-    for (const vid of vehicleIds) {
-      try {
-        await closeOpenCyclesForWeekSafe(String(vid), weekEnd);
-      } catch {
-        /* non-fatal — settle still proceeds */
-      }
     }
 
     const totalSpend = snapshots.reduce((s, snap) => s + (Number(snap.totalGasCardCost) || 0), 0);

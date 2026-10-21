@@ -4,6 +4,7 @@
  */
 import { getServiceClient } from "./service_client.ts";
 import { publishWeekStatement, getLatestWeekStatement, RestatementDraftBlockedError } from "./week_statements.ts";
+import { shouldSkipUnchangedStatement } from "./week_statements_guard.ts";
 import { periodEndForAnchor } from "../../../packages/finance-core/src/periodKey.ts";
 import {
   computeWeekCommissionShare,
@@ -145,12 +146,17 @@ export async function sealEarningsWeek(opts: {
     };
 
     const latest = await getLatestWeekStatement(organizationId, driverId, weekKey, "earnings");
-    if (!opts.force) {
-      const unchanged =
-        latest &&
-        latest.status === status &&
-        JSON.stringify(latest.amountsMinor) === JSON.stringify(amountsMinor);
-      if (unchanged) continue;
+    // Force still signs a draft (status changes). It must not insert another
+    // identical unsigned row when the engines could not run.
+    if (
+      shouldSkipUnchangedStatement({
+        latestStatus: latest?.status,
+        nextStatus: status,
+        amountsMatch:
+          !!latest && JSON.stringify(latest.amountsMinor) === JSON.stringify(amountsMinor),
+      })
+    ) {
+      continue;
     }
 
     // Never invent draft-over-closed restatement spam from Close sync / seal.

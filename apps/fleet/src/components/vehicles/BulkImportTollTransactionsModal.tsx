@@ -22,6 +22,10 @@ import Papa from 'papaparse';
 import { FleetBusyProvider, useFleetBusy } from '../shared/FleetBusyLock';
 import { useLockedDialog } from '../shared/useLockedDialog';
 import { parseTollDate } from '../../utils/tollDate';
+import {
+  StatementCoverageFields,
+  statementCoverageError,
+} from '../fleet-financials/recon/StatementCoverageFields';
 
 /** Wall-clock YYYY-MM-DD + HH:MM:SS from a parsed CSV Date (no browser TZ bake). */
 function wallClockStorageFromDate(d: Date): { date: string; time: string } {
@@ -256,10 +260,27 @@ function BulkImportTollTransactionsModalInner({
   const [fingerprintDupCount, setFingerprintDupCount] = useState(0);
   const [stagedImportId, setStagedImportId] = useState<string | null>(null);
   const [stagedPreview, setStagedPreview] = useState<ReconImportPreview | null>(null);
+  const [coverageStart, setCoverageStart] = useState('');
+  const [coverageEnd, setCoverageEnd] = useState('');
   const [csvHasPaymentMethod, setCsvHasPaymentMethod] = useState(true);
   const [paymentMethodOverride, setPaymentMethodOverride] = useState<'Tag Balance' | 'Cash'>('Tag Balance');
   
   const fileInputRef = React.useRef<HTMLInputElement>(null);
+
+  React.useEffect(() => {
+    if (!stagedPreview?.coverage_start || !stagedPreview?.coverage_end) return;
+    setCoverageStart(stagedPreview.coverage_start);
+    setCoverageEnd(stagedPreview.coverage_end);
+  }, [stagedPreview]);
+
+  const coverageError = stagedPreview
+    ? statementCoverageError({
+        coverageStart,
+        coverageEnd,
+        savedStart: stagedPreview.saved_start || stagedPreview.data_start,
+        savedEnd: stagedPreview.saved_end || stagedPreview.data_end,
+      })
+    : null;
 
   // Load vehicles and tags
   React.useEffect(() => {
@@ -1102,6 +1123,10 @@ function BulkImportTollTransactionsModalInner({
         toast.error("No transactions to import");
         return;
     }
+    if (stagedImportId && coverageError) {
+        toast.error(coverageError);
+        return;
+    }
 
     // 1. Start Loading State
     setIsSubmitting(true);
@@ -1123,6 +1148,8 @@ function BulkImportTollTransactionsModalInner({
             const commitResult = await commitReconImport(stagedImportId, {
               idempotencyKey: stagedImportId,
               overrideFingerprintDupRowIds,
+              coverageStart,
+              coverageEnd,
             });
             if (commitResult.partial || !commitResult.success) {
               toast.error(
@@ -1300,6 +1327,18 @@ function BulkImportTollTransactionsModalInner({
                              </span>
                          </div>
                      )}
+                     {stagedPreview ? (
+                         <StatementCoverageFields
+                             coverageStart={coverageStart}
+                             coverageEnd={coverageEnd}
+                             dataStart={stagedPreview.data_start}
+                             dataEnd={stagedPreview.data_end}
+                             savedStart={stagedPreview.saved_start || stagedPreview.data_start}
+                             savedEnd={stagedPreview.saved_end || stagedPreview.data_end}
+                             onCoverageStart={setCoverageStart}
+                             onCoverageEnd={setCoverageEnd}
+                         />
+                     ) : null}
                      {(stagedPreview?.spill?.length ?? 0) > 0 && (
                          <div className="flex items-center gap-2 px-3 py-1.5 bg-violet-50 border border-violet-200 rounded-md">
                              <AlertCircle className="h-3.5 w-3.5 text-violet-700 shrink-0" />
@@ -1508,7 +1547,7 @@ function BulkImportTollTransactionsModalInner({
           {step === 'preview' && (
               <>
                 <Button variant="outline" onClick={() => setStep('input')} disabled={isSubmitting}>Back</Button>
-                <Button onClick={handleImport} disabled={isSubmitting || parsedTx.filter(t => t.isValid).length === 0}>
+                <Button onClick={handleImport} disabled={isSubmitting || parsedTx.filter(t => t.isValid).length === 0 || (!!stagedImportId && !!coverageError)}>
                     {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
                     Import {parsedTx.filter(t => t.isValid).length} Transactions
                 </Button>

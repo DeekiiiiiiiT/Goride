@@ -1,11 +1,12 @@
 name: Fuel close job sweeper
 
-# Picks up fuel close jobs the button request queued, including a job whose
-# worker died after the money was posted. Does not post a second time.
+# Manual backup for the database sweeper. Picks up fuel close jobs the button
+# queued, including a job whose worker died after the money was posted.
+# Does not post a second time.
 
+# The 15-minute rescue runs in the database (pg_cron). GitHub schedules were
+# dropped, so this workflow is a manual backup only.
 on:
-  schedule:
-    - cron: '*/15 * * * *'
   workflow_dispatch:
 
 jobs:

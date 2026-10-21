@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { DateRange } from 'react-day-picker';
 import { ShieldCheck } from 'lucide-react';
 import { FuelPeriodStepper } from './FuelPeriodStepper';
@@ -19,7 +19,6 @@ import { type FuelWizardDriver } from './buildFuelWizardRows';
 import { useFuelWizardDerived } from './useFuelWizardDerived';
 import { type FuelExceptionBlocker } from '../../../utils/fuelFinalizeGating';
 import {
-  fuelWeekClosableBlockerMessage,
   reportsHaveOdometerChainUnusable,
 } from '../../../utils/fuelWeekClosableGate';
 import { fuelWeekStatusLabel } from '../../../utils/fuelReconGlossary';
@@ -225,6 +224,10 @@ function FuelPeriodWizardInner({
   const [serverPeriodId, setServerPeriodId] = useState<string | null>(null);
   const [serverPeriodVersion, setServerPeriodVersion] = useState<number | null>(null);
   const [serverBlockers, setServerBlockers] = useState<Array<{ code: string; message: string }> | null>(null);
+  const [prepareState, setPrepareState] = useState<'idle' | 'preparing' | 'ready' | 'failed'>('idle');
+  const [prepareError, setPrepareError] = useState<string | null>(null);
+  const [serverReports, setServerReports] = useState<any[] | null>(null);
+  const [closableTick, setClosableTick] = useState(0);
   const [secondApproverThreshold, setSecondApproverThreshold] = useState(
     FUEL_SECOND_APPROVER_THRESHOLD,
   );
@@ -273,53 +276,72 @@ function FuelPeriodWizardInner({
     seedPersonalAllowance: false,
     dispositions,
   });
-  const liveReports = weekReports.reports;
-  const clientSpendForSnapshot = liveReports.reduce(
-    (sum, row) => sum + (Number(row.totalGasCardCost) || 0),
-    0,
-  );
-  const clientDriverForSnapshot = liveReports.reduce(
-    (sum, row) => sum + (Number(row.driverShare) || 0),
-    0,
-  );
-  useEffect(() => {
+  const clientReports = weekReports.reports;
+  const liveReports =
+    prepareState === 'ready' && serverReports && serverReports.length > 0
+      ? serverReports
+      : clientReports;
+  const refreshServerClosable = useCallback(async () => {
+    if (!serverPeriodId || periodLocked) return;
+    const closable = await api.getFuelPeriodClosable(serverPeriodId).catch(() => null);
+    if (closable) setServerBlockers(Array.isArray(closable.blockers) ? closable.blockers : []);
+  }, [serverPeriodId, periodLocked]);
+
+  const prepareWeek = useCallback(async () => {
     if (!serverPeriodId || periodLocked) {
-      rememberFuelSnapshotVersion(null);
+      rememberFuelSnapshotVersion(serverPeriodId, null);
+      setPrepareState('idle');
+      setServerReports(null);
       return;
     }
-    let cancelled = false;
-    void (async () => {
-      const [closable, computed] = await Promise.all([
-        api.getFuelPeriodClosable(serverPeriodId).catch(() => null),
-        api.computeFuelWeek(serverPeriodId).catch(() => null),
-      ]);
-      if (cancelled) return;
-      if (closable) setServerBlockers(Array.isArray(closable.blockers) ? closable.blockers : []);
+    setPrepareState('preparing');
+    setPrepareError(null);
+    try {
+      const computed = await api.computeFuelWeek(serverPeriodId);
       const reports = Array.isArray(computed?.reports) ? computed.reports : [];
-      const serverSpend = reports.reduce(
-        (sum, row) => sum + (Number(row?.totalGasCardCost) || Number(row?.totalSpend) || 0),
-        0,
-      );
-      const serverDriver = reports.reduce(
-        (sum, row) => sum + (Number(row?.driverShare) || 0),
-        0,
-      );
-      const hasDriver = reports.some((row) => row && row.driverShare != null);
       const hasCategories = reports.length > 0 && reports.every((row) => {
         const cats = row?.categoryCosts;
         return cats && typeof cats === 'object' && 'rideShareCost' in cats;
       });
-      const spendMatches = Math.abs(serverSpend - clientSpendForSnapshot) <= 0.02 && serverSpend > 0;
-      const driverMatches = hasDriver && Math.abs(serverDriver - clientDriverForSnapshot) <= 0.02;
       const version = Number(computed?.version) || 0;
-      rememberFuelSnapshotVersion(
-        version && spendMatches && driverMatches && hasCategories ? version : null,
-      );
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [serverPeriodId, periodLocked, clientSpendForSnapshot, clientDriverForSnapshot]);
+      if (!version || (reports.length > 0 && !hasCategories)) {
+        rememberFuelSnapshotVersion(serverPeriodId, null);
+        setServerReports(null);
+        setPrepareState('failed');
+        setPrepareError("We couldn't prepare this week's numbers. Nothing was locked.");
+        return;
+      }
+      rememberFuelSnapshotVersion(serverPeriodId, version);
+      setServerReports(reports);
+      setPrepareState('ready');
+    } catch {
+      rememberFuelSnapshotVersion(serverPeriodId, null);
+      setServerReports(null);
+      setPrepareState('failed');
+      setPrepareError("We couldn't prepare this week's numbers. Nothing was locked.");
+    }
+  }, [serverPeriodId, periodLocked]);
+
+  useEffect(() => {
+    void prepareWeek();
+  }, [prepareWeek]);
+
+  const dispositionStamp = useMemo(() => {
+    if (!dispositions) return '';
+    const parts: string[] = [];
+    dispositions.forEach((inner, entryId) => {
+      inner.forEach((row, code) => {
+        const action = String((row as { action?: string })?.action || '');
+        parts.push(`${entryId}:${code}:${action}`);
+      });
+    });
+    parts.sort();
+    return parts.join('|');
+  }, [dispositions]);
+
+  useEffect(() => {
+    void refreshServerClosable();
+  }, [refreshServerClosable, closableTick, activeStepId, dispositionStamp]);
   const weekTrips = weekReports.trips.length ? weekReports.trips : trips;
   const weekDegraded: FuelWeekDegradedInputs | undefined = weekReports.degraded;
   const hasDegradedInputs = fuelWeekHasDegradedInputs(weekDegraded);
@@ -518,12 +540,27 @@ function FuelPeriodWizardInner({
             to: period.startDate,
           });
           const row = rows.find((r) => String(r.weekStart).split('T')[0] === period.startDate);
-          if (cancelled || !row?.id) return;
-          hit = row;
-          const loaded = await loadWizardStepNotes(row.id);
           if (cancelled) return;
-          notes = loaded.notes;
-          actors = loaded.actors;
+          if (row?.id) {
+            hit = row;
+            const loaded = await loadWizardStepNotes(row.id);
+            if (cancelled) return;
+            notes = loaded.notes;
+            actors = loaded.actors;
+          }
+        }
+
+        if (!hit?.id && !periodLocked && !cancelled) {
+          try {
+            const ensured = await api.ensureFuelReconciliationPeriod({
+              weekStart: period.startDate,
+              weekEnd: period.endDate,
+            });
+            const id = String((ensured as { id?: string })?.id || '');
+            if (id) hit = { id };
+          } catch {
+            /* prepare stays idle until a period exists */
+          }
         }
 
         if (cancelled || !hit?.id) return;
@@ -682,7 +719,7 @@ function FuelPeriodWizardInner({
       setServerPeriodId,
       disposition: validated.disposition,
       note: validated.note,
-    });
+    }).then(() => setClosableTick((tick) => tick + 1));
     toast.success('Unexplained fuel marked reviewed');
   };
 
@@ -720,6 +757,7 @@ function FuelPeriodWizardInner({
       setOdometerChainReviewed(true);
       setOdometerChainNoteDraft('');
       toast.success('Thin odometer chain acknowledged');
+      setClosableTick((tick) => tick + 1);
     } catch (e: any) {
       toast.error(e?.message || 'Could not save odometer chain review');
     }
@@ -745,6 +783,7 @@ function FuelPeriodWizardInner({
       setUnattributedReviewed(true);
       setUnattributedNoteDraft('');
       toast.success('Fills without odometer accepted');
+      setClosableTick((tick) => tick + 1);
     } catch (e: any) {
       toast.error(e?.message || 'Could not save unattributed review');
     }
@@ -776,6 +815,7 @@ function FuelPeriodWizardInner({
       const nextVer = Number((res as { version?: number }).version);
       if (Number.isFinite(nextVer) && nextVer > 0) setServerPeriodVersion(nextVer);
       toast.success('Vehicle marked reviewed');
+      setClosableTick((tick) => tick + 1);
     } catch (e: any) {
       if (e?.message === 'version_conflict') {
         toast.message('Period changed — refresh and try again.');
@@ -819,43 +859,16 @@ function FuelPeriodWizardInner({
     try {
       const ok = await onAcceptFuelException(blocker.id, note);
       if (ok === false) return;
-      // Live fuelEntries + re-gate clear blockers; refresh reports in background.
       onRefresh();
       void weekReports.refresh();
+      setClosableTick((tick) => tick + 1);
     } finally {
       setExceptionBusyId(null);
     }
   };
 
   const handleFinalizeClick = async () => {
-    if (periodLocked || liveReports.length === 0) return;
-    if (hasDegradedInputs) return;
-    if (closableBlockers.length > 0) {
-      const msg = fuelWeekClosableBlockerMessage(closableBlockers[0]);
-      setGateLiveMessage(msg);
-      toast.error(msg);
-      return;
-    }
-    const gate = gateResult;
-    if (gate.hasExceptionBlockers) {
-      return;
-    }
-    // C-7: over-explained is HARD; under-explained requires leakage review first.
-    if (gate.hasOverExplainedBlockers) {
-      return;
-    }
-    if (gate.hasUnderExplainedBlockers && !leakageReviewed) {
-      return;
-    }
-    if (gate.hasBlockingWarnings && !financeWarningAcknowledged) {
-      return;
-    }
-    if (
-      needsHumanSecondApprover(strip.totalSpend, secondApproverThreshold, dualApprovalUiMode) &&
-      !secondApproverConfirmed
-    ) {
-      return;
-    }
+    if (finalizeDisabled) return;
     if (stepNoteDraft.trim()) {
       setStepNotes((prev) => [
         ...prev,
@@ -873,7 +886,7 @@ function FuelPeriodWizardInner({
   };
 
   const handleRetryWeek = () => {
-    void weekReports.refresh();
+    void prepareWeek();
   };
 
   const bucketVehicle =
@@ -1135,14 +1148,10 @@ function FuelPeriodWizardInner({
   const finalizeDisabled =
     finalizing ||
     periodLocked ||
+    prepareState !== 'ready' ||
     liveReports.length === 0 ||
-    hasDegradedInputs ||
-    closableBlockers.length > 0 ||
+    serverBlockers == null ||
     serverBlockMessages.length > 0 ||
-    !!gateResult.hasExceptionBlockers ||
-    !!gateResult.hasUnapprovedFuelTxBlockers ||
-    !!gateResult.hasOverExplainedBlockers ||
-    (!!gateResult.hasUnderExplainedBlockers && !leakageReviewed) ||
     (!!gateResult.hasBlockingWarnings && !financeWarningAcknowledged) ||
     (needsHumanSecondApprover(
       strip.totalSpend,
@@ -1154,26 +1163,11 @@ function FuelPeriodWizardInner({
   const finalizeBlockedReason = (() => {
     if (periodLocked) return 'This week is already locked.';
     if (finalizing) return 'Finalizing…';
-    if (liveReports.length === 0) return 'No fuel spend reports loaded for this week yet.';
-    if (hasDegradedInputs) {
-      return 'We couldn’t load trip distances for this week. Your numbers haven’t changed.';
-    }
+    if (prepareState === 'preparing') return 'Preparing this week.';
+    if (prepareState === 'failed') return prepareError || "We couldn't prepare this week's numbers. Nothing was locked.";
+    if (liveReports.length === 0) return 'No fuel spend for this week yet.';
+    if (serverBlockers == null) return 'Checking whether this week can be locked.';
     if (serverBlockMessages.length > 0) return serverBlockMessages[0];
-    if (closableBlockers.length > 0) {
-      return fuelWeekClosableBlockerMessage(closableBlockers[0]);
-    }
-    if (gateResult.hasExceptionBlockers) {
-      return `Resolve ${gateResult.exceptionBlockers.length} exception fill(s) above first.`;
-    }
-    if (gateResult.hasUnapprovedFuelTxBlockers) {
-      return 'Approve or reject pending fuel receipts in Review Queue first.';
-    }
-    if (gateResult.hasOverExplainedBlockers) {
-      return 'Over-explained week — fix odometer / efficiency inputs (cannot accept away).';
-    }
-    if (gateResult.hasUnderExplainedBlockers && !leakageReviewed) {
-      return 'Under-explained fuel still needs Mark reviewed on Fuel gaps.';
-    }
     if (gateResult.hasBlockingWarnings && !financeWarningAcknowledged) {
       return 'Check the review box above before Finalize.';
     }
@@ -1204,8 +1198,8 @@ function FuelPeriodWizardInner({
       ? {
           title: 'Can’t finalize yet',
           body: finalizeBlockedReason,
-          ...(hasDegradedInputs
-            ? { actionLabel: 'Retry week data' as const, onAction: handleRetryWeek }
+          ...(prepareState === 'failed'
+            ? { actionLabel: 'Try again' as const, onAction: handleRetryWeek }
             : {}),
         }
       : stepHero;
@@ -1345,6 +1339,18 @@ function FuelPeriodWizardInner({
             actionDisabled={stepHeroResolved.actionDisabled}
             focusKey={activeStepId}
           />
+
+          {prepareState === 'preparing' ? (
+            <p className="text-sm text-slate-600">Preparing this week.</p>
+          ) : null}
+          {prepareState === 'failed' ? (
+            <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">
+              <p>{prepareError}</p>
+              <button type="button" className="mt-2 font-medium underline" onClick={handleRetryWeek}>
+                Try again
+              </button>
+            </div>
+          ) : null}
 
           <div className="md:hidden">
             <FuelWeekMoneyStrip {...moneyStripProps} variant="collapsed" />
@@ -1506,12 +1512,7 @@ function FuelPeriodWizardInner({
                 dualApprovalUiMode={dualApprovalUiMode}
                 onRecordSecondApproval={() => void handleRecordSecondApproval()}
                 settlementRows={settlementRows}
-                closableBlockMessages={[
-                  ...serverBlockMessages,
-                  ...closableBlockers
-                    .map(fuelWeekClosableBlockerMessage)
-                    .filter((message) => !serverBlockMessages.includes(message)),
-                ]}
+                closableBlockMessages={serverBlockMessages}
                 stopToStopSummary={stopToStopSummary}
                 onFixStopToStop={() => openStopToStopRemediation()}
                 onOpenIntegrityStopToStop={

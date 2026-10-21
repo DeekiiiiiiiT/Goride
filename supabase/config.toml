@@ -434,3 +434,7 @@ verify_jwt = false
 # Database jobs send the fleet cron secret. This function then calls delivery with the service token.
 [functions.rush-cron]
 verify_jwt = false
+
+# Database jobs send the fleet cron secret. This function then calls the fuel sweeper.
+[functions.fleet-fuel-cron]
+verify_jwt = false

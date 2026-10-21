@@ -46,7 +46,6 @@ import { useInvalidateFuelReviewQueueCounts } from '../hooks/useFuelReviewQueueC
 import { fuelReviewQueueLookbackRange, FUEL_REVIEW_QUEUE_TX_PAGE_SIZE, FUEL_REVIEW_QUEUE_TX_MAX_PAGES } from '../utils/fuelReviewQueueLookback';
 import { fuelService } from '../services/fuelService';
 import { settlementService } from '../services/settlementService';
-import { finalizeFuelWeekReports } from '../services/fuelFinalizeService';
 import { purgeFuelExpense, saveFuelExpense } from '../services/fuelExpenseMutationService';
 import { FuelDisputeService } from '../services/fuelDisputeService';
 import { api } from '../services/api';
@@ -781,6 +780,7 @@ function FuelManagementInner({
             ? {
                 pageSize: FUEL_REVIEW_QUEUE_TX_PAGE_SIZE,
                 maxPages: FUEL_REVIEW_QUEUE_TX_MAX_PAGES,
+                fuelQueue: true,
               }
             : {}),
         }).catch((err) => {
@@ -1934,71 +1934,14 @@ function FuelManagementInner({
             }
           }
 
-          const priorReports = (await api
-            .getFinalizedReports({ weekStartFrom: weekStart, weekStartTo: weekStart })
-            .catch(() => [])) as FinalizedFuelReport[];
-
-          const weekResult = await finalizeFuelWeekReports(
-            reports,
-            {
-              vehicles,
-              drivers,
-              fuelCards: cards,
-              fuelEntries: logs,
-              scenarios,
-              trips,
-              transactions,
-              disputes,
-              periodCounts: (periodRow.counts || undefined) as Record<
-                string,
-                { actionable?: number }
-              >,
-              leakageReviewed: Boolean(
-                periodRow.leakageReviewedAt ||
-                  periodRow.leakage_reviewed_at ||
-                  periodRow.status === 'locked',
-              ),
-              odometerChainReviewed: Boolean(
-                periodRow.odometerChainReviewedAt ||
-                  periodRow.odometer_chain_reviewed_at ||
-                  periodRow.status === 'locked',
-              ),
-              unattributedReviewed: Boolean(
-                periodRow.unattributedReviewedAt ||
-                  periodRow.unattributed_reviewed_at ||
-                  periodRow.status === 'locked',
-              ),
-              totalSpend: spendEstimate,
-              unexplained: reports.reduce(
-                (s, r) => s + (Number(r.miscellaneousCost) || 0),
-                0,
-              ),
-              dispositions: flagDispositions,
-              stopToStopGapAccepts: Array.isArray(periodRow.stopToStopGapAccepts)
-                ? periodRow.stopToStopGapAccepts
-                : Array.isArray(periodRow.stop_to_stop_gap_accepts)
-                  ? periodRow.stop_to_stop_gap_accepts
-                  : [],
-            },
-            {
-              onProgress: (msg) => setMessage(msg),
-              deferSnapshotPersist: true,
-              priorReports,
-            },
-          );
-
-          if (weekResult.snapshotCount === 0) {
-            const blockedMsg = weekResult.message || 'No pending items found to finalize.';
-            if (/^Blocked/i.test(blockedMsg) || weekResult.ok === false) {
-              toast.error(blockedMsg);
-            } else {
-              toast.info(blockedMsg);
-            }
+          const snapshotVersion = currentFuelSnapshotVersion(periodRow.id);
+          if (!snapshotVersion) {
+            toast.error("We couldn't prepare this week's numbers. Nothing was locked.");
             return false;
           }
 
           setMessage('Locking period on server…');
-          const totalSpend = (weekResult.snapshots || []).reduce(
+          const totalSpend = reports.reduce(
             (s, r) => s + (Number(r.totalGasCardCost) || 0),
             0,
           );
@@ -2023,10 +1966,10 @@ function FuelManagementInner({
               periodRow.id,
               periodRow.version || 1,
             ),
-            snapshots: weekResult.snapshots || [],
+            snapshots: [],
             totalSpend,
             secondApproverThreshold: threshold,
-            snapshotVersion: currentFuelSnapshotVersion(),
+            snapshotVersion,
           };
           try {
             jobRes = await api.enqueueFuelPeriodFinalize(enqueueArgs);

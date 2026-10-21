@@ -222,24 +222,29 @@ export async function commitUberImportFromFiles(
 export async function registerUberBundleWithRecon(opts: {
   batchId: string;
   organizationId?: string | null;
+  /** Stated statement period. Falls back to the trip span. */
+  coverageStart?: string | null;
+  coverageEnd?: string | null;
   dataPeriodStart?: string | null;
   dataPeriodEnd?: string | null;
   rowsCommitted?: number;
 }): Promise<void> {
   const dataStart = opts.dataPeriodStart?.slice(0, 10);
   const dataEnd = opts.dataPeriodEnd?.slice(0, 10);
-  if (!dataStart || !dataEnd) return;
+  const coverageStart = opts.coverageStart?.slice(0, 10) || dataStart;
+  const coverageEnd = opts.coverageEnd?.slice(0, 10) || dataEnd;
+  if (!coverageStart || !coverageEnd || !dataStart || !dataEnd) return;
   const importId = crypto.randomUUID();
   try {
     await registerReconImport(importId, {
       batchId: opts.batchId,
       sourceId: 'uber_bundle',
-      coverageStart: dataStart,
-      coverageEnd: dataEnd,
+      coverageStart,
+      coverageEnd,
       dataStart,
       dataEnd,
       semanticKey: opts.organizationId
-        ? `uber:${opts.organizationId}:${dataStart}:${dataEnd}`
+        ? `uber:${opts.organizationId}:${coverageStart}:${coverageEnd}`
         : undefined,
       rowsCommitted: opts.rowsCommitted,
     });
@@ -411,8 +416,10 @@ export async function commitUberCashRefresh(
   await registerUberBundleWithRecon({
     batchId,
     organizationId: orgId,
-    dataPeriodStart: coverageStart,
-    dataPeriodEnd: coverageEnd,
+    coverageStart,
+    coverageEnd,
+    dataPeriodStart: tripBounds.min || coverageStart,
+    dataPeriodEnd: tripBounds.max || coverageEnd,
     rowsCommitted: tripsForSave.length,
   });
 

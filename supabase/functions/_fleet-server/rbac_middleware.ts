@@ -428,8 +428,14 @@ export function requireAuth(options?: RequireAuthOptions) {
       path.includes("/platform-status") ||
       path.includes("/platform-feature-flags") ||
       path.includes("/health") ||
-      path.includes("/internal/seal-fuel-week") ||
+      // Week seals are service-role calls. The kernel checks that key first;
+      // a user session is not one, and the login gate must not answer first.
+      path.includes("/internal/seal-") ||
       path.includes("/internal/activity/") ||
+      // Machine callers (GitHub schedule + service key). The route handler
+      // checks the cron secret or service role; a user session is not one.
+      path.includes("/fuel/period-jobs/sweep") ||
+      path.includes("/fuel/periods/auto-close") ||
       // Public Maps JS bootstrap (browser key only)
       path.includes("/maps-config") ||
       // Server Places proxy — Fleet address fields (key stays server-side)

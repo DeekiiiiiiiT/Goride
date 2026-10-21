@@ -89,3 +89,41 @@ Deno.test("createFleetFunction exposes /health and guards /internal without serv
   // Service-role guard must reject missing/wrong key
   assertEquals(internal.status === 401 || internal.status === 403, true);
 });
+
+Deno.test("internal seal answers before a login gate mounted on /", async () => {
+  const previous = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  Deno.env.set("SUPABASE_SERVICE_ROLE_KEY", "test-service-key");
+  try {
+    const gated = new Hono();
+    gated.use("*", async (c) =>
+      c.json({ error: "Unauthorized: Valid authentication required" }, 401),
+    );
+
+    const app = createFleetFunction({
+      slug: "fleet-toll",
+      pathStyle: "slug",
+      serve: false,
+      registerParentRoutes: (parent) => {
+        parent.post("/internal/seal-toll-week", (c) => c.json({ sealed: true }));
+        parent.route("/", gated);
+      },
+    });
+
+    const res = await app.request(
+      "http://local/fleet-toll/internal/seal-toll-week",
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: "Bearer test-service-key",
+        },
+        body: "{}",
+      },
+    );
+    assertEquals(res.status, 200);
+    assertEquals(await res.json(), { sealed: true });
+  } finally {
+    if (previous == null) Deno.env.delete("SUPABASE_SERVICE_ROLE_KEY");
+    else Deno.env.set("SUPABASE_SERVICE_ROLE_KEY", previous);
+  }
+});

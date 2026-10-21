@@ -192,7 +192,7 @@ export async function sealFuelWeek(opts: {
   asOf?: string;
   /** Optional per-driver overrides (major units) — e.g. Finalize snapshots / Consumption strip. */
   amountsByDriver?: Record<string, FuelCloseAmountOverride>;
-}): Promise<{ published: number }> {
+}): Promise<{ published: number; statementIds: string[] }> {
   const organizationId = String(opts.organizationId || "").trim();
   const weekKey = WEEK_KEY(opts.weekKey);
   if (!organizationId || !/^\d{4}-\d{2}-\d{2}$/.test(weekKey)) {
@@ -222,6 +222,7 @@ export async function sealFuelWeek(opts: {
   }
 
   let published = 0;
+  const statementIds: string[] = [];
   for (const driverId of unionFuelSealDriverIds(periodRows, opts.amountsByDriver)) {
     const p = periodByDriver.get(driverId) ?? {
       driver_id: driverId,
@@ -284,7 +285,7 @@ export async function sealFuelWeek(opts: {
 
     try {
       const asOfTag = opts.asOf ? `;as_of=${opts.asOf}` : "";
-      await publishWeekStatement({
+      const statement = await publishWeekStatement({
         kind: "fuel",
         organizationId,
         driverId,
@@ -298,6 +299,7 @@ export async function sealFuelWeek(opts: {
             ? `fuel_week_seal:${amounts.source}${asOfTag}`
             : "close_precondition_unverified",
       });
+      if (statement.id) statementIds.push(String(statement.id));
       published += 1;
     } catch (e) {
       if (e instanceof RestatementDraftBlockedError) {
@@ -308,5 +310,5 @@ export async function sealFuelWeek(opts: {
     }
   }
 
-  return { published };
+  return { published, statementIds };
 }

@@ -32,6 +32,13 @@ import {
 import type { TollIntegrityLike } from "../../../packages/finance-core/src/tollLedgerIntegrity.ts";
 import { periodKeyFor } from "../../../packages/finance-core/src/periodKey.ts";
 import {
+  asYmd,
+  coverageGapMessage,
+  defaultDeclaredCoverage,
+  parseStatementPeriodBanner,
+  ymdSpan,
+} from "../../../packages/finance-core/src/statementCoverage.ts";
+import {
   ensureReconImportBatch,
   type ReconBatchSourceId,
 } from "./recon_batch_bridge.ts";
@@ -187,7 +194,14 @@ function applySpillClassification(
   });
 }
 
-function buildPreviewFromRows(rows: ImportStagingRow[]) {
+function buildPreviewFromRows(
+  rows: ImportStagingRow[],
+  opts?: {
+    weekKey?: string | null;
+    filePeriodStart?: string | null;
+    filePeriodEnd?: string | null;
+  },
+) {
   const preview = {
     new: [] as unknown[],
     duplicate: { byRef: [] as unknown[], byFingerprint: [] as unknown[] },
@@ -196,6 +210,10 @@ function buildPreviewFromRows(rows: ImportStagingRow[]) {
     totals_minor: 0,
     coverage_start: null as string | null,
     coverage_end: null as string | null,
+    data_start: null as string | null,
+    data_end: null as string | null,
+    saved_start: null as string | null,
+    saved_end: null as string | null,
   };
   const dates: string[] = [];
   for (const r of rows) {
@@ -241,9 +259,33 @@ function buildPreviewFromRows(rows: ImportStagingRow[]) {
         break;
     }
   }
-  dates.sort();
-  preview.coverage_start = dates[0] ?? null;
-  preview.coverage_end = dates[dates.length - 1] ?? null;
+  const data = ymdSpan(dates);
+  const savedDays: string[] = [];
+  for (const r of rows) {
+    if (
+      r.classification === "spill" ||
+      r.classification === "rejected" ||
+      r.classification === "duplicate_ref"
+    ) {
+      continue;
+    }
+    const day = asYmd(r.payload?.date);
+    if (day) savedDays.push(day);
+  }
+  const saved = ymdSpan(savedDays);
+  const declared = defaultDeclaredCoverage({
+    weekKey: opts?.weekKey,
+    dataStart: saved.start ?? data.start,
+    dataEnd: saved.end ?? data.end,
+    filePeriodStart: opts?.filePeriodStart,
+    filePeriodEnd: opts?.filePeriodEnd,
+  });
+  preview.data_start = data.start;
+  preview.data_end = data.end;
+  preview.saved_start = saved.start;
+  preview.saved_end = saved.end;
+  preview.coverage_start = declared.coverageStart;
+  preview.coverage_end = declared.coverageEnd;
   return preview;
 }
 
@@ -521,7 +563,14 @@ export function registerReconImportRoutes(app: Hono) {
           classified = applySpillClassification(classified, parseWeekKey);
         }
         await persistStagingRows(classified);
-        const preview = buildPreviewFromRows(classified);
+        const banner = parseStatementPeriodBanner(csvText);
+        const preview = buildPreviewFromRows(classified, {
+          weekKey: parseWeekKey,
+          filePeriodStart: body.filePeriodStart
+            ? String(body.filePeriodStart)
+            : banner.start,
+          filePeriodEnd: body.filePeriodEnd ? String(body.filePeriodEnd) : banner.end,
+        });
         const sb = getServiceClient();
         await sb.from("recon_import_staging").update({
           status: "parsed",
@@ -577,14 +626,18 @@ export function registerReconImportRoutes(app: Hono) {
             return c.json({ success: true, importId, idempotent: true, batchId: staging.import_batch_id });
           }
           const rowsCommitted = typeof body.rowsCommitted === "number" ? body.rowsCommitted : null;
+          const fuelPreview = staging.preview as {
+            coverage_start?: string;
+            coverage_end?: string;
+            data_start?: string;
+            data_end?: string;
+          } | null;
           const coverageStart =
-            body.coverageStart
-              ? String(body.coverageStart).slice(0, 10)
-              : (staging.preview as { coverage_start?: string } | null)?.coverage_start || null;
+            asYmd(body.coverageStart) || asYmd(fuelPreview?.coverage_start);
           const coverageEnd =
-            body.coverageEnd
-              ? String(body.coverageEnd).slice(0, 10)
-              : (staging.preview as { coverage_end?: string } | null)?.coverage_end || null;
+            asYmd(body.coverageEnd) || asYmd(fuelPreview?.coverage_end);
+          const dataStart = asYmd(body.dataStart) || asYmd(fuelPreview?.data_start);
+          const dataEnd = asYmd(body.dataEnd) || asYmd(fuelPreview?.data_end);
           if (coverageStart && coverageEnd) {
             await ensureReconImportBatch({
               batchId: clientBatchId,
@@ -592,6 +645,8 @@ export function registerReconImportRoutes(app: Hono) {
               sourceId: sourceId as ReconBatchSourceId,
               coverageStart,
               coverageEnd,
+              dataStart,
+              dataEnd,
               status: "completed",
               rowsCommitted,
               fileName: staging.file_name || "fuel_import.csv",
@@ -621,14 +676,48 @@ export function registerReconImportRoutes(app: Hono) {
 
         const rows = await loadStagingRows(importId);
         const preview = staging.preview as Record<string, unknown> | null;
+        const dataSpan = ymdSpan(rows.map((r) => asYmd(r.payload?.date)));
+        const savedSpan = ymdSpan(
+          rows
+            .filter((r) => {
+              if (
+                r.classification === "spill" ||
+                r.classification === "rejected" ||
+                r.classification === "duplicate_ref"
+              ) {
+                return false;
+              }
+              if (r.classification === "duplicate_fingerprint") {
+                return overrideIds.has(stagingRowOverrideId(importId, r.row_index));
+              }
+              return true;
+            })
+            .map((r) => asYmd(r.payload?.date)),
+        );
         const coverageStart =
-          (preview?.coverage_start as string) ||
-          rows.map((r) => String(r.payload.date || "").slice(0, 10)).filter(Boolean).sort()[0] ||
-          null;
+          asYmd(body.coverageStart) ||
+          asYmd(preview?.coverage_start) ||
+          savedSpan.start ||
+          dataSpan.start;
         const coverageEnd =
-          (preview?.coverage_end as string) ||
-          rows.map((r) => String(r.payload.date || "").slice(0, 10)).filter(Boolean).sort().slice(-1)[0] ||
-          null;
+          asYmd(body.coverageEnd) ||
+          asYmd(preview?.coverage_end) ||
+          savedSpan.end ||
+          dataSpan.end;
+        const coverageGap = coverageGapMessage({
+          coverageStart,
+          coverageEnd,
+          dataStart: savedSpan.start,
+          dataEnd: savedSpan.end,
+        });
+        if (coverageGap || !coverageStart || !coverageEnd) {
+          return c.json({
+            error: "COVERAGE_EXCLUDES_ROWS",
+            message: coverageGap || "Choose the first and last day this file covers.",
+          }, 400);
+        }
+        const dataStart = dataSpan.start;
+        const dataEnd = dataSpan.end;
 
         const batchId = staging.import_batch_id || crypto.randomUUID();
         const batchPayload = stampOrg({
@@ -640,10 +729,10 @@ export function registerReconImportRoutes(app: Hono) {
           sourceId,
           coverageStart,
           coverageEnd,
-          dataStart: coverageStart,
-          dataEnd: coverageEnd,
-          dataPeriodStart: coverageStart,
-          dataPeriodEnd: coverageEnd,
+          dataStart,
+          dataEnd,
+          dataPeriodStart: dataStart,
+          dataPeriodEnd: dataEnd,
           recordCount: 0,
           rowsParsed: rows.length,
           fileSha256: staging.file_sha256,
@@ -833,6 +922,8 @@ export function registerReconImportRoutes(app: Hono) {
             sourceId: sourceId as ReconBatchSourceId,
             coverageStart,
             coverageEnd,
+            dataStart,
+            dataEnd,
             status: "completed",
             rowsCommitted: committed,
             fileName: staging.file_name || "toll_import.csv",
@@ -1023,6 +1114,8 @@ export function registerReconImportRoutes(app: Hono) {
             sourceId: sourceId as ReconBatchSourceId,
             coverageStart,
             coverageEnd,
+            dataStart,
+            dataEnd,
             status: "completed",
             rowsCommitted,
             type: sourceId,

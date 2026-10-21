@@ -117,7 +117,56 @@ const JSON_KEY_ALIASES = [
   "resolution",
   "paymentMethod",
   "preUnlinkedTripId",
+  "metadata",
+  "quantity",
+  "merchant",
+  "odometerProofUrl",
+  "receiptUrl",
+  "entrySource",
+  "matchedStationId",
 ] as const;
+
+/** Fuel Review Queue list: typed columns plus the payload fields that screen shows. */
+export const FUEL_QUEUE_TX_COLUMNS = [
+  "id",
+  "organization_id",
+  "date",
+  "driver_id",
+  "vehicle_id",
+  "trip_id",
+  "type",
+  "category",
+  "amount",
+  "status",
+  "description:payload_json->description",
+  "paymentMethod:payload_json->paymentMethod",
+  "driverName:payload_json->driverName",
+  "vehiclePlate:payload_json->vehiclePlate",
+  "vendor:payload_json->vendor",
+  "merchant:payload_json->merchant",
+  "time:payload_json->time",
+  "odometer:payload_json->odometer",
+  "quantity:payload_json->quantity",
+  "odometerProofUrl:payload_json->odometerProofUrl",
+  "receiptUrl:payload_json->receiptUrl",
+  "entrySource:payload_json->entrySource",
+  "matchedStationId:payload_json->matchedStationId",
+  "metadata:payload_json->metadata",
+].join(",");
+
+/** Matches the Review Queue predicates: fuel categories, plus manual fuel rows. */
+export const FUEL_QUEUE_TX_OR =
+  'category.in.("Fuel","Fuel Reimbursement","Fuel Reimbursement Credit"),type.eq.Fuel_Manual_Entry';
+
+const FUEL_QUEUE_CATEGORIES = new Set([
+  "Fuel",
+  "Fuel Reimbursement",
+  "Fuel Reimbursement Credit",
+]);
+
+export function isFuelQueueTransactionRow(row: { category?: unknown; type?: unknown }): boolean {
+  return FUEL_QUEUE_CATEGORIES.has(String(row.category || "")) || String(row.type || "") === "Fuel_Manual_Entry";
+}
 
 /**
  * KV shape for list reads. When the select list omits payload_json, keep the
@@ -127,6 +176,17 @@ export function shapeFleetRow(row: Record<string, unknown>): Record<string, unkn
   const shaped = rowToKvValue(row);
   for (const key of JSON_KEY_ALIASES) {
     if (shaped[key] == null && row[key] != null) shaped[key] = row[key];
+  }
+  // Narrow selects pull metadata by alias and have no payload blob. Drop photo data.
+  // A full select * row still has payload_json, so its receipt stays intact.
+  if (
+    !row.payload_json &&
+    shaped.metadata &&
+    typeof shaped.metadata === "object" &&
+    !Array.isArray(shaped.metadata) &&
+    "receiptBase64" in (shaped.metadata as Record<string, unknown>)
+  ) {
+    delete (shaped.metadata as Record<string, unknown>).receiptBase64;
   }
   // trip_id column is the source of truth, including when it is null.
   if (!Object.prototype.hasOwnProperty.call(row, "trip_id") && shaped.tripId == null && row.tripId != null) {

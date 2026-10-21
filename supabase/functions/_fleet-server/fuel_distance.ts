@@ -90,6 +90,7 @@ export async function computeFleetDeadhead(args: {
   periodEnd?: string;
   vehicleIds?: string[];
 }): Promise<{ fleet: Record<string, unknown>; vehicles: any[] }> {
+  const started = Date.now();
   const periodStart = ymd(args.periodStart);
   const periodEnd = ymd(args.periodEnd);
   const today = new Date().toISOString().slice(0, 10);
@@ -228,7 +229,7 @@ export async function computeFleetDeadhead(args: {
         : "low";
 
   console.log(
-    `[deadhead/fleet] Completed vehicles=${vehicleResults.length} entries=${fills.length} trips=${allTrips.length}`,
+    `[deadhead/fleet] Completed vehicles=${vehicleResults.length} entries=${fills.length} trips=${allTrips.length} elapsedMs=${Date.now() - started}`,
   );
   return { fleet: fleetSummary, vehicles: vehicleResults };
 }

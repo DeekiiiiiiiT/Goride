@@ -46,6 +46,7 @@ export type FuelPeriodRow = {
   lockedAt?: string | null;
   computedAt?: string | null;
   fuelSealError?: string | null;
+  closeReceipt?: { statementIds?: string[]; ledgerEventIds?: string[] } | null;
 };
 
 export function useFuelPeriods(opts: { from?: string; to?: string; enabled?: boolean }) {

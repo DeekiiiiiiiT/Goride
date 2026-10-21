@@ -9,6 +9,7 @@ import {
   filterFuelOpsLogEntries,
   fuelOpsLiters,
   fuelOpsSpendAmount,
+  isFuelOpsLogEntry,
   isGasCardFuelEntry,
 } from './fuelOpsEligibility.ts';
 
@@ -42,34 +43,97 @@ function samePhysicalFill(a: WeekFuelFill, entry: FuelEntry, amount: number): bo
   return !dayA || !dayB || dayA === dayB;
 }
 
+function linkedDriverEntryId(entry: FuelEntry): string | null {
+  const meta = entry.metadata;
+  if (!meta || typeof meta !== 'object') return null;
+  const id = (meta as Record<string, unknown>).jaaMatchedDriverEntryId;
+  return typeof id === 'string' && id.trim() ? id.trim() : null;
+}
+
+function fillFromPair(primary: FuelEntry, twin?: FuelEntry): WeekFuelFill {
+  const rows = twin ? [primary, twin] : [primary];
+  const manual = rows.find(isManual);
+  const card = rows.find((entry) => entry.type === 'Card_Transaction');
+  const amountEntry =
+    (manual && fuelOpsSpendAmount(manual) > 0 ? manual : undefined) ||
+    (card && fuelOpsSpendAmount(card) > 0 ? card : undefined) ||
+    primary;
+  return {
+    cardTxId: card?.id,
+    manualEntryId: manual?.id,
+    paymentSource: isGasCardFuelEntry(amountEntry) ? 'gas_card' : 'cash',
+    amount: fuelOpsSpendAmount(amountEntry),
+    litres: fuelOpsLiters(amountEntry),
+    odometer: amountEntry.odometer != null ? Number(amountEntry.odometer) : null,
+    vehicleId: amountEntry.vehicleId,
+    driverId: amountEntry.driverId,
+    date: ymd(amountEntry.date),
+  };
+}
+
 export function selectWeekFuelFills(entries: FuelEntry[]): WeekFuelFill[] {
   const ops = filterFuelOpsLogEntries(entries || []).filter((entry) => countsInFuelLogSpend(entry));
+  const byId = new Map(ops.map((entry) => [entry.id, entry]));
   const sorted = [...ops].sort((a, b) => {
     const day = ymd(a.date).localeCompare(ymd(b.date));
     if (day !== 0) return day;
     return (Number(a.odometer) || 0) - (Number(b.odometer) || 0);
   });
+  const consumed = new Set<string>();
   const out: WeekFuelFill[] = [];
+
   for (const entry of sorted) {
+    if (consumed.has(entry.id)) continue;
+    const peerId = linkedDriverEntryId(entry);
+    const peer = peerId && peerId !== entry.id ? byId.get(peerId) : undefined;
+    if (peer && !consumed.has(peer.id)) {
+      consumed.add(entry.id);
+      consumed.add(peer.id);
+      const fill = fillFromPair(entry, peer);
+      if (fill.amount > 0) out.push(fill);
+    }
+  }
+
+  for (const entry of sorted) {
+    if (consumed.has(entry.id)) continue;
     const amount = fuelOpsSpendAmount(entry);
     if (amount <= 0) continue;
     const previous = out[out.length - 1];
-    if (previous && samePhysicalFill(previous, entry, amount)) {
+    const previousIsPair = Boolean(previous?.cardTxId && previous?.manualEntryId);
+    if (previous && !previousIsPair && samePhysicalFill(previous, entry, amount)) {
       if (entry.type === 'Card_Transaction' && !previous.cardTxId) previous.cardTxId = entry.id;
       if (isManual(entry) && !previous.manualEntryId) previous.manualEntryId = entry.id;
+      consumed.add(entry.id);
       continue;
     }
-    out.push({
-      cardTxId: entry.type === 'Card_Transaction' ? entry.id : undefined,
-      manualEntryId: isManual(entry) ? entry.id : undefined,
-      paymentSource: isGasCardFuelEntry(entry) ? 'gas_card' : 'cash',
-      amount,
-      litres: fuelOpsLiters(entry),
-      odometer: entry.odometer != null ? Number(entry.odometer) : null,
-      vehicleId: entry.vehicleId,
-      driverId: entry.driverId,
-      date: ymd(entry.date),
-    });
+    consumed.add(entry.id);
+    out.push(fillFromPair(entry));
+  }
+  return out;
+}
+
+/** One ops row per physical fill, so a linked card twin is not added again. */
+export function fuelEntriesForWeekEngine(entries: FuelEntry[]): FuelEntry[] {
+  const byId = new Map((entries || []).map((entry) => [entry.id, entry]));
+  const fills = selectWeekFuelFills(entries || []);
+  const used = new Set<string>();
+  const out: FuelEntry[] = [];
+  for (const fill of fills) {
+    const manual = fill.manualEntryId ? byId.get(fill.manualEntryId) : undefined;
+    const card = fill.cardTxId ? byId.get(fill.cardTxId) : undefined;
+    const chosen =
+      (manual && fuelOpsSpendAmount(manual) > 0 ? manual : undefined) ||
+      (card && fuelOpsSpendAmount(card) > 0 ? card : undefined) ||
+      manual ||
+      card;
+    if (manual) used.add(manual.id);
+    if (card) used.add(card.id);
+    if (chosen) out.push(chosen);
+  }
+  for (const entry of entries || []) {
+    if (!entry?.id || used.has(entry.id)) continue;
+    if (!isFuelOpsLogEntry(entry)) continue;
+    out.push(entry);
   }
   return out;
 }
