@@ -3084,6 +3084,11 @@ async function saveTollLedgerEntry(
   /** R2-17: reuse one ledger load across a commit loop (mutated on successful save). */
   dedupCache?: TollLedgerRecord[],
 ): Promise<boolean> {
+  // Stamp the fleet before any write. prepareTollLedgerEntry stamps again; both must stay.
+  const ctx = c ?? getTollContext();
+  if (ctx) {
+    entry = stampOrg(entry as unknown as Record<string, unknown>, ctx) as TollLedgerRecord;
+  }
   const prepared = await prepareTollLedgerEntry(entry, c, dedupCache);
   if (!prepared) return false;
 
