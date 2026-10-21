@@ -3,7 +3,7 @@
  * Failures must throw — silent drops caused Approved fuel expenses with no Transaction Log row.
  */
 import { getServiceClient } from "./service_client.ts";
-import { resolveDomain } from "./fleet_domains.ts";
+import { orgOf, resolveDomain } from "./fleet_domains.ts";
 import {
   isFleetTableWriteEnabled,
   isLegacyKvWriteEnabled,
@@ -17,6 +17,9 @@ function fleetClient() {
 function tableName(table: string): string {
   return `fleet_${table}`;
 }
+
+/** Global catalogs. Every other fleet domain belongs to one company. */
+const GLOBAL_DOMAINS = new Set(["stations", "toll_plazas", "platform_vendors"]);
 
 async function logMetric(domain: FleetDomain, status: string, reason?: string, legacyKvId?: string) {
   try {
@@ -37,15 +40,18 @@ export async function dualWriteFleetKvUpsert(key: string, value: unknown): Promi
   if (!isFleetTableWriteEnabled(def.domain)) return;
   if (!value || typeof value !== "object" || Array.isArray(value)) return;
 
-  const row = def.mapRow(key, value as Record<string, unknown>);
+  const record = value as Record<string, unknown>;
+  const companyId = orgOf(record);
+  if (companyId && !record.organizationId) record.organizationId = companyId;
+  const row = def.mapRow(key, record);
   if (!row) {
     await logMetric(def.domain, "skip", "map_null", key);
     return;
   }
-  if (row.organization_id == null || row.organization_id === "") {
-    console.warn(
-      `[fleetDualWrite] mapRow produced null organization_id for key=${key} domain=${def.domain}`,
-    );
+  if (!GLOBAL_DOMAINS.has(def.domain) && (row.organization_id == null || row.organization_id === "")) {
+    const reason = "missing_organization_id";
+    await logMetric(def.domain, "fail", reason, key);
+    throw new Error(`[fleetDualWrite] ${def.domain} ${key} is missing a company`);
   }
   const { error } = await fleetClient().from(tableName(def.table)).upsert(row, { onConflict: "id" });
   if (error) {

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  cashHeldClampStamp,
   collectSettlementSignDrift,
   computePeriodSettlement,
   computePeriodSettlementMinor,
@@ -113,5 +114,13 @@ describe('signed pass-through (C-7)', () => {
     expect(drift.sort()).toEqual(
       ['cashWrittenOff', 'tipsPaidToDriver', 'tollCashWash', 'tollPersonal'].sort(),
     );
+  });
+
+  it('stamps a negative cash balance as an over-return', () => {
+    expect(cashHeldClampStamp(-3221.23)).toEqual({
+      cashHeldClamped: true,
+      unclampedCashHeld: -3221.23,
+    });
+    expect(cashHeldClampStamp(12.5).cashHeldClamped).toBe(false);
   });
 });

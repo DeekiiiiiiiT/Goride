@@ -102,8 +102,80 @@ export function defaultDeclaredCoverage(input: {
   return { coverageStart: dataStart, coverageEnd: dataEnd };
 }
 
+function addDaysYmd(ymd: string, days: number): string {
+  const [y, m, d] = ymd.split('-').map(Number);
+  const dt = new Date(Date.UTC(y, (m || 1) - 1, d || 1));
+  dt.setUTCDate(dt.getUTCDate() + days);
+  const yy = dt.getUTCFullYear();
+  const mm = String(dt.getUTCMonth() + 1).padStart(2, '0');
+  const dd = String(dt.getUTCDate()).padStart(2, '0');
+  return `${yy}-${mm}-${dd}`;
+}
+
+function daysBetween(start: string, end: string): number {
+  const a = Date.parse(`${start}T00:00:00Z`);
+  const b = Date.parse(`${end}T00:00:00Z`);
+  if (!Number.isFinite(a) || !Number.isFinite(b)) return 0;
+  return Math.round((b - a) / 86_400_000);
+}
+
+/** Printed file period, else the run week, else 31 days from the declared start. */
+export function coverageCapBounds(input: {
+  coverageStart?: string | null;
+  filePeriodStart?: string | null;
+  filePeriodEnd?: string | null;
+  weekKey?: string | null;
+}): { start: string; end: string; kind: 'file' | 'week' | 'days' } | null {
+  const fileStart = asYmd(input.filePeriodStart);
+  const fileEnd = asYmd(input.filePeriodEnd);
+  if (fileStart && fileEnd && fileStart <= fileEnd) {
+    return { start: fileStart, end: fileEnd, kind: 'file' };
+  }
+  const week = asYmd(input.weekKey);
+  if (week) return { start: week, end: periodEndForAnchor(week), kind: 'week' };
+  const start = asYmd(input.coverageStart);
+  if (!start) return null;
+  return { start, end: addDaysYmd(start, 30), kind: 'days' };
+}
+
+/** How many weeks the declaration sticks out past the transactions. */
+export function coverageWeeksBeyondData(input: {
+  coverageStart: string | null;
+  coverageEnd: string | null;
+  dataStart: string | null;
+  dataEnd: string | null;
+}): number {
+  const coverageStart = asYmd(input.coverageStart);
+  const coverageEnd = asYmd(input.coverageEnd);
+  const dataStart = asYmd(input.dataStart);
+  const dataEnd = asYmd(input.dataEnd);
+  if (!coverageStart || !coverageEnd) return 0;
+  if (!dataStart && !dataEnd) return 0;
+  let extra = 0;
+  if (dataStart && coverageStart < dataStart) extra += daysBetween(coverageStart, dataStart);
+  if (dataEnd && coverageEnd > dataEnd) extra += daysBetween(dataEnd, coverageEnd);
+  if (extra <= 0) return 0;
+  return Math.max(1, Math.ceil(extra / 7));
+}
+
+export function coverageWideWarning(input: {
+  coverageStart: string | null;
+  coverageEnd: string | null;
+  dataStart: string | null;
+  dataEnd: string | null;
+  sourceLabel?: string | null;
+}): string | null {
+  const weeks = coverageWeeksBeyondData(input);
+  if (weeks <= 0) return null;
+  const name = String(input.sourceLabel || 'This file').trim() || 'This file';
+  const unit = weeks === 1 ? 'week' : 'weeks';
+  return `${name} declared to cover ${weeks} ${unit} beyond its data`;
+}
+
 /**
  * The declared range must include every transaction that will be saved.
+ * It also cannot run past the printed statement, the run week, or 31 days,
+ * unless allowWide (approve permission) is set.
  * Empty saved span (nothing new to save) only checks that the range is ordered.
  */
 export function coverageGapMessage(input: {
@@ -111,6 +183,10 @@ export function coverageGapMessage(input: {
   coverageEnd: string | null;
   dataStart: string | null;
   dataEnd: string | null;
+  filePeriodStart?: string | null;
+  filePeriodEnd?: string | null;
+  weekKey?: string | null;
+  allowWide?: boolean;
 }): string | null {
   const coverageStart = asYmd(input.coverageStart);
   const coverageEnd = asYmd(input.coverageEnd);
@@ -123,6 +199,23 @@ export function coverageGapMessage(input: {
   }
   if (dataEnd && coverageEnd < dataEnd) {
     return `This file has a transaction on ${formatCoverDay(dataEnd)}, so coverage can't end earlier than that.`;
+  }
+  if (!input.allowWide) {
+    const cap = coverageCapBounds({
+      coverageStart,
+      filePeriodStart: input.filePeriodStart,
+      filePeriodEnd: input.filePeriodEnd,
+      weekKey: input.weekKey,
+    });
+    if (cap && (coverageStart < cap.start || coverageEnd > cap.end)) {
+      if (cap.kind === 'file') {
+        return `This range is wider than the period printed on the file (${formatCoverDay(cap.start)} – ${formatCoverDay(cap.end)}).`;
+      }
+      if (cap.kind === 'week') {
+        return `This file can only cover this week (${formatCoverDay(cap.start)} – ${formatCoverDay(cap.end)}).`;
+      }
+      return "This range can't be longer than 31 days.";
+    }
   }
   return null;
 }

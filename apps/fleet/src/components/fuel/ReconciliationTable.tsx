@@ -41,24 +41,16 @@ import {
 } from "../ui/alert-dialog";
 import { Progress } from "../ui/progress";
 import { Checkbox } from "../ui/checkbox";
-import {
-  FLEET_USE_FUEL_BRAIN,
-  FUEL_BRAIN_SHADOW_COMPARE,
-} from "../../utils/fuelBrainFlags";
-
 import { Vehicle } from '../../types/vehicle';
 import { Trip } from '../../types/data';
 import { formatFuelMoney } from '../../utils/formatFuelMoney';
 import { FuelEntry, MileageAdjustment, WeeklyFuelReport, FuelDispute, FuelScenario, OdometerBucket, FinalizedFuelReport, FuelCard, UNASSIGNED_FUEL_DRIVER_ID } from '../../types/fuel';
-import { FuelCalculationService, type VehicleDeadheadInput, type FuelBrainClassificationInput, type PersonalAllowanceReconContext } from '../../services/fuelCalculationService';
 import { downloadCSV } from '../../utils/export';
 import { ScenarioSplitDashboard } from './ScenarioSplitDashboard';
 import { reportWeekYmdBounds, isSameFuelStatement } from '../../utils/fuelWeekPeriod';
 import { sumPaidByDriverForReport } from '../../utils/fuelPaidByDriver';
 import { resolveActiveFuelPolicyForDriverWeek } from '../../utils/fuelPolicyVersion';
 import { evaluateFuelFinalizeGating, weekBoundsFromDateRange, findDisputeForReport } from '../../utils/fuelFinalizeGating';
-import { buildPersonalAllowanceReconContext } from '../../utils/buildPersonalAllowanceReconContext';
-import { fetchDeadheadMap, buildBrainMap } from '../../utils/buildFuelWeekReportsForFinalize';
 import { getLeakageDisplay } from '../../utils/fuelLeakageDisplay';
 import { FUEL_MONEY_EPS } from '../../utils/fuelMoneyEpsilon';
 
@@ -78,7 +70,7 @@ interface ReconciliationTableProps {
     periodLocked?: boolean;
     hideFinalize?: boolean;
     hideDashboard?: boolean;
-    /** Emit live weekly reports for period wizard strip / gating. */
+    /** Server reports for this week. This table does not calculate a week. */
     onReportsChange?: (reports: WeeklyFuelReport[]) => void;
     onFinalize?: (reports: WeeklyFuelReport[]) => void;
     onAddAdjustment?: () => void;
@@ -116,97 +108,10 @@ export function ReconciliationTable({
     const [isFinalizeDialogOpen, setIsFinalizeDialogOpen] = React.useState(false);
 
     const weekStart = dateRange?.from;
-    const weekEnd = dateRange?.to || dateRange?.from;
 
-    const skipLiveCompute = Array.isArray(reportsOverride);
-    const [deadheadMap, setDeadheadMap] = useState<Map<string, VehicleDeadheadInput>>(new Map());
-    const [deadheadLoading, setDeadheadLoading] = useState(false);
-    const [brainByDriverVehicle, setBrainByDriverVehicle] = useState<Map<string, FuelBrainClassificationInput>>(new Map());
-    const [paContext, setPaContext] = useState<PersonalAllowanceReconContext | undefined>();
+    const reports = reportsOverride ?? [];
 
-    useEffect(() => {
-        if (skipLiveCompute || !weekStart || !weekEnd) return;
-        let cancelled = false;
-        const weekStartYmd = format(weekStart, 'yyyy-MM-dd');
-        const weekEndYmd = format(weekEnd, 'yyyy-MM-dd');
-        (async () => {
-            try {
-                const pa = await buildPersonalAllowanceReconContext({
-                    weekStartYmd,
-                    weekEndYmd,
-                    drivers,
-                    seedIfMissing: true,
-                });
-                if (!cancelled) setPaContext(pa.context);
-            } catch (e) {
-                console.warn('[PersonalAllowance] failed to load settings', e);
-            }
-        })();
-        return () => {
-            cancelled = true;
-        };
-    }, [skipLiveCompute, weekStart, weekEnd, drivers]);
-
-    useEffect(() => {
-        if (skipLiveCompute || !weekStart || !weekEnd) return;
-        let cancelled = false;
-        setDeadheadLoading(true);
-        const startStr = format(weekStart, 'yyyy-MM-dd');
-        const endStr = format(weekEnd, 'yyyy-MM-dd');
-        fetchDeadheadMap(startStr, endStr)
-            .then((map) => {
-                if (!cancelled) setDeadheadMap(map);
-            })
-            .finally(() => {
-                if (!cancelled) setDeadheadLoading(false);
-            });
-        return () => { cancelled = true; };
-    }, [skipLiveCompute, weekStart, weekEnd]);
-
-    useEffect(() => {
-        if (skipLiveCompute || !weekStart || !weekEnd) return;
-        if (!FLEET_USE_FUEL_BRAIN && !FUEL_BRAIN_SHADOW_COMPARE) {
-            setBrainByDriverVehicle(new Map());
-            return;
-        }
-        let cancelled = false;
-        const startStr = format(weekStart, 'yyyy-MM-dd');
-        const endStr = format(weekEnd, 'yyyy-MM-dd');
-        (async () => {
-            const map = await buildBrainMap({
-                vehicles,
-                trips,
-                adjustments,
-                deadheadMap,
-                weekStartYmd: startStr,
-                weekEndYmd: endStr,
-            });
-            if (!cancelled) setBrainByDriverVehicle(map || new Map());
-        })();
-        return () => { cancelled = true; };
-    }, [skipLiveCompute, weekStart, weekEnd, vehicles, trips, adjustments, deadheadMap]);
-
-    const computedReports = useMemo(() => {
-        if (skipLiveCompute || !weekStart) return [];
-        return FuelCalculationService.generateDriverFleetReport(
-            vehicles,
-            drivers,
-            weekStart,
-            weekEnd!,
-            trips,
-            fuelEntries,
-            adjustments,
-            scenarios,
-            deadheadMap,
-            fuelCards,
-            FLEET_USE_FUEL_BRAIN ? brainByDriverVehicle : undefined,
-            paContext,
-        );
-    }, [skipLiveCompute, vehicles, drivers, trips, fuelEntries, adjustments, weekStart, weekEnd, scenarios, deadheadMap, fuelCards, brainByDriverVehicle, paContext]);
-
-    const reports = reportsOverride ?? computedReports;
-
-    const paMayBeActive = Boolean(paContext?.config?.enabled) || reports.some((r) => !!r.metadata?.personalAllowance);
+    const paMayBeActive = reports.some((r) => !!r.metadata?.personalAllowance);
 
     useEffect(() => {
         onReportsChange?.(reports);
@@ -307,7 +212,7 @@ export function ReconciliationTable({
         return <div className="p-8 text-center text-slate-500">Select a date range to view reconciliation reports.</div>;
     }
 
-    if (loading || deadheadLoading) {
+    if (loading) {
         return <div className="p-8 text-center text-slate-500">Loading week data…</div>;
     }
 
@@ -371,7 +276,7 @@ export function ReconciliationTable({
                         <div className="flex items-center gap-2">
                             <CalendarIcon className="h-4 w-4 text-slate-400" />
                             <span className="font-bold text-slate-900">
-                                {format(weekStart, 'MMM d')} - {format(weekEnd, 'MMM d, yyyy')}
+                                {format(dateRange.from, 'MMM d')} - {format(dateRange.to || dateRange.from, 'MMM d, yyyy')}
                             </span>
                         </div>
                     </div>

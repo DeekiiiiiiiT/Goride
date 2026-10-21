@@ -230,7 +230,11 @@ function PeriodCard({
             </div>
             <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-slate-500">
               <span>{period.vehicleCount} vehicle{period.vehicleCount === 1 ? '' : 's'}</span>
-              <span>Spend {formatFuelMoney(period.totalSpend)}</span>
+              <span>
+                {period.numbersPrepared === false
+                  ? 'Not prepared'
+                  : `Spend ${formatFuelMoney(period.totalSpend)}`}
+              </span>
               <span
                 className={`inline-flex items-center gap-1.5 ${
                   period.netLeakage !== 0 && !unexplainedAccepted

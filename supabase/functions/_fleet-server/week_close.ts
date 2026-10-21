@@ -102,6 +102,7 @@ import {
 import { persistPeriodRowWithVersion } from "./period_persist.ts";
 import {
   loadWeekCloseReconContext,
+  markReconWeekRunClosed,
   normalizeWeekCloseServiceLine,
   reopenReconWeekRun,
   type WeekCloseReconEvidence,
@@ -2554,11 +2555,15 @@ async function closeWeekBody(
 
   const driversClosed = perDriver.filter((d) => d.closed).length;
   const driversBlocked = perDriver.length - driversClosed;
+  const weekClosed = driversBlocked === 0 && perDriver.length > 0;
+  if (weekClosed) {
+    await markReconWeekRunClosed(orgId, week, serviceLine, actorId);
+  }
 
   return {
     organizationId: orgId,
     weekKey: week,
-    closed: driversBlocked === 0 && perDriver.length > 0,
+    closed: weekClosed,
     driversClosed,
     driversBlocked,
     blockers: allBlockers,
@@ -2594,7 +2599,7 @@ export async function retryFreezeWeek(
   }
 
   try {
-    return await retryFreezeWeekBody(orgId, week, actorId, closeReason);
+    return await retryFreezeWeekBody(orgId, week, actorId, closeReason, serviceLine);
   } finally {
     await releaseWeekCloseLock(orgId, week, actorId, serviceLine);
   }
@@ -2605,6 +2610,7 @@ async function retryFreezeWeekBody(
   week: string,
   actorId: string,
   closeReason: string,
+  serviceLine: WeekCloseServiceLine = "rideshare",
 ): Promise<CloseWeekResult> {
   const { data: periods, error } = await sb()
     .from("driver_financial_periods")
@@ -2708,10 +2714,14 @@ async function retryFreezeWeekBody(
       throw e;
     }
     const blocked = perDriver.filter((d) => !d.closed).length;
+    const alreadyClosed = blocked === 0 && perDriver.length > 0;
+    if (alreadyClosed) {
+      await markReconWeekRunClosed(orgId, week, serviceLine, actorId);
+    }
     return {
       organizationId: orgId,
       weekKey: week,
-      closed: blocked === 0 && perDriver.length > 0,
+      closed: alreadyClosed,
       driversClosed: perDriver.filter((d) => d.closed).length,
       driversBlocked: blocked,
       blockers: perDriver.flatMap((d) => d.blockers),
@@ -2769,10 +2779,14 @@ async function retryFreezeWeekBody(
 
   const driversClosed = perDriver.filter((d) => d.closed).length;
   const driversBlocked = perDriver.length - driversClosed;
+  const weekClosed = driversBlocked === 0 && perDriver.length > 0;
+  if (weekClosed) {
+    await markReconWeekRunClosed(orgId, week, serviceLine, actorId);
+  }
   return {
     organizationId: orgId,
     weekKey: week,
-    closed: driversBlocked === 0 && perDriver.length > 0,
+    closed: weekClosed,
     driversClosed,
     driversBlocked,
     blockers: perDriver.flatMap((d) => d.blockers),

@@ -17,7 +17,7 @@ import { periodAnchorFor, periodEndForAnchor, minorToMajor } from "./financial_l
 import {
   resolveActiveEarningsBundleForDriverWeek,
 } from "./earnings_policy_runtime.ts";
-import { computePeriodSettlement } from "./driver_period_settlement.ts";
+import { cashHeldClampStamp, computePeriodSettlement } from "./driver_period_settlement.ts";
 import {
   computeWeekCommissionShare,
   computeWeekCashBase,
@@ -1397,8 +1397,7 @@ export async function rebuildDriverFinancialPeriod(
       tollUnknownPmAmount: round2(tollUnknownPmAmount),
       tollsClear: derived.tollsClear,
       moneyUnlocked: derived.moneyUnlocked,
-      cashHeldClamped: settled.adjCashBalance < -0.005,
-      unclampedCashHeld: round2(settled.adjCashBalance),
+      ...cashHeldClampStamp(settled.adjCashBalance),
       projectionSources: {
         fuel: fuelSource,
         cash: settlementTxTableReadEnabled() ? "table" : "kv",
@@ -1678,6 +1677,7 @@ export async function rebuildDriverFinancialPeriod(
             ...row.metadata,
             financeCore: {
               ...fc,
+              ...cashHeldClampStamp(settled.adjCashBalance),
               overpaidAmount: settled.overpaidAmount,
               projectionSources: {
                 ...((fc.projectionSources as Record<string, unknown>) || {}),
@@ -2412,8 +2412,7 @@ export async function syncPeriodCashFromTransactions(
       tollCashWashEligible: tollCashWash,
       tollsClear,
       moneyUnlocked,
-      cashHeldClamped: settled.adjCashBalance < -0.005,
-      unclampedCashHeld: round2(settled.adjCashBalance),
+      ...cashHeldClampStamp(settled.adjCashBalance),
     },
   });
 

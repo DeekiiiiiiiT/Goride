@@ -192,6 +192,8 @@ export function fuelWeekClosableBlockerMessage(blocker: FuelWeekClosableBlocker)
       return 'Blocked — could not load flag dispositions (retry; contact eng if it persists)';
     case 'data_quality_unreviewed':
       return 'Blocked — data-quality flagged vehicles not marked reviewed';
+    case 'null_org_fill':
+      return 'A fuel fill for this week is missing its company, so it was left out of the total. Repair it before locking.';
     default:
       return blocker.message;
   }

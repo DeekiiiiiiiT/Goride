@@ -4901,15 +4901,21 @@ export const api = {
     ]);
 
     const dataUnderscore = resUnderscore.ok
-      ? unwrapFuelEntriesPayload(await resUnderscore.json(), resUnderscore.headers.get('X-Total-Count'))
+      ? unwrapFuelEntriesPayload<{ id?: string }>(
+          await resUnderscore.json(),
+          resUnderscore.headers.get('X-Total-Count'),
+        )
       : [];
     const dataHyphen = resHyphen.ok
-      ? unwrapFuelEntriesPayload(await resHyphen.json(), resHyphen.headers.get('X-Total-Count'))
+      ? unwrapFuelEntriesPayload<{ id?: string }>(
+          await resHyphen.json(),
+          resHyphen.headers.get('X-Total-Count'),
+        )
       : [];
 
     const combined = [...dataUnderscore, ...dataHyphen];
     // Deduplicate by ID
-    return Array.from(new Map(combined.map(item => [item.id, item])).values());
+    return Array.from(new Map(combined.map((item) => [item.id, item])).values());
   },
 
   async getCheckInsByVehicle(vehicleId: string): Promise<any[]> {

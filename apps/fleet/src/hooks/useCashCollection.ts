@@ -10,6 +10,7 @@ import { useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { parseISO } from 'date-fns';
 import { useSettlementQueue, type SettlementQueueRow } from './useSettlementQueue';
 import { newIdempotencyKey, invalidateSettlementQueries } from './useSettlementCommands';
+import { SETTLEMENT_APPROVAL_THRESHOLD, requiresApproval } from '../utils/settlementEnterprise';
 import {
   settlementCommandsApi,
   isPeriodFrozenError,
@@ -158,6 +159,37 @@ function afterOwedFromPeriod(period: Record<string, unknown> | undefined): numbe
  * Single write path for Log Cash receipts.
  * Throws CashGateError for frozen weeks; MONEY_LOCKED from an old server → SERVER_STALE.
  */
+/** Same Pay write the cash desk uses: idempotency key plus the amount still owed. */
+export async function payDriverWeek(
+  qc: QueryClient,
+  input: {
+    driverId: string;
+    weekAnchor: string;
+    amount: number;
+    method: string;
+    reference?: string;
+    note?: string;
+    expectedOutstanding: number;
+  },
+): Promise<{ needsApproval: boolean }> {
+  const amount = Math.abs(Number(input.amount) || 0);
+  const res = await settlementCommandsApi.pay({
+    driverId: input.driverId,
+    weekAnchor: input.weekAnchor,
+    amount,
+    method: input.method,
+    reference: input.reference,
+    note: input.note,
+    idempotencyKey: newIdempotencyKey(),
+    expectedOutstanding: input.expectedOutstanding,
+  });
+  invalidateSettlementQueries(qc);
+  const needsApproval =
+    (res as { requiresApproval?: boolean })?.requiresApproval === true ||
+    (requiresApproval(amount, SETTLEMENT_APPROVAL_THRESHOLD) && String(input.method || '') !== 'Cash');
+  return { needsApproval };
+}
+
 export async function collectCashPayment(
   qc: QueryClient,
   input: CashCollectInput,

@@ -10,11 +10,6 @@ import {
 import { FuelDataQualityStep } from './FuelDataQualityStep';
 import { FuelExceptionBlockersPanel } from './FuelExceptionBlockersPanel';
 import { FuelUnapprovedTxBlockersPanel } from './FuelUnapprovedTxBlockersPanel';
-import { useFuelWeekReports } from '../../../hooks/useFuelWeekReports';
-import {
-  fuelWeekHasDegradedInputs,
-  type FuelWeekDegradedInputs,
-} from '../../../utils/buildFuelWeekReportsForFinalize';
 import { type FuelWizardDriver } from './buildFuelWizardRows';
 import { useFuelWizardDerived } from './useFuelWizardDerived';
 import { type FuelExceptionBlocker } from '../../../utils/fuelFinalizeGating';
@@ -243,15 +238,6 @@ function FuelPeriodWizardInner({
   const periodLocked = period.locked;
   const secondApproverConfirmed = hasDistinctSecondApprove(secondApproveActors, user?.id);
 
-  // Parent trips are for the selected recon week — only reuse when they overlap this period.
-  const tripsOverlapThisWeek = useMemo(
-    () =>
-      (trips || []).some((t) =>
-        isEntryInInclusiveYmdRange(t.date, period.startDate, period.endDate),
-      ),
-    [trips, period.startDate, period.endDate],
-  );
-
   const weekFuelEntries = useMemo(
     () =>
       fuelEntries.filter((e) =>
@@ -260,27 +246,6 @@ function FuelPeriodWizardInner({
     [fuelEntries, period.startDate, period.endDate],
   );
 
-  const weekReports = useFuelWeekReports({
-    weekStartYmd: period.startDate,
-    weekEndYmd: period.endDate,
-    vehicles,
-    drivers,
-    fuelEntries: weekFuelEntries,
-    adjustments,
-    scenarios,
-    fuelCards,
-    disputes,
-    finalizedReports,
-    // Wrong-week parent trips zero ride-share math and can stall brain work.
-    trips: tripsOverlapThisWeek ? trips : undefined,
-    seedPersonalAllowance: false,
-    dispositions,
-  });
-  const clientReports = weekReports.reports;
-  const liveReports =
-    prepareState === 'ready' && serverReports && serverReports.length > 0
-      ? serverReports
-      : clientReports;
   const refreshServerClosable = useCallback(async () => {
     if (!serverPeriodId || periodLocked) return;
     const closable = await api.getFuelPeriodClosable(serverPeriodId).catch(() => null);
@@ -288,7 +253,7 @@ function FuelPeriodWizardInner({
   }, [serverPeriodId, periodLocked]);
 
   const prepareWeek = useCallback(async () => {
-    if (!serverPeriodId || periodLocked) {
+    if (!serverPeriodId) {
       rememberFuelSnapshotVersion(serverPeriodId, null);
       setPrepareState('idle');
       setServerReports(null);
@@ -320,11 +285,18 @@ function FuelPeriodWizardInner({
       setPrepareState('failed');
       setPrepareError("We couldn't prepare this week's numbers. Nothing was locked.");
     }
-  }, [serverPeriodId, periodLocked]);
+  }, [serverPeriodId]);
 
   useEffect(() => {
     void prepareWeek();
   }, [prepareWeek]);
+
+  const weekLoading = prepareState === 'preparing';
+  const weekFailed = prepareState === 'failed';
+  const liveReports =
+    prepareState === 'ready' && serverReports && serverReports.length > 0
+      ? serverReports
+      : [];
 
   const dispositionStamp = useMemo(() => {
     if (!dispositions) return '';
@@ -342,9 +314,14 @@ function FuelPeriodWizardInner({
   useEffect(() => {
     void refreshServerClosable();
   }, [refreshServerClosable, closableTick, activeStepId, dispositionStamp]);
-  const weekTrips = weekReports.trips.length ? weekReports.trips : trips;
-  const weekDegraded: FuelWeekDegradedInputs | undefined = weekReports.degraded;
-  const hasDegradedInputs = fuelWeekHasDegradedInputs(weekDegraded);
+  const weekTrips = useMemo(
+    () =>
+      (trips || []).filter((t) =>
+        isEntryInInclusiveYmdRange(t.date, period.startDate, period.endDate),
+      ),
+    [trips, period.startDate, period.endDate],
+  );
+  const hasDegradedInputs = false;
 
   const {
     vehicleSnaps,
@@ -386,8 +363,8 @@ function FuelPeriodWizardInner({
     finalizedReports,
     liveReports,
     weekTrips,
-    weekLoading: weekReports.loading,
-    weekError: Boolean(weekReports.error),
+    weekLoading,
+    weekError: weekFailed,
     transactions,
     countsUnevaluated: !period.counts || Object.keys(period.counts).length === 0,
     degradedInputs: hasDegradedInputs,
@@ -467,7 +444,7 @@ function FuelPeriodWizardInner({
 
   // C-3: keep SQL counts/money in sync so auto-close is not stuck on counts_unevaluated.
   useEffect(() => {
-    if (periodLocked || weekReports.loading || weekIsEmpty) return;
+    if (periodLocked || weekLoading || weekIsEmpty) return;
     void materializeWizardPeriodCounts({
       serverPeriodId,
       weekStart: period.startDate,
@@ -478,7 +455,7 @@ function FuelPeriodWizardInner({
       degradedInputs: hasDegradedInputs,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [period.id, periodLocked, weekReports.loading, weekIsEmpty, strip.totalSpend, strip.leakage]);
+  }, [period.id, periodLocked, weekLoading, weekIsEmpty, strip.totalSpend, strip.leakage]);
 
   // H8/H9 + NEW-6 + P-9: week bundle is SoT for chrome (period, step notes, second approve).
   useEffect(() => {
@@ -860,7 +837,7 @@ function FuelPeriodWizardInner({
       const ok = await onAcceptFuelException(blocker.id, note);
       if (ok === false) return;
       onRefresh();
-      void weekReports.refresh();
+      void prepareWeek();
       setClosableTick((tick) => tick + 1);
     } finally {
       setExceptionBusyId(null);
@@ -1273,13 +1250,13 @@ function FuelPeriodWizardInner({
     sqlStatus: period.sqlStatus,
     locking: finalizing,
     blockerCount:
-      weekReports.loading || periodLocked || finalizing
+      weekLoading || periodLocked || finalizing
         ? listedBlockerCount
         : finalizeDisabled
           ? Math.max(listedBlockerCount, 1)
           : listedBlockerCount,
     ready:
-      !weekReports.loading &&
+      !weekLoading &&
       !periodLocked &&
       !finalizing &&
       !finalizeDisabled &&
@@ -1322,10 +1299,10 @@ function FuelPeriodWizardInner({
       </div>
 
       <FuelPeriodWizardBodyGate
-        loading={weekReports.loading}
-        error={Boolean(weekReports.error)}
+        loading={weekLoading}
+        error={weekFailed}
         empty={weekIsEmpty}
-        updating={weekReports.updating}
+        updating={false}
         onRetry={handleRetryWeek}
       >
       <div className="grid grid-cols-1 gap-4 md:grid-cols-[minmax(0,1.65fr)_minmax(280px,1fr)] md:items-start md:gap-5">
@@ -1431,7 +1408,21 @@ function FuelPeriodWizardInner({
                 totalSpend={strip.totalSpend}
                 leakageRows={leakageRows}
                 queueIndex={queueIndex}
-                vehicleSnaps={vehicleSnaps}
+                vehicleSnaps={vehicleSnaps.map((snap) => {
+                  const calc = snap.report?.metadata?.rideShareCalc as
+                    | { totalLitersInPeriod?: number; observedEfficiency?: number }
+                    | undefined;
+                  return {
+                    vehicleId: snap.vehicleId,
+                    misc: snap.misc,
+                    report: calc
+                      ? {
+                          actualFuelLiters: calc.totalLitersInPeriod,
+                          efficiency: calc.observedEfficiency,
+                        }
+                      : undefined,
+                  };
+                })}
                 weekStart={period.startDate}
                 weekEnd={period.endDate}
                 fuelEntries={fuelEntries}
@@ -1528,12 +1519,12 @@ function FuelPeriodWizardInner({
                 }
                 provenance={{
                   tripCount: weekTrips.length,
-                  tripsTimedOut: Boolean(weekDegraded?.trips),
-                  deadheadTimedOut: Boolean(weekDegraded?.deadhead),
-                  personalAllowanceTimedOut: Boolean(weekDegraded?.personalAllowance),
-                  brainTimedOut: Boolean(weekDegraded?.brain),
+                  tripsTimedOut: false,
+                  deadheadTimedOut: false,
+                  personalAllowanceTimedOut: false,
+                  brainTimedOut: false,
                   fuelCardsLoaded: (fuelCards || []).length,
-                  fuelCardsMissing: Boolean(weekDegraded?.fuelCards),
+                  fuelCardsMissing: false,
                   vehicleCount: vehicles.length,
                 }}
               />
@@ -1581,7 +1572,7 @@ function FuelPeriodWizardInner({
         onReviewTrips={(bucket) => setTripWindowBucket(bucket)}
         onInspectTimeline={(bucket) => setTimelineBucket(bucket)}
         onRecheck={() => {
-          void weekReports.refresh();
+          void prepareWeek();
           onRefresh();
         }}
         weekStopToStopClear={weekStopToStopClear}
@@ -1619,7 +1610,7 @@ function FuelPeriodWizardInner({
         }))}
         periodLocked={periodLocked}
         onChanged={() => {
-          void weekReports.refresh();
+          void prepareWeek();
           onRefresh();
         }}
       />

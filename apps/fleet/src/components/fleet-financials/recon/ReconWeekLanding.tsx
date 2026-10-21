@@ -293,6 +293,18 @@ export function ReconWeekLanding({
   deskLine?: 'rideshare' | 'rush_delivery';
 }) {
   const rows = useMemo(() => weeks.slice(0, 12), [weeks]);
+  const groups = useMemo(() => {
+    const bucket = (week: (typeof rows)[number]) => {
+      if (week.state === 'closed') return 'completed' as const;
+      if (week.blockers > 0 || week.state === 'collecting') return 'outstanding' as const;
+      return 'in_progress' as const;
+    };
+    return [
+      { id: 'outstanding', title: 'Outstanding', hint: 'A required file is still missing', items: rows.filter((w) => bucket(w) === 'outstanding') },
+      { id: 'in_progress', title: 'In progress', hint: 'Files are in. The week is not closed.', items: rows.filter((w) => bucket(w) === 'in_progress') },
+      { id: 'completed', title: 'Completed', hint: 'This week is closed.', items: rows.filter((w) => bucket(w) === 'completed') },
+    ].filter((g) => g.items.length > 0);
+  }, [rows]);
   const [explain, setExplain] = useState<SourceExplainTarget | null>(null);
 
   const explainOpen = explain !== null;
@@ -343,8 +355,14 @@ export function ReconWeekLanding({
         </div>
       </section>
 
+      {groups.map((group) => (
+        <section key={group.id} className="space-y-3">
+          <div>
+            <h2 className="text-sm font-semibold text-slate-900">{group.title}</h2>
+            <p className="text-xs text-slate-500">{group.hint}</p>
+          </div>
       <ul className="space-y-3">
-        {rows.map((week) => {
+        {group.items.map((week) => {
           const sources = sourcesForLanding(week);
           return (
             <li
@@ -391,6 +409,8 @@ export function ReconWeekLanding({
           );
         })}
       </ul>
+        </section>
+      ))}
 
       <Dialog
         open={explainOpen}

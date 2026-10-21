@@ -9,6 +9,8 @@ export type FuelFinalizeJobResultLike = {
   error?: string;
   failures?: FuelFinalizeJobFailure[];
   driversDone?: string[];
+  progress_done?: number;
+  cursor?: { completedDriverIds?: string[] } | null;
 };
 
 export function fuelFinalizeProgressLabel(job: {
@@ -26,14 +28,32 @@ export function fuelFinalizeProgressLabel(job: {
   return 'Locking this week';
 }
 
+/** Statements the job actually posted. Prefer the driver list; fall back to progress_done. */
+export function fuelFinalizePostedCount(jobRes: FuelFinalizeJobResultLike | null | undefined): number {
+  if (Array.isArray(jobRes?.driversDone)) return jobRes.driversDone.length;
+  const cursorIds = jobRes?.cursor?.completedDriverIds;
+  if (Array.isArray(cursorIds)) return cursorIds.length;
+  const progress = Number(jobRes?.progress_done);
+  return Number.isFinite(progress) && progress > 0 ? progress : 0;
+}
+
+export function fuelFinalizeSuccessMessage(postedCount: number): string {
+  if (postedCount > 0) {
+    const label = postedCount === 1 ? 'statement' : 'statements';
+    return `Week locked. ${postedCount} driver ${label} posted. This week is completed.`;
+  }
+  return 'Week locked. This week is completed.';
+}
+
 export function interpretFuelFinalizeJobResult(jobRes: FuelFinalizeJobResultLike | null | undefined): {
   incomplete: boolean;
   failures: FuelFinalizeJobFailure[];
   driversDoneCount: number;
   toastMessage: string;
+  successMessage: string;
 } {
   const failures = Array.isArray(jobRes?.failures) ? jobRes!.failures! : [];
-  const driversDoneCount = Array.isArray(jobRes?.driversDone) ? jobRes!.driversDone!.length : 0;
+  const driversDoneCount = fuelFinalizePostedCount(jobRes);
   const stillLocking = jobRes?.state === 'queued' || jobRes?.state === 'running';
   const incomplete =
     stillLocking ||
@@ -50,5 +70,11 @@ export function interpretFuelFinalizeJobResult(jobRes: FuelFinalizeJobResultLike
       : `Finalize incomplete — ${jobRes?.error || 'server job failed'}. Week was not locked.`;
   }
 
-  return { incomplete, failures, driversDoneCount, toastMessage };
+  return {
+    incomplete,
+    failures,
+    driversDoneCount,
+    toastMessage,
+    successMessage: fuelFinalizeSuccessMessage(driversDoneCount),
+  };
 }

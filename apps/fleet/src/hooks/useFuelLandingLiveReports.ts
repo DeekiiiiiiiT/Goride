@@ -1,26 +1,10 @@
 /**
- * Landing-only live fuel reports for unlocked weeks.
- *
- * deriveFuelReconciliationPeriods needs miscellaneousCost / shares for Unexplained
- * and Outstanding vs In Progress. Completed weeks use finalized snapshots; open weeks
- * need the same calc engine as the wizard (buildFuelWeekReportsWithGating).
+ * Open weeks on the list use the server snapshot (period.computedAt).
+ * This hook no longer runs the browser week engine.
  */
-import { useEffect, useMemo, useState } from 'react';
-import {
-  buildFuelWeekReportsWithGating,
-  type BuildFuelWeekReportsInput,
-} from '../utils/buildFuelWeekReportsForFinalize';
 import { isYmdInFuelWeek } from '../utils/fuelWeekPeriod';
 import { FUEL_SPEND_EPS } from '../utils/fuelMoneyEpsilon';
 import { fuelOpsSpendAmount } from '../utils/fuelOpsEligibility';
-import {
-  fuelAdjustmentsContentSig,
-  fuelDisputesContentSig,
-  fuelEntriesContentSig,
-  fuelScenariosContentSig,
-  hashFuelContentSig,
-} from '../utils/fuelContentSig';
-import { liveReportsToPrimaryClaimedSlices } from '../utils/fuelPeriodDerive';
 import type {
   FinalizedFuelReport,
   FuelCard,
@@ -107,99 +91,8 @@ export function selectLandingLiveWeeks(
   );
 }
 
-export function useFuelLandingLiveReports(input: FuelLandingLiveReportsInput) {
-  const {
-    weekOptions,
-    serverSkipWeekStarts,
-    vehicles,
-    drivers,
-    fuelEntries,
-    adjustments,
-    scenarios,
-    fuelCards,
-    disputes,
-    finalizedReports,
-  } = input;
+const EMPTY_LANDING_REPORTS = new Map<string, FuelLandingLiveSlice[]>();
 
-  const weeksToLoad = useMemo(
-    () =>
-      selectLandingLiveWeeks(
-        weekOptions,
-        fuelEntries,
-        vehicles,
-        finalizedReports,
-        serverSkipWeekStarts,
-      ),
-    [weekOptions, fuelEntries, vehicles, finalizedReports, serverSkipWeekStarts],
-  );
-
-  const [liveReportsByWeek, setLiveReportsByWeek] = useState<
-    Map<string, FuelLandingLiveSlice[]>
-  >(() => new Map());
-
-  const weekKey = weeksToLoad.map((w) => w.startDate).join('|');
-  const entrySig = hashFuelContentSig([
-    fuelEntriesContentSig(fuelEntries),
-    fuelAdjustmentsContentSig(adjustments),
-    fuelScenariosContentSig(scenarios),
-    fuelDisputesContentSig(disputes),
-    vehicles.map((v) => `${v.id}:${v.fuelScenarioId || ''}`).join(','),
-    drivers.map((d) => `${d.id || d.driverId}:${d.fuelScenarioId || ''}`).join(','),
-    fuelCards.map((c) => c.id).join(','),
-    finalizedReports
-      .map((f) => `${f.driverId}:${f.weekStart}:${Number(f.miscellaneousCost) || 0}`)
-      .join(','),
-    serverSkipWeekStarts ? [...serverSkipWeekStarts].sort().join('|') : '',
-  ]);
-
-  useEffect(() => {
-    let cancelled = false;
-    if (weeksToLoad.length === 0) {
-      setLiveReportsByWeek(new Map());
-      return;
-    }
-
-    (async () => {
-      const next = new Map<string, FuelLandingLiveSlice[]>();
-      let cursor = 0;
-      const workers = Array.from(
-        { length: Math.min(FUEL_LANDING_LIVE_CONCURRENCY, weeksToLoad.length) },
-        async () => {
-          while (cursor < weeksToLoad.length) {
-            if (cancelled) return;
-            const i = cursor++;
-            const week = weeksToLoad[i];
-            const buildInput: BuildFuelWeekReportsInput = {
-              weekStartYmd: week.startDate,
-              weekEndYmd: week.endDate,
-              vehicles,
-              drivers,
-              fuelEntries,
-              adjustments,
-              scenarios,
-              fuelCards,
-              disputes,
-              finalizedReports,
-              seedPersonalAllowance: false,
-            };
-            try {
-              const { reports } = await buildFuelWeekReportsWithGating(buildInput);
-              next.set(week.startDate, liveReportsToPrimaryClaimedSlices(reports));
-            } catch (e) {
-              console.warn('[useFuelLandingLiveReports] week calc failed', week.startDate, e);
-            }
-          }
-        },
-      );
-      await Promise.all(workers);
-      if (!cancelled) setLiveReportsByWeek(new Map(next));
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional signature deps
-  }, [weekKey, entrySig]);
-
-  return liveReportsByWeek;
+export function useFuelLandingLiveReports(_input: FuelLandingLiveReportsInput) {
+  return EMPTY_LANDING_REPORTS;
 }

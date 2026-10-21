@@ -9,7 +9,7 @@ import {
   fuelBulkResetConfirmPhrase,
   formatFuelBulkResetProgress,
   fuelWeekLabelFromYmd,
-} from '../../../utils/buildFuelWeekReportsForFinalize';
+} from '../../../utils/fuelBulkWeekCopy';
 import { reportWeekYmdBounds } from '../../../utils/fuelWeekPeriod';
 import { toast } from 'sonner';
 import { useQueryClient } from '@tanstack/react-query';

@@ -11,6 +11,7 @@ import {
   DialogTitle,
 } from '../../ui/dialog';
 import { Button } from '../../ui/button';
+import { usePermissions } from '../../../hooks/usePermissions';
 import { Alert, AlertDescription } from '../../ui/alert';
 import {
   createReconImport,
@@ -46,6 +47,8 @@ type Props = {
 };
 
 export function FuelCardSelfUploader({ isOpen, onClose, onSuccess, weekKey, sourceId }: Props) {
+  const { can } = usePermissions();
+  const allowWide = can('recon.approve');
   const [busy, setBusy] = useState(false);
   const [fileData, setFileData] = useState<FileData | null>(null);
   const [entries, setEntries] = useState<FuelEntry[]>([]);
@@ -212,6 +215,8 @@ export function FuelCardSelfUploader({ isOpen, onClose, onSuccess, weekKey, sour
         coverageEnd,
         savedStart: preview?.saved_start || preview?.data_start,
         savedEnd: preview?.saved_end || preview?.data_end,
+        weekKey,
+        allowWide,
       })
     : null;
 
@@ -297,6 +302,8 @@ export function FuelCardSelfUploader({ isOpen, onClose, onSuccess, weekKey, sour
               dataEnd={preview?.data_end}
               savedStart={preview?.saved_start || preview?.data_start}
               savedEnd={preview?.saved_end || preview?.data_end}
+              weekKey={weekKey}
+              allowWide={allowWide}
               onCoverageStart={setCoverageStart}
               onCoverageEnd={setCoverageEnd}
             />

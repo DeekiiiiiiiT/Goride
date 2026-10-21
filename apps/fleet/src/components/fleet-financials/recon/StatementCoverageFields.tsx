@@ -1,28 +1,49 @@
-import { coverageGapMessage, formatCoverDay } from '@roam/finance-core';
+import { coverageGapMessage, coverageWideWarning, formatCoverDay } from '@roam/finance-core';
 
-type Props = {
+type CoverageInput = {
   coverageStart: string;
   coverageEnd: string;
-  dataStart?: string | null;
-  dataEnd?: string | null;
   savedStart?: string | null;
   savedEnd?: string | null;
+  weekKey?: string | null;
+  filePeriodStart?: string | null;
+  filePeriodEnd?: string | null;
+  allowWide?: boolean;
+  sourceLabel?: string | null;
+};
+
+type Props = CoverageInput & {
+  dataStart?: string | null;
+  dataEnd?: string | null;
   onCoverageStart: (value: string) => void;
   onCoverageEnd: (value: string) => void;
 };
 
-export function statementCoverageError(input: {
-  coverageStart: string;
-  coverageEnd: string;
-  savedStart?: string | null;
-  savedEnd?: string | null;
-}): string | null {
+export function statementCoverageError(input: CoverageInput): string | null {
   return coverageGapMessage({
     coverageStart: input.coverageStart || null,
     coverageEnd: input.coverageEnd || null,
     dataStart: input.savedStart || null,
     dataEnd: input.savedEnd || null,
+    weekKey: input.weekKey,
+    filePeriodStart: input.filePeriodStart,
+    filePeriodEnd: input.filePeriodEnd,
+    allowWide: input.allowWide,
   });
+}
+
+export function statementCoverageWarning(input: CoverageInput): string | null {
+  if (!input.allowWide) return null;
+  if (statementCoverageError({ ...input, allowWide: false })) {
+    return coverageWideWarning({
+      coverageStart: input.coverageStart || null,
+      coverageEnd: input.coverageEnd || null,
+      dataStart: input.savedStart || null,
+      dataEnd: input.savedEnd || null,
+      sourceLabel: input.sourceLabel,
+    });
+  }
+  return null;
 }
 
 /** Editable “this file covers” range. Empty days inside it count as no activity. */
@@ -33,15 +54,27 @@ export function StatementCoverageFields({
   dataEnd,
   savedStart,
   savedEnd,
+  weekKey,
+  filePeriodStart,
+  filePeriodEnd,
+  allowWide,
+  sourceLabel,
   onCoverageStart,
   onCoverageEnd,
 }: Props) {
-  const error = statementCoverageError({
+  const coverageInput = {
     coverageStart,
     coverageEnd,
     savedStart,
     savedEnd,
-  });
+    weekKey,
+    filePeriodStart,
+    filePeriodEnd,
+    allowWide,
+    sourceLabel,
+  };
+  const error = statementCoverageError(coverageInput);
+  const warning = statementCoverageWarning(coverageInput);
   const coverLabel =
     coverageStart && coverageEnd
       ? `${formatCoverDay(coverageStart)} – ${formatCoverDay(coverageEnd)}`
@@ -83,6 +116,7 @@ export function StatementCoverageFields({
         Days in this range with no transactions count as no activity.
       </p>
       {error ? <p className="text-xs text-rose-700">{error}</p> : null}
+      {!error && warning ? <p className="text-xs text-amber-800">{warning}</p> : null}
     </div>
   );
 }

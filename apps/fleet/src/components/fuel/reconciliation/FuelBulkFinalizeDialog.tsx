@@ -2,13 +2,11 @@ import { Flag } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { api } from '../../../services/api';
-import { fuelService } from '../../../services/fuelService';
 import {
-  buildFuelWeekReportsWithGating,
   FUEL_BULK_FINALIZE_MAX_WEEKS,
   fuelBulkConfirmPhrase,
   formatFuelBulkProgress,
-} from '../../../utils/buildFuelWeekReportsForFinalize';
+} from '../../../utils/fuelBulkWeekCopy';
 import {
   buildFuelStepCounts,
   type FuelReconciliationPeriod,
@@ -16,7 +14,6 @@ import {
 import { fuelActionableTotal } from '../../../utils/fuelPeriodGating';
 import { formatFuelMoney } from '../../../utils/formatFuelMoney';
 import type { FuelCard, FuelEntry, FuelScenario, MileageAdjustment, FinalizedFuelReport, WeeklyFuelReport } from '../../../types/fuel';
-import type { Trip } from '../../../types/data';
 import type { Vehicle } from '../../../types/vehicle';
 import { toast } from 'sonner';
 import { BulkWeekActionDialog, type BulkWeekActionResult } from './BulkWeekActionDialog';
@@ -32,11 +29,6 @@ import {
 import { fuelPeriodFinalizeIdempotencyKey } from '../../../utils/fuelPeriodIdempotency';
 import { interpretFuelFinalizeJobResult } from '../../../utils/fuelFinalizeJobResult';
 import {
-  evaluateFuelWeekClosableClient,
-  fuelWeekClosableBlockerMessage,
-} from '../../../utils/fuelWeekClosableGate';
-import { stopToStopClosableFlagsFromReports } from '../../../utils/stopToStopClosableFlags';
-import {
   dispositionMapFromRows,
   emptyFuelFlagDispositionMap,
   type FuelFlagDispositionMap,
@@ -50,10 +42,10 @@ type PreparedWeek = {
   period: FuelReconciliationPeriod;
   label: string;
   reports: WeeklyFuelReport[];
-  trips: Trip[];
-  weekEntries: FuelEntry[];
-  /** Per-week disposition map — never reuse page selected-week map (R3-2). */
-  dispositions: FuelFlagDispositionMap;
+  periodRowId: string;
+  periodVersion: number;
+  snapshotVersion: number;
+  totalSpend: number;
 };
 
 /** Operator copy when dispositions cannot be trusted (R4-2 / R4-3). */
@@ -260,14 +252,6 @@ export function FuelBulkFinalizeDialog({
         const sorted = [...weeks].sort((a, b) => a.startDate.localeCompare(b.startDate));
         const weekResults: BulkWeekActionResult[] = [];
         const prepared: PreparedWeek[] = [];
-        onProgress('Loading prior finalized snapshots…');
-        const from = sorted[0]?.startDate;
-        const to = sorted[sorted.length - 1]?.startDate;
-        const priorReports = (await api
-          .getFinalizedReports(
-            from && to ? { weekStartFrom: from, weekStartTo: to } : undefined,
-          )
-          .catch(() => [])) as FinalizedFuelReport[];
 
         for (let i = 0; i < sorted.length; i++) {
           const period = sorted[i];
@@ -275,74 +259,20 @@ export function FuelBulkFinalizeDialog({
           onProgress(`${formatFuelBulkProgress(i + 1, sorted.length, label)} Preparing…`);
 
           try {
-            // Landing money is SQL; in-memory logs only cover a recent window — fetch this week.
-            onProgress(
-              `${formatFuelBulkProgress(i + 1, sorted.length, label)} Loading fills…`,
-            );
-            const weekEntries = await fuelService.getAllFuelEntriesInRange({
-              startDate: period.startDate,
-              endDate: period.endDate,
-            });
-
-            // R3-2: hydrate dispositions for THIS week's entry IDs — page map is selected-week only.
-            // R4-2 / R4-3: load failure or truncated read ≠ "no dispositions".
-            const entryIds = weekEntries.map((e) => e.id).filter(Boolean);
-            const hydrate = await loadWeekFlagDispositions(entryIds);
-            if (!hydrate.ok) {
-              weekResults.push({
-                id: period.id,
-                label,
-                status: 'skipped',
-                message: FUEL_BULK_DISPOSITIONS_LOAD_SKIP,
-              });
-              continue;
-            }
-            const weekDispositions = hydrate.map;
-
-            const { reports, trips, gateResult } = await buildFuelWeekReportsWithGating({
-              weekStartYmd: period.startDate,
-              weekEndYmd: period.endDate,
-              vehicles,
-              drivers,
-              fuelEntries: weekEntries,
-              adjustments,
-              scenarios,
-              fuelCards,
-              disputes,
-              finalizedReports: priorReports.length ? priorReports : finalizedReports,
-              transactions,
-              dispositions: weekDispositions,
-            });
-
-            if (!reports.length) {
-              const hasSpend = (Number(period.totalSpend) || 0) > FUEL_SPEND_EPS;
-              weekResults.push({
-                id: period.id,
-                label,
-                status: 'skipped',
-                message: hasSpend
-                  ? 'Could not build driver statements from fills for this week'
-                  : 'No driver statements with spend',
-              });
-              continue;
-            }
-
-            // Accept unexplained only after we know the week can be built/finalized.
-            // Negative misc (over-explained) gates as data-quality until leakageReviewed — same accept API.
             let periodForGate = period;
             const leakageAmt = Number(period.netLeakage) || 0;
             const needsLeakageAccept =
               !period.leakageReviewed &&
               ((period.counts?.['leakage-gap']?.actionable || 0) > 0 ||
                 Math.abs(leakageAmt) > FUEL_SPEND_EPS);
+            const periodRow = await api.ensureFuelReconciliationPeriod({
+              weekStart: period.startDate,
+              weekEnd: period.endDate,
+            });
             if (needsLeakageAccept) {
               onProgress(
                 `${formatFuelBulkProgress(i + 1, sorted.length, label)} Accepting unexplained…`,
               );
-              const periodRow = await api.ensureFuelReconciliationPeriod({
-                weekStart: period.startDate,
-                weekEnd: period.endDate,
-              });
               await api.reviewFuelPeriodLeakage({
                 periodId: periodRow.id,
                 disposition: 'accepted_variance',
@@ -351,109 +281,46 @@ export function FuelBulkFinalizeDialog({
               periodForGate = { ...period, leakageReviewed: true };
             }
 
-            if (gateResult.hasExceptionBlockers) {
-              const first = gateResult.exceptionBlockers[0];
-              const extra =
-                gateResult.exceptionBlockers.length > 1
-                  ? ` (+${gateResult.exceptionBlockers.length - 1} more)`
-                  : '';
-              const detail = first
-                ? `${first.dateYmd} ${first.paymentLabel} ${formatFuelMoney(first.amount)} @ ${first.location}${extra}`
-                : 'exception fills';
+            let preparedWeek: { version?: number | null; totalSpend?: number | null; reports?: WeeklyFuelReport[] };
+            try {
+              preparedWeek = await api.computeFuelWeek(periodRow.id);
+            } catch {
               weekResults.push({
                 id: period.id,
                 label,
                 status: 'failed',
-                message: `Blocked — resolve exception fill(s): ${detail}`,
+                message: "We couldn't prepare this week's numbers. Nothing was locked.",
               });
               continue;
             }
-
-            if (gateResult.hasUnapprovedFuelTxBlockers) {
-              const n = gateResult.unapprovedFuelTxBlockers.length;
-              const holds = gateResult.unapprovedFuelTxBlockers.filter(
-                (b) => b.holdReason === 'station_hold',
-              ).length;
-              const actionable = n - holds;
-              const detail =
-                actionable > 0 && holds > 0
-                  ? `${actionable} need Review Queue; ${holds} await Station Database`
-                  : holds > 0
-                    ? `${holds} await Station Database (not Review Queue)`
-                    : `${actionable} need Review Queue action`;
+            const snapshotVersion = Number(preparedWeek.version) || 0;
+            if (!snapshotVersion) {
               weekResults.push({
                 id: period.id,
                 label,
                 status: 'failed',
-                message: `Blocked — UNAPPROVED_FUEL_TX: ${detail}`,
+                message: "We couldn't prepare this week's numbers. Nothing was locked.",
               });
               continue;
             }
-
-            // C-2: an over-explained week's residual is a modelling artefact, not
-            // real cash — refuse to finalize regardless of leakage acceptance.
-            if (gateResult.hasOverExplainedBlockers) {
-              const first = gateResult.overExplainedBlockers[0];
-              const extra =
-                gateResult.overExplainedBlockers.length > 1
-                  ? ` (+${gateResult.overExplainedBlockers.length - 1} more)`
-                  : '';
-              const pct = first?.pctOfSpend != null ? `${first.pctOfSpend}% of spend` : 'beyond spend';
+            const closable = await api.getFuelPeriodClosable(periodRow.id);
+            const blockers = Array.isArray(closable?.blockers) ? closable.blockers : [];
+            if (blockers.length > 0) {
               weekResults.push({
                 id: period.id,
                 label,
                 status: 'failed',
-                message: `Blocked — over-explained week (unexplained ${pct})${extra}. Fix odometer / efficiency inputs first.`,
+                message: blockers[0]?.message || 'This week cannot be locked.',
               });
               continue;
             }
-
-            const earlyFail = bulkEarlyGateFailure(
-              periodForGate,
-              reports,
-              weekEntries,
-              disputes,
-              vehicles,
-              scenarios,
-              priorReports.length ? priorReports : finalizedReports,
-            );
-            if (earlyFail) {
-              weekResults.push({ id: period.id, label, status: 'failed', message: earlyFail });
-              continue;
-            }
-
-            const closableBlockers = evaluateFuelWeekClosableClient({
-              gateResult,
-              reports,
-              scenarios,
-              leakageReviewed: periodForGate.leakageReviewed ?? false,
-              odometerChainReviewed: periodForGate.odometerChainReviewed ?? false,
-              unattributedReviewed: periodForGate.unattributedReviewed ?? false,
-              countsUnevaluated:
-                !periodForGate.counts || Object.keys(periodForGate.counts).length === 0,
-              openDisputesInWeek: disputes.some(
-                (d) =>
-                  d.status === 'Open' &&
-                  isYmdInFuelWeek(d.weekStart, period.startDate, period.endDate),
-              ),
-              totalSpend: period.totalSpend,
-              unexplained: period.netLeakage,
-              dataQualityVehiclesUnreviewed:
-                (periodForGate.counts?.['data-quality']?.actionable ?? 0) > 0,
-              ...stopToStopClosableFlagsFromReports({
-                reports,
-                fuelEntries: weekEntries,
-                weekStartYmd: period.startDate,
-                weekEndYmd: period.endDate,
-                gapAccepts: periodForGate.stopToStopGapAccepts,
-              }),
-            });
-            if (closableBlockers.length > 0) {
+            const reports = Array.isArray(preparedWeek.reports) ? preparedWeek.reports : [];
+            if (!reports.length && (Number(preparedWeek.totalSpend) || 0) <= FUEL_SPEND_EPS && (Number(period.totalSpend) || 0) <= FUEL_SPEND_EPS) {
               weekResults.push({
                 id: period.id,
                 label,
-                status: 'failed',
-                message: fuelWeekClosableBlockerMessage(closableBlockers[0]),
+                status: 'skipped',
+                message: 'No driver statements with spend',
               });
               continue;
             }
@@ -462,9 +329,10 @@ export function FuelBulkFinalizeDialog({
               period: periodForGate,
               label,
               reports,
-              trips,
-              weekEntries,
-              dispositions: weekDispositions,
+              periodRowId: periodRow.id,
+              periodVersion: periodRow.version || 1,
+              snapshotVersion,
+              totalSpend: Number(preparedWeek.totalSpend) || period.totalSpend,
             });
           } catch (e: any) {
             console.error('[FuelBulkFinalize] prepare failed', period.id, e);
@@ -495,43 +363,17 @@ export function FuelBulkFinalizeDialog({
           onProgress(formatFuelBulkProgress(i + 1, prepared.length, label));
 
           try {
-            const periodRow = await api.ensureFuelReconciliationPeriod({
-              weekStart: period.startDate,
-              weekEnd: period.endDate,
-            });
-            let preparedWeek: { version?: number | null; totalSpend?: number | null };
-            try {
-              preparedWeek = await api.computeFuelWeek(periodRow.id);
-            } catch {
-              weekResults.push({
-                id: period.id,
-                label,
-                status: 'failed',
-                message: "We couldn't prepare this week's numbers. Nothing was locked.",
-              });
-              continue;
-            }
-            const snapshotVersion = Number(preparedWeek.version) || 0;
-            if (!snapshotVersion) {
-              weekResults.push({
-                id: period.id,
-                label,
-                status: 'failed',
-                message: "We couldn't prepare this week's numbers. Nothing was locked.",
-              });
-              continue;
-            }
             const enqueueArgs = {
-              periodId: periodRow.id,
-              version: periodRow.version || 1,
+              periodId: item.periodRowId,
+              version: item.periodVersion,
               idempotencyKey: fuelPeriodFinalizeIdempotencyKey(
-                periodRow.id,
-                periodRow.version || 1,
+                item.periodRowId,
+                item.periodVersion,
               ),
               snapshots: [] as any[],
-              totalSpend: Number(preparedWeek.totalSpend) || period.totalSpend,
+              totalSpend: item.totalSpend,
               secondApproverThreshold,
-              snapshotVersion,
+              snapshotVersion: item.snapshotVersion,
             };
               const jobRes = await api.enqueueFuelPeriodFinalize(enqueueArgs).catch(async (lockErr: any) => {
                 if (lockErr?.code === 'SNAPSHOT_MISMATCH') {
@@ -547,7 +389,7 @@ export function FuelBulkFinalizeDialog({
                   lockErr?.code === 'inputs_changed' ||
                   lockErr?.code === 'snapshot_stale'
                 ) {
-                  const fresh = await api.getFuelReconciliationPeriod(periodRow.id).catch(() => null);
+                  const fresh = await api.getFuelReconciliationPeriod(item.periodRowId).catch(() => null);
                   if (fresh && (fresh.status === 'locked' || fresh.lockedAt || fresh.locked_at)) {
                     return { state: 'succeeded', ok: true, alreadyLocked: true };
                   }
@@ -558,7 +400,7 @@ export function FuelBulkFinalizeDialog({
                     failures: [],
                   };
                 }
-                const fresh = await api.getFuelReconciliationPeriod(periodRow.id).catch(() => null);
+                const fresh = await api.getFuelReconciliationPeriod(item.periodRowId).catch(() => null);
                 if (fresh && (fresh.status === 'locked' || fresh.lockedAt || fresh.locked_at)) {
                   return { state: 'succeeded', ok: true, alreadyLocked: true };
                 }
@@ -571,7 +413,7 @@ export function FuelBulkFinalizeDialog({
               }
               const jobInterp = interpretFuelFinalizeJobResult(settled);
               if (jobInterp.incomplete) {
-                const fresh = await api.getFuelReconciliationPeriod(periodRow.id).catch(() => null);
+                const fresh = await api.getFuelReconciliationPeriod(item.periodRowId).catch(() => null);
                 if (fresh && (fresh.status === 'locked' || fresh.lockedAt || fresh.locked_at)) {
                   weekResults.push({
                     id: period.id,

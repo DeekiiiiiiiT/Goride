@@ -74,8 +74,10 @@ import { useSettlementCommands, newIdempotencyKey } from '../../hooks/useSettlem
 import {
   CashGateError,
   collectCashPayment,
+  payDriverWeek,
 } from '../../hooks/useCashCollection';
 import { useServiceLineScopeParam } from '../../hooks/useServiceLineScopeParam';
+import { useReconWizardEnabled } from '../../hooks/useReconWizardFlag';
 import {
   RecordPayoutModal,
   type RecordPayoutSavePayload,
@@ -156,7 +158,7 @@ export type SettlementsHubTab = 'cash' | 'close-week' | 'restatements';
 
 type SettlementsNavigateOpts =
   | { startYmd: string; endYmd?: string; driverId?: string }
-  | { weekKey: string };
+  | { weekKey?: string; step?: string; line?: 'rideshare' | 'rush_delivery' };
 
 type PeriodRow = {
   driverId: string;
@@ -417,6 +419,7 @@ export function DriverSettlementsPage({
   const qc = useQueryClient();
   const settlementCmds = useSettlementCommands();
   const { scope, serviceLineParam } = useServiceLineScopeParam();
+  const wizardEnabled = useReconWizardEnabled();
   const thisMonday = format(startOfWeek(new Date(), { weekStartsOn: 1 }), 'yyyy-MM-dd');
   const [hubTab, setHubTab] = useState<SettlementsHubTab>(initialHubTab || 'cash');
   const [closeWeekKey, setCloseWeekKey] = useState<string | undefined>(
@@ -485,9 +488,16 @@ export function DriverSettlementsPage({
     opts?: SettlementsNavigateOpts,
   ) => {
     if (page === 'close-week') {
-      if (opts && 'weekKey' in opts && typeof opts.weekKey === 'string') {
-        setCloseWeekKey(opts.weekKey);
+      const weekKey =
+        opts && 'weekKey' in opts && typeof opts.weekKey === 'string' ? opts.weekKey : closeWeekKey;
+      if (wizardEnabled) {
+        onNavigate?.('close-week', {
+          weekKey,
+          line: scope === 'rush_delivery' ? 'rush_delivery' : 'rideshare',
+        });
+        return;
       }
+      if (weekKey) setCloseWeekKey(weekKey);
       setHubTab('close-week');
       return;
     }
@@ -1268,20 +1278,15 @@ export function DriverSettlementsPage({
     const weekAnchor = String(payload.workPeriodStart || payoutModal.workPeriodStart || '').slice(0, 10);
     const amount = Math.abs(Number(payload.amount) || 0);
     try {
-      const res = await settlementCommandsApi.pay({
+      const { needsApproval } = await payDriverWeek(qc, {
         driverId: payoutModal.driverId,
         weekAnchor,
         amount,
         method: payload.paymentMethod,
         reference: payload.referenceNumber,
         note: payload.notes,
-        idempotencyKey: newIdempotencyKey(),
         expectedOutstanding: payoutModal.maxAmount,
       });
-      const needsApproval =
-        (res as { requiresApproval?: boolean })?.requiresApproval === true ||
-        (requiresApproval(amount, SETTLEMENT_APPROVAL_THRESHOLD) &&
-          String(payload.paymentMethod || '') !== 'Cash');
       if (needsApproval) {
         toast.info('Sent for approval');
       }
@@ -1691,7 +1696,16 @@ export function DriverSettlementsPage({
 
       <Tabs
         value={hubTab}
-        onValueChange={(v) => setHubTab(v as SettlementsHubTab)}
+        onValueChange={(v) => {
+          if (v === 'close-week' && wizardEnabled) {
+            onNavigate?.('close-week', {
+              weekKey: closeWeekKey,
+              line: scope === 'rush_delivery' ? 'rush_delivery' : 'rideshare',
+            });
+            return;
+          }
+          setHubTab(v as SettlementsHubTab);
+        }}
         className="space-y-4"
       >
         <TabsList className="hidden h-auto flex-wrap gap-1 md:flex">
@@ -1720,6 +1734,26 @@ export function DriverSettlementsPage({
         ) : null}
 
         <TabsContent value="close-week" className="mt-0 focus-visible:outline-none">
+          {wizardEnabled ? (
+            <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-6 text-sm text-slate-700">
+              <p className="font-medium text-slate-900">Close this week in Week Reconciliation</p>
+              <p className="mt-1">
+                Closing happens on the wizard so a week cannot be signed while required files are still missing.
+              </p>
+              <Button
+                type="button"
+                className="mt-4 h-11"
+                onClick={() =>
+                  onNavigate?.('close-week', {
+                    weekKey: closeWeekKey,
+                    line: scope === 'rush_delivery' ? 'rush_delivery' : 'rideshare',
+                  })
+                }
+              >
+                Open the close step
+              </Button>
+            </div>
+          ) : (
           <Suspense
             fallback={
               <div className="flex h-40 items-center justify-center text-sm text-slate-500">
@@ -1734,6 +1768,7 @@ export function DriverSettlementsPage({
               onNavigate={handleHubNavigate}
             />
           </Suspense>
+          )}
         </TabsContent>
 
         <TabsContent value="restatements" className="mt-0 focus-visible:outline-none">

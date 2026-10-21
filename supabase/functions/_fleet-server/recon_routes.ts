@@ -49,9 +49,20 @@ import {
 import {
   coverageInputHash,
   countTripsEarningsBlockers,
+  countSettlementPreviewBlockers,
   isReconHumanSourceStatus,
 } from "../../../packages/finance-core/src/coverageInputHash.ts";
 import { sourceVolumeMetrics } from "./recon_volume.ts";
+import { isReconWeekFrozen } from "./recon_week_writable.ts";
+
+async function refuseFrozenReconWeek(
+  c: Context,
+  orgId: string,
+  weekKey: string,
+): Promise<Response | null> {
+  if (!(await isReconWeekFrozen(orgId, weekKey))) return null;
+  return c.json({ error: "PERIOD_FROZEN", message: "Reopen the week first" }, 409);
+}
 
 const BASE = "/make-server-37f42386/recon";
 const WEEK_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -602,11 +613,14 @@ async function computeLiveStepCounts(
 
   // R3-08: Trips & Tag from close-preview blockers / roll-forward variance.
   let tripsActionable = 0;
+  // Fail closed: if the preview cannot be read, Settlement stays open.
+  let settlementActionable = 1;
   try {
     const { previewWeekClose } = await import("./week_close.ts");
     const preview = await previewWeekClose(orgId, weekKey, { serviceLine: line });
     const all = [...(preview.blockers ?? []), ...(preview.weekBlockers ?? [])];
     tripsActionable = countTripsEarningsBlockers(all);
+    settlementActionable = countSettlementPreviewBlockers(all);
   } catch (e) {
     console.warn("[recon] trips_earnings actionable probe failed", e);
   }
@@ -636,7 +650,7 @@ async function computeLiveStepCounts(
     tolls: { actionable: tollActionable, informational: 0 },
     tag_account: { actionable: tagActionable, informational: 0 },
     fuel: { actionable: fuelActionable, informational: 0 },
-    settlement_preview: { actionable: 0, informational: 0 },
+    settlement_preview: { actionable: settlementActionable, informational: 0 },
     close: { actionable: 0, informational: 0 },
   };
 }
@@ -1074,6 +1088,17 @@ export function registerReconRoutes(app: Hono) {
           isSettlementPeriodEnded({ periodAnchor: weekKey })
         );
 
+        const { data: runStateRows } = await reconDb()
+          .from("week_runs")
+          .select("week_key, state")
+          .eq("organization_id", orgId)
+          .eq("service_line", line);
+        const closedWeeks = new Set(
+          (runStateRows ?? [])
+            .filter((r) => String((r as { state?: string }).state || "") === "closed")
+            .map((r) => String((r as { week_key?: string }).week_key || "").slice(0, 10)),
+        );
+
         const weeks = [];
         for (const weekKey of weekKeys) {
           if (!WEEK_RE.test(weekKey)) continue;
@@ -1099,10 +1124,11 @@ export function registerReconRoutes(app: Hono) {
             s.status === "received" || s.status === "not_applicable" || s.status === "attested_none"
           ).length;
 
+          const runClosed = closedWeeks.has(weekKey);
           weeks.push({
             weekKey,
             line,
-            state: missingCount > 0 ? "collecting" : "reconciling",
+            state: runClosed ? "closed" : missingCount > 0 ? "collecting" : "reconciling",
             progress: { done, total: sourceSnaps.length },
             nextAction,
             blockers: missingCount,
@@ -1113,9 +1139,11 @@ export function registerReconRoutes(app: Hono) {
         const statusFilter = c.req.query("status");
         let filtered = weeks;
         if (statusFilter === "outstanding") {
-          filtered = weeks.filter((w) => w.blockers > 0);
+          filtered = weeks.filter((w) => w.state !== "closed" && w.blockers > 0);
+        } else if (statusFilter === "in_progress") {
+          filtered = weeks.filter((w) => w.state === "reconciling");
         } else if (statusFilter === "completed") {
-          filtered = weeks.filter((w) => w.blockers === 0);
+          filtered = weeks.filter((w) => w.state === "closed");
         }
 
         return c.json({ success: true, weeks: filtered, line, year: year ?? null });
@@ -1161,6 +1189,8 @@ export function registerReconRoutes(app: Hono) {
         if (!line || !WEEK_RE.test(weekKey)) {
           return c.json({ error: "INVALID_REQUEST", message: "Invalid line or weekKey" }, 400);
         }
+        const frozen = await refuseFrozenReconWeek(c, orgId, weekKey);
+        if (frozen) return frozen;
         if (!RECON_SOURCES.some((s) => s.id === sourceId)) {
           return c.json({ error: "INVALID_SOURCE", message: "Unknown source id" }, 400);
         }
@@ -1255,6 +1285,8 @@ export function registerReconRoutes(app: Hono) {
         if (!line || !WEEK_RE.test(weekKey)) {
           return c.json({ error: "INVALID_REQUEST", message: "Invalid line or weekKey" }, 400);
         }
+        const frozen = await refuseFrozenReconWeek(c, orgId, weekKey);
+        if (frozen) return frozen;
 
         const body = await c.req.json().catch(() => ({})) as {
           reason?: string;
@@ -1358,6 +1390,8 @@ export function registerReconRoutes(app: Hono) {
         if (!line || !WEEK_RE.test(weekKey)) {
           return c.json({ error: "INVALID_REQUEST", message: "Invalid line or weekKey" }, 400);
         }
+        const frozen = await refuseFrozenReconWeek(c, orgId, weekKey);
+        if (frozen) return frozen;
 
         const body = await c.req.json().catch(() => ({})) as {
           kind?: string;
@@ -1401,6 +1435,8 @@ export function registerReconRoutes(app: Hono) {
         if (!line || !WEEK_RE.test(weekKey)) {
           return c.json({ error: "INVALID_REQUEST", message: "Invalid line or weekKey" }, 400);
         }
+        const frozen = await refuseFrozenReconWeek(c, orgId, weekKey);
+        if (frozen) return frozen;
 
         const body = await c.req.json().catch(() => ({})) as {
           rows?: Array<{ id: string; entity?: string; serviceLine?: string }>;
@@ -1479,6 +1515,8 @@ export function registerReconRoutes(app: Hono) {
         if (!line || !WEEK_RE.test(weekKey)) {
           return c.json({ error: "INVALID_REQUEST", message: "Invalid line or weekKey" }, 400);
         }
+        const frozen = await refuseFrozenReconWeek(c, orgId, weekKey);
+        if (frozen) return frozen;
         if (!(RECON_STEP_ORDER as readonly string[]).includes(stepId)) {
           return c.json({ error: "INVALID_STEP", message: "Unknown step id" }, 400);
         }
@@ -1582,6 +1620,8 @@ export function registerReconRoutes(app: Hono) {
         if (!line || !WEEK_RE.test(weekKey)) {
           return c.json({ error: "INVALID_REQUEST", message: "Invalid line or weekKey" }, 400);
         }
+        const frozen = await refuseFrozenReconWeek(c, orgId, weekKey);
+        if (frozen) return frozen;
         if (!RECON_SOURCES.some((s) => s.id === sourceId)) {
           return c.json({ error: "INVALID_SOURCE", message: "Unknown source id" }, 400);
         }

@@ -30,7 +30,9 @@ export type FuelWeekClosableBlocker = {
     /** Disposition table could not be loaded — infra, not data quality. */
     | 'disposition_load_failed'
     /** Flagged vehicles not marked reviewed on Data quality. */
-    | 'data_quality_unreviewed';
+    | 'data_quality_unreviewed'
+    /** A fill for this week's vehicles has no company, so the server total skipped it. */
+    | 'null_org_fill';
   message: string;
 };
 
@@ -72,6 +74,8 @@ export type EvaluateFuelWeekClosableInput = {
   dispositionLoadFailed?: boolean;
   /** Data-quality flagged vehicles not marked reviewed. */
   dataQualityVehiclesUnreviewed?: boolean;
+  /** Fill dated in this week for this company's vehicles, with no organization_id. */
+  nullOrgFill?: boolean;
 };
 
 function fmtMoney(n: number): string {
@@ -219,6 +223,13 @@ export function evaluateFuelWeekClosable(
     blockers.push({
       code: 'data_quality_unreviewed',
       message: 'Data-quality flagged vehicles not marked reviewed.',
+    });
+  }
+  if (input.nullOrgFill) {
+    blockers.push({
+      code: 'null_org_fill',
+      message:
+        'A fuel fill for this week is missing its company, so it was left out of the total. Repair it before locking.',
     });
   }
   return blockers;

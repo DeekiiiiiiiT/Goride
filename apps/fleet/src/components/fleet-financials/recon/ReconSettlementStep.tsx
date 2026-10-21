@@ -2,15 +2,23 @@
  * Read-only per-driver settlement amounts (Close Week confirm pattern) — R2-26.
  * Cash desk link lives here — after fuel/tolls — not on Trips & earnings.
  */
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { addDays, format, parseISO } from 'date-fns';
 import { Loader2 } from 'lucide-react';
 import { MONEY_EPS, periodEndForAnchor } from '@roam/finance-core';
 import type { ReconRunPayload } from '../../../services/reconApi';
 import { useSettlementQueue } from '../../../hooks/useSettlementQueue';
+import { collectCashPayment, payDriverWeek } from '../../../hooks/useCashCollection';
+import { settlementCommandsApi, isPeriodFrozenError } from '../../../services/settlementCommandsApi';
+import { weekCloseApi } from '../../../services/weekCloseApi';
 import { resolvePayQueueOwed } from '../../../utils/driverSettlementsPayAmount';
 import { computeSettlementLaneMetrics } from '../../../utils/settlementLaneMetrics';
+import { humanBlockerLabel } from '../../../utils/weekCloseBlockers';
+import { LogCashPaymentModal } from '../../drivers/LogCashPaymentModal';
+import { RecordPayoutModal, type RecordPayoutSavePayload } from '../../drivers/RecordPayoutModal';
 import { Button } from '../../ui/button';
+import { toast } from 'sonner';
 
 const MONEY = (n: number | null | undefined) => {
   if (n == null || !Number.isFinite(n)) return '—';
@@ -57,6 +65,51 @@ export function ReconSettlementStep({
   };
   const collectQuery = useSettlementQueue({ view: 'collect', ...queueParams });
   const payQuery = useSettlementQueue({ view: 'pay', ...queueParams });
+  const qc = useQueryClient();
+  const [payTarget, setPayTarget] = useState<{
+    driverId: string;
+    name: string;
+    amount: number;
+  } | null>(null);
+  const [collectTarget, setCollectTarget] = useState<{
+    driverId: string;
+    name: string;
+    amount: number;
+  } | null>(null);
+
+  const movementsQuery = useQuery({
+    queryKey: ['recon-settlement-movements', weekKey, periodEnd],
+    queryFn: () =>
+      settlementCommandsApi.getMovements({
+        weekFrom: weekKey,
+        weekTo: periodEnd,
+        kind: 'pay',
+        pageSize: 200,
+      }),
+  });
+  const previewQuery = useQuery({
+    queryKey: ['recon-close-preview', weekKey, run.run.serviceLine],
+    queryFn: () =>
+      weekCloseApi.preview(weekKey, (run.run.serviceLine as 'rideshare' | 'rush_delivery') || 'rideshare'),
+    staleTime: 30_000,
+    retry: false,
+  });
+
+  const awaitingDriverIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const row of movementsQuery.data?.rows || []) {
+      if (String(row.status || '').toLowerCase() !== 'pending') continue;
+      if (String(row.kind || '') !== 'pay') continue;
+      const id = String(row.driverId || '').trim();
+      if (id) ids.add(id);
+    }
+    return ids;
+  }, [movementsQuery.data?.rows]);
+
+  const overReturnNotes = useMemo(() => {
+    const all = [...(previewQuery.data?.blockers || []), ...(previewQuery.data?.weekBlockers || [])];
+    return all.filter((b) => String(b.code || '').toUpperCase() === 'CASH_HELD_OVER_RETURNED');
+  }, [previewQuery.data]);
 
   const settlement = useMemo(() => {
     return computeSettlementLaneMetrics(
@@ -88,7 +141,7 @@ export function ReconSettlementStep({
         fleet: 0,
       };
       if (r.driverName) cur.name = String(r.driverName);
-      cur.owed += collectOwedMajor(r);
+      if (r.collectKind !== 'cash_held') cur.owed += collectOwedMajor(r);
       byId.set(id, cur);
     }
     for (const r of (payQuery.data?.rows || []) as Row[]) {
@@ -123,8 +176,8 @@ export function ReconSettlementStep({
   return (
     <div className="space-y-4">
       <p className="text-sm text-slate-600">
-        Who owes whom for week of {weekKey} after fuel and tolls. Finish Collect / Pay on Cash desk
-        if anything remains open; closing happens on the next step.
+        Who owes whom for the week of {weekKey}. Pay or collect here. A bank payout stays open until
+        it clears. Closing is the next step.
       </p>
 
       <Button
@@ -156,8 +209,20 @@ export function ReconSettlementStep({
         </div>
       </dl>
 
-      {drivers.length === 0 ? (
-        <p className="text-sm text-slate-500">No driver Collect / Pay rows for this week.</p>
+      {overReturnNotes.length > 0 ? (
+        <ul className="space-y-1 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-900">
+          {overReturnNotes.map((b, i) => (
+            <li key={`${b.driverId || 'week'}-${i}`}>
+              {humanBlockerLabel(b)}
+              {Number.isFinite(Number(b.persisted)) ? ` (${MONEY(Number(b.persisted))})` : ''}. Pay
+              and Collect do not clear this.
+            </li>
+          ))}
+        </ul>
+      ) : null}
+
+      {drivers.filter((d) => d.owed > MONEY_EPS || d.fleet > MONEY_EPS || awaitingDriverIds.has(d.driverId)).length === 0 ? (
+        <p className="text-sm text-slate-500">Nothing left to pay or collect for this week.</p>
       ) : (
         <div className="overflow-x-auto rounded-xl border border-slate-200">
           <table className="w-full min-w-[28rem] text-left text-sm">
@@ -166,17 +231,39 @@ export function ReconSettlementStep({
                 <th className="px-3 py-2 font-medium">Driver</th>
                 <th className="px-3 py-2 font-medium tabular-nums">Driver owes</th>
                 <th className="px-3 py-2 font-medium tabular-nums">Fleet owes</th>
+                <th className="px-3 py-2 font-medium"> </th>
               </tr>
             </thead>
             <tbody>
-              {drivers.map((d) => (
+              {drivers
+                .filter((d) => d.owed > MONEY_EPS || d.fleet > MONEY_EPS || awaitingDriverIds.has(d.driverId))
+                .map((d) => (
                 <tr key={d.driverId} className="border-t border-slate-100 text-slate-800">
-                  <td className="px-3 py-2 font-medium">{d.name}</td>
+                  <td className="px-3 py-2 font-medium">
+                    {d.name}
+                    {awaitingDriverIds.has(d.driverId) ? (
+                      <span className="mt-1 block text-xs font-normal text-amber-800">Awaiting bank clear</span>
+                    ) : null}
+                  </td>
                   <td className="px-3 py-2 tabular-nums">
                     {d.owed > MONEY_EPS ? MONEY(d.owed) : '—'}
                   </td>
                   <td className="px-3 py-2 tabular-nums">
                     {d.fleet > MONEY_EPS ? MONEY(d.fleet) : '—'}
+                  </td>
+                  <td className="px-3 py-2">
+                    <div className="flex flex-wrap gap-2">
+                      {d.fleet > MONEY_EPS ? (
+                        <Button type="button" size="sm" className="h-11" onClick={() => setPayTarget({ driverId: d.driverId, name: d.name, amount: d.fleet })}>
+                          Pay
+                        </Button>
+                      ) : null}
+                      {d.owed > MONEY_EPS ? (
+                        <Button type="button" size="sm" variant="outline" className="h-11" onClick={() => setCollectTarget({ driverId: d.driverId, name: d.name, amount: d.owed })}>
+                          Collect
+                        </Button>
+                      ) : null}
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -184,6 +271,67 @@ export function ReconSettlementStep({
           </table>
         </div>
       )}
+
+      <RecordPayoutModal
+        isOpen={!!payTarget}
+        onClose={() => setPayTarget(null)}
+        driverName={payTarget?.name || ''}
+        maxAmount={payTarget?.amount || 0}
+        workPeriodStart={weekKey}
+        workPeriodEnd={periodEnd}
+        onSave={async (payload: RecordPayoutSavePayload) => {
+          if (!payTarget) return;
+          try {
+            const { needsApproval } = await payDriverWeek(qc, {
+              driverId: payTarget.driverId,
+              weekAnchor: weekKey,
+              amount: Math.abs(Number(payload.amount) || 0),
+              method: payload.paymentMethod,
+              reference: payload.referenceNumber,
+              note: payload.notes,
+              expectedOutstanding: payTarget.amount,
+            });
+            if (needsApproval) toast.info('Sent for approval');
+            else if (String(payload.paymentMethod || '') !== 'Cash') {
+              toast.message('Payout logged — awaiting bank clear');
+            }
+            await qc.invalidateQueries({ queryKey: ['recon-run'] });
+            await previewQuery.refetch();
+          } catch (err) {
+            if (isPeriodFrozenError(err)) {
+              toast.error('Reopen the week first');
+              return;
+            }
+            toast.error(err instanceof Error ? err.message : 'Pay failed');
+            throw err;
+          }
+        }}
+      />
+
+      <LogCashPaymentModal
+        isOpen={!!collectTarget}
+        onClose={() => setCollectTarget(null)}
+        driverName={collectTarget?.name || ''}
+        cashOwed={collectTarget?.amount || 0}
+        initialAmount={collectTarget?.amount}
+        initialWorkPeriodStart={`${weekKey}T12:00:00.000Z`}
+        initialWorkPeriodEnd={`${periodEnd}T12:00:00.000Z`}
+        allowedTypes={['payment']}
+        onSave={async (payment) => {
+          if (!collectTarget) return;
+          await collectCashPayment(qc, {
+            driverId: collectTarget.driverId,
+            weekAnchor: weekKey,
+            amount: Math.abs(Number(payment.amount) || 0),
+            method: payment.paymentMethod,
+            reference: payment.referenceNumber,
+            note: payment.notes,
+            expectedOutstanding: collectTarget.amount,
+          });
+          await qc.invalidateQueries({ queryKey: ['recon-run'] });
+          await previewQuery.refetch();
+        }}
+      />
     </div>
   );
 }

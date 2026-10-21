@@ -682,7 +682,7 @@ function FuelManagementInner({
   const [isBucketSheetOpen, setIsBucketSheetOpen] = useState(false);
 
   // P-9: defer trips until bucket sheet opens — landing must not wait on trip waterfall.
-  // Wizard / finalize fetch trips via buildFuelWeekReportsWithGating when needed.
+  // Wizard trips come from the week already loaded for gap and stop-to-stop.
   useEffect(() => {
     if (activeTab !== 'reconciliation' || !periodsQueryReady || !isBucketSheetOpen) return;
     const fetchTripsForRange = async () => {
@@ -2035,15 +2035,7 @@ function FuelManagementInner({
             to: weekStart,
           }).catch(() => undefined);
 
-          if (weekResult.failures?.length) {
-            toast.warning(
-              `Finalize finished with issues — ${weekResult.snapshotCount} prepared, ${weekResult.failures.length} client build failed.`,
-            );
-          } else if (weekResult.successCount > 0) {
-              toast.success(`Week locked — ${weekResult.successCount} statement(s) posted. This period is now Completed.`);
-          } else {
-              toast.success(`Week locked — ${weekResult.snapshotCount} snapshot(s) saved. This period is now Completed.`);
-          }
+          toast.success(jobInterp.successMessage);
 
           return true;
       } catch (e: any) {

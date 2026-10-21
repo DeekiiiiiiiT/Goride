@@ -4,7 +4,7 @@
  */
 import type { Hono } from "npm:hono@4.3.11";
 import type { Context } from "npm:hono@4.3.11";
-import { requireAuth, requireAnyPermission } from "./rbac_middleware.ts";
+import { hasPermission, requireAuth, requireAnyPermission, type Role } from "./rbac_middleware.ts";
 import { getOrgId } from "./org_scope.ts";
 import { safeErrorResponse } from "./safe_error.ts";
 import { getServiceClient } from "./service_client.ts";
@@ -42,6 +42,24 @@ import {
   ensureReconImportBatch,
   type ReconBatchSourceId,
 } from "./recon_batch_bridge.ts";
+import { isReconWeekFrozen } from "./recon_week_writable.ts";
+import { assertTollPeriodWritable, TollPeriodSealedError } from "./toll_period_writable.ts";
+
+function actorCanApproveWideCoverage(c: Context): boolean {
+  const user = c.get("rbacUser") as { resolvedRole?: Role } | undefined;
+  return !!user?.resolvedRole && hasPermission(user.resolvedRole, "recon.approve");
+}
+
+async function refuseFrozenImportWeek(
+  c: Context,
+  orgId: string,
+  weekKey: string | null | undefined,
+): Promise<Response | null> {
+  const week = weekKey ? String(weekKey).slice(0, 10) : "";
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(week)) return null;
+  if (!(await isReconWeekFrozen(orgId, week))) return null;
+  return c.json({ error: "PERIOD_FROZEN", message: "Reopen the week first" }, 409);
+}
 
 const IMPORTS = "/make-server-37f42386/recon/imports";
 const FLEET_TZ = "America/Jamaica";
@@ -604,6 +622,8 @@ export function registerReconImportRoutes(app: Hono) {
         if (staging.status !== "parsed" && staging.status !== "partial") {
           return c.json({ error: "NOT_PARSED" }, 409);
         }
+        const frozenCommit = await refuseFrozenImportWeek(c, orgId, staging.week_key);
+        if (frozenCommit) return frozenCommit;
 
         const body = await c.req.json().catch(() => ({}));
         const idempotencyKey = body.idempotencyKey ? String(body.idempotencyKey) : null;
@@ -639,6 +659,19 @@ export function registerReconImportRoutes(app: Hono) {
           const dataStart = asYmd(body.dataStart) || asYmd(fuelPreview?.data_start);
           const dataEnd = asYmd(body.dataEnd) || asYmd(fuelPreview?.data_end);
           if (coverageStart && coverageEnd) {
+            const fuelGap = coverageGapMessage({
+              coverageStart,
+              coverageEnd,
+              dataStart,
+              dataEnd,
+              filePeriodStart: body.filePeriodStart ? String(body.filePeriodStart) : null,
+              filePeriodEnd: body.filePeriodEnd ? String(body.filePeriodEnd) : null,
+              weekKey: staging.week_key ? String(staging.week_key).slice(0, 10) : null,
+              allowWide: actorCanApproveWideCoverage(c),
+            });
+            if (fuelGap) {
+              return c.json({ error: "COVERAGE_EXCLUDES_ROWS", message: fuelGap }, 400);
+            }
             await ensureReconImportBatch({
               batchId: clientBatchId,
               orgId,
@@ -709,6 +742,10 @@ export function registerReconImportRoutes(app: Hono) {
           coverageEnd,
           dataStart: savedSpan.start,
           dataEnd: savedSpan.end,
+          filePeriodStart: body.filePeriodStart ? String(body.filePeriodStart) : null,
+          filePeriodEnd: body.filePeriodEnd ? String(body.filePeriodEnd) : null,
+          weekKey: staging.week_key ? String(staging.week_key).slice(0, 10) : null,
+          allowWide: actorCanApproveWideCoverage(c),
         });
         if (coverageGap || !coverageStart || !coverageEnd) {
           return c.json({
@@ -750,6 +787,26 @@ export function registerReconImportRoutes(app: Hono) {
         // so money events (canonical P&L, toll_usage) match saveTollLedgerEntry.
         const dedupCache = await getAllTollLedgerEntries(c);
         const prepared: Array<Parameters<typeof saveTollLedgerEntry>[0]> = [];
+
+        if (isTollSource(sourceId)) {
+          const tollWeeks = new Set<string>();
+          if (staging.week_key) tollWeeks.add(String(staging.week_key).slice(0, 10));
+          for (const row of rows) {
+            if (row.week_key) tollWeeks.add(String(row.week_key).slice(0, 10));
+          }
+          for (const wk of tollWeeks) {
+            const frozenToll = await refuseFrozenImportWeek(c, orgId, wk);
+            if (frozenToll) return frozenToll;
+            try {
+              await assertTollPeriodWritable(orgId, wk, { route: "recon-import-commit" });
+            } catch (e) {
+              if (e instanceof TollPeriodSealedError) {
+                return c.json({ error: "PERIOD_FROZEN", message: "Reopen the week first" }, 409);
+              }
+              throw e;
+            }
+          }
+        }
 
         for (const row of rows) {
           if (row.classification === "duplicate_ref") {
@@ -987,6 +1044,8 @@ export function registerReconImportRoutes(app: Hono) {
         const importId = c.req.param("id");
         const staging = await getStagingImport(orgId, importId);
         if (!staging) return c.json({ error: "NOT_FOUND" }, 404);
+        const frozenRollback = await refuseFrozenImportWeek(c, orgId, staging.week_key);
+        if (frozenRollback) return frozenRollback;
         const body = await c.req.json().catch(() => ({}));
         const reason = body.reason ? String(body.reason) : "rollback";
         const sb = getServiceClient();
@@ -1030,6 +1089,24 @@ export function registerReconImportRoutes(app: Hono) {
         const coverageEnd = body.coverageEnd ? String(body.coverageEnd).slice(0, 10) : null;
         const dataStart = body.dataStart ? String(body.dataStart).slice(0, 10) : coverageStart;
         const dataEnd = body.dataEnd ? String(body.dataEnd).slice(0, 10) : coverageEnd;
+        const registerWeek = body.weekKey ? String(body.weekKey).slice(0, 10) : null;
+        const frozenRegister = await refuseFrozenImportWeek(c, orgId, registerWeek);
+        if (frozenRegister) return frozenRegister;
+        if (coverageStart && coverageEnd) {
+          const registerGap = coverageGapMessage({
+            coverageStart,
+            coverageEnd,
+            dataStart,
+            dataEnd,
+            filePeriodStart: body.filePeriodStart ? String(body.filePeriodStart) : null,
+            filePeriodEnd: body.filePeriodEnd ? String(body.filePeriodEnd) : null,
+            weekKey: registerWeek,
+            allowWide: actorCanApproveWideCoverage(c),
+          });
+          if (registerGap) {
+            return c.json({ error: "COVERAGE_EXCLUDES_ROWS", message: registerGap }, 400);
+          }
+        }
         const semanticKey = body.semanticKey
           ? String(body.semanticKey)
           : (coverageStart && coverageEnd

@@ -10,7 +10,6 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import {
   bulkEarlyGateFailure,
   bulkFinalizeExecuteGateFields,
-  FUEL_BULK_DISPOSITIONS_LOAD_SKIP,
   FuelBulkFinalizeDialog,
   loadWeekFlagDispositions,
 } from './FuelBulkFinalizeDialog';
@@ -19,7 +18,7 @@ import type { FuelReconciliationPeriod } from '../../../utils/fuelPeriodStatus';
 import type { FuelDispute } from '../../../types/fuel';
 import type { Vehicle } from '../../../types/vehicle';
 
-const { computeFuelWeek, enqueueFuelPeriodFinalize, listFuelFlagDispositions, getAllFuelEntriesInRange, buildFuelWeekReportsWithGating } = vi.hoisted(() => ({
+const { computeFuelWeek, enqueueFuelPeriodFinalize, listFuelFlagDispositions, getAllFuelEntriesInRange, getFuelPeriodClosable } = vi.hoisted(() => ({
   computeFuelWeek: vi.fn(async () => ({ version: 3, totalSpend: 1000, reports: [] as unknown[] })),
   enqueueFuelPeriodFinalize: vi.fn(async () => ({ state: 'succeeded', ok: true })),
   listFuelFlagDispositions: vi.fn(async () => ({
@@ -27,30 +26,7 @@ const { computeFuelWeek, enqueueFuelPeriodFinalize, listFuelFlagDispositions, ge
     truncated: false,
   })),
   getAllFuelEntriesInRange: vi.fn(async () => [] as unknown[]),
-  buildFuelWeekReportsWithGating: vi.fn(async (input: { weekStartYmd: string; weekEndYmd: string }) => ({
-    reports: [
-      {
-        driverId: 'd1',
-        vehicleId: 'v1',
-        vehicleIds: ['v1'],
-        weekStart: input.weekStartYmd,
-        weekEnd: input.weekEndYmd,
-        totalGasCardCost: 1_000,
-        driverShare: 500,
-        companyShare: 500,
-        miscellaneousCost: 0,
-      },
-    ],
-    trips: [],
-    gateResult: {
-      hasExceptionBlockers: false,
-      exceptionBlockers: [],
-      hasUnapprovedFuelTxBlockers: false,
-      unapprovedFuelTxBlockers: [],
-      hasOverExplainedBlockers: false,
-      overExplainedBlockers: [],
-    },
-  })),
+  getFuelPeriodClosable: vi.fn(async () => ({ blockers: [] as Array<{ code: string; message: string }> })),
 }));
 
 vi.mock('../../../services/api', () => ({
@@ -63,6 +39,7 @@ vi.mock('../../../services/api', () => ({
     enqueueFuelPeriodFinalize: (...args: unknown[]) => enqueueFuelPeriodFinalize(...args),
     getFuelReconciliationPeriod: vi.fn(async () => null),
     listFuelFlagDispositions: (...args: unknown[]) => listFuelFlagDispositions(...args),
+    getFuelPeriodClosable: (...args: unknown[]) => getFuelPeriodClosable(...args),
   },
 }));
 
@@ -74,15 +51,6 @@ vi.mock('../../../services/fuelService', () => ({
 
 vi.mock('../../../services/fuelFinalizeService', () => ({
   finalizeFuelWeekReports: vi.fn(),
-}));
-
-vi.mock('../../../utils/buildFuelWeekReportsForFinalize', () => ({
-  buildFuelWeekReportsWithGating: (...args: unknown[]) =>
-    buildFuelWeekReportsWithGating(...(args as [Parameters<typeof buildFuelWeekReportsWithGating>[0]])),
-  FUEL_BULK_FINALIZE_MAX_WEEKS: 8,
-  formatFuelBulkProgress: (done: number, total: number, label: string) =>
-    `${done} of ${total} — ${label}`,
-  fuelBulkConfirmPhrase: (count: number) => `FINALIZE ${count} WEEKS`,
 }));
 
 vi.mock('../../../utils/fuelWeekClosableGate', () => ({
@@ -142,6 +110,7 @@ describe('FuelBulkFinalizeDialog', () => {
     getAllFuelEntriesInRange.mockResolvedValue([]);
     computeFuelWeek.mockResolvedValue({ version: 3, totalSpend: 1000, reports: [] });
     enqueueFuelPeriodFinalize.mockResolvedValue({ state: 'succeeded', ok: true });
+    getFuelPeriodClosable.mockResolvedValue({ blockers: [] });
   });
 
   it('renders empty outstanding copy when nothing to finalize', () => {
@@ -352,75 +321,16 @@ describe('FuelBulkFinalizeDialog', () => {
     await user.click(screen.getByRole('button', { name: /finalize 2 weeks/i }));
 
     await waitFor(() => expect(computeFuelWeek).toHaveBeenCalledTimes(2));
-
-    expect(listFuelFlagDispositions).toHaveBeenCalled();
-    const listCalls = listFuelFlagDispositions.mock.calls.map(
-      (c) => (c[0] as { entryIds?: string[] })?.entryIds || [],
-    );
-    expect(listCalls.some((ids) => ids.includes('ea'))).toBe(true);
-    expect(listCalls.some((ids) => ids.includes('eb'))).toBe(true);
-
-    const weekBBuild = buildFuelWeekReportsWithGating.mock.calls.find((call) => {
-      const input = call[0] as { weekStartYmd?: string; dispositions?: Map<string, Map<string, unknown>> };
-      return input?.weekStartYmd === '2026-07-13';
-    });
-    expect(weekBBuild).toBeTruthy();
-    const weekBMap = (weekBBuild![0] as { dispositions: Map<string, Map<string, unknown>> }).dispositions;
-    expect(weekBMap.get('eb')?.has('integrity_critical')).toBe(true);
+    await waitFor(() => expect(enqueueFuelPeriodFinalize).toHaveBeenCalledTimes(2));
   });
 
-  it('skips week with retry copy when disposition list rejects (R4-2)', async () => {
+  it('does not lock a week the server says is not closable', async () => {
     const user = userEvent.setup();
     const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     const p = period({ leakageReviewed: true });
 
-    getAllFuelEntriesInRange.mockResolvedValue([
-      { id: 'e1', date: '2026-07-07', amount: 40 } as any,
-    ]);
-    listFuelFlagDispositions.mockRejectedValueOnce(new Error('network down'));
-
-    render(
-      <QueryClientProvider client={qc}>
-        <FuelBulkFinalizeDialog
-          open
-          onOpenChange={() => undefined}
-          periods={[p]}
-          vehicles={[{ id: 'v1', licensePlate: '5179KZ' } as Vehicle]}
-          drivers={[{ id: 'd1', name: 'Driver' }]}
-          fuelEntries={[]}
-          adjustments={[]}
-          scenarios={[]}
-          fuelCards={[]}
-          onComplete={() => undefined}
-        />
-      </QueryClientProvider>,
-    );
-
-    await user.click(screen.getByRole('button', { name: /select all/i }));
-    const boxes = screen.getAllByRole('checkbox');
-    await user.click(boxes[boxes.length - 1]);
-    const confirm = screen.getByPlaceholderText(/FINALIZE 1 WEEKS/i);
-    await user.clear(confirm);
-    await user.type(confirm, 'FINALIZE 1 WEEKS');
-    await user.click(screen.getByRole('button', { name: /finalize 1 week/i }));
-
-    await waitFor(() => {
-      expect(screen.getByText(new RegExp(FUEL_BULK_DISPOSITIONS_LOAD_SKIP))).toBeInTheDocument();
-    });
-    expect(computeFuelWeek).not.toHaveBeenCalled();
-  });
-
-  it('skips week with retry copy when disposition list is truncated (R4-3)', async () => {
-    const user = userEvent.setup();
-    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    const p = period({ leakageReviewed: true });
-
-    getAllFuelEntriesInRange.mockResolvedValue([
-      { id: 'e1', date: '2026-07-07', amount: 40 } as any,
-    ]);
-    listFuelFlagDispositions.mockResolvedValueOnce({
-      dispositions: [{ entryId: 'e1', flagCode: 'integrity_critical', action: 'accepted' }],
-      truncated: true,
+    getFuelPeriodClosable.mockResolvedValue({
+      blockers: [{ code: 'null_org_fill', message: 'A fuel fill for this week is missing its company, so it was left out of the total. Repair it before locking.' }],
     });
 
     render(
@@ -449,9 +359,9 @@ describe('FuelBulkFinalizeDialog', () => {
     await user.click(screen.getByRole('button', { name: /finalize 1 week/i }));
 
     await waitFor(() => {
-      expect(screen.getByText(new RegExp(FUEL_BULK_DISPOSITIONS_LOAD_SKIP))).toBeInTheDocument();
+      expect(screen.getByText(/missing its company/i)).toBeInTheDocument();
     });
-    expect(computeFuelWeek).not.toHaveBeenCalled();
+    expect(enqueueFuelPeriodFinalize).not.toHaveBeenCalled();
   });
 
   it('loadWeekFlagDispositions returns typed failure reasons (R4-2 / R4-3)', async () => {

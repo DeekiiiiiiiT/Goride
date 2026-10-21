@@ -108,17 +108,11 @@ export function useFuelPeriodMutations() {
     onSuccess: invalidate,
   });
 
-  const reviewLeakage = useMutation({
-    mutationFn: async (args: { periodId: string; note?: string }) =>
-      api.reviewFuelPeriodLeakage(args),
-    onSuccess: invalidate,
-  });
-
   const updateStep = useMutation({
     mutationFn: async (args: { periodId: string; step: string; note?: string }) =>
       api.updateFuelPeriodStep(args),
     onSuccess: invalidate,
   });
 
-  return { finalize, reopen, reviewLeakage, updateStep, invalidate };
+  return { finalize, reopen, updateStep, invalidate };
 }

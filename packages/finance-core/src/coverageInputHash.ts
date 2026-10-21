@@ -42,3 +42,21 @@ export function countTripsEarningsBlockers(
   const set = new Set<string>(TRIPS_EARNINGS_BLOCKER_CODES);
   return blockers.filter((b) => set.has(String(b.code || '').toUpperCase())).length;
 }
+
+/** Money still open on the Settlement step. Completes only when this count is 0. */
+export const SETTLEMENT_PREVIEW_BLOCKER_CODES = [
+  'SETTLEMENT_FLEET_OWES',
+  'SETTLEMENT_DRIVER_OWES',
+  'CASH_HELD_OVER_RETURNED',
+  'SETTLEMENT_CASH_HELD',
+] as const;
+
+export function countSettlementPreviewBlockers(
+  blockers: Array<{ code?: string | null; severity?: string | null }>,
+): number {
+  const set = new Set<string>(SETTLEMENT_PREVIEW_BLOCKER_CODES);
+  return blockers.filter((b) => {
+    if (String(b.severity || 'block') === 'warn') return false;
+    return set.has(String(b.code || '').toUpperCase());
+  }).length;
+}

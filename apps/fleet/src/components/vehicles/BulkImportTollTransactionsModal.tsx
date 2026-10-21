@@ -9,6 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from ".
 import { Alert, AlertDescription, AlertTitle } from "../ui/alert";
 import { Loader2, AlertCircle, CheckCircle2, ArrowUpRight, ArrowDownLeft, MinusCircle, Sparkles, UploadCloud, Copy } from "lucide-react";
 import { api } from "../../services/api";
+import { usePermissions } from "../../hooks/usePermissions";
 import {
   commitReconImport,
   createReconImport,
@@ -242,6 +243,8 @@ function BulkImportTollTransactionsModalInner({
   mode = 'usage',
   weekKey: reconWeekKey,
 }: BulkImportTollTransactionsModalProps) {
+  const { can } = usePermissions();
+  const allowWide = can('recon.approve');
   const { runExclusive, setMessage } = useFleetBusy();
   const [csvContent, setCsvContent] = useState('');
   const [parsedTx, setParsedTx] = useState<ParsedTransaction[]>([]);
@@ -279,6 +282,9 @@ function BulkImportTollTransactionsModalInner({
         coverageEnd,
         savedStart: stagedPreview.saved_start || stagedPreview.data_start,
         savedEnd: stagedPreview.saved_end || stagedPreview.data_end,
+        weekKey: reconWeekKey,
+        sourceLabel: 'Toll usage',
+        allowWide,
       })
     : null;
 
@@ -1335,6 +1341,9 @@ function BulkImportTollTransactionsModalInner({
                              dataEnd={stagedPreview.data_end}
                              savedStart={stagedPreview.saved_start || stagedPreview.data_start}
                              savedEnd={stagedPreview.saved_end || stagedPreview.data_end}
+                             weekKey={reconWeekKey}
+                             sourceLabel="Toll usage"
+                             allowWide={allowWide}
                              onCoverageStart={setCoverageStart}
                              onCoverageEnd={setCoverageEnd}
                          />

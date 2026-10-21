@@ -206,7 +206,7 @@ function AppContent() {
 
   type NavigateOpts =
     | { startYmd: string; endYmd?: string; driverId?: string; step?: string }
-    | { weekKey: string }
+    | { weekKey?: string; step?: string; line?: 'rideshare' | 'rush_delivery' }
     | { vehicleId?: string; driverId?: string; vehicleLabel?: string };
 
   const [closeWeekKeyHint, setCloseWeekKeyHint] = useState<string | null>(null);
@@ -215,6 +215,8 @@ function AppContent() {
     null,
   );
   const [weekReconWeekHint, setWeekReconWeekHint] = useState<string | null>(null);
+  const [weekReconStepHint, setWeekReconStepHint] = useState<string | null>(null);
+  const [weekReconLineHint, setWeekReconLineHint] = useState<'rideshare' | 'rush_delivery' | null>(null);
 
   /** Open driver detail with URL `/drivers/:id` (clears stale list-only state). */
   const openDriverDetail = (driverId: string, tab: DriverDetailTab = 'overview') => {
@@ -311,7 +313,33 @@ function AppContent() {
       return;
     }
 
-    // Close Week / Restatement → Driver Settlements hub when that desk is available
+    if (canUseWeekReconHub && page === 'close-week') {
+      const week =
+        opts && 'weekKey' in opts && typeof opts.weekKey === 'string' ? opts.weekKey : undefined;
+      const line =
+        opts && 'line' in opts && (opts.line === 'rush_delivery' || opts.line === 'rideshare')
+          ? opts.line
+          : 'rideshare';
+      setWeekReconWeekHint(week || null);
+      setWeekReconStepHint('close');
+      setWeekReconLineHint(line);
+      clearDriverDetail();
+      setCurrentPage('week-reconciliation');
+      if (typeof window !== 'undefined') {
+        const qs = new URLSearchParams();
+        qs.set('line', line);
+        qs.set('step', 'close');
+        if (week) qs.set('week', week);
+        window.history.pushState(
+          { page: 'week-reconciliation', week, step: 'close' },
+          '',
+          `/week-reconciliation?${qs.toString()}`,
+        );
+      }
+      return;
+    }
+
+    // Restatement → Driver Settlements hub when that desk is available
     if (canUseSettlementsHub && (page === 'close-week' || page === 'restatement-queue')) {
       const hubTab: SettlementsHubTab =
         page === 'close-week' ? 'close-week' : 'restatements';
@@ -455,6 +483,23 @@ function AppContent() {
 
   // /close-week and /restatement-queue bookmarks → Driver Settlements hub tabs
   useEffect(() => {
+    if (currentPage === 'close-week' && canUseWeekReconHub) {
+      setWeekReconStepHint('close');
+      if (closeWeekKeyHint) setWeekReconWeekHint(closeWeekKeyHint);
+      setCurrentPage('week-reconciliation');
+      if (typeof window !== 'undefined') {
+        const qs = new URLSearchParams();
+        qs.set('line', 'rideshare');
+        qs.set('step', 'close');
+        if (closeWeekKeyHint) qs.set('week', closeWeekKeyHint);
+        window.history.replaceState(
+          { page: 'week-reconciliation', step: 'close' },
+          '',
+          `/week-reconciliation?${qs.toString()}`,
+        );
+      }
+      return;
+    }
     if (!canUseSettlementsHub) return;
     if (currentPage === 'close-week') {
       setSettlementsHubTabHint((prev) => prev || 'close-week');
@@ -463,7 +508,7 @@ function AppContent() {
       setSettlementsHubTabHint((prev) => prev || 'restatements');
       setCurrentPage('driver-settlements');
     }
-  }, [currentPage, canUseSettlementsHub]);
+  }, [currentPage, canUseSettlementsHub, canUseWeekReconHub, closeWeekKeyHint]);
 
   // /fuel-reconciliation and /toll-tags bookmarks → Week Reconciliation hub tabs
   useEffect(() => {
@@ -797,10 +842,14 @@ function AppContent() {
               onNavigate={(page, opts) => handleNavigate(page, opts)}
               initialHubTab={weekReconHubTabHint}
               initialWeekStart={weekReconWeekHint}
+              initialStep={weekReconStepHint}
+              initialLine={weekReconLineHint}
               tollFocus={tollReconFocus}
               onHintsConsumed={() => {
                 setWeekReconHubTabHint(null);
                 setWeekReconWeekHint(null);
+                setWeekReconStepHint(null);
+                setWeekReconLineHint(null);
               }}
               onViewDriverLedger={(driverId) => {
                 openDriverDetail(driverId);

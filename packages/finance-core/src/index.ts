@@ -42,7 +42,11 @@ export type {
   BusinessTransactionEventType,
   BusinessTransactionClassification,
 } from './businessTransactionAccounting.ts';
-export { computePeriodSettlement, computePeriodSettlementMinor } from './driverPeriodSettlement.ts';
+export {
+  computePeriodSettlement,
+  computePeriodSettlementMinor,
+  cashHeldClampStamp,
+} from './driverPeriodSettlement.ts';
 export type { PeriodSettlementInput, PeriodSettlementResult, PeriodSettlementMinorResult } from './driverPeriodSettlement.ts';
 export {
   getAdjCashBalance,
@@ -268,6 +272,8 @@ export {
   RECON_HUMAN_SOURCE_STATUSES,
   TRIPS_EARNINGS_BLOCKER_CODES,
   countTripsEarningsBlockers,
+  SETTLEMENT_PREVIEW_BLOCKER_CODES,
+  countSettlementPreviewBlockers,
 } from './coverageInputHash.ts';
 export type { CoverageVolume } from './coverageInputHash.ts';
 export type {
@@ -300,6 +306,9 @@ export {
   parseStatementPeriodBanner,
   defaultDeclaredCoverage,
   coverageGapMessage,
+  coverageCapBounds,
+  coverageWeeksBeyondData,
+  coverageWideWarning,
 } from './statementCoverage.ts';
 export type { RoamFuelExternalCopy } from './reconExternalRoam.ts';
 export {

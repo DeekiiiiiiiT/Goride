@@ -40,8 +40,8 @@ const TollReconciliationLazy = lazy(() =>
 export type WeekReconciliationHubTab = 'fuel' | 'tolls';
 
 function aggregateReconKpis(weeks: ReconWeekSummary[]) {
-  const openWeeks = weeks.filter((w) => w.blockers > 0).length;
-  const needsData = weeks.reduce((n, w) => n + w.blockers, 0);
+  const openWeeks = weeks.filter((w) => w.state !== 'closed').length;
+  const needsData = weeks.reduce((n, w) => n + (w.state === 'closed' ? 0 : w.blockers), 0);
   const oldest = [...weeks]
     .filter((w) => w.blockers > 0)
     .sort((a, b) => a.weekKey.localeCompare(b.weekKey))[0];
@@ -86,6 +86,8 @@ export function WeekReconciliationPage({
   onNavigate,
   initialHubTab,
   initialWeekStart,
+  initialStep,
+  initialLine,
   tollFocus,
   onHintsConsumed,
   onViewDriverLedger,
@@ -94,6 +96,8 @@ export function WeekReconciliationPage({
   onNavigate?: (page: string, opts?: WeekReconNavigateOpts) => void;
   initialHubTab?: WeekReconciliationHubTab | null;
   initialWeekStart?: string | null;
+  initialStep?: string | null;
+  initialLine?: 'rideshare' | 'rush_delivery' | null;
   tollFocus?: {
     vehicleId?: string;
     driverId?: string;
@@ -146,18 +150,34 @@ export function WeekReconciliationPage({
   const reconKpis = useMemo(() => aggregateReconKpis(reconWeeks), [reconWeeks]);
 
   useEffect(() => {
-    if (!initialHubTab && !initialWeekStart && !tollFocus) return;
+    if (!initialHubTab && !initialWeekStart && !tollFocus && !initialStep && !initialLine) return;
     if (initialHubTab === 'fuel' && canFuel) setHubTab('fuel');
     else if (initialHubTab === 'tolls' && canTolls) setHubTab('tolls');
+    if (initialLine === 'rideshare' || initialLine === 'rush_delivery') {
+      setDeskLine(initialLine);
+      setRunLine(initialLine);
+    }
     if (initialWeekStart) {
       setWeekStart(initialWeekStart);
       if (wizardEnabled) {
+        const line = initialLine === 'rush_delivery' ? 'rush_delivery' : 'rideshare';
+        const step =
+          initialStep && (['sources', 'attribution', 'trips_earnings', 'tolls', 'tag_account', 'fuel', 'settlement_preview', 'close'] as string[]).includes(initialStep)
+            ? initialStep
+            : 'sources';
+        setRunLine(line);
         setRunWeek(initialWeekStart);
-        pushRunQuery('rideshare', initialWeekStart, 'sources');
+        pushRunQuery(line, initialWeekStart, step);
+      }
+    } else if (initialStep === 'close' && wizardEnabled) {
+      const q = readRunQuery();
+      if (q.week) {
+        setRunWeek(q.week);
+        setRunLine(q.line);
       }
     }
     onHintsConsumed?.();
-  }, [initialHubTab, initialWeekStart, tollFocus, canFuel, canTolls, onHintsConsumed, wizardEnabled]);
+  }, [initialHubTab, initialWeekStart, initialStep, initialLine, tollFocus, canFuel, canTolls, onHintsConsumed, wizardEnabled]);
 
   useEffect(() => {
     if (hubTab === 'fuel' && !canFuel && canTolls) setHubTab('tolls');

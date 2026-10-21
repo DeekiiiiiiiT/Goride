@@ -7,6 +7,7 @@ import { useQuery } from '@tanstack/react-query';
 import { addDays, format, parseISO } from 'date-fns';
 import { Loader2, Lock, Unlock } from 'lucide-react';
 import { MONEY_EPS } from '@roam/finance-core';
+import { blockingCount, humanBlockerLabel } from '../../../utils/weekCloseBlockers';
 import type { ReconRunPayload } from '../../../services/reconApi';
 import {
   weekCloseApi,
@@ -171,8 +172,9 @@ export function ReconCloseStep({
   const preview = previewQuery.data;
   const reconEvidence = preview?.reconEvidence;
   const weekAlreadyClosed = !!preview?.weekClosed;
-  const totalBlockers =
-    (preview?.blockers?.length ?? 0) + (preview?.weekBlockers?.length ?? 0);
+  const closeItems = [...(preview?.blockers || []), ...(preview?.weekBlockers || [])];
+  const totalBlockers = blockingCount(closeItems);
+  const closeWarnings = closeItems.filter((b) => String(b.severity || 'block') === 'warn');
   const pendingRestatementCount = preview?.pendingRestatementCount ?? 0;
   const hasPendingRestatements = pendingRestatementCount > 0;
 
@@ -328,6 +330,14 @@ export function ReconCloseStep({
             </p>
           ) : null}
         </div>
+      ) : null}
+
+      {closeWarnings.length > 0 ? (
+        <ul className="space-y-1 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+          {closeWarnings.map((b, i) => (
+            <li key={`${b.code}-${i}`}>{humanBlockerLabel(b)}</li>
+          ))}
+        </ul>
       ) : null}
 
       <div

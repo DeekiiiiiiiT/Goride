@@ -27,6 +27,7 @@ import { runFuelSpendShadow } from "./fuel_week_category_loader.ts";
 import { authorizeCronOrServiceRole } from "../_shared/authorizeCronOrServiceRole.ts";
 import {
   computeFuelWeekSnapshot,
+  loadLatestFuelWeekSnapshot,
   hashFuelWeekInputs,
   loadFuelWeekSnapshotVersion,
 } from "./fuel_week_compute.ts";
@@ -493,7 +494,7 @@ async function sealAndFinishFuelWeek(args: {
     .from("fuel_period_job")
     .update({
       state: "succeeded",
-      cursor: { ...cursor, step: "done" },
+      cursor: { ...cursor, step: "done", completedDriverIds: doneDriverIds },
       progress_done: snapshots.length || 1,
       progress_total: snapshots.length || 1,
       updated_at: now,
@@ -2567,7 +2568,19 @@ export function registerFuelPeriodRoutes(app: Hono) {
       if (!periodId) return c.json({ error: "period id required" }, 400);
       const period = await loadPeriod(orgId, periodId);
       if (!period) return c.json({ error: "Not found" }, 404);
-      if (isFuelPeriodLocked(period)) return c.json(fuelPeriodLockedBody(period), 409);
+      if (isFuelPeriodLocked(period)) {
+        const latest = await loadLatestFuelWeekSnapshot(orgId, periodId);
+        if (!latest) return c.json(fuelPeriodLockedBody(period), 409);
+        const lockedMoney = (latest.money || {}) as { reports?: unknown[]; totalSpend?: number };
+        return c.json({
+          version: latest.version ?? null,
+          inputsHash: latest.inputs_hash ?? null,
+          reused: true,
+          reports: lockedMoney.reports || [],
+          totalSpend: lockedMoney.totalSpend ?? null,
+          locked: true,
+        });
+      }
       try {
         const result = await computeFuelWeekSnapshot({
           orgId,

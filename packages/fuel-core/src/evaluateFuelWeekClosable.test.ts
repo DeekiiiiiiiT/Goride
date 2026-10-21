@@ -116,4 +116,10 @@ describe('evaluateFuelWeekClosable', () => {
       evaluateFuelWeekClosable({ dataQualityVehiclesUnreviewed: true }).map((x) => x.code),
     ).toContain('data_quality_unreviewed');
   });
+
+  it('blocks a fill that has no company', () => {
+    const b = evaluateFuelWeekClosable({ nullOrgFill: true });
+    expect(b.map((x) => x.code)).toContain('null_org_fill');
+    expect(b[0] && b.find((x) => x.code === 'null_org_fill')?.message).toMatch(/missing its company/);
+  });
 });

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   coverageGapMessage,
+  coverageWideWarning,
   defaultDeclaredCoverage,
   formatCoverDay,
   parseStatementPeriodBanner,
@@ -61,5 +62,58 @@ describe('statement coverage', () => {
         dataEnd: '2026-10-16',
       }),
     ).toMatch(/Wed 14 Oct/);
+  });
+
+  it('rejects a year-long declaration for a one-week file', () => {
+    expect(
+      coverageGapMessage({
+        coverageStart: '2026-01-01',
+        coverageEnd: '2026-12-31',
+        dataStart: '2026-10-19',
+        dataEnd: '2026-10-23',
+        weekKey: '2026-10-19',
+      }),
+    ).toMatch(/this week/);
+  });
+
+  it('allows 31 days when the file has no printed period and no week', () => {
+    expect(
+      coverageGapMessage({
+        coverageStart: '2026-10-01',
+        coverageEnd: '2026-10-31',
+        dataStart: '2026-10-05',
+        dataEnd: '2026-10-10',
+      }),
+    ).toBeNull();
+    expect(
+      coverageGapMessage({
+        coverageStart: '2026-10-01',
+        coverageEnd: '2026-11-01',
+        dataStart: '2026-10-05',
+        dataEnd: '2026-10-10',
+      }),
+    ).toMatch(/31 days/);
+  });
+
+  it('lets an approver keep a wide range and warns how far it runs past the data', () => {
+    expect(
+      coverageGapMessage({
+        coverageStart: '2026-01-01',
+        coverageEnd: '2026-12-31',
+        dataStart: '2026-10-19',
+        dataEnd: '2026-10-25',
+        weekKey: '2026-10-19',
+        allowWide: true,
+      }),
+    ).toBeNull();
+    expect(
+      coverageWideWarning({
+        coverageStart: '2026-10-12',
+        coverageEnd: '2026-11-01',
+        dataStart: '2026-10-19',
+        dataEnd: '2026-10-25',
+        sourceLabel: 'Toll usage',
+      }),
+    ).toBe('Toll usage declared to cover 2 weeks beyond its data');
   });
 });

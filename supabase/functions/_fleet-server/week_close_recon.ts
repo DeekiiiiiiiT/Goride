@@ -7,6 +7,7 @@ import {
   resolveSourceRequirements,
   sourcesForLine,
   weekDayKeys,
+  RECON_SOURCES,
   type OrgReconProfile,
   type ReconSourceId,
   type RunStepId,
@@ -20,6 +21,7 @@ import {
   type StepCounts,
 } from "../../../packages/finance-core/src/evaluateRun.ts";
 import { periodEndForAnchor } from "../../../packages/finance-core/src/periodKey.ts";
+import { coverageWideWarning } from "../../../packages/finance-core/src/statementCoverage.ts";
 import {
   coverageInputHash,
   isReconHumanSourceStatus,
@@ -322,6 +324,47 @@ export async function loadWeekCloseReconContext(
     unattributed: unattributed.rowCount > 0 ? unattributed : null,
   });
 
+  const periodEnd = periodEndForAnchor(week);
+  const { data: wideBatches } = await sb()
+    .from("fleet_import_batches")
+    .select("source_id, type, coverage_start, coverage_end, data_start, data_end")
+    .eq("organization_id", orgId)
+    .in("status", ["completed", "committed"])
+    .lte("coverage_start", periodEnd)
+    .gte("coverage_end", week)
+    .limit(40);
+  const seenWide = new Set<string>();
+  for (const batch of wideBatches ?? []) {
+    const row = batch as {
+      source_id?: string | null;
+      type?: string | null;
+      coverage_start?: string | null;
+      coverage_end?: string | null;
+      data_start?: string | null;
+      data_end?: string | null;
+    };
+    const sourceId = String(row.source_id || row.type || "");
+    const label = RECON_SOURCES.find((s) => s.id === sourceId)?.label || "This file";
+    const message = coverageWideWarning({
+      coverageStart: row.coverage_start,
+      coverageEnd: row.coverage_end,
+      dataStart: row.data_start,
+      dataEnd: row.data_end,
+      sourceLabel: label,
+    });
+    if (!message || seenWide.has(message)) continue;
+    seenWide.add(message);
+    sourceBlockers.push({
+      code: "COVERAGE_WIDER_THAN_DATA",
+      severity: "warn",
+      week,
+      persisted: 0,
+      expected: 0,
+      delta: 0,
+      message,
+    });
+  }
+
   return {
     evidence: {
       serviceLine,
@@ -355,4 +398,62 @@ export async function reopenReconWeekRun(
     return false;
   }
   return Boolean(data?.id);
+}
+
+/** After a successful freeze, the wizard run is closed. Reopen is the only way back. */
+export async function markReconWeekRunClosed(
+  orgId: string,
+  weekKey: string,
+  serviceLine: WeekCloseServiceLine,
+  actorId: string,
+): Promise<void> {
+  const week = String(weekKey).slice(0, 10);
+  const sb = getServiceClient();
+  const { data: closeRun } = await sb
+    .from("week_close_runs")
+    .select("id")
+    .eq("organization_id", orgId)
+    .eq("week_key", week)
+    .eq("service_line", serviceLine)
+    .eq("status", "in_progress")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const now = new Date().toISOString();
+  const patch: Record<string, unknown> = {
+    state: "closed",
+    closed_at: now,
+    closed_by: actorId,
+  };
+  const closeRunId = (closeRun as { id?: string } | null)?.id;
+  if (closeRunId) patch.close_run_id = closeRunId;
+
+  const recon = sb.schema("recon");
+  const { data: existing, error: readErr } = await recon
+    .from("week_runs")
+    .select("id")
+    .eq("organization_id", orgId)
+    .eq("service_line", serviceLine)
+    .eq("week_key", week)
+    .maybeSingle();
+  if (readErr) {
+    console.warn("[week_close_recon] read run before close failed", readErr.message);
+    return;
+  }
+  if (existing?.id) {
+    const { error } = await recon.from("week_runs").update(patch).eq("id", existing.id);
+    if (error) console.warn("[week_close_recon] mark closed failed", error.message);
+    return;
+  }
+  const { error } = await recon.from("week_runs").insert({
+    organization_id: orgId,
+    service_line: serviceLine,
+    week_key: week,
+    state: "closed",
+    opened_by: actorId,
+    closed_at: now,
+    closed_by: actorId,
+    ...(closeRunId ? { close_run_id: closeRunId } : {}),
+  });
+  if (error) console.warn("[week_close_recon] insert closed run failed", error.message);
 }

@@ -63,6 +63,18 @@ const SIGN_DRIFT_FIELDS = [
   'settlementPaid',
 ] as const;
 
+/** Close reads these. Refresh them whenever settlement is recomputed. */
+export function cashHeldClampStamp(adjCashBalance: number): {
+  cashHeldClamped: boolean;
+  unclampedCashHeld: number;
+} {
+  const unclampedCashHeld = round2(adjCashBalance);
+  return {
+    cashHeldClamped: unclampedCashHeld < -0.005,
+    unclampedCashHeld,
+  };
+}
+
 /**
  * Report which previously-clamped inputs arrived negative, so callers can write
  * drift records instead of silently swallowing the sign.

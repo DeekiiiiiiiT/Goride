@@ -16,6 +16,7 @@ import { auditLogic } from "./audit_logic.ts";
 import { projectFromFuelEntry } from "./odometer_ledger.ts";
 import { canReuseLinkedFuelEntry, fuelEntryBelongsToTransaction } from "./fuel_entry_link.ts";
 import { queryFleet } from "./repos/baseRepo.ts";
+import { orgOf } from "./fleet_domains.ts";
 
 export type FuelDecisionReason =
   | "AUTO_AI_STATION"
@@ -229,6 +230,9 @@ export async function ensureFuelEntryForApprovedTx(
     return { fuelEntry: null, created: false, blockedNoVehicle: false };
   }
 
+  const companyId = orgOf((tx || {}) as Record<string, unknown>);
+  if (companyId && !tx.organizationId) tx.organizationId = companyId;
+
   const enriched = await enrichRecordWithDriverVehicle(tx, tx.organizationId);
   Object.assign(tx, enriched);
 
@@ -257,7 +261,12 @@ export async function ensureFuelEntryForApprovedTx(
     const existing = await kv.get(`fuel_entry:${linkedId}`);
     if (canReuseLinkedFuelEntry(existing, tx.id)) {
       const patched = { ...existing };
-      if (stampPendingReconciliationStatus(patched)) {
+      let reuseDirty = stampPendingReconciliationStatus(patched);
+      if (companyId && !patched.organizationId) {
+        patched.organizationId = companyId;
+        reuseDirty = true;
+      }
+      if (reuseDirty) {
         const toSave = opts.stamp ? opts.stamp(patched) : patched;
         await kv.set(`fuel_entry:${patched.id}`, toSave);
       }
@@ -304,6 +313,11 @@ export async function ensureFuelEntryForApprovedTx(
       dirty = true;
     }
     if (stampPendingReconciliationStatus(patched)) dirty = true;
+    const existingCompany = orgOf(patched as Record<string, unknown>);
+    if (existingCompany && !patched.organizationId) {
+      patched.organizationId = existingCompany;
+      dirty = true;
+    }
     if (dirty) {
       const toSave = opts.stamp ? opts.stamp(patched) : patched;
       await kv.set(`fuel_entry:${patched.id}`, toSave);
@@ -367,6 +381,7 @@ export async function ensureFuelEntryForApprovedTx(
     vehicleName: tx.vehicleName || canonical.vehicleName,
     driverId: tx.driverId,
     driverName: driverName || undefined,
+    organizationId: companyId || undefined,
     transactionId: tx.id,
     matchedStationId: tx.matchedStationId || tx.metadata?.matchedStationId,
     receiptUrl: tx.receiptUrl || tx.metadata?.receiptUrl,

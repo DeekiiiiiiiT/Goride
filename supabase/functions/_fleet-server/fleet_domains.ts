@@ -54,8 +54,19 @@ function intOrNull(v: unknown): number | null {
   return n != null ? Math.trunc(n) : null;
 }
 
-function orgOf(v: Record<string, unknown>): string | null {
-  return str(v.organizationId) ?? str(v.organization_id);
+/** Company id from the payload. Older writes used orgId / org_id, sometimes only inside metadata. */
+export function orgOf(v: Record<string, unknown>): string | null {
+  const meta = v.metadata && typeof v.metadata === "object" && !Array.isArray(v.metadata)
+    ? (v.metadata as Record<string, unknown>)
+    : {};
+  return str(v.organizationId)
+    ?? str(v.organization_id)
+    ?? str(v.orgId)
+    ?? str(v.org_id)
+    ?? str(meta.organizationId)
+    ?? str(meta.organization_id)
+    ?? str(meta.orgId)
+    ?? str(meta.org_id);
 }
 
 function idFrom(key: string, value: Record<string, unknown>, prefix: string): string {

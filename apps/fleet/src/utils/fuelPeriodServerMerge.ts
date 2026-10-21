@@ -198,6 +198,7 @@ export function serverRowsToLandingPeriods(rows: FuelPeriodRow[]): FuelReconcili
       cashFromEarnings: Number(s.cashFromEarnings) || 0,
       lockedAt: s.lockedAt || null,
       version: s.version,
+      numbersPrepared: locked || Boolean(s.computedAt),
     });
   }
   return out;

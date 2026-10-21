@@ -66,6 +66,8 @@ export interface FuelReconciliationPeriod {
   cashFromEarnings?: number;
   lockedAt?: string | null;
   version?: number;
+  /** False when the server has not prepared this week's snapshot yet. */
+  numbersPrepared?: boolean;
 }
 
 export interface BuildFuelStepCountsInput {

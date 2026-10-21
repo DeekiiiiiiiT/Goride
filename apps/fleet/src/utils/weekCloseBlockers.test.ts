@@ -1,35 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { isCashResidualOnlyBlockers } from './weekCloseBlockers';
+import { RECON_STEP_ORDER } from '@roam/finance-core';
+import { BLOCKER_LABELS, WIZARD_STEP_BY_BLOCKER, wizardStepForBlockerCode } from './weekCloseBlockers';
 
-describe('isCashResidualOnlyBlockers', () => {
-  it('true when only Collect/Pay codes remain', () => {
-    expect(
-      isCashResidualOnlyBlockers([
-        { code: 'SETTLEMENT_DRIVER_OWES', severity: 'block' },
-        { code: 'SETTLEMENT_FLEET_OWES', severity: 'block' },
-      ]),
-    ).toBe(true);
-  });
-
-  it('false when a toll mismatch remains', () => {
-    expect(
-      isCashResidualOnlyBlockers([
-        { code: 'SETTLEMENT_DRIVER_OWES', severity: 'block' },
-        { code: 'TOLL_SPEND_MISMATCH', severity: 'block' },
-      ]),
-    ).toBe(false);
-  });
-
-  it('ignores warn-only week blockers', () => {
-    expect(
-      isCashResidualOnlyBlockers(
-        [{ code: 'SETTLEMENT_DRIVER_OWES', severity: 'block' }],
-        [{ code: 'BUSINESS_WEEK_PNL_UNAVAILABLE', severity: 'warn' }],
-      ),
-    ).toBe(true);
-  });
-
-  it('false when empty', () => {
-    expect(isCashResidualOnlyBlockers([])).toBe(false);
+describe('wizard step for each close blocker', () => {
+  it('maps every label to exactly one wizard step', () => {
+    expect(Object.keys(WIZARD_STEP_BY_BLOCKER).sort()).toEqual(Object.keys(BLOCKER_LABELS).sort());
+    for (const code of Object.keys(BLOCKER_LABELS)) {
+      const step = wizardStepForBlockerCode(code);
+      expect(step, code).toBeTruthy();
+      expect(RECON_STEP_ORDER).toContain(step);
+    }
   });
 });

@@ -29,6 +29,66 @@ function ymd(v: unknown): string {
   return String(v || "").split("T")[0];
 }
 
+function nextYmd(ymdValue: string): string {
+  const [y, m, d] = ymdValue.split("-").map((n) => Number(n));
+  const dt = new Date(Date.UTC(y, (m || 1) - 1, d || 1));
+  dt.setUTCDate(dt.getUTCDate() + 1);
+  return dt.toISOString().slice(0, 10);
+}
+
+function payloadCompanyId(payload: unknown): string | null {
+  if (!payload || typeof payload !== "object") return null;
+  const row = payload as Record<string, unknown>;
+  const meta = row.metadata && typeof row.metadata === "object"
+    ? (row.metadata as Record<string, unknown>)
+    : {};
+  const raw = row.organizationId || row.organization_id || row.orgId || row.org_id
+    || meta.organizationId || meta.organization_id || meta.orgId || meta.org_id;
+  const id = String(raw || "").trim();
+  return id || null;
+}
+
+/**
+ * A fill with no company is invisible to the org-scoped week loader.
+ * Fail closed if the check itself cannot run.
+ */
+async function weekHasNullOrgFill(orgId: string, weekStart: string, weekEnd: string): Promise<boolean> {
+  const sb = getServiceClient();
+  const { data, error } = await sb
+    .schema("fleet")
+    .from("fuel_entries")
+    .select("id, vehicle_id, payload_json")
+    .is("organization_id", null)
+    .gte("date", weekStart)
+    .lt("date", nextYmd(weekEnd))
+    .limit(200);
+  if (error) {
+    console.warn("[fuel_week_closable] null-org fill check failed", error.message);
+    return true;
+  }
+  const rows = (data || []) as Array<{ id?: string; vehicle_id?: string | null; payload_json?: unknown }>;
+  if (!rows.length) return false;
+  const vehicleIds = [...new Set(rows.map((row) => String(row.vehicle_id || "")).filter(Boolean))];
+  const orgVehicles = new Set<string>();
+  if (vehicleIds.length) {
+    const { data: vehicles, error: vehicleError } = await sb
+      .schema("fleet")
+      .from("vehicles")
+      .select("id")
+      .eq("organization_id", orgId)
+      .in("id", vehicleIds);
+    if (vehicleError) {
+      console.warn("[fuel_week_closable] null-org vehicle check failed", vehicleError.message);
+      return true;
+    }
+    for (const vehicle of vehicles || []) orgVehicles.add(String(vehicle.id || ""));
+  }
+  return rows.some((row) => {
+    const vehicleId = String(row.vehicle_id || "");
+    return (vehicleId && orgVehicles.has(vehicleId)) || payloadCompanyId(row.payload_json) === orgId;
+  });
+}
+
 /** N-11/P-3: cache prefix scans per org-week (SQL date index follow-up). */
 type WeekClosableKvBundle = {
   disputes: Record<string, unknown>[];
@@ -612,6 +672,7 @@ export async function buildFuelWeekClosableInputForPeriod(
       isUnattributedBeyondGate(totalSpend, unattributedCost) && !unattributedReviewed,
     cardStatementDriftUnreviewed,
     cardStatementDriftDetail,
+    nullOrgFill: await weekHasNullOrgFill(orgId, weekStart, weekEnd),
     ...(hasFrozenBuckets
       ? {
           stopToStopVolumeFailed: s2sApplied.stopToStopVolumeFailed,

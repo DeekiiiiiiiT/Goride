@@ -228,7 +228,7 @@ export function FuelReconciliationDashboard({
   /** SQL period list failed — do not treat empty Completed as authoritative. */
   periodsLoadError?: boolean;
   vehicles: Vehicle[];
-  /** Optional — wizard fetches week trips via useFuelWeekReports when empty (P-1/P-9). */
+  /** Trips already loaded for this week. The wizard does not build its own totals. */
   trips?: Trip[];
   fuelEntries: FuelEntry[];
   adjustments: MileageAdjustment[];
