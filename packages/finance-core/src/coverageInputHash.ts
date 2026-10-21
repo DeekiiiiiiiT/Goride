@@ -3,6 +3,7 @@
  * Day-status alone misses late rows on already-Covered days — include volume.
  * Keep edge twins (recon_routes / week_close_recon) on this helper.
  */
+import { codesForStep } from './closeBlockerSteps.ts';
 export type CoverageVolume = {
   rowCount?: number | null;
   amountMinor?: number | null;
@@ -27,14 +28,7 @@ export function isReconHumanSourceStatus(status: string | null | undefined): boo
 }
 
 /** Close-preview codes that keep Trips & Earnings actionable (R3-08). */
-export const TRIPS_EARNINGS_BLOCKER_CODES = [
-  'CASH_SOURCE_MISMATCH',
-  'EARNINGS_STATEMENT_MISSING',
-  'EARNINGS_STATEMENT_UNVERIFIED',
-  'EARNINGS_ENGINE_DRIFT',
-  'EARNINGS_GROSS_IDENTITY',
-  'CASH_COLLECTED_MISMATCH',
-] as const;
+export const TRIPS_EARNINGS_BLOCKER_CODES = codesForStep('trips_earnings');
 
 export function countTripsEarningsBlockers(
   blockers: Array<{ code?: string | null }>,
@@ -44,12 +38,7 @@ export function countTripsEarningsBlockers(
 }
 
 /** Money still open on the Settlement step. Completes only when this count is 0. */
-export const SETTLEMENT_PREVIEW_BLOCKER_CODES = [
-  'SETTLEMENT_FLEET_OWES',
-  'SETTLEMENT_DRIVER_OWES',
-  'CASH_HELD_OVER_RETURNED',
-  'SETTLEMENT_CASH_HELD',
-] as const;
+export const SETTLEMENT_PREVIEW_BLOCKER_CODES = codesForStep('settlement_preview');
 
 export function countSettlementPreviewBlockers(
   blockers: Array<{ code?: string | null; severity?: string | null }>,

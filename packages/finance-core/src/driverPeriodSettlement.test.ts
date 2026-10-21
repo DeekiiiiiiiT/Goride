@@ -117,10 +117,42 @@ describe('signed pass-through (C-7)', () => {
   });
 
   it('stamps a negative cash balance as an over-return', () => {
-    expect(cashHeldClampStamp(-3221.23)).toEqual({
+    expect(cashHeldClampStamp(-100)).toEqual({
       cashHeldClamped: true,
-      unclampedCashHeld: -3221.23,
+      unclampedCashHeld: -100,
     });
     expect(cashHeldClampStamp(12.5).cashHeldClamped).toBe(false);
+  });
+
+  it('Oct 12 fuel credit does not raise over-return; paying a real over-return does not hide it', () => {
+    const fuelCreditWeek = computePeriodSettlement({
+      driverShare: 15770.42,
+      fuelDeduction: 1808.12,
+      baseCashOwed: 23970.65,
+      baseCashPaid: 10000,
+      tollCashWash: 0,
+      tollPersonal: 0,
+      fuelCredits: 17191.88,
+      settlementPaid: 0,
+      tipsPaidToDriver: 0,
+    });
+    expect(fuelCreditWeek.settlement).toBeCloseTo(17183.53, 2);
+    expect(fuelCreditWeek.adjCashBalance).toBeCloseTo(-3221.23, 2);
+    expect(cashHeldClampStamp(fuelCreditWeek.cashBalance)).toEqual({
+      cashHeldClamped: false,
+      unclampedCashHeld: 13970.65,
+    });
+
+    const overReturned = computePeriodSettlement({
+      driverShare: 100,
+      fuelDeduction: 0,
+      baseCashOwed: 100,
+      baseCashPaid: 200,
+      tollCashWash: 0,
+      tollPersonal: 0,
+      settlementPaid: 200,
+    });
+    expect(overReturned.cashBalance).toBe(-100);
+    expect(cashHeldClampStamp(overReturned.cashBalance).cashHeldClamped).toBe(true);
   });
 });

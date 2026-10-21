@@ -63,12 +63,17 @@ const SIGN_DRIFT_FIELDS = [
   'settlementPaid',
 ] as const;
 
-/** Close reads these. Refresh them whenever settlement is recomputed. */
-export function cashHeldClampStamp(adjCashBalance: number): {
+/**
+ * Close reads these. Pass the cash leg (`cashBalance`: collected minus returned,
+ * including toll cash), not `adjCashBalance`. A company fuel credit, write-off,
+ * or carried-in custody can push the adjusted figure negative without anyone
+ * returning more cash than the driver held. Paying the week does not clear this.
+ */
+export function cashHeldClampStamp(cashBalance: number): {
   cashHeldClamped: boolean;
   unclampedCashHeld: number;
 } {
-  const unclampedCashHeld = round2(adjCashBalance);
+  const unclampedCashHeld = round2(cashBalance);
   return {
     cashHeldClamped: unclampedCashHeld < -0.005,
     unclampedCashHeld,

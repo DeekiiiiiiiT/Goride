@@ -1,0 +1,586 @@
+<!DOCTYPE html>
+
+<html class="h-full" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Jamaica Fleet Analytics - Trip Analytics</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          "colors": {
+            "primary-fixed": "#e2dfff",
+            "on-error": "#ffffff",
+            "inverse-surface": "#302f39",
+            "inverse-primary": "#c3c0ff",
+            "on-secondary": "#ffffff",
+            "surface-container-highest": "#e4e1ee",
+            "error": "#ba1a1a",
+            "surface": "#fcf8ff",
+            "on-tertiary": "#ffffff",
+            "on-primary-fixed-variant": "#3323cc",
+            "error-container": "#ffdad6",
+            "surface-container-low": "#f5f2ff",
+            "outline": "#777587",
+            "primary": "#3525cd",
+            "on-error-container": "#93000a",
+            "primary-fixed-dim": "#c3c0ff",
+            "tertiary": "#684000",
+            "surface-variant": "#e4e1ee",
+            "tertiary-container": "#885500",
+            "inverse-on-surface": "#f3effc",
+            "surface-tint": "#4d44e3",
+            "on-tertiary-fixed": "#2a1700",
+            "tertiary-fixed": "#ffddb8",
+            "surface-container-high": "#eae6f4",
+            "surface-container": "#f0ecf9",
+            "secondary-container": "#6cf8bb",
+            "on-primary": "#ffffff",
+            "on-secondary-fixed-variant": "#005236",
+            "on-tertiary-container": "#ffd4a4",
+            "outline-variant": "#c7c4d8",
+            "background": "#fcf8ff",
+            "tertiary-fixed-dim": "#ffb95f",
+            "surface-bright": "#fcf8ff",
+            "secondary": "#006c49",
+            "surface-container-lowest": "#ffffff",
+            "on-primary-container": "#dad7ff",
+            "surface-dim": "#dcd8e5",
+            "on-secondary-fixed": "#002113",
+            "secondary-fixed": "#6ffbbe",
+            "on-surface": "#1b1b24",
+            "secondary-fixed-dim": "#4edea3",
+            "on-surface-variant": "#464555",
+            "primary-container": "#4f46e5",
+            "on-tertiary-fixed-variant": "#653e00",
+            "on-primary-fixed": "#0f0069",
+            "on-secondary-container": "#00714d",
+            "on-background": "#1b1b24"
+          },
+          "borderRadius": {
+            "DEFAULT": "0.125rem",
+            "lg": "0.25rem",
+            "xl": "0.5rem",
+            "full": "0.75rem"
+          },
+          "spacing": {
+            "container-padding": "24px",
+            "component-gap": "8px",
+            "gutter": "16px",
+            "density-medium": "12px",
+            "unit": "4px",
+            "density-high": "4px"
+          },
+          "fontFamily": {
+            "body-md": ["Inter"],
+            "label-sm": ["Inter"],
+            "headline-lg": ["Inter"],
+            "label-md": ["Inter"],
+            "body-sm": ["Inter"],
+            "body-lg": ["Inter"],
+            "headline-md": ["Inter"],
+            "display": ["Inter"]
+          },
+          "fontSize": {
+            "body-md": ["14px", { "lineHeight": "20px", "fontWeight": "400" }],
+            "label-sm": ["11px", { "lineHeight": "14px", "fontWeight": "500" }],
+            "headline-lg": ["24px", { "lineHeight": "32px", "letterSpacing": "-0.01em", "fontWeight": "600" }],
+            "label-md": ["12px", { "lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "600" }],
+            "body-sm": ["13px", { "lineHeight": "18px", "fontWeight": "400" }],
+            "body-lg": ["16px", { "lineHeight": "24px", "fontWeight": "400" }],
+            "headline-md": ["20px", { "lineHeight": "28px", "fontWeight": "600" }],
+            "display": ["36px", { "lineHeight": "44px", "letterSpacing": "-0.02em", "fontWeight": "700" }]
+          }
+        }
+      }
+    }
+  </script>
+<style>
+    body {
+      font-family: 'Inter', sans-serif;
+      background-color: #fcf8ff;
+      color: #1b1b24;
+    }
+  </style>
+</head>
+<body class="h-full flex flex-col bg-surface text-on-surface">
+<!-- TopAppBar Component -->
+<header class="bg-surface dark:bg-surface text-primary dark:text-inverse-primary w-full px-6 h-16 flex justify-between items-center z-20">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-primary text-2xl">directions_car</span>
+<h1 class="text-headline-md font-headline-md font-extrabold text-primary dark:text-inverse-primary tracking-tight">Jamaica Fleet Analytics</h1>
+</div>
+<div class="flex items-center gap-4">
+<div class="hidden md:flex items-center gap-2 bg-surface-container px-3 py-1.5 rounded-xl border border-outline-variant">
+<span class="material-symbols-outlined text-on-surface-variant text-lg">calendar_today</span>
+<span class="text-body-sm text-on-surface font-medium">Last 30 Days</span>
+</div>
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-full bg-primary-container text-on-primary flex items-center justify-center font-bold text-label-md">FA</div>
+</div>
+</div>
+</header>
+<div class="flex flex-1 overflow-hidden">
+<!-- SideNavBar Component -->
+<aside class="hidden md:flex flex-col justify-between p-4 w-64 bg-surface-container-low dark:bg-surface-container-low border-r border-outline-variant shrink-0">
+<div>
+<div class="flex items-center gap-3 px-3 py-3 mb-4 bg-surface-container rounded-xl border border-outline-variant">
+<div class="w-10 h-10 rounded-lg bg-surface-container-high flex items-center justify-center text-primary font-bold">
+<span class="material-symbols-outlined">hub</span>
+</div>
+<div>
+<div class="text-headline-sm font-headline-sm font-bold text-primary">Jamaica Operations</div>
+<div class="text-body-sm text-on-surface-variant">Kingston Hub</div>
+</div>
+</div>
+<nav class="space-y-1">
+<a class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-on-surface-variant hover:bg-surface-container transition-colors duration-150" href="#">
+<span class="material-symbols-outlined text-xl">dashboard</span>
+<span class="text-body-sm font-medium">Overview</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-surface-container-high text-primary border-l-4 border-primary font-semibold transition-colors duration-150" href="#">
+<span class="material-symbols-outlined text-xl" style="font-variation-settings: 'FILL' 1;">list</span>
+<span class="text-body-sm">Trip Logs</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-on-surface-variant hover:bg-surface-container transition-colors duration-150" href="#">
+<span class="material-symbols-outlined text-xl">grid_view</span>
+<span class="text-body-sm font-medium">Heatmap</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-on-surface-variant hover:bg-surface-container transition-colors duration-150" href="#">
+<span class="material-symbols-outlined text-xl">payments</span>
+<span class="text-body-sm font-medium">Financials</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-on-surface-variant hover:bg-surface-container transition-colors duration-150" href="#">
+<span class="material-symbols-outlined text-xl">settings</span>
+<span class="text-body-sm font-medium">Settings</span>
+</a>
+</nav>
+</div>
+<div class="pt-4 border-t border-outline-variant">
+<button class="w-full bg-primary-container text-on-primary hover:bg-primary font-label-md py-2 px-4 rounded-xl transition-all duration-200 flex items-center justify-center gap-2 shadow-sm">
+<span class="material-symbols-outlined text-sm">download</span>
+          Export Report
+        </button>
+</div>
+</aside>
+<!-- Main Content Canvas -->
+<main class="flex-1 overflow-y-auto p-6 md:p-container-padding space-y-6">
+<!-- Filter Bar Header -->
+<div class="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-4 rounded-xl border border-slate-200">
+<div>
+<h2 class="text-headline-lg font-headline-lg text-on-surface">Trip Analytics Performance</h2>
+<p class="text-body-sm text-on-surface-variant">Real-time telematics and platform-reported revenue metrics across Jamaican corridors.</p>
+</div>
+<div class="flex items-center gap-2">
+<div class="bg-primary-container text-on-primary text-label-md px-4 py-2 rounded-full font-medium shadow-sm flex items-center gap-2">
+<span class="material-symbols-outlined text-sm">date_range</span>
+            Last 30 Days
+          </div>
+<button class="bg-white border border-slate-200 text-on-surface-variant hover:bg-surface-container text-label-md px-4 py-2 rounded-xl transition-all font-medium flex items-center gap-2">
+<span class="material-symbols-outlined text-sm">filter_list</span>
+            Filter Hub
+          </button>
+</div>
+</div>
+<!-- 8 KPI Cards Grid -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+<!-- 1. Gross Fares -->
+<div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between">
+<div class="flex items-center justify-between text-on-surface-variant mb-2">
+<span class="text-label-md font-label-md uppercase tracking-wider">Gross Fares</span>
+<span class="material-symbols-outlined text-primary p-1 bg-primary-fixed rounded-lg">payments</span>
+</div>
+<div>
+<div class="text-headline-md font-headline-md text-on-surface">J$14,250,840</div>
+<div class="text-body-sm text-on-surface-variant mt-1 flex items-center gap-1">
+<span class="text-secondary font-medium flex items-center"><span class="material-symbols-outlined text-xs">trending_up</span> +4.8%</span>
+<span>Platform-reported</span>
+</div>
+</div>
+</div>
+<!-- 2. Net Revenue -->
+<div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between">
+<div class="flex items-center justify-between text-on-surface-variant mb-2">
+<span class="text-label-md font-label-md uppercase tracking-wider">Net Revenue</span>
+<span class="material-symbols-outlined text-secondary p-1 bg-secondary-fixed rounded-lg">account_balance_wallet</span>
+</div>
+<div>
+<div class="text-headline-md font-headline-md text-on-surface">J$11,820,400</div>
+<div class="text-body-sm text-on-surface-variant mt-1 flex items-center gap-1">
+<span class="text-secondary font-medium flex items-center"><span class="material-symbols-outlined text-xs">trending_up</span> +3.2%</span>
+<span>Platform-reported</span>
+</div>
+</div>
+</div>
+<!-- 3. Total Trips -->
+<div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between">
+<div class="flex items-center justify-between text-on-surface-variant mb-2">
+<span class="text-label-md font-label-md uppercase tracking-wider">Total Trips</span>
+<span class="material-symbols-outlined text-primary p-1 bg-primary-fixed rounded-lg">local_taxi</span>
+</div>
+<div>
+<div class="text-headline-md font-headline-md text-on-surface">48,290</div>
+<div class="text-body-sm text-on-surface-variant mt-1 flex items-center gap-1">
+<span class="text-secondary font-medium flex items-center"><span class="material-symbols-outlined text-xs">trending_up</span> +121 today</span>
+<span>Completed</span>
+</div>
+</div>
+</div>
+<!-- 4. Active Drivers -->
+<div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between">
+<div class="flex items-center justify-between text-on-surface-variant mb-2">
+<span class="text-label-md font-label-md uppercase tracking-wider">Active Drivers</span>
+<span class="material-symbols-outlined text-primary p-1 bg-primary-fixed rounded-lg">group</span>
+</div>
+<div>
+<div class="text-headline-md font-headline-md text-on-surface">1,248</div>
+<div class="text-body-sm text-on-surface-variant mt-1 flex items-center gap-1">
+<span class="text-secondary font-medium">94% online</span>
+<span>Kingston / MoBay</span>
+</div>
+</div>
+</div>
+<!-- 5. Avg Fare per Trip -->
+<div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between">
+<div class="flex items-center justify-between text-on-surface-variant mb-2">
+<span class="text-label-md font-label-md uppercase tracking-wider">Avg Fare per Trip</span>
+<span class="material-symbols-outlined text-primary p-1 bg-primary-fixed rounded-lg">receipt_long</span>
+</div>
+<div>
+<div class="text-headline-md font-headline-md text-on-surface">J$295.10</div>
+<div class="text-body-sm text-on-surface-variant mt-1">Platform-reported</div>
+</div>
+</div>
+<!-- 6. Cancellation Rate -->
+<div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between">
+<div class="flex items-center justify-between text-on-surface-variant mb-2">
+<span class="text-label-md font-label-md uppercase tracking-wider">Cancellation Rate</span>
+<span class="material-symbols-outlined text-error p-1 bg-error-container rounded-lg">cancel</span>
+</div>
+<div>
+<div class="text-headline-md font-headline-md text-error">4.2%</div>
+<div class="text-body-sm text-on-surface-variant mt-1 flex items-center gap-1">
+<span class="text-error font-medium flex items-center"><span class="material-symbols-outlined text-xs">trending_down</span> -0.4%</span>
+<span>Optimized dispatch</span>
+</div>
+</div>
+</div>
+<!-- 7. Online Hours -->
+<div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between">
+<div class="flex items-center justify-between text-on-surface-variant mb-2">
+<span class="text-label-md font-label-md uppercase tracking-wider">Online Hours</span>
+<span class="material-symbols-outlined text-primary p-1 bg-primary-fixed rounded-lg">schedule</span>
+</div>
+<div>
+<div class="text-headline-md font-headline-md text-on-surface">312,450 hrs</div>
+<div class="text-body-sm text-on-surface-variant mt-1">Total Fleet Active Time</div>
+</div>
+</div>
+<!-- 8. Fleet Utilization -->
+<div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between">
+<div class="flex items-center justify-between text-on-surface-variant mb-2">
+<span class="text-label-md font-label-md uppercase tracking-wider">Fleet Utilization</span>
+<span class="material-symbols-outlined text-secondary p-1 bg-secondary-fixed rounded-lg">analytics</span>
+</div>
+<div>
+<div class="text-headline-md font-headline-md text-on-surface">86.4%</div>
+<div class="text-body-sm text-on-surface-variant mt-1 flex items-center gap-1">
+<span class="text-secondary font-medium">Optimal Band</span>
+<span>Peak efficiency</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Sections Grid: Demand Line Chart & Heatmap -->
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+<!-- Demand Line Chart (2 Cols) -->
+<div class="lg:col-span-2 bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between">
+<div class="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-slate-200 mb-6 gap-2">
+<div>
+<h3 class="text-headline-md font-headline-md text-on-surface">Demand Line Chart</h3>
+<p class="text-body-sm text-on-surface-variant">Hourly ride requests vs completed trips over the last 30 days</p>
+</div>
+<div class="flex items-center gap-4 text-label-md">
+<div class="flex items-center gap-1.5">
+<span class="w-3 h-3 rounded-full bg-primary-container inline-block"></span>
+<span class="text-on-surface-variant">Ride Requests</span>
+</div>
+<div class="flex items-center gap-1.5">
+<span class="w-3 h-3 rounded-full bg-secondary inline-block"></span>
+<span class="text-on-surface-variant">Completed Trips</span>
+</div>
+</div>
+</div>
+<!-- Simulated High-End Chart Area -->
+<div class="h-64 w-full relative flex items-end justify-between gap-1 pt-6 pb-2 px-2">
+<!-- Grid lines background -->
+<div class="absolute inset-0 flex flex-col justify-between pointer-events-none opacity-40">
+<div class="border-b border-slate-200 w-full"></div>
+<div class="border-b border-slate-200 w-full"></div>
+<div class="border-b border-slate-200 w-full"></div>
+<div class="border-b border-slate-200 w-full"></div>
+</div>
+<!-- Simulated SVG Line Chart overlay via standard SVG elements -->
+<svg class="absolute inset-x-0 bottom-6 h-48 w-full overflow-visible px-2" preserveaspectratio="none" viewbox="0 0 1000 100">
+<!-- Requests Area Gradient -->
+<defs>
+<lineargradient id="reqGrad" x1="0" x2="0" y1="0" y2="1">
+<stop offset="0%" stop-color="#4f46e5" stop-opacity="0.2"></stop>
+<stop offset="100%" stop-color="#4f46e5" stop-opacity="0.0"></stop>
+</lineargradient>
+<lineargradient id="compGrad" x1="0" x2="0" y1="0" y2="1">
+<stop offset="0%" stop-color="#006c49" stop-opacity="0.2"></stop>
+<stop offset="100%" stop-color="#006c49" stop-opacity="0.0"></stop>
+</lineargradient>
+</defs>
+<path d="M 0,60 Q 150,20 300,45 T 600,25 T 900,50 L 1000,40 L 1000,100 L 0,100 Z" fill="url(#reqGrad)"></path>
+<path d="M 0,70 Q 150,35 300,55 T 600,40 T 900,65 L 1000,55 L 1000,100 L 0,100 Z" fill="url(#compGrad)"></path>
+<!-- Requests Line -->
+<path d="M 0,60 Q 150,20 300,45 T 600,25 T 900,50 L 1000,40" fill="none" stroke="#4f46e5" stroke-width="3"></path>
+<!-- Completed Line -->
+<path d="M 0,70 Q 150,35 300,55 T 600,40 T 900,65 L 1000,55" fill="none" stroke="#006c49" stroke-dasharray="4 2" stroke-width="3"></path>
+</svg>
+<!-- X Axis Labels -->
+<div class="absolute inset-x-2 bottom-0 flex justify-between text-label-sm text-on-surface-variant">
+<span>Day 1</span>
+<span>Day 8</span>
+<span>Day 15</span>
+<span>Day 22</span>
+<span>Day 30</span>
+</div>
+</div>
+<div class="mt-4 pt-4 border-t border-slate-200 flex items-center justify-between text-body-sm text-on-surface-variant">
+<span>Peak Demand Window: 07:00 - 09:30 & 16:30 - 19:00 EST</span>
+<span class="font-medium text-primary">Kingston & Montego Bay Corridors</span>
+</div>
+</div>
+<!-- 7x24 Heatmap (1 Col) -->
+<div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between">
+<div class="pb-4 border-b border-slate-200 mb-4">
+<h3 class="text-headline-md font-headline-md text-on-surface">7x24 Heatmap</h3>
+<p class="text-body-sm text-on-surface-variant">Kingston & MoBay dispatch density</p>
+</div>
+<!-- Heatmap Grid Container -->
+<div class="space-y-1">
+<div class="grid grid-cols-8 gap-1 text-label-sm text-on-surface-variant text-center mb-1">
+<div class="text-left">Day</div>
+<div>00h</div>
+<div>06h</div>
+<div>12h</div>
+<div>15h</div>
+<div>18h</div>
+<div>21h</div>
+<div>23h</div>
+</div>
+<!-- Rows for Days -->
+<script>
+              // Render 7 rows dynamically via inline JS simulation of grid cells
+            </script>
+<!-- Mon -->
+<div class="grid grid-cols-8 gap-1 items-center">
+<span class="text-label-sm font-medium text-on-surface">Mon</span>
+<div class="h-5 bg-primary-fixed/20 rounded"></div>
+<div class="h-5 bg-primary-fixed/60 rounded"></div>
+<div class="h-5 bg-primary-container rounded"></div>
+<div class="h-5 bg-primary-container rounded"></div>
+<div class="h-5 bg-primary-fixed/80 rounded"></div>
+<div class="h-5 bg-primary-fixed/40 rounded"></div>
+<div class="h-5 bg-primary-fixed/20 rounded"></div>
+</div>
+<!-- Tue -->
+<div class="grid grid-cols-8 gap-1 items-center">
+<span class="text-label-sm font-medium text-on-surface">Tue</span>
+<div class="h-5 bg-primary-fixed/30 rounded"></div>
+<div class="h-5 bg-primary-container rounded"></div>
+<div class="h-5 bg-primary-fixed/60 rounded"></div>
+<div class="h-5 bg-primary-fixed/80 rounded"></div>
+<div class="h-5 bg-primary-container rounded"></div>
+<div class="h-5 bg-primary-fixed/50 rounded"></div>
+<div class="h-5 bg-primary-fixed/30 rounded"></div>
+</div>
+<!-- Wed -->
+<div class="grid grid-cols-8 gap-1 items-center">
+<span class="text-label-sm font-medium text-on-surface">Wed</span>
+<div class="h-5 bg-primary-fixed/20 rounded"></div>
+<div class="h-5 bg-primary-fixed/70 rounded"></div>
+<div class="h-5 bg-primary-container rounded"></div>
+<div class="h-5 bg-primary-container rounded"></div>
+<div class="h-5 bg-primary-container rounded"></div>
+<div class="h-5 bg-primary-fixed/60 rounded"></div>
+<div class="h-5 bg-primary-fixed/30 rounded"></div>
+</div>
+<!-- Thu -->
+<div class="grid grid-cols-8 gap-1 items-center">
+<span class="text-label-sm font-medium text-on-surface">Thu</span>
+<div class="h-5 bg-primary-fixed/30 rounded"></div>
+<div class="h-5 bg-primary-container rounded"></div>
+<div class="h-5 bg-primary-fixed/80 rounded"></div>
+<div class="h-5 bg-primary-container rounded"></div>
+<div class="h-5 bg-primary-container rounded"></div>
+<div class="h-5 bg-primary-fixed/70 rounded"></div>
+<div class="h-5 bg-primary-fixed/40 rounded"></div>
+</div>
+<!-- Fri -->
+<div class="grid grid-cols-8 gap-1 items-center">
+<span class="text-label-sm font-medium text-on-surface">Fri</span>
+<div class="h-5 bg-primary-fixed/40 rounded"></div>
+<div class="h-5 bg-primary-container rounded"></div>
+<div class="h-5 bg-primary-container rounded"></div>
+<div class="h-5 bg-primary-container rounded"></div>
+<div class="h-5 bg-primary-container rounded"></div>
+<div class="h-5 bg-primary-container rounded"></div>
+<div class="h-5 bg-primary-fixed/80 rounded"></div>
+</div>
+<!-- Sat -->
+<div class="grid grid-cols-8 gap-1 items-center">
+<span class="text-label-sm font-medium text-on-surface">Sat</span>
+<div class="h-5 bg-primary-fixed/60 rounded"></div>
+<div class="h-5 bg-primary-fixed/40 rounded"></div>
+<div class="h-5 bg-primary-fixed/80 rounded"></div>
+<div class="h-5 bg-primary-container rounded"></div>
+<div class="h-5 bg-primary-container rounded"></div>
+<div class="h-5 bg-primary-container rounded"></div>
+<div class="h-5 bg-primary-container rounded"></div>
+</div>
+<!-- Sun -->
+<div class="grid grid-cols-8 gap-1 items-center">
+<span class="text-label-sm font-medium text-on-surface">Sun</span>
+<div class="h-5 bg-primary-fixed/50 rounded"></div>
+<div class="h-5 bg-primary-fixed/30 rounded"></div>
+<div class="h-5 bg-primary-fixed/60 rounded"></div>
+<div class="h-5 bg-primary-fixed/80 rounded"></div>
+<div class="h-5 bg-primary-fixed/70 rounded"></div>
+<div class="h-5 bg-primary-fixed/50 rounded"></div>
+<div class="h-5 bg-primary-fixed/30 rounded"></div>
+</div>
+</div>
+<div class="mt-4 pt-4 border-t border-slate-200 flex items-center justify-between text-body-sm text-on-surface-variant">
+<span class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-primary-container"></span> High Density Intensity</span>
+<span>Subtle Indigo Scaling</span>
+</div>
+</div>
+</div>
+<!-- Comprehensive Trip Table Section -->
+<div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+<div class="p-6 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+<div>
+<h3 class="text-headline-md font-headline-md text-on-surface">Comprehensive Trip Table</h3>
+<p class="text-body-sm text-on-surface-variant">Real-time log of recent platform-reported dispatches and status badges</p>
+</div>
+<div class="flex items-center gap-2">
+<div class="relative">
+<span class="material-symbols-outlined absolute left-3 top-2.5 text-on-surface-variant text-lg">search</span>
+<input class="pl-9 pr-4 py-2 rounded-xl border border-slate-200 text-body-sm focus:outline-none focus:ring-2 focus:ring-primary w-64" placeholder="Search trip ID or driver..." type="text"/>
+</div>
+<button class="bg-white border border-slate-200 text-on-surface-variant hover:bg-surface-container text-label-md px-4 py-2 rounded-xl transition-all font-medium flex items-center gap-1.5">
+<span class="material-symbols-outlined text-sm">tune</span>
+              Filter
+            </button>
+</div>
+</div>
+<div class="overflow-x-auto">
+<table class="w-full text-left border-collapse">
+<thead>
+<tr class="bg-surface border-b border-slate-200 text-label-md font-label-md text-on-surface-variant uppercase tracking-wider">
+<th class="py-3.5 px-6">Trip ID</th>
+<th class="py-3.5 px-6">Route / Corridor</th>
+<th class="py-3.5 px-6">Driver</th>
+<th class="py-3.5 px-6">Fare (Platform-reported J$)</th>
+<th class="py-3.5 px-6">Status</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-slate-200 text-body-md text-on-surface">
+<!-- Row 1 -->
+<tr class="hover:bg-slate-50 transition-colors">
+<td class="py-3.5 px-6 font-medium text-primary">#TR-90241</td>
+<td class="py-3.5 px-6">Half Way Tree → New Kingston</td>
+<td class="py-3.5 px-6">Marcus Garvey Jr.</td>
+<td class="py-3.5 px-6 font-semibold">J$1,450.00</td>
+<td class="py-3.5 px-6">
+<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-label-sm font-medium bg-emerald-100 text-emerald-700">
+                    Completed
+                  </span>
+</td>
+</tr>
+<!-- Row 2 -->
+<tr class="hover:bg-slate-50 transition-colors">
+<td class="py-3.5 px-6 font-medium text-primary">#TR-90242</td>
+<td class="py-3.5 px-6">Sangster Int. Airport → Montego Bay Hill</td>
+<td class="py-3.5 px-6">Dwayne Campbell</td>
+<td class="py-3.5 px-6 font-semibold">J$3,800.00</td>
+<td class="py-3.5 px-6">
+<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-label-sm font-medium bg-emerald-100 text-emerald-700">
+                    Completed
+                  </span>
+</td>
+</tr>
+<!-- Row 3 -->
+<tr class="hover:bg-slate-50 transition-colors">
+<td class="py-3.5 px-6 font-medium text-primary">#TR-90243</td>
+<td class="py-3.5 px-6">Cross Roads → Downtown Kingston</td>
+<td class="py-3.5 px-6">Winston Barrett</td>
+<td class="py-3.5 px-6 font-semibold">J$920.00</td>
+<td class="py-3.5 px-6">
+<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-label-sm font-medium bg-amber-100 text-amber-700">
+                    In Transit
+                  </span>
+</td>
+</tr>
+<!-- Row 4 -->
+<tr class="hover:bg-slate-50 transition-colors">
+<td class="py-3.5 px-6 font-medium text-primary">#TR-90244</td>
+<td class="py-3.5 px-6">Ocho Rios Pier → Runaway Bay</td>
+<td class="py-3.5 px-6">Nadine Sterling</td>
+<td class="py-3.5 px-6 font-semibold">J$4,150.00</td>
+<td class="py-3.5 px-6">
+<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-label-sm font-medium bg-emerald-100 text-emerald-700">
+                    Completed
+                  </span>
+</td>
+</tr>
+<!-- Row 5 -->
+<tr class="hover:bg-slate-50 transition-colors">
+<td class="py-3.5 px-6 font-medium text-primary">#TR-90245</td>
+<td class="py-3.5 px-6">Portmore Parkway → Kingston Waterfront</td>
+<td class="py-3.5 px-6"> Jermaine Cole</td>
+<td class="py-3.5 px-6 font-semibold">J$1,850.00</td>
+<td class="py-3.5 px-6">
+<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-label-sm font-medium bg-amber-100 text-amber-700">
+                    Dispatched
+                  </span>
+</td>
+</tr>
+<!-- Row 6 -->
+<tr class="hover:bg-slate-50 transition-colors">
+<td class="py-3.5 px-6 font-medium text-primary">#TR-90246</td>
+<td class="py-3.5 px-6">Mandeville Square → Williamsfield</td>
+<td class="py-3.5 px-6">Devon Taylor</td>
+<td class="py-3.5 px-6 font-semibold">J$2,400.00</td>
+<td class="py-3.5 px-6">
+<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-label-sm font-medium bg-emerald-100 text-emerald-700">
+                    Completed
+                  </span>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="p-4 border-t border-slate-200 flex items-center justify-between text-body-sm text-on-surface-variant bg-surface">
+<span>Showing 6 of 48,290 recorded trips</span>
+<div class="flex items-center gap-2">
+<button class="px-3 py-1 bg-white border border-slate-200 rounded-lg hover:bg-surface-container disabled:opacity-50">Previous</button>
+<button class="px-3 py-1 bg-primary text-white rounded-lg">1</button>
+<button class="px-3 py-1 bg-white border border-slate-200 rounded-lg hover:bg-surface-container">2</button>
+<button class="px-3 py-1 bg-white border border-slate-200 rounded-lg hover:bg-surface-container">3</button>
+<button class="px-3 py-1 bg-white border border-slate-200 rounded-lg hover:bg-surface-container">Next</button>
+</div>
+</div>
+</div>
+</main>
+</div>
+</body></html>

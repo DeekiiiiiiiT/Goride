@@ -6,6 +6,8 @@ import type { Hono } from "npm:hono@4.3.11";
 import type { Context, Next } from "npm:hono@4.3.11";
 import { streamText } from "npm:hono@4.3.11/streaming";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { registerTripAnalyticsRoutes } from "./trip_analytics_routes.ts";
+import { searchTripsFromFacts, tripStatsFromFacts } from "./trip_facts_read.ts";
 import { fromKvStore } from "./fleet_sql_bridge.ts";
 import { fleetSelect } from "./fleet_select.ts";
 import { countBy, listByBatch, queryFleet, fleetDb, fleetTable, rowToKvValue } from "./repos/baseRepo.ts";
@@ -486,6 +488,7 @@ export function registerResidualMonolithRoutes(app: Hono) {
   }
 
   registerFleetMigrateRoutes(app);
+  registerTripAnalyticsRoutes(app);
   registerEvidenceRoutes(app, supabase, kv, requireAuth, requirePermission);
   registerFleetAdminStorageRoutes(app, supabase, kv);
   registerFleetAdminMaintenanceLedgerRoutes(app, supabase, kv);
@@ -925,11 +928,16 @@ export function registerResidualMonolithRoutes(app: Hono) {
     c.header("X-Request-Id", requestId);
     const t0 = Date.now();
     try {
+      const body = await c.req.json();
+      const factsHit = await searchTripsFromFacts(c, body);
+      if (factsHit) {
+        return c.json({ ...factsHit, request_id: requestId });
+      }
       let { 
           driverId, driverName, driverIds, startDate, endDate, status, limit, offset,
           platform, tripType, vehicleId, anchorPeriodId, organizationId, serviceLine,
           sortKey, sortDir, cursorDate, cursorId,
-      } = await c.req.json();
+      } = body;
       
       // Query JSONB value directly — F-20: estimated count on deep OFFSET pages
       const deepOffset = Number(offset || 0) >= 5000;
@@ -1035,8 +1043,11 @@ export function registerResidualMonolithRoutes(app: Hono) {
     try {
       const body = await c.req.json();
       const EXPORT_CAP = 10_000;
-      const searchRes = await (async () => {
-        // Reuse search handler logic via internal fetch-shaped call: build same query
+      const factsHit = await searchTripsFromFacts(c, { ...body, limit: EXPORT_CAP, offset: 0 });
+      let trips: Record<string, unknown>[] = [];
+      if (factsHit) {
+        trips = (factsHit.data as Record<string, unknown>[]) || [];
+      } else {
         const {
           driverId, driverName, startDate, endDate, status,
           platform, tripType, vehicleId, anchorPeriodId, organizationId, serviceLine,
@@ -1053,32 +1064,30 @@ export function registerResidualMonolithRoutes(app: Hono) {
           startDate, endDate, status,
           platform, vehicleId, anchorPeriodId, serviceLine,
         }, { effectiveOrgId, useStrict });
-        if (applied.empty) {
-          return { data: [], error: null, count: 0 };
+        if (!applied.empty) {
+          query = applied.query;
+          const { resolveTripSort } = await import("./trip_sort.ts");
+          const { sqlCol, ascending } = resolveTripSort(sortKey, sortDir);
+          query = query.order(sqlCol, { ascending }).order("id", { ascending: false });
+          query = query.range(0, EXPORT_CAP - 1);
+          const searchRes = await query;
+          if (searchRes.error) throw searchRes.error;
+          trips = (searchRes.data || []).map((d: any) => {
+            const v = d.value || {};
+            const {
+              route, stops, intermediateStops, rawPayload, evidence,
+              polyline, gpsTrace, gpsPoints, trackPoints, path, coordinates,
+              ...lightweight
+            } = v;
+            if (lightweight.platform === "GoRide") lightweight.platform = "Roam";
+            return lightweight;
+          });
+          if (tripType === "manual") {
+            trips = trips.filter((t) => t?.isManual === true || t?.isManual === "true");
+          } else if (tripType === "platform") {
+            trips = trips.filter((t) => !(t?.isManual === true || t?.isManual === "true"));
+          }
         }
-        query = applied.query;
-        const { resolveTripSort } = await import("./trip_sort.ts");
-        const { sqlCol, ascending } = resolveTripSort(sortKey, sortDir);
-        query = query.order(sqlCol, { ascending }).order("id", { ascending: false });
-        query = query.range(0, EXPORT_CAP - 1);
-        return await query;
-      })();
-      if (searchRes.error) throw searchRes.error;
-      // F-20: same heavy-blob strip as /trips/search (route/polyline/gps/evidence)
-      let trips = (searchRes.data || []).map((d: any) => {
-        const v = d.value || {};
-        const {
-          route, stops, intermediateStops, rawPayload, evidence,
-          polyline, gpsTrace, gpsPoints, trackPoints, path, coordinates,
-          ...lightweight
-        } = v;
-        if (lightweight.platform === "GoRide") lightweight.platform = "Roam";
-        return lightweight;
-      });
-      if (body.tripType === "manual") {
-        trips = trips.filter((t: any) => t?.isManual === true || t?.isManual === "true");
-      } else if (body.tripType === "platform") {
-        trips = trips.filter((t: any) => !(t?.isManual === true || t?.isManual === "true"));
       }
       const esc = (val: unknown) => {
         let s = String(val ?? "");
@@ -1135,15 +1144,22 @@ export function registerResidualMonolithRoutes(app: Hono) {
           });
       }
 
-      // 1. Check Cache (include orgId in cache key for isolation)
-      // v2: post-cutover stats that page past PostgREST 1000-row cap + correct value unwrap
+      // v4: completed gross + absolute cash. Prefer fleet.trip_facts when the table exists.
       const version = await cache.getCacheVersion("stats");
-      const cacheKey = await cache.generateKey(`stats:v3:${version}:org:${effectiveOrgId || 'none'}:strict:${useStrict}`, filters);
+      const cacheKey = await cache.generateKey(`stats:v4:${version}:org:${effectiveOrgId || 'none'}:strict:${useStrict}`, filters);
       const cachedStats = await cache.getCache(cacheKey);
 
       if (cachedStats) {
           c.header("X-Cache", "HIT");
           return c.json(cachedStats);
+      }
+
+      const factStats = await tripStatsFromFacts(c, filters);
+      if (factStats) {
+          await cache.setCache(cacheKey, factStats, 300);
+          c.header("X-Cache", "MISS");
+          c.header("X-Trip-Stats", "facts");
+          return c.json(factStats);
       }
 
       const { applyTripFilters, resolveTripDriverFilter } = await import("./trip_search_filters.ts");
@@ -1242,9 +1258,13 @@ export function registerResidualMonolithRoutes(app: Hono) {
             netUnknownCount += 1;
           }
 
-          const effectiveEarnings = net != null ? net : amount;
-          totalEarnings += effectiveEarnings;
-          totalCashCollected += Number(t.cashCollected) || 0;
+          // Gross fares are completed platform-reported amount only.
+          // Cash is stored negative for Uber and positive for InDrive/Roam — analytics uses the absolute value.
+          if (t.status === 'Completed') {
+            totalEarnings += amount;
+            const cashRaw = Number(t.cashCollected);
+            if (Number.isFinite(cashRaw)) totalCashCollected += Math.abs(cashRaw);
+          }
 
           if (t.duration && Number(t.duration) > 0) {
             durationSum += Number(t.duration);
@@ -1711,6 +1731,15 @@ export function registerResidualMonolithRoutes(app: Hono) {
               throw error;
           }
           counts[prefix] = count || 0;
+      }
+
+      // KV wipe does not delete fleet.trips. Remove the rows so the facts trigger runs.
+      try {
+        const { getServiceClient } = await import("./service_client.ts");
+        const wiped = await getServiceClient().from("fleet_trips").delete().neq("id", "");
+        if (wiped.error) console.error("[DELETE /trips] fleet.trips wipe failed", wiped.error.message);
+      } catch (wipeErr) {
+        console.error("[DELETE /trips] fleet.trips wipe failed", wipeErr);
       }
 
       // Canonical ledger: trip + transaction rows (trips + transaction:* wiped above)

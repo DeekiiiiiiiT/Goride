@@ -54,6 +54,8 @@ export type WeekClosePreview = {
   cashSourceMismatches?: WeekCloseCashSourceMismatch[];
   /** Drivers with a still-valid Accept statement cash ack this week. */
   cashSourceAckCount?: number;
+  /** Open driver is owed money because company fuel exceeds cash still in hand. */
+  fuelCreditExceedsCashInHand?: boolean;
   serviceLine?: 'rideshare' | 'rush_delivery';
   reconEvidence?: WeekCloseReconEvidence | null;
 };

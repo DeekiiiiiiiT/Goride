@@ -209,6 +209,12 @@ export function ReconSettlementStep({
         </div>
       </dl>
 
+      {previewQuery.data?.fuelCreditExceedsCashInHand && settlement.fleetOwes > MONEY_EPS ? (
+        <p className="text-sm text-slate-600">
+          This pay includes company fuel already covered. Cash returned was not more than cash collected.
+        </p>
+      ) : null}
+
       {overReturnNotes.length > 0 ? (
         <ul className="space-y-1 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-900">
           {overReturnNotes.map((b, i) => (

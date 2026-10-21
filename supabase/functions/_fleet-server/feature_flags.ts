@@ -97,6 +97,8 @@ export const FEATURE_FLAGS = {
   PARTS_TIERED_SEARCH: "parts_tiered_search",
   /** Live supplier price/stock adapter. Default off until a vendor feed exists. */
   PARTS_SUPPLIER_API: "parts_supplier_api",
+  /** Roam rider-app funnel on Trip Analytics. Default on (empty until real completed rides). */
+  TRIP_ANALYTICS_ROAM_FUNNEL: "trip_analytics_roam_funnel",
 } as const;
 
 export type FeatureFlagName = typeof FEATURE_FLAGS[keyof typeof FEATURE_FLAGS];
@@ -127,8 +129,10 @@ export async function isFeatureEnabled(
     const flag = await kv.get(key) as FeatureFlagValue | null;
 
     if (!flag) {
-      // Wave 1C: strict_auth defaults ON when unset; other flags default OFF
-      return flagName === FEATURE_FLAGS.STRICT_AUTH;
+      // Wave 1C: strict_auth defaults ON when unset; other flags default OFF.
+      // The Roam funnel section is an empty state until real rides exist, so it stays on.
+      return flagName === FEATURE_FLAGS.STRICT_AUTH
+        || flagName === FEATURE_FLAGS.TRIP_ANALYTICS_ROAM_FUNNEL;
     }
 
     // Cache the flag value
@@ -490,6 +494,11 @@ export async function initializeDefaultFlags(): Promise<void> {
       name: FEATURE_FLAGS.PARTS_SUPPLIER_API,
       enabled: false,
       description: "Live supplier price and stock adapter. Off until a Jamaican or JDM feed is confirmed.",
+    },
+    {
+      name: FEATURE_FLAGS.TRIP_ANALYTICS_ROAM_FUNNEL,
+      enabled: true,
+      description: "Show the Roam rider-app request funnel on Trip Analytics. Empty until completed rides exist.",
     },
   ];
 

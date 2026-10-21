@@ -52,6 +52,7 @@ import {
   countSettlementPreviewBlockers,
   isReconHumanSourceStatus,
 } from "../../../packages/finance-core/src/coverageInputHash.ts";
+import { countBlockersForStep } from "../../../packages/finance-core/src/closeBlockerSteps.ts";
 import { sourceVolumeMetrics } from "./recon_volume.ts";
 import { isReconWeekFrozen } from "./recon_week_writable.ts";
 
@@ -615,15 +616,23 @@ async function computeLiveStepCounts(
   let tripsActionable = 0;
   // Fail closed: if the preview cannot be read, Settlement stays open.
   let settlementActionable = 1;
+  let closeActionable = 0;
+  let previewBlockers: Array<{ code?: string | null; severity?: string | null }> = [];
   try {
     const { previewWeekClose } = await import("./week_close.ts");
     const preview = await previewWeekClose(orgId, weekKey, { serviceLine: line });
     const all = [...(preview.blockers ?? []), ...(preview.weekBlockers ?? [])];
+    previewBlockers = all;
     tripsActionable = countTripsEarningsBlockers(all);
     settlementActionable = countSettlementPreviewBlockers(all);
+    closeActionable = countBlockersForStep("close", all);
   } catch (e) {
     console.warn("[recon] trips_earnings actionable probe failed", e);
   }
+
+  // Period probes can read clear while a close rule on that lane is still open.
+  fuelActionable = Math.max(fuelActionable, countBlockersForStep("fuel", previewBlockers));
+  tollActionable = Math.max(tollActionable, countBlockersForStep("tolls", previewBlockers));
 
   let tagActionable = 0;
   try {
@@ -651,7 +660,7 @@ async function computeLiveStepCounts(
     tag_account: { actionable: tagActionable, informational: 0 },
     fuel: { actionable: fuelActionable, informational: 0 },
     settlement_preview: { actionable: settlementActionable, informational: 0 },
-    close: { actionable: 0, informational: 0 },
+    close: { actionable: closeActionable, informational: 0 },
   };
 }
 

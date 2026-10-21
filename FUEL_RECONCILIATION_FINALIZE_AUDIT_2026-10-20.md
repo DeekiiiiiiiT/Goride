@@ -1,75 +1,47 @@
 # Fuel Reconciliation — Finalize Path Audit
 
-**Rev 4 · 2026-10-21** · Read-only check of the Rev 3 fixes against code, gates and production (`csfllzzastacofsvcdsc`). No code, config or data changed.
-**Gates:** fuel-core 27/27 ✔ · `deno check` (compute, prepare, routes, fleet_domains, closable gate) ✔ · new Deno tests 4/4 ✔ · fleet `tsc` **497** ✔ (below the 500 baseline)
+**Rev 5 · 2026-10-21** · Read-only check of the Rev 4 fixes against code, gates and production (`csfllzzastacofsvcdsc`). No code, config or data changed.
+**Gates:** fuel-core 27/27 ✔ · `deno check` (compute, prepare, routes) ✔ · Deno hash/org tests 5/5 ✔ · fleet `tsc` **495** ✔ (new baseline)
 
-## Status
+## Status: code complete
 
-All Rev 3 items are fixed in code, and N-1 is fixed in production:
+Every code item from Revs 1–4 is fixed, committed and verified.
 
-- `orgOf` falls back to `orgId` / `org_id`.
-- The backfill is applied: 0 NULL-company rows in fuel entries, transactions and trips, and those three columns are NOT NULL.
-- The "failed after success" toast now comes from the job result.
-- The snapshot hash covers every engine input.
-- The wizard no longer builds the week in the browser.
+**R4-1 is fixed and proven in production.** The snapshot now stores the hash taken *after* distances are saved. The new test covers a week with no saved distances. 2026-10-05 computed to a **single** v1 with no follow-up duplicate.
 
-What's left is small, but item R4-1 will bite on the very next open week.
+**2026-10-05 is verified ready to lock.** The server snapshot ties to the raw fills to the cent:
 
----
+| Line | Server snapshot | From `fleet.fuel_entries` |
+|---|---|---|
+| Gas card | 15,000.00 | three linked card + manual pairs, counted once: 5,000 + 6,000 + 4,000. Three declined rows excluded |
+| Cash from earnings | 13,350.00 | 5,000 + 3,000 + 2,350 + 3,000. All four reimbursements are **Approved** in Transactions |
+| **Total** | **28,350.00** | 28,350.00 |
+| Rideshare + deadhead + personal + window timing | 22,807.99 + 175.29 + 325.53 + 5,041.20 = 28,350.00 | identity exact, misc 0 |
+| Driver / company | 2,342.15 / 26,007.85 | the same driver share the browser engine produced on 10-20 |
 
-## Open items
+The 5,041.20 window-timing line is the first fill of the week, held by the company. That's correct by design (see "Do not change").
 
-### R4-1 · Medium · First finalize of a new week fails once with "This week changed"
+## What's left
 
-- **Where:** `fuel_week_compute.ts` `computeFuelWeekSnapshot`. `inputsHash` is computed **before** `prepareFuelWeekReports`, and prepare is what writes `vehicle_week_distance`. The hash includes those distance rows.
-- **Effect:** for a week with no saved distances, snapshot v1 is stored with a hash that has no distance part. At finalize, the live hash now includes the rows prepare just wrote, so `/finalize` returns 409 `inputs_changed`. The operator sees "This week changed. Refresh, then lock again"; the second attempt works. The same happens whenever a recompute changes a vehicle's distance.
-- **Evidence:** every week computed earlier today got a v1 and then an identical v2 a few minutes later. **2026-10-05**, the next week to close, has **no** distance rows, so it will hit this.
-- **Fix:** recompute the hash **after** prepare and store that one. Alternatively, hash the distance *inputs* (trips, fills) instead of the saved distance rows.
-- **Acceptance:** a week with no `vehicle_week_distance` rows → compute → finalize succeeds on the first try. Add that case to `fuel_week_compute_hash.test.ts`.
-
-### R4-2 · Low · Migration history doesn't match the repo
-
-- **Backfill:** the repo has `20261021130000_backfill_fleet_organization_id.sql`, but production recorded it as `20261021171356`.
-- **Sweeper:** `20261021145921 fuel_period_job_sweep_cron` exists in production and has **no file** in the repo.
-- **Risk:** a fresh environment won't get the sweeper, and `db push` will try to re-run the backfill. The backfill is idempotent, but the history drift is the same class as earlier migration-version issues.
-- **Fix:** rename the local file to the production version and add the cron migration file.
-
-### R4-3 · Low · Leftovers
-
-- `null_org_fill` blocker: `fuel_entries.organization_id` is now NOT NULL, so this blocker can never fire. Keep it as a guard or delete it, but don't count it as a control.
-- The old browser builder (`buildFuelWeekReportsForFinalize`, `useFuelWeekReports`, `withSoftTimeout` / `degraded`) is still used by bulk finalize, bulk reset, the dashboard and `ReconciliationTable`. Move those to the server snapshot or `/compute`, then delete it.
-- `fleet.odometer_readings`: 3 NULL-company rows (check-ins naming a plate with no vehicle row). Documented in the migration; fix or delete those rows.
-
-### R4-4 · Not exercised yet
-
-No week has been finalized through the new path. The only post-deploy job was a test on an already-locked week. Once R4-1 is fixed, finalize **2026-10-05** (28,350) and run the checks below.
-
-### Data (operator work)
-
-- **Open:** 2026-09-21, 2026-09-28 and 2026-10-05.
-- **Unfinished reopen:** 2026-09-07 is still `reopened`.
-- **Legacy:** 2026-08-31 is locked at −11,777.25 unexplained.
-
----
-
-## Checks
+1. **Finalize 2026-10-05.** This is the first money the new path will post. Then run the check below. It should show `sv` set, `progress_done` = 1, and the period's driver share = 2,342.15.
+2. **Close the remaining open weeks.** 2026-09-21 and 2026-09-28 have fills but $0 on the period row until they are opened. 2026-09-07 is still `reopened`.
+3. **Optional cleanup.**
+   - `null_org_fill` can't fire now that `fuel_entries.organization_id` is NOT NULL. Keep it as a guard, but it isn't a live control.
+   - `fleet.odometer_readings` still has 3 NULL-company check-in rows.
 
 ```sql
--- R4-4: the job posted from a server snapshot, and the ledger matches it
-select period_id, state, cursor->>'snapshotVersion' sv, progress_done, failures, created_at
-from public.fuel_period_job where kind='finalize' order by created_at desc limit 3;
+select j.period_id, j.state, j.cursor->>'snapshotVersion' sv, j.progress_done, j.failures,
+       p.status, p.total_spend, p.driver_share, p.company_share
+from public.fuel_period_job j join public.fuel_reconciliation_period p on p.id = j.period_id
+where j.kind = 'finalize' order by j.created_at desc limit 3;
 
-select s.period_id, s.version, s.money->>'totalSpend' snapshot_total, p.total_spend, p.driver_share
-from public.fuel_week_snapshot s join public.fuel_reconciliation_period p on p.id = s.period_id
-where s.period_id like '%2026-10-05' order by s.version desc limit 1;
-
--- R4-1: more than one version with an identical total = hash churn
-select period_id, count(*) versions, count(distinct money->>'totalSpend') distinct_totals
-from public.fuel_week_snapshot group by 1 having count(*) > 1;
+select event_type, amount_minor from public.financial_events
+where domain ilike '%fuel%' and period_anchor between '2026-10-05' and '2026-10-11' and reversed_at is null;
+-- expect fuel_deduction −234215, fuel_fleet_share −2600785, fuel_driver_spend −1335000, fuel_gas_card_spend −1500000
 ```
 
 ## Do not change
 
 - Fill-to-fill efficiency, the window-timing carve, misc → company, the Personal Allowance identity.
-- `processJobRow`'s `alreadyLocked` short-circuit, C-8 compensation, and the atomic job claim.
+- `processJobRow`'s `alreadyLocked` short-circuit, C-8 compensation, the atomic job claim, and the after-prepare snapshot hash.
 - The Review Queue.

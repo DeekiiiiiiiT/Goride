@@ -12,7 +12,9 @@ import {
 } from 'lucide-react';
 import { RECON_SOURCES, weekDayKeys, type ReconSourceId } from '@roam/finance-core';
 import type { ReconWeekSource, ReconWeekSummary } from '../../../services/reconApi';
+import { Badge } from '../../ui/badge';
 import { Button } from '../../ui/button';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../ui/tabs';
 import {
   Dialog,
   DialogContent,
@@ -269,15 +271,85 @@ function SourceStatusCell({
   );
 }
 
+type SourceExplainTarget = {
+  weekKey: string;
+  source: ReconWeekSource;
+};
+
 function sourcesForLanding(week: ReconWeekSummary): ReconWeekSource[] {
   // Hide N/A so the strip matches what ops still need to deal with.
   return week.sources.filter((s) => String(s.status).toLowerCase() !== 'not_applicable');
 }
 
-type SourceExplainTarget = {
-  weekKey: string;
-  source: ReconWeekSource;
-};
+function WeekList({
+  weeks,
+  empty,
+  onOpenWeek,
+  onExplain,
+}: {
+  weeks: ReconWeekSummary[];
+  empty: string;
+  onOpenWeek: (weekKey: string) => void;
+  onExplain: (target: SourceExplainTarget) => void;
+}) {
+  if (weeks.length === 0) {
+    return (
+      <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50/80 px-4 py-8 text-center text-sm text-slate-500">
+        {empty}
+      </div>
+    );
+  }
+  return (
+    <ul className="space-y-3">
+      {weeks.map((week) => {
+        const sources = sourcesForLanding(week);
+        return (
+          <li
+            key={week.weekKey}
+            className="rounded-xl border border-slate-200 bg-white p-4 transition-colors hover:border-indigo-200 hover:shadow-sm"
+          >
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="min-w-0 space-y-2">
+                <button
+                  type="button"
+                  className="text-left text-sm font-semibold text-indigo-700 hover:underline"
+                  onClick={() => onOpenWeek(week.weekKey)}
+                >
+                  Week of {week.weekKey}
+                </button>
+                <CoverageStrip weekKey={week.weekKey} coverage={mergedCoverage(week)} />
+              </div>
+              <p className="max-w-xs text-right text-xs font-medium text-slate-600">
+                {week.nextAction?.label ?? '—'}
+              </p>
+            </div>
+
+            {sources.length > 0 ? (
+              <div
+                className="mt-3 grid w-full grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5"
+                role="group"
+                aria-label={`Sources for week of ${week.weekKey}`}
+              >
+                {sources.map((source) => (
+                  <SourceStatusCell
+                    key={source.id}
+                    source={source}
+                    onOpen={() => onExplain({ weekKey: week.weekKey, source })}
+                  />
+                ))}
+              </div>
+            ) : (
+              <p className="mt-3 flex items-center gap-1.5 text-xs text-slate-500">
+                <Receipt className="h-3.5 w-3.5" aria-hidden />
+                No applicable sources for this week
+              </p>
+            )}
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
 
 export function ReconWeekLanding({
   weeks,
@@ -293,18 +365,9 @@ export function ReconWeekLanding({
   deskLine?: 'rideshare' | 'rush_delivery';
 }) {
   const rows = useMemo(() => weeks.slice(0, 12), [weeks]);
-  const groups = useMemo(() => {
-    const bucket = (week: (typeof rows)[number]) => {
-      if (week.state === 'closed') return 'completed' as const;
-      if (week.blockers > 0 || week.state === 'collecting') return 'outstanding' as const;
-      return 'in_progress' as const;
-    };
-    return [
-      { id: 'outstanding', title: 'Outstanding', hint: 'A required file is still missing', items: rows.filter((w) => bucket(w) === 'outstanding') },
-      { id: 'in_progress', title: 'In progress', hint: 'Files are in. The week is not closed.', items: rows.filter((w) => bucket(w) === 'in_progress') },
-      { id: 'completed', title: 'Completed', hint: 'This week is closed.', items: rows.filter((w) => bucket(w) === 'completed') },
-    ].filter((g) => g.items.length > 0);
-  }, [rows]);
+  const outstanding = useMemo(() => rows.filter((w) => w.state !== 'closed'), [rows]);
+  const reconciled = useMemo(() => rows.filter((w) => w.state === 'closed'), [rows]);
+  const [deskTab, setDeskTab] = useState<'outstanding' | 'reconciled'>('outstanding');
   const [explain, setExplain] = useState<SourceExplainTarget | null>(null);
 
   const explainOpen = explain !== null;
@@ -355,62 +418,42 @@ export function ReconWeekLanding({
         </div>
       </section>
 
-      {groups.map((group) => (
-        <section key={group.id} className="space-y-3">
-          <div>
-            <h2 className="text-sm font-semibold text-slate-900">{group.title}</h2>
-            <p className="text-xs text-slate-500">{group.hint}</p>
-          </div>
-      <ul className="space-y-3">
-        {group.items.map((week) => {
-          const sources = sourcesForLanding(week);
-          return (
-            <li
-              key={week.weekKey}
-              className="rounded-xl border border-slate-200 bg-white p-4 transition-colors hover:border-indigo-200 hover:shadow-sm"
-            >
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div className="min-w-0 space-y-2">
-                  <button
-                    type="button"
-                    className="text-left text-sm font-semibold text-indigo-700 hover:underline"
-                    onClick={() => onOpenWeek(week.weekKey)}
-                  >
-                    Week of {week.weekKey}
-                  </button>
-                  <CoverageStrip weekKey={week.weekKey} coverage={mergedCoverage(week)} />
-                </div>
-                <p className="max-w-xs text-right text-xs font-medium text-slate-600">
-                  {week.nextAction?.label ?? '—'}
-                </p>
-              </div>
+      <Tabs value={deskTab} onValueChange={(v) => setDeskTab(v as 'outstanding' | 'reconciled')}>
+        <TabsList>
+          <TabsTrigger value="outstanding">
+            Outstanding
+            <Badge variant="secondary" className="ml-2 tabular-nums">
+              {outstanding.length}
+            </Badge>
+          </TabsTrigger>
+          <TabsTrigger value="reconciled">
+            Reconciled
+            <Badge variant="secondary" className="ml-2 tabular-nums">
+              {reconciled.length}
+            </Badge>
+          </TabsTrigger>
+        </TabsList>
 
-              {sources.length > 0 ? (
-                <div
-                  className="mt-3 grid w-full grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5"
-                  role="group"
-                  aria-label={`Sources for week of ${week.weekKey}`}
-                >
-                  {sources.map((source) => (
-                    <SourceStatusCell
-                      key={source.id}
-                      source={source}
-                      onOpen={() => setExplain({ weekKey: week.weekKey, source })}
-                    />
-                  ))}
-                </div>
-              ) : (
-                <p className="mt-3 flex items-center gap-1.5 text-xs text-slate-500">
-                  <Receipt className="h-3.5 w-3.5" aria-hidden />
-                  No applicable sources for this week
-                </p>
-              )}
-            </li>
-          );
-        })}
-      </ul>
-        </section>
-      ))}
+        <TabsContent value="outstanding" className="space-y-3">
+          <p className="text-xs text-slate-500">A required file is still missing, or the week is not closed yet.</p>
+          <WeekList
+            weeks={outstanding}
+            empty="No open weeks."
+            onOpenWeek={onOpenWeek}
+            onExplain={setExplain}
+          />
+        </TabsContent>
+
+        <TabsContent value="reconciled" className="space-y-3">
+          <p className="text-xs text-slate-500">Weeks you have already closed.</p>
+          <WeekList
+            weeks={reconciled}
+            empty="Nothing is reconciled yet. A week moves here after you close it."
+            onOpenWeek={onOpenWeek}
+            onExplain={setExplain}
+          />
+        </TabsContent>
+      </Tabs>
 
       <Dialog
         open={explainOpen}

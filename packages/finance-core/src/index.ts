@@ -19,6 +19,23 @@ export {
 } from './normalizePlatform.ts';
 export { getTripPhysicalCashCollected, sumTripPhysicalCashCollected } from './tripPhysicalCash.ts';
 export {
+  TRIP_ANALYTICS_TZ,
+  TRIP_ANALYTICS_RULES_V1,
+  TRIP_ANALYTICS_FILTER_KEYS,
+  CANCEL_REASON_CODES,
+  statusBucket,
+  normalizeAnalyticsPlatform,
+  cashCollectedAbs,
+  normalizeCancel,
+  analyticsPopulation,
+  tripLocalParts,
+  priorPeriod,
+  percentDelta,
+  buildTripAnalyticsFilter,
+  deltaIsBad,
+} from './tripAnalyticsDefinitions.ts';
+export type { TripAnalyticsFilter, StatusBucket, CancelActor, AnalyticsPopulation } from './tripAnalyticsDefinitions.ts';
+export {
   isCashWriteOffTransaction,
   isDriverPayoutTransaction,
   isClearedCashWriteOff,
@@ -275,6 +292,13 @@ export {
   SETTLEMENT_PREVIEW_BLOCKER_CODES,
   countSettlementPreviewBlockers,
 } from './coverageInputHash.ts';
+export {
+  SERVER_STEP_BY_BLOCKER,
+  CHECK_CLOSE_INVARIANT_BLOCK_CODES,
+  codesForStep,
+  serverStepForBlockerCode,
+  countBlockersForStep,
+} from './closeBlockerSteps.ts';
 export type { CoverageVolume } from './coverageInputHash.ts';
 export type {
   SourceKind,

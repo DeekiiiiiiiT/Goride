@@ -77,9 +77,11 @@ export interface ColumnConfig {
 interface TripLedgerPageProps {
   organizationId?: string;
   columnConfig?: ColumnConfig[];
+  /** Extra controls beside export, such as Log Manual Trip. */
+  headerActions?: React.ReactNode;
 }
 
-export function TripLedgerPage({ organizationId, columnConfig }: TripLedgerPageProps = {}) {
+export function TripLedgerPage({ organizationId, columnConfig, headerActions }: TripLedgerPageProps = {}) {
   const { scope } = useServiceLineScope();
   const { period, setPeriod } = useLedgerPeriod();
   const [page, setPage] = useState(0);
@@ -265,7 +267,7 @@ export function TripLedgerPage({ organizationId, columnConfig }: TripLedgerPageP
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <div className="p-2.5 rounded-lg bg-emerald-100 dark:bg-emerald-900/50">
             <FileText className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
@@ -278,7 +280,8 @@ export function TripLedgerPage({ organizationId, columnConfig }: TripLedgerPageP
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {headerActions}
           <TripLedgerExport
             trips={trips}
             visibleColumns={visibleColumns}

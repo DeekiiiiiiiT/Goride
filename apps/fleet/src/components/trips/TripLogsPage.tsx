@@ -25,14 +25,9 @@ import { filterTripsByServiceLineScope } from '../../utils/serviceLineTripFilter
 import { TripStatsCard } from './TripStatsCard';
 import { ManualTripForm } from './ManualTripForm';
 import { TripFilters, TripFilterState } from './TripFilters';
-import { CancellationAnalysis } from './CancellationAnalysis';
-import { RouteAnalysis } from './RouteAnalysis';
-import { ReportGenerator } from './ReportGenerator';
-import { IntegrityDashboard } from './IntegrityDashboard';
 import { TripDetailsDialog } from './TripDetailsDialog';
 import { resolveTripTollCoverage } from '../../utils/tripTollCoverage';
 import { TripMapDialog } from './TripMapDialog';
-import { TripIssueDialog } from './TripIssueDialog';
 import { DeleteConfirmationDialog } from './DeleteConfirmationDialog';
 import { createManualTrip, ManualTripInput } from '../../utils/tripFactory';
 import { startOfDay, endOfDay, subDays, startOfWeek, startOfMonth, format } from 'date-fns';
@@ -47,12 +42,10 @@ const parseLocalDate = (dateStr: string) => {
 };
 
 export function TripLogsPage() {
-  // F-17 soft decommission: financial trip history lives in Ledgers
   return (
     <div className="space-y-4">
-      <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100">
-        Financial trip history and money columns live in <strong>Business Finance → Ledgers</strong>.
-        This Trip Logs view remains for ops (manual trips, maps, integrity tools).
+      <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-200">
+        Trip Logs is the operations list: manual trips, maps, and edits. The cards are platform-reported gross fares for the whole filtered period. Charts and the full trip table are on Trip Analytics. Ledger net is in Business Finance → Ledgers.
       </div>
       <TripLogsPageInner />
     </div>
@@ -63,7 +56,7 @@ function TripLogsPageInner() {
   const queryClient = useQueryClient();
   const { v } = useVocab();
   const { scope } = useServiceLineScope();
-  const [viewMode, setViewMode] = useState<'details' | 'map' | 'issue' | null>(null);
+  const [viewMode, setViewMode] = useState<'details' | 'map' | null>(null);
   const [isManualTripOpen, setIsManualTripOpen] = useState(false);
   const [tripToDelete, setTripToDelete] = useState<Trip | null>(null);
   const [selectedTrip, setSelectedTrip] = useState<Trip | null>(null);
@@ -87,6 +80,7 @@ function TripLogsPageInner() {
 
   const [searchTerm, setSearchTerm] = useState('');
   const [page, setPage] = useState(1);
+  const [exporting, setExporting] = useState(false);
   const pageSize = 50;
 
   // 1. Fetch Filter Options
@@ -182,7 +176,9 @@ function TripLogsPageInner() {
   });
 
   const trips = filterTripsByServiceLineScope(tripData?.data || [], scope);
-  const hasMore = (tripData?.data?.length || 0) === pageSize;
+  const hasMore = typeof tripData?.total === 'number'
+    ? page * pageSize < tripData.total
+    : (tripData?.data?.length || 0) === pageSize;
 
   useTripAddressResolution(trips, queryClient, availableVehicles, availableDrivers);
 
@@ -240,13 +236,9 @@ function TripLogsPageInner() {
       setPage(1); 
   };
 
-  const handleAction = (trip: Trip, mode: 'details' | 'map' | 'issue') => {
+  const handleAction = (trip: Trip, mode: 'details' | 'map') => {
       setSelectedTrip(trip);
       setViewMode(mode);
-  };
-
-  const handleContactDriver = (trip: Trip) => {
-      toast.success(`Contact request sent to ${trip.driverName || 'driver'}`);
   };
 
   const handleDeleteTrip = async (trip: Trip) => {
@@ -256,15 +248,6 @@ function TripLogsPageInner() {
   const confirmDeleteTrip = async () => {
       if (!tripToDelete) return;
       deleteTripMutation.mutate(tripToDelete.id);
-  };
-
-  const handleIssueSubmit = async (tripId: string, reason: string) => {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 500));
-      toast.success("Issue flagged successfully", {
-          description: `Ticket created for Trip #${tripId.slice(0, 8)}`
-      });
-      setViewMode(null);
   };
 
   // Convert a Trip object → initialData for the ManualTripForm edit mode
@@ -348,6 +331,24 @@ function TripLogsPageInner() {
     }
   };
 
+  async function exportFiltered() {
+    setExporting(true);
+    try {
+      const { limit, offset, ...rest } = queryParams;
+      const blob = await api.exportTripsFiltered(rest);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'trip-logs.csv';
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : 'Export failed');
+    } finally {
+      setExporting(false);
+    }
+  }
+
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -365,7 +366,9 @@ function TripLogsPageInner() {
                 <Plus className="mr-2 h-4 w-4" />
                 Log Manual Trip
             </Button>
-            <ReportGenerator trips={trips} />
+            <Button variant="outline" disabled={exporting} onClick={exportFiltered}>
+              {exporting ? 'Exporting…' : 'Export'}
+            </Button>
         </div>
       </div>
 
@@ -383,11 +386,8 @@ function TripLogsPageInner() {
       <TripStatsCard trips={trips} stats={stats} loading={statsLoading} />
 
       <Tabs defaultValue="manifest" className="w-full">
-        <TabsList className="grid w-full max-w-[850px] grid-cols-2 sm:grid-cols-4">
+        <TabsList className="w-full max-w-xs">
           <TabsTrigger value="manifest">Trip Manifest</TabsTrigger>
-          <TabsTrigger value="analysis">Cancellation Analysis</TabsTrigger>
-          <TabsTrigger value="routes">Route Analytics</TabsTrigger>
-          <TabsTrigger value="integrity">Data Integrity</TabsTrigger>
         </TabsList>
         
         <TabsContent value="manifest" className="mt-4">
@@ -512,7 +512,6 @@ function TripLogsPageInner() {
                                       Edit Trip
                                     </DropdownMenuItem>
                                     <DropdownMenuSeparator />
-                                    <DropdownMenuItem className="text-rose-600" onClick={() => handleAction(trip, 'issue')}>Flag Issue</DropdownMenuItem>
                                     <DropdownMenuItem
                                       className="text-rose-600 focus:bg-rose-50 focus:text-rose-700"
                                       onClick={() => handleDeleteTrip(trip)}
@@ -724,9 +723,6 @@ function TripLogsPageInner() {
                                         Edit Trip
                                     </DropdownMenuItem>
                                     <DropdownMenuSeparator />
-                                    <DropdownMenuItem onClick={() => handleContactDriver(trip)}>Contact Driver</DropdownMenuItem>
-                                    <DropdownMenuItem className="text-rose-600" onClick={() => handleAction(trip, 'issue')}>Flag Issue</DropdownMenuItem>
-                                    <DropdownMenuSeparator />
                                     <DropdownMenuItem 
                                         className="text-rose-600 focus:bg-rose-50 focus:text-rose-700" 
                                         onClick={() => handleDeleteTrip(trip)}
@@ -772,18 +768,6 @@ function TripLogsPageInner() {
             </div>
           </Card>
         </TabsContent>
-
-        <TabsContent value="analysis">
-            <CancellationAnalysis trips={trips} />
-        </TabsContent>
-
-        <TabsContent value="routes">
-            <RouteAnalysis trips={trips} />
-        </TabsContent>
-
-        <TabsContent value="integrity">
-            <IntegrityDashboard trips={trips} />
-        </TabsContent>
       </Tabs>
       
       <ManualTripForm 
@@ -809,13 +793,6 @@ function TripLogsPageInner() {
         trip={selectedTrip} 
         open={viewMode === 'map'} 
         onOpenChange={(open) => !open && setViewMode(null)} 
-      />
-
-      <TripIssueDialog 
-        trip={selectedTrip} 
-        open={viewMode === 'issue'} 
-        onOpenChange={(open) => !open && setViewMode(null)} 
-        onSubmit={handleIssueSubmit}
       />
 
       <DeleteConfirmationDialog 

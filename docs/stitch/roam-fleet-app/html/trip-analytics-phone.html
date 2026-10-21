@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Trip Analytics</title>
+<!-- Material Symbols -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap" rel="stylesheet"/>
+<!-- Tailwind CSS v3 -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          "colors": {
+            "outline": "#777587",
+            "surface-container": "#f0ecf9",
+            "secondary-container": "#6cf8bb",
+            "surface-container-highest": "#e4e1ee",
+            "primary-fixed": "#e2dfff",
+            "on-error": "#ffffff",
+            "inverse-on-surface": "#f3effc",
+            "primary-container": "#4f46e5",
+            "background": "#fcf8ff",
+            "inverse-primary": "#c3c0ff",
+            "on-tertiary-fixed-variant": "#653e00",
+            "error": "#ba1a1a",
+            "on-primary-container": "#dad7ff",
+            "on-secondary-fixed-variant": "#005236",
+            "on-tertiary-fixed": "#2a1700",
+            "surface-bright": "#fcf8ff",
+            "outline-variant": "#c7c4d8",
+            "surface-container-high": "#eae6f4",
+            "on-primary-fixed-variant": "#3323cc",
+            "on-tertiary-container": "#ffd4a4",
+            "surface-tint": "#4d44e3",
+            "primary": "#3525cd",
+            "secondary": "#006c49",
+            "secondary-fixed": "#6ffbbe",
+            "on-tertiary": "#ffffff",
+            "on-error-container": "#93000a",
+            "inverse-surface": "#302f39",
+            "tertiary-fixed-dim": "#ffb95f",
+            "on-background": "#1b1b24",
+            "tertiary-fixed": "#ffddb8",
+            "on-secondary-container": "#00714d",
+            "surface-container-low": "#f5f2ff",
+            "error-container": "#ffdad6",
+            "surface-variant": "#e4e1ee",
+            "surface-dim": "#dcd8e5",
+            "on-surface-variant": "#464555",
+            "primary-fixed-dim": "#c3c0ff",
+            "on-primary": "#ffffff",
+            "on-secondary-fixed": "#002113",
+            "surface": "#fcf8ff",
+            "tertiary-container": "#885500",
+            "on-secondary": "#ffffff",
+            "on-primary-fixed": "#0f0069",
+            "secondary-fixed-dim": "#4edea3",
+            "surface-container-lowest": "#ffffff",
+            "on-surface": "#1b1b24",
+            "tertiary": "#684000"
+          },
+          "borderRadius": {
+            "DEFAULT": "0.125rem",
+            "lg": "0.25rem",
+            "xl": "0.5rem",
+            "full": "0.75rem"
+          },
+          "spacing": {
+            "density-high": "4px",
+            "container-padding": "24px",
+            "component-gap": "8px",
+            "gutter": "16px",
+            "density-medium": "12px",
+            "unit": "4px"
+          },
+          "fontFamily": {
+            "label-sm": ["Inter"],
+            "display": ["Inter"],
+            "label-md": ["Inter"],
+            "headline-md": ["Inter"],
+            "body-lg": ["Inter"],
+            "body-md": ["Inter"],
+            "headline-lg": ["Inter"],
+            "body-sm": ["Inter"]
+          },
+          "fontSize": {
+            "label-sm": ["11px", { "lineHeight": "14px", "fontWeight": "500" }],
+            "display": ["36px", { "lineHeight": "44px", "letterSpacing": "-0.02em", "fontWeight": "700" }],
+            "label-md": ["12px", { "lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "600" }],
+            "headline-md": ["20px", { "lineHeight": "28px", "fontWeight": "600" }],
+            "body-lg": ["16px", { "lineHeight": "24px", "fontWeight": "400" }],
+            "body-md": ["14px", { "lineHeight": "20px", "fontWeight": "400" }],
+            "headline-lg": ["24px", { "lineHeight": "32px", "letterSpacing": "-0.01em", "fontWeight": "600" }],
+            "body-sm": ["13px", { "lineHeight": "18px", "fontWeight": "400" }]
+          }
+        }
+      }
+    }
+  </script>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background text-on-background font-body-md antialiased pb-24">
+<!-- TopAppBar -->
+<header class="sticky top-0 z-40 bg-surface dark:bg-surface w-full">
+<div class="flex justify-between items-center w-full px-container-padding py-density-medium max-w-7xl mx-auto">
+<div class="flex items-center gap-3">
+<button class="text-primary dark:text-inverse-primary hover:bg-surface-container p-2 rounded-xl transition-transform active:scale-95 duration-100">
+<span class="material-symbols-outlined">menu</span>
+</button>
+<h1 class="font-headline-md text-headline-md font-semibold text-primary dark:text-inverse-primary">Trip Analytics</h1>
+</div>
+<button class="text-primary dark:text-inverse-primary hover:bg-surface-container p-2 rounded-xl transition-transform active:scale-95 duration-100 flex items-center gap-1 border border-surface-variant">
+<span class="material-symbols-outlined">filter_list</span>
+<span class="font-label-md text-label-md">Filters</span>
+</button>
+</div>
+</header>
+<!-- Main Container -->
+<main class="px-gutter py-density-medium flex flex-col gap-6 max-w-md mx-auto">
+<!-- KPI Cards: Two-column grid -->
+<section>
+<div class="flex items-center justify-between mb-3">
+<h2 class="font-label-md text-label-md text-on-surface-variant uppercase tracking-wider">Performance Overview</h2>
+<span class="font-label-sm text-label-sm text-primary">Live Data</span>
+</div>
+<div class="grid grid-cols-2 gap-3">
+<!-- Gross Fares -->
+<div class="bg-surface border border-surface-variant rounded-xl p-3 shadow-sm flex flex-col justify-between">
+<div class="text-on-surface-variant font-label-sm text-label-sm">Gross Fares</div>
+<div class="mt-2">
+<div class="font-headline-md text-headline-md font-semibold text-primary">J$14,250,840</div>
+<div class="flex items-center gap-1 text-secondary font-label-sm text-label-sm mt-1">
+<span class="material-symbols-outlined text-sm">trending_up</span> +12.4%
+            </div>
+</div>
+</div>
+<!-- Net Revenue -->
+<div class="bg-surface border border-surface-variant rounded-xl p-3 shadow-sm flex flex-col justify-between">
+<div class="text-on-surface-variant font-label-sm text-label-sm">Net Revenue</div>
+<div class="mt-2">
+<div class="font-headline-md text-headline-md font-semibold text-on-surface">J$11,820,400</div>
+<div class="flex items-center gap-1 text-secondary font-label-sm text-label-sm mt-1">
+<span class="material-symbols-outlined text-sm">trending_up</span> +8.1%
+            </div>
+</div>
+</div>
+<!-- Total Trips -->
+<div class="bg-surface border border-surface-variant rounded-xl p-3 shadow-sm flex flex-col justify-between">
+<div class="text-on-surface-variant font-label-sm text-label-sm">Total Trips</div>
+<div class="mt-2">
+<div class="font-headline-md text-headline-md font-semibold text-on-surface">48,290</div>
+<div class="text-on-surface-variant font-label-sm text-label-sm mt-1">Completed safely</div>
+</div>
+</div>
+<!-- Active Drivers -->
+<div class="bg-surface border border-surface-variant rounded-xl p-3 shadow-sm flex flex-col justify-between">
+<div class="text-on-surface-variant font-label-sm text-label-sm">Active Drivers</div>
+<div class="mt-2">
+<div class="font-headline-md text-headline-md font-semibold text-on-surface">1,248</div>
+<div class="text-secondary font-label-sm text-label-sm mt-1">Online now</div>
+</div>
+</div>
+<!-- Avg Fare -->
+<div class="bg-surface border border-surface-variant rounded-xl p-3 shadow-sm flex flex-col justify-between">
+<div class="text-on-surface-variant font-label-sm text-label-sm">Avg Fare</div>
+<div class="mt-2">
+<div class="font-headline-md text-headline-md font-semibold text-on-surface">J$295.10</div>
+<div class="text-on-surface-variant font-label-sm text-label-sm mt-1">Per dispatch</div>
+</div>
+</div>
+<!-- Cancellation Rate -->
+<div class="bg-surface border border-surface-variant rounded-xl p-3 shadow-sm flex flex-col justify-between">
+<div class="text-on-surface-variant font-label-sm text-label-sm">Cancellation Rate</div>
+<div class="mt-2">
+<div class="font-headline-md text-headline-md font-semibold text-error">4.2%</div>
+<div class="text-error font-label-sm text-label-sm mt-1">-0.5% vs avg</div>
+</div>
+</div>
+</div>
+</section>
+<!-- Sideways Heatmap (7x24 Matrix) -->
+<section class="bg-surface border border-surface-variant rounded-xl p-4 shadow-sm">
+<div class="flex items-center justify-between mb-3">
+<div>
+<h2 class="font-headline-md text-headline-md font-semibold">Demand Heatmap</h2>
+<p class="font-body-sm text-on-surface-variant">Weekly volume distribution (7 Days x 24 Hours)</p>
+</div>
+<span class="material-symbols-outlined text-outline">schedule</span>
+</div>
+<!-- Horizontal Scrollable Matrix Container -->
+<div class="overflow-x-auto pb-2">
+<div class="min-w-[500px] flex flex-col gap-1">
+<!-- Hours Header -->
+<div class="grid grid-cols-25 text-[10px] text-on-surface-variant font-label-sm mb-1 text-center" style="grid-template-columns: 24px repeat(24, minmax(0, 1fr));">
+<div></div>
+<div>00</div><div>02</div><div>04</div><div>06</div><div>08</div><div>10</div><div>12</div><div>14</div><div>16</div><div>18</div><div>20</div><div>22</div>
+<div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div>
+</div>
+<!-- Rows for 7 days -->
+<div class="flex flex-col gap-1">
+<!-- Loop representation for 7 days (Mon-Sun) -->
+<div class="grid items-center gap-1 text-[11px] text-on-surface-variant font-label-sm" style="grid-template-columns: 24px repeat(24, minmax(0, 1fr));">
+<span class="font-bold">M</span>
+<!-- 24 cells -->
+<div class="h-3 bg-surface-container rounded-xs"></div><div class="h-3 bg-surface-container rounded-xs"></div><div class="h-3 bg-surface-container rounded-xs"></div><div class="h-3 bg-surface-container-high rounded-xs"></div><div class="h-3 bg-primary-fixed rounded-xs"></div><div class="h-3 bg-primary-container rounded-xs"></div><div class="h-3 bg-primary-container rounded-xs"></div><div class="h-3 bg-primary-fixed rounded-xs"></div><div class="h-3 bg-surface-container-high rounded-xs"></div><div class="h-3 bg-surface-container-high rounded-xs"></div><div class="h-3 bg-surface-container-high rounded-xs"></div><div class="h-3 bg-primary-fixed rounded-xs"></div><div class="h-3 bg-primary-container rounded-xs"></div><div class="h-3 bg-primary-container rounded-xs"></div><div class="h-3 bg-primary-fixed rounded-xs"></div><div class="h-3 bg-surface-container-high rounded-xs"></div><div class="h-3 bg-surface-container-high rounded-xs"></div><div class="h-3 bg-primary-fixed rounded-xs"></div><div class="h-3 bg-primary-container rounded-xs"></div><div class="h-3 bg-primary-container rounded-xs"></div><div class="h-3 bg-primary-fixed rounded-xs"></div><div class="h-3 bg-surface-container-high rounded-xs"></div><div class="h-3 bg-surface-container rounded-xs"></div><div class="h-3 bg-surface-container rounded-xs"></div>
+</div>
+<div class="grid items-center gap-1 text-[11px] text-on-surface-variant font-label-sm" style="grid-template-columns: 24px repeat(24, minmax(0, 1fr));">
+<span class="font-bold">T</span>
+<div class="h-3 bg-surface-container rounded-xs"></div><div class="h-3 bg-surface-container rounded-xs"></div><div class="h-3 bg-surface-container rounded-xs"></div><div class="h-3 bg-surface-container-high rounded-xs"></div><div class="h-3 bg-primary-fixed rounded-xs"></div><div class="h-3 bg-primary-container rounded-xs"></div><div class="h-3 bg-primary-container rounded-xs"></div><div class="h-3 bg-primary-fixed rounded-xs"></div><div class="h-3 bg-surface-container-high rounded-xs"></div><div class="h-3 bg-primary-fixed rounded-xs"></div><div class="h-3 bg-primary-fixed rounded-xs"></div><div class="h-3 bg-primary-fixed rounded-xs"></div><div class="h-3 bg-primary-container rounded-xs"></div><div class="h-3 bg-primary-container rounded-xs"></div><div class="h-3 bg-primary-container rounded-xs"></div><div class="h-3 bg-primary-fixed rounded-xs"></div><div class="h-3 bg-surface-container-high rounded-xs"></div><div class="h-3 bg-primary-fixed rounded-xs"></div><div class="h-3 bg-primary-container rounded-xs"></div><div class="h-3 bg-primary-container rounded-xs"></div><div class="h-3 bg-primary-fixed rounded-xs"></div><div class="h-3 bg-surface-container-high rounded-xs"></div><div class="h-3 bg-surface-container rounded-xs"></div><div class="h-3 bg-surface-container rounded-xs"></div>
+</div>
+<div class="grid items-center gap-1 text-[11px] text-on-surface-variant font-label-sm" style="grid-template-columns: 24px repeat(24, minmax(0, 1fr));">
+<span class="font-bold">W</span>
+<div class="h-3 bg-surface-container rounded-xs"></div><div class="h-3 bg-surface-container rounded-xs"></div><div class="h-3 bg-surface-container rounded-xs"></div><div class="h-3 bg-surface-container-high rounded-xs"></div><div class="h-3 bg-primary-fixed rounded-xs"></div><div class="h-3 bg-primary-container rounded-xs"></div><div class="h-3 bg-primary-container rounded-xs"></div><div class="h-3 bg-primary-fixed rounded-xs"></div><div class="h-3 bg-surface-container-high rounded-xs"></div><div class="h-3 bg-surface-container-high rounded-xs"></div><div class="h-3 bg-surface-container-high rounded-xs"></div><div class="h-3 bg-primary-fixed rounded-xs"></div><div class="h-3 bg-primary-container rounded-xs"></div><div class="h-3 bg-primary-container rounded-xs"></div><div class="h-3 bg-primary-fixed rounded-xs"></div><div class="h-3 bg-surface-container-high rounded-xs"></div><div class="h-3 bg-surface-container-high rounded-xs"></div><div class="h-3 bg-primary-fixed rounded-xs"></div><div class="h-3 bg-primary-container rounded-xs"></div><div class="h-3 bg-primary-container rounded-xs"></div><div class="h-3 bg-primary-fixed rounded-xs"></div><div class="h-3 bg-surface-container-high rounded-xs"></div><div class="h-3 bg-surface-container rounded-xs"></div><div class="h-3 bg-surface-container rounded-xs"></div>
+</div>
+<div class="grid items-center gap-1 text-[11px] text-on-surface-variant font-label-sm" style="grid-template-columns: 24px repeat(24, minmax(0, 1fr));">
+<span class="font-bold">T</span>
+<div class="h-3 bg-surface-container rounded-xs"></div><div class="h-3 bg-surface-container rounded-xs"></div><div class="h-3 bg-surface-container rounded-xs"></div><div class="h-3 bg-surface-container-high rounded-xs"></div><div class="h-3 bg-primary-fixed rounded-xs"></div><div class="h-3 bg-primary-container rounded-xs"></div><div class="h-3 bg-primary-container rounded-xs"></div><div class="h-3 bg-primary-fixed rounded-xs"></div><div class="h-3 bg-surface-container-high rounded-xs"></div><div class="h-3 bg-surface-container-high rounded-xs"></div><div class="h-3 bg-surface-container-high rounded-xs"></div><div class="h-3 bg-primary-fixed rounded-xs"></div><div class="h-3 bg-primary-container rounded-xs"></div><div class="h-3 bg-primary-container rounded-xs"></div><div class="h-3 bg-primary-fixed rounded-xs"></div><div class="h-3 bg-surface-container-high rounded-xs"></div><div class="h-3 bg-surface-container-high rounded-xs"></div><div class="h-3 bg-primary-fixed rounded-xs"></div><div class="h-3 bg-primary-container rounded-xs"></div><div class="h-3 bg-primary-container rounded-xs"></div><div class="h-3 bg-primary-fixed rounded-xs"></div><div class="h-3 bg-surface-container-high rounded-xs"></div><div class="h-3 bg-surface-container rounded-xs"></div><div class="h-3 bg-surface-container rounded-xs"></div>
+</div>
+<div class="grid items-center gap-1 text-[11px] text-on-surface-variant font-label-sm" style="grid-template-columns: 24px repeat(24, minmax(0, 1fr));">
+<span class="font-bold">F</span>
+<div class="h-3 bg-surface-container rounded-xs"></div><div class="h-3 bg-surface-container rounded-xs"></div><div class="h-3 bg-surface-container rounded-xs"></div><div class="h-3 bg-surface-container-high rounded-xs"></div><div class="h-3 bg-primary-fixed rounded-xs"></div><div class="h-3 bg-primary-container rounded-xs"></div><div class="h-3 bg-primary-container rounded-xs"></div><div class="h-3 bg-primary-fixed rounded-xs"></div><div class="h-3 bg-primary-container rounded-xs"></div><div class="h-3 bg-primary-container rounded-xs"></div><div class="h-3 bg-primary-container rounded-xs"></div><div class="h-3 bg-primary-container rounded-xs"></div><div class="h-3 bg-primary-container rounded-xs"></div><div class="h-3 bg-primary-container rounded-xs"></div><div class="h-3 bg-primary-container rounded-xs"></div><div class="h-3 bg-primary-container rounded-xs"></div><div class="h-3 bg-primary-container rounded-xs"></div><div class="h-3 bg-primary-container rounded-xs"></div><div class="h-3 bg-primary-container rounded-xs"></div><div class="h-3 bg-primary-container rounded-xs"></div><div class="h-3 bg-primary-container rounded-xs"></div><div class="h-3 bg-primary-fixed rounded-xs"></div><div class="h-3 bg-surface-container-high rounded-xs"></div><div class="h-3 bg-surface-container rounded-xs"></div>
+</div>
+<div class="grid items-center gap-1 text-[11px] text-on-surface-variant font-label-sm" style="grid-template-columns: 24px repeat(24, minmax(0, 1fr));">
+<span class="font-bold">S</span>
+<div class="h-3 bg-surface-container rounded-xs"></div><div class="h-3 bg-surface-container rounded-xs"></div><div class="h-3 bg-surface-container rounded-xs"></div><div class="h-3 bg-surface-container rounded-xs"></div><div class="h-3 bg-surface-container-high rounded-xs"></div><div class="h-3 bg-primary-fixed rounded-xs"></div><div class="h-3 bg-primary-fixed rounded-xs"></div><div class="h-3 bg-primary-fixed rounded-xs"></div><div class="h-3 bg-primary-container rounded-xs"></div><div class="h-3 bg-primary-container rounded-xs"></div><div class="h-3 bg-primary-container rounded-xs"></div><div class="h-3 bg-primary-container rounded-xs"></div><div class="h-3 bg-primary-container rounded-xs"></div><div class="h-3 bg-primary-container rounded-xs"></div><div class="h-3 bg-primary-container rounded-xs"></div><div class="h-3 bg-primary-container rounded-xs"></div><div class="h-3 bg-primary-container rounded-xs"></div><div class="h-3 bg-primary-container rounded-xs"></div><div class="h-3 bg-primary-container rounded-xs"></div><div class="h-3 bg-primary-container rounded-xs"></div><div class="h-3 bg-primary-fixed rounded-xs"></div><div class="h-3 bg-primary-fixed rounded-xs"></div><div class="h-3 bg-surface-container-high rounded-xs"></div><div class="h-3 bg-surface-container rounded-xs"></div>
+</div>
+<div class="grid items-center gap-1 text-[11px] text-on-surface-variant font-label-sm" style="grid-template-columns: 24px repeat(24, minmax(0, 1fr));">
+<span class="font-bold">S</span>
+<div class="h-3 bg-surface-container rounded-xs"></div><div class="h-3 bg-surface-container rounded-xs"></div><div class="h-3 bg-surface-container rounded-xs"></div><div class="h-3 bg-surface-container rounded-xs"></div><div class="h-3 bg-surface-container-high rounded-xs"></div><div class="h-3 bg-surface-container-high rounded-xs"></div><div class="h-3 bg-primary-fixed rounded-xs"></div><div class="h-3 bg-primary-fixed rounded-xs"></div><div class="h-3 bg-primary-fixed rounded-xs"></div><div class="h-3 bg-primary-container rounded-xs"></div><div class="h-3 bg-primary-container rounded-xs"></div><div class="h-3 bg-primary-fixed rounded-xs"></div><div class="h-3 bg-primary-fixed rounded-xs"></div><div class="h-3 bg-primary-fixed rounded-xs"></div><div class="h-3 bg-primary-container rounded-xs"></div><div class="h-3 bg-primary-fixed rounded-xs"></div><div class="h-3 bg-primary-fixed rounded-xs"></div><div class="h-3 bg-primary-fixed rounded-xs"></div><div class="h-3 bg-surface-container-high rounded-xs"></div><div class="h-3 bg-surface-container-high rounded-xs"></div><div class="h-3 bg-surface-container rounded-xs"></div><div class="h-3 bg-surface-container rounded-xs"></div><div class="h-3 bg-surface-container rounded-xs"></div><div class="h-3 bg-surface-container rounded-xs"></div>
+</div>
+</div>
+</div>
+</div>
+<!-- Legend -->
+<div class="flex items-center justify-end gap-2 mt-3 pt-2 border-t border-surface-variant">
+<span class="font-label-sm text-label-sm text-on-surface-variant">Low</span>
+<div class="flex gap-1">
+<div class="w-3 h-3 bg-surface-container rounded-xs"></div>
+<div class="w-3 h-3 bg-surface-container-high rounded-xs"></div>
+<div class="w-3 h-3 bg-primary-fixed rounded-xs"></div>
+<div class="w-3 h-3 bg-primary-container rounded-xs"></div>
+</div>
+<span class="font-label-sm text-label-sm text-on-surface-variant">High</span>
+</div>
+</section>
+<!-- Recent Trip Cards -->
+<section>
+<div class="flex items-center justify-between mb-3">
+<h2 class="font-headline-md text-headline-md font-semibold">Recent Trips</h2>
+<a class="font-label-md text-label-md text-primary" href="#">View All</a>
+</div>
+<div class="flex flex-col gap-3">
+<!-- Trip Card 1 -->
+<div class="bg-surface border border-surface-variant rounded-xl p-3 shadow-sm flex flex-col gap-2">
+<div class="flex justify-between items-start">
+<div class="flex items-center gap-2">
+<div class="w-8 h-8 rounded-full bg-primary-fixed flex items-center justify-center text-primary font-bold text-xs">
+                #481
+              </div>
+<div>
+<div class="font-body-md font-semibold text-on-surface">Half Way Tree → New Kingston</div>
+<div class="font-body-sm text-on-surface-variant">Driver: Marcus G. (ID: 8821)</div>
+</div>
+</div>
+<span class="px-2 py-0.5 rounded-full bg-secondary-fixed text-on-secondary-fixed-variant font-label-sm text-label-sm">Completed</span>
+</div>
+<div class="flex justify-between items-center pt-2 border-t border-surface-variant text-body-sm">
+<span class="text-on-surface-variant">14 mins ago</span>
+<span class="font-semibold text-primary">J$1,450.00</span>
+</div>
+</div>
+<!-- Trip Card 2 -->
+<div class="bg-surface border border-surface-variant rounded-xl p-3 shadow-sm flex flex-col gap-2">
+<div class="flex justify-between items-start">
+<div class="flex items-center gap-2">
+<div class="w-8 h-8 rounded-full bg-primary-fixed flex items-center justify-center text-primary font-bold text-xs">
+                #480
+              </div>
+<div>
+<div class="font-body-md font-semibold text-on-surface">Cross Roads → Downtown</div>
+<div class="font-body-sm text-on-surface-variant">Driver: Andrea P. (ID: 4102)</div>
+</div>
+</div>
+<span class="px-2 py-0.5 rounded-full bg-error-container text-on-error-container font-label-sm text-label-sm">Cancelled</span>
+</div>
+<div class="flex justify-between items-center pt-2 border-t border-surface-variant text-body-sm">
+<span class="text-on-surface-variant">28 mins ago</span>
+<span class="font-semibold text-error">J$0.00 <span class="text-xs font-normal text-on-surface-variant">(Fee waived)</span></span>
+</div>
+</div>
+<!-- Trip Card 3 -->
+<div class="bg-surface border border-surface-variant rounded-xl p-3 shadow-sm flex flex-col gap-2">
+<div class="flex justify-between items-start">
+<div class="flex items-center gap-2">
+<div class="w-8 h-8 rounded-full bg-primary-fixed flex items-center justify-center text-primary font-bold text-xs">
+                #479
+              </div>
+<div>
+<div class="font-body-md font-semibold text-on-surface">Constant Spring → Manor Park</div>
+<div class="font-body-sm text-on-surface-variant">Driver: Kevin B. (ID: 9034)</div>
+</div>
+</div>
+<span class="px-2 py-0.5 rounded-full bg-secondary-fixed text-on-secondary-fixed-variant font-label-sm text-label-sm">Completed</span>
+</div>
+<div class="flex justify-between items-center pt-2 border-t border-surface-variant text-body-sm">
+<span class="text-on-surface-variant">41 mins ago</span>
+<span class="font-semibold text-primary">J$2,100.00</span>
+</div>
+</div>
+</div>
+</section>
+</main>
+<!-- BottomNavBar -->
+<nav class="fixed bottom-0 left-0 w-full z-50 flex justify-around items-center px-gutter py-density-high bg-surface dark:bg-surface shadow-md">
+<!-- Dashboard -->
+<a class="flex flex-col items-center justify-center text-on-surface-variant px-unit py-unit hover:bg-surface-container dark:hover:bg-inverse-surface rounded-2xl transition-transform active:scale-95 duration-100" href="#">
+<span class="material-symbols-outlined">dashboard</span>
+<span class="font-label-sm text-label-sm mt-1">Dashboard</span>
+</a>
+<!-- Analytics (Active) -->
+<a class="flex flex-col items-center justify-center bg-primary-container text-on-primary-container rounded-2xl px-unit py-unit hover:bg-surface-container dark:hover:bg-inverse-surface transition-transform active:scale-95 duration-100" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">analytics</span>
+<span class="font-label-sm text-label-sm mt-1">Analytics</span>
+</a>
+<!-- Fleet -->
+<a class="flex flex-col items-center justify-center text-on-surface-variant px-unit py-unit hover:bg-surface-container dark:hover:bg-inverse-surface rounded-2xl transition-transform active:scale-95 duration-100" href="#">
+<span class="material-symbols-outlined">directions_car</span>
+<span class="font-label-sm text-label-sm mt-1">Fleet</span>
+</a>
+<!-- Settings -->
+<a class="flex flex-col items-center justify-center text-on-surface-variant px-unit py-unit hover:bg-surface-container dark:hover:bg-inverse-surface rounded-2xl transition-transform active:scale-95 duration-100" href="#">
+<span class="material-symbols-outlined">settings</span>
+<span class="font-label-sm text-label-sm mt-1">Settings</span>
+</a>
+</nav>
+</body></html>

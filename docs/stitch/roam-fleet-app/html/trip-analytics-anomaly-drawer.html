@@ -1,0 +1,916 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Trip Analytics - Roam Fleet</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          "colors": {
+            "on-secondary-fixed": "#002113",
+            "on-secondary": "#ffffff",
+            "surface-container-high": "#eae6f4",
+            "on-surface": "#1b1b24",
+            "on-background": "#1b1b24",
+            "on-secondary-container": "#0c714d",
+            "on-tertiary-container": "#e5ac66",
+            "error-rose": "#ba1a1a",
+            "surface-container": "#f0ecf9",
+            "inverse-on-surface": "#f3effc",
+            "surface-dim": "#dcd8e5",
+            "surface-bright": "#fcf8ff",
+            "on-tertiary-fixed-variant": "#653e00",
+            "on-primary-container": "#b1afff",
+            "secondary": "#006c49",
+            "primary-fixed-dim": "#c3c0ff",
+            "on-error": "#ffffff",
+            "error-container": "#ffdad6",
+            "on-surface-variant": "#464555",
+            "secondary-fixed": "#9df4c8",
+            "primary": "#1e00a9",
+            "surface-indigo-tint": "#f5f2ff",
+            "outline-variant": "#c7c4d8",
+            "surface": "#fcf8ff",
+            "secondary-container": "#9af2c5",
+            "on-tertiary": "#ffffff",
+            "on-primary": "#ffffff",
+            "error": "#ba1a1a",
+            "on-primary-fixed-variant": "#3323cc",
+            "background": "#fcf8ff",
+            "primary-container": "#3525cd",
+            "primary-fixed": "#e2dfff",
+            "tertiary": "#482b00",
+            "outline-slate": "#777587",
+            "on-error-container": "#93000a",
+            "tertiary-container": "#673f00",
+            "secondary-fixed-dim": "#81d8ad",
+            "surface-container-lowest": "#ffffff",
+            "surface-container-low": "#f5f2ff",
+            "tertiary-fixed-dim": "#f6bb74",
+            "outline": "#777587",
+            "inverse-primary": "#c3c0ff",
+            "tertiary-fixed": "#ffddb8",
+            "surface-container-highest": "#e4e1ee",
+            "on-primary-fixed": "#0f0069",
+            "surface-tint": "#4d44e3",
+            "on-secondary-fixed-variant": "#005236",
+            "tertiary-amber": "#684000",
+            "inverse-surface": "#302f39",
+            "surface-variant": "#e4e1ee",
+            "on-tertiary-fixed": "#2a1700"
+          },
+          "borderRadius": {
+            "DEFAULT": "0.125rem",
+            "lg": "0.25rem",
+            "xl": "0.5rem",
+            "full": "0.75rem"
+          },
+          "spacing": {
+            "container-padding-mobile": "16px",
+            "margin-desktop": "24px",
+            "touch-target-preferred": "48px",
+            "margin-mobile": "16px",
+            "container-padding-desktop": "24px",
+            "unit": "8px",
+            "base-unit": "8px",
+            "gutter-default": "16px",
+            "gutter": "16px",
+            "gap-component": "8px",
+            "component-gap": "8px",
+            "touch-target-min": "44px"
+          },
+          "fontFamily": {
+            "label-md": ["Inter"],
+            "headline-md": ["Inter"],
+            "body-sm": ["Inter"],
+            "headline-lg": ["Inter"],
+            "body-md": ["Inter"],
+            "body-lg": ["Inter"],
+            "display": ["Inter"]
+          },
+          "fontSize": {
+            "label-md": ["12px", { "lineHeight": "16px", "fontWeight": "600" }],
+            "headline-md": ["20px", { "lineHeight": "28px", "fontWeight": "600" }],
+            "body-sm": ["13px", { "lineHeight": "18px", "fontWeight": "400" }],
+            "headline-lg": ["24px", { "lineHeight": "32px", "fontWeight": "600" }],
+            "body-md": ["14px", { "lineHeight": "20px", "fontWeight": "400" }],
+            "body-lg": ["16px", { "lineHeight": "24px", "fontWeight": "400" }],
+            "display": ["36px", { "lineHeight": "44px", "fontWeight": "700" }]
+          }
+        }
+      }
+    }
+  </script>
+<style>
+    .material-symbols-outlined {
+      font-family: 'Material Symbols Outlined';
+      font-weight: normal;
+      font-style: normal;
+      font-size: 20px;
+      line-height: 1;
+      letter-spacing: normal;
+      text-transform: none;
+      display: inline-block;
+      white-space: nowrap;
+      word-wrap: normal;
+      direction: ltr;
+      -webkit-font-feature-settings: 'liga';
+      -webkit-font-smoothing: antialiased;
+    }
+  </style>
+</head>
+<body class="bg-[#f8fafc] text-on-surface antialiased min-h-screen">
+<!-- Top Navigation Bar (Shared Component: TopNavBar with active state on 'Trips') -->
+<header class="bg-surface-container-lowest border-b border-outline-variant sticky top-0 z-30">
+<div class="w-full max-w-[1440px] mx-auto px-margin-desktop flex items-center justify-between h-16">
+<!-- Brand & Left Nav -->
+<div class="flex items-center gap-8">
+<div class="flex items-center gap-2">
+<div class="w-8 h-8 rounded-lg bg-primary flex items-center justify-center text-on-primary">
+<span class="material-symbols-outlined" data-icon="local_taxi">local_taxi</span>
+</div>
+<span class="text-headline-md font-headline-md font-bold text-primary tracking-tight">Roam Fleet</span>
+</div>
+<nav class="flex items-center gap-6 h-16">
+<a class="border-b-2 border-primary text-primary font-label-md text-label-md pb-4 pt-4 flex items-center gap-1.5" href="#">
+            Trips
+          </a>
+<a class="text-on-surface-variant font-label-md text-label-md pb-4 pt-4 hover:text-on-surface transition-colors" href="#">
+            Expenses
+          </a>
+<a class="text-on-surface-variant font-label-md text-label-md pb-4 pt-4 hover:text-on-surface transition-colors" href="#">
+            Vehicles
+          </a>
+<a class="text-on-surface-variant font-label-md text-label-md pb-4 pt-4 hover:text-on-surface transition-colors" href="#">
+            Drivers
+          </a>
+<a class="text-on-surface-variant font-label-md text-label-md pb-4 pt-4 hover:text-on-surface transition-colors" href="#">
+            Analytics
+          </a>
+<a class="text-on-surface-variant font-label-md text-label-md pb-4 pt-4 hover:text-on-surface transition-colors" href="#">
+            Settings
+          </a>
+</nav>
+</div>
+<!-- Right Utility Actions -->
+<div class="flex items-center gap-4">
+<button class="bg-primary hover:bg-primary-container text-on-primary font-label-md text-label-md px-3.5 py-2 rounded-lg flex items-center gap-1.5 transition-colors">
+<span class="material-symbols-outlined" data-icon="add">add</span>
+          New Expense
+        </button>
+<div class="h-6 w-[1px] bg-outline-variant"></div>
+<button class="w-9 h-9 rounded-lg flex items-center justify-center text-on-surface-variant hover:bg-surface-container-high transition-colors" title="Notifications">
+<span class="material-symbols-outlined" data-icon="notifications">notifications</span>
+</button>
+<button class="w-9 h-9 rounded-lg flex items-center justify-center text-on-surface-variant hover:bg-surface-container-high transition-colors" title="Help">
+<span class="material-symbols-outlined" data-icon="help">help</span>
+</button>
+<div class="flex items-center gap-2 pl-2 border-l border-outline-variant">
+<img class="w-8 h-8 rounded-full border border-outline-variant object-cover" data-alt="Professional headshot portrait of a focused fleet operations manager wearing clean business attire against a neutral minimal office backdrop with soft daylight." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDQ3EkKuWNzBAiHRoxxas3sf8ktskD4yJGpFl8bvtUyb2XFGJtXCMjEPoJYUv6Z6v2IMf7uLrLXLE5yuhwDTbXCiWFYn8AlFjIocwIvzYNiQlzH0YI7PNnj_Kg0R-Yh-Fe9yKxOTvyPVGq58nUHIeKcGwf_tZcEWvl2CXFCrFA6yhO6AUlmzE_0LWrjHQ5SCOuaeMTocLieaWjN1sl_YHJxtMeml4NWOzvp09qMkvsSK9KpLYBCOAPUOE3BZAbWS8ltRqSf6GOcrIQ"/>
+<div class="flex flex-col text-left">
+<span class="font-label-md text-[11px] leading-tight text-on-surface">Fleet Admin</span>
+<span class="font-body-sm text-[10px] leading-tight text-outline-slate">Ops Controller</span>
+</div>
+</div>
+</div>
+</div>
+</header>
+<!-- Main Canvas Container -->
+<main class="w-full max-w-[1440px] mx-auto px-margin-desktop py-6 flex flex-col gap-unit">
+<!-- Page Header & Sticky-capable Toolbar -->
+<section class="bg-surface-container-lowest p-5 rounded-xl border border-[#e2e8f0] flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+<div>
+<div class="flex items-center gap-2">
+<h1 class="text-headline-lg font-headline-lg text-on-surface font-bold tracking-tight">Trip Analytics</h1>
+<span class="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-primary-fixed text-primary">Live Dispatch View</span>
+</div>
+<p class="text-body-md font-body-md text-on-surface-variant mt-0.5">Operational performance, dispatch volume, and network realization across platforms.</p>
+</div>
+<!-- Controls: Date Presets & Options -->
+<div class="flex flex-wrap items-center gap-3">
+<!-- Preset Segmented Buttons -->
+<div class="inline-flex rounded-lg border border-[#e2e8f0] bg-[#f8fafc] p-1">
+<button class="px-3 py-1.5 rounded-lg text-body-sm font-body-sm text-outline-slate hover:text-on-surface transition-colors">Today</button>
+<button class="px-3 py-1.5 rounded-lg text-body-sm font-body-sm text-outline-slate hover:text-on-surface transition-colors">Yesterday</button>
+<button class="px-3 py-1.5 rounded-lg text-body-sm font-body-sm text-outline-slate hover:text-on-surface transition-colors">Last 7 days</button>
+<button class="px-3 py-1.5 rounded-lg text-body-sm font-body-sm font-semibold bg-primary text-on-primary shadow-sm">Last 30 days</button>
+<button class="px-3 py-1.5 rounded-lg text-body-sm font-body-sm text-outline-slate hover:text-on-surface transition-colors">This month</button>
+<button class="px-3 py-1.5 rounded-lg text-body-sm font-body-sm text-outline-slate hover:text-on-surface transition-colors">Custom</button>
+</div>
+<!-- Toggle Switch -->
+<label class="flex items-center gap-2 cursor-pointer select-none px-2 py-1 bg-surface-container-low rounded-lg border border-outline-variant">
+<div class="relative inline-block w-8 h-4 align-middle">
+<input checked="" class="sr-only peer" type="checkbox"/>
+<div class="w-8 h-4 bg-outline-variant peer-checked:bg-primary rounded-full transition-colors"></div>
+<div class="absolute left-0.5 top-0.5 bg-white w-3 h-3 rounded-full transition-transform peer-checked:translate-x-4"></div>
+</div>
+<span class="font-label-md text-label-md text-on-surface">Compare to previous period</span>
+</label>
+<!-- Export Action -->
+<button class="px-3.5 py-1.5 rounded-lg border border-[#cbd5e1] hover:border-outline-slate bg-surface-container-lowest text-on-surface font-label-md text-label-md flex items-center gap-1.5 transition-colors">
+<span class="material-symbols-outlined text-[18px]" data-icon="file_download">file_download</span>
+          Export CSV / PDF
+        </button>
+</div>
+</section>
+<!-- Compact Filter Bar & Coverage Subtitle -->
+<section class="bg-surface-container-lowest p-3.5 rounded-xl border border-[#e2e8f0] flex flex-col gap-2.5">
+<div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-2">
+<!-- Filter 1 -->
+<div class="relative">
+<label class="block text-[10px] font-semibold text-outline-slate uppercase tracking-wider mb-0.5">Platform</label>
+<select class="w-full h-8 text-[12px] font-medium rounded-lg border border-[#cbd5e1] bg-white px-2 py-0 focus:border-primary focus:ring-0 text-on-surface">
+<option>All platforms</option>
+<option>Uber</option>
+<option>InDrive</option>
+<option>Roam Native</option>
+</select>
+</div>
+<!-- Filter 2 -->
+<div class="relative">
+<label class="block text-[10px] font-semibold text-outline-slate uppercase tracking-wider mb-0.5">Driver</label>
+<select class="w-full h-8 text-[12px] font-medium rounded-lg border border-[#cbd5e1] bg-white px-2 py-0 focus:border-primary focus:ring-0 text-on-surface">
+<option>All drivers</option>
+<option>Active fleet</option>
+<option>Assigned only</option>
+</select>
+</div>
+<!-- Filter 3 -->
+<div class="relative">
+<label class="block text-[10px] font-semibold text-outline-slate uppercase tracking-wider mb-0.5">Vehicle</label>
+<select class="w-full h-8 text-[12px] font-medium rounded-lg border border-[#cbd5e1] bg-white px-2 py-0 focus:border-primary focus:ring-0 text-on-surface">
+<option>All vehicles</option>
+<option>Sedans (32)</option>
+<option>SUVs (14)</option>
+<option>Vans (6)</option>
+</select>
+</div>
+<!-- Filter 4 -->
+<div class="relative">
+<label class="block text-[10px] font-semibold text-outline-slate uppercase tracking-wider mb-0.5">Status</label>
+<select class="w-full h-8 text-[12px] font-medium rounded-lg border border-[#cbd5e1] bg-white px-2 py-0 focus:border-primary focus:ring-0 text-on-surface">
+<option>All statuses</option>
+<option>Completed</option>
+<option>Cancelled</option>
+</select>
+</div>
+<!-- Filter 5 -->
+<div class="relative">
+<label class="block text-[10px] font-semibold text-outline-slate uppercase tracking-wider mb-0.5">Payment</label>
+<select class="w-full h-8 text-[12px] font-medium rounded-lg border border-[#cbd5e1] bg-white px-2 py-0 focus:border-primary focus:ring-0 text-on-surface">
+<option>All payments</option>
+<option>Cash collected</option>
+<option>Digital / Wallet</option>
+</select>
+</div>
+<!-- Filter 6 -->
+<div class="relative">
+<label class="block text-[10px] font-semibold text-outline-slate uppercase tracking-wider mb-0.5">Zone</label>
+<select class="w-full h-8 text-[12px] font-medium rounded-lg border border-[#cbd5e1] bg-white px-2 py-0 focus:border-primary focus:ring-0 text-on-surface">
+<option>All zones</option>
+<option>Kingston Metro</option>
+<option>Montego Bay</option>
+<option>Ocho Rios</option>
+</select>
+</div>
+<!-- Filter 7 -->
+<div class="relative">
+<label class="block text-[10px] font-semibold text-outline-slate uppercase tracking-wider mb-0.5">Source</label>
+<select class="w-full h-8 text-[12px] font-medium rounded-lg border border-[#cbd5e1] bg-white px-2 py-0 focus:border-primary focus:ring-0 text-on-surface">
+<option>Platform &amp; manual</option>
+<option>API Sync only</option>
+<option>Driver Logged</option>
+</select>
+</div>
+</div>
+<!-- Muted Data Coverage Line -->
+<div class="flex items-center gap-2 pt-2 border-t border-[#f1f5f9]">
+<span class="w-2 h-2 rounded-full bg-secondary"></span>
+<p class="font-mono text-[11px] text-[#64748b] leading-tight">
+          1,284 trips · Uber 1,020 · InDrive 180 · Roam 84 · GPS on 22% · time missing on 14 · 72 delivery set aside
+        </p>
+</div>
+</section>
+<!-- 8 KPI Cards Grid (2 rows of 4 cards, 8px gap) -->
+<section class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-unit">
+<!-- Row 1: Card 1 -->
+<div class="bg-surface-container-lowest p-4 rounded-xl border border-[#e2e8f0] flex flex-col justify-between">
+<div class="flex items-start justify-between">
+<span class="text-body-sm font-body-sm font-medium text-[#475569]">Trips completed</span>
+<span class="inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-semibold bg-[#ecfdf5] text-[#059669]">
+            +6.4% vs prev
+          </span>
+</div>
+<div class="flex items-baseline justify-between mt-2">
+<span class="text-headline-lg font-headline-lg font-bold text-on-surface">1,104</span>
+<!-- Inline Sparkline upward -->
+<svg class="w-20 h-7 text-[#059669]" fill="none" viewbox="0 0 80 28">
+<path d="M2 24 L16 20 L30 22 L44 14 L58 17 L72 6 L78 8" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+</div>
+</div>
+<!-- Row 1: Card 2 -->
+<div class="bg-surface-container-lowest p-4 rounded-xl border border-[#e2e8f0] flex flex-col justify-between">
+<div class="flex items-start justify-between">
+<span class="text-body-sm font-body-sm font-medium text-[#475569]">Cancellation rate</span>
+<span class="inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-semibold bg-[#fff1f2] text-[#e11d48]">
+            +1.8% vs prev
+          </span>
+</div>
+<div class="flex items-baseline justify-between mt-2">
+<div>
+<span class="text-headline-lg font-headline-lg font-bold text-[#e11d48]">11.2%</span>
+<div class="text-[11px] font-medium text-[#e11d48] mt-0.5">Higher rate is worse</div>
+</div>
+<!-- Sparkline rose -->
+<svg class="w-20 h-7 text-[#e11d48]" fill="none" viewbox="0 0 80 28">
+<path d="M2 20 L18 21 L32 15 L46 18 L60 10 L78 4" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+</div>
+</div>
+<!-- Row 1: Card 3 -->
+<div class="bg-surface-container-lowest p-4 rounded-xl border border-[#e2e8f0] flex flex-col justify-between">
+<div class="flex items-start justify-between">
+<div class="flex items-center gap-1.5">
+<span class="text-body-sm font-body-sm font-medium text-[#475569]">Gross fares</span>
+<span class="text-[10px] font-semibold px-1 rounded bg-[#f1f5f9] text-[#64748b]">Platform-reported</span>
+</div>
+<span class="inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-semibold bg-[#ecfdf5] text-[#059669]">
+            +8.2% vs prev
+          </span>
+</div>
+<div class="flex items-baseline justify-between mt-2">
+<span class="text-headline-lg font-headline-lg font-bold text-on-surface">J$4,820,000</span>
+<!-- Sparkline indigo -->
+<svg class="w-20 h-7 text-primary" fill="none" viewbox="0 0 80 28">
+<path d="M2 22 L15 18 L32 20 L48 10 L62 13 L78 5" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+</div>
+</div>
+<!-- Row 1: Card 4 -->
+<div class="bg-surface-container-lowest p-4 rounded-xl border border-[#e2e8f0] flex flex-col justify-between">
+<div class="flex items-start justify-between">
+<span class="text-body-sm font-body-sm font-medium text-[#475569]">Avg fare</span>
+<span class="inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-semibold bg-[#ecfdf5] text-[#059669]">
+            +2.1% vs prev
+          </span>
+</div>
+<div class="flex items-baseline justify-between mt-2">
+<div>
+<span class="text-headline-lg font-headline-lg font-bold text-on-surface">J$4,366</span>
+<div class="text-[11px] font-medium text-[#64748b] mt-0.5">Median J$3,900</div>
+</div>
+<!-- Sparkline -->
+<svg class="w-20 h-7 text-[#059669]" fill="none" viewbox="0 0 80 28">
+<path d="M2 24 L20 18 L36 19 L52 12 L66 14 L78 9" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+</div>
+</div>
+<!-- Row 2: Card 5 -->
+<div class="bg-surface-container-lowest p-4 rounded-xl border border-[#e2e8f0] flex flex-col justify-between">
+<div class="flex items-start justify-between">
+<span class="text-body-sm font-body-sm font-medium text-[#475569]">Fare per km</span>
+<span class="inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-semibold bg-[#ecfdf5] text-[#059669]">
+            +3.5% vs prev
+          </span>
+</div>
+<div class="flex items-baseline justify-between mt-2">
+<span class="text-headline-lg font-headline-lg font-bold text-on-surface">J$186</span>
+<svg class="w-20 h-7 text-[#059669]" fill="none" viewbox="0 0 80 28">
+<path d="M2 20 L22 22 L38 14 L55 16 L78 7" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+</div>
+</div>
+<!-- Row 2: Card 6 -->
+<div class="bg-surface-container-lowest p-4 rounded-xl border border-[#e2e8f0] flex flex-col justify-between">
+<div class="flex items-start justify-between">
+<span class="text-body-sm font-body-sm font-medium text-[#475569]">Avg distance</span>
+<span class="inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-semibold bg-[#f1f5f9] text-[#475569]">
+            -0.6 km vs prev
+          </span>
+</div>
+<div class="flex items-baseline justify-between mt-2">
+<span class="text-headline-lg font-headline-lg font-bold text-on-surface">18.4 km</span>
+<svg class="w-20 h-7 text-[#64748b]" fill="none" viewbox="0 0 80 28">
+<path d="M2 8 L22 10 L40 18 L58 14 L78 22" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+</div>
+</div>
+<!-- Row 2: Card 7 -->
+<div class="bg-surface-container-lowest p-4 rounded-xl border border-[#e2e8f0] flex flex-col justify-between">
+<div class="flex items-start justify-between">
+<span class="text-body-sm font-body-sm font-medium text-[#475569]">Avg duration</span>
+<span class="inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-semibold bg-[#fff1f2] text-[#e11d48]">
+            +1.2 min vs prev
+          </span>
+</div>
+<div class="flex items-baseline justify-between mt-2">
+<span class="text-headline-lg font-headline-lg font-bold text-on-surface">27 min</span>
+<svg class="w-20 h-7 text-[#e11d48]" fill="none" viewbox="0 0 80 28">
+<path d="M2 18 L24 20 L44 14 L62 10 L78 6" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+</div>
+</div>
+<!-- Row 2: Card 8 -->
+<div class="bg-surface-container-lowest p-4 rounded-xl border border-[#e2e8f0] flex flex-col justify-between">
+<div class="flex items-start justify-between">
+<span class="text-body-sm font-body-sm font-medium text-[#475569]">Cash share</span>
+<span class="inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-semibold bg-[#ecfdf5] text-[#059669]">
+            -2.4% vs prev
+          </span>
+</div>
+<div class="flex items-baseline justify-between mt-2">
+<span class="text-headline-lg font-headline-lg font-bold text-on-surface">34%</span>
+<svg class="w-20 h-7 text-[#059669]" fill="none" viewbox="0 0 80 28">
+<path d="M2 8 L20 10 L42 16 L60 21 L78 24" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+</div>
+</div>
+</section>
+<!-- Charts Section 1: Demand Line Chart (65%) + Day of Week Bar Chart (35%) -->
+<section class="grid grid-cols-1 lg:grid-cols-12 gap-unit">
+<!-- Chart A: Demand Volume (Completed vs Cancelled) -->
+<div class="lg:col-span-8 bg-surface-container-lowest p-5 rounded-xl border border-[#e2e8f0] flex flex-col">
+<div class="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-[#f1f5f9] gap-3">
+<div>
+<h2 class="text-headline-md font-headline-md font-bold text-on-surface">Trip Demand &amp; Completion</h2>
+<p class="text-body-sm font-body-sm text-on-surface-variant">Daily volume progression across active dispatch channels</p>
+</div>
+<!-- Legend -->
+<div class="flex items-center gap-4 text-[12px] font-medium text-on-surface-variant flex-wrap">
+<div class="flex items-center gap-1.5">
+<span class="w-3 h-1 bg-primary rounded-full"></span>
+<span>Completed Trips</span>
+</div>
+<div class="flex items-center gap-1.5">
+<span class="w-3 h-1 bg-[#e11d48] rounded-full"></span>
+<span>Cancelled Trips</span>
+</div>
+<div class="flex items-center gap-1.5">
+<span class="w-3 h-0.5 border-t border-dashed border-[#64748b]"></span>
+<span>Previous Period Completed</span>
+</div>
+</div>
+</div>
+<!-- SVG Line Chart Canvas -->
+<div class="relative w-full h-64 mt-4">
+<svg class="w-full h-full" preserveaspectratio="none" viewbox="0 0 760 240">
+<!-- Grid Lines -->
+<line stroke="#f1f5f9" stroke-width="1" x1="40" x2="740" y1="20" y2="20"></line>
+<line stroke="#f1f5f9" stroke-width="1" x1="40" x2="740" y1="70" y2="70"></line>
+<line stroke="#f1f5f9" stroke-width="1" x1="40" x2="740" y1="120" y2="120"></line>
+<line stroke="#f1f5f9" stroke-width="1" x1="40" x2="740" y1="170" y2="170"></line>
+<line stroke="#e2e8f0" stroke-width="1" x1="40" x2="740" y1="220" y2="220"></line>
+<!-- Y-Axis Labels -->
+<text fill="#94a3b8" font-family="Inter" font-size="10" text-anchor="end" x="32" y="24">60</text>
+<text fill="#94a3b8" font-family="Inter" font-size="10" text-anchor="end" x="32" y="74">45</text>
+<text fill="#94a3b8" font-family="Inter" font-size="10" text-anchor="end" x="32" y="124">30</text>
+<text fill="#94a3b8" font-family="Inter" font-size="10" text-anchor="end" x="32" y="174">15</text>
+<text fill="#94a3b8" font-family="Inter" font-size="10" text-anchor="end" x="32" y="224">0</text>
+<!-- Line: Previous Period (Dashed) -->
+<path d="M50 140 C 90 150, 130 110, 170 120 C 210 130, 250 80, 290 85 C 330 90, 370 125, 410 115 C 450 105, 490 65, 530 75 C 570 85, 610 110, 650 90 C 690 70, 720 80, 740 60" fill="none" stroke="#94a3b8" stroke-dasharray="4 4" stroke-width="1.75"></path>
+<!-- Line: Completed Trips (Solid Indigo) -->
+<path d="M50 125 C 90 135, 130 95, 170 105 C 210 115, 250 60, 290 70 C 330 80, 370 110, 410 100 C 450 90, 490 50, 530 55 C 570 60, 610 95, 650 70 C 690 45, 720 55, 740 40" fill="none" stroke="#1e00a9" stroke-linecap="round" stroke-width="2.5"></path>
+<!-- Line: Cancelled Trips (Solid Rose) -->
+<path d="M50 205 C 90 200, 130 195, 170 198 C 210 190, 250 185, 290 192 C 330 200, 370 190, 410 185 C 450 180, 490 175, 530 178 C 570 182, 610 188, 650 180 C 690 170, 720 175, 740 168" fill="none" stroke="#e11d48" stroke-linecap="round" stroke-width="2"></path>
+<!-- Tooltip simulation marker -->
+<line stroke="#cbd5e1" stroke-dasharray="2 2" stroke-width="1" x1="530" x2="530" y1="20" y2="220"></line>
+<circle cx="530" cy="55" fill="#1e00a9" r="4.5" stroke="#ffffff" stroke-width="2"></circle>
+<circle cx="530" cy="178" fill="#e11d48" r="4.5" stroke="#ffffff" stroke-width="2"></circle>
+</svg>
+<!-- Interactive Tooltip Overlay -->
+<div class="absolute left-[64%] top-[25%] -translate-x-1/2 bg-inverse-surface text-inverse-on-surface p-2.5 rounded-lg shadow-lg text-[11px] pointer-events-none border border-outline-slate/30 z-10 w-44">
+<div class="font-bold text-white mb-1">Day 22 (Peak Dispatch)</div>
+<div class="flex justify-between items-center text-secondary-fixed">
+<span>Completed:</span>
+<span class="font-mono font-bold">52 trips</span>
+</div>
+<div class="flex justify-between items-center text-error-container">
+<span>Cancelled:</span>
+<span class="font-mono font-bold">6 trips</span>
+</div>
+<div class="flex justify-between items-center text-slate-400 border-t border-slate-700 mt-1 pt-1">
+<span>Prev completion:</span>
+<span class="font-mono">46 trips</span>
+</div>
+</div>
+</div>
+<!-- X-Axis Timeline Labels -->
+<div class="flex justify-between text-[10px] text-[#94a3b8] font-mono px-8 pt-2">
+<span>Day 1</span>
+<span>Day 5</span>
+<span>Day 10</span>
+<span>Day 15</span>
+<span>Day 20</span>
+<span>Day 25</span>
+<span>Day 30</span>
+</div>
+</div>
+<!-- Chart B: Day of Week Bar Chart -->
+<div class="lg:col-span-4 bg-surface-container-lowest p-5 rounded-xl border border-[#e2e8f0] flex flex-col justify-between">
+<div>
+<div class="flex items-center justify-between pb-3 border-b border-[#f1f5f9]">
+<div>
+<h2 class="text-headline-md font-headline-md font-bold text-on-surface">Trips by Day of Week</h2>
+<p class="text-body-sm font-body-sm text-on-surface-variant">Fleet load aggregation</p>
+</div>
+<span class="text-[10px] font-semibold px-2 py-0.5 rounded bg-primary-fixed text-primary">Weekend Surge</span>
+</div>
+<!-- Bar Chart Visualization -->
+<div class="grid grid-cols-7 gap-2 items-end h-56 pt-6 px-1">
+<!-- Mon -->
+<div class="flex flex-col items-center gap-1.5 h-full justify-end">
+<span class="text-[10px] font-mono text-[#64748b]">128</span>
+<div class="w-full bg-[#cbd5e1] rounded-t-lg transition-all hover:bg-primary" style="height: 48%;"></div>
+<span class="text-[11px] font-medium text-[#475569]">Mon</span>
+</div>
+<!-- Tue -->
+<div class="flex flex-col items-center gap-1.5 h-full justify-end">
+<span class="text-[10px] font-mono text-[#64748b]">135</span>
+<div class="w-full bg-[#cbd5e1] rounded-t-lg transition-all hover:bg-primary" style="height: 52%;"></div>
+<span class="text-[11px] font-medium text-[#475569]">Tue</span>
+</div>
+<!-- Wed -->
+<div class="flex flex-col items-center gap-1.5 h-full justify-end">
+<span class="text-[10px] font-mono text-[#64748b]">142</span>
+<div class="w-full bg-[#cbd5e1] rounded-t-lg transition-all hover:bg-primary" style="height: 56%;"></div>
+<span class="text-[11px] font-medium text-[#475569]">Wed</span>
+</div>
+<!-- Thu -->
+<div class="flex flex-col items-center gap-1.5 h-full justify-end">
+<span class="text-[10px] font-mono text-[#64748b]">156</span>
+<div class="w-full bg-[#cbd5e1] rounded-t-lg transition-all hover:bg-primary" style="height: 62%;"></div>
+<span class="text-[11px] font-medium text-[#475569]">Thu</span>
+</div>
+<!-- Fri -->
+<div class="flex flex-col items-center gap-1.5 h-full justify-end">
+<span class="text-[10px] font-mono text-[#64748b]">182</span>
+<div class="w-full bg-[#cbd5e1] rounded-t-lg transition-all hover:bg-primary" style="height: 74%;"></div>
+<span class="text-[11px] font-medium text-[#475569]">Fri</span>
+</div>
+<!-- Sat (Weekend Highlight) -->
+<div class="flex flex-col items-center gap-1.5 h-full justify-end bg-surface-container-low/70 rounded-lg p-1 border border-primary-fixed-dim/40">
+<span class="text-[10px] font-mono font-bold text-primary">234</span>
+<div class="w-full bg-primary rounded-t-lg" style="height: 94%;"></div>
+<span class="text-[11px] font-bold text-primary">Sat</span>
+</div>
+<!-- Sun (Weekend Highlight) -->
+<div class="flex flex-col items-center gap-1.5 h-full justify-end bg-surface-container-low/70 rounded-lg p-1 border border-primary-fixed-dim/40">
+<span class="text-[10px] font-mono font-bold text-primary">207</span>
+<div class="w-full bg-primary rounded-t-lg" style="height: 82%;"></div>
+<span class="text-[11px] font-bold text-primary">Sun</span>
+</div>
+</div>
+</div>
+<div class="mt-4 pt-3 border-t border-[#f1f5f9] flex justify-between items-center text-[12px] text-[#475569]">
+<span>Weekend Load Share:</span>
+<span class="font-bold text-on-surface">39.9% of completed trips</span>
+</div>
+</div>
+</section>
+<!-- Charts Section 2: 7x24 Heatmap (65%) + Cancellation Donut (35%) -->
+<section class="grid grid-cols-1 lg:grid-cols-12 gap-unit">
+<!-- Chart C: 7x24 Heatmap -->
+<div class="lg:col-span-8 bg-surface-container-lowest p-5 rounded-xl border border-[#e2e8f0] flex flex-col justify-between">
+<div>
+<!-- Header with metric selector tabs -->
+<div class="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-[#f1f5f9] gap-3">
+<div>
+<h2 class="text-headline-md font-headline-md font-bold text-on-surface">Hour and day</h2>
+<p class="text-body-sm font-body-sm text-on-surface-variant">Density of fleet activity across 168 weekly hours</p>
+</div>
+<!-- Metric switcher tabs -->
+<div class="inline-flex rounded-lg border border-[#e2e8f0] bg-[#f8fafc] p-0.5">
+<button class="px-2.5 py-1 rounded text-body-sm font-body-sm font-semibold bg-primary text-on-primary">Trips</button>
+<button class="px-2.5 py-1 rounded text-body-sm font-body-sm text-outline-slate hover:text-on-surface transition-colors">Cancellations</button>
+<button class="px-2.5 py-1 rounded text-body-sm font-body-sm text-outline-slate hover:text-on-surface transition-colors">Surge share</button>
+<button class="px-2.5 py-1 rounded text-body-sm font-body-sm text-outline-slate hover:text-on-surface transition-colors">Fare per km</button>
+</div>
+</div>
+<!-- Heatmap Canvas -->
+<div class="overflow-x-auto mt-4">
+<div class="min-w-[620px]">
+<!-- Hours Header -->
+<div class="grid grid-cols-25 gap-1 text-[10px] text-[#64748b] font-mono text-center mb-1.5" style="grid-template-columns: 36px repeat(24, 1fr);">
+<span></span>
+<span>00</span><span>01</span><span>02</span><span class="font-bold text-primary">03</span>
+<span>04</span><span>05</span><span class="font-bold text-primary">06</span><span>07</span>
+<span>08</span><span class="font-bold text-primary">09</span><span>10</span><span>11</span>
+<span class="font-bold text-primary">12</span><span>13</span><span>14</span><span class="font-bold text-primary">15</span>
+<span>16</span><span>17</span><span class="font-bold text-primary">18</span><span>19</span>
+<span>20</span><span class="font-bold text-primary">21</span><span>22</span><span>23</span>
+</div>
+<!-- Day Rows -->
+<!-- Mon -->
+<div class="grid grid-cols-25 gap-1 mb-1 items-center" style="grid-template-columns: 36px repeat(24, 1fr);">
+<span class="text-[11px] font-semibold text-[#475569]">Mon</span>
+<div class="h-4 rounded-[2px] bg-[#eef2ff]"></div>
+<div class="h-4 rounded-[2px] bg-[#eef2ff]"></div>
+<div class="h-4 rounded-[2px] bg-[#eef2ff]"></div>
+<div class="h-4 rounded-[2px] bg-[#eef2ff]"></div>
+<div class="h-4 rounded-[2px] bg-[#e0e7ff]"></div>
+<div class="h-4 rounded-[2px] bg-[#c7d2fe]"></div>
+<div class="h-4 rounded-[2px] bg-[#818cf8]"></div>
+<div class="h-4 rounded-[2px] bg-[#4f46e5]"></div>
+<div class="h-4 rounded-[2px] bg-[#6366f1]"></div>
+<div class="h-4 rounded-[2px] bg-[#a5b4fc]"></div>
+<div class="h-4 rounded-[2px] bg-[#c7d2fe]"></div>
+<div class="h-4 rounded-[2px] bg-[#a5b4fc]"></div>
+<div class="h-4 rounded-[2px] bg-[#818cf8]"></div>
+<div class="h-4 rounded-[2px] bg-[#a5b4fc]"></div>
+<div class="h-4 rounded-[2px] bg-[#c7d2fe]"></div>
+<div class="h-4 rounded-[2px] bg-[#a5b4fc]"></div>
+<div class="h-4 rounded-[2px] bg-[#818cf8]"></div>
+<div class="h-4 rounded-[2px] bg-[#4f46e5]"></div>
+<div class="h-4 rounded-[2px] bg-[#3730a3]"></div>
+<div class="h-4 rounded-[2px] bg-[#6366f1]"></div>
+<div class="h-4 rounded-[2px] bg-[#a5b4fc]"></div>
+<div class="h-4 rounded-[2px] bg-[#c7d2fe]"></div>
+<div class="h-4 rounded-[2px] bg-[#e0e7ff]"></div>
+<div class="h-4 rounded-[2px] bg-[#eef2ff]"></div>
+</div>
+<!-- Tue -->
+<div class="grid grid-cols-25 gap-1 mb-1 items-center" style="grid-template-columns: 36px repeat(24, 1fr);">
+<span class="text-[11px] font-semibold text-[#475569]">Tue</span>
+<div class="h-4 rounded-[2px] bg-[#eef2ff]"></div>
+<div class="h-4 rounded-[2px] bg-[#eef2ff]"></div>
+<div class="h-4 rounded-[2px] bg-[#eef2ff]"></div>
+<div class="h-4 rounded-[2px] bg-[#eef2ff]"></div>
+<div class="h-4 rounded-[2px] bg-[#e0e7ff]"></div>
+<div class="h-4 rounded-[2px] bg-[#c7d2fe]"></div>
+<div class="h-4 rounded-[2px] bg-[#a5b4fc]"></div>
+<div class="h-4 rounded-[2px] bg-[#6366f1]"></div>
+<div class="h-4 rounded-[2px] bg-[#4f46e5]"></div>
+<div class="h-4 rounded-[2px] bg-[#818cf8]"></div>
+<div class="h-4 rounded-[2px] bg-[#c7d2fe]"></div>
+<div class="h-4 rounded-[2px] bg-[#c7d2fe]"></div>
+<div class="h-4 rounded-[2px] bg-[#818cf8]"></div>
+<div class="h-4 rounded-[2px] bg-[#818cf8]"></div>
+<div class="h-4 rounded-[2px] bg-[#a5b4fc]"></div>
+<div class="h-4 rounded-[2px] bg-[#818cf8]"></div>
+<div class="h-4 rounded-[2px] bg-[#6366f1]"></div>
+<div class="h-4 rounded-[2px] bg-[#4f46e5]"></div>
+<div class="h-4 rounded-[2px] bg-[#3730a3]"></div>
+<div class="h-4 rounded-[2px] bg-[#4f46e5]"></div>
+<div class="h-4 rounded-[2px] bg-[#818cf8]"></div>
+<div class="h-4 rounded-[2px] bg-[#c7d2fe]"></div>
+<div class="h-4 rounded-[2px] bg-[#e0e7ff]"></div>
+<div class="h-4 rounded-[2px] bg-[#eef2ff]"></div>
+</div>
+<!-- Wed -->
+<div class="grid grid-cols-25 gap-1 mb-1 items-center" style="grid-template-columns: 36px repeat(24, 1fr);">
+<span class="text-[11px] font-semibold text-[#475569]">Wed</span>
+<div class="h-4 rounded-[2px] bg-[#eef2ff]"></div>
+<div class="h-4 rounded-[2px] bg-[#eef2ff]"></div>
+<div class="h-4 rounded-[2px] bg-[#eef2ff]"></div>
+<div class="h-4 rounded-[2px] bg-[#eef2ff]"></div>
+<div class="h-4 rounded-[2px] bg-[#e0e7ff]"></div>
+<div class="h-4 rounded-[2px] bg-[#c7d2fe]"></div>
+<div class="h-4 rounded-[2px] bg-[#818cf8]"></div>
+<div class="h-4 rounded-[2px] bg-[#4f46e5]"></div>
+<div class="h-4 rounded-[2px] bg-[#4f46e5]"></div>
+<div class="h-4 rounded-[2px] bg-[#818cf8]"></div>
+<div class="h-4 rounded-[2px] bg-[#a5b4fc]"></div>
+<div class="h-4 rounded-[2px] bg-[#c7d2fe]"></div>
+<div class="h-4 rounded-[2px] bg-[#a5b4fc]"></div>
+<div class="h-4 rounded-[2px] bg-[#818cf8]"></div>
+<div class="h-4 rounded-[2px] bg-[#a5b4fc]"></div>
+<div class="h-4 rounded-[2px] bg-[#818cf8]"></div>
+<div class="h-4 rounded-[2px] bg-[#6366f1]"></div>
+<div class="h-4 rounded-[2px] bg-[#3730a3]"></div>
+<div class="h-4 rounded-[2px] bg-[#312e81]"></div>
+<div class="h-4 rounded-[2px] bg-[#4f46e5]"></div>
+<div class="h-4 rounded-[2px] bg-[#818cf8]"></div>
+<div class="h-4 rounded-[2px] bg-[#c7d2fe]"></div>
+<div class="h-4 rounded-[2px] bg-[#e0e7ff]"></div>
+<div class="h-4 rounded-[2px] bg-[#eef2ff]"></div>
+</div>
+<!-- Thu -->
+<div class="grid grid-cols-25 gap-1 mb-1 items-center" style="grid-template-columns: 36px repeat(24, 1fr);">
+<span class="text-[11px] font-semibold text-[#475569]">Thu</span>
+<div class="h-4 rounded-[2px] bg-[#eef2ff]"></div>
+<div class="h-4 rounded-[2px] bg-[#eef2ff]"></div>
+<div class="h-4 rounded-[2px] bg-[#eef2ff]"></div>
+<div class="h-4 rounded-[2px] bg-[#eef2ff]"></div>
+<div class="h-4 rounded-[2px] bg-[#e0e7ff]"></div>
+<div class="h-4 rounded-[2px] bg-[#c7d2fe]"></div>
+<div class="h-4 rounded-[2px] bg-[#818cf8]"></div>
+<div class="h-4 rounded-[2px] bg-[#4f46e5]"></div>
+<div class="h-4 rounded-[2px] bg-[#3730a3]"></div>
+<div class="h-4 rounded-[2px] bg-[#818cf8]"></div>
+<div class="h-4 rounded-[2px] bg-[#a5b4fc]"></div>
+<div class="h-4 rounded-[2px] bg-[#818cf8]"></div>
+<div class="h-4 rounded-[2px] bg-[#818cf8]"></div>
+<div class="h-4 rounded-[2px] bg-[#818cf8]"></div>
+<div class="h-4 rounded-[2px] bg-[#a5b4fc]"></div>
+<div class="h-4 rounded-[2px] bg-[#6366f1]"></div>
+<div class="h-4 rounded-[2px] bg-[#4f46e5]"></div>
+<div class="h-4 rounded-[2px] bg-[#3730a3]"></div>
+<div class="h-4 rounded-[2px] bg-[#312e81]"></div>
+<div class="h-4 rounded-[2px] bg-[#3730a3]"></div>
+<div class="h-4 rounded-[2px] bg-[#6366f1]"></div>
+<div class="h-4 rounded-[2px] bg-[#a5b4fc]"></div>
+<div class="h-4 rounded-[2px] bg-[#c7d2fe]"></div>
+<div class="h-4 rounded-[2px] bg-[#e0e7ff]"></div>
+</div>
+<!-- Fri -->
+<div class="grid grid-cols-25 gap-1 mb-1 items-center" style="grid-template-columns: 36px repeat(24, 1fr);">
+<span class="text-[11px] font-semibold text-[#475569]">Fri</span>
+<div class="h-4 rounded-[2px] bg-[#eef2ff]"></div>
+<div class="h-4 rounded-[2px] bg-[#eef2ff]"></div>
+<div class="h-4 rounded-[2px] bg-[#eef2ff]"></div>
+<div class="h-4 rounded-[2px] bg-[#eef2ff]"></div>
+<div class="h-4 rounded-[2px] bg-[#e0e7ff]"></div>
+<div class="h-4 rounded-[2px] bg-[#c7d2fe]"></div>
+<div class="h-4 rounded-[2px] bg-[#818cf8]"></div>
+<div class="h-4 rounded-[2px] bg-[#4f46e5]"></div>
+<div class="h-4 rounded-[2px] bg-[#4f46e5]"></div>
+<div class="h-4 rounded-[2px] bg-[#6366f1]"></div>
+<div class="h-4 rounded-[2px] bg-[#818cf8]"></div>
+<div class="h-4 rounded-[2px] bg-[#818cf8]"></div>
+<div class="h-4 rounded-[2px] bg-[#6366f1]"></div>
+<div class="h-4 rounded-[2px] bg-[#6366f1]"></div>
+<div class="h-4 rounded-[2px] bg-[#4f46e5]"></div>
+<div class="h-4 rounded-[2px] bg-[#4f46e5]"></div>
+<div class="h-4 rounded-[2px] bg-[#3730a3]"></div>
+<div class="h-4 rounded-[2px] bg-[#312e81]"></div>
+<div class="h-4 rounded-[2px] bg-[#312e81] border border-white outline outline-2 outline-primary"></div>
+<div class="h-4 rounded-[2px] bg-[#312e81]"></div>
+<div class="h-4 rounded-[2px] bg-[#3730a3]"></div>
+<div class="h-4 rounded-[2px] bg-[#4f46e5]"></div>
+<div class="h-4 rounded-[2px] bg-[#818cf8]"></div>
+<div class="h-4 rounded-[2px] bg-[#a5b4fc]"></div>
+</div>
+<!-- Sat -->
+<div class="grid grid-cols-25 gap-1 mb-1 items-center" style="grid-template-columns: 36px repeat(24, 1fr);">
+<span class="text-[11px] font-bold text-primary">Sat</span>
+<div class="h-4 rounded-[2px] bg-[#c7d2fe]"></div>
+<div class="h-4 rounded-[2px] bg-[#a5b4fc]"></div>
+<div class="h-4 rounded-[2px] bg-[#e0e7ff]"></div>
+<div class="h-4 rounded-[2px] bg-[#eef2ff]"></div>
+<div class="h-4 rounded-[2px] bg-[#eef2ff]"></div>
+<div class="h-4 rounded-[2px] bg-[#e0e7ff]"></div>
+<div class="h-4 rounded-[2px] bg-[#c7d2fe]"></div>
+<div class="h-4 rounded-[2px] bg-[#a5b4fc]"></div>
+<div class="h-4 rounded-[2px] bg-[#818cf8]"></div>
+<div class="h-4 rounded-[2px] bg-[#6366f1]"></div>
+<div class="h-4 rounded-[2px] bg-[#4f46e5]"></div>
+<div class="h-4 rounded-[2px] bg-[#3730a3]"></div>
+<div class="h-4 rounded-[2px] bg-[#312e81]"></div>
+<div class="h-4 rounded-[2px] bg-[#312e81]"></div>
+<div class="h-4 rounded-[2px] bg-[#312e81]"></div>
+<div class="h-4 rounded-[2px] bg-[#3730a3]"></div>
+<div class="h-4 rounded-[2px] bg-[#312e81]"></div>
+<div class="h-4 rounded-[2px] bg-[#312e81]"></div>
+<div class="h-4 rounded-[2px] bg-[#312e81]"></div>
+<div class="h-4 rounded-[2px] bg-[#312e81]"></div>
+<div class="h-4 rounded-[2px] bg-[#3730a3]"></div>
+<div class="h-4 rounded-[2px] bg-[#4f46e5]"></div>
+<div class="h-4 rounded-[2px] bg-[#6366f1]"></div>
+<div class="h-4 rounded-[2px] bg-[#818cf8]"></div>
+</div>
+<!-- Sun -->
+<div class="grid grid-cols-25 gap-1 mb-1 items-center" style="grid-template-columns: 36px repeat(24, 1fr);">
+<span class="text-[11px] font-bold text-primary">Sun</span>
+<div class="h-4 rounded-[2px] bg-[#a5b4fc]"></div>
+<div class="h-4 rounded-[2px] bg-[#818cf8]"></div>
+<div class="h-4 rounded-[2px] bg-[#c7d2fe]"></div>
+<div class="h-4 rounded-[2px] bg-[#e0e7ff]"></div>
+<div class="h-4 rounded-[2px] bg-[#eef2ff]"></div>
+<div class="h-4 rounded-[2px] bg-[#eef2ff]"></div>
+<div class="h-4 rounded-[2px] bg-[#e0e7ff]"></div>
+<div class="h-4 rounded-[2px] bg-[#c7d2fe]"></div>
+<div class="h-4 rounded-[2px] bg-[#a5b4fc]"></div>
+<div class="h-4 rounded-[2px] bg-[#6366f1]"></div>
+<div class="h-4 rounded-[2px] bg-[#4f46e5]"></div>
+<div class="h-4 rounded-[2px] bg-[#3730a3]"></div>
+<div class="h-4 rounded-[2px] bg-[#3730a3]"></div>
+<div class="h-4 rounded-[2px] bg-[#4f46e5]"></div>
+<div class="h-4 rounded-[2px] bg-[#6366f1]"></div>
+<div class="h-4 rounded-[2px] bg-[#6366f1]"></div>
+<div class="h-4 rounded-[2px] bg-[#4f46e5]"></div>
+<div class="h-4 rounded-[2px] bg-[#3730a3]"></div>
+<div class="h-4 rounded-[2px] bg-[#312e81]"></div>
+<div class="h-4 rounded-[2px] bg-[#3730a3]"></div>
+<div class="h-4 rounded-[2px] bg-[#4f46e5]"></div>
+<div class="h-4 rounded-[2px] bg-[#6366f1]"></div>
+<div class="h-4 rounded-[2px] bg-[#818cf8]"></div>
+<div class="h-4 rounded-[2px] bg-[#c7d2fe]"></div>
+</div>
+</div>
+</div>
+</div>
+<!-- Heatmap Legend & Scale -->
+<div class="mt-4 pt-3 border-t border-[#f1f5f9] flex flex-wrap items-center justify-between text-[11px] text-[#64748b]">
+<div class="flex items-center gap-1.5">
+<span>Low (0-2 trips)</span>
+<div class="flex items-center gap-1">
+<span class="w-3 h-3 rounded-[2px] bg-[#eef2ff]"></span>
+<span class="w-3 h-3 rounded-[2px] bg-[#c7d2fe]"></span>
+<span class="w-3 h-3 rounded-[2px] bg-[#818cf8]"></span>
+<span class="w-3 h-3 rounded-[2px] bg-[#4f46e5]"></span>
+<span class="w-3 h-3 rounded-[2px] bg-[#312e81]"></span>
+</div>
+<span>High peak (14+ trips)</span>
+</div>
+<span class="font-medium text-on-surface">Peak weekly cell: Fri 18:00 (16 trips)</span>
+</div>
+</div>
+<!-- Chart D: Cancellation Attribution Donut -->
+<div class="lg:col-span-4 bg-surface-container-lowest p-5 rounded-xl border border-[#e2e8f0] flex flex-col justify-between">
+<div>
+<div class="flex items-center justify-between pb-3 border-b border-[#f1f5f9]">
+<div>
+<h2 class="text-headline-md font-headline-md font-bold text-on-surface">Cancellation Breakdown</h2>
+<p class="text-body-sm font-body-sm text-on-surface-variant">Attribution by initiating entity</p>
+</div>
+<span class="text-[11px] font-bold text-[#e11d48] bg-[#fff1f2] px-2 py-0.5 rounded">139 Total</span>
+</div>
+<!-- SVG Donut Chart -->
+<div class="flex items-center justify-center my-4 relative">
+<svg class="w-48 h-48 transform -rotate-90" viewbox="0 0 160 160">
+<!-- Total Circumference = 2 * PI * 60 ~= 376.99 -->
+<!-- Background Circle -->
+<circle cx="80" cy="80" fill="transparent" r="60" stroke="#f1f5f9" stroke-width="20"></circle>
+<!-- Rider: 52% (196.03) -->
+<circle cx="80" cy="80" fill="transparent" r="60" stroke="#e11d48" stroke-dasharray="196.03 376.99" stroke-dashoffset="0" stroke-width="20"></circle>
+<!-- Driver: 26% (98.02) -->
+<circle cx="80" cy="80" fill="transparent" r="60" stroke="#6366f1" stroke-dasharray="98.02 376.99" stroke-dashoffset="-196.03" stroke-width="20"></circle>
+<!-- Delivery: 14% (52.78) -->
+<circle cx="80" cy="80" fill="transparent" r="60" stroke="#f59e0b" stroke-dasharray="52.78 376.99" stroke-dashoffset="-294.05" stroke-width="20"></circle>
+<!-- Unknown: 8% (30.16) -->
+<circle cx="80" cy="80" fill="transparent" r="60" stroke="#94a3b8" stroke-dasharray="30.16 376.99" stroke-dashoffset="-346.83" stroke-width="20"></circle>
+</svg>
+<!-- Center Donut Label -->
+<div class="absolute inset-0 flex flex-col items-center justify-center text-center pointer-events-none">
+<span class="text-headline-lg font-headline-lg font-bold text-on-surface leading-tight">11.2%</span>
+<span class="text-[10px] uppercase tracking-wider text-outline-slate font-semibold">Cancel Rate</span>
+</div>
+</div>
+<!-- Donut Legend & Proportions -->
+<div class="grid grid-cols-2 gap-2 mt-2">
+<!-- Rider -->
+<div class="flex items-center justify-between p-2 rounded-lg bg-[#fff1f2]/60 border border-[#ffe4e6]">
+<div class="flex items-center gap-1.5">
+<span class="w-2.5 h-2.5 rounded-full bg-[#e11d48]"></span>
+<span class="text-[12px] font-medium text-on-surface">Rider</span>
+</div>
+<div class="text-right">
+<span class="text-[12px] font-bold text-on-surface">52%</span>
+<span class="text-[10px] text-[#64748b] block font-mono">72 trips</span>
+</div>
+</div>
+<!-- Driver -->
+<div class="flex items-center justify-between p-2 rounded-lg bg-[#eef2ff]/60 border border-[#e0e7ff]">
+<div class="flex items-center gap-1.5">
+<span class="w-2.5 h-2.5 rounded-full bg-[#6366f1]"></span>
+<span class="text-[12px] font-medium text-on-surface">Driver</span>
+</div>
+<div class="text-right">
+<span class="text-[12px] font-bold text-on-surface">26%</span>
+<span class="text-[10px] text-[#64748b] block font-mono">36 trips</span>
+</div>
+</div>
+<!-- Delivery -->
+<div class="flex items-center justify-between p-2 rounded-lg bg-[#fffbeb]/60 border border-[#fef3c7]">
+<div class="flex items-center gap-1.5">
+<span class="w-2.5 h-2.5 rounded-full bg-[#f59e0b]"></span>
+<span class="text-[12px] font-medium text-on-surface">Delivery</span>
+</div>
+<div class="text-right">
+<span class="text-[12px] font-bold text-on-surface">14%</span>
+<span class="text-[10px] text-[#64748b] block font-mono">20 trips</span>
+</div>
+</div>
+<!-- Unknown -->
+<div class="flex items-center justify-between p-2 rounded-lg bg-[#f8fafc] border border-[#e2e8f0]">
+<div class="flex items-center gap-1.5">
+<span class="w-2.5 h-2.5 rounded-full bg-[#94a3b8]"></span>
+<span class="text-[12px] font-medium text-on-surface">Unknown</span>
+</div>
+<div class="text-right">
+<span class="text-[12px] font-bold text-on-surface">8%</span>
+<span class="text-[10px] text-[#64748b] block font-mono">11 trips</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Strict Footnote / Disclaimer -->
+<div class="mt-4 pt-3 border-t border-[#f1f5f9]">
+<p class="text-[11px] text-[#64748b] italic leading-tight">
+            Note: This chart includes delivery jobs. The rate card does not.
+          </p>
+</div>
+</div>
+</section>
+</main>
+<div class="fixed inset-0 z-50 flex justify-end bg-inverse-surface/40 backdrop-blur-[2px]"><div class="w-full max-w-md bg-surface-container-lowest h-full shadow-2xl flex flex-col border-l border-outline-variant"><div class="p-5 border-b border-[#e2e8f0] flex items-center justify-between"><div class="flex items-center gap-2"><span class="material-symbols-outlined text-primary" data-icon="warning">warning</span><h2 class="text-headline-md font-headline-md font-bold text-on-surface">Review anomaly</h2></div><button class="w-8 h-8 rounded-lg flex items-center justify-center text-on-surface-variant hover:bg-surface-container-high transition-colors"><span class="material-symbols-outlined" data-icon="close">close</span></button></div><div class="p-5 flex-1 overflow-y-auto flex flex-col gap-4"><div class="bg-surface-container-low p-4 rounded-xl border border-outline-variant flex flex-col gap-2"><div class="flex justify-between items-center"><span class="text-body-sm font-body-sm font-medium text-outline-slate">Trip ID</span><span class="font-mono font-bold text-on-surface">#RM-94821</span></div><div class="flex justify-between items-center"><span class="text-body-sm font-body-sm font-medium text-outline-slate">Rule Triggered</span><span class="px-2 py-0.5 rounded text-[11px] font-semibold bg-[#fff1f2] text-[#e11d48]">Zero fare</span></div><div class="flex justify-between items-center"><span class="text-body-sm font-body-sm font-medium text-outline-slate">Driver Name</span><span class="font-medium text-on-surface">Marcus Vance</span></div><div class="flex justify-between items-center"><span class="text-body-sm font-body-sm font-medium text-outline-slate">Fare Details</span><span class="font-mono font-bold text-on-surface">J$0.00 <span class="text-[10px] font-normal text-outline-slate">(Platform-reported)</span></span></div></div><div class="flex flex-col gap-1.5"><label class="font-label-md text-label-md text-on-surface">Reviewer Notes / Reason</label><textarea class="w-full h-24 text-body-md font-body-md rounded-lg border border-[#cbd5e1] bg-white p-3 focus:border-primary focus:ring-0 text-on-surface" placeholder="Enter explanation for override or approval..."></textarea></div><div class="border-t border-[#f1f5f9] pt-4"><h3 class="font-headline-md font-semibold text-on-surface text-[14px] mb-2">Other Anomaly Summary</h3><div class="grid grid-cols-2 gap-2"><div class="p-3 rounded-lg border border-[#e2e8f0] bg-surface-container-lowest flex flex-col"><span class="text-[11px] font-semibold text-outline-slate">Zero distance</span><span class="text-headline-md font-headline-md font-bold text-on-surface mt-1">3</span></div><div class="p-3 rounded-lg border border-[#e2e8f0] bg-surface-container-lowest flex flex-col"><span class="text-[11px] font-semibold text-outline-slate">Very long</span><span class="text-headline-md font-headline-md font-bold text-on-surface mt-1">7</span></div><div class="p-3 rounded-lg border border-[#e2e8f0] bg-surface-container-lowest flex flex-col"><span class="text-[11px] font-semibold text-outline-slate">Possible duplicate</span><span class="text-headline-md font-headline-md font-bold text-on-surface mt-1">2</span></div><div class="p-3 rounded-lg border border-[#e2e8f0] bg-surface-container-lowest flex flex-col"><span class="text-[11px] font-semibold text-outline-slate">Total flagged</span><span class="text-headline-md font-headline-md font-bold text-[#e11d48] mt-1">12</span></div></div></div></div><div class="p-5 border-t border-[#e2e8f0] flex items-center justify-end gap-3 bg-surface-container-low/50"><button class="px-4 py-2 rounded-lg border border-[#cbd5e1] hover:border-outline-slate bg-surface-container-lowest text-on-surface font-label-md text-label-md transition-colors">Dismiss</button><button class="px-4 py-2 rounded-lg bg-primary hover:bg-primary-container text-on-primary font-label-md text-label-md transition-colors shadow-sm">Review</button></div></div></div></body></html>

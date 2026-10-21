@@ -91,6 +91,9 @@ const ExpenseHubPage = lazy(() =>
 const TripLogsPage = lazy(() =>
   import('./components/trips/TripLogsPage').then((m) => ({ default: m.TripLogsPage })),
 );
+const TripAnalyticsPage = lazy(() =>
+  import('./components/trips/analytics/TripAnalyticsPage').then((m) => ({ default: m.TripAnalyticsPage })),
+);
 const TransactionsPage = lazy(() =>
   import('./components/transactions/TransactionsPage').then((m) => ({ default: m.TransactionsPage })),
 );
@@ -782,6 +785,13 @@ function AppContent() {
           <PermissionGate permission="nav.trips" onNavigate={setCurrentPage}>
             <Suspense fallback={<div className="p-6 text-sm text-slate-500">Loading trips…</div>}>
               <TripLogsPage />
+            </Suspense>
+          </PermissionGate>
+        )}
+        {currentPage === 'trip-analytics' && (
+          <PermissionGate permission="nav.trips" onNavigate={setCurrentPage}>
+            <Suspense fallback={<div className="p-6 text-sm text-slate-500">Loading trip analytics…</div>}>
+              <TripAnalyticsPage onNavigate={setCurrentPage} />
             </Suspense>
           </PermissionGate>
         )}

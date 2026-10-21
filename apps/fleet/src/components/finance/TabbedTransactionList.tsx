@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Car, Fuel, Receipt, FileText, Layers } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
-import { TripLedgerPage } from '../database/TripLedgerPage';
+import { TripLedgerWithManualAdd } from './TripLedgerWithManualAdd';
 import { FuelLedgerPage } from '../database/FuelLedgerPage';
 import { FuelExpenseLedgerPage } from '../database/FuelExpenseLedgerPage';
 import { TollLedgerPage } from '../database/TollLedgerPage';
@@ -231,7 +231,7 @@ function LedgersInner({
             >
               {visited.has(tab.id) && (
                 <>
-                  {tab.id === 'trips' && <TripLedgerPage columnConfig={tripColumnConfig} />}
+                  {tab.id === 'trips' && <TripLedgerWithManualAdd columnConfig={tripColumnConfig} />}
                   {tab.id === 'fuel' && <FuelLedgerPage columnConfig={fuelColumnConfig} />}
                   {tab.id === 'fuel-expenses' && <FuelExpenseLedgerPage />}
                   {tab.id === 'toll' && <TollLedgerPage columnConfig={tollColumnConfig} />}

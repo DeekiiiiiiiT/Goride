@@ -80,6 +80,13 @@ export interface TripFilterParams {
     minDistance?: string;
     hasTip?: string;
     hasSurge?: string;
+    platforms?: string[];
+    paymentMethod?: string;
+    zone?: string;
+    hour?: number | null;
+    dow?: number | null;
+    compare?: boolean;
+    population?: 'rideshare' | 'delivery' | 'all';
     organizationId?: string; // Super Admin: scope to specific customer org
     serviceLine?: 'rideshare' | 'rush_delivery' | 'all';
     sortKey?: string;
@@ -498,6 +505,43 @@ export const api = {
     }
     
     return response.json();
+  },
+
+  async getTripAnalytics(body: Record<string, unknown>): Promise<any> {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/trips/analytics`, {
+      method: 'POST',
+      headers: await getHeaders(),
+      body: JSON.stringify(body),
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error || `Trip analytics failed (${response.status})`);
+    }
+    return response.json();
+  },
+
+  async reviewTripAnomaly(body: { tripId: string; rule: string; action: 'dismiss' | 'keep'; reason?: string }): Promise<void> {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/trips/analytics/review`, {
+      method: 'POST',
+      headers: await getHeaders(),
+      body: JSON.stringify(body),
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error || 'Could not save the review');
+    }
+  },
+
+  async saveTripAnalyticsSettings(body: Record<string, unknown>): Promise<void> {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/trips/analytics/settings`, {
+      method: 'POST',
+      headers: await getHeaders(),
+      body: JSON.stringify(body),
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error || 'Could not save thresholds');
+    }
   },
 
   async getTrips(options?: { limit?: number; offset?: number; serviceLine?: string }): Promise<Trip[]> {

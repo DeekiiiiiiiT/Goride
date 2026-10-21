@@ -1,0 +1,217 @@
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Roam Fleet - Trip Analytics States</title>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+              "on-secondary": "#ffffff",
+              "on-primary-fixed": "#0f0069",
+              "on-primary": "#ffffff",
+              "secondary-fixed-dim": "#4edea3",
+              "on-surface": "#1b1b24",
+              "inverse-surface": "#302f39",
+              "surface-tint": "#4d44e3",
+              "surface-container-low": "#f5f2ff",
+              "on-error": "#ffffff",
+              "on-tertiary": "#ffffff",
+              "on-primary-container": "#dad7ff",
+              "surface-container-lowest": "#ffffff",
+              "surface-container-high": "#eae6f4",
+              "on-tertiary-fixed": "#2a1700",
+              "error-container": "#ffdad6",
+              "on-error-container": "#93000a",
+              "surface-variant": "#e4e1ee",
+              "primary-fixed-dim": "#c3c0ff",
+              "error": "#ba1a1a",
+              "surface-container": "#f0ecf9",
+              "on-secondary-fixed": "#002113",
+              "surface-dim": "#dcd8e5",
+              "on-background": "#1b1b24",
+              "outline-variant": "#c7c4d8",
+              "on-secondary-fixed-variant": "#005236",
+              "surface-container-highest": "#e4e1ee",
+              "outline": "#777587",
+              "primary-container": "#4f46e5",
+              "on-surface-variant": "#464555",
+              "tertiary-container": "#885500",
+              "secondary-container": "#6cf8bb",
+              "on-tertiary-container": "#ffd4a4",
+              "on-tertiary-fixed-variant": "#653e00",
+              "on-primary-fixed-variant": "#3323cc",
+              "surface-bright": "#fcf8ff",
+              "on-secondary-container": "#00714d",
+              "inverse-primary": "#c3c0ff",
+              "primary": "#3525cd",
+              "background": "#fcf8ff",
+              "tertiary": "#684000",
+              "tertiary-fixed-dim": "#ffb95f",
+              "primary-fixed": "#e2dfff",
+              "secondary-fixed": "#6ffbbe",
+              "secondary": "#006c49",
+              "inverse-on-surface": "#f3effc",
+              "surface": "#fcf8ff",
+              "tertiary-fixed": "#ffddb8"
+            },
+            "borderRadius": {
+              "DEFAULT": "0.125rem",
+              "lg": "0.25rem",
+              "xl": "0.5rem",
+              "full": "0.75rem"
+            },
+            "spacing": {
+              "unit": "4px",
+              "density-high": "4px",
+              "container-padding": "24px",
+              "density-medium": "12px",
+              "gutter": "16px",
+              "component-gap": "8px"
+            },
+            "fontFamily": {
+              "body-lg": ["Inter"],
+              "body-md": ["Inter"],
+              "label-sm": ["Inter"],
+              "label-md": ["Inter"],
+              "headline-md": ["Inter"],
+              "headline-lg": ["Inter"],
+              "display": ["Inter"],
+              "body-sm": ["Inter"]
+            },
+            "fontSize": {
+              "body-lg": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+              "body-md": ["14px", {"lineHeight": "20px", "fontWeight": "400"}],
+              "label-sm": ["11px", {"lineHeight": "14px", "fontWeight": "500"}],
+              "label-md": ["12px", {"lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "600"}],
+              "headline-md": ["20px", {"lineHeight": "28px", "fontWeight": "600"}],
+              "headline-lg": ["24px", {"lineHeight": "32px", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+              "display": ["36px", {"lineHeight": "44px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+              "body-sm": ["13px", {"lineHeight": "18px", "fontWeight": "400"}]
+            }
+          }
+        }
+      }
+    </script>
+</head>
+<body class="bg-surface font-body-md text-on-surface antialiased min-h-screen flex flex-col">
+<!-- TopNavBar -->
+<header class="bg-surface-container-lowest dark:bg-surface-container-lowest w-full">
+<div class="w-full max-w-[1440px] mx-auto px-margin-desktop flex items-center justify-between h-16">
+<div class="flex items-center gap-8">
+<span class="text-headline-md font-headline-md font-bold text-primary dark:text-primary tracking-tight">Roam Fleet</span>
+<nav class="hidden md:flex items-center gap-1">
+<a class="text-on-surface-variant dark:text-on-surface-variant font-label-md text-label-md pb-4 pt-4 px-3 hover:text-on-surface dark:hover:text-on-surface transition-colors" href="#">Trips</a>
+<a class="text-on-surface-variant dark:text-on-surface-variant font-label-md text-label-md pb-4 pt-4 px-3 hover:text-on-surface dark:hover:text-on-surface transition-colors" href="#">Expenses</a>
+<a class="text-on-surface-variant dark:text-on-surface-variant font-label-md text-label-md pb-4 pt-4 px-3 hover:text-on-surface dark:hover:text-on-surface transition-colors" href="#">Vehicles</a>
+<a class="text-on-surface-variant dark:text-on-surface-variant font-label-md text-label-md pb-4 pt-4 px-3 hover:text-on-surface dark:hover:text-on-surface transition-colors" href="#">Drivers</a>
+<a class="border-b-2 border-primary text-primary dark:text-primary font-label-md text-label-md pb-4 pt-4 px-3" href="#">Analytics</a>
+<a class="text-on-surface-variant dark:text-on-surface-variant font-label-md text-label-md pb-4 pt-4 px-3 hover:text-on-surface dark:hover:text-on-surface transition-colors" href="#">Settings</a>
+</nav>
+</div>
+<div class="flex items-center gap-4">
+<button class="bg-primary-container text-on-primary-container px-3 py-2 rounded-xl font-label-md text-label-md transition-all duration-150 ease-in-out cursor-pointer hover:opacity-90 flex items-center gap-2">
+<span class="material-symbols-outlined" style="font-size: 18px;">add</span>
+                    New Expense
+                </button>
+<button class="text-on-surface-variant p-2 rounded-full hover:bg-surface-container-high transition-colors cursor-pointer">
+<span class="material-symbols-outlined">notifications</span>
+</button>
+<button class="text-on-surface-variant p-2 rounded-full hover:bg-surface-container-high transition-colors cursor-pointer">
+<span class="material-symbols-outlined">help</span>
+</button>
+<div class="w-8 h-8 rounded-full bg-surface-container-high flex items-center justify-center overflow-hidden border border-outline-variant">
+<img class="w-full h-full object-cover" data-alt="Professional portrait photograph of a fleet admin avatar wearing smart casual attire with a neutral friendly expression inside a modern corporate office background." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDt6EnPnpL6WBhaORWUXqUSWcEJooASN_qNA7S_Tl2DrtKxJEmX0iAcWrkjXKptxemA5Iesh0ccRqkmIX3xhFddEuT_3xCFnntSZEGAAQ48t-j6Vy6uYJxHbCH5WbOGys9UCWtGzuc4fBzury1Bl4gRjx2wvoLAS2k0TGZuMc7N4Pdu1d2nNUKonvNe5ZlBYO4-Jw4ke3bmfyROfP9flWW0tFOjoxBcU9wlpydgMH0FWLYzcTDwonj0KvHyK-IV1sDmzLmffDXgvPA"/>
+</div>
+</div>
+</div>
+</header>
+<!-- Main Content Area -->
+<main class="flex-1 w-full max-w-[1440px] mx-auto px-6 py-8">
+<!-- Page Header -->
+<div class="mb-8 flex items-center justify-between">
+<div>
+<h1 class="font-headline-lg text-headline-lg text-on-surface mb-1">Trip Analytics States</h1>
+<p class="font-body-md text-on-surface-variant">System diagnostic view showcasing error handling, empty states, and KPI fallbacks.</p>
+</div>
+<div class="flex items-center gap-2">
+<span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-surface-container-high text-on-surface-variant font-label-sm text-label-sm">
+<span class="w-2 h-2 rounded-full bg-primary"></span>
+                    Live Telemetry
+                </span>
+</div>
+</div>
+<!-- Stacked Cards Container -->
+<div class="flex flex-col gap-6 max-w-4xl">
+<!-- 1. Error Card -->
+<div class="bg-surface-container-lowest border border-error/40 rounded-xl p-6 shadow-sm relative overflow-hidden">
+<div class="absolute top-0 left-0 bottom-0 w-1 bg-error"></div>
+<div class="flex items-start justify-between">
+<div class="flex items-start gap-4">
+<div class="p-3 rounded-xl bg-error-container text-on-error-container">
+<span class="material-symbols-outlined" style="font-size: 24px;">error</span>
+</div>
+<div>
+<span class="inline-block px-2.5 py-0.5 rounded text-label-sm font-label-sm bg-error-container text-on-error-container mb-2">Connection Error</span>
+<h3 class="font-headline-md text-headline-md text-on-surface mb-1">Trip Analytics could not load. This is not a zero.</h3>
+<p class="font-body-md text-on-surface-variant">Unable to synchronize data streams from regional node clusters. Please verify your connection status.</p>
+</div>
+</div>
+<div>
+<button class="bg-error text-on-error px-4 py-2 rounded-xl font-label-md text-label-md transition-all duration-150 ease-in-out cursor-pointer hover:opacity-90 flex items-center gap-2">
+<span class="material-symbols-outlined" style="font-size: 16px;">refresh</span>
+                            Retry
+                        </button>
+</div>
+</div>
+</div>
+<!-- 2. Empty Card -->
+<div class="bg-surface-container-lowest border border-outline-variant rounded-xl p-8 shadow-sm text-center flex flex-col items-center justify-center">
+<div class="w-16 h-16 rounded-full bg-surface-container flex items-center justify-center text-on-surface-variant mb-4">
+<span class="material-symbols-outlined" style="font-size: 32px;">route</span>
+</div>
+<h3 class="font-headline-md text-headline-md text-on-surface mb-1">No trips in this range. Try Last 30 days.</h3>
+<p class="font-body-md text-on-surface-variant max-w-md mb-6">There are no recorded fleet movements matching your currently selected filter parameters. Adjust your timeframe to view historical logs.</p>
+<button class="bg-primary-container text-on-primary-container px-4 py-2 rounded-xl font-label-md text-label-md transition-all duration-150 ease-in-out cursor-pointer hover:opacity-90">
+                    Switch to Last 30 Days
+                </button>
+</div>
+<!-- 3. Standard KPI Card with em dash and tooltip -->
+<div class="bg-surface-container-lowest border border-outline-variant rounded-xl p-6 shadow-sm">
+<div class="flex items-center justify-between mb-4">
+<span class="font-label-md text-label-md text-on-surface-variant tracking-wider uppercase">Average Trip Latency</span>
+<!-- Tooltip Container -->
+<div class="relative group cursor-pointer flex items-center">
+<span class="material-symbols-outlined text-outline hover:text-on-surface transition-colors" style="font-size: 18px;">info</span>
+<!-- Tooltip Popover -->
+<div class="absolute bottom-full right-0 mb-2 hidden group-hover:block z-20 w-48 p-2.5 bg-inverse-surface text-inverse-on-surface text-body-sm rounded shadow-lg text-center pointer-events-none">
+                            Uber does not export this
+                            <div class="absolute top-full right-2 transform -translate-x-1/2 border-4 border-transparent border-t-inverse-surface"></div>
+</div>
+</div>
+</div>
+<div class="flex items-baseline gap-3">
+<span class="font-display text-display text-on-surface">—</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">Metric unverified</span>
+</div>
+<p class="font-body-sm text-on-surface-variant mt-2">Data point unavailable across connected third-party telematics connectors.</p>
+</div>
+</div>
+</main>
+<!-- Footer -->
+<footer class="bg-surface-container-lowest border-t border-outline-variant py-6 mt-auto">
+<div class="w-full max-w-[1440px] mx-auto px-margin-desktop flex flex-col sm:flex-row items-center justify-between gap-4">
+<span class="font-body-sm text-on-surface-variant">© 2025 Roam Fleet Operations. All rights reserved.</span>
+<div class="flex items-center gap-6">
+<a class="font-body-sm text-on-surface-variant hover:text-on-surface transition-colors" href="#">Privacy Policy</a>
+<a class="font-body-sm text-on-surface-variant hover:text-on-surface transition-colors" href="#">Terms of Service</a>
+<a class="font-body-sm text-on-surface-variant hover:text-on-surface transition-colors" href="#">Support Portal</a>
+</div>
+</div>
+</footer>
+</body></html>

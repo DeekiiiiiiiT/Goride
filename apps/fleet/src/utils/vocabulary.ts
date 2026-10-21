@@ -64,7 +64,7 @@ const VOCABULARY: Record<BusinessType, Record<VocabKey, string>> = {
     surge: 'Surge',
     onTrip: 'On Trip',
     enroute: 'En Route',
-    sidebarTrips: 'Trip Analytics',
+    sidebarTrips: 'Trip Logs',
     sidebarPerformance: 'Performance',
     dashboardTitle: 'Dashboard',
     dashboardSubtitle: "Overview of your fleet's performance and financial health.",
@@ -72,8 +72,8 @@ const VOCABULARY: Record<BusinessType, Record<VocabKey, string>> = {
     driversPageSubtitle: 'Manage fleet drivers, track performance, and monitor earnings.',
     vehiclesPageTitle: 'Fleet Vehicles',
     vehiclesPageSubtitle: 'Manage and monitor your vehicle assets',
-    tripsPageTitle: 'Trip Analytics',
-    tripsPageSubtitle: 'Real-time trip analytics, cancellation insights, and fleet performance.',
+    tripsPageTitle: 'Trip Logs',
+    tripsPageSubtitle: 'Uber and InDrive imports, plus Roam manual and live trips. Not live tracking.',
   },
 
   delivery: {
@@ -99,7 +99,7 @@ const VOCABULARY: Record<BusinessType, Record<VocabKey, string>> = {
     surge: 'Peak Pricing',
     onTrip: 'In Transit',
     enroute: 'En Route to Pickup',
-    sidebarTrips: 'Delivery Analytics',
+    sidebarTrips: 'Delivery Logs',
     sidebarPerformance: 'Performance',
     dashboardTitle: 'Dashboard',
     dashboardSubtitle: "Overview of your delivery fleet's performance and financial health.",
@@ -107,8 +107,8 @@ const VOCABULARY: Record<BusinessType, Record<VocabKey, string>> = {
     driversPageSubtitle: 'Manage delivery drivers, track performance, and monitor revenue.',
     vehiclesPageTitle: 'Fleet Vehicles',
     vehiclesPageSubtitle: 'Manage and monitor your delivery vehicle assets',
-    tripsPageTitle: 'Delivery Analytics',
-    tripsPageSubtitle: 'Real-time delivery analytics, failure insights, and fleet performance.',
+    tripsPageTitle: 'Delivery Logs',
+    tripsPageSubtitle: 'Imported delivery jobs and manual entries. Not live tracking.',
   },
 
   taxi: {
@@ -134,7 +134,7 @@ const VOCABULARY: Record<BusinessType, Record<VocabKey, string>> = {
     surge: 'Peak Rate',
     onTrip: 'Metered',
     enroute: 'Dispatched',
-    sidebarTrips: 'Fare Analytics',
+    sidebarTrips: 'Fare Logs',
     sidebarPerformance: 'Performance',
     dashboardTitle: 'Dashboard',
     dashboardSubtitle: "Overview of your taxi fleet's performance and financial health.",
@@ -142,8 +142,8 @@ const VOCABULARY: Record<BusinessType, Record<VocabKey, string>> = {
     driversPageSubtitle: 'Manage taxi drivers, track performance, and monitor earnings.',
     vehiclesPageTitle: 'Fleet Vehicles',
     vehiclesPageSubtitle: 'Manage and monitor your taxi fleet assets',
-    tripsPageTitle: 'Fare Analytics',
-    tripsPageSubtitle: 'Real-time fare analytics, no-show insights, and fleet performance.',
+    tripsPageTitle: 'Fare Logs',
+    tripsPageSubtitle: 'Imported fares and manual entries. Not live tracking.',
   },
 
   trucking: {
@@ -169,7 +169,7 @@ const VOCABULARY: Record<BusinessType, Record<VocabKey, string>> = {
     surge: 'Spot Rate',
     onTrip: 'In Transit',
     enroute: 'En Route to Origin',
-    sidebarTrips: 'Haul Analytics',
+    sidebarTrips: 'Haul Logs',
     sidebarPerformance: 'Compliance',
     dashboardTitle: 'Dashboard',
     dashboardSubtitle: "Overview of your trucking fleet's performance and financial health.",
@@ -177,8 +177,8 @@ const VOCABULARY: Record<BusinessType, Record<VocabKey, string>> = {
     driversPageSubtitle: 'Manage truck operators, track compliance, and monitor revenue.',
     vehiclesPageTitle: 'Fleet Vehicles',
     vehiclesPageSubtitle: 'Manage and monitor your trucking fleet assets',
-    tripsPageTitle: 'Haul Analytics',
-    tripsPageSubtitle: 'Real-time haul analytics, rejection insights, and fleet performance.',
+    tripsPageTitle: 'Haul Logs',
+    tripsPageSubtitle: 'Imported hauls and manual entries. Not live tracking.',
   },
 
   shipping: {
@@ -204,7 +204,7 @@ const VOCABULARY: Record<BusinessType, Record<VocabKey, string>> = {
     surge: 'Peak Season Rate',
     onTrip: 'In Transit',
     enroute: 'En Route to Port',
-    sidebarTrips: 'Shipment Analytics',
+    sidebarTrips: 'Shipment Logs',
     sidebarPerformance: 'Compliance',
     dashboardTitle: 'Dashboard',
     dashboardSubtitle: "Overview of your shipping fleet's performance and financial health.",
@@ -212,8 +212,8 @@ const VOCABULARY: Record<BusinessType, Record<VocabKey, string>> = {
     driversPageSubtitle: 'Manage captains, track compliance, and monitor revenue.',
     vehiclesPageTitle: 'Fleet Vessels',
     vehiclesPageSubtitle: 'Manage and monitor your shipping fleet assets',
-    tripsPageTitle: 'Shipment Analytics',
-    tripsPageSubtitle: 'Real-time shipment analytics, void insights, and fleet performance.',
+    tripsPageTitle: 'Shipment Logs',
+    tripsPageSubtitle: 'Imported shipments and manual entries. Not live tracking.',
   },
 };
 

@@ -14,9 +14,10 @@ interface TripDetailsDialogProps {
   trip: Trip | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onOpenLogs?: () => void;
 }
 
-export function TripDetailsDialog({ trip, open, onOpenChange }: TripDetailsDialogProps) {
+export function TripDetailsDialog({ trip, open, onOpenChange, onOpenLogs }: TripDetailsDialogProps) {
   if (!trip) return null;
 
   // Calculate Total Wait Time
@@ -25,7 +26,7 @@ export function TripDetailsDialog({ trip, open, onOpenChange }: TripDetailsDialo
   const waitSeconds = totalWaitSeconds % 60;
 
   const getStatusColor = (status: string) => {
-    switch (status.toLowerCase()) {
+    switch ((status || '').toLowerCase()) {
       case 'completed': return 'bg-emerald-500 hover:bg-emerald-600';
       case 'cancelled': return 'bg-rose-500 hover:bg-rose-600';
       case 'processing': return 'bg-amber-500 hover:bg-amber-600';
@@ -44,9 +45,12 @@ export function TripDetailsDialog({ trip, open, onOpenChange }: TripDetailsDialo
                 ID: {trip.id.slice(0, 8)}...
               </ResponsiveDialogDescription>
             </div>
-            <Badge className={getStatusColor(trip.status)}>
-              {trip.status}
+            <Badge className={getStatusColor(trip.status || '')}>
+              {trip.status || 'Unknown'}
             </Badge>
+            {onOpenLogs ? (
+              <button type="button" className="min-h-11 text-sm text-indigo-700" onClick={onOpenLogs}>Open in Trip Logs</button>
+            ) : null}
           </div>
           {(() => {
             const coverage = resolveTripTollCoverage(trip);

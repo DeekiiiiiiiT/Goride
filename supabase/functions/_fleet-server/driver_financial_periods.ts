@@ -1397,7 +1397,7 @@ export async function rebuildDriverFinancialPeriod(
       tollUnknownPmAmount: round2(tollUnknownPmAmount),
       tollsClear: derived.tollsClear,
       moneyUnlocked: derived.moneyUnlocked,
-      ...cashHeldClampStamp(settled.adjCashBalance),
+      ...cashHeldClampStamp(settled.cashBalance),
       projectionSources: {
         fuel: fuelSource,
         cash: settlementTxTableReadEnabled() ? "table" : "kv",
@@ -1677,7 +1677,7 @@ export async function rebuildDriverFinancialPeriod(
             ...row.metadata,
             financeCore: {
               ...fc,
-              ...cashHeldClampStamp(settled.adjCashBalance),
+              ...cashHeldClampStamp(settled.cashBalance),
               overpaidAmount: settled.overpaidAmount,
               projectionSources: {
                 ...((fc.projectionSources as Record<string, unknown>) || {}),
@@ -2412,7 +2412,7 @@ export async function syncPeriodCashFromTransactions(
       tollCashWashEligible: tollCashWash,
       tollsClear,
       moneyUnlocked,
-      ...cashHeldClampStamp(settled.adjCashBalance),
+      ...cashHeldClampStamp(settled.cashBalance),
     },
   });
 

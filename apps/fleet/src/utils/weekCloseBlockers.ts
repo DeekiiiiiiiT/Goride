@@ -7,7 +7,12 @@
  * plain-English label and a deep-link target so the "Close the Week" screen and
  * the Driver Settlements desk speak the same language.
  */
-import { RECON_STEP_ORDER, type CloseBlocker, type RunStepId } from '@roam/finance-core';
+import {
+  RECON_STEP_ORDER,
+  SERVER_STEP_BY_BLOCKER,
+  type CloseBlocker,
+  type RunStepId,
+} from '@roam/finance-core';
 
 export type { CloseBlocker } from '@roam/finance-core';
 
@@ -104,52 +109,8 @@ export const BLOCKER_LABELS: Record<string, string> = {
   COVERAGE_WIDER_THAN_DATA: 'A file was declared to cover more days than its transactions',
 };
 
-/** Each close code belongs on exactly one wizard step. */
-export const WIZARD_STEP_BY_BLOCKER: Record<string, RunStepId> = {
-  SOURCE_MISSING: 'sources',
-  SOURCE_PARTIAL: 'sources',
-  SOURCE_WAITING_EXTERNAL: 'sources',
-  SOURCE_WAIVED: 'sources',
-  SOURCE_ATTESTED_NONE: 'sources',
-  STEP_STALE: 'sources',
-  LINE_UNATTRIBUTED: 'attribution',
-  EARNINGS_STATEMENT_MISSING: 'trips_earnings',
-  EARNINGS_STATEMENT_UNVERIFIED: 'trips_earnings',
-  EARNINGS_ENGINE_DRIFT: 'trips_earnings',
-  EARNINGS_GROSS_IDENTITY: 'trips_earnings',
-  CASH_SOURCE_MISMATCH: 'trips_earnings',
-  CASH_COLLECTED_MISMATCH: 'trips_earnings',
-  TOLL_STATEMENT_MISSING: 'tolls',
-  TOLL_STATEMENT_UNVERIFIED: 'tolls',
-  TOLL_SPEND_MISMATCH: 'tolls',
-  TOLL_CHARGED_MISMATCH: 'tolls',
-  TOLL_IDENTITY_UNBALANCED: 'tolls',
-  TOLL_SPEND_SPLIT: 'tolls',
-  TOLL_EVENT_ORPHANED: 'tolls',
-  TOLL_EVENT_MISSING: 'tolls',
-  TOLL_EVENT_INELIGIBLE: 'tolls',
-  TOLL_EVENT_AMOUNT_MISMATCH: 'tolls',
-  TOLL_PAYMENT_METHOD_UNKNOWN: 'tolls',
-  TOLL_ENGINE_DRIFT: 'tolls',
-  TOLL_STALE_ZERO_SEAL: 'tolls',
-  FUEL_STATEMENT_MISSING: 'fuel',
-  FUEL_STATEMENT_UNVERIFIED: 'fuel',
-  FUEL_DRIVER_SHARE_MISMATCH: 'fuel',
-  FUEL_FLEET_SHARE_MISMATCH: 'fuel',
-  FUEL_ENGINE_DRIFT: 'fuel',
-  FUEL_CARD_STATEMENT_DRIFT: 'fuel',
-  SETTLEMENT_FLEET_OWES: 'settlement_preview',
-  SETTLEMENT_DRIVER_OWES: 'settlement_preview',
-  SETTLEMENT_CASH_HELD: 'settlement_preview',
-  CASH_HELD_OVER_RETURNED: 'settlement_preview',
-  STATEMENT_ACCOUNTS_UNBALANCED: 'close',
-  SETTLEMENT_PNL_MISMATCH: 'close',
-  BUSINESS_WEEK_PNL_UNAVAILABLE: 'close',
-  CUSTODY_NO_OPEN_TARGET: 'close',
-  PRIOR_CLOSE_HASH_CHANGED: 'close',
-  PERIOD_REBUILD_FAILED: 'close',
-  COVERAGE_WIDER_THAN_DATA: 'close',
-};
+/** Each close code belongs on exactly one wizard step. Owned by finance-core. */
+export const WIZARD_STEP_BY_BLOCKER = SERVER_STEP_BY_BLOCKER;
 
 export function wizardStepForBlockerCode(code: string): RunStepId | null {
   const step = WIZARD_STEP_BY_BLOCKER[String(code || '').toUpperCase()];

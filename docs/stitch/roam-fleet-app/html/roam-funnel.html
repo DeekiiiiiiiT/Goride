@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Jamaica Fleet Analytics - Roam Rider App</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          "colors": {
+            "on-tertiary-container": "#ffd4a4",
+            "tertiary-fixed": "#ffddb8",
+            "secondary-fixed": "#6ffbbe",
+            "on-tertiary-fixed-variant": "#653e00",
+            "on-tertiary-fixed": "#2a1700",
+            "error": "#ba1a1a",
+            "on-secondary-fixed": "#002113",
+            "secondary-container": "#6cf8bb",
+            "surface": "#fcf8ff",
+            "surface-container-high": "#eae6f4",
+            "background": "#fcf8ff",
+            "primary": "#3525cd",
+            "inverse-surface": "#302f39",
+            "surface-dim": "#dcd8e5",
+            "on-secondary": "#ffffff",
+            "on-primary-fixed-variant": "#3323cc",
+            "secondary-fixed-dim": "#4edea3",
+            "tertiary": "#684000",
+            "surface-container-low": "#f5f2ff",
+            "on-primary": "#ffffff",
+            "surface-container": "#f0ecf9",
+            "surface-container-lowest": "#ffffff",
+            "on-background": "#1b1b24",
+            "on-primary-fixed": "#0f0069",
+            "outline-variant": "#c7c4d8",
+            "surface-bright": "#fcf8ff",
+            "tertiary-container": "#885500",
+            "surface-tint": "#4d44e3",
+            "on-secondary-fixed-variant": "#005236",
+            "on-secondary-container": "#00714d",
+            "on-primary-container": "#dad7ff",
+            "outline": "#777587",
+            "on-surface-variant": "#464555",
+            "inverse-primary": "#c3c0ff",
+            "on-error-container": "#93000a",
+            "on-error": "#ffffff",
+            "tertiary-fixed-dim": "#ffb95f",
+            "primary-container": "#4f46e5",
+            "surface-variant": "#e4e1ee",
+            "on-tertiary": "#ffffff",
+            "primary-fixed-dim": "#c3c0ff",
+            "error-container": "#ffdad6",
+            "surface-container-highest": "#e4e1ee",
+            "secondary": "#006c49",
+            "on-surface": "#1b1b24",
+            "primary-fixed": "#e2dfff",
+            "inverse-on-surface": "#f3effc"
+          },
+          "borderRadius": {
+            "DEFAULT": "0.125rem",
+            "lg": "0.25rem",
+            "xl": "0.5rem",
+            "full": "0.75rem"
+          },
+          "spacing": {
+            "density-high": "4px",
+            "gutter": "16px",
+            "unit": "4px",
+            "density-medium": "12px",
+            "container-padding": "24px",
+            "component-gap": "8px"
+          },
+          "fontFamily": {
+            "label-sm": ["Inter"],
+            "body-lg": ["Inter"],
+            "label-md": ["Inter"],
+            "headline-lg": ["Inter"],
+            "display": ["Inter"],
+            "headline-md": ["Inter"],
+            "body-sm": ["Inter"],
+            "body-md": ["Inter"]
+          },
+          "fontSize": {
+            "label-sm": ["11px", { "lineHeight": "14px", "fontWeight": "500" }],
+            "body-lg": ["16px", { "lineHeight": "24px", "fontWeight": "400" }],
+            "label-md": ["12px", { "lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "600" }],
+            "headline-lg": ["24px", { "lineHeight": "32px", "letterSpacing": "-0.01em", "fontWeight": "600" }],
+            "display": ["36px", { "lineHeight": "44px", "letterSpacing": "-0.02em", "fontWeight": "700" }],
+            "headline-md": ["20px", { "lineHeight": "28px", "fontWeight": "600" }],
+            "body-sm": ["13px", { "lineHeight": "18px", "fontWeight": "400" }],
+            "body-md": ["14px", { "lineHeight": "20px", "fontWeight": "400" }]
+          }
+        }
+      }
+    }
+  </script>
+</head>
+<body class="bg-surface text-on-surface font-body-md antialiased min-h-screen flex flex-col">
+<!-- TopAppBar -->
+<header class="bg-surface text-primary border-b border-outline-variant flex justify-between items-center w-full px-6 h-16 fixed top-0 left-0 z-50">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-2xl" style="font-variation-settings: 'FILL' 1;">directions_car</span>
+<span class="text-headline-md font-headline-md font-extrabold text-primary">Jamaica Fleet Analytics</span>
+</div>
+<div class="flex items-center gap-4">
+<div class="flex items-center gap-2 bg-surface-container-low px-3 py-1.5 rounded-xl border border-outline-variant">
+<span class="material-symbols-outlined text-primary text-xl">hub</span>
+<span class="text-body-sm font-body-sm text-on-surface-variant font-medium">Kingston Hub</span>
+</div>
+<div class="w-9 h-9 rounded-full bg-primary-container text-on-primary flex items-center justify-center font-label-md">
+        FA
+      </div>
+</div>
+</header>
+<!-- SideNavBar -->
+<aside class="fixed left-0 top-16 h-[calc(100vh-4rem)] w-64 bg-surface-container-low border-r border-outline-variant flex flex-col justify-between p-4 z-40">
+<nav class="flex flex-col gap-1">
+<div class="px-3 py-2 mb-2">
+<p class="text-headline-sm font-headline-sm text-primary font-bold">Jamaica Operations</p>
+<p class="text-body-sm font-body-sm text-on-surface-variant">Kingston Hub</p>
+</div>
+<a class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-on-surface-variant hover:bg-surface-container transition-colors duration-150" href="#">
+<span class="material-symbols-outlined text-xl">dashboard</span>
+<span class="text-body-sm font-body-sm">Overview</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-surface-container-high text-primary border-l-4 border-primary font-semibold transition-colors duration-150" href="#">
+<span class="material-symbols-outlined text-xl" style="font-variation-settings: 'FILL' 1;">list</span>
+<span class="text-body-sm font-body-sm">Trip Logs</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-on-surface-variant hover:bg-surface-container transition-colors duration-150" href="#">
+<span class="material-symbols-outlined text-xl">grid_view</span>
+<span class="text-body-sm font-body-sm">Heatmap</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-on-surface-variant hover:bg-surface-container transition-colors duration-150" href="#">
+<span class="material-symbols-outlined text-xl">payments</span>
+<span class="text-body-sm font-body-sm">Financials</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-on-surface-variant hover:bg-surface-container transition-colors duration-150" href="#">
+<span class="material-symbols-outlined text-xl">settings</span>
+<span class="text-body-sm font-body-sm">Settings</span>
+</a>
+</nav>
+<div class="pt-4 border-t border-outline-variant">
+<button class="w-full bg-primary text-on-primary py-2 px-4 rounded-xl text-label-md font-label-md hover:bg-primary-container transition-all duration-200 flex items-center justify-center gap-2">
+<span class="material-symbols-outlined text-lg">download</span>
+        Export Report
+      </button>
+</div>
+</aside>
+<!-- Main Content Canvas -->
+<main class="ml-64 mt-16 p-8 flex-1 bg-surface flex flex-col gap-6">
+<div class="flex justify-between items-center">
+<div>
+<h1 class="text-headline-lg font-headline-lg text-on-surface">Trip Logs &amp; Analytics</h1>
+<p class="text-body-md font-body-md text-on-surface-variant">Monitor real-time conversion metrics and dispatch efficiency across Kingston zones.</p>
+</div>
+<div class="flex gap-3">
+<button class="px-4 py-2 bg-surface-container-low border border-outline-variant text-on-surface rounded-xl text-label-md hover:bg-surface-container">Filter Hubs</button>
+<button class="px-4 py-2 bg-primary text-on-primary rounded-xl text-label-md hover:bg-primary-container">Live Stream</button>
+</div>
+</div>
+<!-- Desktop Card: Roam rider app -->
+<section class="bg-surface-container-lowest border border-outline-variant rounded-xl p-6 shadow-sm max-w-3xl">
+<div class="flex justify-between items-center pb-4 border-b border-outline-variant mb-6">
+<div>
+<h2 class="text-headline-md font-headline-md text-on-surface">Roam rider app</h2>
+<p class="text-body-sm font-body-sm text-on-surface-variant">Conversion funnel metrics for active ride requests</p>
+</div>
+<span class="material-symbols-outlined text-primary text-2xl">analytics</span>
+</div>
+<!-- Conversion Funnel Visualization -->
+<div class="flex flex-col gap-4">
+<!-- Step 1: Requested -->
+<div class="flex flex-col gap-1">
+<div class="flex justify-between text-body-md font-medium text-on-surface">
+<span>Requested</span>
+<span class="font-semibold text-primary">120</span>
+</div>
+<div class="w-full bg-surface-container h-8 rounded-lg overflow-hidden flex items-center p-1">
+<div class="bg-primary-container h-full rounded-md transition-all duration-500 flex items-center justify-end px-3 text-on-primary text-label-sm font-bold" style="width: 100%;">100%</div>
+</div>
+</div>
+<!-- Step 2: Offered -->
+<div class="flex flex-col gap-1">
+<div class="flex justify-between text-body-md font-medium text-on-surface">
+<span>Offered</span>
+<span class="font-semibold text-primary">80</span>
+</div>
+<div class="w-full bg-surface-container h-8 rounded-lg overflow-hidden flex items-center p-1">
+<div class="bg-primary-container h-full rounded-md transition-all duration-500 flex items-center justify-end px-3 text-on-primary text-label-sm font-bold" style="width: 66.6%;">66.7%</div>
+</div>
+</div>
+<!-- Step 3: Accepted -->
+<div class="flex flex-col gap-1">
+<div class="flex justify-between text-body-md font-medium text-on-surface">
+<span>Accepted</span>
+<span class="font-semibold text-primary">54</span>
+</div>
+<div class="w-full bg-surface-container h-8 rounded-lg overflow-hidden flex items-center p-1">
+<div class="bg-primary-container h-full rounded-md transition-all duration-500 flex items-center justify-end px-3 text-on-primary text-label-sm font-bold" style="width: 45%;">45.0%</div>
+</div>
+</div>
+<!-- Step 4: Arrived -->
+<div class="flex flex-col gap-1">
+<div class="flex justify-between text-body-md font-medium text-on-surface">
+<span>Arrived</span>
+<span class="font-semibold text-primary">40</span>
+</div>
+<div class="w-full bg-surface-container h-8 rounded-lg overflow-hidden flex items-center p-1">
+<div class="bg-primary-container h-full rounded-md transition-all duration-500 flex items-center justify-end px-3 text-on-primary text-label-sm font-bold" style="width: 33.3%;">33.3%</div>
+</div>
+</div>
+<!-- Step 5: Started -->
+<div class="flex flex-col gap-1">
+<div class="flex justify-between text-body-md font-medium text-on-surface">
+<span>Started</span>
+<span class="font-semibold text-primary">36</span>
+</div>
+<div class="w-full bg-surface-container h-8 rounded-lg overflow-hidden flex items-center p-1">
+<div class="bg-primary-container h-full rounded-md transition-all duration-500 flex items-center justify-end px-3 text-on-primary text-label-sm font-bold" style="width: 30%;">30.0%</div>
+</div>
+</div>
+<!-- Step 6: Completed -->
+<div class="flex flex-col gap-1">
+<div class="flex justify-between text-body-md font-medium text-on-surface">
+<span>Completed</span>
+<span class="font-semibold text-primary">31</span>
+</div>
+<div class="w-full bg-surface-container h-8 rounded-lg overflow-hidden flex items-center p-1">
+<div class="bg-primary-container h-full rounded-md transition-all duration-500 flex items-center justify-end px-3 text-on-primary text-label-sm font-bold" style="width: 25.8%;">25.8%</div>
+</div>
+</div>
+</div>
+<!-- Footnote -->
+<div class="mt-6 pt-4 border-t border-outline-variant flex items-center gap-2 text-on-surface-variant text-body-sm font-body-sm">
+<span class="material-symbols-outlined text-base">info</span>
+<span>Note: Stage minutes are not shown. Values represent aggregated sample counts across active fleet sectors.</span>
+</div>
+</section>
+</main>
+</body></html>

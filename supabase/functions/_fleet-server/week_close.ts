@@ -779,6 +779,8 @@ export type WeekClosePreview = {
   cashSourceMismatches?: WeekCloseCashSourceMismatch[];
   /** Count of drivers with a still-valid cashSourceAck for this week. */
   cashSourceAckCount?: number;
+  /** True when an open driver is owed money because company fuel exceeds cash still in hand. */
+  fuelCreditExceedsCashInHand?: boolean;
   /** P-2: statement engine version used when this preview was built. */
   statementEngineVersion?: string;
   /** P4: service line scope for lock + recon evidence. */
@@ -1414,6 +1416,7 @@ export async function previewWeekClose(
   const draftKeys = new Set<string>();
   const cashSourceMismatches: WeekCloseCashSourceMismatch[] = [];
   let cashSourceAckCount = 0;
+  let fuelCreditExceedsCashInHand = false;
 
   for (const period of rows) {
     const driverId = String(period.driver_id);
@@ -1436,6 +1439,25 @@ export async function previewWeekClose(
       });
       if (isCashSourceAckValid(cash.cashSourceAck, cash.cashSourceMismatch)) {
         cashSourceAckCount += 1;
+      }
+    }
+
+    if (!frozen) {
+      const cashLeg =
+        Math.round(
+          ((Number(period.cash_collected) || 0) +
+            (Number(period.toll_charged_to_driver) || 0) -
+            (Number(period.cash_returned) || 0) -
+            (Number(fc.tollCashWashEligible) || 0)) *
+            100,
+        ) / 100;
+      const fuelCredit = Number(period.fuel_fleet_share) || 0;
+      const fleetOwes = Number(period.settlement_amount) || 0;
+      if (
+        fleetOwes > CLOSE_INVARIANT_EPS &&
+        fuelCredit > cashLeg + CLOSE_INVARIANT_EPS
+      ) {
+        fuelCreditExceedsCashInHand = true;
       }
     }
 
@@ -1593,6 +1615,7 @@ export async function previewWeekClose(
     }),
     cashSourceMismatches,
     cashSourceAckCount,
+    fuelCreditExceedsCashInHand,
     statementEngineVersion: WEEK_STATEMENT_ENGINE_VERSION,
     serviceLine,
     reconEvidence,
