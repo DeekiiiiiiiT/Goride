@@ -4,6 +4,8 @@
 import { queryFleet } from "./repos/baseRepo.ts";
 import { getServiceClient } from "./service_client.ts";
 import * as fuelLogic from "./fuel_logic.ts";
+import { resolveFillAt } from "../../../packages/fuel-core/src/fillChain.ts";
+import { fleetCalendarDay } from "../../../packages/fuel-core/src/fleetTime.ts";
 
 export class FuelDistanceReadError extends Error {
   degraded: string[];
@@ -73,6 +75,29 @@ async function loadBrainPolicy(): Promise<Partial<fuelLogic.DeadheadBrainPolicy>
   }
 }
 
+function rowTime(row: any): string {
+  return String(row?.time || row?.metadata?.time || "");
+}
+
+function fillClock(entry: any, peers: any[]): { at: string; assumedEndOfDay: boolean } {
+  const day = String(entry?.date || "").slice(0, 10);
+  const odo = Number(entry?.odometer) || 0;
+  const card = (peers || []).find((row) =>
+    row !== entry &&
+    String(row?.type || "") === "Card_Transaction" &&
+    String(row?.date || "").slice(0, 10) === day &&
+    odo > 0 &&
+    Number(row?.odometer) === odo &&
+    (rowTime(row) || /T\d{2}:\d{2}/.test(String(row?.date || "")))
+  );
+  return resolveFillAt({
+    date: String(entry?.date || ""),
+    time: rowTime(entry),
+    linkedDate: card ? String(card.date || "") : "",
+    linkedTime: card ? rowTime(card) : "",
+  });
+}
+
 function inWindow(row: any, periodStart?: string, periodEnd?: string): boolean {
   if (!periodStart && !periodEnd) return true;
   const dateStr = row?.date || row?.timestamp || row?.requestTime;
@@ -107,12 +132,38 @@ export async function computeFleetDeadhead(args: {
     ...new Set(vehicles.map((v) => String(v.currentDriverId || "")).filter(Boolean)),
   ];
 
+  const fills = ids.length
+    ? await queryPages(
+      "fuel_entries",
+      {
+        org: args.orgId,
+        dateFrom: shiftYmd(windowStart, -120),
+        dateTo: shiftYmd(windowEnd, 1),
+        in: { vehicle_id: ids },
+      },
+      "fuel",
+    )
+    : [];
+
+  const latestPriorByVehicle = new Map<string, string>();
+  for (const entry of fills) {
+    const day = String(entry.date || "").slice(0, 10);
+    if (!periodStart || !day || day >= periodStart) continue;
+    const vehicleId = String(entry.vehicleId || "");
+    const prev = latestPriorByVehicle.get(vehicleId);
+    if (!prev || day > prev) latestPriorByVehicle.set(vehicleId, day);
+  }
+  const earliestLatestPrior = [...latestPriorByVehicle.values()].sort()[0];
+  const tripFrom = earliestLatestPrior
+    ? shiftYmd(earliestLatestPrior, -1)
+    : shiftYmd(windowStart, -1);
+
   const tripByVehicle = ids.length
     ? await queryPages(
       "trips",
       {
         org: args.orgId,
-        dateFrom: shiftYmd(windowStart, -1),
+        dateFrom: tripFrom,
         dateTo: shiftYmd(windowEnd, 1),
         in: { vehicle_id: ids },
       },
@@ -124,7 +175,7 @@ export async function computeFleetDeadhead(args: {
       "trips",
       {
         org: args.orgId,
-        dateFrom: shiftYmd(windowStart, -1),
+        dateFrom: tripFrom,
         dateTo: shiftYmd(windowEnd, 1),
         in: { driver_id: driverIds },
       },
@@ -137,19 +188,6 @@ export async function computeFleetDeadhead(args: {
     if (id) tripsById.set(id, trip);
   }
   const allTrips = [...tripsById.values()];
-
-  const fills = ids.length
-    ? await queryPages(
-      "fuel_entries",
-      {
-        org: args.orgId,
-        dateFrom: shiftYmd(windowStart, -60),
-        dateTo: shiftYmd(windowEnd, 1),
-        in: { vehicle_id: ids },
-      },
-      "fuel",
-    )
-    : [];
 
   const brainPolicy = await loadBrainPolicy();
   const vehicleResults: any[] = [];
@@ -174,10 +212,12 @@ export async function computeFleetDeadhead(args: {
       .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")))[0];
     const weekEntries = vEntries.filter((entry) => inWindow(entry, periodStart, periodEnd));
     const fuelEntries = prior ? [...weekEntries, prior] : weekEntries;
+    const priorDay = prior ? fleetCalendarDay(String(prior.date || "")) : "";
+    const spanStart = priorDay ? shiftYmd(priorDay, -1) : periodStart;
     const attribution = fuelLogic.calculateDeadheadAttribution({
       vehicleId: vehicle.id,
       fuelEntries,
-      trips: vTrips.filter((trip) => inWindow(trip, periodStart, periodEnd)),
+      trips: vTrips.filter((trip) => inWindow(trip, spanStart, periodEnd)),
       periodStart,
       periodEnd,
       policy: brainPolicy,
@@ -186,11 +226,14 @@ export async function computeFleetDeadhead(args: {
       .filter((entry) => Number(entry.odometer) > 0)
       .sort((a, b) => Number(a.odometer) - Number(b.odometer));
     const endFill = odoFills[odoFills.length - 1];
+    const priorClock = prior ? fillClock(prior, vEntries) : null;
+    const endClock = endFill ? fillClock(endFill, vEntries) : null;
     vehicleResults.push({
       ...attribution,
       priorOdometer: prior ? Number(prior.odometer) || 0 : 0,
-      priorAt: prior ? String(prior.date || prior.time || "") : "",
-      spanEndAt: endFill ? String(endFill.date || "") : "",
+      priorAt: priorClock?.at || "",
+      priorClockAssumed: !!priorClock?.assumedEndOfDay,
+      spanEndAt: endClock?.at || "",
       vehicleName: vehicle.name || vehicle.licensePlate || vehicle.plateNumber || vehicle.id,
     });
   }

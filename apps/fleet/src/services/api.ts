@@ -408,14 +408,14 @@ export const api = {
     return response.json();
   },
 
-  async deleteTrip(id: string) {
-    // Phase 1: Use JWT for proper org scoping
+  async deleteTrip(id: string): Promise<{ success?: boolean; weekRebuilt?: boolean; weekLocked?: boolean }> {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/trips/${id}`, {
       method: 'DELETE',
       headers: await getHeaders(null)
     });
-    if (!response.ok) throw new Error("Failed to delete trip");
-    return response.json();
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(body.error || "Failed to delete trip");
+    return body;
   },
 
   async saveDriverMetrics(metrics: DriverMetrics[]) {
@@ -518,6 +518,17 @@ export const api = {
       throw new Error(err.error || `Trip analytics failed (${response.status})`);
     }
     return response.json();
+  },
+
+  async getStoredTrip(tripId: string): Promise<{ trip: Trip; weekOpen: boolean }> {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/trips/ledger-trip`, {
+      method: 'POST',
+      headers: await getHeaders(),
+      body: JSON.stringify({ tripId }),
+    });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(body.error || 'Could not open that trip');
+    return { trip: body.trip as Trip, weekOpen: body.weekOpen !== false };
   },
 
   async getTripById(tripId: string): Promise<Record<string, unknown>> {
@@ -5531,6 +5542,7 @@ export const api = {
     mode: 'company' | 'percentage' | 'fixed';
     driverPercent?: number;
     driverFixedAmount?: number;
+    appliesTo?: Array<'variance' | 'unattributedKm' | 'noOdometerFills'>;
     note: string;
   }) {
     const response = await fetchWithRetry(

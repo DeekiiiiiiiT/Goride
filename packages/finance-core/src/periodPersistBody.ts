@@ -34,6 +34,8 @@ export type FinanceCoreMetaInput = {
   tollUnknownPmAmount?: number;
   tollsClear: boolean;
   moneyUnlocked: boolean;
+  /** Driver share of leftover fuel. Kept across a cash rebuild when this rebuild does not recompute it. */
+  fuelLeftoverDriverShare?: number;
   cashHeldClamped: boolean;
   unclampedCashHeld: number;
   projectionSources?: Record<string, string>;
@@ -117,6 +119,10 @@ export function buildPeriodMetadata(input: BuildPeriodMetadataInput): Record<str
       tollUnknownPmAmount: round2(Number(fc.tollUnknownPmAmount) || 0),
       tollsClear: fc.tollsClear,
       moneyUnlocked: fc.moneyUnlocked,
+      fuelLeftoverDriverShare: round2(
+        fc.fuelLeftoverDriverShare ??
+          (Number(priorFc.fuelLeftoverDriverShare) || 0),
+      ),
       ...(fc.projectionSources ? { projectionSources: fc.projectionSources } : {}),
     },
     ...(input.forceRelease ? { forceRelease: input.forceRelease } : {}),

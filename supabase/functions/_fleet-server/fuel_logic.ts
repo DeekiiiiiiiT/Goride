@@ -448,8 +448,6 @@ export function classifyTripGaps(params: {
     let reason: string;
     const dhMax = policy.deadheadGapMaxMinutes;
     const persMin = policy.personalGapMinMinutes;
-    const peakStart = policy.peakHoursStart;
-    const peakEnd = policy.peakHoursEnd;
 
     if (gapMinutes < 5) {
       classification = 'deadhead';
@@ -458,18 +456,10 @@ export function classifyTripGaps(params: {
       classification = 'deadhead';
       reason = `Gap within deadhead max (${dhMax} min)`;
     } else if (gapMinutes <= persMin) {
-      const gapStartHour = fleetLocalHour(new Date(gapStartMs), policy.timezone || DEFAULT_FLEET_TZ);
-      const isDaytime =
-        peakStart <= peakEnd
-          ? gapStartHour >= peakStart && gapStartHour < peakEnd
-          : gapStartHour >= peakStart || gapStartHour < peakEnd;
-      if (isDaytime) {
-        classification = 'deadhead';
-        reason = `Gap ${Math.round(gapMinutes)}min during peak hours`;
-      } else {
-        classification = 'personal';
-        reason = `Gap ${Math.round(gapMinutes)}min during off-peak`;
-      }
+      // No odometer, and the wait is neither a short reposition nor a clear personal break.
+      // These kilometres stay unexplained. The old percentage does not bill them.
+      classification = 'ambiguous';
+      reason = `Gap ${Math.round(gapMinutes)} min is too long to call reposition and too short to call personal`;
     } else {
       classification = 'personal';
       reason = `Gap > ${persMin}min (${Math.round(gapMinutes)}min)`;

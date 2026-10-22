@@ -14,6 +14,7 @@ import { countBy, listByBatch, queryFleet, fleetDb, fleetTable, rowToKvValue } f
 import OpenAI from "npm:openai";
 import { GoogleGenerativeAI } from "npm:@google/generative-ai";
 import * as kv from "./kv_store.tsx";
+import { stampDriverHomePin } from "./fuel_shift_km.ts";
 import { splitCashAwaitingSaveBlocked } from "../../../packages/fuel-core/src/fuelSplitCashLifecycle.ts";
 import * as cache from "./cache.ts";
 import { trackedProviderCall, logProviderCall, checkProviderGuards, ProviderBlockedError } from "./api_usage_logger.ts";
@@ -1392,7 +1393,7 @@ export function registerResidualMonolithRoutes(app: Hono) {
       }
       
       // Validation and processing
-      const processedTrips = trips.map((trip: any) => {
+      let processedTrips = trips.map((trip: any) => {
           if (trip.isManual) {
               // Validation for manual trips
               if (!trip.driverId) throw new Error(`Manual trip ${trip.id || 'unknown'} must have a driverId`);
@@ -1524,8 +1525,22 @@ export function registerResidualMonolithRoutes(app: Hono) {
         processedTrips[i] = mergedTrips[i];
       }
 
+      // A second live/manual save of the same ride keeps the row already stored.
+      const { dropDuplicateAppLoggedTrips } = await import("./trip_save_dedupe.ts");
+      const deduped = await dropDuplicateAppLoggedTrips(
+        processedTrips as Record<string, unknown>[],
+        existingTrips,
+        writeOrgId,
+      );
+      processedTrips = deduped.trips;
+      const duplicatesKept = deduped.duplicatesKept;
+      if (processedTrips.length === 0) {
+        return c.json({ success: true, count: 0, duplicatesKept });
+      }
+
       // Store using mset
-      await kv.mset(keys, processedTrips.map((t: any) => stampWriteOrg(t)));
+      const saveKeys = processedTrips.map((t: any) => `trip:${t.id}`);
+      await kv.mset(saveKeys, processedTrips.map((t: any) => stampWriteOrg(t)));
 
       // Canonical money events (`ledger_event:*`) from trips (Uber / Roam / InDrive).
       try {
@@ -1681,7 +1696,7 @@ export function registerResidualMonolithRoutes(app: Hono) {
       // Invalidate dashboard cache (new trips affect dashboard data)
       await invalidateDashboardCache();
 
-      return c.json({ success: true, count: processedTrips.length });
+      return c.json({ success: true, count: processedTrips.length, duplicatesKept });
     } catch (e: any) {
       console.error("Error saving trips:", e);
       return c.json({ error: e.message || "Internal Server Error" }, 500);
@@ -1776,6 +1791,12 @@ export function registerResidualMonolithRoutes(app: Hono) {
   app.delete("/make-server-37f42386/trips/:id", requireAuth(), requirePermission('transactions.edit'), async (c) => {
     const id = c.req.param("id");
     try {
+      const existing = await kv.get(`trip:${id}`);
+      const orgId = getOrgId(c);
+      if (existing && orgId && existing.organizationId && String(existing.organizationId) !== String(orgId)) {
+        return c.json({ error: "Trip not found" }, 404);
+      }
+
       await kv.del(`trip:${id}`);
       try {
         await deleteCanonicalLedgerBySource("trip", [id]);
@@ -1791,11 +1812,34 @@ export function registerResidualMonolithRoutes(app: Hono) {
         console.warn(`[MatchOnIngest] invalidateStaleTollMatchesForTrip (DELETE /trips/:id) failed:`, invalidateErr);
       }
 
+      let weekRebuilt = false;
+      let weekLocked = false;
+      if (existing) {
+        try {
+          const { rebuildPeriodsForAnchors } = await import("./driver_financial_periods.ts");
+          const { periodKeyFor } = await import("../../../packages/finance-core/src/periodKey.ts");
+          const driverId = String(existing.driverId ?? "").trim();
+          const day = String(existing.date ?? existing.completed_at ?? "").slice(0, 10);
+          const anchor = day ? periodKeyFor(day) : null;
+          if (driverId && anchor) {
+            const n = await rebuildPeriodsForAnchors(driverId, [anchor]);
+            weekRebuilt = n > 0;
+            weekLocked = n === 0;
+          }
+        } catch (dfpErr) {
+          console.error(`[DFP] rebuild after trip delete failed trip=${id}:`, dfpErr);
+          return c.json({
+            error: "The trip was removed, but the pay week could not be updated.",
+            deleted: true,
+          }, 500);
+        }
+      }
+
       // Invalidate stats cache since data has changed
       await cache.invalidateCacheVersion("stats");
       await cache.invalidateCacheVersion("performance");
 
-      return c.json({ success: true });
+      return c.json({ success: true, weekRebuilt, weekLocked });
     } catch (e: any) {
       console.error(`Error deleting trip ${id}:`, e);
       return c.json({ error: e.message || "Internal Server Error" }, 500);
@@ -2236,6 +2280,7 @@ export function registerResidualMonolithRoutes(app: Hono) {
           id: finalId,
           driverId: driver.driverId || finalId, // Allow distinct legacy ID
       };
+      await stampDriverHomePin(newDriver);
 
       // Phase 4: Use stampRecord to include productLine for data isolation
       await kv.set(`driver:${finalId}`, stampRecord(newDriver, c));

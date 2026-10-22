@@ -34,7 +34,6 @@ export function registerFuelScenarioRoutes(app: Hono) {
                   companyUsageCoverage: 100,
                   deadheadCoverage: 50,
                   personalCoverage: 0,
-                  miscCoverage: 50,
                   conditions: { requiresReceipt: true }
               }]
           };

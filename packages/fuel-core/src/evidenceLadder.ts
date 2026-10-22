@@ -37,6 +37,9 @@ export type EvidenceLadderInput = {
   homeMissing?: boolean;
   /** Routed dropoff → next pickup inside a shift, minus P1/P2 already counted. */
   repositionKm?: number;
+  /** Method C time share is an estimate. A routed gap is measured. */
+  repositionConfidence?: 'measured' | 'estimated';
+  repositionNote?: string;
   refuelDetourKm?: number;
 };
 
@@ -125,7 +128,12 @@ export function buildEvidenceLadder(input: EvidenceLadderInput): EvidenceLadderR
           : undefined,
     },
     { category: 'commute', km: round2(commuteOut), confidence: input.homeMissing ? 'none' : 'measured' },
-    { category: 'reposition', km: round2(repositionOut), confidence: 'measured' },
+    {
+      category: 'reposition',
+      km: round2(repositionOut),
+      confidence: repositionOut > 0 ? (input.repositionConfidence || 'estimated') : 'none',
+      note: input.repositionNote,
+    },
     { category: 'refuel', km: round2(refuelOut), confidence: refuelOut > 0 ? 'measured' : 'none' },
     { category: 'personal', km: round2(personalOut), confidence: personalOut > 0 ? 'measured' : 'none' },
     { category: 'unattributed', km: round2(unattributed), confidence: unattributed > 0 ? 'none' : 'measured' },

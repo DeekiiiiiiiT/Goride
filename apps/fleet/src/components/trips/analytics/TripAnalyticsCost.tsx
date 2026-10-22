@@ -39,7 +39,7 @@ export function TripAnalyticsCost({
       <p className="mt-1 text-sm text-slate-500">Fuel cost per kilometre from the fuel log, times this period’s trip kilometres, plus the platform fee. This is a reading, not a new cost model.</p>
       <p className="mt-3 text-2xl font-bold">{missing || estimate == null ? '—' : formatJMD(estimate, 2)}</p>
       <p className="text-sm text-slate-500">
-        {fuel.isLoading ? 'Reading the fuel log…' : costPerKm == null ? 'Fuel cost per km is not available for this period.' : `${formatJMD(costPerKm, 2)} per km · ${km == null ? '—' : `${km.toFixed(0)} km`}`}
+        {fuel.isLoading ? 'Reading the fuel log…' : costPerKm == null ? 'Fuel cost per km is not available for this period.' : `${formatJMD(costPerKm, 2)} per km · ${km == null ? '—' : `${km.toLocaleString('en-JM', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} km`}`}
       </p>
     </section>
   );

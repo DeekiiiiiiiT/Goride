@@ -45,6 +45,27 @@ export type EnrichedVehicleSnap = {
   report?: WeeklyFuelReport;
 };
 
+export function homeDriverLinks(
+  snaps: EnrichedVehicleSnap[],
+  vehicles: Vehicle[],
+  drivers: FuelWizardDriver[],
+  kind: 'missing' | 'street',
+): { id: string; name: string }[] {
+  const seen = new Set<string>();
+  const links: { id: string; name: string }[] = [];
+  for (const snap of snaps) {
+    const id = String(snap.report?.driverId || '');
+    if (!id || seen.has(id)) continue;
+    const meta = snap.report?.metadata as { homeMissing?: boolean; homePinSource?: string } | undefined;
+    const match = kind === 'missing' ? Boolean(meta?.homeMissing) : meta?.homePinSource === 'address';
+    if (!match) continue;
+    seen.add(id);
+    const vehicle = vehicles.find((row) => row.id === snap.vehicleId);
+    links.push({ id, name: resolveDriverDisplayName(snap.report, vehicle, drivers) });
+  }
+  return links;
+}
+
 export function resolveDriverDisplayName(
   report: WeeklyFuelReport | undefined,
   vehicle: Vehicle | undefined,

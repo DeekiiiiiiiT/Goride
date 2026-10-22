@@ -165,4 +165,37 @@ describe('periodPersistBody', () => {
     });
     expect((meta.financeCore as { cashSourceAck?: unknown }).cashSourceAck).toEqual(ack);
   });
+
+  it('keeps the driver leftover share across a cash rebuild that does not recompute it', () => {
+    const settled = computePeriodSettlement({
+      driverShare: 0,
+      fuelDeduction: 0,
+      baseCashOwed: 0,
+      baseCashPaid: 0,
+      tollCashWash: 0,
+      tollPersonal: 0,
+    });
+    const meta = buildPeriodMetadata({
+      priorMeta: { financeCore: { fuelLeftoverDriverShare: 320 } },
+      prevSettlementPaid: 0,
+      settled,
+      derived: {
+        settlementStatus: 'open',
+        payoutStatus: 'open',
+        periodStatus: 'open',
+        cashStillHeld: 0,
+        tollsClear: true,
+        moneyUnlocked: true,
+      },
+      financeCore: {
+        overpaidAmount: 0,
+        tollCashWashEligible: 0,
+        tollsClear: true,
+        moneyUnlocked: true,
+        cashHeldClamped: false,
+        unclampedCashHeld: 0,
+      },
+    });
+    expect((meta.financeCore as { fuelLeftoverDriverShare?: number }).fuelLeftoverDriverShare).toBe(320);
+  });
 });

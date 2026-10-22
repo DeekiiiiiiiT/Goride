@@ -327,6 +327,9 @@ const TRIP_DRIVER_COLUMNS = [
   "startTime:payload_json->startTime",
   "pickupTime:payload_json->pickupTime",
   "tollRefundResolution:payload_json->tollRefundResolution",
+  // Typed `date` is the UTC calendar day. Week cash uses Jamaica time, so a
+  // Sunday evening trip must keep its real clock or it lands on Monday.
+  "payloadDate:payload_json->date",
 ].join(",");
 
 const TX_DRIVER_COLUMNS = [
@@ -383,6 +386,10 @@ export async function loadTollLedgerWithTripsForDrivers(
         order: { col: "date", ascending: true },
         columns: TRIP_DRIVER_COLUMNS,
       })) {
+        const instant = (row as { payloadDate?: unknown }).payloadDate;
+        if (typeof instant === "string" && instant.includes("T")) {
+          (row as { date?: string }).date = instant;
+        }
         tripRows.push(row);
       }
     })(),

@@ -7,6 +7,7 @@ import { Textarea } from "../ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 import { FuelScenario, FuelRule } from '../../types/fuel';
 import { Fuel } from 'lucide-react';
+import { LEFTOVER_BUCKETS } from '@roam/fuel-core';
 import { normalizePercentageRule } from '../../utils/fuelCoverageSplit';
 import { applyPolicyTemplateSave } from '../../utils/fuelPolicyVersion';
 import { toast } from 'sonner';
@@ -39,6 +40,9 @@ export function validateFuelRule(rule: FuelRule): string | null {
                 return `${label} must be a number between 0 and 100.`;
             }
         }
+    }
+    if (rule.leftoverSplit?.appliesTo && rule.leftoverSplit.appliesTo.length === 0) {
+        return 'Choose at least one kind of leftover fuel.';
     }
     if (rule.conditions?.maxAmount !== undefined && (!Number.isFinite(rule.conditions.maxAmount) || rule.conditions.maxAmount <= 0)) {
         return 'Max amount cap must be a positive number.';
@@ -76,7 +80,6 @@ const DEFAULT_RULE = (): FuelRule => ({
     companyUsageCoverage: 100,
     deadheadCoverage: 50,
     personalCoverage: 0, // 0% company = driver pays 100% of Personal overage (after PA)
-    miscCoverage: 50,
     commuteCoverage: 100,
     leftoverSplit: {
         mode: 'company',
@@ -310,6 +313,32 @@ export function ScenarioEditor({
                                         <SelectItem value="fixed">Driver pays a fixed amount</SelectItem>
                                     </SelectContent>
                                 </Select>
+                                <div className="space-y-2">
+                                    {LEFTOVER_BUCKETS.map((bucket) => {
+                                        const selected = (fuelRule.leftoverSplit?.appliesTo || LEFTOVER_BUCKETS.map((item) => item.id)).includes(bucket.id);
+                                        return (
+                                            <label key={bucket.id} className="flex min-h-11 items-center gap-2 text-sm text-slate-700">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={selected}
+                                                    onChange={() => {
+                                                        const current = fuelRule.leftoverSplit?.appliesTo || LEFTOVER_BUCKETS.map((item) => item.id);
+                                                        const next = selected
+                                                            ? current.filter((id) => id !== bucket.id)
+                                                            : [...current, bucket.id];
+                                                        updateFuelRule('leftoverSplit', {
+                                                            mode: fuelRule.leftoverSplit?.mode || 'company',
+                                                            driverPercent: fuelRule.leftoverSplit?.driverPercent ?? 0,
+                                                            driverFixedAmount: fuelRule.leftoverSplit?.driverFixedAmount ?? 0,
+                                                            appliesTo: next,
+                                                        });
+                                                    }}
+                                                />
+                                                {bucket.label}
+                                            </label>
+                                        );
+                                    })}
+                                </div>
                                 {fuelRule.leftoverSplit?.mode === 'percentage' && (
                                     <Input
                                         type="number"
@@ -339,7 +368,7 @@ export function ScenarioEditor({
                                 )}
                                 <p className="text-xs text-slate-500">
                                     Example on 1,000: 0% bills 0, 50% bills 500, 100% bills 1,000.
-                                    A fixed 1,500 on a 1,000 bucket bills 1,000.
+                                    A fixed 300 across three buckets stays 300.
                                 </p>
                             </div>
                         </div>

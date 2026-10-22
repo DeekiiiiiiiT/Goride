@@ -307,6 +307,8 @@ export { calculateOdometerBuckets as calculateOdometerBucketsEngine } from './od
 } from './stopToStopGapCharge.ts';
 
 export { getTotalTripRideshareKm, sumTripRideshareKm } from './tripRideshareKm.ts';
+
+export { LEFTOVER_BUCKETS, type LeftoverBucket } from './leftoverSplit.ts';
 export { getTripGrossRevenue } from './tripGrossRevenue.ts';
 
 export {

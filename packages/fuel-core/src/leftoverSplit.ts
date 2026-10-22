@@ -8,7 +8,7 @@ export type LeftoverBucket = 'variance' | 'unattributedKm' | 'noOdometerFills';
 export type LeftoverSplit = {
   mode: 'company' | 'percentage' | 'fixed';
   driverPercent?: number;
-  /** JMD per driver per week, capped at the bucket. */
+  /** JMD per driver per week, capped once across every bucket. */
   driverFixedAmount?: number;
   appliesTo: LeftoverBucket[];
 };
@@ -41,11 +41,20 @@ function round2(n: number): number {
   return Math.round(n * 100) / 100;
 }
 
-function driverOnBucket(amount: number, split: LeftoverSplit): number {
+export const LEFTOVER_BUCKETS: { id: LeftoverBucket; label: string }[] = [
+  { id: 'variance', label: 'Fuel that doesn’t match the car’s usual economy' },
+  { id: 'unattributedKm', label: 'Kilometres we couldn’t explain' },
+  { id: 'noOdometerFills', label: 'Fills logged without an odometer' },
+];
+
+function driverOnBucket(amount: number, split: LeftoverSplit, fixedLeft: number): { driver: number; fixedLeft: number } {
   const bucket = Math.max(0, amount);
-  if (split.mode === 'company' || !(bucket > 0)) return 0;
-  if (split.mode === 'percentage') return round2(bucket * ((split.driverPercent || 0) / 100));
-  return round2(Math.min(bucket, split.driverFixedAmount || 0));
+  if (split.mode === 'company' || !(bucket > 0)) return { driver: 0, fixedLeft };
+  if (split.mode === 'percentage') {
+    return { driver: round2(bucket * ((split.driverPercent || 0) / 100)), fixedLeft };
+  }
+  const driver = round2(Math.min(bucket, Math.max(0, fixedLeft)));
+  return { driver, fixedLeft: round2(fixedLeft - driver) };
 }
 
 export type LeftoverSplitResult = {
@@ -79,16 +88,20 @@ export function splitLeftoverFuel(args: {
 
   let driver = 0;
   let company = 0;
+  let fixedLeft = split.mode === 'fixed' ? Math.max(0, split.driverFixedAmount || 0) : 0;
   for (const key of ['variance', 'unattributedKm', 'noOdometerFills'] as LeftoverBucket[]) {
     const raw = amounts[key];
     // Negative variance is a saving. Never billed.
     const billable = key === 'variance' ? Math.max(0, raw) : raw;
     const companyHeld = key === 'variance' && raw < 0 ? raw : billable;
     const applies = split.appliesTo.includes(key);
-    const d = args.blockDriver || !applies ? 0 : driverOnBucket(billable, split);
-    byBucket[key] = { driver: d, company: round2(companyHeld - d) };
-    driver = round2(driver + d);
-    company = round2(company + (companyHeld - d));
+    const share = args.blockDriver || !applies
+      ? { driver: 0, fixedLeft }
+      : driverOnBucket(billable, split, fixedLeft);
+    fixedLeft = share.fixedLeft;
+    byBucket[key] = { driver: share.driver, company: round2(companyHeld - share.driver) };
+    driver = round2(driver + share.driver);
+    company = round2(company + (companyHeld - share.driver));
   }
   return {
     driver,

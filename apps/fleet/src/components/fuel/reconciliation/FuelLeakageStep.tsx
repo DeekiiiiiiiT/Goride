@@ -19,8 +19,11 @@ import { FUEL_SPEND_EPS } from '../../../utils/fuelMoneyEpsilon';
 import {
   FUEL_RESIDUAL_DISPOSITIONS,
   isOverExplainedFuelWeek,
+  LEFTOVER_BUCKETS,
   type FuelResidualDisposition,
+  type LeftoverBucket,
 } from '@roam/fuel-core';
+import { pathForDriverDetail } from '../../../navigation/pageRegistry';
 import type { FuelEntry, MileageAdjustment } from '../../../types/fuel';
 import type { Trip } from '../../../types/data';
 import type { Vehicle } from '../../../types/vehicle';
@@ -38,6 +41,11 @@ export type FuelLeakageStepProps = {
     report?: {
       actualFuelLiters?: number;
       efficiency?: number;
+      referenceKmPerLiter?: number | null;
+      referenceDegraded?: boolean;
+      referenceReason?: string;
+      clockAssumed?: boolean;
+      kmSources?: Array<{ category?: string; km?: number; confidence?: string; note?: string }>;
     };
   }>;
   leakageDisposition: FuelResidualDisposition | '';
@@ -76,11 +84,16 @@ export type FuelLeakageStepProps = {
   onAckUnattributed?: () => void;
   /** Commute cannot be measured until a home pin exists. */
   homeMissing?: boolean;
+  /** Drivers whose commute is still unexplained. */
+  homeDrivers?: { id: string; name: string }[];
+  /** Commute is using the street address, not a confirmed home. */
+  streetHomeDrivers?: { id: string; name: string }[];
   periodId?: string;
   onSaveLeftoverOverride?: (override: {
     mode: 'company' | 'percentage' | 'fixed';
     driverPercent: number;
     driverFixedAmount: number;
+    appliesTo: LeftoverBucket[];
     note: string;
   }) => Promise<void>;
 };
@@ -123,14 +136,29 @@ export function FuelLeakageStep(props: FuelLeakageStepProps) {
     onUnattributedNoteChange,
     onAckUnattributed,
     homeMissing = false,
+    homeDrivers = [],
+    streetHomeDrivers = [],
     periodId,
     onSaveLeftoverOverride,
   } = props;
   const [leftoverMode, setLeftoverMode] = useState<'company' | 'percentage' | 'fixed'>('company');
   const [leftoverPercent, setLeftoverPercent] = useState(0);
   const [leftoverFixed, setLeftoverFixed] = useState(0);
+  const [leftoverBuckets, setLeftoverBuckets] = useState<LeftoverBucket[]>(
+    LEFTOVER_BUCKETS.map((bucket) => bucket.id),
+  );
   const [leftoverNote, setLeftoverNote] = useState('');
   const [savingLeftover, setSavingLeftover] = useState(false);
+  const referenceNumbers = vehicleSnaps
+    .map((snap) => Number(snap.report?.referenceKmPerLiter))
+    .filter((value) => value > 0);
+  const referenceOutOfBand = vehicleSnaps.some((snap) => snap.report?.referenceReason === 'reference_out_of_band');
+  const referenceTooThin = vehicleSnaps.some((snap) =>
+    snap.report?.referenceDegraded && snap.report?.referenceReason !== 'reference_out_of_band',
+  );
+  const clockAssumed = vehicleSnaps.some((snap) => snap.report?.clockAssumed);
+  const sourceNotes = vehicleSnaps.flatMap((snap) => snap.report?.kmSources || [])
+    .filter((source) => (source.category === 'reposition' || source.category === 'commute') && source.note);
 
   const overExplained = isOverExplainedFuelWeek(totalSpend, leakage);
   const moneyResidualActive = Math.abs(leakage) > FUEL_SPEND_EPS;
@@ -139,9 +167,67 @@ export function FuelLeakageStep(props: FuelLeakageStepProps) {
 
   return (
     <div className="space-y-3">
+      {referenceNumbers.length > 0 && (
+        <p className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-800">
+          Usual economy for this car: {referenceNumbers.map((value) => value.toFixed(1)).join(', ')} km/L.
+        </p>
+      )}
+      {referenceOutOfBand && (
+        <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+          This car’s usual economy came out impossible, so the driver was not charged for unexplained fuel.
+        </p>
+      )}
+      {referenceTooThin && (
+        <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+          There isn’t enough earlier fuel history to know this car’s usual economy, so the driver was not charged for unexplained fuel.
+        </p>
+      )}
+      {clockAssumed && (
+        <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+          A fill has no time. We treated it as the end of that day. Add a time or link the gas card.
+        </p>
+      )}
+      {sourceNotes.length > 0 && (
+        <ul className="space-y-1 text-sm text-slate-600">
+          {sourceNotes.map((source, index) => (
+            <li key={`${source.category}-${index}`}>
+              {source.category === 'commute' ? 'Commute' : 'Reposition'}: {source.note}.
+            </li>
+          ))}
+        </ul>
+      )}
       {homeMissing && (
         <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
           Home is not set. Commute stays unexplained until you pin a home on the driver profile.
+          {homeDrivers.length > 0 && (
+            <span className="mt-1 flex flex-wrap gap-x-3 gap-y-1">
+              {homeDrivers.map((driver) => (
+                <a
+                  key={driver.id}
+                  className="inline-flex min-h-11 items-center font-medium underline"
+                  href={pathForDriverDetail(driver.id, 'profile')}
+                >
+                  {driver.name}
+                </a>
+              ))}
+            </span>
+          )}
+        </p>
+      )}
+      {streetHomeDrivers.length > 0 && (
+        <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+          Commute is using the street address on file, not a confirmed home.
+          <span className="mt-1 flex flex-wrap gap-x-3 gap-y-1">
+            {streetHomeDrivers.map((driver) => (
+              <a
+                key={driver.id}
+                className="inline-flex min-h-11 items-center font-medium underline"
+                href={pathForDriverDetail(driver.id, 'profile')}
+              >
+                {driver.name}
+              </a>
+            ))}
+          </span>
         </p>
       )}
       {periodId && onSaveLeftoverOverride && !periodLocked && (
@@ -159,6 +245,24 @@ export function FuelLeakageStep(props: FuelLeakageStepProps) {
             <option value="percentage">Driver pays a percent</option>
             <option value="fixed">Driver pays a fixed amount</option>
           </select>
+          <div className="space-y-1">
+            {LEFTOVER_BUCKETS.map((bucket) => (
+              <label key={bucket.id} className="flex min-h-11 items-center gap-2 text-sm text-slate-700">
+                <input
+                  type="checkbox"
+                  checked={leftoverBuckets.includes(bucket.id)}
+                  onChange={() => {
+                    setLeftoverBuckets((current) =>
+                      current.includes(bucket.id)
+                        ? current.filter((id) => id !== bucket.id)
+                        : [...current, bucket.id],
+                    );
+                  }}
+                />
+                {bucket.label}
+              </label>
+            ))}
+          </div>
           {leftoverMode === 'percentage' && (
             <input
               type="number"
@@ -186,13 +290,14 @@ export function FuelLeakageStep(props: FuelLeakageStepProps) {
           />
           <Button
             type="button"
-            disabled={savingLeftover || leftoverNote.trim().length < 8}
+            disabled={savingLeftover || leftoverNote.trim().length < 8 || leftoverBuckets.length === 0}
             onClick={() => {
               setSavingLeftover(true);
               void onSaveLeftoverOverride({
                 mode: leftoverMode,
                 driverPercent: leftoverPercent,
                 driverFixedAmount: leftoverFixed,
+                appliesTo: leftoverBuckets,
                 note: leftoverNote.trim(),
               })
                 .catch(() => {})

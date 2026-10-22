@@ -10,7 +10,7 @@ import {
 import { FuelDataQualityStep } from './FuelDataQualityStep';
 import { FuelExceptionBlockersPanel } from './FuelExceptionBlockersPanel';
 import { FuelUnapprovedTxBlockersPanel } from './FuelUnapprovedTxBlockersPanel';
-import { type FuelWizardDriver } from './buildFuelWizardRows';
+import { homeDriverLinks, type FuelWizardDriver } from './buildFuelWizardRows';
 import { useFuelWizardDerived } from './useFuelWizardDerived';
 import { type FuelExceptionBlocker } from '../../../utils/fuelFinalizeGating';
 import {
@@ -1406,6 +1406,8 @@ function FuelPeriodWizardInner({
               <FuelLeakageStep
                 leakage={strip.leakage}
                 homeMissing={vehicleSnaps.some((snap) => Boolean(snap.report?.metadata?.homeMissing))}
+                homeDrivers={homeDriverLinks(vehicleSnaps, vehicles, drivers, 'missing')}
+                streetHomeDrivers={homeDriverLinks(vehicleSnaps, vehicles, drivers, 'street')}
                 periodId={period.id}
                 onSaveLeftoverOverride={async (override) => {
                   await api.reviewFuelPeriodLeftoverOverride({
@@ -1420,15 +1422,25 @@ function FuelPeriodWizardInner({
                   const calc = snap.report?.metadata?.rideShareCalc as
                     | { totalLitersInPeriod?: number; observedEfficiency?: number }
                     | undefined;
+                  const meta = snap.report?.metadata as {
+                    referenceKmPerLiter?: number | null;
+                    referenceDegraded?: boolean;
+                    referenceReason?: string;
+                    clockAssumed?: boolean;
+                    kmSources?: Array<{ category?: string; km?: number; confidence?: string; note?: string }>;
+                  } | undefined;
                   return {
                     vehicleId: snap.vehicleId,
                     misc: snap.misc,
-                    report: calc
-                      ? {
-                          actualFuelLiters: calc.totalLitersInPeriod,
-                          efficiency: calc.observedEfficiency,
-                        }
-                      : undefined,
+                    report: {
+                      actualFuelLiters: calc?.totalLitersInPeriod,
+                      efficiency: calc?.observedEfficiency,
+                      referenceKmPerLiter: meta?.referenceKmPerLiter,
+                      referenceDegraded: meta?.referenceDegraded,
+                      referenceReason: meta?.referenceReason,
+                      clockAssumed: meta?.clockAssumed,
+                      kmSources: meta?.kmSources,
+                    },
                   };
                 })}
                 weekStart={period.startDate}

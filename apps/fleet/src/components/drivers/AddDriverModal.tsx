@@ -235,6 +235,10 @@ export function AddDriverModal({
       toast.error('Address is required');
       return;
     }
+    if (!v.homeAddress || v.homeLat === '' || v.homeLng === '') {
+      toast.error('Pick a home from the search results');
+      return;
+    }
     if (!v.proofType || !proofFile) {
       toast.error('Proof of Address is required');
       return;
@@ -262,6 +266,10 @@ export function AddDriverModal({
         email: v.email || '',
         status: v.status,
         address: v.address,
+        homeAddress: v.homeAddress,
+        homeLat: v.homeLat,
+        homeLng: v.homeLng,
+        homePinSource: 'home',
         licenseFrontUrl,
         licenseBackUrl,
         licenseUrl: licenseFrontUrl,

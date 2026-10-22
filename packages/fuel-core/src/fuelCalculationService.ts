@@ -60,10 +60,10 @@ import {
 } from './fuelCoverageSplit.ts';
 import { floorMiscForSplit } from './fuelFinalizeGate.ts';
 import { deriveWindowMoneyFromEntries } from './deriveWindowMoneyFromEntries.ts';
-import { resolveFillChainSpan, tripBelongsToFillSpan } from './fillChain.ts';
+import { applyFillClocks, resolveFillAt, resolveFillChainSpan, tripBelongsToFillSpan } from './fillChain.ts';
 import { splitLeftoverFuel, normalizeLeftoverSplit, type LeftoverSplit } from './leftoverSplit.ts';
 import { FUEL_ENGINE_VERSION } from './fuelEngine.ts';
-import { addDaysYmd } from './fleetTime.ts';
+import { addDaysYmd, fleetCalendarDay } from './fleetTime.ts';
 
 export {
   FALLBACK_EFFICIENCY_KM_L,
@@ -119,6 +119,9 @@ export interface VehicleDeadheadInput {
     priorAt?: string;
     referenceKmPerLiter?: number | null;
     referenceDegraded?: boolean;
+    referenceReason?: string;
+    /** Prior fill had no clock, so the span starts at the end of that day. */
+    priorClockAssumed?: boolean;
 }
 
 /** Brain category km injected into recon when FLEET_USE_FUEL_BRAIN=1 */
@@ -135,6 +138,8 @@ export interface FuelBrainClassificationInput {
     method?: string;
     onlinePositioningPct?: number | null;
     homeMissing?: boolean;
+    /** home = confirmed home. address = street address standing in until a home is picked. */
+    homePinSource?: 'home' | 'address';
     kmSources?: unknown;
 }
 
@@ -261,6 +266,7 @@ export const FuelCalculationService = {
             priorFill?: { odometer: number; at?: string };
             referenceKmPerLiter?: number | null;
             referenceDegraded?: boolean;
+            referenceReason?: string;
             leftoverOverride?: LeftoverSplit;
             degradedInputs?: boolean;
         }
@@ -291,7 +297,11 @@ export const FuelCalculationService = {
         // Phase 3: Calculate Pending Count
         const pendingCount = vehicleEntries.filter(e => e.reconciliationStatus === 'Pending').length;
 
-        const tripLookbackStart = addDaysYmd(startStr, -1);
+        const priorAtHint = options?.priorFill?.at ?? deadheadData?.priorAt;
+        const priorDay = priorAtHint ? fleetCalendarDay(priorAtHint) : '';
+        const tripLookbackStart = priorDay
+            ? addDaysYmd(priorDay, -1)
+            : addDaysYmd(startStr, -1);
         let vehicleTrips = trips.filter(t => 
             t.vehicleId === vehicle.id && 
             isEntryInInclusiveYmdRange(t.date, tripLookbackStart, endStr) &&
@@ -339,10 +349,14 @@ export const FuelCalculationService = {
             observedEfficiency = weekOdoSpan / efficiencyFuel;
         }
 
-        const priorFill = options?.priorFill
+        const priorRaw = options?.priorFill
             ?? (deadheadData?.priorOdometer
                 ? { odometer: deadheadData.priorOdometer, at: deadheadData.priorAt }
                 : null);
+        const priorClock = priorRaw?.at ? resolveFillAt({ date: priorRaw.at }) : null;
+        const priorFill = priorRaw
+            ? { odometer: priorRaw.odometer, at: priorClock?.at || priorRaw.at }
+            : null;
         const chain = resolveFillChainSpan({
             weekStartOdometer: Number(entriesWithOdo[0]?.odometer) || 0,
             weekEndOdometer: Number(entriesWithOdo[entriesWithOdo.length - 1]?.odometer) || 0,
@@ -351,7 +365,13 @@ export const FuelCalculationService = {
         if (chain.useChain && totalLiters > 0 && chain.spanKm > 0) {
             observedEfficiency = chain.spanKm / totalLiters;
         }
-        const lastFillAt = String(entriesWithOdo[entriesWithOdo.length - 1]?.date || '');
+        const clocked = applyFillClocks(vehicleEntries);
+        const clockById = new Map(clocked.map((entry) => [entry.id, entry]));
+        const lastRaw = entriesWithOdo[entriesWithOdo.length - 1];
+        const lastFillAt = String((lastRaw && clockById.get(lastRaw.id)?.date) || lastRaw?.date || '');
+        const clockAssumed = clocked.some((entry) => entry.metadata?.clockAssumedEndOfDay)
+            || !!deadheadData?.priorClockAssumed
+            || !!priorClock?.assumedEndOfDay;
         if (chain.useChain && priorFill?.at && lastFillAt) {
             vehicleTrips = trips.filter((t) =>
                 t.vehicleId === vehicle.id &&
@@ -431,6 +451,7 @@ export const FuelCalculationService = {
         let refuelKm = 0;
         let onlinePositioningPct: number | null = null;
         let homeMissing = false;
+        let homePinSource: 'home' | 'address' | undefined = undefined;
         let kmSources: unknown;
         const useBrain =
             !options?.forceLegacyResidual &&
@@ -446,6 +467,7 @@ export const FuelCalculationService = {
             refuelKm = Math.max(0, brain.refuelDetourKm || 0);
             onlinePositioningPct = brain.onlinePositioningPct ?? null;
             homeMissing = !!brain.homeMissing;
+            homePinSource = brain.homePinSource;
             kmSources = brain.kmSources;
             const online = Math.max(0, brain.rideShareKm || 0);
             pricedPurpose.tripKm = online > 0 ? online : pricedPurpose.tripKm;
@@ -486,6 +508,7 @@ export const FuelCalculationService = {
         const referenceKmPerLiter = options?.referenceKmPerLiter
             ?? deadheadData?.referenceKmPerLiter
             ?? null;
+        const referenceReason = options?.referenceReason ?? deadheadData?.referenceReason;
         const referenceDegraded = chain.useChain
             ? (options?.referenceDegraded
                 ?? deadheadData?.referenceDegraded
@@ -546,7 +569,7 @@ export const FuelCalculationService = {
             const priorBonus = paCtx.bonusByDriverId?.get(driverIdForBonus) ?? 0;
             allowanceSplit = computePersonalAllowanceSplit({
                 measuredKm: personalDistance,
-                efficiencyKmPerL: observedEfficiency,
+                efficiencyKmPerL: effForPrice,
                 pricePerLiter: actualPricePerLiter,
                 earningsJmd,
                 config: paCtx.config,
@@ -796,8 +819,11 @@ export const FuelCalculationService = {
                 spanKm: chain.spanKm,
                 referenceKmPerLiter: referenceKmPerLiter,
                 referenceDegraded,
+                referenceReason,
+                clockAssumed,
                 onlinePositioningPct,
                 homeMissing,
+                homePinSource,
                 kmSources,
                 leftoverSplit: leftover
                     ? {
@@ -816,6 +842,7 @@ export const FuelCalculationService = {
                     observedEfficiency: Number(observedEfficiency.toFixed(2)),
                     actualPricePerLiter: Number(actualPricePerLiter.toFixed(3)),
                     efficiencySource,
+                    pricingKmPerLiter: Number(effForPrice.toFixed(4)),
                     priceSource,
                     priceUnavailable,
                     totalLitersInPeriod: Number(totalLiters.toFixed(2)),
@@ -863,7 +890,11 @@ export const FuelCalculationService = {
           resolved && 'quotaConfig' in resolved ? resolved.quotaConfig : paCtx.quotaConfig;
         if (!config?.enabled) return report;
         const calc = report.metadata?.rideShareCalc || {};
-        const efficiency = Number(calc.observedEfficiency) > 0 ? Number(calc.observedEfficiency) : FALLBACK_EFFICIENCY_KM_L;
+        const efficiency = Number(calc.pricingKmPerLiter) > 0
+            ? Number(calc.pricingKmPerLiter)
+            : Number(calc.observedEfficiency) > 0
+              ? Number(calc.observedEfficiency)
+              : FALLBACK_EFFICIENCY_KM_L;
         const price = Number(calc.actualPricePerLiter) > 0 ? Number(calc.actualPricePerLiter) : 0;
         const ledgerGross = paCtx.ledgerGrossByDriverId?.get(report.driverId);
         const earningsJmd =

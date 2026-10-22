@@ -92,5 +92,78 @@ describe('who pays', () => {
       split: { mode: 'percentage', driverPercent: 100, appliesTo: ['variance', 'unattributedKm', 'noOdometerFills'] },
       blockDriver: true,
     }).driver).toBe(0);
+    expect(splitLeftoverFuel({
+      variance: 200,
+      unattributedKmCost: 200,
+      noOdometerFillCost: 200,
+      split: { mode: 'fixed', driverFixedAmount: 300, appliesTo: ['variance', 'unattributedKm', 'noOdometerFills'] },
+    }).driver).toBe(300);
+  });
+
+  it('prices a logged personal trip with the reference economy, and company plus driver equals the fuel bought', () => {
+    const vehicle = {
+      id: 'v1',
+      licensePlate: '5179KZ',
+      currentDriverId: 'd1',
+      fuelSettings: { efficiencyCity: 10, tankCapacity: 36 },
+    } as Vehicle;
+    const entries: FuelEntry[] = [
+      {
+        id: 'prior',
+        vehicleId: 'v1',
+        driverId: 'd1',
+        date: '2026-10-04T07:07:00',
+        amount: 5000,
+        liters: 22,
+        odometer: 1000,
+        type: 'Fuel_Manual_Entry',
+        paymentSource: 'Personal',
+      } as FuelEntry,
+      {
+        id: 'inweek',
+        vehicleId: 'v1',
+        driverId: 'd1',
+        date: '2026-10-06T08:00:00',
+        amount: 9000,
+        liters: 40,
+        odometer: 1200,
+        type: 'Fuel_Manual_Entry',
+        paymentSource: 'Personal',
+      } as FuelEntry,
+    ];
+    const report = FuelCalculationService.calculateReconciliation(
+      vehicle,
+      new Date(2026, 9, 5),
+      new Date(2026, 9, 11),
+      [],
+      entries,
+      [{
+        id: 'adj',
+        date: '2026-10-05',
+        vehicleId: 'v1',
+        driverId: 'd1',
+        type: 'Personal',
+        distance: 20,
+        reason: 'Logged personal trip',
+      }],
+      [],
+      undefined,
+      {
+        priorFill: { odometer: 1000, at: '2026-10-04T07:07:00' },
+        referenceKmPerLiter: 10,
+        referenceDegraded: false,
+        personalAllowance: {
+          config: {
+            enabled: true,
+            weeklyQuotaOverrideJmd: 100000,
+            nextWeekBonusKm: 0,
+            bands: [{ minPctInclusive: 0, maxPctExclusive: null, earnedKm: 10 }],
+          },
+        },
+      },
+    );
+    const allowance = report.metadata?.personalAllowance as { earnedCost?: number; overageCost?: number } | undefined;
+    expect((allowance?.earnedCost || 0) + (allowance?.overageCost || 0)).toBeCloseTo(report.personalUsageCost, 1);
+    expect(report.companyShare + report.driverShare).toBeCloseTo(report.totalGasCardCost, 0);
   });
 });

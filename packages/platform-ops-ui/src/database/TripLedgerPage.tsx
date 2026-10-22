@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { FileText, RefreshCw } from 'lucide-react';
 import { Trip } from '@roam/types';
 import { api, TripFilterParams } from '../services/ledgerApi';
-import { TripLedgerTable, ALL_COLUMNS, DEFAULT_VISIBLE_KEYS } from './trip-ledger/TripLedgerTable';
+import { TripLedgerTable, ALL_COLUMNS, DEFAULT_VISIBLE_KEYS, type TripLedgerRowActions } from './trip-ledger/TripLedgerTable';
 import { TripLedgerColumnToggle } from './trip-ledger/TripLedgerColumnToggle';
 import { TripLedgerFilterBar, TripLedgerFilters, EMPTY_FILTERS } from './trip-ledger/TripLedgerFilterBar';
 import { TripLedgerStats } from './trip-ledger/TripLedgerStats';
@@ -79,9 +79,11 @@ interface TripLedgerPageProps {
   columnConfig?: ColumnConfig[];
   /** Extra controls beside export, such as Log Manual Trip. */
   headerActions?: React.ReactNode;
+  /** Shown only for trips logged in the app, and only when the caller can edit transactions. */
+  rowActions?: TripLedgerRowActions;
 }
 
-export function TripLedgerPage({ organizationId, columnConfig, headerActions }: TripLedgerPageProps = {}) {
+export function TripLedgerPage({ organizationId, columnConfig, headerActions, rowActions }: TripLedgerPageProps = {}) {
   const { scope } = useServiceLineScope();
   const { period, setPeriod } = useLedgerPeriod();
   const [page, setPage] = useState(0);
@@ -373,6 +375,7 @@ export function TripLedgerPage({ organizationId, columnConfig, headerActions }: 
           setPage(0);
           setKeysetCursor(null);
         }}
+        rowActions={rowActions}
       />
     </div>
   );

@@ -6,6 +6,8 @@ import * as kv from "./kv_store.tsx";
 import { fromKvStore } from "./fleet_sql_bridge.ts";
 import * as fuelLogic from "./fuel_logic.ts";
 import { referenceEfficiencyFromFills } from "../../../packages/fuel-core/src/referenceEfficiency.ts";
+import { referenceFillsFromEntries } from "../../../packages/fuel-core/src/referenceFills.ts";
+import type { FuelEntry } from "../../../packages/fuel-core/src/fuelTypes.ts";
 import {
   evaluateCycleClose,
   resolveCycleCloseMode,
@@ -291,12 +293,19 @@ export async function stampEntryCycleMetadata(
     String(entry.date || ""),
   );
   const reference = referenceEfficiencyFromFills(
-    (cycleEntries as Array<Record<string, unknown>>).map((row) => ({
-      date: String(row.date || ""),
-      odometer: Number(row.odometer) || 0,
-      liters: Number(row.liters) || 0,
-      fullTank: Boolean((row.metadata as { isFullTank?: boolean } | undefined)?.isFullTank),
-    })),
+    referenceFillsFromEntries(
+      (cycleEntries as Array<Record<string, unknown>>).map((row) => ({
+        ...(row as unknown as FuelEntry),
+        id: String(row.id || ""),
+        date: String(row.date || ""),
+        amount: Number(row.amount) || Number(row.cost) || 0,
+        liters: row.liters != null ? Number(row.liters) : undefined,
+        odometer: row.odometer != null && row.odometer !== "" ? Number(row.odometer) : undefined,
+        type: (String(row.type || "Manual_Entry") as FuelEntry["type"]),
+        vehicleId: String(row.vehicleId || row.vehicle_id || ""),
+      } as FuelEntry)),
+      { tankCapacityLiters: tankCapacity },
+    ),
     String(entry.date || "").slice(0, 10),
   );
   const effectiveBaseline = reference.kmPerLiter || rollingAvg?.avgKmPerLiter || 0;

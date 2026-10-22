@@ -331,20 +331,10 @@ export function FuelBrainPage() {
                     }
                   />
                 </div>
-                <div>
-                  <Label>Ambiguous → deadhead %</Label>
-                  <Input
-                    type="number"
-                    value={policy.ambiguousDeadheadSplitPct}
-                    onChange={(e) =>
-                      setPolicy({
-                        ...policy,
-                        ambiguousDeadheadSplitPct: Number(e.target.value),
-                      })
-                    }
-                  />
-                </div>
               </div>
+              <p className="text-xs text-slate-500">
+                A gap with no odometer that is too long to call reposition and too short to call personal stays unexplained. It is not split by a percentage.
+              </p>
               <Button onClick={() => void savePolicy()}>Save deadhead rules</Button>
             </>
           ) : (

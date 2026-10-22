@@ -8,6 +8,9 @@ import { getTripNetIncome } from '../../utils/tripNetIncome';
 import { isTripServerSortKey } from '../../utils/tripSortKeys';
 import { usePlatformConfig } from '../../contexts/PlatformConfigContext';
 import { useVirtualizer } from '@tanstack/react-virtual';
+import { TripLedgerDesktopMenu, TripLedgerPhoneActions, type TripLedgerRowActions } from './TripLedgerRowActions';
+
+export type { TripLedgerRowActions };
 
 // ── Formatters ──────────────────────────────────────────────────────────────
 
@@ -733,9 +736,10 @@ interface TripDetailPanelProps {
   trip: Trip;
   colSpan: number;
   columnConfig?: ColumnConfig[];
+  rowActions?: TripLedgerRowActions;
 }
 
-function TripDetailPanel({ trip, colSpan, columnConfig }: TripDetailPanelProps) {
+function TripDetailPanel({ trip, colSpan, columnConfig, rowActions }: TripDetailPanelProps) {
   /** Expanded row always lists the full extractor set; column config only overrides labels (and appends custom keys). Table column visibility stays independent. */
   const fieldsToShow = useMemo(() => {
     if (!columnConfig?.length) return DEFAULT_DETAIL_KEYS;
@@ -803,6 +807,7 @@ function TripDetailPanel({ trip, colSpan, columnConfig }: TripDetailPanelProps) 
           </div>
 
           <PaymentLinesPanel tripId={trip.id} batchId={trip.batchId} platform={trip.platform} />
+          {rowActions ? <TripLedgerPhoneActions trip={trip} actions={rowActions} /> : null}
         </div>
       </td>
     </tr>
@@ -820,9 +825,10 @@ interface DataRowProps {
   columnConfig?: ColumnConfig[];
   onToggleExpand: (id: string) => void;
   onCopyId: (id: string) => void;
+  rowActions?: TripLedgerRowActions;
 }
 
-const DataRow = React.memo(function DataRow({ trip, idx, activeCols, loading, isExpanded, columnConfig, onToggleExpand, onCopyId }: DataRowProps) {
+const DataRow = React.memo(function DataRow({ trip, idx, activeCols, loading, isExpanded, columnConfig, onToggleExpand, onCopyId, rowActions }: DataRowProps) {
   const toggle = () => onToggleExpand(trip.id);
   const onRowKeyDown = (e: React.KeyboardEvent) => {
     if (e.key !== 'Enter' && e.key !== ' ') return;
@@ -849,6 +855,7 @@ const DataRow = React.memo(function DataRow({ trip, idx, activeCols, loading, is
           if (col.key === 'id') {
             return (
               <td key={col.key} className="px-3 py-2.5 whitespace-nowrap">
+                <span className="inline-flex items-center">
                 <button
                   onClick={(e) => { e.stopPropagation(); onCopyId(trip.id); }}
                   className="inline-flex items-center gap-1 text-xs font-mono text-slate-500 dark:text-slate-400 hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors"
@@ -857,6 +864,8 @@ const DataRow = React.memo(function DataRow({ trip, idx, activeCols, loading, is
                   {col.render(trip)}
                   <Copy className="h-3 w-3 opacity-0 group-hover:opacity-100" />
                 </button>
+                {rowActions ? <TripLedgerDesktopMenu trip={trip} actions={rowActions} /> : null}
+                </span>
               </td>
             );
           }
@@ -883,7 +892,9 @@ const DataRow = React.memo(function DataRow({ trip, idx, activeCols, loading, is
           );
         })}
       </tr>
-      {isExpanded && <TripDetailPanel trip={trip} colSpan={activeCols.length} columnConfig={columnConfig} />}
+      {isExpanded && (
+        <TripDetailPanel trip={trip} colSpan={activeCols.length} columnConfig={columnConfig} rowActions={rowActions} />
+      )}
     </>
   );
 });
@@ -921,6 +932,7 @@ function TripLedgerVirtualTable({
   columnConfig,
   handleToggleExpand,
   handleCopyId,
+  rowActions,
 }: {
   activeCols: RenderColumnDef[];
   sortedTrips: Trip[];
@@ -934,6 +946,7 @@ function TripLedgerVirtualTable({
   columnConfig?: ColumnConfig[];
   handleToggleExpand: (id: string) => void;
   handleCopyId: (id: string) => void;
+  rowActions?: TripLedgerRowActions;
 }) {
   const parentRef = useRef<HTMLDivElement>(null);
   const shouldVirtualize = sortedTrips.length >= VIRTUALIZE_MIN_ROWS && !expandedId;
@@ -1015,6 +1028,7 @@ function TripLedgerVirtualTable({
             columnConfig={columnConfig}
             onToggleExpand={handleToggleExpand}
             onCopyId={handleCopyId}
+            rowActions={rowActions}
           />
         );
       })}
@@ -1036,6 +1050,7 @@ function TripLedgerVirtualTable({
         columnConfig={columnConfig}
         onToggleExpand={handleToggleExpand}
         onCopyId={handleCopyId}
+        rowActions={rowActions}
       />
     ))
   );
@@ -1090,6 +1105,8 @@ interface TripLedgerTableProps {
   serverSortKey?: string | null;
   serverSortDir?: SortDir;
   onServerSort?: (key: string | null, dir: SortDir) => void;
+  /** Edit, delete, and route for trips logged in the app. Hidden when the user cannot edit transactions. */
+  rowActions?: TripLedgerRowActions;
 }
 
 export function TripLedgerTable({
@@ -1106,6 +1123,7 @@ export function TripLedgerTable({
   serverSortKey,
   serverSortDir,
   onServerSort,
+  rowActions,
 }: TripLedgerTableProps) {
   const { defaultCurrency } = usePlatformConfig();
   setLedgerTableCurrency(defaultCurrency || 'JMD');
@@ -1207,6 +1225,7 @@ export function TripLedgerTable({
           columnConfig={columnConfig}
           handleToggleExpand={handleToggleExpand}
           handleCopyId={handleCopyId}
+          rowActions={rowActions}
         />
       </div>
 

@@ -13,7 +13,10 @@ import { listOdometerLedger } from "./odometer_ledger.ts";
 import { resolveActiveEarningsBundleForDriverWeek } from "./earnings_policy_runtime.ts";
 import { buildEvidenceLadder } from "../../../packages/fuel-core/src/evidenceLadder.ts";
 import { referenceEfficiencyFromFills } from "../../../packages/fuel-core/src/referenceEfficiency.ts";
-import { addDaysYmd } from "../../../packages/fuel-core/src/fleetTime.ts";
+import { referenceFillsFromEntries } from "../../../packages/fuel-core/src/referenceFills.ts";
+import { addDaysYmd, fleetCalendarDay } from "../../../packages/fuel-core/src/fleetTime.ts";
+import { measureOffAppKm } from "./fuel_shift_km.ts";
+import type { ShiftTrip } from "../../../packages/fuel-core/src/shiftLegs.ts";
 import { FuelCalculationService } from "../../../packages/fuel-core/src/fuelCalculationService.ts";
 import { fuelEntriesForWeekEngine } from "../../../packages/fuel-core/src/selectWeekFuelFills.ts";
 import {
@@ -59,7 +62,8 @@ function asEntry(row: Record<string, unknown>): FuelEntry {
     ...(row as unknown as FuelEntry),
     id: String(row.id || ""),
     type: String(row.type || "Manual_Entry") as FuelEntry["type"],
-    date: ymd(row.date),
+    date: String(row.date || ""),
+    time: row.time ? String(row.time) : undefined,
     amount: Number(row.amount) || Number(row.cost) || 0,
     liters: row.liters != null ? Number(row.liters) : undefined,
     odometer: row.odometer != null && row.odometer !== "" ? Number(row.odometer) : undefined,
@@ -69,6 +73,40 @@ function asEntry(row: Record<string, unknown>): FuelEntry {
     cardId: (row.cardId || row.fuelCardId || undefined) as string | undefined,
     metadata: meta,
     reconciliationStatus: String(row.reconciliationStatus || row.reconciliation_status || "Pending") as FuelEntry["reconciliationStatus"],
+  };
+}
+
+/** Read a saved pin. Week calculate never writes the driver. */
+async function pinDriverHome(
+  driver: Record<string, unknown> | undefined,
+): Promise<{ lat: number; lng: number; source: "home" | "address" } | null> {
+  if (!driver) return null;
+  const lat = Number(driver.homeLat);
+  const lng = Number(driver.homeLng);
+  if (!(lat && lng)) return null;
+  const source = driver.homePinSource === "address" ? "address" : "home";
+  return { lat, lng, source };
+}
+
+function asShiftTrip(trip: Record<string, unknown>): ShiftTrip {
+  const num = (value: unknown) => {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : undefined;
+  };
+  return {
+    id: String(trip.id || ""),
+    requestTime: trip.requestTime ? String(trip.requestTime) : undefined,
+    dropoffTime: trip.dropoffTime ? String(trip.dropoffTime) : undefined,
+    date: trip.date ? String(trip.date) : undefined,
+    startLat: num(trip.startLat),
+    startLng: num(trip.startLng),
+    endLat: num(trip.endLat),
+    endLng: num(trip.endLng),
+    pickupLocation: trip.pickupLocation ? String(trip.pickupLocation) : undefined,
+    dropoffLocation: trip.dropoffLocation ? String(trip.dropoffLocation) : undefined,
+    enrouteKm: Number(trip.normalizedEnrouteDistance) || 0,
+    openKm: Number(trip.normalizedOpenDistance) || 0,
+    unavailableKm: Number(trip.normalizedUnavailableDistance) || 0,
   };
 }
 
@@ -173,6 +211,8 @@ export async function prepareFuelWeekReports(args: {
       priorAt?: string;
       referenceKmPerLiter?: number | null;
       referenceDegraded?: boolean;
+      referenceReason?: string;
+      priorClockAssumed?: boolean;
     }>();
     for (const row of distanceRows) {
       const vehicleId = String(row.vehicle_id || "");
@@ -188,15 +228,21 @@ export async function prepareFuelWeekReports(args: {
         confidenceReason: String(source.confidenceReason || ""),
         priorOdometer: Number(source.priorOdometer) || 0,
         priorAt: String(source.priorAt || ""),
+        priorClockAssumed: Boolean(source.priorClockAssumed),
       });
     }
 
+    const priorDays = [...deadheadMap.values()]
+      .map((row) => fleetCalendarDay(String(row.priorAt || "")))
+      .filter(Boolean)
+      .sort();
+    const tripFrom = priorDays[0] ? addDaysYmd(priorDays[0], -1) : addDaysYmd(weekStart, -1);
     const [vehicles, drivers, cards, adjustments, trips, policies, scenariosRaw, prefs] = await Promise.all([
       loadDomain("vehicles", orgId),
       loadDomain("drivers", orgId),
       loadDomain("fuel_cards", orgId),
       loadDomain("fuel_adjustments", orgId),
-      loadDomain("trips", orgId, { dateFrom: addDaysYmd(weekStart, -1), dateTo: weekEnd }),
+      loadDomain("trips", orgId, { dateFrom: tripFrom, dateTo: weekEnd }),
       loadDomain("earnings_policies", orgId),
       kv.getByPrefix("fuel_scenario:"),
       loadOrgPreferences(orgId),
@@ -220,7 +266,8 @@ export async function prepareFuelWeekReports(args: {
       if (!driverId) continue;
       const vehicleId = String(vehicle.id || "");
       const driver = drivers.find((row) => String(row.id || "") === driverId);
-      const homeMissing = !(Number(driver?.homeLat) && Number(driver?.homeLng));
+      const home = await pinDriverHome(driver);
+      const homeMissing = !home;
       const vehicleTrips = trips.filter((trip) =>
         String(trip.vehicleId || "") === vehicleId &&
         (trip.status === "Completed" || trip.status === "Cancelled")
@@ -235,13 +282,34 @@ export async function prepareFuelWeekReports(args: {
         .reduce((sum, row) => sum + (Number(row.distance) || 0), 0);
       const dh = deadheadMap.get(vehicleId);
       const spanKm = Number(dh?.totalOdometerKm) || 0;
+      const routed = await measureOffAppKm({
+        home,
+        trips: vehicleTrips.map((trip) => asShiftTrip(trip)),
+      });
+      const fallbackReposition = deadheadHintKm(
+        dh as unknown as Record<string, unknown>,
+        sumTripRideshareKm(vehicleTrips as never),
+        companyOpsKm,
+      );
+      const repositionMeasured = routed.repositionMeasured && routed.repositionKm != null;
+      const repositionNote = !repositionMeasured
+        ? "Estimated from time between trips"
+        : routed.repositionAnyEstimated && routed.repositionAnySkipped
+          ? "Some gaps used a straight-line estimate and some could not be routed"
+          : routed.repositionAnyEstimated
+            ? "Some gaps used a straight-line estimate"
+            : routed.repositionAnySkipped
+              ? "Some gaps could not be routed"
+              : "Measured route between dropoff and next pickup";
       const ladder = buildEvidenceLadder({
         spanKm,
         companyOpsKm,
         evidencedPersonalKm,
-        commuteKm: 0,
+        commuteKm: routed.commuteKm,
         homeMissing,
-        repositionKm: deadheadHintKm(dh as unknown as Record<string, unknown>, sumTripRideshareKm(vehicleTrips as never), companyOpsKm),
+        repositionKm: repositionMeasured ? routed.repositionKm! : fallbackReposition,
+        repositionConfidence: repositionMeasured && !routed.repositionAnyEstimated ? "measured" : "estimated",
+        repositionNote,
         trips: vehicleTrips.map((trip) => {
           const platform = String(trip.platform || "");
           const positioningMissing = platform !== "" && platform.toLowerCase() !== "uber";
@@ -256,20 +324,22 @@ export async function prepareFuelWeekReports(args: {
           };
         }),
       });
+      const tank = Number(vehicle.specifications && (vehicle.specifications as { tankCapacity?: number }).tankCapacity)
+        || Number(vehicle.fuelSettings && (vehicle.fuelSettings as { tankCapacity?: number }).tankCapacity)
+        || 0;
       const ref = referenceEfficiencyFromFills(
-        historyRows
-          .filter((row) => String(row.vehicleId || row.vehicle_id || "") === vehicleId)
-          .map((row) => ({
-            date: String(row.date || ""),
-            odometer: Number(row.odometer) || 0,
-            liters: Number(row.liters) || 0,
-            fullTank: Boolean((row.metadata as { isFullTank?: boolean } | undefined)?.isFullTank),
-          })),
+        referenceFillsFromEntries(
+          historyRows
+            .filter((row) => String(row.vehicleId || row.vehicle_id || "") === vehicleId)
+            .map(asEntry),
+          { tankCapacityLiters: tank || null },
+        ),
         weekStart,
       );
       if (dh) {
         dh.referenceKmPerLiter = ref.kmPerLiter;
         dh.referenceDegraded = ref.degraded;
+        dh.referenceReason = ref.reason;
       }
       brain.set(`${driverId}:${vehicleId}`, {
         rideShareKm: ladder.onlineKm,
@@ -283,6 +353,7 @@ export async function prepareFuelWeekReports(args: {
         confidence: { rideShare: "high", deadhead: "medium", personal: "high" },
         onlinePositioningPct: ladder.onlinePositioningPct,
         homeMissing: ladder.homeMissing,
+        homePinSource: home?.source,
         kmSources: ladder.sources,
       });
     }

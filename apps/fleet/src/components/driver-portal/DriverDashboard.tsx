@@ -343,11 +343,14 @@ export function DriverDashboard() {
         identity.driverId,
         identity.driverName
       );
-      await api.saveTrips([trip]);
-      
-      toast.success("Trip Logged Successfully", {
-        description: `$${data.amount} on ${data.date}`
-      });
+      const saved = await api.saveTrips([trip]);
+      if (saved?.duplicatesKept) {
+        toast.message('That trip is already logged');
+      } else {
+        toast.success("Trip Logged Successfully", {
+          description: `$${data.amount} on ${data.date}`
+        });
+      }
       
       // Force refresh data
       setTimeout(() => window.location.reload(), 1000);

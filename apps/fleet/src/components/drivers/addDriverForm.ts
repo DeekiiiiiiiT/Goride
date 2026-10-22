@@ -36,6 +36,9 @@ export type AddDriverFormValues = {
   originalIssueDate: string;
   address: string;
   proofType: string;
+  homeAddress: string;
+  homeLat: number | '';
+  homeLng: number | '';
 };
 
 export type AddDriverDraft = {
@@ -65,6 +68,9 @@ export const defaultAddDriverValues: AddDriverFormValues = {
   originalIssueDate: '',
   address: '',
   proofType: '',
+  homeAddress: '',
+  homeLat: '',
+  homeLng: '',
 };
 
 export function loadAddDriverDraft(): AddDriverDraft | null {

@@ -7,6 +7,8 @@ import { hasPlatformStaffAccess, type RbacUser } from "./rbac_middleware.ts";
 import { buildTripAnalyticsFilter } from "./trip_analytics_definitions.ts";
 import { projectTripListValue } from "./trip_list_projection.ts";
 import { resolveTripSort } from "./trip_sort.ts";
+import { isPeriodFrozen } from "./settlement_period_freeze.ts";
+import { periodKeyFor } from "../../../packages/finance-core/src/periodKey.ts";
 
 type RpcError = { message?: string; code?: string; details?: string };
 
@@ -79,6 +81,50 @@ export async function loadTripForOrg(orgId: string, tripId: string): Promise<Rec
   const projected = projectTripListValue((row.payload_json || { id }) as Record<string, unknown>);
   if (!projected.id) projected.id = id;
   return projected;
+}
+
+/**
+ * Full stored trip for ledger edit and map. Review stays on the short projection.
+ * weekOpen is false when that driver's pay week is already locked.
+ */
+export async function loadStoredTripForOrg(
+  orgId: string,
+  tripId: string,
+): Promise<{ trip: Record<string, unknown>; weekOpen: boolean } | null> {
+  const id = tripId.trim();
+  if (!id || !orgId) return null;
+  const loaded = await fleet().from("fleet_trips").select("id, organization_id, payload_json").eq("id", id).maybeSingle();
+  if (loaded.error) throw new Error(loaded.error.message);
+  const row = loaded.data as { id?: string; organization_id?: string | null; payload_json?: Record<string, unknown> | null } | null;
+  if (!row || String(row.organization_id || "") !== orgId) return null;
+  const trip = { ...(row.payload_json || {}), id: row.id || id } as Record<string, unknown>;
+  if (trip.platform === "GoRide") trip.platform = "Roam";
+  return { trip, weekOpen: await payWeekIsOpen(trip) };
+}
+
+async function payWeekIsOpen(trip: Record<string, unknown>): Promise<boolean> {
+  const driverId = String(trip.driverId ?? "").trim();
+  const day = String(trip.date ?? trip.requestTime ?? "").slice(0, 10);
+  const anchor = day ? periodKeyFor(day) : null;
+  if (!driverId || !anchor) return true;
+  const { data, error } = await fleet()
+    .from("driver_financial_periods")
+    .select("status, metadata, closed_at")
+    .eq("driver_id", driverId)
+    .eq("period_anchor", anchor)
+    .maybeSingle();
+  if (error) {
+    console.warn("[ledger-trip] week lookup failed:", error.message);
+    return true;
+  }
+  if (!data) return true;
+  const row = data as { status?: string | null; metadata?: Record<string, unknown> | null; closed_at?: string | null };
+  return !isPeriodFrozen({
+    status: row.status,
+    metadata: row.metadata,
+    closedAt: row.closed_at,
+    settlementStatus: row.status,
+  });
 }
 
 export async function searchTripsFromFacts(

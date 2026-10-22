@@ -316,6 +316,7 @@ export function DriverProfileTab({
         homeAddress: details.address || hit.display_name,
         homeLat: details.lat,
         homeLng: details.lon,
+        homePinSource: 'home',
       });
       setHomeQuery(details.address || hit.display_name);
       setHomeHits([]);

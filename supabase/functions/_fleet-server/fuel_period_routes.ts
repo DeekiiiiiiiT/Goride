@@ -1732,11 +1732,21 @@ export function registerFuelPeriodRoutes(app: Hono) {
       if (String(period.status) === "locked") return c.json({ error: "period_locked" }, 409);
       const actor = actorId(c);
       const now = new Date().toISOString();
+      const allowed = ["variance", "unattributedKm", "noOdometerFills"];
+      let appliesTo = [...allowed];
+      if (Array.isArray(body.appliesTo)) {
+        appliesTo = body.appliesTo
+          .map((bucket: unknown) => String(bucket))
+          .filter((bucket: string) => allowed.includes(bucket));
+        if (appliesTo.length === 0) {
+          return c.json({ error: "applies_to_required" }, 422);
+        }
+      }
       const override = {
         mode,
         driverPercent: Number(body.driverPercent) || 0,
         driverFixedAmount: Number(body.driverFixedAmount) || 0,
-        appliesTo: ["variance", "unattributedKm", "noOdometerFills"],
+        appliesTo,
         note,
         by: actor,
         at: now,

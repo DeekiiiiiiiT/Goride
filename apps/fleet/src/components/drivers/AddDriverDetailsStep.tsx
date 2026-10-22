@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useFormContext, Controller } from 'react-hook-form';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { AddDriverFileUpload } from './AddDriverFileUpload';
 import { COUNTRY_CODES, type AddDriverFormValues } from './addDriverForm';
+import { getPlaceDetails, searchAddress, type AddressResult } from '../../utils/locationService';
 
 type Props = {
   step: 2 | 3;
@@ -34,8 +35,21 @@ export function AddDriverDetailsStep({
   onScanAddress,
   matchedDriver,
 }: Props) {
-  const { register, control, watch } = useFormContext<AddDriverFormValues>();
+  const { register, control, watch, setValue } = useFormContext<AddDriverFormValues>();
   const address = watch('address');
+  const homeAddress = watch('homeAddress');
+  const [homeQuery, setHomeQuery] = useState('');
+  const [homeHits, setHomeHits] = useState<AddressResult[]>([]);
+  const [savingHome, setSavingHome] = useState(false);
+  const prefilledHome = useRef(false);
+
+  useEffect(() => {
+    if (prefilledHome.current || homeAddress) return;
+    if (address) {
+      setHomeQuery(address);
+      prefilledHome.current = true;
+    }
+  }, [address, homeAddress]);
 
   if (step === 3) {
     return (
@@ -97,7 +111,61 @@ export function AddDriverDetailsStep({
           </Label>
           <div className="col-span-3">
             <Input placeholder="Street Address, City, Zip" {...register('address')} />
-            <p className="text-xs text-slate-500 mt-1">Where the fleet vehicle will be kept.</p>
+            <p className="text-xs text-slate-500 mt-1">Proof-of-address street. This is not the commute home until you pick one below.</p>
+          </div>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 items-start gap-4">
+          <Label className="text-right pt-2.5">
+            Home <span className="text-red-500">*</span>
+          </Label>
+          <div className="col-span-3 space-y-2">
+            <Input
+              value={homeQuery}
+              disabled={savingHome}
+              placeholder="Search a home address"
+              onChange={(e) => {
+                const next = e.target.value;
+                setHomeQuery(next);
+                if (next.trim().length < 3) {
+                  setHomeHits([]);
+                  return;
+                }
+                void searchAddress(next).then(setHomeHits);
+              }}
+            />
+            <p className="text-xs text-slate-500">
+              {homeAddress
+                ? `Home: ${homeAddress}`
+                : 'Pick a result. Commute stays unexplained until a home is chosen.'}
+            </p>
+            {homeHits.length > 0 && (
+              <div className="space-y-1">
+                {homeHits.slice(0, 5).map((hit) => (
+                  <button
+                    key={hit.place_id || hit.display_name}
+                    type="button"
+                    className="block min-h-11 w-full rounded-md px-2 py-2 text-left text-sm hover:bg-slate-50"
+                    onClick={() => {
+                      if (!hit.place_id) return;
+                      setSavingHome(true);
+                      void getPlaceDetails(hit.place_id)
+                        .then((details) => {
+                          if (!details) return;
+                          const picked = details.address || hit.display_name;
+                          setValue('homeAddress', picked, { shouldDirty: true });
+                          setValue('homeLat', details.lat, { shouldDirty: true });
+                          setValue('homeLng', details.lon, { shouldDirty: true });
+                          setHomeQuery(picked);
+                          setHomeHits([]);
+                        })
+                        .finally(() => setSavingHome(false));
+                    }}
+                  >
+                    {hit.display_name}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </div>

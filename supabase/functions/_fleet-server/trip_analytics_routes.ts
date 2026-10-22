@@ -7,7 +7,7 @@ import { requireAuth, requirePermission, type RbacUser } from "./rbac_middleware
 import { FEATURE_FLAGS, isFeatureEnabled } from "./feature_flags.ts";
 import * as cache from "./cache.ts";
 import { buildTripAnalyticsFilter } from "./trip_analytics_definitions.ts";
-import { loadTripForOrg, orgFromTripRequest } from "./trip_facts_read.ts";
+import { loadStoredTripForOrg, loadTripForOrg, orgFromTripRequest } from "./trip_facts_read.ts";
 
 const SECTIONS = [
   "kpis",
@@ -183,6 +183,26 @@ export function registerTripAnalyticsRoutes(app: Hono) {
       return c.json({ error: err instanceof Error ? err.message : "Settings failed" }, 500);
     }
   });
+
+  app.post(
+    "/make-server-37f42386/trips/ledger-trip",
+    requireAuth({ requireOrg: true }),
+    requirePermission("transactions.edit"),
+    async (c) => {
+      try {
+        const body = await c.req.json().catch(() => ({})) as Record<string, unknown>;
+        const orgId = orgFromTripRequest(c, body);
+        if (!orgId) return c.json({ error: "Missing organization" }, 403);
+        const tripId = String(body.tripId || "").trim();
+        if (!tripId) return c.json({ error: "Trip is required" }, 400);
+        const loaded = await loadStoredTripForOrg(orgId, tripId);
+        if (!loaded) return c.json({ error: "Trip not found" }, 404);
+        return c.json(loaded);
+      } catch (err) {
+        return c.json({ error: err instanceof Error ? err.message : "Trip lookup failed" }, 500);
+      }
+    },
+  );
 
   app.post("/make-server-37f42386/trips/analytics/trip", requireAuth({ requireOrg: true }), async (c) => {
     try {
