@@ -88,9 +88,6 @@ const ExpenseHubPage = lazy(() =>
     default: m.ExpenseHubPage,
   })),
 );
-const TripLogsPage = lazy(() =>
-  import('./components/trips/TripLogsPage').then((m) => ({ default: m.TripLogsPage })),
-);
 const TripAnalyticsPage = lazy(() =>
   import('./components/trips/analytics/TripAnalyticsPage').then((m) => ({ default: m.TripAnalyticsPage })),
 );
@@ -240,6 +237,7 @@ function AppContent() {
   };
 
   const handleNavigate = (page: string, opts?: NavigateOpts) => {
+    if (page === 'trips') page = 'trip-analytics';
     const periodHint =
       opts && 'startYmd' in opts && typeof opts.startYmd === 'string'
         ? {
@@ -435,6 +433,16 @@ function AppContent() {
     window.addEventListener('popstate', onPopState);
     return () => window.removeEventListener('popstate', onPopState);
   }, []);
+
+  // Trip Logs was removed — rewrite old /trips bookmarks to Trip Analytics.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const path = window.location.pathname.replace(/\/+$/, '') || '/';
+    if (path === '/trips' || path.startsWith('/trips/')) {
+      window.history.replaceState({ page: 'trip-analytics' }, '', '/trip-analytics');
+      setCurrentPage('trip-analytics');
+    }
+  }, [currentPage]);
 
   // Couriers moved under Drivers — rewrite legacy /couriers bookmarks
   useEffect(() => {
@@ -779,13 +787,6 @@ function AppContent() {
         {currentPage === 'fleet' && (
           <PermissionGate permission="nav.fleet" onNavigate={setCurrentPage}>
             <FleetPage />
-          </PermissionGate>
-        )}
-        {currentPage === 'trips' && (
-          <PermissionGate permission="nav.trips" onNavigate={setCurrentPage}>
-            <Suspense fallback={<div className="p-6 text-sm text-slate-500">Loading trips…</div>}>
-              <TripLogsPage />
-            </Suspense>
           </PermissionGate>
         )}
         {currentPage === 'trip-analytics' && (

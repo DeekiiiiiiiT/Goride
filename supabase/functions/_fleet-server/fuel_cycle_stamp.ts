@@ -5,6 +5,7 @@
 import * as kv from "./kv_store.tsx";
 import { fromKvStore } from "./fleet_sql_bridge.ts";
 import * as fuelLogic from "./fuel_logic.ts";
+import { referenceEfficiencyFromFills } from "../../../packages/fuel-core/src/referenceEfficiency.ts";
 import {
   evaluateCycleClose,
   resolveCycleCloseMode,
@@ -289,7 +290,16 @@ export async function stampEntryCycleMetadata(
     String(entry.vehicleId),
     String(entry.date || ""),
   );
-  const effectiveBaseline = rollingAvg?.avgKmPerLiter || 0;
+  const reference = referenceEfficiencyFromFills(
+    (cycleEntries as Array<Record<string, unknown>>).map((row) => ({
+      date: String(row.date || ""),
+      odometer: Number(row.odometer) || 0,
+      liters: Number(row.liters) || 0,
+      fullTank: Boolean((row.metadata as { isFullTank?: boolean } | undefined)?.isFullTank),
+    })),
+    String(entry.date || "").slice(0, 10),
+  );
+  const effectiveBaseline = reference.kmPerLiter || rollingAvg?.avgKmPerLiter || 0;
 
   let integrityStatus: IntegrityStatus = "valid";
   let anomalyReason: string | null = null;
@@ -394,10 +404,10 @@ export async function stampEntryCycleMetadata(
     distanceSinceAnchor,
     actualKmPerLiter: Number(actualKmPerLiter.toFixed(2)),
     profileKmPerLiter,
-    rollingAvgKmPerLiter: rollingAvg?.avgKmPerLiter ?? null,
-    rollingAvgWindow: rollingAvg?.window ?? null,
+    rollingAvgKmPerLiter: reference.kmPerLiter ?? rollingAvg?.avgKmPerLiter ?? null,
+    rollingAvgWindow: reference.kmPerLiter ? "reference" : (rollingAvg?.window ?? null),
     rollingAvgEntryCount: rollingAvg?.entryCount ?? 0,
-    efficiencyBaseline: rollingAvg ? "rolling" : "skipped",
+    efficiencyBaseline: reference.kmPerLiter ? "reference" : rollingAvg ? "rolling" : "skipped",
     efficiencyVariance: Number((efficiencyVariance * 100).toFixed(1)),
     isSoftAnchor: close.isSoft,
     isCapacityClose: close.isCapacityClose || undefined,

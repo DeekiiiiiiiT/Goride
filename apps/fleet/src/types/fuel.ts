@@ -484,6 +484,14 @@ export interface FuelRule {
   deadheadCoverage?: number;
   personalCoverage?: number;
   miscCoverage?: number;
+  /** Company percent for commute. Missing means the company pays it. */
+  commuteCoverage?: number;
+  leftoverSplit?: {
+    mode: 'company' | 'percentage' | 'fixed';
+    driverPercent?: number;
+    driverFixedAmount?: number;
+    appliesTo: Array<'variance' | 'unattributedKm' | 'noOdometerFills'>;
+  };
 
   conditions?: {
     maxAmount?: number;

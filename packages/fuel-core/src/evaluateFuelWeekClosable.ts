@@ -32,7 +32,9 @@ export type FuelWeekClosableBlocker = {
     /** Flagged vehicles not marked reviewed on Data quality. */
     | 'data_quality_unreviewed'
     /** A fill for this week's vehicles has no company, so the server total skipped it. */
-    | 'null_org_fill';
+    | 'null_org_fill'
+    /** Price or duplicate-odometer fills not yet accepted. */
+    | 'implausible_fills_unreviewed';
   message: string;
 };
 
@@ -76,6 +78,8 @@ export type EvaluateFuelWeekClosableInput = {
   dataQualityVehiclesUnreviewed?: boolean;
   /** Fill dated in this week for this company's vehicles, with no organization_id. */
   nullOrgFill?: boolean;
+  /** Confirm-level fill issues (price, duplicate odometer) not yet accepted. */
+  implausibleFillsUnreviewed?: boolean;
 };
 
 function fmtMoney(n: number): string {
@@ -230,6 +234,12 @@ export function evaluateFuelWeekClosable(
       code: 'null_org_fill',
       message:
         'A fuel fill for this week is missing its company, so it was left out of the total. Repair it before locking.',
+    });
+  }
+  if (input.implausibleFillsUnreviewed) {
+    blockers.push({
+      code: 'implausible_fills_unreviewed',
+      message: 'A fill has an unusual price or a repeated odometer and has not been accepted.',
     });
   }
   return blockers;

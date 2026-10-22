@@ -1,5 +1,6 @@
 import * as kv from "./kv_store.tsx";
 import { fromKvStore } from "./fleet_sql_bridge.ts";
+import { DEFAULT_FLEET_TZ, fleetLocalHour } from "../../../packages/fuel-core/src/fleetTime.ts";
 
 /**
  * Full rideshare trip km — MUST match apps/fleet/src/utils/tripRideshareKm.ts
@@ -328,6 +329,8 @@ export type DeadheadBrainPolicy = {
   crossValidationPp: number;
   preferOdoGaps: boolean;
   ambiguousDeadheadSplitPct: number;
+  /** IANA zone for peak-hour gaps. Defaults to America/Jamaica. */
+  timezone?: string;
 };
 
 export const DEFAULT_DEADHEAD_BRAIN_POLICY: DeadheadBrainPolicy = {
@@ -370,8 +373,6 @@ export function classifyTripGaps(params: {
 } {
   const policy = { ...DEFAULT_DEADHEAD_BRAIN_POLICY, ...(params.policy || {}) };
   const { trips, totalOdometerKm, tripKm } = params;
-  const ambSplit = Math.max(0, Math.min(100, policy.ambiguousDeadheadSplitPct)) / 100;
-
   const EMPTY_RESULT = {
     gaps: [] as TripGapClassification[],
     deadheadGapMinutes: 0,
@@ -457,7 +458,7 @@ export function classifyTripGaps(params: {
       classification = 'deadhead';
       reason = `Gap within deadhead max (${dhMax} min)`;
     } else if (gapMinutes <= persMin) {
-      const gapStartHour = new Date(gapStartMs).getHours();
+      const gapStartHour = fleetLocalHour(new Date(gapStartMs), policy.timezone || DEFAULT_FLEET_TZ);
       const isDaytime =
         peakStart <= peakEnd
           ? gapStartHour >= peakStart && gapStartHour < peakEnd
@@ -519,14 +520,10 @@ export function classifyTripGaps(params: {
       personalGapMinutes += gap.gapMinutes;
       gapBasedPersonalKm += gap.estimatedKm;
     } else {
-      deadheadGapMinutes += gap.gapMinutes * ambSplit;
-      personalGapMinutes += gap.gapMinutes * (1 - ambSplit);
+      // Ambiguous gaps stay unexplained. The 60% knob is not a billed split.
       ambiguousKm += gap.estimatedKm;
     }
   }
-
-  gapBasedDeadheadKm += ambiguousKm * ambSplit;
-  gapBasedPersonalKm += ambiguousKm * (1 - ambSplit);
 
   const coverageRatio = totalTrips > 0 ? totalWithTimestamps / totalTrips : 0;
   const dataQuality: 'full' | 'partial' | 'insufficient' =
@@ -666,32 +663,23 @@ export function calculateDeadheadAttribution(params: {
     }
 
   } else if (methodC.dataQuality === 'partial') {
-    // Priority 2: Method C partial — blend with Method A (60/40)
-    if (methodA.dataQuality !== 'insufficient') {
-      deadheadKm = (methodC.gapBasedDeadheadKm * 0.6) + (methodA.timeRatioDeadheadKm * 0.4);
-      method = 'combined';
-      confidenceLevel = 'medium';
-      confidenceReason = `Blended: Method C partial (60% weight, ${methodC.gapBasedDeadheadKm.toFixed(1)} km) + Method A (40% weight, ${methodA.timeRatioDeadheadKm.toFixed(1)} km)`;
-    } else {
-      deadheadKm = methodC.gapBasedDeadheadKm;
-      method = 'C';
-      confidenceLevel = 'medium';
-      confidenceReason = 'Method C partial data; Method A unavailable';
-    }
+    deadheadKm = methodC.gapBasedDeadheadKm;
+    method = 'C';
+    confidenceLevel = 'medium';
+    confidenceReason = `Method C partial (${methodC.gapBasedDeadheadKm.toFixed(1)} km). Method A ${methodA.timeRatioDeadheadKm.toFixed(1)} km is diagnostic only.`;
 
   } else if (methodA.dataQuality !== 'insufficient') {
-    // Priority 3: Method A alone
-    deadheadKm = methodA.timeRatioDeadheadKm;
+    // Method A re-estimates P1/P2 already inside trip km. Diagnostic only.
+    deadheadKm = 0;
     method = 'A';
-    confidenceLevel = methodA.dataQuality === 'full' ? 'medium' : 'low';
-    confidenceReason = `Method A only (${methodA.dataQuality} data); Method C insufficient (no trip timestamps)`;
+    confidenceLevel = 'low';
+    confidenceReason = `Method A diagnostic only (${methodA.timeRatioDeadheadKm.toFixed(1)} km); not billed`;
 
   } else {
-    // Priority 4: Industry fallback
-    deadheadKm = nonTripKm * (INDUSTRY_FALLBACK_PCT / 100);
+    deadheadKm = 0;
     method = 'fallback';
     confidenceLevel = 'low';
-    confidenceReason = 'No time or trip-gap data available; using 35% industry average for non-trip km';
+    confidenceReason = `No gap evidence. Industry benchmark is ${INDUSTRY_FALLBACK_PCT}% and is not billed.`;
   }
 
   // --- Step F: Safety rails and final attribution ---
@@ -704,21 +692,9 @@ export function calculateDeadheadAttribution(params: {
     deadheadKm = nonTripKm;
   }
 
-  // Industry floor: gap/time may raise Deadhead above floor, not collapse below it.
-  // Deadhead = min(nonTrip, max(hint, nonTrip × industryFallbackPct%))
-  if (nonTripKm > 0) {
-    const industryFloor = nonTripKm * (INDUSTRY_FALLBACK_PCT / 100);
-    if (deadheadKm < industryFloor) {
-      deadheadKm = industryFloor;
-      confidenceReason +=
-        confidenceReason.length > 0
-          ? ` | Industry floor ${INDUSTRY_FALLBACK_PCT}% of non-trip km applied`
-          : `Industry floor ${INDUSTRY_FALLBACK_PCT}% of non-trip km applied`;
-    }
-  }
-
-  // personalKm = whatever remains after trip + deadhead
-  personalKm = Math.max(0, totalOdometerKm - tripKm - deadheadKm);
+  // C-4: 35% is a benchmark only. It is not a floor on billed kilometres.
+  // Personal is evidenced adjustments only — the remainder is unaccounted.
+  personalKm = 0;
 
   // Empty trip load with real odo is almost always a data-pipe failure (e.g. KV row truncate),
   // not a week with zero platform trips. Surface that in confidenceReason for recon diagnostics.

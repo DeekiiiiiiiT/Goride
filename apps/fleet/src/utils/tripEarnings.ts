@@ -10,12 +10,7 @@ import { Trip } from '../types/data';
  * This centralizes the guard pattern:
  *   (trip.platform === 'InDrive' && trip.indriveNetIncome != null) ? trip.indriveNetIncome : trip.amount
  *
- * Previously duplicated across:
- *   - TripStatsCard.tsx
- *   - TripLogsPage.tsx
- *   - DriverDetail.tsx (2 call sites)
- *   - VehiclesPage.tsx
- *   - DriverAssignmentModal.tsx
+ * Previously duplicated across Driver and Vehicle screens.
  */
 export function getEffectiveTripEarnings(trip: Trip | null | undefined): number {
   if (!trip) return 0;

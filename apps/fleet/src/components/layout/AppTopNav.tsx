@@ -187,7 +187,7 @@ export function AppTopNav({
             />
           ) : null}
 
-          {nav.fleetOps.visible && (nav.fleetOps.fuel || nav.fleetOps.toll || nav.fleetOps.trips) ? (
+          {nav.fleetOps.visible && (nav.fleetOps.fuel || nav.fleetOps.toll) ? (
             <TopMenu label="Fleet Operations" active={fleetOpsIsActive}>
               {nav.fleetOps.fuel ? (
                 <>
@@ -208,12 +208,6 @@ export function AppTopNav({
                     currentPage={currentPage}
                     onNavigate={go}
                   />
-                </>
-              ) : null}
-              {nav.fleetOps.trips ? (
-                <>
-                  {(nav.fleetOps.fuel || nav.fleetOps.toll) ? <DropdownMenuSeparator /> : null}
-                  <DropdownMenuItem onClick={() => go('trips')}>{String(nav.fleetOps.trips.label)}</DropdownMenuItem>
                 </>
               ) : null}
             </TopMenu>

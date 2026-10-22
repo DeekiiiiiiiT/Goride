@@ -96,65 +96,106 @@ export function FuelWeekMoneyStrip({
     return { earnedCost, earnedKm };
   }, [liveReports]);
 
+  const moneyRow = (label: string, amount: number, tone: 'default' | 'total' | 'warn' = 'default') => (
+    <div
+      className={`flex items-baseline justify-between gap-4 ${
+        tone === 'total'
+          ? 'border-t border-slate-200 pt-2.5 text-sm font-semibold text-slate-900'
+          : tone === 'warn'
+            ? 'text-sm text-rose-700'
+            : 'text-sm text-slate-600'
+      }`}
+    >
+      <span className="min-w-0">{label}</span>
+      <span className="shrink-0 tabular-nums">{formatFuelMoney(amount)}</span>
+    </div>
+  );
+
+  const tiePill = (ok: boolean, okText: string, badText: string) => (
+    <p
+      className={`mt-3 inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ${
+        ok ? 'bg-emerald-50 text-emerald-800' : 'bg-rose-50 text-rose-800'
+      }`}
+    >
+      <CheckCircle2
+        className={`h-3.5 w-3.5 ${ok ? 'text-emerald-600' : 'text-rose-600'}`}
+        aria-hidden
+      />
+      {ok ? okText : badText}
+    </p>
+  );
+
   const detailBody = (
-    <div className="space-y-4 text-sm text-slate-700">
-      <div>
-        <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+    <div className="space-y-3">
+      <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+        <p className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
           Where the money came from
         </p>
-        <p>Gas card (company paid): {formatFuelMoney(gasCard)}</p>
-        <p>Cash from earnings: {formatFuelMoney(cashFromEarnings)}</p>
-        <p className="font-semibold">Total fuel bought: {formatFuelMoney(totalSpend)}</p>
-        <p className={sourcesTie ? 'text-emerald-700' : 'text-rose-700'}>
-          Gas card + Cash {sourcesTie ? '=' : '≠'} Total {sourcesTie ? '✓' : '— check attribution'}
-        </p>
-      </div>
-      <div>
-        <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+        <div className="space-y-2.5">
+          {moneyRow('Gas card (company paid)', gasCard)}
+          {moneyRow('Cash from earnings', cashFromEarnings)}
+          {moneyRow('Total fuel bought', totalSpend, 'total')}
+        </div>
+        {tiePill(
+          sourcesTie,
+          'Gas card + cash equals the total',
+          'Gas card + cash does not equal the total',
+        )}
+      </section>
+
+      <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+        <p className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
           Who ends up paying
         </p>
-        <p>Company keeps: {formatFuelMoney(company)}</p>
-        <p>Driver’s fuel share: {formatFuelMoney(driver)}</p>
-        {Math.abs(windowTiming) > FUEL_SPEND_EPS && (
-          <p>
-            {WINDOW_TIMING_LABEL}: {formatFuelMoney(windowTiming)}
-          </p>
+        <div className="space-y-2.5">
+          {moneyRow('Company keeps', company)}
+          {moneyRow('Driver’s fuel share', driver)}
+          {Math.abs(windowTiming) > FUEL_SPEND_EPS
+            ? moneyRow(WINDOW_TIMING_LABEL, windowTiming)
+            : null}
+          {Math.abs(unattributedFill) > FUEL_SPEND_EPS
+            ? moneyRow(UNATTRIBUTED_FILL_LABEL, unattributedFill, 'warn')
+            : null}
+          {showLeakage ? moneyRow(unexplainedLabel(leakage), leakage, 'warn') : null}
+          {Math.abs(driverFromUnexplained) > FUEL_SPEND_EPS
+            ? moneyRow('Charged to driver from unexplained', driverFromUnexplained, 'warn')
+            : (
+              <p className="text-sm text-slate-600">
+                {Math.abs(leakage) > FUEL_SPEND_EPS
+                  ? 'Leftover fuel follows this week’s policy. Company pays it unless a driver share is set.'
+                  : 'No leftover fuel this week.'}
+              </p>
+            )}
+          {paAbsorb.earnedCost > FUEL_SPEND_EPS ? (
+            <p className="text-sm text-slate-600">
+              Personal allowance absorbed by company:{' '}
+              <span className="font-semibold tabular-nums text-slate-900">
+                {formatFuelMoney(paAbsorb.earnedCost)}
+              </span>
+              {paAbsorb.earnedKm > 0
+                ? ` (${paAbsorb.earnedKm % 1 === 0 ? paAbsorb.earnedKm : paAbsorb.earnedKm.toFixed(1)} earned km)`
+                : ''}
+            </p>
+          ) : null}
+        </div>
+        {tiePill(
+          splitTie,
+          'Company + driver equals the total',
+          'Company + driver does not equal the total',
         )}
-        {Math.abs(unattributedFill) > FUEL_SPEND_EPS && (
-          <p>
-            {UNATTRIBUTED_FILL_LABEL}: {formatFuelMoney(unattributedFill)}
-          </p>
-        )}
-        {showLeakage && (
-          <p>
-            {unexplainedLabel(leakage)}: {formatFuelMoney(leakage)}
-          </p>
-        )}
-        {Math.abs(driverFromUnexplained) > FUEL_SPEND_EPS ? (
-          <p>Charged to driver from unexplained: {formatFuelMoney(driverFromUnexplained)}</p>
-        ) : (
-          <p>Unexplained fuel is company-held (never billed to driver)</p>
-        )}
-        {paAbsorb.earnedCost > FUEL_SPEND_EPS && (
-          <p>
-            Personal allowance absorbed by company: {formatFuelMoney(paAbsorb.earnedCost)}
-            {paAbsorb.earnedKm > 0
-              ? ` (${paAbsorb.earnedKm % 1 === 0 ? paAbsorb.earnedKm : paAbsorb.earnedKm.toFixed(1)} earned km)`
-              : ''}
-          </p>
-        )}
-        <p className={splitTie ? 'text-emerald-700' : 'text-rose-700'}>
-          Company + Driver {splitTie ? '=' : '≠'} Total {splitTie ? '✓' : '— check split'}
-        </p>
-      </div>
+      </section>
+
       {priorMedian != null && (
-        <p className="text-xs text-slate-500">
+        <p className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-xs text-slate-500 shadow-sm">
           vs 4-week median spend:{' '}
-          {totalSpend - priorMedian.totalSpend >= 0 ? '+' : ''}
-          {formatFuelMoney(totalSpend - priorMedian.totalSpend)}
+          <span className="font-semibold tabular-nums text-slate-800">
+            {totalSpend - priorMedian.totalSpend >= 0 ? '+' : ''}
+            {formatFuelMoney(totalSpend - priorMedian.totalSpend)}
+          </span>
         </p>
       )}
-      <p className="rounded border border-slate-200 bg-slate-50 px-3 py-2 text-xs leading-relaxed text-slate-600">
+
+      <p className="rounded-xl border border-[#3525cd]/15 bg-[#3525cd]/5 px-4 py-3 text-xs leading-relaxed text-slate-600">
         Gas card is company-paid fuel. Cash from earnings is what drivers already paid from their
         pocket. Company keeps vs driver charge is who pays after policy rules. Timing and
         unexplained leftovers are carved out before settle-up — they are not a third payer.
@@ -162,21 +203,24 @@ export function FuelWeekMoneyStrip({
     </div>
   );
 
-  const whySheet = (side: 'bottom' | 'right') => (
+  const whySheet = (
     <Sheet open={whyOpen} onOpenChange={setWhyOpen}>
       <SheetContent
-        side={side}
-        className={
-          side === 'right'
-            ? 'w-full overflow-y-auto sm:max-w-md'
-            : 'max-h-[80vh] overflow-y-auto sm:max-w-lg'
-        }
+        side="right"
+        className="w-full gap-0 overflow-y-auto border-l border-slate-200 bg-slate-50 p-0 shadow-2xl sm:max-w-[420px]"
       >
-        <SheetHeader>
-          <SheetTitle>Why these numbers?</SheetTitle>
-          <SheetDescription>Plain-English money check for this week.</SheetDescription>
+        <SheetHeader className="space-y-1 border-b border-slate-200 bg-white px-5 py-5 pr-12">
+          <div className="mb-1 flex h-9 w-9 items-center justify-center rounded-lg bg-[#3525cd]/10">
+            <Wallet className="h-4 w-4 text-[#3525cd]" aria-hidden />
+          </div>
+          <SheetTitle className="text-lg font-bold tracking-tight text-slate-900">
+            Why these numbers?
+          </SheetTitle>
+          <SheetDescription className="text-sm text-slate-500">
+            Plain-English money check for this week.
+          </SheetDescription>
         </SheetHeader>
-        <div className="mt-4">{detailBody}</div>
+        <div className="px-5 py-5">{detailBody}</div>
       </SheetContent>
     </Sheet>
   );
@@ -368,7 +412,7 @@ export function FuelWeekMoneyStrip({
               : 'Numbers don’t balance — check attribution'}
           </div>
         </div>
-        {whySheet('right')}
+        {whySheet}
         {allocSheet}
       </aside>
     );
@@ -426,7 +470,7 @@ export function FuelWeekMoneyStrip({
         </Button>
         <span className="text-xs text-slate-400">Auto-synced</span>
       </div>
-      {whySheet('bottom')}
+      {whySheet}
     </section>
   );
 }

@@ -1367,6 +1367,11 @@ export function registerResidualMonolithRoutes(app: Hono) {
         return c.json({ error: "Expected array of trips" }, 400);
       }
 
+      // One-off production probes (probe-trip-0 … 64) inflated every KPI. Never store that prefix.
+      if (trips.some((t: { id?: unknown }) => String(t?.id ?? "").toLowerCase().startsWith("probe-trip-"))) {
+        return c.json({ error: "Test trip ids are not allowed" }, 400);
+      }
+
       const isRushProjection = trips.some(
         (t: { platform?: unknown }) => String(t?.platform ?? "") === "Roam Rush",
       );

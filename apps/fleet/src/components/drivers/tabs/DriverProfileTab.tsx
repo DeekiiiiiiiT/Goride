@@ -33,6 +33,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../ui/tabs';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '../../ui/dialog';
 import { toast } from 'sonner';
 import { api } from '../../../services/api';
+import { getPlaceDetails, searchAddress, type AddressResult } from '../../../utils/locationService';
 import {
   useDriverAudit,
   useDriverCompliance,
@@ -235,6 +236,9 @@ export function DriverProfileTab({
   const [complianceExpiry, setComplianceExpiry] = useState<string | null>(
     driver?.licenseExpiry ? String(driver.licenseExpiry).slice(0, 10) : null,
   );
+  const [homeQuery, setHomeQuery] = useState(String(driver?.homeAddress || ''));
+  const [homeHits, setHomeHits] = useState<AddressResult[]>([]);
+  const [savingHome, setSavingHome] = useState(false);
 
   useEffect(() => {
     setSubTab(initialSubTab);
@@ -297,8 +301,70 @@ export function DriverProfileTab({
     }
   };
 
+  const saveHome = async (hit: AddressResult) => {
+    if (!canEditDrivers || !hit.place_id) return;
+    setSavingHome(true);
+    try {
+      const details = await getPlaceDetails(hit.place_id);
+      if (!details) {
+        toast.error('Could not place that address');
+        return;
+      }
+      await api.saveDriver({
+        ...driver,
+        id: driverId,
+        homeAddress: details.address || hit.display_name,
+        homeLat: details.lat,
+        homeLng: details.lon,
+      });
+      setHomeQuery(details.address || hit.display_name);
+      setHomeHits([]);
+      toast.success('Home saved');
+    } catch (e: any) {
+      toast.error(e?.message || 'Could not save home');
+    } finally {
+      setSavingHome(false);
+    }
+  };
+
   return (
     <>
+      <div className="rounded-xl border border-slate-200 dark:border-slate-700 p-4 mb-6 space-y-3">
+        <div>
+          <p className="text-sm font-medium text-slate-900 dark:text-slate-100">Home</p>
+          <p className="text-xs text-slate-500">
+            Used for commute. Until this is set, those kilometres stay unexplained.
+          </p>
+        </div>
+        <Input
+          value={homeQuery}
+          disabled={!canEditDrivers || savingHome}
+          placeholder="Search a home address"
+          onChange={(e) => {
+            const next = e.target.value;
+            setHomeQuery(next);
+            if (next.trim().length < 3) {
+              setHomeHits([]);
+              return;
+            }
+            void searchAddress(next).then(setHomeHits);
+          }}
+        />
+        {homeHits.length > 0 && (
+          <div className="space-y-1">
+            {homeHits.slice(0, 5).map((hit) => (
+              <button
+                key={hit.place_id || hit.display_name}
+                type="button"
+                className="block w-full rounded-md px-2 py-1 text-left text-sm hover:bg-slate-50"
+                onClick={() => void saveHome(hit)}
+              >
+                {hit.display_name}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
       {/* Compliance lifecycle — mirror courier blocker tone */}
       <div className="rounded-xl border border-slate-200 dark:border-slate-700 p-4 mb-6 space-y-3">
         <div className="flex flex-wrap items-center gap-2">

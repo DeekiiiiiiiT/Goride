@@ -13,7 +13,6 @@ export const FLEET_PAGE_REGISTRY: Record<string, FleetPageDef> = {
   drivers: { id: 'drivers', path: '/drivers', permission: 'nav.drivers' },
   'driver-analytics': { id: 'driver-analytics', path: '/driver-analytics', permission: 'nav.drivers' },
   vehicles: { id: 'vehicles', path: '/vehicles', permission: 'nav.vehicles' },
-  trips: { id: 'trips', path: '/trips', permission: 'nav.trips' },
   'trip-analytics': { id: 'trip-analytics', path: '/trip-analytics', permission: 'nav.trips' },
   reports: { id: 'reports', path: '/reports', permission: 'nav.reports' },
   earnings: { id: 'earnings', path: '/earnings', permission: 'nav.tier_config' },
@@ -146,6 +145,8 @@ export function resolvePageFromPathname(pathname: string): string {
   if (normalized === '/') return 'dashboard';
   // Couriers live under Drivers as a workforce tab — keep deep links working.
   if (normalized === '/couriers' || normalized.startsWith('/couriers/')) return 'drivers';
+  // Trip Logs was removed. Old bookmarks open Trip Analytics.
+  if (normalized === '/trips' || normalized.startsWith('/trips/')) return 'trip-analytics';
   const match = PATH_TO_PAGE.find(
     (def) => normalized === def.path || normalized.startsWith(`${def.path}/`),
   );
@@ -154,6 +155,7 @@ export function resolvePageFromPathname(pathname: string): string {
 
 export function pathForPageId(pageId: string): string {
   if (pageId === 'couriers') return '/drivers?workforce=couriers';
+  if (pageId === 'trips') return '/trip-analytics';
   // Legacy Fuel Flags bookmarks → canonical Integrity path when navigating by old id.
   if (pageId === 'fuel-flags') return '/fuel-integrity';
   return FLEET_PAGE_REGISTRY[pageId]?.path ?? '/';

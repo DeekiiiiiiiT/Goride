@@ -182,8 +182,15 @@ export async function computeFleetDeadhead(args: {
       periodEnd,
       policy: brainPolicy,
     });
+    const odoFills = [...fuelEntries]
+      .filter((entry) => Number(entry.odometer) > 0)
+      .sort((a, b) => Number(a.odometer) - Number(b.odometer));
+    const endFill = odoFills[odoFills.length - 1];
     vehicleResults.push({
       ...attribution,
+      priorOdometer: prior ? Number(prior.odometer) || 0 : 0,
+      priorAt: prior ? String(prior.date || prior.time || "") : "",
+      spanEndAt: endFill ? String(endFill.date || "") : "",
       vehicleName: vehicle.name || vehicle.licensePlate || vehicle.plateNumber || vehicle.id,
     });
   }

@@ -17,11 +17,13 @@ import { calculateDistance, isInsideGeofence } from '../../utils/geoUtils';
 import { EvidenceBridgeStatus } from './EvidenceBridgeStatus';
 import { Textarea } from '../ui/textarea';
 import { motion } from 'motion/react';
+import { confirmFillPlausibility } from '../../utils/fillPlausibilityGate';
 
 interface FuelLogFormProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onSubmit: (data: Partial<FuelLog> & { 
+  onSubmit: (data: Partial<FuelLog> & {
+    plausibilityAccepted?: boolean;
     paymentMethod?: string;
     geofenceMetadata?: any;
     deviationReason?: string;
@@ -170,6 +172,17 @@ export function FuelLogForm({ open, onOpenChange, onSubmit, vehicleId }: FuelLog
       return;
     }
 
+    const fillGate = confirmFillPlausibility({
+      amount,
+      liters,
+      odometer: parseFloat(formData.odometer),
+    });
+    if (!fillGate.ok) {
+      toast.error(fillGate.message || 'This fill cannot be saved');
+      setIsUploading(false);
+      return;
+    }
+
     const price = Number((amount / liters).toFixed(2));
 
     if (price < 0.50) {
@@ -182,6 +195,7 @@ export function FuelLogForm({ open, onOpenChange, onSubmit, vehicleId }: FuelLog
       await onSubmit({
         date: formData.date,
         odometer: parseFloat(formData.odometer),
+        ...(fillGate.accepted ? { plausibilityAccepted: true } : {}),
         liters,
         totalCost: amount,
         notes: formData.notes,

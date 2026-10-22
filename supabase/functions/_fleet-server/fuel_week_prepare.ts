@@ -11,7 +11,9 @@ import { computeFleetDeadhead } from "./fuel_distance.ts";
 import { loadOrgPreferences } from "./fuel_org_preferences.ts";
 import { listOdometerLedger } from "./odometer_ledger.ts";
 import { resolveActiveEarningsBundleForDriverWeek } from "./earnings_policy_runtime.ts";
-import { classifyFuelWeek } from "../fuel-brain/classify.ts";
+import { buildEvidenceLadder } from "../../../packages/fuel-core/src/evidenceLadder.ts";
+import { referenceEfficiencyFromFills } from "../../../packages/fuel-core/src/referenceEfficiency.ts";
+import { addDaysYmd } from "../../../packages/fuel-core/src/fleetTime.ts";
 import { FuelCalculationService } from "../../../packages/fuel-core/src/fuelCalculationService.ts";
 import { fuelEntriesForWeekEngine } from "../../../packages/fuel-core/src/selectWeekFuelFills.ts";
 import {
@@ -70,30 +72,22 @@ function asEntry(row: Record<string, unknown>): FuelEntry {
   };
 }
 
-/** Same hint hygiene the screen applies before Fuel Brain. */
+/** Cap a server hint at the kilometres left. Do not raise it to 35%. */
 function deadheadHintKm(server: Record<string, unknown> | undefined, tripKm: number, companyOpsKm: number): number {
   const rawHint = Math.max(0, Number(server?.deadheadKm) || 0);
-  const clientTrip = Math.max(0, tripKm);
   const odo = Math.max(0, Number(server?.totalOdometerKm) || 0);
-  const serverTrip = Number(server?.tripKm);
-  const industryPct = 35;
-  const missed =
-    Number.isFinite(serverTrip) &&
-    serverTrip === 0 &&
-    clientTrip > 0 &&
-    (server?.method === "fallback" || server?.confidenceLevel === "low");
-  const available = odo > 0 ? Math.max(0, odo - clientTrip - companyOpsKm) : 0;
-  let hint = rawHint;
-  if (missed) hint = Number(Math.min(rawHint, available * (industryPct / 100)).toFixed(2));
-  if (!(available > 0)) return hint;
-  const floor = available * (industryPct / 100);
-  return Number(Math.min(available, Math.max(hint, floor)).toFixed(2));
+  const available = odo > 0 ? Math.max(0, odo - Math.max(0, tripKm) - companyOpsKm) : 0;
+  if (server?.method === "fallback") return 0;
+  if (!(available > 0)) return rawHint;
+  return Number(Math.min(available, rawHint).toFixed(2));
 }
 
 export async function prepareFuelWeekReports(args: {
   orgId: string;
   weekStart: string;
   weekEnd: string;
+  /** Shadow compares must not overwrite saved distances. */
+  persistDistance?: boolean;
 }): Promise<
   | { ok: true; reports: Record<string, unknown>[]; totalSpend: number }
   | { ok: false; reports: []; totalSpend: 0; error: string }
@@ -124,6 +118,7 @@ export async function prepareFuelWeekReports(args: {
       const vehicleId = String(row.vehicleId || "");
       if (!vehicleId) continue;
       distanceByVehicle.set(vehicleId, row);
+      if (args.persistDistance === false) continue;
       const { error } = await sb.from("vehicle_week_distance").upsert(
         {
           organization_id: orgId,
@@ -151,9 +146,19 @@ export async function prepareFuelWeekReports(args: {
         .in("vehicle_id", vehicleIds)
       : { data: [], error: null };
     if (saved.error) throw new Error(saved.error.message);
-    if ((saved.data || []).length < vehicleIds.length || (saved.data || []).some((row) => row.stale)) {
+    const persistDistance = args.persistDistance !== false;
+    if (persistDistance && ((saved.data || []).length < vehicleIds.length || (saved.data || []).some((row) => row.stale))) {
       throw new Error("distance_not_saved");
     }
+    const distanceRows = persistDistance
+      ? (saved.data || [])
+      : [...distanceByVehicle.entries()].map(([vehicleId, source]) => ({
+        vehicle_id: vehicleId,
+        deadhead_km: Number(source.deadheadKm) || 0,
+        trip_km: Number(source.tripKm) || 0,
+        personal_km: Number(source.personalKm) || 0,
+        stale: false,
+      }));
 
     const deadheadMap = new Map<string, {
       vehicleId: string;
@@ -164,8 +169,12 @@ export async function prepareFuelWeekReports(args: {
       method: string;
       confidenceLevel: string;
       confidenceReason: string;
+      priorOdometer?: number;
+      priorAt?: string;
+      referenceKmPerLiter?: number | null;
+      referenceDegraded?: boolean;
     }>();
-    for (const row of saved.data || []) {
+    for (const row of distanceRows) {
       const vehicleId = String(row.vehicle_id || "");
       const source = distanceByVehicle.get(vehicleId) || {};
       deadheadMap.set(vehicleId, {
@@ -177,6 +186,8 @@ export async function prepareFuelWeekReports(args: {
         method: String(source.method || "fallback"),
         confidenceLevel: String(source.confidenceLevel || "low"),
         confidenceReason: String(source.confidenceReason || ""),
+        priorOdometer: Number(source.priorOdometer) || 0,
+        priorAt: String(source.priorAt || ""),
       });
     }
 
@@ -185,7 +196,7 @@ export async function prepareFuelWeekReports(args: {
       loadDomain("drivers", orgId),
       loadDomain("fuel_cards", orgId),
       loadDomain("fuel_adjustments", orgId),
-      loadDomain("trips", orgId, { dateFrom: weekStart, dateTo: weekEnd }),
+      loadDomain("trips", orgId, { dateFrom: addDaysYmd(weekStart, -1), dateTo: weekEnd }),
       loadDomain("earnings_policies", orgId),
       kv.getByPrefix("fuel_scenario:"),
       loadOrgPreferences(orgId),
@@ -199,11 +210,17 @@ export async function prepareFuelWeekReports(args: {
       return day >= weekStart && day <= weekEnd;
     });
 
-    const brain = new Map<string, ReturnType<typeof classifyFuelWeek>>();
+    const historyRows = await loadDomain("fuel_entries", orgId, {
+      dateFrom: addDaysYmd(weekStart, -120),
+      dateTo: addDaysYmd(weekStart, -1),
+    });
+    const brain = new Map<string, Record<string, unknown>>();
     for (const vehicle of vehicles) {
       const driverId = String(vehicle.currentDriverId || "");
       if (!driverId) continue;
       const vehicleId = String(vehicle.id || "");
+      const driver = drivers.find((row) => String(row.id || "") === driverId);
+      const homeMissing = !(Number(driver?.homeLat) && Number(driver?.homeLng));
       const vehicleTrips = trips.filter((trip) =>
         String(trip.vehicleId || "") === vehicleId &&
         (trip.status === "Completed" || trip.status === "Cancelled")
@@ -212,16 +229,62 @@ export async function prepareFuelWeekReports(args: {
         .filter((row) => String(row.vehicleId || "") === vehicleId)
         .filter((row) => row.type === "Company_Misc" || row.type === "Maintenance")
         .reduce((sum, row) => sum + (Number(row.distance) || 0), 0);
+      const evidencedPersonalKm = weekAdjustments
+        .filter((row) => String(row.vehicleId || "") === vehicleId)
+        .filter((row) => row.type === "Personal")
+        .reduce((sum, row) => sum + (Number(row.distance) || 0), 0);
       const dh = deadheadMap.get(vehicleId);
-      const tripKm = sumTripRideshareKm(vehicleTrips as never);
-      const classified = classifyFuelWeek({
-        totalOdometerKm: Number(dh?.totalOdometerKm) || 0,
-        tripRideshareKm: tripKm,
+      const spanKm = Number(dh?.totalOdometerKm) || 0;
+      const ladder = buildEvidenceLadder({
+        spanKm,
         companyOpsKm,
-        deadheadHintKm: deadheadHintKm(dh as unknown as Record<string, unknown>, tripKm, companyOpsKm),
-        industryFallbackPct: 35,
+        evidencedPersonalKm,
+        commuteKm: 0,
+        homeMissing,
+        repositionKm: deadheadHintKm(dh as unknown as Record<string, unknown>, sumTripRideshareKm(vehicleTrips as never), companyOpsKm),
+        trips: vehicleTrips.map((trip) => {
+          const platform = String(trip.platform || "");
+          const positioningMissing = platform !== "" && platform.toLowerCase() !== "uber";
+          return {
+            id: String(trip.id || ""),
+            platform,
+            onTripKm: Number(trip.distance) || 0,
+            enrouteKm: Number(trip.normalizedEnrouteDistance) || 0,
+            openKm: Number(trip.normalizedOpenDistance) || 0,
+            unavailableKm: Number(trip.normalizedUnavailableDistance) || 0,
+            positioningMissing,
+          };
+        }),
       });
-      brain.set(`${driverId}:${vehicleId}`, classified);
+      const ref = referenceEfficiencyFromFills(
+        historyRows
+          .filter((row) => String(row.vehicleId || row.vehicle_id || "") === vehicleId)
+          .map((row) => ({
+            date: String(row.date || ""),
+            odometer: Number(row.odometer) || 0,
+            liters: Number(row.liters) || 0,
+            fullTank: Boolean((row.metadata as { isFullTank?: boolean } | undefined)?.isFullTank),
+          })),
+        weekStart,
+      );
+      if (dh) {
+        dh.referenceKmPerLiter = ref.kmPerLiter;
+        dh.referenceDegraded = ref.degraded;
+      }
+      brain.set(`${driverId}:${vehicleId}`, {
+        rideShareKm: ladder.onlineKm,
+        personalKm: ladder.personalKm,
+        companyOpsKm: ladder.companyOpsKm,
+        deadheadKm: ladder.repositionKm,
+        commuteKm: ladder.commuteKm,
+        unattributedKm: ladder.unattributedKm,
+        availableKm: ladder.unattributedKm + ladder.repositionKm + ladder.commuteKm,
+        method: "fuel-chain-v2",
+        confidence: { rideShare: "high", deadhead: "medium", personal: "high" },
+        onlinePositioningPct: ladder.onlinePositioningPct,
+        homeMissing: ladder.homeMissing,
+        kmSources: ladder.sources,
+      });
     }
 
     const anchors = new Map<string, Array<{ id: string; date: string; odometer: number; referenceId?: string; source?: string }>>();

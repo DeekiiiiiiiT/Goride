@@ -276,7 +276,7 @@ export function registerFuelAuditRoutes(app: Hono) {
                       rollingAvgWindow: txRollingAvg?.window ?? null,
                       rollingAvgEntryCount: txRollingAvg?.entryCount ?? 0,
                       efficiencyBaseline: txRollingAvg ? 'rolling' : 'skipped',
-                      efficiencyVariance: Number(efficiencyVariance.toFixed(4)),
+                      efficiencyVariance: Number((efficiencyVariance * 100).toFixed(1)),
                       isSoftAnchor: isSoftAnchor,
                       isCapacityClose: isCapacityClose || undefined,
                       isFullTank: isCapacityClose || undefined,

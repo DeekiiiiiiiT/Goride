@@ -1,7 +1,7 @@
 /**
  * Fuel gaps step — money residual accept + stop-to-stop mileage Fix (two modes, one step).
  */
-import React from 'react';
+import React, { useState } from 'react';
 import { Button } from '../../ui/button';
 import { CompactVehicleList, type CompactVehicleRow } from './CompactVehicleList';
 import { FuelGapAttribution } from './FuelGapAttribution';
@@ -74,6 +74,15 @@ export type FuelLeakageStepProps = {
   unattributedNote?: string;
   onUnattributedNoteChange?: (value: string) => void;
   onAckUnattributed?: () => void;
+  /** Commute cannot be measured until a home pin exists. */
+  homeMissing?: boolean;
+  periodId?: string;
+  onSaveLeftoverOverride?: (override: {
+    mode: 'company' | 'percentage' | 'fixed';
+    driverPercent: number;
+    driverFixedAmount: number;
+    note: string;
+  }) => Promise<void>;
 };
 
 export function FuelLeakageStep(props: FuelLeakageStepProps) {
@@ -113,7 +122,15 @@ export function FuelLeakageStep(props: FuelLeakageStepProps) {
     unattributedNote = '',
     onUnattributedNoteChange,
     onAckUnattributed,
+    homeMissing = false,
+    periodId,
+    onSaveLeftoverOverride,
   } = props;
+  const [leftoverMode, setLeftoverMode] = useState<'company' | 'percentage' | 'fixed'>('company');
+  const [leftoverPercent, setLeftoverPercent] = useState(0);
+  const [leftoverFixed, setLeftoverFixed] = useState(0);
+  const [leftoverNote, setLeftoverNote] = useState('');
+  const [savingLeftover, setSavingLeftover] = useState(false);
 
   const overExplained = isOverExplainedFuelWeek(totalSpend, leakage);
   const moneyResidualActive = Math.abs(leakage) > FUEL_SPEND_EPS;
@@ -122,6 +139,70 @@ export function FuelLeakageStep(props: FuelLeakageStepProps) {
 
   return (
     <div className="space-y-3">
+      {homeMissing && (
+        <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+          Home is not set. Commute stays unexplained until you pin a home on the driver profile.
+        </p>
+      )}
+      {periodId && onSaveLeftoverOverride && !periodLocked && (
+        <div className="space-y-2 rounded-lg border border-slate-300 bg-white px-3 py-3">
+          <p className="text-sm font-medium text-slate-900">Change leftover for this week</p>
+          <p className="text-[12px] text-slate-500">
+            Company pays leftover unless you set a driver share. A typed reason is required.
+          </p>
+          <select
+            className="h-10 w-full rounded-md border border-slate-200 px-2 text-sm"
+            value={leftoverMode}
+            onChange={(e) => setLeftoverMode(e.target.value as 'company' | 'percentage' | 'fixed')}
+          >
+            <option value="company">Company pays all</option>
+            <option value="percentage">Driver pays a percent</option>
+            <option value="fixed">Driver pays a fixed amount</option>
+          </select>
+          {leftoverMode === 'percentage' && (
+            <input
+              type="number"
+              min={0}
+              max={100}
+              className="h-10 w-full rounded-md border border-slate-200 px-2 text-sm"
+              value={leftoverPercent}
+              onChange={(e) => setLeftoverPercent(Number(e.target.value) || 0)}
+            />
+          )}
+          {leftoverMode === 'fixed' && (
+            <input
+              type="number"
+              min={0}
+              className="h-10 w-full rounded-md border border-slate-200 px-2 text-sm"
+              value={leftoverFixed}
+              onChange={(e) => setLeftoverFixed(Number(e.target.value) || 0)}
+            />
+          )}
+          <textarea
+            className="min-h-[72px] w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
+            value={leftoverNote}
+            onChange={(e) => setLeftoverNote(e.target.value)}
+            placeholder="Why this week is different (8+ characters)"
+          />
+          <Button
+            type="button"
+            disabled={savingLeftover || leftoverNote.trim().length < 8}
+            onClick={() => {
+              setSavingLeftover(true);
+              void onSaveLeftoverOverride({
+                mode: leftoverMode,
+                driverPercent: leftoverPercent,
+                driverFixedAmount: leftoverFixed,
+                note: leftoverNote.trim(),
+              })
+                .catch(() => {})
+                .finally(() => setSavingLeftover(false));
+            }}
+          >
+            Save this week’s leftover split
+          </Button>
+        </div>
+      )}
       {needsUnattributedAck && !periodLocked && (
         <div className="space-y-3 rounded-lg border border-slate-300 bg-white px-3 py-3">
           {unattributedReviewed ? (

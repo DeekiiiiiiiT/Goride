@@ -15,6 +15,7 @@ export interface FleetExpenseCategorySummary {
   type: FleetExpenseType;
   total: number;
   count: number;
+  note?: string;
 }
 
 export interface FleetExpenseWeekGroup {
@@ -151,13 +152,23 @@ export function buildEarningsWeeksFromPeriods(input: {
     const fuelTotal =
       period && period.fuelFinalized ? round2(Math.max(0, Number(period.fuelDeduction) || 0)) : 0;
     const fuelCount = fuelTotal > 0.005 ? 1 : 0;
+    const fuelFc =
+      period?.metadata && typeof period.metadata.financeCore === 'object'
+        ? (period.metadata.financeCore as Record<string, unknown>)
+        : {};
+    const leftover = round2(Math.max(0, Number(fuelFc.fuelLeftoverDriverShare) || 0));
 
     // Toll: only what was charged to the driver (unreconciled weeks stay $0).
     const tollTotal = round2(Math.max(0, Number(period?.tollChargedToDriver) || 0));
     const tollCount = tollTotal > 0.005 ? 1 : 0;
 
     const categories: FleetExpenseCategorySummary[] = [
-      { type: 'fuel', total: fuelTotal, count: fuelCount },
+      {
+        type: 'fuel',
+        total: fuelTotal,
+        count: fuelCount,
+        note: leftover > 0.005 ? `Includes ${leftover.toFixed(2)} leftover fuel you can dispute` : undefined,
+      },
       { type: 'toll', total: tollTotal, count: tollCount },
       { type: 'maintenance', total: maintMisc.maintenance.total, count: maintMisc.maintenance.count },
       { type: 'misc', total: maintMisc.misc.total, count: maintMisc.misc.count },

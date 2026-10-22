@@ -85,6 +85,8 @@ export function buildFuelWeekClosableInput(opts: {
   odometerChainReviewed?: boolean;
   /** R-1: wizard accepted fills-without-odometer beyond gate. */
   unattributedReviewed?: boolean;
+  /** Impossible fills still need an explicit accept. */
+  implausibleFillsUnreviewed?: boolean;
   countsUnevaluated?: boolean;
   degradedInputs?: boolean;
   openDisputesInWeek?: boolean;
@@ -140,6 +142,7 @@ export function buildFuelWeekClosableInput(opts: {
       reportsHaveOdometerChainUnusable(opts.reports) && !opts.odometerChainReviewed,
     unattributedUnreviewed:
       isUnattributedBeyondGate(totalSpend, unattributed) && !opts.unattributedReviewed,
+    implausibleFillsUnreviewed: Boolean(opts.implausibleFillsUnreviewed),
   };
 }
 
@@ -184,6 +187,8 @@ export function fuelWeekClosableBlockerMessage(blocker: FuelWeekClosableBlocker)
       return 'Blocked — not enough odometered fills to measure tank timing';
     case 'unattributed_unreviewed':
       return 'Blocked — fills without odometer need review';
+    case 'implausible_fills_unreviewed':
+      return 'Blocked — a fill looks wrong and has not been accepted';
     case 'card_statement_drift':
       return 'Blocked — unlinked card charges (statement vs Transaction Logs drift)';
     case 'undisposed_flags':

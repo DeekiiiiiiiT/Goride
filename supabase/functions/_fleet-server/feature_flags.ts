@@ -97,7 +97,7 @@ export const FEATURE_FLAGS = {
   PARTS_TIERED_SEARCH: "parts_tiered_search",
   /** Live supplier price/stock adapter. Default off until a vendor feed exists. */
   PARTS_SUPPLIER_API: "parts_supplier_api",
-  /** Roam rider-app funnel on Trip Analytics. Default on (empty until real completed rides). */
+  /** Roam rider-app funnel on Trip Analytics. Off until requests can be tied to a fleet before accept. */
   TRIP_ANALYTICS_ROAM_FUNNEL: "trip_analytics_roam_funnel",
 } as const;
 
@@ -130,9 +130,7 @@ export async function isFeatureEnabled(
 
     if (!flag) {
       // Wave 1C: strict_auth defaults ON when unset; other flags default OFF.
-      // The Roam funnel section is an empty state until real rides exist, so it stays on.
-      return flagName === FEATURE_FLAGS.STRICT_AUTH
-        || flagName === FEATURE_FLAGS.TRIP_ANALYTICS_ROAM_FUNNEL;
+      return flagName === FEATURE_FLAGS.STRICT_AUTH;
     }
 
     // Cache the flag value
@@ -497,8 +495,8 @@ export async function initializeDefaultFlags(): Promise<void> {
     },
     {
       name: FEATURE_FLAGS.TRIP_ANALYTICS_ROAM_FUNNEL,
-      enabled: true,
-      description: "Show the Roam rider-app request funnel on Trip Analytics. Empty until completed rides exist.",
+      enabled: false,
+      description: "Show the Roam rider-app request funnel on Trip Analytics. Off until a request can be tied to this fleet before a driver accepts.",
     },
   ];
 

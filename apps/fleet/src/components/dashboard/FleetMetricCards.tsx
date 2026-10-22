@@ -102,7 +102,7 @@ export function FleetMetricCards({ metrics, trips = [], onNavigate }: FleetMetri
       {/* Card 3: Trips in Progress */}
       <Card 
         className="cursor-pointer hover:shadow-md transition-shadow border-l-4 border-l-amber-500"
-        onClick={() => onNavigate('trips')}
+        onClick={() => onNavigate('trip-analytics')}
       >
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
           <CardTitle className="text-sm font-medium">Trips in Progress</CardTitle>

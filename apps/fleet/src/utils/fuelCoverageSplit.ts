@@ -21,17 +21,17 @@ export {
 
 /** Resolve display matrix rows (company % / driver %) for policy cards. */
 export function getCoverageMatrixRows(rule: FuelRule | undefined): {
-  key: FuelCoverageCategory;
+  key: string;
   label: string;
   companyPct: number;
   driverPct: number;
 }[] {
-  const labels: { key: FuelCoverageCategory; label: string }[] = [
+  const labels: { key: string; label: string }[] = [
     { key: 'rideShare', label: 'Ride Share' },
     { key: 'companyUsage', label: 'Company Ops' },
-    { key: 'deadhead', label: 'Deadhead' },
+    { key: 'deadhead', label: 'Repositioning' },
     { key: 'personal', label: 'Personal' },
-    { key: 'misc', label: 'Misc / Leakage' },
+    { key: 'commute', label: 'Commute' },
   ];
 
   if (!rule) {
@@ -51,7 +51,7 @@ export function getCoverageMatrixRows(rule: FuelRule | undefined): {
     // F-8: misc is company-held; rideShare is allowance-based.
     return labels.map(({ key, label }) => {
       if (key === 'personal') return { key, label, companyPct: 0, driverPct: 100 };
-      if (key === 'companyUsage' || key === 'deadhead' || key === 'misc') {
+      if (key === 'companyUsage' || key === 'deadhead' || key === 'commute') {
         return { key, label, companyPct: 100, driverPct: 0 };
       }
       return { key, label, companyPct: -1, driverPct: -1 }; // rideShare: allowance-based
@@ -59,9 +59,11 @@ export function getCoverageMatrixRows(rule: FuelRule | undefined): {
   }
 
   return labels.map(({ key, label }) => {
-    // F-8: unexplained always company on Percentage path.
-    if (key === 'misc') return { key, label, companyPct: 100, driverPct: 0 };
-    const companyPct = getCompanyCoveragePercent(key, rule);
+    if (key === 'commute') {
+      const companyPct = rule.commuteCoverage ?? 100;
+      return { key, label, companyPct, driverPct: 100 - companyPct };
+    }
+    const companyPct = getCompanyCoveragePercent(key as FuelCoverageCategory, rule);
     return { key, label, companyPct, driverPct: 100 - companyPct };
   });
 }

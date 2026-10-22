@@ -1,10 +1,10 @@
 /**
- * Deno unit tests for Fuel Brain classifier v2 (residual Personal + Deadhead floor).
+ * Deno unit tests. The 35% floor is gone. Personal is not the remainder.
  */
 import { assertEquals, assertAlmostEquals } from "https://deno.land/std@0.208.0/assert/mod.ts";
 import { classifyFuelWeek } from "./classify.ts";
 
-Deno.test("residual after RS/CO/floored DH goes to Personal", () => {
+Deno.test("hint is kept and the remainder is unattributed", () => {
   const r = classifyFuelWeek({
     totalOdometerKm: 400,
     tripRideshareKm: 200,
@@ -13,13 +13,12 @@ Deno.test("residual after RS/CO/floored DH goes to Personal", () => {
     industryFallbackPct: 35,
   });
   assertEquals(r.rideShareKm, 200);
-  // Available = 200; floor = 70; hint 40 → Deadhead 70
-  assertAlmostEquals(r.deadheadKm, 70, 0.01);
-  assertAlmostEquals(r.personalKm, 130, 0.01);
-  assertAlmostEquals(r.rideShareKm + r.companyOpsKm + r.deadheadKm + r.personalKm, 400, 0.01);
+  assertAlmostEquals(r.deadheadKm, 40, 0.01);
+  assertEquals(r.personalKm, 0);
+  assertAlmostEquals(r.unattributedKm, 160, 0.01);
 });
 
-Deno.test("Kenny-like under-claim raises Deadhead to 35% of Available", () => {
+Deno.test("under-claim is not raised to 35% of available", () => {
   const r = classifyFuelWeek({
     totalOdometerKm: 1819,
     tripRideshareKm: 1169,
@@ -28,8 +27,9 @@ Deno.test("Kenny-like under-claim raises Deadhead to 35% of Available", () => {
     industryFallbackPct: 35,
   });
   assertEquals(r.availableKm, 650);
-  assertAlmostEquals(r.deadheadKm, 227.5, 0.01);
-  assertAlmostEquals(r.personalKm, 422.5, 0.01);
+  assertAlmostEquals(r.deadheadKm, 20, 0.01);
+  assertEquals(r.personalKm, 0);
+  assertAlmostEquals(r.unattributedKm, 630, 0.01);
 });
 
 Deno.test("deadhead capped to Available", () => {
@@ -39,13 +39,13 @@ Deno.test("deadhead capped to Available", () => {
     companyOpsKm: 10,
     deadheadHintKm: 50,
   });
-  // Available = 10; deadhead capped to 10; personal = 0
   assertEquals(r.availableKm, 10);
   assertEquals(r.deadheadKm, 10);
   assertEquals(r.personalKm, 0);
+  assertEquals(r.unattributedKm, 0);
 });
 
-Deno.test("hint above floor is kept", () => {
+Deno.test("hint above the old floor is kept and personal stays 0", () => {
   const r = classifyFuelWeek({
     totalOdometerKm: 500,
     tripRideshareKm: 300,
@@ -54,5 +54,6 @@ Deno.test("hint above floor is kept", () => {
     industryFallbackPct: 35,
   });
   assertEquals(r.deadheadKm, 120);
-  assertEquals(r.personalKm, 80);
+  assertEquals(r.personalKm, 0);
+  assertEquals(r.unattributedKm, 80);
 });

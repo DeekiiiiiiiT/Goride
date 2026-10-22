@@ -16,6 +16,7 @@ import {
   fuelTankLiters,
 } from "../../../packages/fuel-core/src/fuelOpsEligibility.ts";
 import { isEntryInInclusiveYmdRange } from "../../../packages/fuel-core/src/fuelWeekRange.ts";
+import { weekHasUnreviewedImplausibleFills } from "../../../packages/fuel-core/src/fillPlausibility.ts";
 import { selectOdometerBucketsClosingInWeek } from "../../../packages/fuel-core/src/fuelWeekRange.ts";
 import type { FuelEntry } from "../../../packages/fuel-core/src/fuelTypes.ts";
 import { getServiceClient } from "./service_client.ts";
@@ -673,6 +674,8 @@ export async function buildFuelWeekClosableInputForPeriod(
     cardStatementDriftUnreviewed,
     cardStatementDriftDetail,
     nullOrgFill: await weekHasNullOrgFill(orgId, weekStart, weekEnd),
+    implausibleFillsUnreviewed: !period.implausible_fills_reviewed_at
+      && weekHasUnreviewedImplausibleFills(weekEntries as Parameters<typeof weekHasUnreviewedImplausibleFills>[0]),
     ...(hasFrozenBuckets
       ? {
           stopToStopVolumeFailed: s2sApplied.stopToStopVolumeFailed,

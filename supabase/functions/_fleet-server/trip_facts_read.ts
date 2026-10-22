@@ -43,6 +43,44 @@ const SORT_TO_FACT: Record<string, string> = {
   id: "trip_id",
 };
 
+// PostgREST puts `.in()` on the query string. A few thousand ids overflow the URL.
+const TRIP_ID_LOOKUP_CHUNK = 80;
+const TRIP_ID_LOOKUP_CONCURRENCY = 6;
+
+async function loadTripPayloads(ids: string[]): Promise<Map<string, Record<string, unknown>>> {
+  const byId = new Map<string, Record<string, unknown>>();
+  const chunks: string[][] = [];
+  for (let i = 0; i < ids.length; i += TRIP_ID_LOOKUP_CHUNK) {
+    chunks.push(ids.slice(i, i + TRIP_ID_LOOKUP_CHUNK));
+  }
+  for (let i = 0; i < chunks.length; i += TRIP_ID_LOOKUP_CONCURRENCY) {
+    const group = chunks.slice(i, i + TRIP_ID_LOOKUP_CONCURRENCY);
+    const loaded = await Promise.all(group.map((slice) =>
+      fleet().from("fleet_trips").select("id, payload_json").in("id", slice)
+    ));
+    for (const result of loaded) {
+      if (result.error) throw new Error(result.error.message);
+      for (const row of (result.data || []) as Array<{ id: string; payload_json: Record<string, unknown> }>) {
+        byId.set(row.id, row.payload_json || {});
+      }
+    }
+  }
+  return byId;
+}
+
+/** One trip for the anomaly Review dialog. Same projection the table already uses. */
+export async function loadTripForOrg(orgId: string, tripId: string): Promise<Record<string, unknown> | null> {
+  const id = tripId.trim();
+  if (!id || !orgId) return null;
+  const loaded = await fleet().from("fleet_trips").select("id, organization_id, payload_json").eq("id", id).maybeSingle();
+  if (loaded.error) throw new Error(loaded.error.message);
+  const row = loaded.data as { id?: string; organization_id?: string | null; payload_json?: Record<string, unknown> | null } | null;
+  if (!row || String(row.organization_id || "") !== orgId) return null;
+  const projected = projectTripListValue((row.payload_json || { id }) as Record<string, unknown>);
+  if (!projected.id) projected.id = id;
+  return projected;
+}
+
 export async function searchTripsFromFacts(
   c: Context,
   body: Record<string, unknown>,
@@ -71,12 +109,7 @@ export async function searchTripsFromFacts(
   const flags = new Map(rows.map((row) => [String(row.trip_id), row]));
   let trips: Record<string, unknown>[] = [];
   if (ids.length) {
-    const loaded = await fleet().from("fleet_trips").select("id, payload_json").in("id", ids);
-    if (loaded.error) throw new Error(loaded.error.message);
-    const byId = new Map((loaded.data || []).map((row: { id: string; payload_json: Record<string, unknown> }) => [
-      row.id,
-      row.payload_json,
-    ]));
+    const byId = await loadTripPayloads(ids);
     trips = ids.map((id) => {
       const projected = projectTripListValue((byId.get(id) || { id }) as Record<string, unknown>);
       const meta = flags.get(id);

@@ -1,13 +1,15 @@
 /**
  * Pure YMD week/range helpers for fuel recon (no React / timezone UI).
+ * Zoned timestamps use the Jamaica calendar day. Naive fill times keep
+ * the written day. Date objects built as local midnights stay on that
+ * local calendar day (callers use them as week bounds, not instants).
  */
+import { fleetCalendarDay } from './fleetTime.ts';
 
 /** Calendar day YYYY-MM-DD from entry/adjustment date strings or Date objects. */
 export function toEntryYmd(date: string | Date | undefined | null): string {
   if (date == null) return '';
-  if (typeof date === 'string') {
-    return date.split('T')[0]?.split(' ')[0] || '';
-  }
+  if (typeof date === 'string') return fleetCalendarDay(date);
   if (date instanceof Date && !isNaN(date.getTime())) {
     const yyyy = date.getFullYear();
     const mm = String(date.getMonth() + 1).padStart(2, '0');

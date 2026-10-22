@@ -374,6 +374,8 @@ function rulesSignature(rules: FuelRule[]): string {
         deadheadCoverage: r.deadheadCoverage,
         personalCoverage: r.personalCoverage,
         miscCoverage: r.miscCoverage,
+        commuteCoverage: r.commuteCoverage,
+        leftoverSplit: r.leftoverSplit,
         conditions: r.conditions,
       }))
       .sort((a, b) => a.category.localeCompare(b.category)),

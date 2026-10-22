@@ -11,7 +11,7 @@ export const FLEET_COMMAND_CENTER =
 export const FLEET_FEATURES = [
   { title: 'Driver Management', description: 'Unified profile system for licensing, performance, and scheduling.', icon: 'badge', accent: 'secondary' },
   { title: 'Vehicle Tracking', description: 'GPS telemetry updated every 3 seconds with history playback.', icon: 'location', accent: 'rides-blue' },
-  { title: 'Trip Logs', description: 'Automated digital logs compliant with international standards.', icon: 'history', accent: 'haul-indigo' },
+  { title: 'Trip Analytics', description: 'Fares, cancellations, and trip patterns for the fleet.', icon: 'history', accent: 'haul-indigo' },
   { title: 'Fuel Management', description: 'Fuel card integration and real-time consumption auditing.', icon: 'fuel', accent: 'dash-cyan' },
   { title: 'Toll Recon', description: 'Automatic matching of toll expenses to specific vehicle routes.', icon: 'receipt', accent: 'secondary' },
   { title: 'Maintenance', description: 'Predictive scheduling based on real-time mileage sensors.', icon: 'build', accent: 'rides-blue' },

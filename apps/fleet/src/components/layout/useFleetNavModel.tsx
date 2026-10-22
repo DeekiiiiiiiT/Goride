@@ -53,7 +53,6 @@ export function useFleetNavModel(): FleetNavModel {
       dashboardTitle: v('dashboardTitle'),
       drivers: v('drivers'),
       vehiclesPageTitle: v('vehiclesPageTitle'),
-      sidebarTrips: v('sidebarTrips'),
     },
     reviewQueueCount: queueCounts?.total ?? 0,
     unattributedFuelCount: queueCounts?.unattributedFuelCount ?? 0,

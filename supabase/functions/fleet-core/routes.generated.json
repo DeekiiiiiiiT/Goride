@@ -1,7 +1,7 @@
 {
   "slug": "fleet-core",
-  "generatedAt": "2026-10-21T19:13:51.109Z",
-  "routeCount": 656,
+  "generatedAt": "2026-10-21T22:45:37.544Z",
+  "routeCount": 657,
   "routes": [
     "ALL /make-server-37f42386/webhooks/wipay-fleet-modules",
     "DELETE ${ADMIN_CAT}/:id",
@@ -612,6 +612,7 @@
     "POST /make-server-37f42386/trips/analytics",
     "POST /make-server-37f42386/trips/analytics/review",
     "POST /make-server-37f42386/trips/analytics/settings",
+    "POST /make-server-37f42386/trips/analytics/trip",
     "POST /make-server-37f42386/trips/export",
     "POST /make-server-37f42386/trips/search",
     "POST /make-server-37f42386/trips/stats",

@@ -104,9 +104,11 @@ describe('5179KZ Jun 15–21 golden spine', () => {
       industryFallbackPct: 35,
     });
     expect(brain.method).toBe('fuel_brain_v2');
-    // Available = 464; floor = 162.4; hint 50 → Deadhead 162.4; Personal 301.6
-    expect(brain.deadheadKm).toBeCloseTo(162.4, 1);
-    expect(brain.personalKm).toBeCloseTo(301.6, 1);
+    // Rebaselined 2026-10-21 (fuel-chain-v2): the 35% floor is gone.
+    // Available = 464; hint 50 stays; remainder is unattributed, not personal.
+    expect(brain.deadheadKm).toBeCloseTo(50, 1);
+    expect(brain.personalKm).toBe(0);
+    expect(brain.unattributedKm).toBeCloseTo(414, 1);
     expect(brain).not.toHaveProperty('isSoftAnchor');
     expect(brain).not.toHaveProperty('tankCapacity');
   });

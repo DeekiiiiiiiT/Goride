@@ -7,9 +7,8 @@ import {
 import { classifyFuelWeek } from './fuelBrainClassify';
 
 describe('applyDeadheadFloor', () => {
-  it('raises under-claimed hints to Available × 35%', () => {
-    // Kenny-like leftover ~650 km, gap hint ~20
-    expect(applyDeadheadFloor(20, 650, 35)).toBeCloseTo(227.5, 1);
+  it('keeps an under-claimed hint instead of raising it to 35%', () => {
+    expect(applyDeadheadFloor(20, 650, 35)).toBeCloseTo(20, 1);
   });
 
   it('keeps hints above the floor', () => {
@@ -22,8 +21,8 @@ describe('applyDeadheadFloor', () => {
 });
 
 describe('resolveDeadheadHintForBrain', () => {
-  it('floors healthy but under-claimed server hints', () => {
-    // Available = 1581 - 1300 = 281; floor = 98.35; hint 80 → 98.35
+  it('keeps a healthy hint that is under the old 35% floor', () => {
+    // Available = 1581 - 1300 = 281; hint 80 stays 80
     expect(
       resolveDeadheadHintForBrain({
         server: {
@@ -36,7 +35,7 @@ describe('resolveDeadheadHintForBrain', () => {
         clientTripRideshareKm: 1300,
         industryFallbackPct: DEFAULT_INDUSTRY_FALLBACK_PCT,
       }),
-    ).toBeCloseTo(98.35, 1);
+    ).toBeCloseTo(80, 1);
   });
 
   it('passes through hints already above the floor', () => {
@@ -67,9 +66,7 @@ describe('resolveDeadheadHintForBrain', () => {
       clientTripRideshareKm: 1319,
       industryFallbackPct: 35,
     });
-    // Available ≈ 262; hygiene + floor = 0.35 * 262 ≈ 91.7
-    expect(hint).toBeCloseTo(91.7, 0);
-    expect(hint).toBeLessThan(200);
+    expect(hint).toBe(0);
 
     const brain = classifyFuelWeek({
       driverId: 'd1',
@@ -82,11 +79,9 @@ describe('resolveDeadheadHintForBrain', () => {
       deadheadHintKm: hint,
       industryFallbackPct: 35,
     });
-    expect(brain.personalKm).toBeGreaterThan(100);
-    expect(brain.deadheadKm + brain.personalKm).toBeCloseTo(262, 0);
-    expect(
-      brain.rideShareKm + brain.companyOpsKm + brain.deadheadKm + brain.personalKm,
-    ).toBeCloseTo(1581, 0);
+    expect(brain.personalKm).toBe(0);
+    expect(brain.unattributedKm).toBeGreaterThan(100);
+    expect(brain.deadheadKm + brain.unattributedKm).toBeCloseTo(262, 0);
   });
 
   it('Fuel Brain still caps an overstated hint (brain itself is not the bug)', () => {

@@ -247,9 +247,14 @@ export function FleetEarningsSettlementTab({
                         <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-100 dark:bg-slate-800">
                           {typeIcon(cat.type)}
                         </div>
-                        <p className="text-sm font-medium text-slate-800 dark:text-slate-100">
-                          {typeLabel(cat.type)}
-                        </p>
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-slate-800 dark:text-slate-100">
+                            {typeLabel(cat.type)}
+                          </p>
+                          {cat.note ? (
+                            <p className="text-xs text-slate-500">{cat.note}</p>
+                          ) : null}
+                        </div>
                       </div>
                       <p
                         className={cn(

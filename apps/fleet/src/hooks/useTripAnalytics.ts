@@ -1,3 +1,4 @@
+import { useRef } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../services/api';
 import {
@@ -8,14 +9,19 @@ import {
 export function useTripAnalytics(state: TripAnalyticsState, page: number, pageSize = 25) {
   const queryClient = useQueryClient();
   const filters = analyticsFilterBody(state);
+  const forceRefresh = useRef(false);
   const analytics = useQuery({
     queryKey: ['trip-analytics', filters, state.measure],
-    queryFn: () => api.getTripAnalytics({
-      filters,
-      measure: state.measure,
-      refresh: false,
-      sections: ['kpis', 'volume', 'heatmap', 'cancellations', 'economics', 'geo', 'anomalies', 'coverage', 'funnel'],
-    }),
+    queryFn: () => {
+      const refresh = forceRefresh.current;
+      forceRefresh.current = false;
+      return api.getTripAnalytics({
+        filters,
+        measure: state.measure,
+        refresh,
+        sections: ['kpis', 'volume', 'heatmap', 'cancellations', 'economics', 'geo', 'anomalies', 'coverage', 'funnel'],
+      });
+    },
     staleTime: 60_000,
   });
 
@@ -45,6 +51,7 @@ export function useTripAnalytics(state: TripAnalyticsState, page: number, pageSi
     analytics,
     table,
     refresh: async () => {
+      forceRefresh.current = true;
       await queryClient.invalidateQueries({ queryKey: ['trip-analytics'] });
       await queryClient.invalidateQueries({ queryKey: ['trip-analytics-table'] });
     },

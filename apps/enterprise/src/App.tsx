@@ -178,9 +178,6 @@ const BridgedTagInventoryPage = lazy(() =>
 const BridgedTollAnalyticsPage = lazy(() =>
   import('@/fleet-bridge/TollPages').then((m) => ({ default: m.BridgedTollAnalyticsPage })),
 );
-const BridgedTripsPage = lazy(() =>
-  import('@/fleet-bridge/pages').then((m) => ({ default: m.BridgedTripsPage })),
-);
 const BridgedDataCenterPage = lazy(() =>
   import('@/fleet-bridge/pages').then((m) => ({ default: m.BridgedDataCenterPage })),
 );
@@ -708,16 +705,7 @@ export default function App() {
               </Gated>
             }
           />
-          <Route
-            path="trips"
-            element={
-              <Gated module="trips">
-                <Suspense fallback={<Fall />}>
-                  <BridgedTripsPage />
-                </Suspense>
-              </Gated>
-            }
-          />
+          <Route path="trips" element={<Navigate to="/app/finance" replace />} />
           <Route
             path="data-center"
             element={

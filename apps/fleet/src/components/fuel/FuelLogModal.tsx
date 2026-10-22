@@ -24,6 +24,7 @@ import { uploadEvidenceFile } from '../../services/uploadEvidence';
 import { validateGasCardCreateGates } from '../../utils/gasCardCreateGates';
 import { stampAdminKnownFillCashMeta } from '../../utils/adminKnownFillStamp';
 import { useAuth } from '../auth/AuthContext';
+import { confirmFillPlausibility } from '../../utils/fillPlausibilityGate';
 
 export type FuelLogSavePayload =
     | FuelEntry
@@ -429,6 +430,17 @@ export function FuelLogModal({
         if (!formData.vehicleId) { toast.error("Please select a vehicle"); return; }
         if (!formData.driverId) { toast.error("Please select a driver"); return; }
         if (!(Number(formData.odometer) > 0)) { toast.error("Odometer reading is required"); return; }
+        const vehicle = vehicles.find((v: any) => v.id === formData.vehicleId);
+        const fillGate = confirmFillPlausibility({
+            amount: Number(formData.amount) || 0,
+            liters: Number(formData.liters) || 0,
+            odometer: Number(formData.odometer) || 0,
+            tankCapacityLiters: Number(vehicle?.fuelSettings?.tankCapacity) || undefined,
+        });
+        if (!fillGate.ok) {
+            toast.error(fillGate.message || 'This fill cannot be saved');
+            return;
+        }
         if (!formData.matchedStationId) {
             toast.error("Select a verified station from the Dominion list");
             return;
@@ -540,6 +552,7 @@ export function FuelLogModal({
                     ?? 0,
                 editReason: formData.editReason,
                 source: 'Fuel Log',
+                ...(fillGate.accepted ? { plausibilityAccepted: true } : {}),
                 portal_type: 'Manual_Entry',
                 isManual: true,
                 entrySource: initialData

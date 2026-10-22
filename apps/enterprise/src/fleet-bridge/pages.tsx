@@ -74,10 +74,6 @@ export const BridgedTollReconciliationPage = bridge(() =>
   }),
 );
 
-export const BridgedTripsPage = bridge(() =>
-  import('@fleet/components/trips/TripLogsPage').then((m) => ({ default: m.TripLogsPage })),
-);
-
 export const BridgedDataCenterPage = bridge(() =>
   import('@fleet/components/imports/ImportsPage').then((m) => ({ default: m.ImportsPage })),
 );

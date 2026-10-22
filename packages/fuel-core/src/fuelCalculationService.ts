@@ -60,6 +60,10 @@ import {
 } from './fuelCoverageSplit.ts';
 import { floorMiscForSplit } from './fuelFinalizeGate.ts';
 import { deriveWindowMoneyFromEntries } from './deriveWindowMoneyFromEntries.ts';
+import { resolveFillChainSpan, tripBelongsToFillSpan } from './fillChain.ts';
+import { splitLeftoverFuel, normalizeLeftoverSplit, type LeftoverSplit } from './leftoverSplit.ts';
+import { FUEL_ENGINE_VERSION } from './fuelEngine.ts';
+import { addDaysYmd } from './fleetTime.ts';
 
 export {
   FALLBACK_EFFICIENCY_KM_L,
@@ -110,6 +114,11 @@ export interface VehicleDeadheadInput {
     method: 'A' | 'C' | 'combined' | 'fallback';
     confidenceLevel: 'high' | 'medium' | 'low';
     confidenceReason: string;
+    /** Last odometered fill before this week. Turns on the continuous chain. */
+    priorOdometer?: number;
+    priorAt?: string;
+    referenceKmPerLiter?: number | null;
+    referenceDegraded?: boolean;
 }
 
 /** Brain category km injected into recon when FLEET_USE_FUEL_BRAIN=1 */
@@ -118,9 +127,15 @@ export interface FuelBrainClassificationInput {
     personalKm: number;
     companyOpsKm: number;
     deadheadKm: number;
+    commuteKm?: number;
+    unattributedKm?: number;
+    refuelDetourKm?: number;
     availableKm?: number;
     confidence?: Record<string, string>;
     method?: string;
+    onlinePositioningPct?: number | null;
+    homeMissing?: boolean;
+    kmSources?: unknown;
 }
 
 export const FuelCalculationService = {
@@ -243,6 +258,11 @@ export const FuelCalculationService = {
             personalAllowance?: PersonalAllowanceReconContext;
             /** H-8: ledger anchors so freeze buckets match Stop-to-Stop panel. */
             externalAnchors?: OdometerBucketAnchor[];
+            priorFill?: { odometer: number; at?: string };
+            referenceKmPerLiter?: number | null;
+            referenceDegraded?: boolean;
+            leftoverOverride?: LeftoverSplit;
+            degradedInputs?: boolean;
         }
     ): WeeklyFuelReport => {
         const startStr = FuelCalculationService.toLocalDateStr(weekStart);
@@ -271,9 +291,10 @@ export const FuelCalculationService = {
         // Phase 3: Calculate Pending Count
         const pendingCount = vehicleEntries.filter(e => e.reconciliationStatus === 'Pending').length;
 
-        const vehicleTrips = trips.filter(t => 
+        const tripLookbackStart = addDaysYmd(startStr, -1);
+        let vehicleTrips = trips.filter(t => 
             t.vehicleId === vehicle.id && 
-            isEntryInInclusiveYmdRange(t.date, startStr, endStr) &&
+            isEntryInInclusiveYmdRange(t.date, tripLookbackStart, endStr) &&
             (t.status === 'Completed' || t.status === 'Cancelled')
         );
 
@@ -318,6 +339,36 @@ export const FuelCalculationService = {
             observedEfficiency = weekOdoSpan / efficiencyFuel;
         }
 
+        const priorFill = options?.priorFill
+            ?? (deadheadData?.priorOdometer
+                ? { odometer: deadheadData.priorOdometer, at: deadheadData.priorAt }
+                : null);
+        const chain = resolveFillChainSpan({
+            weekStartOdometer: Number(entriesWithOdo[0]?.odometer) || 0,
+            weekEndOdometer: Number(entriesWithOdo[entriesWithOdo.length - 1]?.odometer) || 0,
+            prior: priorFill,
+        });
+        if (chain.useChain && totalLiters > 0 && chain.spanKm > 0) {
+            observedEfficiency = chain.spanKm / totalLiters;
+        }
+        const lastFillAt = String(entriesWithOdo[entriesWithOdo.length - 1]?.date || '');
+        if (chain.useChain && priorFill?.at && lastFillAt) {
+            vehicleTrips = trips.filter((t) =>
+                t.vehicleId === vehicle.id &&
+                (t.status === 'Completed' || t.status === 'Cancelled') &&
+                tripBelongsToFillSpan(t, {
+                    weekStart: startStr,
+                    weekEnd: endStr,
+                    priorAt: priorFill.at,
+                    endAt: lastFillAt,
+                }),
+            );
+        } else {
+            vehicleTrips = vehicleTrips.filter((t) =>
+                isEntryInInclusiveYmdRange(t.date, startStr, endStr),
+            );
+        }
+
         // Fallback chain: vehicle.fuelSettings.efficiencyCity (L/100km -> km/L) -> 10 km/L default
         if (observedEfficiency <= 0) {
             const cityEfficiency = vehicle.fuelSettings?.efficiencyCity;
@@ -359,7 +410,9 @@ export const FuelCalculationService = {
         const evidencedPersonalFromBuckets = buckets.reduce((sum, b) => sum + (b.personalDistance || 0), 0);
         // Price km against the week's fill-to-fill span, not a wider ledger chain.
         // Platform km after the last reading was being billed as extra fuel.
-        const priceSpanKm = weekOdoSpan > 0 ? weekOdoSpan : totalOdometerDelta;
+        const priceSpanKm = chain.useChain && chain.spanKm > 0
+            ? chain.spanKm
+            : (weekOdoSpan > 0 ? weekOdoSpan : totalOdometerDelta);
         const pricedPurpose = capPurposeKmToOdometer({
             odometerDeltaKm: priceSpanKm,
             tripKm: totalTripDistance,
@@ -373,11 +426,44 @@ export const FuelCalculationService = {
 
         let deadheadDistance = 0;
         let personalDistance = evidencedPersonalFromBuckets;
+        let commuteDistance = 0;
+        let unattributedKm = 0;
+        let refuelKm = 0;
+        let onlinePositioningPct: number | null = null;
+        let homeMissing = false;
+        let kmSources: unknown;
         const useBrain =
             !options?.forceLegacyResidual &&
             !!options?.brainClassification;
 
-        if (useBrain && options?.brainClassification) {
+        if (chain.useChain && useBrain && options?.brainClassification) {
+            const brain = options.brainClassification;
+            // Evidence ladder: do not rescale onto a shorter span, and do not
+            // treat the remainder as personal.
+            personalDistance = evidencedPersonalFromBuckets;
+            deadheadDistance = Math.max(0, brain.deadheadKm || 0);
+            commuteDistance = Math.max(0, brain.commuteKm || 0);
+            refuelKm = Math.max(0, brain.refuelDetourKm || 0);
+            onlinePositioningPct = brain.onlinePositioningPct ?? null;
+            homeMissing = !!brain.homeMissing;
+            kmSources = brain.kmSources;
+            const online = Math.max(0, brain.rideShareKm || 0);
+            pricedPurpose.tripKm = online > 0 ? online : pricedPurpose.tripKm;
+            unattributedKm = brain.unattributedKm != null
+                ? Math.max(0, brain.unattributedKm)
+                : Math.max(
+                    0,
+                    priceSpanKm - pricedPurpose.tripKm - pricedPurpose.companyKm
+                      - personalDistance - deadheadDistance - commuteDistance - refuelKm,
+                  );
+        } else if (chain.useChain) {
+            personalDistance = evidencedPersonalFromBuckets;
+            deadheadDistance = 0;
+            unattributedKm = Math.max(
+                0,
+                priceSpanKm - pricedPurpose.tripKm - pricedPurpose.companyKm - personalDistance,
+            );
+        } else if (useBrain && options?.brainClassification) {
             const brain = options.brainClassification;
             personalDistance = Math.max(0, brain.personalKm || 0);
             deadheadDistance = Math.max(0, brain.deadheadKm || 0);
@@ -397,19 +483,27 @@ export const FuelCalculationService = {
             deadheadDistance = Math.min(deadheadData.deadheadKm, residualAfterPersonal);
         }
 
+        const referenceKmPerLiter = options?.referenceKmPerLiter
+            ?? deadheadData?.referenceKmPerLiter
+            ?? null;
+        const referenceDegraded = chain.useChain
+            ? (options?.referenceDegraded
+                ?? deadheadData?.referenceDegraded
+                ?? !(Number(referenceKmPerLiter) > 0))
+            : false;
+        const effForPrice = chain.useChain && Number(referenceKmPerLiter) > 0
+            ? Number(referenceKmPerLiter)
+            : observedEfficiency;
+        const kmCost = (km: number) =>
+            priceUnavailable || !(effForPrice > 0) ? 0 : (km / effForPrice) * actualPricePerLiter;
+
         // 5. Costs need a real JMD/L — when unavailable, keep km but charge $0 (fail loud)
-        const rideShareCost = priceUnavailable
-            ? 0
-            : (pricedPurpose.tripKm / observedEfficiency) * actualPricePerLiter;
-        const companyUsageCost = priceUnavailable
-            ? 0
-            : (pricedPurpose.companyKm / observedEfficiency) * actualPricePerLiter;
-        const deadheadCost = priceUnavailable
-            ? 0
-            : (deadheadDistance / observedEfficiency) * actualPricePerLiter;
-        const personalUsageCost = priceUnavailable
-            ? 0
-            : (personalDistance / observedEfficiency) * actualPricePerLiter;
+        const rideShareCost = kmCost(pricedPurpose.tripKm);
+        const companyUsageCost = kmCost(pricedPurpose.companyKm + refuelKm);
+        const deadheadCost = kmCost(deadheadDistance);
+        const personalUsageCost = kmCost(personalDistance);
+        const commuteCost = kmCost(commuteDistance);
+        const unattributedKmCost = kmCost(unattributedKm);
 
         // 6. N-1/N-2: hoist efficiencySource before carve; split first-fill timing vs no-odo
         // R-3: derive carves from entries; FCS already resolved price for categories.
@@ -417,10 +511,11 @@ export const FuelCalculationService = {
             pricePerLiter: actualPricePerLiter,
             hasVehicleEfficiencySettings: !!vehicle.fuelSettings?.efficiencyCity,
         });
-        const efficiencySource = derivedWindow.efficiencySource;
-        const windowTimingCost = priceUnavailable ? 0 : derivedWindow.windowTimingCost;
+        let efficiencySource = derivedWindow.efficiencySource;
+        if (chain.useChain && totalLiters > 0 && chain.spanKm > 0) efficiencySource = 'odometer';
+        const windowTimingCost = chain.useChain || priceUnavailable ? 0 : derivedWindow.windowTimingCost;
         const unattributedFillCost = priceUnavailable ? 0 : derivedWindow.unattributedFillCost;
-        const miscellaneousCost = computeMiscellaneousCost(totalGasCardCost, {
+        let miscellaneousCost = computeMiscellaneousCost(totalGasCardCost, {
             rideShare: rideShareCost,
             companyUsage: companyUsageCost,
             deadhead: deadheadCost,
@@ -428,6 +523,7 @@ export const FuelCalculationService = {
             windowTiming: windowTimingCost,
             unattributedFill: unattributedFillCost,
         });
+        if (chain.useChain) miscellaneousCost -= commuteCost + unattributedKmCost;
 
         // 6b. Personal Allowance (Option 2): company absorbs earned; overage → personal split
         let personalForSplit = personalUsageCost;
@@ -530,6 +626,47 @@ export const FuelCalculationService = {
                 miscSplit.driver;
         }
 
+        const assembleHeldExtras = earnedAbsorbCompany === 0 && personalForSplit === personalUsageCost;
+        if (chain.useChain && !assembleHeldExtras) {
+            companyShare += commuteCost + unattributedKmCost;
+        }
+        const blockDriver = !chain.useChain
+            || efficiencySource !== 'odometer'
+            || referenceDegraded
+            || !!options?.degradedInputs;
+        const leftoverPolicy = normalizeLeftoverSplit(
+            options?.leftoverOverride ?? fuelRule?.leftoverSplit,
+        );
+        const leftover = chain.useChain
+            ? splitLeftoverFuel({
+                variance: miscellaneousCost,
+                unattributedKmCost,
+                noOdometerFillCost: unattributedFillCost,
+                split: leftoverPolicy,
+                blockDriver,
+                blockReason: efficiencySource !== 'odometer'
+                    ? 'efficiency_not_from_odometer'
+                    : referenceDegraded
+                        ? 'no_reference_efficiency'
+                        : options?.degradedInputs
+                            ? 'degraded_inputs'
+                            : undefined,
+            })
+            : null;
+        const commuteCompanyPct = fuelRule?.commuteCoverage ?? 100;
+        const commuteDriver = chain.useChain
+            ? commuteCost * (1 - Math.max(0, Math.min(100, commuteCompanyPct)) / 100)
+            : 0;
+        if (leftover) {
+            const driverExtra = leftover.driver + commuteDriver;
+            companyShare -= driverExtra;
+            driverShare += driverExtra;
+            miscSplit = {
+                company: miscSplit.company - leftover.driver,
+                driver: leftover.driver,
+            };
+        }
+
         // 8. Health Status — cycle spine when FLEET_CYCLE_HEALTH (default ON)
         const priceSource = priceResolved.priceSource;
 
@@ -623,6 +760,10 @@ export const FuelCalculationService = {
             companyUsageCost,
             deadheadDistance,
             deadheadCost,
+            commuteDistance,
+            commuteCost,
+            unattributedKm,
+            unattributedKmCost,
             personalDistance,
             personalUsageCost,
             miscellaneousCost,
@@ -648,6 +789,25 @@ export const FuelCalculationService = {
             metadata: {
                 scenarioName: activeScenario?.name || 'Standard (Fallback)',
                 scenarioId: activeScenario?.id,
+                engineVersion: FUEL_ENGINE_VERSION,
+                chainStart: chain.chainStart,
+                spanStartOdometer: chain.spanStartOdometer,
+                spanEndOdometer: chain.spanEndOdometer,
+                spanKm: chain.spanKm,
+                referenceKmPerLiter: referenceKmPerLiter,
+                referenceDegraded,
+                onlinePositioningPct,
+                homeMissing,
+                kmSources,
+                leftoverSplit: leftover
+                    ? {
+                        ...leftoverPolicy,
+                        driver: leftover.driver,
+                        company: leftover.company,
+                        byBucket: leftover.byBucket,
+                        driverBlockedReason: leftover.driverBlockedReason,
+                      }
+                    : undefined,
                 windowTimingCost,
                 unattributedFillCost,
                 // Ride Share calculation transparency
@@ -841,7 +1001,7 @@ export const FuelCalculationService = {
             const policyId = hit?.scenario.id;
 
             const expandedTrips = trips.filter((t) => {
-                if (!isEntryInInclusiveYmdRange(t.date, startStr, endStr)) return false;
+                if (!isEntryInInclusiveYmdRange(t.date, addDaysYmd(startStr, -1), endStr)) return false;
                 if (!(t.status === 'Completed' || t.status === 'Cancelled')) return false;
                 if (driverId === UNASSIGNED_FUEL_DRIVER_ID) return false;
                 if (t.driverId === driverId) return true;
@@ -940,6 +1100,10 @@ export const FuelCalculationService = {
             merged.totalTripDistance = 0;
             merged.companyMiscDistance = 0;
             merged.deadheadDistance = 0;
+            merged.commuteDistance = 0;
+            merged.commuteCost = 0;
+            merged.unattributedKm = 0;
+            merged.unattributedKmCost = 0;
             merged.personalDistance = 0;
             merged.pendingCount = 0;
             merged.companyShare = 0;
@@ -984,6 +1148,10 @@ export const FuelCalculationService = {
                 merged.totalTripDistance += slice.totalTripDistance;
                 merged.companyMiscDistance += slice.companyMiscDistance;
                 merged.deadheadDistance += slice.deadheadDistance || 0;
+                merged.commuteDistance = (merged.commuteDistance || 0) + (slice.commuteDistance || 0);
+                merged.commuteCost = (merged.commuteCost || 0) + (slice.commuteCost || 0);
+                merged.unattributedKm = (merged.unattributedKm || 0) + (slice.unattributedKm || 0);
+                merged.unattributedKmCost = (merged.unattributedKmCost || 0) + (slice.unattributedKmCost || 0);
                 merged.personalDistance += slice.personalDistance;
                 merged.pendingCount = (merged.pendingCount || 0) + (slice.pendingCount || 0);
                 merged.companyShare += slice.companyShare;
@@ -1001,7 +1169,7 @@ export const FuelCalculationService = {
                 personal: merged.personalUsageCost,
                 windowTiming: Number(merged.windowTimingCost) || 0,
                 unattributedFill: Number(merged.unattributedFillCost) || 0,
-            });
+            }) - (Number(merged.commuteCost) || 0) - (Number(merged.unattributedKmCost) || 0);
             merged.vehicleId = primaryVehicle.id;
             if (sliceMeta) {
                 merged.metadata = { ...merged.metadata, ...sliceMeta };

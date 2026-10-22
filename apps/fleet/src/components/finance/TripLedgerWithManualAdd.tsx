@@ -14,7 +14,7 @@ type ColumnConfig = {
   custom?: boolean;
 };
 
-/** Trip Ledger plus the same Log Manual Trip form used on Trip Logs. */
+/** Trip Ledger plus the manual trip form. */
 export function TripLedgerWithManualAdd({ columnConfig }: { columnConfig?: ColumnConfig[] }) {
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
@@ -46,7 +46,7 @@ export function TripLedgerWithManualAdd({ columnConfig }: { columnConfig?: Colum
       toast.error('Driver must be selected');
       throw new Error('Driver must be selected');
     }
-    const driverName = drivers.find((d) => d.id === driverId)?.name || 'Unknown';
+    const driverName = drivers.find((d: { id: string; name: string }) => d.id === driverId)?.name || 'Unknown';
     const trip = createManualTrip(data, driverId, driverName);
     await api.saveTrips([trip]);
     toast.success('Manual trip logged');

@@ -169,7 +169,6 @@ const NAV_ITEMS: NavItem[] = [
           },
         ],
       },
-      { to: '/app/trips', label: 'Trips', icon: Route, module: 'trips' },
       { to: '/app/data-center', label: 'Data Center', icon: Database, module: 'dataCenter' },
       { to: '/app/reports', label: 'Reports', icon: BarChart3, module: 'reports' },
     ],

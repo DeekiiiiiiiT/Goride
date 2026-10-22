@@ -20,6 +20,11 @@
     "./fuelOpsEligibility": "./src/fuelOpsEligibility.ts",
     "./fuelWeekRange": "./src/fuelWeekRange.ts",
     "./tripRideshareKm": "./src/tripRideshareKm.ts",
+    "./fuelBrainClassifyCore": "./src/fuelBrainClassifyCore.ts",
+    "./fillPlausibility": "./src/fillPlausibility.ts",
+    "./leftoverSplit": "./src/leftoverSplit.ts",
+    "./fleetTime": "./src/fleetTime.ts",
+    "./fuelEngine": "./src/fuelEngine.ts",
     "./tripGrossRevenue": "./src/tripGrossRevenue.ts",
     "./vehicleDriverAssignmentHistory": "./src/vehicleDriverAssignmentHistory.ts"
   },

@@ -33,6 +33,8 @@ export function TripAnalyticsPage({ onNavigate }: { onNavigate?: (page: string) 
   const [page, setPage] = useState(1);
   const [coverageOpen, setCoverageOpen] = useState(false);
   const [selected, setSelected] = useState<Trip | null>(null);
+  const [openingId, setOpeningId] = useState<string | null>(null);
+  const [openError, setOpenError] = useState('');
   const [exporting, setExporting] = useState(false);
   const [exportNote, setExportNote] = useState('');
   const pageSize = 25;
@@ -139,7 +141,7 @@ export function TripAnalyticsPage({ onNavigate }: { onNavigate?: (page: string) 
         <div className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-900">
           <p className="font-semibold">Trip Analytics could not load.</p>
           <p className="mt-1">{analytics.error instanceof Error ? analytics.error.message : 'Try again. This is not a zero result.'}</p>
-          <button type="button" className="mt-3 min-h-11 rounded-lg bg-white px-3" onClick={() => analytics.refetch()}>Retry</button>
+          <button type="button" className="mt-3 min-h-11 rounded-lg bg-white px-3" onClick={() => refresh()}>Retry</button>
         </div>
       ) : null}
       {empty ? (
@@ -180,21 +182,37 @@ export function TripAnalyticsPage({ onNavigate }: { onNavigate?: (page: string) 
             <TripAnalyticsGeo geo={payload.geo} onZone={(zone) => update({ ...state, zone })} />
           )}
           {errors.anomalies ? <SectionError title="Anomalies" body={errors.anomalies} onRetry={() => refresh()} /> : (
-            <TripAnalyticsAnomalies
-              data={payload.anomalies}
-              onOpen={(tripId) => {
-                const trip = trips.find((row) => String(row.id) === tripId);
-                setSelected((trip as Trip) || ({ id: tripId } as Trip));
-              }}
-              onChanged={() => refresh()}
-            />
+            <>
+              <TripAnalyticsAnomalies
+                data={payload.anomalies}
+                openingId={openingId}
+                onOpen={async (tripId) => {
+                  const onPage = trips.find((row) => String(row.id) === tripId);
+                  if (onPage) {
+                    setOpenError('');
+                    setSelected(onPage as Trip);
+                    return;
+                  }
+                  setOpeningId(tripId);
+                  setOpenError('');
+                  try {
+                    const loaded = await api.getTripById(tripId);
+                    setSelected(loaded as unknown as Trip);
+                  } catch (err) {
+                    setOpenError(err instanceof Error ? err.message : 'Could not open that trip');
+                  } finally {
+                    setOpeningId(null);
+                  }
+                }}
+                onChanged={() => refresh()}
+              />
+              {openError ? <p className="text-sm text-rose-700">{openError}</p> : null}
+            </>
           )}
           <TripAnalyticsCost
             from={state.from}
             to={state.to}
-            km={kpis?.current?.avgDistance != null && kpis?.current?.completed != null
-              ? Number(kpis.current.avgDistance) * Number(kpis.current.completed)
-              : null}
+            km={kpis?.current?.distanceKm != null ? Number(kpis.current.distanceKm) : null}
             fee={kpis?.current?.platformFee != null ? Number(kpis.current.platformFee) : null}
             vehicles={(vehicles.data || []) as FleetVehicle[]}
           />
@@ -228,7 +246,6 @@ export function TripAnalyticsPage({ onNavigate }: { onNavigate?: (page: string) 
         trip={selected}
         open={!!selected}
         onOpenChange={(open) => { if (!open) setSelected(null); }}
-        onOpenLogs={() => onNavigate?.('trips')}
       />
     </div>
   );

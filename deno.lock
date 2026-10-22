@@ -120,8 +120,9 @@
     "npm:react-resizable-panels@^2.1.7": "2.1.9_react@18.3.1_react-dom@18.3.1__react@18.3.1",
     "npm:react-router-dom@^7.6.0": "7.18.2_react@18.3.1_react-dom@18.3.1__react@18.3.1",
     "npm:react@^18.3.1": "18.3.1",
-    "npm:recharts@*": "3.10.1_react@18.3.1_react-dom@18.3.1__react@18.3.1_react-is@19.2.8_@types+react@18.3.31_redux@5.0.1",
-    "npm:recharts@^3.8.1": "3.10.1_react@18.3.1_react-dom@18.3.1__react@18.3.1_react-is@19.2.8_@types+react@18.3.31_redux@5.0.1",
+    "npm:recharts@*": "3.8.1_react@18.3.1_react-dom@18.3.1__react@18.3.1_react-is@17.0.2_@types+react@18.3.31_redux@5.0.1",
+    "npm:recharts@3.8.1": "3.8.1_react@18.3.1_react-dom@18.3.1__react@18.3.1_react-is@17.0.2_@types+react@18.3.31_redux@5.0.1",
+    "npm:recharts@^3.8.1": "3.8.1_react@18.3.1_react-dom@18.3.1__react@18.3.1_react-is@17.0.2_@types+react@18.3.31_redux@5.0.1",
     "npm:sharp@~0.35.3": "0.35.3",
     "npm:sonner@^2.0.3": "2.0.8_@types+react@18.3.31_react@18.3.1_react-dom@18.3.1__react@18.3.1",
     "npm:tailwind-merge@*": "3.6.0",
@@ -2618,12 +2619,12 @@
       "dependencies": [
         "@standard-schema/spec",
         "@standard-schema/utils",
-        "immer",
+        "immer@11.1.18",
         "react",
         "react-redux",
         "redux",
         "redux-thunk",
-        "reselect"
+        "reselect@5.2.0"
       ],
       "optionalPeers": [
         "react",
@@ -4358,6 +4359,9 @@
     "immediate@3.0.6": {
       "integrity": "sha512-XXOFtyqDjNDAQxVfYxuF7g9Il/IbWmmlQg2MYKOH8ExIT1qg6xc4zyS3HaEEATgs1btfzxq15ciUiY7gjSXRGQ=="
     },
+    "immer@10.2.0": {
+      "integrity": "sha512-d/+XTN3zfODyjr89gM3mPq1WNX2B8pYsu7eORitdwyA2sBubnTl3laYlBk4sXY5FUa5qTZGBDPJICVbvqzjlbw=="
+    },
     "immer@11.1.18": {
       "integrity": "sha512-EQyQtLiYW029lyoczMl/Hh4Xu7cDecSc58JRYpHyL4tIAu3eqd1yJzQX04d2BZHDkzFFvm6qJEJWOtfDSWAXbQ=="
     },
@@ -5201,19 +5205,20 @@
         "util-deprecate"
       ]
     },
-    "recharts@3.10.1_react@18.3.1_react-dom@18.3.1__react@18.3.1_react-is@19.2.8_@types+react@18.3.31_redux@5.0.1": {
-      "integrity": "sha512-QXFrvt6IVcw7eeZCoyXTwkIJAX3Dv1nyVhMicXJ47GsGDDpcN8z6o644DibE9XjpBTThtsomLKnTV6lc+cVFUA==",
+    "recharts@3.8.1_react@18.3.1_react-dom@18.3.1__react@18.3.1_react-is@17.0.2_@types+react@18.3.31_redux@5.0.1": {
+      "integrity": "sha512-mwzmO1s9sFL0TduUpwndxCUNoXsBw3u3E/0+A+cLcrSfQitSG62L32N69GhqUrrT5qKcAE3pCGVINC6pqkBBQg==",
       "dependencies": [
         "@reduxjs/toolkit",
         "clsx",
         "decimal.js-light",
         "es-toolkit",
         "eventemitter3",
-        "immer",
+        "immer@10.2.0",
         "react",
         "react-dom",
+        "react-is",
         "react-redux",
-        "reselect",
+        "reselect@5.1.1",
         "tiny-invariant",
         "use-sync-external-store",
         "victory-vendor"
@@ -5291,6 +5296,9 @@
     },
     "require-from-string@2.0.2": {
       "integrity": "sha512-Xf0nWe6RseziFMu+Ap9biiUbmplq6S9/p+7w7YXP/JBHhrUDDUhwa+vANyubuqfZWTveU//DYVGsDG7RKL/vEw=="
+    },
+    "reselect@5.1.1": {
+      "integrity": "sha512-K/BG6eIky/SBpzfHZv/dd+9JBFiS4SWV7FIujVyJRux6e45+73RaUHXLmIR1f7WOMaQ0U1km6qwklRQxpJJY0w=="
     },
     "reselect@5.2.0": {
       "integrity": "sha512-AgZ3UOZm3YndfrJ4OYjgrT7bmCm/1iqkjvEfH/oYjzh6PD2qw4QuT3jjnXIrpdt4MTpMXclMT3lXbmRY+XRakw=="
@@ -7057,7 +7065,7 @@
             "npm:react-hook-form@^7.55.0",
             "npm:react-resizable-panels@^2.1.7",
             "npm:react@^18.3.1",
-            "npm:recharts@*",
+            "npm:recharts@3.8.1",
             "npm:sharp@~0.35.3",
             "npm:sonner@^2.0.3",
             "npm:tailwind-merge@*",

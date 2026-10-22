@@ -199,7 +199,7 @@ export function AppSidebar({
                   />
                 )}
 
-                {nav.fleetOps.visible && (nav.fleetOps.fuel || nav.fleetOps.toll || nav.fleetOps.trips) && (
+                {nav.fleetOps.visible && (nav.fleetOps.fuel || nav.fleetOps.toll) && (
                   <NavSection
                     id="fleet-ops"
                     label="Fleet Operations"
@@ -235,14 +235,6 @@ export function AppSidebar({
                           onOpenChange={(next) => handleFlyoutChange('toll', next)}
                           onNavigate={navigate}
                           nested
-                        />
-                      )}
-                      {nav.fleetOps.trips && (
-                        <NavItem
-                          icon={<FileText className="h-4 w-4" />}
-                          label={String(nav.fleetOps.trips.label)}
-                          active={currentPage === 'trips'}
-                          onClick={() => navigate('trips')}
                         />
                       )}
                     </div>

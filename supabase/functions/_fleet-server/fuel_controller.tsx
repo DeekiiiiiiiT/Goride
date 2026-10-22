@@ -110,6 +110,8 @@ import {
   backfillUnmatchedSplitFills,
 } from "./fuel_split_fill.ts";
 import { splitCashAwaitingSaveBlocked } from "../../../packages/fuel-core/src/fuelSplitCashLifecycle.ts";
+import { assessFillPlausibility, fillPlausibilityBlocksSave } from "../../../packages/fuel-core/src/fillPlausibility.ts";
+import { getServiceClient } from "./service_client.ts";
 
 const app = new Hono();
 
@@ -4385,6 +4387,49 @@ app.post(`${BASE_PATH}/fuel-entries`, async (c: Context) => {
             conflictingEntryId: unlinkedHalf.id,
           },
           409,
+        );
+      }
+      const vehicle = entry.vehicleId ? await kv.get(`vehicle:${entry.vehicleId}`) : null;
+      const tank = Number(vehicle?.fuelSettings?.tankCapacity) || Number(vehicle?.specifications?.tankCapacity) || 0;
+      const accepted = entry.metadata?.plausibilityAccepted === true;
+      let previousOdometer = 0;
+      const peerPrices: number[] = [];
+      let duplicateOdometer = false;
+      if (entry.vehicleId) {
+        const { data: peers, error: peerError } = await getServiceClient()
+          .schema("fleet")
+          .from("fuel_entries")
+          .select("odometer, amount, liters")
+          .eq("vehicle_id", String(entry.vehicleId))
+          .order("date", { ascending: false })
+          .limit(30);
+        if (peerError) {
+          console.warn("[fuel] peer fill lookup failed", peerError.message);
+        }
+        for (const row of peers || []) {
+          const odo = Number(row.odometer) || 0;
+          const liters = Number(row.liters) || 0;
+          const amount = Number(row.amount) || 0;
+          if (odo > previousOdometer) previousOdometer = odo;
+          if (odo > 0 && odo === Number(entry.odometer)) duplicateOdometer = true;
+          if (liters > 0 && amount > 0) peerPrices.push(amount / liters);
+        }
+      }
+      const issues = assessFillPlausibility({
+        amount: Number(entry.amount) || 0,
+        liters: Number(entry.liters) || 0,
+        odometer: Number(entry.odometer) || 0,
+        previousOdometer,
+        tankCapacityLiters: tank,
+        peerPrices,
+        duplicateOdometer,
+        confirmed: accepted,
+      });
+      if (fillPlausibilityBlocksSave(issues)) {
+        const hard = issues.some((issue) => issue.severity === "block");
+        return c.json(
+          { error: issues[0]?.message || "This fill does not look right.", code: "FILL_PLAUSIBILITY", issues },
+          hard ? 422 : 409,
         );
       }
     }

@@ -14,10 +14,9 @@ interface TripDetailsDialogProps {
   trip: Trip | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onOpenLogs?: () => void;
 }
 
-export function TripDetailsDialog({ trip, open, onOpenChange, onOpenLogs }: TripDetailsDialogProps) {
+export function TripDetailsDialog({ trip, open, onOpenChange }: TripDetailsDialogProps) {
   if (!trip) return null;
 
   // Calculate Total Wait Time
@@ -48,9 +47,6 @@ export function TripDetailsDialog({ trip, open, onOpenChange, onOpenLogs }: Trip
             <Badge className={getStatusColor(trip.status || '')}>
               {trip.status || 'Unknown'}
             </Badge>
-            {onOpenLogs ? (
-              <button type="button" className="min-h-11 text-sm text-indigo-700" onClick={onOpenLogs}>Open in Trip Logs</button>
-            ) : null}
           </div>
           {(() => {
             const coverage = resolveTripTollCoverage(trip);

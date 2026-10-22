@@ -20,12 +20,10 @@ describe('classifyFuelWeek residual Personal', () => {
     });
     expect(result.rideShareKm).toBe(300);
     expect(result.companyOpsKm).toBe(20);
-    // Available = 180; floor = 63; hint 50 → Deadhead 63
-    expect(result.deadheadKm).toBeCloseTo(63, 5);
-    expect(result.personalKm).toBeCloseTo(117, 5);
-    expect(
-      result.rideShareKm + result.companyOpsKm + result.deadheadKm + result.personalKm,
-    ).toBeCloseTo(500, 5);
+    // Available = 180. Hint 50 is kept. Remainder is unattributed, not personal.
+    expect(result.deadheadKm).toBeCloseTo(50, 5);
+    expect(result.personalKm).toBe(0);
+    expect(result.unattributedKm).toBeCloseTo(130, 5);
   });
 
   it('leftover after deadhead is Personal (no Unknown); floor raises under-claimed DH', () => {
@@ -40,9 +38,10 @@ describe('classifyFuelWeek residual Personal', () => {
       deadheadHintKm: 40,
       industryFallbackPct: 35,
     });
-    // Available = 200; floor = 70; hint 40 → Deadhead 70; Personal 130
-    expect(result.deadheadKm).toBeCloseTo(70, 5);
-    expect(result.personalKm).toBeCloseTo(130, 5);
+    // Available = 200; hint 40 stays. Personal is not the remainder.
+    expect(result.deadheadKm).toBeCloseTo(40, 5);
+    expect(result.personalKm).toBe(0);
+    expect(result.unattributedKm).toBeCloseTo(160, 5);
     expect(result.method).toBe('fuel_brain_v2');
   });
 
@@ -59,8 +58,9 @@ describe('classifyFuelWeek residual Personal', () => {
       industryFallbackPct: 35,
     });
     expect(result.availableKm).toBe(650);
-    expect(result.deadheadKm).toBeCloseTo(227.5, 1);
-    expect(result.personalKm).toBeCloseTo(422.5, 1);
+    expect(result.deadheadKm).toBeCloseTo(20, 1);
+    expect(result.personalKm).toBe(0);
+    expect(result.unattributedKm).toBeCloseTo(630, 1);
   });
 
   it('caps deadhead so it cannot exceed Available', () => {
@@ -91,9 +91,10 @@ describe('classifyFuelWeek residual Personal', () => {
       deadheadHintKm: 120,
       industryFallbackPct: 35,
     });
-    // Available = 200; floor = 70; hint 120 stays
+    // Available = 200; hint 120 stays. Remainder is unattributed.
     expect(result.deadheadKm).toBe(120);
-    expect(result.personalKm).toBe(80);
+    expect(result.personalKm).toBe(0);
+    expect(result.unattributedKm).toBe(80);
   });
 });
 

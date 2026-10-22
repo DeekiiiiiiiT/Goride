@@ -40,9 +40,18 @@ export function FuelCoverageMatrix({ rule, compact }: FuelCoverageMatrixProps) {
           })}
         </tbody>
       </table>
+      <p className="border-t border-slate-100 px-3 py-2 text-[11px] text-slate-500">
+        Leftover fuel (variance, unexplained kilometres, fills with no odometer) is paid by the company
+        {rule?.leftoverSplit?.mode === 'percentage'
+          ? `, except ${rule.leftoverSplit.driverPercent ?? 0}% billed to the driver`
+          : rule?.leftoverSplit?.mode === 'fixed'
+            ? `, except ${rule.leftoverSplit.driverFixedAmount ?? 0} JMD billed to the driver`
+            : ''}
+        .
+      </p>
       {isFixed && (
         <p className="border-t border-slate-100 px-3 py-2 text-[11px] text-slate-500">
-          Fixed allowance applies to Ride Share + Misc combined. Company Ops and Deadhead are fully company; Personal is fully driver.
+          Fixed allowance applies to ride share. Company ops, repositioning, and commute are fully company; personal is fully driver. Leftover fuel is company unless a leftover split is set.
         </p>
       )}
     </div>

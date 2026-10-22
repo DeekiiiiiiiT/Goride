@@ -3,11 +3,11 @@
  */
 import type { Hono } from "npm:hono@4.3.11";
 import { getServiceClient } from "./service_client.ts";
-import { requireAuth, type RbacUser } from "./rbac_middleware.ts";
+import { requireAuth, requirePermission, type RbacUser } from "./rbac_middleware.ts";
 import { FEATURE_FLAGS, isFeatureEnabled } from "./feature_flags.ts";
 import * as cache from "./cache.ts";
 import { buildTripAnalyticsFilter } from "./trip_analytics_definitions.ts";
-import { orgFromTripRequest } from "./trip_facts_read.ts";
+import { loadTripForOrg, orgFromTripRequest } from "./trip_facts_read.ts";
 
 const SECTIONS = [
   "kpis",
@@ -124,7 +124,10 @@ export function registerTripAnalyticsRoutes(app: Hono) {
           (payload.errors as Record<string, string>)[section] = err instanceof Error ? err.message : "Section failed";
         }
       }));
-      await cache.setCache(cacheKey, payload, 300);
+      const sectionErrors = payload.errors as Record<string, string>;
+      if (Object.keys(sectionErrors).length === 0) {
+        await cache.setCache(cacheKey, payload, 300);
+      }
       c.header("X-Cache", "MISS");
       return c.json(payload);
     } catch (err) {
@@ -133,7 +136,7 @@ export function registerTripAnalyticsRoutes(app: Hono) {
     }
   });
 
-  app.post("/make-server-37f42386/trips/analytics/review", requireAuth({ requireOrg: true }), async (c) => {
+  app.post("/make-server-37f42386/trips/analytics/review", requireAuth({ requireOrg: true }), requirePermission("transactions.edit"), async (c) => {
     try {
       const body = await c.req.json() as Record<string, unknown>;
       const orgId = orgFromTripRequest(c, body);
@@ -159,7 +162,7 @@ export function registerTripAnalyticsRoutes(app: Hono) {
     }
   });
 
-  app.post("/make-server-37f42386/trips/analytics/settings", requireAuth({ requireOrg: true }), async (c) => {
+  app.post("/make-server-37f42386/trips/analytics/settings", requireAuth({ requireOrg: true }), requirePermission("transactions.edit"), async (c) => {
     try {
       const body = await c.req.json() as Record<string, unknown>;
       const orgId = orgFromTripRequest(c, body);
@@ -178,6 +181,21 @@ export function registerTripAnalyticsRoutes(app: Hono) {
       return c.json({ ok: true });
     } catch (err) {
       return c.json({ error: err instanceof Error ? err.message : "Settings failed" }, 500);
+    }
+  });
+
+  app.post("/make-server-37f42386/trips/analytics/trip", requireAuth({ requireOrg: true }), async (c) => {
+    try {
+      const body = await c.req.json().catch(() => ({})) as Record<string, unknown>;
+      const orgId = orgFromTripRequest(c, body);
+      if (!orgId) return c.json({ error: "Missing organization" }, 403);
+      const tripId = String(body.tripId || "").trim();
+      if (!tripId) return c.json({ error: "Trip is required" }, 400);
+      const trip = await loadTripForOrg(orgId, tripId);
+      if (!trip) return c.json({ error: "Trip not found" }, 404);
+      return c.json({ trip });
+    } catch (err) {
+      return c.json({ error: err instanceof Error ? err.message : "Trip lookup failed" }, 500);
     }
   });
 }

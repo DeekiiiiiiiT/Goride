@@ -2,6 +2,7 @@
  * Domain registry: KV prefix → fleet table + row mapper.
  */
 import type { FleetDomain } from "./fleet_table_flags.ts";
+import { fleetCalendarDay } from "../../../packages/fuel-core/src/fleetTime.ts";
 
 export type FleetDomainDef = {
   domain: FleetDomain;
@@ -34,6 +35,13 @@ function dateOnly(v: unknown): string | null {
   const s = str(v);
   if (!s) return null;
   return s.slice(0, 10);
+}
+
+/** Trip business date is the Jamaica calendar day. UTC instants move off the UTC day. */
+function tripBusinessDate(v: unknown): string | null {
+  const s = str(v);
+  if (!s) return null;
+  return fleetCalendarDay(s);
 }
 
 /** P0 trip backfill: Roam Rush → rush_delivery; everything else rideshare. */
@@ -163,7 +171,7 @@ export const FLEET_DOMAINS: FleetDomainDef[] = [
     prefixes: ["trip:"],
     mapRow: (key, v) =>
       base(key, v, "trip:", {
-        date: dateOnly(v.date),
+        date: tripBusinessDate(v.date),
         driver_id: str(v.driverId),
         vehicle_id: str(v.vehicleId),
         platform: str(v.platform),

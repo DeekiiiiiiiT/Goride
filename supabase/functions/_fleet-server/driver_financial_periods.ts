@@ -1050,6 +1050,7 @@ export async function rebuildDriverFinancialPeriod(
 
   let tollReimbursed = round2(plazaReimbursed);
   let fuelDeduction = 0;
+  let fuelLeftoverDriverShare = 0;
   let fuelFleetShare = 0;
   let fuelDriverSpend = 0;
   let fuelGasCardSpend = 0;
@@ -1133,12 +1134,15 @@ export async function rebuildDriverFinancialPeriod(
     if (et === "toll_reimbursed" || et === "trip_refund" || et === "unlinked_trip" || et === "dispute_refund") {
       tollReimbursed = round2(tollReimbursed + Math.abs(major));
     }
-    if (et === "fuel_deduction") {
+    if (et === "fuel_deduction" || et === "fuel_leftover_driver_share") {
       // C-1: the ledger stores the share as a SIGNED outflow (amountMajor = −deduction),
       // so negate to recover the driver-debt-positive projection value — matching the
       // snapshot path (+driverShare). A fleet-owes week posts a positive inflow →
       // projects a negative deduction (credit), no longer flattened by Math.abs.
       fuelDeduction = round2(fuelDeduction - major);
+      if (et === "fuel_leftover_driver_share") {
+        fuelLeftoverDriverShare = round2(fuelLeftoverDriverShare - major);
+      }
       fuelHasPostedMoney = true;
     }
     if (et === "fuel_fleet_share") fuelFleetShare = round2(fuelFleetShare - major);
@@ -1397,6 +1401,7 @@ export async function rebuildDriverFinancialPeriod(
       tollUnknownPmAmount: round2(tollUnknownPmAmount),
       tollsClear: derived.tollsClear,
       moneyUnlocked: derived.moneyUnlocked,
+      fuelLeftoverDriverShare,
       ...cashHeldClampStamp(settled.cashBalance),
       projectionSources: {
         fuel: fuelSource,

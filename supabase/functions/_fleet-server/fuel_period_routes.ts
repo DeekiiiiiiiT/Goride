@@ -30,6 +30,7 @@ import {
   loadLatestFuelWeekSnapshot,
   hashFuelWeekInputs,
   loadFuelWeekSnapshotVersion,
+  shadowFuelEngineDrift,
 } from "./fuel_week_compute.ts";
 import { buildFuelSealAmountsByDriver } from "./fuel_close_amounts.ts";
 import { assertPeriodEndedForReconciliation } from "./settlement_period_freeze.ts";
@@ -1032,6 +1033,14 @@ function kickFuelJobProcessor(c: Context) {
 }
 
 export function registerFuelPeriodRoutes(app: Hono) {
+  app.get(`${BASE}/fuel/engine-shadow`, requirePermission("fuel.view"), async (c: Context) => {
+    const orgId = getOrgId(c);
+    if (!orgId) return c.json({ error: "org required" }, 400);
+    const weeks = Number(c.req.query("weeks") || 8);
+    const report = await shadowFuelEngineDrift({ orgId, weeks });
+    return c.json(report);
+  });
+
   app.get(`${BASE}/fuel/periods`, requirePermission("fuel.view"), async (c: Context) => {
     const orgId = getOrgId(c);
     if (!orgId) return c.json({ periods: [] });
@@ -1700,6 +1709,47 @@ export function registerFuelPeriodRoutes(app: Hono) {
       if (error) return c.json({ error: error.message }, 500);
       await insertAudit(orgId, periodId, "leakage_review", { note, disposition }, actor);
       return c.json({ ok: true, leakageReviewedAt: now, disposition });
+    },
+  );
+
+  app.post(
+    `${BASE}/fuel/periods/:id/leftover-override`,
+    requirePermission("fuel.accept_unexplained"),
+    async (c: Context) => {
+      const orgId = getOrgId(c);
+      if (!orgId) return c.json({ error: "org required" }, 400);
+      const periodId = periodIdParam(c);
+      if (!periodId) return c.json({ error: "period id required" }, 400);
+      const body = await c.req.json().catch(() => ({}));
+      const note = String(body.note || "").trim();
+      if (note.length < 8) return c.json({ error: "note_too_short", minLength: 8 }, 422);
+      const mode = String(body.mode || "company");
+      if (!["company", "percentage", "fixed"].includes(mode)) {
+        return c.json({ error: "bad_mode" }, 422);
+      }
+      const period = await loadPeriod(orgId, periodId);
+      if (!period) return c.json({ error: "Not found" }, 404);
+      if (String(period.status) === "locked") return c.json({ error: "period_locked" }, 409);
+      const actor = actorId(c);
+      const now = new Date().toISOString();
+      const override = {
+        mode,
+        driverPercent: Number(body.driverPercent) || 0,
+        driverFixedAmount: Number(body.driverFixedAmount) || 0,
+        appliesTo: ["variance", "unattributedKm", "noOdometerFills"],
+        note,
+        by: actor,
+        at: now,
+      };
+      const sb = getServiceClient();
+      const { error } = await sb
+        .from("fuel_reconciliation_period")
+        .update({ leftover_split_override: override, updated_at: now })
+        .eq("id", periodId)
+        .eq("org_id", orgId);
+      if (error) return c.json({ error: error.message }, 500);
+      await insertAudit(orgId, periodId, "leftover_override", override, actor);
+      return c.json({ ok: true, leftoverSplitOverride: override });
     },
   );
 

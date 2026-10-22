@@ -30,7 +30,7 @@ export function validateFuelRule(rule: FuelRule): string | null {
             ['Company Ops', rule.companyUsageCoverage],
             ['Deadhead', rule.deadheadCoverage],
             ['Personal Usage', rule.personalCoverage],
-            ['Misc / Leakage', rule.miscCoverage],
+            ['Commute', rule.commuteCoverage],
         ];
         for (const [label, value] of granular) {
             if (value === undefined) continue;
@@ -61,9 +61,9 @@ interface ScenarioEditorProps {
 const GRANULAR_FIELDS: { key: keyof FuelRule; label: string }[] = [
     { key: 'rideShareCoverage', label: 'Ride Share' },
     { key: 'companyUsageCoverage', label: 'Company Ops' },
-    { key: 'deadheadCoverage', label: 'Deadhead' },
+    { key: 'deadheadCoverage', label: 'Repositioning' },
     { key: 'personalCoverage', label: 'Personal' },
-    { key: 'miscCoverage', label: 'Misc / Leakage' },
+    { key: 'commuteCoverage', label: 'Commute' },
 ];
 
 const DEFAULT_RULE = (): FuelRule => ({
@@ -76,6 +76,11 @@ const DEFAULT_RULE = (): FuelRule => ({
     deadheadCoverage: 50,
     personalCoverage: 0, // 0% company = driver pays 100% of Personal overage (after PA)
     miscCoverage: 50,
+    commuteCoverage: 100,
+    leftoverSplit: {
+        mode: 'company',
+        appliesTo: ['variance', 'unattributedKm', 'noOdometerFills'],
+    },
 });
 
 /** Rules tab: name + split % only. Periods and drivers live on Schedule. */
@@ -98,7 +103,15 @@ export function ScenarioEditor({
                 setDescription(initialData.description || '');
                 const fuelRule = initialData.rules.find(r => r.category === 'Fuel');
                 if (fuelRule) {
-                     setRules([fuelRule.coverageType === 'Percentage' ? normalizePercentageRule(fuelRule) : fuelRule]);
+                     const withLeftover = {
+                         ...fuelRule,
+                         commuteCoverage: fuelRule.commuteCoverage ?? 100,
+                         leftoverSplit: fuelRule.leftoverSplit || {
+                             mode: 'company' as const,
+                             appliesTo: ['variance', 'unattributedKm', 'noOdometerFills'],
+                         },
+                     };
+                     setRules([withLeftover.coverageType === 'Percentage' ? normalizePercentageRule(withLeftover) : withLeftover]);
                 } else {
                      setRules([DEFAULT_RULE()]);
                 }
@@ -271,6 +284,63 @@ export function ScenarioEditor({
                                     ))}
                                 </div>
                             )}
+
+                            <div className="space-y-3 border-t border-slate-100 pt-4">
+                                <Label className="text-slate-700">Leftover fuel</Label>
+                                <p className="text-xs text-slate-500">
+                                    Variance, kilometres nobody could explain, and fills with no odometer.
+                                    Company pays all of it until you choose otherwise.
+                                </p>
+                                <Select
+                                    value={fuelRule.leftoverSplit?.mode || 'company'}
+                                    onValueChange={(val) => updateFuelRule('leftoverSplit', {
+                                        mode: val,
+                                        driverPercent: fuelRule.leftoverSplit?.driverPercent ?? 0,
+                                        driverFixedAmount: fuelRule.leftoverSplit?.driverFixedAmount ?? 0,
+                                        appliesTo: fuelRule.leftoverSplit?.appliesTo || ['variance', 'unattributedKm', 'noOdometerFills'],
+                                    })}
+                                >
+                                    <SelectTrigger>
+                                        <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="company">Company pays all</SelectItem>
+                                        <SelectItem value="percentage">Driver pays a percent</SelectItem>
+                                        <SelectItem value="fixed">Driver pays a fixed amount</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                                {fuelRule.leftoverSplit?.mode === 'percentage' && (
+                                    <Input
+                                        type="number"
+                                        min={0}
+                                        max={100}
+                                        value={fuelRule.leftoverSplit.driverPercent ?? 0}
+                                        onChange={(e) => updateFuelRule('leftoverSplit', {
+                                            ...fuelRule.leftoverSplit,
+                                            mode: 'percentage',
+                                            driverPercent: Math.min(100, Math.max(0, parseFloat(e.target.value) || 0)),
+                                            appliesTo: fuelRule.leftoverSplit?.appliesTo || ['variance', 'unattributedKm', 'noOdometerFills'],
+                                        })}
+                                    />
+                                )}
+                                {fuelRule.leftoverSplit?.mode === 'fixed' && (
+                                    <Input
+                                        type="number"
+                                        min={0}
+                                        value={fuelRule.leftoverSplit.driverFixedAmount ?? 0}
+                                        onChange={(e) => updateFuelRule('leftoverSplit', {
+                                            ...fuelRule.leftoverSplit,
+                                            mode: 'fixed',
+                                            driverFixedAmount: Math.max(0, parseFloat(e.target.value) || 0),
+                                            appliesTo: fuelRule.leftoverSplit?.appliesTo || ['variance', 'unattributedKm', 'noOdometerFills'],
+                                        })}
+                                    />
+                                )}
+                                <p className="text-xs text-slate-500">
+                                    Example on 1,000: 0% bills 0, 50% bills 500, 100% bills 1,000.
+                                    A fixed 1,500 on a 1,000 bucket bills 1,000.
+                                </p>
+                            </div>
                         </div>
                     </div>
                 </div>

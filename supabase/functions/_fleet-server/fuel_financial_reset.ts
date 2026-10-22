@@ -16,6 +16,7 @@ const FUEL_EVENT_TYPES = new Set([
   "fuel_fleet_share",
   "fuel_driver_spend",
   "fuel_gas_card_spend",
+  "fuel_leftover_driver_share",
 ]);
 
 /** Mirror packages/finance-core MONEY_EPS — post any non-zero share (C-1). */
@@ -165,22 +166,25 @@ function sumsFromActiveFuelEvents(active: any[]): {
   fleetShare: number;
   driverSpend: number;
   gasCard: number;
+  leftover: number;
 } {
   let deduction = 0;
   let fleetShare = 0;
   let driverSpend = 0;
   let gasCard = 0;
+  let leftover = 0;
   for (const ev of active) {
     // C-1: preserve sign so a fleet-owes-driver week (negative share) is not
     // silently flattened; staleness compare must see the real magnitude+sign.
     const major = minorToMajor(Number(ev.amount_minor) || 0);
     const et = String(ev.event_type || "");
     if (et === "fuel_deduction") deduction += major;
+    else if (et === "fuel_leftover_driver_share") leftover += major;
     else if (et === "fuel_fleet_share") fleetShare += major;
     else if (et === "fuel_driver_spend") driverSpend += Math.abs(major);
     else if (et === "fuel_gas_card_spend") gasCard += Math.abs(major);
   }
-  return { deduction, fleetShare, driverSpend, gasCard };
+  return { deduction, fleetShare, driverSpend, gasCard, leftover };
 }
 
 /**
@@ -204,7 +208,8 @@ export async function postFuelFinalizedEventsFromReport(
   const driverId = String(report.driverId);
   // C-1: shares are SIGNED. A negative driverShare means the fleet owes the
   // driver — Math.abs here flipped fleet-owes weeks into a driver debt.
-  const deduction = Number(report.driverShare) || 0;
+  const leftoverDriver = Math.max(0, Number(report.metadata?.leftoverSplit?.driver) || 0);
+  const deduction = (Number(report.driverShare) || 0) - leftoverDriver;
   const fleetShare = Number(report.companyShare) || 0;
   const driverSpend = reportDriverSpendMajor(report);
   const gasCard = Math.abs(Number(report.gasCardSpend) || 0);
@@ -215,6 +220,7 @@ export async function postFuelFinalizedEventsFromReport(
     const curr = sumsFromActiveFuelEvents(active);
     const amountsMatch =
       roundCentsEqual(curr.deduction, deduction) &&
+      roundCentsEqual(curr.leftover, -leftoverDriver) &&
       roundCentsEqual(curr.fleetShare, fleetShare) &&
       roundCentsEqual(curr.driverSpend, driverSpend) &&
       roundCentsEqual(curr.gasCard, gasCard);
@@ -295,6 +301,31 @@ export async function postFuelFinalizedEventsFromReport(
         }],
       }),
       "deduction",
+    );
+  }
+  if (leftoverDriver > MONEY_EPS) {
+    check(
+      await postFinancialEvent({
+        idempotencyKey: `${keyBase}|leftover`,
+        domain: "fuel",
+        eventType: "fuel_leftover_driver_share",
+        sourceSystem: "fuel_ops",
+        sourceId,
+        driverId,
+        occurredAt: weekKey,
+        amountMajor: -leftoverDriver,
+        direction: "outflow",
+        debitAccountKey: "platform:driver_receivable",
+        creditAccountKey: "platform:fleet_fuel_expense",
+        payload: { reportId: report.id, weekStart: weekKey, generation, kind: "leftover" },
+        allocations: [{
+          allocation_type: "fuel_leftover_driver_share",
+          amount_minor: Math.round(leftoverDriver * 100),
+          driver_id: driverId,
+          fuel_entry_id: String(report.id || ""),
+        }],
+      }),
+      "leftover",
     );
   }
   // C-1 / M-2: fleet share posted signed with an explicit debit/credit pair so the

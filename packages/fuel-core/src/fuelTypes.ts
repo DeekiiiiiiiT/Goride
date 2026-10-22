@@ -190,6 +190,9 @@ export interface FuelRule {
   deadheadCoverage?: number;
   personalCoverage?: number;
   miscCoverage?: number;
+  /** Company percent for commute. Missing means the company pays the commute. */
+  commuteCoverage?: number;
+  leftoverSplit?: import('./leftoverSplit.ts').LeftoverSplit;
   conditions?: {
     maxAmount?: number;
     requiresReceipt?: boolean;
@@ -234,6 +237,10 @@ export interface WeeklyFuelReport {
   personalUsageCost: number;
   deadheadDistance: number;
   deadheadCost: number;
+  commuteDistance?: number;
+  commuteCost?: number;
+  unattributedKm?: number;
+  unattributedKmCost?: number;
   miscellaneousCost: number;
   /** F-1/N-2: first-fill litres × price — tank-window timing, not leakage. */
   windowTimingCost?: number;

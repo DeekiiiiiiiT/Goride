@@ -29,7 +29,7 @@ export const TOLL_PAGE_IDS = [
 ] as const;
 
 export function fleetOpsActive(page: string) {
-  return page === 'trips' || ([...FUEL_PAGE_IDS, ...TOLL_PAGE_IDS] as string[]).includes(page);
+  return ([...FUEL_PAGE_IDS, ...TOLL_PAGE_IDS] as string[]).includes(page);
 }
 
 export function isNavLeafActive(
@@ -44,7 +44,6 @@ export type FleetNavLabels = {
   dashboardTitle: string;
   drivers: string;
   vehiclesPageTitle: string;
-  sidebarTrips: string;
 };
 
 export type BuildFleetNavModelInput = {
@@ -73,7 +72,6 @@ export type FleetNavModel = {
     visible: boolean;
     fuel: FleetNavDesk | null;
     toll: FleetNavDesk | null;
-    trips: NavLeaf | null;
   };
   driverOps: { visible: boolean; items: NavLeaf[] };
   money: { visible: boolean; items: NavLeaf[] };
@@ -141,7 +139,7 @@ export function buildFleetNavModel(input: BuildFleetNavModelInput): FleetNavMode
     canView('toll-tags');
   const canSeeWeekReconciliation =
     canView('fuel-reconciliation') || canView('toll-tags');
-  const canSeeFleetOps = (hasSharedOps && (canSeeFuelDesk || canSeeTollDesk)) || canView('trips');
+  const canSeeFleetOps = hasSharedOps && (canSeeFuelDesk || canSeeTollDesk);
   const canSeeCouriersInDriverOps =
     hasRushDeliveryLine &&
     isModuleEnabled('rush_couriers') &&
@@ -387,9 +385,6 @@ export function buildFleetNavModel(input: BuildFleetNavModelInput): FleetNavMode
         canSeeTollDesk && tollItems.length > 0
           ? { id: 'toll', label: 'Toll Management', items: tollItems }
           : null,
-      trips: canView('trips')
-        ? { id: 'trips', label: labels.sidebarTrips }
-        : null,
     },
     driverOps: {
       visible: canSeeDriverOps && driverItems.length > 0,
@@ -447,7 +442,6 @@ export function resolveNavPageTitle(
   for (const desk of [model.fleetOps.fuel, model.fleetOps.toll]) {
     if (desk) leaves.push(...desk.items);
   }
-  if (model.fleetOps.trips) leaves.push(model.fleetOps.trips);
   leaves.push(
     ...model.driverOps.items,
     ...model.money.items,

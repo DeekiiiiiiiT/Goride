@@ -520,6 +520,20 @@ export const api = {
     return response.json();
   },
 
+  async getTripById(tripId: string): Promise<Record<string, unknown>> {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/trips/analytics/trip`, {
+      method: 'POST',
+      headers: await getHeaders(),
+      body: JSON.stringify({ tripId }),
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error || 'Could not open that trip');
+    }
+    const body = await response.json();
+    return body.trip as Record<string, unknown>;
+  },
+
   async reviewTripAnomaly(body: { tripId: string; rule: string; action: 'dismiss' | 'keep'; reason?: string }): Promise<void> {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/trips/analytics/review`, {
       method: 'POST',
@@ -5508,6 +5522,28 @@ export const api = {
     if (!response.ok) {
       const errText = await response.text().catch(() => '');
       throw new Error(errText || 'Leakage review failed');
+    }
+    return response.json();
+  },
+
+  async reviewFuelPeriodLeftoverOverride(args: {
+    periodId: string;
+    mode: 'company' | 'percentage' | 'fixed';
+    driverPercent?: number;
+    driverFixedAmount?: number;
+    note: string;
+  }) {
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.fuel}/fuel/periods/${encodeURIComponent(args.periodId)}/leftover-override`,
+      {
+        method: 'POST',
+        headers: await requireAuthHeaders(),
+        body: JSON.stringify(args),
+      },
+    );
+    if (!response.ok) {
+      const errText = await response.text().catch(() => '');
+      throw new Error(errText || 'Leftover override failed');
     }
     return response.json();
   },

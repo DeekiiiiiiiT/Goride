@@ -11,6 +11,8 @@ import { filterRecordsByOrganizationId } from "./org_scope.ts";
 import { loadOrgPreferences } from "./fuel_org_preferences.ts";
 import { listOdometerLedger } from "./odometer_ledger.ts";
 import { listAllUnifiedCanonicalEvents } from "../_shared/unifiedLedger/queries.ts";
+import { FUEL_ENGINE_VERSION, fuelShadowDrift } from "../../../packages/fuel-core/src/fuelEngine.ts";
+import { addDaysYmd } from "../../../packages/fuel-core/src/fleetTime.ts";
 
 function hashParts(parts: string[]): string {
   let h = 2166136261;
@@ -65,6 +67,7 @@ export type FuelWeekHashSources = {
   fares: Array<Record<string, unknown>>;
   distances: Array<Record<string, unknown>>;
   anchors: Array<Record<string, unknown>>;
+  leftoverOverride?: unknown;
 };
 
 /** Every input prepareFuelWeekReports reads. Distance rows omit computed_at. */
@@ -120,13 +123,15 @@ export function buildFuelWeekHashParts(sources: FuelWeekHashSources): string[] {
     ...anchorParts,
     prefPart,
     "shape:fuel-rule-v2",
+    `engine:${FUEL_ENGINE_VERSION}`,
+    `leftover:${stable(sources.leftoverOverride || null)}`,
   ];
 }
 
 export async function hashFuelWeekInputs(orgId: string, weekStart: string, weekEnd: string): Promise<string> {
   const entries = await loadWeekFuelEntries(orgId, weekStart, weekEnd);
   const [trips, adjustments, policies, drivers, vehicles, scenariosRaw, prefs, fares] = await Promise.all([
-    loadOrgRows("trips", orgId, { dateFrom: weekStart, dateTo: weekEnd }),
+    loadOrgRows("trips", orgId, { dateFrom: addDaysYmd(weekStart, -1), dateTo: weekEnd }),
     loadOrgRows("fuel_adjustments", orgId),
     loadOrgRows("earnings_policies", orgId),
     loadOrgRows("drivers", orgId),
@@ -173,6 +178,13 @@ export async function hashFuelWeekInputs(orgId: string, weekStart: string, weekE
       });
     }
   }
+  const period = await sb
+    .from("fuel_reconciliation_period")
+    .select("leftover_split_override")
+    .eq("org_id", orgId)
+    .eq("week_start", weekStart)
+    .maybeSingle();
+  const leftoverOverride = period.error ? null : period.data?.leftover_split_override ?? null;
   return hashParts(buildFuelWeekHashParts({
     entries: entries as unknown as Array<Record<string, unknown>>,
     trips,
@@ -185,6 +197,7 @@ export async function hashFuelWeekInputs(orgId: string, weekStart: string, weekE
     fares: (fares || []) as Array<Record<string, unknown>>,
     distances: (saved.data || []) as Array<Record<string, unknown>>,
     anchors,
+    leftoverOverride,
   }));
 }
 
@@ -254,7 +267,7 @@ export async function computeFuelWeekSnapshot(args: {
       inputs_hash: plan.hash,
       money,
       blockers: [],
-      provenance: { engine: "generateDriverFleetReport" },
+      provenance: { engine: "generateDriverFleetReport", engineVersion: FUEL_ENGINE_VERSION },
     })
     .select("id, version, inputs_hash, money")
     .single();
@@ -338,4 +351,51 @@ export async function loadFuelWeekSnapshotVersion(args: {
     return { ok: false as const, status: 409, body: { error: "snapshot_stale", currentVersion: newer[0].version } };
   }
   return { ok: true as const, row };
+}
+
+/**
+ * Compare the saved snapshot with the new engine for recent weeks.
+ * Does not write a snapshot and does not lock a week.
+ */
+export async function shadowFuelEngineDrift(args: { orgId: string; weeks?: number }) {
+  const sb = getServiceClient();
+  const limit = Math.max(1, Math.min(8, args.weeks || 8));
+  const { data: periods, error } = await sb
+    .from("fuel_reconciliation_period")
+    .select("id, week_start, week_end, status")
+    .eq("org_id", args.orgId)
+    .order("week_start", { ascending: false })
+    .limit(limit);
+  if (error) throw new Error(error.message);
+  const weeks = [];
+  for (const period of periods || []) {
+    const weekStart = String(period.week_start);
+    const weekEnd = String(period.week_end);
+    const { data: snap } = await sb
+      .from("fuel_week_snapshot")
+      .select("money, version, provenance")
+      .eq("org_id", args.orgId)
+      .eq("period_id", period.id)
+      .order("version", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    const built = await prepareFuelWeekReports({
+      orgId: args.orgId,
+      weekStart,
+      weekEnd,
+      persistDistance: false,
+    });
+    const oldReports = (snap?.money?.reports || []) as Array<Record<string, unknown>>;
+    const newReports = (built.ok ? built.reports : []) as Array<Record<string, unknown>>;
+    weeks.push({
+      periodId: period.id,
+      weekStart,
+      status: period.status,
+      locked: period.status === "locked",
+      engineVersion: FUEL_ENGINE_VERSION,
+      error: built.ok ? null : built.error,
+      drivers: fuelShadowDrift(oldReports, newReports),
+    });
+  }
+  return { engineVersion: FUEL_ENGINE_VERSION, weeks };
 }

@@ -1405,6 +1405,14 @@ function FuelPeriodWizardInner({
             {activeStepId === 'leakage-gap' && (
               <FuelLeakageStep
                 leakage={strip.leakage}
+                homeMissing={vehicleSnaps.some((snap) => Boolean(snap.report?.metadata?.homeMissing))}
+                periodId={period.id}
+                onSaveLeftoverOverride={async (override) => {
+                  await api.reviewFuelPeriodLeftoverOverride({
+                    periodId: period.id,
+                    ...override,
+                  });
+                }}
                 totalSpend={strip.totalSpend}
                 leakageRows={leakageRows}
                 queueIndex={queueIndex}
