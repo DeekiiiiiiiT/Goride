@@ -38,6 +38,7 @@ import { SettlementCommandError } from "./settlement_commands.ts";
 import { isSettlementPeriodEnded } from "../../../packages/finance-core/src/settlementPeriodGate.ts";
 import { listUnapprovedFuelTxInWindow } from "../../../packages/fuel-core/src/fuelReviewQueue.ts";
 import { evaluateFuelWeekClosable } from "../../../packages/fuel-core/src/evaluateFuelWeekClosable.ts";
+import { loadPriorWeekCredit } from "./fuel_week_prepare.ts";
 import { validateDisposition } from "../../../packages/fuel-core/src/fuelResidualDisposition.ts";
 import {
   upsertStopToStopGapAccepts,
@@ -644,6 +645,22 @@ async function processJobRow(job: Record<string, unknown>) {
       return { ok: false, error: unapprovedFuel.code };
     }
 
+    const priorCredit = await loadPriorWeekCredit(sb, orgId, ymd(period.week_start));
+    const priorBlock = evaluateFuelWeekClosable({
+      openPriorWeekStarts: priorCredit.openWeekStarts,
+    }).find((blocker) => blocker.code === "prior_weeks_open");
+    if (priorBlock) {
+      await sb
+        .from("fuel_period_job")
+        .update({
+          state: "failed",
+          failures: [{ error: "prior_weeks_open", message: priorBlock.message }],
+          updated_at: now,
+        })
+        .eq("id", job.id);
+      return { ok: false, error: "prior_weeks_open" };
+    }
+
     const snapshots = Array.isArray(cursor.snapshots) ? (cursor.snapshots as any[]) : [];
     const completed: string[] = Array.isArray(cursor.completedDriverIds)
       ? (cursor.completedDriverIds as string[])
@@ -1038,7 +1055,13 @@ export function registerFuelPeriodRoutes(app: Hono) {
     if (!orgId) return c.json({ error: "org required" }, 400);
     const weeks = Number(c.req.query("weeks") || 8);
     const weekStart = ymd(c.req.query("week"));
-    const report = await shadowFuelEngineDrift({ orgId, weeks, weekStart: weekStart || undefined });
+    const status = String(c.req.query("status") || "").trim();
+    const report = await shadowFuelEngineDrift({
+      orgId,
+      weeks,
+      weekStart: weekStart || undefined,
+      status: status || undefined,
+    });
     return c.json(report);
   });
 

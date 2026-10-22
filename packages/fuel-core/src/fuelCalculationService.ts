@@ -142,8 +142,10 @@ export interface FuelBrainClassificationInput {
     /** home = confirmed home. address = street address standing in until a home is picked. */
     homePinSource?: 'home' | 'address';
     kmSources?: unknown;
-    /** Oldest first. Signed fuel difference from the previous 3 v2 weeks. */
+    /** Oldest first. Signed fuel difference from the previous 3 locked v2 weeks. */
     priorWeekVariances?: number[];
+    /** Earlier weeks still open, so their difference is not in priorWeekVariances. */
+    openPriorWeeks?: string[];
     routingHealth?: { ok: boolean; plainReason: string; message: string };
 }
 
@@ -842,6 +844,7 @@ export const FuelCalculationService = {
                 homePinSource,
                 kmSources,
                 routingHealth: options?.routingHealth ?? options?.brainClassification?.routingHealth,
+                openPriorWeeks: options?.brainClassification?.openPriorWeeks || [],
                 varianceBalance: {
                     creditIn: varianceBalance.creditIn,
                     runningBalance: varianceBalance.runningBalance,

@@ -96,6 +96,8 @@ export {
 export {
   FUEL_MISC_MAX_RATIO,
   FUEL_MISC_MAX_ABS_JMD,
+  FUEL_MISC_SCALED_ABS_RATIO,
+  fuelMiscAbsCapJmd,
   isOverExplainedFuelWeek,
   isFuelMiscWithinGate,
   floorMiscForSplit,
@@ -117,6 +119,9 @@ export {
 export {
   evaluateFuelWeekClosable,
   fuelWeekIsClosable,
+  formatFuelWeekLabel,
+  openPriorWeeksCarryMessage,
+  priorWeeksOpenMessage,
   type EvaluateFuelWeekClosableInput,
   type FuelWeekClosableBlocker,
 } from './evaluateFuelWeekClosable.ts';

@@ -13,6 +13,12 @@ import { listOdometerLedger } from "./odometer_ledger.ts";
 import { resolveActiveEarningsBundleForDriverWeek } from "./earnings_policy_runtime.ts";
 import { buildEvidenceLadder } from "../../../packages/fuel-core/src/evidenceLadder.ts";
 import { FUEL_ENGINE_VERSION } from "../../../packages/fuel-core/src/fuelEngine.ts";
+import {
+  buildPriorWeekCredit,
+  type PriorWeekCredit,
+  type PriorWeekFact,
+  priorWeekStarts,
+} from "../../../packages/fuel-core/src/priorWeekCredit.ts";
 import { REFERENCE_LOOKBACK_DAYS, referenceEfficiencyFromFills } from "../../../packages/fuel-core/src/referenceEfficiency.ts";
 import { referenceFillsFromEntries } from "../../../packages/fuel-core/src/referenceFills.ts";
 import { addDaysYmd, fleetCalendarDay } from "../../../packages/fuel-core/src/fleetTime.ts";
@@ -112,27 +118,57 @@ function asShiftTrip(trip: Record<string, unknown>): ShiftTrip {
   };
 }
 
-/** Cap a server hint at the kilometres left. Do not raise it to 35%. */
-function chainSnapshot(version: string): boolean {
-  return version === FUEL_ENGINE_VERSION || version === "fuel-chain-v2" || version.startsWith("fuel-chain-v2.");
+function variancesFromSnapshot(money: unknown): PriorWeekFact["variances"] {
+  const reports = money && typeof money === "object"
+    ? ((money as { reports?: unknown[] }).reports || [])
+    : [];
+  const variances: PriorWeekFact["variances"] = [];
+  for (const report of reports) {
+    if (!report || typeof report !== "object") continue;
+    const row = report as { driverId?: string; vehicleId?: string; miscellaneousCost?: number };
+    const driverId = String(row.driverId || "");
+    const vehicleId = String(row.vehicleId || "");
+    if (!driverId || !vehicleId) continue;
+    variances.push({
+      driverId,
+      vehicleId,
+      miscellaneousCost: Number(row.miscellaneousCost) || 0,
+    });
+  }
+  return variances;
 }
 
-/** Signed fuel difference for the previous 3 weeks. A week without a v2 snapshot is 0. */
-async function loadPriorWeekVariances(
+/**
+ * Previous 3 weeks. Credit uses locked chain snapshots only.
+ * Hash facts keep status, version, and the fuel difference even when the week is still open.
+ */
+export async function loadPriorWeekCredit(
   sb: ReturnType<typeof getServiceClient>,
   orgId: string,
   weekStart: string,
-): Promise<Map<string, number[]>> {
-  const weeks = [3, 2, 1].map((n) => addDaysYmd(weekStart, -7 * n));
-  const index = new Map(weeks.map((week, i) => [week, i]));
-  const { data, error } = await sb
-    .from("fuel_week_snapshot")
-    .select("week_start, version, money, provenance")
-    .eq("org_id", orgId)
-    .in("week_start", weeks);
-  if (error) throw new Error(error.message);
+): Promise<PriorWeekCredit> {
+  const weeks = priorWeekStarts(weekStart);
+  const [periods, snaps] = await Promise.all([
+    sb
+      .from("fuel_reconciliation_period")
+      .select("week_start, status")
+      .eq("org_id", orgId)
+      .in("week_start", weeks),
+    sb
+      .from("fuel_week_snapshot")
+      .select("week_start, version, money, provenance")
+      .eq("org_id", orgId)
+      .in("week_start", weeks),
+  ]);
+  if (periods.error) throw new Error(periods.error.message);
+  if (snaps.error) throw new Error(snaps.error.message);
+
+  const statusByWeek = new Map<string, string>();
+  for (const row of periods.data || []) {
+    statusByWeek.set(ymd(row.week_start), String(row.status || ""));
+  }
   const latest = new Map<string, { version: number; money: unknown; provenance: unknown }>();
-  for (const row of data || []) {
+  for (const row of snaps.data || []) {
     const start = ymd(row.week_start);
     const prev = latest.get(start);
     const version = Number(row.version) || 0;
@@ -140,30 +176,23 @@ async function loadPriorWeekVariances(
       latest.set(start, { version, money: row.money, provenance: row.provenance });
     }
   }
-  const byKey = new Map<string, number[]>();
-  for (const [start, snap] of latest) {
-    const slot = index.get(start);
-    if (slot == null) continue;
-    const provenance = snap.provenance && typeof snap.provenance === "object"
+  const facts: PriorWeekFact[] = weeks.map((start) => {
+    const snap = latest.get(start);
+    const provenance = snap?.provenance && typeof snap.provenance === "object"
       ? snap.provenance as { engineVersion?: string }
       : {};
-    if (!chainSnapshot(String(provenance.engineVersion || ""))) continue;
-    const reports = snap.money && typeof snap.money === "object"
-      ? ((snap.money as { reports?: unknown[] }).reports || [])
-      : [];
-    for (const report of reports) {
-      if (!report || typeof report !== "object") continue;
-      const row = report as { driverId?: string; vehicleId?: string; miscellaneousCost?: number };
-      const key = `${String(row.driverId || "")}:${String(row.vehicleId || "")}`;
-      if (key === ":") continue;
-      const series = byKey.get(key) || [0, 0, 0];
-      series[slot] = Number(row.miscellaneousCost) || 0;
-      byKey.set(key, series);
-    }
-  }
-  return byKey;
+    return {
+      weekStart: start,
+      status: statusByWeek.get(start) || "",
+      version: snap?.version || 0,
+      engineVersion: String(provenance.engineVersion || ""),
+      variances: snap ? variancesFromSnapshot(snap.money) : [],
+    };
+  });
+  return buildPriorWeekCredit(facts);
 }
 
+/** Cap a server hint at the kilometres left. Do not raise it to 35%. */
 function deadheadHintKm(server: Record<string, unknown> | undefined, tripKm: number, companyOpsKm: number): number {
   const rawHint = Math.max(0, Number(server?.deadheadKm) || 0);
   const odo = Math.max(0, Number(server?.totalOdometerKm) || 0);
@@ -314,7 +343,7 @@ export async function prepareFuelWeekReports(args: {
       dateTo: addDaysYmd(weekStart, -1),
     });
     const routing = await checkFuelRoutingHealth();
-    const priorVariances = await loadPriorWeekVariances(sb, orgId, weekStart);
+    const priorCredit = await loadPriorWeekCredit(sb, orgId, weekStart);
     const routingHealth = {
       ok: routing.ok,
       plainReason: routing.plainReason,
@@ -423,7 +452,8 @@ export async function prepareFuelWeekReports(args: {
         homeMissing: ladder.homeMissing,
         homePinSource: home?.source,
         kmSources: ladder.sources,
-        priorWeekVariances: priorVariances.get(`${driverId}:${vehicleId}`) || [0, 0, 0],
+        priorWeekVariances: priorCredit.byKey.get(`${driverId}:${vehicleId}`) || [0, 0, 0],
+        openPriorWeeks: priorCredit.openWeekStarts,
         routingHealth,
       });
     }

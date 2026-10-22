@@ -303,6 +303,10 @@ export const api = {
       } catch (e) {
           // Ignore json parse error, use statusText
       }
+      if (/pay week is closed/i.test(errorMessage)) {
+          const { closedWeekSaveError } = await import('../utils/closedWeekTrip');
+          throw closedWeekSaveError();
+      }
       throw new Error(`Failed to save trips: ${errorMessage}`);
     }
     return response.json();

@@ -4,6 +4,7 @@ import { Button } from '@roam/ui';
 import { ScrollArea } from '@roam/ui';
 import { AlertCircle, CheckCircle2, Trash2, RefreshCw, Wifi, WifiOff } from 'lucide-react';
 import type { OfflineAction } from '../../types/offline';
+import { isClosedWeekSaveError } from '../../utils/closedWeekTrip';
 
 export function OfflineSyncManager() {
   const { queue, isOnline, syncStatus, processQueue, removeFromQueue, clearQueue } = useOffline();
@@ -13,12 +14,26 @@ export function OfflineSyncManager() {
   };
 
   const handleClear = () => {
+    const held = queue.filter(
+      (item) => item.type === 'SUBMIT_TRIP' && isClosedWeekSaveError(item.lastError),
+    );
+    const rest = queue.filter((item) => !held.some((heldItem) => heldItem.id === item.id));
+    if (rest.length === 0) {
+      window.alert(
+        'This trip stays on the phone. Change the date to an open week, or discard this trip.',
+      );
+      return;
+    }
+    const note = held.length
+      ? ' Trips in a closed week stay until you change the date or discard that trip.'
+      : '';
     if (
       window.confirm(
-        'Are you sure you want to delete all pending offline data? This cannot be undone.',
+        `Are you sure you want to delete the other pending offline data? This cannot be undone.${note}`,
       )
     ) {
-      clearQueue();
+      if (held.length === 0) clearQueue();
+      else rest.forEach((item) => removeFromQueue(item.id));
     }
   };
 

@@ -188,7 +188,10 @@ export function TripLogsPage() {
         queryClient.invalidateQueries({ queryKey: ['tripStats'] });
         queryClient.invalidateQueries({ queryKey: ['dashboard'] });
     },
-    onError: (err: any) => toast.error(err.message || "Failed to save trip")
+    onError: (err: any) => {
+      if (err?.message && /pay week is closed/i.test(err.message)) return;
+      toast.error(err.message || "Failed to save trip");
+    }
   });
 
   const deleteTripMutation = useMutation({
@@ -211,9 +214,9 @@ export function TripLogsPage() {
     const driverName = availableDrivers.find((d: any) => d.id === driverId)?.name || 'Unknown';
     try {
         const trip = createManualTrip(data, driverId, driverName);
-        createTripMutation.mutate(trip);
+        await createTripMutation.mutateAsync(trip);
     } catch (e: any) {
-        toast.error(e.message);
+        throw e;
     }
   };
 
@@ -326,7 +329,7 @@ export function TripLogsPage() {
       queryClient.invalidateQueries({ queryKey: ['dashboard'] });
     } catch (e: any) {
       console.error("Failed to update trip", e);
-      toast.error(e.message || "Failed to update trip");
+      throw e;
     }
   };
 

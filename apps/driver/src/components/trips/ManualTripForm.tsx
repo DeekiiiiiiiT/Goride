@@ -281,7 +281,8 @@ export function ManualTripForm({
       }
     } catch (error) {
       console.error("Form submission failed", error);
-      toast.error("Failed to save trip");
+      const message = error instanceof Error ? error.message : '';
+      toast.error(message && /pay week is closed/i.test(message) ? message : 'Failed to save trip');
     } finally {
       setLoading(false);
     }

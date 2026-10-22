@@ -34,7 +34,9 @@ export type FuelWeekClosableBlocker = {
     /** A fill for this week's vehicles has no company, so the server total skipped it. */
     | 'null_org_fill'
     /** Price or duplicate-odometer fills not yet accepted. */
-    | 'implausible_fills_unreviewed';
+    | 'implausible_fills_unreviewed'
+    /** An earlier week was started and is not locked. */
+    | 'prior_weeks_open';
   message: string;
 };
 
@@ -80,7 +82,40 @@ export type EvaluateFuelWeekClosableInput = {
   nullOrgFill?: boolean;
   /** Confirm-level fill issues (price, duplicate odometer) not yet accepted. */
   implausibleFillsUnreviewed?: boolean;
+  /** Earlier weeks that have a period and are not locked. Oldest first. */
+  openPriorWeekStarts?: string[];
 };
+
+const FUEL_WEEK_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+/** "28 Sep" from a week start date. */
+export function formatFuelWeekLabel(weekStart: string): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(weekStart || ''));
+  if (!match) return String(weekStart || '');
+  const month = FUEL_WEEK_MONTHS[Number(match[2]) - 1] || match[2];
+  return `${Number(match[3])} ${month}`;
+}
+
+function joinWeekLabels(labels: string[]): string {
+  if (labels.length <= 1) return labels[0] || '';
+  if (labels.length === 2) return `${labels[0]} and ${labels[1]}`;
+  return `${labels.slice(0, -1).join(', ')} and ${labels[labels.length - 1]}`;
+}
+
+export function priorWeeksOpenMessage(weekStarts: string[]): string {
+  const labels = weekStarts.map(formatFuelWeekLabel).filter(Boolean);
+  if (labels.length <= 1) return `Lock the week of ${labels[0] || 'the earlier week'} before this one.`;
+  return `Lock the weeks of ${joinWeekLabels(labels)} before this one.`;
+}
+
+export function openPriorWeeksCarryMessage(weekStarts: string[]): string | null {
+  const labels = weekStarts.map(formatFuelWeekLabel).filter(Boolean);
+  if (!labels.length) return null;
+  if (labels.length === 1) {
+    return `The week of ${labels[0]} is still open, so its fuel difference is not carried into this week yet.`;
+  }
+  return `The weeks of ${joinWeekLabels(labels)} are still open, so their fuel difference is not carried into this week yet.`;
+}
 
 function fmtMoney(n: number): string {
   return `$${(Number(n) || 0).toFixed(2)}`;
@@ -240,6 +275,13 @@ export function evaluateFuelWeekClosable(
     blockers.push({
       code: 'implausible_fills_unreviewed',
       message: 'A fill has an unusual price or a repeated odometer and has not been accepted.',
+    });
+  }
+  const openPrior = (input.openPriorWeekStarts || []).map((week) => String(week || '').slice(0, 10)).filter(Boolean);
+  if (openPrior.length) {
+    blockers.push({
+      code: 'prior_weeks_open',
+      message: priorWeeksOpenMessage(openPrior),
     });
   }
   return blockers;

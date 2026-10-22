@@ -5,6 +5,17 @@ import {
 } from './evaluateFuelWeekClosable.ts';
 
 describe('evaluateFuelWeekClosable', () => {
+  it('blocks a week while an earlier week is still open', () => {
+    const blocked = evaluateFuelWeekClosable({ openPriorWeekStarts: ['2026-09-28'] });
+    expect(blocked.map((x) => x.code)).toContain('prior_weeks_open');
+    expect(blocked[0]?.message).toBe('Lock the week of 28 Sep before this one.');
+    const chain = evaluateFuelWeekClosable({
+      openPriorWeekStarts: ['2026-09-07', '2026-09-21'],
+    });
+    expect(chain[0]?.message).toBe('Lock the weeks of 7 Sep and 21 Sep before this one.');
+    expect(evaluateFuelWeekClosable({ openPriorWeekStarts: [] })).toEqual([]);
+  });
+
   it('passes a clean week', () => {
     expect(fuelWeekIsClosable({})).toBe(true);
     expect(evaluateFuelWeekClosable({})).toEqual([]);

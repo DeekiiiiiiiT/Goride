@@ -21,6 +21,7 @@ import {
   FUEL_RESIDUAL_DISPOSITIONS,
   isOverExplainedFuelWeek,
   LEFTOVER_BUCKETS,
+  openPriorWeeksCarryMessage,
   type FuelResidualDisposition,
   type LeftoverBucket,
 } from '@roam/fuel-core';
@@ -48,6 +49,7 @@ export type FuelLeakageStepProps = {
       clockAssumed?: boolean;
       kmSources?: Array<{ category?: string; km?: number; confidence?: string; note?: string }>;
       routingHealth?: { ok?: boolean; message?: string };
+      openPriorWeeks?: string[];
       varianceBalance?: {
         creditIn?: number;
         runningBalance?: number;
@@ -168,6 +170,8 @@ export function FuelLeakageStep(props: FuelLeakageStepProps) {
   const sourceNotes = vehicleSnaps.flatMap((snap) => snap.report?.kmSources || [])
     .filter((source) => (source.category === 'reposition' || source.category === 'commute') && source.note);
   const routingHealth = vehicleSnaps.map((snap) => snap.report?.routingHealth).find((health) => health?.message);
+  const openPriorWeeks = [...new Set(vehicleSnaps.flatMap((snap) => snap.report?.openPriorWeeks || []))];
+  const openPriorMessage = openPriorWeeksCarryMessage(openPriorWeeks);
   const varianceRows = vehicleSnaps.filter((snap) => snap.report?.varianceBalance);
 
   const overExplained = isOverExplainedFuelWeek(totalSpend, leakage);
@@ -199,6 +203,11 @@ export function FuelLeakageStep(props: FuelLeakageStepProps) {
             : 'border-amber-200 bg-amber-50 text-amber-900'
         }`}>
           {routingHealth.message}
+        </p>
+      )}
+      {openPriorMessage && (
+        <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+          {openPriorMessage}
         </p>
       )}
       {varianceRows.map((snap) => {

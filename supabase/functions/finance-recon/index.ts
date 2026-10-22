@@ -10,6 +10,7 @@ import {
   checkCloseInvariants,
   type ClosePeriodRow,
 } from "../../../packages/finance-core/src/closeInvariants.ts";
+import { shouldCompareWeekToLiveTrips } from "../../../packages/finance-core/src/closedWeekLiveCompare.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -109,7 +110,7 @@ Deno.serve(async (req) => {
     const { data: periods, error } = await supabase
       .from("driver_financial_periods")
       .select(
-        "driver_id, period_anchor, cash_collected, cash_returned, cash_written_off, cash_still_held, settlement_amount, settlement_paid, organization_id, payout_net, driver_share, fleet_share, fuel_deduction, fuel_fleet_share, fuel_driver_spend, fuel_gas_card_spend, toll_cash_spend, toll_tag_spend, toll_spend, toll_charged_to_driver, toll_reimbursed, earnings_gross, tips_paid_to_driver, settlement_amount_minor, payout_net_minor, cash_still_held_minor, metadata",
+        "driver_id, period_anchor, status, closed_at, cash_collected, cash_returned, cash_written_off, cash_still_held, settlement_amount, settlement_paid, organization_id, payout_net, driver_share, fleet_share, fuel_deduction, fuel_fleet_share, fuel_driver_spend, fuel_gas_card_spend, toll_cash_spend, toll_tag_spend, toll_spend, toll_charged_to_driver, toll_reimbursed, earnings_gross, tips_paid_to_driver, settlement_amount_minor, payout_net_minor, cash_still_held_minor, metadata",
       )
       .gte("period_anchor", fromYmd)
       .order("period_anchor", { ascending: true });
@@ -330,6 +331,18 @@ Deno.serve(async (req) => {
             }
           }
 
+          // Closed weeks stay as they were sealed. Only an open week is
+          // compared to today's trips, so old frozen weeks are not drift.
+          if (
+            shouldCompareWeekToLiveTrips({
+              status: p.status != null ? String(p.status) : null,
+              closed_at: p.closed_at != null ? String(p.closed_at) : null,
+              metadata:
+                p.metadata && typeof p.metadata === "object"
+                  ? (p.metadata as Record<string, unknown>)
+                  : null,
+            })
+          ) {
           // Pass 5: statement ↔ fresh engine compare (durable drift).
           try {
             const { mapRowToWeekStatement } = await import(
@@ -381,6 +394,7 @@ Deno.serve(async (req) => {
             }
           } catch (engErr) {
             console.warn("[finance-recon] engine compare skipped:", errMsg(engErr));
+          }
           }
 
           // M-2: active fuel_* events must carry debit/credit account keys (trial-balance hygiene).

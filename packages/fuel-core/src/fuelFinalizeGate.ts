@@ -8,14 +8,30 @@
  * C-7: negative misc (over-explained) and positive misc (under-explained) are
  * opposite problems — never conflate them in product copy or hard-blocks.
  *
- * F-9: residual must pass BOTH the ratio band and an absolute JMD ceiling.
+ * F-9: residual must pass BOTH the ratio band and a dollar ceiling.
+ * The dollar ceiling is the larger of J$5,000 and one fifth of that week's fuel,
+ * so a normal swing on a busy week is not flagged and a large hole still is.
  */
 
 /** Misc may not exceed this fraction of total spend before a week is gated. */
 export const FUEL_MISC_MAX_RATIO = 0.25;
 
-/** Absolute JMD ceiling — high-spend weeks cannot free-pass large residuals. */
+/** Floor of the dollar ceiling. Busy weeks scale above this. */
 export const FUEL_MISC_MAX_ABS_JMD = 5000;
+
+/** Busy-week dollar ceiling, as a fraction of that week's fuel spend. */
+export const FUEL_MISC_SCALED_ABS_RATIO = 0.2;
+
+/** Dollar ceiling for one week: at least J$5,000, otherwise one fifth of spend. */
+export function fuelMiscAbsCapJmd(totalSpend: number): number {
+  const spend = Math.max(0, num(totalSpend));
+  return Math.max(FUEL_MISC_MAX_ABS_JMD, spend * FUEL_MISC_SCALED_ABS_RATIO);
+}
+
+function resolvedAbsCap(spend: number, absCap: number): number {
+  if (absCap !== FUEL_MISC_MAX_ABS_JMD) return absCap;
+  return fuelMiscAbsCapJmd(spend);
+}
 
 function num(v: unknown): number {
   const n = Number(v);
@@ -27,7 +43,7 @@ export type FuelMiscResidualKind = 'ok' | 'over_explained' | 'under_explained';
 /**
  * Classify residual sign + magnitude. over = modelled costs exceed spend;
  * under = spend not fully explained by categories.
- * F-9: ok only when |misc| ≤ ratio×spend AND |misc| ≤ absCap.
+ * F-9: ok only when |misc| ≤ ratio×spend AND |misc| ≤ the week's dollar ceiling.
  */
 export function classifyFuelMiscResidual(
   totalSpend: number,
@@ -42,7 +58,7 @@ export function classifyFuelMiscResidual(
     return misc < 0 ? 'over_explained' : 'under_explained';
   }
   const withinRatio = Math.abs(misc) <= ratio * spend;
-  const withinAbs = Math.abs(misc) <= absCap;
+  const withinAbs = Math.abs(misc) <= resolvedAbsCap(spend, absCap);
   if (withinRatio && withinAbs) return 'ok';
   return misc < 0 ? 'over_explained' : 'under_explained';
 }
@@ -175,7 +191,7 @@ export function isUnattributedBeyondGate(
   const unattr = Math.max(0, num(unattributedFillCost));
   if (unattr <= 0) return false;
   if (spend <= 0) return unattr > 0;
-  return !(unattr <= ratio * spend && unattr <= absCap);
+  return !(unattr <= ratio * spend && unattr <= resolvedAbsCap(spend, absCap));
 }
 
 /** Alias — classify unattributed against the misc gate band. */

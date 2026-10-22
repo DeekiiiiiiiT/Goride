@@ -1429,6 +1429,7 @@ function FuelPeriodWizardInner({
                     clockAssumed?: boolean;
                     kmSources?: Array<{ category?: string; km?: number; confidence?: string; note?: string }>;
                     routingHealth?: { ok?: boolean; message?: string };
+                    openPriorWeeks?: string[];
                     varianceBalance?: {
                       creditIn?: number;
                       runningBalance?: number;
@@ -1448,6 +1449,7 @@ function FuelPeriodWizardInner({
                       clockAssumed: meta?.clockAssumed,
                       kmSources: meta?.kmSources,
                       routingHealth: meta?.routingHealth,
+                      openPriorWeeks: meta?.openPriorWeeks,
                       varianceBalance: meta?.varianceBalance,
                     },
                   };

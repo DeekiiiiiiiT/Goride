@@ -4,7 +4,8 @@
  */
 import * as kv from "./kv_store.tsx";
 import { getServiceClient } from "./service_client.ts";
-import { prepareFuelWeekReports } from "./fuel_week_prepare.ts";
+import { loadPriorWeekCredit, prepareFuelWeekReports } from "./fuel_week_prepare.ts";
+import type { PriorWeekFact } from "../../../packages/fuel-core/src/priorWeekCredit.ts";
 import { loadWeekFuelEntries } from "./fuel_period_build_snapshots.ts";
 import { queryFleet } from "./repos/baseRepo.ts";
 import { filterRecordsByOrganizationId } from "./org_scope.ts";
@@ -68,6 +69,8 @@ export type FuelWeekHashSources = {
   distances: Array<Record<string, unknown>>;
   anchors: Array<Record<string, unknown>>;
   leftoverOverride?: unknown;
+  /** Previous 3 weeks, oldest first. Open weeks are included so a recompute moves this hash. */
+  priorWeeks?: PriorWeekFact[];
 };
 
 /** Every input prepareFuelWeekReports reads. Distance rows omit computed_at. */
@@ -89,7 +92,7 @@ export function buildFuelWeekHashParts(sources: FuelWeekHashSources): string[] {
     `policy:${row.id}:${row.updated_at || row.updatedAt || ""}:${stable(row)}`
   );
   const driverParts = sources.drivers.map((row) =>
-    `driver:${row.id}:${row.fuelScenarioId || row.fuel_scenario_id || ""}`
+    `driver:${row.id}:${row.fuelScenarioId || row.fuel_scenario_id || ""}:${row.homeLat ?? row.home_lat ?? ""}:${row.homeLng ?? row.home_lng ?? ""}:${row.homePinSource || row.home_pin_source || ""}`
   );
   const vehicleParts = sources.vehicles.map((row) =>
     `vehicle:${row.id}:${row.currentDriverId || row.current_driver_id || ""}:${row.fuelScenarioId || row.fuel_scenario_id || ""}`
@@ -103,6 +106,17 @@ export function buildFuelWeekHashParts(sources: FuelWeekHashSources): string[] {
   const anchorParts = sources.anchors.map((row) =>
     `anchor:${row.id}:${row.date}:${row.odometer}:${row.source || ""}`
   );
+  const priorParts = (sources.priorWeeks || []).flatMap((week) => {
+    const status = week.status || "none";
+    const version = week.version || 0;
+    const rows = [...(week.variances || [])].sort((a, b) =>
+      `${a.driverId}:${a.vehicleId}`.localeCompare(`${b.driverId}:${b.vehicleId}`)
+    );
+    if (!rows.length) return [`prior:${week.weekStart}:${status}:${version}`];
+    return rows.map((row) =>
+      `prior:${week.weekStart}:${status}:${version}:${row.driverId}:${row.vehicleId}:${row.miscellaneousCost}`
+    );
+  });
   const prefs = sources.prefs || {};
   const prefPart = `prefs:${stable({
     personalAllowance: prefs.personalAllowance || null,
@@ -121,6 +135,7 @@ export function buildFuelWeekHashParts(sources: FuelWeekHashSources): string[] {
     ...fareParts,
     ...distanceParts,
     ...anchorParts,
+    ...priorParts,
     prefPart,
     "shape:fuel-rule-v2",
     `engine:${FUEL_ENGINE_VERSION}`,
@@ -185,6 +200,7 @@ export async function hashFuelWeekInputs(orgId: string, weekStart: string, weekE
     .eq("week_start", weekStart)
     .maybeSingle();
   const leftoverOverride = period.error ? null : period.data?.leftover_split_override ?? null;
+  const priorCredit = await loadPriorWeekCredit(sb, orgId, weekStart);
   return hashParts(buildFuelWeekHashParts({
     entries: entries as unknown as Array<Record<string, unknown>>,
     trips,
@@ -198,6 +214,7 @@ export async function hashFuelWeekInputs(orgId: string, weekStart: string, weekE
     distances: (saved.data || []) as Array<Record<string, unknown>>,
     anchors,
     leftoverOverride,
+    priorWeeks: priorCredit.weeks,
   }));
 }
 
@@ -205,6 +222,34 @@ export async function hashFuelWeekInputs(orgId: string, weekStart: string, weekE
  * A new snapshot stores the hash taken after prepare wrote distance rows.
  * The before-hash only reuses a snapshot that already matches the saved rows.
  */
+function reportRoutingFailed(report: unknown): boolean {
+  if (!report || typeof report !== "object") return false;
+  const meta = (report as { metadata?: { routingHealth?: { ok?: boolean } } }).metadata;
+  return meta?.routingHealth?.ok === false;
+}
+
+/** True when a saved snapshot recorded a failed route. A missing flag is not a failure. */
+export function snapshotRoutingFailed(money: unknown): boolean {
+  if (!money || typeof money !== "object") return false;
+  const reports = (money as { reports?: unknown[] }).reports;
+  if (!Array.isArray(reports)) return false;
+  return reports.some(reportRoutingFailed);
+}
+
+/**
+ * A failed route must be tried again. If the retry also fails, keep the saved snapshot
+ * instead of writing a new copy with the same bad result.
+ */
+export function shouldReuseFuelSnapshot(args: {
+  planReuse: boolean;
+  savedRoutingFailed: boolean;
+  freshRoutingFailed: boolean;
+}): boolean {
+  if (!args.planReuse) return false;
+  if (!args.savedRoutingFailed) return true;
+  return args.freshRoutingFailed;
+}
+
 export function fuelSnapshotWritePlan(args: {
   latestHash: string | null | undefined;
   beforeHash: string;
@@ -233,7 +278,8 @@ export async function computeFuelWeekSnapshot(args: {
     .order("version", { ascending: false })
     .limit(1)
     .maybeSingle();
-  if (latest && latest.inputs_hash === beforeHash) {
+  const savedRoutingFailed = snapshotRoutingFailed(latest?.money);
+  if (latest && latest.inputs_hash === beforeHash && !savedRoutingFailed) {
     await rememberPeriodTotals(sb, args, latest.money);
     return { snapshot: latest, reused: true };
   }
@@ -251,7 +297,12 @@ export async function computeFuelWeekSnapshot(args: {
     beforeHash,
     afterHash,
   });
-  if (plan.reuse && latest) {
+  const freshRoutingFailed = built.reports.some(reportRoutingFailed);
+  if (shouldReuseFuelSnapshot({
+    planReuse: plan.reuse && !!latest,
+    savedRoutingFailed,
+    freshRoutingFailed,
+  }) && latest) {
     await rememberPeriodTotals(sb, args, latest.money);
     return { snapshot: latest, reused: true };
   }
@@ -357,15 +408,22 @@ export async function loadFuelWeekSnapshotVersion(args: {
  * Compare the saved snapshot with the new engine for recent weeks.
  * Does not write a snapshot and does not lock a week.
  */
-export async function shadowFuelEngineDrift(args: { orgId: string; weeks?: number; weekStart?: string }) {
+export async function shadowFuelEngineDrift(args: {
+  orgId: string;
+  weeks?: number;
+  weekStart?: string;
+  status?: string;
+}) {
   const sb = getServiceClient();
   const limit = Math.max(1, Math.min(8, args.weeks || 8));
   const oneWeek = String(args.weekStart || "").slice(0, 10);
+  const status = String(args.status || "").trim();
   let query = sb
     .from("fuel_reconciliation_period")
     .select("id, week_start, week_end, status")
     .eq("org_id", args.orgId)
     .order("week_start", { ascending: false });
+  if (status) query = query.eq("status", status);
   if (oneWeek) query = query.eq("week_start", oneWeek).limit(1);
   else query = query.limit(limit);
   const { data: periods, error } = await query;

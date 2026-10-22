@@ -2,6 +2,8 @@ import { assertEquals, assertNotEquals } from "jsr:@std/assert";
 import {
   buildFuelWeekHashParts,
   fuelSnapshotWritePlan,
+  shouldReuseFuelSnapshot,
+  snapshotRoutingFailed,
   type FuelWeekHashSources,
 } from "./fuel_week_compute.ts";
 
@@ -42,6 +44,67 @@ Deno.test("empty distance week stores the hash after prepare writes rows", () =>
   const again = fuelSnapshotWritePlan({ latestHash: saved, beforeHash: saved, afterHash: saved });
   assertEquals(again.reuse, true);
   assertEquals(again.hash, saved);
+});
+
+Deno.test("fuel week hash changes when a prior week or a home pin changes", () => {
+  const base = buildFuelWeekHashParts(sources({
+    priorWeeks: [{
+      weekStart: "2026-09-28",
+      status: "open",
+      version: 2,
+      engineVersion: "fuel-chain-v2.1",
+      variances: [{ driverId: "d1", vehicleId: "v1", miscellaneousCost: -100 }],
+    }],
+  })).join("|");
+  const recomputed = buildFuelWeekHashParts(sources({
+    priorWeeks: [{
+      weekStart: "2026-09-28",
+      status: "open",
+      version: 3,
+      engineVersion: "fuel-chain-v2.1",
+      variances: [{ driverId: "d1", vehicleId: "v1", miscellaneousCost: -250 }],
+    }],
+  })).join("|");
+  const locked = buildFuelWeekHashParts(sources({
+    priorWeeks: [{
+      weekStart: "2026-09-28",
+      status: "locked",
+      version: 3,
+      engineVersion: "fuel-chain-v2.1",
+      variances: [{ driverId: "d1", vehicleId: "v1", miscellaneousCost: -250 }],
+    }],
+  })).join("|");
+  assertNotEquals(base, recomputed);
+  assertNotEquals(recomputed, locked);
+  const noHome = buildFuelWeekHashParts(sources()).join("|");
+  const withHome = buildFuelWeekHashParts(sources({
+    drivers: [{ id: "d1", fuelScenarioId: "s1", homeLat: 18.01, homeLng: -76.8, homePinSource: "home" }],
+  })).join("|");
+  assertNotEquals(noHome, withHome);
+});
+
+Deno.test("a failed route snapshot is retried, and a second failure is not copied", () => {
+  assertEquals(snapshotRoutingFailed({
+    reports: [{ metadata: { routingHealth: { ok: false } } }],
+  }), true);
+  assertEquals(snapshotRoutingFailed({
+    reports: [{ metadata: { routingHealth: { ok: true } } }],
+  }), false);
+  assertEquals(shouldReuseFuelSnapshot({
+    planReuse: true,
+    savedRoutingFailed: true,
+    freshRoutingFailed: false,
+  }), false);
+  assertEquals(shouldReuseFuelSnapshot({
+    planReuse: true,
+    savedRoutingFailed: true,
+    freshRoutingFailed: true,
+  }), true);
+  assertEquals(shouldReuseFuelSnapshot({
+    planReuse: true,
+    savedRoutingFailed: false,
+    freshRoutingFailed: false,
+  }), true);
 });
 
 Deno.test("fuel week hash ignores distance computed_at", () => {

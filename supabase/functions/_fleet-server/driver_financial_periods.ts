@@ -25,6 +25,7 @@ import {
 import { foldPayoutCashByWeek } from "../../../packages/finance-core/src/payoutCashDedupe.ts";
 import { periodKeyFor } from "../../../packages/finance-core/src/periodKey.ts";
 import { faresLandedOutsideTripWeek } from "../../../packages/finance-core/src/fareWeekMismatch.ts";
+import { isProbeTripRef } from "../../../packages/finance-core/src/closedWeekLiveCompare.ts";
 import {
   deriveFuelExpenseStatus,
   type FuelExpenseStatus,
@@ -708,7 +709,11 @@ export async function loadRebuildContext(
   );
 
   const fareEntries = (ledgerEvents || []).filter(
-    (e: any) => e && String(e.eventType || "") === "fare_earning",
+    (e: any) =>
+      e &&
+      String(e.eventType || "") === "fare_earning" &&
+      !isProbeTripRef(e.sourceId) &&
+      !isProbeTripRef(e.id),
   );
   const tipEntries = (ledgerEvents || []).filter(
     (e: any) => e && String(e.eventType || "") === "tip",

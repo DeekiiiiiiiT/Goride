@@ -9,6 +9,7 @@ import { uploadEvidenceFile } from '../../services/uploadEvidence';
 import { createManualTrip } from '../../utils/tripFactory';
 import { mapMatchService } from '../../services/mapMatchService';
 import { toast } from 'sonner';
+import { CLOSED_WEEK_TRIP_MESSAGE, isClosedWeekSaveError } from '../../utils/closedWeekTrip';
 
 interface OfflineContextType {
   isOnline: boolean;
@@ -231,9 +232,10 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
       let fuelSuccess = 0;
 
       // Filter actionable items first
-      const itemsToProcess = currentQueue.filter(item => 
-          forceRetry || (item.retryCount || 0) < MAX_RETRIES
-      );
+      const itemsToProcess = currentQueue.filter(item => {
+          if (isClosedWeekSaveError(item.lastError)) return false;
+          return forceRetry || (item.retryCount || 0) < MAX_RETRIES;
+      });
 
       if (itemsToProcess.length === 0) {
           setSyncStatus('IDLE');
@@ -294,23 +296,31 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
               }
           } catch (e: any) {
               console.error("Sync failed for action", action.id, e);
-              errorCount++;
 
               const code = String(e?.code || "");
               const msg = String(e?.message || "");
+              const closedWeek = code === "CLOSED_WEEK" || isClosedWeekSaveError(e);
               const permanent =
+                closedWeek ||
                 code === "MODULE_DISABLED" ||
                 /MODULE_DISABLED/i.test(msg) ||
                 /not enabled for this organization/i.test(msg);
 
               offlineStorage.updateAction(action.id, {
                   retryCount: permanent ? MAX_RETRIES : (action.retryCount || 0) + 1,
-                  lastError: permanent
+                  lastError: closedWeek
+                    ? CLOSED_WEEK_TRIP_MESSAGE
+                    : permanent
                     ? (msg || "Split fills are not enabled for this fleet")
                     : (msg || "Unknown error"),
               });
-              if (permanent && action.type === "SUBMIT_SPLIT_FUEL_FILL") {
-                toast.error("Split fuel fill is not available for your fleet");
+              if (closedWeek) {
+                toast.error(CLOSED_WEEK_TRIP_MESSAGE);
+              } else {
+                errorCount++;
+                if (permanent && action.type === "SUBMIT_SPLIT_FUEL_FILL") {
+                  toast.error("Split fuel fill is not available for your fleet");
+                }
               }
           }
       }

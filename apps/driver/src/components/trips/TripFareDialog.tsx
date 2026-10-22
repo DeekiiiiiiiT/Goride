@@ -6,6 +6,7 @@ import { Button } from '@roam/ui';
 import { Input } from '@roam/ui';
 import { Label } from '@roam/ui';
 import type { ManualTripInput } from '../../utils/tripFactory';
+import { CLOSED_WEEK_TRIP_MESSAGE, isClosedWeekSaveError } from '../../utils/closedWeekTrip';
 import type { RoutePoint, TripStop } from '../../types/tripSession';
 
 const LIVE_TRIP_PLATFORM = 'Roam' as const;
@@ -47,6 +48,7 @@ export function TripFareDialog({
 }: TripFareDialogProps) {
   const [amount, setAmount] = useState('');
   const [loading, setLoading] = useState(false);
+  const [saveError, setSaveError] = useState('');
 
   useEffect(() => {
     if (!open) return;
@@ -90,10 +92,11 @@ export function TripFareDialog({
 
     try {
       setLoading(true);
+      setSaveError('');
       await onSubmit(payload);
       onClose();
-    } catch {
-      /* parent shows toast */
+    } catch (err) {
+      if (isClosedWeekSaveError(err)) setSaveError(CLOSED_WEEK_TRIP_MESSAGE);
     } finally {
       setLoading(false);
     }
@@ -149,6 +152,11 @@ export function TripFareDialog({
                 onChange={(e) => setAmount(e.target.value)}
               />
             </div>
+            {saveError ? (
+              <p className="text-sm font-medium text-amber-800 dark:text-amber-200" role="alert">
+                {saveError}
+              </p>
+            ) : null}
           </div>
         </div>
 

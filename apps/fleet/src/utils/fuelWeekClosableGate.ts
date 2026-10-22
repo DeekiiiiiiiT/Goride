@@ -199,6 +199,8 @@ export function fuelWeekClosableBlockerMessage(blocker: FuelWeekClosableBlocker)
       return 'Blocked — data-quality flagged vehicles not marked reviewed';
     case 'null_org_fill':
       return 'A fuel fill for this week is missing its company, so it was left out of the total. Repair it before locking.';
+    case 'prior_weeks_open':
+      return blocker.message || 'Lock the earlier week before this one.';
     default:
       return blocker.message;
   }

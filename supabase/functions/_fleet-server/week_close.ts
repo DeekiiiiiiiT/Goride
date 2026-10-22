@@ -1834,12 +1834,14 @@ async function prepareWeekCloseBody(
   if (didSeal || periodSync.rebuilt > 0) {
     const { data: periods, error } = await sb()
       .from("driver_financial_periods")
-      .select("driver_id")
+      .select("driver_id, status, closed_at, metadata, settlement_status")
       .eq("organization_id", orgId)
       .eq("period_anchor", week);
     if (error) throw new Error(error.message);
 
-    const driverIds = (periods ?? []).map((p) => String(p.driver_id || "")).filter(Boolean);
+    const openPeriods = (periods ?? []).filter(
+      (p) => !periodIsFrozen(p as Record<string, unknown>),
+    );
     const statementsByDriver = await getLatestWeekStatementsForOrgWeek(orgId, week);
     const pendingDrifts: Array<{
       driverId: string;
@@ -1847,7 +1849,9 @@ async function prepareWeekCloseBody(
       statementVersion: number | null;
     }> = [];
 
-    await mapPool(driverIds, 8, async (driverId) => {
+    await mapPool(openPeriods, 8, async (period) => {
+      const driverId = String(period.driver_id || "");
+      if (!driverId) return;
       try {
         const statements = statementsByDriver.get(driverId) ?? [];
         const engineDrifts = await compareDriverWeekStatementsToEngines({

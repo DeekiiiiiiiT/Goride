@@ -126,4 +126,19 @@ describe('FuelLeakageStep render', () => {
     expect(screen.getByText(/Recent weeks already explain this/i)).toBeTruthy();
     expect(screen.getByText(/Commute: Routing unavailable/i)).toBeTruthy();
   });
+
+  it('says an open earlier week is not carried yet', () => {
+    render(
+      <FuelLeakageStep
+        {...baseProps}
+        leakage={0}
+        vehicleSnaps={[{
+          vehicleId: 'v1',
+          misc: 0,
+          report: { openPriorWeeks: ['2026-09-28'] },
+        }]}
+      />,
+    );
+    expect(screen.getByText(/week of 28 Sep is still open/i)).toBeTruthy();
+  });
 });

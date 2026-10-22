@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   FUEL_MISC_MAX_RATIO,
   FUEL_MISC_MAX_ABS_JMD,
+  fuelMiscAbsCapJmd,
   classifyFuelMiscResidual,
   floorMiscForSplit,
   isFuelMiscWithinGate,
@@ -25,10 +26,13 @@ describe('classifyFuelMiscResidual (C-7 / F-9)', () => {
     expect(isOverExplainedResidual(10000, 3000)).toBe(false);
   });
 
-  it('F-9: absolute cap blocks high-spend weeks inside ratio', () => {
-    // 20% of 100k = 20k > 5000 abs → under_explained
-    expect(classifyFuelMiscResidual(100000, 20000)).toBe('under_explained');
+  it('F-9: dollar cap scales with spend so a normal swing passes and a larger hole does not', () => {
     expect(FUEL_MISC_MAX_ABS_JMD).toBe(5000);
+    expect(fuelMiscAbsCapJmd(100000)).toBe(20000);
+    expect(classifyFuelMiscResidual(40000, -5600)).toBe('ok');
+    expect(classifyFuelMiscResidual(100000, 20000)).toBe('ok');
+    expect(classifyFuelMiscResidual(100000, 21000)).toBe('under_explained');
+    expect(classifyFuelMiscResidual(10000, 3000)).toBe('under_explained');
   });
 });
 
