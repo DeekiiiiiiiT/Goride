@@ -88,9 +88,22 @@ export function reportWeekYmdBounds(report: {
   weekStart: string;
   weekEnd?: string;
 }): { start: string; end: string } {
-  const start = toEntryYmd(report.weekStart);
-  const end = report.weekEnd ? toEntryYmd(report.weekEnd) : start;
+  const start = fuelPeriodIdFromWeekStart(report.weekStart).slice(0, 10);
+  const end = report.weekEnd ? inclusiveWeekEndYmd(report.weekEnd) : start;
   return { start, end };
+}
+
+/**
+ * Inclusive Sunday. A date-only or UTC-midnight value is that written day.
+ * A real instant (Sunday 23:59 Jamaica = next day 04:59Z) uses the Jamaica calendar day.
+ */
+function inclusiveWeekEndYmd(raw: string): string {
+  const s = String(raw).trim();
+  const prefix = s.split('T')[0]?.split(' ')[0] || '';
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(prefix)) return toEntryYmd(s);
+  if (!/[Zz]|[+-]\d{2}:\d{2}$/.test(s)) return prefix;
+  if (/T00:00:00(\.0+)?(Z|[+-]00:00)$/i.test(s)) return prefix;
+  return toEntryYmd(s);
 }
 
 /**

@@ -38,6 +38,7 @@ export function validateFuelScenarioPayload(item: any): string | null {
       "deadheadCoverage",
       "personalCoverage",
       "miscCoverage",
+      "commuteCoverage",
     ];
     for (const field of granularFields) {
       const val = rule[field];

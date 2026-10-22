@@ -58,6 +58,7 @@ describe('validateFuelRule', () => {
     ['deadheadCoverage', NaN],
     ['personalCoverage', 101],
     ['miscCoverage', -0.01],
+    ['commuteCoverage', 150],
   ] as const)('rejects an out-of-range %s value (%s)', (field, value) => {
     const rule = baseRule({ coverageType: 'Percentage', coverageValue: 50, [field]: value } as Partial<FuelRule>);
     expect(validateFuelRule(rule)).toBeTruthy();

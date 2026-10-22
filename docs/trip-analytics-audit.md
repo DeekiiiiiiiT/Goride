@@ -1,47 +1,30 @@
 # Trip Analytics: what's left
 
-**Rev 2 · 2026-10-21** · Checked against the code and production. Rev 1 (the full spec and build plan) is in git history.
-
-## Done and verified
-
-- **Data layer is live in production.** `fleet.trip_facts` has 3,806 rows, matching `fleet.trips` by count and by total amount (J$3,666,149.12). It's kept in sync by the `trip_facts_sync` trigger.
-- **Cancellations are classified correctly.** The actor buckets add up to the cancelled total: 460 rider + 61 driver + 72 delivery + 4 unknown = 597.
-- **No negative cash values remain.**
-- **The API is deployed and locked down.** The fleet-core v99 bundle contains `/trips/analytics`. The SQL functions are callable only by the service role (`anon` and `authenticated` have no execute rights), and the new tables have RLS on.
-- **The numbers add up.**
-  - Completed trips for the last 30 days: 267 from the API, 267 from raw SQL.
-  - Heatmap: 3,655 trips with a known time + 76 without = 3,731 rideshare trips.
-  - The prior-period window is correct.
-- **Search, stats, export and analytics all use the same filter** (`fleet.trip_facts_matching`), so the charts and the table can't disagree.
-- **All P0 fixes are in on the old page.** Cash, gross fares and the fake Flag Issue are fixed, and it's now Trip Logs with a full filtered export.
-- **The new page is built.** Trip Analytics is routed, in the nav, and has its Stitch exports in `docs/stitch/roam-fleet-app/`.
-- **Checks pass.**
-  - Definitions tests: 9 of 9 pass.
-  - Fleet `tsc`: 496 errors, under the 500 baseline.
-  - `recharts` is pinned to 3.8.1.
-
-## Open
+**Rev 3 · 2026-10-22** · Earlier revisions are in git history. R1–R12 from Rev 2 are all closed and verified in production. This file lists only what's still open.
 
 | # | Sev | Item | Fix |
 |---|---|---|---|
-| R1 | **High** | **65 test trips are in production data.** `probe-trip-0` to `probe-trip-64` are dated 2026-08-24, marked completed, J$100 each, with no time and no vehicle. They count in every KPI. They make the 65-trip spike on Aug 24. They're 65 of the 76 "missing time" and 76 "missing vehicle" anomalies. | Delete them from `fleet.trips` after checking nothing references them; the trigger removes the matching facts rows. Then make sure whatever wrote them can't write to production again. |
-| R2 | **High** | **The Roam funnel can never show unmatched demand.** It filters `rides.ride_requests` by `organization_id`, but that column is only stamped when a driver is assigned or the ride completes. All 93 current rows have a null org. Requests that never get a driver will never show up for any fleet, so "Requested" can't be higher than "Accepted". | Stamp `organization_id` when the request is created (from the market/fleet the rider is booking into), or attribute requests through `driver_offers` to fleet drivers. Keep the funnel flag off until this is fixed. |
-| R3 | **High** | **Retry on a failed section doesn't actually retry.** The server caches the whole response for 5 minutes, failed sections included ([trip_analytics_routes.ts:120](../supabase/functions/_fleet-server/trip_analytics_routes.ts#L120)). The Retry button only invalidates the browser query and sends `refresh: false` ([useTripAnalytics.ts:16](../apps/fleet/src/hooks/useTripAnalytics.ts#L16)), so it gets the same cached error back for up to 5 minutes. | Skip `setCache` when `errors` isn't empty, and have Retry send `refresh: true`. |
-| R4 | **High** | **Migration history doesn't match the repo.** Production records `20261021192724 trip_analytics_public_api`, but the local file is `20261021203000`. `20261021190000_trip_analytics_facts.sql` isn't in production history at all, even though its objects exist. Replaying migrations on a fresh branch would break or double-apply. | Rename the local public-API file to `20261021192724_…`, and run `supabase migration repair --status applied 20261021190000`. Then commit. |
-| R5 | Medium | **Any signed-in org user can change anomaly thresholds or dismiss anomalies.** `/trips/analytics/review` and `/trips/analytics/settings` only use `requireAuth({ requireOrg: true })` ([trip_analytics_routes.ts:126](../supabase/functions/_fleet-server/trip_analytics_routes.ts#L126), [:155](../supabase/functions/_fleet-server/trip_analytics_routes.ts#L155)). Trip delete in the same file uses `requirePermission('transactions.edit')`. | Add `requirePermission(...)` to both routes (e.g. `transactions.edit`). |
-| R6 | Medium | **"Review" on an anomaly opens an empty dialog** unless that trip happens to be on the current table page ([TripAnalyticsPage.tsx:185-188](../apps/fleet/src/components/trips/analytics/TripAnalyticsPage.tsx#L185-L188)). It falls back to `{ id }` only. | Fetch the trip by id before opening the dialog. |
-| R7 | Medium | **The fare-per-km rule is mostly noise.** It fires 48 times, mainly on Uber minimum fares for 1–2 km trips (e.g. 1.11 km for J$808.94). Real problems get buried. | Only apply it when `distance_km ≥ 2`, or compare against each platform's minimum fare. |
-| R8 | Medium | **Trip Logs now hides 75 trips.** `buildTripAnalyticsFilter` defaults `population` to `rideshare`, so the 72 Uber `delivery_failed` jobs and 3 courier trips no longer appear on Trip Logs. It's an ops list, so it shouldn't hide anything. | Send `population: 'all'` from [TripLogsPage.tsx](../apps/fleet/src/components/trips/TripLogsPage.tsx). |
-| R9 | Low | **The table's anomaly badges can disagree with the Anomalies section.** The trigger stamps `anomaly_flags` using fixed thresholds, while the Anomalies section reads thresholds from settings at query time. Rule names also differ (`fare_outlier_floor` vs `fare_outlier`). | Drive the badges from the same query-time rules, or re-flag all trips when settings change. |
-| R10 | Low | **The cost card overstates kilometres.** It computes `avgDistance × completed`, but `avgDistance` only averages trips with distance, while `completed` includes the zero-distance ones ([TripAnalyticsPage.tsx:192-194](../apps/fleet/src/components/trips/analytics/TripAnalyticsPage.tsx#L192-L194)). | Return Σ distance from `trip_kpi_block` and use that. |
-| R11 | Low | **The Data Integrity tab was removed with no replacement.** It showed how accurately trip addresses were resolved, which Anomalies doesn't cover. | Confirm you don't want it back; if you do, add it to Trip Logs. |
-| R12 | Low | **New type error.** [TripLedgerWithManualAdd.tsx:49](../apps/fleet/src/components/finance/TripLedgerWithManualAdd.tsx#L49) has an implicit `any` (TS7006). | Type `d`. |
+| T1 | **High** | **Trips can no longer be edited or deleted from the app.** Commit `09dad77b` deleted Trip Logs, and `/trips` now redirects to Trip Analytics. Manual logging moved to Ledgers → Trips, but nothing replaced Edit, Delete or Map Route. The duplicate the audit found is still in production: `manual_664e9f4d` and `manual_dee530d3` are both J$2,500 for the same driver at Oct 3, 13:06. That counts J$2,500 twice in analytics. If the Oct 3 week used trip totals, check the settlement too. | Choose one: (a) add Edit/Delete to the Ledgers → Trips row menu, behind `requirePermission('transactions.edit')` like the existing `DELETE /trips/:id`, or (b) delete the duplicate yourself and accept that trips can't be fixed from the UI. |
+| T2 | Low | **The duplicate rule fires 8 times but there's only 1 real duplicate.** It pairs a completed trip with any other trip at the same `request_at`, including cancelled ones (a rider cancels and rebooks in the same minute). | In `fleet.trip_live_anomaly_flags`, only match against other completed trips. |
+| T3 | Low | **The funnel's time-per-stage is always empty.** `roam_ride_funnel` returns `stageMinutes` as all nulls. | Compute medians from `created_at → en_route_at → arrived_pickup_at → trip_started_at → completed_at`. This can wait until real Roam rides exist. Keep the funnel flag off until then. |
+| T4 | — | **Nobody has opened the page in production yet.** There are no edge log hits for `/trips/analytics` in the last 24 h. | Open it once on desktop and at 390 px. The KPI cards for Sep 22–Oct 21 should show 3,068.03 km, which matches SQL. |
 
-## Not yet verified
+## Verified this pass
 
-- Nobody has called `/trips/analytics` in production yet (no edge log hits in the last 24 h). Open the page once on desktop and at 390 px, then check that the KPI cards match the SQL above.
-- Nothing is committed yet: the migrations, edge files, page, hook and Stitch exports are all untracked. Fix R4 before committing.
+- **Test trips removed.** The 65 probe trips are gone. `fleet.trips` and `fleet.trip_facts` both have 3,742 rows and J$3,660,899.12.
+- **Funnel attribution works.** Requests are matched to a fleet through offers made to its fleet drivers. Your org has 3 fleet driver profiles. The current test rides were only offered to independent drivers, so an empty funnel is the right answer.
+- **Migrations match.** Production history now has `190000`, `192724` and `220000`, the same as the repo. All trip analytics work is committed.
+- **Server fixes are in.**
+  - A response with a failed section isn't cached, and Retry forces a fresh load.
+  - Review and settings require `transactions.edit`.
+  - The anomaly Review button loads the trip by id.
+- **Anomaly fixes work.**
+  - Fare-per-km fires 7 times instead of 48.
+  - "Missing time" fires 11 times instead of 76.
+  - Badges and the Anomalies section use the same live rules, and the old flag name is gone.
+- **Cost card uses real distance.** Its kilometres equal Σ distance (3,068.03 = SQL).
+- **Fleet `tsc` is down to 484 errors** (was 496), with none in the new files.
 
-## Still not buildable (data limits, unchanged)
+## Data limits (unchanged)
 
-Platform imports have no request, accept, arrive or start times, rider ids, ratings, promos or Uber GPS. The funnel, wait time, repeat riders, re-request rate and ratings stay Roam-native only (see R2) or stay dropped.
+Uber and InDrive imports have no request, accept, arrive or start times, no rider ids, ratings or promos, and Uber has no GPS. The funnel, wait time and repeat-rider metrics stay Roam-only.

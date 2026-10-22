@@ -79,6 +79,7 @@ describe('validateFuelScenarioPayload', () => {
     'deadheadCoverage',
     'personalCoverage',
     'miscCoverage',
+    'commuteCoverage',
   ])('rejects an out-of-range %s', (field) => {
     const payload = validPayload();
     (payload.rules[0] as any)[field] = 150;

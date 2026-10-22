@@ -9,7 +9,7 @@ import type {
   WeeklyFuelReport,
 } from '../types/fuel';
 import type { Vehicle } from '../types/vehicle';
-import { reportWeekYmdBounds, toEntryYmd, isYmdInFuelWeek } from './fuelWeekPeriod';
+import { reportWeekYmdBounds, toEntryYmd, isYmdInFuelWeek, fuelPeriodIdFromWeekStart } from './fuelWeekPeriod';
 import { isSameFuelStatement } from './fuelWeekPeriod';
 import { fuelOpsSpendAmount } from './fuelOpsEligibility';
 import { FUEL_SPEND_EPS } from './fuelMoneyEpsilon';
@@ -38,8 +38,10 @@ export function isFuelDisputeOpenInWeek(
   weekEndYmd: string,
 ): boolean {
   if (d.status !== 'Open') return false;
-  const ws = toEntryYmd(d.weekStart);
-  if (ws) return ws === weekStartYmd;
+  // Week identity is the written Monday (YYYY-MM-DD), even when stored as
+  // 2026-07-06T00:00:00.000Z. Jamaica instant conversion would move that to Sunday.
+  const ws = d.weekStart ? fuelPeriodIdFromWeekStart(String(d.weekStart)).slice(0, 10) : '';
+  if (/^\d{4}-\d{2}-\d{2}$/.test(ws)) return ws === weekStartYmd;
   const we = toEntryYmd(d.weekEnd);
   if (we) return we >= weekStartYmd && we <= weekEndYmd;
   const created = toEntryYmd((d as any).createdAt);

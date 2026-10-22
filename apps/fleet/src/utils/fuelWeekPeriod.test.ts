@@ -76,7 +76,7 @@ describe('fuelWeekPeriod YMD helpers', () => {
         weekStart: '2026-01-12T05:00:00.000Z',
         weekEnd: '2026-01-19T04:59:59.999Z',
       }),
-    ).toEqual({ start: '2026-01-12', end: '2026-01-19' });
+    ).toEqual({ start: '2026-01-12', end: '2026-01-18' });
 
     expect(
       reportWeekYmdBounds({

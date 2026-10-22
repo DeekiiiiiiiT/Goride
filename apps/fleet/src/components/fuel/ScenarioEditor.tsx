@@ -30,6 +30,7 @@ export function validateFuelRule(rule: FuelRule): string | null {
             ['Company Ops', rule.companyUsageCoverage],
             ['Deadhead', rule.deadheadCoverage],
             ['Personal Usage', rule.personalCoverage],
+            ['Misc / Leakage', rule.miscCoverage],
             ['Commute', rule.commuteCoverage],
         ];
         for (const [label, value] of granular) {
