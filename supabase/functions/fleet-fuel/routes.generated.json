@@ -1,7 +1,7 @@
 {
   "slug": "fleet-fuel",
-  "generatedAt": "2026-10-22T11:44:08.910Z",
-  "routeCount": 214,
+  "generatedAt": "2026-10-22T22:37:30.438Z",
+  "routeCount": 215,
   "routes": [
     "DELETE ${BASE_PATH}/admin/evidence-inbox/gate-held/:transactionId",
     "DELETE ${BASE_PATH}/finalized-reports/:weekStart/:identityId",
@@ -55,6 +55,7 @@
     "GET ${BASE}/fuel/periods/:id/closable",
     "GET ${BASE}/fuel/periods/:id/evidence-pack",
     "GET ${BASE}/fuel/periods/:id/gap-charges",
+    "GET ${BASE}/fuel/periods/:id/snapshot",
     "GET ${BASE}/fuel/weeks/:weekStart/bundle",
     "GET ${BASE}/ledger",
     "GET ${BASE}/match-candidates",
