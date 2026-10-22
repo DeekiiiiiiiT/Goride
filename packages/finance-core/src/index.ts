@@ -9,6 +9,7 @@ export {
   asWeekKey,
   DEFAULT_FLEET_TZ,
 } from './periodKey.ts';
+export { allocateSharedCost, netCourierPayout, tollClosingBalance } from './courierWeekMoney.ts';
 export type { WeekKey } from './periodKey.ts';
 export * from './types.ts';
 export {
@@ -237,6 +238,21 @@ export {
   canCloseWeek,
   isCashSourceAckValid,
 } from './closeInvariants.ts';
+export {
+  assembleCloseInvariantInput,
+  earningsStatementForClose,
+  fuelStatementForClose,
+  parseCashSourceAck,
+  readFinanceCoreCash,
+  tollStatementForClose,
+} from './closeInvariantInput.ts';
+export type { FinanceCoreCashFields } from './closeInvariantInput.ts';
+export {
+  DRIVER_SHADOW_MONEY_FIELDS,
+  VEHICLE_SHADOW_MONEY_FIELDS,
+  diffShadowMoney,
+} from './shadowMoney.ts';
+export type { ShadowMoneyDelta } from './shadowMoney.ts';
 export type {
   CloseBlocker,
   CloseInvariantSeverity,

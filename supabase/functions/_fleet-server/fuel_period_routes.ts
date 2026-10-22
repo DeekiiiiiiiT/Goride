@@ -2642,6 +2642,46 @@ export function registerFuelPeriodRoutes(app: Hono) {
     },
   );
 
+  app.get(
+    `${BASE}/fuel/periods/:id/snapshot`,
+    requirePermission("fuel.view"),
+    async (c: Context) => {
+      const orgId = getOrgId(c);
+      if (!orgId) return c.json({ error: "org required" }, 400);
+      const periodId = periodIdParam(c);
+      if (!periodId) return c.json({ error: "period id required" }, 400);
+      const latest = await loadLatestFuelWeekSnapshot(orgId, periodId);
+      if (latest) {
+        const money = (latest.money || {}) as { reports?: unknown[]; totalSpend?: number };
+        return c.json({
+          version: latest.version ?? null,
+          inputsHash: latest.inputs_hash ?? null,
+          reused: true,
+          reports: money.reports || [],
+          totalSpend: money.totalSpend ?? null,
+        });
+      }
+      const period = await loadPeriod(orgId, periodId);
+      const weekStart = String(period?.week_start || period?.weekStart || "").slice(0, 10);
+      if (weekStart) {
+        const { data } = await getServiceClient()
+          .schema("recon")
+          .from("fuel_vehicle_week_shadow")
+          .select("payload")
+          .eq("organization_id", orgId)
+          .eq("week_key", weekStart);
+        const reports = (data ?? []).flatMap((row) => {
+          const payload = (row as { payload?: { reports?: unknown[] } }).payload;
+          return Array.isArray(payload?.reports) ? payload.reports : [];
+        });
+        if (reports.length) {
+          return c.json({ version: 1, reused: true, reports, totalSpend: null });
+        }
+      }
+      return c.json({ version: null, reports: [], reused: true });
+    },
+  );
+
   app.post(
     `${BASE}/fuel/periods/:id/compute`,
     requirePermission("fuel.view"),

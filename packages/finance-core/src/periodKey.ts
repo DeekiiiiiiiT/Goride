@@ -13,6 +13,22 @@ export function asWeekKey(ymd: string): WeekKey {
   return String(ymd || '').slice(0, 10) as WeekKey;
 }
 
+const calendarFormatters = new Map<string, Intl.DateTimeFormat>();
+
+function formatterFor(timeZone: string): Intl.DateTimeFormat {
+  let fmt = calendarFormatters.get(timeZone);
+  if (!fmt) {
+    fmt = new Intl.DateTimeFormat('en-CA', {
+      timeZone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    });
+    calendarFormatters.set(timeZone, fmt);
+  }
+  return fmt;
+}
+
 function calendarDayKey(input: string, timeZone: string): string | null {
   const raw = String(input || '').trim();
   if (!raw) return null;
@@ -21,12 +37,7 @@ function calendarDayKey(input: string, timeZone: string): string | null {
   const date = new Date(raw);
   if (isNaN(date.getTime())) return null;
   try {
-    const parts = new Intl.DateTimeFormat('en-CA', {
-      timeZone,
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-    }).formatToParts(date);
+    const parts = formatterFor(timeZone).formatToParts(date);
     const y = parts.find((p) => p.type === 'year')?.value;
     const m = parts.find((p) => p.type === 'month')?.value;
     const d = parts.find((p) => p.type === 'day')?.value;

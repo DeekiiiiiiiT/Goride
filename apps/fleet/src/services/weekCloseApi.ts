@@ -20,6 +20,13 @@ import type { CloseBlocker, FuelLaneMetrics, TollLaneMetrics } from '../utils/we
 
 const BASE = `${API_ENDPOINTS.fleetCore}/settlements/week-close`;
 
+function plainCloseMessage(message: string): string {
+  if (/not having enough compute resources/i.test(message)) {
+    return 'This week is still updating. Wait a minute and try again.';
+  }
+  return message;
+}
+
 export type WeekClosePreview = {
   weekKey: string;
   driversTotal: number;
@@ -297,6 +304,7 @@ export const weekCloseApi = {
       idempotencyKey?: string;
       skipPrepare?: boolean;
       serviceLine?: 'rideshare' | 'rush_delivery';
+      onProgress?: (step: string) => void;
     },
   ): Promise<WeekCloseResult> {
     const response = await fetchWithRetry(BASE, {
@@ -312,9 +320,44 @@ export const weekCloseApi = {
     });
     if (!response.ok) {
       const err = await parseErrorPayload(response, 'Close week failed');
-      throw new WeekCloseApiError(err.message, response.status, err.code, err.details);
+      throw new WeekCloseApiError(plainCloseMessage(err.message), response.status, err.code, err.details);
     }
-    return response.json() as Promise<WeekCloseResult>;
+    const started = (await response.json()) as WeekCloseResult & {
+      workflowId?: string;
+      step?: string;
+    };
+    if (started.closed || !started.workflowId) return started;
+    const stepLabel: Record<string, string> = {
+      waiting: 'Waiting for drivers to finish updating',
+      checking: 'Checking this week',
+      freezing: 'Freezing the week',
+      blocked: 'This week still has something to fix',
+      done: 'Week closed',
+    };
+    let step = started.step || 'waiting';
+    for (let attempt = 0; attempt < 40; attempt += 1) {
+      opts?.onProgress?.(stepLabel[step] || 'Updating this week');
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+      const follow = await fetchWithRetry(`${BASE}/workflows/${encodeURIComponent(started.workflowId)}`, {
+        headers: await requireAuthHeaders(null),
+      });
+      if (!follow.ok) continue;
+      const workflow = (await follow.json()) as {
+        state?: string;
+        step?: string;
+        error?: string | null;
+        result?: WeekCloseResult | null;
+      };
+      step = workflow.step || step;
+      if (workflow.state === 'succeeded' && workflow.result) return workflow.result;
+      if (workflow.state === 'blocked' || workflow.state === 'failed') {
+        throw new WeekCloseApiError(
+          plainCloseMessage(workflow.error || 'This week still has something to fix before it can close.'),
+          409,
+        );
+      }
+    }
+    throw new WeekCloseApiError('This week is still updating. You can leave this page and come back.', 202);
   },
 
   /** N-11: apply calendar freeze only after statements sealed but freeze failed. */

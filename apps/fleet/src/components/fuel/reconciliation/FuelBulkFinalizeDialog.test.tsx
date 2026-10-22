@@ -18,8 +18,8 @@ import type { FuelReconciliationPeriod } from '../../../utils/fuelPeriodStatus';
 import type { FuelDispute } from '../../../types/fuel';
 import type { Vehicle } from '../../../types/vehicle';
 
-const { computeFuelWeek, enqueueFuelPeriodFinalize, listFuelFlagDispositions, getAllFuelEntriesInRange, getFuelPeriodClosable } = vi.hoisted(() => ({
-  computeFuelWeek: vi.fn(async () => ({ version: 3, totalSpend: 1000, reports: [] as unknown[] })),
+const { getFuelWeekSnapshot, enqueueFuelPeriodFinalize, listFuelFlagDispositions, getAllFuelEntriesInRange, getFuelPeriodClosable } = vi.hoisted(() => ({
+  getFuelWeekSnapshot: vi.fn(async () => ({ version: 3, totalSpend: 1000, reports: [] as unknown[] })),
   enqueueFuelPeriodFinalize: vi.fn(async () => ({ state: 'succeeded', ok: true })),
   listFuelFlagDispositions: vi.fn(async () => ({
     dispositions: [] as unknown[],
@@ -34,7 +34,7 @@ vi.mock('../../../services/api', () => ({
     getPreferences: vi.fn(async () => ({})),
     getFinalizedReports: vi.fn(async () => []),
     ensureFuelReconciliationPeriod: vi.fn(async () => ({ id: 'p1', version: 1 })),
-    computeFuelWeek: (...args: unknown[]) => computeFuelWeek(...args),
+    getFuelWeekSnapshot: (...args: unknown[]) => getFuelWeekSnapshot(...args),
     reviewFuelPeriodLeakage: vi.fn(async () => ({ ok: true })),
     enqueueFuelPeriodFinalize: (...args: unknown[]) => enqueueFuelPeriodFinalize(...args),
     getFuelReconciliationPeriod: vi.fn(async () => null),
@@ -108,7 +108,7 @@ describe('FuelBulkFinalizeDialog', () => {
     vi.clearAllMocks();
     listFuelFlagDispositions.mockResolvedValue({ dispositions: [], truncated: false });
     getAllFuelEntriesInRange.mockResolvedValue([]);
-    computeFuelWeek.mockResolvedValue({ version: 3, totalSpend: 1000, reports: [] });
+    getFuelWeekSnapshot.mockResolvedValue({ version: 3, totalSpend: 1000, reports: [] });
     enqueueFuelPeriodFinalize.mockResolvedValue({ state: 'succeeded', ok: true });
     getFuelPeriodClosable.mockResolvedValue({ blockers: [] });
   });
@@ -247,7 +247,7 @@ describe('FuelBulkFinalizeDialog', () => {
     await user.type(confirm, 'FINALIZE 1 WEEKS');
     await user.click(screen.getByRole('button', { name: /finalize 1 week/i }));
 
-    await waitFor(() => expect(computeFuelWeek).toHaveBeenCalled());
+    await waitFor(() => expect(getFuelWeekSnapshot).toHaveBeenCalled());
     await waitFor(() => expect(enqueueFuelPeriodFinalize).toHaveBeenCalled());
     const args = enqueueFuelPeriodFinalize.mock.calls[0][0] as { snapshotVersion?: number };
     expect(args.snapshotVersion).toBe(3);
@@ -320,7 +320,7 @@ describe('FuelBulkFinalizeDialog', () => {
     await user.type(confirm, 'FINALIZE 2 WEEKS');
     await user.click(screen.getByRole('button', { name: /finalize 2 weeks/i }));
 
-    await waitFor(() => expect(computeFuelWeek).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(getFuelWeekSnapshot).toHaveBeenCalledTimes(2));
     await waitFor(() => expect(enqueueFuelPeriodFinalize).toHaveBeenCalledTimes(2));
   });
 

@@ -612,22 +612,24 @@ async function computeLiveStepCounts(
     }
   }
 
-  // R3-08: Trips & Tag from close-preview blockers / roll-forward variance.
+  // Trips, settlement, and close read the saved blockers. No engine on this request.
+  // No saved projection yet: settlement stays open so a week cannot be signed blind.
   let tripsActionable = 0;
-  // Fail closed: if the preview cannot be read, Settlement stays open.
   let settlementActionable = 1;
   let closeActionable = 0;
   let previewBlockers: Array<{ code?: string | null; severity?: string | null }> = [];
   try {
-    const { previewWeekClose } = await import("./week_close.ts");
-    const preview = await previewWeekClose(orgId, weekKey, { serviceLine: line });
-    const all = [...(preview.blockers ?? []), ...(preview.weekBlockers ?? [])];
-    previewBlockers = all;
-    tripsActionable = countTripsEarningsBlockers(all);
-    settlementActionable = countSettlementPreviewBlockers(all);
-    closeActionable = countBlockersForStep("close", all);
+    const { loadWeekBlockerRows, loadWeekProjectionStatus } = await import("./recon_projection_read.ts");
+    const projection = await loadWeekProjectionStatus(orgId, weekKey);
+    if (projection.totalDrivers > 0) {
+      const stored = await loadWeekBlockerRows(orgId, weekKey, line);
+      previewBlockers = stored.map((row) => ({ code: row.code, severity: row.severity }));
+      tripsActionable = countTripsEarningsBlockers(previewBlockers);
+      settlementActionable = countSettlementPreviewBlockers(previewBlockers);
+      closeActionable = countBlockersForStep("close", previewBlockers);
+    }
   } catch (e) {
-    console.warn("[recon] trips_earnings actionable probe failed", e);
+    console.warn("[recon] stored blocker read failed", e);
   }
 
   // Period probes can read clear while a close rule on that lane is still open.
@@ -1044,6 +1046,76 @@ function pickNextAction(
 }
 
 export function registerReconRoutes(app: Hono) {
+  app.get(
+    `${BASE}/runs/:line/:weekKey/status`,
+    requireAuth({ strict: true }),
+    requireAnyPermission("recon.view", "transactions.view"),
+    async (c: Context) => {
+      try {
+        const orgId = getOrgId(c);
+        if (!orgId) return c.json({ error: "ORG_REQUIRED" }, 400);
+        const weekKey = String(c.req.param("weekKey") || "").slice(0, 10);
+        const { loadWeekProjectionStatus } = await import("./recon_projection_read.ts");
+        const status = await loadWeekProjectionStatus(orgId, weekKey);
+        return c.json({ success: true, ...status });
+      } catch (e) {
+        return safeErrorResponse(c, e, "recon-status");
+      }
+    },
+  );
+
+  app.post(
+    `${BASE}/runs/:line/:weekKey/retry-failed`,
+    requireAuth({ strict: true }),
+    requirePermission("recon.prepare"),
+    async (c: Context) => {
+      try {
+        const orgId = getOrgId(c);
+        if (!orgId) return c.json({ error: "ORG_REQUIRED" }, 400);
+        const weekKey = String(c.req.param("weekKey") || "").slice(0, 10);
+        const sb = getServiceClient();
+        const { data } = await sb.schema("recon")
+          .from("projection_state")
+          .select("unit_kind, driver_id, vehicle_id")
+          .eq("organization_id", orgId)
+          .eq("week_key", weekKey)
+          .eq("status", "failed");
+        for (const row of data ?? []) {
+          await sb.rpc("recon_enqueue_unit", {
+            p_org: orgId,
+            p_kind: (row as { unit_kind?: string }).unit_kind,
+            p_week: weekKey,
+            p_driver: (row as { driver_id?: string | null }).driver_id,
+            p_vehicle: (row as { vehicle_id?: string | null }).vehicle_id,
+          });
+        }
+        const { loadWeekProjectionStatus } = await import("./recon_projection_read.ts");
+        const status = await loadWeekProjectionStatus(orgId, weekKey);
+        return c.json({ success: true, ...status });
+      } catch (e) {
+        return safeErrorResponse(c, e, "recon-retry");
+      }
+    },
+  );
+
+  app.post(
+    `${BASE}/worker/tick`,
+    requireAuth({ strict: true }),
+    requirePermission("recon.prepare"),
+    (c: Context) => {
+      return c.json({ success: true, hosted: "container", processed: 0, workflows: 0 });
+    },
+  );
+
+  app.post(
+    `${BASE}/worker/nightly`,
+    requireAuth({ strict: true }),
+    requirePermission("recon.prepare"),
+    (c: Context) => {
+      return c.json({ success: true, hosted: "container", enqueued: 0 });
+    },
+  );
+
   app.get(
     `${BASE}/weeks`,
     requireAuth({ strict: true }),
@@ -1607,8 +1679,7 @@ export function registerReconRoutes(app: Hono) {
         }, { onConflict: "run_id,step_id" });
 
         await appendRunEvent(run.id, actor, "step_complete", { stepId, inputsHash: currentHash });
-        const payload = await buildRunPayload(orgId, line, weekKey, actor);
-        return c.json({ success: true, ...payload });
+        return c.json({ success: true, ok: true, version: bump.version });
       } catch (e) {
         return safeErrorResponse(c, e, "recon-step-complete");
       }

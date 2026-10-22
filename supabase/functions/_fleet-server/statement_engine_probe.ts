@@ -18,6 +18,7 @@ import {
   type FuelCloseAmounts,
 } from "./fuel_week_seal.ts";
 import { resolveTollCloseAmounts } from "./toll_close_amounts.ts";
+import { logReconPhase } from "./recon_phase_log.ts";
 
 const round2 = (n: number): number => Math.round((Number(n) || 0) * 100) / 100;
 
@@ -60,6 +61,7 @@ export async function probeTollEngineAmounts(
   weekKey: string,
   driverId: string,
 ): Promise<TollEngineAmounts> {
+  const started = Date.now();
   try {
     // Shared preference with sealTollWeek (toll_close_amounts).
     const amounts = await resolveTollCloseAmounts({
@@ -67,6 +69,7 @@ export async function probeTollEngineAmounts(
       weekKey,
       driverId,
     });
+    logReconPhase("probeTollEngineAmounts", started, { organizationId, weekKey, driverId, rows: 1 });
     return {
       totalSpend: amounts.totalSpend,
       chargedToDriver: amounts.chargedToDriver,

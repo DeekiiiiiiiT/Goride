@@ -119,6 +119,7 @@ export async function weekPnlTieSides(
   organizationId: string,
   weekKey: string,
   driverIds: string[],
+  opts?: { skipEngineProbe?: boolean },
 ): Promise<{
   statementsByDriver: WeekStatementsByDriver;
   settlementSumForWeek: number;
@@ -133,10 +134,9 @@ export async function weekPnlTieSides(
     if (!statementsByDriver.has(id)) statementsByDriver.set(id, []);
   }
   const settlementSumForWeek = sumSettlementPnlFromStatements(statementsByDriver);
-  const businessWeekPnl = await sumBusinessWeekPnlMajor(
-    organizationId,
-    weekKey,
-    driverIds,
-  );
+  // Page reads use the saved settlement. They do not probe every driver.
+  const businessWeekPnl = opts?.skipEngineProbe
+    ? null
+    : await sumBusinessWeekPnlMajor(organizationId, weekKey, driverIds);
   return { statementsByDriver, settlementSumForWeek, businessWeekPnl };
 }

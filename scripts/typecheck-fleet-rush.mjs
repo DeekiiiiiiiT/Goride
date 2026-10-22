@@ -11,6 +11,9 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const rushFilter =
   /(?:^|[/\\])(?:apps[/\\]fleet[/\\]src[/\\](?:components[/\\](?:rush|couriers|deliveries)|contexts[/\\]ServiceLineScopeContext|components[/\\]layout[/\\](?:AppSidebar|sidebarGating)|components[/\\]settings[/\\]ServiceLinesSettingsCard|utils[/\\](?:fleetBankReceive|loadResolvedEarningsBundle|serviceLineTripFilter))|packages[/\\]admin-core[/\\]src[/\\]fleet[/\\]|supabase[/\\]functions[/\\](?:_shared[/\\]orderToFleetTrip|_fleet-server[/\\]rush_|delivery[/\\]courierFleetAttribution))/;
 
+const reconWizardFilter =
+  /(?:^|[/\\])apps[/\\]fleet[/\\]src[/\\](?:services[/\\](?:reconApi|weekCloseApi)|components[/\\]fleet-financials[/\\]recon[/\\])/;
+
 const r = spawnSync(
   'pnpm',
   ['--filter', '@roam/fleet', 'exec', 'tsc', '--noEmit', '-p', 'tsconfig.json'],
@@ -28,15 +31,23 @@ const r = spawnSync(
 
 const out = `${r.stdout || ''}\n${r.stderr || ''}`;
 const errors = out.split(/\r?\n/).filter((l) => l.includes('error TS'));
-const rush = errors.filter((l) => rushFilter.test(l.replace(/\\/g, '/')));
+const normalized = errors.map((l) => l.replace(/\\/g, '/'));
+const rush = normalized.filter((l) => rushFilter.test(l));
+const recon = normalized.filter((l) => reconWizardFilter.test(l));
 
-if (rush.length) {
-  console.error(`Fleet Rush typecheck failed: ${rush.length} error(s)`);
-  for (const l of rush) console.error(l);
+if (rush.length || recon.length) {
+  if (rush.length) {
+    console.error(`Fleet Rush typecheck failed: ${rush.length} error(s)`);
+    for (const l of rush) console.error(l);
+  }
+  if (recon.length) {
+    console.error(`Week reconciliation typecheck failed: ${recon.length} error(s)`);
+    for (const l of recon) console.error(l);
+  }
   process.exit(1);
 }
 
 console.log(
-  `Fleet Rush typecheck OK: 0 rush-spine errors (${errors.length} other tsc errors ignored until full-app typecheck cleanup)`,
+  `Fleet typecheck OK: 0 rush-spine errors, 0 week-reconciliation errors (${errors.length} other tsc errors ignored until full-app typecheck cleanup)`,
 );
 process.exit(0);

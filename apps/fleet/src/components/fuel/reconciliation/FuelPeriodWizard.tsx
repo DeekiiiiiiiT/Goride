@@ -262,21 +262,10 @@ function FuelPeriodWizardInner({
     setPrepareState('preparing');
     setPrepareError(null);
     try {
-      const computed = await api.computeFuelWeek(serverPeriodId);
+      const computed = await api.getFuelWeekSnapshot(serverPeriodId);
       const reports = Array.isArray(computed?.reports) ? computed.reports : [];
-      const hasCategories = reports.length > 0 && reports.every((row) => {
-        const cats = row?.categoryCosts;
-        return cats && typeof cats === 'object' && 'rideShareCost' in cats;
-      });
       const version = Number(computed?.version) || 0;
-      if (!version || (reports.length > 0 && !hasCategories)) {
-        rememberFuelSnapshotVersion(serverPeriodId, null);
-        setServerReports(null);
-        setPrepareState('failed');
-        setPrepareError("We couldn't prepare this week's numbers. Nothing was locked.");
-        return;
-      }
-      rememberFuelSnapshotVersion(serverPeriodId, version);
+      rememberFuelSnapshotVersion(serverPeriodId, version || null);
       setServerReports(reports);
       setPrepareState('ready');
     } catch {

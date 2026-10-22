@@ -26,6 +26,8 @@ export type PrepareWeekCloseOpts = CloseLaneForceOpts & WeekCloseServiceLineOpts
 /** H-1: close can skip prepare when client already synced fresh books. */
 export type CloseWeekOpts = WeekCloseServiceLineOpts & {
   skipPrepare?: boolean;
+  /** Read saved books. Do not run fuel, toll, or earnings engines in this request. */
+  skipEngineProbe?: boolean;
 };
 
 export function resolveCloseLaneForceOpts(opts?: PrepareWeekCloseOpts): CloseLaneForceOpts {

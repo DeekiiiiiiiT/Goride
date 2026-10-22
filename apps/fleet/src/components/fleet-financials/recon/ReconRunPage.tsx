@@ -5,8 +5,10 @@ import { RECON_STEP_LABELS, RECON_STEP_ORDER, type RunStepId } from '@roam/finan
 import {
   completeRunStep,
   fetchRun,
+  fetchWeekProjectionStatus,
   isReconUnavailable,
   ReconApiError,
+  retryFailedProjection,
   type ReconRunPayload,
 } from '../../../services/reconApi';
 import { ReconSourcesStep } from './ReconSourcesStep';
@@ -152,6 +154,16 @@ export function ReconRunPage({
     queryFn: () => fetchRun(line, weekKey),
     staleTime: 0,
     retry: false,
+  });
+
+  const statusQuery = useQuery({
+    queryKey: ['recon-projection', line, weekKey],
+    queryFn: () => fetchWeekProjectionStatus(line, weekKey),
+    refetchInterval: (query) => {
+      const status = query.state.data;
+      if (status && (status.pendingDrivers > 0 || status.failedDrivers > 0)) return 5000;
+      return false;
+    },
   });
 
   const gateByStep = useMemo(() => {
@@ -471,6 +483,22 @@ export function ReconRunPage({
           </h2>
           {line === 'rush_delivery' ? (
             <ReconCodRemittanceBanner onOpenRemittance={onOpenRemittance} />
+          ) : null}
+          {statusQuery.data?.line ? (
+            <p className="flex items-center gap-3 text-sm text-slate-600">
+              <span>{statusQuery.data.line}</span>
+              {statusQuery.data.failedDrivers > 0 ? (
+                <button
+                  type="button"
+                  className="font-semibold text-[#3525cd] underline"
+                  onClick={() => {
+                    void retryFailedProjection(line, weekKey).then(() => statusQuery.refetch());
+                  }}
+                >
+                  Retry
+                </button>
+              ) : null}
+            </p>
           ) : null}
         </header>
 

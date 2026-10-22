@@ -264,6 +264,14 @@ jobs:
           supabase/functions/_fleet-server/recon_statement_coverage.test.ts
           supabase/functions/_shared/edgeKernel.test.ts
 
+      - name: Deno test background week projection
+        run: >
+          deno test --allow-read --allow-env
+          supabase/functions/_fleet-server/recon_projection.test.ts
+
+      - name: Page reads do not run week engines
+        run: node scripts/assert-no-engine-on-edge-read.mjs
+
       - name: Typecheck fleet Rush spine
         env:
           VITE_SUPABASE_URL: https://ci-placeholder.supabase.co

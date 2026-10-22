@@ -5219,6 +5219,27 @@ export const api = {
     return response.json();
   },
 
+  async getFuelWeekSnapshot(periodId: string): Promise<{
+    version: number | null;
+    reports: any[];
+    reused?: boolean;
+    totalSpend?: number | null;
+  } | null> {
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.fuel}/fuel/periods/${encodeURIComponent(periodId)}/snapshot`,
+      { headers: await requireAuthHeaders(null) },
+    );
+    if (response.status === 404) return null;
+    if (!response.ok) {
+      const errText = await response.text().catch(() => '');
+      if (/not having enough compute resources/i.test(errText)) {
+        throw new Error("This week's numbers are still updating.");
+      }
+      throw new Error(errText || 'Could not load this week');
+    }
+    return response.json();
+  },
+
   async computeFuelWeek(periodId: string): Promise<{
     version: number | null;
     reports: any[];

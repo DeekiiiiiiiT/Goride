@@ -47,14 +47,21 @@ export async function sourceVolumeMetrics(
     // Prefer live trips so close-hash matches dual-read coverage when batches lag.
     let tripQ = sb
       .from("fleet_trips")
-      .select("id", { count: "exact", head: true })
+      .select("id, amount")
       .eq("organization_id", orgId)
       .gte("date", weekKey)
-      .lte("date", end);
+      .lte("date", end)
+      .limit(100000);
     if (sourceId === "uber_bundle") tripQ = tripQ.ilike("platform", "%uber%");
     if (sourceId === "indrive_trips") tripQ = tripQ.ilike("platform", "%indrive%");
-    const { count: tripCount } = await tripQ;
-    if ((tripCount ?? 0) > 0) return { rowCount: tripCount ?? 0, amountMinor: 0 };
+    const { data: tripRows } = await tripQ;
+    if ((tripRows ?? []).length > 0) {
+      let amountMinor = 0;
+      for (const row of tripRows ?? []) {
+        amountMinor += Math.round(Math.abs(Number((row as { amount?: number }).amount) || 0) * 100);
+      }
+      return { rowCount: tripRows?.length ?? 0, amountMinor };
+    }
 
     const { data } = await sb
       .from("fleet_import_batches")
@@ -79,12 +86,13 @@ export async function sourceVolumeMetrics(
   if (sourceId === "fuel_card_roam" || sourceId === "fuel_card_self") {
     const { data: fuelRows } = await sb
       .from("fleet_fuel_entries")
-      .select("id, type, payload_json")
+      .select("id, type, amount, payload_json")
       .eq("organization_id", orgId)
       .gte("date", weekKey)
       .lte("date", end)
       .limit(100000);
     let live = 0;
+    let amountMinor = 0;
     for (const f of fuelRows ?? []) {
       const payload = (f as { payload_json?: Record<string, unknown> }).payload_json || {};
       const importSrc = String(payload.importSource || "").toLowerCase();
@@ -103,12 +111,14 @@ export async function sourceVolumeMetrics(
           !!cardId
         ) {
           live += 1;
+          amountMinor += Math.round(Math.abs(Number((f as { amount?: number }).amount) || 0) * 100);
         }
       } else if (importSrc.includes("jaa") || importSrc.includes("self_serve")) {
         live += 1;
+        amountMinor += Math.round(Math.abs(Number((f as { amount?: number }).amount) || 0) * 100);
       }
     }
-    if (live > 0) return { rowCount: live, amountMinor: 0 };
+    if (live > 0) return { rowCount: live, amountMinor };
 
     const { data } = await sb
       .from("fleet_import_batches")
@@ -133,24 +143,34 @@ export async function sourceVolumeMetrics(
   if (sourceId === "roam_trips" || sourceId === "rush_deliveries") {
     let q = sb
       .from("fleet_trips")
-      .select("id", { count: "exact", head: true })
+      .select("id, amount")
       .eq("organization_id", orgId)
       .gte("date", weekKey)
-      .lte("date", end);
+      .lte("date", end)
+      .limit(100000);
     if (sourceId === "roam_trips") q = q.ilike("platform", "%roam%");
     if (sourceId === "rush_deliveries") q = q.eq("service_line", "rush_delivery");
-    const { count } = await q;
-    return { rowCount: count ?? 0, amountMinor: 0 };
+    const { data: tripRows } = await q;
+    let amountMinor = 0;
+    for (const row of tripRows ?? []) {
+      amountMinor += Math.round(Math.abs(Number((row as { amount?: number }).amount) || 0) * 100);
+    }
+    return { rowCount: tripRows?.length ?? 0, amountMinor };
   }
 
   if (sourceId === "cash_fuel") {
-    const { count } = await sb
+    const { data: fuelRows } = await sb
       .from("fleet_fuel_entries")
-      .select("id", { count: "exact", head: true })
+      .select("id, amount")
       .eq("organization_id", orgId)
       .gte("date", weekKey)
-      .lte("date", end);
-    return { rowCount: count ?? 0, amountMinor: 0 };
+      .lte("date", end)
+      .limit(100000);
+    let amountMinor = 0;
+    for (const row of fuelRows ?? []) {
+      amountMinor += Math.round(Math.abs(Number((row as { amount?: number }).amount) || 0) * 100);
+    }
+    return { rowCount: fuelRows?.length ?? 0, amountMinor };
   }
 
   return { rowCount: 0, amountMinor: 0 };

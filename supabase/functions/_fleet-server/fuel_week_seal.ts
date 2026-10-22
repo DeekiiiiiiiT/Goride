@@ -18,6 +18,7 @@ import {
   type FuelCloseAmounts,
 } from "./fuel_close_amounts.ts";
 import { unionFuelSealDriverIds } from "./fuel_week_seal_driver_union.ts";
+import { logReconPhase } from "./recon_phase_log.ts";
 
 export type { FuelCloseAmountOverride, FuelCloseAmounts } from "./fuel_close_amounts.ts";
 export {
@@ -50,11 +51,17 @@ async function amountsFromRebuild(
   organizationId: string,
   weekKey: string,
 ): Promise<Map<string, FuelCloseAmounts>> {
+  const started = Date.now();
   const weekEnd = periodEndForAnchor(weekKey);
   const built = await buildFuelPeriodSnapshots({
     orgId: organizationId,
     weekStart: weekKey,
     weekEnd,
+  });
+  logReconPhase("buildFuelPeriodSnapshots", started, {
+    orgId: organizationId,
+    weekKey,
+    rows: built.ok ? built.snapshots.length : 0,
   });
   const out = new Map<string, FuelCloseAmounts>();
   if (!built.ok) return out;

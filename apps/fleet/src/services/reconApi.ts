@@ -333,7 +333,43 @@ export async function completeRunStep(
     }
     throw new ReconApiError(message, response.status);
   }
-  return (await response.json()) as ReconRunPayload;
+  const payload = (await response.json()) as ReconRunPayload & { ok?: boolean };
+  if (payload.run && Array.isArray(payload.sources)) return payload;
+  return fetchRun(line, weekKey);
+}
+
+export type WeekProjectionStatus = {
+  pendingDrivers: number;
+  failedDrivers: number;
+  totalDrivers: number;
+  line: string | null;
+};
+
+export async function fetchWeekProjectionStatus(
+  line: 'rideshare' | 'rush_delivery',
+  weekKey: string,
+): Promise<WeekProjectionStatus> {
+  const response = await reconFetch(
+    `/runs/${encodeURIComponent(line)}/${encodeURIComponent(weekKey)}/status`,
+  );
+  if (!response.ok) {
+    return { pendingDrivers: 0, failedDrivers: 0, totalDrivers: 0, line: null };
+  }
+  return (await response.json()) as WeekProjectionStatus;
+}
+
+export async function retryFailedProjection(
+  line: 'rideshare' | 'rush_delivery',
+  weekKey: string,
+): Promise<WeekProjectionStatus> {
+  const response = await reconFetch(
+    `/runs/${encodeURIComponent(line)}/${encodeURIComponent(weekKey)}/retry-failed`,
+    { method: 'POST' },
+  );
+  if (!response.ok) {
+    throw new ReconApiError('Could not retry the update', response.status);
+  }
+  return (await response.json()) as WeekProjectionStatus;
 }
 
 async function reconImportFetch(

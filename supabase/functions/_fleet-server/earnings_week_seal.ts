@@ -16,6 +16,7 @@ import {
   type RebuildContext,
 } from "./driver_financial_periods.ts";
 import { resolveActiveEarningsBundleForDriverWeek } from "./earnings_policy_runtime.ts";
+import { logReconPhase } from "./recon_phase_log.ts";
 
 function sb() {
   return getServiceClient();
@@ -39,6 +40,7 @@ export async function computeEarningsEngineAmountsForWeek(
   weekKey: string,
   ctx?: RebuildContext,
 ): Promise<EarningsEngineAmounts | null> {
+  const started = Date.now();
   const periodAnchor = WEEK_KEY(weekKey);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(periodAnchor)) return null;
   const periodEnd = periodEndForAnchor(periodAnchor);
@@ -68,6 +70,11 @@ export async function computeEarningsEngineAmountsForWeek(
       transactions: context.driverTxAll || [],
       uberPayoutCash: context.payoutCashByAnchor?.get(periodAnchor) || 0,
       timezone,
+    });
+    logReconPhase("computeEarningsEngineAmountsForWeek", started, {
+      driverId,
+      weekKey: periodAnchor,
+      rows: (context.scopedTrips || []).length,
     });
     return {
       driverShare: round2(share.driverShare),

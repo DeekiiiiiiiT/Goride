@@ -1858,6 +1858,7 @@ export async function rebuildOneDriverPeriod(
   periodAnchor: string,
   ctx?: RebuildContext,
 ): Promise<DriverFinancialPeriodRow> {
+  const started = Date.now();
   const anchor = String(periodAnchor || "").slice(0, 10);
   const { data: existing, error: loadErr } = await sb()
     .from("driver_financial_periods")
@@ -1874,11 +1875,16 @@ export async function rebuildOneDriverPeriod(
       closedAt: existing.closed_at != null ? String(existing.closed_at) : null,
     })
   ) {
+    const { logReconPhase } = await import("./recon_phase_log.ts");
+    logReconPhase("rebuildOneDriverPeriod", started, { driverId, weekKey: anchor, rows: 0, frozen: true });
     return mapDbPeriod(existing);
   }
 
   const context = ctx || { ...(await loadRebuildContext(driverId)), persistLines: true };
-  return rebuildDriverFinancialPeriod(driverId, periodAnchor, context);
+  const rebuilt = await rebuildDriverFinancialPeriod(driverId, periodAnchor, context);
+  const { logReconPhase } = await import("./recon_phase_log.ts");
+  logReconPhase("rebuildOneDriverPeriod", started, { driverId, weekKey: anchor, rows: 1 });
+  return rebuilt;
 }
 
 /** Drain pending outbox jobs (period_projection_refresh) — one context load per driver. */

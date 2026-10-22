@@ -1,0 +1,11 @@
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - -f
+      - Dockerfile.recon-worker
+      - -t
+      - gcr.io/$PROJECT_ID/recon-worker
+      - .
+images:
+  - gcr.io/$PROJECT_ID/recon-worker

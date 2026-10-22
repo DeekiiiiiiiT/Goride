@@ -7,6 +7,7 @@ import { filterRecordsByOrganizationId } from "./org_scope.ts";
 import { getServiceClient } from "./service_client.ts";
 import { queryFleet } from "./repos/baseRepo.ts";
 import { loadWeekFuelEntries } from "./fuel_period_build_snapshots.ts";
+import { logReconPhase } from "./recon_phase_log.ts";
 import { computeFleetDeadhead } from "./fuel_distance.ts";
 import { loadOrgPreferences } from "./fuel_org_preferences.ts";
 import { listOdometerLedger } from "./odometer_ledger.ts";
@@ -206,6 +207,8 @@ export async function prepareFuelWeekReports(args: {
   orgId: string;
   weekStart: string;
   weekEnd: string;
+  /** One vehicle. The background worker never calculates the whole fleet. */
+  vehicleId?: string;
   /** Shadow compares must not overwrite saved distances. */
   persistDistance?: boolean;
 }): Promise<
@@ -219,12 +222,16 @@ export async function prepareFuelWeekReports(args: {
     return { ok: false, reports: [], totalSpend: 0, error: "missing_org_or_week" };
   }
 
+  const started = Date.now();
   try {
     const rawEntries = await loadWeekFuelEntries(orgId, weekStart, weekEnd);
-    const entries = fuelEntriesForWeekEngine(rawEntries.map(asEntry));
-    const vehicleIds = [
+    const onlyVehicle = String(args.vehicleId || "").trim();
+    let entries = fuelEntriesForWeekEngine(rawEntries.map(asEntry));
+    if (onlyVehicle) entries = entries.filter((entry) => String(entry.vehicleId || "") === onlyVehicle);
+    let vehicleIds = [
       ...new Set(entries.map((entry) => String(entry.vehicleId || "")).filter(Boolean)),
     ];
+    if (onlyVehicle) vehicleIds = vehicleIds.filter((id) => id === onlyVehicle);
 
     const distance = await computeFleetDeadhead({
       orgId,
@@ -349,27 +356,53 @@ export async function prepareFuelWeekReports(args: {
       plainReason: routing.plainReason,
       message: routing.message,
     };
+    const tripsByVehicle = new Map<string, typeof trips>();
+    for (const trip of trips) {
+      const day = ymd(trip.date);
+      if (day < weekStart || day > weekEnd) continue;
+      if (trip.status !== "Completed" && trip.status !== "Cancelled") continue;
+      const id = String(trip.vehicleId || "");
+      const list = tripsByVehicle.get(id) ?? [];
+      list.push(trip);
+      tripsByVehicle.set(id, list);
+    }
+    const adjustmentsByVehicle = new Map<string, typeof weekAdjustments>();
+    for (const row of weekAdjustments) {
+      const id = String(row.vehicleId || "");
+      const list = adjustmentsByVehicle.get(id) ?? [];
+      list.push(row);
+      adjustmentsByVehicle.set(id, list);
+    }
+    const historyByVehicle = new Map<string, typeof historyRows>();
+    for (const row of historyRows) {
+      const id = String((row as { vehicleId?: string; vehicle_id?: string }).vehicleId || (row as { vehicle_id?: string }).vehicle_id || "");
+      const list = historyByVehicle.get(id) ?? [];
+      list.push(row);
+      historyByVehicle.set(id, list);
+    }
+    const driverById = new Map(drivers.map((row) => [String(row.id || ""), row]));
+    const homeByDriver = new Map<string, Awaited<ReturnType<typeof pinDriverHome>>>();
+    const scopedVehicles = onlyVehicle
+      ? vehicles.filter((vehicle) => String(vehicle.id || "") === onlyVehicle)
+      : vehicles;
     const brain = new Map<string, Record<string, unknown>>();
-    for (const vehicle of vehicles) {
+    for (const vehicle of scopedVehicles) {
       const driverId = String(vehicle.currentDriverId || "");
       if (!driverId) continue;
       const vehicleId = String(vehicle.id || "");
-      const driver = drivers.find((row) => String(row.id || "") === driverId);
-      const home = await pinDriverHome(driver);
+      const driver = driverById.get(driverId);
+      let home = homeByDriver.get(driverId);
+      if (home === undefined) {
+        home = await pinDriverHome(driver);
+        homeByDriver.set(driverId, home);
+      }
       const homeMissing = !home;
-      const vehicleTrips = trips.filter((trip) => {
-        const day = ymd(trip.date);
-        return String(trip.vehicleId || "") === vehicleId &&
-          day >= weekStart &&
-          day <= weekEnd &&
-          (trip.status === "Completed" || trip.status === "Cancelled");
-      });
-      const companyOpsKm = weekAdjustments
-        .filter((row) => String(row.vehicleId || "") === vehicleId)
+      const vehicleTrips = tripsByVehicle.get(vehicleId) ?? [];
+      const vehicleAdjustments = adjustmentsByVehicle.get(vehicleId) ?? [];
+      const companyOpsKm = vehicleAdjustments
         .filter((row) => row.type === "Company_Misc" || row.type === "Maintenance")
         .reduce((sum, row) => sum + (Number(row.distance) || 0), 0);
-      const evidencedPersonalKm = weekAdjustments
-        .filter((row) => String(row.vehicleId || "") === vehicleId)
+      const evidencedPersonalKm = vehicleAdjustments
         .filter((row) => row.type === "Personal")
         .reduce((sum, row) => sum + (Number(row.distance) || 0), 0);
       const dh = deadheadMap.get(vehicleId);
@@ -426,9 +459,7 @@ export async function prepareFuelWeekReports(args: {
         || 0;
       const ref = referenceEfficiencyFromFills(
         referenceFillsFromEntries(
-          historyRows
-            .filter((row) => String(row.vehicleId || row.vehicle_id || "") === vehicleId)
-            .map(asEntry),
+          (historyByVehicle.get(vehicleId) ?? []).map(asEntry),
           { tankCapacityLiters: tank || null },
         ),
         weekStart,
@@ -544,7 +575,7 @@ export async function prepareFuelWeekReports(args: {
     const weekStartDate = new Date(`${weekStart}T12:00:00`);
     const weekEndDate = new Date(`${weekEnd}T12:00:00`);
     const reports = FuelCalculationService.generateDriverFleetReport(
-      vehicles as never,
+      scopedVehicles as never,
       drivers.map((driver) => ({
         id: String(driver.id || ""),
         fuelScenarioId: driver.fuelScenarioId ? String(driver.fuelScenarioId) : undefined,
@@ -641,6 +672,12 @@ export async function prepareFuelWeekReports(args: {
     const totalSpend = Math.round(
       stamped.reduce((sum, report) => sum + (Number(report.totalGasCardCost) || 0), 0) * 100,
     ) / 100;
+    logReconPhase("prepareFuelWeekReports", started, {
+      orgId,
+      weekKey: weekStart,
+      rows: stamped.length,
+      vehicles: vehicleIds.length,
+    });
     return { ok: true, reports: stamped as unknown as Record<string, unknown>[], totalSpend };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);

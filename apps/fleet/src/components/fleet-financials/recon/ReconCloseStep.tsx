@@ -79,6 +79,7 @@ export function ReconCloseStep({
   );
 
   const [closing, setClosing] = useState(false);
+  const [closeNote, setCloseNote] = useState<string | null>(null);
   const [reopening, setReopening] = useState(false);
   const [closeConfirmOpen, setCloseConfirmOpen] = useState(false);
   const [confirmNeedsReconfirm, setConfirmNeedsReconfirm] = useState(false);
@@ -188,6 +189,7 @@ export function ReconCloseStep({
         idempotencyKey: opts?.idempotencyKey,
         skipPrepare: opts?.skipPrepare === true,
         serviceLine,
+        onProgress: setCloseNote,
       });
       if (res.closed) {
         toast.success(
@@ -406,7 +408,7 @@ export function ReconCloseStep({
               }}
             >
               {closing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Lock className="mr-2 h-4 w-4" />}
-              {hasPendingRestatements ? 'Sign restatements' : 'Close week'}
+              {closeNote && closing ? closeNote : hasPendingRestatements ? 'Sign restatements' : 'Close week'}
             </Button>
           )}
         </div>
@@ -480,7 +482,7 @@ export function ReconCloseStep({
               onClick={() => void confirmCloseWeek()}
             >
               {closing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Lock className="mr-2 h-4 w-4" />}
-              {hasPendingRestatements ? 'Sign restatements' : 'Close week'}
+              {closeNote && closing ? closeNote : hasPendingRestatements ? 'Sign restatements' : 'Close week'}
             </Button>
           </DialogFooter>
         </DialogContent>

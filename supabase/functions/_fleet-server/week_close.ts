@@ -42,7 +42,7 @@ import {
   WeekSealLogError,
 } from "./week_seal_log.ts";
 import { compareDriverWeekStatementsToEngines } from "./statement_engine_probe.ts";
-import { upsertFinanceReconDrifts, countOpenFinanceReconDrifts } from "./finance_recon_drift.ts";
+import { upsertFinanceReconDrifts, countOpenFinanceReconDrifts, listOpenFinanceReconDrifts } from "./finance_recon_drift.ts";
 import { weekPnlTieSides } from "./business_week_pnl.ts";
 import {
   summarizeTollUsageOrphansByDriverForWeek,
@@ -67,6 +67,13 @@ import {
   type ClosePeriodRow,
   type CloseTollStatement,
 } from "../../../packages/finance-core/src/closeInvariants.ts";
+import {
+  assembleCloseInvariantInput,
+  earningsStatementForClose,
+  fuelStatementForClose,
+  readFinanceCoreCash,
+  tollStatementForClose,
+} from "../../../packages/finance-core/src/closeInvariantInput.ts";
 import { tollPeriodDisagreesWithSeal } from "../../../packages/finance-core/src/tollPeriodSealDrift.ts";
 import { stampCloseInvariantSnapshotOnMeta } from "../../../packages/finance-core/src/periodSignedSnapshot.ts";
 import type { WeekStatement } from "../../../packages/finance-core/src/weekStatement.ts";
@@ -586,55 +593,25 @@ function tollEventLedgerFromSummary(
   };
 }
 
-/** Draft restatements (supersedes set) are amount-ready; treat as closed for invariants. */
-function statementStatusForInvariants(
-  s: WeekStatement,
-  acceptRestatementDrafts: boolean,
-): WeekStatement["status"] {
-  if (acceptRestatementDrafts && s.status === "draft" && s.supersedes) return "closed";
-  return s.status;
-}
-
 function fuelFromStatement(
   s: WeekStatement | undefined,
   acceptRestatementDrafts = false,
 ): CloseFuelStatement | null {
-  if (!s) return null;
-  return {
-    driverShare: minorToMajor(s.amountsMinor.driverShare),
-    companyShare: minorToMajor(s.amountsMinor.companyShare),
-    status: statementStatusForInvariants(s, acceptRestatementDrafts),
-  };
+  return fuelStatementForClose(s, acceptRestatementDrafts);
 }
 
 function tollFromStatement(
   s: WeekStatement | undefined,
   acceptRestatementDrafts = false,
 ): CloseTollStatement | null {
-  if (!s) return null;
-  return {
-    totalSpend: minorToMajor(s.amountsMinor.totalSpend),
-    chargedToDriver: minorToMajor(s.amountsMinor.chargedToDriver),
-    reimbursed: minorToMajor(s.amountsMinor.reimbursed),
-    netLoss: minorToMajor(s.amountsMinor.netLoss),
-    cashWashSpend: minorToMajor(s.amountsMinor.cashWashSpend),
-    tagSpend: minorToMajor(s.amountsMinor.tagSpend),
-    status: statementStatusForInvariants(s, acceptRestatementDrafts),
-  };
+  return tollStatementForClose(s, acceptRestatementDrafts);
 }
 
 function earningsFromStatement(
   s: WeekStatement | undefined,
   acceptRestatementDrafts = false,
 ): CloseEarningsStatement | null {
-  if (!s) return null;
-  return {
-    passengerCash: minorToMajor(s.amountsMinor.passengerCash),
-    driverShare: minorToMajor(s.amountsMinor.driverShare),
-    companyShare: minorToMajor(s.amountsMinor.companyShare),
-    tipsPaidToDriver: minorToMajor(s.amountsMinor.tipsPaidToDriver),
-    status: statementStatusForInvariants(s, acceptRestatementDrafts),
-  };
+  return earningsStatementForClose(s, acceptRestatementDrafts);
 }
 
 /** Structured errors for week-close HTTP (409 settlement risk, etc.). */
@@ -788,50 +765,6 @@ export type WeekClosePreview = {
   /** P4: sources / attestations / stale steps for accountant pack. */
   reconEvidence?: WeekCloseReconEvidence | null;
 };
-
-type FinanceCoreCashSlice = {
-  cashSourceMismatch: number;
-  uberCash: number;
-  uberTripCash: number;
-  cashSourceAck: CashSourceAck | null;
-};
-
-function parseCashSourceAck(raw: unknown): CashSourceAck | null {
-  if (!raw || typeof raw !== "object") return null;
-  const o = raw as Record<string, unknown>;
-  const reason = String(o.reason || "").trim();
-  if (!reason) return null;
-  const mismatchAtAck = Number(o.mismatchAtAck);
-  if (!Number.isFinite(mismatchAtAck)) return null;
-  return {
-    at: String(o.at || ""),
-    by: o.by != null ? String(o.by) : null,
-    reason,
-    uberCash: Number(o.uberCash) || 0,
-    uberTripCash: Number(o.uberTripCash) || 0,
-    mismatchAtAck,
-  };
-}
-
-function readFinanceCoreCash(meta: Record<string, unknown> | null | undefined): FinanceCoreCashSlice {
-  const fc = (meta?.financeCore as Record<string, unknown> | undefined) || {};
-  return {
-    cashSourceMismatch: Number(fc.cashSourceMismatch) || 0,
-    uberCash: Number(fc.uberCash) || 0,
-    uberTripCash: Number(fc.uberTripCash) || 0,
-    cashSourceAck: parseCashSourceAck(fc.cashSourceAck),
-  };
-}
-
-function cashInvariantFields(meta: Record<string, unknown> | null | undefined) {
-  const cash = readFinanceCoreCash(meta);
-  return {
-    cashSourceMismatch: cash.cashSourceMismatch,
-    uberCash: cash.uberCash,
-    uberTripCash: cash.uberTripCash,
-    cashSourceAck: cash.cashSourceAck,
-  };
-}
 
 /**
  * Close Program Pass 3/5 precondition: refresh fuel/toll/earnings from
@@ -1331,7 +1264,7 @@ async function orgWeekNeedsForceTollReseal(orgId: string, week: string): Promise
 export async function previewWeekClose(
   orgId: string,
   weekKey: string,
-  opts?: { serviceLine?: WeekCloseServiceLine },
+  opts?: { serviceLine?: WeekCloseServiceLine; skipEngineProbe?: boolean },
 ): Promise<WeekClosePreview> {
   const week = String(weekKey).slice(0, 10);
   const serviceLine = normalizeWeekCloseServiceLine(opts?.serviceLine);
@@ -1375,10 +1308,12 @@ export async function previewWeekClose(
 
   // H-4 + N-4: one statement batch; settlement = statements, business = engines.
   const driverIds = rows.map((p) => String(p.driver_id)).filter(Boolean);
+  const skipEngineProbe = opts?.skipEngineProbe === true;
   const { statementsByDriver, settlementSumForWeek, businessWeekPnl } = await weekPnlTieSides(
     orgId,
     week,
     driverIds,
+    { skipEngineProbe },
   );
 
   // P-3: one week-scoped toll orphan scan, indexed by driver.
@@ -1400,7 +1335,7 @@ export async function previewWeekClose(
       delta: settlementSumForWeek - businessWeekPnl,
       message: "Week settlement composition (statements) does not tie to engine week P&L",
     });
-  } else if (businessWeekPnl == null && settlementSumForWeek !== 0) {
+  } else if (!skipEngineProbe && businessWeekPnl == null && settlementSumForWeek !== 0) {
     weekBlockers.push({
       code: "BUSINESS_WEEK_PNL_UNAVAILABLE",
       severity: "warn",
@@ -1417,6 +1352,22 @@ export async function previewWeekClose(
   const cashSourceMismatches: WeekCloseCashSourceMismatch[] = [];
   let cashSourceAckCount = 0;
   let fuelCreditExceedsCashInHand = false;
+
+  const storedDriftsByDriver = new Map<string, StatementEngineDrift[]>();
+  if (skipEngineProbe) {
+    const stored = await listOpenFinanceReconDrifts(orgId, week);
+    for (const row of stored) {
+      const list = storedDriftsByDriver.get(row.driver_id) ?? [];
+      list.push({
+        kind: row.kind,
+        field: row.field,
+        statementMinor: Number(row.statement_minor) || 0,
+        engineMinor: Number(row.engine_minor) || 0,
+        deltaMinor: Number(row.delta_minor) || 0,
+      });
+      storedDriftsByDriver.set(row.driver_id, list);
+    }
+  }
 
   for (const period of rows) {
     const driverId = String(period.driver_id);
@@ -1496,8 +1447,13 @@ export async function previewWeekClose(
     const tollStatement = tollFromStatement(byKind.get("toll"), acceptRestatementDrafts);
 
     let engineBlockers: CloseBlocker[] = [];
-    // H-1: preview is read-only — compare engines but do NOT upsert drifts.
-    if (!frozen || acceptRestatementDrafts) {
+    // Page preview reads the last saved drift. It does not recompute engines.
+    if (skipEngineProbe) {
+      const stored = storedDriftsByDriver.get(driverId) ?? [];
+      if (stored.length) {
+        engineBlockers = engineDriftsToCloseBlockers(stored, { driverId, week }) as CloseBlocker[];
+      }
+    } else if (!frozen || acceptRestatementDrafts) {
       try {
         const engineDrifts = await compareDriverWeekStatementsToEngines({
           organizationId: orgId,
@@ -1521,25 +1477,15 @@ export async function previewWeekClose(
         ? tollEventLedgerFromSummary(orphansByDriver.get(driverId))
         : null;
 
-    const driverBlockers = checkCloseInvariants({
+    const driverBlockers = checkCloseInvariants(assembleCloseInvariantInput({
       period: period as ClosePeriodRow,
       fuelStatement,
       tollStatement,
       earningsStatement: earningsFromStatement(byKind.get("earnings"), acceptRestatementDrafts),
-      ...cashInvariantFields(meta),
       skipSettlementDeskClear: acceptRestatementDrafts,
       engineDrifts: engineBlockers,
       tollEventLedger,
-      tollUnknownPmCount: Number(
-        (meta as { financeCore?: { tollUnknownPmCount?: number } } | null)
-          ?.financeCore?.tollUnknownPmCount,
-      ) || 0,
-      tollUnknownPmAmount: Number(
-        (meta as { financeCore?: { tollUnknownPmAmount?: number } } | null)
-          ?.financeCore?.tollUnknownPmAmount,
-      ) || 0,
-      // H-3: P&L is in weekBlockers — do not attribute to a driver here.
-    });
+    }));
     // N-3: custody target must exist before freeze — surface on preview.
     if (!frozen || acceptRestatementDrafts) {
       try {
@@ -2100,7 +2046,9 @@ async function closeWeekBody(
     } catch (e) {
       console.warn("[week_close] recon gate on close failed (non-fatal)", week, e);
     }
-    const sides = await weekPnlTieSides(orgId, week, driverIds);
+    const sides = await weekPnlTieSides(orgId, week, driverIds, {
+      skipEngineProbe: opts?.skipEngineProbe === true,
+    });
     statementsByDriver = sides.statementsByDriver;
     const { settlementSumForWeek, businessWeekPnl } = sides;
 
@@ -2128,7 +2076,7 @@ async function closeWeekBody(
           blockers: allBlockers,
         })),
       };
-    } else if (businessWeekPnl == null) {
+    } else if (businessWeekPnl == null && opts?.skipEngineProbe !== true) {
       allBlockers.push({
         code: "BUSINESS_WEEK_PNL_UNAVAILABLE",
         severity: "warn",
@@ -2180,6 +2128,21 @@ async function closeWeekBody(
   };
 
   const closePhaseStarted = Date.now();
+  const storedCloseDrifts = new Map<string, StatementEngineDrift[]>();
+  if (opts?.skipEngineProbe === true) {
+    const stored = await listOpenFinanceReconDrifts(orgId, week);
+    for (const row of stored) {
+      const list = storedCloseDrifts.get(row.driver_id) ?? [];
+      list.push({
+        kind: row.kind,
+        field: row.field,
+        statementMinor: Number(row.statement_minor) || 0,
+        engineMinor: Number(row.engine_minor) || 0,
+        deltaMinor: Number(row.delta_minor) || 0,
+      });
+      storedCloseDrifts.set(row.driver_id, list);
+    }
+  }
   // P-1: read-only verification pooled; freeze writes stay sequential after.
   const verified = await mapPool(periodRows, 6, async (period): Promise<CloseVerifyRow> => {
     const driverId = String(period.driver_id);
@@ -2210,26 +2173,33 @@ async function closeWeekBody(
       : reason;
 
     let engineBlockers: CloseBlocker[] = [];
-    try {
-      const engineDrifts = await compareDriverWeekStatementsToEngines({
-        organizationId: orgId,
-        driverId,
-        weekKey: week,
-        statements,
-      });
-      if (engineDrifts.length) {
-        closeDriftBatch.push({
-          driverId,
-          drifts: engineDrifts,
-          statementVersion: statements[0]?.version ?? null,
-        });
-        engineBlockers = engineDriftsToCloseBlockers(engineDrifts, {
-          driverId,
-          week,
-        }) as CloseBlocker[];
+    if (opts?.skipEngineProbe === true) {
+      const stored = storedCloseDrifts.get(driverId) ?? [];
+      if (stored.length) {
+        engineBlockers = engineDriftsToCloseBlockers(stored, { driverId, week }) as CloseBlocker[];
       }
-    } catch (e) {
-      console.warn("[week_close] engine compare failed (non-fatal)", driverId, week, e);
+    } else {
+      try {
+        const engineDrifts = await compareDriverWeekStatementsToEngines({
+          organizationId: orgId,
+          driverId,
+          weekKey: week,
+          statements,
+        });
+        if (engineDrifts.length) {
+          closeDriftBatch.push({
+            driverId,
+            drifts: engineDrifts,
+            statementVersion: statements[0]?.version ?? null,
+          });
+          engineBlockers = engineDriftsToCloseBlockers(engineDrifts, {
+            driverId,
+            week,
+          }) as CloseBlocker[];
+        }
+      } catch (e) {
+        console.warn("[week_close] engine compare failed (non-fatal)", driverId, week, e);
+      }
     }
 
     const sum = orphansByDriver.get(driverId);
@@ -2258,25 +2228,15 @@ async function closeWeekBody(
       });
     }
 
-    const blockers = checkCloseInvariants({
+    const blockers = checkCloseInvariants(assembleCloseInvariantInput({
       period: period as ClosePeriodRow,
       fuelStatement: fuelFromStatement(byKind.get("fuel"), acceptRestatementDrafts),
       tollStatement: tollFromStatement(byKind.get("toll"), acceptRestatementDrafts),
       earningsStatement: earningsFromStatement(byKind.get("earnings"), acceptRestatementDrafts),
-      ...cashInvariantFields(meta),
       skipSettlementDeskClear: acceptRestatementDrafts,
       engineDrifts: engineBlockers,
       tollEventLedger,
-      tollUnknownPmCount: Number(
-        (meta as { financeCore?: { tollUnknownPmCount?: number } } | null)
-          ?.financeCore?.tollUnknownPmCount,
-      ) || 0,
-      tollUnknownPmAmount: Number(
-        (meta as { financeCore?: { tollUnknownPmAmount?: number } } | null)
-          ?.financeCore?.tollUnknownPmAmount,
-      ) || 0,
-      // H-3: P&L handled once above — not per driver.
-    });
+    }));
 
     // M-2: refuse close when active fuel_* events lack account keys.
     try {

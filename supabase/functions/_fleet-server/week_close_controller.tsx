@@ -18,7 +18,8 @@ import { Hono, type Context } from "npm:hono@4.3.11";
 import { requireAuth, requirePermission, requireAnyPermission, type RbacUser } from "./rbac_middleware.ts";
 import { getOrgId } from "./org_scope.ts";
 import { safeErrorResponse } from "./safe_error.ts";
-import { closeWeek, previewWeekClose, prepareWeekClose, reopenWeek, retryFreezeWeek, listClosedWeeks, listOpenWeeks, acknowledgeCashSourceMismatch, WeekCloseError } from "./week_close.ts";
+import { previewWeekClose, reopenWeek, retryFreezeWeek, listClosedWeeks, listOpenWeeks, acknowledgeCashSourceMismatch, WeekCloseError } from "./week_close.ts";
+import { loadWorkflow, startWeekWorkflow } from "./recon_close_workflow.ts";
 import { sealFuelWeekViaHttp } from "./fuel_seal_http.ts";
 import {
   listPendingRestatements,
@@ -92,14 +93,34 @@ app.get(`${BASE}/preview`, requirePermission("transactions.view"), async (c) => 
       return c.json({ error: "weekKey (YYYY-MM-DD) is required" }, 400);
     }
     const serviceLine = normalizeWeekCloseServiceLine(c.req.query("serviceLine"));
-    const preview = await previewWeekClose(org, weekKey, { serviceLine });
+    const preview = await previewWeekClose(org, weekKey, { serviceLine, skipEngineProbe: true });
     return c.json(preview);
   } catch (e) {
     return safeErrorResponse(c, e, "week-close");
   }
 });
 
-// ── POST /week-close/prepare — week sync: seal + rebuild + drifts (H-1 writes) ─
+app.get(`${BASE}/workflows/:id`, requirePermission("transactions.view"), async (c) => {
+  try {
+    const org = requireOrg(c);
+    if (typeof org !== "string") return org;
+    const workflow = await loadWorkflow(String(c.req.param("id") || ""));
+    if (!workflow || workflow.organization_id !== org) {
+      return c.json({ error: "NOT_FOUND" }, 404);
+    }
+    return c.json({
+      id: workflow.id,
+      state: workflow.state,
+      step: workflow.step,
+      error: workflow.error,
+      result: workflow.result,
+    });
+  } catch (e) {
+    return safeErrorResponse(c, e, "week-close-workflow");
+  }
+});
+
+// ── POST /week-close/prepare — mark the week pending. Calculation runs in the background.
 // Alias: POST /week-close/sync (same handler; product language for auto-sync).
 async function handleWeekSync(c: Context) {
   try {
@@ -118,13 +139,15 @@ async function handleWeekSync(c: Context) {
     if (!WEEK_RE.test(weekKey)) {
       return c.json({ error: "weekKey (YYYY-MM-DD) is required" }, 400);
     }
-    const preview = await prepareWeekClose(org, weekKey, user.userId, {
-      serviceLine: normalizeWeekCloseServiceLine(body.serviceLine),
-      forceFuelReseal: Boolean(body.forceFuelReseal),
-      forceTollReseal: Boolean(body.forceTollReseal),
-      forceEarningsReseal: Boolean(body.forceEarningsReseal),
-      forceAllLaneReseals: Boolean(body.forceAllLaneReseals),
+    const serviceLine = normalizeWeekCloseServiceLine(body.serviceLine);
+    await startWeekWorkflow({
+      orgId: org,
+      weekKey,
+      serviceLine,
+      kind: "refresh",
+      actorId: user.userId,
     });
+    const preview = await previewWeekClose(org, weekKey, { serviceLine, skipEngineProbe: true });
     return c.json(preview);
   } catch (e) {
     if (e instanceof WeekCloseError) {
@@ -185,9 +208,7 @@ app.post(BASE, requireAnyPermission("recon.approve", "transactions.edit"), async
     if (!WEEK_RE.test(weekKey)) {
       return c.json({ error: "weekKey (YYYY-MM-DD) is required" }, 400);
     }
-    const reason = String(body.reason || "").trim() || "Manual week close";
     const idempotencyKey = String(body.idempotencyKey || "").trim();
-    const skipPrepare = body.skipPrepare === true;
     const serviceLine = normalizeWeekCloseServiceLine(body.serviceLine);
 
     // C-3: return stored outcome for a completed idempotency key.
@@ -230,11 +251,32 @@ app.post(BASE, requireAnyPermission("recon.approve", "transactions.edit"), async
     }
 
     try {
-      const result = await closeWeek(org, weekKey, user.userId, reason, { skipPrepare, serviceLine });
-      if (idempotencyKey) {
-        await completeWeekCloseRun(org, idempotencyKey, result as unknown as Record<string, unknown>);
+      const workflow = await startWeekWorkflow({
+        orgId: org,
+        weekKey,
+        serviceLine,
+        kind: "close",
+        actorId: user.userId,
+      });
+      if (workflow.state === "succeeded" && workflow.result) {
+        if (idempotencyKey) {
+          await completeWeekCloseRun(org, idempotencyKey, workflow.result);
+        }
+        return c.json({ ...workflow.result, idempotent: true });
       }
-      return c.json(result);
+      return c.json({
+        workflowId: workflow.id,
+        state: workflow.state,
+        step: workflow.step,
+        closed: false,
+        organizationId: org,
+        weekKey,
+        driversClosed: 0,
+        driversBlocked: 0,
+        blockers: [],
+        perDriver: [],
+        message: workflow.error,
+      });
     } catch (e) {
       if (idempotencyKey) {
         if (e instanceof WeekCloseError) {

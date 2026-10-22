@@ -8,7 +8,7 @@ function sb() {
   return getServiceClient();
 }
 
-export type DriftSource = "close_preview" | "rebuild" | "nightly" | "close";
+export type DriftSource = "close_preview" | "rebuild" | "nightly" | "close" | "close_prepare" | "shadow";
 
 export async function upsertFinanceReconDrifts(opts: {
   organizationId: string;
@@ -88,4 +88,36 @@ export async function countOpenFinanceReconDrifts(
     return 0;
   }
   return count ?? 0;
+}
+
+export async function listOpenFinanceReconDrifts(
+  organizationId: string,
+  weekKey: string,
+): Promise<Array<{
+  driver_id: string;
+  kind: StatementEngineDrift["kind"];
+  field: string;
+  statement_minor: number;
+  engine_minor: number;
+  delta_minor: number;
+}>> {
+  const { data, error } = await sb()
+    .from("finance_recon_drift")
+    .select("driver_id, kind, field, statement_minor, engine_minor, delta_minor")
+    .eq("organization_id", organizationId)
+    .eq("week_key", String(weekKey).slice(0, 10))
+    .eq("status", "open")
+    .neq("source", "shadow");
+  if (error) {
+    console.warn("[finance_recon_drift] list open failed", error.message);
+    return [];
+  }
+  return (data ?? []) as Array<{
+    driver_id: string;
+    kind: StatementEngineDrift["kind"];
+    field: string;
+    statement_minor: number;
+    engine_minor: number;
+    delta_minor: number;
+  }>;
 }
