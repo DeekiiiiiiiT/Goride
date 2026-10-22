@@ -8,7 +8,6 @@
   "//testExclude": "QUARANTINE. These suites were never executed by CI (the workflow was workflow_dispatch + continue-on-error), so they drifted from the code they cover. Each is a real pre-existing failure in a non-toll domain and needs its owning team; they are listed here rather than silently disabled so the rest of the edge suite can gate PRs.",
   "test": {
     "exclude": [
-      "supabase/functions/_shared/directionsRoute.test.ts",
       "supabase/functions/delivery/admin/identityPhone.test.ts",
       "supabase/functions/matching/dispatch/matching.parity.test.ts",
       "supabase/functions/rides/cashSettlement/cashSettlement.test.ts",

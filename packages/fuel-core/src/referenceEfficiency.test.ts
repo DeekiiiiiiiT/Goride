@@ -14,10 +14,41 @@ describe('reference efficiency', () => {
       ],
       '2026-08-01',
     );
-    // Old method used only the full fills: 800 / (30 + 25) = 14.55.
+    // Three full flags are not enough, and none of them have in-band tank use.
     expect(result.kmPerLiter).toBeCloseTo(800 / 75, 5);
     expect(result.degraded).toBe(false);
+    expect(result.reason).toBe('fill_chain');
+  });
+
+  it('uses a full-tank chain only when four fills are full and tank use is in band', () => {
+    const result = referenceEfficiencyFromFills(
+      [
+        { date: '2026-07-01', odometer: 1000, liters: 40, fullTank: true, tankUsePct: 98 },
+        { date: '2026-07-08', odometer: 1400, liters: 20, fullTank: false, tankUsePct: 50 },
+        { date: '2026-07-15', odometer: 1700, liters: 35, fullTank: true, tankUsePct: 90 },
+        { date: '2026-07-22', odometer: 2100, liters: 38, fullTank: true, tankUsePct: 105 },
+        { date: '2026-07-29', odometer: 2500, liters: 36, fullTank: true, tankUsePct: 100 },
+        { date: '2026-08-05', odometer: 3000, liters: 40, fullTank: true, tankUsePct: 162 },
+      ],
+      '2026-08-10',
+    );
     expect(result.reason).toBe('full_tank_chain');
+    expect(result.degraded).toBe(false);
+    expect(result.kmPerLiter).toBeCloseTo(1500 / 129, 5);
+  });
+
+  it('ignores a full-tank flag when tank use is missing or above 110', () => {
+    const result = referenceEfficiencyFromFills(
+      [
+        { date: '2026-07-01', odometer: 1000, liters: 40, fullTank: true, tankUsePct: 162 },
+        { date: '2026-07-08', odometer: 1200, liters: 20, fullTank: true },
+        { date: '2026-07-15', odometer: 1500, liters: 30, fullTank: true, tankUsePct: 90 },
+        { date: '2026-07-22', odometer: 1800, liters: 25, fullTank: true, tankUsePct: 100 },
+      ],
+      '2026-08-01',
+    );
+    expect(result.reason).toBe('fill_chain');
+    expect(result.kmPerLiter).toBeCloseTo(800 / 75, 5);
   });
 
   it('does not price an economy outside 4–40 km/L', () => {

@@ -1,33 +1,26 @@
-# Trip Analytics: close-out
+# Trip Analytics: what's left
 
-**Rev 3 closed · 2026-10-22** · R1–R12 from Rev 2 stay closed. T1–T4 are done.
+**Rev 5 · 2026-10-22** · D1–D4 are closed. T1–T4 stay closed. Earlier revisions are in git history.
 
-| # | Sev | Result |
-|---|---|---|
-| T1 | High | Ledgers → Trips can edit, delete, and view the route for trips logged in the app. Uber, InDrive, Lyft, and Bolt imports stay read-only. The extra copy `manual_dee530d3` is gone. `manual_664e9f4d` remains. A second save of the same driver, start time, amount, and pickup now keeps the trip that is already there. |
-| T2 | Low | The duplicate warning only pairs two completed trips. It now marks 0 trips. |
-| T3 | Low | Stage times are calculated (offered, accepted, arrived, started, completed). The funnel card stays hidden. The switch `trip_analytics_roam_funnel` is still off. |
-| T4 | — | Trip Analytics was opened on a desktop window and at phone width, before and after the extra trip was removed. |
+## Open
 
-## Pay week and distance
+None.
 
-Week of Mon 28 Sep–Sun 4 Oct, Kenny Gregory Rattray. The week is still open.
+## Closed this pass
 
-| | Before | After |
-|---|---|---|
-| Gross | J$91,958.20 | J$89,458.20 |
-| Cash collected | J$43,291.60 | J$40,791.60 |
-| Trips | 71 | 70 |
-
-Driver share and the amount owed were recalculated by the existing week builder. Driver share is J$31,226.37. The driver still owes the fleet for that week; the balance moved with the cash.
-
-Sep 22–Oct 21 completed distance was 3,068.03 km before the extra trip was removed and **3,055.12 km** after. The live site rounds that to whole kilometres (3,068 then 3,055) until the fleet website is published. The page at phone width showed the same figure.
+| # | Result |
+|---|---|
+| D1 | A delete now stops before anything is removed. Imported trips are refused. A closed pay week is refused, and the trip stays. A trip with no pay week can be deleted, and that is not reported as a locked week. An edit of an app-logged trip is refused when the current week or the new date’s week is closed. CSV imports are not blocked by this rule. On a closed week the confirm screen no longer offers Delete. |
+| D2 | Sunday fares that had been dated Monday are back on the trip’s week. `manual_1c4f6742` is on Oct 4: Sep 28–Oct 4 is 71 trips, J$91,958.20 gross, cash still J$40,791.60, driver share J$32,101.37. Oct 5–Oct 11 is 63 trips and J$84,612.76 gross. The three Jan 4 Uber cash trips (`1a6f6466-23e8-4c84-8819-58f671581e0a`, `0e47b4ff-b8ef-4da3-b2f7-c95406577caa`, `d5cf1bfa-7d06-402b-85ac-0ae996626398`) are on Dec 29–Jan 4: 97 trips, J$95,776.53 gross, cash still J$59,697.17, driver share J$26,649.43. Jan 5–Jan 11 is 60 trips and J$90,150.07 gross. Closed weeks were not changed. A rebuild now logs any fare that lands outside its trip’s week. |
+| D3 | View route stays available when someone cannot edit trips. Edit and Delete stay behind `transactions.edit`. Imported trips still have no menu. |
+| D4 | The fuel files are now `20261022133427_fuel_who_pays.sql` and `20261022133437_fuel_route_cache.sql`, matching production. The SQL was not changed. |
 
 ## Verified this pass
 
-- Delete went through the app path. The fare, the analytics row, and the open week all moved together. The week was not reopened.
-- On Ledgers → Trips, a driver-logged row offers Edit trip, Delete trip, and View route. An imported Uber row does not. Delete names the date and amount, and says the fare and cash come off the open week. View route opens the map. On a phone-width screen the same three actions sit on the row panel with a 44px tap target.
-- The duplicate list no longer includes the Oct 3 pair.
+- Sep 28–Oct 4: 71 trips, J$91,958.20 gross, J$40,791.60 cash.
+- Oct 5–Oct 11: 63 trips, J$84,612.76 gross. The J$2,500 fare is no longer on that week.
+- Dec 29–Jan 4: 97 trips, J$95,776.53 gross, J$59,697.17 cash.
+- Jan 5–Jan 11: 60 trips, J$90,150.07 gross. Those three Sunday fares are no longer on that week.
 
 ## Data limits (unchanged)
 

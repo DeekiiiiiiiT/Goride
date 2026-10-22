@@ -357,15 +357,18 @@ export async function loadFuelWeekSnapshotVersion(args: {
  * Compare the saved snapshot with the new engine for recent weeks.
  * Does not write a snapshot and does not lock a week.
  */
-export async function shadowFuelEngineDrift(args: { orgId: string; weeks?: number }) {
+export async function shadowFuelEngineDrift(args: { orgId: string; weeks?: number; weekStart?: string }) {
   const sb = getServiceClient();
   const limit = Math.max(1, Math.min(8, args.weeks || 8));
-  const { data: periods, error } = await sb
+  const oneWeek = String(args.weekStart || "").slice(0, 10);
+  let query = sb
     .from("fuel_reconciliation_period")
     .select("id, week_start, week_end, status")
     .eq("org_id", args.orgId)
-    .order("week_start", { ascending: false })
-    .limit(limit);
+    .order("week_start", { ascending: false });
+  if (oneWeek) query = query.eq("week_start", oneWeek).limit(1);
+  else query = query.limit(limit);
+  const { data: periods, error } = await query;
   if (error) throw new Error(error.message);
   const weeks = [];
   for (const period of periods || []) {

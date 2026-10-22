@@ -12,10 +12,12 @@ import { loadOrgPreferences } from "./fuel_org_preferences.ts";
 import { listOdometerLedger } from "./odometer_ledger.ts";
 import { resolveActiveEarningsBundleForDriverWeek } from "./earnings_policy_runtime.ts";
 import { buildEvidenceLadder } from "../../../packages/fuel-core/src/evidenceLadder.ts";
-import { referenceEfficiencyFromFills } from "../../../packages/fuel-core/src/referenceEfficiency.ts";
+import { FUEL_ENGINE_VERSION } from "../../../packages/fuel-core/src/fuelEngine.ts";
+import { REFERENCE_LOOKBACK_DAYS, referenceEfficiencyFromFills } from "../../../packages/fuel-core/src/referenceEfficiency.ts";
 import { referenceFillsFromEntries } from "../../../packages/fuel-core/src/referenceFills.ts";
 import { addDaysYmd, fleetCalendarDay } from "../../../packages/fuel-core/src/fleetTime.ts";
 import { measureOffAppKm } from "./fuel_shift_km.ts";
+import { checkFuelRoutingHealth } from "../_shared/directionsRoute.ts";
 import type { ShiftTrip } from "../../../packages/fuel-core/src/shiftLegs.ts";
 import { FuelCalculationService } from "../../../packages/fuel-core/src/fuelCalculationService.ts";
 import { fuelEntriesForWeekEngine } from "../../../packages/fuel-core/src/selectWeekFuelFills.ts";
@@ -111,6 +113,57 @@ function asShiftTrip(trip: Record<string, unknown>): ShiftTrip {
 }
 
 /** Cap a server hint at the kilometres left. Do not raise it to 35%. */
+function chainSnapshot(version: string): boolean {
+  return version === FUEL_ENGINE_VERSION || version === "fuel-chain-v2" || version.startsWith("fuel-chain-v2.");
+}
+
+/** Signed fuel difference for the previous 3 weeks. A week without a v2 snapshot is 0. */
+async function loadPriorWeekVariances(
+  sb: ReturnType<typeof getServiceClient>,
+  orgId: string,
+  weekStart: string,
+): Promise<Map<string, number[]>> {
+  const weeks = [3, 2, 1].map((n) => addDaysYmd(weekStart, -7 * n));
+  const index = new Map(weeks.map((week, i) => [week, i]));
+  const { data, error } = await sb
+    .from("fuel_week_snapshot")
+    .select("week_start, version, money, provenance")
+    .eq("org_id", orgId)
+    .in("week_start", weeks);
+  if (error) throw new Error(error.message);
+  const latest = new Map<string, { version: number; money: unknown; provenance: unknown }>();
+  for (const row of data || []) {
+    const start = ymd(row.week_start);
+    const prev = latest.get(start);
+    const version = Number(row.version) || 0;
+    if (!prev || version > prev.version) {
+      latest.set(start, { version, money: row.money, provenance: row.provenance });
+    }
+  }
+  const byKey = new Map<string, number[]>();
+  for (const [start, snap] of latest) {
+    const slot = index.get(start);
+    if (slot == null) continue;
+    const provenance = snap.provenance && typeof snap.provenance === "object"
+      ? snap.provenance as { engineVersion?: string }
+      : {};
+    if (!chainSnapshot(String(provenance.engineVersion || ""))) continue;
+    const reports = snap.money && typeof snap.money === "object"
+      ? ((snap.money as { reports?: unknown[] }).reports || [])
+      : [];
+    for (const report of reports) {
+      if (!report || typeof report !== "object") continue;
+      const row = report as { driverId?: string; vehicleId?: string; miscellaneousCost?: number };
+      const key = `${String(row.driverId || "")}:${String(row.vehicleId || "")}`;
+      if (key === ":") continue;
+      const series = byKey.get(key) || [0, 0, 0];
+      series[slot] = Number(row.miscellaneousCost) || 0;
+      byKey.set(key, series);
+    }
+  }
+  return byKey;
+}
+
 function deadheadHintKm(server: Record<string, unknown> | undefined, tripKm: number, companyOpsKm: number): number {
   const rawHint = Math.max(0, Number(server?.deadheadKm) || 0);
   const odo = Math.max(0, Number(server?.totalOdometerKm) || 0);
@@ -257,9 +310,16 @@ export async function prepareFuelWeekReports(args: {
     });
 
     const historyRows = await loadDomain("fuel_entries", orgId, {
-      dateFrom: addDaysYmd(weekStart, -120),
+      dateFrom: addDaysYmd(weekStart, -REFERENCE_LOOKBACK_DAYS),
       dateTo: addDaysYmd(weekStart, -1),
     });
+    const routing = await checkFuelRoutingHealth();
+    const priorVariances = await loadPriorWeekVariances(sb, orgId, weekStart);
+    const routingHealth = {
+      ok: routing.ok,
+      plainReason: routing.plainReason,
+      message: routing.message,
+    };
     const brain = new Map<string, Record<string, unknown>>();
     for (const vehicle of vehicles) {
       const driverId = String(vehicle.currentDriverId || "");
@@ -268,10 +328,13 @@ export async function prepareFuelWeekReports(args: {
       const driver = drivers.find((row) => String(row.id || "") === driverId);
       const home = await pinDriverHome(driver);
       const homeMissing = !home;
-      const vehicleTrips = trips.filter((trip) =>
-        String(trip.vehicleId || "") === vehicleId &&
-        (trip.status === "Completed" || trip.status === "Cancelled")
-      );
+      const vehicleTrips = trips.filter((trip) => {
+        const day = ymd(trip.date);
+        return String(trip.vehicleId || "") === vehicleId &&
+          day >= weekStart &&
+          day <= weekEnd &&
+          (trip.status === "Completed" || trip.status === "Cancelled");
+      });
       const companyOpsKm = weekAdjustments
         .filter((row) => String(row.vehicleId || "") === vehicleId)
         .filter((row) => row.type === "Company_Misc" || row.type === "Maintenance")
@@ -285,6 +348,7 @@ export async function prepareFuelWeekReports(args: {
       const routed = await measureOffAppKm({
         home,
         trips: vehicleTrips.map((trip) => asShiftTrip(trip)),
+        routing,
       });
       const fallbackReposition = deadheadHintKm(
         dh as unknown as Record<string, unknown>,
@@ -307,6 +371,10 @@ export async function prepareFuelWeekReports(args: {
         evidencedPersonalKm,
         commuteKm: routed.commuteKm,
         homeMissing,
+        commuteConfidence: routed.commuteStatus === "routed"
+          ? "measured"
+          : routed.commuteStatus,
+        commuteNote: routed.commuteNote,
         repositionKm: repositionMeasured ? routed.repositionKm! : fallbackReposition,
         repositionConfidence: repositionMeasured && !routed.repositionAnyEstimated ? "measured" : "estimated",
         repositionNote,
@@ -349,12 +417,14 @@ export async function prepareFuelWeekReports(args: {
         commuteKm: ladder.commuteKm,
         unattributedKm: ladder.unattributedKm,
         availableKm: ladder.unattributedKm + ladder.repositionKm + ladder.commuteKm,
-        method: "fuel-chain-v2",
+        method: FUEL_ENGINE_VERSION,
         confidence: { rideShare: "high", deadhead: "medium", personal: "high" },
         onlinePositioningPct: ladder.onlinePositioningPct,
         homeMissing: ladder.homeMissing,
         homePinSource: home?.source,
         kmSources: ladder.sources,
+        priorWeekVariances: priorVariances.get(`${driverId}:${vehicleId}`) || [0, 0, 0],
+        routingHealth,
       });
     }
 
@@ -370,7 +440,12 @@ export async function prepareFuelWeekReports(args: {
           referenceId: row.referenceId ? String(row.referenceId) : undefined,
           source: row.source ? String(row.source) : undefined,
         }));
-      if (points.length >= 2) anchors.set(vehicleId, points);
+      const prior = points
+        .filter((point) => point.date && point.date < weekStart)
+        .sort((a, b) => b.date.localeCompare(a.date) || b.odometer - a.odometer)[0];
+      const during = points.filter((point) => point.date >= weekStart && point.date <= weekEnd);
+      const scoped = prior ? [prior, ...during] : during;
+      if (scoped.length >= 2) anchors.set(vehicleId, scoped);
     }
 
     const paConfig = mergePersonalAllowanceDefaults(
@@ -457,7 +532,6 @@ export async function prepareFuelWeekReports(args: {
       personalAllowance as never,
       anchors.size > 0 ? (anchors as never) : undefined,
     );
-
     for (const report of reports) {
       if (Array.isArray(report.odometerBuckets) && report.odometerBuckets.length > 0) {
         report.odometerBuckets = selectOdometerBucketsClosingInWeek(

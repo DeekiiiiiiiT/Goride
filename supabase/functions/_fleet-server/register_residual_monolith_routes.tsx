@@ -1524,6 +1524,11 @@ export function registerResidualMonolithRoutes(app: Hono) {
       for (let i = 0; i < processedTrips.length; i++) {
         processedTrips[i] = mergedTrips[i];
       }
+      const existingById = new Map<string, Record<string, unknown> | null>();
+      for (let i = 0; i < processedTrips.length; i++) {
+        const id = String(processedTrips[i]?.id || "");
+        if (id) existingById.set(id, (existingTrips[i] as Record<string, unknown> | null) ?? null);
+      }
 
       // A second live/manual save of the same ride keeps the row already stored.
       const { dropDuplicateAppLoggedTrips } = await import("./trip_save_dedupe.ts");
@@ -1536,6 +1541,14 @@ export function registerResidualMonolithRoutes(app: Hono) {
       const duplicatesKept = deduped.duplicatesKept;
       if (processedTrips.length === 0) {
         return c.json({ success: true, count: 0, duplicatesKept });
+      }
+
+      // App-logged edits and new logs cannot change a closed pay week. CSV imports are not gated.
+      const { appLoggedWriteBlock } = await import("./trip_week_guard.ts");
+      for (const trip of processedTrips as Record<string, unknown>[]) {
+        const id = String(trip?.id || "");
+        const blocked = await appLoggedWriteBlock(trip, id ? existingById.get(id) : null);
+        if (blocked) return c.json({ error: blocked }, 409);
       }
 
       // Store using mset
@@ -1797,6 +1810,14 @@ export function registerResidualMonolithRoutes(app: Hono) {
         return c.json({ error: "Trip not found" }, 404);
       }
 
+      const { deleteTripDecision, weekGateForTrip } = await import("./trip_week_guard.ts");
+      const week = existing ? await weekGateForTrip(existing as Record<string, unknown>) : "missing";
+      const decision = deleteTripDecision(
+        existing ? existing as Record<string, unknown> : null,
+        week,
+      );
+      if (!decision.allow) return c.json({ error: decision.error }, decision.status);
+
       await kv.del(`trip:${id}`);
       try {
         await deleteCanonicalLedgerBySource("trip", [id]);
@@ -1813,19 +1834,11 @@ export function registerResidualMonolithRoutes(app: Hono) {
       }
 
       let weekRebuilt = false;
-      let weekLocked = false;
-      if (existing) {
+      if (decision.rebuild && decision.driverId && decision.anchor) {
         try {
           const { rebuildPeriodsForAnchors } = await import("./driver_financial_periods.ts");
-          const { periodKeyFor } = await import("../../../packages/finance-core/src/periodKey.ts");
-          const driverId = String(existing.driverId ?? "").trim();
-          const day = String(existing.date ?? existing.completed_at ?? "").slice(0, 10);
-          const anchor = day ? periodKeyFor(day) : null;
-          if (driverId && anchor) {
-            const n = await rebuildPeriodsForAnchors(driverId, [anchor]);
-            weekRebuilt = n > 0;
-            weekLocked = n === 0;
-          }
+          const n = await rebuildPeriodsForAnchors(decision.driverId, [decision.anchor]);
+          weekRebuilt = n > 0;
         } catch (dfpErr) {
           console.error(`[DFP] rebuild after trip delete failed trip=${id}:`, dfpErr);
           return c.json({
@@ -1839,7 +1852,11 @@ export function registerResidualMonolithRoutes(app: Hono) {
       await cache.invalidateCacheVersion("stats");
       await cache.invalidateCacheVersion("performance");
 
-      return c.json({ success: true, weekRebuilt, weekLocked });
+      return c.json({
+        success: true,
+        weekRebuilt,
+        weekMissing: decision.weekMissing,
+      });
     } catch (e: any) {
       console.error(`Error deleting trip ${id}:`, e);
       return c.json({ error: e.message || "Internal Server Error" }, 500);

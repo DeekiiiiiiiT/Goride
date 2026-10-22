@@ -32,7 +32,9 @@ export function DeleteConfirmationDialog({ trip, open, onOpenChange, onConfirm, 
     <AlertDialog open={open} onOpenChange={onOpenChange}>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle className="text-rose-600">Delete this trip?</AlertDialogTitle>
+          <AlertDialogTitle className={weekOpen ? 'text-rose-600' : undefined}>
+            {weekOpen ? 'Delete this trip?' : 'This pay week is closed'}
+          </AlertDialogTitle>
           <AlertDialogDescription asChild>
             <div className="text-muted-foreground text-sm">
               <div className="bg-slate-50 dark:bg-slate-900 p-3 rounded-md border border-slate-100 dark:border-slate-800 text-sm space-y-1">
@@ -43,23 +45,25 @@ export function DeleteConfirmationDialog({ trip, open, onOpenChange, onConfirm, 
               <p className="mt-3">
                 {weekOpen
                   ? 'This fare and its cash will come off that driver’s open pay week.'
-                  : 'This trip will leave analytics. That pay week is already locked, so the payout stays as it was.'}
+                  : 'This trip stays. A closed pay week cannot be changed.'}
               </p>
             </div>
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
-          <AlertDialogAction
-            onClick={(e) => {
-              e.preventDefault();
-              onConfirm();
-            }}
-            className="bg-rose-600 hover:bg-rose-700 text-white"
-            disabled={isDeleting}
-          >
-            {isDeleting ? 'Deleting...' : 'Delete trip'}
-          </AlertDialogAction>
+          <AlertDialogCancel disabled={isDeleting}>{weekOpen ? 'Cancel' : 'Close'}</AlertDialogCancel>
+          {weekOpen ? (
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                onConfirm();
+              }}
+              className="bg-rose-600 hover:bg-rose-700 text-white"
+              disabled={isDeleting}
+            >
+              {isDeleting ? 'Deleting...' : 'Delete trip'}
+            </AlertDialogAction>
+          ) : null}
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>

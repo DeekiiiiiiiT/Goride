@@ -408,7 +408,7 @@ export const api = {
     return response.json();
   },
 
-  async deleteTrip(id: string): Promise<{ success?: boolean; weekRebuilt?: boolean; weekLocked?: boolean }> {
+  async deleteTrip(id: string): Promise<{ success?: boolean; weekRebuilt?: boolean; weekMissing?: boolean }> {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/trips/${id}`, {
       method: 'DELETE',
       headers: await getHeaders(null)

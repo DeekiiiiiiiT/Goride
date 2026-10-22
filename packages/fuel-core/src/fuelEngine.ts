@@ -1,5 +1,5 @@
 /** Stamped on every new snapshot and inside the input hash. Locked weeks stay on the old engine. */
-export const FUEL_ENGINE_VERSION = 'fuel-chain-v2';
+export const FUEL_ENGINE_VERSION = 'fuel-chain-v2.1';
 
 export type ShadowDriverDrift = {
   driverId: string;

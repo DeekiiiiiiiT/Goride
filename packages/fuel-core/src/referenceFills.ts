@@ -10,6 +10,12 @@ import type { ReferenceFill } from './referenceEfficiency.ts';
 import { selectWeekFuelFills } from './selectWeekFuelFills.ts';
 import type { FuelEntry } from './fuelTypes.ts';
 
+function readTankUse(meta?: Record<string, unknown>): number | null {
+  if (!meta || meta.tankUtilizationPercentage == null || meta.tankUtilizationPercentage === '') return null;
+  const raw = Number(meta.tankUtilizationPercentage);
+  return Number.isFinite(raw) ? raw : null;
+}
+
 export function referenceFillsFromEntries(
   entries: FuelEntry[],
   opts?: { tankCapacityLiters?: number | null },
@@ -32,6 +38,7 @@ export function referenceFillsFromEntries(
         liters: Number(fill.litres) || 0,
         amount: Number(fill.amount) || 0,
         fullTank: Boolean(manualMeta?.isFullTank || cardMeta?.isFullTank),
+        tankUsePct: readTankUse(manualMeta) ?? readTankUse(cardMeta),
         accepted: Boolean(manualMeta?.plausibilityAccepted || cardMeta?.plausibilityAccepted),
       };
     })
@@ -59,6 +66,7 @@ export function referenceFillsFromEntries(
       odometer: row.odometer,
       liters: row.liters,
       fullTank: row.fullTank,
+      tankUsePct: row.tankUsePct,
       exclude: issues.some(
         (issue) => issue.code === 'zero_liters_with_amount' || issue.code === 'over_tank',
       ),

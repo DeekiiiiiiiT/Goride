@@ -176,7 +176,6 @@ export function TripLedgerWithManualAdd({ columnConfig }: { columnConfig?: Colum
     try {
       const result = await api.deleteTrip(deleteTrip.id);
       if (result.weekRebuilt) toast.success('Trip deleted. This fare and its cash came off the open pay week.');
-      else if (result.weekLocked) toast.success('Trip deleted. That pay week is locked, so the payout was left as it was.');
       else toast.success('Trip deleted');
       setDeleteOpen(false);
       setDeleteTrip(null);
@@ -192,7 +191,10 @@ export function TripLedgerWithManualAdd({ columnConfig }: { columnConfig?: Colum
     <>
       <TripLedgerPage
         columnConfig={columnConfig}
-        rowActions={canEdit ? { onEdit, onDelete, onViewRoute } : undefined}
+        rowActions={{
+          onViewRoute,
+          ...(canEdit ? { onEdit, onDelete } : {}),
+        }}
         headerActions={
           <button
             type="button"

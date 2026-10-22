@@ -1,11 +1,18 @@
 /**
  * Reference km/L from earlier fills only. The current week is not in the
- * sample, so unexplained litres can exist. Prefer full-tank fills.
- * Needs ≥ 3 weeks or ≥ 1,500 km. Otherwise the week is degraded and variance is 0.
+ * sample, so unexplained litres can exist. The caller passes a trailing
+ * 8-week window. Every fill in that window is the default. Full-to-full
+ * is used only when four fills are flagged full and their tank use is
+ * between 80% and 110%. Needs ≥ 3 weeks or ≥ 1,500 km. Otherwise the
+ * week is degraded and variance is 0.
  */
 
 export const REFERENCE_MIN_WEEKS = 3;
 export const REFERENCE_MIN_KM = 1500;
+export const REFERENCE_LOOKBACK_DAYS = 56;
+export const FULL_TANK_MIN_COUNT = 4;
+export const FULL_TANK_USE_MIN = 80;
+export const FULL_TANK_USE_MAX = 110;
 export const VARIANCE_MATERIALITY_PCT = 10;
 /** A car cannot honestly sit outside this band. Outside it, do not price the week. */
 export const REFERENCE_KM_PER_L_MIN = 4;
@@ -16,6 +23,8 @@ export type ReferenceFill = {
   odometer?: number | null;
   liters?: number | null;
   fullTank?: boolean;
+  /** Tank use percent. Missing means a full-tank flag is not trustworthy. */
+  tankUsePct?: number | null;
   /** Left out only when the litres themselves are not real. */
   exclude?: boolean;
 };
@@ -62,12 +71,16 @@ export function referenceEfficiencyFromFills(
   };
   if (prior.length < 2) return empty;
 
-  const full = prior.filter((f) => f.fullTank);
+  const full = prior.filter((f) => {
+    if (!f.fullTank) return false;
+    const use = Number(f.tankUsePct);
+    return Number.isFinite(use) && use >= FULL_TANK_USE_MIN && use <= FULL_TANK_USE_MAX;
+  });
   let spanKm = 0;
   let liters = 0;
   let weeks = 0;
   let reason = 'fill_chain';
-  if (full.length >= 2) {
+  if (full.length >= FULL_TANK_MIN_COUNT) {
     const firstOdo = Number(full[0].odometer);
     const lastOdo = Number(full[full.length - 1].odometer);
     // Full-to-full: the fuel already in the tank at the first full fill is not counted.

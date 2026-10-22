@@ -170,3 +170,282 @@ export async function getCourierRouteEstimate(
   }
   return haversineFallback(fromLat, fromLng, toLat, toLng);
 }
+
+/** Server key only. The browser key is referrer-locked and fails from the edge. */
+export function googleMapsServerKey(): string | null {
+  const key = Deno.env.get("GOOGLE_MAPS_SERVER_KEY_RIDES")?.trim();
+  return key || null;
+}
+
+export type FuelRoutePlainReason =
+  | "ok"
+  | "maps_key_missing"
+  | "google_refused"
+  | "no_road"
+  | "unavailable";
+
+export type FuelRouteFailure = {
+  status: string;
+  errorMessage: string;
+  plainReason: Exclude<FuelRoutePlainReason, "ok">;
+  legacyBlocked: boolean;
+};
+
+export type FuelRouteKm = {
+  km: number | null;
+  source: "google_directions" | "google_routes" | null;
+  failure?: FuelRouteFailure;
+};
+
+export type RoutingHealth = {
+  ok: boolean;
+  backend: "legacy" | "routes" | null;
+  plainReason: FuelRoutePlainReason;
+  message: string;
+};
+
+const KINGSTON = { lat: 17.9716, lng: -76.7936 };
+const SPANISH_TOWN = { lat: 17.991, lng: -76.9573 };
+const HEALTH_MIN_KM = 8;
+const HEALTH_MAX_KM = 80;
+
+export function fuelRouteOperatorMessage(reason: FuelRoutePlainReason): string {
+  if (reason === "ok") return "Road routes are working.";
+  if (reason === "maps_key_missing") {
+    return "Routing unavailable — kilometres left unexplained. The server maps key is not set.";
+  }
+  if (reason === "google_refused") {
+    return "Routing unavailable — kilometres left unexplained. Google refused the route.";
+  }
+  if (reason === "no_road") {
+    return "Routing unavailable — kilometres left unexplained. No road was found.";
+  }
+  return "Routing unavailable — kilometres left unexplained.";
+}
+
+function safeGoogleMessage(message: string, apiKey: string): string {
+  return message.split(apiKey).join("[redacted]").slice(0, 300);
+}
+
+export function reportFuelRouteFailure(
+  where: string,
+  status: string,
+  errorMessage: string,
+  plainReason: Exclude<FuelRoutePlainReason, "ok">,
+  legacyBlocked = false,
+): FuelRouteFailure {
+  const failure: FuelRouteFailure = {
+    status,
+    errorMessage: errorMessage.slice(0, 300),
+    plainReason,
+    legacyBlocked,
+  };
+  console.error(JSON.stringify({
+    scope: "fuel_route",
+    where,
+    status: failure.status,
+    error_message: failure.errorMessage,
+  }));
+  return failure;
+}
+
+function legacyDirectionsBlocked(status: string, errorMessage: string): boolean {
+  if (status !== "REQUEST_DENIED") return false;
+  const msg = errorMessage.toLowerCase();
+  return msg.includes("legacy")
+    || msg.includes("routes api")
+    || msg.includes("not enabled")
+    || msg.includes("has not been used");
+}
+
+function plainFromStatus(status: string): Exclude<FuelRoutePlainReason, "ok"> {
+  if (status === "REQUEST_DENIED" || status === "OVER_QUERY_LIMIT" || status === "INVALID_REQUEST" || status === "PERMISSION_DENIED") {
+    return "google_refused";
+  }
+  if (status === "NOT_FOUND" || status === "ZERO_RESULTS" || status === "NO_ROUTE") return "no_road";
+  if (status === "MAPS_KEY_MISSING") return "maps_key_missing";
+  return "unavailable";
+}
+
+type RouteFetchArgs = {
+  apiKey: string;
+  fromLat?: number;
+  fromLng?: number;
+  toLat?: number;
+  toLng?: number;
+  origin?: string;
+  destination?: string;
+  fetchFn?: typeof fetch;
+};
+
+export async function fetchLegacyDirectionsKm(args: RouteFetchArgs): Promise<FuelRouteKm> {
+  const fetchFn = args.fetchFn ?? fetch;
+  const origin = args.origin ?? `${args.fromLat},${args.fromLng}`;
+  const destination = args.destination ?? `${args.toLat},${args.toLng}`;
+  const url =
+    `https://maps.googleapis.com/maps/api/directions/json?origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(destination)}&mode=driving&region=jm&key=${encodeURIComponent(args.apiKey)}`;
+  try {
+    const res = await fetchFn(url, { signal: AbortSignal.timeout(8000) });
+    if (!res.ok) {
+      return {
+        km: null,
+        source: null,
+        failure: reportFuelRouteFailure(
+          "legacy_directions",
+          `HTTP_${res.status}`,
+          "request failed",
+          "unavailable",
+        ),
+      };
+    }
+    const json = await res.json() as {
+      status?: string;
+      error_message?: string;
+      routes?: Array<{ legs?: Array<{ distance?: { value?: number } }> }>;
+    };
+    const status = String(json.status || "UNKNOWN");
+    const errorMessage = safeGoogleMessage(String(json.error_message || ""), args.apiKey);
+    if (status !== "OK") {
+      return {
+        km: null,
+        source: null,
+        failure: reportFuelRouteFailure(
+          "legacy_directions",
+          status,
+          errorMessage,
+          plainFromStatus(status),
+          legacyDirectionsBlocked(status, errorMessage),
+        ),
+      };
+    }
+    const meters = json.routes?.[0]?.legs?.[0]?.distance?.value;
+    if (meters == null) {
+      return {
+        km: null,
+        source: null,
+        failure: reportFuelRouteFailure("legacy_directions", "NO_ROUTE", errorMessage, "no_road"),
+      };
+    }
+    return { km: meters / 1000, source: "google_directions" };
+  } catch {
+    return {
+      km: null,
+      source: null,
+      failure: reportFuelRouteFailure("legacy_directions", "UNAVAILABLE", "request failed", "unavailable"),
+    };
+  }
+}
+
+export async function fetchRoutesApiKm(args: RouteFetchArgs): Promise<FuelRouteKm> {
+  const fetchFn = args.fetchFn ?? fetch;
+  const origin = args.origin
+    ? { address: args.origin }
+    : { location: { latLng: { latitude: args.fromLat, longitude: args.fromLng } } };
+  const destination = args.destination
+    ? { address: args.destination }
+    : { location: { latLng: { latitude: args.toLat, longitude: args.toLng } } };
+  try {
+    const res = await fetchFn("https://routes.googleapis.com/directions/v2:computeRoutes", {
+      method: "POST",
+      signal: AbortSignal.timeout(8000),
+      headers: {
+        "Content-Type": "application/json",
+        "X-Goog-Api-Key": args.apiKey,
+        "X-Goog-FieldMask": "routes.distanceMeters",
+      },
+      body: JSON.stringify({
+        origin,
+        destination,
+        travelMode: "DRIVE",
+        regionCode: "JM",
+      }),
+    });
+    const json = await res.json() as {
+      routes?: Array<{ distanceMeters?: number }>;
+      error?: { status?: string; message?: string };
+    };
+    if (!res.ok || json.error) {
+      const status = String(json.error?.status || `HTTP_${res.status}`);
+      const errorMessage = safeGoogleMessage(String(json.error?.message || "request failed"), args.apiKey);
+      return {
+        km: null,
+        source: null,
+        failure: reportFuelRouteFailure(
+          "routes_api",
+          status,
+          errorMessage,
+          plainFromStatus(status),
+        ),
+      };
+    }
+    const meters = json.routes?.[0]?.distanceMeters;
+    if (meters == null) {
+      return {
+        km: null,
+        source: null,
+        failure: reportFuelRouteFailure("routes_api", "NO_ROUTE", "", "no_road"),
+      };
+    }
+    return { km: meters / 1000, source: "google_routes" };
+  } catch {
+    return {
+      km: null,
+      source: null,
+      failure: reportFuelRouteFailure("routes_api", "UNAVAILABLE", "request failed", "unavailable"),
+    };
+  }
+}
+
+function healthKmOk(km: number | null): boolean {
+  return km != null && km >= HEALTH_MIN_KM && km <= HEALTH_MAX_KM;
+}
+
+/** One Kingston → Spanish Town drive before any car is measured. */
+export async function checkFuelRoutingHealth(opts?: {
+  fetchFn?: typeof fetch;
+  apiKey?: string | null;
+}): Promise<RoutingHealth> {
+  const fetchFn = opts?.fetchFn ?? fetch;
+  const apiKey = opts && "apiKey" in opts ? (opts.apiKey?.trim() || null) : googleMapsServerKey();
+  if (!apiKey) {
+    reportFuelRouteFailure("health", "MAPS_KEY_MISSING", "", "maps_key_missing");
+    return {
+      ok: false,
+      backend: null,
+      plainReason: "maps_key_missing",
+      message: fuelRouteOperatorMessage("maps_key_missing"),
+    };
+  }
+  const leg = {
+    apiKey,
+    fromLat: KINGSTON.lat,
+    fromLng: KINGSTON.lng,
+    toLat: SPANISH_TOWN.lat,
+    toLng: SPANISH_TOWN.lng,
+    fetchFn,
+  };
+  const legacy = await fetchLegacyDirectionsKm(leg);
+  if (healthKmOk(legacy.km)) {
+    return {
+      ok: true,
+      backend: "legacy",
+      plainReason: "ok",
+      message: fuelRouteOperatorMessage("ok"),
+    };
+  }
+  if (legacy.failure?.legacyBlocked) {
+    const routes = await fetchRoutesApiKm(leg);
+    if (healthKmOk(routes.km)) {
+      return {
+        ok: true,
+        backend: "routes",
+        plainReason: "ok",
+        message: fuelRouteOperatorMessage("ok"),
+      };
+    }
+    const reason = routes.failure?.plainReason || "google_refused";
+    return { ok: false, backend: null, plainReason: reason, message: fuelRouteOperatorMessage(reason) };
+  }
+  const reason = legacy.failure?.plainReason || "unavailable";
+  return { ok: false, backend: null, plainReason: reason, message: fuelRouteOperatorMessage(reason) };
+}

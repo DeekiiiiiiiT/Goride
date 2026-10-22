@@ -62,6 +62,7 @@ import { floorMiscForSplit } from './fuelFinalizeGate.ts';
 import { deriveWindowMoneyFromEntries } from './deriveWindowMoneyFromEntries.ts';
 import { applyFillClocks, resolveFillAt, resolveFillChainSpan, tripBelongsToFillSpan } from './fillChain.ts';
 import { splitLeftoverFuel, normalizeLeftoverSplit, type LeftoverSplit } from './leftoverSplit.ts';
+import { rollingVarianceBill } from './rollingVariance.ts';
 import { FUEL_ENGINE_VERSION } from './fuelEngine.ts';
 import { addDaysYmd, fleetCalendarDay } from './fleetTime.ts';
 
@@ -141,6 +142,9 @@ export interface FuelBrainClassificationInput {
     /** home = confirmed home. address = street address standing in until a home is picked. */
     homePinSource?: 'home' | 'address';
     kmSources?: unknown;
+    /** Oldest first. Signed fuel difference from the previous 3 v2 weeks. */
+    priorWeekVariances?: number[];
+    routingHealth?: { ok: boolean; plainReason: string; message: string };
 }
 
 export const FuelCalculationService = {
@@ -269,6 +273,9 @@ export const FuelCalculationService = {
             referenceReason?: string;
             leftoverOverride?: LeftoverSplit;
             degradedInputs?: boolean;
+            /** Oldest first. Signed fuel difference from the previous 3 v2 weeks. */
+            priorWeekVariances?: number[];
+            routingHealth?: { ok: boolean; plainReason: string; message: string };
         }
     ): WeeklyFuelReport => {
         const startStr = FuelCalculationService.toLocalDateStr(weekStart);
@@ -547,6 +554,15 @@ export const FuelCalculationService = {
             unattributedFill: unattributedFillCost,
         });
         if (chain.useChain) miscellaneousCost -= commuteCost + unattributedKmCost;
+        const priorWeekVariances = options?.priorWeekVariances
+            ?? options?.brainClassification?.priorWeekVariances
+            ?? [];
+        const varianceBalance = rollingVarianceBill({
+            thisWeek: miscellaneousCost,
+            priorSigned: priorWeekVariances,
+            weekSpend: totalGasCardCost,
+        });
+        const varianceForSplit = miscellaneousCost < 0 ? miscellaneousCost : varianceBalance.billable;
 
         // 6b. Personal Allowance (Option 2): company absorbs earned; overage → personal split
         let personalForSplit = personalUsageCost;
@@ -662,7 +678,7 @@ export const FuelCalculationService = {
         );
         const leftover = chain.useChain
             ? splitLeftoverFuel({
-                variance: miscellaneousCost,
+                variance: varianceForSplit,
                 unattributedKmCost,
                 noOdometerFillCost: unattributedFillCost,
                 split: leftoverPolicy,
@@ -825,6 +841,13 @@ export const FuelCalculationService = {
                 homeMissing,
                 homePinSource,
                 kmSources,
+                routingHealth: options?.routingHealth ?? options?.brainClassification?.routingHealth,
+                varianceBalance: {
+                    creditIn: varianceBalance.creditIn,
+                    runningBalance: varianceBalance.runningBalance,
+                    billable: varianceBalance.billable,
+                    driverAdded: leftover?.byBucket.variance.driver ?? 0,
+                },
                 leftoverSplit: leftover
                     ? {
                         ...leftoverPolicy,

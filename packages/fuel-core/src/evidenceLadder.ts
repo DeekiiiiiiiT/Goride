@@ -35,6 +35,9 @@ export type EvidenceLadderInput = {
   /** Routed home ↔ shift ends. 0 when home is not set. */
   commuteKm?: number;
   homeMissing?: boolean;
+  /** Measured only when every commute leg was a road route. */
+  commuteConfidence?: 'measured' | 'estimated' | 'none';
+  commuteNote?: string;
   /** Routed dropoff → next pickup inside a shift, minus P1/P2 already counted. */
   repositionKm?: number;
   /** Method C time share is an estimate. A routed gap is measured. */
@@ -127,7 +130,12 @@ export function buildEvidenceLadder(input: EvidenceLadderInput): EvidenceLadderR
           ? 'No Uber ratio this week — those positioning kilometres stay unexplained'
           : undefined,
     },
-    { category: 'commute', km: round2(commuteOut), confidence: input.homeMissing ? 'none' : 'measured' },
+    {
+      category: 'commute',
+      km: round2(commuteOut),
+      confidence: input.homeMissing ? 'none' : (input.commuteConfidence || 'measured'),
+      note: input.homeMissing ? undefined : input.commuteNote,
+    },
     {
       category: 'reposition',
       km: round2(repositionOut),

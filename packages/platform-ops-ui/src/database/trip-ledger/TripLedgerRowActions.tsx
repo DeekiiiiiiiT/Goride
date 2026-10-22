@@ -11,8 +11,8 @@ import {
 } from '@roam/ui';
 
 export interface TripLedgerRowActions {
-  onEdit: (trip: Trip) => void;
-  onDelete: (trip: Trip) => void;
+  onEdit?: (trip: Trip) => void;
+  onDelete?: (trip: Trip) => void;
   onViewRoute: (trip: Trip) => void;
 }
 
@@ -52,21 +52,25 @@ export function TripLedgerDesktopMenu({
           Trip actions
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
-        <DropdownMenuItem className="cursor-pointer gap-2" onClick={() => actions.onEdit(trip)}>
-          <Pencil className="h-3.5 w-3.5" />
-          Edit trip
-        </DropdownMenuItem>
+        {actions.onEdit ? (
+          <DropdownMenuItem className="cursor-pointer gap-2" onClick={() => actions.onEdit?.(trip)}>
+            <Pencil className="h-3.5 w-3.5" />
+            Edit trip
+          </DropdownMenuItem>
+        ) : null}
         <DropdownMenuItem className="cursor-pointer gap-2" onClick={() => actions.onViewRoute(trip)}>
           <Map className="h-3.5 w-3.5" />
           View route
         </DropdownMenuItem>
-        <DropdownMenuItem
-          className="cursor-pointer gap-2 text-rose-700 focus:text-rose-700"
-          onClick={() => actions.onDelete(trip)}
-        >
-          <Trash2 className="h-3.5 w-3.5" />
-          Delete trip
-        </DropdownMenuItem>
+        {actions.onDelete ? (
+          <DropdownMenuItem
+            className="cursor-pointer gap-2 text-rose-700 focus:text-rose-700"
+            onClick={() => actions.onDelete?.(trip)}
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+            Delete trip
+          </DropdownMenuItem>
+        ) : null}
       </DropdownMenuContent>
     </DropdownMenu>
   );
@@ -83,14 +87,16 @@ export function TripLedgerPhoneActions({
   const stop = (e: MouseEvent) => e.stopPropagation();
   return (
     <div className="mt-4 flex flex-wrap gap-2 border-t border-slate-200 pt-4 dark:border-slate-700" onClick={stop}>
-      <button
-        type="button"
-        className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-800 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100"
-        onClick={() => actions.onEdit(trip)}
-      >
-        <Pencil className="h-4 w-4" />
-        Edit trip
-      </button>
+      {actions.onEdit ? (
+        <button
+          type="button"
+          className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-800 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100"
+          onClick={() => actions.onEdit?.(trip)}
+        >
+          <Pencil className="h-4 w-4" />
+          Edit trip
+        </button>
+      ) : null}
       <button
         type="button"
         className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-800 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100"
@@ -99,14 +105,16 @@ export function TripLedgerPhoneActions({
         <Map className="h-4 w-4" />
         View route
       </button>
-      <button
-        type="button"
-        className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-rose-200 bg-white px-3 text-sm font-medium text-rose-700 dark:border-rose-900 dark:bg-slate-900"
-        onClick={() => actions.onDelete(trip)}
-      >
-        <Trash2 className="h-4 w-4" />
-        Delete trip
-      </button>
+      {actions.onDelete ? (
+        <button
+          type="button"
+          className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-rose-200 bg-white px-3 text-sm font-medium text-rose-700 dark:border-rose-900 dark:bg-slate-900"
+          onClick={() => actions.onDelete?.(trip)}
+        >
+          <Trash2 className="h-4 w-4" />
+          Delete trip
+        </button>
+      ) : null}
     </div>
   );
 }

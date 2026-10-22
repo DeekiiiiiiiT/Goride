@@ -1037,7 +1037,8 @@ export function registerFuelPeriodRoutes(app: Hono) {
     const orgId = getOrgId(c);
     if (!orgId) return c.json({ error: "org required" }, 400);
     const weeks = Number(c.req.query("weeks") || 8);
-    const report = await shadowFuelEngineDrift({ orgId, weeks });
+    const weekStart = ymd(c.req.query("week"));
+    const report = await shadowFuelEngineDrift({ orgId, weeks, weekStart: weekStart || undefined });
     return c.json(report);
   });
 

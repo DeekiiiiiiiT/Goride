@@ -1428,6 +1428,13 @@ function FuelPeriodWizardInner({
                     referenceReason?: string;
                     clockAssumed?: boolean;
                     kmSources?: Array<{ category?: string; km?: number; confidence?: string; note?: string }>;
+                    routingHealth?: { ok?: boolean; message?: string };
+                    varianceBalance?: {
+                      creditIn?: number;
+                      runningBalance?: number;
+                      billable?: number;
+                      driverAdded?: number;
+                    };
                   } | undefined;
                   return {
                     vehicleId: snap.vehicleId,
@@ -1440,6 +1447,8 @@ function FuelPeriodWizardInner({
                       referenceReason: meta?.referenceReason,
                       clockAssumed: meta?.clockAssumed,
                       kmSources: meta?.kmSources,
+                      routingHealth: meta?.routingHealth,
+                      varianceBalance: meta?.varianceBalance,
                     },
                   };
                 })}

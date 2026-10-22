@@ -15,6 +15,7 @@ import {
 } from '../../ui/dialog';
 import { residualVsSpendPhrase, unexplainedLabel } from '../../../utils/fuelReconGlossary';
 import { formatFuelMoney } from '../../../utils/formatFuelMoney';
+import { formatJMDDelta } from '../../../utils/formatJMD';
 import { FUEL_SPEND_EPS } from '../../../utils/fuelMoneyEpsilon';
 import {
   FUEL_RESIDUAL_DISPOSITIONS,
@@ -46,6 +47,13 @@ export type FuelLeakageStepProps = {
       referenceReason?: string;
       clockAssumed?: boolean;
       kmSources?: Array<{ category?: string; km?: number; confidence?: string; note?: string }>;
+      routingHealth?: { ok?: boolean; message?: string };
+      varianceBalance?: {
+        creditIn?: number;
+        runningBalance?: number;
+        billable?: number;
+        driverAdded?: number;
+      };
     };
   }>;
   leakageDisposition: FuelResidualDisposition | '';
@@ -159,6 +167,8 @@ export function FuelLeakageStep(props: FuelLeakageStepProps) {
   const clockAssumed = vehicleSnaps.some((snap) => snap.report?.clockAssumed);
   const sourceNotes = vehicleSnaps.flatMap((snap) => snap.report?.kmSources || [])
     .filter((source) => (source.category === 'reposition' || source.category === 'commute') && source.note);
+  const routingHealth = vehicleSnaps.map((snap) => snap.report?.routingHealth).find((health) => health?.message);
+  const varianceRows = vehicleSnaps.filter((snap) => snap.report?.varianceBalance);
 
   const overExplained = isOverExplainedFuelWeek(totalSpend, leakage);
   const moneyResidualActive = Math.abs(leakage) > FUEL_SPEND_EPS;
@@ -182,6 +192,34 @@ export function FuelLeakageStep(props: FuelLeakageStepProps) {
           There isn’t enough earlier fuel history to know this car’s usual economy, so the driver was not charged for unexplained fuel.
         </p>
       )}
+      {routingHealth?.message && (
+        <p className={`rounded-lg border px-3 py-2 text-sm ${
+          routingHealth.ok
+            ? 'border-slate-200 bg-slate-50 text-slate-800'
+            : 'border-amber-200 bg-amber-50 text-amber-900'
+        }`}>
+          {routingHealth.message}
+        </p>
+      )}
+      {varianceRows.map((snap) => {
+        const balance = snap.report?.varianceBalance;
+        if (!balance) return null;
+        const plate = vehicles.find((vehicle) => vehicle.id === snap.vehicleId)?.licensePlate;
+        const creditIn = Number(balance.creditIn) || 0;
+        const driverAdded = Number(balance.driverAdded) || 0;
+        const covered = creditIn < 0 && snap.misc > 0 && Number(balance.billable) === 0;
+        return (
+          <div key={`balance-${snap.vehicleId}`} className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-800">
+            {plate && <p className="font-medium text-slate-900">{plate}</p>}
+            <p>Carried from recent weeks: {formatJMDDelta(creditIn, 2)}</p>
+            <p>This week’s fuel difference: {formatJMDDelta(snap.misc, 2)}</p>
+            <p>Added to the driver’s fuel share: {formatFuelMoney(driverAdded)}</p>
+            {covered && (
+              <p>Recent weeks already explain this, so nothing is added to the driver’s share.</p>
+            )}
+          </div>
+        );
+      })}
       {clockAssumed && (
         <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
           A fill has no time. We treated it as the end of that day. Add a time or link the gas card.

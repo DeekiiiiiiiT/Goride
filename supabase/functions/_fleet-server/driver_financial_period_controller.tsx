@@ -699,6 +699,14 @@ app.post(`${BASE}/internal-rebuild`, async (c) => {
     const body = await c.req.json().catch(() => ({}));
     const driverId = String(body.driverId || "").trim();
     if (!driverId) return c.json({ error: "driverId is required" }, 400);
+    const anchors = Array.isArray(body.periodAnchors)
+      ? body.periodAnchors.map((a: unknown) => String(a || "").slice(0, 10)).filter((a: string) => /^\d{4}-\d{2}-\d{2}$/.test(a))
+      : [];
+    if (anchors.length > 0) {
+      const { rebuildPeriodsForAnchors } = await import("./driver_financial_periods.ts");
+      const rebuilt = await rebuildPeriodsForAnchors(driverId, anchors);
+      return c.json({ success: true, rebuilt, anchors });
+    }
     const n = await rebuildAllPeriodsForDriver(driverId, { force: !!body.force });
     return c.json({ success: true, rebuilt: n.rebuilt, skippedSigned: n.skippedSigned });
   } catch (e: any) {

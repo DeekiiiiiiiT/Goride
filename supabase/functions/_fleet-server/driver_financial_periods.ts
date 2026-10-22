@@ -24,6 +24,7 @@ import {
 } from "./period_share_cash.ts";
 import { foldPayoutCashByWeek } from "../../../packages/finance-core/src/payoutCashDedupe.ts";
 import { periodKeyFor } from "../../../packages/finance-core/src/periodKey.ts";
+import { faresLandedOutsideTripWeek } from "../../../packages/finance-core/src/fareWeekMismatch.ts";
 import {
   deriveFuelExpenseStatus,
   type FuelExpenseStatus,
@@ -1211,6 +1212,21 @@ export async function rebuildDriverFinancialPeriod(
     ? await isFeatureEnabled(FEATURE_FLAGS.RUSH_SETTLEMENT, context.organizationId)
     : false;
   const excludeRushDelivery = !context.filterServiceLine && !rushSettlementOn;
+
+  const fareMismatches = faresLandedOutsideTripWeek({
+    trips: context.scopedTrips || [],
+    fares: context.fareEntries || [],
+    periodAnchor,
+    periodEnd,
+    timezone,
+  });
+  if (fareMismatches.length > 0) {
+    console.warn("[DFP] fare landed outside its trip week", {
+      driverId,
+      periodAnchor,
+      trips: fareMismatches,
+    });
+  }
 
   const { share, serviceLineBreakdown } = computeCommissionShareForRebuild(
     context,

@@ -3,8 +3,17 @@
  * One gap that cannot be routed does not throw away the week.
  * Successful driving distances are remembered. Failures are not.
  */
-import { fetchGoogleDirectionsRouteWithTurn, googleMapsRidesApiKey, haversineKm } from "../_shared/directionsRoute.ts";
+import {
+  fetchLegacyDirectionsKm,
+  fetchRoutesApiKm,
+  googleMapsServerKey,
+  haversineKm,
+  reportFuelRouteFailure,
+  type RoutingHealth,
+} from "../_shared/directionsRoute.ts";
 import { getServiceClient } from "./service_client.ts";
+import { commuteRouteStatus } from "../../../packages/fuel-core/src/commuteRouteStatus.ts";
+import { straightLineRoadKm } from "../../../packages/fuel-core/src/roadFactor.ts";
 import {
   commuteLegs,
   foldMeasuredGaps,
@@ -17,6 +26,22 @@ import {
 } from "../../../packages/fuel-core/src/shiftLegs.ts";
 
 const routeCache = new Map<string, number>();
+const ROUTE_CONCURRENCY = 4;
+
+async function mapLimited<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
+  const out: R[] = new Array(items.length);
+  let next = 0;
+  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    for (;;) {
+      const index = next;
+      next += 1;
+      if (index >= items.length) return;
+      out[index] = await fn(items[index]);
+    }
+  });
+  await Promise.all(workers);
+  return out;
+}
 
 function pointKey(point: LegPoint): string {
   if (Number.isFinite(point.lat) && Number.isFinite(point.lng)) {
@@ -25,24 +50,20 @@ function pointKey(point: LegPoint): string {
   return String(point.label || "").trim().toLowerCase();
 }
 
-async function drivingKmByAddress(origin: string, destination: string): Promise<number | null> {
-  const apiKey = googleMapsRidesApiKey();
-  if (!apiKey) return null;
-  const url =
-    `https://maps.googleapis.com/maps/api/directions/json?origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(destination)}&mode=driving&region=jm&key=${encodeURIComponent(apiKey)}`;
-  try {
-    const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
-    if (!res.ok) return null;
-    const json = await res.json() as {
-      status?: string;
-      routes?: Array<{ legs?: Array<{ distance?: { value?: number } }> }>;
-    };
-    if (json.status !== "OK") return null;
-    const meters = json.routes?.[0]?.legs?.[0]?.distance?.value;
-    return meters != null ? meters / 1000 : null;
-  } catch {
-    return null;
-  }
+type RouteSession = {
+  backend: RoutingHealth["backend"];
+  apiKey: string | null;
+};
+
+type FuelRouteHit = { km: number; source: "google_directions" | "google_routes" };
+
+async function drivingKmByAddress(origin: string, destination: string, session: RouteSession): Promise<FuelRouteHit | null> {
+  if (!session.apiKey || !session.backend) return null;
+  const result = session.backend === "routes"
+    ? await fetchRoutesApiKm({ apiKey: session.apiKey, origin, destination })
+    : await fetchLegacyDirectionsKm({ apiKey: session.apiKey, origin, destination });
+  if (result.km == null || !result.source) return null;
+  return { km: result.km, source: result.source };
 }
 
 function hasCoords(point: LegPoint): boolean {
@@ -66,11 +87,16 @@ async function cachedRouteKm(fromKey: string, toKey: string): Promise<number | n
   }
 }
 
-async function rememberRouteKm(fromKey: string, toKey: string, km: number): Promise<void> {
+async function rememberRouteKm(
+  fromKey: string,
+  toKey: string,
+  km: number,
+  source: FuelRouteHit["source"],
+): Promise<void> {
   try {
     const client = getServiceClient();
     await client.from("fuel_route_cache").upsert(
-      { from_key: fromKey, to_key: toKey, km, source: "google_directions" },
+      { from_key: fromKey, to_key: toKey, km, source },
       { onConflict: "from_key,to_key" },
     );
   } catch {
@@ -78,7 +104,8 @@ async function rememberRouteKm(fromKey: string, toKey: string, km: number): Prom
   }
 }
 
-async function drivingKm(from: LegPoint, to: LegPoint): Promise<number | null> {
+async function drivingKm(from: LegPoint, to: LegPoint, session: RouteSession): Promise<number | null> {
+  if (!session.backend || !session.apiKey) return null;
   const fromKey = pointKey(from);
   const toKey = pointKey(to);
   const key = `${fromKey}>${toKey}`;
@@ -91,26 +118,31 @@ async function drivingKm(from: LegPoint, to: LegPoint): Promise<number | null> {
       return cached;
     }
   }
-  let km: number | null = null;
+  let hit: FuelRouteHit | null = null;
   if (coords) {
-    try {
-      const route = await fetchGoogleDirectionsRouteWithTurn(
-        Number(from.lat),
-        Number(from.lng),
-        Number(to.lat),
-        Number(to.lng),
-      );
-      if (route?.source === "google_directions") km = route.distanceKm;
-    } catch {
-      km = null;
-    }
+    const result = session.backend === "routes"
+      ? await fetchRoutesApiKm({
+        apiKey: session.apiKey,
+        fromLat: Number(from.lat),
+        fromLng: Number(from.lng),
+        toLat: Number(to.lat),
+        toLng: Number(to.lng),
+      })
+      : await fetchLegacyDirectionsKm({
+        apiKey: session.apiKey,
+        fromLat: Number(from.lat),
+        fromLng: Number(from.lng),
+        toLat: Number(to.lat),
+        toLng: Number(to.lng),
+      });
+    if (result.km != null && result.source) hit = { km: result.km, source: result.source };
   } else if (from.label && to.label) {
-    km = await drivingKmByAddress(from.label, to.label);
+    hit = await drivingKmByAddress(from.label, to.label, session);
   }
-  if (km == null) return null;
-  routeCache.set(key, km);
-  if (coords) await rememberRouteKm(fromKey, toKey, km);
-  return km;
+  if (!hit) return null;
+  routeCache.set(key, hit.km);
+  if (coords) await rememberRouteKm(fromKey, toKey, hit.km, hit.source);
+  return hit.km;
 }
 
 /** Place a home pin on the driver being saved. Never reads a stale copy to write back. */
@@ -135,24 +167,42 @@ export async function stampDriverHomePin(driver: Record<string, unknown>): Promi
 }
 
 export async function geocodeJamaicaAddress(address: string): Promise<{ lat: number; lng: number } | null> {
-  const apiKey = googleMapsRidesApiKey();
+  const apiKey = googleMapsServerKey();
   const trimmed = address.trim();
-  if (!apiKey || !trimmed) return null;
+  if (!trimmed) return null;
+  if (!apiKey) {
+    reportFuelRouteFailure("geocode", "MAPS_KEY_MISSING", "", "maps_key_missing");
+    return null;
+  }
   const query = /jamaica/i.test(trimmed) ? trimmed : `${trimmed}, Jamaica`;
   try {
     const res = await fetch(
       `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(query)}&region=jm&key=${encodeURIComponent(apiKey)}`,
       { signal: AbortSignal.timeout(8000) },
     );
-    if (!res.ok) return null;
+    if (!res.ok) {
+      reportFuelRouteFailure("geocode", `HTTP_${res.status}`, "request failed", "unavailable");
+      return null;
+    }
     const json = await res.json() as {
       status?: string;
+      error_message?: string;
       results?: Array<{ geometry?: { location?: { lat?: number; lng?: number } } }>;
     };
-    const loc = json.status === "OK" ? json.results?.[0]?.geometry?.location : undefined;
-    if (!loc || !Number.isFinite(loc.lat) || !Number.isFinite(loc.lng)) return null;
+    const status = String(json.status || "UNKNOWN");
+    const loc = status === "OK" ? json.results?.[0]?.geometry?.location : undefined;
+    if (!loc || !Number.isFinite(loc.lat) || !Number.isFinite(loc.lng)) {
+      reportFuelRouteFailure(
+        "geocode",
+        status,
+        String(json.error_message || "").split(apiKey).join("[redacted]"),
+        status === "ZERO_RESULTS" ? "no_road" : "google_refused",
+      );
+      return null;
+    }
     return { lat: Number(loc.lat), lng: Number(loc.lng) };
   } catch {
+    reportFuelRouteFailure("geocode", "UNAVAILABLE", "request failed", "unavailable");
     return null;
   }
 }
@@ -160,22 +210,42 @@ export async function geocodeJamaicaAddress(address: string): Promise<{ lat: num
 export async function measureOffAppKm(args: {
   home: { lat: number; lng: number } | null;
   trips: ShiftTrip[];
+  routing: RoutingHealth;
 }): Promise<{
   commuteKm: number;
+  commuteStatus: "routed" | "estimated" | "none";
+  commuteNote?: string;
   repositionKm: number | null;
   repositionMeasured: boolean;
   repositionAnyEstimated: boolean;
   repositionAnySkipped: boolean;
 }> {
+  const session: RouteSession = {
+    backend: args.routing.ok ? args.routing.backend : null,
+    apiKey: args.routing.ok ? googleMapsServerKey() : null,
+  };
   const shifts = groupShifts(args.trips || []);
+  const legs = args.home ? commuteLegs({ lat: args.home.lat, lng: args.home.lng }, shifts) : [];
   let commuteKm = 0;
-  if (args.home) {
-    const legs = commuteLegs({ lat: args.home.lat, lng: args.home.lng }, shifts);
+  let routedLegs = 0;
+  if (session.backend && session.apiKey) {
     for (const leg of legs) {
-      const net = netLegKm(await drivingKm(leg.from, leg.to), leg.alreadyCountedKm);
+      const km = await drivingKm(leg.from, leg.to, session);
+      if (km == null) continue;
+      routedLegs += 1;
+      const net = netLegKm(km, leg.alreadyCountedKm);
       if (net != null) commuteKm += net;
     }
   }
+  const commute = commuteRouteStatus({
+    homeMissing: !args.home,
+    routingOk: Boolean(session.backend && session.apiKey),
+    legs: legs.length,
+    routedLegs,
+  });
+  const commuteStatus: "routed" | "estimated" | "none" = commute.confidence === "measured"
+    ? "routed"
+    : commute.confidence;
 
   const gaps = repositionGaps(shifts);
   const tripsHavePoints = (args.trips || []).some((trip) =>
@@ -185,21 +255,32 @@ export async function measureOffAppKm(args: {
   if (!gaps.length) {
     return {
       commuteKm: round2(commuteKm),
+      commuteStatus,
+      commuteNote: commute.note,
       repositionKm: tripsHavePoints ? 0 : null,
       repositionMeasured: tripsHavePoints,
       repositionAnyEstimated: false,
       repositionAnySkipped: false,
     };
   }
-  const folded = foldMeasuredGaps(await Promise.all(gaps.map(async (gap) => {
-    const routedKm = await drivingKm(gap.from, gap.to);
+  const folded = foldMeasuredGaps(await mapLimited(gaps, ROUTE_CONCURRENCY, async (gap) => {
+    const routedKm = session.backend && session.apiKey
+      ? await drivingKm(gap.from, gap.to, session)
+      : null;
     const straightKm = routedKm == null && hasCoords(gap.from) && hasCoords(gap.to)
-      ? haversineKm(Number(gap.from.lat), Number(gap.from.lng), Number(gap.to.lat), Number(gap.to.lng))
+      ? straightLineRoadKm(haversineKm(
+        Number(gap.from.lat),
+        Number(gap.from.lng),
+        Number(gap.to.lat),
+        Number(gap.to.lng),
+      ))
       : null;
     return { routedKm, straightKm, alreadyCountedKm: gap.alreadyCountedKm };
-  })));
+  }));
   return {
     commuteKm: round2(commuteKm),
+    commuteStatus,
+    commuteNote: commute.note,
     repositionKm: folded.measured ? folded.repositionKm : null,
     repositionMeasured: folded.measured,
     repositionAnyEstimated: folded.anyEstimated,

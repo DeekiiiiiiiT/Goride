@@ -96,4 +96,34 @@ describe('FuelLeakageStep render', () => {
     expect(screen.getByText(/Residual disposition/i)).toBeTruthy();
     expect(screen.queryByText(/Money residual clear/i)).toBeNull();
   });
+
+  it('shows routing health and a running balance that recent weeks already cover', () => {
+    render(
+      <FuelLeakageStep
+        {...baseProps}
+        leakage={982}
+        vehicleSnaps={[{
+          vehicleId: 'v1',
+          misc: 982,
+          report: {
+            routingHealth: {
+              ok: false,
+              message: 'Routing unavailable — kilometres left unexplained. Google refused the route.',
+            },
+            varianceBalance: { creditIn: -7209, runningBalance: -6227, billable: 0, driverAdded: 0 },
+            kmSources: [{
+              category: 'commute',
+              km: 0,
+              confidence: 'none',
+              note: 'Routing unavailable — kilometres left unexplained',
+            }],
+          },
+        }]}
+      />,
+    );
+    expect(screen.getByText(/Google refused the route/i)).toBeTruthy();
+    expect(screen.getByText(/Carried from recent weeks/i)).toBeTruthy();
+    expect(screen.getByText(/Recent weeks already explain this/i)).toBeTruthy();
+    expect(screen.getByText(/Commute: Routing unavailable/i)).toBeTruthy();
+  });
 });
