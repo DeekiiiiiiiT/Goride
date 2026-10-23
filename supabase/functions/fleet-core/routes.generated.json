@@ -1,7 +1,7 @@
 {
   "slug": "fleet-core",
-  "generatedAt": "2026-10-22T22:37:30.709Z",
-  "routeCount": 663,
+  "generatedAt": "2026-10-23T10:38:31.989Z",
+  "routeCount": 665,
   "routes": [
     "ALL /make-server-37f42386/webhooks/wipay-fleet-modules",
     "DELETE ${ADMIN_CAT}/:id",
@@ -417,6 +417,8 @@
     "POST ${PREFIX}/internal/activity/purge",
     "POST ${PREFIX}/ledger/ensure-from-trip-ids",
     "POST ${PREFIX}/ledger/ensure-from-trip-ids/import",
+    "POST ${PREFIX}/off",
+    "POST ${PREFIX}/on",
     "POST ${PREFIX}/org-billing/payment-methods",
     "POST ${PREFIX}/org-billing/payout-accounts",
     "POST ${TOLL_HTTP_PREFIX}/toll-ledger/:id/void",

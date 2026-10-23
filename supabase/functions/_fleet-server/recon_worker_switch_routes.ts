@@ -166,39 +166,40 @@ export function registerReconWorkerSwitchRoutes(app: RouteApp, supabase: Supabas
     }
   });
 
-  for (const on of [true, false] as const) {
-    app.post(`${PREFIX}/${on ? "on" : "off"}`, async (c: Context) => {
-      try {
-        const auth = await requireProductAdmin(c, "fleet");
-        if (auth instanceof Response) return auth;
-        if (!FLIP_ROLES.has(auth.role)) {
-          return c.json({ error: "Only the fleet owner can stop or resume this." }, 403);
-        }
-        const stopping = !on;
-        const { error } = await supabase.schema("recon").from("worker_control").update({
-          emergency_off: stopping,
-          updated_at: new Date().toISOString(),
-        }).eq("id", 1);
-        if (error) throw new Error(error.message);
-        const { error: alertError } = await supabase.schema("recon").from("worker_alerts").insert({
-          kind: stopping ? "emergency_off" : "emergency_resume",
-          detail: { by: auth.email, userId: auth.id },
-        });
-        if (alertError) console.error("[recon-worker-switch] alert insert failed");
-        let warning: string | null = null;
-        if (stopping) {
-          try {
-            await scaleToZero();
-          } catch (e) {
-            console.error("[recon-worker-switch] scale to zero failed", e instanceof Error ? e.message : e);
-            warning = "Stopped. If a computer was left on from before, it could not be reached, so it may keep running until the next deploy.";
-          }
-        }
-        return c.json({ ...(await buildStatus(supabase, auth)), warning });
-      } catch (e) {
-        const message = e instanceof Error ? e.message : "Could not change the week calculator.";
-        return c.json({ error: message }, 500);
+  const flipWorker = async (c: Context, on: boolean) => {
+    try {
+      const auth = await requireProductAdmin(c, "fleet");
+      if (auth instanceof Response) return auth;
+      if (!FLIP_ROLES.has(auth.role)) {
+        return c.json({ error: "Only the fleet owner can stop or resume this." }, 403);
       }
-    });
-  }
+      const stopping = !on;
+      const { error } = await supabase.schema("recon").from("worker_control").update({
+        emergency_off: stopping,
+        updated_at: new Date().toISOString(),
+      }).eq("id", 1);
+      if (error) throw new Error(error.message);
+      const { error: alertError } = await supabase.schema("recon").from("worker_alerts").insert({
+        kind: stopping ? "emergency_off" : "emergency_resume",
+        detail: { by: auth.email, userId: auth.id },
+      });
+      if (alertError) console.error("[recon-worker-switch] alert insert failed");
+      let warning: string | null = null;
+      if (stopping) {
+        try {
+          await scaleToZero();
+        } catch (e) {
+          console.error("[recon-worker-switch] scale to zero failed", e instanceof Error ? e.message : e);
+          warning = "Stopped. If a computer was left on from before, it could not be reached, so it may keep running until the next deploy.";
+        }
+      }
+      return c.json({ ...(await buildStatus(supabase, auth)), warning });
+    } catch (e) {
+      const message = e instanceof Error ? e.message : "Could not change the week calculator.";
+      return c.json({ error: message }, 500);
+    }
+  };
+
+  app.post(`${PREFIX}/on`, (c: Context) => flipWorker(c, true));
+  app.post(`${PREFIX}/off`, (c: Context) => flipWorker(c, false));
 }
