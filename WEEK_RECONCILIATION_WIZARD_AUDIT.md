@@ -1,51 +1,92 @@
 # Week Reconciliation — Implementation Plan
 
-**Rev 18 · 2026-10-23 · verification of working tree on `9788c91c` (24 files uncommitted) + prod**
+**Rev 20 · 2026-10-23 · R19-01 fixed in `b3f74786` and live**
 Open items only. Earlier revisions are in git history.
 
 ## Status
 
-**The calculator now runs by itself.** The `recon-worker-wake` cron runs every minute and only wakes the worker when there's queued work, a close is running, or the nightly check is due. It has an emergency-off flag and a secret header, and it scales to zero when idle. 385 wake calls succeeded; the only failures were 3 × 403 during setup (01:11–01:13) and a few cold-start timeouts that the next minute covered. The nightly comparison runs on its own (latest 01:22, **0 mismatches** over 11 weeks).
+- **Kenny is paid**: Oct 12 period `settled`, $17,183.53 paid.
+- **R19-01 is fixed and live.** That was the Close blocker no step showed.
+  - Blocker columns were added to the live table.
+  - fleet-core and the Cloud Run calculator (`goride-recon`) are deployed.
+  - roam-fleet is Ready on Vercel.
+  - All 4 GitHub runs passed; fleet `tsc` is still 484.
+- **Migration file names now match prod** for `…011034` and `…011035`.
 
-Gates: fleet `tsc` 484, web build passes, finance-core 281/281, Deno 21/21, all four guards pass, 0 public functions callable by anon.
+### What R19-01 really was
+
+Rev 19 blamed `SETTLEMENT_PNL_MISMATCH`. **That was wrong.** The page preview skips the P&L tie.
+
+The real cause was that the calculator's saves were failing **silently**:
+- **Week-level rows:** two "no activity" sources shared one `(code)` slot. The insert of the whole set failed, and the error was never checked.
+- **Driver rows:** two drifts with the same code but different fields did the same thing.
+
+As a result, the steps read **0 blockers** while the Close box (live preview) counted **1**.
+
+**What changed:**
+- **One shared check per driver.** `driverCloseBlockers` in `week_close.ts` is now used by both the preview and the calculator.
+- **One shared writer.** `recon_week_blockers.ts` stores one row per `(code, source_id)` with amounts. It upserts, then deletes stale rows, and throws on any error.
+- **Whole-week checks are stored** each time the calculator settles a week, before the desk is published.
+- **The settlement ↔ P&L tie** runs once in the close workflow, right before freezing. It is no longer skipped.
+- **The close workflow** counts only its own service line, and its error names the first 3 blockers.
+- **The Close box** reads the same stored rows (`closeCheck` on the run payload):
+  - It lists each blocker with its amount and a **Go to step** button.
+  - If the read fails, Close stays locked.
+  - If the calculator has not run for the week yet, it falls back to the old preview.
 
 ---
 
-## R18-01 · Commit everything · High
+## R20-01 · Refresh, then close Oct 12–18 · High (your action)
 
-Prod depends on files that exist **only on this computer**: `supabase/functions/fleet-recon-cron/`, `recon_worker_wake.ts`, `recon_worker_google.ts`, `recon_worker_switch*.ts`, `WeekCalculatorPage.tsx`, `.gcloudignore`, both new migrations, and edits to the Dockerfile, Cloud Build, the deploy script and the worker. 24 files in total. Commit them.
+Nothing has recalculated since the deploy. In Week Reconciliation, on Oct 12–18 (Rideshare):
+1. Press **Refresh** and wait until the steps settle.
+2. Open **Close**.
+   - If it lists a blocker, it now says what it is and where to fix it.
+   - If the list is empty, press **Close**.
+3. Pressing Close runs the **P&L tie** for the first time. If the sealed statements don't match the recalculation, Close stops with `SETTLEMENT_PNL_MISMATCH` and the amount.
+   - Kenny's earnings were sealed 2026-10-21 but recalculated 2026-10-23, so a mismatch is possible.
+   - Fix it by resealing through Refresh, not with an override.
 
-## R18-02 · Migration history drifted again · Medium
+**Done when:**
+- The workflow reaches `succeeded`.
+- `recon.week_runs` for Oct 12 / rideshare = `closed`.
+- Kenny's period has `closed_at`.
 
-| Repo file | Prod history |
-|---|---|
-| `20261022200000_recon_enqueue_reason_and_revoke.sql` | **not recorded**, but applied (`recon_enqueue_unit` has `p_reason`) |
-| `20261022210000_recon_worker_autowake.sql` | `20261023011034 recon_worker_autowake` |
-| `20261022211000_recon_week_desk_snapshot.sql` | `20261023011035 recon_week_desk_snapshot` |
+## R20-02 · Two migrations not in prod history · Medium
 
-Rename the two repo files to prod's versions, and record `…200000` with `supabase migration repair --status applied`. From now on, apply migrations from the repo file, so the version in prod matches the file name.
+The SQL of both is live. Only the history record is missing. Run this in the SQL editor:
 
-## R18-03 · Close Oct 12–18: the first real close through the workflow · High (ops)
+```sql
+insert into supabase_migrations.schema_migrations(version, name) values
+  ('20261023120000','recon_week_blockers_detail'),
+  ('20261022200000','recon_enqueue_reason_and_revoke')
+on conflict (version) do nothing;
+```
 
-`close_workflows` is still empty, and Kenny's $17,183.53 is unpaid (the week's only blocker). **Pay** from the Settlement step, then **Close**. Confirm:
-- the workflow reaches `succeeded`;
-- `recon.week_runs` for Oct 12 / rideshare shows `closed`;
-- Kenny's period shows `closed_at`.
+## R20-03 · Close-time P&L tie vs the 120 s Cloud Run limit · Medium
 
-This is the last proof the new design works end to end.
+- **Risk:** the tie re-runs fuel, toll and earnings for **every driver** in the week inside one wake request. Cloud Run's `--timeout` is `120` (`cloudbuild.recon-worker.yaml`). That is fine for today's driver count, but at about 30 drivers it can run out of time.
+- **What it looks like:** the workflow stays at "waiting" and retries.
+- **Fix when the fleet grows:** run the tie as its own queued unit, one driver per message, and sum the results.
 
-## R18-04 · Page loads: 3.5 s average, target under 1 s · Medium
+## R20-04 · `recon.enqueue_unit` executable by anon · Low
 
-On the current version: 6 loads, average 3.5 s, p95 5.9 s, no failures. The new `recon_week_desk_snapshot` should bring this down once it's committed and deployed. Re-measure; if p95 is still over 1 s, add timing logs to `buildRunPayload` to find the slow read.
+- `has_function_privilege('anon', 'recon.enqueue_unit(...)', 'execute')` is true.
+- The `public.` wrapper is locked, so this is only reachable if anon has `USAGE` on schema `recon`.
+- Check that, and revoke it if anon has usage.
 
-## R18-05 · Let the nightly check run for 7 days · Low (just wait)
+## R18-05 · 7-day nightly check · Low (wait)
 
-It now runs automatically every night. On **2026-10-30**, check the worker log for 7 `shadow_ok` entries and no `shadow_mismatch`, before relying on it for a larger fleet.
+On **2026-10-30**: 7 `shadow_ok`, no `shadow_mismatch` in `recon.worker_alerts`.
 
 ---
 
 ## Still to come
 
-- Phase 5 cleanup: delete the old on-request recompute code once Oct 12 has closed through the workflow.
-- Phase 6 Delivery: a Delivery run for Oct 12 now exists (opened by the nightly pass); `courierWeekMoney.ts` is started. Q2, Q3 and Q5 wait for it.
-- After two closes through the wizard: `SOURCE_ENFORCE=enforce`.
+- Page loads: p95 1.5 s vs the 1 s target.
+- Phase 5 cleanup, after Oct 12 closes:
+  - delete the preview fallback in `ReconCloseStep`;
+  - delete `previewWeekClose`'s page use;
+  - remove the `weekCloseApi.sync` call before Close.
+- Phase 6 Delivery; Q2, Q3 and Q5 wait for it.
+- After two closes through the wizard: `SOURCE_ENFORCE=enforce` on the **Cloud Run** service (the calculator's setting is now the one that counts).
