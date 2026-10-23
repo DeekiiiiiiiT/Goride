@@ -137,6 +137,7 @@ export function buildReconSourceCloseBlockers(input: {
       code,
       severity: reconSourceBlockerSeverity(code, { enforce }),
       week,
+      sourceId: src.sourceId,
       persisted: src.missingDays?.length ?? (code === 'SOURCE_PARTIAL' ? 1 : 0),
       expected: 0,
       delta: round2(src.missingDays?.length ?? 0),

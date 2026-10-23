@@ -11,31 +11,18 @@ import {
   netCourierPayout,
   tollClosingBalance,
 } from "../../../packages/finance-core/src/courierWeekMoney.ts";
-import { checkCloseInvariants } from "../../../packages/finance-core/src/closeInvariants.ts";
-import {
-  assembleCloseInvariantInput,
-  earningsStatementForClose,
-  fuelStatementForClose,
-  tollStatementForClose,
-} from "../../../packages/finance-core/src/closeInvariantInput.ts";
 import {
   DRIVER_SHADOW_MONEY_FIELDS,
   VEHICLE_SHADOW_MONEY_FIELDS,
   diffShadowMoney,
 } from "../../../packages/finance-core/src/shadowMoney.ts";
-import { hasPendingRestatementDrafts, mapRowToWeekStatement } from "../../../packages/finance-core/src/weekStatement.ts";
-import { engineDriftsToCloseBlockers } from "../../../packages/finance-core/src/statementEngineCompare.ts";
-import type { StatementEngineDrift } from "../../../packages/finance-core/src/statementEngineCompare.ts";
 import { prepareFuelWeekReports } from "./fuel_week_prepare.ts";
 import { rebuildOneDriverPeriod } from "./driver_financial_periods.ts";
-import { loadWeekCloseReconContext } from "./week_close_recon.ts";
 import { hashDriverWeekFacts, hashVehicleWeekFacts } from "./recon_unit_hash.ts";
 import { nextAttemptStatus, plainComputeFailure } from "./recon_projection.ts";
-import { listOpenFinanceReconDrifts } from "./finance_recon_drift.ts";
 import { advanceOpenCloseWorkflows } from "./recon_close_workflow.ts";
 import { logReconPhase } from "./recon_phase_log.ts";
-import { isPeriodFrozen } from "./settlement_period_freeze.ts";
-import { summarizeTollUsageOrphansByDriverForWeek } from "./toll_financial_reset.ts";
+import { writeDriverWeekBlockers, writeWeekLevelBlockers } from "./recon_week_blockers.ts";
 
 export const RECON_WORKER_HOST_DECISION = "container" as const;
 
@@ -184,125 +171,6 @@ async function syncShadowMoney(opts: {
   }
 }
 
-async function writeDriverBlockers(orgId: string, weekKey: string, driverId: string, serviceLine: "rideshare" | "rush_delivery") {
-  const period = await sb()
-    .from("driver_financial_periods")
-    .select("*")
-    .eq("organization_id", orgId)
-    .eq("driver_id", driverId)
-    .eq("period_anchor", weekKey)
-    .maybeSingle();
-  const { data: statementRows } = await sb()
-    .from("week_statements")
-    .select("*")
-    .eq("organization_id", orgId)
-    .eq("driver_id", driverId)
-    .eq("week_key", weekKey);
-  const byKind = new Map<string, ReturnType<typeof mapRowToWeekStatement>>();
-  for (const row of statementRows ?? []) {
-    const statement = mapRowToWeekStatement(row as Record<string, unknown>);
-    byKind.set(statement.kind, statement);
-  }
-  const statements = [...byKind.values()];
-  const row = (period.data ?? null) as Record<string, unknown> | null;
-  const meta = (row?.metadata as Record<string, unknown> | null) ?? null;
-  const fc = (meta?.financeCore as Record<string, unknown> | undefined) || {};
-  const acceptRestatementDrafts = Boolean(row) && isPeriodFrozen({
-    metadata: meta,
-    settlementStatus: row?.settlement_status != null ? String(row.settlement_status) : null,
-    signedAt: fc.signedAt != null ? String(fc.signedAt) : null,
-    status: row?.status != null ? String(row.status) : null,
-    closedAt: row?.closed_at != null ? String(row.closed_at) : null,
-  }) && hasPendingRestatementDrafts(statements);
-
-  const stored = await listOpenFinanceReconDrifts(orgId, weekKey);
-  const drifts: StatementEngineDrift[] = stored
-    .filter((item) => item.driver_id === driverId)
-    .map((item) => ({
-      kind: item.kind,
-      field: item.field,
-      statementMinor: Number(item.statement_minor) || 0,
-      engineMinor: Number(item.engine_minor) || 0,
-      deltaMinor: Number(item.delta_minor) || 0,
-    }));
-  const engineDrifts = drifts.length
-    ? engineDriftsToCloseBlockers(drifts, { driverId, week: weekKey })
-    : [];
-
-  let tollEventLedger: ReturnType<typeof assembleCloseInvariantInput>["tollEventLedger"] = null;
-  try {
-    const orphans = await summarizeTollUsageOrphansByDriverForWeek(weekKey);
-    const sum = orphans.get(driverId);
-    tollEventLedger = sum
-      ? {
-        orphanCount: sum.orphanCount,
-        orphanAmountMajor: sum.orphanAmountMajor,
-        eventSpendMajor: sum.eventSpendMajor,
-        ledgerSpendMajor: sum.ledgerSpendMajor,
-        missingEventCount: sum.missingEventCount,
-        missingEventAmountMajor: sum.missingEventAmountMajor,
-        ineligibleEventCount: sum.ineligibleEventCount,
-        ineligibleEventAmountMajor: sum.ineligibleEventAmountMajor,
-        amountMismatchCount: sum.amountMismatchCount,
-        amountMismatchAmountMajor: sum.amountMismatchAmountMajor,
-      }
-      : null;
-  } catch (e) {
-    console.warn("[recon] toll event ledger skipped", e);
-  }
-
-  const blockers = row
-    ? checkCloseInvariants(assembleCloseInvariantInput({
-      period: row as never,
-      fuelStatement: fuelStatementForClose(byKind.get("fuel"), acceptRestatementDrafts),
-      tollStatement: tollStatementForClose(byKind.get("toll"), acceptRestatementDrafts),
-      earningsStatement: earningsStatementForClose(byKind.get("earnings"), acceptRestatementDrafts),
-      skipSettlementDeskClear: acceptRestatementDrafts,
-      engineDrifts,
-      tollEventLedger,
-    }))
-    : [];
-  await recon()
-    .from("week_blockers")
-    .delete()
-    .eq("organization_id", orgId)
-    .eq("week_key", weekKey)
-    .eq("service_line", serviceLine)
-    .eq("driver_id", driverId);
-  if (blockers.length) {
-    await recon().from("week_blockers").insert(blockers.map((blocker) => ({
-      organization_id: orgId,
-      week_key: weekKey,
-      service_line: serviceLine,
-      driver_id: driverId,
-      code: blocker.code,
-      severity: blocker.severity,
-      fingerprint: `${blocker.code}:${driverId}`,
-      message: blocker.message,
-    })));
-  }
-  const context = await loadWeekCloseReconContext(orgId, weekKey, serviceLine);
-  await recon()
-    .from("week_blockers")
-    .delete()
-    .eq("organization_id", orgId)
-    .eq("week_key", weekKey)
-    .eq("service_line", serviceLine)
-    .is("driver_id", null);
-  if (context.sourceBlockers.length) {
-    await recon().from("week_blockers").insert(context.sourceBlockers.map((blocker) => ({
-      organization_id: orgId,
-      week_key: weekKey,
-      service_line: serviceLine,
-      driver_id: null,
-      code: blocker.code,
-      severity: blocker.severity,
-      fingerprint: blocker.code,
-      message: blocker.message,
-    })));
-  }
-}
-
 async function processVehicle(msg: UnitMessage): Promise<void> {
   const orgId = String(msg.organizationId || "");
   const weekKey = String(msg.weekKey || "").slice(0, 10);
@@ -391,7 +259,7 @@ async function processDriver(msg: UnitMessage): Promise<void> {
     payload: row as unknown as Record<string, unknown>,
     computed_at: new Date().toISOString(),
   }, { onConflict: "organization_id,week_key,driver_id" });
-  await writeDriverBlockers(orgId, weekKey, driverId, "rideshare");
+  await writeDriverWeekBlockers(orgId, weekKey, driverId, "rideshare");
   await markFresh(msg, hash);
 }
 
@@ -439,7 +307,7 @@ async function processCourier(msg: UnitMessage): Promise<void> {
     payload: { shared, net, tollClosing },
     computed_at: new Date().toISOString(),
   }, { onConflict: "organization_id,week_key,courier_id" });
-  await writeDriverBlockers(orgId, weekKey, courierId, "rush_delivery");
+  await writeDriverWeekBlockers(orgId, weekKey, courierId, "rush_delivery");
   await markFresh(msg, hash);
 }
 
@@ -490,6 +358,8 @@ async function publishSettledDesks(touched: DeskTouch[]): Promise<void> {
     }
     if ((count ?? 0) > 0) continue;
     try {
+      // Whole-week checks first, so the desk the steps read already lists them.
+      await writeWeekLevelBlockers(item.organizationId, item.weekKey, item.serviceLine, { withPnlTie: false });
       await publishDesk(item.organizationId, item.serviceLine, item.weekKey);
     } catch (e) {
       console.warn("[recon] desk publish failed", e instanceof Error ? e.message : e);
@@ -538,7 +408,10 @@ export async function processReconQueueBatch(qty = 1): Promise<{ processed: numb
       const orgId = String(message.organizationId || "");
       const weekKey = String(message.weekKey || "").slice(0, 10);
       try {
-        if (orgId && weekKey) await publishDesk(orgId, line, weekKey);
+        if (orgId && weekKey) {
+          await writeWeekLevelBlockers(orgId, weekKey, line, { withPnlTie: false });
+          await publishDesk(orgId, line, weekKey);
+        }
         await sb().rpc("recon_archive_recompute", { p_msg_id: row.msg_id });
         processed += 1;
       } catch (e) {
@@ -712,8 +585,9 @@ export async function finishNightlyIntegrity(
 
 export async function runReconWorkerTick(qty = 1): Promise<{ processed: number; workflows: number }> {
   const processed = await processReconQueueBatch(qty);
-  const workflows = await advanceOpenCloseWorkflows(1);
+  // Settle blockers and desks before a workflow reads them.
   await publishSettledDesks(processed.touched);
+  const workflows = await advanceOpenCloseWorkflows(1);
   await publishSucceededCloseDesks();
   return { processed: processed.processed, workflows };
 }

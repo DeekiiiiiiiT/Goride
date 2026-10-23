@@ -3,6 +3,8 @@ import { closeWeek } from "./week_close.ts";
 import { advanceCloseWorkflow, plainComputeFailure } from "./recon_projection.ts";
 import { hashDriverWeekFacts, hashVehicleWeekFacts } from "./recon_unit_hash.ts";
 import { markReconWeekRunClosed } from "./week_close_recon.ts";
+import { listWeekBlocks, writeWeekLevelBlockers } from "./recon_week_blockers.ts";
+import type { ReconServiceLine } from "./recon_week_blockers.ts";
 
 type WorkflowRow = {
   id: string;
@@ -97,16 +99,18 @@ async function latestShadowVerdict(): Promise<"ok" | "mismatch" | "pending"> {
   return "pending";
 }
 
-async function countUnits(orgId: string, weekKey: string): Promise<{
+async function countUnits(orgId: string, weekKey: string, serviceLine: ReconServiceLine): Promise<{
   pending: number;
   blockers: number;
   hashMismatches: number;
+  blocks: Array<{ code: string; driverId: string | null; message: string }>;
 }> {
-  const { data: units } = await recon()
+  const { data: units, error: unitsErr } = await recon()
     .from("projection_state")
     .select("unit_kind, driver_id, vehicle_id, status, inputs_hash")
     .eq("organization_id", orgId)
     .eq("week_key", weekKey);
+  if (unitsErr) throw new Error(`week units read failed: ${unitsErr.message}`);
   let pending = 0;
   let hashMismatches = 0;
   for (const row of units ?? []) {
@@ -135,20 +139,41 @@ async function countUnits(orgId: string, weekKey: string): Promise<{
       });
     }
   }
-  const { count } = await recon()
-    .from("week_blockers")
-    .select("id", { count: "exact", head: true })
-    .eq("organization_id", orgId)
-    .eq("week_key", weekKey)
-    .eq("severity", "block");
-  return { pending: pending + hashMismatches, blockers: count ?? 0, hashMismatches };
+  const blocks = await listWeekBlocks(orgId, weekKey, serviceLine);
+  return { pending: pending + hashMismatches, blockers: blocks.length, hashMismatches, blocks };
+}
+
+const MAX_LISTED_BLOCKS = 3;
+
+/** "Can't close yet: <first few reasons>" so the person sees what to fix. */
+function blockedMessage(blocks: Array<{ message: string }>): string {
+  if (!blocks.length) return "This week still has something to fix before it can close.";
+  const listed = blocks.slice(0, MAX_LISTED_BLOCKS).map((b) => b.message).join(" · ");
+  const more = blocks.length > MAX_LISTED_BLOCKS ? ` (+${blocks.length - MAX_LISTED_BLOCKS} more)` : "";
+  return `Can't close yet: ${listed}${more}`;
+}
+
+/** Workflows whose whole-week money check ran since their units last settled. */
+const pnlChecked = new Set<string>();
+
+function lineOf(row: { service_line?: string }): ReconServiceLine {
+  return row.service_line === "rush_delivery" ? "rush_delivery" : "rideshare";
 }
 
 export async function advanceOneCloseWorkflow(row: WorkflowRow): Promise<WorkflowRow> {
   if (row.state !== "running") return row;
   const week = weekOf(row);
   try {
-    const counts = await countUnits(row.organization_id, week);
+    const line = lineOf(row);
+    let counts = await countUnits(row.organization_id, week, line);
+    if (counts.pending > 0) {
+      pnlChecked.delete(row.id);
+    } else if (row.kind === "close" && !pnlChecked.has(row.id)) {
+      // Settlement ↔ P&L tie runs every engine, so it runs once here, not on page reads.
+      await writeWeekLevelBlockers(row.organization_id, week, line, { withPnlTie: true });
+      pnlChecked.add(row.id);
+      counts = await countUnits(row.organization_id, week, line);
+    }
     const step = (row.step === "freezing" ? "freezing" : row.step === "checking" ? "checking" : "waiting") as
       | "waiting"
       | "checking"
@@ -185,7 +210,7 @@ export async function advanceOneCloseWorkflow(row: WorkflowRow): Promise<Workflo
       const result = await closeWeek(row.organization_id, week, row.started_by || "recon-worker", "Closed from Week Reconciliation", {
         skipPrepare: true,
         skipEngineProbe: true,
-        serviceLine: row.service_line === "rush_delivery" ? "rush_delivery" : "rideshare",
+        serviceLine: line,
       });
       try {
         await markReconWeekRunClosed(
@@ -204,7 +229,7 @@ export async function advanceOneCloseWorkflow(row: WorkflowRow): Promise<Workflo
           state,
           step: result.closed ? "done" : "blocked",
           result: result as unknown as Record<string, unknown>,
-          error: result.closed ? null : "This week still has something to fix before it can close.",
+          error: result.closed ? null : blockedMessage((result.blockers ?? []).filter((b) => b.severity === "block")),
           updated_at: new Date().toISOString(),
         })
         .eq("id", row.id)
@@ -232,7 +257,7 @@ export async function advanceOneCloseWorkflow(row: WorkflowRow): Promise<Workflo
       .update({
         state: next.state === "succeeded" ? "succeeded" : next.state === "blocked" ? "blocked" : "running",
         step: next.step,
-        error: next.state === "blocked" ? "This week still has something to fix before it can close." : null,
+        error: next.state === "blocked" ? blockedMessage(counts.blocks) : null,
         updated_at: new Date().toISOString(),
       })
       .eq("id", row.id)

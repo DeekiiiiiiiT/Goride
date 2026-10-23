@@ -60,6 +60,8 @@ export type CloseBlocker = {
   severity: CloseInvariantSeverity;
   driverId?: string;
   week?: string;
+  /** Recon source the blocker is about (one row per source, e.g. two attested sources). */
+  sourceId?: string;
   /** Value on the persisted period projection. */
   persisted: number;
   /** Value the independent source (statement / identity) expects. */

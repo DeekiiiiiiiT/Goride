@@ -269,6 +269,7 @@ jobs:
           deno test --allow-read --allow-env
           supabase/functions/_fleet-server/recon_projection.test.ts
           supabase/functions/_fleet-server/recon_worker_switch.test.ts
+          supabase/functions/_fleet-server/recon_week_blocker_rows.test.ts
 
       - name: Page reads do not run week engines
         run: node scripts/assert-no-engine-on-edge-read.mjs

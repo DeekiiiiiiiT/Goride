@@ -101,8 +101,27 @@ export type ReconAttributionSummary = {
   truncated?: boolean;
 };
 
+/** A saved close blocker (recon.week_blockers). The steps and the close workflow read the same rows. */
+export type ReconStoredBlocker = {
+  code: string;
+  severity: string;
+  driver_id: string | null;
+  source_id: string | null;
+  message: string | null;
+  persisted: number | null;
+  expected: number | null;
+  delta: number | null;
+};
+
+/** "none" = not calculated yet (use the live preview); "error" = read failed (Close stays locked). */
+export type ReconCloseCheck =
+  | { status: 'ok'; blockers: ReconStoredBlocker[] }
+  | { status: 'none' }
+  | { status: 'error' };
+
 export type ReconRunPayload = {
   deskReady?: boolean;
+  closeCheck?: ReconCloseCheck;
   run: {
     id: string;
     organizationId: string;

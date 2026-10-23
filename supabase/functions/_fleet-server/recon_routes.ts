@@ -56,6 +56,7 @@ import { countBlockersForStep } from "../../../packages/finance-core/src/closeBl
 import { sourceVolumeMetrics } from "./recon_volume.ts";
 import { isReconWeekFrozen } from "./recon_week_writable.ts";
 import { logReconPhase } from "./recon_phase_log.ts";
+import type { StoredWeekBlocker } from "./recon_projection_read.ts";
 
 async function refuseFrozenReconWeek(
   c: Context,
@@ -552,6 +553,15 @@ function sourcesStepCounts(
   return { actionable, informational: 0 };
 }
 
+/**
+ * What the Close step shows: the same saved blockers the steps and the close workflow read.
+ * "none" = the calculator has not run for this week yet; "error" = the read failed (Close stays locked).
+ */
+type CloseCheck =
+  | { status: "ok"; blockers: StoredWeekBlocker[] }
+  | { status: "none" }
+  | { status: "error" };
+
 /** Live lane actionable counts for run_steps + complete gates (R2-11 / R3-04/08/11). */
 async function computeLiveStepCounts(
   orgId: string,
@@ -559,7 +569,10 @@ async function computeLiveStepCounts(
   line: ReconLine,
   sources: Array<{ requirement: SourceRequirement; status: SourceAggregateStatus }>,
   runId?: string,
-): Promise<Partial<Record<RunStepId, { actionable: number; informational: number }>>> {
+): Promise<{
+  counts: Partial<Record<RunStepId, { actionable: number; informational: number }>>;
+  closeCheck: CloseCheck;
+}> {
   const sb = getServiceClient();
   const attribution = await loadUnattributedForWeek(orgId, weekKey);
 
@@ -626,11 +639,13 @@ async function computeLiveStepCounts(
   let settlementActionable = 1;
   let closeActionable = 0;
   let previewBlockers: Array<{ code?: string | null; severity?: string | null }> = [];
+  let closeCheck: CloseCheck = { status: "none" };
   try {
     const { loadWeekBlockerRows, loadWeekProjectionStatus } = await import("./recon_projection_read.ts");
     const projection = await loadWeekProjectionStatus(orgId, weekKey);
     if (projection.totalDrivers > 0) {
       const stored = await loadWeekBlockerRows(orgId, weekKey, line);
+      closeCheck = { status: "ok", blockers: stored };
       previewBlockers = stored.map((row) => ({ code: row.code, severity: row.severity }));
       tripsActionable = countTripsEarningsBlockers(previewBlockers);
       settlementActionable = countSettlementPreviewBlockers(previewBlockers);
@@ -638,6 +653,9 @@ async function computeLiveStepCounts(
     }
   } catch (e) {
     console.warn("[recon] stored blocker read failed", e);
+    // Fail closed: a failed read must not show the week as clear.
+    closeCheck = { status: "error" };
+    closeActionable = 1;
   }
 
   // Period probes can read clear while a close rule on that lane is still open.
@@ -663,14 +681,17 @@ async function computeLiveStepCounts(
   }
 
   return {
-    sources: sourcesStepCounts(sources),
-    attribution: { actionable: attribution.rowCount, informational: 0 },
-    trips_earnings: { actionable: tripsActionable, informational: 0 },
-    tolls: { actionable: tollActionable, informational: 0 },
-    tag_account: { actionable: tagActionable, informational: 0 },
-    fuel: { actionable: fuelActionable, informational: 0 },
-    settlement_preview: { actionable: settlementActionable, informational: 0 },
-    close: { actionable: closeActionable, informational: 0 },
+    counts: {
+      sources: sourcesStepCounts(sources),
+      attribution: { actionable: attribution.rowCount, informational: 0 },
+      trips_earnings: { actionable: tripsActionable, informational: 0 },
+      tolls: { actionable: tollActionable, informational: 0 },
+      tag_account: { actionable: tagActionable, informational: 0 },
+      fuel: { actionable: fuelActionable, informational: 0 },
+      settlement_preview: { actionable: settlementActionable, informational: 0 },
+      close: { actionable: closeActionable, informational: 0 },
+    },
+    closeCheck,
   };
 }
 
@@ -714,7 +735,7 @@ async function buildRunPayload(
   const sources = await materializeRunSources(orgId, line, weekKey, run.id, profile);
   logReconPhase("materialize_sources", sourcesStarted, { weekKey, line, sources: sources.length });
   const stepsStarted = Date.now();
-  const liveCounts = await computeLiveStepCounts(orgId, weekKey, line, sources, run.id);
+  const { counts: liveCounts, closeCheck } = await computeLiveStepCounts(orgId, weekKey, line, sources, run.id);
   logReconPhase("step_counts", stepsStarted, { weekKey, line });
   const persistStarted = Date.now();
   await persistLiveStepCounts(run.id, liveCounts);
@@ -770,6 +791,7 @@ async function buildRunPayload(
     },
     evaluation,
     attribution,
+    closeCheck,
     sources: sources.map((s) => {
       const def = RECON_SOURCES.find((d) => d.id === s.id);
       return {
@@ -1731,7 +1753,7 @@ export function registerReconRoutes(app: Hono) {
 
         const profile = await loadOrgReconProfile(orgId);
         const sources = await materializeRunSources(orgId, line, weekKey, run.id, profile);
-        const liveCounts = await computeLiveStepCounts(orgId, weekKey, line, sources, run.id);
+        const { counts: liveCounts } = await computeLiveStepCounts(orgId, weekKey, line, sources, run.id);
         await persistLiveStepCounts(run.id, liveCounts);
 
         const sourceSnaps: ReconSourceSnapshot[] = sources.map((s) => ({

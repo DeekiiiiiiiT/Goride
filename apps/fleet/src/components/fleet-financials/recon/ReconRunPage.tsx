@@ -578,7 +578,7 @@ export function ReconRunPage({
         ) : null}
 
         {activeStep === 'close' ? (
-          <ReconCloseStep run={run} onRefresh={refreshRun} />
+          <ReconCloseStep run={run} onRefresh={refreshRun} onGoToStep={setStep} />
         ) : null}
 
         {activeStep !== 'sources' &&

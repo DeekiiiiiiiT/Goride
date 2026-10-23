@@ -6,8 +6,12 @@ import React, { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { addDays, format, parseISO } from 'date-fns';
 import { Loader2, Lock, Unlock } from 'lucide-react';
-import { MONEY_EPS } from '@roam/finance-core';
-import { blockingCount, humanBlockerLabel } from '../../../utils/weekCloseBlockers';
+import { MONEY_EPS, RECON_STEP_LABELS, type CloseBlocker, type RunStepId } from '@roam/finance-core';
+import {
+  blockingCount,
+  humanBlockerLabel,
+  wizardStepForBlockerCode,
+} from '../../../utils/weekCloseBlockers';
 import type { ReconRunPayload } from '../../../services/reconApi';
 import {
   weekCloseApi,
@@ -63,12 +67,19 @@ function collectOwedMajor(r: {
   return Math.max(0, Math.abs(Number(r.settlementAmount) || 0));
 }
 
+type CloseItem = Pick<CloseBlocker, 'code' | 'severity' | 'message'> & {
+  driverId?: string | null;
+  delta?: number | null;
+};
+
 export function ReconCloseStep({
   run,
   onRefresh,
+  onGoToStep,
 }: {
   run: ReconRunPayload;
   onRefresh: () => void;
+  onGoToStep?: (step: RunStepId) => void;
 }) {
   const weekKey = run.run.weekKey;
   const serviceLine = (run.run.serviceLine as 'rideshare' | 'rush_delivery') || 'rideshare';
@@ -173,9 +184,49 @@ export function ReconCloseStep({
   const preview = previewQuery.data;
   const reconEvidence = preview?.reconEvidence;
   const weekAlreadyClosed = !!preview?.weekClosed;
-  const closeItems = [...(preview?.blockers || []), ...(preview?.weekBlockers || [])];
-  const totalBlockers = blockingCount(closeItems);
+  // Saved blockers are what the steps and the close workflow read, so Close shows those.
+  // Before the calculator has run for this week, fall back to the live preview.
+  const closeCheck = run.closeCheck;
+  const closeCheckFailed = closeCheck?.status === 'error';
+  const closeItems: CloseItem[] =
+    closeCheck?.status === 'ok'
+      ? closeCheck.blockers.map((b) => ({
+          code: b.code,
+          severity: b.severity === 'warn' ? 'warn' : 'block',
+          message: b.message || b.code,
+          driverId: b.driver_id,
+          delta: b.delta,
+        }))
+      : [...(preview?.blockers || []), ...(preview?.weekBlockers || [])];
+  const totalBlockers = closeCheckFailed ? 1 : blockingCount(closeItems as CloseBlocker[]);
+  const closeBlocks = closeItems.filter((b) => String(b.severity || 'block') !== 'warn');
   const closeWarnings = closeItems.filter((b) => String(b.severity || 'block') === 'warn');
+  const driverNames = new Map(closeConfirmDrivers.map((d) => [d.driverId, d.name]));
+  const renderItem = (b: CloseItem, i: number) => {
+    const step = wizardStepForBlockerCode(b.code);
+    const who = b.driverId ? driverNames.get(b.driverId) : null;
+    const amount = b.delta != null && Math.abs(b.delta) > MONEY_EPS ? MONEY(b.delta) : null;
+    return (
+      <li key={`${b.code}-${b.driverId ?? ''}-${i}`} className="flex flex-wrap items-center justify-between gap-2">
+        <span>
+          {humanBlockerLabel(b)}
+          {who ? ` — ${who}` : ''}
+          {amount ? ` (off by ${amount})` : ''}
+        </span>
+        {onGoToStep && step && step !== 'close' ? (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-7 bg-white text-xs"
+            onClick={() => onGoToStep(step)}
+          >
+            Go to {RECON_STEP_LABELS[step]}
+          </Button>
+        ) : null}
+      </li>
+    );
+  };
   const pendingRestatementCount = preview?.pendingRestatementCount ?? 0;
   const hasPendingRestatements = pendingRestatementCount > 0;
 
@@ -334,11 +385,22 @@ export function ReconCloseStep({
         </div>
       ) : null}
 
+      {closeCheckFailed ? (
+        <p className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
+          Could not load this week&apos;s checks, so Close stays locked. Refresh and try again.
+        </p>
+      ) : null}
+
+      {!weekAlreadyClosed && closeBlocks.length > 0 ? (
+        <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-900">
+          <p className="mb-2 font-medium">Fix before closing</p>
+          <ul className="space-y-1.5">{closeBlocks.map(renderItem)}</ul>
+        </div>
+      ) : null}
+
       {closeWarnings.length > 0 ? (
-        <ul className="space-y-1 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
-          {closeWarnings.map((b, i) => (
-            <li key={`${b.code}-${i}`}>{humanBlockerLabel(b)}</li>
-          ))}
+        <ul className="space-y-1.5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+          {closeWarnings.map(renderItem)}
         </ul>
       ) : null}
 
@@ -367,7 +429,7 @@ export function ReconCloseStep({
             </span>
           ) : totalBlockers > 0 ? (
             <span className="text-rose-700">
-              {totalBlockers} blocker{totalBlockers === 1 ? '' : 's'} — resolve earlier steps first.
+              {totalBlockers} blocker{totalBlockers === 1 ? '' : 's'} — see the list above.
             </span>
           ) : (
             <span className="text-emerald-700">

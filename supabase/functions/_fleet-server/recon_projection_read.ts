@@ -40,22 +40,30 @@ export async function loadWeekProjectionStatus(
   }
 }
 
+export type StoredWeekBlocker = {
+  code: string;
+  severity: string;
+  driver_id: string | null;
+  source_id: string | null;
+  message: string | null;
+  persisted: number | null;
+  expected: number | null;
+  delta: number | null;
+};
+
+/** Saved blockers for a week. Throws on a failed read: an error must never look like "nothing to fix". */
 export async function loadWeekBlockerRows(
   orgId: string,
   weekKey: string,
   serviceLine: string,
-): Promise<Array<{ code: string; severity: string; driver_id: string | null; message: string | null }>> {
-  try {
-    const { data, error } = await getServiceClient()
-      .schema("recon")
-      .from("week_blockers")
-      .select("code, severity, driver_id, message")
-      .eq("organization_id", orgId)
-      .eq("week_key", weekKey)
-      .eq("service_line", serviceLine);
-    if (error || !data) return [];
-    return data as Array<{ code: string; severity: string; driver_id: string | null; message: string | null }>;
-  } catch {
-    return [];
-  }
+): Promise<StoredWeekBlocker[]> {
+  const { data, error } = await getServiceClient()
+    .schema("recon")
+    .from("week_blockers")
+    .select("code, severity, driver_id, source_id, message, persisted, expected, delta")
+    .eq("organization_id", orgId)
+    .eq("week_key", weekKey)
+    .eq("service_line", serviceLine);
+  if (error) throw new Error(`week blockers read failed: ${error.message}`);
+  return (data ?? []) as StoredWeekBlocker[];
 }

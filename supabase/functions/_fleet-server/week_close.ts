@@ -67,6 +67,7 @@ import {
   type ClosePeriodRow,
   type CloseTollStatement,
 } from "../../../packages/finance-core/src/closeInvariants.ts";
+import { weekPnlTieBlockers } from "../../../packages/finance-core/src/weekPnlTie.ts";
 import {
   assembleCloseInvariantInput,
   earningsStatementForClose,
@@ -614,6 +615,89 @@ function earningsFromStatement(
   return earningsStatementForClose(s, acceptRestatementDrafts);
 }
 
+/**
+ * One owner for a driver's close blockers on a week (R19-01). The Close preview
+ * and the background worker both call this, so the step list, the Close panel
+ * and the close workflow cannot disagree about a driver.
+ *
+ * `statements` must be the latest version per kind (getLatestWeekStatements).
+ * `storedDrifts` = saved drift (page/worker reads); null = run the engine compare.
+ */
+export async function driverCloseBlockers(opts: {
+  orgId: string;
+  week: string;
+  driverId: string;
+  period: Record<string, unknown>;
+  frozen: boolean;
+  statements: WeekStatement[];
+  storedDrifts: StatementEngineDrift[] | null;
+  tollSummary: TollUsageIntegritySummary | undefined | null;
+}): Promise<{
+  blockers: CloseBlocker[];
+  acceptRestatementDrafts: boolean;
+  fuelStatement: CloseFuelStatement | null;
+  tollStatement: CloseTollStatement | null;
+}> {
+  const { orgId, week, driverId, period, frozen, statements } = opts;
+  const meta = (period.metadata as Record<string, unknown> | null) || null;
+  const acceptRestatementDrafts = frozen && hasPendingRestatementDrafts(statements);
+  const byKind = new Map<string, WeekStatement>(statements.map((s) => [s.kind, s]));
+
+  const fuelStatement = fuelFromStatement(byKind.get("fuel"), acceptRestatementDrafts);
+  const tollStatement = tollFromStatement(byKind.get("toll"), acceptRestatementDrafts);
+
+  let engineBlockers: CloseBlocker[] = [];
+  if (opts.storedDrifts) {
+    if (opts.storedDrifts.length) {
+      engineBlockers = engineDriftsToCloseBlockers(opts.storedDrifts, { driverId, week }) as CloseBlocker[];
+    }
+  } else if (!frozen || acceptRestatementDrafts) {
+    try {
+      const engineDrifts = await compareDriverWeekStatementsToEngines({
+        organizationId: orgId,
+        driverId,
+        weekKey: week,
+        statements,
+      });
+      if (engineDrifts.length) {
+        engineBlockers = engineDriftsToCloseBlockers(engineDrifts, {
+          driverId,
+          week,
+        }) as CloseBlocker[];
+      }
+    } catch (e) {
+      console.warn("[week_close] engine compare failed (non-fatal)", driverId, week, e);
+    }
+  }
+
+  const tollEventLedger =
+    !frozen || acceptRestatementDrafts
+      ? tollEventLedgerFromSummary(opts.tollSummary)
+      : null;
+
+  const blockers = checkCloseInvariants(assembleCloseInvariantInput({
+    period: period as ClosePeriodRow,
+    fuelStatement,
+    tollStatement,
+    earningsStatement: earningsFromStatement(byKind.get("earnings"), acceptRestatementDrafts),
+    skipSettlementDeskClear: acceptRestatementDrafts,
+    engineDrifts: engineBlockers,
+    tollEventLedger,
+  }));
+  // N-3: custody target must exist before freeze — surface on preview.
+  if (!frozen || acceptRestatementDrafts) {
+    try {
+      const preflight = await custodyCarryPreflight(driverId, week, period, meta);
+      if (!preflight.ok) {
+        blockers.push(custodyNoOpenTargetBlocker(driverId, week, preflight.held));
+      }
+    } catch (e) {
+      console.warn("[week_close] custody preflight failed (non-fatal preview)", driverId, e);
+    }
+  }
+  return { blockers, acceptRestatementDrafts, fuelStatement, tollStatement };
+}
+
 /** Structured errors for week-close HTTP (409 settlement risk, etc.). */
 export class WeekCloseError extends Error {
   readonly code: string;
@@ -628,7 +712,7 @@ export class WeekCloseError extends Error {
   }
 }
 
-function periodIsFrozen(period: Record<string, unknown>): boolean {
+export function periodIsFrozen(period: Record<string, unknown>): boolean {
   const meta = (period.metadata as Record<string, unknown> | null) || null;
   const fc = (meta?.financeCore as Record<string, unknown> | undefined) || {};
   // R-2: do not read period.signed_at — column is never written; freeze is metadata + status/closed_at.
@@ -1325,27 +1409,13 @@ export async function previewWeekClose(
   }
 
   // H-3 / N-3: week-level P&L — block on mismatch (non-tautological statements↔engines).
-  if (businessWeekPnl != null && Math.abs(settlementSumForWeek - businessWeekPnl) > CLOSE_INVARIANT_EPS) {
-    weekBlockers.push({
-      code: "SETTLEMENT_PNL_MISMATCH",
-      severity: "block",
-      week,
-      persisted: settlementSumForWeek,
-      expected: businessWeekPnl,
-      delta: settlementSumForWeek - businessWeekPnl,
-      message: "Week settlement composition (statements) does not tie to engine week P&L",
-    });
-  } else if (!skipEngineProbe && businessWeekPnl == null && settlementSumForWeek !== 0) {
-    weekBlockers.push({
-      code: "BUSINESS_WEEK_PNL_UNAVAILABLE",
-      severity: "warn",
-      week,
-      persisted: settlementSumForWeek,
-      expected: 0,
-      delta: settlementSumForWeek,
-      message: "Engine week P&L unavailable for settlement tie-out",
-    });
-  }
+  // Shared with the background worker so both write the same week blockers (R19-01).
+  weekBlockers.push(...weekPnlTieBlockers({
+    week,
+    settlementSum: settlementSumForWeek,
+    businessPnl: businessWeekPnl,
+    probed: !skipEngineProbe,
+  }));
 
   // Dedup restatement drafts (U-6) — latest version per driver/week/kind.
   const draftKeys = new Set<string>();
@@ -1440,68 +1510,22 @@ export async function previewWeekClose(
       driversSettled += 1;
     }
 
-    const acceptRestatementDrafts = frozen && pendingDrafts;
-    const byKind = new Map<string, WeekStatement>(statements.map((s) => [s.kind, s]));
-
-    const fuelStatement = fuelFromStatement(byKind.get("fuel"), acceptRestatementDrafts);
-    const tollStatement = tollFromStatement(byKind.get("toll"), acceptRestatementDrafts);
-
-    let engineBlockers: CloseBlocker[] = [];
-    // Page preview reads the last saved drift. It does not recompute engines.
-    if (skipEngineProbe) {
-      const stored = storedDriftsByDriver.get(driverId) ?? [];
-      if (stored.length) {
-        engineBlockers = engineDriftsToCloseBlockers(stored, { driverId, week }) as CloseBlocker[];
-      }
-    } else if (!frozen || acceptRestatementDrafts) {
-      try {
-        const engineDrifts = await compareDriverWeekStatementsToEngines({
-          organizationId: orgId,
-          driverId,
-          weekKey: week,
-          statements,
-        });
-        if (engineDrifts.length) {
-          engineBlockers = engineDriftsToCloseBlockers(engineDrifts, {
-            driverId,
-            week,
-          }) as CloseBlocker[];
-        }
-      } catch (e) {
-        console.warn("[week_close] engine compare failed (non-fatal)", driverId, week, e);
-      }
-    }
-
-    const tollEventLedger =
-      !frozen || acceptRestatementDrafts
-        ? tollEventLedgerFromSummary(orphansByDriver.get(driverId))
-        : null;
-
-    const driverBlockers = checkCloseInvariants(assembleCloseInvariantInput({
-      period: period as ClosePeriodRow,
+    const {
+      blockers: driverBlockers,
+      acceptRestatementDrafts,
       fuelStatement,
       tollStatement,
-      earningsStatement: earningsFromStatement(byKind.get("earnings"), acceptRestatementDrafts),
-      skipSettlementDeskClear: acceptRestatementDrafts,
-      engineDrifts: engineBlockers,
-      tollEventLedger,
-    }));
-    // N-3: custody target must exist before freeze — surface on preview.
-    if (!frozen || acceptRestatementDrafts) {
-      try {
-        const preflight = await custodyCarryPreflight(
-          driverId,
-          week,
-          period as Record<string, unknown>,
-          meta,
-        );
-        if (!preflight.ok) {
-          driverBlockers.push(custodyNoOpenTargetBlocker(driverId, week, preflight.held));
-        }
-      } catch (e) {
-        console.warn("[week_close] custody preflight failed (non-fatal preview)", driverId, e);
-      }
-    }
+    } = await driverCloseBlockers({
+      orgId,
+      week,
+      driverId,
+      period: period as Record<string, unknown>,
+      frozen,
+      statements,
+      // Page preview reads the last saved drift. It does not recompute engines.
+      storedDrifts: skipEngineProbe ? (storedDriftsByDriver.get(driverId) ?? []) : null,
+      tollSummary: orphansByDriver.get(driverId),
+    });
     // Already-frozen without restatement drafts are done — not blockers.
     // Frozen WITH drafts surface blockers for Sign restatements.
     if (!frozen || acceptRestatementDrafts) {

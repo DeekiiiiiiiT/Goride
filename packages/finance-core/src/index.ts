@@ -315,6 +315,7 @@ export {
   serverStepForBlockerCode,
   countBlockersForStep,
 } from './closeBlockerSteps.ts';
+export { weekPnlTieBlockers } from './weekPnlTie.ts';
 export type { CoverageVolume } from './coverageInputHash.ts';
 export type {
   SourceKind,
