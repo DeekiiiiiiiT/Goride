@@ -11,7 +11,7 @@ Open items only. Earlier revisions are in git history.
   - fleet-core and the Cloud Run calculator (`goride-recon`) are deployed.
   - roam-fleet is Ready on Vercel.
   - All 4 GitHub runs passed; fleet `tsc` is still 484.
-- **Migration file names now match prod** for `…011034` and `…011035`.
+- **Migration history matches prod**: all 4 recent recon migrations are recorded.
 
 ### What R19-01 really was
 
@@ -51,17 +51,6 @@ Nothing has recalculated since the deploy. In Week Reconciliation, on Oct 12–1
 - The workflow reaches `succeeded`.
 - `recon.week_runs` for Oct 12 / rideshare = `closed`.
 - Kenny's period has `closed_at`.
-
-## R20-02 · Two migrations not in prod history · Medium
-
-The SQL of both is live. Only the history record is missing. Run this in the SQL editor:
-
-```sql
-insert into supabase_migrations.schema_migrations(version, name) values
-  ('20261023120000','recon_week_blockers_detail'),
-  ('20261022200000','recon_enqueue_reason_and_revoke')
-on conflict (version) do nothing;
-```
 
 ## R20-03 · Close-time P&L tie vs the 120 s Cloud Run limit · Medium
 
