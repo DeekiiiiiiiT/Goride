@@ -23,6 +23,7 @@ import {
   HardDrive,
   BookOpen,
   Wrench,
+  Calculator,
   ChevronDown,
   ChevronRight,
 } from 'lucide-react';
@@ -39,6 +40,7 @@ import { FleetAdminServiceLinesModal } from './FleetAdminServiceLinesModal';
 import { StorageCenterPage } from './storage/StorageCenterPage';
 import { MaintenanceScheduleLedgerPage } from './ledger/MaintenanceScheduleLedgerPage';
 import { FleetAdminPartsDesk } from './FleetAdminPartsDesk';
+import { WeekCalculatorPage } from './WeekCalculatorPage';
 import { Button } from '../components/ui/button';
 import {
   DropdownMenu,
@@ -53,7 +55,7 @@ import { useAdminConfirm } from './contexts/AdminConfirmContext';
 const DRIVER_ADMIN_URL = 'https://roamdriver.co/admin';
 const RIDES_ADMIN_URL = 'https://roam-s.co/admin';
 
-type AdminPage = 'dashboard' | 'customers' | 'storage' | 'ledger-maintenance' | 'parts';
+type AdminPage = 'dashboard' | 'customers' | 'storage' | 'ledger-maintenance' | 'parts' | 'week-calculator';
 
 function FleetAdminLogin({ onSession }: { onSession: (s: Session) => void }) {
   const [email, setEmail] = useState('');
@@ -341,6 +343,13 @@ export function FleetProductAdminPortal() {
         >
           <Wrench className="h-4 w-4" /> Parts desk
         </button>
+        <button
+          type="button"
+          onClick={() => setPage('week-calculator')}
+          className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm ${page === 'week-calculator' ? 'bg-slate-800' : 'hover:bg-slate-900'}`}
+        >
+          <Calculator className="h-4 w-4" /> Week calculator
+        </button>
         <div className="mt-1">
           <button
             type="button"
@@ -433,6 +442,9 @@ export function FleetProductAdminPortal() {
         )}
         {page === 'parts' && (
           <FleetAdminPartsDesk token={token} />
+        )}
+        {page === 'week-calculator' && (
+          <WeekCalculatorPage accessToken={token} />
         )}
 
         {page === 'ledger-maintenance' && (

@@ -421,6 +421,58 @@ export async function fetchFleetMaintLedgerByOrg(
   return data as FleetMaintLedgerByOrg;
 }
 
+export type WeekCalculatorState =
+  | 'disconnected'
+  | 'stopped'
+  | 'working'
+  | 'idle'
+  | 'needs_a_look';
+
+export type WeekCalculatorNight = {
+  at: string;
+  kind: string;
+  mismatches?: number;
+};
+
+export type WeekCalculatorStatus = {
+  connected: boolean;
+  state: WeekCalculatorState;
+  message: string;
+  canFlip: boolean;
+  closeRunning: boolean;
+  queueWaiting: number;
+  nights: WeekCalculatorNight[];
+  holdLargerFleets: boolean;
+  holdNote: string;
+  costNote: string;
+  warning?: string | null;
+};
+
+export async function fetchWeekCalculator(
+  accessToken: string,
+): Promise<WeekCalculatorStatus> {
+  const res = await fetch(`${API_ENDPOINTS.admin}/fleet-admin/recon-worker`, {
+    headers: authHeaders(accessToken),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || data.message || `HTTP ${res.status}`);
+  return data as WeekCalculatorStatus;
+}
+
+export async function setWeekCalculator(
+  accessToken: string,
+  on: boolean,
+): Promise<WeekCalculatorStatus> {
+  const res = await fetch(`${API_ENDPOINTS.admin}/fleet-admin/recon-worker/${on ? 'on' : 'off'}`, {
+    method: 'POST',
+    headers: authHeaders(accessToken, { 'Content-Type': 'application/json' }),
+    body: '{}',
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || data.message || `HTTP ${res.status}`);
+  return data as WeekCalculatorStatus;
+}
+
 export async function fetchFleetMaintLedgerOrgDetail(
   accessToken: string,
   orgId: string,

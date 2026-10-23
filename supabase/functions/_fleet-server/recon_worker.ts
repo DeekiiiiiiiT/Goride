@@ -1,8 +1,8 @@
 /**
  * Host decision (Phase 0.4): one driver-week already costs 2–4 seconds of CPU
  * in production, past the 1 second edge budget. The loop that keeps the queue
- * under a minute runs in scripts/recon-worker.ts. Page routes do not import
- * this file. Default host: container.
+ * under a minute runs in scripts/recon-worker.ts, one wake at a time.
+ * Page routes do not import this file. Default host: container.
  */
 import { getServiceClient } from "./service_client.ts";
 import { periodEndForAnchor } from "../../../packages/finance-core/src/periodKey.ts";
@@ -47,6 +47,8 @@ type UnitMessage = {
   vehicleId?: string | null;
   /** Set by the nightly pass so a recompute can be compared to the last result. */
   reason?: string | null;
+  /** Set on a week-picture job. Not a driver. */
+  serviceLine?: string | null;
 };
 
 function sb() {
@@ -447,27 +449,117 @@ async function processOne(msg: UnitMessage): Promise<void> {
   return processDriver(msg);
 }
 
-export async function processReconQueueBatch(qty = 1): Promise<{ processed: number }> {
+type DeskTouch = {
+  organizationId: string;
+  weekKey: string;
+  serviceLine: "rideshare" | "rush_delivery";
+};
+
+function deskLines(message: UnitMessage): DeskTouch[] {
+  const organizationId = String(message.organizationId || "");
+  const weekKey = String(message.weekKey || "").slice(0, 10);
+  if (!organizationId || !weekKey) return [];
+  const lines: Array<"rideshare" | "rush_delivery"> = message.unitKind === "courier_week"
+    ? ["rush_delivery"]
+    : message.unitKind === "vehicle_week"
+    ? ["rideshare", "rush_delivery"]
+    : ["rideshare"];
+  return lines.map((serviceLine) => ({ organizationId, weekKey, serviceLine }));
+}
+
+async function publishDesk(orgId: string, line: "rideshare" | "rush_delivery", weekKey: string): Promise<void> {
+  const { publishWeekDesk } = await import("./recon_routes.ts");
+  await publishWeekDesk(orgId, line, weekKey, "recon-worker");
+}
+
+async function publishSettledDesks(touched: DeskTouch[]): Promise<void> {
+  const seen = new Set<string>();
+  for (const item of touched) {
+    const key = `${item.organizationId}:${item.weekKey}:${item.serviceLine}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const { count, error } = await recon()
+      .from("projection_state")
+      .select("id", { count: "exact", head: true })
+      .eq("organization_id", item.organizationId)
+      .eq("week_key", item.weekKey)
+      .eq("status", "pending");
+    if (error) {
+      console.warn("[recon] desk pending read failed", error.message);
+      continue;
+    }
+    if ((count ?? 0) > 0) continue;
+    try {
+      await publishDesk(item.organizationId, item.serviceLine, item.weekKey);
+    } catch (e) {
+      console.warn("[recon] desk publish failed", e instanceof Error ? e.message : e);
+    }
+  }
+}
+
+const publishedCloseDesks = new Set<string>();
+
+async function publishSucceededCloseDesks(): Promise<void> {
+  const since = new Date(Date.now() - 2 * 60 * 1000).toISOString();
+  const { data, error } = await recon()
+    .from("close_workflows")
+    .select("organization_id, week_key, service_line")
+    .in("state", ["succeeded", "blocked"])
+    .gte("updated_at", since)
+    .limit(5);
+  if (error || !data) return;
+  for (const row of data as Array<{ organization_id?: string; week_key?: string; service_line?: string }>) {
+    const orgId = String(row.organization_id || "");
+    const weekKey = String(row.week_key || "").slice(0, 10);
+    const line = row.service_line === "rush_delivery" ? "rush_delivery" : "rideshare";
+    const key = `${orgId}:${weekKey}:${line}`;
+    if (!orgId || !weekKey || publishedCloseDesks.has(key)) continue;
+    try {
+      await publishDesk(orgId, line, weekKey);
+      publishedCloseDesks.add(key);
+    } catch (e) {
+      console.warn("[recon] close desk publish failed", e instanceof Error ? e.message : e);
+    }
+  }
+}
+
+export async function processReconQueueBatch(qty = 1): Promise<{ processed: number; touched: DeskTouch[] }> {
   const { data, error } = await sb().rpc("recon_read_recompute_batch", { p_qty: qty, p_vt: 300 });
   if (error) {
     console.warn("[recon] queue read failed", error.message);
-    return { processed: 0 };
+    return { processed: 0, touched: [] };
   }
   let processed = 0;
+  const touched: DeskTouch[] = [];
   for (const row of (data ?? []) as Array<{ msg_id: number; message: UnitMessage }>) {
     const message = row.message || {};
+    if (message.unitKind === "week_desk") {
+      const line = message.serviceLine === "rush_delivery" ? "rush_delivery" : "rideshare";
+      const orgId = String(message.organizationId || "");
+      const weekKey = String(message.weekKey || "").slice(0, 10);
+      try {
+        if (orgId && weekKey) await publishDesk(orgId, line, weekKey);
+        await sb().rpc("recon_archive_recompute", { p_msg_id: row.msg_id });
+        processed += 1;
+      } catch (e) {
+        console.warn("[recon] week picture failed", e instanceof Error ? e.message : e);
+      }
+      continue;
+    }
     try {
       await processOne(message);
       await sb().rpc("recon_archive_recompute", { p_msg_id: row.msg_id });
       processed += 1;
+      touched.push(...deskLines(message));
     } catch (e) {
       const status = await bumpFailure(message, e instanceof Error ? e.message : "update failed");
       if (status === "failed") {
         await sb().rpc("recon_archive_recompute", { p_msg_id: row.msg_id });
+        touched.push(...deskLines(message));
       }
     }
   }
-  return { processed };
+  return { processed, touched };
 }
 
 export async function runNightlyIntegrity(): Promise<{
@@ -565,6 +657,23 @@ export async function runNightlyIntegrity(): Promise<{
   return { enqueued, alerts, startedAt, weekKeys: keys };
 }
 
+/** The nightly check that has started and not finished, if one is open. Survives a restart. */
+export async function loadOpenNightly(): Promise<{ startedAt: string; weekKeys: string[] } | null> {
+  const { data, error } = await recon()
+    .from("worker_alerts")
+    .select("kind, detail")
+    .in("kind", ["nightly_started", "shadow_ok", "shadow_mismatch"])
+    .order("created_at", { ascending: false })
+    .limit(1);
+  if (error) throw new Error(error.message);
+  const row = (data ?? [])[0] as { kind?: string; detail?: { startedAt?: string; weekKeys?: string[] } } | undefined;
+  if (!row || row.kind !== "nightly_started") return null;
+  return {
+    startedAt: String(row.detail?.startedAt || ""),
+    weekKeys: Array.isArray(row.detail?.weekKeys) ? row.detail.weekKeys.map((key) => String(key)) : [],
+  };
+}
+
 /** Call once the nightly queue has drained. Writes shadow_ok or shadow_mismatch. */
 export async function finishNightlyIntegrity(
   startedAt: string,
@@ -604,5 +713,7 @@ export async function finishNightlyIntegrity(
 export async function runReconWorkerTick(qty = 1): Promise<{ processed: number; workflows: number }> {
   const processed = await processReconQueueBatch(qty);
   const workflows = await advanceOpenCloseWorkflows(1);
+  await publishSettledDesks(processed.touched);
+  await publishSucceededCloseDesks();
   return { processed: processed.processed, workflows };
 }

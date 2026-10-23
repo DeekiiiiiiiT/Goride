@@ -102,6 +102,7 @@ export type ReconAttributionSummary = {
 };
 
 export type ReconRunPayload = {
+  deskReady?: boolean;
   run: {
     id: string;
     organizationId: string;

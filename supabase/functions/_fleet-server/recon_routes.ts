@@ -55,6 +55,7 @@ import {
 import { countBlockersForStep } from "../../../packages/finance-core/src/closeBlockerSteps.ts";
 import { sourceVolumeMetrics } from "./recon_volume.ts";
 import { isReconWeekFrozen } from "./recon_week_writable.ts";
+import { logReconPhase } from "./recon_phase_log.ts";
 
 async function refuseFrozenReconWeek(
   c: Context,
@@ -82,6 +83,9 @@ type WeekRunRow = {
   closed_at: string | null;
   closed_by: string | null;
   close_run_id: string | null;
+  desk_snapshot?: unknown;
+  desk_computed_at?: string | null;
+  desk_requested_at?: string | null;
 };
 
 function reconDb() {
@@ -430,7 +434,9 @@ async function materializeRunSources(
 
   for (const def of defs) {
     const requirement = reqById[def.id] ?? def.requiredWhen(profile, weekKey);
+    const coverageStarted = Date.now();
     const coverage = await fetchCoverageMap(orgId, line, def.id, weekKey);
+    logReconPhase(`coverage:${def.id}`, coverageStarted, { weekKey, line });
     let status = computeSourceStatusFromCoverage(coverage, requirement, {
       waitingExternal: def.id === "fuel_card_roam" &&
         requirement === "required" &&
@@ -438,7 +444,9 @@ async function materializeRunSources(
       // Keep approver waive across rematerialize (coverage alone cannot express waived).
       waived: priorStatus.get(def.id) === "waived",
     });
+    const volumeStarted = Date.now();
     const volume = await sourceVolumeMetrics(orgId, def.id, weekKey);
+    logReconPhase(`volume:${def.id}`, volumeStarted, { weekKey, line });
     const inputHash = coverageInputHash(coverage, volume);
     out.push({
       id: def.id,
@@ -696,12 +704,22 @@ async function buildRunPayload(
   weekKey: string,
   openedBy: string,
 ) {
+  const profileStarted = Date.now();
   const profile = await loadOrgReconProfile(orgId);
+  logReconPhase("profile", profileStarted, { weekKey, line });
+  const ensureStarted = Date.now();
   const run = await ensureWeekRun(orgId, line, weekKey, openedBy);
+  logReconPhase("ensure_run", ensureStarted, { weekKey, line });
+  const sourcesStarted = Date.now();
   const sources = await materializeRunSources(orgId, line, weekKey, run.id, profile);
+  logReconPhase("materialize_sources", sourcesStarted, { weekKey, line, sources: sources.length });
+  const stepsStarted = Date.now();
   const liveCounts = await computeLiveStepCounts(orgId, weekKey, line, sources, run.id);
+  logReconPhase("step_counts", stepsStarted, { weekKey, line });
+  const persistStarted = Date.now();
   await persistLiveStepCounts(run.id, liveCounts);
   const stepRows = await loadRunSteps(run.id);
+  logReconPhase("persist_steps", persistStarted, { weekKey, line });
 
   const sourceSnaps: ReconSourceSnapshot[] = sources.map((s) => ({
     id: s.id,
@@ -731,9 +749,12 @@ async function buildRunPayload(
     }));
 
   const evaluation = evaluateRun({ sources: sourceSnaps, stepCounts, completedSteps });
+  const attributionStarted = Date.now();
   const attribution = await loadUnattributedForWeek(orgId, weekKey);
+  logReconPhase("attribution", attributionStarted, { weekKey, line, rows: attribution.rowCount });
 
-  return {
+  const payload = {
+    deskReady: true,
     run: {
       id: run.id,
       organizationId: run.organization_id,
@@ -770,10 +791,95 @@ async function buildRunPayload(
         completedAt: r.completed_at,
         completedBy: r.completed_by,
         inputsHashAtComplete: r.inputs_hash_at_complete,
-        gateStatus: evaluation.steps.find((e) => e.id === r.step_id)?.status ?? "locked",
-      };
-    }),
+      gateStatus: evaluation.steps.find((e) => e.id === r.step_id)?.status ?? "locked",
+    };
+  }),
   };
+  const saveStarted = Date.now();
+  const { error: saveError } = await reconDb().from("week_runs").update({
+    desk_snapshot: payload,
+    desk_computed_at: new Date().toISOString(),
+  }).eq("id", run.id);
+  logReconPhase("desk_save", saveStarted, { weekKey, line, ok: !saveError });
+  if (saveError) console.warn("[recon] desk snapshot write failed", saveError.message);
+  return payload;
+}
+
+export async function publishWeekDesk(
+  orgId: string,
+  line: ReconLine,
+  weekKey: string,
+  openedBy: string,
+) {
+  return buildRunPayload(orgId, line, weekKey, openedBy);
+}
+
+function deskRunFields(run: WeekRunRow) {
+  return {
+    id: run.id,
+    organizationId: run.organization_id,
+    serviceLine: run.service_line,
+    weekKey: String(run.week_key).slice(0, 10),
+    state: run.state,
+    version: run.version,
+    openedBy: run.opened_by,
+    openedAt: run.opened_at,
+    closedAt: run.closed_at,
+    closedBy: run.closed_by,
+    closeRunId: run.close_run_id,
+  };
+}
+
+function isDeskSnapshot(value: unknown): value is { sources: unknown[]; steps: unknown[]; evaluation: unknown; run: Record<string, unknown> } {
+  if (!value || typeof value !== "object") return false;
+  const row = value as { sources?: unknown; steps?: unknown; evaluation?: unknown; run?: unknown };
+  return Array.isArray(row.sources) && Array.isArray(row.steps) && row.evaluation != null && row.run != null && typeof row.run === "object";
+}
+
+function withLiveRun(
+  snapshot: { run: Record<string, unknown> },
+  run: WeekRunRow,
+) {
+  return {
+    ...snapshot,
+    deskReady: true,
+    run: { ...snapshot.run, ...deskRunFields(run) },
+  };
+}
+
+function preparingPayload(run: WeekRunRow) {
+  return {
+    deskReady: false,
+    run: deskRunFields(run),
+    evaluation: {
+      stage: "collecting",
+      steps: [],
+      nextAction: { kind: "wait", targetId: "sources", label: "Preparing this week" },
+    },
+    attribution: { rowCount: 0, amountMajor: 0, rows: [] },
+    sources: [],
+    steps: [],
+  };
+}
+
+async function requestWeekDesk(run: WeekRunRow): Promise<void> {
+  if (!("desk_requested_at" in run)) return;
+  const requestedAt = run.desk_requested_at ? Date.parse(run.desk_requested_at) : NaN;
+  if (Number.isFinite(requestedAt) && Date.now() - requestedAt < 120_000) return;
+  const { error: stampError } = await reconDb()
+    .from("week_runs")
+    .update({ desk_requested_at: new Date().toISOString() })
+    .eq("id", run.id);
+  if (stampError) {
+    console.warn("[recon] desk request stamp failed", stampError.message);
+    return;
+  }
+  const { error } = await getServiceClient().rpc("recon_enqueue_week_desk", {
+    p_org: run.organization_id,
+    p_line: run.service_line,
+    p_week: String(run.week_key).slice(0, 10),
+  });
+  if (error) console.warn("[recon] desk enqueue failed", error.message);
 }
 
 async function bumpRunVersion(
@@ -1248,8 +1354,21 @@ export function registerReconRoutes(app: Hono) {
         if (!WEEK_RE.test(weekKey)) {
           return c.json({ error: "INVALID_WEEK", message: "weekKey must be YYYY-MM-DD (Monday)" }, 400);
         }
-        const payload = await buildRunPayload(orgId, line, weekKey, actorFromContext(c));
-        return c.json({ success: true, ...payload });
+        const started = Date.now();
+        const actor = actorFromContext(c);
+        const run = await ensureWeekRun(orgId, line, weekKey, actor);
+        if (!("desk_snapshot" in run)) {
+          logReconPhase("desk_read", started, { hit: false, fallback: "live", weekKey, line });
+          const payload = await buildRunPayload(orgId, line, weekKey, actor);
+          return c.json({ success: true, ...payload });
+        }
+        if (isDeskSnapshot(run.desk_snapshot)) {
+          logReconPhase("desk_read", started, { hit: true, weekKey, line });
+          return c.json({ success: true, ...withLiveRun(run.desk_snapshot, run) });
+        }
+        await requestWeekDesk(run);
+        logReconPhase("desk_read", started, { hit: false, weekKey, line });
+        return c.json({ success: true, ...preparingPayload(run) });
       } catch (e) {
         return safeErrorResponse(c, e, "recon-run-get");
       }
@@ -1679,6 +1798,7 @@ export function registerReconRoutes(app: Hono) {
         }, { onConflict: "run_id,step_id" });
 
         await appendRunEvent(run.id, actor, "step_complete", { stepId, inputsHash: currentHash });
+        await buildRunPayload(orgId, line, weekKey, actor);
         return c.json({ success: true, ok: true, version: bump.version });
       } catch (e) {
         return safeErrorResponse(c, e, "recon-step-complete");

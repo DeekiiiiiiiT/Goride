@@ -217,6 +217,7 @@ import {
 } from "./evidence_routes.ts";
 import { registerFleetAdminStorageRoutes } from "./fleet_admin_storage_routes.ts";
 import { registerFleetAdminMaintenanceLedgerRoutes } from "./fleet_admin_maintenance_ledger_routes.ts";
+import { registerReconWorkerSwitchRoutes } from "./recon_worker_switch_routes.ts";
 import { registerEnterpriseAdminRoutes } from "./enterprise_admin_routes.ts";
 import { registerEnterpriseIntakeAdminRoutes } from "./enterprise_intake_admin_routes.ts";
 import { registerWorkforceInviteRoutes } from "./workforce_invite_routes.ts";
@@ -493,6 +494,7 @@ export function registerResidualMonolithRoutes(app: Hono) {
   registerEvidenceRoutes(app, supabase, kv, requireAuth, requirePermission);
   registerFleetAdminStorageRoutes(app, supabase, kv);
   registerFleetAdminMaintenanceLedgerRoutes(app, supabase, kv);
+  registerReconWorkerSwitchRoutes(app, supabase);
   registerPendingVehicleCatalogRoutes(app, supabase);
   registerPartSourcingRoutes(app, supabase);
   registerUberFleetRoutes(app);

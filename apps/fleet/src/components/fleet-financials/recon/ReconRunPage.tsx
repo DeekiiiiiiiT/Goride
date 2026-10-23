@@ -154,6 +154,7 @@ export function ReconRunPage({
     queryFn: () => fetchRun(line, weekKey),
     staleTime: 0,
     retry: false,
+    refetchInterval: (query) => (query.state.data?.deskReady === false ? 3000 : false),
   });
 
   const statusQuery = useQuery({
@@ -165,6 +166,20 @@ export function ReconRunPage({
       return false;
     },
   });
+
+  const pendingDrivers = statusQuery.data?.pendingDrivers;
+  const prevPending = useRef<number | null>(null);
+  useEffect(() => {
+    if (pendingDrivers == null) return;
+    const prev = prevPending.current;
+    prevPending.current = pendingDrivers;
+    if (prev == null || prev === 0 || pendingDrivers !== 0) return;
+    void queryClient.refetchQueries({ queryKey: runQueryKey });
+    const timer = window.setTimeout(() => {
+      void queryClient.refetchQueries({ queryKey: runQueryKey });
+    }, 6000);
+    return () => window.clearTimeout(timer);
+  }, [pendingDrivers, queryClient, runQueryKey]);
 
   const gateByStep = useMemo(() => {
     const map = new Map<string, string>();
@@ -394,6 +409,15 @@ export function ReconRunPage({
       <div className="flex h-48 items-center justify-center text-sm text-slate-500">
         <Loader2 className="mr-2 h-5 w-5 animate-spin" />
         Loading week run…
+      </div>
+    );
+  }
+
+  if (runQuery.data?.deskReady === false) {
+    return (
+      <div className="flex h-48 items-center justify-center text-sm text-slate-500">
+        <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+        Preparing this week. The calculator will fill this in shortly.
       </div>
     );
   }

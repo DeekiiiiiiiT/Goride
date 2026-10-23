@@ -7,5 +7,39 @@ steps:
       - -t
       - gcr.io/$PROJECT_ID/recon-worker
       - .
+  # Asleep until the database wakes it. Minimum 0, one job at a time, CPU only while that job runs.
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - recon-worker
+      - --project
+      - $PROJECT_ID
+      - --region
+      - us-east1
+      - --image
+      - gcr.io/$PROJECT_ID/recon-worker
+      - --platform
+      - managed
+      - --quiet
+      - --min-instances
+      - "0"
+      - --max-instances
+      - "1"
+      - --concurrency
+      - "1"
+      - --cpu
+      - "1"
+      - --memory
+      - 1Gi
+      - --cpu-throttling
+      - --timeout
+      - "120"
+      - --port
+      - "8080"
+      - --no-allow-unauthenticated
+      - --set-secrets
+      - SUPABASE_URL=SUPABASE_URL:latest,SUPABASE_SERVICE_ROLE_KEY=SUPABASE_SERVICE_ROLE_KEY:latest
 images:
   - gcr.io/$PROJECT_ID/recon-worker

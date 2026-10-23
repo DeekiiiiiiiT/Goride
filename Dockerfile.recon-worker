@@ -1,4 +1,5 @@
-# Always-on week calculator. One driver-week is 2–4 seconds of CPU, past the edge budget.
+# Week calculator. One driver-week is 2–4 seconds of CPU, past the edge budget.
+# The container works only while a wake request is open, then Cloud Run can stop it.
 FROM denoland/deno:2.1.4
 WORKDIR /app
 COPY deno.json ./
