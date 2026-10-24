@@ -4,8 +4,7 @@
  */
 import type { Hono } from "npm:hono@4.3.11";
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
-import type { RbacUser } from "./rbac_middleware.ts";
-import { hasPermission, type Permission } from "./rbac_middleware.ts";
+import { hasPermission, effectiveRole, type Permission, type RbacUser } from "./rbac_middleware.ts";
 import { checkAcceptRateLimit } from "./workforce_invite_rate_limit.ts";
 import type { LinkCourierResult, LinkDriverResult } from "./workforce_link.ts";
 
@@ -66,13 +65,12 @@ function rbacFromContext(c: { get: (k: string) => unknown }): RbacUser | null {
   return user?.userId ? user : null;
 }
 
-function canManageFleetTag(user: RbacUser): boolean {
-  // Owners have users.*; managers manage workforce via drivers.create.
-  return hasPermission(user.resolvedRole, "users.invite" as Permission) ||
-    hasPermission(user.resolvedRole, "users.edit_role" as Permission) ||
-    hasPermission(user.resolvedRole, "drivers.create" as Permission) ||
-    user.resolvedRole === "fleet_owner" ||
-    user.resolvedRole === "fleet_manager";
+function canSetFleetTag(user: RbacUser): boolean {
+  return hasPermission(effectiveRole(user), "fleet_tag.set" as Permission);
+}
+
+function canApproveWorkforce(user: RbacUser): boolean {
+  return hasPermission(effectiveRole(user), "workforce.approve" as Permission);
 }
 
 async function ensureOrgFleetTagInternalId(
@@ -205,8 +203,8 @@ export function registerFleetTagRoutes(
     try {
       const rbacUser = rbacFromContext(c);
       if (!rbacUser) return c.json({ error: "Unauthorized" }, 401);
-      if (!canManageFleetTag(rbacUser)) {
-        return c.json({ error: "Only fleet owners and managers can set the Fleet Tag" }, 403);
+      if (!canSetFleetTag(rbacUser)) {
+        return c.json({ error: "Only the fleet owner can set the Fleet Tag" }, 403);
       }
       const orgId = deps.getOrgId(c);
       if (!orgId) return c.json({ error: "Organization required" }, 403);
@@ -418,6 +416,10 @@ export function registerFleetTagRoutes(
     try {
       const orgId = deps.getOrgId(c);
       if (!orgId) return c.json({ error: "Organization required" }, 403);
+      const rbacUser = rbacFromContext(c);
+      if (!rbacUser || !canApproveWorkforce(rbacUser)) {
+        return c.json({ error: "Not allowed to view join requests" }, 403);
+      }
 
       const statusFilter = c.req.query("status"); // optional
       let q = deps.supabase
@@ -450,7 +452,32 @@ export function registerFleetTagRoutes(
         } catch {
           /* ignore enrichment failures */
         }
-        return { ...row, requester_name, requester_email };
+        let verification: "approved" | "pending" = "pending";
+        let holdsVehicle = false;
+        try {
+          if (String(row.service_line) === "rush_delivery") {
+            const { data: courier } = await deps.supabase
+              .schema("delivery")
+              .from("courier_profiles")
+              .select("onboarding_complete")
+              .eq("user_id", uid)
+              .maybeSingle();
+            if (courier?.onboarding_complete) verification = "approved";
+          } else {
+            const { data: profile } = await deps.supabase
+              .from("driver_profiles")
+              .select("onboarding_complete")
+              .eq("user_id", uid)
+              .maybeSingle();
+            if (profile?.onboarding_complete) verification = "approved";
+          }
+          const { resolveDriverVehicleAssignment } = await import("./driver_vehicle_assignment.ts");
+          const vehicle = await resolveDriverVehicleAssignment(uid, { organizationId: orgId });
+          holdsVehicle = !!vehicle.vehicleId;
+        } catch {
+          /* badge stays pending */
+        }
+        return { ...row, requester_name, requester_email, verification, holdsVehicle };
       }));
 
       return c.json({ requests: enriched });
@@ -468,44 +495,14 @@ export function registerFleetTagRoutes(
       try {
         const rbacUser = rbacFromContext(c);
         if (!rbacUser) return c.json({ error: "Unauthorized" }, 401);
-        if (!canManageFleetTag(rbacUser)) {
+        if (!canApproveWorkforce(rbacUser)) {
           return c.json({ error: "Not allowed to approve join requests" }, 403);
         }
         const orgId = deps.getOrgId(c);
         if (!orgId) return c.json({ error: "Organization required" }, 403);
 
         const id = c.req.param("id");
-        const { data: reqRow, error: fetchErr } = await deps.supabase
-          .from("fleet_join_requests")
-          .select("*")
-          .eq("id", id)
-          .eq("organization_id", orgId)
-          .maybeSingle();
-        if (fetchErr) throw fetchErr;
-        if (!reqRow) return c.json({ error: "Join request not found" }, 404);
-        if (reqRow.status !== "pending") {
-          return c.json({ error: `Request is already ${reqRow.status}` }, 409);
-        }
-
-        const userId = reqRow.requester_user_id as string;
-        const serviceLine = String(reqRow.service_line);
-        const fleetId = orgId;
-
-        if (serviceLine === "rush_delivery") {
-          const linked = await deps.linkCourierToFleet(userId, fleetId);
-          if (!linked.success) return c.json({ error: linked.error }, linked.status);
-        } else {
-          try {
-            await deps.linkDriverToFleet(userId, fleetId);
-          } catch (e: unknown) {
-            const err = e as Error & { status?: number };
-            if (err.status === 409) return c.json({ error: err.message }, 409);
-            if (err.message === "Fleet not found") return c.json({ error: err.message }, 404);
-            throw e;
-          }
-        }
-
-        const { data: updated, error: upErr } = await deps.supabase
+        const { data: claimed, error: claimErr } = await deps.supabase
           .from("fleet_join_requests")
           .update({
             status: "approved",
@@ -513,13 +510,50 @@ export function registerFleetTagRoutes(
             resolved_by: rbacUser.userId,
           })
           .eq("id", id)
+          .eq("organization_id", orgId)
           .eq("status", "pending")
           .select("*")
           .maybeSingle();
-        if (upErr) throw upErr;
-        if (!updated) return c.json({ error: "Request was already resolved" }, 409);
+        if (claimErr) throw claimErr;
+        if (!claimed) return c.json({ error: "Request was already resolved" }, 409);
 
-        return c.json({ success: true, request: updated, fleetId, serviceLine });
+        const userId = claimed.requester_user_id as string;
+        const serviceLine = String(claimed.service_line);
+        const fleetId = orgId;
+
+        const rollback = async () => {
+          await deps.supabase
+            .from("fleet_join_requests")
+            .update({ status: "pending", resolved_at: null, resolved_by: null })
+            .eq("id", id)
+            .eq("status", "approved");
+        };
+
+        if (serviceLine === "rush_delivery") {
+          const linked = await deps.linkCourierToFleet(userId, fleetId, {
+            joinedVia: "fleet_tag",
+            joinRequestId: id,
+          });
+          if (!linked.success) {
+            await rollback();
+            return c.json({ error: linked.error }, linked.status);
+          }
+        } else {
+          try {
+            await deps.linkDriverToFleet(userId, fleetId, {
+              joinedVia: "fleet_tag",
+              joinRequestId: id,
+            });
+          } catch (e: unknown) {
+            await rollback();
+            const err = e as Error & { status?: number };
+            if (err.status === 409) return c.json({ error: err.message }, 409);
+            if (err.message === "Fleet not found") return c.json({ error: err.message }, 404);
+            throw e;
+          }
+        }
+
+        return c.json({ success: true, request: claimed, fleetId, serviceLine });
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : String(e);
         return c.json({ error: msg }, 500);
@@ -535,7 +569,7 @@ export function registerFleetTagRoutes(
       try {
         const rbacUser = rbacFromContext(c);
         if (!rbacUser) return c.json({ error: "Unauthorized" }, 401);
-        if (!canManageFleetTag(rbacUser)) {
+        if (!canApproveWorkforce(rbacUser)) {
           return c.json({ error: "Not allowed to deny join requests" }, 403);
         }
         const orgId = deps.getOrgId(c);

@@ -33,6 +33,8 @@ As a result, the steps read **0 blockers** while the Close box (live preview) co
   - It lists each blocker with its amount and a **Go to step** button.
   - If the read fails, Close stays locked.
   - If the calculator has not run for the week yet, it falls back to the old preview.
+  - "No activity" confirmations (`SOURCE_ATTESTED_NONE`) are no longer shown as yellow warnings. They appear once in the Evidence box ("You confirmed no activity: …") and stay in the close record. Source warnings are prefixed with the source name. Change is local only: not yet committed or deployed.
+  - The Close confirm no longer runs `weekCloseApi.sync` first and asks to confirm again ("Books refreshed — review the numbers"). That sync only started a refresh workflow, and the close workflow already waits for pending units and checks input hashes before freezing. The dialog now shows a check mark ("Everything is complete") and one line on what closing freezes. The money bullets and driver list are removed. Local only.
 
 ---
 

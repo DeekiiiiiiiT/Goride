@@ -94,3 +94,40 @@ export async function declineFleetInviteById(
   if (!res.ok) return { ok: false, error: data.error || 'Could not decline invite' };
   return { ok: true };
 }
+
+export async function leaveDriverFleet(confirmName?: string): Promise<
+  { ok: true } | { ok: false; error: string; blockers?: Array<{ label: string; amount?: number }>; displayName?: string }
+> {
+  const headers = await authHeaders();
+  if (!headers) return { ok: false, error: 'Not signed in' };
+  const res = await fetch(`${BASE}/driver/workforce/leave`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ confirmName: confirmName || '' }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    return {
+      ok: false,
+      error: data.error || 'Could not leave fleet',
+      blockers: data.blockers,
+      displayName: data.displayName,
+    };
+  }
+  return { ok: true };
+}
+
+export async function previewLeaveFleet(): Promise<
+  { ok: true; displayName: string; blockers: Array<{ label: string; amount?: number }> } | { ok: false; error: string }
+> {
+  const headers = await authHeaders();
+  if (!headers) return { ok: false, error: 'Not signed in' };
+  const check = await fetch(`${BASE}/driver/workforce/offboarding-check`, { headers });
+  const report = await check.json().catch(() => null);
+  if (!check.ok || !report) return { ok: false, error: "We couldn't confirm what's still open." };
+  return {
+    ok: true,
+    displayName: String(report.displayName || ''),
+    blockers: Array.isArray(report.blockers) ? report.blockers : [],
+  };
+}

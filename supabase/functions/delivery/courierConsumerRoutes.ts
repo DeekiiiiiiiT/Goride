@@ -71,6 +71,9 @@ async function requireActiveCourier(
   if (profile.status !== "active") {
     return { ok: false, status: 403, error: `Courier status is ${profile.status}` };
   }
+  const { workforcePauseMessage } = await import("../_shared/workforcePause.ts");
+  const workforcePaused = await workforcePauseMessage(userId, "rush_delivery");
+  if (workforcePaused) return { ok: false, status: 403, error: workforcePaused, code: "workforce_paused" };
   if (opts.skipCashGate !== true) {
     const { assertCourierNotPaused } = await import("./remittance/pauseGate.ts");
     const pause = await assertCourierNotPaused(serviceSb, userId);
@@ -423,6 +426,9 @@ async function dispatchOffersForOrder(
     for (const p of activeProfiles ?? []) {
       activeCourierIds.add(String(p.user_id));
     }
+    const { pausedWorkforceUserIds } = await import("../_shared/workforcePause.ts");
+    const paused = await pausedWorkforceUserIds([...activeCourierIds], "rush_delivery");
+    for (const id of paused) activeCourierIds.delete(id);
   }
 
   type Ranked = { driver_id: string; km: number };

@@ -106,7 +106,39 @@ export function registerCourierWorkforceRoutes(
       const rbacUser = rbacFromContext(c);
       if (!rbacUser) return c.json({ error: "Unauthorized" }, 401);
 
+      const { data: courierRow } = await deps.supabase
+        .schema("delivery")
+        .from("courier_profiles")
+        .select("fleet_id")
+        .eq("user_id", rbacUser.userId)
+        .maybeSingle();
+      const fleetId = courierRow?.fleet_id ? String(courierRow.fleet_id) : "";
+      const body = await c.req.json().catch(() => ({}));
+      const report = await import("./workforce_offboarding.ts").then((m) =>
+        m.offboardingCheck(deps.supabase, rbacUser.userId, fleetId)
+      );
+      const checked = await report;
+      const { namesMatch } = await import("./team_staff_policy.ts");
+      if (!checked.clear && !namesMatch(String(body.confirmName || ""), checked.displayName)) {
+        return c.json({
+          error: "Type your name to leave while something is still open.",
+          blockers: checked.blockers,
+          displayName: checked.displayName,
+        }, 409);
+      }
       const result = await deps.unlinkCourierFromFleet(rbacUser.userId);
+      if (result.success && fleetId) {
+        const { clearDetachedFleetOrg, setMembershipStatus } = await import("./workforce_membership.ts");
+        await setMembershipStatus(deps.supabase, {
+          organizationId: fleetId,
+          userId: rbacUser.userId,
+          serviceLine: "rush_delivery",
+          status: "ended",
+          endedBy: rbacUser.userId,
+          endedReason: "worker_left",
+        }).catch(() => undefined);
+        await clearDetachedFleetOrg(deps.supabase, rbacUser.userId, fleetId);
+      }
       if (!result.success) return c.json({ error: result.error }, result.status);
       return c.json({ success: true });
     } catch (e: unknown) {

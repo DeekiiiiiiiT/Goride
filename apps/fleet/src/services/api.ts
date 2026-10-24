@@ -822,6 +822,8 @@ export const api = {
     return response.json() as Promise<{
       totalFills: number;
       totalSpend: number;
+      cashSpend?: number;
+      gasCardSpend?: number;
       totalVolume: number;
       totalKm: number;
       totalCycles: number;
@@ -1943,8 +1945,8 @@ export const api = {
         created_at: string;
         resolved_at: string | null;
         resolved_by: string | null;
-        requester_name?: string | null;
-        requester_email?: string | null;
+        verification?: 'approved' | 'pending';
+        holdsVehicle?: boolean;
       }>;
     }>;
   },
@@ -3127,6 +3129,219 @@ export const api = {
     if (!response.ok) {
       const err = await response.json().catch(() => ({}));
       throw new Error(err.error || "Failed to update role");
+    }
+    return response.json();
+  },
+
+  async getTeamDirectory() {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.admin}/team/staff`, {
+      headers: await getHeaders(null),
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error || 'Failed to load team');
+    }
+    return response.json() as Promise<{
+      seats: Array<Record<string, unknown>>;
+      invites: Array<Record<string, unknown>>;
+    }>;
+  },
+
+  async getWorkforceMembers() {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/workforce/members`, {
+      headers: await getHeaders(null),
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error || 'Failed to load workforce');
+    }
+    return response.json() as Promise<{ members: Array<Record<string, unknown>> }>;
+  },
+
+  async getTeamAudit() {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.admin}/team/audit`, {
+      headers: await getHeaders(null),
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error || 'Failed to load activity');
+    }
+    return response.json() as Promise<{ events: Array<Record<string, unknown>> }>;
+  },
+
+  async sendStaffResetEmail(userId: string) {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.admin}/team/staff/${userId}/password-reset-email`, {
+      method: 'POST',
+      headers: await getHeaders(),
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error || 'Failed to send reset email');
+    }
+    return response.json();
+  },
+
+  async setStaffStatus(userId: string, status: 'active' | 'suspended') {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.admin}/team/staff/${userId}`, {
+      method: 'PATCH',
+      headers: await getHeaders(),
+      body: JSON.stringify({ status }),
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error || 'Failed to update seat');
+    }
+    return response.json();
+  },
+
+  async revokeStaffInvite(inviteId: string) {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.admin}/team/staff/invites/${inviteId}`, {
+      method: 'DELETE',
+      headers: await getHeaders(null),
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error || 'Failed to revoke invite');
+    }
+    return response.json();
+  },
+
+  async resendStaffInvite(inviteId: string) {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.admin}/team/staff/invites/${inviteId}/resend`, {
+      method: 'POST',
+      headers: await getHeaders(),
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error || 'Failed to resend invite');
+    }
+    return response.json();
+  },
+
+  async myStaffInvites() {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.admin}/team/staff/invites/mine`, {
+      headers: await getHeaders(null),
+    });
+    if (!response.ok) return { invites: [] as Array<{ id: string; role: string; organizationName: string }> };
+    return response.json() as Promise<{ invites: Array<{ id: string; role: string; organizationName: string }> }>;
+  },
+
+  async acceptStaffInvite(inviteId: string) {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.admin}/team/staff/invites/accept`, {
+      method: 'POST',
+      headers: await getHeaders(),
+      body: JSON.stringify({ inviteId }),
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error || 'Failed to accept invite');
+    }
+    return response.json();
+  },
+
+  async offboardingCheck(userId: string) {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/workforce/members/${userId}/offboarding-check`, {
+      headers: await getHeaders(null),
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error || 'Failed to check offboarding');
+    }
+    return response.json() as Promise<{
+      displayName: string;
+      clear: boolean;
+      blockers: Array<{ code: string; label: string; amount?: number }>;
+    }>;
+  },
+
+  async endWorkforceMember(userId: string, body: { confirmName?: string; serviceLine?: string }) {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/workforce/members/${userId}/end`, {
+      method: 'POST',
+      headers: await getHeaders(),
+      body: JSON.stringify(body),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const err = new Error(data.error || 'Failed to remove from fleet') as Error & { blockers?: unknown; displayName?: string };
+      err.blockers = data.blockers;
+      err.displayName = data.displayName;
+      throw err;
+    }
+    return data;
+  },
+
+  async pauseWorkforceMember(userId: string, serviceLine: string) {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/workforce/members/${userId}/pause`, {
+      method: 'POST',
+      headers: await getHeaders(),
+      body: JSON.stringify({ serviceLine }),
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error || 'Failed to pause');
+    }
+    return response.json();
+  },
+
+  async resumeWorkforceMember(userId: string, serviceLine: string) {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/workforce/members/${userId}/resume`, {
+      method: 'POST',
+      headers: await getHeaders(),
+      body: JSON.stringify({ serviceLine }),
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error || 'Failed to resume');
+    }
+    return response.json();
+  },
+
+  async startOwnershipTransfer(toUserId: string) {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.admin}/team/ownership-transfer`, {
+      method: 'POST',
+      headers: await getHeaders(),
+      body: JSON.stringify({ toUserId }),
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error || 'Failed to start transfer');
+    }
+    return response.json();
+  },
+
+  async acceptOwnershipTransfer(transferId: string) {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.admin}/team/ownership-transfer/${transferId}/accept`, {
+      method: 'POST',
+      headers: await getHeaders(),
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error || 'Failed to accept transfer');
+    }
+    return response.json();
+  },
+
+  async cancelOwnershipTransfer(transferId: string) {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.admin}/team/ownership-transfer/${transferId}/cancel`, {
+      method: 'POST',
+      headers: await getHeaders(),
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error || 'Failed to cancel transfer');
+    }
+    return response.json();
+  },
+
+  async setOwnerMfaRequired(requireOwnerMfa: boolean) {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.admin}/team/security`, {
+      method: 'PATCH',
+      headers: await getHeaders(),
+      body: JSON.stringify({ requireOwnerMfa }),
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error || 'Failed to update security');
     }
     return response.json();
   },

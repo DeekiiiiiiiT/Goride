@@ -161,8 +161,9 @@ export async function fetchUserRoleNames(userId: string): Promise<string[]> {
   const { data, error } = await serviceClient()
     .schema("platform")
     .from("user_roles")
-    .select("expires_at, roles(name)")
-    .eq("user_id", userId);
+    .select("expires_at, status, roles(name)")
+    .eq("user_id", userId)
+    .eq("status", "active");
   if (error) {
     console.warn("[rbac] fetchUserRoleNames failed:", error.message);
     return [];

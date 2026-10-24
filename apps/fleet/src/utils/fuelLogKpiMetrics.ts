@@ -19,6 +19,8 @@ export type IntegrityStatus = 'Complete' | 'Partial' | 'Orphaned' | 'Pending' | 
 export type TransactionKpis = {
   totalFills: number;
   totalSpend: number;
+  cashSpend: number;
+  gasCardSpend: number;
   totalVolume: number;
   /** Fill-to-fill odo deltas within the scoped set (secondary measure). */
   totalKm: number;

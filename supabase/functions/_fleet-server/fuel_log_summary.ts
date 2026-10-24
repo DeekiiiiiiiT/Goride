@@ -22,6 +22,8 @@ export type FuelLogSummaryEntry = {
 export type FuelLogSummaryTotals = {
   totalFills: number;
   totalSpend: number;
+  cashSpend: number;
+  gasCardSpend: number;
   totalVolume: number;
   totalKm: number;
   sourcePortal: number;
@@ -69,6 +71,23 @@ function isGasCardFuelEntryCore(entry: FuelLogSummaryEntry): boolean {
   }
   if (entry.type === "Card_Transaction") return true;
   return false;
+}
+
+const GAS_CARD_PAY = new Set([
+  "Gas_Card",
+  "company_card",
+  "Gas Card",
+  "Fuel Card",
+]);
+
+/** Paid By bucket — metadata wins, same as the Transaction Logs column. */
+function isGasCardSpendBucket(entry: FuelLogSummaryEntry): boolean {
+  const metaPay = metaOf(entry).paymentSource;
+  const raw =
+    (typeof metaPay === "string" && metaPay.trim()) ||
+    (typeof entry.paymentSource === "string" ? entry.paymentSource.trim() : "");
+  if (raw) return GAS_CARD_PAY.has(raw);
+  return isGasCardFuelEntryCore(entry);
 }
 
 function countsInGasCardSpendCore(entry: FuelLogSummaryEntry): boolean {
@@ -196,13 +215,22 @@ export function summarizeFuelLogEntries(
   }
 
   const spendScope = periodEntries.filter(countsInFuelLogSpendCore);
-  const totalSpend = spendScope.reduce((s, e) => s + (Number(e.amount) || 0), 0);
+  let cashSpend = 0;
+  let gasCardSpend = 0;
+  for (const e of spendScope) {
+    const amt = Number(e.amount) || 0;
+    if (isGasCardSpendBucket(e)) gasCardSpend += amt;
+    else cashSpend += amt;
+  }
+  const totalSpend = cashSpend + gasCardSpend;
   const totalVolume = spendScope.reduce((s, e) => s + (Number(e.liters) || 0), 0);
   const totalKm = sumOdometerDeltasBetweenFillsCore(periodEntries);
 
   return {
     totalFills: periodEntries.length,
     totalSpend: Math.round(totalSpend * 100) / 100,
+    cashSpend: Math.round(cashSpend * 100) / 100,
+    gasCardSpend: Math.round(gasCardSpend * 100) / 100,
     totalVolume: Math.round(totalVolume * 100) / 100,
     totalKm,
     sourcePortal,

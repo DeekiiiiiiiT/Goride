@@ -70,13 +70,23 @@ export const teamService = {
   ) =>
     teamFetch<{
       success: boolean;
-      userId: string;
-      temporaryPassword: string;
+      pending?: boolean;
       message: string;
     }>('/team/invite', {
       method: 'POST',
       body: JSON.stringify(body),
       organizationId,
+    }),
+
+  myInvites: () =>
+    teamFetch<{ invites: Array<{ id: string; role: string; organizationName: string }> }>(
+      '/team/staff/invites/mine',
+    ),
+
+  acceptInvite: (inviteId: string) =>
+    teamFetch<{ success: boolean }>('/team/staff/invites/accept', {
+      method: 'POST',
+      body: JSON.stringify({ inviteId }),
     }),
 
   updateAccess: (

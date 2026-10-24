@@ -2157,7 +2157,10 @@ app.post("/v1/drivers/presence", async (c) => {
   if (goingOnline) {
     const eligibility = await isDriverEligibleForDispatch(auth.user.id, dispatchSettings);
     if (!eligibility.eligible) {
-      return c.json({ error: eligibility.reason ?? "not_eligible_for_dispatch" }, 403);
+      return c.json({
+        error: eligibility.reason ?? "not_eligible_for_dispatch",
+        message: eligibility.reason === "workforce_paused" ? "This fleet has paused you." : undefined,
+      }, 403);
     }
   }
 
@@ -2298,6 +2301,9 @@ app.post("/v1/drivers/offers/:offerId/accept", async (c) => {
   const offer = await loadDriverOfferById(offerId);
   if (!offer || offer.driver_user_id !== auth.user.id) return c.json({ error: "not_found" }, 404);
   if (offer.status !== "pending") return c.json({ error: "offer_not_pending" }, 409);
+  const { workforcePauseMessage } = await import("../_shared/workforcePause.ts");
+  const paused = await workforcePauseMessage(auth.user.id, "rideshare");
+  if (paused) return c.json({ error: "workforce_paused", message: paused }, 403);
   if ((offer.expires_at as string) <= nowIso) {
     await patchDriverOfferRow(offerId, { status: "expired" });
     return c.json({ error: "offer_expired" }, 410);
@@ -2751,6 +2757,13 @@ app.patch("/v1/requests/:id/driver-transition", async (c) => {
         message: "Use Collect payment to confirm cash before completing this trip",
         current: result.current,
       }, 400);
+    }
+    if (result.error === "workforce_paused") {
+      return c.json({
+        error: "workforce_paused",
+        message: "This fleet has paused you.",
+        current: result.current,
+      }, 403);
     }
     if (result.error === "status_changed") {
       return c.json({

@@ -354,7 +354,7 @@ export function assertSplitFillAllowed(c: Context): { allowed: true } | { allowe
     return { allowed: false, status: 401, body: { error: "Unauthorized: No user context" } };
   }
   const canFleetCreate = hasPermission(rbacUser.resolvedRole, "fuel.create_entry");
-  const isDriverSubmitter = rbacUser.resolvedRole === "driver";
+  const isDriverSubmitter = rbacUser.resolvedRole === "driver" || rbacUser.rawRole === "driver";
   if (!canFleetCreate && !isDriverSubmitter) {
     return {
       allowed: false,

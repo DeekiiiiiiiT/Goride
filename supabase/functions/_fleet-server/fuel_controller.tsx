@@ -2653,6 +2653,8 @@ app.get(`${BASE_PATH}/fuel/log-summary`, requirePermission("fuel.view"), async (
     return c.json({
       totalFills: rolled.totalFills,
       totalSpend: rolled.totalSpend,
+      cashSpend: rolled.cashSpend,
+      gasCardSpend: rolled.gasCardSpend,
       totalVolume: rolled.totalVolume,
       totalKm: rolled.totalKm,
       sourcePortal: rolled.sourcePortal,
@@ -4229,7 +4231,7 @@ app.post(`${BASE_PATH}/fuel-entries`, async (c: Context) => {
     return c.json({ error: "Unauthorized: No user context" }, 401);
   }
   const canFleetCreate = hasPermission(rbacUser.resolvedRole, "fuel.create_entry");
-  const isDriverSubmitter = rbacUser.resolvedRole === "driver";
+  const isDriverSubmitter = rbacUser.resolvedRole === "driver" || rbacUser.rawRole === "driver";
   if (!canFleetCreate && !isDriverSubmitter) {
     return c.json(
       {

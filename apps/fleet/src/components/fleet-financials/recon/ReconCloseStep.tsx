@@ -1,11 +1,12 @@
 /**
  * Embedded Close Week confirm + evidence + reopen (R2-26).
- * Stays on /week-reconciliation — sync → close with serviceLine.
+ * Stays on /week-reconciliation. Close starts the close workflow directly: it waits for
+ * every driver to finish updating and re-checks before freezing, so no separate sync step.
  */
 import React, { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { addDays, format, parseISO } from 'date-fns';
-import { Loader2, Lock, Unlock } from 'lucide-react';
+import { CheckCircle2, Loader2, Lock, Unlock } from 'lucide-react';
 import { MONEY_EPS, RECON_STEP_LABELS, type CloseBlocker, type RunStepId } from '@roam/finance-core';
 import {
   blockingCount,
@@ -18,11 +19,9 @@ import {
   isWeekCloseUnavailable,
   WeekCloseApiError,
 } from '../../../services/weekCloseApi';
-import { forceResealHintsFromPreview } from '../../../utils/closeWeekAutoSync';
 import { isCloseWeekEnded } from '../../../utils/closeWeekPicker';
 import { useSettlementQueue } from '../../../hooks/useSettlementQueue';
 import { resolvePayQueueOwed } from '../../../utils/driverSettlementsPayAmount';
-import { computeSettlementLaneMetrics } from '../../../utils/settlementLaneMetrics';
 import { Button } from '../../ui/button';
 import {
   Dialog,
@@ -34,8 +33,6 @@ import {
 } from '../../ui/dialog';
 import { Textarea } from '../../ui/textarea';
 import { toast } from 'sonner';
-
-const PREPARE_FRESH_MS = 2 * 60 * 1000;
 
 const MONEY = (n: number | null | undefined) => {
   if (n == null || !Number.isFinite(n)) return '—';
@@ -69,6 +66,7 @@ function collectOwedMajor(r: {
 
 type CloseItem = Pick<CloseBlocker, 'code' | 'severity' | 'message'> & {
   driverId?: string | null;
+  sourceId?: string | null;
   delta?: number | null;
 };
 
@@ -93,8 +91,6 @@ export function ReconCloseStep({
   const [closeNote, setCloseNote] = useState<string | null>(null);
   const [reopening, setReopening] = useState(false);
   const [closeConfirmOpen, setCloseConfirmOpen] = useState(false);
-  const [confirmNeedsReconfirm, setConfirmNeedsReconfirm] = useState(false);
-  const [lastPreparedAt, setLastPreparedAt] = useState<number | null>(null);
   const [closeIdempotencyKey, setCloseIdempotencyKey] = useState<string | null>(null);
   const [reopenOpen, setReopenOpen] = useState(false);
   const [reopenReason, setReopenReason] = useState('');
@@ -117,25 +113,6 @@ export function ReconCloseStep({
   };
   const collectQuery = useSettlementQueue({ view: 'collect', ...queueParams });
   const payQuery = useSettlementQueue({ view: 'pay', ...queueParams });
-
-  const settlement = useMemo(() => {
-    const m = computeSettlementLaneMetrics(
-      collectQuery.data?.rows || [],
-      payQuery.data?.rows || [],
-    );
-    let fleetOwes = m.fleetOwes;
-    let driversOwe = m.driversOwe;
-    let cashHeld = m.cashHeld;
-    for (const b of previewQuery.data?.blockers || []) {
-      const code = String(b.code || '').toUpperCase();
-      const amt = Math.abs(Number(b.persisted) || 0);
-      if (amt <= MONEY_EPS) continue;
-      if (code === 'SETTLEMENT_FLEET_OWES' && fleetOwes <= MONEY_EPS) fleetOwes = amt;
-      if (code === 'SETTLEMENT_DRIVER_OWES' && driversOwe <= MONEY_EPS) driversOwe = amt;
-      if (code === 'SETTLEMENT_CASH_HELD' && cashHeld <= MONEY_EPS) cashHeld = amt;
-    }
-    return { fleetOwes, driversOwe, cashHeld };
-  }, [collectQuery.data?.rows, payQuery.data?.rows, previewQuery.data?.blockers]);
 
   const closeConfirmDrivers = useMemo(() => {
     type Row = {
@@ -195,21 +172,43 @@ export function ReconCloseStep({
           severity: b.severity === 'warn' ? 'warn' : 'block',
           message: b.message || b.code,
           driverId: b.driver_id,
+          sourceId: b.source_id,
           delta: b.delta,
         }))
       : [...(preview?.blockers || []), ...(preview?.weekBlockers || [])];
   const totalBlockers = closeCheckFailed ? 1 : blockingCount(closeItems as CloseBlocker[]);
+  // "No activity" confirmations are decisions already made on Upload inputs.
+  // They belong in the evidence record, not in the to-do warnings.
+  const isAttestedNone = (b: CloseItem) => String(b.code || '').toUpperCase() === 'SOURCE_ATTESTED_NONE';
+  const sourceLabels = new Map((run.sources || []).map((s) => [s.id, s.label]));
+  const sourceLabel = (b: CloseItem) => (b.sourceId ? sourceLabels.get(b.sourceId) : null);
+  const confirmedNoActivity = Array.from(
+    new Set(
+      closeItems
+        .filter(isAttestedNone)
+        .map((b) => sourceLabel(b) || b.message || 'a source'),
+    ),
+  );
   const closeBlocks = closeItems.filter((b) => String(b.severity || 'block') !== 'warn');
-  const closeWarnings = closeItems.filter((b) => String(b.severity || 'block') === 'warn');
+  const closeWarnings = closeItems.filter(
+    (b) => String(b.severity || 'block') === 'warn' && !isAttestedNone(b),
+  );
   const driverNames = new Map(closeConfirmDrivers.map((d) => [d.driverId, d.name]));
+  // Source checks: the server message names the source, the generic label does not.
+  const itemLabel = (b: CloseItem) => {
+    if (!String(b.code || '').toUpperCase().startsWith('SOURCE_')) return humanBlockerLabel(b);
+    const label = sourceLabel(b);
+    const base = humanBlockerLabel(b);
+    return label ? `${label}: ${base.charAt(0).toLowerCase()}${base.slice(1)}` : b.message || base;
+  };
   const renderItem = (b: CloseItem, i: number) => {
     const step = wizardStepForBlockerCode(b.code);
     const who = b.driverId ? driverNames.get(b.driverId) : null;
     const amount = b.delta != null && Math.abs(b.delta) > MONEY_EPS ? MONEY(b.delta) : null;
     return (
-      <li key={`${b.code}-${b.driverId ?? ''}-${i}`} className="flex flex-wrap items-center justify-between gap-2">
+      <li key={`${b.code}-${b.driverId ?? ''}-${b.sourceId ?? ''}-${i}`} className="flex flex-wrap items-center justify-between gap-2">
         <span>
-          {humanBlockerLabel(b)}
+          {itemLabel(b)}
           {who ? ` — ${who}` : ''}
           {amount ? ` (off by ${amount})` : ''}
         </span>
@@ -271,30 +270,7 @@ export function ReconCloseStep({
     const key = closeIdempotencyKey || crypto.randomUUID();
     if (!closeIdempotencyKey) setCloseIdempotencyKey(key);
 
-    const prepareFresh =
-      lastPreparedAt != null && Date.now() - lastPreparedAt < PREPARE_FRESH_MS;
-
-    if (!prepareFresh) {
-      setClosing(true);
-      try {
-        await weekCloseApi.sync(weekKey, {
-          ...forceResealHintsFromPreview(preview || {}),
-          serviceLine,
-        });
-        setLastPreparedAt(Date.now());
-        await previewQuery.refetch();
-        setConfirmNeedsReconfirm(true);
-        toast.message('Books refreshed — review the numbers and confirm Close again.');
-      } catch (e) {
-        toast.error(e instanceof Error ? e.message : 'Could not refresh week books before close');
-      } finally {
-        setClosing(false);
-      }
-      return;
-    }
-
     setCloseConfirmOpen(false);
-    setConfirmNeedsReconfirm(false);
     await doClose(reason, { idempotencyKey: key, skipPrepare: true });
   };
 
@@ -376,6 +352,11 @@ export function ReconCloseStep({
           ) : (
             <p className="mt-2 text-xs text-slate-500">Source manifest will appear after recon sync.</p>
           )}
+          {confirmedNoActivity.length > 0 ? (
+            <p className="mt-2 text-xs text-slate-600">
+              You confirmed no activity: {confirmedNoActivity.join(', ')}.
+            </p>
+          ) : null}
           {(reconEvidence.unattributed?.rowCount ?? 0) > 0 ? (
             <p className="mt-2 text-xs text-amber-800">
               {reconEvidence.unattributed.rowCount} unattributed row(s) (
@@ -464,10 +445,7 @@ export function ReconCloseStep({
                 totalBlockers > 0 ||
                 (preview?.driversReady ?? 0) === 0
               }
-              onClick={() => {
-                setConfirmNeedsReconfirm(false);
-                setCloseConfirmOpen(true);
-              }}
+              onClick={() => setCloseConfirmOpen(true)}
             >
               {closing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Lock className="mr-2 h-4 w-4" />}
               {closeNote && closing ? closeNote : hasPendingRestatements ? 'Sign restatements' : 'Close week'}
@@ -481,7 +459,6 @@ export function ReconCloseStep({
         onOpenChange={(open) => {
           if (closing) return;
           setCloseConfirmOpen(open);
-          if (!open) setConfirmNeedsReconfirm(false);
         }}
       >
         <DialogContent className="sm:max-w-md">
@@ -492,41 +469,15 @@ export function ReconCloseStep({
                 : `Close week of ${weekLabel(weekKey)}?`}
             </DialogTitle>
           </DialogHeader>
-          <div className="space-y-2 text-sm text-slate-700">
-            {confirmNeedsReconfirm ? (
-              <p className="rounded-md border border-amber-200 bg-amber-50 px-2.5 py-2 text-xs text-amber-900">
-                Books were refreshed — confirm these numbers before closing.
-              </p>
-            ) : null}
-            <p>
-              This will freeze <strong>{preview?.driversReady ?? 0}</strong> driver-period
-              {(preview?.driversReady ?? 0) === 1 ? '' : 's'} and lock Pay/Collect for the week.
+          <div className="space-y-3 text-sm text-slate-700">
+            <p className="flex items-center gap-2 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2.5 font-medium text-emerald-800">
+              <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-600" />
+              Everything is complete — every step is done and every driver ties.
             </p>
-            <ul className="list-disc space-y-1 pl-5 text-slate-600">
-              <li>Fleet owes (after share): {MONEY(settlement.fleetOwes)}</li>
-              <li>Drivers owe (after share): {MONEY(settlement.driversOwe)}</li>
-              <li>Cash held (before share): {MONEY(settlement.cashHeld)}</li>
-            </ul>
-            {closeConfirmDrivers.length > 0 ? (
-              <div className="max-h-40 overflow-y-auto rounded-md border border-slate-200 bg-slate-50">
-                <ul className="divide-y divide-slate-200 text-xs">
-                  {closeConfirmDrivers.slice(0, 20).map((d) => (
-                    <li
-                      key={d.driverId}
-                      className="flex items-start justify-between gap-2 px-2.5 py-1.5"
-                    >
-                      <span className="truncate font-medium text-slate-800">{d.name}</span>
-                      <span className="shrink-0 text-right tabular-nums text-slate-600">
-                        {d.owed > MONEY_EPS ? `owed ${MONEY(d.owed)}` : null}
-                        {d.owed > MONEY_EPS && d.fleet > MONEY_EPS ? ' · ' : null}
-                        {d.fleet > MONEY_EPS ? `fleet ${MONEY(d.fleet)}` : null}
-                        {d.owed <= MONEY_EPS && d.fleet <= MONEY_EPS ? '—' : null}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ) : null}
+            <p className="text-slate-600">
+              Closing freezes {preview?.driversReady ?? 0} driver-period
+              {(preview?.driversReady ?? 0) === 1 ? '' : 's'} and locks Pay/Collect for the week.
+            </p>
           </div>
           <DialogFooter>
             <Button

@@ -23,6 +23,7 @@ export const FLEET_PAGE_REGISTRY: Record<string, FleetPageDef> = {
   },
   wallet: { id: 'wallet', path: '/wallet', permission: 'nav.tier_config' },
   settings: { id: 'settings', path: '/settings', permission: 'nav.settings' },
+  'user-management': { id: 'user-management', path: '/team', permission: 'nav.user_management' },
   couriers: { id: 'couriers', path: '/couriers', permission: 'nav.couriers' },
   'courier-analytics': { id: 'courier-analytics', path: '/courier-analytics', permission: 'nav.courier_analytics' },
   deliveries: { id: 'deliveries', path: '/deliveries', permission: 'nav.deliveries' },

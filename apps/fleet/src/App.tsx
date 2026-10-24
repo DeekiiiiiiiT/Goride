@@ -15,6 +15,7 @@ import { FleetMaintenanceHub } from './components/vehicles/FleetMaintenanceHub';
 import { FleetPage } from './components/fleet/FleetPage';
 import { ReportsPage } from './components/reports/ReportsPage';
 import { UserManagementPage } from './components/users/UserManagementPage';
+import { StaffInviteBanner } from './components/users/StaffInviteBanner';
 import { EarningsPolicyConfiguration } from './components/earnings-policy';
 import { EarningsPage } from './components/earnings/EarningsPage';
 import { WalletPage } from './components/wallet/WalletPage';
@@ -27,6 +28,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { PlatformConfigProvider as OpsPlatformConfigProvider, PlatformSessionProvider } from '@roam/platform-ops-ui';
 import { ErrorBoundary } from './components/ui/ErrorBoundary';
 import { API_ENDPOINTS } from './services/apiConfig';
+import { api } from './services/api';
+import { toast } from 'sonner';
 import { withProductLineHeaders } from './config/productLine';
 
 import { PermissionGate } from './components/auth/PermissionGate';
@@ -163,7 +166,7 @@ function PlatformSessionFromAuth({ children }: { children: React.ReactNode }) {
 }
 
 function AppContent() {
-  const { user, role, resolvedRole, loading, needsProvision, signOut } = useAuth();
+  const { user, role, resolvedRole, loading, needsProvision, signOut, teamAccess, refreshSession } = useAuth();
   const { canView, permissions } = usePermissions();
   const { rideshareVisible } = useServiceLineScope();
   /** Close Week / Restatements live on Driver Settlements when that desk is available. */
@@ -641,7 +644,7 @@ function AppContent() {
         />
       );
     }
-    if (isFleetPortalUser(user) && !needsProvision) {
+    if ((teamAccess?.portal || isFleetPortalUser(user)) && !needsProvision) {
       window.location.replace('/');
       return (
         <div className="flex h-screen items-center justify-center text-slate-500">Loading dashboard…</div>
@@ -649,9 +652,31 @@ function AppContent() {
     }
   }
 
+  if (loading) {
+    return (
+      <div className="flex h-screen items-center justify-center text-slate-500">Loading…</div>
+    );
+  }
+
+  if (!user) {
+    return <LoginPage />;
+  }
+
+  if (teamAccess?.pendingInvite && !teamAccess.portal) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4">
+        <div className="w-full max-w-lg">
+          <StaffInviteBanner
+            invite={teamAccess.pendingInvite}
+            onAccepted={() => void refreshSession()}
+          />
+        </div>
+      </div>
+    );
+  }
+
   // Main Fleet Portal — Authentication Gate
-  // Soft path gate (shared with Edge middleware.js); AuthProvider remains authoritative.
-  if (!user || !isFleetPortalUser(user)) {
+  if (!teamAccess?.portal && !isFleetPortalUser(user)) {
     if (
       typeof window !== 'undefined' &&
       requiresSessionGate(window.location.pathname) &&
@@ -671,7 +696,10 @@ function AppContent() {
     );
   }
 
-  const ownerProductLine = inferClientProductLine(user.user_metadata as Record<string, unknown>);
+  const ownerProductLine =
+    teamAccess?.productLine === 'fleet' || teamAccess?.productLine === 'enterprise'
+      ? teamAccess.productLine
+      : inferClientProductLine(user.user_metadata as Record<string, unknown>);
   if (ownerProductLine !== PRODUCT_LINE) {
     return (
       <WrongProductLineGate
@@ -721,6 +749,43 @@ function AppContent() {
   // Fleet Manager View (Default)
   return (
     <AppLayout currentPage={currentPage} onNavigate={handleNavigate} onLogout={signOut}>
+      {teamAccess?.pendingTransfer && (
+        <div className="mb-4 flex flex-col gap-2 rounded-lg border border-indigo-200 bg-indigo-50 px-4 py-3 text-sm text-indigo-950 sm:flex-row sm:items-center sm:justify-between">
+          <p>
+            {teamAccess.pendingTransfer.fromName} wants you to become the owner of {teamAccess.pendingTransfer.organizationName}.
+          </p>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              className="rounded-md bg-indigo-700 px-3 py-2 text-sm font-medium text-white"
+              onClick={() => {
+                void api.acceptOwnershipTransfer(teamAccess.pendingTransfer!.id)
+                  .then(() => {
+                    toast.success('You are now the owner.');
+                    void refreshSession();
+                  })
+                  .catch((e) => toast.error(e instanceof Error ? e.message : 'Could not accept'));
+              }}
+            >
+              Accept
+            </button>
+            <button
+              type="button"
+              className="rounded-md border px-3 py-2 text-sm"
+              onClick={() => {
+                void api.cancelOwnershipTransfer(teamAccess.pendingTransfer!.id)
+                  .then(() => {
+                    toast.success('Transfer declined');
+                    void refreshSession();
+                  })
+                  .catch((e) => toast.error(e instanceof Error ? e.message : 'Could not decline'));
+              }}
+            >
+              Decline
+            </button>
+          </div>
+        </div>
+      )}
       <ErrorBoundary
         key={currentPage}
         name={`MainContent:${currentPage}`}

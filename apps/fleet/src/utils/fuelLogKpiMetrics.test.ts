@@ -48,6 +48,8 @@ describe('buildTransactionKpis', () => {
     const kpis = buildTransactionKpis(entries);
     expect(kpis.totalFills).toBe(3);
     expect(kpis.totalSpend).toBe(175);
+    expect(kpis.cashSpend).toBe(175);
+    expect(kpis.gasCardSpend).toBe(0);
     expect(kpis.totalVolume).toBe(17);
     expect(kpis.totalKm).toBe(100);
   });
@@ -68,6 +70,23 @@ describe('buildTransactionKpis', () => {
     expect(kpis.totalFills).toBe(1);
     expect(kpis.totalSpend).toBe(100);
     expect(kpis.totalVolume).toBe(10);
+  });
+
+  it('splits spend into cash and gas card using the Paid By source', () => {
+    const entries: FuelEntry[] = [
+      makeEntry({ id: 'cash', amount: 1500, paymentSource: 'RideShare_Cash' }),
+      makeEntry({ id: 'card', amount: 4000, paymentSource: 'Gas_Card', type: 'Card_Transaction' }),
+      makeEntry({
+        id: 'meta-card',
+        amount: 500,
+        paymentSource: 'RideShare_Cash',
+        metadata: { paymentSource: 'company_card' },
+      }),
+    ];
+    const kpis = buildTransactionKpis(entries);
+    expect(kpis.cashSpend).toBe(1500);
+    expect(kpis.gasCardSpend).toBe(4500);
+    expect(kpis.totalSpend).toBe(6000);
   });
 
   it('does not re-filter by vehicle — caller scopes first', () => {

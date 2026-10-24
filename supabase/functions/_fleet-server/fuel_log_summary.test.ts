@@ -73,6 +73,8 @@ Deno.test("server core matches fleet contract fixture", () => {
   const core = summarizeFuelLogEntries(FIXTURE as any);
   assertEquals(core.totalFills, 4);
   assertEquals(core.totalSpend, 230);
+  assertEquals(core.cashSpend, 230);
+  assertEquals(core.gasCardSpend, 0);
   assertEquals(core.totalVolume, 23);
   assertEquals(core.totalKm, 300);
   assertEquals(core.sourcePortal, 1);
@@ -84,6 +86,8 @@ Deno.test("excludes JAA fee from fills and awaiting from spend", () => {
   const core = summarizeFuelLogEntries(FIXTURE as any);
   assertEquals(core.totalFills, 4);
   assertEquals(core.totalSpend, 230);
+  assertEquals(core.cashSpend, 230);
+  assertEquals(core.gasCardSpend, 0);
   assertEquals(core.totalVolume, 23);
   assertEquals(core.totalKm, 300);
   assertEquals(core.sourceAnchors, 1);

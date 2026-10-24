@@ -11,10 +11,13 @@ import {
 } from './FuelLogKpiRow';
 import type { TransactionKpis } from '../../../utils/fuelLogKpiMetrics';
 import { replaceServerTransactionKpis } from '../../../hooks/useFuelLogSummary';
+import { formatFuelMoney } from '../../../utils/formatFuelMoney';
 
 const baseKpis: TransactionKpis = {
   totalFills: 4,
   totalSpend: 200,
+  cashSpend: 50,
+  gasCardSpend: 150,
   totalVolume: 20,
   totalKm: 100,
   imbalancedCount: 2,
@@ -36,6 +39,14 @@ describe('FuelLogKpiRow', () => {
     );
     await user.click(screen.getByText('Imbalanced').closest('[role="button"]')!);
     expect(onTileClick).toHaveBeenCalledWith('imbalanced');
+  });
+
+  it('spend tile shows cash and gas card when they add up to the total', () => {
+    render(<FuelLogKpiRow tiles={transactionKpisToTiles(baseKpis)} />);
+    expect(screen.getByText('Cash')).toBeTruthy();
+    expect(screen.getByText('Gas Card')).toBeTruthy();
+    expect(screen.getByText(formatFuelMoney(50, 0))).toBeTruthy();
+    expect(screen.getByText(formatFuelMoney(150, 0))).toBeTruthy();
   });
 });
 

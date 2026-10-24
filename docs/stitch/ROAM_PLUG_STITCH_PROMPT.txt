@@ -1,0 +1,772 @@
+ROAM PLUG FULL DESIGN PROMPT (GOOGLE STITCH)
+
+
+
+
+Roam Plug (Public App):
+
+Design a complete high-fidelity mobile app UI for "Roam Plug" — a free motoring companion app for drivers in Jamaica. Drivers use it to find gas stations and live fuel prices island-wide, track maintenance for their own vehicle by logging their odometer when they fuel up, find parts that fit their car, and find auto parts stores, mechanic shops, air pumps, restrooms and car washes near them. Drivers also help map Jamaica: they can pin any motoring place they are standing at, and every pin is reviewed by the Roam team before it appears on the map. The app is 100% free — nothing is sold in this version.
+
+BRAND IDENTITY:
+- Theme: "Sunset Orange" — energetic, enthusiastic and bold
+- LIGHT MODE (default):
+  - Primary: Vivid Orange (#ea580c) — main buttons, active tabs, Log Fuel button, links
+  - Secondary: Warm Orange (#f97316) — secondary buttons, selected chips, map price bubbles
+  - Tertiary: Golden Yellow (#eab308) — highlights, badges, contributor levels, the "Cheapest" price tag
+  - Success / verified: #16a34a
+  - Error / overdue: #dc2626
+  - Warning / due soon: #d97706
+  - Neutral: #57534e (muted text, icons, borders at low opacity)
+  - Background: Warm off-white (#FAFAF9)
+  - Surface cards: Pure white (#FFFFFF)
+  - Text primary: Warm charcoal (#1C1917)
+  - Gradient 1: linear-gradient(135deg, #ea580c, #eab308) — splash, hero headers, success screens
+  - Gradient 2: linear-gradient(135deg, #f97316, #fbbf24) — promo/community cards, contributor badges
+- DARK MODE:
+  - Primary: #fb923c
+  - Secondary: #fdba74
+  - Tertiary: #fde047
+  - Success: #22c55e
+  - Error: #ef4444
+  - Warning: #f59e0b
+  - Neutral: #d6d3d1
+  - Background: Warm dark gray (#292524)
+  - Surface: #44403c
+  - Gradient 1: linear-gradient(135deg, #9a3412, #a16207)
+  - Gradient 2: linear-gradient(135deg, #c2410c, #ca8a04)
+- Pending / awaiting approval: Neutral stone (#57534e) with a dashed outline (dashed pin on the map)
+- Fuel grade chip colors:
+  - E-10 87: Green (#16a34a)
+  - E-10 90: Red (#dc2626)
+  - Diesel / ULSD: Charcoal (#1C1917 on light, #d6d3d1 on dark)
+- Use gradients sparingly (hero areas and celebration moments); keep lists and forms on flat white surfaces
+- Clean, modern, minimalistic design language
+- Practical motoring aesthetic — bold, warm, map-first, glanceable at the pump
+- Typography: Inter or similar clean sans-serif; prices in tabular numerals
+- Brand name: "Roam Plug"
+- Logo treatment: "ROAM PLUG" wordmark with a small icon combining a location pin and a plug prong
+- Currency always J$ (Jamaican dollars), distance in km, volume in litres
+
+DESIGN PRINCIPLES:
+- Mobile-first (iOS/Android)
+- Touch-friendly tap targets (minimum 48px — used one-handed at the pump)
+- Safe area insets for notch devices
+- Map-first discovery with a draggable bottom sheet list
+- Bottom sheet patterns for place details and filters
+- Large center "Log Fuel" action in the bottom navigation
+- Status-driven UI for places: Verified (green check) | Unconfirmed (gray) | Awaiting approval (stone gray, dashed outline — only visible to the person who pinned it)
+- Every price shows its age ("updated 2 h ago")
+- Light theme default (high readability outdoors in sunlight)
+- Optional dark mode variant
+- Works offline: logs and pins are saved and sent later
+- Jamaica context everywhere: parishes, towns, Plus Codes, +1 876 phone numbers, local brands (Total, Rubis, Texaco, Fesco, Cool Oasis, Petcom), local cars (Toyota Roomy, Honda Fit, Toyota Axio, Probox, Voxy, Hiace, Nissan AD Wagon, Suzuki Swift)
+
+---
+
+SCREEN 1: SPLASH SCREEN
+- Centered "ROAM PLUG" logo in white on Gradient 1 (orange → golden yellow)
+- Cool off-white background
+- Subtle loading indicator
+- Tagline: "Plugged into every road in Jamaica."
+
+SCREEN 2: ONBOARDING - WELCOME
+- Hero illustration: car at a Jamaican gas station with hills in the background and map pins floating above
+- "Welcome to Roam Plug" heading
+- "Fuel prices, car care and every motoring spot in Jamaica — free" subtext
+- "Get Started" primary button (vivid orange)
+- "Explore without an account" secondary link
+- "I already have an account" link
+
+SCREEN 3: ONBOARDING - HOW IT WORKS (CAROUSEL)
+3a. "Find Fuel"
+- Icon: Gas pump with price tag
+- "See live fuel prices at stations across all 14 parishes"
+
+3b. "Track Your Car"
+- Icon: Car with wrench and calendar
+- "Log your odometer when you fuel up — we'll tell you when service is due"
+
+3c. "Find Parts & Mechanics"
+- Icon: Gear with map pin
+- "See parts that fit your car and the stores and shops near you"
+
+3d. "Map Jamaica"
+- Icon: Map with plus pin
+- "Pin places you visit and help every driver on the island"
+
+- Dot indicators, "Skip" link top right, "Next" / "Let's go" button
+
+SCREEN 4: SIGN UP - PHONE
+- "Create your account" heading
+- Phone number input with country picker fixed to +1 876 (Jamaica)
+- OR divider
+- "Continue with Google" / "Continue with Apple" buttons
+- "Continue" button
+- Terms of service & privacy policy checkbox
+
+SCREEN 5: SIGN UP - VERIFICATION
+- "Verify your phone" heading
+- 6-digit OTP input fields
+- Timer countdown for resend
+- "Resend code" link
+- "Verify" button
+
+SCREEN 6: ONBOARDING - YOUR PROFILE
+- "Set up your profile" heading
+- Profile photo upload (circular with camera icon overlay, optional)
+- First name input
+- Display name input (shown on your map contributions, e.g. "Andre B.")
+- Home parish dropdown (Kingston, St Andrew, St Thomas, Portland, St Mary, St Ann, Trelawny, St James, Hanover, Westmoreland, St Elizabeth, Manchester, Clarendon, St Catherine)
+- "Continue" button
+
+SCREEN 7: ONBOARDING - PRIVACY & LOCATION CONSENT
+- "Your data, your choice" heading
+- Plain-language cards:
+  - "We use your location to show nearby stations and to map places you pin"
+  - "Your fuel logs and car details are private to you"
+  - "Only anonymous totals help build our map — never who you are or where you went"
+- "You can export or delete your data any time in Settings"
+- "Read full privacy notice" link
+- "I agree" primary button
+
+SCREEN 8: ONBOARDING - PERMISSIONS
+- "Enable permissions" heading
+- Location permission card (required — "While using the app")
+- Camera permission card (for odometer scan and place photos)
+- Notification permission card (for service and renewal reminders)
+- Each card with "Allow" button and status check
+- "Continue" button at bottom
+
+SCREEN 9: ADD YOUR VEHICLE - MAKE
+- "Add your vehicle" heading
+- "So we can build your maintenance schedule" subtext
+- Search input: "Search make (e.g. Toyota)"
+- Popular makes grid with logos: Toyota, Honda, Nissan, Suzuki, Mazda, Mitsubishi, Hyundai, Kia, Isuzu, Subaru
+- "Skip for now" link (can add later)
+- Progress indicator: Step 1 of 3
+
+SCREEN 10: ADD YOUR VEHICLE - MODEL, YEAR & VERSION
+- Selected make chip at top: "Toyota"
+- Model search + list: Roomy, Axio, Fielder, Probox, Voxy, Noah, Hiace, Vitz, Corolla
+- Year selector (horizontal scroll chips)
+- Version / engine cards (e.g. "Roomy M900A — 1.0L 1KR-FE — 2016–2020") with small car silhouette
+- "Can't find your car?" link
+- "Continue" button
+- Progress indicator: Step 2 of 3
+
+SCREEN 11: VEHICLE NOT FOUND - REQUEST
+- "Tell us about your car" heading
+- Make, model, year, engine size inputs (free text)
+- Optional photo of the car
+- Info card (golden yellow tint): "We'll add your car to our database. You can log fuel right away — your full schedule appears once it's added."
+- "Submit & Continue" button
+
+SCREEN 12: ADD YOUR VEHICLE - STARTING ODOMETER
+- "What's on your odometer?" heading
+- Large camera scan card: "Scan odometer" with dashboard icon
+- OR manual numeric input: "_____ km"
+- Nickname input (optional): "e.g. Work Roomy"
+- Plate number input (optional, private)
+- "Finish" button
+- Progress indicator: Step 3 of 3
+
+SCREEN 13: VEHICLE ADDED - SUCCESS
+- Checkmark animation
+- Car card: "2019 Toyota Roomy — 84,210 km"
+- "Your maintenance schedule is ready" with preview of next 2 services
+- If general schedule: small label "General schedule — your exact car's schedule is coming"
+- "Go to Home" button
+
+SCREEN 14: LOGIN
+- "Welcome back" heading
+- Phone input (+1 876)
+- "Send code" button
+- "Continue with Google" / "Continue with Apple"
+- "Don't have an account? Sign up" link
+
+SCREEN 15: HOME - EXPLORE (MAP + SHEET)
+- Header:
+  - Current area: "📍 Half-Way-Tree, St Andrew" (tappable)
+  - Profile avatar
+- Search bar: "Search stations, parts stores, mechanics..."
+- Category chips (horizontal scroll): ⛽ Fuel | 🔧 Mechanics | ⚙️ Parts Stores | 🛞 Air Pump | 🚻 Restrooms | 🚿 Car Wash | 🔌 EV Charging | 🛣️ Tolls
+- Full-screen map behind:
+  - Station pins showing price bubbles ("J$214") for the selected grade
+  - Cheapest nearby pin highlighted with a golden yellow "Cheapest" badge
+  - Different pin icons per place type
+  - User location blue dot
+- Draggable bottom sheet (half open):
+  - "Cheapest E-10 87 near you" card: station, price, distance, age
+  - "My car" card: "Oil change due in 620 km" (amber) with "View" link
+  - Nearby list preview
+- Floating "Map It" button (plus-pin icon) bottom right above the sheet
+- Bottom navigation: Explore | Garage | ⛽ Log Fuel (large center button) | Map It | Account
+
+SCREEN 16: HOME - GUEST MODE
+- Same as Home, no "My car" card
+- Soft banner card: "Track your car's maintenance for free — Create account"
+- Log Fuel and Map It buttons prompt sign-in when tapped
+
+SCREEN 17: FUEL - STATION LIST
+- Tabs or toggle: Map | List
+- Grade selector chips: E-10 87 | E-10 90 | Diesel
+- Sort: Cheapest | Nearest | Recently updated
+- Station cards:
+  - Brand logo + name: "Total Constant Spring"
+  - Distance: "1.4 km"
+  - Price large: "J$214.50" with grade chip
+  - Price age: "Updated 3 h ago"
+  - Verified badge or "Unconfirmed"
+  - Amenity icons row: air pump, restroom, shop, car wash
+  - "Cheapest" golden yellow tag on the lowest price
+- Filter button opens filter sheet
+- Pull to refresh
+
+SCREEN 18: FILTERS - BOTTOM SHEET
+- "Filter & Sort" header with "Reset" link
+- Fuel grade: E-10 87 | E-10 90 | Diesel
+- Brand: Total, Rubis, Texaco, Fesco, Cool Oasis, Petcom, Other (multi-select)
+- Distance: 2 km | 5 km | 10 km | 25 km | Island-wide
+- Has: Air pump | Restroom | Shop | Car wash | EV charging
+- Open now toggle
+- Verified only toggle
+- "Show 24 stations" button
+
+SCREEN 19: STATION DETAIL
+- Header photo (or brand-colored placeholder) with back and share buttons
+- Station name: "Rubis Hope Road"
+- Brand logo, address, parish, Plus Code ("7GRM+QX Kingston")
+- Verified badge: "Verified by Roam" (green) or "Unconfirmed"
+- Price table card:
+  - E-10 87 — J$214.50 — updated 2 h ago
+  - E-10 90 — J$224.10 — updated 2 h ago
+  - Diesel — J$231.80 — updated yesterday
+- Small note: "Prices come from drivers' fuel logs"
+- Amenities grid: Air pump ✓ | Restroom ✓ (J$100 fee) | Shop ✓ | Car wash ✗ | EV ✗
+- Opening hours
+- Two large buttons: "Directions" (opens picker: Google Maps / Waze) and "Log fuel here"
+- Secondary actions: "Suggest an edit" | "Report closed" | "Price looks wrong"
+- "Mapped with help from 14 drivers" contributor note
+
+SCREEN 20: PARTS STORE DETAIL
+- Store name: "Mario's Auto Parts — Constant Spring"
+- Address, parish, Plus Code, phone (tap to call), hours, open/closed badge
+- Verified badge
+- "Specialises in" chips: Toyota | Honda | Nissan | Japanese used parts
+- Map preview
+- "Directions" and "Call" buttons
+- "Suggest an edit" | "Report closed"
+- Note card: "Online parts buying is coming soon"
+
+SCREEN 21: MECHANIC SHOP DETAIL
+- Shop name: "Precision Auto Works"
+- Address, parish, phone, hours, open/closed badge
+- Verified badge
+- Services offered chips: Oil change | Brakes | Suspension | Engine diagnostics | Tyres | A/C | Wheel alignment | Body work
+- Makes they work on
+- Photos row
+- "Directions" and "Call" buttons
+- "Suggest an edit" | "Report closed"
+- Note card: "Booking is coming soon"
+
+SCREEN 22: FACILITY DETAIL (AIR PUMP / RESTROOM / CAR WASH)
+- Place type header icon (e.g. restroom)
+- Name and location: "Restroom — Total Half-Way-Tree"
+- Fee: "J$100 (pay attendant)"
+- Hours, accessibility (wheelchair access yes/no)
+- Last confirmed: "Confirmed working 2 days ago"
+- "Directions" button
+- "Still here?" quick buttons: "Yes, it's here" | "No longer here"
+
+SCREEN 23: MY PENDING PLACE (ONLY VISIBLE TO THE PERSON WHO PINNED IT)
+- Stone gray "Awaiting approval" banner with dashed border
+- Place name and type as submitted
+- Pin on map with accuracy circle
+- Submitted date
+- "The Roam team reviews every pin before it goes on the map"
+- "Edit submission" | "Withdraw" links
+
+SCREEN 24: LOG FUEL - STEP 1 ODOMETER SCAN
+- Full-screen camera view
+- Frame overlay: "Line up your odometer inside the box"
+- Capture button (large)
+- "Type it instead" link
+- Vehicle selector chip at top: "2019 Toyota Roomy ▾"
+- Last reading shown small: "Last: 84,210 km"
+
+SCREEN 25: LOG FUEL - CONFIRM ODOMETER
+- Photo thumbnail
+- Read value large and editable: "84,612 km"
+- Confidence badge: "High confidence" (green) or "Please check this number" (amber)
+- Warning variants:
+  - "This is lower than your last reading (84,210 km)" — red
+  - "That's 1,700 km since your last log — is that right?" — amber
+- "Confirm" button
+
+SCREEN 26: LOG FUEL - STEP 2 FUEL DETAILS
+- Station detected card at top:
+  - "You're at Texaco Barbican" with verified badge and "Change" link
+  - OR new-place variant: "New station — we'll add it to the map for review" (stone gray, dashed border)
+- Fuel grade selector: E-10 87 | E-10 90 | Diesel (large chips)
+- Amount paid: "J$ _____"
+- Litres: "_____ L"
+- Auto-calculated price per litre: "J$214.50 / L"
+- "Filled the tank" toggle (helps calculate km per litre)
+- Date & time (defaults to now)
+- "Save Fuel Log" button
+
+SCREEN 27: LOG FUEL - SAVED
+- Success animation (checkmark)
+- "Fuel logged!" heading
+- Cards:
+  - Fuel economy: "14.2 km/L" with trend arrow
+  - This fill: "J$4,290 • 20.0 L"
+  - Next service: "Oil change due in 380 km"
+- Community card (Gradient 2 background): "You updated the E-10 87 price at Texaco Barbican for every driver 🎉"
+- "Done" button
+
+SCREEN 28: LOG FUEL - SAVED OFFLINE
+- Cloud-off icon
+- "Saved on your phone"
+- "We'll send it when you're back online"
+- List of queued logs with "Waiting to send" status
+- "Done" button
+
+SCREEN 29: GARAGE - MY VEHICLES
+- "My Garage" header
+- Vehicle cards:
+  - Car silhouette/photo
+  - "2019 Toyota Roomy" + nickname
+  - Odometer: "84,612 km"
+  - Status pill: "1 service overdue" (red) / "Service due soon" (amber) / "All good" (green)
+  - Fuel economy: "14.2 km/L"
+- "Add vehicle" button
+- Empty state: "Add your first car to start tracking"
+
+SCREEN 30: VEHICLE OVERVIEW
+- Header: car image, name, year, version, plate (private)
+- Key stats row: Odometer | Avg km/day | Fuel economy | This month's fuel spend
+- "Up next" maintenance card list (top 3, colored by status)
+- Quick actions: "Log fuel" | "Log service" | "Parts for this car"
+- Documents & renewals summary card: "Fitness expires in 21 days" (amber)
+- Tabs: Overview | Maintenance | Fuel | Documents
+- "General schedule" label variant when no vehicle-specific schedule exists
+
+SCREEN 31: MAINTENANCE SCHEDULE
+- "Maintenance" header for selected vehicle
+- Info strip: "Based on your driving: ~48 km/day"
+- Sections: Overdue | Due soon | Upcoming | Done recently
+- Service rows:
+  - Icon + name: "Engine oil & filter"
+  - Interval: "Every 5,000 km or 6 months"
+  - Due: "Due at 85,000 km • ~8 days"
+  - Status colors: red overdue, amber due soon, slate upcoming
+  - Progress bar from last service to next
+- Tap row → service detail
+- Small label variant: "General schedule — your exact car's schedule is coming"
+
+SCREEN 32: SERVICE ITEM DETAIL
+- Service name: "Brake pads (front)"
+- Why it matters (2-line plain explanation)
+- Interval and due info
+- Last done: "79,950 km • 14 March"
+- History list for this item
+- "Find parts for this" link → parts screen
+- "Find a mechanic" link → mechanic map filtered
+- "Mark as done" primary button
+
+SCREEN 33: LOG SERVICE
+- "Log a service" header
+- Service type picker (multi-select from schedule list)
+- Odometer input (pre-filled with last reading)
+- Date
+- Where: "Choose mechanic shop" (search places) or "Did it myself"
+- Cost (optional, private): "J$ ____"
+- Notes (optional)
+- Receipt/photo (optional)
+- "Save Service" button
+
+SCREEN 34: MAINTENANCE HISTORY
+- Timeline list by date
+- Each entry: service names, odometer, shop, cost
+- Filter: All | Oil | Brakes | Tyres | Other
+- Export button: "Download history (PDF)" — useful when selling the car
+
+SCREEN 35: FUEL SPEND & MILEAGE
+- Period selector: This week | This month | 3 months | Year
+- Large card: "J$18,450 spent on fuel this month"
+- Bar chart: spend by week
+- Line chart: km/L over time
+- Stats: Litres | Km driven | Avg price per litre | Cost per km
+- Fuel log list (date, station, litres, amount, km/L)
+
+SCREEN 36: DOCUMENTS & RENEWALS
+- "Documents & renewals" header
+- Document cards with status:
+  - Driver's licence — expires 12 Jun 2027 (green)
+  - Motor vehicle registration — expires in 45 days (amber)
+  - Certificate of fitness — expires in 21 days (amber)
+  - Insurance — expired 3 days ago (red)
+- Each card: expiry date, days remaining, reminder setting
+- "Add document" button
+- Note: "Stored privately on your account"
+
+SCREEN 37: ADD / EDIT DOCUMENT REMINDER
+- Document type: Licence | Registration | Fitness | Insurance | Other
+- Linked vehicle (if applicable)
+- Expiry date picker
+- Remind me: 30 days | 14 days | 7 days | 1 day before (multi-select)
+- Photo of document (optional)
+- "Save" button
+
+SCREEN 38: PARTS FOR MY CAR - CATEGORIES
+- Vehicle chip at top: "2019 Toyota Roomy ▾"
+- Search bar: "Search a part (e.g. brake pads)"
+- Category grid: Filters | Brakes | Engine | Suspension | Electrical | Cooling | Belts | Lighting | Wipers | Fluids
+- "Common for your car" quick list: Oil filter, Air filter, Spark plugs, Brake pads
+
+SCREEN 39: PARTS RESULTS - 5 TIERS
+- Header: "Brake pads (front) — 2019 Toyota Roomy"
+- Results grouped into five labeled sections, each with a short explainer and an icon:
+  1. "Exact factory part" — Direct OEM match for this car
+  2. "Sister vehicle part" — Identical car sold under another name (e.g. Daihatsu Thor)
+  3. "Engine-compatible part" — Fits because the engine is shared (e.g. Toyota Vitz)
+  4. "Aftermarket equivalent" — Third-party brands (e.g. Bosch, Denso)
+  5. "Universal fit" — Matched by size/spec (bulbs, fluids, wipers)
+- Part rows: part name, part number, brand, small confidence tag
+- "Find stores near me" button on each section
+- Empty tier collapsed with "None found"
+
+SCREEN 40: PART DETAIL
+- Part name and number: "Front brake pad set — 04465-B1170"
+- Tier badge: "Exact factory part"
+- Fits: list of vehicles/years
+- Also known as: alternate part numbers
+- Specs (if universal): size, type
+- "Where to look": map + list of nearby parts stores that carry this make
+- Note: "Prices and buying online are coming soon"
+- "This didn't fit my car" feedback link
+
+SCREEN 41: PARTS - COMING SOON FOR YOUR CAR
+- Illustration: gears and a calendar
+- "Parts for your 2019 Toyota Roomy are coming soon"
+- "We're building our parts database car by car. Yours is on the list."
+- "Notify me when ready" toggle
+- "Find parts stores near me" button
+
+SCREEN 42: MAP IT - CHOOSE PLACE TYPE
+- "What are you mapping?" heading
+- "You must be at the place to pin it" note
+- Large type cards with icons:
+  - Gas station
+  - Auto parts store
+  - Mechanic shop
+  - Air pump
+  - Restroom
+  - Car wash
+  - EV charging
+  - Tyre shop
+- "Continue" button
+
+SCREEN 43: MAP IT - PLACE THE PIN
+- Full-screen map centered on user
+- Center crosshair pin (drag map to adjust)
+- GPS accuracy indicator: "Accuracy ±8 m" (green) / "±45 m — move outside for better signal" (amber)
+- Nearby existing places shown faintly
+- Duplicate warning card variant: "Is this Total Half-Way-Tree? It's already on the map" → "Yes, that's it" | "No, it's a different place"
+- "Confirm location" button (disabled when accuracy is poor)
+
+SCREEN 44: MAP IT - DETAILS
+- Place type badge at top
+- Name input: "e.g. Precision Auto Works"
+- Brand dropdown (for gas stations)
+- Services / amenities checklist (changes per type):
+  - Mechanic: Oil change, Brakes, Tyres, Diagnostics, A/C, Body work...
+  - Gas station: grades sold, air pump, restroom, shop, car wash
+  - Restroom: fee amount, wheelchair access
+- Opening hours (quick: "Don't know" allowed)
+- Phone number (optional)
+- Photo of the place (encouraged): "Photos get approved faster"
+- "Submit for review" button
+
+SCREEN 45: MAP IT - SUBMITTED
+- Success animation with a dashed "pending" pin
+- "Thanks! Your pin is awaiting approval"
+- "The Roam team checks every pin before it goes on the map. We'll notify you."
+- Contribution counter: "You've mapped 12 places"
+- "Map another place" | "Back to map" buttons
+
+SCREEN 46: MY CONTRIBUTIONS
+- Header stats: Places mapped | Approved | Prices updated | Contributor level
+- Level badge: "Road Scout — Level 3" with progress bar to next level
+- Tabs: All | Awaiting approval | Approved | Not approved
+- Contribution cards:
+  - Place type icon, name, parish, date
+  - Status pill: Awaiting approval (stone gray, dashed) | Approved (green) | Not approved (red, with reason: "Duplicate of an existing place")
+- Badges row: "First in St Elizabeth", "10 stations", "Price hero"
+
+SCREEN 47: HELP MAP YOUR PARISH
+- Parish card list with coverage bars: "St Elizabeth — 38% mapped"
+- Map of Jamaica with parishes shaded by coverage
+- "Places we still need in Manchester: parts stores, mechanics"
+- "Start mapping" button
+
+SCREEN 48: TOLLS
+- "Highway tolls" header
+- Vehicle class selector: Class 1 (cars) | Class 2 | Class 3
+- Toll plaza list by highway (Highway 2000 East-West, North-South):
+  - Plaza name, direction, price "J$___"
+- Route cost calculator: From → To with total toll cost
+- "Prices last updated: [date]"
+
+SCREEN 49: SEARCH - RESULTS
+- Search input with query: "brake"
+- Results tabs: Places | Parts | Services
+- Places: matching stores/mechanics with distance and verified badge
+- Parts: matching parts for your car
+- Services: maintenance items
+- "No results" empty state with "Map a missing place" link
+
+SCREEN 50: NOTIFICATIONS / REMINDERS INBOX
+- Grouped: Today | This week | Earlier
+- Notification cards:
+  - "Oil change due in 200 km — 2019 Toyota Roomy" (amber)
+  - "Your pin 'Precision Auto Works' was approved ✓" (green)
+  - "Fitness certificate expires in 14 days" (amber)
+  - "E-10 87 dropped J$3.20 this week" (orange)
+- Mark all as read
+
+SCREEN 51: ACCOUNT / PROFILE
+- Profile header:
+  - Avatar, display name, home parish
+  - Contributor level badge
+  - Member since
+- Menu items:
+  - My Garage
+  - My Contributions
+  - Documents & Renewals
+  - Notification Settings
+  - Privacy & Data
+  - Settings
+  - Help & Support
+  - About Roam Plug
+  - Sign Out
+
+SCREEN 52: NOTIFICATION SETTINGS
+- Toggle switches:
+  - Service due reminders
+  - Document renewal reminders
+  - Pin approval updates
+  - Weekly fuel price summary
+  - Price drop alerts for favourite stations
+  - Tips and news from Roam Plug
+
+SCREEN 53: PRIVACY & DATA
+- "Privacy & Data" header
+- Location: "While using the app" status + "Change in phone settings"
+- "What we keep private": vehicles, fuel logs, documents, service history
+- "What helps the map": anonymous station prices and approved pins
+- "Download my data" button
+- "Delete my account and data" (muted red, bottom, with confirmation)
+
+SCREEN 54: SETTINGS
+- Appearance: Light | Dark | System
+- Navigation app: Google Maps | Waze | Apple Maps
+- Default fuel grade: E-10 87 | E-10 90 | Diesel
+- Distance units: km
+- Language: English
+- About Roam Plug
+- Terms of Service
+- Privacy Policy
+- App version
+
+SCREEN 55: HELP & SUPPORT
+- Search: "How can we help?"
+- FAQ categories:
+  - Fuel prices
+  - Logging fuel & odometer
+  - Maintenance schedules
+  - Mapping places
+  - Parts info
+  - Account & privacy
+- "Contact Support" button (WhatsApp / Email)
+
+SCREEN 56: GPS / LOCATION ISSUES
+- Modal when location unavailable or weak
+- "We can't find your location"
+- Troubleshooting steps:
+  - "Turn on location services"
+  - "Allow Roam Plug to use your location"
+  - "Move to an open area away from buildings"
+- "Open Settings" button
+- "Retry" button
+
+SCREEN 57: OFFLINE / NO CONNECTION
+- Banner at top: "No internet connection"
+- Cached map area and prices still shown with "Last updated 20 min ago"
+- "You can still log fuel and pin places — we'll send them later"
+- "Retry connection" button
+
+---
+
+ADDITIONAL UI COMPONENTS:
+
+- Bottom navigation bar: Explore | Garage | ⛽ Log Fuel (raised center button) | Map It | Account
+- Map price bubble pin (brand color dot + price, cheapest variant in golden yellow)
+- Place type pins (fuel, parts, mechanic, air pump, restroom, car wash, EV, tyre)
+- Status badges: Verified | Unconfirmed | Awaiting approval | Not approved
+- Fuel grade chips (E-10 87 green, E-10 90 red, Diesel charcoal)
+- Price age label ("2 h ago", "yesterday")
+- Maintenance status pill (Overdue | Due soon | Upcoming | Done)
+- Service progress bar (last service → next due)
+- Odometer scan camera frame
+- GPS accuracy indicator (green / amber / red)
+- Vehicle selector chip with dropdown
+- Parts tier section header (1–5 with icon and explainer)
+- Contributor level badge + progress bar
+- Parish coverage bar
+- Directions app picker (action sheet)
+- Toast notifications (saved, submitted, approved, error)
+- Loading skeletons for station cards and map
+- Pull-to-refresh on lists
+- Empty state illustrations for each section
+- Confirmation modals
+- Offline queue indicator
+
+INTERACTIONS:
+- Map and bottom sheet stay in sync: dragging the map updates the list, tapping a card centers its pin
+- Swipe the bottom sheet up for full list, down for full map
+- Tap a pin → place detail bottom sheet
+- Grade chip switches every price bubble on the map instantly
+- Odometer scan → auto-read → confirm in two taps
+- Station auto-detected from GPS when logging fuel
+- Pin placement: drag the map under a fixed center pin
+- "Confirm location" disabled until GPS accuracy is good
+- Haptic feedback on fuel logged, pin submitted, pin approved
+- Confetti on first fuel log and first approved pin
+- Pull to refresh on lists
+- Offline actions queue and auto-send with a small sync indicator
+- Deep link "Directions" into Google Maps / Waze
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Roam Dominion - Places Review (Desktop Admin, for the owner):
+
+Design high-fidelity desktop admin screens for the "Places Review" section of Roam Dominion — the master database admin (roamdominion.co). The owner personally approves every place that Roam Plug users pin across all 14 parishes of Jamaica, so these screens must make reviewing fast: most decisions should take one click.
+
+BRAND IDENTITY:
+- Match the existing Roam Dominion admin style (left sidebar navigation, white cards, compact data tables)
+- Primary action: Green (#16a34a) for Approve
+- Destructive: Red (#dc2626) for Reject
+- Merge / duplicate: Vivid Orange (#ea580c)
+- Pending: Stone (#57534e)
+- Typography: Inter
+- Light theme default, dark mode variant
+
+DESIGN PRINCIPLES:
+- Desktop-first (1440px wide), keyboard friendly
+- Map and evidence visible together — no switching pages to decide
+- Grouped evidence: many pins for the same place appear as ONE review item
+- Suggested decision pre-filled on every item
+- Keyboard shortcuts shown on buttons (A approve, R reject, M merge, N next)
+
+---
+
+SCREEN D1: PLACES REVIEW QUEUE
+- Sidebar: Vehicle Database | Fuel | Places Review (active) | Tolls | ...
+- Header: "Places Review" + counts: "184 waiting • oldest 3 days • 62 approved today"
+- Filters bar: Parish | Place type | Evidence strength (Strong / Medium / Weak) | Source (Roam Plug / Roam Fleet) | Age
+- Sort: Strongest evidence first (default) | Oldest first | Parish
+- Table rows (one per candidate place):
+  - Checkbox
+  - Place type icon + submitted name: "Precision Auto Works"
+  - Parish / town: "St Andrew — Half-Way-Tree"
+  - Evidence: "5 pins • 4 people • best ±9 m • 2 photos"
+  - Suggested action pill: "Approve — strong" (green) | "Likely duplicate of Total HWT" (orange) | "Weak — check photo" (warning #d97706)
+  - First seen / last seen
+- Bulk action bar when rows selected: "Approve 12 selected" | "Reject"
+- Pagination
+
+SCREEN D2: REVIEW ITEM (SPLIT VIEW)
+- Left (60%): map
+  - All submitted pins for this item with accuracy circles
+  - Proposed final pin (draggable)
+  - Nearby verified places faint, with names
+  - Satellite / map toggle, Street View link
+- Right (40%): evidence panel
+  - Suggested decision banner at top
+  - Place type, submitted names (with counts), brand, services ticked
+  - Photos carousel
+  - Contributor list: display name, trust level, past approval rate
+  - Pin history timeline
+- Sticky action bar at bottom:
+  - "Approve" (A) green
+  - "Merge into existing…" (M) orange
+  - "Edit then approve" (E)
+  - "Reject" (R) red with reason dropdown: Duplicate | Wrong location | Not a real place | Spam | Other
+  - "Skip" (N)
+- After action, next item loads automatically
+
+SCREEN D3: MERGE INTO EXISTING PLACE - MODAL
+- "Merge into an existing place"
+- Search existing places nearby (list with distance)
+- Side-by-side compare: submitted vs existing (name, pin, services)
+- Choose which details to keep
+- "Merge" button
+
+SCREEN D4: COVERAGE BY PARISH DASHBOARD
+- Map of Jamaica with 14 parishes shaded by verified places per type
+- Table: Parish | Gas stations | Parts stores | Mechanics | Air pumps | Restrooms | Car washes | Pending
+- Trend chart: places approved per day
+- Queue health cards: Waiting | Oldest waiting | Approved today | Rejection rate
+- Top contributors this week (display names only)
+
+ADDITIONAL UI COMPONENTS:
+- Evidence strength pill (Strong / Medium / Weak)
+- Suggested action pill
+- Accuracy circle map overlay
+- Contributor trust badge
+- Keyboard shortcut hints on buttons
+- Bulk action bar
+- Toasts: "Approved — next item loaded"
+
+INTERACTIONS:
+- Keyboard shortcuts for every decision
+- Auto-advance to the next item after each decision
+- Drag the proposed pin to correct the location before approving
+- Hover a pin on the map to highlight its evidence row
+- Bulk approve only enabled for "Strong" items
+
+
+
+
+Spec screens	Area
+1–3 Splash, welcome, carousel	Onboarding
+4–8 Sign up, OTP, profile, privacy, permissions	Onboarding
+9–13 Add vehicle	Onboarding / Garage
+14 Login	Auth
+15–23 Explore, fuel, place details	Explore
+24–28 Log fuel	Log Fuel
+29–37 Garage, maintenance, fuel spend, documents	Garage
+38–41 Parts	Parts
+42–47 Map It, contributions, parish coverage	Map It
+48 Tolls	Explore
+49–57 Search, inbox, account, settings, help, errors	Account / system
+D1–D4 Places Review	Roam Dominion (desktop)

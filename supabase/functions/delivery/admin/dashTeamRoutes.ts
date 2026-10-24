@@ -199,7 +199,15 @@ export function mountDashTeamRoutes(admin: Hono) {
     };
     if (expiresAt) grantRow.expires_at = expiresAt;
 
-    const { error: grantErr } = await pdb.from("user_roles").upsert(grantRow, { onConflict: "user_id,role_id" });
+    let seatQuery = pdb.from("user_roles").select("id")
+      .eq("user_id", userId)
+      .eq("role_id", role.id)
+      .eq("scope_type", scopeType);
+    seatQuery = scopeId ? seatQuery.eq("scope_id", scopeId) : seatQuery.is("scope_id", null);
+    const { data: existingSeat } = await seatQuery.maybeSingle();
+    const grantErr = existingSeat?.id
+      ? (await pdb.from("user_roles").update(grantRow).eq("id", existingSeat.id)).error
+      : (await pdb.from("user_roles").insert(grantRow)).error;
     if (grantErr) return c.json({ error: grantErr.message }, 500);
 
     await writeAdminAudit({

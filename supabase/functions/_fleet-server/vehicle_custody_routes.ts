@@ -162,6 +162,9 @@ export function registerVehicleCustodyRoutes(
         if (!isSelf && !orgId) {
           return c.json({ error: "Forbidden" }, 403);
         }
+        const { workforcePauseMessage } = await import("../_shared/workforcePause.ts");
+        const paused = await workforcePauseMessage(driverIdParam, "rideshare");
+        if (paused) return c.json({ error: paused, eligible: false }, 403);
 
         const resolved = await resolveDriverVehicleAssignment(driverIdParam, {
           organizationId: orgId,

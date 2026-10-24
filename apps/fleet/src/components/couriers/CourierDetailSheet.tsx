@@ -1,9 +1,11 @@
 import type { CourierComplianceBlocker } from '@roam/types/courier';
+import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle, Package, UserMinus, X } from 'lucide-react';
 import { toast } from 'sonner';
-import { API_ENDPOINTS } from '@roam/api-client';
-import { requireAuthHeaders } from '../../utils/authHeaders';
+import { api } from '../../services/api';
+import { formatJMD } from '../../utils/formatJMD';
+import { usePermissions } from '../../hooks/usePermissions';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import {
@@ -46,16 +48,21 @@ export function CourierDetailSheet({
   onOpenChange: (open: boolean) => void;
 }) {
   const queryClient = useQueryClient();
+  const { can } = usePermissions();
+  const [removeOpen, setRemoveOpen] = useState(false);
+  const [removeName, setRemoveName] = useState('');
+  const [removeReport, setRemoveReport] = useState<
+    | { failed: true }
+    | { failed: false; displayName: string; blockers: Array<{ label: string; amount?: number }> }
+    | null
+  >(null);
 
   const removeMutation = useMutation({
     mutationFn: async (courierId: string) => {
-      const response = await fetch(`${API_ENDPOINTS.fleetCore}/team/drivers/${courierId}/remove`, {
-        method: 'POST',
-        headers: await requireAuthHeaders(null),
+      return api.endWorkforceMember(courierId, {
+        confirmName: removeName,
+        serviceLine: 'rush_delivery',
       });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(data.error || 'Failed to remove courier');
-      return data;
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['couriers'] });
@@ -143,24 +150,69 @@ export function CourierDetailSheet({
             </p>
           </div>
 
-          <Button
-            type="button"
-            variant="outline"
-            className="w-full border-red-200 text-red-700 hover:bg-red-50 dark:border-red-900/50 dark:text-red-300 dark:hover:bg-red-950/40"
-            disabled={removeMutation.isPending}
-            onClick={() => {
-              if (
-                window.confirm(
-                  `Remove ${courier.name} from your fleet? They will become an independent courier again.`,
-                )
-              ) {
-                removeMutation.mutate(courier.id);
-              }
-            }}
-          >
-            <UserMinus className="mr-2 h-4 w-4" />
-            {removeMutation.isPending ? 'Removing…' : 'Remove from fleet'}
-          </Button>
+          {can('workforce.remove') && (
+          <div className="space-y-2">
+            {!removeOpen ? (
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full border-red-200 text-red-700 hover:bg-red-50 dark:border-red-900/50 dark:text-red-300 dark:hover:bg-red-950/40"
+                onClick={() => {
+                  setRemoveOpen(true);
+                  setRemoveName('');
+                  setRemoveReport(null);
+                  void api.offboardingCheck(courier.id)
+                    .then((report) => setRemoveReport({
+                      failed: false,
+                      displayName: report.displayName,
+                      blockers: report.blockers || [],
+                    }))
+                    .catch(() => setRemoveReport({ failed: true }));
+                }}
+              >
+                <UserMinus className="mr-2 h-4 w-4" />
+                Remove from fleet
+              </Button>
+            ) : (
+              <div className="space-y-2 rounded-lg border border-red-200 p-3 text-sm">
+                <p>
+                  {removeReport?.failed
+                    ? "We couldn't confirm what's still open. Try again."
+                    : removeReport && !removeReport.failed && removeReport.blockers.length
+                      ? 'Something is still open. Type their name to remove them. Their Roam login stays. Past weeks stay in your history.'
+                      : 'Remove them from this fleet? Their Roam login stays. Past weeks stay in your history.'}
+                </p>
+                {removeReport && !removeReport.failed && removeReport.blockers.map((b) => (
+                  <p key={b.label}>{b.label}{typeof b.amount === 'number' ? ` — ${formatJMD(b.amount, 2)}` : ''}</p>
+                ))}
+                {removeReport && !removeReport.failed && removeReport.blockers.length > 0 && (
+                  <input
+                    className="w-full rounded-md border px-3 py-2"
+                    placeholder={`Type ${removeReport.displayName}`}
+                    value={removeName}
+                    onChange={(e) => setRemoveName(e.target.value)}
+                  />
+                )}
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full border-red-200 text-red-700"
+                  disabled={
+                    removeMutation.isPending ||
+                    !removeReport ||
+                    removeReport.failed ||
+                    (removeReport.failed === false &&
+                      removeReport.blockers.length > 0 &&
+                      removeName.trim().toLowerCase() !== removeReport.displayName.trim().toLowerCase())
+                  }
+                  onClick={() => removeMutation.mutate(courier.id)}
+                >
+                  {removeMutation.isPending ? 'Removing…' : 'Remove from fleet'}
+                </Button>
+              </div>
+            )}
+          </div>
+          )}
 
           <Button type="button" variant="outline" className="w-full" onClick={() => onOpenChange(false)}>
             <X className="mr-2 h-4 w-4" />

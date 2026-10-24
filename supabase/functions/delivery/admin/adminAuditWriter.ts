@@ -12,6 +12,8 @@ export type AdminAuditInput = {
   metadata?: Record<string, unknown>;
   resourceType?: string;
   resourceId?: string;
+  ipAddress?: string | null;
+  userAgent?: string | null;
 };
 
 function platformClient() {
@@ -30,6 +32,8 @@ export async function writeAdminAudit(input: AdminAuditInput): Promise<void> {
     permission_key: input.permissionKey ?? null,
     resource_type: input.resourceType ?? null,
     resource_id: input.resourceId ?? null,
+    ip_address: input.ipAddress ?? null,
+    user_agent: input.userAgent ?? null,
     metadata: {
       ...(input.metadata ?? {}),
       ...(input.reason ? { reason: input.reason } : {}),

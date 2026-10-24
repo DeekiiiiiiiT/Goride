@@ -6,6 +6,7 @@ import { resolveRole, Role } from '../../utils/permissions';
 import { FLEET_OAUTH_INTENT_KEY, FLEET_OAUTH_INTENT_VALUE } from '../../utils/fleetAuthSignup';
 import { provisionFleetOwnerAccount } from '../../services/fleetOwnerAuth';
 import { needsFleetOwnerProvision } from '../../utils/fleetOwnerUser';
+import { fetchTeamAccess, type TeamAccess } from '../../services/teamAccess';
 
 type UserRole = 'admin' | 'manager' | 'viewer' | 'driver' | 'superadmin';
 
@@ -17,6 +18,7 @@ interface AuthContextType {
   organizationId: string | null;
   loading: boolean;
   needsProvision: boolean;
+  teamAccess: TeamAccess | null;
   signOut: () => Promise<void>;
   refreshSession: () => Promise<void>;
 }
@@ -29,6 +31,7 @@ const AuthContext = createContext<AuthContextType>({
   organizationId: null,
   loading: true,
   needsProvision: false,
+  teamAccess: null,
   signOut: async () => {},
   refreshSession: async () => {},
 });
@@ -51,36 +54,49 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [organizationId, setOrganizationId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [needsProvision, setNeedsProvision] = useState(false);
+  const [teamAccess, setTeamAccess] = useState<TeamAccess | null>(null);
 
-  const applySession = useCallback((session: Session | null) => {
-    setSession(session);
-    setUser(session?.user ?? null);
-    if (session?.user) {
-      const userRole = (jwtPrimaryRole(session.user) || null) as UserRole | null;
+  const applyAccess = useCallback((access: TeamAccess | null) => {
+    setTeamAccess(access);
+    if (!access) return;
+    if (access.portal) {
+      setResolvedRole(resolveRole(access.role));
+      if (access.organizationId) setOrganizationId(access.organizationId);
+      if (access.role !== 'fleet_owner') setNeedsProvision(false);
+    } else if (access.pendingInvite) {
+      setNeedsProvision(false);
+    }
+  }, []);
+
+  const hydrate = useCallback(async (next: Session | null) => {
+    setSession(next);
+    setUser(next?.user ?? null);
+    if (next?.user) {
+      const userRole = (jwtPrimaryRole(next.user) || null) as UserRole | null;
       setRole(userRole);
       setResolvedRole(resolveRole(userRole));
-      setOrganizationId(deriveOrgId(session.user));
-      setNeedsProvision(needsFleetOwnerProvision(session.user));
+      setOrganizationId(deriveOrgId(next.user));
+      setNeedsProvision(needsFleetOwnerProvision(next.user));
+      if (next.access_token) applyAccess(await fetchTeamAccess(next.access_token));
     } else {
       setRole(null);
       setResolvedRole(null);
       setOrganizationId(null);
       setNeedsProvision(false);
+      setTeamAccess(null);
     }
-  }, []);
+  }, [applyAccess]);
 
   const refreshSession = useCallback(async () => {
-    const { data: { session } } = await supabase.auth.getSession();
-    applySession(session);
-  }, [applySession]);
+    const { data: { session: next } } = await supabase.auth.refreshSession();
+    const session = next ?? (await supabase.auth.getSession()).data.session;
+    await hydrate(session);
+  }, [hydrate]);
 
   useEffect(() => {
-    // 1. Get initial session
     const initSession = async () => {
       try {
-        const { data: { session }, error } = await supabase.auth.getSession();
-
-        // If the refresh token is stale/revoked, clear it so the error stops recurring
+        const { data: { session: next }, error } = await supabase.auth.getSession();
         if (error) {
           console.warn('Session init error (clearing stale tokens):', error.message);
           await supabase.auth.signOut({ scope: 'local' });
@@ -88,32 +104,29 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           setUser(null);
           setRole(null);
           setResolvedRole(null);
+          setTeamAccess(null);
           setLoading(false);
           return;
         }
-
-        applySession(session);
-      } catch (error: any) {
+        await hydrate(next);
+      } catch (error: unknown) {
         console.error('Error fetching session:', error);
-        // Belt-and-suspenders: also clear on unexpected throw
-        try { await supabase.auth.signOut({ scope: 'local' }); } catch {}
+        try { await supabase.auth.signOut({ scope: 'local' }); } catch { /* already signed out */ }
       } finally {
         setLoading(false);
       }
     };
 
-    initSession();
+    void initSession();
 
-    // 2. Listen for changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      applySession(session);
-      setLoading(false);
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, next) => {
+      void hydrate(next).finally(() => setLoading(false));
     });
 
     return () => {
       subscription.unsubscribe();
     };
-  }, [applySession]);
+  }, [hydrate]);
 
   /** Google OAuth on /signup: provision fleet owner when intent flag is set */
   useEffect(() => {
@@ -146,6 +159,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     setRole(null);
     setResolvedRole(null);
     setOrganizationId(null);
+    setTeamAccess(null);
     setLoading(false);
 
     // 2. Attempt Supabase sign out
@@ -157,7 +171,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ session, user, role, resolvedRole, organizationId, loading, needsProvision, signOut, refreshSession }}>
+    <AuthContext.Provider value={{ session, user, role, resolvedRole, organizationId, loading, needsProvision, teamAccess, signOut, refreshSession }}>
       {children}
     </AuthContext.Provider>
   );

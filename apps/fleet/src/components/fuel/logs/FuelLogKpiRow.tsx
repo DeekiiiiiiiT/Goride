@@ -15,6 +15,8 @@ export type KpiTile = {
   label: string;
   value: string;
   hint?: string;
+  /** Cash vs gas card lines under Spend. Shown only when they add up to the total. */
+  split?: { cash: string; gasCard: string };
   tone?: 'default' | 'warning' | 'danger' | 'success';
   /** When set, tile is a filter control. */
   filterable?: boolean;
@@ -80,6 +82,18 @@ export function FuelLogKpiRow({
             >
               {t.value}
             </div>
+            {t.split ? (
+              <div className="mt-1 flex flex-wrap items-baseline gap-x-3 gap-y-0.5 text-[10px] leading-tight sm:text-[11px]">
+                <span>
+                  <span className="text-slate-400">Cash </span>
+                  <span className="font-semibold tabular-nums text-slate-700">{t.split.cash}</span>
+                </span>
+                <span>
+                  <span className="text-slate-400">Gas Card </span>
+                  <span className="font-semibold tabular-nums text-slate-700">{t.split.gasCard}</span>
+                </span>
+              </div>
+            ) : null}
             {t.hint ? (
               <div
                 className="mt-0.5 hidden truncate text-[10px] leading-tight text-slate-400 sm:block"
@@ -116,6 +130,17 @@ export function cycleKpisToTiles(
   ];
 }
 
+/** Hide the split when it would not add up to the total on the card. */
+function spendSplit(kpis: TransactionKpis): KpiTile['split'] {
+  const cash = Number(kpis.cashSpend) || 0;
+  const gas = Number(kpis.gasCardSpend) || 0;
+  if (Math.abs(cash + gas - (Number(kpis.totalSpend) || 0)) > 0.05) return undefined;
+  return {
+    cash: formatFuelMoney(cash, 0),
+    gasCard: formatFuelMoney(gas, 0),
+  };
+}
+
 /** Map Transaction KPIs to display tiles. */
 export function transactionKpisToTiles(
   kpis: TransactionKpis,
@@ -131,7 +156,12 @@ export function transactionKpisToTiles(
       value: String(kpis.totalFills),
       hint: opts?.sourceHint,
     },
-    { id: 'spend', label: 'Spend', value: formatFuelMoney(kpis.totalSpend, 0) },
+    {
+      id: 'spend',
+      label: 'Spend',
+      value: formatFuelMoney(kpis.totalSpend, 0),
+      split: spendSplit(kpis),
+    },
     {
       id: 'imbalanced',
       label: 'Imbalanced',

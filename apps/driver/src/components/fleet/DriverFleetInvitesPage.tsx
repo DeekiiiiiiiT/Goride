@@ -7,6 +7,8 @@ import {
   acceptFleetInviteById,
   declineFleetInviteById,
   loadMyFleetInvites,
+  leaveDriverFleet,
+  previewLeaveFleet,
 } from '../../lib/driverRoamTagService';
 import { useDriver } from '../../contexts/DriverContext';
 
@@ -19,6 +21,13 @@ export function DriverFleetInvitesPage({ onBack }: Props) {
   const [invites, setInvites] = useState<WorkforceInviteMineDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [actingId, setActingId] = useState<string | null>(null);
+  const [leaveOpen, setLeaveOpen] = useState(false);
+  const [leaveName, setLeaveName] = useState('');
+  const [leaveReport, setLeaveReport] = useState<
+    | { failed: true }
+    | { failed: false; displayName: string; blockers: Array<{ label: string; amount?: number }> }
+    | null
+  >(null);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -31,6 +40,27 @@ export function DriverFleetInvitesPage({ onBack }: Props) {
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  const startLeave = async () => {
+    setLeaveOpen(true);
+    setLeaveName('');
+    setLeaveReport(null);
+    const preview = await previewLeaveFleet();
+    if (!preview.ok) setLeaveReport({ failed: true });
+    else setLeaveReport({ failed: false, displayName: preview.displayName, blockers: preview.blockers });
+  };
+
+  const leaveThisFleet = async () => {
+    if (!leaveReport || leaveReport.failed) return;
+    const result = await leaveDriverFleet(leaveName);
+    if (result.ok) {
+      toast.success('You left the fleet');
+      setLeaveOpen(false);
+      await refreshProfile();
+    } else {
+      toast.error(result.error);
+    }
+  };
 
   const onAccept = async (id: string) => {
     setActingId(id);
@@ -80,8 +110,53 @@ export function DriverFleetInvitesPage({ onBack }: Props) {
             <div>
               <p className="font-semibold text-slate-900 dark:text-white">You’re in a fleet</p>
               <p className="mt-0.5 text-sm text-slate-500 dark:text-slate-400">
-                Fleet membership is active on this account.
+                This fleet can see your name, photo, phone, email, trips, and earnings. Your login stays yours. You can leave anytime.
               </p>
+              <button
+                type="button"
+                className="mt-3 text-sm font-semibold text-rose-600"
+                onClick={() => void startLeave()}
+              >
+                Leave fleet
+              </button>
+              {leaveOpen && (
+                <div className="mt-3 space-y-2 text-sm">
+                  <p>
+                    {leaveReport?.failed
+                      ? "We couldn't confirm what's still open. Try again."
+                      : leaveReport && !leaveReport.failed && leaveReport.blockers.length
+                        ? 'Something is still open. Type your name to leave. Your Roam login stays.'
+                        : 'Leave this fleet? Your Roam login stays. Past weeks stay on the fleet’s history.'}
+                  </p>
+                  {leaveReport && !leaveReport.failed && leaveReport.blockers.map((b) => (
+                    <p key={b.label}>
+                      {b.label}{typeof b.amount === 'number' ? ` — J$${b.amount.toFixed(2)}` : ''}
+                    </p>
+                  ))}
+                  {leaveReport && !leaveReport.failed && leaveReport.blockers.length > 0 && (
+                    <input
+                      className="w-full rounded-md border px-3 py-2"
+                      placeholder={`Type ${leaveReport.displayName}`}
+                      value={leaveName}
+                      onChange={(e) => setLeaveName(e.target.value)}
+                    />
+                  )}
+                  <button
+                    type="button"
+                    className="text-sm font-semibold text-rose-600"
+                    disabled={
+                      !leaveReport ||
+                      leaveReport.failed ||
+                      (leaveReport.failed === false &&
+                        leaveReport.blockers.length > 0 &&
+                        leaveName.trim().toLowerCase() !== leaveReport.displayName.trim().toLowerCase())
+                    }
+                    onClick={() => void leaveThisFleet()}
+                  >
+                    Confirm leave
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>

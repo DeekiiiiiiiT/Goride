@@ -1321,6 +1321,13 @@ app.post(`${BASE}/:movementId/approve`, requireSettlementPerm("settlements.appro
     if (typeof orgOrResp !== "string") return orgOrResp;
     const organizationId = orgOrResp;
     const user = c.get("rbacUser") as RbacUser;
+    const { assertMfaIfRequired } = await import("./team_staff_service.ts");
+    const mfaBlock = await assertMfaIfRequired(
+      (await import("./service_client.ts")).getServiceClient(),
+      organizationId,
+      user.userId,
+    );
+    if (mfaBlock) return c.json({ error: mfaBlock }, 403);
     const movementId = c.req.param("movementId");
     const body = await c.req.json();
     const decision = String(body.decision || "").toLowerCase();

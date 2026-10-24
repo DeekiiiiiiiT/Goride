@@ -32,16 +32,14 @@ type JoinRequestRow = {
   created_at: string;
   requester_name?: string | null;
   requester_email?: string | null;
+  verification?: 'approved' | 'pending';
+  holdsVehicle?: boolean;
 };
 
-export function FleetTagSection() {
-  const { can, jwtRole } = usePermissions();
-  const canEditTag =
-    can('users.invite') ||
-    can('drivers.create') ||
-    jwtRole === 'fleet_owner' ||
-    jwtRole === 'admin' ||
-    jwtRole === 'fleet_manager';
+export function FleetTagSection({ mode = 'all' }: { mode?: 'all' | 'tag' | 'requests' }) {
+  const { can } = usePermissions();
+  const canEditTag = can('fleet_tag.set');
+  const canApprove = can('workforce.approve');
 
   const [tag, setTag] = useState<string | null>(null);
   const [orgName, setOrgName] = useState<string | null>(null);
@@ -73,7 +71,7 @@ export function FleetTagSection() {
   const loadRequests = async () => {
     setRequestsLoading(true);
     try {
-      const data = await api.getJoinRequests('pending');
+      const data = await api.getJoinRequests(mode === 'requests' ? undefined : 'pending');
       setRequests(data.requests ?? []);
     } catch (e) {
       console.error(e);
@@ -145,6 +143,7 @@ export function FleetTagSection() {
 
   return (
     <div className="space-y-6">
+      {mode !== 'requests' && (
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -152,9 +151,8 @@ export function FleetTagSection() {
             Fleet Tag
           </CardTitle>
           <CardDescription>
-            Share this tag with drivers and couriers so they can request to join your fleet.
-            Once set, it cannot be changed (same as Rider Roam Tags). Instant invite codes still work.
-            {orgName ? ` (${orgName})` : ''}
+            Share this tag so drivers and couriers can ask to join.
+            {orgName ? <span className="mt-1 block font-medium text-slate-700 dark:text-slate-200">{orgName}</span> : null}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -232,7 +230,9 @@ export function FleetTagSection() {
           )}
         </CardContent>
       </Card>
+      )}
 
+      {mode !== 'tag' && (
       <Card>
         <CardHeader>
           <CardTitle>Join Requests</CardTitle>
@@ -266,7 +266,11 @@ export function FleetTagSection() {
                         <div className="font-medium text-slate-900 dark:text-slate-100">
                           {r.requester_name || 'Unknown'}
                         </div>
-                        <div className="text-xs text-slate-500">{r.requester_email || r.requester_user_id}</div>
+                        <div className="text-xs text-slate-500">{r.requester_email || 'Unknown user'}</div>
+                        <div className="mt-1 flex flex-wrap gap-1">
+                          <Badge variant="outline">{r.verification === 'approved' ? 'Roam verified' : 'Verification pending'}</Badge>
+                          {r.holdsVehicle ? <Badge variant="outline">Has a vehicle</Badge> : null}
+                        </div>
                       </TableCell>
                       <TableCell>
                         <Badge variant="outline" className="capitalize">
@@ -277,7 +281,7 @@ export function FleetTagSection() {
                         {new Date(r.created_at).toLocaleDateString()}
                       </TableCell>
                       <TableCell className="text-right">
-                        {canEditTag ? (
+                        {canApprove && r.status === 'pending' ? (
                           <div className="flex justify-end gap-2">
                             <Button
                               type="button"
@@ -300,7 +304,7 @@ export function FleetTagSection() {
                             </Button>
                           </div>
                         ) : (
-                          <span className="text-xs text-slate-400">Pending</span>
+                          <span className="text-xs capitalize text-slate-400">{r.status}</span>
                         )}
                       </TableCell>
                     </TableRow>
@@ -311,6 +315,7 @@ export function FleetTagSection() {
           )}
         </CardContent>
       </Card>
+      )}
     </div>
   );
 }

@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { EnterpriseInviteGate } from '@/app/auth/EnterpriseInviteGate';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/app/auth/AuthProvider';
 
@@ -18,7 +19,7 @@ export function RequireAuth({ children }: { children: React.ReactNode }) {
     return <Navigate to="/login" replace state={{ from: location.pathname }} />;
   }
 
-  return <>{children}</>;
+  return <EnterpriseInviteGate>{children}</EnterpriseInviteGate>;
 }
 
 /**

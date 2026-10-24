@@ -229,6 +229,15 @@ import {
   completeCustodyFromHandoverProof,
 } from "./vehicle_custody_routes.ts";
 import { registerFleetTagRoutes } from "./fleet_tag_routes.ts";
+import { registerTeamStaffRoutes } from "./team_staff_routes.ts";
+import { registerWorkforceLifecycleRoutes, endWorkforceInOrg } from "./workforce_lifecycle_routes.ts";
+import {
+  changeStaffRole,
+  createStaffInvite,
+  listStaff,
+  removeStaffSeat,
+} from "./team_staff_service.ts";
+import { isTeamRole } from "./team_staff_policy.ts";
 import { registerFleetModuleCheckoutRoutes } from "./fleet_module_checkout.ts";
 import {
   clearCourierFleetMembership,
@@ -2742,7 +2751,7 @@ export function registerResidualMonolithRoutes(app: Hono) {
     transaction: Record<string, unknown>,
     previous: Record<string, unknown> | null | undefined,
   ): Promise<boolean> {
-    if (rbacUser.resolvedRole !== "driver") return false;
+    if (rbacUser.resolvedRole !== "driver" && rbacUser.rawRole !== "driver") return false;
     const category = String(transaction.category || "").trim();
     if (!DRIVER_SELF_EXPENSE_CATEGORIES.has(category)) return false;
     const type = String(transaction.type || "Expense").trim();
@@ -7714,20 +7723,18 @@ export function registerResidualMonolithRoutes(app: Hono) {
   );
 
   // Admin: List Users (org-scoped) — still on core
-  app.get("/make-server-37f42386/users", requireAuth(), async (c) => {
+  app.get("/make-server-37f42386/users", requireAuth(), requirePermission('users.edit_role'), async (c) => {
     try {
       const rbacUser = c.get('rbacUser') as any;
       const { data: { users }, error } = await supabase.auth.admin.listUsers();
       
       if (error) throw error;
       
-      // Filter users by organizationId for data isolation
       const orgId = getOrgId(c);
 
-      // Determine who we should show based on context
       const orgUsers = (users || []).filter((u: any) => {
-        const uOrgId = u.user_metadata?.organizationId;
-        const uRole = u.user_metadata?.role || '';
+        const uOrgId = typeof u.app_metadata?.organizationId === 'string' ? u.app_metadata.organizationId : '';
+        const uRole = typeof u.app_metadata?.role === 'string' ? u.app_metadata.role : '';
         
         // Always hide platform-level users from anyone who isn't a platform role themselves
         const platformRoles = ['superadmin', 'platform_owner', 'platform_support', 'platform_analyst'];
@@ -7756,7 +7763,7 @@ export function registerResidualMonolithRoutes(app: Hono) {
           id: u.id,
           name: u.user_metadata?.name || 'Unknown',
           email: u.email || '',
-          role: u.user_metadata?.role || 'driver',
+          role: u.app_metadata?.role || 'unassigned',
           status: 'active', 
           lastActive: u.last_sign_in_at ? new Date(u.last_sign_in_at).toLocaleDateString() : 'Never',
           avatarUrl: u.user_metadata?.avatarUrl
@@ -8044,35 +8051,7 @@ export function registerResidualMonolithRoutes(app: Hono) {
 
   // ─── Phase 9: Team Invitation System ─────────────────────────────────────────
 
-  // Step 9.1: POST /team/invite — Invite team member with auto-generated temp password
-  const TEAM_ROLES = [
-    'fleet_manager',
-    'fleet_accountant',
-    'fleet_viewer',
-    'enterprise_dispatcher',
-    'enterprise_customs',
-    'enterprise_warehouse',
-    'enterprise_finance',
-    'enterprise_viewer',
-  ] as const;
-
-  function authMetaOrgId(u: { app_metadata?: Record<string, unknown>; user_metadata?: Record<string, unknown> }): string | undefined {
-    const app = u.app_metadata?.organizationId;
-    const user = u.user_metadata?.organizationId;
-    if (typeof app === 'string' && app.trim()) return app.trim();
-    if (typeof user === 'string' && user.trim()) return user.trim();
-    return undefined;
-  }
-
-  function authMetaRole(u: { app_metadata?: Record<string, unknown>; user_metadata?: Record<string, unknown> }): string {
-    const app = u.app_metadata?.role;
-    const user = u.user_metadata?.role;
-    if (typeof app === 'string' && app.trim()) return app.trim();
-    if (typeof user === 'string' && user.trim()) return user.trim();
-    return '';
-  }
-
-  /** JWT org, or owned org from X-Roam-Organization-Id (Enterprise owners often lack JWT org). */
+  // Staff seats. Never creates a password and never deletes a Roam account.
   async function resolveTeamOrgId(c: Context, rbacUser: any): Promise<string | null> {
     const fromJwt = getOrgId(c);
     if (fromJwt) return fromJwt;
@@ -8083,341 +8062,97 @@ export function registerResidualMonolithRoutes(app: Hono) {
       .select("id, owner_id")
       .eq("id", headerOrg)
       .maybeSingle();
-    if (org && String(org.owner_id) === String(rbacUser.userId)) {
-      return headerOrg;
-    }
+    if (org && String(org.owner_id) === String(rbacUser.userId)) return headerOrg;
     return null;
+  }
+
+  function teamAudit(c: Context) {
+    return {
+      ipAddress: c.req.header("x-forwarded-for") || c.req.header("cf-connecting-ip") || null,
+      userAgent: c.req.header("user-agent") || null,
+    };
   }
 
   app.post("/make-server-37f42386/team/invite", requireAuth(), requirePermission('users.invite'), async (c) => {
     try {
       const body = await c.req.json();
-      const { email, name, role } = body;
-      const sectionOverrides = parseSectionOverrides(body.sectionOverrides);
-
-      if (!email || !name) {
-        return c.json({ error: "Email and name are required" }, 400);
-      }
-      if (!TEAM_ROLES.includes(role)) {
-        return c.json({ error: `Invalid team role. Must be one of: ${TEAM_ROLES.join(', ')}` }, 400);
-      }
-
       const rbacUser = c.get('rbacUser') as any;
       const orgId = await resolveTeamOrgId(c, rbacUser);
-      if (!orgId) {
-        return c.json({ error: "Organization context required" }, 400);
-      }
-      const inviterUserId = rbacUser?.userId || null;
-
-      // Generate a random temporary password (12 chars)
-      const tempPassword = Array.from(crypto.getRandomValues(new Uint8Array(9)))
-        .map((b: number) => b.toString(36).padStart(2, '0'))
-        .join('')
-        .slice(0, 12);
-
-      const inviteMeta = {
-        name,
-        role,
-        organizationId: orgId || undefined,
-        productLine: 'enterprise',
-        invitedBy: inviterUserId || undefined,
-        invitedAt: new Date().toISOString(),
-        sectionOverrides,
-      };
-
-      const appMetaInvite = {
-        role,
-        organizationId: orgId || undefined,
-        productLine: 'enterprise',
-        invitedBy: inviterUserId || undefined,
-        invitedAt: inviteMeta.invitedAt,
-        sectionOverrides,
-      };
-
-      // Write org/role to both app_metadata (JWT source of truth) and user_metadata (list UI fallback)
-      const { data, error } = await supabase.auth.admin.createUser({
-        email,
-        password: tempPassword,
-        user_metadata: inviteMeta,
-        app_metadata: appMetaInvite,
-        email_confirm: true,
+      if (!orgId) return c.json({ error: "Organization context required" }, 400);
+      const result = await createStaffInvite(supabase, {
+        email: String(body.email || ""),
+        name: String(body.name || ""),
+        role: String(body.role || ""),
+        organizationId: orgId,
+        actorId: rbacUser?.userId,
+        actorRole: rbacUser?.resolvedRole || "fleet_owner",
+        productLine: resolveProductLine(c),
+        sectionOverrides: body.sectionOverrides,
+        audit: teamAudit(c),
       });
-
-      if (error) {
-        const isDuplicate =
-          error.message?.includes('already been registered') ||
-          error.message?.includes('already exists');
-        if (!isDuplicate) throw error;
-
-        // Shared Auth across Roam products — adopt passenger/fleet-less logins into this Enterprise org
-        const { data: listData, error: listErr } = await supabase.auth.admin.listUsers({
-          perPage: 1000,
-        });
-        if (listErr) throw listErr;
-        const existing = (listData?.users || []).find(
-          (u: { email?: string }) => u.email?.toLowerCase() === String(email).toLowerCase(),
-        );
-        if (!existing) {
-          return c.json({
-            error: "An account with this email already exists, but it could not be located for invite.",
-          }, 409);
-        }
-
-        const existingOrg = authMetaOrgId(existing);
-        const existingRole = authMetaRole(existing);
-        const platformRoles = ['superadmin', 'platform_owner', 'platform_support', 'platform_analyst'];
-        if (platformRoles.includes(existingRole)) {
-          return c.json({ error: "This email belongs to a platform account and cannot be invited." }, 409);
-        }
-        if (existingOrg && existingOrg !== orgId) {
-          return c.json({
-            error: "This email is already linked to another company on Roam. Use a different work email.",
-          }, 409);
-        }
-        if (existingOrg === orgId && TEAM_ROLES.includes(existingRole as typeof TEAM_ROLES[number])) {
-          return c.json({
-            error: "This person is already on your team. Change their role from the list below.",
-          }, 409);
-        }
-
-        const { data: updated, error: updateErr } = await supabase.auth.admin.updateUserById(
-          existing.id,
-          {
-            password: tempPassword,
-            user_metadata: { ...(existing.user_metadata || {}), ...inviteMeta },
-            app_metadata: { ...(existing.app_metadata || {}), ...appMetaInvite },
-            email_confirm: true,
-          },
-        );
-        if (updateErr) throw updateErr;
-
-        console.log(
-          `[Team] Adopted existing auth user ${email} as ${role} into org ${orgId} by ${inviterUserId}`,
-        );
-
-        return c.json({
-          success: true,
-          adopted: true,
-          userId: updated.user.id,
-          temporaryPassword: tempPassword,
-          message: `Added ${name} as ${role} (existing Roam login linked). Share the temporary password with them securely.`,
-        });
-      }
-
-      console.log(`[Team] Invited ${email} as ${role} into org ${orgId} by ${inviterUserId}`);
-
-      return c.json({
-        success: true,
-        userId: data.user.id,
-        temporaryPassword: tempPassword,
-        message: `Invited ${name} as ${role}. Share the temporary password with them securely.`,
-      });
+      return c.json({ success: true, ...result }, 202);
     } catch (e: any) {
-      console.error("[Team Invite] Error:", e);
-      return c.json({ error: e.message }, 500);
+      const status = e?.status || 500;
+      return c.json({ error: e.message }, status);
     }
   });
 
-  // Step 9.2: GET /team/members — List team members in same org
-  app.get("/make-server-37f42386/team/members", requireAuth(), async (c) => {
+  app.get("/make-server-37f42386/team/members", requireAuth(), requirePermission('users.view'), async (c) => {
     try {
       const rbacUser = c.get('rbacUser') as any;
       const orgId = await resolveTeamOrgId(c, rbacUser);
-      const { data: { users }, error } = await supabase.auth.admin.listUsers({ perPage: 1000 });
-      if (error) throw error;
-
-      const platformRoles = ['superadmin', 'platform_owner', 'platform_support', 'platform_analyst'];
-      const isRequestersPlatform = platformRoles.includes(rbacUser?.resolvedRole) ||
-        platformRoles.includes(rbacUser?.rawRole);
-
-      // Org owner may only live on organizations.owner_id (not as a "seat" with organizationId)
-      let ownerId: string | null = null;
-      if (orgId) {
-        const { data: org } = await supabase
-          .from("organizations")
-          .select("owner_id")
-          .eq("id", orgId)
-          .maybeSingle();
-        ownerId = org?.owner_id ? String(org.owner_id) : null;
-      }
-
-      const orgUsers = (users || []).filter((u: any) => {
-        const uOrgId = authMetaOrgId(u);
-        const uRole = authMetaRole(u);
-        const isPlatformUser = platformRoles.includes(uRole);
-
-        if (isPlatformUser && !isRequestersPlatform) return false;
-
-        if (orgId) {
-          if (uOrgId === orgId) return true;
-          if (ownerId && u.id === ownerId) return true;
-          return false;
-        }
-
-        if (rbacUser?.userId === '_anon_passthrough') return false;
-        if (isRequestersPlatform) return true;
-        return false;
-      });
-
-      const members = orgUsers.map((u: any) => {
-        const rawRole = authMetaRole(u) || 'enterprise_viewer';
-        const isOwner = Boolean(ownerId && u.id === ownerId);
-        // Owner always displays/acts as fleet_owner in Team Management. Do not stamp
-        // enterprise_owner onto `role` — fleet UI falls that unknown key back to Fleet Viewer.
-        let role = isOwner ? 'fleet_owner' : rawRole;
-        const seatRole = resolveEnterpriseSeatRole(isOwner ? 'enterprise_owner' : role);
-        const sectionOverrides = parseSectionOverrides(
-          u.app_metadata?.sectionOverrides ?? u.user_metadata?.sectionOverrides,
-        );
-        const effectiveSections = effectiveSectionAccess(seatRole, sectionOverrides);
-        return {
-          id: u.id,
-          name: u.user_metadata?.name || u.email || 'Unknown',
-          email: u.email || '',
-          role,
-          status: 'active',
-          lastActive: u.last_sign_in_at ? new Date(u.last_sign_in_at).toLocaleDateString() : 'Never',
-          invitedBy: u.app_metadata?.invitedBy || u.user_metadata?.invitedBy || null,
-          invitedAt: u.app_metadata?.invitedAt || u.user_metadata?.invitedAt || null,
-          isOwner,
-          sectionOverrides,
-          effectiveSections,
-          accessCustomized: Object.keys(sectionOverrides).length > 0,
-        };
-      });
-
-      return c.json(members);
+      if (!orgId) return c.json({ error: "Organization context required" }, 400);
+      const listed = await listStaff(supabase, orgId);
+      return c.json(listed.seats);
     } catch (e: any) {
       console.error("[Team Members] Error:", e);
       return c.json({ error: e.message }, 500);
     }
   });
 
-  // Step 9.3: PUT /team/members/:id/role — Update team member role + section overrides
   app.put("/make-server-37f42386/team/members/:id/role", requireAuth(), requirePermission('users.edit_role'), async (c) => {
     try {
       const targetId = c.req.param("id");
       const body = await c.req.json();
-      const { role: newRole } = body;
-      const hasOverridesField = Object.prototype.hasOwnProperty.call(body, 'sectionOverrides');
-      const sectionOverrides: EnterpriseSectionOverrides = hasOverridesField
-        ? parseSectionOverrides(body.sectionOverrides)
-        : {};
+      const newRole = String(body.role || "");
+      if (!isTeamRole(newRole)) return c.json({ error: "Invalid role. Cannot promote to owner." }, 400);
       const rbacUser = c.get('rbacUser') as any;
       const orgId = await resolveTeamOrgId(c, rbacUser);
-
-      if (!TEAM_ROLES.includes(newRole)) {
-        return c.json({ error: "Invalid role. Cannot promote to owner." }, 400);
-      }
-
-      const { data: { user: targetUser }, error: fetchErr } = await supabase.auth.admin.getUserById(targetId);
-      if (fetchErr || !targetUser) {
-        return c.json({ error: "User not found" }, 404);
-      }
-
-      // CRITICAL: Never allow role changes on platform-level users from any customer portal
-      const currentRole = authMetaRole(targetUser);
-      const protectedPlatformRoles = ['superadmin', 'platform_owner', 'platform_support', 'platform_analyst'];
-      if (protectedPlatformRoles.includes(currentRole)) {
-        return c.json({ error: "This user cannot be modified" }, 403);
-      }
-
-      const targetOrgId = authMetaOrgId(targetUser);
-      if (!targetOrgId) {
-        return c.json({ error: "This user does not belong to your organization" }, 403);
-      }
-
-      if (orgId && targetOrgId !== orgId) {
-        return c.json({ error: "Cannot modify users from another organization" }, 403);
-      }
-
-      if (currentRole === 'admin' || currentRole === 'fleet_owner' || currentRole === 'enterprise_owner') {
-        return c.json({ error: "Cannot change the organization owner's role" }, 403);
-      }
-
-      if (orgId) {
-        const { data: org } = await supabase.from("organizations").select("owner_id").eq("id", orgId).maybeSingle();
-        if (org?.owner_id && targetId === String(org.owner_id)) {
-          return c.json({ error: "Cannot change the organization owner's role" }, 403);
-        }
-      }
-
-      // When sectionOverrides is sent, replace stored overrides (even if {}); omit field → keep existing
-      const nextAppMeta = {
-        ...targetUser.app_metadata,
+      if (!orgId) return c.json({ error: "Organization context required" }, 400);
+      await changeStaffRole(supabase, {
+        organizationId: orgId,
+        actorId: rbacUser?.userId,
+        actorRole: rbacUser?.resolvedRole || "fleet_owner",
+        targetId,
         role: newRole,
-        ...(hasOverridesField ? { sectionOverrides } : {}),
-      };
-      const nextUserMeta = {
-        ...targetUser.user_metadata,
-        role: newRole,
-        ...(hasOverridesField ? { sectionOverrides } : {}),
-      };
-
-      const { error } = await supabase.auth.admin.updateUserById(targetId, {
-        user_metadata: nextUserMeta,
-        app_metadata: nextAppMeta,
+        sectionOverrides: Object.prototype.hasOwnProperty.call(body, "sectionOverrides")
+          ? body.sectionOverrides
+          : null,
+        audit: teamAudit(c),
       });
-      if (error) throw error;
-
-      console.log(`[Team] Access updated: ${targetId} → ${newRole} by org ${orgId}`);
-      return c.json({
-        success: true,
-        message: `Access updated. Teammate may need to sign out and back in to refresh their menu.`,
-      });
+      return c.json({ success: true, message: "Access updated." });
     } catch (e: any) {
-      console.error("[Team Role Update] Error:", e);
-      return c.json({ error: e.message }, 500);
+      const status = e?.status || 500;
+      return c.json({ error: e.message }, status);
     }
   });
 
-  // Step 9.4: DELETE /team/members/:id — Remove team member
   app.delete("/make-server-37f42386/team/members/:id", requireAuth(), requirePermission('users.remove'), async (c) => {
     try {
       const targetId = c.req.param("id");
       const rbacUser = c.get('rbacUser') as any;
       const orgId = await resolveTeamOrgId(c, rbacUser);
-
-      const { data: { user: targetUser }, error: fetchErr } = await supabase.auth.admin.getUserById(targetId);
-      if (fetchErr || !targetUser) {
-        return c.json({ error: "User not found" }, 404);
-      }
-
-      // CRITICAL: Never allow deletion of platform-level users from any customer portal
-      const targetRole = authMetaRole(targetUser);
-      const protectedPlatformRoles = ['superadmin', 'platform_owner', 'platform_support', 'platform_analyst'];
-      if (protectedPlatformRoles.includes(targetRole)) {
-        return c.json({ error: "This user cannot be removed" }, 403);
-      }
-
-      const targetOrgId = authMetaOrgId(targetUser);
-      if (orgId) {
-        const { data: org } = await supabase.from("organizations").select("owner_id").eq("id", orgId).maybeSingle();
-        if (org?.owner_id && targetId === String(org.owner_id)) {
-          return c.json({ error: "Cannot remove the organization owner" }, 403);
-        }
-      }
-
-      if (!targetOrgId) {
-        return c.json({ error: "This user does not belong to your organization" }, 403);
-      }
-
-      if (orgId && targetOrgId !== orgId) {
-        return c.json({ error: "Cannot remove users from another organization" }, 403);
-      }
-
-      if (targetRole === 'admin' || targetRole === 'fleet_owner' || targetRole === 'enterprise_owner') {
-        return c.json({ error: "Cannot remove the organization owner" }, 403);
-      }
-
-      const { error } = await supabase.auth.admin.deleteUser(targetId);
-      if (error) throw error;
-
-      console.log(`[Team] Removed user ${targetId} from org ${orgId}`);
-      return c.json({ success: true, message: "Team member removed" });
+      if (!orgId) return c.json({ error: "Organization context required" }, 400);
+      await removeStaffSeat(supabase, {
+        organizationId: orgId,
+        actorId: rbacUser?.userId,
+        targetId,
+        audit: teamAudit(c),
+      });
+      return c.json({ success: true, message: "Removed from team. Their Roam account is unchanged." });
     } catch (e: any) {
-      console.error("[Team Remove] Error:", e);
-      return c.json({ error: e.message }, 500);
+      const status = e?.status || 500;
+      return c.json({ error: e.message }, status);
     }
   });
 
@@ -8627,10 +8362,10 @@ export function registerResidualMonolithRoutes(app: Hono) {
 
       // Filter to drivers only
       const drivers = allUsers
-        .filter((u: any) => u.user_metadata?.role === 'driver')
+        .filter((u: any) => (u.app_metadata?.role || u.user_metadata?.role) === 'driver')
         .map((u: any) => {
           const meta = u.user_metadata || {};
-          const orgId = meta.organizationId || null;
+          const orgId = u.app_metadata?.organizationId || null;
           const isLinked = !!orgId;
           return {
             id: u.id,
@@ -8669,19 +8404,21 @@ export function registerResidualMonolithRoutes(app: Hono) {
       const { data: { user }, error: getUserErr } = await supabase.auth.admin.getUserById(driverId);
       if (getUserErr || !user) return c.json({ error: "User not found" }, 404);
 
-      if (user.user_metadata?.role !== 'driver') {
+      const role = user.app_metadata?.role || user.user_metadata?.role;
+      if (role !== 'driver') {
         return c.json({ error: "This user is not a driver" }, 400);
       }
 
-      if (!user.user_metadata?.organizationId) {
+      const linkedOrg = user.app_metadata?.organizationId || null;
+      if (!linkedOrg) {
         return c.json({ error: "Driver is already unlinked" }, 400);
       }
 
       // Clear auth + KV + driver_profiles + vehicle assignment (not just auth metadata)
       await detachDriverFromOrg(driverId);
 
-      console.log(`[Admin Drivers] Unlinked driver ${user.email} from org ${user.user_metadata.organizationId}`);
-      await logAdminAction({ actorId: rbacUser?.id, actorName: rbacUser?.name || 'Admin', action: 'unlink_driver', targetId: driverId, targetEmail: user.email || '', details: `From org: ${user.user_metadata.organizationId}` });
+      console.log(`[Admin Drivers] Unlinked driver ${user.email} from org ${linkedOrg}`);
+      await logAdminAction({ actorId: rbacUser?.id, actorName: rbacUser?.name || 'Admin', action: 'unlink_driver', targetId: driverId, targetEmail: user.email || '', details: `From org: ${linkedOrg}` });
       return c.json({ success: true, message: "Driver unlinked from organization" });
     } catch (e: any) {
       console.error("[Admin Drivers Unlink] Error:", e);
@@ -8706,11 +8443,12 @@ export function registerResidualMonolithRoutes(app: Hono) {
       const { data: { user: driver }, error: getDriverErr } = await supabase.auth.admin.getUserById(driverId);
       if (getDriverErr || !driver) return c.json({ error: "Driver not found" }, 404);
 
-      if (driver.user_metadata?.role !== 'driver') {
+      const driverRole = driver.app_metadata?.role || driver.user_metadata?.role;
+      if (driverRole !== 'driver') {
         return c.json({ error: "This user is not a driver" }, 400);
       }
 
-      if (driver.user_metadata?.organizationId) {
+      if (driver.app_metadata?.organizationId) {
         return c.json({ error: "Driver is already linked to an organization. Unlink them first." }, 409);
       }
 
@@ -8724,7 +8462,7 @@ export function registerResidualMonolithRoutes(app: Hono) {
       }
 
       const { error: updateErr } = await supabase.auth.admin.updateUserById(driverId, {
-        user_metadata: { ...driver.user_metadata, organizationId }
+        app_metadata: { ...driver.app_metadata, organizationId },
       });
       if (updateErr) throw updateErr;
 
@@ -9308,127 +9046,40 @@ export function registerResidualMonolithRoutes(app: Hono) {
     }
   });
 
-  // Step 10.5: POST /team/claim-driver — Claim an unlinked driver by email
-  app.post("/make-server-37f42386/team/claim-driver", requireAuth(), requirePermission('drivers.create'), async (c) => {
-    try {
-      const { driverEmail } = await c.req.json();
-      if (!driverEmail) {
-        return c.json({ error: "driverEmail is required" }, 400);
-      }
-
-      const orgId = getOrgId(c);
-      if (!orgId) {
-        return c.json({ error: "Cannot claim driver: no organization context" }, 400);
-      }
-
-      // Find user by email in Supabase Auth
-      const { data: { users }, error: listErr } = await supabase.auth.admin.listUsers({ perPage: 1000 });
-      if (listErr) throw listErr;
-
-      const targetUser = (users || []).find((u: any) => u.email?.toLowerCase() === driverEmail.toLowerCase());
-      if (!targetUser) {
-        return c.json({ error: `No account found for ${driverEmail}` }, 404);
-      }
-
-      const meta = targetUser.user_metadata || {};
-
-      // Verify their role is driver
-      if (meta.role !== 'driver') {
-        return c.json({ error: `This user is a ${meta.role || 'unknown'}, not a driver. Only drivers can be claimed.` }, 400);
-      }
-
-      // Verify they have no organizationId (not already claimed)
-      if (meta.organizationId) {
-        return c.json({ error: "This driver is already linked to an organization" }, 409);
-      }
-
-      // Update their user_metadata with the fleet owner's orgId
-      const { error: updateErr } = await supabase.auth.admin.updateUserById(targetUser.id, {
-        user_metadata: { ...meta, organizationId: orgId },
-      });
-      if (updateErr) throw updateErr;
-
-      // Also update the driver's KV profile to have organizationId
-      const driverProfile = await kv.get(`driver:${targetUser.id}`);
-      if (driverProfile) {
-        await kv.set(`driver:${targetUser.id}`, { ...driverProfile, organizationId: orgId });
-        console.log(`[ClaimDriver] Updated KV profile for driver ${targetUser.id} with org ${orgId}`);
-      } else {
-        // Driver has auth account but no KV profile — create one
-        const newProfile = {
-          id: targetUser.id,
-          driverId: targetUser.id,
-          driverName: meta.name || driverEmail.split('@')[0],
-          email: driverEmail,
-          status: 'active',
-          createdAt: new Date().toISOString(),
-          acceptanceRate: 0,
-          cancellationRate: 0,
-          completionRate: 0,
-          ratingLast500: 5.0,
-          totalEarnings: 0,
-          organizationId: orgId,
-        };
-        await kv.set(`driver:${targetUser.id}`, newProfile);
-        console.log(`[ClaimDriver] Created KV profile for driver ${targetUser.id} in org ${orgId}`);
-      }
-
-      await upsertDriverProfileFromServer({
-        userId: targetUser.id,
-        mode: "fleet",
-        fleetId: orgId,
-        displayName: (meta.name as string) || driverEmail.split("@")[0],
-        status: "active",
-        onboardingComplete: false,
-        markFleetJoined: true,
-      });
-      invalidateDriverCache();
-
-      console.log(`[ClaimDriver] Driver ${driverEmail} (${targetUser.id}) claimed by org ${orgId}`);
-      return c.json({ success: true, driverId: targetUser.id, message: `Driver ${driverEmail} has been linked to your organization` });
-    } catch (e: any) {
-      console.error("[ClaimDriver] Error:", e);
-      return c.json({ error: e.message }, 500);
-    }
+  app.post("/make-server-37f42386/team/claim-driver", requireAuth(), async (c) => {
+    return c.json({
+      error: "Drivers join by accepting a Fleet Tag or invite. A fleet cannot claim them.",
+    }, 403);
   });
 
   // POST /team/drivers/:id/remove — Fleet owner removes a driver from their own fleet.
   // Clears auth metadata, KV org, driver_profiles fleet link, and releases the vehicle.
-  app.post("/make-server-37f42386/team/drivers/:id/remove", requireAuth(), requirePermission('drivers.delete'), async (c) => {
+  app.post("/make-server-37f42386/team/drivers/:id/remove", requireAuth(), requirePermission('workforce.remove'), async (c) => {
     try {
       const orgId = getOrgId(c);
       if (!orgId) return c.json({ error: "No organization context" }, 400);
-
       const driverId = c.req.param('id');
-      const { data: { user }, error: getUserErr } = await supabase.auth.admin.getUserById(driverId);
-      if (getUserErr || !user) return c.json({ error: "Driver not found" }, 404);
-
-      // Scope check across membership stores — owner can only remove their own people
-      const metaOrg = typeof user.user_metadata?.organizationId === 'string' ? user.user_metadata.organizationId : '';
-      const { data: prof } = await supabase.from("driver_profiles").select("fleet_id").eq("user_id", driverId).maybeSingle();
-      const profOrg = prof?.fleet_id ? String(prof.fleet_id) : '';
-      const { data: courierProf } = await supabase.schema("delivery")
-        .from("courier_profiles")
-        .select("fleet_id")
-        .eq("user_id", driverId)
-        .maybeSingle();
-      const courierOrg = courierProf?.fleet_id ? String(courierProf.fleet_id) : '';
-      if (metaOrg !== orgId && profOrg !== orgId && courierOrg !== orgId) {
-        return c.json({ error: "This driver is not part of your fleet" }, 403);
-      }
-
-      await detachDriverFromOrg(driverId);
-
+      const body = await c.req.json().catch(() => ({}));
       const rbacUser = c.get('rbacUser') as any;
-      await logAdminAction({
-        actorId: rbacUser?.id,
-        actorName: rbacUser?.name || 'Fleet Owner',
-        action: 'remove_driver_from_fleet',
-        targetId: driverId,
-        targetEmail: user.email || '',
-        details: `Removed from org: ${orgId}`,
+      const result = await endWorkforceInOrg({
+        supabase,
+        kv,
+        requireAuth,
+        requirePermission,
+        getOrgId,
+        invalidateDriverCache,
+      }, {
+        organizationId: orgId,
+        userId: driverId,
+        actorId: rbacUser?.userId,
+        reason: 'fleet_removed',
+        confirmName: typeof body.confirmName === 'string' ? body.confirmName : undefined,
+        serviceLine: body.serviceLine === 'rush_delivery' ? 'rush_delivery' : body.serviceLine === 'rideshare' ? 'rideshare' : undefined,
       });
-      return c.json({ success: true, message: "Driver removed from your fleet" });
+      if (!result.ok) {
+        return c.json({ error: result.error, blockers: result.blockers, displayName: result.displayName }, result.status);
+      }
+      return c.json({ success: true, message: "Removed from your fleet. Their Roam account is unchanged." });
     } catch (e: any) {
       console.error("[Team Drivers Remove] Error:", e);
       return c.json({ error: e.message }, 500);
@@ -9442,7 +9093,7 @@ export function registerResidualMonolithRoutes(app: Hono) {
       if (!rbacUser || rbacUser.userId === "_anon_passthrough") {
         return c.json({ error: "Unauthorized" }, 401);
       }
-      if (rbacUser.resolvedRole !== "driver") {
+      if (rbacUser.resolvedRole !== "driver" && rbacUser.rawRole !== "driver") {
         return c.json({ error: "Only driver accounts can join a fleet from this endpoint" }, 403);
       }
 
@@ -9524,13 +9175,24 @@ export function registerResidualMonolithRoutes(app: Hono) {
     }
   });
 
-  // Admin: Update User Details (name, role, businessType) — role goes to app_metadata only
-  app.post("/make-server-37f42386/update-user", requireAuth(), requirePermission('users.edit_role'), async (c) => {
+  // Platform only. Fleet owners must not write roles or customer profiles.
+  app.post("/make-server-37f42386/update-user", requireAuth(), async (c) => {
     try {
-      const { userId, name, role, businessType } = await c.req.json();
+      const rbacUser = c.get("rbacUser") as RbacUser | undefined;
+      if (!rbacUser) return c.json({ error: "Unauthorized" }, 401);
 
-      if (!userId) {
-        return c.json({ error: "User ID is required" }, 400);
+      const { userId, name, role, businessType } = await c.req.json();
+      if (!userId) return c.json({ error: "User ID is required" }, 400);
+
+      const wantsRole = role !== undefined;
+      const wantsProfile = name !== undefined || businessType !== undefined;
+      if (!wantsRole && !wantsProfile) return c.json({ error: "No fields to update" }, 400);
+
+      if (wantsRole && !hasPlatformOwnerAccess(rbacUser)) {
+        return c.json({ error: "Forbidden" }, 403);
+      }
+      if (wantsProfile && !hasPlatformStaffAccess(rbacUser)) {
+        return c.json({ error: "Forbidden" }, 403);
       }
 
       const { data: existing, error: getErr } = await supabase.auth.admin.getUserById(userId);
@@ -9543,14 +9205,13 @@ export function registerResidualMonolithRoutes(app: Hono) {
       };
       if (name !== undefined) userMetaUpdates.name = name;
       if (businessType !== undefined) userMetaUpdates.businessType = businessType;
-      // Never store authz role in user_metadata
       delete userMetaUpdates.role;
       delete userMetaUpdates.organizationId;
 
       const appMetaUpdates: Record<string, unknown> = {
         ...(existing.user.app_metadata || {}),
       };
-      if (role !== undefined) {
+      if (wantsRole && hasPlatformOwnerAccess(rbacUser)) {
         appMetaUpdates.role = role;
         const prevRoles = Array.isArray(appMetaUpdates.roles)
           ? (appMetaUpdates.roles as unknown[]).filter((r): r is string => typeof r === "string")
@@ -9560,18 +9221,11 @@ export function registerResidualMonolithRoutes(app: Hono) {
         appMetaUpdates.roles = Array.from(nextRoles);
       }
 
-      if (name === undefined && role === undefined && businessType === undefined) {
-        return c.json({ error: "No fields to update" }, 400);
-      }
-
       const { data, error } = await supabase.auth.admin.updateUserById(userId, {
         user_metadata: userMetaUpdates,
         app_metadata: appMetaUpdates,
       });
-
       if (error) throw error;
-
-      console.log(`User updated: ${userId} — role=${role ?? "(unchanged)"}`);
 
       if (role === "admin" || data.user?.app_metadata?.role === "admin") {
         await invalidateCustomerCache();
@@ -9580,40 +9234,6 @@ export function registerResidualMonolithRoutes(app: Hono) {
       return c.json({ success: true, user: data.user });
     } catch (e: any) {
       console.error("Update User Error:", e);
-      return c.json({ error: e.message }, 500);
-    }
-  });
-
-  // Admin: Delete User (Driver)
-  app.post("/make-server-37f42386/delete-user", requireAuth(), requirePermission('users.remove'), async (c) => {
-    try {
-      const { userId } = await c.req.json();
-      
-      if (!userId) {
-        return c.json({ error: "User ID is required" }, 400);
-      }
-      
-      // 1. Get user info before deletion (to check role)
-      const { data: userData } = await supabase.auth.admin.getUserById(userId);
-      const isAdmin = userData?.user?.user_metadata?.role === 'admin';
-      
-      // 2. Delete from Auth (Attempt)
-      const { error } = await supabase.auth.admin.deleteUser(userId);
-      if (error) {
-          console.warn(`Auth delete failed for ${userId} (ignoring):`, error.message);
-      }
-      
-      // 3. Delete from KV Store
-      await kv.del(`driver:${userId}`);
-      
-      // 4. Invalidate customer cache if deleting an admin user
-      if (isAdmin) {
-        await invalidateCustomerCache();
-      }
-      
-      return c.json({ success: true });
-    } catch (e: any) {
-      console.error("Delete User Error:", e);
       return c.json({ error: e.message }, 500);
     }
   });
@@ -10420,6 +10040,12 @@ export function registerResidualMonolithRoutes(app: Hono) {
       const custodyOk = await assertVehicleCustodyForCheckIn(String(checkIn.vehicleId));
       if (!custodyOk.ok) {
         return c.json({ error: custodyOk.error }, custodyOk.status);
+      }
+      const rbacUser = c.get("rbacUser") as RbacUser | undefined;
+      if (rbacUser?.userId) {
+        const { workforcePauseMessage } = await import("../_shared/workforcePause.ts");
+        const paused = await workforcePauseMessage(rbacUser.userId, "rideshare");
+        if (paused) return c.json({ error: paused }, 403);
       }
       
       // Key: checkin:{id}
@@ -12627,6 +12253,21 @@ export function registerResidualMonolithRoutes(app: Hono) {
     requireAuth,
     getOrgId,
     requirePermission,
+  });
+
+  registerTeamStaffRoutes(app, {
+    supabase,
+    requireAuth,
+    requirePermission,
+  });
+
+  registerWorkforceLifecycleRoutes(app, {
+    supabase,
+    kv,
+    requireAuth,
+    requirePermission,
+    getOrgId,
+    invalidateDriverCache,
   });
 
   registerFleetTagRoutes(app, {

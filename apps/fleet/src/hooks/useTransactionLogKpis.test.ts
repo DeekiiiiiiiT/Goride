@@ -9,6 +9,8 @@ import type { FuelLogSummary } from './useFuelLogSummary';
 const client: TransactionKpis = {
   totalFills: 4,
   totalSpend: 200,
+  cashSpend: 80,
+  gasCardSpend: 120,
   totalVolume: 20,
   totalKm: 100,
   imbalancedCount: 1,
@@ -100,6 +102,21 @@ describe('resolveTransactionKpisDisplay', () => {
     expect(next.sourcePortal).toBe(5);
     expect(next.imbalancedCount).toBe(1);
     expect(next.populationNote).toContain('Server log-summary');
+    expect(next.cashSpend).toBe(80);
+    expect(next.gasCardSpend).toBe(120);
+  });
+
+  it('uses the server cash and gas card split when the summary includes it', () => {
+    const next = resolveTransactionKpisDisplay({
+      client,
+      hasExtraTxnFilters: false,
+      summaryLoading: false,
+      summaryError: null,
+      serverSummary: { ...server, cashSpend: 200, gasCardSpend: 300 },
+    });
+    expect(next.totalSpend).toBe(500);
+    expect(next.cashSpend).toBe(200);
+    expect(next.gasCardSpend).toBe(300);
   });
 
   it('falls back to local totals when summary errors', () => {

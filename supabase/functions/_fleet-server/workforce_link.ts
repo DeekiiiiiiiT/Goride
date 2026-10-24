@@ -6,6 +6,7 @@
  */
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import type * as KvStore from "./kv_store.tsx";
+import { getOpenMembership, setWorkforceMembership, type JoinedVia } from "./workforce_membership.ts";
 
 export type UpsertDriverProfileFn = (opts: {
   userId: string;
@@ -92,7 +93,9 @@ export async function getDriverFleetMembership(
   if (authErr || !authData?.user) {
     throw new Error("User not found");
   }
-  const meta = (authData.user.user_metadata || {}) as Record<string, unknown>;
+  const meta = (authData.user.app_metadata || {}) as Record<string, unknown>;
+  const userMeta = (authData.user.user_metadata || {}) as Record<string, unknown>;
+  const open = await getOpenMembership(supabase, userId, "rideshare");
   const { data: existingProf } = await supabase
     .from("driver_profiles")
     .select("fleet_id")
@@ -100,11 +103,11 @@ export async function getDriverFleetMembership(
     .maybeSingle();
 
   const currentFleetId =
-    (typeof meta.organizationId === "string" && meta.organizationId.trim()) ||
+    open?.organization_id ||
     (existingProf?.fleet_id ? String(existingProf.fleet_id) : "") ||
     null;
 
-  return { currentFleetId: currentFleetId || null, meta };
+  return { currentFleetId: currentFleetId || null, meta: { ...userMeta, ...meta } };
 }
 
 export type LinkDriverResult = { success: true; alreadyMember?: boolean };
@@ -117,6 +120,7 @@ export async function linkDriverToFleet(
   deps: WorkforceLinkDeps,
   userId: string,
   fleetId: string,
+  opts?: { joinedVia?: JoinedVia; joinRequestId?: string | null },
 ): Promise<LinkDriverResult> {
   const trimmedFleetId = fleetId.trim();
   if (!trimmedFleetId) throw new Error("fleetId is required");
@@ -132,7 +136,7 @@ export async function linkDriverToFleet(
 
   if (currentFleetId && currentFleetId !== trimmedFleetId) {
     const err = new Error(
-      "You are already linked to a fleet. Ask your current fleet owner to remove you first.",
+      "You are already linked to a fleet for rides. Leave that fleet before joining another.",
     );
     (err as Error & { status?: number }).status = 409;
     throw err;
@@ -150,9 +154,10 @@ export async function linkDriverToFleet(
     .eq("user_id", userId)
     .maybeSingle();
 
-  await deps.supabase.auth.admin.updateUserById(userId, {
-    user_metadata: { ...meta, organizationId: trimmedFleetId },
-  });
+  const appMeta = { ...(authData.user.app_metadata || {}) } as Record<string, unknown>;
+  if (!appMeta.role) appMeta.role = "driver";
+  appMeta.organizationId = trimmedFleetId;
+  await deps.supabase.auth.admin.updateUserById(userId, { app_metadata: appMeta });
 
   const driverKv = await deps.kv.get(`driver:${userId}`);
   if (driverKv) {
@@ -188,6 +193,13 @@ export async function linkDriverToFleet(
   });
 
   deps.invalidateDriverCache();
+  await setWorkforceMembership(deps.supabase, {
+    organizationId: trimmedFleetId,
+    userId,
+    serviceLine: "rideshare",
+    joinedVia: opts?.joinedVia ?? "fleet_tag",
+    joinRequestId: opts?.joinRequestId ?? null,
+  });
   return { success: true };
 }
 
@@ -203,6 +215,7 @@ export async function linkCourierToFleet(
   deps: WorkforceCourierLinkDeps,
   userId: string,
   fleetId: string,
+  opts?: { joinedVia?: JoinedVia; joinRequestId?: string | null },
 ): Promise<LinkCourierResult> {
   const trimmedFleetId = fleetId.trim();
   if (!trimmedFleetId) throw new Error("fleetId is required");
@@ -255,22 +268,9 @@ export async function linkCourierToFleet(
   if (authErr || !authData?.user) throw new Error("User not found");
 
   const meta = (authData.user.user_metadata || {}) as Record<string, unknown>;
-  const metaOrg =
-    typeof meta.organizationId === "string" && meta.organizationId.trim()
-      ? meta.organizationId.trim()
-      : null;
-  if (metaOrg && metaOrg !== trimmedFleetId) {
-    return {
-      success: false,
-      error: "Already linked to another fleet",
-      status: 409,
-    };
-  }
-  if (metaOrg !== trimmedFleetId) {
-    await deps.supabase.auth.admin.updateUserById(userId, {
-      user_metadata: { ...meta, organizationId: trimmedFleetId },
-    });
-  }
+  const appMeta = { ...(authData.user.app_metadata || {}) } as Record<string, unknown>;
+  if (!appMeta.organizationId) appMeta.organizationId = trimmedFleetId;
+  await deps.supabase.auth.admin.updateUserById(userId, { app_metadata: appMeta });
 
   const email =
     (typeof existingCourier.email === "string" && existingCourier.email) ||
@@ -307,13 +307,6 @@ export async function linkCourierToFleet(
       typeof (driverKv as { organizationId?: string }).organizationId === "string"
         ? String((driverKv as { organizationId: string }).organizationId)
         : null;
-    if (kvOrg && kvOrg !== trimmedFleetId) {
-      return {
-        success: false,
-        error: "Already linked to another fleet",
-        status: 409,
-      };
-    }
     const serviceLines = mergeRushIntoServiceLines(
       (driverKv as { serviceLines?: unknown }).serviceLines,
       { treatMissingAsRideshare: isRideshareFleetMember },
@@ -362,6 +355,14 @@ export async function linkCourierToFleet(
     });
     deps.invalidateDriverCache();
   }
+
+  await setWorkforceMembership(deps.supabase, {
+    organizationId: trimmedFleetId,
+    userId,
+    serviceLine: "rush_delivery",
+    joinedVia: opts?.joinedVia ?? "fleet_tag",
+    joinRequestId: opts?.joinRequestId ?? null,
+  });
 
   return { success: true, alreadyMember: alreadyMember || undefined };
 }
@@ -495,15 +496,9 @@ export async function unlinkCourierFromFleet(
     String(driverProf.fleet_id) === leftFleetId;
 
   const { data: authData } = await deps.supabase.auth.admin.getUserById(userId);
-  if (authData?.user) {
-    const meta = (authData.user.user_metadata || {}) as Record<string, unknown>;
-    const metaOrg =
-      typeof meta.organizationId === "string" ? meta.organizationId.trim() : "";
-    if (metaOrg === leftFleetId && !stillRideshareFleet) {
-      await deps.supabase.auth.admin.updateUserById(userId, {
-        user_metadata: { ...meta, organizationId: null },
-      });
-    }
+  if (authData?.user && !stillRideshareFleet) {
+    const { clearDetachedFleetOrg } = await import("./workforce_membership.ts");
+    await clearDetachedFleetOrg(deps.supabase, userId, leftFleetId);
   }
 
   // Release fleet vehicles pointing at this courier

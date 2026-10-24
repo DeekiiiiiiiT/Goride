@@ -25,15 +25,15 @@ export async function loadWorkforceMe(): Promise<CourierWorkforceMeDto | null> {
   return (await res.json()) as CourierWorkforceMeDto;
 }
 
-export async function leaveFleet(): Promise<{ ok: true } | { ok: false; error: string }> {
+export async function leaveFleet(confirmName?: string): Promise<{ ok: true } | { ok: false; error: string; blockers?: Array<{ label: string; amount?: number }> }> {
   const headers = await authHeaders();
   if (!headers) return { ok: false, error: 'Not signed in' };
   const res = await fetch(`${BASE}/courier/workforce/leave`, {
     method: 'POST',
     headers,
-    body: JSON.stringify({}),
+    body: JSON.stringify({ confirmName: confirmName || '' }),
   });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) return { ok: false, error: data.error || 'Could not leave fleet' };
+  if (!res.ok) return { ok: false, error: data.error || 'Could not leave fleet', blockers: data.blockers };
   return { ok: true };
 }

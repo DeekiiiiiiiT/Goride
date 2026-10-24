@@ -63,7 +63,17 @@ function recoverySurfaceForTeam(
   return productLine === 'enterprise' ? 'enterprise' : 'fleet';
 }
 
-function roleLabel(role: string): string {
+function roleLabel(role: string, productLine: 'fleet' | 'enterprise' = 'fleet'): string {
+  if (productLine === 'enterprise') {
+    switch (role) {
+      case 'enterprise_dispatcher': return 'Dispatcher';
+      case 'enterprise_customs': return 'Customs';
+      case 'enterprise_warehouse': return 'Warehouse';
+      case 'enterprise_finance': return 'Finance';
+      case 'enterprise_viewer': return 'Viewer';
+      default: return role;
+    }
+  }
   switch (role) {
     case 'fleet_manager': return 'Fleet Manager';
     case 'fleet_accountant': return 'Fleet Accountant';
@@ -127,7 +137,7 @@ export function TeamMembers({
 
   // Change role modal
   const [changeRoleMember, setChangeRoleMember] = useState<TeamMember | null>(null);
-  const [newRole, setNewRole] = useState('fleet_manager');
+  const [newRole, setNewRole] = useState(productLine === 'enterprise' ? 'enterprise_dispatcher' : 'fleet_manager');
   const [changeRoleLoading, setChangeRoleLoading] = useState(false);
 
   // Phase 7: Set Password modal
@@ -253,7 +263,7 @@ export function TeamMembers({
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-      toast.success(`${changeRoleMember.name || changeRoleMember.email}'s role changed to ${roleLabel(newRole)}`);
+      toast.success(`${changeRoleMember.name || changeRoleMember.email}'s role changed to ${roleLabel(newRole, productLine)}`);
       setChangeRoleMember(null);
       queryClient.invalidateQueries({ queryKey: ['adminTeamMembers'] });
     } catch (err: any) {
@@ -393,7 +403,7 @@ export function TeamMembers({
     const esc = (v: string) => (v.includes(',') || v.includes(DQ) || v.includes('\n')) ? DQ + v.replace(new RegExp(DQ, 'g'), DQ + DQ) + DQ : v;
     const headers = ['Name', 'Email', 'Role', 'Organization', 'Signed Up', 'Last Active', 'Status'];
     const rows = displayed.map(m => [
-      esc(m.name || '(No name)'), esc(m.email), esc(roleLabel(m.role)), esc(m.organizationName || 'N/A'),
+      esc(m.name || '(No name)'), esc(m.email), esc(roleLabel(m.role, productLine)), esc(m.organizationName || 'N/A'),
       esc(formatDate(m.createdAt)), esc(m.lastSignIn ? formatDate(m.lastSignIn) : 'Never'),
       esc(m.isSuspended ? 'Suspended' : m.status === 'active' ? 'Active' : 'Inactive'),
     ]);
@@ -461,9 +471,21 @@ export function TeamMembers({
         <select value={roleFilter} onChange={e => setRoleFilter(e.target.value)}
           className="appearance-none px-3 py-2 bg-white border border-slate-200 dark:bg-slate-900 dark:border-slate-800 rounded-lg text-sm text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-amber-500/50 cursor-pointer">
           <option value="all">All Roles</option>
-          <option value="fleet_manager">Fleet Manager</option>
-          <option value="fleet_accountant">Fleet Accountant</option>
-          <option value="fleet_viewer">Fleet Viewer</option>
+          {productLine === 'enterprise' ? (
+            <>
+              <option value="enterprise_dispatcher">Dispatcher</option>
+              <option value="enterprise_customs">Customs</option>
+              <option value="enterprise_warehouse">Warehouse</option>
+              <option value="enterprise_finance">Finance</option>
+              <option value="enterprise_viewer">Viewer</option>
+            </>
+          ) : (
+            <>
+              <option value="fleet_manager">Fleet Manager</option>
+              <option value="fleet_accountant">Fleet Accountant</option>
+              <option value="fleet_viewer">Fleet Viewer</option>
+            </>
+          )}
         </select>
         <div className="relative">
           <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 pointer-events-none" />
@@ -542,7 +564,7 @@ export function TeamMembers({
                     <td className="px-4 py-3 text-slate-600 dark:text-slate-400 whitespace-nowrap truncate max-w-[220px]">{m.email}</td>
                     <td className="px-4 py-3 whitespace-nowrap">
                       <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${roleBadgeClasses(m.role)}`}>
-                        {roleLabel(m.role)}
+                        {roleLabel(m.role, productLine)}
                       </span>
                     </td>
                     <td className="px-4 py-3 text-slate-700 dark:text-slate-300 whitespace-nowrap truncate max-w-[180px]">{m.organizationName || 'N/A'}</td>
@@ -679,9 +701,21 @@ export function TeamMembers({
               <label className="block text-xs font-medium text-slate-400 mb-1">New Role</label>
               <select value={newRole} onChange={e => setNewRole(e.target.value)}
                 className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm text-slate-900 dark:bg-slate-800 dark:border-slate-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500/50">
-                <option value="fleet_manager">Fleet Manager</option>
-                <option value="fleet_accountant">Fleet Accountant</option>
-                <option value="fleet_viewer">Fleet Viewer</option>
+                {productLine === 'enterprise' ? (
+                  <>
+                    <option value="enterprise_dispatcher">Dispatcher</option>
+                    <option value="enterprise_customs">Customs</option>
+                    <option value="enterprise_warehouse">Warehouse</option>
+                    <option value="enterprise_finance">Finance</option>
+                    <option value="enterprise_viewer">Viewer</option>
+                  </>
+                ) : (
+                  <>
+                    <option value="fleet_manager">Fleet Manager</option>
+                    <option value="fleet_accountant">Fleet Accountant</option>
+                    <option value="fleet_viewer">Fleet Viewer</option>
+                  </>
+                )}
               </select>
             </div>
             <div className="flex justify-end gap-3 pt-2">

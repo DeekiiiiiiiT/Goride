@@ -188,7 +188,6 @@ import {
   DialogTitle,
 } from "../ui/dialog";
 import { Label } from "../ui/label";
-import { Link2 } from 'lucide-react';
 import { WorkforceInvitePanel, WorkforcePendingInvitesButton } from '../workforce/WorkforceInvitePanel';
 // Interface for our View Model
 interface DriverProfile {
@@ -353,6 +352,12 @@ export function DriversPage({
   const [bulkStatusBusy, setBulkStatusBusy] = useState(false);
 
   const [driverToRemove, setDriverToRemove] = useState<string | null>(null);
+  const [removeConfirmName, setRemoveConfirmName] = useState('');
+  const [removeReport, setRemoveReport] = useState<
+    | { failed: true }
+    | { failed: false; displayName: string; blockers: Array<{ label: string; amount?: number }> }
+    | null
+  >(null);
   const [isRemoving, setIsRemoving] = useState(false);
   const [assignDriverId, setAssignDriverId] = useState<string | null>(null);
   const [busyDriverId, setBusyDriverId] = useState<string | null>(null);
@@ -497,26 +502,50 @@ export function DriversPage({
 
   // Detach membership (auth + KV + driver_profiles + vehicle) without deleting the account
   const handleRemoveFromFleet = async () => {
-    if (!driverToRemove) return;
+    if (!driverToRemove || !removeReport || removeReport.failed) return;
+    if (removeReport.blockers.length > 0 && removeConfirmName.trim().toLowerCase() !== removeReport.displayName.trim().toLowerCase()) return;
     setIsRemoving(true);
     try {
-      const response = await fetch(`${API_ENDPOINTS.fleetCore}/team/drivers/${driverToRemove}/remove`, {
-        method: 'POST',
-        headers: await requireAuthHeaders(null),
+      await api.endWorkforceMember(driverToRemove, {
+        confirmName: removeConfirmName,
+        serviceLine: 'rideshare',
       });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || 'Failed to remove driver');
-
       queryClient.invalidateQueries({ queryKey: ['drivers'] });
       queryClient.invalidateQueries({ queryKey: ['driversRoster'] });
       toast.success('Driver removed from your fleet');
       setDriverToRemove(null);
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to remove driver');
+    } catch (error: unknown) {
+      toast.error(error instanceof Error ? error.message : 'Failed to remove driver');
     } finally {
       setIsRemoving(false);
     }
   };
+
+  useEffect(() => {
+    if (!driverToRemove) {
+      setRemoveReport(null);
+      setRemoveConfirmName('');
+      return;
+    }
+    let cancelled = false;
+    setRemoveReport(null);
+    void api.offboardingCheck(driverToRemove)
+      .then((report) => {
+        if (!cancelled) {
+          setRemoveReport({
+            failed: false,
+            displayName: report.displayName,
+            blockers: report.blockers || [],
+          });
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setRemoveReport({ failed: true });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [driverToRemove]);
 
   // Roster is primary list source; merge profile extras from getDrivers + CSV acceptance overlay
   const drivers: DriverProfile[] = useMemo(() => {
@@ -1005,10 +1034,6 @@ export function DriversPage({
                dialogTitle="Invite a driver"
                dialogDescription="Generate a code for your driver to enter in the Roam Driver app during onboarding."
              />
-             <Button variant="outline" onClick={() => setIsClaimOpen(true)}>
-               <Link2 className="h-4 w-4 mr-2" />
-               Claim Driver
-             </Button>
              <Button className="bg-indigo-600 hover:bg-indigo-700" onClick={() => setIsAddModalOpen(true)}>
                <Plus className="h-4 w-4 mr-2" />
                Add Driver
@@ -1436,7 +1461,7 @@ export function DriversPage({
                                             <DropdownMenuContent align="end">
                                                 <DropdownMenuItem onClick={() => openDriver(driver.id)}>View Analysis</DropdownMenuItem>
                                                 <DropdownMenuItem>View History</DropdownMenuItem>
-                                                {can('drivers.edit') && (
+                                                {can('workforce.remove') && (
                                                   <>
                                                     <DropdownMenuSeparator />
                                                     <DropdownMenuItem
@@ -1566,7 +1591,7 @@ export function DriversPage({
                   <DropdownMenuContent align="end">
                     <DropdownMenuItem onClick={() => openDriver(driver.id)}>View Analysis</DropdownMenuItem>
                     <DropdownMenuItem onClick={() => openDriver(driver.id, 'profile')}>Add note</DropdownMenuItem>
-                    {can('drivers.edit') && (
+                    {can('workforce.remove') && (
                       <>
                         <DropdownMenuSeparator />
                         <DropdownMenuItem
@@ -1737,18 +1762,43 @@ export function DriversPage({
           <AlertDialogHeader>
             <AlertDialogTitle>Remove driver from your fleet?</AlertDialogTitle>
             <AlertDialogDescription>
-              The driver keeps their account and trip history, but is unlinked from your organization,
-              unassigned from their vehicle, and switched back to independent mode.
+              {removeReport?.failed
+                ? "We couldn't confirm what's still open. Try again."
+                : removeReport && removeReport.failed === false && removeReport.blockers.length > 0
+                  ? 'Something is still open. Type their name to remove them. Their Roam login stays. Past weeks stay in your history.'
+                  : 'Remove them from this fleet? Their Roam login stays. Past weeks stay in your history.'}
             </AlertDialogDescription>
           </AlertDialogHeader>
+          {removeReport && removeReport.failed === false && removeReport.blockers.length > 0 && (
+            <div className="space-y-2 text-sm">
+              <ul className="space-y-1">
+                {removeReport.blockers.map((b) => (
+                  <li key={b.label}>{b.label}{typeof b.amount === 'number' ? ` — ${formatJMD(b.amount, 2)}` : ''}</li>
+                ))}
+              </ul>
+              <input
+                className="w-full rounded-md border px-3 py-2"
+                placeholder={`Type ${removeReport.displayName}`}
+                value={removeConfirmName}
+                onChange={(e) => setRemoveConfirmName(e.target.value)}
+              />
+            </div>
+          )}
           <AlertDialogFooter>
             <AlertDialogCancel disabled={isRemoving}>Cancel</AlertDialogCancel>
             <AlertDialogAction
               onClick={(e) => {
                 e.preventDefault();
-                handleRemoveFromFleet();
+                void handleRemoveFromFleet();
               }}
-              disabled={isRemoving}
+              disabled={
+                isRemoving ||
+                !removeReport ||
+                removeReport.failed ||
+                (removeReport.failed === false &&
+                  removeReport.blockers.length > 0 &&
+                  removeConfirmName.trim().toLowerCase() !== removeReport.displayName.trim().toLowerCase())
+              }
             >
               {isRemoving ? "Removing..." : "Remove from Fleet"}
             </AlertDialogAction>

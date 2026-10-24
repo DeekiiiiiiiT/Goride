@@ -62,6 +62,7 @@ import { Separator } from "../ui/separator";
 
 // DataResetModal kept as a file but no longer rendered from Settings — deletion centralized in Data Center > Delete tab
 import { SystemHardeningPanel } from '../admin/SystemHardeningPanel';
+import { OwnerSecurityCard } from './OwnerSecurityCard';
 import { SyncCenter } from '../sync/SyncCenter';
 import { FleetEnableDriverCard } from './FleetEnableDriverCard';
 import { ServiceLinesSettingsCard } from './ServiceLinesSettingsCard';
@@ -89,7 +90,10 @@ export function SettingsPage() {
         </div>
         
         <TabsContent value="general">
-          <GeneralPanel />
+          <div className="space-y-6">
+            <GeneralPanel />
+            <OwnerSecurityCard />
+          </div>
         </TabsContent>
 
         <TabsContent value="integrations">

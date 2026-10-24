@@ -68,18 +68,28 @@ Deno.serve(async (req) => {
         const { data: pending } = await pdb.from("pending_invites")
           .select("id, role_id, scope_type, scope_id")
           .eq("email", email)
+          .neq("scope_type", "organization")
           .is("accepted_at", null)
           .is("revoked_at", null)
           .gt("expires_at", new Date().toISOString())
           .limit(1)
           .maybeSingle();
         if (pending) {
-          await pdb.from("user_roles").upsert({
-            user_id: userId,
-            role_id: pending.role_id,
-            scope_type: pending.scope_type ?? "global",
-            scope_id: pending.scope_id,
-          }, { onConflict: "user_id,role_id" });
+          const scopeType = pending.scope_type ?? "global";
+          const { data: existingSeat } = await pdb.from("user_roles")
+            .select("id")
+            .eq("user_id", userId)
+            .eq("role_id", pending.role_id)
+            .eq("scope_type", scopeType)
+            .maybeSingle();
+          if (!existingSeat) {
+            await pdb.from("user_roles").insert({
+              user_id: userId,
+              role_id: pending.role_id,
+              scope_type: scopeType,
+              scope_id: pending.scope_id,
+            });
+          }
           await pdb.from("pending_invites").update({
             accepted_at: new Date().toISOString(),
             accepted_user_id: userId,
@@ -88,9 +98,15 @@ Deno.serve(async (req) => {
       }
 
       const dbRoles = await fetchUserRoleNames(userId);
-      if (dbRoles.length > 0) {
-        appMeta.roles = dbRoles;
-        appMeta.role = dbRoles[0];
+      const platformRoles = dbRoles.filter((role) =>
+        role === "superadmin" ||
+        role === "platform_owner" ||
+        role === "platform_support" ||
+        role === "platform_analyst"
+      );
+      if (platformRoles.length > 0) {
+        appMeta.roles = platformRoles;
+        appMeta.role = platformRoles[0];
       }
     }
 

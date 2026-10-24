@@ -26,6 +26,8 @@ export function FleetInfoPage({ onBack, onJoinFleet }: Props) {
   const [actingId, setActingId] = useState<string | null>(null);
   const [leaving, setLeaving] = useState(false);
   const [confirmLeave, setConfirmLeave] = useState(false);
+  const [confirmName, setConfirmName] = useState('');
+  const [leaveBlockers, setLeaveBlockers] = useState<Array<{ label: string; amount?: number }>>([]);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -70,13 +72,15 @@ export function FleetInfoPage({ onBack, onJoinFleet }: Props) {
 
   const onLeave = async () => {
     setLeaving(true);
-    const result = await leaveFleet();
+    const result = await leaveFleet(confirmName);
     setLeaving(false);
-    setConfirmLeave(false);
     if (result.ok) {
       toast.success('You left the fleet');
+      setConfirmLeave(false);
+      setLeaveBlockers([]);
       void refresh();
     } else {
+      setLeaveBlockers(result.blockers || []);
       toast.error(result.error);
     }
   };
@@ -198,8 +202,7 @@ export function FleetInfoPage({ onBack, onJoinFleet }: Props) {
                   </div>
                 </div>
                 <p className="text-sm text-muted">
-                  Your fleet assigns vehicles in Roam Fleet. You can leave anytime to work as an
-                  independent courier again.
+                  The fleet can see your name, photo, phone, email, trips, and earnings while you work with them. Your login stays yours.
                 </p>
                 <button
                   type="button"
@@ -241,9 +244,23 @@ export function FleetInfoPage({ onBack, onJoinFleet }: Props) {
           <div className="w-full bg-surface rounded-t-[24px] p-6 pb-safe safe-x space-y-4">
             <h3 className="text-xl font-semibold text-on-surface">Leave this fleet?</h3>
             <p className="text-sm text-muted">
-              You’ll become an independent courier again and can add your own vehicle. Your fleet
-              assignment will be cleared.
+              Open items stay on the fleet's books. You can still leave.
             </p>
+            {leaveBlockers.length > 0 && (
+              <ul className="text-sm text-on-surface">
+                {leaveBlockers.map((b) => (
+                  <li key={b.label}>
+                    {b.label}{b.amount != null ? ` — J$${Number(b.amount).toFixed(2)}` : ''}
+                  </li>
+                ))}
+              </ul>
+            )}
+            <input
+              className="w-full h-12 rounded-lg border px-3"
+              placeholder="Type your name if something is still open"
+              value={confirmName}
+              onChange={(e) => setConfirmName(e.target.value)}
+            />
             <button
               type="button"
               disabled={leaving}

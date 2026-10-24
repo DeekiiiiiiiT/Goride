@@ -55,6 +55,15 @@ function makeDeps(overrides: Partial<{
           }),
         };
       }
+      if (table === "fleet_workforce_memberships") {
+        const result = Promise.resolve({ data: null, error: null });
+        const chain: Record<string, unknown> = {};
+        const self = () => chain;
+        for (const method of ["select", "eq", "neq", "insert", "update", "upsert", "order", "limit"]) chain[method] = self;
+        chain.maybeSingle = () => result;
+        chain.then = (resolve: (v: unknown) => void, reject?: (e: unknown) => void) => result.then(resolve, reject);
+        return chain;
+      }
       return { select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: null, error: null }) }) }) };
     },
     auth: {
@@ -205,9 +214,29 @@ function makeCourierDeps(overrides: Partial<{
           }),
         };
       }
+      if (table === "fleet_workforce_memberships") {
+        const result = Promise.resolve({ data: null, error: null });
+        const chain: Record<string, unknown> = {};
+        const self = () => chain;
+        for (const method of ["select", "eq", "neq", "insert", "update", "upsert", "order", "limit"]) chain[method] = self;
+        chain.maybeSingle = () => result;
+        chain.then = (resolve: (v: unknown) => void, reject?: (e: unknown) => void) => result.then(resolve, reject);
+        return chain;
+      }
       return { select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: null, error: null }) }) }) };
     },
     schema: (name: string) => {
+      if (name === "fleet") {
+        const result = Promise.resolve({ data: null, error: null });
+        const chain: Record<string, unknown> = {};
+        const self = () => chain;
+        for (const method of ["select", "eq", "neq", "insert", "update", "upsert", "order", "limit"]) {
+          chain[method] = self;
+        }
+        chain.maybeSingle = () => result;
+        chain.then = (resolve: (v: unknown) => void, reject?: (e: unknown) => void) => result.then(resolve, reject);
+        return { from: () => chain };
+      }
       if (name !== "delivery") throw new Error("unexpected schema");
       return {
         from: (table: string) => {

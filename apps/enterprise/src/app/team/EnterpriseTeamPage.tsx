@@ -10,7 +10,7 @@ import {
   type EnterpriseSeatRole,
   type EnterpriseSectionOverrides,
 } from '@roam/auth-client';
-import { Copy, Shield, UserPlus } from 'lucide-react';
+import { Shield, UserPlus } from 'lucide-react';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { useSeatAccess } from '@/app/seats/SeatAccessProvider';
 import { teamService, type TeamMember } from '@/app/services/teamService';
@@ -102,10 +102,8 @@ export function EnterpriseTeamPage() {
   const [inviteSections, setInviteSections] = useState(() =>
     effectiveSectionAccess('enterprise_warehouse', {}),
   );
-  const [inviteResult, setInviteResult] =
-    useState<{ name: string; email: string; temporaryPassword: string } | null>(null);
+  const [inviteResult, setInviteResult] = useState<{ name: string; email: string; message: string } | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
   const [accessEditorId, setAccessEditorId] = useState<string | null>(null);
   const [accessMessage, setAccessMessage] = useState<string | null>(null);
 
@@ -130,7 +128,7 @@ export function EnterpriseTeamPage() {
       setInviteResult({
         name: form.name.trim(),
         email: form.email.trim(),
-        temporaryPassword: res.temporaryPassword,
+        message: res.message || 'Invite saved. They will see it when they sign in.',
       });
       setForm({ name: '', email: '', role: 'enterprise_warehouse' });
       setInviteSections(effectiveSectionAccess('enterprise_warehouse', {}));
@@ -174,13 +172,6 @@ export function EnterpriseTeamPage() {
     await inviteMut.mutateAsync();
   }
 
-  async function copyPassword() {
-    if (!inviteResult?.temporaryPassword) return;
-    await navigator.clipboard.writeText(inviteResult.temporaryPassword);
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 2000);
-  }
-
   if (!canManage) {
     return (
       <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
@@ -210,23 +201,7 @@ export function EnterpriseTeamPage() {
             <p className="text-sm font-semibold text-emerald-900">
               {inviteResult.name} invited
             </p>
-            <p className="text-sm text-emerald-900/90">
-              Share this temporary password with them (shown once):
-            </p>
-            <div className="flex flex-wrap items-center gap-2">
-              <code className="rounded bg-white px-3 py-1.5 font-mono text-sm text-slate-900 ring-1 ring-emerald-200">
-                {inviteResult.temporaryPassword}
-              </code>
-              <button
-                type="button"
-                onClick={() => void copyPassword()}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-300 bg-white px-3 py-1.5 text-xs font-semibold text-emerald-900 hover:bg-emerald-50"
-              >
-                <Copy className="h-3.5 w-3.5" />
-                {copied ? 'Copied' : 'Copy'}
-              </button>
-            </div>
-            <p className="text-xs text-emerald-800">Login email: {inviteResult.email}</p>
+            <p className="text-sm text-emerald-900/90">{inviteResult.message}</p>
             <button
               type="button"
               onClick={() => setInviteResult(null)}

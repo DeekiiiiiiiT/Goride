@@ -36,7 +36,10 @@ export async function getEligibleDriverUserIds(
     return new Set();
   }
 
-  return new Set((data ?? []).map((row: { user_id: string }) => row.user_id));
+  const ids = (data ?? []).map((row: { user_id: string }) => row.user_id);
+  const { pausedWorkforceUserIds } = await import("./workforcePause.ts");
+  const paused = await pausedWorkforceUserIds(ids, "rideshare");
+  return new Set(ids.filter((id: string) => !paused.has(id)));
 }
 
 export async function isDriverEligibleForDispatch(
@@ -70,6 +73,11 @@ export async function isDriverEligibleForDispatch(
     if (!ctx.assignedVehicleId) {
       return { eligible: false, reason: "fleet_vehicle_not_assigned" };
     }
+  }
+
+  const { workforcePauseMessage } = await import("./workforcePause.ts");
+  if (await workforcePauseMessage(userId, "rideshare")) {
+    return { eligible: false, reason: "workforce_paused" };
   }
 
   return { eligible: true };

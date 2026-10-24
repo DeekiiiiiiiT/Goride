@@ -47,6 +47,7 @@ export type Role =
   | 'fleet_viewer'
   // Driver
   | 'driver'
+  | 'unassigned'
   // Hauler (Roam Haul consumer)
   | 'hauler';
 
@@ -206,6 +207,12 @@ export const ROLE_META: Record<Role, RoleMeta> = {
     description: 'Dashboard view only.',
     tier: 'customer',
   },
+  unassigned: {
+    level: 0,
+    label: 'No dashboard access',
+    description: 'No fleet dashboard permissions.',
+    tier: 'customer',
+  },
 
   // Driver
   driver: {
@@ -323,6 +330,13 @@ export type Permission =
   | 'users.invite'
   | 'users.edit_role'
   | 'users.remove'
+  | 'users.view'
+  | 'users.suspend'
+  | 'users.send_reset_email'
+  | 'workforce.approve'
+  | 'workforce.pause'
+  | 'workforce.remove'
+  | 'fleet_tag.set'
   // Data
   | 'data.import'
   | 'data.export'
@@ -391,7 +405,8 @@ const ALL_CUSTOMER_PERMISSIONS: Permission[] = [
   'settlements.collect', 'settlements.pay', 'settlements.write_off', 'settlements.reverse', 'settlements.approve',
   'reports.generate', 'reports.export', 'reports.view',
   'settings.edit',
-  'users.invite', 'users.edit_role', 'users.remove',
+  'users.view', 'users.invite', 'users.edit_role', 'users.suspend', 'users.remove', 'users.send_reset_email',
+  'workforce.approve', 'workforce.pause', 'workforce.remove', 'fleet_tag.set',
   'data.import', 'data.export', 'data.backfill',
   'recon.view', 'recon.prepare', 'recon.approve',
 ];
@@ -400,12 +415,15 @@ const FLEET_MANAGER_PERMISSIONS: Permission[] = ALL_CUSTOMER_PERMISSIONS.filter(
   (p) =>
     // Remove settings, user management, database management
     p !== 'nav.settings' &&
-    p !== 'nav.user_management' &&
     p !== 'nav.database_management' &&
     p !== 'settings.edit' &&
     p !== 'users.invite' &&
     p !== 'users.edit_role' &&
+    p !== 'users.suspend' &&
     p !== 'users.remove' &&
+    p !== 'users.send_reset_email' &&
+    p !== 'workforce.remove' &&
+    p !== 'fleet_tag.set' &&
     p !== 'data.backfill' &&
     p !== 'fuel.split_cash_override'
 );
@@ -482,6 +500,8 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
   fleet_accountant: FLEET_ACCOUNTANT_PERMISSIONS,
   fleet_viewer: FLEET_VIEWER_PERMISSIONS,
 
+  unassigned: [],
+
   // Driver
   driver: [],
   hauler: [],
@@ -515,7 +535,7 @@ export function isAssignableRole(raw: string): boolean {
  *   unknown      → 'fleet_viewer'      (safest fallback — minimal access)
  */
 export function resolveRole(raw: string | null | undefined): Role {
-  if (!raw) return 'fleet_viewer';
+  if (!raw) return 'unassigned';
 
   // Legacy mappings
   switch (raw) {
@@ -528,8 +548,8 @@ export function resolveRole(raw: string | null | undefined): Role {
   // Already a canonical role?
   if (VALID_ROLES.has(raw)) return raw as Role;
 
-  // Unknown → safest fallback
-  return 'fleet_viewer';
+  // Unknown → no dashboard access
+  return 'unassigned';
 }
 
 /** Check whether a role has a specific permission. */

@@ -78,6 +78,8 @@ describe('fuel log summary contract (client ≡ server core)', () => {
 
     expect(client.totalFills).toBe(core.totalFills);
     expect(client.totalSpend).toBe(core.totalSpend);
+    expect(client.cashSpend).toBe(core.cashSpend);
+    expect(client.gasCardSpend).toBe(core.gasCardSpend);
     expect(client.totalVolume).toBe(core.totalVolume);
     expect(client.totalKm).toBe(core.totalKm);
     expect(client.sourcePortal).toBe(core.sourcePortal);
@@ -90,6 +92,8 @@ describe('fuel log summary contract (client ≡ server core)', () => {
     // fee excluded from fills; awaiting still a fill but not spend
     expect(core.totalFills).toBe(4);
     expect(core.totalSpend).toBe(230); // 100+50+80 — not fee, not awaiting $0
+    expect(core.cashSpend).toBe(230);
+    expect(core.gasCardSpend).toBe(0);
     expect(core.totalVolume).toBe(23);
     expect(core.totalKm).toBe(300); // 100+100+100
     expect(core.sourceAnchors).toBe(1);

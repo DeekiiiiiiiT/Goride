@@ -416,11 +416,11 @@ export function registerWorkforceInviteRoutes(
       const serviceLine = String(invite.service_line);
 
       if (serviceLine === "rush_delivery") {
-        const linked = await deps.linkCourierToFleet(userId, fleetId);
+        const linked = await deps.linkCourierToFleet(userId, fleetId, { joinedVia: "invite_code" });
         if (!linked.success) return c.json({ error: linked.error }, linked.status);
       } else {
         try {
-          await deps.linkDriverToFleet(userId, fleetId);
+          await deps.linkDriverToFleet(userId, fleetId, { joinedVia: "invite_code" });
         } catch (e: unknown) {
           const err = e as Error & { status?: number };
           if (err.status === 409) return c.json({ error: err.message }, 409);
@@ -476,11 +476,11 @@ export function registerWorkforceInviteRoutes(
       const serviceLine = String(invite.service_line);
 
       if (serviceLine === "rush_delivery") {
-        const linked = await deps.linkCourierToFleet(userId, fleetId);
+        const linked = await deps.linkCourierToFleet(userId, fleetId, { joinedVia: "roam_tag_invite" });
         if (!linked.success) return c.json({ error: linked.error }, linked.status);
       } else if (serviceLine === "rideshare") {
         try {
-          await deps.linkDriverToFleet(userId, fleetId);
+          await deps.linkDriverToFleet(userId, fleetId, { joinedVia: "roam_tag_invite" });
         } catch (e: unknown) {
           const err = e as Error & { status?: number };
           if (err.status === 409) return c.json({ error: err.message }, 409);

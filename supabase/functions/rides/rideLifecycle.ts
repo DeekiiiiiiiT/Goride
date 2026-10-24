@@ -134,6 +134,15 @@ export async function applyRideTransition(
   if (!allowed?.includes(params.next)) {
     return { ok: false, error: "invalid_transition", current, ride };
   }
+  if (params.next === "on_trip") {
+    const driverId = String(ride.assigned_driver_user_id ?? params.actorUserId ?? "");
+    if (driverId) {
+      const { workforcePauseMessage } = await import("../_shared/workforcePause.ts");
+      if (await workforcePauseMessage(driverId, "rideshare")) {
+        return { ok: false, error: "workforce_paused", current, ride };
+      }
+    }
+  }
   if (
     cashEnabled &&
     paymentMethod === "cash" &&

@@ -14,6 +14,8 @@
 
 import { createClient } from "npm:@supabase/supabase-js@2";
 import type { Context, Next } from "npm:hono@4.3.11";
+import { readAccessCache, writeAccessCache } from "./access_cache.ts";
+import { resolveAccess, type AccessDecision, type AccessSeat, type OpenMembership, type OwnedOrg } from "./access_resolution.ts";
 
 // ---------------------------------------------------------------------------
 // 1. Types
@@ -27,7 +29,8 @@ export type Role =
   | 'fleet_manager'
   | 'fleet_accountant'
   | 'fleet_viewer'
-  | 'driver';
+  | 'driver'
+  | 'unassigned';
 
 export type Permission =
   | 'nav.dashboard' | 'nav.imports' | 'nav.drivers' | 'nav.vehicles' | 'nav.maintenance'
@@ -55,6 +58,9 @@ export type Permission =
   | 'reports.generate' | 'reports.export' | 'reports.view'
   | 'settings.edit'
   | 'users.invite' | 'users.edit_role' | 'users.remove'
+  | 'users.view' | 'users.suspend' | 'users.send_reset_email'
+  | 'workforce.approve' | 'workforce.pause' | 'workforce.remove'
+  | 'fleet_tag.set'
   | 'data.import' | 'data.export' | 'data.backfill'
   | 'expenses.view' | 'expenses.export' | 'expenses.create' | 'expenses.manage_rules'
   | 'expenses.approve' | 'expenses.pay' | 'expenses.manage_vendors'
@@ -67,6 +73,10 @@ export interface RbacUser {
   resolvedRole: Role;
   /** The organization this user belongs to. For fleet_owners, this is their own userId. */
   organizationId: string | null;
+  /** Active organization staff seat, when one exists. Dashboard permissions use this. */
+  staffRole?: string | null;
+  productLine?: "fleet" | "enterprise" | null;
+  portal?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -76,7 +86,7 @@ export interface RbacUser {
 const VALID_ROLES = new Set<string>([
   'platform_owner', 'platform_support', 'platform_analyst',
   'fleet_owner', 'fleet_manager', 'fleet_accountant', 'fleet_viewer',
-  'driver',
+  'driver', 'unassigned',
 ]);
 
 /** Product-scoped admin roles — must not override platform superadmin for RBAC. */
@@ -143,7 +153,7 @@ export function pickRawRoleForRbac(
     if (!PRODUCT_ADMIN_ROLES.has(r)) return r;
   }
 
-  return 'fleet_viewer';
+  return '';
 }
 
 function resolveOrganizationId(
@@ -240,7 +250,7 @@ export function isPlatformOwnerFromAuthUser(user: SupabaseAuthUser): boolean {
 }
 
 export function resolveRole(raw: string | null | undefined): Role {
-  if (!raw) return 'fleet_viewer';
+  if (!raw) return 'unassigned';
   switch (raw) {
     case 'superadmin': return 'platform_owner';
     case 'admin':      return 'fleet_owner';
@@ -259,7 +269,16 @@ export function resolveRole(raw: string | null | undefined): Role {
       return 'fleet_viewer';
   }
   if (VALID_ROLES.has(raw)) return raw as Role;
-  return 'fleet_viewer';
+  return 'unassigned';
+}
+
+/** Dashboard permissions follow an active staff seat. Driver checks keep resolvedRole. */
+export function effectiveRole(user: RbacUser): Role {
+  if (user.staffRole) {
+    const seated = resolveRole(user.staffRole);
+    if (seated !== 'unassigned') return seated;
+  }
+  return user.resolvedRole;
 }
 
 // ---------------------------------------------------------------------------
@@ -274,6 +293,7 @@ const ROLE_LEVELS: Record<Role, number> = {
   fleet_manager:    700,
   fleet_accountant: 500,
   fleet_viewer:     300,
+  unassigned:       0,
   driver:           100,
 };
 
@@ -307,7 +327,8 @@ const ALL_CUSTOMER_PERMISSIONS: Permission[] = [
   'settlements.reverse', 'settlements.approve',
   'reports.generate', 'reports.export', 'reports.view',
   'settings.edit',
-  'users.invite', 'users.edit_role', 'users.remove',
+  'users.view', 'users.invite', 'users.edit_role', 'users.suspend', 'users.remove', 'users.send_reset_email',
+  'workforce.approve', 'workforce.pause', 'workforce.remove', 'fleet_tag.set',
   'data.import', 'data.export', 'data.backfill',
   'expenses.view', 'expenses.export', 'expenses.create', 'expenses.manage_rules',
   'expenses.approve', 'expenses.pay', 'expenses.manage_vendors',
@@ -317,12 +338,15 @@ const ALL_CUSTOMER_PERMISSIONS: Permission[] = [
 const FLEET_MANAGER_PERMISSIONS: Permission[] = ALL_CUSTOMER_PERMISSIONS.filter(
   (p) =>
     p !== 'nav.settings' &&
-    p !== 'nav.user_management' &&
     p !== 'nav.database_management' &&
     p !== 'settings.edit' &&
     p !== 'users.invite' &&
     p !== 'users.edit_role' &&
+    p !== 'users.suspend' &&
     p !== 'users.remove' &&
+    p !== 'users.send_reset_email' &&
+    p !== 'workforce.remove' &&
+    p !== 'fleet_tag.set' &&
     p !== 'data.backfill' &&
     p !== 'fuel.split_cash_override'
 );
@@ -357,6 +381,7 @@ const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
   fleet_accountant: FLEET_ACCOUNTANT_PERMISSIONS,
   fleet_viewer:     FLEET_VIEWER_PERMISSIONS,
   driver:           [],
+  unassigned:       [],
 };
 
 // ---------------------------------------------------------------------------
@@ -411,6 +436,71 @@ export interface RequireAuthOptions {
   requireOrg?: boolean;
   /** Allow anon access for specific use cases (health check, public status). */
   allowAnon?: boolean;
+}
+
+function roleNameFromJoin(roles: unknown): string {
+  const row = Array.isArray(roles) ? roles[0] : roles;
+  if (!row || typeof row !== "object") return "";
+  const name = (row as { name?: unknown }).name;
+  return typeof name === "string" ? name : "";
+}
+
+async function loadAccessFacts(userId: string): Promise<{
+  seats: AccessSeat[];
+  ownedOrgs: OwnedOrg[];
+  memberships: OpenMembership[];
+}> {
+  const { getServiceClient } = await import("./service_client.ts");
+  const db = getServiceClient();
+  const [seatRes, orgRes, memRes] = await Promise.all([
+    db.schema("platform").from("user_roles")
+      .select("id, status, scope_id, granted_at, roles(name)")
+      .eq("user_id", userId)
+      .eq("scope_type", "organization")
+      .order("granted_at", { ascending: true })
+      .order("id", { ascending: true }),
+    db.from("organizations").select("id, product_line").eq("owner_id", userId),
+    db.schema("fleet").from("workforce_memberships")
+      .select("organization_id, service_line, status")
+      .eq("user_id", userId)
+      .neq("status", "ended"),
+  ]);
+  if (seatRes.error) throw new Error(seatRes.error.message);
+  if (orgRes.error) throw new Error(orgRes.error.message);
+  if (memRes.error) throw new Error(memRes.error.message);
+
+  const seats: AccessSeat[] = (seatRes.data || []).map((row) => {
+    const rec = row as {
+      id?: string;
+      status?: string;
+      scope_id?: string;
+      granted_at?: string;
+      roles?: unknown;
+    };
+    return {
+      id: String(rec.id || ""),
+      status: String(rec.status || ""),
+      scopeId: typeof rec.scope_id === "string" ? rec.scope_id : "",
+      roleName: roleNameFromJoin(rec.roles),
+      grantedAt: String(rec.granted_at || ""),
+    };
+  });
+  const ownedOrgs: OwnedOrg[] = (orgRes.data || []).map((row) => {
+    const rec = row as { id?: string; product_line?: string };
+    return {
+      id: String(rec.id || ""),
+      productLine: rec.product_line === "enterprise" ? "enterprise" : "fleet",
+    };
+  }).filter((org) => org.id);
+  const memberships: OpenMembership[] = (memRes.data || []).map((row) => {
+    const rec = row as { organization_id?: string; service_line?: string; status?: string };
+    return {
+      organizationId: typeof rec.organization_id === "string" ? rec.organization_id : "",
+      serviceLine: String(rec.service_line || ""),
+      status: String(rec.status || ""),
+    };
+  }).filter((m) => m.organizationId);
+  return { seats, ownedOrgs, memberships };
 }
 
 export function requireAuth(options?: RequireAuthOptions) {
@@ -495,44 +585,56 @@ export function requireAuth(options?: RequireAuthOptions) {
         }, 401);
       }
 
-      // Valid JWT — resolve RBAC role from app_metadata only
       const appMeta = (data.user.app_metadata || {}) as Record<string, unknown>;
       const meta = data.user.user_metadata || {};
       const rawRole = pickRawRoleForRbac(appMeta, meta);
-      const resolved = resolveRole(rawRole);
+      const jwtOrg = resolveOrganizationId(appMeta, data.user.id, resolveRole(rawRole));
+      let decision = readAccessCache<AccessDecision>(data.user.id);
+      if (!decision) {
+        try {
+          decision = resolveAccess({
+            jwtRole: rawRole,
+            jwtOrgId: jwtOrg,
+            ...(await loadAccessFacts(data.user.id)),
+          });
+          writeAccessCache(data.user.id, decision);
+        } catch (seatErr) {
+          console.warn('[RBAC] access lookup failed closed', seatErr);
+          decision = resolveAccess({
+            jwtRole: rawRole === 'driver' || rawRole === 'courier' ? rawRole : '',
+            jwtOrgId: null,
+            seats: [],
+            ownedOrgs: [],
+            memberships: [],
+          });
+        }
+      }
+
+      if (!decision.organizationId && decision.rawRole === 'driver') {
+        const healed = await healDriverOrganizationId(data.user.id);
+        if (healed) decision = { ...decision, organizationId: healed };
+      }
 
       const rbacUser: RbacUser = {
         userId: data.user.id,
         email: data.user.email || '',
-        rawRole,
-        resolvedRole: resolved,
-        organizationId: resolveOrganizationId(appMeta, data.user.id, resolved),
+        rawRole: decision.rawRole,
+        resolvedRole: decision.resolvedRole,
+        organizationId: decision.organizationId,
+        staffRole: decision.staffRole,
+        productLine: decision.productLine,
+        portal: decision.portal,
       };
-
-      // Driver JWTs often omit organizationId — heal from profile / fleet.drivers
-      // so hand-over → check-in can still load the assigned vehicle.
-      if (
-        !rbacUser.organizationId &&
-        (resolved === 'driver' || String(rawRole).toLowerCase().includes('driver'))
-      ) {
-        const healed = await healDriverOrganizationId(data.user.id);
-        if (healed) {
-          rbacUser.organizationId = healed;
-          console.log(
-            `[RBAC] Healed driver org from profile/roster user=${data.user.id} org=${healed}`,
-          );
-        }
-      }
 
       c.set('rbacUser', rbacUser);
 
       // Check if organizationId is required
       if (options?.requireOrg) {
         // Platform roles are exempt from org requirement (they see all orgs)
-        const isPlatformRole = ['platform_owner', 'platform_support', 'platform_analyst'].includes(resolved);
+        const isPlatformRole = ['platform_owner', 'platform_support', 'platform_analyst'].includes(rbacUser.resolvedRole);
         
         if (!isPlatformRole && !rbacUser.organizationId) {
-          console.warn(`[RBAC] requireOrg: User ${rbacUser.userId} (role=${resolved}) has no organizationId`);
+          console.warn(`[RBAC] requireOrg: User ${rbacUser.userId} (role=${rbacUser.resolvedRole}) has no organizationId`);
           return c.json({
             error: 'Forbidden: Organization context required',
             code: 'ORG_REQUIRED',
@@ -585,7 +687,7 @@ export function requireAnyPermission(...permissions: Permission[]) {
       return c.json({ error: 'Unauthorized: No user context' }, 401);
     }
 
-    const ok = permissions.some((p) => hasPermission(user.resolvedRole, p));
+    const ok = permissions.some((p) => hasPermission(effectiveRole(user), p));
     if (!ok) {
       console.log(`[RBAC] FORBIDDEN: User ${user.userId} (role=${user.resolvedRole}) missing any of "${permissions.join(', ')}"`);
       return c.json({

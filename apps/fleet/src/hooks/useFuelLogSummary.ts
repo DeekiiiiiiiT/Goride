@@ -5,6 +5,9 @@ import type { TransactionKpis } from '../utils/fuelLogKpiMetrics';
 export type FuelLogSummary = {
   totalFills: number;
   totalSpend: number;
+  /** Absent on edge builds that predate the cash / gas card split. */
+  cashSpend?: number;
+  gasCardSpend?: number;
   totalVolume: number;
   totalKm: number;
   totalCycles: number;
@@ -68,6 +71,8 @@ export function useFuelLogSummary(params: UseFuelLogSummaryParams): {
         setSummary({
           totalFills: Number(res.totalFills) || 0,
           totalSpend: Number(res.totalSpend) || 0,
+          cashSpend: typeof res.cashSpend === 'number' ? res.cashSpend : undefined,
+          gasCardSpend: typeof res.gasCardSpend === 'number' ? res.gasCardSpend : undefined,
           totalVolume: Number(res.totalVolume) || 0,
           totalKm: Number(res.totalKm) || 0,
           totalCycles: Number(res.totalCycles) || 0,
@@ -109,6 +114,9 @@ export function replaceServerTransactionKpis(
     ...client,
     totalFills: server.totalFills,
     totalSpend: server.totalSpend,
+    ...(typeof server.cashSpend === 'number' && typeof server.gasCardSpend === 'number'
+      ? { cashSpend: server.cashSpend, gasCardSpend: server.gasCardSpend }
+      : {}),
     totalVolume: server.totalVolume,
     totalKm: server.totalKm,
     sourcePortal: server.sourcePortal,
