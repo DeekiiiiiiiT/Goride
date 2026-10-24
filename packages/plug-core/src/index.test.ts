@@ -8,6 +8,7 @@ import {
   impossibleTravel,
   planPlugFill,
   plugPriceDecision,
+  fillCare,
   projectServiceDue,
   sectionEnabled,
   suggestReview,
@@ -55,6 +56,39 @@ describe('station and price decisions', () => {
 });
 
 describe('care, trust, and review', () => {
+  it('moves the next service when a later fill changes the pace', () => {
+    const first = fillCare({
+      readings: [{ at: '2026-06-01T00:00:00.000Z', km: 10000 }],
+      litres: null,
+      lastServiceOn: null,
+      lastServiceKm: null,
+      now: '2026-06-01T00:00:00.000Z',
+    });
+    const second = fillCare({
+      readings: [
+        { at: '2026-06-01T00:00:00.000Z', km: 10000 },
+        { at: '2026-06-02T00:00:00.000Z', km: 10200 },
+      ],
+      litres: 20,
+      lastServiceOn: null,
+      lastServiceKm: null,
+      now: '2026-06-02T00:00:00.000Z',
+    });
+    expect(second.kmPerLitre).toBe(10);
+    expect(second.dueOn).not.toBe(first.dueOn);
+  });
+
+  it('marks the service overdue once the km interval is passed', () => {
+    const care = fillCare({
+      readings: [{ at: '2026-06-02T00:00:00.000Z', km: 16000 }],
+      litres: 40,
+      lastServiceOn: '2026-06-01T00:00:00.000Z',
+      lastServiceKm: 10000,
+      now: '2026-06-02T00:00:00.000Z',
+    });
+    expect(care.status).toBe('overdue');
+  });
+
   it('projects the earlier of km and time', () => {
     const due = projectServiceDue({
       intervalKm: 5000,

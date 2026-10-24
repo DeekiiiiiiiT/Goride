@@ -297,6 +297,7 @@ export async function fetchBusinessFinanceBundle(
     incomplete.push('Ledgers');
   }
 
+  const cashBasis = opts.basis === 'cash';
   const fuelInProfit = round2(Math.abs(pnl.lines.find((l) => l.id === 'fuel')?.amount || 0));
   const companyFuel = weekRead
     ? companyFuelCost({
@@ -308,7 +309,7 @@ export async function fetchBusinessFinanceBundle(
       })
     : round2(pnl.fuelBreakdown?.fleetLoss ?? fuel);
   let fixedReplacement: number | null = null;
-  if (weekRead && weekRead.coverageRecognised > 0.005 && weekRead.coveredSourceIds.length) {
+  if (!cashBasis && weekRead && weekRead.coverageRecognised > 0.005 && weekRead.coveredSourceIds.length) {
     const covered = new Set(weekRead.coveredSourceIds);
     let lump = 0;
     for (const event of ledgerEvents) {
@@ -331,7 +332,6 @@ export async function fetchBusinessFinanceBundle(
   if (fixedLine && fixedReplacement != null) fixedLine.amount = -fixedOverhead;
   const payoutLine = pnl.lines.find((line) => line.id === 'driver_payouts');
   if (payoutLine) payoutLine.amount = -movementPays;
-  const cashBasis = opts.basis === 'cash';
   const operatingProfit = ledgerFailed
     ? 0
     : profitAfterCompanyFuel({
@@ -346,11 +346,6 @@ export async function fetchBusinessFinanceBundle(
       });
   const profitLineRow = pnl.lines.find((line) => line.id === 'operating_profit');
   if (profitLineRow && !ledgerFailed) profitLineRow.amount = operatingProfit;
-  const statedBank = round2(
-    confirms
-      .filter((row) => inPeriod(String(row.weekStartYmd || '').slice(0, 10), period))
-      .reduce((sum, row) => sum + (Number(row.expectedAmount) || 0), 0),
-  );
   const pumpSpend = round2(pnl.fuelBreakdown?.grossSpend || fuel);
   const weekClosed = weekRead?.weekStatus === 'Closed';
   const agreement = agreementChecks({
@@ -363,17 +358,25 @@ export async function fetchBusinessFinanceBundle(
     sealedFuelSpend: weekRead?.companyFuelSealed ? weekRead.sealedFuelSpend : pumpSpend,
     ledgerTolls: tolls,
     sealedTollNet: weekClosed ? (weekRead?.sealedTollNet ?? tolls) : tolls,
-    payouts: movementPays,
+    payouts: weekRead ? weekRead.closedAmountOwed : 0,
     movementPays,
     bankExpected,
-    bankDeposits: statedBank > 0.005 ? statedBank : bankExpected,
+    bankDeposits: weekRead?.bankConfirmed ? weekRead.bankDeposits : 0,
     statementSummary: round2(grossLine),
     ledgerStatement: ledgerEarnings ?? round2(grossLine),
   });
   if (!weekRead) {
     for (const row of agreement) {
-      if (row.id === 'revenue' || row.id === 'fuel' || row.id === 'tolls') row.ok = false;
+      if (row.id === 'revenue' || row.id === 'fuel' || row.id === 'tolls' || row.id === 'payouts') {
+        row.ok = false;
+        if (row.id === 'payouts') row.pending = 'Week statements';
+      }
     }
+  }
+  const bankRow = agreement.find((row) => row.id === 'bank');
+  if (bankRow && !weekRead?.bankConfirmed) {
+    bankRow.ok = false;
+    bankRow.pending = 'Not confirmed';
   }
 
   const overview: BusinessFinanceOverview = {
@@ -500,6 +503,9 @@ type WeekRead = {
   courierOut: number;
   coverageRecognised: number;
   coveredSourceIds: string[];
+  closedAmountOwed: number;
+  bankDeposits: number;
+  bankConfirmed: boolean;
 };
 
 async function fetchWeekRead(startYmd: string, endYmd: string): Promise<WeekRead> {

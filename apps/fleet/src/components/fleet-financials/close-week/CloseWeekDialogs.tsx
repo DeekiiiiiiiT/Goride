@@ -194,8 +194,8 @@ export function CloseWeekDialogs({
             ) : null}
             {pnlUnavailable ? (
               <p className="rounded-md border border-amber-200 bg-amber-50 px-2.5 py-2 text-xs text-amber-900">
-                Business Finance P&amp;L is unavailable — the week P&amp;L tie did not run. You can
-                still close, but treat identity as unchecked until P&amp;L is back.
+                Driver settlements were not checked against the week. You can
+                still close, but treat that match as unchecked until the week total is back.
               </p>
             ) : null}
             {closeConfirmDrivers.length > 0 ? (

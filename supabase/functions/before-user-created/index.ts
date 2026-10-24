@@ -5,6 +5,7 @@
  * Fails closed when BEFORE_USER_CREATED_HOOK_SECRET is unset (P0 audit).
  */
 import { Webhook } from "https://esm.sh/standardwebhooks@1.0.0";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const PRIVILEGED_META_KEYS = new Set([
   "role",
@@ -63,6 +64,32 @@ Deno.serve(async (req) => {
         }),
         { status: 400, headers: { "Content-Type": "application/json" } },
       );
+    }
+
+    // Trust the Plug flag only at creation. The trigger stamps the role; later edits do not.
+    if (meta.app === "plug") {
+      const url = Deno.env.get("SUPABASE_URL");
+      const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+      const userId = typeof user.id === "string" ? user.id : "";
+      if (!url || !key || !userId) {
+        return new Response(
+          JSON.stringify({
+            error: { http_code: 500, message: "Plug signup could not be recorded" },
+          }),
+          { status: 500, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      const sb = createClient(url, key);
+      const { error } = await sb.schema("explorer").from("signup_intent").upsert({ user_id: userId });
+      if (error) {
+        console.error("[before-user-created] signup_intent", error.message);
+        return new Response(
+          JSON.stringify({
+            error: { http_code: 500, message: "Plug signup could not be recorded" },
+          }),
+          { status: 500, headers: { "Content-Type": "application/json" } },
+        );
+      }
     }
 
     return new Response("{}", {

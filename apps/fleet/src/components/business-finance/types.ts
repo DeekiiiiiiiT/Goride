@@ -151,6 +151,7 @@ export type BusinessFinanceOverview = {
     ok: boolean;
     difference: number;
     held?: boolean;
+    pending?: string;
   }>;
   weekStatus?: 'Closed' | 'Open' | 'Unavailable';
   profit: {

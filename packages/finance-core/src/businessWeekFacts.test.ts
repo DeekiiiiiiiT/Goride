@@ -62,11 +62,11 @@ describe('business week facts', () => {
     })).toBe(4408.12);
   });
 
-  it('holds Aug 3 revenue instead of failing it', () => {
+  it('fails a week when the books do not match the statement', () => {
     const [revenue] = agreementChecks({
-      ledgerGross: 1,
-      sealedEarningsGross: 2,
-      earningsHeld: true,
+      ledgerGross: 62797.4,
+      sealedEarningsGross: 63479.4,
+      earningsHeld: false,
       ledgerFuel: 1,
       sealedFuelSpend: 1,
       ledgerTolls: 1,
@@ -78,8 +78,33 @@ describe('business week facts', () => {
       statementSummary: 1,
       ledgerStatement: 1,
     });
-    expect(revenue.held).toBe(true);
+    expect(revenue.held).toBe(false);
     expect(revenue.ok).toBe(false);
+    expect(revenue.difference).toBe(-682);
+  });
+
+  it('passes payouts and bank only when the two sides match', () => {
+    const rows = agreementChecks({
+      ledgerGross: 1,
+      sealedEarningsGross: 1,
+      earningsHeld: false,
+      ledgerFuel: 1,
+      sealedFuelSpend: 1,
+      ledgerTolls: 1,
+      sealedTollNet: 1,
+      payouts: 100,
+      movementPays: 40,
+      bankExpected: 500,
+      bankDeposits: 480,
+      statementSummary: 1,
+      ledgerStatement: 1,
+    });
+    const payouts = rows.find((row) => row.id === 'payouts');
+    const bank = rows.find((row) => row.id === 'bank');
+    expect(payouts?.ok).toBe(false);
+    expect(payouts?.difference).toBe(60);
+    expect(bank?.ok).toBe(false);
+    expect(bank?.difference).toBe(20);
   });
 
   it('does not treat company fuel share as driver cash', () => {

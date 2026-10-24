@@ -259,6 +259,9 @@ delete from public.kv_store_37f42386 where key >= 'fleet_kv_backup:' and key < '
 do $cron$
 declare jid bigint;
 begin
+  IF NOT EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_cron') THEN
+    RETURN;
+  END IF;
   select jobid into jid from cron.job where jobname = 'purge-disk-io-logs-90d';
   if jid is not null then
     perform cron.unschedule(jid);

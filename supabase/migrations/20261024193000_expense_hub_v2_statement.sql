@@ -101,12 +101,12 @@ CREATE OR REPLACE FUNCTION fleet.post_expense_bill(
 LANGUAGE plpgsql
 AS $$
 DECLARE
-  week_start date;
+  v_week date;
 BEGIN
-  week_start := p_bill_date - ((EXTRACT(ISODOW FROM p_bill_date)::int - 1));
+  v_week := p_bill_date - ((EXTRACT(ISODOW FROM p_bill_date)::int - 1));
   IF EXISTS (
-    SELECT 1 FROM fleet.finance_period_locks
-    WHERE organization_id = p_org AND week_start = week_start
+    SELECT 1 FROM fleet.finance_period_locks AS locks
+    WHERE locks.organization_id = p_org AND locks.week_start = v_week
   ) THEN
     RAISE EXCEPTION 'week locked';
   END IF;
@@ -132,17 +132,17 @@ AS $$
 DECLARE
   owed numeric;
   paid numeric;
-  week_start date;
+  v_week date;
 BEGIN
   IF EXISTS (
     SELECT 1 FROM fleet.expense_bill_payments WHERE idempotency_key = p_idempotency_key
   ) THEN
     RETURN;
   END IF;
-  week_start := p_payment_date - ((EXTRACT(ISODOW FROM p_payment_date)::int - 1));
+  v_week := p_payment_date - ((EXTRACT(ISODOW FROM p_payment_date)::int - 1));
   IF EXISTS (
-    SELECT 1 FROM fleet.finance_period_locks
-    WHERE organization_id = p_org AND week_start = week_start
+    SELECT 1 FROM fleet.finance_period_locks AS locks
+    WHERE locks.organization_id = p_org AND locks.week_start = v_week
   ) THEN
     RAISE EXCEPTION 'week locked';
   END IF;
@@ -251,18 +251,18 @@ RETURNS void
 LANGUAGE plpgsql
 AS $$
 DECLARE
-  bill_date date;
-  week_start date;
+  v_bill_date date;
+  v_week date;
 BEGIN
-  SELECT b.bill_date INTO bill_date FROM fleet.expense_bills b
+  SELECT b.bill_date INTO v_bill_date FROM fleet.expense_bills b
   WHERE b.id = p_bill_id AND b.organization_id = p_org FOR UPDATE;
-  IF bill_date IS NULL THEN
+  IF v_bill_date IS NULL THEN
     RAISE EXCEPTION 'bill not found';
   END IF;
-  week_start := bill_date - ((EXTRACT(ISODOW FROM bill_date)::int - 1));
+  v_week := v_bill_date - ((EXTRACT(ISODOW FROM v_bill_date)::int - 1));
   IF EXISTS (
-    SELECT 1 FROM fleet.finance_period_locks
-    WHERE organization_id = p_org AND week_start = week_start
+    SELECT 1 FROM fleet.finance_period_locks AS locks
+    WHERE locks.organization_id = p_org AND locks.week_start = v_week
   ) THEN
     RAISE EXCEPTION 'week locked';
   END IF;

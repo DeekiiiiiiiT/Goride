@@ -8,11 +8,17 @@ alter role service_role  set work_mem = '8MB';
 alter role authenticated set work_mem = '8MB';
 
 -- 2) pg_cron history was never purged (419,813 rows; 7 jobs fire every minute).
---    Keep 7 days. Named schedule upserts, so re-running is safe.
-select cron.schedule(
-  'purge-cron-run-details-7d',
-  '40 5 * * *',
-  $$delete from cron.job_run_details where end_time < now() - interval '7 days'$$
-);
+--    Keep 7 days. A fresh database has no pg_cron, so the schedule is skipped there.
+DO $cron$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_cron') THEN
+    PERFORM cron.schedule(
+      'purge-cron-run-details-7d',
+      '40 5 * * *',
+      $job$delete from cron.job_run_details where end_time < now() - interval '7 days'$job$
+    );
+  END IF;
+END
+$cron$;
 
 notify pgrst, 'reload config';

@@ -5,7 +5,7 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 
-const roots = ["supabase/functions", "packages"];
+const roots = ["supabase/functions", "packages", "apps"];
 const needle = "admin_boundaries";
 const skip = new Set(["node_modules", "dist", ".turbo"]);
 const hits = [];
@@ -32,4 +32,4 @@ if (hits.length) {
   process.exit(1);
 }
 
-console.log(`${needle} is gone from supabase/functions and packages.`);
+console.log(`${needle} is gone from supabase/functions, packages, and apps.`);

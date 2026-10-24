@@ -4,7 +4,7 @@ import {
   computeIndriveWalletLoadsFromLedgerEntries,
   buildIndriveWalletFleetFromLedger,
   isIndriveWalletShort,
-} from './indriveWalletMetrics';
+} from '@roam/finance-core';
 
 describe('computeIndriveWalletFeesFromLedgerEntries', () => {
   const range = { start: '2025-01-01', end: '2025-01-31' };

@@ -29,6 +29,24 @@ function sb() {
   );
 }
 
+/** Gas-card rows must carry the fleet. The report wins; otherwise the driver's closed week. */
+async function organizationForFuelReport(
+  report: Record<string, unknown>,
+  driverId: string,
+): Promise<string | null> {
+  const fromReport = String(report.organizationId || report.organization_id || "").trim();
+  if (fromReport) return fromReport;
+  const { data } = await sb()
+    .from("driver_financial_periods")
+    .select("organization_id")
+    .eq("driver_id", driverId)
+    .not("organization_id", "is", null)
+    .limit(1)
+    .maybeSingle();
+  const org = data?.organization_id;
+  return org ? String(org) : null;
+}
+
 function filterActiveEvents<T extends {
   id?: string;
   reverses_event_id?: string | null;
@@ -213,6 +231,7 @@ export async function postFuelFinalizedEventsFromReport(
   const fleetShare = Number(report.companyShare) || 0;
   const driverSpend = reportDriverSpendMajor(report);
   const gasCard = Math.abs(Number(report.gasCardSpend) || 0);
+  const organizationId = await organizationForFuelReport(report, driverId);
   const results: PostFinancialEventResult[] = [];
 
   const active = await listActiveFuelEventsForWeek(driverId, weekKey);
@@ -381,6 +400,7 @@ export async function postFuelFinalizedEventsFromReport(
         sourceSystem: "fuel_ops",
         sourceId,
         driverId,
+        organizationId,
         occurredAt: weekKey,
         amountMajor: -gasCard,
         direction: "outflow",

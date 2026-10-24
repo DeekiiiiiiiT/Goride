@@ -15,6 +15,9 @@ do $cron$
 declare
   jid bigint;
 begin
+  IF NOT EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_cron') THEN
+    RETURN;
+  END IF;
   select jobid into jid from cron.job where jobname = 'rush-config-apply-pending';
   if jid is not null then
     perform cron.alter_job(jid, schedule := '*/5 * * * *');

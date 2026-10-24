@@ -31,12 +31,20 @@ function round2(n: number): number {
   return Math.round((n + Number.EPSILON) * 100) / 100;
 }
 
+/** A reversal row undoes an earlier fare. The amount stays positive; the sign flips. */
+export function isLedgerReversal(e: PlatformFeeLedgerLike): boolean {
+  const meta = e.metadata && typeof e.metadata === 'object'
+    ? (e.metadata as Record<string, unknown>)
+    : {};
+  return meta.reversal === true || meta.reversal === 'true';
+}
+
 /** Pre-commission fare contribution from a fare_earning row. */
 export function recognizedFareGross(e: PlatformFeeLedgerLike): number {
   const net = num(e.netAmount);
   const gross = num(e.grossAmount);
-  if (gross > net + 1e-9) return Math.abs(gross);
-  return Math.abs(net) || Math.abs(gross);
+  const magnitude = gross > net + 1e-9 ? Math.abs(gross) : (Math.abs(net) || Math.abs(gross));
+  return isLedgerReversal(e) ? -magnitude : magnitude;
 }
 
 /** Implied commission on a fare_earning row (never negative). */

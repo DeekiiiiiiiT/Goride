@@ -116,7 +116,7 @@ export function profitAfterCompanyFuel(input: {
   );
 }
 
-export type AgreementRow = TieOut & { held?: boolean };
+export type AgreementRow = TieOut & { held?: boolean; pending?: string };
 
 export function agreementChecks(input: {
   ledgerGross: number;
@@ -142,8 +142,8 @@ export function agreementChecks(input: {
     { ...tieOut('revenue', 'Revenue', input.ledgerGross, input.sealedEarningsGross), held: revenue.held },
     tieOut('fuel', 'Fuel', input.ledgerFuel, input.sealedFuelSpend),
     tieOut('tolls', 'Tolls', input.ledgerTolls, input.sealedTollNet),
-    tieOut('payouts', 'Payouts', input.payouts, input.movementPays),
-    tieOut('bank', 'Bank expected', input.bankExpected, input.bankDeposits),
+    tieOut('payouts', 'Payouts (owed vs paid)', input.payouts, input.movementPays),
+    tieOut('bank', 'Bank (expected vs received)', input.bankExpected, input.bankDeposits),
     tieOut('ledgers', 'Statement summary', input.statementSummary, input.ledgerStatement),
   ];
 }

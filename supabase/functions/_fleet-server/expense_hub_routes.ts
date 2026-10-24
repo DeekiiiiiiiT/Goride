@@ -629,6 +629,14 @@ export function registerExpenseHubRoutes(app: {
       voidedAt: to === "voided" ? nowIso() : doc.voidedAt,
     };
     if (to === "approved" || to === "posted") {
+      await statementRpc("post_expense_bill", {
+        p_org: getOrgId(c) || "",
+        p_bill_id: next.id,
+        p_coverage_id: null,
+        p_bill_date: next.incurredDate,
+        p_amount: Number(next.netAmount) || 0,
+        p_self_approved: Boolean(next.selfApproved),
+      });
       const journal = buildAccrualJournal(
         { ...next, status: "approved" },
         getOrgId(c) || "",
@@ -645,14 +653,6 @@ export function registerExpenseHubRoutes(app: {
         stampOrg(stampedJournal as unknown as Record<string, unknown>, c),
       );
       await appendHubDocumentLedger(c, next);
-      await statementRpc("post_expense_bill", {
-        p_org: getOrgId(c) || "",
-        p_bill_id: next.id,
-        p_coverage_id: null,
-        p_bill_date: next.incurredDate,
-        p_amount: Number(next.netAmount) || 0,
-        p_self_approved: Boolean(next.selfApproved),
-      });
       next.status = "posted";
       next.postedAt = nowIso();
       // Shadow-write GCT input tax when vendor has TRN (Accounting engine)
@@ -688,10 +688,19 @@ export function registerExpenseHubRoutes(app: {
       }
     }
     if (to === "voided") {
-      await statementRpc("void_expense_bill", {
-        p_org: getOrgId(c) || "",
-        p_bill_id: doc.id,
-      });
+      try {
+        await statementRpc("void_expense_bill", {
+          p_org: getOrgId(c) || "",
+          p_bill_id: doc.id,
+        });
+      } catch (e) {
+        const message = e instanceof Error ? e.message : String(e);
+        if (!/bill not found/i.test(message)) throw e;
+        console.warn(JSON.stringify({
+          event: "expense_bill_missing",
+          expenseDocId: doc.id,
+        }));
+      }
       try {
         const sb = createClient(
           Deno.env.get("SUPABASE_URL") ?? "",

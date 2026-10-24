@@ -251,6 +251,11 @@ jobs:
           deno test --allow-read
           supabase/functions/_shared/menuEngine/exports.drift.test.ts
 
+      - name: Deno test plug-core re-export drift
+        run: >
+          deno test --allow-read
+          supabase/functions/_shared/plugCore.drift.test.ts
+
       - name: Deno test recon sources mirror drift
         run: >
           deno test --allow-read

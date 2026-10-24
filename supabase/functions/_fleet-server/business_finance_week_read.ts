@@ -50,7 +50,11 @@ type WeekRead = {
   courierOut: number;
   coverageRecognised: number;
   coveredSourceIds: string[];
+  /** Closed Driver Settlements amount the company owes. */
+  closedAmountOwed: number;
   bankDeposits: number;
+  /** False when nobody has confirmed what landed in the bank. */
+  bankConfirmed: boolean;
 };
 
 function emptyRead(): WeekRead {
@@ -70,7 +74,9 @@ function emptyRead(): WeekRead {
     courierOut: 0,
     coverageRecognised: 0,
     coveredSourceIds: [],
+    closedAmountOwed: 0,
     bankDeposits: 0,
+    bankConfirmed: false,
   };
 }
 
@@ -167,39 +173,32 @@ export async function loadBusinessFinanceWeekRead(
   out.tagTopUps = minor(topMinor);
 
   try {
-    const rush = sb.schema("rush_money");
-    const { data: lines } = await rush
-      .from("lines")
-      .select("amount_minor, account_id, journal_id")
-      .limit(5000);
-    const accountIds = [...new Set((lines || []).map((row) => String((row as { account_id?: string }).account_id || "")).filter(Boolean))];
-    const { data: accounts } = accountIds.length
-      ? await rush.from("accounts").select("id, kind").in("id", accountIds.slice(0, 500))
-      : { data: [] };
-    const kindByAccount = new Map<string, string>();
-    for (const account of accounts || []) {
-      kindByAccount.set(String((account as { id?: string }).id), String((account as { kind?: string }).kind || ""));
-    }
-    const { data: journals } = await rush
-      .from("journals")
-      .select("id, created_at")
-      .gte("created_at", `${startYmd}T00:00:00.000Z`)
-      .lte("created_at", `${endYmd}T23:59:59.999Z`)
-      .limit(5000);
-    const inRange = new Set((journals || []).map((row) => String((row as { id?: string }).id)));
-    let courierIn = 0;
-    let courierOut = 0;
-    for (const line of lines || []) {
-      if (!inRange.has(String((line as { journal_id?: string }).journal_id || ""))) continue;
-      const kind = kindByAccount.get(String((line as { account_id?: string }).account_id || ""));
-      const amount = Number((line as { amount_minor?: number }).amount_minor) || 0;
-      if (kind === "platform_revenue") courierIn += amount;
-      else if (kind === "platform_cost" || kind === "cod_clearing") courierOut += Math.abs(amount);
-    }
-    out.courierIn = minor(courierIn);
-    out.courierOut = minor(courierOut);
+    const { data: rush, error: rushError } = await sb.rpc("svc_rush_fleet_week_money", {
+      p_org: orgId,
+      p_start: startYmd,
+      p_end: endYmd,
+    });
+    if (rushError) throw rushError;
+    const row = (rush || {}) as { courier_in?: number; courier_out?: number };
+    out.courierIn = minor(row.courier_in);
+    out.courierOut = minor(row.courier_out);
   } catch (err) {
     console.warn("[business-finance] rush read skipped", err);
+  }
+
+  try {
+    const { data: sides, error: sidesError } = await sb.rpc("svc_finance_week_sides", {
+      p_org: orgId,
+      p_start: startYmd,
+      p_end: endYmd,
+    });
+    if (sidesError) throw sidesError;
+    const row = (sides || {}) as { closed_owed?: number; bank_deposits?: number; bank_confirmed?: boolean };
+    out.closedAmountOwed = Math.round((Number(row.closed_owed) || 0) * 100) / 100;
+    out.bankDeposits = Math.round((Number(row.bank_deposits) || 0) * 100) / 100;
+    out.bankConfirmed = Boolean(row.bank_confirmed);
+  } catch (err) {
+    console.warn("[business-finance] week sides skipped", err);
   }
 
   try {

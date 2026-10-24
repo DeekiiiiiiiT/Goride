@@ -73,6 +73,44 @@ export function writesTouchFleetMoney(tables: string[]): string[] {
   return tables.filter((table) => banned.has(table));
 }
 
+/** Km per litre from the previous reading. Null until two increasing readings exist. */
+export function kmPerLitre(previousKm: number | null, odometer: number, litres: number): number | null {
+  if (previousKm == null || !(litres > 0) || !(odometer > previousKm)) return null;
+  return (odometer - previousKm) / litres;
+}
+
+/**
+ * Mileage and next service from real readings.
+ * The date moves when a later fill changes the pace. Crossing the km interval is overdue immediately.
+ */
+export function fillCare(input: {
+  readings: { at: string; km: number }[];
+  litres: number | null;
+  lastServiceOn: string | null;
+  lastServiceKm: number | null;
+  now: string;
+}): { kmPerLitre: number | null; dueOn: string | null; status: CareStatus; pace: number | null } {
+  const sorted = [...input.readings].filter((row) => row.km >= 0 && row.at).sort((a, b) => a.at.localeCompare(b.at));
+  const last = sorted[sorted.length - 1];
+  const prev = sorted.length >= 2 ? sorted[sorted.length - 2] : undefined;
+  const perLitre = last && input.litres != null ? kmPerLitre(prev?.km ?? null, last.km, input.litres) : null;
+  const pace = kmPerDay(sorted);
+  const lastKm = last?.km ?? input.lastServiceKm ?? 0;
+  const lastDoneOn = input.lastServiceOn || sorted[0]?.at || input.now;
+  if (input.lastServiceKm != null && lastKm - input.lastServiceKm >= 5000) {
+    return { kmPerLitre: perLitre, dueOn: input.now, status: 'overdue', pace };
+  }
+  const due = projectServiceDue({
+    intervalKm: 5000,
+    intervalDays: 180,
+    lastKm,
+    lastDoneOn,
+    kmPerDay: pace,
+    now: input.now,
+  });
+  return { kmPerLitre: perLitre, dueOn: due.dueOn, status: due.status, pace };
+}
+
 export function kmPerDay(readings: { at: string; km: number }[]): number | null {
   const sorted = [...readings].filter((r) => r.km >= 0 && r.at).sort((a, b) => a.at.localeCompare(b.at));
   if (sorted.length < 2) return null;

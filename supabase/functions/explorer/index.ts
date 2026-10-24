@@ -8,6 +8,7 @@ import {
   decidePlugStation,
   hashExplorerUser,
   impossibleTravel,
+  fillCare,
   planPlugFill,
   plugPriceDecision,
   suggestReview,
@@ -81,6 +82,73 @@ async function allow(sb: SupabaseClient, userId: string, flag: string): Promise<
   return sectionEnabled(flag as typeof PLUG_FLAGS[number], Boolean(globalFlag?.enabled), Boolean(row));
 }
 
+type FillCare = { kmPerLitre: number | null; dueOn: string | null; status: string; pace: number | null };
+
+async function careFor(sb: SupabaseClient, userId: string, vehicleId: string, litres: number | null): Promise<FillCare> {
+  const [{ data: readings }, { data: services }] = await Promise.all([
+    sb.schema("explorer").from("odometer_reading").select("reading, recorded_at").eq("user_id", userId).eq("vehicle_id", vehicleId).order("recorded_at"),
+    sb.schema("explorer").from("service_log").select("done_on, odometer").eq("user_id", userId).eq("vehicle_id", vehicleId).order("done_on", { ascending: false }).limit(1),
+  ]);
+  const lastService = services?.[0] as { done_on?: string; odometer?: number | null } | undefined;
+  return fillCare({
+    readings: (readings || []).map((row: { reading: number; recorded_at: string }) => ({ at: row.recorded_at, km: Number(row.reading) })),
+    litres,
+    lastServiceOn: lastService?.done_on || null,
+    lastServiceKm: lastService?.odometer == null ? null : Number(lastService.odometer),
+    now: new Date().toISOString(),
+  });
+}
+
+async function notifyPlugUser(sb: SupabaseClient, userId: string, title: string, body: string) {
+  await sb.schema("explorer").from("notification").insert({ user_id: userId, title, body });
+  const { data: subs } = await sb.schema("explorer").from("push_subscription").select("id, endpoint, p256dh, auth").eq("user_id", userId);
+  const publicKey = Deno.env.get("VAPID_PUBLIC_KEY");
+  const privateKey = Deno.env.get("VAPID_PRIVATE_KEY");
+  if (!subs?.length || !publicKey || !privateKey) return;
+  const webpush = (await import("npm:web-push@3.6.7")).default;
+  webpush.setVapidDetails(Deno.env.get("VAPID_SUBJECT") || "mailto:support@roam.app", publicKey, privateKey);
+  for (const sub of subs) {
+    try {
+      await webpush.sendNotification(
+        { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
+        JSON.stringify({ title, body, url: "/#/inbox" }),
+      );
+    } catch (err) {
+      const statusCode = (err as { statusCode?: number }).statusCode;
+      if (statusCode === 404 || statusCode === 410) {
+        await sb.schema("explorer").from("push_subscription").delete().eq("id", sub.id);
+      }
+    }
+  }
+}
+
+async function syncServiceReminder(sb: SupabaseClient, userId: string, vehicleId: string, care: FillCare) {
+  const dueOn = care.dueOn ? care.dueOn.slice(0, 10) : null;
+  const { data: existing } = await sb.schema("explorer").from("reminder").select("id, notified_at, due_on").eq("user_id", userId).eq("vehicle_id", vehicleId).eq("kind", "service").order("created_at", { ascending: false }).limit(1);
+  const row = existing?.[0] as { id: string; notified_at: string | null; due_on: string | null } | undefined;
+  const previousDue = row?.due_on ? String(row.due_on).slice(0, 10) : null;
+  const dayMoved = Boolean(dueOn) && dueOn !== previousDue;
+  const dueNow = care.status === "due_soon" || care.status === "overdue";
+  const shouldAlertDue = dueNow && !row?.notified_at;
+  const shouldNotify = shouldAlertDue || (dayMoved && !dueNow);
+  const notifiedAt = shouldAlertDue ? new Date().toISOString() : dueNow ? row?.notified_at || null : null;
+  if (row) {
+    await sb.schema("explorer").from("reminder").update({ due_on: dueOn, notified_at: notifiedAt }).eq("id", row.id);
+  } else {
+    await sb.schema("explorer").from("reminder").insert({
+      user_id: userId,
+      vehicle_id: vehicleId,
+      kind: "service",
+      due_on: dueOn,
+      notified_at: notifiedAt,
+    });
+  }
+  if (shouldNotify && dueOn) {
+    const title = shouldAlertDue ? "Service is coming due" : "Next service moved";
+    await notifyPlugUser(sb, userId, title, `Next service ${dueOn}.`);
+  }
+}
+
 async function hitLimit(sb: SupabaseClient, userId: string, action: string, max: number): Promise<boolean> {
   const windowStart = new Date();
   windowStart.setMinutes(0, 0, 0);
@@ -103,6 +171,52 @@ app.get("/flags", async (c) => {
     return c.json({ flags });
   } catch (err) {
     return c.json({ error: err instanceof Error ? err.message : "Could not load flags" }, 401);
+  }
+});
+
+app.get("/care", async (c) => {
+  try {
+    const user = await requireExplorer(c);
+    const vehicleId = c.req.query("vehicleId") || "";
+    const sb = admin();
+    const { data: vehicle } = await sb.schema("explorer").from("user_vehicle").select("id").eq("id", vehicleId).eq("user_id", user.id).maybeSingle();
+    if (!vehicle) return c.json({ error: "That vehicle is not in your garage" }, 404);
+    const { data: lastFill } = await sb.schema("explorer").from("fuel_log").select("litres").eq("user_id", user.id).eq("vehicle_id", vehicleId).order("created_at", { ascending: false }).limit(1);
+    const litres = lastFill?.[0]?.litres == null ? null : Number(lastFill[0].litres);
+    return c.json(await careFor(sb, user.id, vehicleId, litres));
+  } catch (err) {
+    return c.json({ error: err instanceof Error ? err.message : "Could not load service" }, 400);
+  }
+});
+
+app.get("/push/public-key", async (c) => {
+  try {
+    await requireExplorer(c);
+    const publicKey = Deno.env.get("VAPID_PUBLIC_KEY")?.trim() || "";
+    if (!publicKey) return c.json({ error: "Push is not set up yet. The inbox still works." }, 404);
+    return c.json({ publicKey });
+  } catch (err) {
+    return c.json({ error: err instanceof Error ? err.message : "Could not load push" }, 401);
+  }
+});
+
+app.post("/push-subscriptions", async (c) => {
+  try {
+    const user = await requireExplorer(c);
+    const body = await c.req.json();
+    if (!body.endpoint || !body.p256dh || !body.auth) return c.json({ error: "That push subscription is incomplete" }, 400);
+    const sb = admin();
+    await ensureProfile(sb, user);
+    const { error } = await sb.schema("explorer").from("push_subscription").upsert({
+      user_id: user.id,
+      endpoint: String(body.endpoint),
+      p256dh: String(body.p256dh),
+      auth: String(body.auth),
+    }, { onConflict: "user_id,endpoint" });
+    if (error) throw error;
+    return c.json({ ok: true });
+  } catch (err) {
+    return c.json({ error: err instanceof Error ? err.message : "Could not save push" }, 400);
   }
 });
 
@@ -298,6 +412,7 @@ app.post("/fuel-logs", async (c) => {
       });
       if (evidenceError) throw evidenceError;
     }
+    let priceUpdated = false;
     if (stationId && pricePer > 0) {
       await sb.schema("places").from("price_observation").insert({
         station_id: stationId,
@@ -320,10 +435,24 @@ app.post("/fuel-logs", async (c) => {
             prices: { ...(card.prices || {}), [body.grade || "e10_87"]: pricePer },
             price_updated_at: new Date().toISOString(),
           }).eq("id", stationId);
+          priceUpdated = true;
         }
       }
     }
-    return c.json({ id: log.id, stationId, decision, price: priceCall });
+    const care = await careFor(sb, user.id, body.vehicleId, Number(body.litres));
+    await syncServiceReminder(sb, user.id, body.vehicleId, care);
+    return c.json({
+      id: log.id,
+      stationId,
+      decision,
+      price: priceCall,
+      odometer: Number(body.odometer),
+      kmPerLitre: care.kmPerLitre,
+      nextServiceOn: care.dueOn,
+      serviceStatus: care.status,
+      priceUpdated,
+      locationUsed: Number.isFinite(lat) && Number.isFinite(lng),
+    });
   } catch (err) {
     return c.json({ error: err instanceof Error ? err.message : "Could not save fuel log" }, 400);
   }
@@ -343,7 +472,18 @@ app.post("/services", async (c) => {
       done_elsewhere: Boolean(body.doneElsewhere),
     }).select("id").single();
     if (error) throw error;
-    return c.json({ id: data.id });
+    if (body.odometer != null) {
+      await sb.schema("explorer").from("odometer_reading").insert({
+        user_id: user.id,
+        vehicle_id: body.vehicleId,
+        reading: body.odometer,
+        source: "service",
+        reference_id: data.id,
+      });
+    }
+    const care = await careFor(sb, user.id, body.vehicleId, null);
+    await syncServiceReminder(sb, user.id, body.vehicleId, care);
+    return c.json({ id: data.id, nextServiceOn: care.dueOn, serviceStatus: care.status });
   } catch (err) {
     return c.json({ error: err instanceof Error ? err.message : "Could not log service" }, 400);
   }
@@ -441,6 +581,7 @@ app.post("/pins", async (c) => {
       best_accuracy_m: accuracy,
       suggestion: suggestion.label,
     });
+    await sb.schema("explorer").from("pin_receipt").upsert({ user_id: user.id, place_id: placeId }, { onConflict: "user_id,place_id" });
     return c.json({ placeId, status: "pending", suggestion: suggestion.label });
   } catch (err) {
     return c.json({ error: err instanceof Error ? err.message : "Could not save pin" }, 400);
@@ -451,7 +592,7 @@ app.get("/me/export", async (c) => {
   try {
     const user = await requireExplorer(c);
     const sb = admin();
-    const tables = ["profile", "user_vehicle", "fuel_log", "odometer_reading", "service_log", "reminder", "notification"] as const;
+    const tables = ["profile", "user_vehicle", "fuel_log", "odometer_reading", "service_log", "reminder", "notification", "pin_receipt", "push_subscription"] as const;
     const dump: Record<string, unknown> = {};
     for (const table of tables) {
       const { data } = await sb.schema("explorer").from(table).select("*").eq(table === "profile" ? "user_id" : "user_id", user.id);
@@ -469,7 +610,8 @@ app.delete("/me", async (c) => {
     const sb = admin();
     const userHash = await hashExplorerUser(user.id, userPepper());
     await sb.schema("places").from("place_evidence").delete().eq("user_hash", userHash);
-    await sb.schema("explorer").from("profile").delete().eq("user_id", user.id);
+    const { error } = await sb.auth.admin.deleteUser(user.id);
+    if (error) throw error;
     return c.json({ ok: true });
   } catch (err) {
     return c.json({ error: err instanceof Error ? err.message : "Could not delete account" }, 400);
@@ -635,6 +777,15 @@ app.post("/admin/places/:id", async (c) => {
       decided_by: owner.id,
       decided_at: new Date().toISOString(),
     }).eq("id", id);
+    const note = action === "reject"
+      ? { title: "Place not added", body: "Your pin was not approved." }
+      : action === "merge"
+      ? { title: "Pin matched", body: "Your pin was matched to a place already on the map." }
+      : { title: "Place approved", body: "Your pin is now on the map." };
+    const { data: receipts } = await sb.schema("explorer").from("pin_receipt").select("user_id").eq("place_id", proposal.place_id);
+    for (const receipt of receipts || []) {
+      await notifyPlugUser(sb, receipt.user_id as string, note.title, note.body);
+    }
     return c.json({ ok: true });
   } catch (err) {
     return c.json({ error: err instanceof Error ? err.message : "Could not review" }, 400);

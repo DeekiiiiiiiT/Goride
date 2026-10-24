@@ -1,13 +1,14 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { Link, Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { Link, Navigate, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { FuelGradeChip, GpsAccuracyIndicator, MaintenanceStatusPill, PartsTierHeader, PendingDashedPin, PriceBubblePin } from '../../../packages/ui/src/plug-kit';
 import { CatalogSearchPicker } from '../../../packages/ui/src/catalog-search-picker';
 import { OdometerScanner } from '../../../packages/ui/src/odometer-scanner';
-import { documentStatus, priceAgeLabel, projectServiceDue, kmPerDay, contributorLevel } from '@roam/plug-core';
+import { documentStatus, priceAgeLabel, contributorLevel } from '@roam/plug-core';
 import { Frame, Notice } from './Shell';
 import { googleDirections, plugSend, publicGet, wazeDirections } from './api';
 import { useAuth } from './auth';
 import { enqueue, readQueue, removeJob } from './offline';
+import { enablePlugPush } from './push';
 import type { PlugFlag } from '@roam/plug-core';
 
 function Gate({ flag, children }: { flag: PlugFlag; children: ReactNode }) {
@@ -293,8 +294,26 @@ export function FuelDetails() {
   const [error, setError] = useState<string | null>(null);
   const [vehicles, setVehicles] = useState<{ id: string; nickname: string | null }[]>([]);
   const [vehicleId, setVehicleId] = useState('');
+  const [fix, setFix] = useState<{ lat: number; lng: number; accuracy: number; mocked: boolean } | null>(null);
+  const [gpsNote, setGpsNote] = useState<string | null>(null);
   const navigate = useNavigate();
   useEffect(() => { void plugSend<{ vehicles: { id: string; nickname: string | null }[] }>('/garage', 'GET').then((body) => { setVehicles(body.vehicles); setVehicleId(body.vehicles[0]?.id || ''); }).catch(() => setVehicles([])); }, []);
+  useEffect(() => {
+    if (!navigator.geolocation) {
+      setGpsNote('Location is off, so the station price will not update.');
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      (pos) => setFix({
+        lat: pos.coords.latitude,
+        lng: pos.coords.longitude,
+        accuracy: pos.coords.accuracy,
+        mocked: Boolean((pos.coords as GeolocationCoordinates & { mocked?: boolean }).mocked),
+      }),
+      () => setGpsNote('Location is off, so the station price will not update.'),
+      { enableHighAccuracy: true, timeout: 12000, maximumAge: 0 },
+    );
+  }, []);
   return (
     <Frame title="Fuel details" action={{ label: 'Save', onClick: () => {
       const body = {
@@ -304,27 +323,49 @@ export function FuelDetails() {
         odometer: Number(params.get('odo')),
         grade: 'e10_87',
         clientId: crypto.randomUUID(),
-        lat: Number(params.get('lat')) || undefined,
-        lng: Number(params.get('lng')) || undefined,
-        accuracyM: Number(params.get('accuracy')) || undefined,
-        mockLocation: params.get('mock') === '1',
+        lat: fix?.lat,
+        lng: fix?.lng,
+        accuracyM: fix?.accuracy,
+        mockLocation: fix?.mocked || params.get('mock') === '1',
       };
-      const save = () => plugSend('/fuel-logs', 'POST', body);
+      const save = () => plugSend<SavedFill>('/fuel-logs', 'POST', body);
       if (!navigator.onLine) { enqueue('/fuel-logs', body); navigate('/fuel/offline'); return; }
-      void save().then(() => navigate('/fuel/saved')).catch((err: unknown) => setError(err instanceof Error ? err.message : 'Could not save'));
+      void save().then((saved) => navigate('/fuel/saved', { state: saved })).catch((err: unknown) => setError(err instanceof Error ? err.message : 'Could not save'));
     } }}>
       {vehicles.length === 0 ? <Notice kind="empty" text="Add a vehicle before logging fuel." /> : null}
       <select className="tap w-full rounded-xl border px-3" value={vehicleId} onChange={(e) => setVehicleId(e.target.value)} aria-label="Vehicle">{vehicles.map((v) => <option key={v.id} value={v.id}>{v.nickname || 'Vehicle'}</option>)}</select>
       <input className="tap w-full rounded-xl border px-3" placeholder="Litres" value={litres} onChange={(e) => setLitres(e.target.value)} />
       <input className="tap w-full rounded-xl border px-3" placeholder="Amount J$" value={amount} onChange={(e) => setAmount(e.target.value)} />
-      <GpsAccuracyIndicator meters={null} />
+      <GpsAccuracyIndicator meters={fix?.accuracy ?? null} />
+      {gpsNote ? <p className="text-sm">{gpsNote}</p> : null}
       {error ? <Notice kind="error" text={error} /> : null}
     </Frame>
   );
 }
 
+type SavedFill = {
+  odometer?: number;
+  kmPerLitre?: number | null;
+  nextServiceOn?: string | null;
+  priceUpdated?: boolean;
+  locationUsed?: boolean;
+};
+
 export function FuelSaved() {
-  return <Frame title="Saved"><p>Your odometer, mileage, and the station price were updated.</p></Frame>;
+  const saved = (useLocation().state || {}) as SavedFill;
+  const when = saved.nextServiceOn ? new Date(saved.nextServiceOn).toLocaleDateString() : null;
+  const mileage = saved.kmPerLitre == null ? 'Log another fill to see km per litre.' : `${saved.kmPerLitre.toFixed(1)} km/L`;
+  const price = saved.locationUsed
+    ? (saved.priceUpdated ? 'The station price was updated.' : 'The station price was not published from this fill.')
+    : 'Location was off, so the station price was not updated.';
+  return (
+    <Frame title="Saved">
+      <p>Odometer {saved.odometer ?? '—'} km.</p>
+      <p>{mileage}</p>
+      <p>{when ? `Next service ${when}.` : 'Next service will show after this fill syncs.'}</p>
+      <p>{price}</p>
+    </Frame>
+  );
 }
 export function FuelOffline() {
   return <Frame title="Saved on this phone"><p>This fill will sync when you are back online. It never goes into a fleet fuel log.</p></Frame>;
@@ -349,18 +390,22 @@ export function Garage() {
 
 export function VehicleOverview() {
   const { id } = useParams();
-  const [startKm, setStartKm] = useState<number | null>(null);
+  const [care, setCare] = useState<{ kmPerLitre: number | null; dueOn: string | null; status: 'overdue' | 'due_soon' | 'upcoming' | 'done' } | null>(null);
+  const [error, setError] = useState<string | null>(null);
   useEffect(() => {
-    void plugSend<{ vehicles: { id: string; starting_odometer: number | null }[] }>('/garage', 'GET')
-      .then((body) => setStartKm(body.vehicles.find((row) => row.id === id)?.starting_odometer ?? null))
-      .catch(() => setStartKm(null));
+    void plugSend<{ kmPerLitre: number | null; dueOn: string | null; status: 'overdue' | 'due_soon' | 'upcoming' | 'done' }>(`/care?vehicleId=${id}`, 'GET')
+      .then(setCare)
+      .catch((err: unknown) => setError(err instanceof Error ? err.message : 'Could not load this vehicle'));
   }, [id]);
-  const pace = startKm == null ? 0 : kmPerDay([{ at: new Date().toISOString(), km: startKm }]);
-  const due = projectServiceDue({ intervalKm: 5000, intervalDays: 180, lastKm: startKm || 0, lastDoneOn: new Date().toISOString(), kmPerDay: pace || 1, now: new Date().toISOString() });
+  const when = care?.dueOn ? new Date(care.dueOn).toLocaleDateString() : null;
   return (
     <Frame title="Vehicle">
       <p className="text-sm">General schedule — a schedule for your exact car is coming.</p>
-      {startKm == null ? <Notice kind="empty" text="Log fuel to see mileage." /> : <MaintenanceStatusPill status={due.status === 'done' ? 'upcoming' : due.status} label={due.status.replace('_', ' ')} />}
+      {care === null && !error ? <Notice kind="loading" text="Loading mileage…" /> : null}
+      {error ? <Notice kind="error" text={error} /> : null}
+      {care && care.kmPerLitre == null ? <Notice kind="empty" text="Log fuel to see mileage." /> : null}
+      {care && care.kmPerLitre != null ? <p className="text-sm">{care.kmPerLitre.toFixed(1)} km/L</p> : null}
+      {care ? <MaintenanceStatusPill status={care.status === 'done' ? 'upcoming' : care.status} label={when ? `Next service ${when}` : care.status.replace('_', ' ')} /> : null}
       <Link className="tap flex text-primary" to={`/garage/${id}/schedule`}>Maintenance</Link>
       <Link className="tap flex text-primary" to={`/garage/${id}/history`}>History</Link>
       <Link className="tap flex text-primary" to={`/garage/${id}/spend`}>Fuel spend</Link>
@@ -550,7 +595,18 @@ export function Account() {
   return <Frame title="Account"><p className="text-sm">{session.user.phone}</p><button type="button" className="tap text-primary" onClick={() => void signOut()}>Sign out</button><Link to="/account/privacy" className="tap flex text-primary">Privacy and data</Link></Frame>;
 }
 export function NotifySettings() {
-  return <Frame title="Notifications"><p className="text-sm">Service and document reminders. Push uses your phone permission. The inbox still works without it.</p></Frame>;
+  const [note, setNote] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  return (
+    <Frame title="Notifications" action={{ label: 'Turn on reminders', onClick: () => {
+      setError(null);
+      void enablePlugPush(plugSend).then(() => setNote('Reminders will show on this phone. The inbox still works if you turn them off later.')).catch((err: unknown) => setError(err instanceof Error ? err.message : 'Could not turn on reminders'));
+    } }}>
+      <p className="text-sm">Service and document reminders. Push uses your phone permission. The inbox still works without it.</p>
+      {note ? <p className="text-sm">{note}</p> : null}
+      {error ? <Notice kind="error" text={error} /> : null}
+    </Frame>
+  );
 }
 export function PrivacyData() {
   const [error, setError] = useState<string | null>(null);
@@ -564,7 +620,7 @@ export function PrivacyData() {
         a.href = url; a.download = 'roam-plug-export.json'; a.click();
       }).catch((err: unknown) => setError(err instanceof Error ? err.message : 'Export failed')); }}>Download my data</button>
       <button type="button" className="tap w-full rounded-xl bg-error px-4 text-white" onClick={() => {
-        if (!window.confirm('Delete your garage and fuel logs? Approved places stay on the map.')) return;
+        if (!window.confirm('Delete this account? Your garage and fuel logs go away. Approved places stay on the map.')) return;
         void plugSend('/me', 'DELETE').then(() => signOut()).catch((err: unknown) => setError(err instanceof Error ? err.message : 'Could not delete'));
       }}>Delete account</button>
       {error ? <Notice kind="error" text={error} /> : null}

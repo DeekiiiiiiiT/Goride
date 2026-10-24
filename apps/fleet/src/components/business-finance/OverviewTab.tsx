@@ -94,8 +94,8 @@ export function OverviewTab({ overview, onNavigateTab, onNavigatePage }: Props) 
             <Row
               key={check.id}
               label={check.label}
-              value={check.held ? 'Waiting on Uber statement' : check.ok ? 'Yes' : formatMoney(check.difference)}
-              valueClassName={!check.held && !check.ok ? 'text-rose-700' : undefined}
+              value={check.held ? 'Waiting on Uber statement' : check.pending ? check.pending : check.ok ? 'Yes' : formatMoney(check.difference)}
+              valueClassName={!check.held && !check.pending && !check.ok ? 'text-rose-700' : undefined}
             />
           ))}
           <Row
@@ -182,7 +182,7 @@ export function OverviewTab({ overview, onNavigateTab, onNavigatePage }: Props) 
           />
           <Row
             label="Fixed overhead"
-            hint="Expenses"
+            hint={overview.basis === 'cash' ? 'Cash paid this week' : 'Spread across the cover period'}
             value={formatMoney(moneyOut.fixedOverhead)}
             onClick={() => onNavigateTab('expenses')}
           />

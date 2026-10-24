@@ -9,6 +9,14 @@ export async function financeWeekIsLocked(orgId: string, dateYmd: string): Promi
     p_org: orgId,
     p_week: week,
   });
-  if (error) return false;
+  if (error) {
+    console.warn(JSON.stringify({
+      event: "finance_week_lock_lookup_failed",
+      organizationId: orgId,
+      week,
+      error: error.message,
+    }));
+    return false;
+  }
   return Boolean(data);
 }

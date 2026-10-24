@@ -90,4 +90,18 @@ describe('platformFeeRecognition', () => {
     expect(impliedFareFeeGap({ grossAmount: 100, netAmount: 80 })).toBe(20);
     expect(impliedFareFeeGap({ grossAmount: 70, netAmount: 80 })).toBe(0);
   });
+
+  it('a reversal fare reduces the week instead of adding again', () => {
+    const r = recognizePlatformGrossAndFees([
+      { eventType: 'fare_earning', platform: 'Uber', grossAmount: 100, netAmount: 100 },
+      {
+        eventType: 'fare_earning',
+        platform: 'Uber',
+        grossAmount: 100,
+        netAmount: 100,
+        metadata: { reversal: true },
+      },
+    ]);
+    expect(r.totalGross).toBe(0);
+  });
 });

@@ -114,6 +114,7 @@
     "deploy:platform-catalog": "npx supabase functions deploy platform-catalog --use-api --project-ref csfllzzastacofsvcdsc",
     "deploy:before-user-created": "npx supabase functions deploy before-user-created --use-api --project-ref csfllzzastacofsvcdsc",
     "deploy:custom-access-token": "npx supabase functions deploy custom-access-token --use-api --project-ref csfllzzastacofsvcdsc",
+    "deploy:explorer": "npx supabase functions deploy explorer --use-api --project-ref csfllzzastacofsvcdsc",
     "dev:rides-passenger": "pnpm --filter @roam/rides-passenger dev",
     "build:rides-passenger": "pnpm --filter @roam/rides-passenger build",
     "dev:haul": "pnpm --filter @roam/haul dev",

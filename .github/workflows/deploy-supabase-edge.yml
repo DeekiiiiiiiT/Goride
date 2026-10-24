@@ -20,10 +20,11 @@ on:
       - "packages/types/**"
       - "packages/toll-core/**"
       - "packages/auth-client/**"
+      - "packages/plug-core/**"
   workflow_dispatch:
     inputs:
       deploy_all:
-        description: "Deploy all 18 edge functions (ignore path filter)"
+        description: "Deploy all edge functions (ignore path filter)"
         type: boolean
         default: false
 
@@ -117,6 +118,7 @@ jobs:
             platform-catalog
             before-user-created
             custom-access-token
+            explorer
           )
 
           deploy_with_retry() {
@@ -171,6 +173,15 @@ jobs:
               fi
             done
             # Fleet monolith tree, and the shared permission catalog it bundles, feed these entrypoints
+            if echo "$CHANGED_FILES" | grep -qE '^packages/plug-core/'; then
+              already=false
+              for f in "${FNS[@]+"${FNS[@]}"}"; do
+                [ "$f" = "explorer" ] && already=true && break
+              done
+              if [ "$already" = "false" ]; then
+                FNS+=("explorer")
+              fi
+            fi
             if echo "$CHANGED_FILES" | grep -qE '^supabase/functions/_fleet-server/|^packages/auth-client/'; then
               for dep in fleet-core fleet-fuel fleet-toll fleet-ops fleet-claims fleet-pay evidence-cleanup; do
                 already=false

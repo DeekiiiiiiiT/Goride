@@ -3,7 +3,7 @@
 -- and a separate go-ahead. It is not a migration. The drops stay commented.
 --
 -- Before this SQL, run: node scripts/geo-phase5-precheck.mjs
--- That fails if supabase/functions or packages still name admin_boundaries.
+-- That fails if supabase/functions, packages, or apps still name admin_boundaries.
 -- This block fails if a database function or view still names the old objects.
 -- The check fails closed while anything still uses these objects.
 
