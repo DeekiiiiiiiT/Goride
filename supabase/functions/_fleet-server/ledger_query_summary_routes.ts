@@ -16,6 +16,7 @@ import {
   statementPayoutReconciliationGap,
   STATEMENT_TOLL_RECON_EPS,
 } from "../../../packages/finance-core/src/statementTollNetting.ts";
+import { statementEarningDelta } from "../../../packages/finance-core/src/platformFeeRecognition.ts";
 
 const PREFIX = "/make-server-37f42386";
 
@@ -454,20 +455,16 @@ export async function buildOrgStatementSummaries(
 
       switch (et) {
         case "fare_earning":
-          netFare += net;
-          tripCount++;
-          if (e.paymentMethod === "Cash") {
-            const cashAmt =
-              e.metadata?.cashCollected != null ? Number(e.metadata.cashCollected) : mag;
-            cashCollected += cashAmt;
-          }
-          break;
         case "tip":
-          tips += net;
+        case "promotion": {
+          const delta = statementEarningDelta(e);
+          netFare += delta.netFare;
+          tips += delta.tips;
+          promotions += delta.promotions;
+          tripCount += delta.tripCount;
+          cashCollected += delta.cashCollected;
           break;
-        case "promotion":
-          promotions += net;
-          break;
+        }
         case "prior_period_adjustment":
           periodAdjustments += net;
           break;

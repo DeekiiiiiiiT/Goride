@@ -224,3 +224,21 @@ function makeOccurrence(
     idempotencyKey: `fixed_expense:${configId}|${occurrenceYmd}|${versionTag}`,
   };
 }
+
+/** A locked due date is skipped. Open dates in the same rule still post. */
+export function partitionByLockedDate<T extends { date?: unknown }>(
+  events: readonly T[],
+  isLocked: (ymd: string) => boolean,
+): { open: T[]; skippedLocked: number } {
+  const open: T[] = [];
+  let skippedLocked = 0;
+  for (const event of events) {
+    const ymd = String(event.date || '').slice(0, 10);
+    if (/^\d{4}-\d{2}-\d{2}$/.test(ymd) && isLocked(ymd)) {
+      skippedLocked += 1;
+      continue;
+    }
+    open.push(event);
+  }
+  return { open, skippedLocked };
+}

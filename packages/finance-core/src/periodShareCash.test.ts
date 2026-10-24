@@ -67,6 +67,26 @@ describe('computeWeekCommissionShare — D3 tips quota + D4 full week', () => {
     expect(r.grossRevenue).toBe(10000);
     expect(r.driverSharePercent).toBe(30);
   });
+
+  it('a positive reversal fare reduces the week and is not another trip', () => {
+    const r = computeWeekCommissionShare({
+      fareEntries: [
+        { date: '2026-08-24', eventType: 'fare_earning', grossAmount: 100, netAmount: 100 },
+        {
+          date: '2026-08-24',
+          eventType: 'fare_earning',
+          grossAmount: 40,
+          netAmount: 40,
+          metadata: { reversal: true },
+        },
+      ],
+      periodAnchor: '2026-08-24',
+      periodEnd: '2026-08-30',
+      tiers,
+    });
+    expect(r.grossRevenue).toBe(60);
+    expect(r.tripCount).toBe(1);
+  });
 });
 
 describe('computeWeekCashBase', () => {

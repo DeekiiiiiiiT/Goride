@@ -279,4 +279,31 @@ describe('aggregateCanonicalEventsToLedgerDriverOverview', () => {
     expect(data.period.earnings).toBe(1000);
     expect(data.platformStats.Uber.earnings).toBe(1000);
   });
+
+  it('a positive reversal fare reduces earnings and is not another trip', () => {
+    const period = [
+      {
+        eventType: 'fare_earning',
+        driverId: driver,
+        netAmount: 80,
+        grossAmount: 80,
+        direction: 'inflow',
+        date: '2026-08-25',
+        platform: 'InDrive',
+      },
+      {
+        eventType: 'fare_earning',
+        driverId: driver,
+        netAmount: 30,
+        grossAmount: 30,
+        direction: 'inflow',
+        date: '2026-08-25',
+        platform: 'InDrive',
+        metadata: { reversal: true },
+      },
+    ];
+    const data = aggregateCanonicalEventsToLedgerDriverOverview(period, [], [], undefined) as any;
+    expect(data.period.earnings).toBe(50);
+    expect(data.period.tripCount).toBe(1);
+  });
 });

@@ -5,7 +5,10 @@
 import type { Context } from "npm:hono@4.3.11";
 import { appendCanonicalLedgerEvents, canonicalEventExistsByIdemKey } from "./ledger_canonical.ts";
 import type { FixedExpenseConfig } from "../../../packages/types/src/expenses.ts";
-import { buildFixedExpenseOccurrences } from "../../../packages/finance-core/src/fixedExpenseOccurrences.ts";
+import {
+  buildFixedExpenseOccurrences,
+  partitionByLockedDate,
+} from "../../../packages/finance-core/src/fixedExpenseOccurrences.ts";
 import { classifyPostedBusinessTransaction } from "../../../packages/finance-core/src/businessTransactionAccounting.ts";
 import {
   buildCanonicalMaintenanceEvent,
@@ -565,17 +568,22 @@ export async function appendCanonicalFixedExpenseIfEligible(
     .filter((event) => !already.has(String(event.date || "").slice(0, 10)));
   if (!events.length) return { inserted: 0, skipped: 0, failed: 0 };
   const orgId = String((config as { organizationId?: string }).organizationId || "");
+  let locked: (ymd: string) => boolean = () => false;
   if (orgId) {
     const { financeWeekIsLocked } = await import("./finance_period_lock.ts");
+    const cache = new Map<string, boolean>();
+    locked = (ymd: string) => cache.get(ymd) ?? false;
     for (const event of events) {
-      if (await financeWeekIsLocked(orgId, String(event.date || ""))) {
-        throw new Error("This week is closed.");
-      }
+      const ymd = String(event.date || "").slice(0, 10);
+      if (cache.has(ymd)) continue;
+      cache.set(ymd, await financeWeekIsLocked(orgId, ymd));
     }
   }
-  const totals = { inserted: 0, skipped: 0, failed: 0 };
-  for (let i = 0; i < events.length; i += 200) {
-    const result = await appendCanonicalLedgerEvents(events.slice(i, i + 200), c);
+  const split = partitionByLockedDate(events, locked);
+  const totals = { inserted: 0, skipped: split.skippedLocked, failed: 0 };
+  if (!split.open.length) return totals;
+  for (let i = 0; i < split.open.length; i += 200) {
+    const result = await appendCanonicalLedgerEvents(split.open.slice(i, i + 200), c);
     totals.inserted += result.inserted;
     totals.skipped += result.skipped;
     totals.failed += result.failed;

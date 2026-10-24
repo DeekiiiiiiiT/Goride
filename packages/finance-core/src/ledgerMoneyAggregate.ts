@@ -4,6 +4,8 @@
  * Used by GET /ledger/driver-overview, import preview, and tests.
  */
 
+import { isLedgerReversal, recognizedFareGross, signedLedgerAmount } from "./platformFeeRecognition.ts";
+
 export type CanonicalMoneyEvent = {
   eventType: string;
   driverId: string;
@@ -332,7 +334,7 @@ function accumulateWindow(events: CanonicalMoneyEvent[], platformsParam?: string
       uberHasStatement &&
       (et === "fare_earning" || et === "tip" || et === "promotion" || et === "refund_expense")
     ) {
-      if (et === "fare_earning") {
+      if (et === "fare_earning" && !isLedgerReversal(e)) {
         a.pTripCount += 1;
         a.pBaseFare += gross;
         a.pFareGrossMinusNetByPlatform[plat] = (a.pFareGrossMinusNetByPlatform[plat] || 0) + (gross - net);
@@ -350,14 +352,18 @@ function accumulateWindow(events: CanonicalMoneyEvent[], platformsParam?: string
     }
 
     if (et === "fare_earning") {
-      a.pTripCount += 1;
-      a.pEarnings += net;
-      a.pBaseFare += gross;
-      a.pFareGrossMinusNetByPlatform[plat] = (a.pFareGrossMinusNetByPlatform[plat] || 0) + (gross - net);
+      const signed = signedLedgerAmount(e);
+      const base = isLedgerReversal(e) ? recognizedFareGross(e) : gross;
+      if (!isLedgerReversal(e)) {
+        a.pTripCount += 1;
+        a.pFareGrossMinusNetByPlatform[plat] = (a.pFareGrossMinusNetByPlatform[plat] || 0) + (gross - net);
+      }
+      a.pEarnings += signed;
+      a.pBaseFare += base;
       ensurePlat(plat);
-      a.pPlatformStats[plat].earnings += net;
-      a.pPlatformStats[plat].tripCount += 1;
-      if (e.paymentMethod === "Cash") {
+      a.pPlatformStats[plat].earnings += signed;
+      if (!isLedgerReversal(e)) a.pPlatformStats[plat].tripCount += 1;
+      if (e.paymentMethod === "Cash" && !isLedgerReversal(e)) {
         const cashAmt = e.metadata?.cashCollected != null
           ? Number(e.metadata.cashCollected)
           : Math.abs(net);
@@ -366,16 +372,17 @@ function accumulateWindow(events: CanonicalMoneyEvent[], platformsParam?: string
       }
       if (plat === "Uber" && !uberHasStatement) {
         /** Match statement `NET_FARE` semantics (driver net), not passenger gross. */
-        a.pUberFareComponents += net;
+        a.pUberFareComponents += signed;
       }
-      addDaily(e.date.slice(0, 10), plat, net);
+      addDaily(e.date.slice(0, 10), plat, signed);
     } else if (et === "tip") {
-      a.pEarnings += net;
-      a.pTips += net;
+      const signed = signedLedgerAmount(e);
+      a.pEarnings += signed;
+      a.pTips += signed;
       ensurePlat(plat);
-      a.pPlatformStats[plat].earnings += net;
-      if (plat === "Uber" && !uberHasStatement) a.pUberTips += net;
-      addDaily(e.date.slice(0, 10), plat, net);
+      a.pPlatformStats[plat].earnings += signed;
+      if (plat === "Uber" && !uberHasStatement) a.pUberTips += signed;
+      addDaily(e.date.slice(0, 10), plat, signed);
     } else if (et === "prior_period_adjustment") {
       // Trip-projected prior only. Import payment-grain "prior" often duplicates tip / fare adjust.
       if (e.sourceType === "import_batch") {
@@ -393,11 +400,12 @@ function accumulateWindow(events: CanonicalMoneyEvent[], platformsParam?: string
       if (plat === "Uber" && !uberHasStatement) {
         continue;
       }
-      a.pEarnings += net;
+      const signed = signedLedgerAmount(e);
+      a.pEarnings += signed;
       ensurePlat(plat);
-      a.pPlatformStats[plat].earnings += net;
-      if (plat === "Uber" && !uberHasStatement) a.pUberPromo += net;
-      addDaily(e.date.slice(0, 10), plat, net);
+      a.pPlatformStats[plat].earnings += signed;
+      if (plat === "Uber" && !uberHasStatement) a.pUberPromo += signed;
+      addDaily(e.date.slice(0, 10), plat, signed);
     } else if (et === "refund_expense") {
       a.pEarnings += net;
       ensurePlat(plat);

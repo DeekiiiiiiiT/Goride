@@ -39,12 +39,64 @@ export function isLedgerReversal(e: PlatformFeeLedgerLike): boolean {
   return meta.reversal === true || meta.reversal === 'true';
 }
 
+/**
+ * Economic net. A reversal always subtracts its size, even when the stored
+ * amount is already negative, so applying this twice does not flip again.
+ * A normal row keeps the stored sign.
+ */
+export function signedLedgerAmount(e: PlatformFeeLedgerLike): number {
+  const raw = num(e.netAmount);
+  if (!isLedgerReversal(e)) return raw;
+  return -Math.abs(raw);
+}
+
 /** Pre-commission fare contribution from a fare_earning row. */
 export function recognizedFareGross(e: PlatformFeeLedgerLike): number {
   const net = num(e.netAmount);
   const gross = num(e.grossAmount);
   const magnitude = gross > net + 1e-9 ? Math.abs(gross) : (Math.abs(net) || Math.abs(gross));
   return isLedgerReversal(e) ? -magnitude : magnitude;
+}
+
+export type StatementEarningDelta = {
+  netFare: number;
+  promotions: number;
+  tips: number;
+  tripCount: number;
+  cashCollected: number;
+};
+
+/** Ledgers statement summary. A reversal reduces the line and is not another trip or cash collection. */
+export function statementEarningDelta(e: PlatformFeeLedgerLike): StatementEarningDelta {
+  const empty: StatementEarningDelta = {
+    netFare: 0,
+    promotions: 0,
+    tips: 0,
+    tripCount: 0,
+    cashCollected: 0,
+  };
+  const et = String(e.eventType || '');
+  const signed = signedLedgerAmount(e);
+  if (et === 'fare_earning') {
+    let cashCollected = 0;
+    if (!isLedgerReversal(e) && e.paymentMethod === 'Cash') {
+      const meta = e.metadata && typeof e.metadata === 'object'
+        ? (e.metadata as Record<string, unknown>)
+        : {};
+      cashCollected = meta.cashCollected != null
+        ? num(meta.cashCollected)
+        : Math.abs(num(e.netAmount));
+    }
+    return {
+      ...empty,
+      netFare: signed,
+      tripCount: isLedgerReversal(e) ? 0 : 1,
+      cashCollected,
+    };
+  }
+  if (et === 'tip') return { ...empty, tips: signed };
+  if (et === 'promotion') return { ...empty, promotions: signed };
+  return empty;
 }
 
 /** Implied commission on a fare_earning row (never negative). */

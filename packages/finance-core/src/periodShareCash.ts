@@ -7,12 +7,14 @@ import {
 import { normalizePlatform } from './normalizePlatform.ts';
 import { round2, MONEY_EPS } from './money.ts';
 import { fleetCalendarDay, DEFAULT_FLEET_TZ } from './periodKey.ts';
+import { isLedgerReversal } from './platformFeeRecognition.ts';
 
 export type LedgerFareLike = {
   date?: string;
   eventType?: string;
   grossAmount?: number;
   netAmount?: number;
+  metadata?: Record<string, unknown>;
 };
 
 export type QuotaConfigLike = {
@@ -57,8 +59,10 @@ export type TripCashLike = {
 };
 
 function fareGross(e: LedgerFareLike): number {
-  if (Number.isFinite(e.grossAmount)) return Math.abs(Number(e.grossAmount));
-  return Math.abs(Number(e.netAmount) || 0);
+  const magnitude = Number.isFinite(e.grossAmount)
+    ? Math.abs(Number(e.grossAmount))
+    : Math.abs(Number(e.netAmount) || 0);
+  return isLedgerReversal(e) ? -magnitude : magnitude;
 }
 
 function dayKey(d: string | undefined, timezone: string): string {
@@ -144,7 +148,7 @@ export function computeWeekCommissionShare(params: {
     return d >= periodAnchor && d <= periodEnd;
   });
   const grossRevenue = round2(weekFares.reduce((s, e) => s + fareGross(e), 0));
-  const tripCount = weekFares.length;
+  const tripCount = weekFares.filter((e) => !isLedgerReversal(e)).length;
 
   const tips = round2(
     tipEntries
@@ -152,7 +156,10 @@ export function computeWeekCommissionShare(params: {
         const d = dayKey(e.date, timezone);
         return d >= periodAnchor && d <= periodEnd;
       })
-      .reduce((s, e) => s + Math.abs(Number(e.netAmount) || fareGross(e)), 0),
+      .reduce((s, e) => {
+        const magnitude = Math.abs(Number(e.netAmount) || 0) || Math.abs(fareGross(e));
+        return s + (isLedgerReversal(e) ? -magnitude : magnitude);
+      }, 0),
   );
 
   // D4: full-week cumulative — do not truncate at month-end.

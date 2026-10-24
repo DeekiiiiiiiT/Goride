@@ -1,4 +1,5 @@
 import { unifiedLedgerClient } from "./postEntry.ts";
+import { signedLedgerAmount } from "../../../packages/finance-core/src/platformFeeRecognition.ts";
 
 export type IslandReconciliation = {
   source_system: string;
@@ -384,7 +385,10 @@ export function mapUnifiedEntryToCanonicalEvent(
   return {
     id: e.id,
     eventType: e.entry_type,
-    netAmount: Number(e.amount_minor ?? 0) / 100,
+    netAmount: signedLedgerAmount({
+      netAmount: Number(e.amount_minor ?? 0) / 100,
+      metadata: meta,
+    }),
     grossAmount: grossAmount ?? Math.abs(Number(e.amount_minor ?? 0) / 100),
     currency: e.currency ?? "JMD",
     date,
