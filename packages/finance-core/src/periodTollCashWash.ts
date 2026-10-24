@@ -27,6 +27,8 @@ export type PeriodRowForCashHeld = {
   toll_charged_to_driver?: number | null;
   toll_cash_spend?: number | null;
   fuel_fleet_share?: number | null;
+  /** Driver-paid fuel only. Company gas-card share must not reduce cash held. */
+  fuel_driver_spend?: number | null;
   metadata?: Record<string, unknown> | null;
 };
 
@@ -43,7 +45,7 @@ export function computeExpectedCashStillHeld(p: PeriodRowForCashHeld): number {
         (Number(p.toll_charged_to_driver) || 0) -
         (Number(p.cash_returned) || 0) -
         tollWash -
-        (Number(p.fuel_fleet_share) || 0) -
+        (Number(p.fuel_driver_spend) || 0) -
         (Number(p.cash_written_off) || 0),
     ),
   );

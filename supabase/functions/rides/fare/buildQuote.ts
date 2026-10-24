@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { computeFareMinor, type FareBreakdown } from "./compute.ts";
-import { loadFareRules, resolvePickupLocation } from "./rules.ts";
+import { loadFareRules } from "./rules.ts";
 import { getRouteEstimate, type RouteEstimate } from "./routing.ts";
 import { mintQuoteToken } from "./quoteToken.ts";
 import type { DispatchSettings } from "./dispatchSettings.ts";
@@ -69,7 +69,6 @@ export async function buildFareQuote(
   },
 ): Promise<BuiltFareQuote> {
   const vehicleType = params.vehicleType || "uberx";
-  const resolved = resolvePickupLocation(params.pickupLat, params.pickupLng);
   const rules = await loadFareRules(
     params.fareRulesDb ?? db,
     params.pickupLat,
@@ -80,7 +79,7 @@ export async function buildFareQuote(
       vehicleTypesTable: params.vehicleTypesTable,
     },
   );
-  const city = resolved.locationKey;
+  const city = rules.location_key;
   const route = await getRouteEstimate(
     params.pickupLat,
     params.pickupLng,

@@ -76,6 +76,9 @@ export function DriverBalancesTab({
                 >
                   <TableCell>
                     <div className="font-medium text-sm">{r.name}</div>
+                    {r.note ? (
+                      <div className="text-[11px] text-amber-800 dark:text-amber-300">{r.note}</div>
+                    ) : null}
                     <div className="text-[11px] text-slate-400">{r.driverId}</div>
                   </TableCell>
                   <TableCell

@@ -145,6 +145,19 @@ export function isSoftDuplicatePair(
   return true;
 }
 
+/** Same card, day, amount, and upload is one fill — even when the odometer is missing. */
+export function fuelCardUploadKey(entry: Record<string, unknown>): string | null {
+  const meta = entryMeta(entry);
+  const upload = String(
+    meta.uploadId || meta.batchId || meta.jaaImportId || entry.batchId || "",
+  ).trim();
+  const date = ymd(String(entry.date || ""));
+  const amount = Number(entry.amount ?? entry.totalCost ?? NaN);
+  if (!date || !upload || !Number.isFinite(amount)) return null;
+  const card = String(meta.cardId || meta.cardLast4 || entry.cardId || entry.cardLast4 || "").trim();
+  return `${card}|${date}|${amount.toFixed(2)}|${upload}`;
+}
+
 /**
  * Find an existing fuel_entry that is a soft-duplicate of the candidate.
  * Matching: same vehicle + odometer + calendar day + within soft window.
@@ -154,6 +167,22 @@ export async function findSoftDuplicateFuelEntry(
   entry: Record<string, unknown>,
   excludeId?: string | null,
 ): Promise<Record<string, unknown> | null> {
+  const uploadKey = fuelCardUploadKey(entry);
+  const dayForUpload = ymd(entry.date as string);
+  if (uploadKey && dayForUpload) {
+    const uploaded = await queryFleet("fuel_entries", {
+      dateFrom: dayForUpload,
+      dateTo: dayForUpload,
+      limit: 200,
+      order: { col: "date", ascending: false },
+    });
+    if (uploaded.error) throw uploaded.error;
+    for (const row of uploaded.data as Record<string, unknown>[]) {
+      if (String(row.id) === String(excludeId || entry.id)) continue;
+      if (fuelCardUploadKey(row) === uploadKey) return row;
+    }
+  }
+
   const vehicleId = String(entry.vehicleId || "").trim();
   const odo = Number(entry.odometer);
   if (!vehicleId || !Number.isFinite(odo) || odo <= 0) return null;

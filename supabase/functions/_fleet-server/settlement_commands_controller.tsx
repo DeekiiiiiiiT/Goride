@@ -51,6 +51,10 @@ import {
   SETTLEMENT_APPROVAL_THRESHOLD,
   requiresSettlementApproval,
 } from "../../../packages/finance-core/src/settlementApproval.ts";
+import { reviewSettlementPay } from "../../../packages/finance-core/src/driverFuelCredit.ts";
+import { hasPendingRestatementDrafts } from "../../../packages/finance-core/src/weekStatement.ts";
+import { getLatestWeekStatements } from "./week_statements.ts";
+import { previewOrApplyFuelCreditReceivable, scanFuelCreditOverpayments } from "./fuel_credit_receivable.ts";
 
 function requiresApproval(amount: number, threshold = SETTLEMENT_APPROVAL_THRESHOLD): boolean {
   return requiresSettlementApproval(amount, threshold);
@@ -602,12 +606,22 @@ app.post(`${BASE}/pay`, requireSettlementPerm("settlements.pay"), async (c) => {
     const settlementAmount = Number(periodDb.settlement_amount) || 0;
     const settlementPaid = Number(periodDb.settlement_paid) || 0;
     const residual = companyOwesResidual(settlementAmount);
+    const statements = await getLatestWeekStatements(organizationId, driverId, weekAnchor);
+    const payReview = reviewSettlementPay({
+      amount,
+      closedResidual: residual,
+      hasPendingRestatement: hasPendingRestatementDrafts(statements),
+      threshold: SETTLEMENT_APPROVAL_THRESHOLD,
+    });
+    if (!payReview.ok) {
+      return c.json({ error: payReview.code, message: payReview.message }, 400);
+    }
     assertExpectedOutstanding(residual, expectedOutstanding);
     // Entitlement = already paid + still owed (gross positive claim for the week).
     enforcePayCap(settlementPaid, settlementPaid + residual, amount);
     const observedVersion = Number(periodDb.row_version) || 1;
 
-    const needsApproval = requiresApproval(amount) && method !== "Cash";
+    const needsApproval = payReview.needsApproval;
     const { movement, period } = await insertMovementAndDualWrite(c, {
       organizationId,
       actorId: user.userId,
@@ -630,6 +644,43 @@ app.post(`${BASE}/pay`, requireSettlementPerm("settlements.pay"), async (c) => {
       requiresApproval: needsApproval,
     });
   } catch (e) {
+    return commandErrorResponse(c, e);
+  }
+});
+
+app.get(`${BASE}/fuel-credit-scan`, requireSettlementPerm("settlements.approve"), async (c) => {
+  try {
+    const orgOrResp = await requireOrgId(c);
+    if (typeof orgOrResp !== "string") return orgOrResp;
+    const hits = await scanFuelCreditOverpayments(orgOrResp);
+    return c.json({ success: true, hits });
+  } catch (e) {
+    return commandErrorResponse(c, e);
+  }
+});
+
+// ── POST /fuel-credit-receivable ────────────────────────────────────────────
+// Preview unless confirm is true. Does not change the cash already paid.
+app.post(`${BASE}/fuel-credit-receivable`, requireSettlementPerm("settlements.approve"), async (c) => {
+  try {
+    const orgOrResp = await requireOrgId(c);
+    if (typeof orgOrResp !== "string") return orgOrResp;
+    const body = await c.req.json().catch(() => ({}));
+    const driverId = String(body.driverId || "").trim();
+    const sourceWeek = String(body.sourceWeek || body.weekAnchor || "").slice(0, 10);
+    if (!driverId || !/^\d{4}-\d{2}-\d{2}$/.test(sourceWeek)) {
+      return c.json({ error: "driverId and sourceWeek are required" }, 400);
+    }
+    const result = await previewOrApplyFuelCreditReceivable({
+      organizationId: orgOrResp,
+      driverId,
+      sourceWeek,
+      confirm: body.confirm === true,
+    });
+    return c.json({ success: true, ...result });
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
+    if (message === "PERIOD_NOT_FOUND") return c.json({ error: message }, 404);
     return commandErrorResponse(c, e);
   }
 });

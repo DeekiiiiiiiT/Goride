@@ -27,6 +27,7 @@ import { DriverOverviewCard } from './product-overviews/DriverOverviewCard';
 import { HaulOverviewCard } from './product-overviews/HaulOverviewCard';
 import { PartsSourcingManager } from './parts-sourcing/PartsSourcingManager';
 import { CatalogQualityPage } from './parts-sourcing/CatalogQualityPage';
+import { WorldMapsPage } from './world-maps/WorldMapsPage';
 import { PlatformsEnginesPage } from './parts-sourcing/PlatformsEnginesPage';
 import { AccountingCatalogManager } from './accounting/AccountingCatalogManager';
 import { PendingVendorRequestsManager } from './accounting/PendingVendorRequestsManager';
@@ -38,12 +39,15 @@ import { GctRemittancePage } from './gct/GctRemittancePage';
 import { GctKnowledgeBasePage } from './gct/GctKnowledgeBasePage';
 import { ErrorBoundary } from '@roam/roam-shared';
 import { StationDatabaseView } from '../fuel/stations/StationDatabaseView';
+import { PlacesReview } from '@roam/platform-ops-ui';
 import type { ResolutionQueueSubTab } from '../fuel/stations/ResolutionQueueTab';
 import { GasStationAnalytics } from '../fuel/stations/GasStationAnalytics';
 import { fuelService } from '../../services/fuelService';
 import { FuelEntry } from '../../types/fuel';
 import { API_ENDPOINTS } from '../../services/apiConfig';
 import { useAuth } from '../auth/AuthContext';
+import { StaffMfaStep } from '../auth/StaffMfaStep';
+import { supabase } from '../../utils/supabase/client';
 import { LEGACY_PAGE_REDIRECTS, settingsTabFromPageId } from './adminNavConfig';
 import { MerchantVerificationManager } from './roam-dash/MerchantVerificationManager';
 import { GlobalIdentitySearch } from './platform/GlobalIdentitySearch';
@@ -79,7 +83,8 @@ type NavExtras = { userId?: string; customer?: unknown } | null;
  * AdminPortal — Dominion platform shell that routes purely via internal page IDs.
  */
 export function AdminPortal() {
-  const { session, user } = useAuth();
+  const { session, user, signOut } = useAuth();
+  const [mfaNeeded, setMfaNeeded] = useState(false);
   const queryClient = useQueryClient();
   const [currentPageRaw, setCurrentPageRaw] = useState(() => {
     if (typeof window !== 'undefined') {
@@ -184,6 +189,21 @@ export function AdminPortal() {
   }, [currentPage, loadFuelLogs]);
 
   useEffect(() => {
+    if (!session) {
+      setMfaNeeded(false);
+      return;
+    }
+    let cancelled = false;
+    void supabase.auth.mfa.getAuthenticatorAssuranceLevel().then(({ data }) => {
+      if (cancelled) return;
+      setMfaNeeded(data?.currentLevel !== 'aal2' && data?.nextLevel === 'aal2');
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [session]);
+
+  useEffect(() => {
     api.getPreferences()
       .then((prefs) => {
         if (prefs?.darkMode !== undefined) {
@@ -192,6 +212,10 @@ export function AdminPortal() {
       })
       .catch(() => {});
   }, []);
+
+  if (mfaNeeded) {
+    return <StaffMfaStep onCancel={() => void signOut()} />;
+  }
 
   return (
     <AdminLayout currentPage={currentPage} onNavigate={setCurrentPage}>
@@ -265,6 +289,14 @@ export function AdminPortal() {
             loading={fuelLoading}
             defaultTab={stationDbDefaultTab}
             defaultResolutionSubTab={resolutionSubTab}
+          />
+        </div>
+      )}
+      {currentPage === 'plug-places' && (
+        <div className="min-h-[600px] rounded-xl bg-white shadow-sm dark:bg-card">
+          <PlacesReview
+            apiBase={API_ENDPOINTS.explorer}
+            getToken={async () => (await supabase.auth.getSession()).data.session?.access_token ?? null}
           />
         </div>
       )}
@@ -345,6 +377,17 @@ export function AdminPortal() {
       {currentPage === 'catalog-quality' && (
         <div className="bg-white rounded-xl shadow-sm overflow-hidden min-h-[600px] dark:bg-card">
           <CatalogQualityPage />
+        </div>
+      )}
+      {currentPage.startsWith('world-') && accessToken && (
+        <div className="bg-white rounded-xl shadow-sm overflow-hidden min-h-[600px] dark:bg-card">
+          <WorldMapsPage
+            page={currentPage}
+            accessToken={accessToken}
+            canWrite={['platform_owner', 'superadmin'].includes(
+              String(user?.user_metadata?.role ?? user?.app_metadata?.role ?? ''),
+            )}
+          />
         </div>
       )}
       {currentPage === 'gct-engine' && (

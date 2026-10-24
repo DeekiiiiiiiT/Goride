@@ -276,7 +276,9 @@ export function buildCanonicalFuelExpenseEvent(entry: Record<string, unknown>): 
   const amt = Math.abs(coerceAmount(entry.amount));
   if (amt <= 1e-9) return null;
 
-  const paymentSource = resolveFuelExpensePaymentSource(entry);
+  let paymentSource = resolveFuelExpensePaymentSource(entry);
+  const kind = `${entry.type || ""} ${entry.category || ""}`;
+  if (!paymentSource && /reimburs/i.test(kind)) paymentSource = "Rideshare_Cash";
 
   return {
     idempotencyKey: `fuel_entry:${id}|fuel_expense`,

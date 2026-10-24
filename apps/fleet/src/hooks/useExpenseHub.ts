@@ -209,6 +209,22 @@ export function useUpdateExpenseRule() {
   });
 }
 
+export function useRenewExpenseRule() {
+  const invalidate = useInvalidateHub();
+  return useMutation({
+    mutationFn: ({
+      id,
+      ...body
+    }: {
+      id: string;
+      amount?: number;
+      startDate?: string;
+      endDate?: string;
+    }) => expenseHubService.renewRule(id, body),
+    onSuccess: () => invalidate(),
+  });
+}
+
 export function useCreateExpenseVendor() {
   const invalidate = useInvalidateHub();
   return useMutation({

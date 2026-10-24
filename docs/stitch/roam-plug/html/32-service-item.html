@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+
+<html class="h-full" lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" name="viewport"/><meta content="mobile_stack" name="shell-type"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/><link href="https://fonts.googleapis.com" rel="preconnect"/><link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config = { darkMode: "class", theme: { extend: { "colors": { "on-surface": "#1e1b17", "on-secondary": "#ffffff", "on-secondary-fixed-variant": "#783200", "tertiary": "#755800", "primary": "#a33900", "outline": "#8e7166", "secondary": "#9d4300", "surface-container-highest": "#e8e1db", "on-tertiary": "#ffffff", "on-background": "#1e1b17", "primary-container": "#cc4900", "on-primary": "#ffffff", "on-primary-fixed": "#370e00", "outline-variant": "#e2bfb2", "primary-fixed": "#ffdbce", "on-error": "#ffffff", "inverse-on-surface": "#f7efe9", "surface-container-low": "#faf2eb", "error-container": "#ffdad6", "surface-container": "#f4ede6", "on-secondary-fixed": "#341100", "tertiary-fixed-dim": "#f7be1d", "on-secondary-container": "#5c2400", "on-tertiary-fixed": "#251a00", "surface-dim": "#e0d9d2", "surface-container-lowest": "#ffffff", "secondary-fixed": "#ffdbca", "on-tertiary-fixed-variant": "#5a4300", "on-primary-fixed-variant": "#7f2b00", "primary-fixed-dim": "#ffb599", "inverse-surface": "#33302c", "secondary-fixed-dim": "#ffb690", "on-primary-container": "#fffbff", "surface-bright": "#fff8f2", "surface-container-high": "#eee7e0", "background": "#fff8f2", "surface-tint": "#a73a00", "surface": "#fff8f2", "tertiary-fixed": "#ffdf9a", "secondary-container": "#fd761a", "tertiary-container": "#936f00", "surface-variant": "#e8e1db", "on-tertiary-container": "#fffbff", "on-surface-variant": "#5a4138", "inverse-primary": "#ffb599", "on-error-container": "#93000a", "error": "#ba1a1a" }, "borderRadius": { "DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px" }, "spacing": { "gutter": "1rem", "space-xs": "0.25rem", "margin": "1rem", "space-sm": "0.5rem", "space-xl": "2rem", "space-lg": "1.5rem", "gutter-sm": "0.75rem", "margin-lg": "1.5rem", "space-md": "1rem" }, "fontFamily": { "label-lg": ["Inter"], "price-display": ["Inter"], "headline-sm": ["Inter"], "label-sm": ["Inter"], "label-md": ["Inter"], "body-md": ["Inter"], "headline-md": ["Inter"], "display-lg": ["Inter"], "body-sm": ["Inter"], "body-lg": ["Inter"], "display-lg-mobile": ["Inter"], "headline-lg": ["Inter"] }, "fontSize": { "label-lg": ["14px", { "lineHeight": "20px", "letterSpacing": "0.01em", "fontWeight": "600" }], "price-display": ["24px", { "lineHeight": "28px", "letterSpacing": "-0.01em", "fontWeight": "700" }], "headline-sm": ["18px", { "lineHeight": "24px", "fontWeight": "600" }], "label-sm": ["10px", { "lineHeight": "12px", "letterSpacing": "0.04em", "fontWeight": "700" }], "label-md": ["12px", { "lineHeight": "16px", "letterSpacing": "0.02em", "fontWeight": "600" }], "body-md": ["14px", { "lineHeight": "20px", "fontWeight": "400" }], "headline-md": ["22px", { "lineHeight": "28px", "letterSpacing": "-0.01em", "fontWeight": "700" }], "display-lg": ["40px", { "lineHeight": "48px", "letterSpacing": "-0.02em", "fontWeight": "800" }], "body-sm": ["12px", { "lineHeight": "16px", "fontWeight": "400" }], "body-lg": ["16px", { "lineHeight": "24px", "fontWeight": "400" }], "display-lg-mobile": ["32px", { "lineHeight": "40px", "letterSpacing": "-0.02em", "fontWeight": "800" }], "headline-lg": ["28px", { "lineHeight": "36px", "letterSpacing": "-0.01em", "fontWeight": "700" }] } } } };</script><style>@layer base { html, body { width: 100vw; margin: 0; padding: 0; } body { overscroll-behavior: none; } .pb-safe { padding-bottom: env(safe-area-inset-bottom, 0px); } .pt-safe { padding-top: env(safe-area-inset-top, 0px); } main > :first-child { margin-top: 0 !important; } main > :last-child { margin-bottom: 0 !important; } } ::-webkit-scrollbar { display: none; }</style><style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head><body class="bg-surface font-body-md text-on-surface flex flex-col min-h-screen"><header class="fixed top-0 w-full z-50 pt-safe bg-surface/80 backdrop-blur-xl shadow-[0_1px_8px_rgba(0,0,0,0.04)]"><div class="h-16 px-gutter flex items-center justify-between gap-space-sm"><div class="flex items-center gap-space-sm min-w-0"><button aria-label="Go back" class="w-12 h-12 rounded-full flex items-center justify-center text-on-surface hover:bg-surface-container-high transition-colors active:scale-95" onclick="history.back()"><span class="material-symbols-outlined text-[24px]">arrow_back</span></button><div class="flex flex-col min-w-0"><h1 class="font-headline-sm text-headline-sm text-on-surface truncate">Service Item Detail</h1><span class="font-label-md text-label-md text-on-surface-variant truncate">2019 Toyota Roomy</span></div></div><div class="flex items-center gap-space-xs"><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div></div></div></header><main class="flex-1 flex flex-col relative w-full px-gutter pt-16 pb-safe bg-surface"><div class="flex flex-col w-full pb-8 space-y-space-md">
+<!-- Status & Category Breadcrumb -->
+<div class="flex items-center justify-between pt-space-xs">
+<div class="flex items-center gap-space-xs bg-surface-container px-3 py-1.5 rounded-full">
+<span class="material-symbols-outlined text-[16px] text-tertiary" style="font-variation-settings: 'FILL' 1;">security</span>
+<span class="font-label-sm text-label-sm uppercase tracking-wider text-on-surface-variant">Braking &amp; Safety System</span>
+</div>
+<div class="flex items-center gap-1.5 bg-tertiary-fixed text-on-tertiary-fixed px-2.5 py-1 rounded-full shadow-sm">
+<span class="w-2 h-2 rounded-full bg-tertiary animate-pulse"></span>
+<span class="font-label-sm text-label-sm font-bold">Due in 5,388 km</span>
+</div>
+</div>
+<!-- Hero Header Title & Quick Metric -->
+<div class="flex flex-col space-y-1">
+<h2 class="font-headline-lg text-headline-lg text-on-surface tracking-tight">Front Brake Pads &amp; Rotors</h2>
+<div class="flex items-center gap-2 text-on-surface-variant font-label-md text-label-md">
+<span>2019 Toyota Roomy</span>
+<span>•</span>
+<span class="text-primary font-semibold">Odo: 84,612 km</span>
+</div>
+</div>
+<!-- Visual Wear Gauge & Schedule Tracker Card -->
+<div class="bg-surface-container-lowest rounded-xl p-space-md shadow-sm space-y-space-sm">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2">
+<div class="w-8 h-8 rounded-lg bg-surface-container-high flex items-center justify-center text-primary">
+<span class="material-symbols-outlined text-[20px]">speed</span>
+</div>
+<div>
+<p class="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">Interval Wear Life</p>
+<p class="font-headline-sm text-headline-sm text-on-surface">78% Expended</p>
+</div>
+</div>
+<div class="text-right">
+<span class="font-label-sm text-label-sm text-on-surface-variant block">Target Replace</span>
+<span class="font-headline-sm text-headline-sm text-primary font-bold">90,000 km</span>
+</div>
+</div>
+<!-- Visual Progress Bar / Wear Tracker -->
+<div class="space-y-1.5 pt-1">
+<div class="h-3 w-full bg-surface-container-highest rounded-full overflow-hidden p-0.5 flex">
+<div class="h-full bg-gradient-to-r from-secondary-container via-primary to-primary-container rounded-full transition-all duration-700 ease-out" style="width: 78%;"></div>
+</div>
+<div class="flex justify-between items-center text-on-surface-variant font-label-sm text-label-sm px-0.5">
+<span>Last: 65k km</span>
+<span class="text-primary font-semibold">Current: 84,612 km</span>
+<span>Goal: 90k km</span>
+</div>
+</div>
+<!-- Metrics Grid -->
+<div class="grid grid-cols-2 gap-space-sm pt-2">
+<div class="bg-surface-container-low rounded-lg p-2.5">
+<span class="font-label-sm text-label-sm text-on-surface-variant block">Spec Interval</span>
+<span class="font-label-lg text-label-lg text-on-surface font-semibold">25,000 km / 18 mos</span>
+</div>
+<div class="bg-surface-container-low rounded-lg p-2.5">
+<span class="font-label-sm text-label-sm text-on-surface-variant block">Projected Service</span>
+<span class="font-label-lg text-label-lg text-on-surface font-semibold">Est. Jan 2025</span>
+</div>
+</div>
+</div>
+<!-- Localized Route Insight / "Why It Matters" -->
+<div class="bg-surface-container rounded-xl p-space-md shadow-sm relative overflow-hidden">
+<div class="flex items-start gap-3">
+<div class="w-10 h-10 rounded-full bg-secondary-fixed flex items-center justify-center shrink-0 text-on-secondary-fixed">
+<span class="material-symbols-outlined text-[22px]">terrain</span>
+</div>
+<div class="space-y-1">
+<div class="flex items-center gap-1.5">
+<h3 class="font-label-lg text-label-lg text-on-surface font-bold">Why It Matters on Island Roads</h3>
+<span class="bg-secondary-fixed-variant/10 text-secondary font-label-sm text-label-sm px-1.5 py-0.5 rounded">Island Route Note</span>
+</div>
+<p class="font-body-md text-body-md text-on-surface-variant leading-relaxed">
+          Crucial for downhill braking control through Mount Rosser and Junction road descents. Tropical wet heat causes faster pad glazing on stop-and-go Jamaican routes.
+        </p>
+</div>
+</div>
+</div>
+<!-- Last Performed Card -->
+<div class="bg-surface-container-lowest rounded-xl p-space-md shadow-sm space-y-space-sm">
+<div class="flex items-center justify-between">
+<h3 class="font-label-lg text-label-lg text-on-surface font-bold flex items-center gap-1.5">
+<span class="material-symbols-outlined text-primary text-[20px]">history_edu</span>
+        Last Service Record
+      </h3>
+<span class="font-label-sm text-label-sm bg-surface-container px-2 py-0.5 rounded-full text-on-surface-variant">Verified Work</span>
+</div>
+<div class="bg-surface-container-low rounded-lg p-space-sm space-y-2">
+<div class="flex justify-between items-baseline">
+<span class="font-headline-sm text-headline-sm text-on-surface">65,000 km</span>
+<span class="font-label-md text-label-md text-on-surface-variant font-medium">14 March 2024</span>
+</div>
+<div class="flex items-center gap-2 text-on-surface font-body-md text-body-md">
+<span class="material-symbols-outlined text-primary text-[18px]">store</span>
+<span class="font-semibold">Precision Auto Works</span>
+<span class="text-on-surface-variant font-normal">• Kingston</span>
+</div>
+<div class="pt-1 flex items-center justify-between">
+<div class="flex items-center gap-1.5 bg-surface-container-lowest px-2 py-1 rounded">
+<span class="material-symbols-outlined text-[16px] text-tertiary">check_circle</span>
+<span class="font-label-sm text-label-sm text-on-surface">Akebono Ceramic OEM Spec</span>
+</div>
+<span class="font-label-lg text-label-lg text-primary font-bold">J$9,800</span>
+</div>
+</div>
+</div>
+<!-- History For This Item (Timeline) -->
+<div class="space-y-space-xs">
+<div class="flex items-center justify-between px-1">
+<h3 class="font-headline-sm text-headline-sm text-on-surface">Component History</h3>
+<span class="font-label-sm text-label-sm text-on-surface-variant">2 Recorded Logs</span>
+</div>
+<div class="bg-surface-container-lowest rounded-xl p-space-md shadow-sm divide-y divide-surface-container">
+<!-- Item 1 -->
+<div class="pb-space-sm space-y-1.5">
+<div class="flex justify-between items-center">
+<span class="font-label-lg text-label-lg font-bold text-on-surface">65,000 km • Pad &amp; Fluid Refresh</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">Mar 2024</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Rotors skimmed and fitted with Akebono pads. System bled with DOT 4 fluid.</p>
+<div class="flex items-center justify-between pt-1">
+<span class="font-label-sm text-label-sm text-on-surface-variant">Precision Auto Works</span>
+<span class="font-label-md text-label-md font-semibold text-on-surface">J$14,500 total</span>
+</div>
+</div>
+<!-- Item 2 -->
+<div class="pt-space-sm space-y-1.5">
+<div class="flex justify-between items-center">
+<span class="font-label-lg text-label-lg font-bold text-on-surface">40,120 km • Inspection &amp; Cleaning</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">Nov 2022</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Cleaned caliper slide pins, 55% pad thickness remaining. Calipers lubed.</p>
+<div class="flex items-center justify-between pt-1">
+<span class="font-label-sm text-label-sm text-on-surface-variant">Toyota Jamaica (Liguanea)</span>
+<span class="font-label-md text-label-md font-semibold text-on-surface">J$4,200</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Quick Jamaican Driver Connectors -->
+<div class="space-y-space-xs">
+<h3 class="font-headline-sm text-headline-sm text-on-surface px-1">Island Fast Tracks</h3>
+<div class="grid grid-cols-1 gap-space-sm">
+<!-- Parts Connector -->
+<button class="w-full text-left bg-surface-container-lowest rounded-xl p-space-md shadow-sm active:scale-[0.99] transition-transform">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-full bg-primary-fixed flex items-center justify-center text-on-primary-fixed">
+<span class="material-symbols-outlined text-[20px]">shopping_bag</span>
+</div>
+<div>
+<div class="flex items-center gap-1.5">
+<span class="font-label-lg text-label-lg text-on-surface font-bold">Find Pads &amp; Rotors</span>
+<span class="bg-surface-container text-on-surface-variant font-label-sm text-label-sm px-1.5 rounded">In Stock</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-0.5">Mario's Auto Parts (Constant Spring) • OEM Ready</p>
+</div>
+</div>
+<span class="material-symbols-outlined text-primary text-[20px]">chevron_right</span>
+</div>
+</button>
+<!-- Mechanic Connector -->
+<button class="w-full text-left bg-surface-container-lowest rounded-xl p-space-md shadow-sm active:scale-[0.99] transition-transform">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-full bg-secondary-fixed flex items-center justify-center text-on-secondary-fixed">
+<span class="material-symbols-outlined text-[20px]">build_circle</span>
+</div>
+<div>
+<div class="flex items-center gap-1.5">
+<span class="font-label-lg text-label-lg text-on-surface font-bold">Find a Mechanic</span>
+<span class="bg-secondary-fixed-variant/10 text-secondary font-label-sm text-label-sm px-1.5 rounded">4 Nearby</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-0.5">Precision Auto Works • 1.4 km away in Kingston</p>
+</div>
+</div>
+<span class="material-symbols-outlined text-secondary text-[20px]">chevron_right</span>
+</div>
+</button>
+</div>
+</div>
+<!-- Action CTAs -->
+<div class="pt-space-sm space-y-3">
+<button class="w-full h-12 bg-primary hover:bg-primary-container text-on-primary font-label-lg text-label-lg font-bold rounded-xl shadow-md flex items-center justify-center gap-2 active:scale-95 transition-all">
+<span class="material-symbols-outlined text-[20px]">check_circle</span>
+<span>Mark as Done / Log Service</span>
+</button>
+<button class="w-full h-12 bg-surface-container hover:bg-surface-container-high text-on-surface-variant font-label-lg text-label-lg font-semibold rounded-xl flex items-center justify-center gap-2 active:scale-95 transition-all">
+<span class="material-symbols-outlined text-[20px]">alarm</span>
+<span>Add to To-Do / Remind me in 3,000 km</span>
+</button>
+</div>
+</div></main></body></html>

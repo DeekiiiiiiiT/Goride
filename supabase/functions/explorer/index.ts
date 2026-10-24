@@ -1,0 +1,595 @@
+import { Hono } from "npm:hono@4.3.11";
+import { cors } from "npm:hono@4.3.11/cors";
+import { createClient, type SupabaseClient, type User } from "npm:@supabase/supabase-js@2";
+import { assessFillPlausibility } from "../../../packages/fuel-core/src/fillPlausibility.ts";
+import { findMatchingStationSmart, type StationProfile } from "../../../packages/location/src/stationMatch.ts";
+import {
+  contributorLevel,
+  decidePlugStation,
+  hashExplorerUser,
+  impossibleTravel,
+  planPlugFill,
+  plugPriceDecision,
+  suggestReview,
+  writesTouchFleetMoney,
+  PLUG_FLAGS,
+  sectionEnabled,
+} from "../_shared/plugCore.ts";
+
+const app = new Hono().basePath("/explorer");
+app.use("*", cors());
+
+function admin(): SupabaseClient {
+  const url = Deno.env.get("SUPABASE_URL");
+  const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (!url || !key) throw new Error("Supabase is not configured");
+  return createClient(url, key);
+}
+
+async function userFrom(c: { req: { header: (name: string) => string | undefined } }): Promise<User> {
+  const header = c.req.header("Authorization") || "";
+  const token = header.replace(/^Bearer\s+/i, "");
+  if (!token) throw new Error("Sign in required");
+  const sb = admin();
+  const { data, error } = await sb.auth.getUser(token);
+  if (error || !data.user) throw new Error("Sign in required");
+  return data.user;
+}
+
+function roleOf(user: User): string {
+  const meta = user.app_metadata || {};
+  const userMeta = user.user_metadata || {};
+  return String(meta.role || userMeta.role || "");
+}
+
+async function requireExplorer(c: { req: { header: (name: string) => string | undefined } }): Promise<User> {
+  const user = await userFrom(c);
+  const role = roleOf(user);
+  if (role !== "explorer_user" && role !== "platform_owner") throw new Error("This account cannot use Roam Plug");
+  return user;
+}
+
+async function requireOwner(c: { req: { header: (name: string) => string | undefined } }): Promise<User> {
+  const user = await userFrom(c);
+  if (roleOf(user) !== "platform_owner") throw new Error("Only the owner can review places");
+  return user;
+}
+
+async function ensureProfile(sb: SupabaseClient, user: User) {
+  await sb.schema("explorer").from("profile").upsert({
+    user_id: user.id,
+    phone: user.phone || null,
+    display_name: user.user_metadata?.display_name || null,
+  }, { onConflict: "user_id" });
+}
+
+async function allow(sb: SupabaseClient, userId: string, flag: string): Promise<boolean> {
+  const { data: globalFlag } = await sb.from("platform_feature_flags").select("enabled").eq("name", flag).maybeSingle();
+  const { data: row } = await sb.schema("explorer").from("flag_allowlist").select("user_id").eq("flag_name", flag).eq("user_id", userId).maybeSingle();
+  return sectionEnabled(flag as typeof PLUG_FLAGS[number], Boolean(globalFlag?.enabled), Boolean(row));
+}
+
+async function hitLimit(sb: SupabaseClient, userId: string, action: string, max: number): Promise<boolean> {
+  const windowStart = new Date();
+  windowStart.setMinutes(0, 0, 0);
+  const key = { user_id: userId, action, window_start: windowStart.toISOString() };
+  const { data } = await sb.schema("explorer").from("write_window").select("hits").match(key).maybeSingle();
+  const hits = Number(data?.hits || 0) + 1;
+  if (hits > max) return false;
+  await sb.schema("explorer").from("write_window").upsert({ ...key, hits });
+  return true;
+}
+
+app.get("/health", (c) => c.json({ service: "explorer", status: "ok" }));
+
+app.get("/flags", async (c) => {
+  try {
+    const user = await requireExplorer(c);
+    const sb = admin();
+    const flags: Record<string, boolean> = {};
+    for (const flag of PLUG_FLAGS) flags[flag] = await allow(sb, user.id, flag);
+    return c.json({ flags });
+  } catch (err) {
+    return c.json({ error: err instanceof Error ? err.message : "Could not load flags" }, 401);
+  }
+});
+
+app.post("/profile", async (c) => {
+  try {
+    const user = await requireExplorer(c);
+    const body = await c.req.json();
+    const sb = admin();
+    await sb.schema("explorer").from("profile").upsert({
+      user_id: user.id,
+      display_name: body.displayName || null,
+      phone: user.phone || body.phone || null,
+      parish_pcode: body.parishPcode || null,
+      consent_at: body.consent ? new Date().toISOString() : null,
+    });
+    return c.json({ ok: true });
+  } catch (err) {
+    return c.json({ error: err instanceof Error ? err.message : "Could not save profile" }, 400);
+  }
+});
+
+app.get("/garage", async (c) => {
+  try {
+    const user = await requireExplorer(c);
+    const sb = admin();
+    const { data, error } = await sb.schema("explorer").from("user_vehicle").select("*").eq("user_id", user.id).order("created_at");
+    if (error) throw error;
+    return c.json({ vehicles: data || [] });
+  } catch (err) {
+    return c.json({ error: err instanceof Error ? err.message : "Could not load garage" }, 400);
+  }
+});
+
+app.post("/vehicles", async (c) => {
+  try {
+    const user = await requireExplorer(c);
+    const body = await c.req.json();
+    const sb = admin();
+    await ensureProfile(sb, user);
+    if (!(await allow(sb, user.id, "plug.garage"))) return c.json({ error: "Garage is turned off" }, 403);
+    let pendingId: string | null = null;
+    if (!body.catalogVariantId) {
+      const { data: pending, error } = await sb.schema("explorer").from("pending_catalog_request").insert({
+        user_id: user.id,
+        make: body.make || "Unknown",
+        model: body.model || null,
+        year: body.year || null,
+        note: body.note || null,
+      }).select("id").single();
+      if (error) throw error;
+      pendingId = pending.id;
+    }
+    const { data, error } = await sb.schema("explorer").from("user_vehicle").insert({
+      user_id: user.id,
+      catalog_variant_id: body.catalogVariantId || null,
+      pending_request_id: pendingId,
+      year: body.year || null,
+      nickname: body.nickname || null,
+      starting_odometer: body.startingOdometer ?? null,
+    }).select("*").single();
+    if (error) throw error;
+    if (body.startingOdometer != null) {
+      await sb.schema("explorer").from("odometer_reading").insert({
+        user_id: user.id,
+        vehicle_id: data.id,
+        reading: body.startingOdometer,
+        source: "start",
+      });
+    }
+    return c.json({ vehicle: data });
+  } catch (err) {
+    return c.json({ error: err instanceof Error ? err.message : "Could not add vehicle" }, 400);
+  }
+});
+
+app.post("/fuel-logs", async (c) => {
+  try {
+    const user = await requireExplorer(c);
+    const body = await c.req.json();
+    const sb = admin();
+    await ensureProfile(sb, user);
+    if (!(await allow(sb, user.id, "plug.fuel_log"))) return c.json({ error: "Fuel logging is turned off" }, 403);
+    if (!(await hitLimit(sb, user.id, "fuel", 30))) return c.json({ error: "Too many fuel logs this hour" }, 429);
+
+    const { data: vehicle } = await sb.schema("explorer").from("user_vehicle").select("id").eq("id", body.vehicleId).eq("user_id", user.id).maybeSingle();
+    if (!vehicle) return c.json({ error: "That vehicle is not in your garage" }, 404);
+
+    const { data: last } = await sb.schema("explorer").from("odometer_reading").select("reading").eq("vehicle_id", body.vehicleId).order("recorded_at", { ascending: false }).limit(1);
+    const previous = Number(last?.[0]?.reading);
+    const issues = assessFillPlausibility({
+      amount: Number(body.amount),
+      liters: Number(body.litres),
+      odometer: Number(body.odometer),
+      previousOdometer: Number.isFinite(previous) ? previous : null,
+      confirmed: Boolean(body.confirmed),
+    });
+    const blocking = issues.filter((issue) => issue.severity === "block" || (issue.severity === "confirm" && !body.confirmed));
+    if (blocking.length) return c.json({ error: blocking[0]!.message, issues }, 422);
+
+    const lat = Number(body.lat);
+    const lng = Number(body.lng);
+    const { data: prior } = await sb.schema("explorer").from("fuel_log").select("lat,lng,created_at").eq("user_id", user.id).order("created_at", { ascending: false }).limit(1);
+    const prevPin = prior?.[0] as { lat?: number; lng?: number; created_at?: string } | undefined;
+    if (prevPin?.lat && prevPin.lng && Number.isFinite(lat) && Number.isFinite(lng)) {
+      if (impossibleTravel(
+        { lat: prevPin.lat, lng: prevPin.lng, at: prevPin.created_at || new Date().toISOString() },
+        { lat, lng, at: new Date().toISOString() },
+      )) {
+        return c.json({ error: "That pin is too far from your last fuel-up to be the same trip" }, 422);
+      }
+    }
+
+    const { data: stationRows } = await sb.schema("fleet").from("stations").select("id,name,payload_json").limit(1000);
+    const stations: StationProfile[] = (stationRows || []).map((row) => {
+      const payload = (row.payload_json || {}) as Record<string, unknown>;
+      const location = (payload.location || {}) as { lat?: number; lng?: number };
+      return {
+        id: String(row.id),
+        name: String(row.name || payload.name || "Station"),
+        brand: String(payload.brand || ""),
+        address: String(payload.address || ""),
+        location: { lat: Number(location.lat ?? payload.lat), lng: Number(location.lng ?? payload.lng) },
+        status: (payload.status as StationProfile["status"]) || "verified",
+        geofenceRadius: Number(payload.geofenceRadius) || undefined,
+        pinConfirmed: payload.pinConfirmed !== false,
+        gpsAliases: Array.isArray(payload.gpsAliases) ? payload.gpsAliases as StationProfile["gpsAliases"] : undefined,
+      };
+    }).filter((station) => station.status === "verified" && Number.isFinite(station.location.lat) && Number.isFinite(station.location.lng));
+
+    const match = Number.isFinite(lat) && Number.isFinite(lng)
+      ? findMatchingStationSmart(lat, lng, stations, 600, Number(body.accuracyM) || 0)
+      : { confidence: "none" as const, station: null, distance: Infinity, candidatesInRange: 0, secondClosestDistance: Infinity };
+    const decision = decidePlugStation(match);
+    const pricePer = Number(body.litres) > 0 ? Number(body.amount) / Number(body.litres) : 0;
+    const estimate = await retailEstimate(sb, String(body.grade || "e10_87"));
+    const priceCall = estimate ? plugPriceDecision(pricePer, estimate) : "hold";
+    const writes = planPlugFill({ decision, price: priceCall });
+    const touched = writesTouchFleetMoney(writes.map((write) => write.table));
+    if (touched.length) throw new Error("Plug fill tried to touch fleet money");
+
+    let stationId = decision === "confirm" || decision === "review" ? match.station?.id || null : null;
+    if (decision === "learnt" && Number.isFinite(lat) && Number.isFinite(lng)) {
+      const id = crypto.randomUUID();
+      const { error } = await sb.schema("fleet").from("stations").insert({
+        id,
+        organization_id: null,
+        name: body.stationName || "Unconfirmed station",
+        legacy_kv_id: `plug:${id}`,
+        origin_app: "roam_plug",
+        payload_json: {
+          status: "learnt",
+          origin_app: "roam_plug",
+          dataSource: "log",
+          pinConfirmed: false,
+          location: { lat, lng },
+          brand: body.brand || null,
+        },
+      });
+      if (error) throw error;
+      stationId = id;
+    }
+
+    const pepper = Deno.env.get("PLUG_USER_HASH_PEPPER") || "roam-plug";
+    const userHash = await hashExplorerUser(user.id, pepper);
+    const clientId = String(body.clientId || crypto.randomUUID());
+    const { data: log, error: logError } = await sb.schema("explorer").from("fuel_log").insert({
+      user_id: user.id,
+      vehicle_id: body.vehicleId,
+      litres: body.litres,
+      amount: body.amount,
+      price_per_litre: pricePer,
+      grade: body.grade || null,
+      odometer: body.odometer,
+      lat: Number.isFinite(lat) ? lat : null,
+      lng: Number.isFinite(lng) ? lng : null,
+      accuracy_m: body.accuracyM ?? null,
+      mock_location: Boolean(body.mockLocation),
+      station_id: stationId,
+      client_id: clientId,
+    }).select("id").single();
+    if (logError) throw logError;
+
+    await sb.schema("explorer").from("odometer_reading").insert({
+      user_id: user.id,
+      vehicle_id: body.vehicleId,
+      reading: body.odometer,
+      source: "fuel",
+      reference_id: log.id,
+    });
+    if (stationId) {
+      const { error: evidenceError } = await sb.schema("places").from("place_evidence").insert({
+        station_id: stationId,
+        user_hash: userHash,
+        origin_app: "roam_plug",
+        lat: Number.isFinite(lat) ? lat : null,
+        lng: Number.isFinite(lng) ? lng : null,
+        accuracy_m: body.accuracyM ?? null,
+        mock_location: Boolean(body.mockLocation),
+      });
+      if (evidenceError) throw evidenceError;
+    }
+    if (stationId && pricePer > 0) {
+      await sb.schema("places").from("price_observation").insert({
+        station_id: stationId,
+        grade: body.grade || "e10_87",
+        price_per_litre: pricePer,
+        origin_app: "roam_plug",
+        user_hash: userHash,
+        in_band: priceCall === "publish",
+      });
+      if (priceCall === "publish" && decision === "confirm") {
+        await sb.schema("places").from("price_current").upsert({
+          station_id: stationId,
+          grade: body.grade || "e10_87",
+          price_per_litre: pricePer,
+          observed_at: new Date().toISOString(),
+        });
+        const { data: card } = await sb.schema("places").from("public_station").select("prices").eq("id", stationId).maybeSingle();
+        if (card) {
+          await sb.schema("places").from("public_station").update({
+            prices: { ...(card.prices || {}), [body.grade || "e10_87"]: pricePer },
+            price_updated_at: new Date().toISOString(),
+          }).eq("id", stationId);
+        }
+      }
+    }
+    return c.json({ id: log.id, stationId, decision, price: priceCall });
+  } catch (err) {
+    return c.json({ error: err instanceof Error ? err.message : "Could not save fuel log" }, 400);
+  }
+});
+
+app.post("/services", async (c) => {
+  try {
+    const user = await requireExplorer(c);
+    const body = await c.req.json();
+    const sb = admin();
+    const { data, error } = await sb.schema("explorer").from("service_log").insert({
+      user_id: user.id,
+      vehicle_id: body.vehicleId,
+      op_code: body.opCode,
+      odometer: body.odometer ?? null,
+      done_on: body.doneOn,
+      done_elsewhere: Boolean(body.doneElsewhere),
+    }).select("id").single();
+    if (error) throw error;
+    return c.json({ id: data.id });
+  } catch (err) {
+    return c.json({ error: err instanceof Error ? err.message : "Could not log service" }, 400);
+  }
+});
+
+app.post("/reminders", async (c) => {
+  try {
+    const user = await requireExplorer(c);
+    const body = await c.req.json();
+    const sb = admin();
+    const { data, error } = await sb.schema("explorer").from("reminder").insert({
+      user_id: user.id,
+      vehicle_id: body.vehicleId || null,
+      kind: body.kind,
+      due_on: body.dueOn || null,
+      due_km: body.dueKm ?? null,
+    }).select("*").single();
+    if (error) throw error;
+    return c.json({ reminder: data });
+  } catch (err) {
+    return c.json({ error: err instanceof Error ? err.message : "Could not save reminder" }, 400);
+  }
+});
+
+app.post("/pins", async (c) => {
+  try {
+    const user = await requireExplorer(c);
+    const body = await c.req.json();
+    const sb = admin();
+    await ensureProfile(sb, user);
+    if (!(await allow(sb, user.id, "plug.map_it"))) return c.json({ error: "Map It is turned off" }, 403);
+    if (!(await hitLimit(sb, user.id, "pin", 20))) return c.json({ error: "Too many pins this hour" }, 429);
+    const accuracy = Number(body.accuracyM);
+    if (!(accuracy > 0) || accuracy > 100) return c.json({ error: "GPS is not accurate enough to pin this place" }, 422);
+    const pepper = Deno.env.get("PLUG_USER_HASH_PEPPER") || "roam-plug";
+    const userHash = await hashExplorerUser(user.id, pepper);
+    const lat = Number(body.lat);
+    const lng = Number(body.lng);
+    const { data: nearby } = await sb.schema("places").from("place").select("id,name,lat,lng,geofence_m,status").eq("status", "verified").limit(500);
+    const hit = (nearby || []).find((place) => {
+      const metres = Math.hypot((place.lat - lat) * 111_000, (place.lng - lng) * 111_000);
+      return metres <= Number(place.geofence_m || 50);
+    });
+    let placeId = hit?.id as string | undefined;
+    if (!placeId) {
+      const { data: parish } = await sb.schema("places").rpc("parish_pcode", { lat, lng });
+      const { data: created, error } = await sb.schema("places").from("place").insert({
+        name: body.name,
+        brand: body.brand || null,
+        lat,
+        lng,
+        pcode: typeof parish === "string" ? parish : null,
+        status: "pending",
+      }).select("id").single();
+      if (error) throw error;
+      placeId = created.id;
+      await sb.schema("places").from("place_capability").insert({
+        place_id: placeId,
+        kind: body.kind,
+        details: { services: body.services || [], hours: body.hours || null, phone: body.phone || null },
+      });
+    }
+    await sb.schema("places").from("place_evidence").insert({
+      place_id: placeId,
+      user_hash: userHash,
+      origin_app: "roam_plug",
+      lat,
+      lng,
+      accuracy_m: accuracy,
+      mock_location: Boolean(body.mockLocation),
+      note: body.note || null,
+    });
+    const { count } = await sb.schema("places").from("place_evidence").select("user_hash", { count: "exact", head: true }).eq("place_id", placeId);
+    const suggestion = suggestReview({
+      distinctUsers: count || 1,
+      bestAccuracyM: accuracy,
+      nearbyVerifiedName: hit?.name || null,
+    });
+    await sb.schema("places").from("place_change_proposal").insert({
+      place_id: placeId,
+      kind: hit ? "merge" : "new",
+      payload: { name: body.name, kind: body.kind },
+      distinct_users: count || 1,
+      best_accuracy_m: accuracy,
+      suggestion: suggestion.label,
+    });
+    return c.json({ placeId, status: "pending", suggestion: suggestion.label });
+  } catch (err) {
+    return c.json({ error: err instanceof Error ? err.message : "Could not save pin" }, 400);
+  }
+});
+
+app.get("/me/export", async (c) => {
+  try {
+    const user = await requireExplorer(c);
+    const sb = admin();
+    const tables = ["profile", "user_vehicle", "fuel_log", "odometer_reading", "service_log", "reminder", "notification"] as const;
+    const dump: Record<string, unknown> = {};
+    for (const table of tables) {
+      const { data } = await sb.schema("explorer").from(table).select("*").eq(table === "profile" ? "user_id" : "user_id", user.id);
+      dump[table] = data || [];
+    }
+    return c.json(dump);
+  } catch (err) {
+    return c.json({ error: err instanceof Error ? err.message : "Could not export" }, 400);
+  }
+});
+
+app.delete("/me", async (c) => {
+  try {
+    const user = await requireExplorer(c);
+    const sb = admin();
+    const pepper = Deno.env.get("PLUG_USER_HASH_PEPPER") || "roam-plug";
+    const userHash = await hashExplorerUser(user.id, pepper);
+    await sb.schema("places").from("place_evidence").delete().eq("user_hash", userHash);
+    await sb.schema("explorer").from("profile").delete().eq("user_id", user.id);
+    return c.json({ ok: true });
+  } catch (err) {
+    return c.json({ error: err instanceof Error ? err.message : "Could not delete account" }, 400);
+  }
+});
+
+app.get("/notifications", async (c) => {
+  try {
+    const user = await requireExplorer(c);
+    const sb = admin();
+    const { data, error } = await sb.schema("explorer").from("notification").select("*").eq("user_id", user.id).order("created_at", { ascending: false });
+    if (error) throw error;
+    return c.json({ notifications: data || [] });
+  } catch (err) {
+    return c.json({ error: err instanceof Error ? err.message : "Could not load inbox" }, 400);
+  }
+});
+
+app.get("/contributions", async (c) => {
+  try {
+    const user = await requireExplorer(c);
+    const sb = admin();
+    const { data: trust } = await sb.schema("explorer").from("trust").select("*").eq("user_id", user.id).maybeSingle();
+    return c.json({ level: contributorLevel(Number(trust?.approved_count || 0)), trust: trust || { score: 0, approved_count: 0, rejected_count: 0 } });
+  } catch (err) {
+    return c.json({ error: err instanceof Error ? err.message : "Could not load contributions" }, 400);
+  }
+});
+
+app.get("/admin/places", async (c) => {
+  try {
+    await requireOwner(c);
+    const sb = admin();
+    const { data, error } = await sb.schema("places").from("place_change_proposal").select("*").eq("status", "pending").order("created_at");
+    if (error) throw error;
+    return c.json({ items: data || [] });
+  } catch (err) {
+    return c.json({ error: err instanceof Error ? err.message : "Could not load queue" }, 403);
+  }
+});
+
+app.post("/admin/places/:id", async (c) => {
+  try {
+    const owner = await requireOwner(c);
+    const body = await c.req.json();
+    const sb = admin();
+    const id = c.req.param("id");
+    const action = String(body.action || "");
+    const { data: proposal } = await sb.schema("places").from("place_change_proposal").select("*").eq("id", id).single();
+    if (!proposal) return c.json({ error: "That item is gone" }, 404);
+    if (action === "approve") {
+      await sb.schema("places").from("place").update({ status: "verified", verified_at: new Date().toISOString() }).eq("id", proposal.place_id);
+      const { data: place } = await sb.schema("places").from("place").select("*").eq("id", proposal.place_id).single();
+      const { data: cap } = await sb.schema("places").from("place_capability").select("kind,details").eq("place_id", proposal.place_id).limit(1);
+      if (place) {
+        await sb.schema("places").from("public_place").upsert({
+          id: place.id,
+          name: place.name,
+          brand: place.brand,
+          kind: cap?.[0]?.kind || "mechanic",
+          lat: place.lat,
+          lng: place.lng,
+          pcode: place.pcode,
+          details: cap?.[0]?.details || {},
+        });
+      }
+    } else if (action === "reject") {
+      await sb.schema("places").from("place").update({ status: "rejected" }).eq("id", proposal.place_id);
+      await sb.schema("places").from("public_place").delete().eq("id", proposal.place_id);
+    } else if (action === "merge" && body.intoId) {
+      await sb.schema("places").from("place_evidence").update({ place_id: body.intoId }).eq("place_id", proposal.place_id);
+      await sb.schema("places").from("place").update({ status: "duplicate" }).eq("id", proposal.place_id);
+    } else {
+      return c.json({ error: "Choose approve, reject, or merge" }, 400);
+    }
+    await sb.schema("places").from("place_change_proposal").update({
+      status: action === "reject" ? "rejected" : "approved",
+      decided_by: owner.id,
+      decided_at: new Date().toISOString(),
+    }).eq("id", id);
+    return c.json({ ok: true });
+  } catch (err) {
+    return c.json({ error: err instanceof Error ? err.message : "Could not review" }, 400);
+  }
+});
+
+app.get("/admin/coverage", async (c) => {
+  try {
+    await requireOwner(c);
+    const sb = admin();
+    const { data, error } = await sb.schema("places").from("coverage_count").select("*");
+    if (error) throw error;
+    const { count } = await sb.schema("places").from("place_change_proposal").select("id", { count: "exact", head: true }).eq("status", "pending");
+    return c.json({ coverage: data || [], pending: count || 0 });
+  } catch (err) {
+    return c.json({ error: err instanceof Error ? err.message : "Could not load coverage" }, 403);
+  }
+});
+
+app.post("/admin/flags", async (c) => {
+  try {
+    const owner = await requireOwner(c);
+    const body = await c.req.json();
+    const sb = admin();
+    if (body.userId) {
+      await sb.schema("explorer").from("flag_allowlist").upsert({ flag_name: body.flag, user_id: body.userId });
+    } else {
+      await sb.from("platform_feature_flags").upsert({ name: body.flag, enabled: Boolean(body.enabled), updated_at: new Date().toISOString() });
+    }
+    return c.json({ ok: true, by: owner.id });
+  } catch (err) {
+    return c.json({ error: err instanceof Error ? err.message : "Could not update flag" }, 403);
+  }
+});
+
+app.post("/demand", async (c) => {
+  try {
+    const body = await c.req.json();
+    const sb = admin();
+    await sb.schema("places").from("demand_search").insert({ variant_id: body.variantId || null, query: String(body.query || "").slice(0, 120) });
+    return c.json({ ok: true });
+  } catch (err) {
+    return c.json({ error: err instanceof Error ? err.message : "Could not record demand" }, 400);
+  }
+});
+
+async function retailEstimate(sb: SupabaseClient, grade: string): Promise<number | null> {
+  const column = grade === "e10_90" ? "gasolene_90" : grade === "diesel" ? "auto_diesel" : "gasolene_87";
+  const markupColumn = grade === "e10_90" ? "gasolene_90_markup" : grade === "diesel" ? "auto_diesel_markup" : "gasolene_87_markup";
+  const { data } = await sb.schema("fuel").from("petrojam_prices").select(`${column}, price_date`).order("price_date", { ascending: false }).limit(1);
+  const wholesale = Number((data?.[0] as Record<string, number> | undefined)?.[column]);
+  if (!(wholesale > 0)) return null;
+  const { data: markup } = await sb.schema("fuel").from("retail_price_markup").select(markupColumn).eq("is_published", true).order("effective_from", { ascending: false }).limit(1);
+  const mark = Number((markup?.[0] as Record<string, number> | undefined)?.[markupColumn]);
+  if (!(mark >= 0)) return null;
+  return wholesale + mark;
+}
+
+Deno.serve(app.fetch);

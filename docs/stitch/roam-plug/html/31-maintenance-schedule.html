@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+
+<html class="h-full" lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" name="viewport"/><meta content="mobile_stack" name="shell-type"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/><link href="https://fonts.googleapis.com" rel="preconnect"/><link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config = { darkMode: "class", theme: { extend: { "colors": { "on-surface": "#1e1b17", "on-secondary": "#ffffff", "on-secondary-fixed-variant": "#783200", "tertiary": "#755800", "primary": "#a33900", "outline": "#8e7166", "secondary": "#9d4300", "surface-container-highest": "#e8e1db", "on-tertiary": "#ffffff", "on-background": "#1e1b17", "primary-container": "#cc4900", "on-primary": "#ffffff", "on-primary-fixed": "#370e00", "outline-variant": "#e2bfb2", "primary-fixed": "#ffdbce", "on-error": "#ffffff", "inverse-on-surface": "#f7efe9", "surface-container-low": "#faf2eb", "error-container": "#ffdad6", "surface-container": "#f4ede6", "on-secondary-fixed": "#341100", "tertiary-fixed-dim": "#f7be1d", "on-secondary-container": "#5c2400", "on-tertiary-fixed": "#251a00", "surface-dim": "#e0d9d2", "surface-container-lowest": "#ffffff", "secondary-fixed": "#ffdbca", "on-tertiary-fixed-variant": "#5a4300", "on-primary-fixed-variant": "#7f2b00", "primary-fixed-dim": "#ffb599", "inverse-surface": "#33302c", "secondary-fixed-dim": "#ffb690", "on-primary-container": "#fffbff", "surface-bright": "#fff8f2", "surface-container-high": "#eee7e0", "background": "#fff8f2", "surface-tint": "#a73a00", "surface": "#fff8f2", "tertiary-fixed": "#ffdf9a", "secondary-container": "#fd761a", "tertiary-container": "#936f00", "surface-variant": "#e8e1db", "on-tertiary-container": "#fffbff", "on-surface-variant": "#5a4138", "inverse-primary": "#ffb599", "on-error-container": "#93000a", "error": "#ba1a1a" }, "borderRadius": { "DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px" }, "spacing": { "gutter": "1rem", "space-xs": "0.25rem", "margin": "1rem", "space-sm": "0.5rem", "space-xl": "2rem", "space-lg": "1.5rem", "gutter-sm": "0.75rem", "margin-lg": "1.5rem", "space-md": "1rem" }, "fontFamily": { "label-lg": ["Inter"], "price-display": ["Inter"], "headline-sm": ["Inter"], "label-sm": ["Inter"], "label-md": ["Inter"], "body-md": ["Inter"], "headline-md": ["Inter"], "display-lg": ["Inter"], "body-sm": ["Inter"], "body-lg": ["Inter"], "display-lg-mobile": ["Inter"], "headline-lg": ["Inter"] }, "fontSize": { "label-lg": ["14px", { "lineHeight": "20px", "letterSpacing": "0.01em", "fontWeight": "600" }], "price-display": ["24px", { "lineHeight": "28px", "letterSpacing": "-0.01em", "fontWeight": "700" }], "headline-sm": ["18px", { "lineHeight": "24px", "fontWeight": "600" }], "label-sm": ["10px", { "lineHeight": "12px", "letterSpacing": "0.04em", "fontWeight": "700" }], "label-md": ["12px", { "lineHeight": "16px", "letterSpacing": "0.02em", "fontWeight": "600" }], "body-md": ["14px", { "lineHeight": "20px", "fontWeight": "400" }], "headline-md": ["22px", { "lineHeight": "28px", "letterSpacing": "-0.01em", "fontWeight": "700" }], "display-lg": ["40px", { "lineHeight": "48px", "letterSpacing": "-0.02em", "fontWeight": "800" }], "body-sm": ["12px", { "lineHeight": "16px", "fontWeight": "400" }], "body-lg": ["16px", { "lineHeight": "24px", "fontWeight": "400" }], "display-lg-mobile": ["32px", { "lineHeight": "40px", "letterSpacing": "-0.02em", "fontWeight": "800" }], "headline-lg": ["28px", { "lineHeight": "36px", "letterSpacing": "-0.01em", "fontWeight": "700" }] } } } };</script><style>@layer base { html, body { width: 100vw; margin: 0; padding: 0; } body { overscroll-behavior: none; } .pb-safe { padding-bottom: env(safe-area-inset-bottom, 0px); } .pt-safe { padding-top: env(safe-area-inset-top, 0px); } main > :first-child { margin-top: 0 !important; } main > :last-child { margin-bottom: 0 !important; } } ::-webkit-scrollbar { display: none; }</style><style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head><body class="bg-surface font-body-md text-on-surface flex flex-col min-h-screen"><header class="fixed top-0 w-full z-50 pt-safe bg-surface/80 backdrop-blur-xl shadow-[0_1px_8px_rgba(0,0,0,0.04)]"><div class="h-16 px-gutter flex items-center justify-between gap-space-sm"><div class="flex items-center gap-space-sm min-w-0"><button aria-label="Go back" class="w-12 h-12 rounded-full flex items-center justify-center text-on-surface hover:bg-surface-container-high transition-colors active:scale-95" onclick="history.back()"><span class="material-symbols-outlined text-[24px]">arrow_back</span></button><div class="flex flex-col min-w-0"><h1 class="font-headline-sm text-headline-sm text-on-surface truncate">Maintenance Schedule</h1><span class="font-label-md text-label-md text-on-surface-variant truncate">2019 Toyota Roomy</span></div></div><div class="flex items-center gap-space-xs"><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div></div></div></header><main class="flex-1 flex flex-col relative w-full px-gutter pt-16 pb-safe bg-surface"><div class="flex flex-col w-full pb-24">
+<!-- Vehicle Header Card -->
+<section class="bg-surface-container rounded-xl p-space-md shadow-sm mb-space-md">
+<div class="flex items-start justify-between gap-space-sm mb-space-sm">
+<div class="flex flex-col min-w-0">
+<div class="flex items-center gap-space-xs">
+<span class="font-headline-sm text-headline-sm text-on-surface truncate">2019 Toyota Roomy</span>
+<span class="material-symbols-outlined text-primary text-[20px]" style="font-variation-settings: 'FILL' 1;">verified</span>
+</div>
+<div class="flex items-center gap-space-xs mt-space-xs">
+<span class="bg-surface-container-highest text-on-surface-variant font-label-md text-label-md px-space-sm py-0.5 rounded flex items-center gap-1 shadow-sm">
+<span>🔒</span>
+<span class="tracking-wider">8241-HY</span>
+</span>
+<span class="font-label-md text-label-md text-on-surface-variant">• 84,612 km</span>
+</div>
+</div>
+<div class="w-12 h-12 rounded-lg bg-surface-container-highest overflow-hidden flex-shrink-0 shadow-sm">
+<img class="w-full h-full object-cover" data-alt="A compact metallic bronze 2019 Toyota Roomy parked gracefully under bright Caribbean midday sun with palm trees reflecting off windshield, realistic automotive photography" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAUiOcWucZnld91gH_Ck_Gj32W0rsXuYKJKZ7JgqyCfmR-rDozatjb1NptFMEoakffxHZzIqfD2Vk0pH1DOEtgJTh_gpuomGTvsmTxczMl87UIcXjdT9xdVFK60yFvKN9Qi6KhQgw0Dk3yJdkuMFjLqxkAxrDW9I-khn-tDVaX0SE62vx8D6sC9ydrtuVSJvVvRStB0PkM3mCGWeDj_EjCd8Jl1tCu7x5b_FNYSVa_diAIFaz4CZZqk"/>
+</div>
+</div>
+<!-- General Schedule Disclaimer Pill -->
+<div class="bg-surface-container-lowest rounded-lg p-space-sm flex items-center gap-space-xs shadow-sm">
+<span class="material-symbols-outlined text-secondary text-[18px] flex-shrink-0">info</span>
+<p class="font-body-sm text-body-sm text-on-surface-variant leading-tight">
+        General schedule — your exact car's schedule is coming
+      </p>
+</div>
+</section>
+<!-- Driving Telemetry Bar -->
+<section class="bg-surface-container-low rounded-xl p-space-md shadow-sm mb-space-lg">
+<div class="flex items-center gap-space-sm">
+<div class="w-10 h-10 rounded-full bg-secondary-container/20 flex items-center justify-center flex-shrink-0">
+<span class="material-symbols-outlined text-secondary text-[22px]">commute</span>
+</div>
+<div class="flex flex-col min-w-0 flex-1">
+<div class="flex items-center justify-between">
+<span class="font-label-sm text-label-sm uppercase tracking-wider text-secondary">Telemetry Sync</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant flex items-center gap-1">
+<span class="w-2 h-2 rounded-full bg-tertiary"></span> Moderate Wear
+          </span>
+</div>
+<p class="font-label-lg text-label-lg text-on-surface truncate">
+          ~48 km/day <span class="font-body-sm text-body-sm text-on-surface-variant">(Kingston ↔ Spanish Town)</span>
+</p>
+</div>
+</div>
+</section>
+<!-- Urgent / Overdue Notice -->
+<section class="mb-space-lg">
+<div class="bg-surface-container-lowest rounded-xl p-space-sm px-space-md flex items-center justify-between shadow-sm">
+<div class="flex items-center gap-space-sm">
+<span class="material-symbols-outlined text-tertiary text-[20px]" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+<span class="font-label-lg text-label-lg text-on-surface">No Overdue Items</span>
+</div>
+<span class="bg-surface-container-high text-on-surface-variant font-label-sm text-label-sm px-space-sm py-0.5 rounded-full">OVERDUE (0)</span>
+</div>
+</section>
+<!-- DUE SOON SECTION -->
+<section class="mb-space-lg">
+<div class="flex items-center justify-between mb-space-sm px-space-xs">
+<div class="flex items-center gap-space-xs">
+<span class="w-2.5 h-2.5 rounded-full bg-secondary-container animate-pulse"></span>
+<h2 class="font-headline-sm text-headline-sm text-on-surface">DUE SOON</h2>
+</div>
+<span class="bg-secondary-container text-on-secondary font-label-sm text-label-sm px-space-sm py-0.5 rounded-full">1 ACTION</span>
+</div>
+<!-- Due Soon Card (Engine Oil) -->
+<div class="bg-surface-container-lowest rounded-xl p-space-md shadow-md transition-all active:scale-[0.99] cursor-pointer">
+<div class="flex items-start justify-between gap-space-sm mb-space-xs">
+<div class="flex items-center gap-space-sm">
+<div class="w-10 h-10 rounded-lg bg-secondary-container/15 flex items-center justify-center flex-shrink-0 text-secondary">
+<span class="material-symbols-outlined text-[24px]">oil_barrel</span>
+</div>
+<div class="flex flex-col">
+<span class="font-headline-sm text-headline-sm text-on-surface">Engine Oil &amp; Filter Service</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">Every 5,000 km or 6 months</span>
+</div>
+</div>
+<span class="material-symbols-outlined text-outline text-[22px]">chevron_right</span>
+</div>
+<!-- Critical Countdown -->
+<div class="bg-surface-container-low rounded-lg p-space-sm my-space-sm">
+<div class="flex items-center justify-between mb-space-xs">
+<span class="font-label-md text-label-md text-secondary font-semibold">Due at 85,000 km</span>
+<span class="font-label-md text-label-md text-secondary font-bold">~388 km left (~8 days)</span>
+</div>
+<!-- Progress Bar -->
+<div class="w-full bg-surface-container-highest h-2.5 rounded-full overflow-hidden">
+<div class="bg-secondary-container h-full rounded-full" style="width: 92%;"></div>
+</div>
+<div class="flex justify-between items-center mt-1 text-[11px] font-label-sm text-on-surface-variant">
+<span>80,000 km</span>
+<span class="text-secondary font-semibold">Current: 84,612 km (92%)</span>
+<span>85,000 km</span>
+</div>
+</div>
+<!-- Recommendation Spec -->
+<div class="flex items-center gap-space-xs pt-space-xs">
+<span class="material-symbols-outlined text-tertiary text-[16px]">tune</span>
+<p class="font-body-sm text-body-sm text-on-surface-variant">
+          Spec: <span class="font-semibold text-on-surface">0W-20 / 5W-30 Synthetic</span> (Idemitsu / Castrol)
+        </p>
+</div>
+</div>
+</section>
+<!-- UPCOMING SECTION -->
+<section class="mb-space-lg">
+<div class="flex items-center justify-between mb-space-sm px-space-xs">
+<h2 class="font-headline-sm text-headline-sm text-on-surface">UPCOMING</h2>
+<span class="bg-surface-container-high text-on-surface-variant font-label-sm text-label-sm px-space-sm py-0.5 rounded-full">4 ITEMS</span>
+</div>
+<div class="flex flex-col gap-space-sm">
+<!-- Item 1: Front Brake Pads -->
+<div class="bg-surface-container-lowest rounded-xl p-space-md shadow-sm">
+<div class="flex items-start justify-between gap-space-sm">
+<div class="flex items-center gap-space-sm">
+<div class="w-9 h-9 rounded-lg bg-surface-container flex items-center justify-center flex-shrink-0 text-on-surface-variant">
+<span class="material-symbols-outlined text-[20px]">disc_full</span>
+</div>
+<div class="flex flex-col">
+<span class="font-label-lg text-label-lg text-on-surface">Front Brake Pads &amp; Rotors</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">Every 25,000 km</span>
+</div>
+</div>
+<span class="font-label-md text-label-md text-on-surface-variant font-medium">5,388 km left</span>
+</div>
+<div class="mt-space-sm">
+<div class="w-full bg-surface-container h-1.5 rounded-full overflow-hidden">
+<div class="bg-outline h-full rounded-full" style="width: 65%;"></div>
+</div>
+<div class="flex justify-between items-center mt-1">
+<span class="font-body-sm text-body-sm text-on-surface-variant">Due at 90,000 km</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">~3.5 months</span>
+</div>
+</div>
+</div>
+<!-- Item 2: Air Filter & Cabin AC Filter -->
+<div class="bg-surface-container-lowest rounded-xl p-space-md shadow-sm">
+<div class="flex items-start justify-between gap-space-sm">
+<div class="flex items-center gap-space-sm">
+<div class="w-9 h-9 rounded-lg bg-surface-container flex items-center justify-center flex-shrink-0 text-on-surface-variant">
+<span class="material-symbols-outlined text-[20px]">air</span>
+</div>
+<div class="flex flex-col">
+<span class="font-label-lg text-label-lg text-on-surface">Air Filter &amp; Cabin AC Filter</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">Every 15,000 km</span>
+</div>
+</div>
+<span class="font-label-md text-label-md text-on-surface-variant font-medium">10,388 km left</span>
+</div>
+<div class="mt-space-sm">
+<div class="w-full bg-surface-container h-1.5 rounded-full overflow-hidden">
+<div class="bg-outline h-full rounded-full" style="width: 31%;"></div>
+</div>
+<div class="flex justify-between items-center mt-1">
+<span class="font-body-sm text-body-sm text-on-surface-variant">Due at 95,000 km</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">~7 months</span>
+</div>
+</div>
+</div>
+<!-- Item 3: CVT Fluid -->
+<div class="bg-surface-container-lowest rounded-xl p-space-md shadow-sm">
+<div class="flex items-start justify-between gap-space-sm">
+<div class="flex items-center gap-space-sm">
+<div class="w-9 h-9 rounded-lg bg-surface-container flex items-center justify-center flex-shrink-0 text-on-surface-variant">
+<span class="material-symbols-outlined text-[20px]">settings_input_component</span>
+</div>
+<div class="flex flex-col">
+<span class="font-label-lg text-label-lg text-on-surface">CVT Transmission Fluid (TC/FE)</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">Every 40,000 km</span>
+</div>
+</div>
+<span class="font-label-md text-label-md text-on-surface-variant font-medium">15,388 km left</span>
+</div>
+<div class="mt-space-sm">
+<div class="w-full bg-surface-container h-1.5 rounded-full overflow-hidden">
+<div class="bg-outline h-full rounded-full" style="width: 20%;"></div>
+</div>
+<div class="flex justify-between items-center mt-1">
+<span class="font-body-sm text-body-sm text-on-surface-variant">Due at 100,000 km</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">~11 months</span>
+</div>
+</div>
+</div>
+<!-- Item 4: Spark Plugs -->
+<div class="bg-surface-container-lowest rounded-xl p-space-md shadow-sm">
+<div class="flex items-start justify-between gap-space-sm">
+<div class="flex items-center gap-space-sm">
+<div class="w-9 h-9 rounded-lg bg-surface-container flex items-center justify-center flex-shrink-0 text-on-surface-variant">
+<span class="material-symbols-outlined text-[20px]">bolt</span>
+</div>
+<div class="flex flex-col">
+<span class="font-label-lg text-label-lg text-on-surface">Spark Plugs (Iridium)</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">Every 60,000 km</span>
+</div>
+</div>
+<span class="font-label-md text-label-md text-on-surface-variant font-medium">35,388 km left</span>
+</div>
+<div class="mt-space-sm">
+<div class="w-full bg-surface-container h-1.5 rounded-full overflow-hidden">
+<div class="bg-outline h-full rounded-full" style="width: 10%;"></div>
+</div>
+<div class="flex justify-between items-center mt-1">
+<span class="font-body-sm text-body-sm text-on-surface-variant">Due at 120,000 km</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">~2 years</span>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- DONE RECENTLY SECTION -->
+<section class="mb-space-xl">
+<div class="flex items-center justify-between mb-space-sm px-space-xs">
+<h2 class="font-headline-sm text-headline-sm text-on-surface">DONE RECENTLY</h2>
+<span class="bg-surface-container-high text-on-surface-variant font-label-sm text-label-sm px-space-sm py-0.5 rounded-full">2 LOGGED</span>
+</div>
+<div class="flex flex-col gap-space-sm">
+<!-- Done 1: Tyre Rotation -->
+<div class="bg-surface-container-lowest rounded-xl p-space-md shadow-sm">
+<div class="flex items-start gap-space-sm">
+<div class="w-8 h-8 rounded-full bg-tertiary-fixed flex items-center justify-center flex-shrink-0 text-on-tertiary-fixed">
+<span class="material-symbols-outlined text-[18px]">check</span>
+</div>
+<div class="flex flex-col flex-1 min-w-0">
+<div class="flex items-center justify-between">
+<span class="font-label-lg text-label-lg text-on-surface truncate">Tyre Rotation &amp; Balancing</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">80,000 km</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-0.5">
+              14 Sep 2024 • Sammy's Tyre Repair
+            </p>
+</div>
+</div>
+</div>
+<!-- Done 2: Coolant Flush -->
+<div class="bg-surface-container-lowest rounded-xl p-space-md shadow-sm">
+<div class="flex items-start gap-space-sm">
+<div class="w-8 h-8 rounded-full bg-tertiary-fixed flex items-center justify-center flex-shrink-0 text-on-tertiary-fixed">
+<span class="material-symbols-outlined text-[18px]">check</span>
+</div>
+<div class="flex flex-col flex-1 min-w-0">
+<div class="flex items-center justify-between">
+<span class="font-label-lg text-label-lg text-on-surface truncate">Coolant Flush &amp; Top-up</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">75,000 km</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-0.5">
+              12 May 2024 • Precision Auto Works
+            </p>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- Sticky / Floating Bottom Actions Bar -->
+<div class="fixed bottom-0 left-0 right-0 p-space-md bg-surface/90 backdrop-blur-xl shadow-lg flex flex-col gap-space-xs z-40 max-w-md mx-auto">
+<button class="w-full h-12 bg-primary hover:bg-primary-container active:scale-[0.98] transition-all rounded-lg text-on-primary font-label-lg text-label-lg flex items-center justify-center gap-space-xs shadow-md" type="button">
+<span class="material-symbols-outlined text-[20px]">add_circle</span>
+<span>Log a Service</span>
+</button>
+<button class="w-full py-1 text-center font-label-md text-label-md text-secondary hover:text-primary transition-colors flex items-center justify-center gap-1" type="button">
+<span class="material-symbols-outlined text-[16px]">picture_as_pdf</span>
+<span>View History (PDF Export)</span>
+</button>
+</div>
+</div></main></body></html>

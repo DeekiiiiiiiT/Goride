@@ -63,12 +63,19 @@ function polygonsForCompile(raw: unknown): LatLng[][] {
   return ring.length >= 3 ? [ring] : [];
 }
 
+export async function activeCoverageGeneration(db: SupabaseClient): Promise<number> {
+  const { data } = await db.from("coverage_state").select("active_generation").eq("id", 1).maybeSingle();
+  return Number(data?.active_generation ?? 1);
+}
+
 export async function compileMarketCoverageCells(
   db: SupabaseClient,
   marketId: string,
   zones: ZoneRow[],
+  generation?: number,
 ): Promise<{ include: number; exclude: number }> {
-  await db.from("coverage_cells").delete().eq("market_id", marketId);
+  const liveGeneration = generation ?? await activeCoverageGeneration(db);
+  await db.from("coverage_cells").delete().eq("market_id", marketId).eq("generation", liveGeneration);
 
   const liveZones = filterLiveCoverageZones(
     zones.map((z) => ({
@@ -78,7 +85,7 @@ export async function compileMarketCoverageCells(
     })),
   );
 
-  const rows: Array<{ market_id: string; h3_cell: string; h3_res: number; kind: string }> = [];
+  const rows: Array<{ market_id: string; h3_cell: string; h3_res: number; kind: string; generation: number }> = [];
   let include = 0;
   let exclude = 0;
 
@@ -88,7 +95,7 @@ export async function compileMarketCoverageCells(
       for (const poly of polygonsForCompile(z.polygon)) {
         const cells = polygonToH3Cells(poly, res, kind);
         for (const cell of cells) {
-          rows.push({ market_id: marketId, h3_cell: cell, h3_res: res, kind });
+          rows.push({ market_id: marketId, h3_cell: cell, h3_res: res, kind, generation: liveGeneration });
           if (kind === "exclude") exclude += 1;
           else include += 1;
         }
@@ -99,7 +106,7 @@ export async function compileMarketCoverageCells(
   // Dedupe by PK
   const seen = new Set<string>();
   const unique = rows.filter((r) => {
-    const k = `${r.market_id}|${r.h3_res}|${r.h3_cell}|${r.kind}`;
+    const k = `${r.market_id}|${r.h3_res}|${r.h3_cell}|${r.kind}|${r.generation}`;
     if (seen.has(k)) return false;
     seen.add(k);
     return true;
@@ -137,12 +144,14 @@ export async function recomputeMerchantCoverageCells(
     const k = kRingForRadiusKmWithMargin(radius, res);
     const disk = new Set(h3DiskFromCell(storeCell, k));
 
+    const generation = await activeCoverageGeneration(db);
     const { data: marketCells } = await db
       .from("coverage_cells")
       .select("h3_cell")
       .eq("market_id", opts.marketId)
       .eq("h3_res", res)
-      .eq("kind", "include");
+      .eq("kind", "include")
+      .eq("generation", generation);
 
     const include = new Set((marketCells ?? []).map((r) => String(r.h3_cell)));
     const { data: excludeRows } = await db
@@ -150,7 +159,8 @@ export async function recomputeMerchantCoverageCells(
       .select("h3_cell")
       .eq("market_id", opts.marketId)
       .eq("h3_res", res)
-      .eq("kind", "exclude");
+      .eq("kind", "exclude")
+      .eq("generation", generation);
     const exclude = new Set((excludeRows ?? []).map((r) => String(r.h3_cell)));
 
     const rows: Array<{ merchant_id: string; h3_cell: string; h3_res: number }> = [];
@@ -183,11 +193,13 @@ export async function previewCoverageDiff(
   marketId: string,
   zones: ZoneRow[],
 ): Promise<CoverageDiff> {
+  const generation = await activeCoverageGeneration(db);
   const { data: existing } = await db
     .from("coverage_cells")
     .select("h3_cell, h3_res, kind")
     .eq("market_id", marketId)
-    .eq("h3_res", DEFAULT_H3_RESOLUTION);
+    .eq("h3_res", DEFAULT_H3_RESOLUTION)
+    .eq("generation", generation);
 
   const before = new Set(
     (existing ?? []).map((r) => `${r.kind}:${r.h3_cell}`),

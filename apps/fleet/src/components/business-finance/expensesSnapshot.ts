@@ -49,7 +49,6 @@ export function buildExpensesSnapshot(
   const fuel = expenseAgg.fuelEventCount > 0 ? expenseAgg.fuel : round2(fallback.fuel || 0);
   const tolls = expenseAgg.tollEventCount > 0 ? expenseAgg.tolls : round2(fallback.tolls || 0);
   const maintenance = expenseAgg.maintenance;
-  const operatingExpenses = expenseAgg.operating;
 
   return {
     categories: [
@@ -130,14 +129,20 @@ export function buildExpensesSnapshot(
         id: 'other',
         label: 'Other',
         amount: round2(
-          expenseAgg.other +
-            Math.max(
-              0,
-              operatingExpenses -
-                (expenseAgg.byCategory.Insurance || 0) -
-                (expenseAgg.byCategory['Software/Subscription'] || 0) -
-                (expenseAgg.byCategory.Registration || 0),
-            ),
+          Math.max(
+            0,
+            expenseAgg.fixed +
+              expenseAgg.operating +
+              expenseAgg.other -
+              (expenseAgg.byCategory.Insurance || 0) -
+              (expenseAgg.byCategory.Lease || 0) -
+              (expenseAgg.byCategory.Security || expenseAgg.byCategory.Tracking || 0) -
+              ((expenseAgg.byCategory.Software || 0) +
+                (expenseAgg.byCategory['Software/Subscription'] || 0)) -
+              ((expenseAgg.byCategory.Permits || 0) +
+                (expenseAgg.byCategory.Registration || 0)) -
+              (expenseAgg.byCategory.Equipment || 0),
+          ),
         ),
         tracked: true,
       },

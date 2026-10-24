@@ -5,6 +5,7 @@ const ALLOWED = new Set([
   "/internal/rush-money/recon",
   "/internal/rush-money/scores",
   "/internal/in-house/sweep",
+  "/internal/geo/reconcile",
 ]);
 
 function sameSecret(a: string, b: string): boolean {

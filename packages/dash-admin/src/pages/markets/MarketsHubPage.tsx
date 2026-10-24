@@ -8,15 +8,14 @@ import { PageHeader } from '../../components/ui/PageHeader';
 import { PlatformExclusionsPanel } from './PlatformExclusionsPanel';
 import type { AdminOutletContext } from '../../DashAdminPortal';
 
-const TABS = ['markets', 'exclusions', 'boundaries', 'health'] as const;
+const TABS = ['markets', 'exclusions', 'health'] as const;
 
 export function MarketsHubPage({
   markets,
-  boundaries,
   health,
 }: {
   markets: ReactNode;
-  boundaries: ReactNode;
+  boundaries?: ReactNode;
   health: ReactNode;
 }) {
   const [tab, setTab] = useUrlTab('markets', TABS);
@@ -28,14 +27,12 @@ export function MarketsHubPage({
         tabs={[
           { id: 'markets', label: 'Markets' },
           { id: 'exclusions', label: 'Exclusion zones' },
-          { id: 'boundaries', label: 'Boundaries' },
           { id: 'health', label: 'Health' },
         ]}
         activeTab={tab}
         onTab={(id) => setTab(id as typeof TABS[number])}
       />
       {tab === 'exclusions' ? <ExclusionsTab /> : null}
-      {tab === 'boundaries' ? boundaries : null}
       {tab === 'health' ? health : null}
       {tab === 'markets' ? markets : null}
     </div>

@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+
+<html lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" name="viewport"/><meta content="mobile_stack" name="shell-type"/><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&amp;display=swap" rel="stylesheet"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><style>@layer base{html,body{width:100%;margin:0;padding:0;background-color:#fff8f2;}body{overscroll-behavior-y:none;-webkit-tap-highlight-color:transparent;font-family:'Inter',sans-serif;}.pb-safe{padding-bottom:env(safe-area-inset-bottom,0px);}.pt-safe{padding-top:env(safe-area-inset-top,0px);}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config={darkMode:"class",theme:{extend:{colors:{"on-tertiary-fixed":"#251a00","tertiary":"#755800","primary-container":"#cc4900","on-background":"#1e1b17","surface-container-lowest":"#ffffff","inverse-on-surface":"#f7efe9","secondary":"#9d4300","on-surface-variant":"#5a4138","on-surface":"#1e1b17","on-primary-fixed-variant":"#7f2b00","error":"#ba1a1a","primary-fixed":"#ffdbce","background":"#fff8f2","error-container":"#ffdad6","on-primary":"#ffffff","surface-container-highest":"#e8e1db","surface-dim":"#e0d9d2","primary-fixed-dim":"#ffb599","surface-container-low":"#faf2eb","on-secondary-fixed":"#341100","primary":"#a33900","on-secondary-container":"#5c2400","on-tertiary-fixed-variant":"#5a4300","on-tertiary":"#ffffff","on-secondary-fixed-variant":"#783200","on-error-container":"#93000a","on-error":"#ffffff","surface":"#fff8f2","surface-container":"#f4ede6","inverse-surface":"#33302c","tertiary-container":"#936f00","outline-variant":"#e2bfb2","surface-tint":"#a73a00","on-tertiary-container":"#fffbff","tertiary-fixed-dim":"#f7be1d","surface-container-high":"#eee7e0","on-secondary":"#ffffff","secondary-fixed":"#ffdbca","tertiary-fixed":"#ffdf9a","on-primary-fixed":"#370e00","surface-bright":"#fff8f2","inverse-primary":"#ffb599","on-primary-container":"#fffbff","secondary-fixed-dim":"#ffb690","surface-variant":"#e8e1db","secondary-container":"#fd761a","outline":"#8e7166"},borderRadius:{DEFAULT:"0.25rem",lg:"0.5rem",xl:"0.75rem",full:"9999px"},spacing:{"gutter":"1rem","margin":"1rem","margin-lg":"1.5rem","space-xl":"2rem","space-md":"1rem","space-lg":"1.5rem","gutter-sm":"0.75rem","space-xs":"0.25rem","space-sm":"0.5rem"},fontFamily:{"display-lg-mobile":["Inter"],"label-sm":["Inter"],"body-md":["Inter"],"label-lg":["Inter"],"label-md":["Inter"],"headline-md":["Inter"],"display-lg":["Inter"],"body-lg":["Inter"],"body-sm":["Inter"],"price-display":["Inter"],"headline-lg":["Inter"],"headline-sm":["Inter"]},fontSize:{"display-lg-mobile":["32px",{lineHeight:"40px",letterSpacing:"-0.02em",fontWeight:"800"}],"label-sm":["10px",{lineHeight:"12px",letterSpacing:"0.04em",fontWeight:"700"}],"body-md":["14px",{lineHeight:"20px",fontWeight:"400"}],"label-lg":["14px",{lineHeight:"20px",letterSpacing:"0.01em",fontWeight:"600"}],"label-md":["12px",{lineHeight:"16px",letterSpacing:"0.02em",fontWeight:"600"}],"headline-md":["22px",{lineHeight:"28px",letterSpacing:"-0.01em",fontWeight:"700"}],"display-lg":["40px",{lineHeight:"48px",letterSpacing:"-0.02em",fontWeight:"800"}],"body-lg":["16px",{lineHeight:"24px",fontWeight:"400"}],"body-sm":["12px",{lineHeight:"16px",fontWeight:"400"}],"price-display":["24px",{lineHeight:"28px",letterSpacing:"-0.01em",fontWeight:"700"}],"headline-lg":["28px",{lineHeight:"36px",letterSpacing:"-0.01em",fontWeight:"700"}],"headline-sm":["18px",{lineHeight:"24px",fontWeight:"600"}]}}}};</script><style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head><body class="bg-surface font-body-md text-on-surface flex flex-col min-h-screen"><header class="fixed top-0 w-full z-50 pt-safe bg-surface/80 backdrop-blur-xl shadow-[0_1px_8px_rgba(0,0,0,0.04)]"><div class="h-16 px-gutter flex items-center justify-between"><div class="flex items-center gap-space-sm min-w-0 pr-space-sm"><button aria-label="Go back" class="w-12 h-12 flex-shrink-0 flex items-center justify-center rounded-full text-on-surface hover:bg-surface-container active:bg-surface-container-high transition-colors" onclick="history.back()" type="button"><span class="material-symbols-outlined text-[24px]">arrow_back</span></button><h1 class="font-headline-sm text-headline-sm text-on-surface tracking-tight truncate">Help Map Your Parish</h1></div><div class="flex items-center gap-space-xs flex-shrink-0"><button aria-label="Help &amp; Guidelines" class="w-12 h-12 flex items-center justify-center rounded-full text-on-surface-variant hover:bg-surface-container active:bg-surface-container-high transition-colors" type="button"><span class="material-symbols-outlined text-[22px]">help_outline</span></button></div></div></header><main class="flex flex-col relative w-full pt-16 bg-surface min-h-screen pb-safe"><div class="flex flex-col w-full pb-24">
+<!-- Top Hero Context Header -->
+<div class="px-gutter pt-space-md pb-space-lg">
+<div class="flex items-center gap-space-xs text-primary mb-space-xs">
+<span class="material-symbols-outlined text-[18px]">explore</span>
+<span class="font-label-md text-label-md uppercase tracking-wider">Road Scout Mission</span>
+</div>
+<h2 class="font-headline-lg text-headline-lg text-on-surface tracking-tight mb-space-xs">Help Map Your Parish</h2>
+<p class="font-body-md text-body-md text-on-surface-variant leading-relaxed mb-space-md">
+      Join fellow Jamaican Road Scouts in filling missing fuel stops, tyre shops, and trusted roadside mechanics across all 14 parishes.
+    </p>
+<!-- Summary Metric Pill Banner -->
+<div class="bg-surface-container rounded-xl p-space-sm shadow-sm flex flex-col gap-space-xs">
+<div class="flex items-center justify-between">
+<span class="font-label-md text-label-md text-on-surface-variant flex items-center gap-1">
+<span class="w-2 h-2 rounded-full bg-secondary"></span>
+          Islandwide Coverage
+        </span>
+<span class="font-headline-sm text-headline-sm text-secondary font-bold">54%</span>
+</div>
+<!-- Mini Progress Indicator -->
+<div class="w-full bg-surface-container-highest rounded-full h-2 overflow-hidden">
+<div class="bg-primary h-full rounded-full" style="width: 54%"></div>
+</div>
+<div class="flex items-center justify-between pt-1 font-label-sm text-label-sm text-on-surface-variant">
+<span class="flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px] text-primary">priority_high</span>
+          7 Parishes Critical
+        </span>
+<span class="bg-primary-fixed text-on-primary-fixed-variant px-2 py-0.5 rounded-full font-bold">
+          +50 XP In Priority Zones
+        </span>
+</div>
+</div>
+</div>
+<!-- Interactive / Stylized SVG Map of Jamaica -->
+<div class="px-gutter mb-space-lg">
+<div class="bg-surface-container-lowest rounded-2xl p-space-md shadow-sm">
+<div class="flex items-center justify-between mb-space-sm">
+<div>
+<h3 class="font-headline-sm text-headline-sm text-on-surface">Parish Grid Shading</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Tap a parish region to inspect gaps</p>
+</div>
+<span class="material-symbols-outlined text-primary text-[24px]">satellite_alt</span>
+</div>
+<!-- Stylized Jamaica Island Map -->
+<div class="relative w-full overflow-hidden rounded-xl bg-surface-container-low p-2">
+<svg class="w-full h-auto drop-shadow-sm select-none" viewbox="0 0 540 220" xmlns="http://www.w3.org/2000/svg">
+<!-- Ambient Coast Glow -->
+<defs>
+<lineargradient id="heroGradient" x1="0%" x2="100%" y1="0%" y2="100%">
+<stop offset="0%" stop-color="#fd761a" stop-opacity="0.25"></stop>
+<stop offset="100%" stop-color="#755800" stop-opacity="0.1"></stop>
+</lineargradient>
+<pattern height="16" id="gridPattern" patternunits="userSpaceOnUse" width="16">
+<path d="M 16 0 L 0 0 0 16" fill="none" stroke="#e8e1db" stroke-width="0.75"></path>
+</pattern>
+</defs>
+<!-- Subtle Sea Texture -->
+<rect fill="url(#gridPattern)" height="100%" rx="8" width="100%"></rect>
+<!-- Parishes Paths Stylized Blocks with High Legibility -->
+<!-- Hanover (Moderate: #f7be1d) -->
+<polygon class="cursor-pointer transition-colors hover:opacity-80" fill="#ffdf9a" id="parish-hanover" points="25,55 68,48 72,82 32,84"></polygon>
+<text class="font-label-sm text-[8px] fill-[#5a4300] font-bold" x="40" y="68">HAN</text>
+<!-- Westmoreland (Moderate: 49%) -->
+<polygon class="cursor-pointer transition-colors hover:opacity-80" fill="#ffdf9a" id="parish-westmoreland" points="20,85 73,83 95,118 35,124 15,102"></polygon>
+<text class="font-label-sm text-[9px] fill-[#5a4300] font-bold" x="38" y="106">WEST</text>
+<!-- St. James (Moderate: 58%) -->
+<polygon class="cursor-pointer transition-colors hover:opacity-80" fill="#ffdf9a" id="parish-stjames" points="69,47 114,44 118,92 74,82"></polygon>
+<text class="font-label-sm text-[8px] fill-[#5a4300] font-bold" x="82" y="70">ST. JAM</text>
+<!-- Trelawny (Moderate: 44%) -->
+<polygon class="cursor-pointer transition-colors hover:opacity-80" fill="#ffdf9a" id="parish-trelawny" points="115,44 172,42 168,102 119,92"></polygon>
+<text class="font-label-sm text-[9px] fill-[#5a4300] font-bold" x="130" y="74">TRELAWNY</text>
+<!-- St. Elizabeth (Critical: 38% - Primary orange pulse) -->
+<polygon class="cursor-pointer transition-colors hover:opacity-80" fill="#ffdbce" id="parish-stelizabeth" points="74,84 120,93 148,150 96,152 72,122"></polygon>
+<text class="font-label-sm text-[9px] fill-[#7f2b00] font-extrabold" x="94" y="122">ST. ELIZ</text>
+<!-- Manchester (Critical: 34% - Urgent orange) -->
+<polygon class="cursor-pointer transition-colors hover:opacity-80" fill="#ffb599" id="parish-manchester" points="121,94 170,103 178,156 148,151"></polygon>
+<text class="font-label-sm text-[9px] fill-[#7f2b00] font-extrabold" x="135" y="128">MANCH</text>
+<!-- St. Ann (Moderate: 51%) -->
+<polygon class="cursor-pointer transition-colors hover:opacity-80" fill="#ffdf9a" id="parish-stann" points="173,42 260,40 248,98 169,102"></polygon>
+<text class="font-label-sm text-[10px] fill-[#5a4300] font-bold" x="202" y="72">ST. ANN</text>
+<!-- Clarendon (Critical: 39%) -->
+<polygon class="cursor-pointer transition-colors hover:opacity-80" fill="#ffdbce" id="parish-clarendon" points="171,104 235,99 238,172 179,157"></polygon>
+<text class="font-label-sm text-[9px] fill-[#7f2b00] font-bold" x="190" y="134">CLAR</text>
+<!-- St. Mary (Moderate: 48%) -->
+<polygon class="cursor-pointer transition-colors hover:opacity-80" fill="#ffdf9a" id="parish-stmary" points="261,40 338,58 318,102 249,97"></polygon>
+<text class="font-label-sm text-[9px] fill-[#5a4300] font-bold" x="278" y="72">ST. MARY</text>
+<!-- St. Catherine (Good: 62%) -->
+<polygon class="cursor-pointer transition-colors hover:opacity-80" fill="#ffdf9a" id="parish-stcatherine" points="236,99 308,103 298,162 239,171"></polygon>
+<text class="font-label-sm text-[9px] fill-[#5a4300] font-bold" x="254" y="132">ST. CATH</text>
+<!-- St. Andrew & Kingston (High Coverage: 88% - Deep Emerald / Green Tint) -->
+<polygon class="cursor-pointer transition-colors hover:opacity-80" fill="#bbf7d0" id="parish-standrew" points="309,104 365,108 358,154 299,161"></polygon>
+<text class="font-label-sm text-[8px] fill-[#14532d] font-extrabold" x="318" y="128">ST. ANDREW</text>
+<!-- Kingston Metro -->
+<circle cx="332" cy="146" fill="#22c55e" r="10"></circle>
+<text class="font-label-sm text-[7px] fill-white font-extrabold" x="325" y="149">KGN</text>
+<!-- Portland (Critical Need: 22%) -->
+<polygon class="cursor-pointer transition-colors hover:opacity-80" fill="#ffb599" id="parish-portland" points="339,59 428,102 384,138 319,103"></polygon>
+<text class="font-label-sm text-[9px] fill-[#7f2b00] font-extrabold" x="358" y="96">PORTLAND</text>
+<!-- St. Thomas (Critical: 36%) -->
+<polygon class="cursor-pointer transition-colors hover:opacity-80" fill="#ffdbce" id="parish-stthomas" points="366,110 442,126 432,152 359,153"></polygon>
+<text class="font-label-sm text-[8px] fill-[#7f2b00] font-bold" x="382" y="138">ST. THOM</text>
+<!-- Urgent Hotspot Pin Indicators -->
+<g transform="translate(148, 114)">
+<circle class="animate-ping" cx="0" cy="0" fill="#ea580c" opacity="0.3" r="7"></circle>
+<circle cx="0" cy="0" fill="#a33900" r="4"></circle>
+</g>
+<g transform="translate(376, 96)">
+<circle class="animate-ping" cx="0" cy="0" fill="#ea580c" opacity="0.3" r="7"></circle>
+<circle cx="0" cy="0" fill="#a33900" r="4"></circle>
+</g>
+</svg>
+</div>
+<!-- Map Legend Pills -->
+<div class="flex items-center justify-between gap-1 mt-space-md pt-space-xs">
+<div class="flex items-center gap-1.5">
+<span class="w-3 h-3 rounded-full bg-[#22c55e]"></span>
+<span class="font-label-sm text-label-sm text-on-surface">&gt;70% Well Mapped</span>
+</div>
+<div class="flex items-center gap-1.5">
+<span class="w-3 h-3 rounded-full bg-[#f7be1d]"></span>
+<span class="font-label-sm text-label-sm text-on-surface">40-70% Moderate</span>
+</div>
+<div class="flex items-center gap-1.5">
+<span class="w-3 h-3 rounded-full bg-primary-container"></span>
+<span class="font-label-sm text-label-sm text-on-surface">&lt;40% Critical</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Priority Spotlight: Manchester -->
+<div class="px-gutter mb-space-lg">
+<div class="bg-surface-container-lowest rounded-2xl p-space-md shadow-sm relative overflow-hidden">
+<!-- Accent Flash Badge -->
+<div class="flex items-center justify-between mb-space-sm">
+<div class="flex items-center gap-2">
+<span class="px-2.5 py-1 rounded-full bg-primary text-on-primary font-label-sm text-label-sm font-bold flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]">local_fire_department</span>
+            PRIORITY SPOTLIGHT
+          </span>
+<span class="font-label-md text-label-md text-secondary font-bold">Manchester</span>
+</div>
+<span class="font-label-sm text-label-sm text-on-surface-variant font-bold">34% Mapped</span>
+</div>
+<h3 class="font-headline-sm text-headline-sm text-on-surface tracking-tight mb-1">
+        Places we urgently need in Manchester
+      </h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant mb-space-md flex items-center gap-1">
+<span class="material-symbols-outlined text-[16px] text-primary">pin_drop</span>
+        Mandeville &amp; Christiana Transit Corridors
+      </p>
+<!-- Needed Place Cards with XP incentives -->
+<div class="flex flex-col gap-space-sm mb-space-md">
+<!-- Item 1 -->
+<div class="bg-surface-container rounded-xl p-space-sm flex items-start justify-between gap-space-sm">
+<div class="flex items-start gap-space-sm min-w-0">
+<div class="w-9 h-9 rounded-lg bg-surface-container-highest flex items-center justify-center flex-shrink-0 text-primary">
+<span class="material-symbols-outlined text-[20px]">build</span>
+</div>
+<div class="min-w-0">
+<div class="flex items-center gap-2">
+<h4 class="font-label-lg text-label-lg text-on-surface truncate">Auto Parts Stores</h4>
+<span class="bg-secondary-fixed text-on-secondary-fixed font-label-sm text-label-sm px-1.5 py-0.2 rounded font-bold">+50 XP</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Japanese import spares &amp; Daihatsu supplies</p>
+</div>
+</div>
+<button class="w-8 h-8 rounded-full bg-surface-container-highest flex items-center justify-center text-primary flex-shrink-0 hover:bg-primary hover:text-on-primary transition-colors" type="button">
+<span class="material-symbols-outlined text-[18px]">add_location</span>
+</button>
+</div>
+<!-- Item 2 -->
+<div class="bg-surface-container rounded-xl p-space-sm flex items-start justify-between gap-space-sm">
+<div class="flex items-start gap-space-sm min-w-0">
+<div class="w-9 h-9 rounded-lg bg-surface-container-highest flex items-center justify-center flex-shrink-0 text-primary">
+<span class="material-symbols-outlined text-[20px]">car_repair</span>
+</div>
+<div class="min-w-0">
+<div class="flex items-center gap-2">
+<h4 class="font-label-lg text-label-lg text-on-surface truncate">Spur Tree Mechanics</h4>
+<span class="bg-secondary-fixed text-on-secondary-fixed font-label-sm text-label-sm px-1.5 py-0.2 rounded font-bold">+50 XP</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Brake pad, radiator &amp; overheat recovery spots</p>
+</div>
+</div>
+<button class="w-8 h-8 rounded-full bg-surface-container-highest flex items-center justify-center text-primary flex-shrink-0 hover:bg-primary hover:text-on-primary transition-colors" type="button">
+<span class="material-symbols-outlined text-[18px]">add_location</span>
+</button>
+</div>
+<!-- Item 3 -->
+<div class="bg-surface-container rounded-xl p-space-sm flex items-start justify-between gap-space-sm">
+<div class="flex items-start gap-space-sm min-w-0">
+<div class="w-9 h-9 rounded-lg bg-surface-container-highest flex items-center justify-center flex-shrink-0 text-primary">
+<span class="material-symbols-outlined text-[20px]">air</span>
+</div>
+<div class="min-w-0">
+<div class="flex items-center gap-2">
+<h4 class="font-label-lg text-label-lg text-on-surface truncate">24/7 Working Air Pumps</h4>
+<span class="bg-surface-container-highest text-on-surface font-label-sm text-label-sm px-1.5 py-0.2 rounded font-bold">+30 XP</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Functional gauges along A2 Main Road</p>
+</div>
+</div>
+<button class="w-8 h-8 rounded-full bg-surface-container-highest flex items-center justify-center text-primary flex-shrink-0 hover:bg-primary hover:text-on-primary transition-colors" type="button">
+<span class="material-symbols-outlined text-[18px]">add_location</span>
+</button>
+</div>
+</div>
+<!-- Quick Action Button inside Card -->
+<button class="w-full h-12 bg-primary text-on-primary rounded-xl font-label-lg text-label-lg font-bold flex items-center justify-center gap-2 shadow-sm active:bg-secondary transition-colors" type="button">
+<span>Map Manchester Gaps Now</span>
+<span class="material-symbols-outlined text-[18px]">arrow_forward</span>
+</button>
+</div>
+</div>
+<!-- Parish Coverage Leaderboard & List -->
+<div class="px-gutter mb-space-lg">
+<!-- Header with Sort Toggle -->
+<div class="flex items-center justify-between mb-space-sm">
+<h3 class="font-headline-sm text-headline-sm text-on-surface">Parish Coverage</h3>
+<div class="flex items-center bg-surface-container rounded-lg p-0.5 text-on-surface-variant">
+<button class="px-2.5 py-1 rounded-md bg-surface-container-lowest font-label-sm text-label-sm text-primary font-bold shadow-sm" id="filter-need" type="button">
+          Highest Need
+        </button>
+<button class="px-2.5 py-1 rounded-md font-label-sm text-label-sm text-on-surface-variant" id="filter-covered" type="button">
+          Mapped %
+        </button>
+</div>
+</div>
+<!-- Parish List Stack -->
+<div class="flex flex-col gap-space-sm">
+<!-- 1. Portland (Critical 22%) -->
+<div class="bg-surface-container-lowest rounded-xl p-space-sm shadow-sm flex flex-col gap-space-xs">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2">
+<span class="font-label-lg text-label-lg text-on-surface font-bold">Portland</span>
+<span class="bg-error-container text-on-error-container font-label-sm text-label-sm px-1.5 py-0.2 rounded font-bold">Critical</span>
+</div>
+<div class="flex items-center gap-1.5">
+<span class="font-label-sm text-label-sm bg-primary-fixed text-on-primary-fixed-variant px-1.5 py-0.2 rounded font-bold">+50 XP</span>
+<span class="font-headline-sm text-headline-sm text-error font-bold">22%</span>
+</div>
+</div>
+<div class="w-full bg-surface-container-highest rounded-full h-1.5 overflow-hidden">
+<div class="bg-error h-full rounded-full" style="width: 22%"></div>
+</div>
+<div class="flex items-center justify-between text-on-surface-variant font-body-sm text-body-sm pt-0.5">
+<span class="truncate">Missing: Port Antonio fuel, air compressors &amp; Long Bay tyre spots</span>
+<button class="text-primary font-label-md text-label-md flex-shrink-0 ml-2 font-bold" type="button">Map</button>
+</div>
+</div>
+<!-- 2. Manchester (34%) -->
+<div class="bg-surface-container-lowest rounded-xl p-space-sm shadow-sm flex flex-col gap-space-xs">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2">
+<span class="font-label-lg text-label-lg text-on-surface font-bold">Manchester</span>
+<span class="bg-primary-fixed text-on-primary-fixed-variant font-label-sm text-label-sm px-1.5 py-0.2 rounded font-bold">High Need</span>
+</div>
+<div class="flex items-center gap-1.5">
+<span class="font-label-sm text-label-sm bg-primary-fixed text-on-primary-fixed-variant px-1.5 py-0.2 rounded font-bold">+50 XP</span>
+<span class="font-headline-sm text-headline-sm text-primary font-bold">34%</span>
+</div>
+</div>
+<div class="w-full bg-surface-container-highest rounded-full h-1.5 overflow-hidden">
+<div class="bg-primary h-full rounded-full" style="width: 34%"></div>
+</div>
+<div class="flex items-center justify-between text-on-surface-variant font-body-sm text-body-sm pt-0.5">
+<span class="truncate">Missing: Auto parts stores &amp; diagnostic bays in Mandeville</span>
+<button class="text-primary font-label-md text-label-md flex-shrink-0 ml-2 font-bold" type="button">Map</button>
+</div>
+</div>
+<!-- 3. St. Elizabeth (38%) -->
+<div class="bg-surface-container-lowest rounded-xl p-space-sm shadow-sm flex flex-col gap-space-xs">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2">
+<span class="font-label-lg text-label-lg text-on-surface font-bold">St. Elizabeth</span>
+<span class="bg-primary-fixed text-on-primary-fixed-variant font-label-sm text-label-sm px-1.5 py-0.2 rounded font-bold">High Need</span>
+</div>
+<div class="flex items-center gap-1.5">
+<span class="font-label-sm text-label-sm bg-primary-fixed text-on-primary-fixed-variant px-1.5 py-0.2 rounded font-bold">+50 XP</span>
+<span class="font-headline-sm text-headline-sm text-primary font-bold">38%</span>
+</div>
+</div>
+<div class="w-full bg-surface-container-highest rounded-full h-1.5 overflow-hidden">
+<div class="bg-primary h-full rounded-full" style="width: 38%"></div>
+</div>
+<div class="flex items-center justify-between text-on-surface-variant font-body-sm text-body-sm pt-0.5">
+<span class="truncate">Missing: Tyre vulcanizing &amp; E-10 pumps in Junction &amp; Black River</span>
+<button class="text-primary font-label-md text-label-md flex-shrink-0 ml-2 font-bold" type="button">Map</button>
+</div>
+</div>
+<!-- 4. Trelawny (44%) -->
+<div class="bg-surface-container-lowest rounded-xl p-space-sm shadow-sm flex flex-col gap-space-xs">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2">
+<span class="font-label-lg text-label-lg text-on-surface font-bold">Trelawny</span>
+<span class="bg-surface-container text-on-surface-variant font-label-sm text-label-sm px-1.5 py-0.2 rounded font-bold">Moderate</span>
+</div>
+<span class="font-headline-sm text-headline-sm text-on-surface font-bold">44%</span>
+</div>
+<div class="w-full bg-surface-container-highest rounded-full h-1.5 overflow-hidden">
+<div class="bg-secondary-container h-full rounded-full" style="width: 44%"></div>
+</div>
+<div class="flex items-center justify-between text-on-surface-variant font-body-sm text-body-sm pt-0.5">
+<span class="truncate">Missing: Falmouth highway bypass mechanics &amp; late-night diesel</span>
+<button class="text-primary font-label-md text-label-md flex-shrink-0 ml-2 font-bold" type="button">Map</button>
+</div>
+</div>
+<!-- 5. Westmoreland (49%) -->
+<div class="bg-surface-container-lowest rounded-xl p-space-sm shadow-sm flex flex-col gap-space-xs">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2">
+<span class="font-label-lg text-label-lg text-on-surface font-bold">Westmoreland</span>
+<span class="bg-surface-container text-on-surface-variant font-label-sm text-label-sm px-1.5 py-0.2 rounded font-bold">Moderate</span>
+</div>
+<span class="font-headline-sm text-headline-sm text-on-surface font-bold">49%</span>
+</div>
+<div class="w-full bg-surface-container-highest rounded-full h-1.5 overflow-hidden">
+<div class="bg-secondary-container h-full rounded-full" style="width: 49%"></div>
+</div>
+<div class="flex items-center justify-between text-on-surface-variant font-body-sm text-body-sm pt-0.5">
+<span class="truncate">Missing: Savanna-la-Mar &amp; Negril strip 24hr tyre spots</span>
+<button class="text-primary font-label-md text-label-md flex-shrink-0 ml-2 font-bold" type="button">Map</button>
+</div>
+</div>
+<!-- 6. St. Ann (51%) -->
+<div class="bg-surface-container-lowest rounded-xl p-space-sm shadow-sm flex flex-col gap-space-xs">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2">
+<span class="font-label-lg text-label-lg text-on-surface font-bold">St. Ann</span>
+<span class="bg-tertiary-fixed text-on-tertiary-fixed-variant font-label-sm text-label-sm px-1.5 py-0.2 rounded font-bold">On Track</span>
+</div>
+<span class="font-headline-sm text-headline-sm text-on-surface font-bold">51%</span>
+</div>
+<div class="w-full bg-surface-container-highest rounded-full h-1.5 overflow-hidden">
+<div class="bg-tertiary h-full rounded-full" style="width: 51%"></div>
+</div>
+<div class="flex items-center justify-between text-on-surface-variant font-body-sm text-body-sm pt-0.5">
+<span class="truncate">Missing: Golden Grove corridor amenities &amp; car wash bays</span>
+<button class="text-primary font-label-md text-label-md flex-shrink-0 ml-2 font-bold" type="button">Map</button>
+</div>
+</div>
+<!-- 7. St. Catherine (62%) -->
+<div class="bg-surface-container-lowest rounded-xl p-space-sm shadow-sm flex flex-col gap-space-xs">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2">
+<span class="font-label-lg text-label-lg text-on-surface font-bold">St. Catherine</span>
+<span class="bg-surface-container-high text-on-surface font-label-sm text-label-sm px-1.5 py-0.2 rounded font-bold">Good</span>
+</div>
+<span class="font-headline-sm text-headline-sm text-on-surface font-bold">62%</span>
+</div>
+<div class="w-full bg-surface-container-highest rounded-full h-1.5 overflow-hidden">
+<div class="bg-tertiary-fixed-dim h-full rounded-full" style="width: 62%"></div>
+</div>
+<div class="flex items-center justify-between text-on-surface-variant font-body-sm text-body-sm pt-0.5">
+<span class="truncate">Missing: Bog Walk Gorge bypass recovery &amp; Old Harbour parts</span>
+<button class="text-primary font-label-md text-label-md flex-shrink-0 ml-2 font-bold" type="button">Map</button>
+</div>
+</div>
+<!-- 8. Kingston & St. Andrew (88%) -->
+<div class="bg-surface-container-lowest rounded-xl p-space-sm shadow-sm flex flex-col gap-space-xs">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2">
+<span class="font-label-lg text-label-lg text-on-surface font-bold">Kingston &amp; St. Andrew</span>
+<span class="bg-[#bbf7d0] text-[#14532d] font-label-sm text-label-sm px-1.5 py-0.2 rounded font-bold">Well Mapped</span>
+</div>
+<span class="font-headline-sm text-headline-sm text-[#14532d] font-bold">88%</span>
+</div>
+<div class="w-full bg-surface-container-highest rounded-full h-1.5 overflow-hidden">
+<div class="bg-[#22c55e] h-full rounded-full" style="width: 88%"></div>
+</div>
+<div class="flex items-center justify-between text-on-surface-variant font-body-sm text-body-sm pt-0.5">
+<span class="truncate">Active community • Verifying pump prices in Constant Spring</span>
+<span class="material-symbols-outlined text-[#22c55e] text-[18px]">verified</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Community Impact Box -->
+<div class="px-gutter mb-space-lg">
+<div class="bg-surface-container rounded-2xl p-space-md flex items-start gap-space-md shadow-sm">
+<div class="w-12 h-12 rounded-xl bg-primary text-on-primary flex items-center justify-center flex-shrink-0 shadow-sm">
+<span class="material-symbols-outlined text-[26px]">military_tech</span>
+</div>
+<div class="flex flex-col min-w-0">
+<h4 class="font-label-lg text-label-lg text-on-surface font-bold mb-0.5">Road Scout Impact</h4>
+<p class="font-body-sm text-body-sm text-on-surface-variant leading-relaxed">
+          Every verified pin helps over <strong class="text-on-surface">120,000 daily commuters</strong> navigate safer routes, avoid stranded night breakdowns on steep hills, and find accurate pump rates.
+        </p>
+</div>
+</div>
+</div>
+<!-- Bottom Floating / Sticky Action Container -->
+<div class="fixed bottom-0 left-0 right-0 z-40 bg-surface/95 backdrop-blur-md p-gutter pb-safe shadow-[0_-4px_20px_rgba(0,0,0,0.06)] flex flex-col gap-2">
+<!-- Primary CTA: Start Mapping -->
+<button class="w-full h-14 bg-primary text-on-primary rounded-xl font-label-lg text-label-lg font-bold flex items-center justify-center gap-2 shadow-lg active:bg-secondary transition-transform active:scale-[0.99]" type="button">
+<span class="material-symbols-outlined text-[24px]">add_location_alt</span>
+<span>+ Start Mapping A Place</span>
+</button>
+<!-- Secondary Scout Contribution Hook -->
+<button class="w-full py-1.5 text-center font-label-md text-label-md text-on-surface-variant hover:text-primary transition-colors flex items-center justify-center gap-1" type="button">
+<span class="material-symbols-outlined text-[16px]">history_edu</span>
+<span>View My Contributions (3 Pins Added • 140 XP)</span>
+</button>
+</div>
+</div></main></body></html>

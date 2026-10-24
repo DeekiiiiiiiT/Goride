@@ -155,6 +155,20 @@ export const expenseHubService = {
     return this.bulkRuleAction(id, { action: 'update', ...body });
   },
 
+  renewRule(id: string, body: { amount?: number; startDate?: string; endDate?: string }) {
+    return hubFetch<{ success: boolean; group: ExpenseRuleGroup }>(`/rules/${id}/renew`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+  },
+
+  reverseOccurrence(id: string, body: { occurrenceYmd: string; amount: number }) {
+    return hubFetch<{ success: boolean }>(`/rules/${id}/reverse-occurrence`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+  },
+
   listVendors() {
     return hubFetch<{ items: ExpenseVendor[] }>('/vendors');
   },

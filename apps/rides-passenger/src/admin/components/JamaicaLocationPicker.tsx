@@ -1,14 +1,19 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
-  JAMAICA_COUNTIES,
   buildLocationKey,
   selectionFromLocationKey,
   type JamaicaCountySlug,
   type JamaicaLocationSelection,
   type LocationScope,
 } from '@roam/business-config';
+import { getSupabaseFunctionsBaseUrl } from '@roam/api-client';
+import { supabaseRidesAdmin as supabase } from '@roam/auth-client';
 
 export type JamaicaLocationValue = JamaicaLocationSelection;
+
+type Locality = { slug: string; label: string };
+type Parish = { slug: string; label: string; localities: Locality[] };
+type County = { slug: JamaicaCountySlug; label: string; parishes: Parish[] };
 
 type Props = {
   value: JamaicaLocationValue;
@@ -23,55 +28,63 @@ const SCOPES: { scope: LocationScope; label: string }[] = [
 ];
 
 export function JamaicaLocationPicker({ value, onChange }: Props) {
+  const [counties, setCounties] = useState<County[]>([]);
   const county = useMemo(
-    () => JAMAICA_COUNTIES.find((c) => c.slug === value.county),
-    [value.county]
+    () => counties.find((c) => c.slug === value.county),
+    [counties, value.county],
   );
   const parish = useMemo(
     () => county?.parishes.find((p) => p.slug === value.parish),
-    [county, value.parish]
+    [county, value.parish],
   );
-
   const previewKey = buildLocationKey(value);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const { data } = await supabase.auth.getSession();
+      const token = data.session?.access_token;
+      if (!token) return;
+      const res = await fetch(`${getSupabaseFunctionsBaseUrl()}/platform-catalog/geo/fare-tree`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) return;
+      const body = await res.json();
+      if (!cancelled) setCounties(Array.isArray(body.counties) ? body.counties : []);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const setScope = (scope: LocationScope) => {
     if (scope === 'country') {
       onChange({ scope: 'country' });
       return;
     }
+    const c = value.county ?? counties[0]?.slug ?? 'cornwall';
+    const countyData = counties.find((x) => x.slug === c);
     if (scope === 'county') {
-      onChange({
-        scope: 'county',
-        county: value.county ?? 'cornwall',
-      });
+      onChange({ scope: 'county', county: c });
       return;
     }
+    const parishSlug = value.parish ?? countyData?.parishes[0]?.slug;
     if (scope === 'parish') {
-      const c = value.county ?? 'cornwall';
-      const countyData = JAMAICA_COUNTIES.find((x) => x.slug === c)!;
-      onChange({
-        scope: 'parish',
-        county: c,
-        parish: value.parish ?? countyData.parishes[0]?.slug,
-      });
+      onChange({ scope: 'parish', county: c, parish: parishSlug });
       return;
     }
-    const c = value.county ?? 'cornwall';
-    const countyData = JAMAICA_COUNTIES.find((x) => x.slug === c)!;
-    const p = value.parish ?? countyData.parishes[0]?.slug;
-    const parishData = countyData.parishes.find((x) => x.slug === p)!;
+    const parishData = countyData?.parishes.find((x) => x.slug === parishSlug);
     onChange({
       scope: 'locality',
       county: c,
-      parish: p,
-      locality: value.locality ?? parishData.localities[0]?.slug,
+      parish: parishSlug,
+      locality: value.locality ?? parishData?.localities[0]?.slug,
     });
   };
 
   return (
     <div className="space-y-3 rounded-lg border border-slate-700 bg-slate-800/40 p-3">
       <p className="text-xs font-medium text-slate-400 uppercase tracking-wide">Location</p>
-
       <div className="grid grid-cols-2 gap-2">
         {SCOPES.map(({ scope, label }) => (
           <button
@@ -96,24 +109,18 @@ export function JamaicaLocationPicker({ value, onChange }: Props) {
             value={value.county ?? ''}
             onChange={(e) => {
               const countySlug = e.target.value as JamaicaCountySlug;
-              const countyData = JAMAICA_COUNTIES.find((c) => c.slug === countySlug)!;
+              const countyData = counties.find((c) => c.slug === countySlug);
               onChange({
                 scope: value.scope,
                 county: countySlug,
-                parish:
-                  value.scope !== 'county' ? countyData.parishes[0]?.slug : undefined,
-                locality:
-                  value.scope === 'locality'
-                    ? countyData.parishes[0]?.localities[0]?.slug
-                    : undefined,
+                parish: value.scope !== 'county' ? countyData?.parishes[0]?.slug : undefined,
+                locality: value.scope === 'locality' ? countyData?.parishes[0]?.localities[0]?.slug : undefined,
               });
             }}
             className="w-full px-3 py-2 bg-slate-800 border border-slate-600 rounded-lg text-white text-sm"
           >
-            {JAMAICA_COUNTIES.map((c) => (
-              <option key={c.slug} value={c.slug}>
-                {c.label}
-              </option>
+            {counties.map((c) => (
+              <option key={c.slug} value={c.slug}>{c.label}</option>
             ))}
           </select>
         </div>
@@ -126,23 +133,18 @@ export function JamaicaLocationPicker({ value, onChange }: Props) {
             value={value.parish ?? ''}
             onChange={(e) => {
               const parishSlug = e.target.value;
-              const parishData = county.parishes.find((p) => p.slug === parishSlug)!;
+              const parishData = county.parishes.find((p) => p.slug === parishSlug);
               onChange({
                 scope: value.scope,
                 county: value.county,
                 parish: parishSlug,
-                locality:
-                  value.scope === 'locality'
-                    ? parishData.localities[0]?.slug
-                    : undefined,
+                locality: value.scope === 'locality' ? parishData?.localities[0]?.slug : undefined,
               });
             }}
             className="w-full px-3 py-2 bg-slate-800 border border-slate-600 rounded-lg text-white text-sm"
           >
             {county.parishes.map((p) => (
-              <option key={p.slug} value={p.slug}>
-                {p.label}
-              </option>
+              <option key={p.slug} value={p.slug}>{p.label}</option>
             ))}
           </select>
         </div>
@@ -153,19 +155,11 @@ export function JamaicaLocationPicker({ value, onChange }: Props) {
           <label className="block text-sm text-slate-300">Town / area</label>
           <select
             value={value.locality ?? ''}
-            onChange={(e) =>
-              onChange({
-                ...value,
-                locality: e.target.value,
-              })
-            }
+            onChange={(e) => onChange({ ...value, locality: e.target.value })}
             className="w-full px-3 py-2 bg-slate-800 border border-slate-600 rounded-lg text-white text-sm"
           >
             {parish.localities.map((loc) => (
-              <option key={loc.slug} value={loc.slug}>
-                {loc.label}
-                {loc.isCapital ? ' (capital)' : ''}
-              </option>
+              <option key={loc.slug} value={loc.slug}>{loc.label}</option>
             ))}
           </select>
         </div>

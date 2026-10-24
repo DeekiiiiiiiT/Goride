@@ -1,5 +1,6 @@
 import React from 'react';
 import { ChevronRight } from 'lucide-react';
+import { statementFooting } from '@roam/finance-core';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { cn } from '../ui/utils';
 import { formatMoney } from './money';
@@ -24,16 +25,12 @@ function Row({
   onClick?: () => void;
   valueClassName?: string;
 }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={cn(
-        'w-full flex items-center justify-between gap-2 py-1.5 text-left text-sm rounded-sm',
-        onClick && 'hover:bg-slate-50 dark:hover:bg-slate-800/60 cursor-pointer',
-        !onClick && 'cursor-default',
-      )}
-    >
+  const className = cn(
+    'w-full flex items-center justify-between gap-2 py-1.5 text-left text-sm rounded-sm',
+    onClick && 'hover:bg-slate-50 dark:hover:bg-slate-800/60 cursor-pointer',
+  );
+  const body = (
+    <>
       <span className="min-w-0">
         <span className="text-slate-600 dark:text-slate-400 block">{label}</span>
         {hint && onClick && (
@@ -49,6 +46,12 @@ function Row({
         {value}
         {onClick && <ChevronRight className="h-3.5 w-3.5 text-slate-400" />}
       </span>
+    </>
+  );
+  if (!onClick) return <div className={className}>{body}</div>;
+  return (
+    <button type="button" onClick={onClick} className={className}>
+      {body}
     </button>
   );
 }
@@ -56,9 +59,52 @@ function Row({
 export function OverviewTab({ overview, onNavigateTab, onNavigatePage }: Props) {
   const { moneyIn, moneyOut, transfers, profit, risks } = overview;
   const profitNegative = profit.operatingProfit < -0.005;
+  const fuelSpend = moneyOut.fuelSpend ?? moneyOut.fuel;
+  const fleetFuel = moneyOut.fleetFuelCost ?? moneyOut.fuel;
+  const foot = statementFooting({
+    gross: moneyIn.grossEarnings,
+    platformFees: moneyOut.platformFees || 0,
+    driverCommission: moneyOut.driverCommission || 0,
+    fleetFuelCost: fleetFuel,
+    tolls: moneyOut.tolls,
+    maintenance: moneyOut.maintenance,
+    fixedCosts: moneyOut.fixedOverhead,
+    otherOperating: moneyOut.operatingExpenses,
+    otherIncome: moneyOut.otherIncome || 0,
+    cashWriteOff: moneyOut.cashWrittenOff,
+    driverPayouts: overview.basis === 'cash' ? moneyOut.driverPayouts : 0,
+    operatingProfit: profit.withheld ? Number.NaN : profit.operatingProfit,
+  });
+  const basisLabel = overview.basis === 'cash' ? 'Cash' : 'Accrual';
 
   return (
     <div className="grid gap-4 sm:grid-cols-2">
+      <Card className="border-slate-200 dark:border-slate-800 rounded-md sm:col-span-2">
+        <CardHeader className="border-b border-slate-100 dark:border-slate-800 py-3">
+          <CardTitle className="text-sm font-semibold">Does this week agree?</CardTitle>
+        </CardHeader>
+        <CardContent className="pt-3 space-y-0.5">
+          <p className="text-[11px] text-slate-500 mb-2">{basisLabel}. A gap stays on its own line.</p>
+          <Row
+            label="The statement adds up"
+            value={profit.withheld ? 'Unavailable' : foot.ok ? 'Yes' : formatMoney(foot.difference)}
+            valueClassName={!profit.withheld && !foot.ok ? 'text-rose-700' : undefined}
+          />
+          <Row
+            label="Fuel company cost vs pump spend"
+            value={formatMoney(fuelSpend - fleetFuel)}
+          />
+          <Row
+            label="Bank received vs expected"
+            value={formatMoney(moneyIn.bankReceived - moneyIn.bankExpected)}
+            valueClassName={Math.abs(moneyIn.bankReceived - moneyIn.bankExpected) > 0.01 ? 'text-amber-700' : undefined}
+          />
+          <Row
+            label="Week status"
+            value={profit.withheld ? 'Unavailable' : 'Provisional'}
+          />
+        </CardContent>
+      </Card>
       <Card className="border-slate-200 dark:border-slate-800 rounded-md">
         <CardHeader className="border-b border-slate-100 dark:border-slate-800 py-3">
           <CardTitle className="text-sm font-semibold">Money in</CardTitle>
@@ -97,10 +143,14 @@ export function OverviewTab({ overview, onNavigateTab, onNavigatePage }: Props) 
         <CardContent className="pt-3 space-y-0.5">
           <Row
             label="Fuel"
-            hint="Expenses"
-            value={formatMoney(moneyOut.fuel)}
+            hint="Pump spend. Profit uses the company share."
+            value={formatMoney(fuelSpend)}
             onClick={() => onNavigateTab('expenses')}
           />
+          <Row label="Fuel charged to the company" value={formatMoney(fleetFuel)} />
+          <Row label="Platform fees" hint="Profit & Loss" value={formatMoney(moneyOut.platformFees || 0)} onClick={() => onNavigateTab('pnl')} />
+          <Row label="Driver commission" hint="Profit & Loss" value={formatMoney(moneyOut.driverCommission || 0)} onClick={() => onNavigateTab('pnl')} />
+          <Row label="Other income" value={formatMoney(moneyOut.otherIncome || 0)} />
           <Row
             label="Tolls"
             hint="Expenses"
@@ -175,14 +225,11 @@ export function OverviewTab({ overview, onNavigateTab, onNavigatePage }: Props) 
               profitNegative ? 'text-rose-700 dark:text-rose-400' : 'text-slate-900 dark:text-slate-100',
             )}
           >
-            {formatMoney(profit.operatingProfit)}
+            {profit.withheld ? 'Unavailable' : formatMoney(profit.operatingProfit)}
           </div>
-          <p className="text-xs text-slate-500 mt-1 mb-1">Operating profit</p>
-          <p className="text-[11px] text-slate-400 mb-3">
-            Share of gross eaten by costs (not profit margin).
-          </p>
+          <p className="text-xs text-slate-500 mt-1 mb-1">Operating profit · {basisLabel}</p>
           <Row
-            label="Operating ratio"
+            label="Costs as % of gross"
             hint="Profit & Loss"
             value={profit.operatingRatio == null ? '—' : `${profit.operatingRatio}%`}
             onClick={() => onNavigateTab('pnl')}
@@ -208,16 +255,16 @@ export function OverviewTab({ overview, onNavigateTab, onNavigatePage }: Props) 
             onClick={() => onNavigateTab('driver-balances')}
           />
           <Row
-            label="Tag tolls missing from P&L"
+            label="Tag tolls missing (all time)"
             hint="Toll Reconciliation"
-            value={String(risks.tollVarianceFlags)}
+            value={risks.tollVarianceFlags > 0 ? `${risks.tollVarianceFlags} need a look` : '0'}
             valueClassName={risks.tollVarianceFlags > 0 ? 'text-amber-700' : undefined}
             onClick={() => onNavigatePage?.('toll-tags')}
           />
           <Row
-            label="Fuel fills missing from P&L"
+            label="Fuel fills missing (all time)"
             hint="Consumption Reconciliation"
-            value={String(risks.fuelVarianceFlags)}
+            value={risks.fuelVarianceFlags > 0 ? `${risks.fuelVarianceFlags} need a look` : '0'}
             valueClassName={risks.fuelVarianceFlags > 0 ? 'text-amber-700' : undefined}
             onClick={() => onNavigatePage?.('fuel-analytics')}
           />

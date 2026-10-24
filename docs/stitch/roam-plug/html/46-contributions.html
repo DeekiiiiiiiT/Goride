@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+
+<html lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" name="viewport"/><meta content="mobile_stack" name="shell-type"/><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&amp;display=swap" rel="stylesheet"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><style>@layer base{html,body{width:100%;margin:0;padding:0;background-color:#fff8f2;}body{overscroll-behavior-y:none;-webkit-tap-highlight-color:transparent;font-family:'Inter',sans-serif;}.pb-safe{padding-bottom:env(safe-area-inset-bottom,0px);}.pt-safe{padding-top:env(safe-area-inset-top,0px);}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config={darkMode:"class",theme:{extend:{colors:{"on-tertiary-fixed":"#251a00","tertiary":"#755800","primary-container":"#cc4900","on-background":"#1e1b17","surface-container-lowest":"#ffffff","inverse-on-surface":"#f7efe9","secondary":"#9d4300","on-surface-variant":"#5a4138","on-surface":"#1e1b17","on-primary-fixed-variant":"#7f2b00","error":"#ba1a1a","primary-fixed":"#ffdbce","background":"#fff8f2","error-container":"#ffdad6","on-primary":"#ffffff","surface-container-highest":"#e8e1db","surface-dim":"#e0d9d2","primary-fixed-dim":"#ffb599","surface-container-low":"#faf2eb","on-secondary-fixed":"#341100","primary":"#a33900","on-secondary-container":"#5c2400","on-tertiary-fixed-variant":"#5a4300","on-tertiary":"#ffffff","on-secondary-fixed-variant":"#783200","on-error-container":"#93000a","on-error":"#ffffff","surface":"#fff8f2","surface-container":"#f4ede6","inverse-surface":"#33302c","tertiary-container":"#936f00","outline-variant":"#e2bfb2","surface-tint":"#a73a00","on-tertiary-container":"#fffbff","tertiary-fixed-dim":"#f7be1d","surface-container-high":"#eee7e0","on-secondary":"#ffffff","secondary-fixed":"#ffdbca","tertiary-fixed":"#ffdf9a","on-primary-fixed":"#370e00","surface-bright":"#fff8f2","inverse-primary":"#ffb599","on-primary-container":"#fffbff","secondary-fixed-dim":"#ffb690","surface-variant":"#e8e1db","secondary-container":"#fd761a","outline":"#8e7166"},borderRadius:{DEFAULT:"0.25rem",lg:"0.5rem",xl:"0.75rem",full:"9999px"},spacing:{"gutter":"1rem","margin":"1rem","margin-lg":"1.5rem","space-xl":"2rem","space-md":"1rem","space-lg":"1.5rem","gutter-sm":"0.75rem","space-xs":"0.25rem","space-sm":"0.5rem"},fontFamily:{"display-lg-mobile":["Inter"],"label-sm":["Inter"],"body-md":["Inter"],"label-lg":["Inter"],"label-md":["Inter"],"headline-md":["Inter"],"display-lg":["Inter"],"body-lg":["Inter"],"body-sm":["Inter"],"price-display":["Inter"],"headline-lg":["Inter"],"headline-sm":["Inter"]},fontSize:{"display-lg-mobile":["32px",{lineHeight:"40px",letterSpacing:"-0.02em",fontWeight:"800"}],"label-sm":["10px",{lineHeight:"12px",letterSpacing:"0.04em",fontWeight:"700"}],"body-md":["14px",{lineHeight:"20px",fontWeight:"400"}],"label-lg":["14px",{lineHeight:"20px",letterSpacing:"0.01em",fontWeight:"600"}],"label-md":["12px",{lineHeight:"16px",letterSpacing:"0.02em",fontWeight:"600"}],"headline-md":["22px",{lineHeight:"28px",letterSpacing:"-0.01em",fontWeight:"700"}],"display-lg":["40px",{lineHeight:"48px",letterSpacing:"-0.02em",fontWeight:"800"}],"body-lg":["16px",{lineHeight:"24px",fontWeight:"400"}],"body-sm":["12px",{lineHeight:"16px",fontWeight:"400"}],"price-display":["24px",{lineHeight:"28px",letterSpacing:"-0.01em",fontWeight:"700"}],"headline-lg":["28px",{lineHeight:"36px",letterSpacing:"-0.01em",fontWeight:"700"}],"headline-sm":["18px",{lineHeight:"24px",fontWeight:"600"}]}}}};</script><style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head><body class="bg-surface font-body-md text-on-surface flex flex-col min-h-screen"><header class="fixed top-0 w-full z-50 pt-safe bg-surface/80 backdrop-blur-xl shadow-[0_1px_8px_rgba(0,0,0,0.04)]"><div class="h-16 px-gutter flex items-center justify-between"><div class="flex items-center gap-space-sm"><button aria-label="Go back" class="w-12 h-12 flex items-center justify-center rounded-full text-on-surface hover:bg-surface-container active:bg-surface-container-high transition-colors" onclick="history.back()" type="button"><span class="material-symbols-outlined text-[24px]">arrow_back</span></button><h1 class="font-headline-sm text-headline-sm text-on-surface tracking-tight truncate">My Contributions</h1></div><div class="flex items-center gap-space-xs"><button aria-label="Contribution guidelines" class="w-12 h-12 flex items-center justify-center rounded-full text-on-surface-variant hover:bg-surface-container active:bg-surface-container-high transition-colors" type="button"><span class="material-symbols-outlined text-[22px]">help_outline</span></button><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center ml-space-xs shadow-sm"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div></div></div></header><main class="flex flex-col relative w-full pt-16 bg-surface min-h-screen pb-safe"><div class="flex flex-col w-full">
+<!-- Interactive Toast / Delight Notification (Triggered on interactions) -->
+<div class="fixed top-20 left-1/2 -translate-x-1/2 z-50 transition-all duration-300 opacity-0 pointer-events-none transform -translate-y-2 flex items-center gap-space-sm bg-inverse-surface text-inverse-on-surface px-space-md py-space-sm rounded-full shadow-lg" id="roam-toast">
+<span class="material-symbols-outlined text-tertiary-fixed-dim text-[18px]" style="font-variation-settings: 'FILL' 1;">stars</span>
+<span class="font-label-md text-label-md" id="toast-text">Scout XP synced</span>
+</div>
+<div class="px-gutter flex flex-col gap-space-lg pt-space-sm pb-space-xl">
+<!-- Hero Level Progression Card -->
+<section class="relative overflow-hidden rounded-xl bg-gradient-to-br from-primary via-primary-container to-secondary text-on-primary p-space-md shadow-md">
+<!-- Ambient Island Sunshine Glow & Jamaican Compass Vector -->
+<div class="absolute -right-8 -bottom-10 w-44 h-44 rounded-full bg-white/10 blur-2xl pointer-events-none"></div>
+<div class="absolute right-3 top-3 opacity-15 pointer-events-none">
+<svg class="w-24 h-24 text-on-primary" fill="currentColor" viewbox="0 0 100 100">
+<circle cx="50" cy="50" fill="none" r="46" stroke="currentColor" stroke-dasharray="4 4" stroke-width="2"></circle>
+<polygon opacity="0.8" points="50,12 56,44 88,50 56,56 50,88 44,56 12,50 44,44"></polygon>
+</svg>
+</div>
+<div class="relative z-10 flex flex-col gap-space-md">
+<!-- Rank & Scout Medal -->
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-space-sm">
+<div class="w-12 h-12 rounded-xl bg-white/20 backdrop-blur-md flex items-center justify-center shadow-inner">
+<span class="material-symbols-outlined text-white text-[28px]" style="font-variation-settings: 'FILL' 1;">military_tech</span>
+</div>
+<div class="flex flex-col">
+<span class="font-label-sm text-label-sm uppercase tracking-wider text-primary-fixed">Scout Tier • Verified</span>
+<h2 class="font-headline-sm text-headline-sm text-white leading-tight">Road Scout — Level 3</h2>
+</div>
+</div>
+<span class="font-label-md text-label-md bg-white/15 px-space-sm py-1 rounded-full text-white backdrop-blur-sm">
+            Island Rank #18
+          </span>
+</div>
+<!-- Progress to Next Tier -->
+<div class="flex flex-col gap-space-xs bg-black/15 p-space-sm rounded-lg backdrop-blur-sm">
+<div class="flex items-center justify-between font-label-md text-label-md text-primary-fixed">
+<span>340 / 500 Scout XP</span>
+<span class="text-white font-semibold">160 XP to Level 4</span>
+</div>
+<div class="w-full h-2.5 rounded-full bg-white/25 overflow-hidden p-0.5">
+<div class="h-full rounded-full bg-gradient-to-r from-tertiary-fixed-dim to-white transition-all duration-700" style="width: 68%;"></div>
+</div>
+<div class="flex items-center justify-between font-body-sm text-body-sm text-white/80 pt-0.5">
+<span class="flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]">turn_sharp_right</span>
+              Next Rank: <strong class="text-white font-medium ml-0.5">Highway Pathfinder</strong>
+</span>
+<span class="font-label-sm text-label-sm text-tertiary-fixed">+50 XP Per Verified Pin</span>
+</div>
+</div>
+<!-- 4-Stat Metrics Matrix -->
+<div class="grid grid-cols-4 gap-space-xs pt-space-xs text-center">
+<div class="flex flex-col items-center bg-white/10 rounded-lg py-space-sm px-1 backdrop-blur-xs">
+<span class="font-headline-sm text-headline-sm text-white">14</span>
+<span class="font-label-sm text-label-sm text-primary-fixed truncate w-full mt-0.5">Places</span>
+</div>
+<div class="flex flex-col items-center bg-white/10 rounded-lg py-space-sm px-1 backdrop-blur-xs">
+<span class="font-headline-sm text-headline-sm text-white">11</span>
+<span class="font-label-sm text-label-sm text-primary-fixed truncate w-full mt-0.5">Approved</span>
+</div>
+<div class="flex flex-col items-center bg-white/10 rounded-lg py-space-sm px-1 backdrop-blur-xs">
+<span class="font-headline-sm text-headline-sm text-white">42</span>
+<span class="font-label-sm text-label-sm text-primary-fixed truncate w-full mt-0.5">Prices Logged</span>
+</div>
+<div class="flex flex-col items-center bg-white/10 rounded-lg py-space-sm px-1 backdrop-blur-xs">
+<span class="font-headline-sm text-headline-sm text-tertiary-fixed font-bold">Top 5%</span>
+<span class="font-label-sm text-label-sm text-primary-fixed truncate w-full mt-0.5">Parish Impact</span>
+</div>
+</div>
+</div>
+</section>
+<!-- Earned Badges Showcase (Horizontal Scroll) -->
+<section class="flex flex-col gap-space-sm">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-space-xs">
+<span class="material-symbols-outlined text-primary text-[20px]" style="font-variation-settings: 'FILL' 1;">workspace_premium</span>
+<h3 class="font-headline-sm text-headline-sm text-on-surface">Scout Milestones</h3>
+</div>
+<span class="font-label-md text-label-md text-primary font-semibold">4 Unlocked</span>
+</div>
+<div class="flex gap-space-sm overflow-x-auto pb-space-xs -mx-gutter px-gutter scroll-smooth no-scrollbar" style="scrollbar-width: none;">
+<!-- Badge 1: St Elizabeth Pioneer -->
+<div class="flex-shrink-0 w-52 p-space-md rounded-xl bg-surface-container-lowest shadow-sm flex flex-col justify-between gap-space-sm">
+<div class="flex items-start justify-between">
+<div class="w-10 h-10 rounded-xl bg-tertiary-fixed flex items-center justify-center text-on-tertiary-fixed shadow-sm">
+<span class="material-symbols-outlined text-[24px]" style="font-variation-settings: 'FILL' 1;">explore</span>
+</div>
+<span class="font-label-sm text-label-sm bg-surface-container px-2 py-0.5 rounded-full text-on-surface-variant font-bold">PIONEER</span>
+</div>
+<div>
+<h4 class="font-label-lg text-label-lg text-on-surface truncate">First in St Elizabeth</h4>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-0.5 line-clamp-2">Pioneered pins across the Junction corridor.</p>
+</div>
+<div class="flex items-center gap-1 font-label-sm text-label-sm text-tertiary">
+<span class="material-symbols-outlined text-[14px]">verified</span>
+            Parish Pioneer #1
+          </div>
+</div>
+<!-- Badge 2: 10 Stations -->
+<div class="flex-shrink-0 w-52 p-space-md rounded-xl bg-surface-container-lowest shadow-sm flex flex-col justify-between gap-space-sm">
+<div class="flex items-start justify-between">
+<div class="w-10 h-10 rounded-xl bg-primary-fixed flex items-center justify-center text-on-primary-fixed shadow-sm">
+<span class="material-symbols-outlined text-[24px]" style="font-variation-settings: 'FILL' 1;">local_gas_station</span>
+</div>
+<span class="font-label-sm text-label-sm bg-primary-fixed/60 px-2 py-0.5 rounded-full text-on-primary-fixed font-bold">10+ STOPS</span>
+</div>
+<div>
+<h4 class="font-label-lg text-label-lg text-on-surface truncate">10 Stations Mapped</h4>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-0.5 line-clamp-2">Mapped 10+ island fuel stops accurately.</p>
+</div>
+<div class="flex items-center gap-1 font-label-sm text-label-sm text-primary">
+<span class="material-symbols-outlined text-[14px]">local_fire_department</span>
+            Fuel Network Builder
+          </div>
+</div>
+<!-- Badge 3: Price Hero -->
+<div class="flex-shrink-0 w-52 p-space-md rounded-xl bg-surface-container-lowest shadow-sm flex flex-col justify-between gap-space-sm">
+<div class="flex items-start justify-between">
+<div class="w-10 h-10 rounded-xl bg-surface-container-high flex items-center justify-center text-secondary shadow-sm">
+<span class="material-symbols-outlined text-[24px]" style="font-variation-settings: 'FILL' 1;">bolt</span>
+</div>
+<span class="font-label-sm text-label-sm bg-surface-container px-2 py-0.5 rounded-full text-secondary font-bold">40+ RATES</span>
+</div>
+<div>
+<h4 class="font-label-lg text-label-lg text-on-surface truncate">Price Hero</h4>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-0.5 line-clamp-2">Logged 40+ verified Jamaican pump rates.</p>
+</div>
+<div class="flex items-center gap-1 font-label-sm text-label-sm text-secondary">
+<span class="material-symbols-outlined text-[14px]">trending_down</span>
+            Drivers Saved ~$14k JMD
+          </div>
+</div>
+<!-- Badge 4: Road Guardian -->
+<div class="flex-shrink-0 w-52 p-space-md rounded-xl bg-surface-container-lowest shadow-sm flex flex-col justify-between gap-space-sm">
+<div class="flex items-start justify-between">
+<div class="w-10 h-10 rounded-xl bg-surface-container-highest flex items-center justify-center text-on-surface shadow-sm">
+<span class="material-symbols-outlined text-[24px]" style="font-variation-settings: 'FILL' 1;">security</span>
+</div>
+<span class="font-label-sm text-label-sm bg-surface-container px-2 py-0.5 rounded-full text-on-surface-variant font-bold">GUARDIAN</span>
+</div>
+<div>
+<h4 class="font-label-lg text-label-lg text-on-surface truncate">Road Guardian</h4>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-0.5 line-clamp-2">Verified 5 critical hazard &amp; amenity spots.</p>
+</div>
+<div class="flex items-center gap-1 font-label-sm text-label-sm text-on-surface-variant">
+<span class="material-symbols-outlined text-[14px]">shield</span>
+            Island Route Safe
+          </div>
+</div>
+</div>
+</section>
+<!-- Contribution Status Navigation Tabs -->
+<section class="flex flex-col gap-space-sm">
+<div class="flex items-center justify-between">
+<h3 class="font-headline-sm text-headline-sm text-on-surface">Submission History</h3>
+<span class="font-body-sm text-body-sm text-on-surface-variant">Parish of St. Andrew Focus</span>
+</div>
+<!-- Scrollable Tab Pills -->
+<div class="flex gap-space-xs overflow-x-auto pb-1 no-scrollbar -mx-gutter px-gutter" id="status-tabs" role="tablist">
+<button class="tab-btn px-space-md py-space-sm rounded-full font-label-md text-label-md bg-inverse-surface text-inverse-on-surface transition-all flex items-center gap-1.5 shadow-sm active:scale-95" onclick="filterContributions('all', this)" type="button">
+<span>All</span>
+<span class="px-1.5 py-0.2 bg-white/20 rounded-full font-label-sm text-label-sm">16</span>
+</button>
+<button class="tab-btn px-space-md py-space-sm rounded-full font-label-md text-label-md bg-surface-container-lowest text-on-surface-variant hover:bg-surface-container transition-all flex items-center gap-1.5 shadow-sm active:scale-95" onclick="filterContributions('awaiting', this)" type="button">
+<span>Awaiting approval</span>
+<span class="px-1.5 py-0.2 bg-surface-container-high rounded-full font-label-sm text-label-sm">3</span>
+</button>
+<button class="tab-btn px-space-md py-space-sm rounded-full font-label-md text-label-md bg-surface-container-lowest text-on-surface-variant hover:bg-surface-container transition-all flex items-center gap-1.5 shadow-sm active:scale-95" onclick="filterContributions('approved', this)" type="button">
+<span>Approved</span>
+<span class="px-1.5 py-0.2 bg-surface-container-high rounded-full font-label-sm text-label-sm">11</span>
+</button>
+<button class="tab-btn px-space-md py-space-sm rounded-full font-label-md text-label-md bg-surface-container-lowest text-on-surface-variant hover:bg-surface-container transition-all flex items-center gap-1.5 shadow-sm active:scale-95" onclick="filterContributions('not-approved', this)" type="button">
+<span>Not approved</span>
+<span class="px-1.5 py-0.2 bg-surface-container-high rounded-full font-label-sm text-label-sm">2</span>
+</button>
+</div>
+<!-- Contributions List Grid -->
+<div class="flex flex-col gap-space-sm mt-space-xs" id="contributions-list">
+<!-- Card 1: Awaiting Approval (Gas Station) -->
+<article class="contribution-item p-space-md rounded-xl bg-surface-container-lowest shadow-sm flex flex-col gap-space-sm transition-transform active:scale-[0.99]" data-status="awaiting">
+<div class="flex items-start justify-between gap-space-sm">
+<div class="flex items-start gap-space-sm min-w-0">
+<div class="w-12 h-12 rounded-xl bg-surface-container flex-shrink-0 flex items-center justify-center text-primary shadow-xs">
+<span class="material-symbols-outlined text-[26px]">local_gas_station</span>
+</div>
+<div class="flex flex-col min-w-0">
+<h4 class="font-headline-sm text-headline-sm text-on-surface truncate">TotalEnergies Half-Way-Tree</h4>
+<p class="font-body-sm text-body-sm text-on-surface-variant truncate">Constant Spring Rd, St. Andrew • Submitted Today, 2:15 PM</p>
+</div>
+</div>
+<span class="flex-shrink-0 px-2.5 py-1 rounded-full bg-secondary-fixed text-on-secondary-fixed font-label-sm text-label-sm font-bold">
+              +25 XP Pending
+            </span>
+</div>
+<div class="flex flex-wrap items-center justify-between gap-space-sm pt-space-xs">
+<!-- Stone/Gray In-Queue Pill -->
+<div class="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-surface-container text-on-surface-variant font-label-md text-label-md">
+<span class="material-symbols-outlined text-[16px] text-tertiary animate-spin" style="animation-duration: 4s;">schedule</span>
+<span>In moderation queue • ~2h est.</span>
+</div>
+<div class="flex items-center gap-space-xs text-on-surface-variant font-label-sm text-label-sm">
+<span class="material-symbols-outlined text-[16px]">photo_camera</span>
+<span>2 Photos Attached</span>
+</div>
+</div>
+</article>
+<!-- Card 2: Approved (Mechanic Shop) -->
+<article class="contribution-item p-space-md rounded-xl bg-surface-container-lowest shadow-sm flex flex-col gap-space-sm transition-transform active:scale-[0.99]" data-status="approved">
+<div class="flex items-start justify-between gap-space-sm">
+<div class="flex items-start gap-space-sm min-w-0">
+<div class="w-12 h-12 rounded-xl bg-surface-container flex-shrink-0 flex items-center justify-center text-primary shadow-xs">
+<span class="material-symbols-outlined text-[26px]">build</span>
+</div>
+<div class="flex flex-col min-w-0">
+<div class="flex items-center gap-1.5">
+<h4 class="font-headline-sm text-headline-sm text-on-surface truncate">Precision Auto Works</h4>
+<span class="material-symbols-outlined text-[18px] text-primary" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant truncate">14 Dunrobin Ave, St. Andrew • Approved 18 Oct 2024</p>
+</div>
+</div>
+<!-- Live Status Pill -->
+<span class="flex-shrink-0 flex items-center gap-1 px-3 py-1 rounded-full bg-surface-container-highest text-on-surface font-label-sm text-label-sm font-semibold">
+<span class="w-2 h-2 rounded-full bg-primary animate-pulse"></span>
+              Live on Map
+            </span>
+</div>
+<!-- Impact Badge Callout -->
+<div class="flex items-center justify-between bg-surface-container-low p-space-sm rounded-lg">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-[18px]">group</span>
+<span class="font-label-md text-label-md text-on-surface">Helped 420+ drivers</span>
+</div>
+<span class="font-label-md text-label-md text-primary font-bold">+25 XP awarded</span>
+</div>
+</article>
+<!-- Card 3: Approved (Tyre Shop) -->
+<article class="contribution-item p-space-md rounded-xl bg-surface-container-lowest shadow-sm flex flex-col gap-space-sm transition-transform active:scale-[0.99]" data-status="approved">
+<div class="flex items-start justify-between gap-space-sm">
+<div class="flex items-start gap-space-sm min-w-0">
+<div class="w-12 h-12 rounded-xl bg-surface-container flex-shrink-0 flex items-center justify-center text-primary shadow-xs">
+<span class="material-symbols-outlined text-[26px]">tire_repair</span>
+</div>
+<div class="flex flex-col min-w-0">
+<div class="flex items-center gap-1.5">
+<h4 class="font-headline-sm text-headline-sm text-on-surface truncate">Sammy's Tyre Repair &amp; Air</h4>
+<span class="material-symbols-outlined text-[18px] text-primary" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant truncate">Dunrobin Ave, St. Andrew • Approved 12 Oct 2024</p>
+</div>
+</div>
+<span class="flex-shrink-0 flex items-center gap-1 px-3 py-1 rounded-full bg-surface-container-highest text-on-surface font-label-sm text-label-sm font-semibold">
+<span class="w-2 h-2 rounded-full bg-primary"></span>
+              Live on Map
+            </span>
+</div>
+<!-- Impact Badge -->
+<div class="flex items-center justify-between bg-surface-container-low p-space-sm rounded-lg">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-secondary text-[18px]">air</span>
+<span class="font-label-md text-label-md text-on-surface">Verified 24/7 Air Pump</span>
+</div>
+<span class="font-label-md text-label-md text-primary font-bold">+25 XP awarded</span>
+</div>
+</article>
+<!-- Card 4: Not Approved (Duplicate Station) -->
+<article class="contribution-item p-space-md rounded-xl bg-surface-container-lowest shadow-sm flex flex-col gap-space-sm transition-transform active:scale-[0.99]" data-status="not-approved">
+<div class="flex items-start justify-between gap-space-sm">
+<div class="flex items-start gap-space-sm min-w-0">
+<div class="w-12 h-12 rounded-xl bg-error-container flex-shrink-0 flex items-center justify-center text-error shadow-xs">
+<span class="material-symbols-outlined text-[26px]">local_gas_station</span>
+</div>
+<div class="flex flex-col min-w-0">
+<h4 class="font-headline-sm text-headline-sm text-on-surface truncate">Texaco Constant Spring</h4>
+<p class="font-body-sm text-body-sm text-on-surface-variant truncate">Constant Spring Rd, St. Andrew • Submitted 04 Oct 2024</p>
+</div>
+</div>
+<!-- Not Approved Pill -->
+<span class="flex-shrink-0 flex items-center gap-1 px-3 py-1 rounded-full bg-error-container text-on-error-container font-label-sm text-label-sm font-bold">
+<span class="material-symbols-outlined text-[14px]">cancel</span>
+              Not approved
+            </span>
+</div>
+<!-- Reason Container -->
+<div class="flex flex-col gap-space-xs bg-surface-container-low p-space-sm rounded-lg">
+<div class="flex items-start gap-2">
+<span class="material-symbols-outlined text-error text-[18px] mt-0.5">info</span>
+<p class="font-body-sm text-body-sm text-on-surface-variant leading-relaxed">
+<strong class="text-on-surface">Reason:</strong> Duplicate of an existing place (already pinned as Texaco Barbican / Constant Spring).
+              </p>
+</div>
+<div class="flex items-center justify-end pt-1">
+<button class="font-label-md text-label-md text-primary font-semibold flex items-center gap-1 hover:underline" onclick="showToast('Appeal form opened for review')" type="button">
+                Appeal or merge notes
+                <span class="material-symbols-outlined text-[16px]">arrow_forward</span>
+</button>
+</div>
+</div>
+</article>
+<!-- Card 5: Awaiting Approval (Depot Restroom) -->
+<article class="contribution-item p-space-md rounded-xl bg-surface-container-lowest shadow-sm flex flex-col gap-space-sm transition-transform active:scale-[0.99]" data-status="awaiting">
+<div class="flex items-start justify-between gap-space-sm">
+<div class="flex items-start gap-space-sm min-w-0">
+<div class="w-12 h-12 rounded-xl bg-surface-container flex-shrink-0 flex items-center justify-center text-primary shadow-xs">
+<span class="material-symbols-outlined text-[26px]">wc</span>
+</div>
+<div class="flex flex-col min-w-0">
+<h4 class="font-headline-sm text-headline-sm text-on-surface truncate">Swallowfield Depot Restroom</h4>
+<p class="font-body-sm text-body-sm text-on-surface-variant truncate">Swallowfield, St. Andrew • Submitted yesterday</p>
+</div>
+</div>
+<span class="flex-shrink-0 px-2.5 py-1 rounded-full bg-secondary-fixed text-on-secondary-fixed font-label-sm text-label-sm font-bold">
+              +15 XP Pending
+            </span>
+</div>
+<div class="flex flex-wrap items-center justify-between gap-space-sm pt-space-xs">
+<div class="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-surface-container text-on-surface-variant font-label-md text-label-md">
+<span class="material-symbols-outlined text-[16px] text-tertiary">hourglass_top</span>
+<span>Awaiting moderation</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant flex items-center gap-1">
+<span class="material-symbols-outlined text-[16px] text-secondary">accessible</span>
+              Includes wheelchair access &amp; customer key info
+            </p>
+</div>
+</article>
+<!-- Card 6: Approved (Auto Parts) -->
+<article class="contribution-item p-space-md rounded-xl bg-surface-container-lowest shadow-sm flex flex-col gap-space-sm transition-transform active:scale-[0.99]" data-status="approved">
+<div class="flex items-start justify-between gap-space-sm">
+<div class="flex items-start gap-space-sm min-w-0">
+<div class="w-12 h-12 rounded-xl bg-surface-container flex-shrink-0 flex items-center justify-center text-primary shadow-xs">
+<span class="material-symbols-outlined text-[26px]">settings</span>
+</div>
+<div class="flex flex-col min-w-0">
+<div class="flex items-center gap-1.5">
+<h4 class="font-headline-sm text-headline-sm text-on-surface truncate">Mario's Auto Parts</h4>
+<span class="material-symbols-outlined text-[18px] text-primary" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant truncate">Constant Spring Rd, St. Andrew • Approved 28 Sep 2024</p>
+</div>
+</div>
+<span class="flex-shrink-0 flex items-center gap-1 px-3 py-1 rounded-full bg-surface-container-highest text-on-surface font-label-sm text-label-sm font-semibold">
+<span class="w-2 h-2 rounded-full bg-primary"></span>
+              Live on Map
+            </span>
+</div>
+<div class="flex items-center justify-between bg-surface-container-low p-space-sm rounded-lg">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-[18px]">verified</span>
+<span class="font-label-md text-label-md text-on-surface">Genuine Toyota &amp; Nissan Inventory</span>
+</div>
+<span class="font-label-md text-label-md text-primary font-bold">+25 XP awarded</span>
+</div>
+</article>
+</div>
+</section>
+<!-- Empty State Container (Hidden by default, shown when filtering returns empty) -->
+<div class="hidden flex-col items-center justify-center py-space-xl px-space-md text-center bg-surface-container-lowest rounded-xl shadow-sm gap-space-sm" id="empty-state">
+<div class="w-16 h-16 rounded-full bg-surface-container flex items-center justify-center text-on-surface-variant">
+<span class="material-symbols-outlined text-[32px]">manage_search</span>
+</div>
+<h4 class="font-headline-sm text-headline-sm text-on-surface">No submissions found</h4>
+<p class="font-body-sm text-body-sm text-on-surface-variant max-w-xs">There are currently no pinned places in this review category.</p>
+</div>
+<!-- Community Tip Callout: Jamaican Road Co-Pilot Guidance -->
+<div class="p-space-md rounded-xl bg-surface-container flex items-center gap-space-sm shadow-xs">
+<div class="w-10 h-10 rounded-full bg-primary-fixed flex-shrink-0 flex items-center justify-center text-primary">
+<span class="material-symbols-outlined text-[22px]">lightbulb</span>
+</div>
+<div class="flex flex-col">
+<h5 class="font-label-md text-label-md text-on-surface font-bold">Pro-Tip for Fast Approvals</h5>
+<p class="font-body-sm text-body-sm text-on-surface-variant leading-snug">Adding pump price photos or station contact tags cuts verification time down to under 45 minutes.</p>
+</div>
+</div>
+<!-- Sticky Bottom Floating Action Anchor -->
+<div class="sticky bottom-4 z-30 pt-space-xs">
+<button class="w-full h-14 rounded-xl bg-primary text-on-primary font-headline-sm text-headline-sm flex items-center justify-center gap-space-sm shadow-xl active:bg-secondary transition-all transform active:scale-[0.98]" onclick="showToast('Launching place pin submission camera...')" type="button">
+<span class="material-symbols-outlined text-[24px]">add_location_alt</span>
+<span>+ Map Another Place</span>
+</button>
+</div>
+</div>
+</div>
+<script>
+  function filterContributions(status, triggerBtn) {
+    // 1. Update Tabs Visual State
+    const tabs = document.querySelectorAll('.tab-btn');
+    tabs.forEach(tab => {
+      tab.classList.remove('bg-inverse-surface', 'text-inverse-on-surface');
+      tab.classList.add('bg-surface-container-lowest', 'text-on-surface-variant');
+    });
+    
+    triggerBtn.classList.remove('bg-surface-container-lowest', 'text-on-surface-variant');
+    triggerBtn.classList.add('bg-inverse-surface', 'text-inverse-on-surface');
+
+    // 2. Filter Cards
+    const items = document.querySelectorAll('.contribution-item');
+    let visibleCount = 0;
+
+    items.forEach(item => {
+      const itemStatus = item.getAttribute('data-status');
+      if (status === 'all' || itemStatus === status) {
+        item.style.display = 'flex';
+        visibleCount++;
+      } else {
+        item.style.display = 'none';
+      }
+    });
+
+    // 3. Handle Empty State
+    const emptyState = document.getElementById('empty-state');
+    if (emptyState) {
+      if (visibleCount === 0) {
+        emptyState.classList.remove('hidden');
+        emptyState.classList.add('flex');
+      } else {
+        emptyState.classList.remove('flex');
+        emptyState.classList.add('hidden');
+      }
+    }
+  }
+
+  function showToast(message) {
+    const toast = document.getElementById('roam-toast');
+    const toastText = document.getElementById('toast-text');
+    if (!toast || !toastText) return;
+
+    toastText.innerText = message;
+    toast.classList.remove('opacity-0', '-translate-y-2', 'pointer-events-none');
+    toast.classList.add('opacity-100', 'translate-y-0');
+
+    setTimeout(() => {
+      toast.classList.remove('opacity-100', 'translate-y-0');
+      toast.classList.add('opacity-0', '-translate-y-2', 'pointer-events-none');
+    }, 2400);
+  }
+</script></main></body></html>

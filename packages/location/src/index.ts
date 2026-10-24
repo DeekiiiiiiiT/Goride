@@ -15,3 +15,15 @@ export {
   type GeoCoordinates,
   type GeoPositionWithAccuracy,
 } from './geolocation';
+export {
+  calculateDistance,
+  findMatchingStation,
+  findMatchingStationSmart,
+  isStationPinConfirmedForGps,
+  DEFAULT_STATION_GEOFENCE_METERS,
+  NEAR_MISS_CANDIDATE_M,
+  type LocationStatus,
+  type StationProfile,
+  type NearMissCandidate,
+  type SmartMatchResult,
+} from './stationMatch';

@@ -2,7 +2,7 @@
  * Business Finance — fleet owner finance center (Stitch Precision Operations).
  * Read-only aggregations; never mutates settlement / bank confirm / fuel / toll writers.
  */
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Landmark, Loader2, RefreshCw } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
@@ -34,14 +34,19 @@ export function BusinessFinancePage({
   initialTab = 'overview',
   expensesInitialVehicleId,
 }: Props) {
+  const opening = readFinanceQuery();
   const [tab, setTab] = useState<BusinessFinanceTab>(initialTab);
-  const [preset, setPreset] = useState<PeriodPreset>('last_90_days');
+  const [preset, setPreset] = useState<PeriodPreset>(
+    opening.from && opening.to ? 'custom' : 'last_90_days',
+  );
   /** Last complete non-custom preset — used while custom From/To are incomplete */
   const [anchorPreset, setAnchorPreset] = useState<PeriodPreset>('last_90_days');
-  const [customStart, setCustomStart] = useState('');
-  const [customEnd, setCustomEnd] = useState('');
-  const [bannerDismissed, setBannerDismissed] = useState(false);
-  const [pnlBasis, setPnlBasis] = useState<'accrual' | 'cash'>('accrual');
+  const [customStart, setCustomStart] = useState(opening.from);
+  const [customEnd, setCustomEnd] = useState(opening.to);
+  const [dismissedBanner, setDismissedBanner] = useState('');
+  const [pnlBasis, setPnlBasis] = useState<'accrual' | 'cash'>(
+    opening.basis === 'cash' ? 'cash' : 'accrual',
+  );
 
   const customReady = Boolean(customStart && customEnd);
   const queryPreset: PeriodPreset =
@@ -53,6 +58,19 @@ export function BusinessFinancePage({
     customReady ? customEnd : undefined,
     pnlBasis,
   );
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !period.startYmd) return;
+    if (!window.location.pathname.includes('business-finance')) return;
+    const qs = new URLSearchParams(window.location.search);
+    qs.set('from', period.startYmd);
+    qs.set('to', period.endYmd);
+    qs.set('basis', pnlBasis);
+    const next = `${window.location.pathname}?${qs.toString()}`;
+    if (`${window.location.pathname}${window.location.search}` !== next) {
+      window.history.replaceState(window.history.state, '', next);
+    }
+  }, [period.startYmd, period.endYmd, pnlBasis]);
 
   const setPresetSafe = (p: PeriodPreset) => {
     if (p !== 'custom') {
@@ -77,8 +95,10 @@ export function BusinessFinancePage({
     onOpenDriver?.(driverId);
   };
 
+  const bannerKey = incomplete.join('|');
+
   const navigateWithPeriod = (page: string) => {
-    const seedPeriod = ['fleet-financials', 'indrive-wallet'].includes(page);
+    const seedPeriod = ['fleet-financials', 'indrive-wallet', 'expense-hub'].includes(page);
     onNavigate?.(page, seedPeriod ? { startYmd: period.startYmd, endYmd: period.endYmd } : undefined);
   };
 
@@ -108,8 +128,8 @@ export function BusinessFinancePage({
         </Button>
       </div>
 
-      {!bannerDismissed && incomplete.length > 0 && (
-        <IncompleteDataBanner sources={incomplete} onDismiss={() => setBannerDismissed(true)} />
+      {incomplete.length > 0 && dismissedBanner !== bannerKey && (
+        <IncompleteDataBanner sources={incomplete} onDismiss={() => setDismissedBanner(bannerKey)} />
       )}
 
       <PeriodToolbar
@@ -223,4 +243,17 @@ export function BusinessFinancePage({
       </Tabs>
     </div>
   );
+}
+
+function readFinanceQuery(): { from: string; to: string; basis: string } {
+  if (typeof window === 'undefined') return { from: '', to: '', basis: '' };
+  const qs = new URLSearchParams(window.location.search);
+  const from = qs.get('from') || '';
+  const to = qs.get('to') || '';
+  const ymd = /^\d{4}-\d{2}-\d{2}$/;
+  return {
+    from: ymd.test(from) ? from : '',
+    to: ymd.test(to) ? to : '',
+    basis: qs.get('basis') || '',
+  };
 }

@@ -365,11 +365,14 @@ export async function resolveMarketForPoint(
   if (isRushHexCoverageEnabled()) {
     try {
       const customerCell = latLngToH3(lat, lng, DEFAULT_H3_RESOLUTION);
+      const { activeCoverageGeneration } = await import("../coverageCompile.ts");
+      const generation = await activeCoverageGeneration(sb);
       const { data: cellRows, error: cellErr } = await sb
         .from("coverage_cells")
         .select("market_id, kind")
         .eq("h3_res", DEFAULT_H3_RESOLUTION)
-        .eq("h3_cell", customerCell);
+        .eq("h3_cell", customerCell)
+        .eq("generation", generation);
 
       if (!cellErr && Array.isArray(cellRows) && cellRows.length > 0) {
         const byMarket = new Map<string, { include: string[]; exclude: string[] }>();

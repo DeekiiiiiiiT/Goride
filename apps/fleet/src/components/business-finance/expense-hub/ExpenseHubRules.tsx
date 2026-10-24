@@ -59,8 +59,10 @@ import {
   useBulkExpenseRuleAction,
   useExpenseHubRules,
   useExpenseHubVendors,
+  useRenewExpenseRule,
   useUpdateExpenseRule,
 } from '../../../hooks/useExpenseHub';
+import { renewalCoverage } from '../../../utils/fixedExpenseOccurrences';
 import { HubEmpty, HubError, HubLoading, RuleStatusBadge } from './HubStates';
 import { ExpenseHubRuleBuilder } from './ExpenseHubRuleBuilder';
 import { ExpenseHubRuleDetail } from './ExpenseHubRuleDetail';
@@ -72,11 +74,13 @@ function RuleActions({
   busy,
   onEdit,
   onAction,
+  onRenew,
 }: {
   rule: RuleItem;
   busy: boolean;
   onEdit: () => void;
   onAction: (action: 'pause' | 'resume' | 'end') => void;
+  onRenew: () => void;
 }) {
   if (busy) {
     return <Loader2 className="ml-auto h-5 w-5 animate-spin text-slate-400" aria-label="Updating rule" />;
@@ -101,6 +105,12 @@ function RuleActions({
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="min-w-[10.5rem]">
+        {canEdit && (
+          <DropdownMenuItem className="min-h-11 cursor-pointer gap-2" onSelect={onRenew}>
+            <CalendarClock className="h-4 w-4" aria-hidden />
+            Renew
+          </DropdownMenuItem>
+        )}
         {canEdit && (
           <DropdownMenuItem className="min-h-11 cursor-pointer gap-2" onSelect={onEdit}>
             <Pencil className="h-4 w-4" aria-hidden />
@@ -330,14 +340,28 @@ export function ExpenseHubRules({
   const { can } = usePermissions();
   const rulesQuery = useExpenseHubRules();
   const bulkAction = useBulkExpenseRuleAction();
+  const renewRule = useRenewExpenseRule();
   const [builderOpen, setBuilderOpen] = React.useState(false);
   const [pendingRuleId, setPendingRuleId] = React.useState<string | null>(null);
   const [endCandidate, setEndCandidate] = React.useState<RuleItem | null>(null);
   const [editCandidate, setEditCandidate] = React.useState<RuleItem | null>(null);
+  const [renewCandidate, setRenewCandidate] = React.useState<RuleItem | null>(null);
+  const [renewAmount, setRenewAmount] = React.useState('');
+  const [renewStart, setRenewStart] = React.useState('');
+  const [renewEnd, setRenewEnd] = React.useState('');
   const [detailRuleId, setDetailRuleId] = React.useState<string | null>(null);
   const [search, setSearch] = React.useState('');
   const [status, setStatus] = React.useState('all');
   const canManage = can('expenses.manage_rules') && writesEnabled;
+
+  const openRenew = (rule: RuleItem) => {
+    const end = String(rule.endDate || new Date().toISOString().slice(0, 10)).slice(0, 10);
+    const next = renewalCoverage(end, rule.frequency || 'annually');
+    setRenewAmount(String(rule.amount ?? ''));
+    setRenewStart(next.startDate);
+    setRenewEnd(next.endDate);
+    setRenewCandidate(rule);
+  };
 
   const runAction = async (id: string, action: 'pause' | 'resume' | 'end') => {
     setPendingRuleId(id);
@@ -490,6 +514,7 @@ export function ExpenseHubRules({
                             rule={rule}
                             busy={busy}
                             onEdit={() => setEditCandidate(rule)}
+                            onRenew={() => openRenew(rule)}
                             onAction={(action) =>
                               action === 'end' ? setEndCandidate(rule) : void runAction(rule.id, action)
                             }
@@ -579,6 +604,7 @@ export function ExpenseHubRules({
                                 rule={rule}
                                 busy={busy}
                                 onEdit={() => setEditCandidate(rule)}
+                                onRenew={() => openRenew(rule)}
                                 onAction={(action) =>
                                   action === 'end'
                                     ? setEndCandidate(rule)
@@ -621,6 +647,58 @@ export function ExpenseHubRules({
         onSaved={onChanged}
       />
 
+      <Dialog open={renewCandidate !== null} onOpenChange={(open) => !open && setRenewCandidate(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Renew {renewCandidate?.name}</DialogTitle>
+            <DialogDescription>
+              Last year’s bills stay as they are. Nothing is charged until you save this new coverage.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <label className="block text-sm">
+              Premium
+              <Input className="mt-1 min-h-11" value={renewAmount} onChange={(e) => setRenewAmount(e.target.value)} />
+            </label>
+            <label className="block text-sm">
+              Cover starts
+              <Input className="mt-1 min-h-11" type="date" value={renewStart} onChange={(e) => setRenewStart(e.target.value)} />
+            </label>
+            <label className="block text-sm">
+              Cover ends
+              <Input className="mt-1 min-h-11" type="date" value={renewEnd} onChange={(e) => setRenewEnd(e.target.value)} />
+            </label>
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" className="min-h-11" onClick={() => setRenewCandidate(null)}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              className="min-h-11"
+              disabled={renewRule.isPending}
+              onClick={() => {
+                if (!renewCandidate) return;
+                void renewRule
+                  .mutateAsync({
+                    id: renewCandidate.id,
+                    amount: Number(renewAmount),
+                    startDate: renewStart,
+                    endDate: renewEnd,
+                  })
+                  .then(() => {
+                    toast.success('Renewal saved. Last year was not changed.');
+                    setRenewCandidate(null);
+                    onChanged?.();
+                  })
+                  .catch((err: Error) => toast.error(err.message || 'Could not renew'));
+              }}
+            >
+              Save renewal
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       <AlertDialog open={endCandidate !== null} onOpenChange={(open) => !open && setEndCandidate(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>

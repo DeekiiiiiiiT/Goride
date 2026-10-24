@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+
+<html class="h-full" lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" name="viewport"/><meta content="mobile_stack" name="shell-type"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" rel="stylesheet"/><link href="https://fonts.googleapis.com" rel="preconnect"/><link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&amp;display=swap" rel="stylesheet"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config = { darkMode: "class", theme: { extend: { colors: { "on-secondary-container": "#5c2400", "on-primary-fixed-variant": "#7f2b00", "on-primary-container": "#fffbff", "background": "#fff8f2", "on-secondary": "#ffffff", "primary-fixed-dim": "#ffb599", "tertiary-container": "#936f00", "inverse-primary": "#ffb599", "secondary-container": "#fd761a", "on-background": "#1e1b17", "surface-container": "#f4ede6", "primary": "#a33900", "on-surface-variant": "#5a4138", "inverse-on-surface": "#f7efe9", "on-primary-fixed": "#370e00", "outline-variant": "#e2bfb2", "surface-container-high": "#eee7e0", "on-primary": "#ffffff", "error-container": "#ffdad6", "surface-variant": "#e8e1db", "outline": "#8e7166", "on-surface": "#1e1b17", "surface-bright": "#fff8f2", "tertiary": "#755800", "inverse-surface": "#33302c", "surface-container-low": "#faf2eb", "secondary": "#9d4300", "secondary-fixed-dim": "#ffb690", "surface-tint": "#a73a00", "on-error": "#ffffff", "primary-fixed": "#ffdbce", "primary-container": "#cc4900", "on-tertiary": "#ffffff", "surface": "#fff8f2", "error": "#ba1a1a", "tertiary-fixed": "#ffdf9a", "tertiary-fixed-dim": "#f7be1d", "on-error-container": "#93000a", "on-secondary-fixed": "#341100", "on-tertiary-container": "#fffbff", "on-secondary-fixed-variant": "#783200", "on-tertiary-fixed": "#251a00", "secondary-fixed": "#ffdbca", "surface-container-highest": "#e8e1db", "surface-container-lowest": "#ffffff", "surface-dim": "#e0d9d2", "on-tertiary-fixed-variant": "#5a4300" }, borderRadius: { "DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px" }, spacing: { "space-xl": "2rem", "space-md": "1rem", "margin": "1rem", "gutter": "1rem", "space-sm": "0.5rem", "margin-lg": "1.5rem", "gutter-sm": "0.75rem", "space-lg": "1.5rem", "space-xs": "0.25rem" }, fontFamily: { "body-lg": ["Inter"], "label-sm": ["Inter"], "label-md": ["Inter"], "headline-lg": ["Inter"], "display-lg-mobile": ["Inter"], "body-md": ["Inter"], "price-display": ["Inter"], "headline-md": ["Inter"], "display-lg": ["Inter"], "body-sm": ["Inter"], "headline-sm": ["Inter"], "label-lg": ["Inter"] }, fontSize: { "body-lg": ["16px", { lineHeight: "24px", fontWeight: "400" }], "label-sm": ["10px", { lineHeight: "12px", letterSpacing: "0.04em", fontWeight: "700" }], "label-md": ["12px", { lineHeight: "16px", letterSpacing: "0.02em", fontWeight: "600" }], "headline-lg": ["28px", { lineHeight: "36px", letterSpacing: "-0.01em", fontWeight: "700" }], "display-lg-mobile": ["32px", { lineHeight: "40px", letterSpacing: "-0.02em", fontWeight: "800" }], "body-md": ["14px", { lineHeight: "20px", fontWeight: "400" }], "price-display": ["24px", { lineHeight: "28px", letterSpacing: "-0.01em", fontWeight: "700" }], "headline-md": ["22px", { lineHeight: "28px", letterSpacing: "-0.01em", fontWeight: "700" }], "display-lg": ["40px", { lineHeight: "48px", letterSpacing: "-0.02em", fontWeight: "800" }], "body-sm": ["12px", { lineHeight: "16px", fontWeight: "400" }], "headline-sm": ["18px", { lineHeight: "24px", fontWeight: "600" }], "label-lg": ["14px", { lineHeight: "20px", letterSpacing: "0.01em", fontWeight: "600" }] } } } }</script><style>@layer base { html, body { min-height: 100%; margin: 0; padding: 0; background-color: #fff8f2; } .pb-safe { padding-bottom: env(safe-area-inset-bottom, 0px); } .pt-safe { padding-top: env(safe-area-inset-top, 0px); } } ::-webkit-scrollbar { display: none; }</style><style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head><body class="bg-surface font-body-md text-on-surface min-h-screen flex flex-col antialiased selection:bg-primary/20 selection:text-primary"><header class="fixed top-0 w-full z-50 bg-surface/85 backdrop-blur-xl shadow-[0_1px_8px_rgba(28,25,23,0.04)] pt-safe"><div class="h-16 px-space-sm flex items-center justify-between"><div class="flex items-center gap-space-xs"><button aria-label="Go Back" class="w-11 h-11 flex items-center justify-center rounded-full text-on-surface hover:text-primary hover:bg-surface-container active:scale-95 transition-all" onclick="history.back()"><span class="material-symbols-outlined text-[24px]">arrow_back</span></button><h1 class="font-headline-md text-headline-md text-on-surface tracking-tight font-headline-md line-clamp-1">Add / Edit Document Reminder</h1></div><div class="flex items-center gap-space-xs"><button aria-label="Share Vehicle" class="w-11 h-11 flex items-center justify-center rounded-full text-on-surface-variant hover:text-primary hover:bg-surface-container active:scale-95 transition-all"><span class="material-symbols-outlined text-[22px]">share</span></button><button aria-label="More Options" class="w-11 h-11 flex items-center justify-center rounded-full text-on-surface-variant hover:text-primary hover:bg-surface-container active:scale-95 transition-all"><span class="material-symbols-outlined text-[22px]">more_vert</span></button><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center ml-space-xs shadow-sm"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div></div></div></header><main class="flex-1 w-full bg-surface pt-16 pb-safe"><div class="flex flex-col w-full px-margin pb-space-xl">
+<!-- Subtle Visual Header Subtext & Island Warmth Micro-Card -->
+<div class="mt-space-sm mb-space-md p-space-md rounded-xl bg-surface-container-low shadow-sm flex items-center gap-space-md">
+<div class="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center shrink-0 text-primary">
+<span class="material-symbols-outlined text-[28px]" style="font-variation-settings: 'FILL' 1;">shield_with_heart</span>
+</div>
+<div class="min-w-0 flex-1">
+<span class="font-label-sm text-label-sm text-primary uppercase tracking-wider block">Statutory Compliance</span>
+<h2 class="font-headline-sm text-headline-sm text-on-surface truncate">Never Miss a Parish Deadline</h2>
+<p class="font-body-sm text-body-sm text-on-surface-variant truncate">ITA inspection &amp; TAJ renewal sync</p>
+</div>
+</div>
+<form class="flex flex-col gap-space-lg" id="reminder-form" onsubmit="event.preventDefault();">
+<!-- SECTION 1: Document Type Selector -->
+<div class="flex flex-col gap-space-sm">
+<div class="flex items-center justify-between">
+<label class="font-label-lg text-label-lg text-on-surface flex items-center gap-space-xs">
+<span>Document Type</span>
+<span class="text-primary font-bold">*</span>
+</label>
+<span class="font-label-sm text-label-sm text-on-surface-variant">Tap to select</span>
+</div>
+<!-- Segmented Chips Grid / Scroll -->
+<div class="grid grid-cols-2 gap-gutter-sm" id="doc-type-group">
+<button class="doc-type-btn flex items-center gap-space-sm p-space-md rounded-xl bg-surface-container-lowest text-on-surface shadow-sm active:scale-95 transition-all text-left" data-doc-type="licence" type="button">
+<div class="w-9 h-9 rounded-lg bg-surface-container-high flex items-center justify-center text-on-surface-variant shrink-0 icon-box">
+<span class="material-symbols-outlined text-[20px]">badge</span>
+</div>
+<div class="min-w-0">
+<span class="font-label-md text-label-md block leading-tight truncate">Driver's Licence</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant text-[11px] block truncate">Personal ID</span>
+</div>
+</button>
+<button class="doc-type-btn flex items-center gap-space-sm p-space-md rounded-xl bg-surface-container-lowest text-on-surface shadow-sm active:scale-95 transition-all text-left" data-doc-type="taj" type="button">
+<div class="w-9 h-9 rounded-lg bg-surface-container-high flex items-center justify-center text-on-surface-variant shrink-0 icon-box">
+<span class="material-symbols-outlined text-[20px]">description</span>
+</div>
+<div class="min-w-0">
+<span class="font-label-md text-label-md block leading-tight truncate">Registration</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant text-[11px] block truncate">Tax Admin (TAJ)</span>
+</div>
+</button>
+<!-- Selected by default: Fitness -->
+<button class="doc-type-btn selected flex items-center gap-space-sm p-space-md rounded-xl bg-primary-container text-on-primary-container shadow-md active:scale-95 transition-all text-left" data-doc-type="fitness" type="button">
+<div class="w-9 h-9 rounded-lg bg-on-primary/20 flex items-center justify-center text-on-primary-container shrink-0 icon-box">
+<span class="material-symbols-outlined text-[20px]" style="font-variation-settings: 'FILL' 1;">verified</span>
+</div>
+<div class="min-w-0">
+<span class="font-label-md text-label-md block leading-tight truncate">Fitness (ITA)</span>
+<span class="font-body-sm text-body-sm text-on-primary-container/80 text-[11px] block truncate">Roadworthiness</span>
+</div>
+</button>
+<button class="doc-type-btn flex items-center gap-space-sm p-space-md rounded-xl bg-surface-container-lowest text-on-surface shadow-sm active:scale-95 transition-all text-left" data-doc-type="insurance" type="button">
+<div class="w-9 h-9 rounded-lg bg-surface-container-high flex items-center justify-center text-on-surface-variant shrink-0 icon-box">
+<span class="material-symbols-outlined text-[20px]">health_and_safety</span>
+</div>
+<div class="min-w-0">
+<span class="font-label-md text-label-md block leading-tight truncate">Insurance Policy</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant text-[11px] block truncate">Coverage certificate</span>
+</div>
+</button>
+</div>
+<button class="doc-type-btn w-full flex items-center justify-between p-space-sm px-space-md rounded-xl bg-surface-container-lowest text-on-surface shadow-sm active:scale-95 transition-all" data-doc-type="other" type="button">
+<div class="flex items-center gap-space-sm">
+<div class="w-7 h-7 rounded-lg bg-surface-container-high flex items-center justify-center text-on-surface-variant icon-box">
+<span class="material-symbols-outlined text-[16px]">folder_open</span>
+</div>
+<span class="font-label-md text-label-md">Other Vehicle Permit / PPV Badge</span>
+</div>
+<span class="material-symbols-outlined text-on-surface-variant text-[18px]">chevron_right</span>
+</button>
+</div>
+<!-- SECTION 2: Linked Vehicle Selector -->
+<div class="flex flex-col gap-space-sm">
+<label class="font-label-lg text-label-lg text-on-surface flex items-center justify-between">
+<span>Linked Vehicle</span>
+<span class="font-label-sm text-label-sm text-primary font-normal">Active fleet (2)</span>
+</label>
+<div class="flex flex-col gap-space-xs" id="vehicle-radio-group">
+<!-- Vehicle 1: Selected -->
+<label class="vehicle-option relative flex items-center justify-between p-space-md rounded-xl bg-surface-container-lowest text-on-surface shadow-sm cursor-pointer select-none">
+<input checked="" class="sr-only peer" name="linked_vehicle" type="radio" value="8241-HY"/>
+<div class="flex items-center gap-space-md min-w-0">
+<div class="w-10 h-10 rounded-xl bg-surface-container-high flex items-center justify-center text-primary shrink-0">
+<span class="material-symbols-outlined text-[22px]">directions_car</span>
+</div>
+<div class="min-w-0">
+<div class="flex items-center gap-space-xs">
+<span class="font-label-lg text-label-lg text-on-surface truncate">2019 Toyota Roomy</span>
+<span class="font-label-sm text-label-sm bg-surface-container-high px-space-xs py-0.5 rounded text-on-surface-variant font-bold">PPV</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Plate: <span class="font-bold text-on-surface">8241-HY</span> • Kingston &amp; St. Andrew</p>
+</div>
+</div>
+<div class="w-6 h-6 rounded-full bg-primary flex items-center justify-center text-on-primary shrink-0 vehicle-check">
+<span class="material-symbols-outlined text-[16px]">check</span>
+</div>
+</label>
+<!-- Vehicle 2 -->
+<label class="vehicle-option relative flex items-center justify-between p-space-md rounded-xl bg-surface-container-lowest text-on-surface shadow-sm cursor-pointer select-none opacity-80 hover:opacity-100 transition-opacity">
+<input class="sr-only peer" name="linked_vehicle" type="radio" value="PA-4910"/>
+<div class="flex items-center gap-space-md min-w-0">
+<div class="w-10 h-10 rounded-xl bg-surface-container-high flex items-center justify-center text-on-surface-variant shrink-0">
+<span class="material-symbols-outlined text-[22px]">commute</span>
+</div>
+<div class="min-w-0">
+<div class="flex items-center gap-space-xs">
+<span class="font-label-lg text-label-lg text-on-surface truncate">2016 Nissan AD Wagon</span>
+<span class="font-label-sm text-label-sm bg-surface-container-high px-space-xs py-0.5 rounded text-on-surface-variant">Route</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Plate: <span class="font-bold text-on-surface">PA 4910</span> • St. Catherine</p>
+</div>
+</div>
+<div class="w-6 h-6 rounded-full bg-surface-container-high flex items-center justify-center text-transparent shrink-0 vehicle-check">
+<span class="material-symbols-outlined text-[16px]">check</span>
+</div>
+</label>
+<!-- Driver Personal -->
+<label class="vehicle-option relative flex items-center justify-between p-space-sm px-space-md rounded-xl bg-surface-container-lowest text-on-surface shadow-sm cursor-pointer select-none opacity-80 hover:opacity-100 transition-opacity">
+<input class="sr-only peer" name="linked_vehicle" type="radio" value="personal"/>
+<div class="flex items-center gap-space-md min-w-0">
+<div class="w-8 h-8 rounded-lg bg-surface-container-high flex items-center justify-center text-on-surface-variant shrink-0">
+<span class="material-symbols-outlined text-[18px]">person</span>
+</div>
+<div class="min-w-0">
+<span class="font-label-md text-label-md text-on-surface truncate block">Driver Personal</span>
+<p class="font-body-sm text-body-sm text-on-surface-variant text-[11px]">Not bound to an individual vehicle chassis</p>
+</div>
+</div>
+<div class="w-6 h-6 rounded-full bg-surface-container-high flex items-center justify-center text-transparent shrink-0 vehicle-check">
+<span class="material-symbols-outlined text-[16px]">check</span>
+</div>
+</label>
+</div>
+</div>
+<!-- SECTION 3: Document Details -->
+<div class="flex flex-col gap-space-md bg-surface-container-lowest p-space-md rounded-xl shadow-sm">
+<div class="flex items-center justify-between">
+<h3 class="font-headline-sm text-headline-sm text-on-surface">Details &amp; Reference</h3>
+<span class="flex items-center gap-1 font-label-sm text-label-sm text-tertiary">
+<span class="material-symbols-outlined text-[14px]">lock</span> Private Vault
+        </span>
+</div>
+<!-- Document/Policy Number -->
+<div class="flex flex-col gap-space-xs">
+<label class="font-label-md text-label-md text-on-surface-variant" for="doc-number">
+          Document / Certificate Number <span class="font-normal opacity-70">(Optional)</span>
+</label>
+<div class="relative flex items-center">
+<span class="absolute left-space-md text-on-surface-variant pointer-events-none material-symbols-outlined text-[20px]">pin</span>
+<input class="w-full h-12 pl-11 pr-space-md rounded-xl bg-surface-container-low font-body-md text-body-md text-on-surface placeholder:text-outline outline-none focus:bg-surface-container-lowest shadow-inner transition-colors" id="doc-number" placeholder="e.g. TF-94021-JM" type="text" value="TF-94021-JM"/>
+</div>
+</div>
+<!-- Issuing Authority -->
+<div class="flex flex-col gap-space-xs">
+<label class="font-label-md text-label-md text-on-surface-variant" for="issuing-authority">
+          Issuing Authority or Insurer
+        </label>
+<div class="relative flex items-center">
+<span class="absolute left-space-md text-on-surface-variant pointer-events-none material-symbols-outlined text-[20px]">assured_workload</span>
+<input class="w-full h-12 pl-11 pr-space-md rounded-xl bg-surface-container-low font-body-md text-body-md text-on-surface placeholder:text-outline outline-none focus:bg-surface-container-lowest shadow-inner transition-colors" id="issuing-authority" placeholder="e.g. Advantage General / ITA Swallowfield" type="text" value="Island Traffic Authority (ITA)"/>
+</div>
+</div>
+</div>
+<!-- SECTION 4: Expiry Date Picker & Countdown Pill -->
+<div class="flex flex-col gap-space-sm bg-surface-container-lowest p-space-md rounded-xl shadow-sm">
+<div class="flex items-center justify-between">
+<label class="font-label-lg text-label-lg text-on-surface flex items-center gap-space-xs" for="expiry-date-input">
+<span>Expiry Date</span>
+<span class="text-primary font-bold">*</span>
+</label>
+<!-- Computed countdown pill -->
+<span class="font-label-md text-label-md px-space-sm py-1 rounded-full bg-secondary-fixed text-on-secondary-fixed flex items-center gap-1 font-bold" id="countdown-badge">
+<span class="material-symbols-outlined text-[15px]" style="font-variation-settings: 'FILL' 1;">timer</span>
+          in 21 days
+        </span>
+</div>
+<div class="relative flex items-center">
+<div class="absolute left-space-md flex items-center justify-center text-primary pointer-events-none">
+<span class="material-symbols-outlined text-[22px]">calendar_month</span>
+</div>
+<input class="w-full h-14 pl-12 pr-space-md rounded-xl bg-surface-container-low font-headline-sm text-headline-sm text-on-surface outline-none focus:bg-surface-container-lowest shadow-inner cursor-pointer" id="expiry-date-input" type="date" value="2024-11-15"/>
+</div>
+<div class="flex items-center justify-between pt-space-xs text-on-surface-variant">
+<div class="flex items-center gap-1 text-[12px] font-body-sm">
+<span class="material-symbols-outlined text-[16px] text-tertiary">info</span>
+<span>Formatted: <strong class="text-on-surface" id="formatted-preview">15 Nov 2024</strong></span>
+</div>
+<span class="font-label-sm text-label-sm text-primary font-bold">Grace Period: None (ITA)</span>
+</div>
+</div>
+<!-- SECTION 5: Reminder Notification Schedule (Multi-select) -->
+<div class="flex flex-col gap-space-sm bg-surface-container-lowest p-space-md rounded-xl shadow-sm">
+<div class="flex items-start justify-between gap-space-sm">
+<div>
+<h3 class="font-headline-sm text-headline-sm text-on-surface">Reminder Triggers</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Instant SMS &amp; push notifications to your device</p>
+</div>
+<div class="w-8 h-8 rounded-full bg-secondary-fixed/50 flex items-center justify-center text-secondary shrink-0">
+<span class="material-symbols-outlined text-[18px]">notifications_active</span>
+</div>
+</div>
+<!-- Schedule Chips Grid -->
+<div class="flex flex-wrap gap-space-xs pt-space-xs" id="trigger-chips">
+<!-- 30 days (Checked) -->
+<button class="schedule-chip active h-10 px-space-md rounded-full bg-primary text-on-primary font-label-md text-label-md flex items-center gap-space-xs shadow-sm transition-all active:scale-95" data-schedule="30" type="button">
+<span class="material-symbols-outlined text-[16px]">check_circle</span>
+<span>30 days before</span>
+</button>
+<!-- 14 days (Checked) -->
+<button class="schedule-chip active h-10 px-space-md rounded-full bg-primary text-on-primary font-label-md text-label-md flex items-center gap-space-xs shadow-sm transition-all active:scale-95" data-schedule="14" type="button">
+<span class="material-symbols-outlined text-[16px]">check_circle</span>
+<span>14 days before</span>
+</button>
+<!-- 7 days (Checked) -->
+<button class="schedule-chip active h-10 px-space-md rounded-full bg-primary text-on-primary font-label-md text-label-md flex items-center gap-space-xs shadow-sm transition-all active:scale-95" data-schedule="7" type="button">
+<span class="material-symbols-outlined text-[16px]">check_circle</span>
+<span>7 days before</span>
+</button>
+<!-- 1 day (Checked) -->
+<button class="schedule-chip active h-10 px-space-md rounded-full bg-primary text-on-primary font-label-md text-label-md flex items-center gap-space-xs shadow-sm transition-all active:scale-95" data-schedule="1" type="button">
+<span class="material-symbols-outlined text-[16px]">check_circle</span>
+<span>1 day before</span>
+</button>
+<!-- On expiry day (Unchecked) -->
+<button class="schedule-chip h-10 px-space-md rounded-full bg-surface-container-high text-on-surface-variant font-label-md text-label-md flex items-center gap-space-xs transition-all active:scale-95" data-schedule="0" type="button">
+<span class="material-symbols-outlined text-[16px] opacity-40">add_circle</span>
+<span>On expiry day</span>
+</button>
+</div>
+<!-- Explanatory Localized Note -->
+<div class="mt-space-sm p-space-sm rounded-lg bg-surface-container-low flex items-start gap-space-sm">
+<span class="material-symbols-outlined text-secondary text-[20px] shrink-0 mt-0.5">verified_user</span>
+<p class="font-body-sm text-body-sm text-on-surface-variant leading-snug">
+          Helps you avoid <strong>ITA roadside seizure penalties</strong> and <strong>TAJ late renewal fees</strong> along Highway 2000 and parish corridors.
+        </p>
+</div>
+</div>
+<!-- SECTION 6: Attach Document Photo (Optional) -->
+<div class="flex flex-col gap-space-sm bg-surface-container-lowest p-space-md rounded-xl shadow-sm">
+<div class="flex items-center justify-between">
+<div>
+<h3 class="font-headline-sm text-headline-sm text-on-surface">Attach Document Photo</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Front or back scan for quick road checks</p>
+</div>
+<span class="font-label-sm text-label-sm bg-surface-container-high px-space-xs py-0.5 rounded text-on-surface-variant">Optional</span>
+</div>
+<!-- Upload Zone Card -->
+<div class="relative group cursor-pointer rounded-xl bg-surface-container-low p-space-lg flex flex-col items-center justify-center text-center transition-all hover:bg-surface-container" id="dropzone">
+<!-- SVG Visual Motif / Document Snapshot Placeholder -->
+<div class="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center text-primary mb-space-sm group-hover:scale-110 transition-transform">
+<span class="material-symbols-outlined text-[32px]">photo_camera</span>
+</div>
+<h4 class="font-label-lg text-label-lg text-on-surface">Snap document front &amp; back</h4>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-1">
+          Take a fresh photo or <span class="text-primary font-bold underline">browse gallery</span> (Max 5MB)
+        </p>
+<!-- Hidden input for file selection -->
+<input accept="image/*" class="sr-only" id="file-uploader" type="file"/>
+<!-- Secure Badge -->
+<div class="mt-space-md flex items-center gap-1.5 px-space-sm py-1 rounded-full bg-surface-container-lowest text-on-surface-variant shadow-sm text-[11px] font-label-md">
+<span class="material-symbols-outlined text-[14px] text-tertiary" style="font-variation-settings: 'FILL' 1;">security</span>
+<span>Stored with end-to-end encryption</span>
+</div>
+</div>
+<!-- Preview strip with mock attachment card -->
+<div class="flex items-center justify-between p-space-sm rounded-xl bg-surface-container-low shadow-inner" id="preview-container">
+<div class="flex items-center gap-space-sm min-w-0">
+<div class="w-12 h-12 rounded-lg bg-surface-container overflow-hidden shrink-0">
+<img class="w-full h-full object-cover" data-alt="A clear close-up photograph of an official Jamaican vehicle fitness certificate held over a warm wooden dashboard with amber sunlight spilling over the paper watermark and serial stamp." src="https://lh3.googleusercontent.com/aida-public/AB6AXuB69-SH4M6ECkRZrPOWP--oBW2RzZpj_AzaiJy0DDchdIVENuvqMXvr9VYPr4HAznOabLV1X2QnMEvDT19YZsl6bO7vAHTacDYJ2EnBGRYemp5qVtq8xvzOkw2IhKJftmRSdyJx0oWB5i2AYE3efz_GHGifhs_Uo3R2CfcaAg6TY-mVne6ChdFSGOQOyXJ2ZmKZ5xzLnSKxRrue8x12SZOyWX4sEoeTgVP7PrfxkKQ"/>
+</div>
+<div class="min-w-0">
+<span class="font-label-md text-label-md text-on-surface truncate block">ita_fitness_cert_front.jpg</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant text-[11px]">1.8 MB • Encrypted</span>
+</div>
+</div>
+<button aria-label="Remove attached document" class="w-9 h-9 rounded-full flex items-center justify-center text-error hover:bg-error-container/50 active:scale-95 transition-all" type="button">
+<span class="material-symbols-outlined text-[20px]">delete</span>
+</button>
+</div>
+</div>
+<!-- SECTION 7: Action Buttons -->
+<div class="flex flex-col gap-space-sm pt-space-xs">
+<button class="w-full h-14 rounded-xl bg-gradient-to-r from-primary to-secondary-container text-on-primary font-label-lg text-label-lg flex items-center justify-center gap-space-xs shadow-lg active:scale-98 transition-all hover:brightness-105" id="save-reminder-btn" type="submit">
+<span class="material-symbols-outlined text-[22px]">notification_add</span>
+<span>Save Reminder</span>
+</button>
+<button class="w-full h-12 rounded-xl text-on-surface-variant hover:text-on-surface font-label-lg text-label-lg flex items-center justify-center transition-colors active:scale-98" onclick="history.back()" type="button">
+        Cancel and Discard
+      </button>
+</div>
+</form>
+</div>
+<script>
+  // Micro-interactions and Reactive State
+  document.addEventListener('DOMContentLoaded', () => {
+    // 1. Document Type Selector Switching
+    const docButtons = document.querySelectorAll('.doc-type-btn');
+    docButtons.forEach(btn => {
+      btn.addEventListener('click', () => {
+        docButtons.forEach(b => {
+          b.classList.remove('selected', 'bg-primary-container', 'text-on-primary-container', 'shadow-md');
+          b.classList.add('bg-surface-container-lowest', 'text-on-surface', 'shadow-sm');
+          const icon = b.querySelector('.icon-box');
+          if (icon) {
+            icon.classList.remove('bg-on-primary/20', 'text-on-primary-container');
+            icon.classList.add('bg-surface-container-high', 'text-on-surface-variant');
+          }
+        });
+        btn.classList.add('selected', 'bg-primary-container', 'text-on-primary-container', 'shadow-md');
+        btn.classList.remove('bg-surface-container-lowest', 'text-on-surface', 'shadow-sm');
+        const icon = btn.querySelector('.icon-box');
+        if (icon) {
+          icon.classList.add('bg-on-primary/20', 'text-on-primary-container');
+          icon.classList.remove('bg-surface-container-high', 'text-on-surface-variant');
+        }
+      });
+    });
+
+    // 2. Vehicle Selector Radio Highlighting
+    const vehicleOptions = document.querySelectorAll('.vehicle-option');
+    vehicleOptions.forEach(opt => {
+      const radio = opt.querySelector('input[type="radio"]');
+      opt.addEventListener('click', () => {
+        vehicleOptions.forEach(o => {
+          o.classList.add('opacity-80');
+          const check = o.querySelector('.vehicle-check');
+          check.classList.remove('bg-primary', 'text-on-primary');
+          check.classList.add('bg-surface-container-high', 'text-transparent');
+        });
+        opt.classList.remove('opacity-80');
+        const check = opt.querySelector('.vehicle-check');
+        check.classList.add('bg-primary', 'text-on-primary');
+        check.classList.remove('bg-surface-container-high', 'text-transparent');
+      });
+    });
+
+    // 3. Expiry Date & Countdown Pill computation
+    const dateInput = document.getElementById('expiry-date-input');
+    const countdownBadge = document.getElementById('countdown-badge');
+    const formattedPreview = document.getElementById('formatted-preview');
+
+    function updateDateComputations() {
+      if (!dateInput.value) return;
+      const targetDate = new Date(dateInput.value + 'T00:00:00');
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      const diffTime = targetDate - today;
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+      // Format date nicely
+      const options = { day: 'numeric', month: 'short', year: 'numeric' };
+      formattedPreview.textContent = targetDate.toLocaleDateString('en-GB', options);
+
+      // Countdown badge text & styling
+      if (diffDays > 0) {
+        countdownBadge.innerHTML = `<span class="material-symbols-outlined text-[15px]" style="font-variation-settings: 'FILL' 1;">timer</span> in ${diffDays} days`;
+        countdownBadge.className = "font-label-md text-label-md px-space-sm py-1 rounded-full bg-secondary-fixed text-on-secondary-fixed flex items-center gap-1 font-bold";
+      } else if (diffDays === 0) {
+        countdownBadge.innerHTML = `<span class="material-symbols-outlined text-[15px]">priority_high</span> Expires Today`;
+        countdownBadge.className = "font-label-md text-label-md px-space-sm py-1 rounded-full bg-error text-on-error flex items-center gap-1 font-bold";
+      } else {
+        countdownBadge.innerHTML = `<span class="material-symbols-outlined text-[15px]">warning</span> Overdue by ${Math.abs(diffDays)}d`;
+        countdownBadge.className = "font-label-md text-label-md px-space-sm py-1 rounded-full bg-error-container text-on-error-container flex items-center gap-1 font-bold";
+      }
+    }
+
+    dateInput.addEventListener('change', updateDateComputations);
+
+    // 4. Multi-Select Schedule Chips
+    const scheduleChips = document.querySelectorAll('.schedule-chip');
+    scheduleChips.forEach(chip => {
+      chip.addEventListener('click', () => {
+        const isActive = chip.classList.contains('active');
+        const icon = chip.querySelector('.material-symbols-outlined');
+        if (isActive) {
+          chip.classList.remove('active', 'bg-primary', 'text-on-primary', 'shadow-sm');
+          chip.classList.add('bg-surface-container-high', 'text-on-surface-variant');
+          icon.textContent = 'add_circle';
+          icon.classList.add('opacity-40');
+        } else {
+          chip.classList.add('active', 'bg-primary', 'text-on-primary', 'shadow-sm');
+          chip.classList.remove('bg-surface-container-high', 'text-on-surface-variant');
+          icon.textContent = 'check_circle';
+          icon.classList.remove('opacity-40');
+        }
+      });
+    });
+
+    // 5. File upload zone triggers input
+    const dropzone = document.getElementById('dropzone');
+    const fileInput = document.getElementById('file-uploader');
+    dropzone.addEventListener('click', () => fileInput.click());
+
+    // 6. Save button feedback micro-animation
+    const saveBtn = document.getElementById('save-reminder-btn');
+    saveBtn.addEventListener('click', () => {
+      const originalHtml = saveBtn.innerHTML;
+      saveBtn.innerHTML = `
+        <span class="material-symbols-outlined text-[20px] animate-spin">refresh</span>
+        <span>Saving to Roam Vault...</span>
+      `;
+      setTimeout(() => {
+        saveBtn.innerHTML = `
+          <span class="material-symbols-outlined text-[20px]">check</span>
+          <span>Reminder Activated!</span>
+        `;
+        saveBtn.classList.remove('from-primary', 'to-secondary-container');
+        saveBtn.classList.add('bg-tertiary', 'text-on-tertiary');
+        setTimeout(() => history.back(), 700);
+      }, 900);
+    });
+  });
+</script></main></body></html>

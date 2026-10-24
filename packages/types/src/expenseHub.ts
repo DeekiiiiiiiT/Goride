@@ -163,6 +163,8 @@ export type ExpenseDocument = {
   createdBy?: string;
   submittedBy?: string;
   approvedBy?: string;
+  /** Owner approved their own bill. Shown on the bill. */
+  selfApproved?: boolean;
   createdAt: string;
   updatedAt: string;
   submittedAt?: string;
@@ -181,6 +183,7 @@ export type ExpensePayment = {
   paymentMethod: string;
   reference?: string;
   notes?: string;
+  idempotencyKey?: string;
   createdBy?: string;
   createdAt: string;
 };

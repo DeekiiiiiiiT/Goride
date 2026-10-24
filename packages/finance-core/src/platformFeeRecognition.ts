@@ -89,9 +89,11 @@ export function accumulatePlatformFeeBuckets(
     } else if (et === 'fare_earning') {
       b.fareGross += recognizedFareGross(e);
       b.impliedFees += impliedFareFeeGap(e);
-    } else if (et === 'tip' || et === 'promotion') {
+    } else if (et === 'tip') {
       const amt = Math.abs(num(e.netAmount)) || Math.abs(num(e.grossAmount));
       b.tipPromo += amt;
+    } else if (et === 'promotion') {
+      // Uber Total earnings already includes promotions. Do not add them again.
     }
   }
   return by;

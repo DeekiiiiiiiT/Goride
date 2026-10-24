@@ -32,6 +32,14 @@ function eventAmount(e: LedgerLike): number {
   return tollEventAmount(e);
 }
 
+/** A reversal is an inflow (or metadata.reversal) and reduces fixed overhead. */
+function signedFixedExpense(e: LedgerLike, magnitude: number): number {
+  const meta =
+    e.metadata && typeof e.metadata === 'object' ? (e.metadata as Record<string, unknown>) : {};
+  if (meta.reversal === true || String(e.direction || '') === 'inflow') return -magnitude;
+  return magnitude;
+}
+
 function fuelExpensePumpPay(e: LedgerLike): 'card' | 'cash' | 'unknown' {
   const meta =
     e.metadata && typeof e.metadata === 'object'
@@ -121,7 +129,7 @@ export function buildPnLFromCanonicalEvents(
   for (const e of scoped) {
     const type = String(e.eventType || '');
     const amount = eventAmount(e);
-    if (type === 'fixed_expense') fixedOverhead += amount;
+    if (type === 'fixed_expense') fixedOverhead += signedFixedExpense(e, amount);
     else if (type === 'maintenance') maintenance += amount;
     else if (type === 'operating_expense') operatingExpenses += amount;
     else if (type === 'other_income') otherIncome += amount;
@@ -357,9 +365,11 @@ export function sumExpenseRowsFromEvents(
         signedAmount = amt;
       }
     } else if (t === 'fixed_expense') {
-      fixed += amt;
+      const signed = signedFixedExpense(e, amt);
+      fixed += signed;
+      signedAmount = signed;
       category = String(e.category || 'Fixed overhead');
-      byCategory[category] = (byCategory[category] || 0) + amt;
+      byCategory[category] = (byCategory[category] || 0) + signed;
     } else if (t === 'maintenance') {
       maintenance += amt;
       category = 'Maintenance';

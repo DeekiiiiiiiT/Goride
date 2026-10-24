@@ -163,4 +163,35 @@ describe('buildPaymentLedgerCanonicalEvents', () => {
     expect(events[0].eventType).toBe('toll_support_adjustment');
     expect(events[0].netAmount).toBe(15);
   });
+
+  it('posts a cancellation fee as earnings', () => {
+    const line: PaymentLedgerLine = {
+      id: 'tx-cancel',
+      platform: 'Uber',
+      tripId: 'trip-c',
+      driverId: 'driver-1',
+      description: 'cancellation fee',
+      reportingAt: '2026-10-14T12:00:00.000Z',
+      paidToYou: 0,
+      earningsGross: 0,
+      cashCollected: 0,
+      bankTransferred: 0,
+      fareBreakdown: {
+        base: 0,
+        surge: 0,
+        waitPickup: 0,
+        timeAtStop: 0,
+        cancellation: 250,
+        taxes: 0,
+        tip: 0,
+        tollRefund: 0,
+      },
+      sourceType: 'uber_import',
+      lineKind: 'cancellation',
+      idempotencyKey: 'uber_tx:tx-cancel',
+    };
+    const events = buildPaymentLedgerCanonicalEvents([line], 'batch-1');
+    expect(events[0].eventType).toBe('fare_earning');
+    expect(events[0].netAmount).toBe(250);
+  });
 });

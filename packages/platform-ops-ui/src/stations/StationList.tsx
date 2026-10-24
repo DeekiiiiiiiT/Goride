@@ -57,6 +57,7 @@ export function StationList({ context, onSelectStation, variant = 'manager', sel
   const [brandFilter, setBrandFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [sourceFilter, setSourceFilter] = useState<string>('all');
+  const [appFilter, setAppFilter] = useState<string>('all');
   const [cityFilter, setCityFilter] = useState<string>('all');
   const [parishFilter, setParishFilter] = useState<string>('all');
   
@@ -106,7 +107,7 @@ export function StationList({ context, onSelectStation, variant = 'manager', sel
   // Reset pagination when filters change OR when station data changes
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, brandFilter, statusFilter, sourceFilter, cityFilter, parishFilter, stations.length]);
+  }, [searchTerm, brandFilter, statusFilter, sourceFilter, appFilter, cityFilter, parishFilter, stations.length]);
 
   // Filter and Sort
   const processedStations = useMemo(() => {
@@ -137,6 +138,9 @@ export function StationList({ context, onSelectStation, variant = 'manager', sel
     // 4. Filter by Source
     if (sourceFilter !== 'all') {
       result = result.filter(s => s.dataSource === sourceFilter);
+    }
+    if (appFilter !== 'all') {
+      result = result.filter((s) => (s.originApp || (s as { origin_app?: string }).origin_app || 'manual') === appFilter);
     }
 
     // 5. Filter by City
@@ -200,7 +204,7 @@ export function StationList({ context, onSelectStation, variant = 'manager', sel
     });
 
     return result;
-  }, [stations, searchTerm, sortKey, sortDir, brandFilter, statusFilter, sourceFilter, cityFilter, parishFilter]);
+  }, [stations, searchTerm, sortKey, sortDir, brandFilter, statusFilter, sourceFilter, appFilter, cityFilter, parishFilter]);
 
   // Pagination Logic
   const totalItems = processedStations.length;
@@ -236,7 +240,7 @@ export function StationList({ context, onSelectStation, variant = 'manager', sel
     setParishFilter('all');
   };
 
-  const hasActiveFilters = searchTerm || brandFilter !== 'all' || statusFilter !== 'all' || sourceFilter !== 'all' || cityFilter !== 'all' || parishFilter !== 'all';
+  const hasActiveFilters = searchTerm || brandFilter !== 'all' || statusFilter !== 'all' || sourceFilter !== 'all' || appFilter !== 'all' || cityFilter !== 'all' || parishFilter !== 'all';
 
   const handleSelectAll = (checked: boolean) => {
     if (checked) {
@@ -322,6 +326,18 @@ export function StationList({ context, onSelectStation, variant = 'manager', sel
                   <SelectItem value="log">Logs</SelectItem>
                   <SelectItem value="manual">Manual</SelectItem>
                   <SelectItem value="import">Imported</SelectItem>
+                </SelectContent>
+              </Select>
+
+              <Select value={appFilter} onValueChange={setAppFilter}>
+                <SelectTrigger className="w-[150px] bg-slate-50 border-slate-200">
+                  <SelectValue placeholder="App" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All apps</SelectItem>
+                  <SelectItem value="roam_fleet">Roam Fleet</SelectItem>
+                  <SelectItem value="roam_plug">Roam Plug</SelectItem>
+                  <SelectItem value="manual">Manual</SelectItem>
                 </SelectContent>
               </Select>
 

@@ -17,6 +17,7 @@ function mapDescriptionToEventType(line: PaymentLedgerLine): string {
   if (d.includes('so.payout')) return 'payout_bank';
   if (d.startsWith('support adjustment')) return 'toll_support_adjustment';
   if (line.lineKind === 'toll_refund') return 'toll_support_adjustment';
+  if (line.lineKind === 'cancellation') return 'fare_earning';
   return 'payment_line';
 }
 
@@ -25,6 +26,9 @@ function primaryAmount(line: PaymentLedgerLine, eventType: string): number {
     if (Math.abs(line.fareBreakdown.tollRefund) > 1e-9) return line.fareBreakdown.tollRefund;
     if (Math.abs(line.paidToYou) > 1e-9) return line.paidToYou;
     return line.earningsGross;
+  }
+  if (line.lineKind === 'cancellation' && Math.abs(line.fareBreakdown.cancellation) > 1e-9) {
+    return line.fareBreakdown.cancellation;
   }
   if (Math.abs(line.earningsGross) > 1e-9) return line.earningsGross;
   if (Math.abs(line.paidToYou) > 1e-9) return line.paidToYou;

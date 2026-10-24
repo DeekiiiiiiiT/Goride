@@ -39,7 +39,7 @@ export function ExpenseHubShell({
   initialVehicleId?: string;
   initialSubview?: ExpenseHubSubview;
 }) {
-  const { can } = usePermissions();
+  const { can, role } = usePermissions();
   const flagQuery = useExpenseHubFlag();
   const hubEnabled = flagQuery.data?.enabled === true;
 
@@ -52,7 +52,9 @@ export function ExpenseHubShell({
     if (initialSubview) setSubview(initialSubview);
   }, [initialSubview]);
 
-  if (!can('expenses.view')) return <HubDenied what="Business Finance expenses" />;
+  if (!can('expenses.view')) {
+    return <HubDenied what="Business Finance expenses" role={role} missingPermission="expenses.view" />;
+  }
   if (flagQuery.isLoading) return <HubLoading label="Loading Expense Hub…" />;
 
   const subviews: Array<{

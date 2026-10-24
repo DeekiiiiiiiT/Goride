@@ -1,0 +1,10 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "git": { "deploymentEnabled": { "main": false } },
+  "ignoreCommand": "node ../../scripts/vercel-should-build.mjs apps/plug",
+  "installCommand": "cd ../.. && npm install -g pnpm@9.15.4 && pnpm install --no-frozen-lockfile --ignore-scripts && pnpm rebuild esbuild @tailwindcss/oxide",
+  "buildCommand": "cd ../.. && pnpm --filter @roam/plug build",
+  "outputDirectory": "dist",
+  "framework": null,
+  "rewrites": [{ "source": "/(.*)", "destination": "/" }]
+}

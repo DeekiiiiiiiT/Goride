@@ -21,6 +21,10 @@ export function payoutBankEventWeekKey(
   ev: PayoutBankEventLike,
   timezone?: string,
 ): string | null {
+  const meta = ev.metadata;
+  const stamped =
+    meta && typeof meta === 'object' ? ymdSlice((meta as { weekKey?: unknown }).weekKey) : null;
+  if (stamped) return periodKeyFor(stamped, timezone || DEFAULT_FLEET_TZ);
   const date = ymdSlice(ev.date) || ymdSlice(ev.periodStart);
   if (!date) return null;
   return periodKeyFor(date, timezone || DEFAULT_FLEET_TZ);

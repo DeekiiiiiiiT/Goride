@@ -5,6 +5,7 @@
   "description": "Shared Tailwind v4 theme tokens for Roam apps",
   "exports": {
     "./theme.css": "./theme.css",
-    "./enterprise.css": "./enterprise.css"
+    "./enterprise.css": "./enterprise.css",
+    "./plug.css": "./plug.css"
   }
 }

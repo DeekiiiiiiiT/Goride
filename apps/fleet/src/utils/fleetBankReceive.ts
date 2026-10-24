@@ -259,6 +259,8 @@ export function aggregateExpectedBankByWeek(
   for (const raw of events || []) {
     if (!raw || typeof raw !== 'object') continue;
     if (String(raw.eventType || '') !== 'payout_bank') continue;
+    const driverId = String(raw.driverId || '');
+    if (driverId.startsWith('00000000') && !isOrgBankEvent(raw)) continue;
     const weekStartYmd = payoutBankEventWeekKey(raw, timezone);
     if (!weekStartYmd) continue;
     const add = Math.abs(Number(raw.netAmount) || 0);

@@ -65,7 +65,7 @@ export function CoverageHealthPage({ embedded = false }: { embedded?: boolean } 
           Coverage Health
         </h2>
         <p className="text-sm text-slate-400 mt-1">
-          Parish foundation geom, town catalog linkage, and official source vintage.
+          Zone drift and expired exclusions. Shape problems are fixed in Dominion → World Maps → Data quality.
         </p>
       </div>
       )}

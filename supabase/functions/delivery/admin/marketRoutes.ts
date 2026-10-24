@@ -10,6 +10,7 @@ import {
 } from "./dashPermissions.ts";
 import { getDb, writeKvAudit } from "./merchantAdminShared.ts";
 import { attachBoundaryAdminRoutes } from "./boundaryRoutes.ts";
+import { geographyManagedResponse } from "./geoManaged.ts";
 import { attachScopedExclusionRoutes } from "./scopedExclusionRoutes.ts";
 import {
   buildParishSyntheticZone,
@@ -19,9 +20,9 @@ import {
   type CoverageVertex,
   type CoverageZone,
 } from "./coverageEval.ts";
-import {
-  deliveryAreaName,
-} from "./townOutlines.ts";
+function deliveryAreaName(townName: string): string {
+  return `${townName.trim()} delivery area`;
+}
 import {
   buildReadinessChecks,
   hasValidInclude,
@@ -492,6 +493,7 @@ export function registerMarketAdminRoutes(app: Hono) {
   });
 
   admin.post("/parishes", async (c) => {
+    return geographyManagedResponse();
     const adminUser = c.get("adminUser") as ProductAdminUser;
     const denied = requireDashWrite(adminUser);
     if (denied) return denied;
@@ -531,6 +533,7 @@ export function registerMarketAdminRoutes(app: Hono) {
     const denied = requireDashWrite(adminUser);
     if (denied) return denied;
     const body = await c.req.json().catch(() => ({}));
+    if (body.name != null || body.slug != null) return geographyManagedResponse();
     const updates: Record<string, unknown> = {};
     if (body.name != null) updates.name = String(body.name).trim();
     if (body.slug != null) updates.slug = slugify(String(body.slug));
@@ -558,6 +561,7 @@ export function registerMarketAdminRoutes(app: Hono) {
 
   /** Set parish foundation outline. Used as outer gate (town_zones) or live delivery area (parish_boundary). */
   admin.put("/parishes/:parishId/outline", async (c) => {
+    return geographyManagedResponse();
     const adminUser = c.get("adminUser") as ProductAdminUser;
     const denied = requireDashWrite(adminUser);
     if (denied) return denied;
@@ -622,6 +626,7 @@ export function registerMarketAdminRoutes(app: Hono) {
 
   /** Import reference town/city Point pins for ops parish map context. */
   admin.put("/parishes/:parishId/town-pins", async (c) => {
+    return geographyManagedResponse();
     const adminUser = c.get("adminUser") as ProductAdminUser;
     const denied = requireDashWrite(adminUser);
     if (denied) return denied;
@@ -658,6 +663,7 @@ export function registerMarketAdminRoutes(app: Hono) {
   });
 
   admin.delete("/parishes/:parishId", async (c) => {
+    return geographyManagedResponse();
     const adminUser = c.get("adminUser") as ProductAdminUser;
     const denied = requireDashDelete(adminUser);
     if (denied) return denied;
@@ -950,11 +956,14 @@ export function registerMarketAdminRoutes(app: Hono) {
     const marketId = c.req.param("id");
     const res = Number(c.req.query("res") ?? 7);
     const db = getDb();
+    const { activeCoverageGeneration } = await import("../coverageCompile.ts");
+    const generation = await activeCoverageGeneration(db);
     const { data, error } = await db
       .from("coverage_cells")
       .select("h3_cell, h3_res, kind")
       .eq("market_id", marketId)
-      .eq("h3_res", res);
+      .eq("h3_res", res)
+      .eq("generation", generation);
     if (error) return c.json({ error: error.message }, 500);
     return c.json({ cells: data ?? [], resolution: res });
   });

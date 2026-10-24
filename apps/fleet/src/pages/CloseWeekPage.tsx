@@ -1545,7 +1545,7 @@ export function CloseWeekPage({
             ok={!!preview && tollIdentity.closes}
           />
           <CloseWeekIdentityRow
-            label="Σ driver settlements ↔ Business Finance P&L"
+            label="Driver-lane contribution ↔ settlements"
             value={
               pnlBlocker
                 ? MONEY(pnlBlocker.delta)

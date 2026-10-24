@@ -133,6 +133,18 @@ function stepDate(start: Date, n: number, freq: CanonicalFrequency): Date {
   }
 }
 
+/** Next cover term. Start is the day after the old end. The owner can edit both dates. */
+export function renewalCoverage(
+  endDate: string,
+  frequency: string,
+): { startDate: string; endDate: string } {
+  const end = parseYmd(endDate);
+  const start = new Date(end.getTime() + 86_400_000);
+  const freq = canonicalFrequency(frequency);
+  const nextEnd = freq === 'one_time' ? start : stepDate(start, 1, freq);
+  return { startDate: ymd(start), endDate: ymd(nextEnd) };
+}
+
 /**
  * Expand a config into occurrences whose due date falls within
  * [windowStartYmd, windowEndYmd] (inclusive). Respects the config's own
@@ -174,7 +186,9 @@ export function buildFixedExpenseOccurrences(
   for (let n = 0; n < MAX_OCCURRENCES; n++) {
     const occ = stepDate(start, n, freq);
     if (occ > winEnd) break;
-    if (configEnd && occ > configEnd) break;
+    // End date is the last day of cover, not another bill. The start date
+    // is still billed when it falls on the end date (a one-day cover).
+    if (configEnd && ymd(occ) !== config.startDate && occ >= configEnd) break;
     if (occ >= winStart) {
       out.push(makeOccurrence(config, configId, ymd(occ), amount, category, currency, versionTag));
     }

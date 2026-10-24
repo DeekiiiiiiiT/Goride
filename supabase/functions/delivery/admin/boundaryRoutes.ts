@@ -6,6 +6,7 @@ import { requireProductAdmin, type ProductAdminUser } from "../../_shared/produc
 import { requireDashWrite } from "./dashPermissions.ts";
 import { getDb, writeKvAudit } from "./merchantAdminShared.ts";
 import { marketSlugFromBoundary } from "./marketSlug.ts";
+import { geographyManagedResponse } from "./geoManaged.ts";
 
 type BoundaryUpsertRow = {
   admin_level: number;
@@ -157,6 +158,7 @@ export function attachBoundaryAdminRoutes(admin: Hono) {
   });
 
   admin.post("/boundaries/import", async (c) => {
+    return geographyManagedResponse();
     const adminUser = c.get("adminUser") as ProductAdminUser;
     const denied = requireDashWrite(adminUser);
     if (denied) return denied;
@@ -429,6 +431,7 @@ export function attachBoundaryAdminRoutes(admin: Hono) {
   });
 
   admin.post("/parishes/:parishId/outline-versions/:versionId/restore", async (c) => {
+    return geographyManagedResponse();
     const adminUser = c.get("adminUser") as ProductAdminUser;
     const denied = requireDashWrite(adminUser);
     if (denied) return denied;

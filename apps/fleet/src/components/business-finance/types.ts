@@ -127,6 +127,12 @@ export type BusinessFinanceOverview = {
     driverPayouts: number;
     /** Cash Wallet write-offs — company loss; never cash collected. */
     cashWrittenOff: number;
+    platformFees?: number;
+    driverCommission?: number;
+    otherIncome?: number;
+    /** Pump spend. Profit uses fleet cost, not this headline. */
+    fuelSpend?: number;
+    fleetFuelCost?: number;
   };
   /** Bank → platform wallet transfers (not an expense). */
   transfers: {
@@ -135,7 +141,9 @@ export type BusinessFinanceOverview = {
   profit: {
     operatingProfit: number;
     operatingRatio: number | null;
+    withheld?: boolean;
   };
+  basis?: 'accrual' | 'cash';
   risks: {
     needsStatementWeeks: number;
     highCashDrivers: number;
@@ -219,6 +227,7 @@ export type DriverBalanceRow = {
   weekLabel: string;
   periodAnchor: string;
   status: string;
+  note?: string;
 };
 
 export type DriverBalancesSnapshot = {

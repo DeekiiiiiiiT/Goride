@@ -90,6 +90,8 @@ export interface StationOverride {
   // Phase 10: Enriched Metadata Overrides
   amenities?: string[];
   dataSource?: 'log' | 'manual' | 'import' | string;
+  /** Which app first created the station. Separate from dataSource. */
+  originApp?: 'roam_fleet' | 'roam_plug' | 'manual' | string;
   category?: 'fuel' | 'non_fuel';
   contactInfo?: {
     phone?: string;

@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+
+<html lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" name="viewport"/><meta content="mobile_blank" name="shell-type"/><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=block" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap" rel="stylesheet"/><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config = { darkMode: "class", theme: { extend: { colors: { "surface-container-highest": "#e8e1db", "surface-container": "#f4ede6", "on-surface": "#1e1b17", "error": "#ba1a1a", "surface-bright": "#fff8f2", "on-background": "#1e1b17", "outline": "#8e7166", "secondary-fixed": "#ffdbca", "on-secondary-fixed": "#341100", "surface-dim": "#e0d9d2", "inverse-on-surface": "#f7efe9", "tertiary-fixed": "#ffdf9a", "primary-container": "#cc4900", "primary-fixed": "#ffdbce", "surface-variant": "#e8e1db", "on-error": "#ffffff", "on-tertiary-fixed-variant": "#5a4300", "on-primary-fixed-variant": "#7f2b00", "tertiary-container": "#936f00", "error-container": "#ffdad6", "on-tertiary": "#ffffff", "on-tertiary-container": "#fffbff", "secondary": "#9d4300", "primary": "#a33900", "inverse-surface": "#33302c", "primary-fixed-dim": "#ffb599", "on-primary-container": "#fffbff", "inverse-primary": "#ffb599", "on-primary": "#ffffff", "surface": "#fff8f2", "background": "#fff8f2", "surface-container-high": "#eee7e0", "outline-variant": "#e2bfb2", "on-secondary": "#ffffff", "secondary-fixed-dim": "#ffb690", "surface-container-low": "#faf2eb", "on-secondary-fixed-variant": "#783200", "on-tertiary-fixed": "#251a00", "on-error-container": "#93000a", "surface-tint": "#a73a00", "on-surface-variant": "#5a4138", "secondary-container": "#fd761a", "tertiary": "#755800", "tertiary-fixed-dim": "#f7be1d", "on-secondary-container": "#5c2400", "surface-container-lowest": "#ffffff", "on-primary-fixed": "#370e00" }, borderRadius: { "DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px" }, spacing: { "gutter-sm": "0.75rem", "space-xs": "0.25rem", "space-md": "1rem", "space-xl": "2rem", "space-sm": "0.5rem", "gutter": "1rem", "space-lg": "1.5rem", "margin": "1rem", "margin-lg": "1.5rem" }, fontFamily: { "body-lg": ["Inter"], "display-lg-mobile": ["Inter"], "headline-md": ["Inter"], "headline-sm": ["Inter"], "label-md": ["Inter"], "display-lg": ["Inter"], "label-sm": ["Inter"], "price-display": ["Inter"], "headline-lg": ["Inter"], "label-lg": ["Inter"], "body-sm": ["Inter"], "body-md": ["Inter"] }, fontSize: { "body-lg": ["16px", { "lineHeight": "24px", "fontWeight": "400" }], "display-lg-mobile": ["32px", { "lineHeight": "40px", "letterSpacing": "-0.02em", "fontWeight": "800" }], "headline-md": ["22px", { "lineHeight": "28px", "letterSpacing": "-0.01em", "fontWeight": "700" }], "headline-sm": ["18px", { "lineHeight": "24px", "fontWeight": "600" }], "label-md": ["12px", { "lineHeight": "16px", "letterSpacing": "0.02em", "fontWeight": "600" }], "display-lg": ["40px", { "lineHeight": "48px", "letterSpacing": "-0.02em", "fontWeight": "800" }], "label-sm": ["10px", { "lineHeight": "12px", "letterSpacing": "0.04em", "fontWeight": "700" }], "price-display": ["24px", { "lineHeight": "28px", "letterSpacing": "-0.01em", "fontWeight": "700" }], "headline-lg": ["28px", { "lineHeight": "36px", "letterSpacing": "-0.01em", "fontWeight": "700" }], "label-lg": ["14px", { "lineHeight": "20px", "letterSpacing": "0.01em", "fontWeight": "600" }], "body-sm": ["12px", { "lineHeight": "16px", "fontWeight": "400" }], "body-md": ["14px", { "lineHeight": "20px", "fontWeight": "400" }] } } } };</script><style>@layer base{html,body{width:100%;margin:0;padding:0;}body{overscroll-behavior:none;}.pb-safe{padding-bottom:env(safe-area-inset-bottom,0px);}.pt-safe{padding-top:env(safe-area-inset-top,0px);}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head><body class="bg-surface text-on-surface antialiased flex flex-col min-h-screen"><div class="w-full pt-safe px-margin select-none"><div class="flex justify-between items-center pt-space-xs text-on-surface"><span class="font-label-md text-label-md font-semibold tracking-tight">9:41</span><div class="flex items-center gap-1.5"><span class="material-symbols-outlined text-[16px] leading-none">signal_cellular_alt</span><span class="material-symbols-outlined text-[16px] leading-none">wifi</span><span class="material-symbols-outlined text-[18px] leading-none">battery_full</span></div></div></div><main class="flex-1 flex flex-col relative w-full pb-safe bg-surface px-margin"><div class="flex flex-col w-full pb-6 select-none">
+<!-- Top Bar with Skip Navigation -->
+<div class="flex items-center justify-between w-full py-space-sm mb-space-sm">
+<div class="flex items-center gap-2">
+<div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center text-on-primary shadow-sm">
+<span class="material-symbols-outlined text-[18px]">electric_bolt</span>
+</div>
+<div class="flex flex-col">
+<span class="font-headline-sm text-headline-sm text-on-surface leading-none">Roam Plug</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider mt-0.5">Island Driver Co-Pilot</span>
+</div>
+</div>
+<button class="px-space-sm py-1.5 rounded-full bg-surface-container hover:bg-surface-container-high transition-colors font-label-lg text-label-lg text-on-surface-variant" id="skipBtn">
+      Skip
+    </button>
+</div>
+<!-- Headline Context -->
+<div class="mb-space-md">
+<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-secondary-fixed text-on-secondary-fixed font-label-md text-label-md mb-space-xs">
+<span class="material-symbols-outlined text-[14px]">verified</span> 100% Local Utility
+    </span>
+<h1 class="font-display-lg-mobile text-display-lg-mobile text-on-surface tracking-tight">Built for Jamaican Roads</h1>
+<p class="font-body-md text-body-md text-on-surface-variant mt-1">Everything route taxis, couriers, and daily commuters need on one smart dashboard.</p>
+</div>
+<!-- Interactive Swipeable Tour Wrapper -->
+<div class="relative w-full overflow-hidden rounded-xl">
+<div class="flex w-full transition-transform duration-300 ease-out" id="tourTrack">
+<!-- Slide 1: Find Fuel (Active Initial) -->
+<div class="w-full flex-shrink-0 flex flex-col">
+<div class="bg-surface-container rounded-xl p-space-md shadow-sm flex flex-col gap-space-md">
+<div class="flex items-start justify-between">
+<div class="w-14 h-14 rounded-xl bg-primary-container flex items-center justify-center text-on-primary-container shadow-md">
+<span class="material-symbols-outlined text-[32px]">local_gas_station</span>
+</div>
+<span class="px-2.5 py-1 rounded-full bg-tertiary-fixed text-on-tertiary-fixed font-label-md text-label-md flex items-center gap-1 shadow-sm">
+<span class="material-symbols-outlined text-[14px]" style="font-variation-settings: 'FILL' 1;">price_check</span>
+              Real-time JMD
+            </span>
+</div>
+<div>
+<h2 class="font-headline-md text-headline-md text-on-surface">Find Fuel Fast</h2>
+<p class="font-body-md text-body-md text-on-surface-variant mt-1">
+              See live fuel prices at stations across all 14 parishes, crowd-verified by Jamaican drivers.
+            </p>
+</div>
+<!-- Micro Interactive Preview: Station Card -->
+<div class="bg-surface-container-lowest rounded-xl p-space-md shadow-sm flex flex-col gap-3">
+<div class="flex items-start justify-between gap-2">
+<div class="flex items-center gap-2.5 min-w-0">
+<div class="w-9 h-9 rounded-lg bg-surface-container-high flex items-center justify-center text-primary flex-shrink-0">
+<span class="material-symbols-outlined text-[20px]" style="font-variation-settings: 'FILL' 1;">local_gas_station</span>
+</div>
+<div class="min-w-0">
+<div class="flex items-center gap-1">
+<span class="font-label-lg text-label-lg text-on-surface truncate">Fesco - White River</span>
+<span class="material-symbols-outlined text-[16px] text-primary" style="font-variation-settings: 'FILL' 1;">verified</span>
+</div>
+<span class="font-body-sm text-body-sm text-on-surface-variant truncate block">Ocho Rios, St. Ann</span>
+</div>
+</div>
+<span class="font-label-sm text-label-sm text-on-surface-variant bg-surface-container px-2 py-0.5 rounded-full flex-shrink-0">
+                2.1 km away
+              </span>
+</div>
+<!-- Price Callout Grid -->
+<div class="grid grid-cols-2 gap-2">
+<div class="bg-surface-container-low rounded-lg p-2 flex flex-col">
+<span class="font-label-sm text-label-sm text-on-surface-variant uppercase">E-10 87 Octane</span>
+<span class="font-price-display text-price-display text-primary font-bold">J$208.50</span>
+</div>
+<div class="bg-surface-container-low rounded-lg p-2 flex flex-col">
+<span class="font-label-sm text-label-sm text-on-surface-variant uppercase">Ultra Diesel</span>
+<span class="font-price-display text-price-display text-on-surface font-bold">J$214.20</span>
+</div>
+</div>
+<div class="flex items-center justify-between pt-1">
+<span class="px-2 py-0.5 rounded-full bg-tertiary-fixed-dim text-on-tertiary-fixed font-label-sm text-label-sm font-semibold">
+                ★ Cheapest in St. Ann
+              </span>
+<span class="font-label-sm text-label-sm text-on-surface-variant flex items-center gap-1">
+<span class="material-symbols-outlined text-[12px]">schedule</span> updated 28m ago
+              </span>
+</div>
+</div>
+</div>
+</div>
+<!-- Slide 2: Track Your Car -->
+<div class="w-full flex-shrink-0 flex flex-col">
+<div class="bg-surface-container rounded-xl p-space-md shadow-sm flex flex-col gap-space-md">
+<div class="flex items-start justify-between">
+<div class="w-14 h-14 rounded-xl bg-secondary flex items-center justify-center text-on-secondary shadow-md">
+<span class="material-symbols-outlined text-[32px]">speed</span>
+</div>
+<span class="px-2.5 py-1 rounded-full bg-secondary-fixed text-on-secondary-fixed font-label-md text-label-md flex items-center gap-1 shadow-sm">
+<span class="material-symbols-outlined text-[14px]">notifications_active</span> Auto Alerts
+            </span>
+</div>
+<div>
+<h2 class="font-headline-md text-headline-md text-on-surface">Track Your Car</h2>
+<p class="font-body-md text-body-md text-on-surface-variant mt-1">
+              Log your odometer when you fuel up — we'll tell you when service is due (oil changes, fitness inspection, road license).
+            </p>
+</div>
+<!-- Micro Preview: Service Milestones -->
+<div class="bg-surface-container-lowest rounded-xl p-space-md shadow-sm flex flex-col gap-2.5">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[20px] text-secondary">minor_crash</span>
+<span class="font-label-lg text-label-lg text-on-surface">Toyota Probox (2018)</span>
+</div>
+<span class="font-label-sm text-label-sm bg-surface-container px-2 py-0.5 rounded-full text-on-surface">148,220 km</span>
+</div>
+<div class="flex flex-col gap-2 pt-1">
+<div class="flex items-center justify-between p-2 rounded-lg bg-surface-container-low">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[18px] text-primary">car_repair</span>
+<span class="font-label-md text-label-md text-on-surface">Oil & Filter Change</span>
+</div>
+<span class="font-label-sm text-label-sm text-primary font-semibold">Due in 780 km</span>
+</div>
+<div class="flex items-center justify-between p-2 rounded-lg bg-surface-container-low">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[18px] text-tertiary">description</span>
+<span class="font-label-md text-label-md text-on-surface">Fitness Certificate</span>
+</div>
+<span class="font-label-sm text-label-sm text-on-surface-variant">Due Oct 14</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Slide 3: Find Parts & Mechanics -->
+<div class="w-full flex-shrink-0 flex flex-col">
+<div class="bg-surface-container rounded-xl p-space-md shadow-sm flex flex-col gap-space-md">
+<div class="flex items-start justify-between">
+<div class="w-14 h-14 rounded-xl bg-tertiary-container flex items-center justify-center text-on-tertiary-container shadow-md">
+<span class="material-symbols-outlined text-[32px]">build_circle</span>
+</div>
+<span class="px-2.5 py-1 rounded-full bg-surface-container-highest text-on-surface font-label-md text-label-md flex items-center gap-1 shadow-sm">
+<span class="material-symbols-outlined text-[14px]">tune</span> Island-Fit
+            </span>
+</div>
+<div>
+<h2 class="font-headline-md text-headline-md text-on-surface">Parts & Trusted Mechanics</h2>
+<p class="font-body-md text-body-md text-on-surface-variant mt-1">
+              See parts that fit your car (Roomy, Fit, Axio, Probox) and trusted alignment, tire, and repair shops near you.
+            </p>
+</div>
+<!-- Micro Preview: Parts Compatibility -->
+<div class="bg-surface-container-lowest rounded-xl p-space-md shadow-sm flex flex-col gap-2.5">
+<div class="flex items-center justify-between">
+<span class="font-label-sm text-label-sm text-on-surface-variant uppercase">Compatible Match</span>
+<span class="px-2 py-0.5 rounded-full bg-tertiary-fixed text-on-tertiary-fixed font-label-sm text-label-sm">Exact Fit: Axio / Fielder</span>
+</div>
+<div class="flex items-center gap-3">
+<div class="w-12 h-12 rounded-lg bg-surface-container flex items-center justify-center text-primary flex-shrink-0">
+<span class="material-symbols-outlined text-[24px]">precision_manufacturing</span>
+</div>
+<div class="min-w-0 flex-1">
+<span class="font-label-lg text-label-lg text-on-surface truncate block">Front Brake Pads Set (OEM)</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">Spanish Town Road Auto Parts</span>
+</div>
+<div class="text-right">
+<span class="font-headline-sm text-headline-sm text-primary">J$4,800</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Slide 4: Map Jamaica -->
+<div class="w-full flex-shrink-0 flex flex-col">
+<div class="bg-surface-container rounded-xl p-space-md shadow-sm flex flex-col gap-space-md">
+<div class="flex items-start justify-between">
+<div class="w-14 h-14 rounded-xl bg-inverse-surface flex items-center justify-center text-inverse-on-surface shadow-md">
+<span class="material-symbols-outlined text-[32px]">pin_drop</span>
+</div>
+<span class="px-2.5 py-1 rounded-full bg-primary-fixed text-on-primary-fixed font-label-md text-label-md flex items-center gap-1 shadow-sm">
+<span class="material-symbols-outlined text-[14px]">groups</span> Driver Network
+            </span>
+</div>
+<div>
+<h2 class="font-headline-md text-headline-md text-on-surface">Map Jamaica Together</h2>
+<p class="font-body-md text-body-md text-on-surface-variant mt-1">
+              Pin places you visit and help every driver on the island. Every single road pin is verified by our local team.
+            </p>
+</div>
+<!-- Micro Preview: Community Pin -->
+<div class="bg-surface-container-lowest rounded-xl p-space-md shadow-sm flex flex-col gap-2.5">
+<div class="flex items-center gap-2">
+<div class="w-8 h-8 rounded-full bg-secondary-fixed flex items-center justify-center text-on-secondary-fixed">
+<span class="material-symbols-outlined text-[18px]">add_location_alt</span>
+</div>
+<div class="flex-1 min-w-0">
+<span class="font-label-lg text-label-lg text-on-surface block truncate">Spur Tree Hill Warning</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">Manchester / St. Elizabeth border</span>
+</div>
+<span class="px-2 py-0.5 rounded-full bg-surface-container text-on-surface-variant font-label-sm text-label-sm">
+                Verified
+              </span>
+</div>
+<div class="p-2 rounded-lg bg-surface-container-low font-body-sm text-body-sm text-on-surface flex items-center gap-1.5">
+<span class="material-symbols-outlined text-[16px] text-primary">warning</span>
+              Oil slick reported near lookout curve — climb in low gear.
+            </div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Quick Pillar Chips (Tap to Jump) -->
+<div class="grid grid-cols-4 gap-1.5 mt-space-sm mb-space-md">
+<button class="step-chip py-2 px-1 rounded-lg bg-primary text-on-primary text-center flex flex-col items-center gap-0.5 transition-all" data-step="0">
+<span class="material-symbols-outlined text-[18px]">local_gas_station</span>
+<span class="font-label-sm text-label-sm truncate w-full">Fuel</span>
+</button>
+<button class="step-chip py-2 px-1 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface text-center flex flex-col items-center gap-0.5 transition-all" data-step="1">
+<span class="material-symbols-outlined text-[18px]">speed</span>
+<span class="font-label-sm text-label-sm truncate w-full">Track</span>
+</button>
+<button class="step-chip py-2 px-1 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface text-center flex flex-col items-center gap-0.5 transition-all" data-step="2">
+<span class="material-symbols-outlined text-[18px]">build</span>
+<span class="font-label-sm text-label-sm truncate w-full">Parts</span>
+</button>
+<button class="step-chip py-2 px-1 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface text-center flex flex-col items-center gap-0.5 transition-all" data-step="3">
+<span class="material-symbols-outlined text-[18px]">map</span>
+<span class="font-label-sm text-label-sm truncate w-full">Map</span>
+</button>
+</div>
+<!-- Bottom Control Region -->
+<div class="mt-auto flex flex-col gap-space-sm pt-space-xs">
+<!-- Carousel Dots -->
+<div class="flex items-center justify-center gap-2 py-1">
+<span class="step-dot w-6 h-2 rounded-full bg-primary transition-all duration-300" data-dot="0"></span>
+<span class="step-dot w-2 h-2 rounded-full bg-surface-dim transition-all duration-300" data-dot="1"></span>
+<span class="step-dot w-2 h-2 rounded-full bg-surface-dim transition-all duration-300" data-dot="2"></span>
+<span class="step-dot w-2 h-2 rounded-full bg-surface-dim transition-all duration-300" data-dot="3"></span>
+</div>
+<!-- Main Navigation Button (52px Touch Target) -->
+<button class="w-full h-[52px] rounded-xl bg-primary text-on-primary font-headline-sm text-headline-sm flex items-center justify-center gap-2 shadow-md active:bg-primary-container transition-colors" id="nextBtn">
+<span id="btnLabel">Next</span>
+<span class="material-symbols-outlined text-[20px]" id="btnIcon">arrow_forward</span>
+</button>
+<!-- Offline Resilience Assurance Note -->
+<div class="flex items-center justify-center gap-1.5 text-center text-on-surface-variant font-label-md text-label-md pt-1">
+<span class="material-symbols-outlined text-[16px] text-tertiary">wifi_off</span>
+<span>Works offline • Syncs when connected</span>
+</div>
+</div>
+</div>
+<script>
+  (function() {
+    let currentStep = 0;
+    const totalSteps = 4;
+    const track = document.getElementById('tourTrack');
+    const dots = document.querySelectorAll('.step-dot');
+    const chips = document.querySelectorAll('.step-chip');
+    const nextBtn = document.getElementById('nextBtn');
+    const btnLabel = document.getElementById('btnLabel');
+    const btnIcon = document.getElementById('btnIcon');
+    const skipBtn = document.getElementById('skipBtn');
+
+    function updateCarousel(step) {
+      currentStep = step;
+      track.style.transform = `translateX(-${step * 100}%)`;
+
+      // Update Dots
+      dots.forEach((dot, idx) => {
+        if (idx === currentStep) {
+          dot.className = 'step-dot w-6 h-2 rounded-full bg-primary transition-all duration-300';
+        } else {
+          dot.className = 'step-dot w-2 h-2 rounded-full bg-surface-dim transition-all duration-300';
+        }
+      });
+
+      // Update Chips
+      chips.forEach((chip, idx) => {
+        if (idx === currentStep) {
+          chip.className = 'step-chip py-2 px-1 rounded-lg bg-primary text-on-primary text-center flex flex-col items-center gap-0.5 transition-all shadow-sm';
+        } else {
+          chip.className = 'step-chip py-2 px-1 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface text-center flex flex-col items-center gap-0.5 transition-all';
+        }
+      });
+
+      // Update Button Label
+      if (currentStep === totalSteps - 1) {
+        btnLabel.textContent = "Let's Go!";
+        btnIcon.textContent = "rocket_launch";
+      } else {
+        btnLabel.textContent = "Next";
+        btnIcon.textContent = "arrow_forward";
+      }
+    }
+
+    chips.forEach(chip => {
+      chip.addEventListener('click', () => {
+        const step = parseInt(chip.getAttribute('data-step'), 10);
+        updateCarousel(step);
+      });
+    });
+
+    nextBtn.addEventListener('click', () => {
+      if (currentStep < totalSteps - 1) {
+        updateCarousel(currentStep + 1);
+      } else {
+        btnLabel.textContent = "Ready to Roll!";
+        btnIcon.textContent = "check_circle";
+      }
+    });
+
+    skipBtn.addEventListener('click', () => {
+      updateCarousel(totalSteps - 1);
+    });
+
+    // Touch Swipe Support
+    let touchStartX = 0;
+    let touchEndX = 0;
+
+    track.addEventListener('touchstart', e => {
+      touchStartX = e.changedTouches[0].screenX;
+    }, { passive: true });
+
+    track.addEventListener('touchend', e => {
+      touchEndX = e.changedTouches[0].screenX;
+      handleGesture();
+    }, { passive: true });
+
+    function handleGesture() {
+      const threshold = 40;
+      if (touchEndX < touchStartX - threshold && currentStep < totalSteps - 1) {
+        updateCarousel(currentStep + 1);
+      } else if (touchEndX > touchStartX + threshold && currentStep > 0) {
+        updateCarousel(currentStep - 1);
+      }
+    }
+  })();
+</script></main></body></html>

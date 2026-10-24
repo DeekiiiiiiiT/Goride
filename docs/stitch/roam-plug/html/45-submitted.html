@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" name="viewport"/>
+<meta content="mobile_blank" name="shell-type"/>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<style>
+    @layer base {
+      html, body { width: 100vw; margin: 0; padding: 0; }
+      body { overscroll-behavior: none; }
+      .pb-safe { padding-bottom: env(safe-area-inset-bottom, 0px); }
+      .pt-safe { padding-top: env(safe-area-inset-top, 0px); }
+    }
+    ::-webkit-scrollbar { display: none; }
+    body { min-height: max(884px, 100dvh); }
+  </style>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {
+            "primary": "#a33900",
+            "primary-container": "#cc4900",
+            "on-primary": "#ffffff",
+            "primary-fixed": "#ffdbce",
+            "on-primary-fixed-variant": "#7f2b00",
+            "secondary": "#9d4300",
+            "secondary-container": "#fd761a",
+            "on-secondary-container": "#5c2400",
+            "tertiary": "#755800",
+            "tertiary-fixed": "#ffdf9a",
+            "tertiary-fixed-dim": "#f7be1d",
+            "on-tertiary-fixed": "#251a00",
+            "background": "#fff8f2",
+            "surface": "#fff8f2",
+            "surface-container-lowest": "#ffffff",
+            "surface-container-low": "#faf2eb",
+            "surface-container": "#f4ede6",
+            "surface-container-high": "#eee7e0",
+            "surface-container-highest": "#e8e1db",
+            "on-surface": "#1e1b17",
+            "on-surface-variant": "#5a4138",
+            "outline": "#8e7166",
+            "outline-variant": "#e2bfb2",
+            "error": "#ba1a1a"
+          },
+          borderRadius: {
+            "DEFAULT": "0.25rem",
+            "lg": "0.5rem",
+            "xl": "0.75rem",
+            "2xl": "1rem",
+            "full": "9999px"
+          },
+          fontFamily: {
+            "sans": ["Inter", "sans-serif"]
+          }
+        }
+      }
+    };
+  </script>
+</head>
+<body class="bg-surface font-sans text-on-surface flex flex-col min-h-screen pt-safe pb-safe selection:bg-primary-fixed selection:text-primary">
+<!-- Top Close/Back Action Bar -->
+<header class="sticky top-0 z-30 flex items-center justify-between px-4 py-3 bg-surface border-b border-surface-container-highest/60 backdrop-blur-sm bg-surface/95">
+<button aria-label="Go back or close" class="flex items-center justify-center w-10 h-10 rounded-full hover:bg-surface-container active:bg-surface-container-high text-on-surface transition-colors" type="button">
+<span class="material-symbols-outlined text-[24px]">close</span>
+</button>
+<div class="flex items-center gap-1.5 font-bold text-sm tracking-wide text-on-surface">
+<span>Map It</span>
+<span class="text-secondary font-black">•</span>
+<span class="text-on-surface-variant font-medium">Status</span>
+</div>
+<div class="w-10 h-10 flex items-center justify-center">
+<button aria-label="Help &amp; Info" class="flex items-center justify-center w-9 h-9 rounded-full hover:bg-surface-container text-on-surface-variant" type="button">
+<span class="material-symbols-outlined text-[20px]">help_outline</span>
+</button>
+</div>
+</header>
+<!-- Main Scrollable Content -->
+<main class="flex-1 w-full max-w-md mx-auto p-4 space-y-4">
+<!-- Hero Pending Badge Section -->
+<div class="flex flex-col items-center justify-center pt-2 pb-1 text-center">
+<!-- Styled Pending Pin Badge -->
+<div class="relative flex items-center justify-center w-28 h-28 mb-3">
+<!-- Glow / Backdrop -->
+<div class="absolute inset-0 rounded-full bg-secondary-container/20 blur-xl"></div>
+<!-- Dashed Circular Border with Animation/Accent Ring -->
+<svg class="absolute inset-0 w-full h-full -rotate-45" viewbox="0 0 112 112">
+<circle class="opacity-80" cx="56" cy="56" fill="none" r="50" stroke="#fd761a" stroke-dasharray="6 5" stroke-linecap="round" stroke-width="2.5"></circle>
+</svg>
+<!-- Inner Badge Container -->
+<div class="relative flex items-center justify-center w-20 h-20 rounded-full bg-surface-container-lowest shadow-md">
+<div class="flex items-center justify-center w-16 h-16 rounded-full bg-gradient-to-tr from-primary to-secondary-container text-on-primary shadow-inner">
+<span class="material-symbols-outlined text-[34px]" style="font-variation-settings: 'FILL' 1;">add_location_alt</span>
+</div>
+<!-- Clock / Hourglass Motif Corner Pill -->
+<div class="absolute -bottom-1 -right-1 flex items-center justify-center w-8 h-8 rounded-full bg-tertiary-fixed-dim text-on-tertiary-fixed shadow-md border-2 border-surface-container-lowest">
+<span class="material-symbols-outlined text-[18px]" style="font-variation-settings: 'FILL' 1;">schedule</span>
+</div>
+</div>
+</div>
+<!-- Pending Verification Chip -->
+<div class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-tertiary-fixed/60 text-on-tertiary-fixed mb-2 shadow-xs">
+<span class="material-symbols-outlined text-[15px]" style="font-variation-settings: 'FILL' 1;">hourglass_top</span>
+<span class="text-xs font-bold uppercase tracking-wider">Pending Verification</span>
+</div>
+<!-- Headings -->
+<h1 class="text-2xl font-extrabold tracking-tight text-on-surface text-center">
+        Thanks! Your pin is awaiting approval
+      </h1>
+<p class="text-sm text-on-surface-variant max-w-xs text-center mt-1.5 leading-relaxed">
+        The Roam team checks every pin before it goes on the map. We'll notify you once verified.
+      </p>
+</div>
+<!-- Submission Summary Card -->
+<div class="w-full bg-surface-container-lowest rounded-2xl shadow-sm border border-surface-container-highest/60 p-4">
+<div class="flex items-start justify-between gap-3 pb-3 border-b border-surface-container">
+<div class="flex items-start gap-3 min-w-0">
+<div class="flex items-center justify-center w-11 h-11 rounded-xl bg-surface-container text-primary shrink-0 text-xl font-bold shadow-xs">
+            ⛽
+          </div>
+<div class="min-w-0">
+<h2 class="text-base font-bold text-on-surface truncate">TotalEnergies Half-Way-Tree</h2>
+<p class="text-xs text-on-surface-variant truncate mt-0.5">Constant Spring Rd, Kingston 10</p>
+</div>
+</div>
+</div>
+<div class="flex items-center justify-between pt-3 gap-2">
+<span class="text-xs font-semibold text-on-surface-variant flex items-center gap-1.5">
+<span class="material-symbols-outlined text-[16px] text-primary">local_gas_station</span>
+          Gas Station
+        </span>
+<!-- Status Pill -->
+<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-surface-container-low text-secondary border border-secondary-container/30 text-xs font-bold">
+<span class="w-2 h-2 rounded-full bg-secondary-container animate-pulse"></span>
+          Pending Review • ~2-4 hours est.
+        </span>
+</div>
+</div>
+<!-- Community Contribution Card (Warm Gradient Background) -->
+<div class="relative w-full rounded-2xl overflow-hidden p-4 bg-gradient-to-br from-primary-container via-secondary-container to-tertiary-fixed text-on-primary shadow-md">
+<!-- Ambient Decorative Trophy Watermark -->
+<div class="absolute -right-5 -bottom-6 opacity-15 pointer-events-none select-none">
+<span class="material-symbols-outlined text-[140px]">emoji_events</span>
+</div>
+<div class="relative z-10 flex flex-col gap-2.5">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2">
+<div class="flex items-center justify-center w-8 h-8 rounded-full bg-white/20 backdrop-blur-sm text-white">
+<span class="material-symbols-outlined text-[20px]" style="font-variation-settings: 'FILL' 1;">emoji_events</span>
+</div>
+<span class="text-xs font-bold tracking-wider uppercase text-white/95">Scout Network</span>
+</div>
+<span class="text-xs font-semibold px-2.5 py-1 rounded-full bg-black/15 backdrop-blur-sm text-white">
+            Rank: Parish Scout Level 2
+          </span>
+</div>
+<div class="flex items-baseline justify-between mt-1">
+<div>
+<div class="text-2xl font-black tracking-tight text-white">
+              12 Places Mapped
+            </div>
+</div>
+<div class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-surface-container-lowest text-primary font-bold text-sm shadow-xs">
+            +25 Pending Scout Points
+          </div>
+</div>
+<div class="mt-1 bg-black/10 rounded-xl p-2.5 backdrop-blur-xs">
+<p class="text-xs text-white/95 flex items-start gap-1.5 leading-snug">
+<span class="material-symbols-outlined text-[15px] shrink-0 mt-0.5 text-tertiary-fixed" style="font-variation-settings: 'FILL' 1;">thumb_up</span>
+<span>Your pins help over <strong>3,400 Jamaican motorists</strong> find fuel, air, and repairs.</span>
+</p>
+</div>
+</div>
+</div>
+<!-- Verification Steps Card -->
+<div class="w-full bg-surface-container-lowest rounded-2xl shadow-sm border border-surface-container-highest/60 p-4">
+<h3 class="text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-3">Verification Process</h3>
+<div class="space-y-3">
+<!-- Step 1: GPS corridor match: Verified -->
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2.5 min-w-0">
+<div class="flex items-center justify-center w-6 h-6 rounded-full bg-emerald-100 text-emerald-700 shrink-0">
+<span class="material-symbols-outlined text-[16px]">check</span>
+</div>
+<span class="text-sm font-medium text-on-surface">1. GPS corridor match</span>
+</div>
+<span class="text-xs font-bold text-emerald-700">Verified</span>
+</div>
+<!-- Step 2: Community moderator check: In queue -->
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2.5 min-w-0">
+<div class="flex items-center justify-center w-6 h-6 rounded-full bg-amber-100 text-amber-800 shrink-0">
+<span class="material-symbols-outlined text-[15px]" style="font-variation-settings: 'FILL' 1;">schedule</span>
+</div>
+<span class="text-sm font-medium text-on-surface">2. Community moderator check</span>
+</div>
+<span class="text-xs font-bold text-amber-700">In queue</span>
+</div>
+<!-- Step 3: Published to Jamaican Radar (muted) -->
+<div class="flex items-center justify-between opacity-60">
+<div class="flex items-center gap-2.5 min-w-0">
+<div class="flex items-center justify-center w-6 h-6 rounded-full bg-surface-container text-on-surface-variant shrink-0">
+<span class="material-symbols-outlined text-[15px]">sensors</span>
+</div>
+<span class="text-sm font-medium text-on-surface">3. Published to Jamaican Radar</span>
+</div>
+<span class="text-xs font-medium text-on-surface-variant">Pending</span>
+</div>
+</div>
+</div>
+<!-- Bottom Actions -->
+<div class="space-y-2.5 pt-2">
+<!-- Primary button: Map Another Place -->
+<button class="w-full bg-primary text-white py-3.5 rounded-xl font-bold flex items-center justify-center gap-2 shadow-sm active:opacity-90 transition-opacity text-sm" type="button">
+<span class="material-symbols-outlined text-[19px]">add_location</span>
+<span>Map Another Place</span>
+</button>
+<!-- Secondary button: Back to Map -->
+<button class="w-full border border-outline py-3 rounded-xl font-semibold w-full text-center text-on-surface flex items-center justify-center gap-2 hover:bg-surface-container/50 active:bg-surface-container transition-colors text-sm" type="button">
+<span class="material-symbols-outlined text-[19px] text-primary">map</span>
+<span>Back to Map</span>
+</button>
+<!-- Text link: View My Submitted Places -->
+<div class="text-center pt-1 pb-2">
+<a class="text-xs font-semibold text-secondary hover:underline underline-offset-4 py-1.5 px-3" href="#submitted-places">
+          View My Submitted Places
+        </a>
+</div>
+</div>
+</main>
+</body></html>

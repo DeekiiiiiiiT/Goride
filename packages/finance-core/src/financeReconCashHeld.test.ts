@@ -22,10 +22,24 @@ describe('finance-recon cash_still_held identity', () => {
       cash_returned: 0,
       toll_charged_to_driver: 0,
       toll_cash_spend: 800,
-      fuel_fleet_share: 200,
+      fuel_fleet_share: 15000,
+      fuel_driver_spend: 200,
       cash_written_off: 0,
     };
     expect(computeExpectedCashStillHeld(row)).toBe(4000);
+  });
+
+  it('company gas-card share does not reduce cash the driver still holds', () => {
+    const row = {
+      cash_collected: 5000,
+      cash_returned: 0,
+      toll_charged_to_driver: 0,
+      toll_cash_spend: 0,
+      fuel_fleet_share: 15000,
+      fuel_driver_spend: 0,
+      cash_written_off: 0,
+    };
+    expect(computeExpectedCashStillHeld(row)).toBe(5000);
   });
 
   it('clamps negative balance to zero', () => {

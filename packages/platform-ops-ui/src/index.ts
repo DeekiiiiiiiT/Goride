@@ -69,6 +69,7 @@ export { TollRatePublishPreviewDialog } from './toll/TollRatePublishPreviewDialo
 export { tollOpsApi } from './services/tollOpsApi';
 
 export { StationDatabaseView } from './stations/StationDatabaseView';
+export { PlacesReview } from './places/PlacesReview';
 export {
   ResolutionQueueTab,
   type ResolutionQueueSubTab,

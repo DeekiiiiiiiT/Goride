@@ -19,6 +19,8 @@ export type PersistedPeriodRow = {
   fleet_share?: number | null;
   fuel_deduction?: number | null;
   fuel_fleet_share?: number | null;
+  /** Cash or personal fuel the driver paid. This is the settlement credit, not company share. */
+  fuel_driver_spend?: number | null;
   toll_charged_to_driver?: number | null;
   toll_cash_spend?: number | null;
   toll_tag_spend?: number | null;
@@ -57,7 +59,7 @@ export function mapPersistedRowToSettlementInput(row: PersistedPeriodRow) {
     }),
     // H-6: no clamps — signed values match rebuild path.
     tollPersonal: Number(row.toll_charged_to_driver) || 0,
-    fuelCredits: Number(row.fuel_fleet_share) || 0,
+    fuelCredits: Number(row.fuel_driver_spend) || 0,
     cashWrittenOff: Number(row.cash_written_off) || 0,
     settlementPaid: Number(row.settlement_paid) || 0,
     tipsPaidToDriver,

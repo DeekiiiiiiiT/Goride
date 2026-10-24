@@ -9,6 +9,7 @@ import { requireAuth, requirePermission } from "./rbac_middleware.ts";
 import { filterByOrg, stampOrg, getOrgId } from "./org_scope.ts";
 import { isFeatureEnabled, FEATURE_FLAGS } from "./feature_flags.ts";
 import { appendCanonicalFixedExpenseIfEligible } from "./canonical_from_ops.ts";
+import { renewalCoverage } from "../../../packages/finance-core/src/fixedExpenseOccurrences.ts";
 import {
   appendCanonicalLedgerEvents,
   deleteCanonicalLedgerBySource,
@@ -143,7 +144,6 @@ async function projectFixedExpenseFromAssignment(
   await kv.set(key, stampOrg(config, c));
   await deleteCanonicalLedgerBySource("financial_event", [String(config.id)]);
   const horizon = new Date();
-  horizon.setUTCFullYear(horizon.getUTCFullYear() + 5);
   await appendCanonicalFixedExpenseIfEligible(config, startDate, horizon.toISOString().slice(0, 10), c);
   return config;
 }
@@ -199,6 +199,48 @@ async function appendHubDocumentLedger(c: Context, doc: ExpenseDocument) {
           },
         ];
   return appendCanonicalLedgerEvents(events, c);
+}
+
+function ownerMaySelfApprove(c: Context): boolean {
+  const user = c.get("rbacUser") as { resolvedRole?: string } | undefined;
+  const role = user?.resolvedRole;
+  return role === "fleet_owner" || role === "platform_owner";
+}
+
+function orgRow<T>(raw: unknown, c: Context): T | null {
+  if (!raw) return null;
+  return (filterByOrg([raw], c)[0] as T) || null;
+}
+
+async function appendHubReversal(c: Context, doc: ExpenseDocument) {
+  const orgId = getOrgId(c);
+  const eventType = hubCategoryToCanonicalEventType(String(doc.category));
+  await appendCanonicalLedgerEvents(
+    [
+      {
+        idempotencyKey: `expense_doc:${doc.id}|reversal|v${doc.version}`,
+        date: new Date().toISOString().slice(0, 10),
+        driverId: "fleet",
+        eventType,
+        direction: "inflow",
+        netAmount: doc.netAmount,
+        grossAmount: doc.grossAmount,
+        currency: (doc.currency || "JMD").toUpperCase(),
+        sourceType: "financial_event",
+        sourceId: doc.id,
+        category: String(doc.category),
+        description: `Reversal — ${doc.description}`,
+        metadata: {
+          expenseHub: true,
+          documentId: doc.id,
+          reversal: true,
+          journalKind: "reversal",
+        },
+        ...(orgId ? { organizationId: orgId } : {}),
+      },
+    ],
+    c,
+  );
 }
 
 export function registerExpenseHubRoutes(app: {
@@ -513,8 +555,7 @@ export function registerExpenseHubRoutes(app: {
     doc: ExpenseDocument,
     paymentInput: { amount: number; paymentDate: string; paymentMethod: string; reference?: string },
   ) {
-    const approved = await transitionDocument(c, doc, "approved", {});
-    const posted = await transitionDocument(c, approved, "posted", {});
+    const posted = await transitionDocument(c, doc, "approved", {});
     const payment: ExpensePayment = {
       id: crypto.randomUUID(),
       documentId: posted.id,
@@ -552,7 +593,7 @@ export function registerExpenseHubRoutes(app: {
         createdBy: doc.createdBy,
         submittedBy: doc.submittedBy,
         actorId: actorId(c),
-        allowSelfApprove: Boolean(opts.allowSelfApprove) || actorId(c) === getOrgId(c),
+        allowSelfApprove: ownerMaySelfApprove(c),
       });
       if (!ok) throw new Error("Separation of duties: creator cannot approve this expense");
     }
@@ -561,6 +602,12 @@ export function registerExpenseHubRoutes(app: {
       status: to,
       updatedAt: nowIso(),
       approvedBy: to === "approved" ? actorId(c) : doc.approvedBy,
+      selfApproved:
+        to === "approved" &&
+        ownerMaySelfApprove(c) &&
+        (doc.submittedBy || doc.createdBy) === actorId(c)
+          ? true
+          : doc.selfApproved,
       approvedAt: to === "approved" ? nowIso() : doc.approvedAt,
       postedAt: to === "posted" ? nowIso() : doc.postedAt,
       rejectionReason: to === "rejected" ? opts.reason : doc.rejectionReason,
@@ -639,7 +686,7 @@ export function registerExpenseHubRoutes(app: {
         `expense_journal:${journal.id}`,
         stampOrg(journal as unknown as Record<string, unknown>, c),
       );
-      await deleteCanonicalLedgerBySource("financial_event", [doc.id]);
+      await appendHubReversal(c, doc);
     }
     await kv.set(`expense_doc:${next.id}`, stampOrg(next as unknown as Record<string, unknown>, c));
     await writeAudit(c, {
@@ -698,11 +745,10 @@ export function registerExpenseHubRoutes(app: {
       const body = await c.req.json().catch(() => ({}));
       const raw = await kv.get(`expense_doc:${id}`);
       if (!raw) return c.json({ error: "Not found" }, 404);
-      const doc = filterByOrg([raw], c)[0] as ExpenseDocument;
+      const doc = orgRow<ExpenseDocument>(raw, c);
+      if (!doc) return c.json({ error: "Not found" }, 404);
       try {
-        const next = await transitionDocument(c, doc, "approved", {
-          allowSelfApprove: Boolean(body.allowSelfApprove),
-        });
+        const next = await transitionDocument(c, doc, "approved", {});
         return c.json({ success: true, data: next });
       } catch (e: any) {
         return c.json({ error: e.message }, 400);
@@ -744,14 +790,26 @@ export function registerExpenseHubRoutes(app: {
       const amount = Number(body.amount);
       if (!Number.isFinite(amount) || amount <= 0) return c.json({ error: "Invalid amount" }, 400);
       const raw = await kv.get(`expense_doc:${id}`);
-      if (!raw) return c.json({ error: "Not found" }, 404);
-      const doc = filterByOrg([raw], c)[0] as ExpenseDocument;
+      const doc = orgRow<ExpenseDocument>(raw, c);
+      if (!doc) return c.json({ error: "Not found" }, 404);
       if (!["posted", "partially_paid", "approved"].includes(doc.status)) {
         return c.json({ error: `Cannot pay document in status ${doc.status}` }, 400);
+      }
+      const existing = (filterByOrg(await kv.getByPrefix("expense_payment:"), c) as ExpensePayment[])
+        .filter((p) => p.documentId === id);
+      const idempotencyKey = String(body.idempotencyKey || "").trim();
+      if (idempotencyKey) {
+        const replay = existing.find((p) => p.idempotencyKey === idempotencyKey);
+        if (replay) return c.json({ success: true, idempotent: true, data: doc, payment: replay });
+      }
+      const alreadyPaid = existing.reduce((s, p) => s + Number(p.amount || 0), 0);
+      if (amount > doc.netAmount - alreadyPaid + 0.01) {
+        return c.json({ error: "Payment is more than the balance" }, 400);
       }
       const payment: ExpensePayment = {
         id: crypto.randomUUID(),
         documentId: id,
+        idempotencyKey: idempotencyKey || undefined,
         amount,
         currency: doc.currency || "JMD",
         paymentDate: body.paymentDate || ymd(),
@@ -795,7 +853,8 @@ export function registerExpenseHubRoutes(app: {
       if (!String(body.reason || "").trim()) return c.json({ error: "Reason required" }, 400);
       const raw = await kv.get(`expense_doc:${c.req.param("id")}`);
       if (!raw) return c.json({ error: "Not found" }, 404);
-      const doc = filterByOrg([raw], c)[0] as ExpenseDocument;
+      const doc = orgRow<ExpenseDocument>(raw, c);
+      if (!doc) return c.json({ error: "Not found" }, 404);
       try {
         const next = await transitionDocument(c, doc, "voided", { reason: body.reason });
         return c.json({ success: true, data: next });
@@ -830,6 +889,121 @@ export function registerExpenseHubRoutes(app: {
     ).filter((a) => a.ruleGroupId === id);
     return c.json({ group, assignments });
   });
+
+  app.post(
+    `${PREFIX}/rules/:id/renew`,
+    requireAuth(),
+    requirePermission("expenses.manage_rules"),
+    async (c: Context) => {
+      const blocked = await requireHubWrites(c);
+      if (blocked) return blocked;
+      const id = c.req.param("id");
+      const raw = await kv.get(`expense_rule_group:${id}`);
+      const group = orgRow<ExpenseRuleGroup>(raw, c);
+      if (!group) return c.json({ error: "Not found" }, 404);
+      const body = await c.req.json().catch(() => ({}));
+      const amount = Number(body.amount ?? group.amount);
+      if (!Number.isFinite(amount) || amount <= 0) return c.json({ error: "Invalid amount" }, 400);
+      const fallbackEnd = group.endDate || new Date().toISOString().slice(0, 10);
+      const suggested = renewalCoverage(fallbackEnd, group.frequency || "annually");
+      const startDate = String(body.startDate || suggested.startDate).slice(0, 10);
+      const endDate = String(body.endDate || suggested.endDate).slice(0, 10);
+      if (group.status !== "ended") {
+        await kv.set(
+          `expense_rule_group:${group.id}`,
+          stampOrg({ ...group, status: "ended", autoRenew: false, updatedAt: nowIso() }, c),
+        );
+      }
+      const groupId = crypto.randomUUID();
+      const nextGroup: ExpenseRuleGroup = {
+        ...group,
+        id: groupId,
+        amount,
+        startDate,
+        endDate,
+        status: "active",
+        autoRenew: false,
+        version: 1,
+        createdAt: nowIso(),
+        updatedAt: nowIso(),
+        description: group.description,
+      };
+      (nextGroup as ExpenseRuleGroup & { renewedFrom?: string }).renewedFrom = group.id;
+      await kv.set(`expense_rule_group:${groupId}`, stampOrg(nextGroup, c));
+      const oldAssignments = (
+        filterByOrg(await kv.getByPrefix("expense_rule_assignment:"), c) as ExpenseRuleAssignment[]
+      ).filter((a) => a.ruleGroupId === id && a.isActive);
+      const assignments: ExpenseRuleAssignment[] = [];
+      for (const old of oldAssignments) {
+        const assignmentId = crypto.randomUUID();
+        const assignment: ExpenseRuleAssignment = {
+          ...old,
+          id: assignmentId,
+          ruleGroupId: groupId,
+          fixedExpenseConfigId: assignmentId,
+          startDateOverride: startDate,
+          endDateOverride: endDate,
+          amountOverride: amount,
+          createdAt: nowIso(),
+          updatedAt: nowIso(),
+        };
+        await kv.set(`expense_rule_assignment:${assignmentId}`, stampOrg(assignment, c));
+        await projectFixedExpenseFromAssignment(c, nextGroup, assignment);
+        assignments.push(assignment);
+      }
+      await writeAudit(c, {
+        entityType: "rule_group",
+        entityId: groupId,
+        action: "renew",
+        actorId: actorId(c),
+        after: { from: group.id, startDate, endDate, amount } as unknown as Record<string, unknown>,
+      });
+      return c.json({ success: true, group: nextGroup, assignments });
+    },
+  );
+
+  app.post(
+    `${PREFIX}/rules/:id/reverse-occurrence`,
+    requireAuth(),
+    requirePermission("expenses.manage_rules"),
+    async (c: Context) => {
+      const blocked = await requireHubWrites(c);
+      if (blocked) return blocked;
+      const body = await c.req.json().catch(() => ({}));
+      const occurrenceYmd = String(body.occurrenceYmd || "").slice(0, 10);
+      const amount = Number(body.amount);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(occurrenceYmd) || !Number.isFinite(amount) || amount <= 0) {
+        return c.json({ error: "occurrenceYmd and amount are required" }, 400);
+      }
+      const id = c.req.param("id");
+      const raw = await kv.get(`expense_rule_group:${id}`);
+      const group = orgRow<ExpenseRuleGroup>(raw, c);
+      if (!group) return c.json({ error: "Not found" }, 404);
+      const orgId = getOrgId(c);
+      const result = await appendCanonicalLedgerEvents(
+        [
+          {
+            idempotencyKey: `fixed_expense_reversal:${id}|${occurrenceYmd}`,
+            date: occurrenceYmd,
+            driverId: "fleet",
+            eventType: "fixed_expense",
+            direction: "inflow",
+            netAmount: amount,
+            grossAmount: amount,
+            currency: group.currency || "JMD",
+            sourceType: "financial_event",
+            sourceId: id,
+            category: String(group.category || "Other"),
+            description: `Reversal — ${group.name}`,
+            metadata: { reversal: true, ruleGroupId: id, occurrenceYmd },
+            ...(orgId ? { organizationId: orgId } : {}),
+          },
+        ],
+        c,
+      );
+      return c.json({ success: true, result });
+    },
+  );
 
   app.post(
     `${PREFIX}/rules/preview`,

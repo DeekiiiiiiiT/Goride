@@ -111,6 +111,12 @@ export function buildPeriodMetadata(input: BuildPeriodMetadataInput): Record<str
       ...(priorFc.custodyTransferredAmount != null
         ? { custodyTransferredAmount: round2(Number(priorFc.custodyTransferredAmount) || 0) }
         : {}),
+      ...(priorFc.fuelCreditReceivable
+        ? {
+            fuelCreditReceivableApplied: true,
+            fuelCreditReceivable: priorFc.fuelCreditReceivable,
+          }
+        : {}),
       cashHeldClamped: fc.cashHeldClamped,
       unclampedCashHeld: fc.unclampedCashHeld,
       overpaidAmount: round2(fc.overpaidAmount),

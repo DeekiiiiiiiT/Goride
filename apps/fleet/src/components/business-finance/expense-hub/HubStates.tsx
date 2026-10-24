@@ -55,14 +55,41 @@ export function HubEmpty({
   );
 }
 
-export function HubDenied({ what = 'this section' }: { what?: string }) {
+export function HubDenied({
+  what = 'this section',
+  role,
+  missingPermission = 'expenses.view',
+}: {
+  what?: string;
+  role?: string | null;
+  missingPermission?: string;
+}) {
+  const ownerLockedOut = role === 'fleet_owner' || role === 'platform_owner' || role === 'admin';
+  const diagnostic = `Expense Hub denied. Role: ${role || 'unknown'}. Missing: ${missingPermission}.`;
   return (
-    <div className="flex flex-col items-center justify-center gap-2 rounded-md border border-slate-200 dark:border-slate-800 px-4 py-12 text-center">
+    <div className="flex flex-col items-center justify-center gap-2 rounded-md border border-slate-200 px-4 py-12 text-center dark:border-slate-800">
       <ShieldAlert className="h-6 w-6 text-slate-400" />
       <p className="text-sm text-slate-600 dark:text-slate-300">
         You don't have permission to view {what}.
       </p>
-      <p className="text-xs text-slate-500">Ask a fleet owner to grant Expense Hub access.</p>
+      <p className="text-xs text-slate-500">
+        Signed in as {role || 'unknown'}. Missing permission: {missingPermission}.
+      </p>
+      {ownerLockedOut ? (
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          className="mt-2 min-h-11"
+          onClick={() => {
+            void navigator.clipboard?.writeText(diagnostic);
+          }}
+        >
+          Report this
+        </Button>
+      ) : (
+        <p className="text-xs text-slate-500">A fleet owner can grant this permission.</p>
+      )}
     </div>
   );
 }

@@ -3355,6 +3355,78 @@ app.post("/internal/disputes/refresh-merchant-performance", async (c) => {
     return c.json({ error: e instanceof Error ? e.message : "merchant_performance_failed" }, 500);
   }
 });
+app.post("/internal/geo/impact", async (c) => {
+  const auth = await authorizeCronOrServiceRole(c.req.raw);
+  if (!auth.ok) return c.json({ error: auth.error }, auth.status);
+  try {
+    const body = await c.req.json().catch(() => ({}));
+    const { buildGeoImpact } = await import("./admin/geoPublish.ts");
+    const impact = await buildGeoImpact(
+      getServiceSupabase(),
+      String(body.pcode || ""),
+      String(body.version_id || ""),
+    );
+    const { moves: _moves, market_ids: _ids, ...counts } = impact;
+    return c.json({ impact: counts });
+  } catch (e) {
+    return c.json({ error: e instanceof Error ? e.message : "impact_failed" }, 500);
+  }
+});
+
+app.post("/internal/geo/apply", async (c) => {
+  const auth = await authorizeCronOrServiceRole(c.req.raw);
+  if (!auth.ok) return c.json({ error: auth.error }, auth.status);
+  try {
+    const body = await c.req.json().catch(() => ({}));
+    const { applyGeoPublish } = await import("./admin/geoPublish.ts");
+    const result = await applyGeoPublish(getServiceSupabase(), {
+      pcode: String(body.pcode || ""),
+      versionId: String(body.version_id || ""),
+      confirmName: body.confirm_name != null ? String(body.confirm_name) : null,
+      actorId: body.actor_id != null ? String(body.actor_id) : null,
+      systemHeal: body.system_heal === true,
+    });
+    if (result.error === "confirmation_required") return c.json(result, 409);
+    return c.json(result);
+  } catch (e) {
+    return c.json({ error: e instanceof Error ? e.message : "publish_failed" }, 500);
+  }
+});
+
+app.post("/internal/geo/reconcile", async (c) => {
+  const auth = await authorizeCronOrServiceRole(c.req.raw);
+  if (!auth.ok) return c.json({ error: auth.error }, auth.status);
+  try {
+    const { createClient } = await import("https://esm.sh/@supabase/supabase-js@2");
+    const geo = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+      { db: { schema: "geo" } },
+    );
+    const db = getServiceSupabase();
+    const { data: places } = await geo.from("boundaries").select("pcode, current_version_id").eq("admin_level", 1);
+    const { data: parishes } = await db.from("service_parishes").select("pcode, adopted_version_id");
+    const adopted = new Map((parishes ?? []).map((p) => [String(p.pcode), String(p.adopted_version_id || "")]));
+    const { applyGeoPublish } = await import("./admin/geoPublish.ts");
+    let healed = 0;
+    for (const place of places ?? []) {
+      const current = String(place.current_version_id || "");
+      if (!current || adopted.get(String(place.pcode)) === current) continue;
+      await applyGeoPublish(db, {
+        pcode: String(place.pcode),
+        versionId: current,
+        confirmName: null,
+        actorId: null,
+        systemHeal: true,
+      });
+      healed += 1;
+    }
+    return c.json({ healed });
+  } catch (e) {
+    return c.json({ error: e instanceof Error ? e.message : "reconcile_failed" }, 500);
+  }
+});
+
 app.post("/internal/disputes/process-pending-refunds", async (c) => {
   const auth = await authorizeCronOrServiceRole(c.req.raw);
   if (!auth.ok) return c.json({ error: auth.error }, auth.status);

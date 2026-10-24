@@ -105,5 +105,8 @@ export const supabaseEnterpriseAdmin = createRoamAuthClient(
   `sb-${projectId}-auth-enterprise-admin`,
 );
 
+/** Roam Plug. Isolated from Fleet, driver, and Dominion sessions. */
+export const supabasePlugApp = createRoamAuthClient(`sb-${projectId}-auth-plug`);
+
 /** Default export for packages that expect a single client (driver app surface). */
 export const supabase = supabaseDriverApp;

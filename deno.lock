@@ -80,8 +80,10 @@
     "npm:@types/node@^20.10.0": "20.19.43",
     "npm:@types/papaparse@*": "5.5.2",
     "npm:@types/react-dom@^18.3.0": "18.3.7_@types+react@18.3.31",
+    "npm:@types/react-dom@^18.3.5": "18.3.7_@types+react@18.3.31",
     "npm:@types/react@^18.3.0": "18.3.31",
     "npm:@types/react@^18.3.12": "18.3.31",
+    "npm:@types/react@^18.3.18": "18.3.31",
     "npm:@vitejs/plugin-react@^4.7.0": "4.7.0_vite@6.3.5__@types+node@20.19.43_@types+node@20.19.43",
     "npm:capacitor-native-settings@^7.0.2": "7.0.2_@capacitor+core@7.6.8",
     "npm:class-variance-authority@~0.7.1": "0.7.1",
@@ -129,6 +131,7 @@
     "npm:tailwindcss@4.1.12": "4.1.12",
     "npm:tw-animate-css@^1.3.8": "1.4.0",
     "npm:typescript@^5.4.0": "5.9.3",
+    "npm:typescript@^5.7.3": "5.9.3",
     "npm:vaul@^1.1.2": "1.1.2_react@18.3.1_react-dom@18.3.1__react@18.3.1_@types+react@18.3.31_@types+react-dom@18.3.7__@types+react@18.3.31",
     "npm:vite-plugin-pwa@^1.3.0": "1.3.0_vite@6.3.5__@types+node@20.19.43_workbox-build@7.4.1_workbox-window@7.4.1_@types+node@20.19.43",
     "npm:vite@6.3.5": "6.3.5_@types+node@20.19.43",
@@ -2624,7 +2627,7 @@
         "react-redux",
         "redux",
         "redux-thunk",
-        "reselect@5.2.0"
+        "reselect"
       ],
       "optionalPeers": [
         "react",
@@ -5218,7 +5221,7 @@
         "react-dom",
         "react-is",
         "react-redux",
-        "reselect@5.1.1",
+        "reselect",
         "tiny-invariant",
         "use-sync-external-store",
         "victory-vendor"
@@ -5299,9 +5302,6 @@
     },
     "reselect@5.1.1": {
       "integrity": "sha512-K/BG6eIky/SBpzfHZv/dd+9JBFiS4SWV7FIujVyJRux6e45+73RaUHXLmIR1f7WOMaQ0U1km6qwklRQxpJJY0w=="
-    },
-    "reselect@5.2.0": {
-      "integrity": "sha512-AgZ3UOZm3YndfrJ4OYjgrT7bmCm/1iqkjvEfH/oYjzh6PD2qw4QuT3jjnXIrpdt4MTpMXclMT3lXbmRY+XRakw=="
     },
     "resolve@1.22.12": {
       "integrity": "sha512-TyeJ1zif53BPfHootBGwPRYT1RUt6oGWsaQr8UyZW/eAm9bKoijtvruSDEmZHm92CwS9nj7/fWttqPCgzep8CA==",
@@ -7101,6 +7101,27 @@
           ]
         }
       },
+      "apps/plug": {
+        "packageJson": {
+          "dependencies": [
+            "npm:@capacitor/cli@^7.6.5",
+            "npm:@capacitor/core@^7.6.5",
+            "npm:@sentry/react@^10.69.0",
+            "npm:@supabase/supabase-js@2",
+            "npm:@tailwindcss/vite@4.1.12",
+            "npm:@types/react-dom@^18.3.5",
+            "npm:@types/react@^18.3.18",
+            "npm:@vitejs/plugin-react@^4.7.0",
+            "npm:react-dom@^18.3.1",
+            "npm:react-router-dom@^7.6.0",
+            "npm:react@^18.3.1",
+            "npm:tailwindcss@4.1.12",
+            "npm:typescript@^5.7.3",
+            "npm:vite@6.3.5",
+            "npm:vitest@^3.2.4"
+          ]
+        }
+      },
       "apps/rides-passenger": {
         "packageJson": {
           "dependencies": [
@@ -7265,6 +7286,15 @@
           ]
         }
       },
+      "packages/geo-ui": {
+        "packageJson": {
+          "dependencies": [
+            "npm:lucide-react@0.487",
+            "npm:react-dom@^18.3.1",
+            "npm:react@^18.3.1"
+          ]
+        }
+      },
       "packages/hauler-dispatch": {
         "packageJson": {
           "dependencies": [
@@ -7335,6 +7365,13 @@
           "dependencies": [
             "npm:clsx@*",
             "npm:lucide-react@0.487",
+            "npm:vitest@^3.2.4"
+          ]
+        }
+      },
+      "packages/plug-core": {
+        "packageJson": {
+          "dependencies": [
             "npm:vitest@^3.2.4"
           ]
         }

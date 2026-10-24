@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+
+<html class="h-full" lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" name="viewport"/><meta content="mobile_stack" name="shell-type"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/><link href="https://fonts.googleapis.com" rel="preconnect"/><link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config = { darkMode: "class", theme: { extend: { "colors": { "on-surface": "#1e1b17", "on-secondary": "#ffffff", "on-secondary-fixed-variant": "#783200", "tertiary": "#755800", "primary": "#a33900", "outline": "#8e7166", "secondary": "#9d4300", "surface-container-highest": "#e8e1db", "on-tertiary": "#ffffff", "on-background": "#1e1b17", "primary-container": "#cc4900", "on-primary": "#ffffff", "on-primary-fixed": "#370e00", "outline-variant": "#e2bfb2", "primary-fixed": "#ffdbce", "on-error": "#ffffff", "inverse-on-surface": "#f7efe9", "surface-container-low": "#faf2eb", "error-container": "#ffdad6", "surface-container": "#f4ede6", "on-secondary-fixed": "#341100", "tertiary-fixed-dim": "#f7be1d", "on-secondary-container": "#5c2400", "on-tertiary-fixed": "#251a00", "surface-dim": "#e0d9d2", "surface-container-lowest": "#ffffff", "secondary-fixed": "#ffdbca", "on-tertiary-fixed-variant": "#5a4300", "on-primary-fixed-variant": "#7f2b00", "primary-fixed-dim": "#ffb599", "inverse-surface": "#33302c", "secondary-fixed-dim": "#ffb690", "on-primary-container": "#fffbff", "surface-bright": "#fff8f2", "surface-container-high": "#eee7e0", "background": "#fff8f2", "surface-tint": "#a73a00", "surface": "#fff8f2", "tertiary-fixed": "#ffdf9a", "secondary-container": "#fd761a", "tertiary-container": "#936f00", "surface-variant": "#e8e1db", "on-tertiary-container": "#fffbff", "on-surface-variant": "#5a4138", "inverse-primary": "#ffb599", "on-error-container": "#93000a", "error": "#ba1a1a" }, "borderRadius": { "DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px" }, "spacing": { "gutter": "1rem", "space-xs": "0.25rem", "margin": "1rem", "space-sm": "0.5rem", "space-xl": "2rem", "space-lg": "1.5rem", "gutter-sm": "0.75rem", "margin-lg": "1.5rem", "space-md": "1rem" }, "fontFamily": { "label-lg": ["Inter"], "price-display": ["Inter"], "headline-sm": ["Inter"], "label-sm": ["Inter"], "label-md": ["Inter"], "body-md": ["Inter"], "headline-md": ["Inter"], "display-lg": ["Inter"], "body-sm": ["Inter"], "body-lg": ["Inter"], "display-lg-mobile": ["Inter"], "headline-lg": ["Inter"] }, "fontSize": { "label-lg": ["14px", { "lineHeight": "20px", "letterSpacing": "0.01em", "fontWeight": "600" }], "price-display": ["24px", { "lineHeight": "28px", "letterSpacing": "-0.01em", "fontWeight": "700" }], "headline-sm": ["18px", { "lineHeight": "24px", "fontWeight": "600" }], "label-sm": ["10px", { "lineHeight": "12px", "letterSpacing": "0.04em", "fontWeight": "700" }], "label-md": ["12px", { "lineHeight": "16px", "letterSpacing": "0.02em", "fontWeight": "600" }], "body-md": ["14px", { "lineHeight": "20px", "fontWeight": "400" }], "headline-md": ["22px", { "lineHeight": "28px", "letterSpacing": "-0.01em", "fontWeight": "700" }], "display-lg": ["40px", { "lineHeight": "48px", "letterSpacing": "-0.02em", "fontWeight": "800" }], "body-sm": ["12px", { "lineHeight": "16px", "fontWeight": "400" }], "body-lg": ["16px", { "lineHeight": "24px", "fontWeight": "400" }], "display-lg-mobile": ["32px", { "lineHeight": "40px", "letterSpacing": "-0.02em", "fontWeight": "800" }], "headline-lg": ["28px", { "lineHeight": "36px", "letterSpacing": "-0.01em", "fontWeight": "700" }] } } } };</script><style>@layer base { html, body { width: 100vw; margin: 0; padding: 0; } body { overscroll-behavior: none; } .pb-safe { padding-bottom: env(safe-area-inset-bottom, 0px); } .pt-safe { padding-top: env(safe-area-inset-top, 0px); } main > :first-child { margin-top: 0 !important; } main > :last-child { margin-bottom: 0 !important; } } ::-webkit-scrollbar { display: none; } body { min-height: max(884px, 100dvh); }</style><style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head><body class="bg-surface font-body-md text-on-surface flex flex-col min-h-screen"><header class="fixed top-0 w-full z-50 pt-safe bg-surface/85 backdrop-blur-xl shadow-[0_1px_8px_rgba(0,0,0,0.04)]"><div class="h-16 px-gutter flex items-center justify-between gap-space-sm"><div class="flex items-center gap-space-sm min-w-0"><button aria-label="Go back or close" class="w-11 h-11 rounded-full flex items-center justify-center text-on-surface hover:bg-surface-container-high transition-colors active:scale-95" onclick="history.back()"><span class="material-symbols-outlined text-[24px]">close</span></button><div class="flex flex-col min-w-0"><h1 class="font-headline-sm text-headline-sm text-on-surface truncate">Screen 44: Place Details</h1><span class="font-label-md text-label-md text-primary font-semibold truncate">Map It • Crowd Contribution</span></div></div><div class="flex items-center gap-space-xs"><button aria-label="Help" class="w-11 h-11 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-surface-container-high transition-colors"><span class="material-symbols-outlined text-[20px]">help_outline</span></button></div></div></header><main class="flex-1 flex flex-col relative w-full px-gutter pt-16 pb-safe bg-surface"><div class="flex flex-col w-full pb-8">
+<!-- Progress Tracker -->
+<div class="w-full pt-2 pb-4">
+<div class="flex items-center justify-between mb-2">
+<span class="font-label-md text-label-md text-primary uppercase tracking-wider font-bold">Step 3 of 3</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant font-medium">Place Details</span>
+</div>
+<div class="w-full bg-surface-container-high h-2 rounded-full overflow-hidden flex">
+<div class="bg-primary h-full w-full rounded-full transition-all duration-300"></div>
+</div>
+</div>
+<!-- Header Location Preview Card -->
+<div class="w-full bg-surface-container-lowest rounded-xl p-space-md shadow-sm mb-space-md">
+<div class="flex items-center justify-between mb-space-sm">
+<div class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-primary-fixed text-on-primary-fixed font-label-md text-label-md">
+<span>⛽</span>
+<span class="font-bold">Gas Station</span>
+</div>
+<button class="font-label-md text-label-md text-primary font-bold hover:underline flex items-center gap-0.5" type="button">
+<span>Change</span>
+<span class="material-symbols-outlined text-[16px]">edit</span>
+</button>
+</div>
+<div class="flex items-start gap-space-sm pt-1">
+<span class="material-symbols-outlined text-primary text-[20px] mt-0.5 shrink-0" style="font-variation-settings: 'FILL' 1;">location_on</span>
+<div class="min-w-0">
+<p class="font-label-lg text-label-lg text-on-surface font-semibold truncate">Constant Spring Rd, Half-Way-Tree</p>
+<div class="flex items-center gap-2 mt-0.5">
+<span class="font-body-sm text-body-sm text-on-surface-variant">St. Andrew Parish</span>
+<span class="inline-flex items-center gap-1 text-[11px] font-semibold text-tertiary bg-tertiary-fixed/60 px-2 py-0.5 rounded-full">
+<span class="material-symbols-outlined text-[12px]">gps_fixed</span>
+            ±8m accuracy
+          </span>
+</div>
+</div>
+</div>
+</div>
+<form class="flex flex-col gap-space-lg" id="place-details-form" onsubmit="event.preventDefault();">
+<!-- Place Name -->
+<div class="flex flex-col gap-space-xs">
+<label class="font-label-lg text-label-lg text-on-surface font-bold flex items-center justify-between" for="place-name">
+<span>Place Name <span class="text-primary">*</span></span>
+<span class="font-body-sm text-body-sm text-on-surface-variant font-normal">Official or local name</span>
+</label>
+<div class="relative">
+<input class="w-full h-12 px-4 rounded-xl bg-surface-container-lowest text-on-surface font-body-lg text-body-lg shadow-sm focus:outline-none focus:bg-surface-container-low transition-colors" id="place-name" placeholder="e.g. TotalEnergies Half-Way-Tree" required="" type="text" value="TotalEnergies Half-Way-Tree"/>
+<span class="material-symbols-outlined absolute right-3 top-3 text-secondary text-[22px]">verified</span>
+</div>
+</div>
+<!-- Brand / Network Selection -->
+<div class="flex flex-col gap-space-xs">
+<label class="font-label-lg text-label-lg text-on-surface font-bold">
+        Brand / Network <span class="text-primary">*</span>
+</label>
+<div class="grid grid-cols-2 gap-2" id="brand-selector">
+<button class="brand-btn h-12 px-3 rounded-xl bg-primary text-on-primary font-label-lg text-label-lg flex items-center justify-between shadow-sm transition-transform active:scale-95 text-left" data-brand="TotalEnergies" type="button">
+<span class="font-bold truncate">TotalEnergies</span>
+<span class="material-symbols-outlined text-[18px]">check_circle</span>
+</button>
+<button class="brand-btn h-12 px-3 rounded-xl bg-surface-container-lowest text-on-surface font-label-lg text-label-lg flex items-center justify-between shadow-sm transition-transform active:scale-95 text-left" data-brand="Rubis" type="button">
+<span class="font-medium truncate">Rubis</span>
+<span class="material-symbols-outlined text-[18px] opacity-0">check_circle</span>
+</button>
+<button class="brand-btn h-12 px-3 rounded-xl bg-surface-container-lowest text-on-surface font-label-lg text-label-lg flex items-center justify-between shadow-sm transition-transform active:scale-95 text-left" data-brand="Texaco" type="button">
+<span class="font-medium truncate">Texaco</span>
+<span class="material-symbols-outlined text-[18px] opacity-0">check_circle</span>
+</button>
+<button class="brand-btn h-12 px-3 rounded-xl bg-surface-container-lowest text-on-surface font-label-lg text-label-lg flex items-center justify-between shadow-sm transition-transform active:scale-95 text-left" data-brand="Fesco" type="button">
+<span class="font-medium truncate">Fesco</span>
+<span class="material-symbols-outlined text-[18px] opacity-0">check_circle</span>
+</button>
+<button class="brand-btn h-12 px-3 rounded-xl bg-surface-container-lowest text-on-surface font-label-lg text-label-lg flex items-center justify-between shadow-sm transition-transform active:scale-95 text-left" data-brand="Petcom" type="button">
+<span class="font-medium truncate">Petcom</span>
+<span class="material-symbols-outlined text-[18px] opacity-0">check_circle</span>
+</button>
+<button class="brand-btn h-12 px-3 rounded-xl bg-surface-container-lowest text-on-surface font-label-lg text-label-lg flex items-center justify-between shadow-sm transition-transform active:scale-95 text-left" data-brand="Unipet" type="button">
+<span class="font-medium truncate">Unipet</span>
+<span class="material-symbols-outlined text-[18px] opacity-0">check_circle</span>
+</button>
+<button class="brand-btn col-span-2 h-12 px-3 rounded-xl bg-surface-container-lowest text-on-surface font-label-lg text-label-lg flex items-center justify-between shadow-sm transition-transform active:scale-95 text-left" data-brand="Independent" type="button">
+<span class="font-medium truncate">Independent / Other Local Dealer</span>
+<span class="material-symbols-outlined text-[18px] opacity-0">check_circle</span>
+</button>
+</div>
+</div>
+<!-- Services & Amenities -->
+<div class="flex flex-col gap-space-sm bg-surface-container-lowest p-space-md rounded-xl shadow-sm">
+<div class="flex flex-col">
+<h3 class="font-headline-sm text-headline-sm text-on-surface font-bold">What does this station have?</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Tap all fuels and motorist amenities available</p>
+</div>
+<!-- Fuel Grades Sub-group -->
+<div class="flex flex-col gap-2 pt-2">
+<span class="font-label-md text-label-md text-primary font-bold uppercase tracking-wider">Fuel Grades Dispensed</span>
+<div class="grid grid-cols-2 gap-2" id="fuels-group">
+<!-- E-10 87 -->
+<label class="amenity-chip cursor-pointer h-12 px-3 rounded-lg bg-surface-container flex items-center justify-between transition-colors active:scale-95 select-none">
+<input checked="" class="hidden" type="checkbox"/>
+<div class="flex items-center gap-2 min-w-0">
+<span class="w-3 h-3 rounded-full bg-primary shrink-0"></span>
+<span class="font-label-md text-label-md text-on-surface font-bold truncate">E-10 87</span>
+</div>
+<span class="material-symbols-outlined text-primary text-[20px] check-icon" style="font-variation-settings: 'FILL' 1;">check_box</span>
+</label>
+<!-- E-10 90 -->
+<label class="amenity-chip cursor-pointer h-12 px-3 rounded-lg bg-surface-container flex items-center justify-between transition-colors active:scale-95 select-none">
+<input checked="" class="hidden" type="checkbox"/>
+<div class="flex items-center gap-2 min-w-0">
+<span class="w-3 h-3 rounded-full bg-error shrink-0"></span>
+<span class="font-label-md text-label-md text-on-surface font-bold truncate">E-10 90</span>
+</div>
+<span class="material-symbols-outlined text-primary text-[20px] check-icon" style="font-variation-settings: 'FILL' 1;">check_box</span>
+</label>
+<!-- ULSD -->
+<label class="amenity-chip cursor-pointer h-12 px-3 rounded-lg bg-surface-container flex items-center justify-between transition-colors active:scale-95 select-none">
+<input checked="" class="hidden" type="checkbox"/>
+<div class="flex items-center gap-2 min-w-0">
+<span class="w-3 h-3 rounded-full bg-on-surface shrink-0"></span>
+<span class="font-label-md text-label-md text-on-surface font-bold truncate">ULSD Diesel</span>
+</div>
+<span class="material-symbols-outlined text-primary text-[20px] check-icon" style="font-variation-settings: 'FILL' 1;">check_box</span>
+</label>
+<!-- Auto-LPG -->
+<label class="amenity-chip cursor-pointer h-12 px-3 rounded-lg bg-surface-container-low flex items-center justify-between transition-colors active:scale-95 select-none">
+<input class="hidden" type="checkbox"/>
+<div class="flex items-center gap-2 min-w-0">
+<span class="w-3 h-3 rounded-full bg-outline shrink-0"></span>
+<span class="font-label-md text-label-md text-on-surface-variant font-medium truncate">Auto-LPG</span>
+</div>
+<span class="material-symbols-outlined text-outline text-[20px] check-icon">check_box_outline_blank</span>
+</label>
+</div>
+</div>
+<!-- Amenities Sub-group -->
+<div class="flex flex-col gap-2 pt-3">
+<span class="font-label-md text-label-md text-primary font-bold uppercase tracking-wider">Station Amenities</span>
+<div class="grid grid-cols-2 gap-2" id="amenities-group">
+<!-- Air Pump -->
+<label class="amenity-chip cursor-pointer h-12 px-3 rounded-lg bg-surface-container flex items-center justify-between transition-colors active:scale-95 select-none">
+<input checked="" class="hidden" type="checkbox"/>
+<div class="flex items-center gap-1.5 min-w-0">
+<span class="material-symbols-outlined text-primary text-[18px]">air</span>
+<span class="font-label-md text-label-md text-on-surface font-semibold truncate">Air Pump</span>
+</div>
+<span class="material-symbols-outlined text-primary text-[20px] check-icon" style="font-variation-settings: 'FILL' 1;">check_box</span>
+</label>
+<!-- Clean Restroom -->
+<label class="amenity-chip cursor-pointer h-12 px-3 rounded-lg bg-surface-container flex items-center justify-between transition-colors active:scale-95 select-none">
+<input checked="" class="hidden" type="checkbox"/>
+<div class="flex items-center gap-1.5 min-w-0">
+<span class="material-symbols-outlined text-primary text-[18px]">wc</span>
+<span class="font-label-md text-label-md text-on-surface font-semibold truncate">Restroom</span>
+</div>
+<span class="material-symbols-outlined text-primary text-[20px] check-icon" style="font-variation-settings: 'FILL' 1;">check_box</span>
+</label>
+<!-- Convenience Store -->
+<label class="amenity-chip cursor-pointer h-12 px-3 rounded-lg bg-surface-container flex items-center justify-between transition-colors active:scale-95 select-none">
+<input checked="" class="hidden" type="checkbox"/>
+<div class="flex items-center gap-1.5 min-w-0">
+<span class="material-symbols-outlined text-primary text-[18px]">storefront</span>
+<span class="font-label-md text-label-md text-on-surface font-semibold truncate">24/7 Store</span>
+</div>
+<span class="material-symbols-outlined text-primary text-[20px] check-icon" style="font-variation-settings: 'FILL' 1;">check_box</span>
+</label>
+<!-- Car Wash Bay -->
+<label class="amenity-chip cursor-pointer h-12 px-3 rounded-lg bg-surface-container-low flex items-center justify-between transition-colors active:scale-95 select-none">
+<input class="hidden" type="checkbox"/>
+<div class="flex items-center gap-1.5 min-w-0">
+<span class="material-symbols-outlined text-outline text-[18px]">local_car_wash</span>
+<span class="font-label-md text-label-md text-on-surface-variant font-medium truncate">Car Wash Bay</span>
+</div>
+<span class="material-symbols-outlined text-outline text-[20px] check-icon">check_box_outline_blank</span>
+</label>
+<!-- ATM / Cash Machine -->
+<label class="amenity-chip cursor-pointer h-12 px-3 rounded-lg bg-surface-container flex items-center justify-between transition-colors active:scale-95 select-none">
+<input checked="" class="hidden" type="checkbox"/>
+<div class="flex items-center gap-1.5 min-w-0">
+<span class="material-symbols-outlined text-primary text-[18px]">atm</span>
+<span class="font-label-md text-label-md text-on-surface font-semibold truncate">ATM / Cash</span>
+</div>
+<span class="material-symbols-outlined text-primary text-[20px] check-icon" style="font-variation-settings: 'FILL' 1;">check_box</span>
+</label>
+<!-- Tyre Pressure Gauge -->
+<label class="amenity-chip cursor-pointer h-12 px-3 rounded-lg bg-surface-container-low flex items-center justify-between transition-colors active:scale-95 select-none">
+<input class="hidden" type="checkbox"/>
+<div class="flex items-center gap-1.5 min-w-0">
+<span class="material-symbols-outlined text-outline text-[18px]">speed</span>
+<span class="font-label-md text-label-md text-on-surface-variant font-medium truncate">Tyre Gauge</span>
+</div>
+<span class="material-symbols-outlined text-outline text-[20px] check-icon">check_box_outline_blank</span>
+</label>
+</div>
+</div>
+</div>
+<!-- Opening Hours -->
+<div class="flex flex-col gap-space-xs">
+<label class="font-label-lg text-label-lg text-on-surface font-bold">Operating Hours</label>
+<div class="grid grid-cols-2 gap-2" id="hours-selector">
+<button class="hours-chip h-12 px-3 rounded-xl bg-primary text-on-primary font-label-md text-label-md font-bold flex items-center justify-center gap-1.5 shadow-sm" data-hours="247" type="button">
+<span class="material-symbols-outlined text-[18px]">schedule</span>
+<span>Open 24/7</span>
+</button>
+<button class="hours-chip h-12 px-2 rounded-xl bg-surface-container-lowest text-on-surface font-label-md text-label-md font-medium flex items-center justify-center gap-1 text-center shadow-sm" data-hours="standard" type="button">
+<span>Day (6 AM - 10 PM)</span>
+</button>
+<button class="hours-chip h-12 px-3 rounded-xl bg-surface-container-lowest text-on-surface font-label-md text-label-md font-medium flex items-center justify-center gap-1.5 shadow-sm" data-hours="custom" type="button">
+<span class="material-symbols-outlined text-[18px]">tune</span>
+<span>Custom Hours</span>
+</button>
+<button class="hours-chip h-12 px-3 rounded-xl bg-surface-container-lowest text-on-surface font-label-md text-label-md font-medium flex items-center justify-center gap-1.5 shadow-sm" data-hours="unknown" type="button">
+<span class="material-symbols-outlined text-[18px]">help_outline</span>
+<span>Not Sure</span>
+</button>
+</div>
+</div>
+<!-- Phone Number (Optional) -->
+<div class="flex flex-col gap-space-xs">
+<div class="flex items-center justify-between">
+<label class="font-label-lg text-label-lg text-on-surface font-bold" for="phone-number">Phone Number</label>
+<span class="font-body-sm text-body-sm text-on-surface-variant">Optional</span>
+</div>
+<div class="relative">
+<div class="absolute left-3.5 top-3 flex items-center gap-1 text-on-surface-variant font-label-lg text-label-lg pointer-events-none">
+<span>🇯🇲</span>
+<span class="font-bold text-on-surface">+1 (876)</span>
+</div>
+<input class="w-full h-12 pl-28 pr-4 rounded-xl bg-surface-container-lowest text-on-surface font-body-lg text-body-lg shadow-sm focus:outline-none focus:bg-surface-container-low transition-colors" id="phone-number" placeholder="926 - 4820" type="tel"/>
+</div>
+</div>
+<!-- Photo Upload Section -->
+<div class="flex flex-col gap-space-xs">
+<div class="flex items-center justify-between">
+<label class="font-label-lg text-label-lg text-on-surface font-bold">Photo of Station</label>
+<span class="font-label-sm text-label-sm font-bold text-secondary uppercase bg-secondary-fixed px-2 py-0.5 rounded-full">Encouraged</span>
+</div>
+<!-- Motivational Badge -->
+<div class="flex items-center gap-2 p-space-sm bg-tertiary-fixed rounded-xl text-on-tertiary-fixed shadow-sm">
+<span class="text-lg">⚡</span>
+<span class="font-label-md text-label-md font-bold">Photos get approved 3x faster by community scouts!</span>
+</div>
+<!-- Upload Drop / Action Area -->
+<button class="w-full h-24 rounded-xl bg-surface-container-low flex flex-col items-center justify-center gap-1 text-primary hover:bg-surface-container transition-colors shadow-sm active:scale-98" type="button">
+<div class="w-9 h-9 rounded-full bg-primary-fixed flex items-center justify-center text-primary">
+<span class="material-symbols-outlined text-[22px]">add_a_photo</span>
+</div>
+<span class="font-label-md text-label-md font-bold text-on-surface">Snap station canopy or totem price board</span>
+</button>
+<!-- Attached Thumbnail Preview -->
+<div class="flex items-center justify-between p-2.5 bg-surface-container-lowest rounded-xl shadow-sm mt-1">
+<div class="flex items-center gap-3 min-w-0">
+<div class="w-14 h-14 rounded-lg overflow-hidden shrink-0 bg-surface-container-highest">
+<img class="w-full h-full object-cover" data-alt="Close up photography of vibrant digital fuel pricing totem sign in Kingston Jamaica displaying glowing red and green LED numerals against bright sunny afternoon Caribbean sky" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCeoiVO77zHxYHCMLD9vlpY4QIp8cRPrPPCff2x7oPRB70uOgcpgDhz8avDYf7sge45K3c6kTPNn5Zcpc2g4PKoPMkwioVwaYI0i3C5TKF9XS-s_iz5A5PgEn0RvNB-heXDHn0uY-j03pa9UpoW8tQsteoi6aSGsWMDAuY-1O9-RAzCDx3siyc76DDFH3IT_dJRrZLPNElMeMuGUEJsLQIqVb2Nuva55y4sLJu0nM2qWD8K98gnozbi"/>
+</div>
+<div class="flex flex-col min-w-0">
+<span class="font-label-md text-label-md text-on-surface font-bold truncate">totem_prices_hwt.jpg</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">1.8 MB • Ready to upload</span>
+</div>
+</div>
+<button aria-label="Remove photo" class="w-10 h-10 rounded-full flex items-center justify-center text-error hover:bg-error-container/40 transition-colors" type="button">
+<span class="material-symbols-outlined text-[20px]">delete</span>
+</button>
+</div>
+</div>
+<!-- Notes / Motorist Tip (Optional) -->
+<div class="flex flex-col gap-space-xs">
+<div class="flex items-center justify-between">
+<label class="font-label-lg text-label-lg text-on-surface font-bold" for="motorist-notes">Notes / Motorist Tip</label>
+<span class="font-body-sm text-body-sm text-on-surface-variant">Optional</span>
+</div>
+<textarea class="w-full p-3 rounded-xl bg-surface-container-lowest text-on-surface font-body-md text-body-md shadow-sm focus:outline-none focus:bg-surface-container-low transition-colors resize-none" id="motorist-notes" placeholder="e.g. Air pump is located behind the wash bay, accepts $100 coins or swipe debit card at cashier." rows="3"></textarea>
+</div>
+<!-- Submission Area -->
+<div class="flex flex-col gap-space-xs pt-2">
+<button class="w-full h-14 rounded-full bg-primary hover:bg-primary-container text-on-primary font-headline-sm text-headline-sm flex items-center justify-center gap-2 shadow-md hover:shadow-lg transition-all active:scale-95" id="submit-btn" type="submit">
+<span>Submit for Review</span>
+<span class="material-symbols-outlined text-[22px]">arrow_forward</span>
+</button>
+<div class="flex items-center justify-center gap-1.5 py-1 text-center">
+<span class="material-symbols-outlined text-secondary text-[18px]" style="font-variation-settings: 'FILL' 1;">stars</span>
+<p class="font-label-md text-label-md text-on-surface-variant">
+          Earn <span class="font-bold text-primary">+25 Scout Points</span> upon moderation approval.
+        </p>
+</div>
+</div>
+</form>
+</div>
+<script>
+  // Brand Selector Switcher
+  const brandButtons = document.querySelectorAll('.brand-btn');
+  brandButtons.forEach(btn => {
+    btn.addEventListener('click', () => {
+      brandButtons.forEach(b => {
+        b.classList.remove('bg-primary', 'text-on-primary');
+        b.classList.add('bg-surface-container-lowest', 'text-on-surface');
+        const icon = b.querySelector('.material-symbols-outlined');
+        if (icon) icon.classList.add('opacity-0');
+        const span = b.querySelector('span:first-child');
+        if (span) span.classList.replace('font-bold', 'font-medium');
+      });
+      btn.classList.remove('bg-surface-container-lowest', 'text-on-surface');
+      btn.classList.add('bg-primary', 'text-on-primary');
+      const activeIcon = btn.querySelector('.material-symbols-outlined');
+      if (activeIcon) activeIcon.classList.remove('opacity-0');
+      const activeSpan = btn.querySelector('span:first-child');
+      if (activeSpan) activeSpan.classList.replace('font-medium', 'font-bold');
+    });
+  });
+
+  // Operating Hours Switcher
+  const hoursChips = document.querySelectorAll('.hours-chip');
+  hoursChips.forEach(chip => {
+    chip.addEventListener('click', () => {
+      hoursChips.forEach(c => {
+        c.classList.remove('bg-primary', 'text-on-primary');
+        c.classList.add('bg-surface-container-lowest', 'text-on-surface');
+        c.classList.replace('font-bold', 'font-medium');
+      });
+      chip.classList.remove('bg-surface-container-lowest', 'text-on-surface');
+      chip.classList.add('bg-primary', 'text-on-primary');
+      chip.classList.replace('font-medium', 'font-bold');
+    });
+  });
+
+  // Amenity and Fuel Checkbox Toggles
+  const amenityChips = document.querySelectorAll('.amenity-chip');
+  amenityChips.forEach(card => {
+    const checkbox = card.querySelector('input[type="checkbox"]');
+    const icon = card.querySelector('.check-icon');
+    
+    card.addEventListener('click', (e) => {
+      e.preventDefault();
+      checkbox.checked = !checkbox.checked;
+      
+      if (checkbox.checked) {
+        card.classList.remove('bg-surface-container-low');
+        card.classList.add('bg-surface-container');
+        icon.textContent = 'check_box';
+        icon.classList.remove('text-outline');
+        icon.classList.add('text-primary');
+        icon.style.fontVariationSettings = "'FILL' 1";
+      } else {
+        card.classList.remove('bg-surface-container');
+        card.classList.add('bg-surface-container-low');
+        icon.textContent = 'check_box_outline_blank';
+        icon.classList.remove('text-primary');
+        icon.classList.add('text-outline');
+        icon.style.fontVariationSettings = "'FILL' 0";
+      }
+    });
+  });
+
+  // Interactive Submit Feedback
+  const submitBtn = document.getElementById('submit-btn');
+  submitBtn.addEventListener('click', () => {
+    submitBtn.innerHTML = `
+      <span class="material-symbols-outlined animate-spin text-[22px]">progress_activity</span>
+      <span>Submitting Report...</span>
+    `;
+    setTimeout(() => {
+      submitBtn.classList.remove('bg-primary');
+      submitBtn.classList.add('bg-tertiary');
+      submitBtn.innerHTML = `
+        <span class="material-symbols-outlined text-[22px]">done_all</span>
+        <span>Submitted! +25 Points</span>
+      `;
+    }, 900);
+  });
+</script></main></body></html>

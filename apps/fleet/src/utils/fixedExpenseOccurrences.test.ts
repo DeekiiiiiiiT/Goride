@@ -41,6 +41,21 @@ describe('buildFixedExpenseOccurrences', () => {
     expect(occ.map((o) => o.occurrenceYmd)).toEqual(['2026-02-15', '2026-03-15']);
   });
 
+  it('does not bill a second year on the coverage end date', () => {
+    const occ = buildFixedExpenseOccurrences(
+      cfg({
+        frequency: 'annually',
+        startDate: '2025-10-15',
+        endDate: '2026-10-15',
+        amount: 47725,
+        name: 'Amber GPS',
+      }),
+      '2025-01-01',
+      '2027-12-31',
+    );
+    expect(occ.map((o) => o.occurrenceYmd)).toEqual(['2025-10-15']);
+  });
+
   it('respects the config end date', () => {
     const occ = buildFixedExpenseOccurrences(
       cfg({ endDate: '2026-02-20' }),

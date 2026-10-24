@@ -16,6 +16,8 @@ export type FuelFinalizeReportLike = {
   weekEnd?: string;
   driverShare: number;
   companyShare: number;
+  /** Cash or personal fuel. Company gas-card spend is not a driver credit. */
+  driverSpend?: number;
 };
 
 export type FuelSettlementReopenImpact = {
@@ -64,7 +66,7 @@ export function residualBalanceLabel(residual: number): string {
 /** Pure estimate — swap proposed fuel into an existing period snapshot. */
 export function estimateResidualAfterProposedFuel(
   period: PeriodSettlementSnapshot,
-  proposed: { fuelDeduction: number; fuelFleetShare: number },
+  proposed: { fuelDeduction: number; fuelFleetShare: number; driverPaidFuel?: number },
 ): number {
   const settled = computePeriodSettlement({
     driverShare: Number(period.driverShare) || 0,
@@ -73,7 +75,7 @@ export function estimateResidualAfterProposedFuel(
     baseCashPaid: Number(period.cashReturned) || 0,
     tollCashWash: Number(period.tollCashSpend) || 0,
     tollPersonal: Math.max(0, Number(period.tollChargedToDriver) || 0),
-    fuelCredits: Math.max(0, Number(proposed.fuelFleetShare) || 0),
+    fuelCredits: Math.max(0, Number(proposed.driverPaidFuel) || 0),
     cashWrittenOff: Number(period.cashWrittenOff) || 0,
     settlementPaid: Number(period.settlementPaid) || 0,
   });
@@ -82,7 +84,7 @@ export function estimateResidualAfterProposedFuel(
 
 export function impactFromPeriodAndProposedFuel(
   period: PeriodSettlementSnapshot,
-  proposed: { fuelDeduction: number; fuelFleetShare: number },
+  proposed: { fuelDeduction: number; fuelFleetShare: number; driverPaidFuel?: number },
   driverId: string,
 ): FuelSettlementReopenImpact | null {
   const settlementPaid = round2(Math.max(0, Number(period.settlementPaid) || 0));
@@ -122,10 +124,10 @@ function toSnapshot(p: DriverFinancialPeriodClient): PeriodSettlementSnapshot {
 /** Group multi-vehicle reports into per driver+Monday fuel totals. */
 export function aggregateProposedFuelByDriverWeek(
   reports: FuelFinalizeReportLike[],
-): Map<string, { driverId: string; weekStart: string; fuelDeduction: number; fuelFleetShare: number }> {
+): Map<string, { driverId: string; weekStart: string; fuelDeduction: number; fuelFleetShare: number; driverPaidFuel: number }> {
   const map = new Map<
     string,
-    { driverId: string; weekStart: string; fuelDeduction: number; fuelFleetShare: number }
+    { driverId: string; weekStart: string; fuelDeduction: number; fuelFleetShare: number; driverPaidFuel: number }
   >();
   for (const report of reports) {
     const driverId = String(report.driverId || '').trim();
@@ -137,9 +139,11 @@ export function aggregateProposedFuelByDriverWeek(
       weekStart,
       fuelDeduction: 0,
       fuelFleetShare: 0,
+      driverPaidFuel: 0,
     };
     cur.fuelDeduction = round2(cur.fuelDeduction + (Number(report.driverShare) || 0));
     cur.fuelFleetShare = round2(cur.fuelFleetShare + (Number(report.companyShare) || 0));
+    cur.driverPaidFuel = round2(cur.driverPaidFuel + (Number(report.driverSpend) || 0));
     map.set(key, cur);
   }
   return map;
@@ -182,6 +186,7 @@ export async function assessFuelFinalizeSettlementImpact(
       {
         fuelDeduction: proposed.fuelDeduction,
         fuelFleetShare: proposed.fuelFleetShare,
+        driverPaidFuel: proposed.driverPaidFuel,
       },
       proposed.driverId,
     );

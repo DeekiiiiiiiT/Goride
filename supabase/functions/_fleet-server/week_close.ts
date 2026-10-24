@@ -556,6 +556,8 @@ const PERIOD_CLOSE_SELECT = [
   "dispute_refund_unmatched",
   "fuel_deduction",
   "fuel_fleet_share",
+  "fuel_driver_spend",
+  "fuel_gas_card_spend",
   "fuel_finalized",
   "driver_share",
   "fleet_share",
@@ -1472,7 +1474,7 @@ export async function previewWeekClose(
             (Number(fc.tollCashWashEligible) || 0)) *
             100,
         ) / 100;
-      const fuelCredit = Number(period.fuel_fleet_share) || 0;
+      const fuelCredit = Number(period.fuel_driver_spend) || 0;
       const fleetOwes = Number(period.settlement_amount) || 0;
       if (
         fleetOwes > CLOSE_INVARIANT_EPS &&
@@ -2085,7 +2087,7 @@ async function closeWeekBody(
         persisted: settlementSumForWeek,
         expected: businessWeekPnl,
         delta: settlementSumForWeek - businessWeekPnl,
-        message: "Week settlement composition (statements) does not tie to engine week P&L",
+        message: "Driver-lane contribution does not match settlements",
       });
       return {
         organizationId: orgId,

@@ -105,6 +105,7 @@ export const FUEL_MANAGEMENT_CHILDREN: NavChild[] = [
   { id: 'fuel-brain', label: 'Fuel Brain', icon: Brain },
   { id: 'fuel-prices', label: 'Prices', icon: DollarSign },
   { id: 'fuel-stations', label: 'Station Database', icon: Database },
+  { id: 'plug-places', label: 'Places Review', icon: MapPin },
   { id: 'fuel-analytics', label: 'Station Analytics', icon: BarChart3 },
   { id: 'fuel-cost-analytics', label: 'Fuel Cost Analytics', icon: Gauge },
   { id: 'fuel-evidence-bridge', label: 'Evidence Bridge', icon: ShieldCheck },
@@ -116,6 +117,16 @@ export const TOLL_MANAGEMENT_CHILDREN: NavChild[] = [
   { id: 'toll-info', label: 'Toll Info', icon: Info },
   { id: 'toll-settings', label: 'Toll Settings', icon: Settings },
   { id: 'toll-live-monitor', label: 'Live Toll Monitor', icon: Radio },
+];
+
+export const WORLD_MAPS_CHILDREN: NavChild[] = [
+  { id: 'world-jamaica', label: 'Jamaica map', icon: MapPin },
+  { id: 'world-parishes', label: 'Parishes', icon: MapPin },
+  { id: 'world-towns', label: 'Towns', icon: MapPin },
+  { id: 'world-communities', label: 'Communities', icon: MapPin },
+  { id: 'world-places', label: 'Places & pins', icon: MapPin },
+  { id: 'world-imports', label: 'Imports & versions', icon: Layers },
+  { id: 'world-quality', label: 'Data quality', icon: ClipboardCheck },
 ];
 
 export const VEHICLE_DATABASE_CHILDREN: NavChild[] = [
@@ -219,6 +230,7 @@ const SHARED_PLATFORM_PAGES = [
   'fuel-brain',
   'fuel-prices',
   'fuel-stations',
+  'plug-places',
   'fuel-analytics',
   'fuel-cost-analytics',
   'fuel-evidence-bridge',
@@ -234,6 +246,13 @@ const SHARED_PLATFORM_PAGES = [
   'parts-catalog',
   'suppliers-prices',
   'catalog-quality',
+  'world-jamaica',
+  'world-parishes',
+  'world-towns',
+  'world-communities',
+  'world-places',
+  'world-imports',
+  'world-quality',
   'gct-engine',
   'gct-rates',
   'gct-entities',

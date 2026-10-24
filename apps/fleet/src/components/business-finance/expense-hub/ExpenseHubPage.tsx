@@ -11,6 +11,8 @@ type Props = {
   onNavigate?: (page: string, periodHint?: { startYmd: string; endYmd: string }) => void;
   initialVehicleId?: string;
   initialSubview?: ExpenseHubSubview;
+  initialStart?: string;
+  initialEnd?: string;
 };
 
 /** Dedicated Expense Hub desk; Business Finance remains the accounting roll-up. */
@@ -18,11 +20,16 @@ export function ExpenseHubPage({
   onNavigate,
   initialVehicleId,
   initialSubview,
+  initialStart,
+  initialEnd,
 }: Props) {
-  const [preset, setPreset] = React.useState<PeriodPreset>('last_90_days');
+  const opening = readHubPeriod(initialStart, initialEnd);
+  const [preset, setPreset] = React.useState<PeriodPreset>(
+    opening.from && opening.to ? 'custom' : 'last_90_days',
+  );
   const [anchorPreset, setAnchorPreset] = React.useState<PeriodPreset>('last_90_days');
-  const [customStart, setCustomStart] = React.useState('');
-  const [customEnd, setCustomEnd] = React.useState('');
+  const [customStart, setCustomStart] = React.useState(opening.from);
+  const [customEnd, setCustomEnd] = React.useState(opening.to);
 
   const customReady = Boolean(customStart && customEnd);
   const queryPreset: PeriodPreset =
@@ -134,4 +141,15 @@ export function ExpenseHubPage({
       ) : null}
     </div>
   );
+}
+
+function readHubPeriod(initialStart?: string, initialEnd?: string): { from: string; to: string } {
+  const ymd = /^\d{4}-\d{2}-\d{2}$/;
+  const fromQuery = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
+  const from = initialStart || fromQuery?.get('from') || '';
+  const to = initialEnd || fromQuery?.get('to') || '';
+  return {
+    from: ymd.test(from) ? from : '',
+    to: ymd.test(to) ? to : '',
+  };
 }

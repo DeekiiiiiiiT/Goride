@@ -1,0 +1,10 @@
+@import "@roam/design-tokens/plug.css";
+
+html, body, #root { min-height: 100%; margin: 0; }
+body {
+  background: var(--color-background);
+  color: var(--color-on-surface);
+  font-family: var(--font-sans);
+}
+button, a, input, select, textarea { font: inherit; }
+.tap { min-height: 48px; }

@@ -17,6 +17,7 @@ export const PLATFORM_PERMISSIONS = {
   FINANCIAL_SETTLEMENTS: 'financial.settlements',
 
   SYSTEM_CONFIG: 'system.config',
+  GEO_WRITE: 'platform.geo.write',
   SYSTEM_BILLING: 'system.billing',
   SYSTEM_SECURITY: 'system.security',
 

@@ -207,6 +207,52 @@ export async function requireProductAdmin(
   };
 }
 
+const ANY_APP_ROLE = new Set<string>();
+for (const role of PLATFORM_ROLES) ANY_APP_ROLE.add(role);
+for (const set of Object.values(PRODUCT_ADMIN_ROLES)) {
+  for (const role of set) ANY_APP_ROLE.add(role);
+}
+
+/** Any signed-in app server (Rush, Rides, Fleet, and the rest) or a platform role. */
+export async function requireAnyProductAdmin(
+  c: {
+    req: { header: (n: string) => string | undefined };
+    json: (b: unknown, s?: number) => Response;
+  },
+): Promise<ProductAdminUser | Response> {
+  const authHeader = c.req.header("Authorization");
+  if (!authHeader?.startsWith("Bearer ")) {
+    return c.json({ error: "Unauthorized: missing Authorization header" }, 401);
+  }
+  const { data: { user }, error } = await authClient(authHeader).auth.getUser();
+  if (error || !user) {
+    return c.json({ error: "Unauthorized: invalid token" }, 401);
+  }
+  const roles = await resolveEffectiveRoleNames(user.id, user);
+  const matched = roles.find((role) => ANY_APP_ROLE.has(role));
+  if (!matched) {
+    return c.json({ error: "Forbidden", message: "App server access required" }, 403);
+  }
+  const mfaBlock = await enforceStaffMfa(c, authHeader, roles);
+  if (mfaBlock) return mfaBlock;
+  const permissions = await resolveUserPermissions(user.id, user);
+  return {
+    id: user.id,
+    email: user.email || "",
+    role: matched,
+    roles,
+    permissions,
+    isPlatformRole: PLATFORM_ROLES.has(matched),
+  };
+}
+
+export function canWriteWorldMaps(admin: ProductAdminUser): boolean {
+  const role = (admin.role || "").toLowerCase();
+  if (role === "platform_owner" || role === "superadmin") return true;
+  return admin.roles.some((r) => r === "platform_owner" || r === "superadmin")
+    || (admin.permissions?.includes("platform.geo.write") ?? false);
+}
+
 /** A buyer can open the desk. They cannot open the rest of the ops console. */
 export function isInHouseBuyerOnly(roles: string[]): boolean {
   if (!roles.includes("dash_concierge")) return false;

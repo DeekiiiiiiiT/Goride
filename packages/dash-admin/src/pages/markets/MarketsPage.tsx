@@ -975,20 +975,6 @@ function TownMapOverlay({
                   <span className="ml-2 text-xs font-normal text-sky-300">· expanded</span>
                 ) : null}
               </span>
-              {canWrite ? (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setRenameValue(town.name);
-                    setShowRename(true);
-                  }}
-                  className="shrink-0 p-1 rounded-md border border-slate-600 text-slate-300 hover:bg-slate-800 hover:text-white"
-                  title="Rename town"
-                  aria-label="Rename town"
-                >
-                  <Pencil className="w-3.5 h-3.5" />
-                </button>
-              ) : null}
             </h3>
             <p className="text-xs text-slate-300">
               {town.is_active ? 'Active' : 'Inactive'}
@@ -1846,7 +1832,7 @@ function ParishMapOverlay({
               {editing ? ' · editing border' : null}
             </p>
           </div>
-          {canWrite && (
+          {canWrite && false && (
             <div className="relative" ref={parishToolsRef}>
               <button
                 type="button"
@@ -1965,7 +1951,7 @@ function ParishMapOverlay({
             zones={zones}
             contextTownPolygons={contextTownPolygons}
             showNeighborToggle={false}
-            uiMode={editing ? 'adjust' : 'view'}
+            uiMode="view"
             initialPolygon={foundation}
             editingZoneId={editing ? 'parish-foundation' : null}
             townIncludePolygons={
@@ -1991,9 +1977,7 @@ function ParishMapOverlay({
             onTestActiveChange={setTestActive}
             onTestPoint={(lat, lng) => checkCoveragePoint(accessToken, lat, lng)}
             onCancel={() => onSetEditing(false)}
-          onSaveOutline={async (polygon, promote) => {
-            await onSaveOutline(polygon, promote);
-          }}
+            onSave={() => undefined}
           />
         </div>
       </div>
@@ -2702,11 +2686,20 @@ export function MarketsPage({ embedded = false }: { embedded?: boolean } = {}) {
             <div className="flex flex-wrap items-center gap-2">
               <h3 className="font-semibold text-white">{p.name}</h3>
               <ProvenanceBadge source={p.boundary_source} validOn={p.boundary_valid_on} />
+              <span className="inline-flex items-center rounded-md border border-sky-500/30 bg-sky-500/10 px-1.5 py-0.5 text-[10px] text-sky-100">
+                From Dominion
+              </span>
+              <a href="https://roamdominion.co/?page=world-parishes" target="_blank" rel="noopener noreferrer" className="text-[10px] text-sky-300">
+                Edit in Dominion
+              </a>
             </div>
             <p className="text-xs text-slate-500">
               Parish · {hasParishBorder ? 'border set' : 'no border yet'} · {allTowns.length} town
               {allTowns.length === 1 ? '' : 's'}
               {parishBoundaryMode ? ' · parish border delivery' : ' · town zones + parish gate'}
+              {(p as { border_notice?: string | null }).border_notice
+                ? ` · ${(p as { border_notice?: string | null }).border_notice}`
+                : ''}
               {p.pcode ? ` · ${p.pcode}` : ''}
             </p>
           </div>
@@ -2777,10 +2770,11 @@ export function MarketsPage({ embedded = false }: { embedded?: boolean } = {}) {
                 className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-700 text-xs text-slate-200"
               >
                 <Plus className="w-3.5 h-3.5" />
-                Add town
+                Add a town from the map
               </button>
               <button
                 type="button"
+                hidden
                 onClick={() => void removeParish(p)}
                 className="p-1.5 rounded hover:bg-slate-800 text-red-400"
                 title="Delete parish"
@@ -2807,11 +2801,11 @@ export function MarketsPage({ embedded = false }: { embedded?: boolean } = {}) {
                         className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-700 text-sm text-white"
                       >
                         <option value="">
-                          {catalogTowns.length === 0
-                            ? 'No catalog towns (import boundaries first)…'
-                            : 'Select catalog town…'}
+                          {catalogTowns.filter((b) => !towns.some((t) => t.pcode === b.pcode)).length === 0
+                            ? 'Every Dominion town here is already a market'
+                            : 'Select a Dominion town…'}
                         </option>
-                        {catalogTowns.map((b) => (
+                        {catalogTowns.filter((b) => !towns.some((t) => t.pcode === b.pcode)).map((b) => (
                           <option key={b.pcode} value={b.pcode}>
                             {b.name} ({b.pcode})
                           </option>
@@ -2922,16 +2916,6 @@ export function MarketsPage({ embedded = false }: { embedded?: boolean } = {}) {
             placeholder="Search parishes / towns…"
             className="px-3 py-2 rounded-lg bg-slate-950 border border-slate-700 text-sm text-white min-w-[180px]"
           />
-          {canWrite && (
-            <button
-              type="button"
-              onClick={() => setShowCreateParish((v) => !v)}
-              className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-amber-500 text-sm font-semibold text-slate-950"
-            >
-              <Plus className="w-4 h-4" />
-              New parish
-            </button>
-          )}
           <details className="relative">
             <summary className="list-none cursor-pointer px-3 py-2 rounded-lg border border-slate-700 text-sm text-slate-300">More</summary>
             <div className="absolute right-0 z-10 mt-1 w-48 rounded-lg border border-slate-700 bg-slate-900 p-1 shadow-xl">
@@ -2948,9 +2932,6 @@ export function MarketsPage({ embedded = false }: { embedded?: boolean } = {}) {
                     toast.error(e instanceof Error ? e.message : 'Could not load the island map');
                   });
               }} className="block w-full text-left px-3 py-2 text-sm text-slate-200 hover:bg-slate-800 rounded-md">Jamaica overview</button>
-              {canWrite && (
-                <button type="button" onClick={() => setShowImportBoundaries(true)} className="block w-full text-left px-3 py-2 text-sm text-slate-200 hover:bg-slate-800 rounded-md">Import boundaries</button>
-              )}
             </div>
           </details>
         </div>
@@ -2959,8 +2940,8 @@ export function MarketsPage({ embedded = false }: { embedded?: boolean } = {}) {
       <details className="rounded-xl border border-slate-800 bg-slate-900/60 p-4 text-sm text-slate-300">
         <summary className="cursor-pointer font-medium text-slate-100">How this works</summary>
         <p className="mt-2 text-slate-400">
-          Open the parish map, set the parish border, choose coverage mode, then set town borders
-          when a parish uses town zones. Add non-delivery zones, publish coverage, then activate.
+          Parish borders come from Dominion. Here you choose coverage mode, add towns Rush serves,
+          draw delivery zones, then publish coverage and activate.
         </p>
       </details>
 

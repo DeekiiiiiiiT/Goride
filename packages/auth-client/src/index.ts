@@ -15,6 +15,7 @@ export {
   supabaseFleetAdmin,
   supabaseEnterpriseApp,
   supabaseEnterpriseAdmin,
+  supabasePlugApp,
 } from './supabase';
 export { supabaseRecovery, isPasswordRecoveryUrl } from './supabaseRecovery';
 export { PasswordRecoveryPage } from './components/PasswordRecoveryPage';

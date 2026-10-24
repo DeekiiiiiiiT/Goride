@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+
+<html lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" name="viewport"/><meta content="mobile_stack" name="shell-type"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/><link href="https://fonts.googleapis.com" rel="preconnect"/><link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><style>@layer base{html,body{width:100vw;margin:0;padding:0;background-color:#fff8f2;color:#1e1b17;}body{overscroll-behavior:none;}.pb-safe{padding-bottom:env(safe-area-inset-bottom,0px);}.pt-safe{padding-top:env(safe-area-inset-top,0px);}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config = { darkMode: 'class', theme: { extend: { colors: { 'tertiary-fixed': '#ffdf9a', 'outline': '#8e7166', 'error': '#ba1a1a', 'inverse-primary': '#ffb599', 'on-tertiary': '#ffffff', 'error-container': '#ffdad6', 'surface-bright': '#fff8f2', 'background': '#fff8f2', 'surface-container-high': '#eee7e0', 'surface-variant': '#e8e1db', 'on-primary': '#ffffff', 'on-background': '#1e1b17', 'primary': '#a33900', 'secondary-container': '#fd761a', 'primary-container': '#cc4900', 'on-error': '#ffffff', 'on-tertiary-fixed': '#251a00', 'on-secondary-fixed': '#341100', 'on-secondary-fixed-variant': '#783200', 'on-surface-variant': '#5a4138', 'on-primary-container': '#fffbff', 'surface-container-lowest': '#ffffff', 'secondary-fixed-dim': '#ffb690', 'surface-container': '#f4ede6', 'tertiary-fixed-dim': '#f7be1d', 'on-secondary-container': '#5c2400', 'surface-dim': '#e0d9d2', 'on-error-container': '#93000a', 'on-primary-fixed': '#370e00', 'on-primary-fixed-variant': '#7f2b00', 'primary-fixed-dim': '#ffb599', 'outline-variant': '#e2bfb2', 'surface-tint': '#a73a00', 'surface-container-highest': '#e8e1db', 'tertiary-container': '#936f00', 'surface': '#fff8f2', 'secondary': '#9d4300', 'primary-fixed': '#ffdbce', 'inverse-on-surface': '#f7efe9', 'tertiary': '#755800', 'inverse-surface': '#33302c', 'on-tertiary-fixed-variant': '#5a4300', 'on-secondary': '#ffffff', 'surface-container-low': '#faf2eb', 'on-tertiary-container': '#fffbff', 'on-surface': '#1e1b17', 'secondary-fixed': '#ffdbca' }, borderRadius: { 'DEFAULT': '0.25rem', 'lg': '0.5rem', 'xl': '0.75rem', 'full': '9999px' }, spacing: { 'margin-lg': '1.5rem', 'margin': '1rem', 'space-md': '1rem', 'gutter': '1rem', 'space-lg': '1.5rem', 'gutter-sm': '0.75rem', 'space-xl': '2rem', 'space-sm': '0.5rem', 'space-xs': '0.25rem' }, fontFamily: { 'headline-md': ['Inter'], 'headline-sm': ['Inter'], 'headline-lg': ['Inter'], 'label-sm': ['Inter'], 'body-lg': ['Inter'], 'display-lg-mobile': ['Inter'], 'body-sm': ['Inter'], 'body-md': ['Inter'], 'label-lg': ['Inter'], 'label-md': ['Inter'], 'price-display': ['Inter'], 'display-lg': ['Inter'] }, fontSize: { 'headline-md': ['22px', { lineHeight: '28px', letterSpacing: '-0.01em', fontWeight: '700' }], 'headline-sm': ['18px', { lineHeight: '24px', fontWeight: '600' }], 'headline-lg': ['28px', { lineHeight: '36px', letterSpacing: '-0.01em', fontWeight: '700' }], 'label-sm': ['10px', { lineHeight: '12px', letterSpacing: '0.04em', fontWeight: '700' }], 'body-lg': ['16px', { lineHeight: '24px', fontWeight: '400' }], 'display-lg-mobile': ['32px', { lineHeight: '40px', letterSpacing: '-0.02em', fontWeight: '800' }], 'body-sm': ['12px', { lineHeight: '16px', fontWeight: '400' }], 'body-md': ['14px', { lineHeight: '20px', fontWeight: '400' }], 'label-lg': ['14px', { lineHeight: '20px', letterSpacing: '0.01em', fontWeight: '600' }], 'label-md': ['12px', { lineHeight: '16px', letterSpacing: '0.02em', fontWeight: '600' }], 'price-display': ['24px', { lineHeight: '28px', letterSpacing: '-0.01em', fontWeight: '700' }], 'display-lg': ['40px', { lineHeight: '48px', letterSpacing: '-0.02em', fontWeight: '800' }] } } } };</script><style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head><body class="bg-surface font-body-md text-on-surface flex flex-col min-h-screen selection:bg-secondary-fixed selection:text-on-secondary-fixed"><header class="fixed top-0 inset-x-0 z-50 bg-surface/85 backdrop-blur-xl pt-safe shadow-[0_1px_8px_rgba(28,25,23,0.04)]"><div class="h-16 px-margin flex items-center justify-between"><div class="flex items-center gap-space-sm"><button aria-label="Go Back" class="w-12 h-12 -ml-2 rounded-full flex items-center justify-center text-on-surface hover:bg-surface-container active:scale-95 transition-all" onclick="history.back()" type="button"><span class="material-symbols-outlined text-[24px]">arrow_back</span></button><h1 class="font-headline-sm text-headline-sm text-on-surface tracking-tight truncate max-w-[210px]">Privacy &amp; Data</h1></div><div class="flex items-center gap-space-xs"><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center shrink-0 shadow-sm"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div></div></div></header><main class="flex-1 flex flex-col relative w-full pt-16 pb-safe bg-surface"><div class="flex flex-col w-full pb-10">
+<!-- Intro Subtitle & Jamaican Motoring Assurance -->
+<div class="px-margin pt-4 pb-2">
+<div class="flex items-center gap-space-xs text-primary mb-1">
+<span class="material-symbols-outlined text-[18px]">verified_user</span>
+<span class="font-label-md text-label-md uppercase tracking-wider">Driver Data Charter</span>
+</div>
+<p class="font-body-md text-body-md text-on-surface-variant leading-relaxed">
+      Transparency first. You have complete ownership over your motoring data and location permissions across Jamaica.
+    </p>
+</div>
+<div class="px-margin flex flex-col gap-space-md mt-2">
+<!-- 1. Location Permission Status Card -->
+<div class="bg-surface-container-lowest p-space-md rounded-xl shadow-sm flex flex-col gap-space-sm relative overflow-hidden">
+<div class="flex items-start justify-between gap-space-sm">
+<div class="flex items-center gap-space-sm">
+<div class="w-10 h-10 rounded-full bg-surface-container flex items-center justify-center shrink-0 text-primary">
+<span class="material-symbols-outlined text-[22px]">near_me</span>
+</div>
+<div>
+<div class="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">GPS Permission</div>
+<div class="font-headline-sm text-headline-sm text-on-surface flex items-center gap-1.5 mt-0.5">
+<span>While Using App</span>
+<span class="inline-flex items-center justify-center w-4 h-4 rounded-full bg-emerald-600 text-white">
+<span class="material-symbols-outlined text-[12px] font-bold">check</span>
+</span>
+</div>
+</div>
+</div>
+<span class="px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-800 font-label-md text-label-md flex items-center gap-1">
+<span class="w-2 h-2 rounded-full bg-emerald-600"></span> Active
+        </span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant">
+        Precise location is only accessed when logging fuel at pumps or pinning new automotive spots in your parish.
+      </p>
+<div class="pt-1">
+<button class="w-full h-12 rounded-lg bg-surface-container hover:bg-surface-container-high active:scale-[0.98] transition-all flex items-center justify-center gap-2 text-primary font-label-lg text-label-lg" onclick="triggerToast('Opening device system settings...')" type="button">
+<span>Change in phone settings</span>
+<span class="material-symbols-outlined text-[18px]">open_in_new</span>
+</button>
+</div>
+</div>
+<!-- 2. 'What we keep private' (Strictly Shielded) -->
+<div class="bg-surface-container-lowest p-space-md rounded-xl shadow-sm flex flex-col gap-space-md">
+<div class="flex items-start gap-space-sm">
+<div class="w-10 h-10 rounded-full bg-emerald-100 text-emerald-800 flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-[22px]" style="font-variation-settings: 'FILL' 1;">shield</span>
+</div>
+<div>
+<div class="font-headline-sm text-headline-sm text-on-surface">What we keep strictly private</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-0.5">
+            Stored encrypted and never shared with third parties, insurers, or Jamaican advertising networks:
+          </p>
+</div>
+</div>
+<!-- Private Items Stack -->
+<div class="flex flex-col gap-space-sm">
+<div class="p-3 rounded-lg bg-surface-container-low flex items-start gap-space-sm">
+<div class="w-7 h-7 rounded-full bg-surface-container-highest flex items-center justify-center shrink-0 mt-0.5 text-on-surface">
+<span class="material-symbols-outlined text-[16px]">directions_car</span>
+</div>
+<div class="min-w-0">
+<div class="font-label-lg text-label-lg text-on-surface">Vehicles &amp; License plates</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant">2019 Toyota Roomy, registration serial, and vehicle chassis number</p>
+</div>
+</div>
+<div class="p-3 rounded-lg bg-surface-container-low flex items-start gap-space-sm">
+<div class="w-7 h-7 rounded-full bg-surface-container-highest flex items-center justify-center shrink-0 mt-0.5 text-on-surface">
+<span class="material-symbols-outlined text-[16px]">local_gas_station</span>
+</div>
+<div class="min-w-0">
+<div class="font-label-lg text-label-lg text-on-surface">Fuel logs &amp; spend history</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Fill volumes, J$ total expenditure, personal odometer &amp; fuel economy</p>
+</div>
+</div>
+<div class="p-3 rounded-lg bg-surface-container-low flex items-start gap-space-sm">
+<div class="w-7 h-7 rounded-full bg-surface-container-highest flex items-center justify-center shrink-0 mt-0.5 text-on-surface">
+<span class="material-symbols-outlined text-[16px]">folder_shared</span>
+</div>
+<div class="min-w-0">
+<div class="font-label-lg text-label-lg text-on-surface">Vehicle documents &amp; renewal dates</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Island traffic fitness certificates, insurance policy numbers, and disc photo scans</p>
+</div>
+</div>
+<div class="p-3 rounded-lg bg-surface-container-low flex items-start gap-space-sm">
+<div class="w-7 h-7 rounded-full bg-surface-container-highest flex items-center justify-center shrink-0 mt-0.5 text-on-surface">
+<span class="material-symbols-outlined text-[16px]">build_circle</span>
+</div>
+<div class="min-w-0">
+<div class="font-label-lg text-label-lg text-on-surface">Service &amp; repair history</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Mechanic invoices, parts procurement, and custom service intervals</p>
+</div>
+</div>
+</div>
+<div class="flex items-center gap-2 px-3 py-2 rounded-lg bg-surface-container font-label-md text-label-md text-on-surface-variant">
+<span class="material-symbols-outlined text-[18px] text-emerald-700">lock</span>
+<span>Zero telematics sharing with insurance providers</span>
+</div>
+</div>
+<!-- 3. 'What helps the map' (Community Crowdsource) -->
+<div class="bg-surface-container-lowest p-space-md rounded-xl shadow-sm flex flex-col gap-space-md">
+<div class="flex items-start gap-space-sm">
+<div class="w-10 h-10 rounded-full bg-secondary-fixed text-on-secondary-fixed flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-[22px]">public</span>
+</div>
+<div>
+<div class="font-headline-sm text-headline-sm text-on-surface">What powers the community</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-0.5">
+            Crowdsourced data contributed to help fellow Jamaican motorists navigate safely &amp; affordably:
+          </p>
+</div>
+</div>
+<div class="flex flex-col gap-space-sm">
+<div class="p-3 rounded-lg bg-surface-container-low flex items-start gap-space-sm">
+<div class="w-7 h-7 rounded-full bg-secondary-container/20 text-secondary flex items-center justify-center shrink-0 mt-0.5">
+<span class="material-symbols-outlined text-[16px]">payments</span>
+</div>
+<div class="min-w-0">
+<div class="font-label-lg text-label-lg text-on-surface">Anonymous station fuel prices</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Aggregated to compute fair parish gas averages (E10 87, E10 90, ULSD)</p>
+</div>
+</div>
+<div class="p-3 rounded-lg bg-surface-container-low flex items-start gap-space-sm">
+<div class="w-7 h-7 rounded-full bg-secondary-container/20 text-secondary flex items-center justify-center shrink-0 mt-0.5">
+<span class="material-symbols-outlined text-[16px]">add_location_alt</span>
+</div>
+<div class="min-w-0">
+<div class="font-label-lg text-label-lg text-on-surface">Approved pins &amp; verified spots</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Air compressor spots, alignment shops, and local auto parts vendors</p>
+</div>
+</div>
+<div class="p-3 rounded-lg bg-surface-container-low flex items-start gap-space-sm">
+<div class="w-7 h-7 rounded-full bg-secondary-container/20 text-secondary flex items-center justify-center shrink-0 mt-0.5">
+<span class="material-symbols-outlined text-[16px]">warning</span>
+</div>
+<div class="min-w-0">
+<div class="font-label-lg text-label-lg text-on-surface">Road hazard &amp; station amenities</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Real-time reports on pump queues, working tire pressure gauges &amp; potholes</p>
+</div>
+</div>
+</div>
+<!-- Trust Note Badge -->
+<div class="p-3 rounded-lg bg-surface-container-high flex items-start gap-2 text-on-surface">
+<span class="material-symbols-outlined text-[18px] text-primary shrink-0 mt-0.5">info</span>
+<p class="font-body-sm text-body-sm font-semibold">
+          Your personal identity, phone number, and vehicle registration are never connected to public road or fuel price posts.
+        </p>
+</div>
+</div>
+<!-- 4. Data Management & Export Actions -->
+<div class="bg-surface-container-lowest p-space-md rounded-xl shadow-sm flex flex-col gap-space-sm">
+<div class="flex items-center gap-space-sm">
+<div class="w-10 h-10 rounded-full bg-tertiary-fixed text-on-tertiary-fixed flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-[20px]">download</span>
+</div>
+<div>
+<div class="font-headline-sm text-headline-sm text-on-surface">Export Your Motoring Archive</div>
+<div class="font-label-md text-label-md text-on-surface-variant">Take your vehicle data anytime</div>
+</div>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant">
+        Request a full export of all your vehicle specs, fuel receipts, JMD pump logs, and garage service records in standard JSON or spreadsheet format.
+      </p>
+<div class="pt-2">
+<button class="w-full h-12 rounded-lg bg-primary hover:bg-primary-container active:scale-[0.98] transition-all flex items-center justify-center gap-2 text-on-primary font-label-lg text-label-lg shadow-sm" id="exportBtn" onclick="startExport()" type="button">
+<span class="material-symbols-outlined text-[20px]">file_download</span>
+<span id="exportText">Download My Data (CSV / JSON)</span>
+</button>
+</div>
+</div>
+<!-- 5. Danger Zone / Account Deletion -->
+<div class="bg-surface-container-lowest p-space-md rounded-xl shadow-sm flex flex-col gap-space-sm">
+<div class="flex items-center gap-space-sm text-error">
+<div class="w-10 h-10 rounded-full bg-error-container text-on-error-container flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-[20px]">delete_forever</span>
+</div>
+<div>
+<div class="font-headline-sm text-headline-sm text-on-surface">Delete Account &amp; Data</div>
+<div class="font-label-md text-label-md text-error">Permanent &amp; Irreversible</div>
+</div>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant">
+        Permanently remove your profile, registered cars, maintenance records, and community XP. Approved community map pins will remain anonymous to keep road guides functional for other Jamaican drivers.
+      </p>
+<div class="pt-2">
+<button class="w-full h-12 rounded-lg bg-surface-container-high hover:bg-error-container hover:text-on-error-container active:scale-[0.98] transition-all flex items-center justify-center gap-2 text-error font-label-lg text-label-lg" onclick="openDeleteModal()" type="button">
+<span class="material-symbols-outlined text-[20px]">heart_broken</span>
+<span>Delete My Account and Data</span>
+</button>
+</div>
+</div>
+<!-- Island Data Sovereignty Note -->
+<div class="text-center py-2">
+<p class="font-body-sm text-body-sm text-on-surface-variant flex items-center justify-center gap-1">
+<span>Protected under Jamaica Data Protection Act (JDPA)</span>
+<span class="material-symbols-outlined text-[14px]">gavel</span>
+</p>
+</div>
+</div>
+<!-- Delete Confirmation Modal (Native Minimal Mobile Sheet) -->
+<div class="hidden fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm p-4" id="deleteModal">
+<div class="w-full max-w-sm bg-surface-container-lowest rounded-xl p-space-lg flex flex-col gap-space-md shadow-2xl animate-in fade-in zoom-in-95 duration-150">
+<div class="w-12 h-12 rounded-full bg-error-container text-on-error-container flex items-center justify-center mx-auto">
+<span class="material-symbols-outlined text-[28px]">warning</span>
+</div>
+<div class="text-center">
+<h3 class="font-headline-sm text-headline-sm text-on-surface">Delete all Roam Plug data?</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-2">
+          This will purge your odometer logs, Jamaica fitness documents, and vehicle garage records immediately. You cannot undo this action.
+        </p>
+</div>
+<div class="flex flex-col gap-2 pt-2">
+<button class="w-full h-12 rounded-lg bg-error text-on-error font-label-lg text-label-lg flex items-center justify-center gap-1 active:scale-95 transition-all" onclick="confirmDelete()" type="button">
+<span>Yes, permanently delete</span>
+</button>
+<button class="w-full h-12 rounded-lg bg-surface-container text-on-surface font-label-lg text-label-lg flex items-center justify-center active:scale-95 transition-all" onclick="closeDeleteModal()" type="button">
+<span>Cancel &amp; keep my data</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Micro-interaction Toast -->
+<div class="fixed bottom-6 inset-x-4 max-w-xs mx-auto z-50 pointer-events-none opacity-0 transition-opacity duration-300 flex items-center gap-2 p-3 rounded-lg bg-inverse-surface text-inverse-on-surface shadow-xl" id="feedbackToast">
+<span class="material-symbols-outlined text-[18px] text-tertiary-fixed">info</span>
+<span class="font-label-md text-label-md" id="toastMsg">Action triggered</span>
+</div>
+</div>
+<script>
+  function triggerToast(msg) {
+    const toast = document.getElementById('feedbackToast');
+    const toastMsg = document.getElementById('toastMsg');
+    toastMsg.textContent = msg;
+    toast.classList.remove('opacity-0');
+    toast.classList.add('opacity-100');
+    setTimeout(() => {
+      toast.classList.remove('opacity-100');
+      toast.classList.add('opacity-0');
+    }, 2800);
+  }
+
+  function startExport() {
+    const btn = document.getElementById('exportBtn');
+    const text = document.getElementById('exportText');
+    const originalText = text.textContent;
+    btn.disabled = true;
+    text.textContent = 'Packaging zip file...';
+    triggerToast('Generating vehicle & fuel report...');
+    setTimeout(() => {
+      text.textContent = 'Archive ready for download!';
+      triggerToast('Downloaded Roam_Plug_Archive.zip');
+      setTimeout(() => {
+        text.textContent = originalText;
+        btn.disabled = false;
+      }, 2500);
+    }, 1800);
+  }
+
+  function openDeleteModal() {
+    document.getElementById('deleteModal').classList.remove('hidden');
+  }
+
+  function closeDeleteModal() {
+    document.getElementById('deleteModal').classList.add('hidden');
+  }
+
+  function confirmDelete() {
+    closeDeleteModal();
+    triggerToast('Account scheduled for permanent erasure.');
+  }
+</script></main></body></html>

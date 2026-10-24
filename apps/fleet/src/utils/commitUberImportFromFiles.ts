@@ -17,6 +17,7 @@ import {
   type FileData,
 } from './csvHelpers';
 import { computeImportBundleFingerprint } from './importBundleFingerprint';
+import { uberWeekNeedsStatement } from '@roam/finance-core';
 import { buildCanonicalImportEvents, tripDateBounds } from './buildCanonicalImportEvents';
 import { buildPaymentLedgerCanonicalEvents } from './buildPaymentLedgerCanonicalEvents';
 import { validateMergedImportPreview } from './importValidation';
@@ -335,6 +336,7 @@ export async function commitUberCashRefresh(
           contentFingerprint,
         )
       : [];
+  const heldWeek = uberWeekNeedsStatement(wk);
   const canonicalEvents = [
     ...paymentLineEvents,
     ...buildCanonicalImportEvents({
@@ -345,7 +347,14 @@ export async function commitUberCashRefresh(
       uberStatementsByDriverId: merged.uberStatementsByDriverId,
       disputeRefunds: merged.disputeRefunds || [],
     }),
-  ];
+  ].map((event) =>
+    heldWeek
+      ? {
+          ...event,
+          metadata: { ...(event.metadata || {}), heldUntilUberStatement: true, weekKey: wk },
+        }
+      : event,
+  );
 
   if (canonicalEvents.length > 0) {
     let confirmSignedWeek = false;

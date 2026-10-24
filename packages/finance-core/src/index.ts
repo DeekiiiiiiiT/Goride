@@ -1,4 +1,14 @@
 export { round2, MONEY_EPS, STATUS_SETTLED_EPS, STATUS_CASH_HELD_EPS, toMoneyMinor, fromMoneyMinor } from './money.ts';
+export {
+  statementFooting,
+  amortisedPrepaid,
+  tieOut,
+  fuelCardUploadKey,
+  uberWeekNeedsStatement,
+  uberEarningsTie,
+  expectedBankWeekKey,
+  fuelLedgerDrift,
+} from './businessStatement.ts';
 export type { MoneyMinor } from './money.ts';
 export {
   periodKeyFor,

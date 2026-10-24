@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" name="viewport"/>
+<meta content="mobile_blank" name="shell-type"/>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {
+            "error": "#ba1a1a",
+            "error-container": "#ffdad6",
+            "surface-bright": "#fff8f2",
+            "primary-fixed-dim": "#ffb599",
+            "surface-container-highest": "#e8e1db",
+            "on-secondary-fixed": "#341100",
+            "primary-fixed": "#ffdbce",
+            "inverse-on-surface": "#f7efe9",
+            "tertiary-container": "#936f00",
+            "inverse-surface": "#33302c",
+            "on-secondary-container": "#5c2400",
+            "secondary-container": "#fd761a",
+            "secondary-fixed-dim": "#ffb690",
+            "on-primary-fixed-variant": "#7f2b00",
+            "tertiary": "#755800",
+            "on-error-container": "#93000a",
+            "on-tertiary": "#ffffff",
+            "inverse-primary": "#ffb599",
+            "on-primary": "#ffffff",
+            "surface-container-lowest": "#ffffff",
+            "background": "#fff8f2",
+            "on-surface-variant": "#5a4138",
+            "surface-dim": "#e0d9d2",
+            "on-tertiary-fixed-variant": "#5a4300",
+            "surface-container-low": "#faf2eb",
+            "on-tertiary-fixed": "#251a00",
+            "on-surface": "#1e1b17",
+            "on-error": "#ffffff",
+            "outline": "#8e7166",
+            "on-primary-container": "#fffbff",
+            "surface-tint": "#a73a00",
+            "tertiary-fixed": "#ffdf9a",
+            "surface-container": "#f4ede6",
+            "surface-variant": "#e8e1db",
+            "on-primary-fixed": "#370e00",
+            "on-secondary": "#ffffff",
+            "tertiary-fixed-dim": "#f7be1d",
+            "on-secondary-fixed-variant": "#783200",
+            "secondary": "#9d4300",
+            "surface-container-high": "#eee7e0",
+            "primary-container": "#ea580c",
+            "on-tertiary-container": "#fffbff",
+            "primary": "#ea580c",
+            "on-background": "#1e1b17",
+            "secondary-fixed": "#ffdbca",
+            "outline-variant": "#e2bfb2",
+            "surface": "#fff8f2"
+          },
+          fontFamily: {
+            "body-md": ["Inter", "sans-serif"],
+            "headline-sm": ["Inter", "sans-serif"],
+            "headline-md": ["Inter", "sans-serif"],
+            "label-sm": ["Inter", "sans-serif"],
+            "label-md": ["Inter", "sans-serif"],
+            "label-lg": ["Inter", "sans-serif"]
+          }
+        }
+      }
+    };
+  </script>
+<style>
+    @layer base {
+      html, body {
+        width: 100vw;
+        height: 100vh;
+        margin: 0;
+        padding: 0;
+        overflow: hidden;
+      }
+      body {
+        overscroll-behavior: none;
+      }
+      .pb-safe {
+        padding-bottom: env(safe-area-inset-bottom, 12px);
+      }
+      .pt-safe {
+        padding-top: env(safe-area-inset-top, 12px);
+      }
+    }
+  </style>
+</head>
+<body class="bg-surface font-body-md text-on-surface h-screen w-screen flex flex-col overflow-hidden select-none">
+<!-- Screen 43: Map It - Place the Pin -->
+<main class="relative flex-1 w-full h-full flex flex-col overflow-hidden bg-surface">
+<!-- MAP VIEWPORT CONTAINER -->
+<div class="relative w-full flex-1 h-full bg-[#ebe7df] overflow-hidden">
+<!-- High-Detail Kingston Crossroads Map Geometry -->
+<svg class="absolute inset-0 w-full h-full" fill="none" preserveaspectratio="xMidYMid slice" viewbox="0 0 420 700" xmlns="http://www.w3.org/2000/svg">
+<!-- Land blocks -->
+<path d="M-40 -40 H200 V230 H-40 Z" fill="#eae4db"></path>
+<path d="M220 -40 H460 V180 H220 Z" fill="#dfd8ce"></path>
+<path d="M-40 270 H150 V740 H-40 Z" fill="#e5dfd5"></path>
+<path d="M210 320 H460 V740 H210 Z" fill="#eae3db"></path>
+<path d="M150 400 H210 V740 H150 Z" fill="#ded7cc"></path>
+<!-- Parish greenery & park (Mandela Park / Recreation pocket) -->
+<rect fill="#d0dec8" height="100" opacity="0.85" rx="10" width="85" x="235" y="50"></rect>
+<circle cx="280" cy="100" fill="#c3d5b9" opacity="0.9" r="28"></circle>
+<path d="M20 440 Q60 410 110 440 T140 540 L20 540 Z" fill="#d4e2cd" opacity="0.7"></path>
+<!-- Secondary Road Networks -->
+<path d="M-30 110 L450 200" stroke="#ffffff" stroke-linecap="round" stroke-width="12"></path>
+<path d="M50 -30 L80 730" stroke="#ffffff" stroke-linecap="round" stroke-width="10"></path>
+<path d="M280 180 L450 390" stroke="#ffffff" stroke-linecap="round" stroke-width="10"></path>
+<path d="M-30 460 L180 340" stroke="#ffffff" stroke-linecap="round" stroke-width="10"></path>
+<!-- Major Jamaican Arterial Spine: Hagley Park Rd to Constant Spring Rd -->
+<!-- Hagley Park Rd (South-West diagonal to center hub) -->
+<path d="M-30 520 L190 270" stroke="#fbd38d" stroke-linecap="round" stroke-width="26"></path>
+<path d="M-30 520 L190 270" stroke="#ffffff" stroke-linecap="round" stroke-width="18"></path>
+<!-- Constant Spring Rd (North-South primary artery) -->
+<path d="M205 -30 L185 730" stroke="#fbd38d" stroke-linecap="round" stroke-width="26"></path>
+<path d="M205 -30 L185 730" stroke="#ffffff" stroke-linecap="round" stroke-width="18"></path>
+<!-- Eastwood Park Rd & Half-Way-Tree Rd (East-West diagonal) -->
+<path d="M-30 260 L450 280" stroke="#fbd38d" stroke-linecap="round" stroke-width="24"></path>
+<path d="M-30 260 L450 280" stroke="#ffffff" stroke-linecap="round" stroke-width="16"></path>
+<!-- Half-Way Tree Transport Centre & Clock Tower Roundabout -->
+<ellipse cx="190" cy="270" fill="#f4ede6" rx="36" ry="36" stroke="#ffffff" stroke-width="10"></ellipse>
+<circle cx="190" cy="270" fill="#ded7cc" r="16"></circle>
+<!-- Road Names On Canvas -->
+<text fill="#78594d" font-family="Inter" font-size="9" font-weight="700" letter-spacing="1" transform="rotate(84 216 90)" x="216" y="90">CONSTANT SPRING RD</text>
+<text fill="#78594d" font-family="Inter" font-size="9" font-weight="700" letter-spacing="0.8" x="32" y="252">EASTWOOD PARK RD</text>
+<text fill="#78594d" font-family="Inter" font-size="9" font-weight="700" letter-spacing="0.8" x="260" y="302">HALF-WAY-TREE RD</text>
+<text fill="#78594d" font-family="Inter" font-size="9" font-weight="700" letter-spacing="0.8" transform="rotate(-34 60 420)" x="60" y="420">HAGLEY PARK RD</text>
+<text fill="#4d6f3e" font-family="Inter" font-size="8.5" font-weight="600" x="242" y="105">Nelson Mandela Park</text>
+<!-- Building blocks -->
+<rect fill="#cfc8bc" height="30" rx="3" width="38" x="110" y="70"></rect>
+<rect fill="#c7bfb2" height="36" rx="4" width="46" x="235" y="195"></rect>
+<rect fill="#cdc6ba" height="42" rx="4" width="52" x="75" y="310"></rect>
+<rect fill="#d3ccbf" height="50" rx="4" width="66" x="230" y="350"></rect>
+<rect fill="#dcd5c9" height="26" rx="3" width="34" x="118" y="180"></rect>
+</svg>
+<!-- Faint POI Markers -->
+<!-- Mario's Auto Parts -->
+<div class="absolute top-[175px] left-[32px] z-10 flex items-center gap-1.5 bg-surface/90 backdrop-blur-sm border border-outline-variant/60 px-2.5 py-1 rounded-full shadow-sm pointer-events-none">
+<span class="material-symbols-outlined text-outline text-[14px]">build</span>
+<div class="flex flex-col">
+<span class="text-[11px] font-semibold text-on-surface leading-tight">Mario's Auto Parts</span>
+<span class="text-[9px] text-outline leading-none">180m away</span>
+</div>
+</div>
+<!-- Tastee HWT -->
+<div class="absolute top-[320px] right-[24px] z-10 flex items-center gap-1.5 bg-surface/90 backdrop-blur-sm border border-outline-variant/60 px-2.5 py-1 rounded-full shadow-sm pointer-events-none">
+<span class="material-symbols-outlined text-outline text-[14px]">fastfood</span>
+<div class="flex flex-col">
+<span class="text-[11px] font-semibold text-on-surface leading-tight">Tastee HWT</span>
+<span class="text-[9px] text-outline leading-none">120m away</span>
+</div>
+</div>
+<!-- Existing Total Station Dot on Map (25m away reference) -->
+<div class="absolute top-[230px] right-[112px] z-10 flex items-center gap-1 bg-surface-container-high/95 border border-outline/20 px-2 py-0.5 rounded-full shadow-sm pointer-events-none">
+<span class="w-2 h-2 rounded-full bg-amber-600"></span>
+<span class="text-[10px] font-semibold text-on-surface-variant">Total HWT (25m)</span>
+</div>
+<!-- Center Fixed Crosshairs Reticle & High-Contrast Orange Pin -->
+<div class="absolute inset-0 flex items-center justify-center pointer-events-none z-20 -translate-y-8">
+<!-- Glowing Pulse Rings -->
+<div class="absolute w-44 h-44 rounded-full bg-[#ea580c]/10 animate-ping opacity-60"></div>
+<div class="absolute w-28 h-28 rounded-full bg-[#ea580c]/15 animate-pulse"></div>
+<div class="absolute w-14 h-14 rounded-full border border-[#ea580c]/40 bg-[#ea580c]/20"></div>
+<!-- Crosshair Reticle lines -->
+<div class="absolute w-12 h-[1.5px] bg-[#ea580c]/70"></div>
+<div class="absolute h-12 w-[1.5px] bg-[#ea580c]/70"></div>
+<!-- Pin Assembly Container -->
+<div class="flex flex-col items-center -translate-y-8">
+<!-- Floating Tooltip -->
+<div class="mb-2 bg-inverse-surface/95 text-inverse-on-surface px-3 py-1.5 rounded-full shadow-lg flex items-center gap-1.5 whitespace-nowrap animate-bounce">
+<span class="material-symbols-outlined text-secondary-fixed text-[16px]">touch_app</span>
+<span class="text-[11px] font-medium tracking-tight">Drag map to align with station entrance</span>
+</div>
+<!-- Orange Pin Head -->
+<div class="relative flex items-center justify-center">
+<!-- Ground Drop Shadow -->
+<div class="absolute -bottom-2 w-7 h-2 bg-black/30 rounded-full blur-[2px]"></div>
+<div class="w-12 h-12 rounded-full bg-[#ea580c] text-white flex items-center justify-center shadow-2xl border-2 border-white">
+<span class="material-symbols-outlined text-[24px]" style="font-variation-settings: 'FILL' 1;">local_gas_station</span>
+</div>
+</div>
+<!-- Pin Needle Tip -->
+<div class="w-3.5 h-3.5 bg-[#ea580c] rotate-45 -mt-2 rounded-xs border-r border-b border-white"></div>
+<!-- Center Point Dot -->
+<div class="w-2.5 h-2.5 rounded-full bg-[#ea580c] ring-2 ring-white mt-1 shadow-sm"></div>
+</div>
+</div>
+<!-- Re-Center Map Action Button -->
+<button aria-label="Re-center on current location" class="absolute right-4 bottom-[310px] z-20 w-11 h-11 rounded-full bg-surface-container-lowest text-on-surface flex items-center justify-center shadow-lg border border-outline-variant/40 active:scale-95 transition-transform" type="button">
+<span class="material-symbols-outlined text-[#ea580c] text-[22px]">my_location</span>
+</button>
+</div>
+<!-- TOP FLOATING OVERLAY -->
+<div class="absolute top-0 inset-x-0 z-30 pt-safe px-3 flex flex-col gap-2 pointer-events-auto">
+<!-- Header Row Card -->
+<div class="w-full bg-surface-container-lowest/95 backdrop-blur-md rounded-2xl p-2.5 flex items-center justify-between shadow-md border border-outline-variant/30">
+<!-- Close (X) Button -->
+<button aria-label="Close" class="w-9 h-9 rounded-full bg-surface-variant/70 text-on-surface flex items-center justify-center active:bg-surface-variant transition-colors" type="button">
+<span class="material-symbols-outlined text-[20px]">close</span>
+</button>
+<!-- Title -->
+<div class="flex items-center gap-1.5">
+<span class="font-headline-sm text-[16px] font-bold text-on-surface">Map It</span>
+<span class="text-outline text-[12px]">•</span>
+<span class="font-headline-sm text-[16px] font-bold text-[#ea580c]">Position Pin</span>
+</div>
+<!-- Info Button -->
+<button aria-label="Information" class="w-9 h-9 rounded-full bg-surface-variant/70 text-on-surface flex items-center justify-center active:bg-surface-variant transition-colors" type="button">
+<span class="material-symbols-outlined text-[20px]">info</span>
+</button>
+</div>
+<!-- GPS Status Pill -->
+<div class="w-full bg-surface-container-lowest/95 backdrop-blur-md rounded-xl px-3 py-2 flex items-center justify-between shadow-sm border border-outline-variant/30">
+<div class="flex items-center gap-2">
+<span class="relative flex h-2.5 w-2.5">
+<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-500 opacity-75"></span>
+<span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-green-600"></span>
+</span>
+<span class="text-[12px] font-bold text-on-surface">GPS Accuracy ±8 m</span>
+</div>
+<span class="text-[11px] text-on-surface-variant font-medium">Move outside if signal degrades</span>
+</div>
+</div>
+<!-- BOTTOM FLOATING OVERLAYS (Warning Card + Drawer) -->
+<div class="absolute bottom-0 inset-x-0 z-30 flex flex-col gap-2.5 px-3 pb-safe pointer-events-auto">
+<!-- DUPLICATE DETECTION WARNING CARD -->
+<div class="w-full bg-surface-container-lowest rounded-2xl p-4 shadow-xl border-2 border-amber-400 flex flex-col gap-3">
+<!-- Warning Alert Header -->
+<div class="flex items-start gap-2.5">
+<div class="w-9 h-9 rounded-xl bg-amber-100 text-amber-800 flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-[22px]">warning</span>
+</div>
+<div class="flex-1 min-w-0">
+<div class="flex items-center gap-1.5">
+<span class="text-[13px] font-bold text-on-surface tracking-tight">⚠️ Possible Match Detected</span>
+</div>
+<p class="text-[12px] text-on-surface-variant mt-0.5 leading-snug">
+              Is this <strong class="text-on-surface font-semibold">Total Half-Way-Tree</strong>? It's already on the map 25m away.
+            </p>
+</div>
+</div>
+<!-- Warning Card Actions -->
+<div class="grid grid-cols-2 gap-2 pt-0.5">
+<button class="w-full min-h-[42px] px-2.5 rounded-xl border border-outline/40 bg-surface-container-low text-on-surface text-[12px] font-semibold flex items-center justify-center gap-1 active:bg-surface-variant transition-colors" type="button">
+<span class="material-symbols-outlined text-[16px]">edit_location</span>
+<span class="truncate">Yes, that's it (Update info)</span>
+</button>
+<button class="w-full min-h-[42px] px-2.5 rounded-xl bg-secondary-fixed text-on-secondary-fixed text-[12px] font-bold flex items-center justify-center gap-1 shadow-sm active:opacity-90 transition-opacity" type="button">
+<span class="material-symbols-outlined text-[16px]">add_location</span>
+<span class="truncate">No, it's a different place</span>
+</button>
+</div>
+</div>
+<!-- BOTTOM SHEET / ACTION DRAWER -->
+<div class="w-full bg-surface-container-lowest rounded-2xl p-3.5 shadow-xl border border-outline-variant/30 flex flex-col gap-2.5">
+<!-- Geocoded Location Readout -->
+<div class="flex items-center gap-2.5 bg-surface-container-low px-3 py-2 rounded-xl">
+<span class="material-symbols-outlined text-[#ea580c] text-[20px] shrink-0">pin_drop</span>
+<div class="flex-1 min-w-0">
+<p class="text-[12px] font-semibold text-on-surface truncate">
+              Constant Spring Rd &amp; Eastwood Park Rd, St. Andrew (Kingston 10)
+            </p>
+</div>
+<span class="material-symbols-outlined text-green-700 text-[18px] shrink-0">check_circle</span>
+</div>
+<!-- Solid Orange Primary CTA Button -->
+<button class="w-full min-h-[48px] py-3.5 rounded-xl bg-[#ea580c] hover:bg-[#c2410c] text-white font-bold text-[15px] tracking-wide flex items-center justify-center gap-2 shadow-md active:scale-[0.99] transition-transform" type="button">
+<span class="material-symbols-outlined text-[20px]">where_to_vote</span>
+<span>Confirm Pin Location</span>
+</button>
+</div>
+</div>
+</main>
+</body></html>

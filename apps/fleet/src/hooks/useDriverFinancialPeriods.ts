@@ -257,7 +257,7 @@ export function overlaySharedPeriodsOntoPayoutRows<T extends {
       cashWrittenOff: Number(p.cashWrittenOff) || 0,
       settlementPaid: Number(p.settlementPaid) || 0,
       fuelDeduction: Number.isFinite(Number(p.fuelDeduction)) ? Number(p.fuelDeduction) : row.fuelDeduction,
-      fuelCredits: Number.isFinite(Number(p.fuelFleetShare)) ? Number(p.fuelFleetShare) : row.fuelCredits,
+      fuelCredits: Number.isFinite(Number(p.fuelDriverSpend)) ? Number(p.fuelDriverSpend) : row.fuelCredits,
       isFinalized: periodMoneyUnlocked(p) ? true : row.isFinalized,
       driverShare: Number.isFinite(Number(p.driverShare)) ? Number(p.driverShare) : row.driverShare,
       grossRevenue: Number.isFinite(Number(p.earningsGross)) ? Number(p.earningsGross) : row.grossRevenue,

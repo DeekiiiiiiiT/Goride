@@ -10,6 +10,7 @@ import {
   Activity,
   HardDrive,
   Receipt,
+  Map,
 } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
 import { AdminNavSection } from './AdminNavSection';
@@ -27,6 +28,7 @@ import {
   FUEL_MANAGEMENT_CHILDREN,
   TOLL_MANAGEMENT_CHILDREN,
   VEHICLE_DATABASE_CHILDREN,
+  WORLD_MAPS_CHILDREN,
   GCT_CHILDREN,
   ACCOUNTING_VENDOR_CHILDREN,
   GLOBAL_SETTINGS_CHILDREN,
@@ -66,6 +68,7 @@ function allNavChildren(): NavChild[] {
     ...FUEL_MANAGEMENT_CHILDREN,
     ...TOLL_MANAGEMENT_CHILDREN,
     ...VEHICLE_DATABASE_CHILDREN,
+    ...WORLD_MAPS_CHILDREN,
     ...GCT_CHILDREN,
     ...ACCOUNTING_VENDOR_CHILDREN,
     ...GLOBAL_SETTINGS_CHILDREN,
@@ -158,6 +161,7 @@ export function AdminLayout({ children, currentPage, onNavigate }: AdminLayoutPr
   const visibleDriver = filterChildren(ROAM_DRIVER_CHILDREN);
   const visibleFuel = filterChildren(FUEL_MANAGEMENT_CHILDREN);
   const visibleToll = filterChildren(TOLL_MANAGEMENT_CHILDREN);
+  const visibleWorldMaps = filterChildren(WORLD_MAPS_CHILDREN);
   const visibleVehicleDb = filterChildren(VEHICLE_DATABASE_CHILDREN).map((c) =>
     c.id === 'pending-motor-vehicles'
       ? { ...c, badgeCount: pendingCatalogOpenCount }
@@ -180,6 +184,7 @@ export function AdminLayout({ children, currentPage, onNavigate }: AdminLayoutPr
   const fuelIds = useMemo(() => visibleFuel.map((c) => c.id), [visibleFuel]);
   const tollIds = useMemo(() => visibleToll.map((c) => c.id), [visibleToll]);
   const vehicleIds = useMemo(() => visibleVehicleDb.map((c) => c.id), [visibleVehicleDb]);
+  const worldIds = useMemo(() => visibleWorldMaps.map((c) => c.id), [visibleWorldMaps]);
   const gctIds = useMemo(() => visibleGct.map((c) => c.id), [visibleGct]);
   const accountingVendorIds = useMemo(
     () => visibleAccountingVendors.map((c) => c.id),
@@ -203,6 +208,7 @@ export function AdminLayout({ children, currentPage, onNavigate }: AdminLayoutPr
   const [fuelOpen, setFuelOpen] = useSectionOpen(currentPage, fuelIds);
   const [tollOpen, setTollOpen] = useSectionOpen(currentPage, tollIds);
   const [vehicleDbOpen, setVehicleDbOpen] = useSectionOpen(currentPage, vehicleIds);
+  const [worldOpen, setWorldOpen] = useSectionOpen(currentPage, worldIds);
   const [gctOpen, setGctOpen] = useSectionOpen(currentPage, gctIds);
   const [accountingVendorsOpen, setAccountingVendorsOpen] = useSectionOpen(
     currentPage,
@@ -322,6 +328,15 @@ export function AdminLayout({ children, currentPage, onNavigate }: AdminLayoutPr
       open: vehicleDbOpen,
       setOpen: setVehicleDbOpen,
       isActive: vehicleIds.includes(currentPage),
+    },
+    {
+      key: 'world',
+      label: 'World Maps',
+      icon: Map,
+      children: visibleWorldMaps,
+      open: worldOpen,
+      setOpen: setWorldOpen,
+      isActive: worldIds.includes(currentPage),
     },
   ];
 

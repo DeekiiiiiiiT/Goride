@@ -292,7 +292,7 @@ function AppContent() {
     if (page === 'expense-hub') {
       setExpenseHubVehicleId(null);
       setExpenseHubSubview(null);
-      setFinancePeriodHint(null);
+      if (!periodHint) setFinancePeriodHint(null);
     }
     // Legacy Accounting nav → Expense Hub Recurring expenses tab
     if (page === 'expense-accounting') {
@@ -399,8 +399,14 @@ function AppContent() {
 
     setCurrentPage(page);
     if (typeof window !== 'undefined') {
-      const nextPath = pathForPageId(page);
-      if (window.location.pathname !== nextPath) {
+      const base = pathForPageId(page);
+      const qs = new URLSearchParams();
+      if (page === 'expense-hub' && periodHint) {
+        qs.set('from', periodHint.startYmd);
+        qs.set('to', periodHint.endYmd);
+      }
+      const nextPath = qs.toString() ? `${base}?${qs.toString()}` : base;
+      if (`${window.location.pathname}${window.location.search}` !== nextPath) {
         window.history.pushState({ page }, '', nextPath);
       }
     }
@@ -887,8 +893,10 @@ function AppContent() {
           <PermissionGate permission="nav.financial_analytics" onNavigate={setCurrentPage}>
             <Suspense fallback={<div className="p-6 text-sm text-slate-500">Loading expense hub…</div>}>
               <ExpenseHubPage
-                key={`${expenseHubVehicleId || 'expense-hub'}:${expenseHubSubview || 'default'}`}
+                key={`${expenseHubVehicleId || 'expense-hub'}:${expenseHubSubview || 'default'}:${financePeriodHint?.startYmd || ''}`}
                 initialVehicleId={expenseHubVehicleId ?? undefined}
+                initialStart={financePeriodHint?.startYmd}
+                initialEnd={financePeriodHint?.endYmd}
                 initialSubview={
                   expenseHubSubview || (expenseHubVehicleId ? 'register' : 'overview')
                 }

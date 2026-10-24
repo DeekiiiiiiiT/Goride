@@ -1,0 +1,39 @@
+/* Roam Plug — Sunset Orange. Import only from apps/plug. */
+@theme {
+  --color-primary: #ea580c;
+  --color-primary-press: #c2410c;
+  --color-secondary: #f97316;
+  --color-tertiary: #eab308;
+  --color-success: #16a34a;
+  --color-warning: #d97706;
+  --color-error: #dc2626;
+  --color-neutral: #57534e;
+  --color-background: #fafaf9;
+  --color-surface: #ffffff;
+  --color-on-surface: #1c1917;
+  --color-line: #e7e5e4;
+  --color-grade-87: #16a34a;
+  --color-grade-90: #dc2626;
+  --color-grade-diesel: #1c1917;
+  --color-pending: #57534e;
+  --font-sans: Inter, "Segoe UI", system-ui, sans-serif;
+  --radius-lg: 1rem;
+  --radius-xl: 1.5rem;
+}
+
+.dark {
+  --color-primary: #fb923c;
+  --color-primary-press: #fdba74;
+  --color-secondary: #fdba74;
+  --color-tertiary: #fde047;
+  --color-success: #22c55e;
+  --color-warning: #f59e0b;
+  --color-error: #ef4444;
+  --color-neutral: #d6d3d1;
+  --color-background: #292524;
+  --color-surface: #44403c;
+  --color-on-surface: #fafaf9;
+  --color-line: #57534e;
+  --color-grade-diesel: #d6d3d1;
+  --color-pending: #d6d3d1;
+}

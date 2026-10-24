@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+
+<html lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" name="viewport"/><meta content="mobile_stack" name="shell-type"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/><link href="https://fonts.googleapis.com" rel="preconnect"/><link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><style>@layer base{html,body{width:100vw;margin:0;padding:0;}body{overscroll-behavior:none;}.pb-safe{padding-bottom:env(safe-area-inset-bottom,0px);}.pt-safe{padding-top:env(safe-area-inset-top,0px);}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config = { darkMode: "class", theme: { extend: { "colors": { "on-primary-fixed": "#370e00", "primary-fixed-dim": "#ffb599", "surface-variant": "#e8e1db", "secondary-container": "#fd761a", "secondary-fixed-dim": "#ffb690", "tertiary-container": "#936f00", "on-tertiary-fixed-variant": "#5a4300", "surface-container-high": "#eee7e0", "on-secondary-container": "#5c2400", "on-secondary-fixed-variant": "#783200", "surface-container-highest": "#e8e1db", "on-error-container": "#93000a", "secondary-fixed": "#ffdbca", "primary-fixed": "#ffdbce", "background": "#fff8f2", "surface-bright": "#fff8f2", "surface-container-low": "#faf2eb", "on-primary": "#ffffff", "error": "#ba1a1a", "on-secondary": "#ffffff", "tertiary": "#755800", "outline-variant": "#e2bfb2", "on-surface-variant": "#5a4138", "primary": "#a33900", "inverse-primary": "#ffb599", "on-secondary-fixed": "#341100", "primary-container": "#cc4900", "outline": "#8e7166", "on-background": "#1e1b17", "error-container": "#ffdad6", "surface-container-lowest": "#ffffff", "surface-dim": "#e0d9d2", "inverse-surface": "#33302c", "on-tertiary-container": "#fffbff", "secondary": "#9d4300", "inverse-on-surface": "#f7efe9", "tertiary-fixed": "#ffdf9a", "surface": "#fff8f2", "on-tertiary-fixed": "#251a00", "surface-container": "#f4ede6", "on-primary-container": "#fffbff", "on-surface": "#1e1b17", "on-error": "#ffffff", "on-tertiary": "#ffffff", "on-primary-fixed-variant": "#7f2b00", "surface-tint": "#a73a00", "tertiary-fixed-dim": "#f7be1d" }, "borderRadius": { "DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px" }, "spacing": { "gutter": "1rem", "space-xl": "2rem", "space-md": "1rem", "margin-lg": "1.5rem", "space-sm": "0.5rem", "gutter-sm": "0.75rem", "margin": "1rem", "space-xs": "0.25rem", "space-lg": "1.5rem" }, "fontFamily": { "body-lg": ["Inter"], "body-sm": ["Inter"], "label-md": ["Inter"], "headline-lg": ["Inter"], "price-display": ["Inter"], "label-lg": ["Inter"], "display-lg-mobile": ["Inter"], "label-sm": ["Inter"], "headline-md": ["Inter"], "headline-sm": ["Inter"], "body-md": ["Inter"], "display-lg": ["Inter"] }, "fontSize": { "body-lg": ["16px", { "lineHeight": "24px", "fontWeight": "400" }], "body-sm": ["12px", { "lineHeight": "16px", "fontWeight": "400" }], "label-md": ["12px", { "lineHeight": "16px", "letterSpacing": "0.02em", "fontWeight": "600" }], "headline-lg": ["28px", { "lineHeight": "36px", "letterSpacing": "-0.01em", "fontWeight": "700" }], "price-display": ["24px", { "lineHeight": "28px", "letterSpacing": "-0.01em", "fontWeight": "700" }], "label-lg": ["14px", { "lineHeight": "20px", "letterSpacing": "0.01em", "fontWeight": "600" }], "display-lg-mobile": ["32px", { "lineHeight": "40px", "letterSpacing": "-0.02em", "fontWeight": "800" }], "label-sm": ["10px", { "lineHeight": "12px", "letterSpacing": "0.04em", "fontWeight": "700" }], "headline-md": ["22px", { "lineHeight": "28px", "letterSpacing": "-0.01em", "fontWeight": "700" }], "headline-sm": ["18px", { "lineHeight": "24px", "fontWeight": "600" }], "body-md": ["14px", { "lineHeight": "20px", "fontWeight": "400" }], "display-lg": ["40px", { "lineHeight": "48px", "letterSpacing": "-0.02em", "fontWeight": "800" }] } } } }</script><style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head><body class="bg-surface font-body-md text-on-surface flex flex-col min-h-screen"><header class="fixed top-0 w-full z-50 bg-surface/80 backdrop-blur-xl pt-safe shadow-[0_1px_8px_rgba(0,0,0,0.04)]"><div class="h-16 px-margin flex items-center justify-between"><div class="flex items-center gap-space-sm"><button aria-label="Go back" class="w-12 h-12 -ml-2 rounded-full flex items-center justify-center text-on-surface hover:bg-surface-container-high transition-colors" onclick="history.back()" type="button"><span class="material-symbols-outlined text-[24px]">arrow_back</span></button><h1 class="font-headline-sm text-headline-sm text-on-surface tracking-tight select-none">Notifications</h1></div><div class="flex items-center gap-space-sm"><button class="min-h-[44px] px-space-sm py-space-xs rounded-lg text-primary hover:bg-primary-fixed/20 transition-colors font-label-md text-label-md flex items-center gap-1" type="button"><span>Mark all as read</span></button><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center shrink-0"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div></div></div></header><main class="flex flex-col relative w-full px-margin pt-16 pb-safe bg-surface"><div class="flex flex-col w-full pb-8">
+<!-- Top Dynamic Status Banner & Stats Bar -->
+<div class="flex items-center justify-between py-space-sm mb-space-md">
+<div class="flex items-center gap-2">
+<span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-primary text-on-primary font-label-md text-label-md shadow-sm">
+<span class="w-2 h-2 rounded-full bg-surface-container-lowest animate-pulse"></span>
+        3 new alerts
+      </span>
+<span class="text-on-surface-variant font-body-sm text-body-sm hidden xs:inline">Island co-pilot active</span>
+</div>
+<button class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-primary hover:bg-primary-fixed/30 active:scale-95 transition-all font-label-md text-label-md" id="markAllReadBtn" type="button">
+<span class="material-symbols-outlined text-[18px]">done_all</span>
+<span>Clear all</span>
+</button>
+</div>
+<!-- Filter Chips Ribbon (Parish & Category Flow) -->
+<div class="flex items-center gap-2 overflow-x-auto no-scrollbar -mx-margin px-margin pb-2 mb-space-md">
+<button class="filter-chip active-filter shrink-0 h-9 px-4 rounded-full bg-on-surface text-surface-container-lowest font-label-md text-label-md shadow-sm transition-all flex items-center gap-1.5" type="button">
+<span>All</span>
+<span class="px-1.5 py-0.2 rounded-full bg-white/20 text-white font-label-sm text-label-sm">5</span>
+</button>
+<button class="filter-chip shrink-0 h-9 px-4 rounded-full bg-surface-container-high text-on-surface hover:bg-surface-variant active:scale-95 transition-all font-label-md text-label-md flex items-center gap-1.5" type="button">
+<span>Reminders</span>
+<span class="px-1.5 py-0.2 rounded-full bg-secondary-fixed text-on-secondary-fixed font-label-sm text-label-sm">2</span>
+</button>
+<button class="filter-chip shrink-0 h-9 px-4 rounded-full bg-surface-container-high text-on-surface hover:bg-surface-variant active:scale-95 transition-all font-label-md text-label-md flex items-center gap-1.5" type="button">
+<span>Scout Updates</span>
+<span class="px-1.5 py-0.2 rounded-full bg-surface-container-highest text-on-surface-variant font-label-sm text-label-sm">1</span>
+</button>
+<button class="filter-chip shrink-0 h-9 px-4 rounded-full bg-surface-container-high text-on-surface hover:bg-surface-variant active:scale-95 transition-all font-label-md text-label-md flex items-center gap-1.5" type="button">
+<span>Fuel Radar</span>
+<span class="px-1.5 py-0.2 rounded-full bg-secondary-fixed text-on-secondary-fixed font-label-sm text-label-sm">2</span>
+</button>
+</div>
+<!-- Notification Stream -->
+<div class="flex flex-col gap-space-lg">
+<!-- SECTION: TODAY -->
+<div class="flex flex-col gap-space-sm">
+<div class="flex items-center justify-between px-1">
+<h2 class="font-label-md text-label-md tracking-wider uppercase text-on-surface-variant">Today</h2>
+<span class="font-label-sm text-label-sm text-outline">Nov 14, 2024</span>
+</div>
+<!-- Card 1: Maintenance Alert (Amber / Warm) -->
+<div class="unread-card relative flex flex-col p-4 rounded-xl bg-surface-container-lowest shadow-sm hover:shadow-md transition-shadow">
+<div class="flex items-start justify-between gap-3">
+<div class="flex gap-3 min-w-0">
+<div class="w-10 h-10 rounded-xl bg-secondary-fixed flex items-center justify-center shrink-0 text-on-secondary-fixed">
+<span class="material-symbols-outlined text-[22px]">oil_barrel</span>
+</div>
+<div class="flex flex-col min-w-0">
+<div class="flex items-center gap-2">
+<span class="font-headline-sm text-headline-sm text-on-surface truncate">Oil change due in 200 km</span>
+</div>
+<div class="flex items-center gap-1.5 mt-0.5">
+<span class="inline-flex items-center px-2 py-0.5 rounded-full bg-surface-container font-label-sm text-label-sm text-on-surface-variant font-semibold">
+                  2019 Toyota Roomy
+                </span>
+<span class="font-body-sm text-body-sm text-outline">84,210 km</span>
+</div>
+</div>
+</div>
+<div class="flex items-center gap-2 shrink-0">
+<span class="font-body-sm text-body-sm text-outline">2h ago</span>
+<span class="unread-dot w-2.5 h-2.5 rounded-full bg-primary-container"></span>
+</div>
+</div>
+<p class="mt-3 font-body-md text-body-md text-on-surface-variant leading-relaxed">
+          Your synthetic blend interval reaches its threshold at 84,400 km. Service early to protect against North-South Highway thermal wear.
+        </p>
+<!-- Dynamic Visual Cue: Service Gauge Mini-Bar -->
+<div class="mt-3 p-2.5 rounded-lg bg-surface-container-low flex flex-col gap-1.5">
+<div class="flex justify-between items-center font-label-sm text-label-sm">
+<span class="text-on-surface-variant font-medium">Interval health</span>
+<span class="text-primary font-bold">96% utilized</span>
+</div>
+<div class="w-full h-1.5 rounded-full bg-surface-variant overflow-hidden">
+<div class="h-full bg-primary-container rounded-full" style="width: 96%"></div>
+</div>
+</div>
+<!-- Action Buttons -->
+<div class="flex items-center gap-2 mt-4 pt-1">
+<button class="min-h-[44px] px-4 py-2 rounded-lg bg-primary hover:bg-primary-container text-on-primary font-label-md text-label-md shadow-sm active:scale-95 transition-all flex items-center gap-1.5 justify-center flex-1 sm:flex-initial" type="button">
+<span class="material-symbols-outlined text-[18px]">build_circle</span>
+<span>Log Service</span>
+</button>
+<button class="min-h-[44px] px-4 py-2 rounded-lg bg-surface-container-high hover:bg-surface-variant text-on-surface font-label-md text-label-md active:scale-95 transition-all" type="button">
+            Snooze (100 km)
+          </button>
+</div>
+</div>
+<!-- Card 2: Scout Community (Emerald / Island Success) -->
+<div class="unread-card relative flex flex-col p-4 rounded-xl bg-surface-container-lowest shadow-sm hover:shadow-md transition-shadow">
+<div class="flex items-start justify-between gap-3">
+<div class="flex gap-3 min-w-0">
+<div class="w-10 h-10 rounded-xl bg-tertiary-fixed flex items-center justify-center shrink-0 text-on-tertiary-fixed">
+<span class="material-symbols-outlined text-[22px]" style="font-variation-settings: 'FILL' 1;">verified</span>
+</div>
+<div class="flex flex-col min-w-0">
+<h3 class="font-headline-sm text-headline-sm text-on-surface truncate">Your pin 'Precision Auto Works' was approved</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant flex items-center gap-1 mt-0.5">
+<span class="material-symbols-outlined text-[14px] text-tertiary">location_on</span>
+                Constant Spring Rd, St. Andrew
+              </p>
+</div>
+</div>
+<div class="flex items-center gap-2 shrink-0">
+<span class="font-body-sm text-body-sm text-outline">5h ago</span>
+<span class="unread-dot w-2.5 h-2.5 rounded-full bg-primary-container"></span>
+</div>
+</div>
+<!-- Island Community Impact Badge -->
+<div class="mt-3 inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-surface-container-low">
+<span class="flex items-center gap-1 font-label-md text-label-md text-tertiary font-bold">
+<span class="material-symbols-outlined text-[16px]">stars</span>
+            +25 Scout XP
+          </span>
+<span class="w-1 h-1 rounded-full bg-outline-variant"></span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">Live on Jamaica Route Map</span>
+</div>
+<p class="mt-2.5 font-body-md text-body-md text-on-surface-variant">
+          A Kingston Road Scout verified your coordinates. <strong class="text-on-surface">18 motorists</strong> navigated to this tire &amp; brake depot today!
+        </p>
+<!-- Location Visual Preview Card -->
+<div class="mt-3 rounded-lg overflow-hidden relative h-28 bg-surface-variant flex items-end p-2.5">
+<img class="absolute inset-0 w-full h-full object-cover" data-alt="Overhead aerial map shot of Constant Spring Road in Kingston Jamaica with warm tropical lighting, asphalt road intersections, automotive workshops, and Jamaican palm trees bathed in golden afternoon sunlight." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCtOPNW2qS9AreOY1VZqWhNsDGvs1uJvTt6ecVtf8nk6utuqSc1JvWleFakHGdM0nrQYcRjDY5pXex-eI1jSs4wZYdJTI0xxWcD4SQq2PF6wsLNr_548lge6z_dDbI1fc2U--jHfYL3ZRQ__wsoWnbqucB4CnhtQe0v3uMERqUgtA3aUEPHu_TLal4L4bD90nrVVXd4g5K2GZOEQv2KKROGzBrnXJpE1au4cFTrP24PIcGc-7Ke6HrN"/>
+<div class="absolute inset-0 bg-gradient-to-t from-inverse-surface/80 via-inverse-surface/30 to-transparent"></div>
+<div class="relative z-10 flex items-center justify-between w-full text-surface-container-lowest">
+<div class="flex items-center gap-1.5">
+<span class="material-symbols-outlined text-[18px] text-secondary-fixed">pin_drop</span>
+<span class="font-label-md text-label-md drop-shadow">Constant Spring Hub</span>
+</div>
+<span class="font-label-sm text-label-sm bg-surface-container-lowest/30 backdrop-blur-md px-2 py-0.5 rounded text-white">4.8 ★ (12 Reviews)</span>
+</div>
+</div>
+<!-- Actions -->
+<div class="flex items-center gap-2 mt-4">
+<button class="min-h-[44px] px-4 py-2 rounded-lg bg-surface-container-high hover:bg-surface-variant text-on-surface font-label-md text-label-md active:scale-95 transition-all flex items-center gap-1.5 flex-1 sm:flex-initial justify-center" type="button">
+<span class="material-symbols-outlined text-[18px]">map</span>
+<span>View on Map</span>
+</button>
+<button class="min-h-[44px] px-4 py-2 rounded-lg text-primary hover:bg-primary-fixed/20 font-label-md text-label-md active:scale-95 transition-all" type="button">
+            Scout Profile
+          </button>
+</div>
+</div>
+</div>
+<!-- SECTION: THIS WEEK -->
+<div class="flex flex-col gap-space-sm">
+<div class="flex items-center justify-between px-1">
+<h2 class="font-label-md text-label-md tracking-wider uppercase text-on-surface-variant">This Week</h2>
+<span class="font-label-sm text-label-sm text-outline">2 Updates</span>
+</div>
+<!-- Card 3: Fitness Certificate Warning -->
+<div class="unread-card relative flex flex-col p-4 rounded-xl bg-surface-container-lowest shadow-sm hover:shadow-md transition-shadow">
+<div class="flex items-start justify-between gap-3">
+<div class="flex gap-3 min-w-0">
+<div class="w-10 h-10 rounded-xl bg-secondary-fixed flex items-center justify-center shrink-0 text-on-secondary-fixed">
+<span class="material-symbols-outlined text-[22px]">assignment_late</span>
+</div>
+<div class="flex flex-col min-w-0">
+<h3 class="font-headline-sm text-headline-sm text-on-surface truncate">Fitness certificate expires in 14 days</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant flex items-center gap-2 mt-0.5">
+<span>2019 Toyota Roomy</span>
+<span class="w-1 h-1 rounded-full bg-outline-variant"></span>
+<span class="font-semibold text-on-surface">Plate: 4821-JR</span>
+</p>
+</div>
+</div>
+<div class="flex items-center gap-2 shrink-0">
+<span class="font-body-sm text-body-sm text-outline">Yesterday</span>
+<span class="unread-dot w-2.5 h-2.5 rounded-full bg-primary-container"></span>
+</div>
+</div>
+<!-- Deadline Notice Bar -->
+<div class="mt-3 flex items-center justify-between px-3 py-2 rounded-lg bg-surface-container-low">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-secondary text-[20px]">calendar_clock</span>
+<span class="font-label-md text-label-md text-on-surface">Valid until: <strong>28 Nov 2024</strong></span>
+</div>
+<span class="font-label-sm text-label-sm px-2 py-0.5 rounded bg-secondary-fixed text-on-secondary-fixed font-bold">14d left</span>
+</div>
+<p class="mt-2.5 font-body-md text-body-md text-on-surface-variant leading-relaxed">
+          Avoid Island Traffic Authority spot checks and penalty tickets. Test bays currently reporting under 20-min wait times around Half-Way-Tree.
+        </p>
+<!-- Actions -->
+<div class="flex items-center gap-2 mt-4 pt-1">
+<button class="min-h-[44px] px-4 py-2 rounded-lg bg-primary hover:bg-primary-container text-on-primary font-label-md text-label-md shadow-sm active:scale-95 transition-all flex items-center gap-1.5 flex-1 sm:flex-initial justify-center" type="button">
+<span class="material-symbols-outlined text-[18px]">event_available</span>
+<span>Book Inspection Depot</span>
+</button>
+<button class="min-h-[44px] px-4 py-2 rounded-lg bg-surface-container-high hover:bg-surface-variant text-on-surface font-label-md text-label-md active:scale-95 transition-all" type="button">
+            Update Date
+          </button>
+</div>
+</div>
+<!-- Card 4: Fuel Radar Alert -->
+<div class="flex flex-col p-4 rounded-xl bg-surface-container-lowest shadow-sm hover:shadow-md transition-shadow">
+<div class="flex items-start justify-between gap-3">
+<div class="flex gap-3 min-w-0">
+<div class="w-10 h-10 rounded-xl bg-primary-fixed flex items-center justify-center shrink-0 text-primary">
+<span class="material-symbols-outlined text-[22px]">local_gas_station</span>
+</div>
+<div class="flex flex-col min-w-0">
+<div class="flex items-center gap-2">
+<h3 class="font-headline-sm text-headline-sm text-on-surface truncate">E-10 87 dropped J$3.20 this week</h3>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-0.5">
+                Kgn &amp; St. Andrew Avg: <strong class="text-on-surface font-semibold">J$208.40 / L</strong>
+</p>
+</div>
+</div>
+<span class="font-body-sm text-body-sm text-outline shrink-0">Wed</span>
+</div>
+<!-- Fuel Rate Comparison Box -->
+<div class="mt-3 grid grid-cols-2 gap-2">
+<div class="p-2.5 rounded-lg bg-surface-container-low flex flex-col">
+<span class="font-label-sm text-label-sm text-on-surface-variant">Rubis Waterloo Rd</span>
+<div class="flex items-baseline gap-1 mt-0.5">
+<span class="font-price-display text-price-display text-primary">J$204.85</span>
+<span class="font-label-sm text-label-sm text-tertiary">Lowest</span>
+</div>
+</div>
+<div class="p-2.5 rounded-lg bg-surface-container-low flex flex-col">
+<span class="font-label-sm text-label-sm text-on-surface-variant">TotalEnergies HWT</span>
+<div class="flex items-baseline gap-1 mt-0.5">
+<span class="font-price-display text-price-display text-on-surface">J$205.10</span>
+<span class="font-label-sm text-label-sm text-outline">Verified 4h</span>
+</div>
+</div>
+</div>
+<p class="mt-3 font-body-md text-body-md text-on-surface-variant">
+          Petrojam ex-refinery price reduction has passed through to pumps along major commuter corridors.
+        </p>
+<!-- Action Button -->
+<div class="mt-4">
+<button class="min-h-[44px] w-full px-4 py-2 rounded-lg bg-surface-container-high hover:bg-surface-variant text-primary font-label-md text-label-md active:scale-95 transition-all flex items-center justify-center gap-1.5" type="button">
+<span class="material-symbols-outlined text-[18px]">trending_down</span>
+<span>View Best Pump Rates (Islandwide)</span>
+</button>
+</div>
+</div>
+</div>
+<!-- SECTION: EARLIER -->
+<div class="flex flex-col gap-space-sm">
+<div class="flex items-center justify-between px-1">
+<h2 class="font-label-md text-label-md tracking-wider uppercase text-on-surface-variant">Earlier</h2>
+<span class="font-label-sm text-label-sm text-outline">Read</span>
+</div>
+<!-- Card 5: Toll Advisory (Highway 2000) -->
+<div class="flex flex-col p-4 rounded-xl bg-surface-container-low opacity-90 hover:opacity-100 transition-opacity">
+<div class="flex items-start justify-between gap-3">
+<div class="flex gap-3 min-w-0">
+<div class="w-10 h-10 rounded-xl bg-surface-container-highest flex items-center justify-center shrink-0 text-on-surface-variant">
+<span class="material-symbols-outlined text-[22px]">toll</span>
+</div>
+<div class="flex flex-col min-w-0">
+<h3 class="font-headline-sm text-headline-sm text-on-surface truncate">Highway 2000 May Pen interchange update</h3>
+<span class="font-body-sm text-body-sm text-outline mt-0.5">Clarendon Expressway Section</span>
+</div>
+</div>
+<span class="font-body-sm text-body-sm text-outline shrink-0">Oct 29</span>
+</div>
+<p class="mt-2.5 font-body-md text-body-md text-on-surface-variant leading-relaxed">
+          Cashless T-Tag express lanes have expanded for speedier commuter clearance during Friday evening rush toward Manchester.
+        </p>
+<div class="mt-3 flex items-center gap-2">
+<button class="px-3 py-1.5 rounded-lg text-primary hover:bg-surface-variant font-label-md text-label-md transition-colors flex items-center gap-1" type="button">
+<span class="material-symbols-outlined text-[16px]">info</span>
+<span>Review Toll Rates</span>
+</button>
+</div>
+</div>
+</div>
+<!-- BOTTOM ACTION CARD: Notification Preferences -->
+<div class="mt-space-md p-4 rounded-2xl bg-surface-container flex items-center justify-between gap-3">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-xl bg-surface-container-lowest flex items-center justify-center text-on-surface shrink-0 shadow-sm">
+<span class="material-symbols-outlined text-[20px]">tune</span>
+</div>
+<div class="flex flex-col">
+<span class="font-headline-sm text-headline-sm text-on-surface">Alert Preferences</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">Manage SMS alerts, Fitness reminders &amp; Gas Radar</span>
+</div>
+</div>
+<button aria-label="Open alert preferences" class="w-10 h-10 rounded-full bg-surface-container-lowest flex items-center justify-center text-on-surface hover:bg-primary hover:text-on-primary transition-colors shrink-0 shadow-sm active:scale-90" type="button">
+<span class="material-symbols-outlined text-[20px]">chevron_right</span>
+</button>
+</div>
+</div>
+</div>
+<script>
+  (function() {
+    const markAllBtn = document.getElementById('markAllReadBtn');
+    if (markAllBtn) {
+      markAllBtn.addEventListener('click', function() {
+        const dots = document.querySelectorAll('.unread-dot');
+        dots.forEach(dot => dot.remove());
+
+        const cards = document.querySelectorAll('.unread-card');
+        cards.forEach(card => {
+          card.classList.remove('unread-card');
+        });
+
+        const pill = document.querySelector('.bg-primary.text-on-primary');
+        if (pill) {
+          pill.innerHTML = '<span class="material-symbols-outlined text-[14px]">check</span> All up to date';
+          pill.className = 'inline-flex items-center gap-1 px-3 py-1 rounded-full bg-surface-container-high text-on-surface-variant font-label-md text-label-md';
+        }
+      });
+    }
+
+    // Filter chip toggle
+    const chips = document.querySelectorAll('.filter-chip');
+    chips.forEach(chip => {
+      chip.addEventListener('click', function() {
+        chips.forEach(c => {
+          c.classList.remove('bg-on-surface', 'text-surface-container-lowest', 'shadow-sm');
+          c.classList.add('bg-surface-container-high', 'text-on-surface');
+        });
+        this.classList.remove('bg-surface-container-high', 'text-on-surface');
+        this.classList.add('bg-on-surface', 'text-surface-container-lowest', 'shadow-sm');
+      });
+    });
+  })();
+</script></main></body></html>

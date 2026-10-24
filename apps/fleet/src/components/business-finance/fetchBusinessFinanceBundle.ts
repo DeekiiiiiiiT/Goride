@@ -121,7 +121,8 @@ export async function fetchBusinessFinanceBundle(
     const name = driverName(d);
     if (!driverId) return { driverId: '', name, periods: [] as DriverFinancialPeriodClient[] };
     try {
-      const res = await api.getDriverFinancialPeriods(driverId);
+      const serviceLine = scope === 'rideshare' || scope === 'rush_delivery' ? scope : undefined;
+      const res = await api.getDriverFinancialPeriods(driverId, serviceLine);
       const periods = Array.isArray(res?.data) ? (res.data as DriverFinancialPeriodClient[]) : [];
       return { driverId, name, periods };
     } catch {
@@ -166,6 +167,7 @@ export async function fetchBusinessFinanceBundle(
         weekLabel: String(p.periodAnchor).slice(0, 10),
         periodAnchor: String(p.periodAnchor).slice(0, 10),
         status: String(p.settlementStatus || p.status || 'open'),
+        note: fuelCreditNote(p),
       });
     }
   }
@@ -208,6 +210,10 @@ export async function fetchBusinessFinanceBundle(
 
   const grossLine = pnl.lines.find((l) => l.id === 'gross')?.amount || 0;
   const profitLine = Number(pnl.lines.find((l) => l.id === 'operating_profit')?.amount) || 0;
+  const platformFees = Math.abs(pnl.lines.find((l) => l.id === 'platform_fees')?.amount || 0);
+  const driverCommission = Math.abs(pnl.lines.find((l) => l.id === 'driver_commission')?.amount || 0);
+  const otherIncome = Number(pnl.lines.find((l) => l.id === 'other_income')?.amount) || 0;
+  const ledgerFailed = incomplete.some((s) => /canonical ledger/i.test(s));
 
   // Wallet loads: sum canonical wallet_credit already in ledgerEvents (funding transfer, not P&L).
   const { periodLoads: walletLoads } = computeIndriveWalletLoadsFromLedgerEntries(
@@ -283,17 +289,26 @@ export async function fetchBusinessFinanceBundle(
       operatingExpenses,
       driverPayouts,
       cashWrittenOff: round2(cashWrittenOff),
+      platformFees: round2(platformFees),
+      driverCommission: round2(driverCommission),
+      otherIncome: round2(otherIncome),
+      fuelSpend: round2(pnl.fuelBreakdown?.grossSpend || fuel),
+      fleetFuelCost: round2(pnl.fuelBreakdown?.fleetLoss ?? fuel),
     },
     transfers: {
       bankToIndriveWallet: round2(walletLoads),
     },
     profit: {
-      operatingProfit: round2(profitLine),
-      operatingRatio: pnl.operatingRatio,
+      operatingProfit: ledgerFailed ? 0 : round2(profitLine),
+      operatingRatio: ledgerFailed ? null : pnl.operatingRatio,
+      withheld: ledgerFailed,
     },
+    basis: opts.basis === 'cash' ? 'cash' : 'accrual',
     risks: {
       needsStatementWeeks,
-      highCashDrivers: debtors.filter((d) => d.amount > 10000).length,
+      highCashDrivers: new Set(
+        debtors.filter((d) => d.amount > 10000).map((d) => d.driverId),
+      ).size,
       tollVarianceFlags,
       fuelVarianceFlags,
       walletShortDriverCount,
@@ -355,4 +370,13 @@ export async function fetchBusinessFinanceBundle(
       truncateCap: truncated ? 80 : undefined,
     },
   };
+}
+
+function fuelCreditNote(period: DriverFinancialPeriodClient): string | undefined {
+  const fc = (period.metadata as { financeCore?: { fuelCreditReceivable?: { amount?: number; sourceWeek?: string } } } | undefined)
+    ?.financeCore?.fuelCreditReceivable;
+  const amount = Number(fc?.amount) || 0;
+  const week = String(fc?.sourceWeek || '').slice(0, 10);
+  if (amount <= 0.01 || !week) return undefined;
+  return `Includes $${amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} owed from the week of ${week}. The cash already paid is unchanged.`;
 }

@@ -14,5 +14,7 @@ export const API_ENDPOINTS = {
   ai: `${BASE_URL}/fleet-core`,
   admin: `${BASE_URL}/fleet-core`,
   delivery: `${BASE_URL}/delivery`,
+  catalog: `${BASE_URL}/platform-catalog`,
+  explorer: `${BASE_URL}/explorer`,
   rides: `${BASE_URL}/rides`,
 };

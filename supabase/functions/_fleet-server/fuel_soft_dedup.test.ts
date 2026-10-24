@@ -1,9 +1,31 @@
 import { assertEquals } from "jsr:@std/assert";
 import {
+  fuelCardUploadKey,
   isGasCardCsvFuelEntry,
   isSoftDuplicatePair,
   normalizeFuelPaymentKey,
 } from "./fuel_soft_dedup.ts";
+
+Deno.test("same card, date, amount, and upload is one fill", () => {
+  const a = fuelCardUploadKey({
+    date: "2026-10-17",
+    amount: 4000,
+    batchId: "up1",
+    metadata: { cardLast4: "4242" },
+  });
+  const b = fuelCardUploadKey({
+    date: "2026-10-17",
+    amount: 4000,
+    metadata: { batchId: "up1", cardLast4: "4242" },
+  });
+  const cash = fuelCardUploadKey({
+    date: "2026-10-17",
+    amount: 1500,
+    metadata: { batchId: "up1", cardLast4: "4242" },
+  });
+  assertEquals(a, b);
+  assertEquals(a === cash, false);
+});
 
 Deno.test("normalizeFuelPaymentKey maps company_card to gas_card", () => {
   assertEquals(normalizeFuelPaymentKey("Gas_Card"), "gas_card");

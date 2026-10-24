@@ -23,7 +23,7 @@ export function weekPnlTieBlockers(input: {
       persisted: settlementSum,
       expected: businessPnl,
       delta: settlementSum - businessPnl,
-      message: 'Week settlement composition (statements) does not tie to engine week P&L',
+      message: 'Driver-lane contribution does not match settlements',
     }];
   }
   if (probed && businessPnl == null && settlementSum !== 0) {

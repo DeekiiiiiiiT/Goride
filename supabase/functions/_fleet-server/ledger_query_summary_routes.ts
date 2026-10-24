@@ -472,13 +472,17 @@ export async function buildOrgStatementSummaries(
           periodAdjustments += net;
           break;
         case "payout_cash":
-          cashCollected = mag;
+          cashCollected += mag;
           hasPayoutEvents = true;
           break;
-        case "payout_bank":
-          bankTransfer = mag;
+        case "payout_bank": {
+          const driverId = String(e.driverId || "");
+          // Nil-driver statement lines are the previous week's payout, not this deposit.
+          if (driverId.startsWith("00000000")) break;
+          bankTransfer += mag;
           hasPayoutEvents = true;
           break;
+        }
       }
     }
 

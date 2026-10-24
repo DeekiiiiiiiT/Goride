@@ -245,7 +245,10 @@ export function buildFleetNavModel(input: BuildFleetNavModelInput): FleetNavMode
       id: 'business-finance',
       label: 'Overview',
     }),
-    leaf(canSeeBusinessFinanceHome, { id: 'expense-hub', label: 'Expense Hub' }),
+    leaf(isModuleEnabled('businessFinance') && canView('expense-hub'), {
+      id: 'expense-hub',
+      label: 'Expense Hub',
+    }),
     leaf(canView('fleet-financials'), {
       id: 'fleet-financials',
       label: 'Bank Deposits',

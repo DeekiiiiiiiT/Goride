@@ -18,6 +18,7 @@
     "@roam/auth-client": "workspace:*",
     "@roam/dash-admin-client": "workspace:*",
     "@roam/dash-coverage": "workspace:*",
+    "@roam/geo-ui": "workspace:*",
     "@roam/dash-pricing": "workspace:*",
     "@roam/location": "workspace:*",
     "@roam/menu-builder": "workspace:*",

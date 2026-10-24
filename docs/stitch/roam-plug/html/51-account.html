@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+
+<html class="h-full" lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" name="viewport"/><meta content="mobile_tab" name="shell-type"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" rel="stylesheet"/><link href="https://fonts.googleapis.com" rel="preconnect"/><link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config = { darkMode: "class", theme: { extend: { colors: { "on-secondary-container": "#5c2400", "on-primary-fixed-variant": "#7f2b00", "on-primary-container": "#fffbff", "background": "#fff8f2", "on-secondary": "#ffffff", "primary-fixed-dim": "#ffb599", "tertiary-container": "#936f00", "inverse-primary": "#ffb599", "secondary-container": "#fd761a", "on-background": "#1e1b17", "surface-container": "#f4ede6", "primary": "#a33900", "on-surface-variant": "#5a4138", "inverse-on-surface": "#f7efe9", "on-primary-fixed": "#370e00", "outline-variant": "#e2bfb2", "surface-container-high": "#eee7e0", "on-primary": "#ffffff", "error-container": "#ffdad6", "surface-variant": "#e8e1db", "outline": "#8e7166", "on-surface": "#1e1b17", "surface-bright": "#fff8f2", "tertiary": "#755800", "inverse-surface": "#33302c", "surface-container-low": "#faf2eb", "secondary": "#9d4300", "secondary-fixed-dim": "#ffb690", "surface-tint": "#a73a00", "on-error": "#ffffff", "primary-fixed": "#ffdbce", "primary-container": "#cc4900", "on-tertiary": "#ffffff", "surface": "#fff8f2", "error": "#ba1a1a", "tertiary-fixed": "#ffdf9a", "tertiary-fixed-dim": "#f7be1d", "on-error-container": "#93000a", "on-secondary-fixed": "#341100", "on-tertiary-container": "#fffbff", "on-secondary-fixed-variant": "#783200", "on-tertiary-fixed": "#251a00", "secondary-fixed": "#ffdbca", "surface-container-highest": "#e8e1db", "surface-container-lowest": "#ffffff", "surface-dim": "#e0d9d2", "on-tertiary-fixed-variant": "#5a4300" }, borderRadius: { "DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px" }, spacing: { "space-xl": "2rem", "space-md": "1rem", "margin": "1rem", "gutter": "1rem", "space-sm": "0.5rem", "margin-lg": "1.5rem", "gutter-sm": "0.75rem", "space-lg": "1.5rem", "space-xs": "0.25rem" }, fontFamily: { "body-lg": ["Inter"], "label-sm": ["Inter"], "label-md": ["Inter"], "headline-lg": ["Inter"], "display-lg-mobile": ["Inter"], "body-md": ["Inter"], "price-display": ["Inter"], "headline-md": ["Inter"], "display-lg": ["Inter"], "body-sm": ["Inter"], "headline-sm": ["Inter"], "label-lg": ["Inter"] }, fontSize: { "body-lg": ["16px", { lineHeight: "24px", fontWeight: "400" }], "label-sm": ["10px", { lineHeight: "12px", letterSpacing: "0.04em", fontWeight: "700" }], "label-md": ["12px", { lineHeight: "16px", letterSpacing: "0.02em", fontWeight: "600" }], "headline-lg": ["28px", { lineHeight: "36px", letterSpacing: "-0.01em", fontWeight: "700" }], "display-lg-mobile": ["32px", { lineHeight: "40px", letterSpacing: "-0.02em", fontWeight: "800" }], "body-md": ["14px", { lineHeight: "20px", fontWeight: "400" }], "price-display": ["24px", { lineHeight: "28px", letterSpacing: "-0.01em", fontWeight: "700" }], "headline-md": ["22px", { lineHeight: "28px", letterSpacing: "-0.01em", fontWeight: "700" }], "display-lg": ["40px", { lineHeight: "48px", letterSpacing: "-0.02em", fontWeight: "800" }], "body-sm": ["12px", { lineHeight: "16px", fontWeight: "400" }], "headline-sm": ["18px", { lineHeight: "24px", fontWeight: "600" }], "label-lg": ["14px", { lineHeight: "20px", letterSpacing: "0.01em", fontWeight: "600" }] } } } }</script><style>@layer base { html, body { min-height: 100%; margin: 0; padding: 0; background-color: #fff8f2; } .pb-safe { padding-bottom: env(safe-area-inset-bottom, 0px); } .pt-safe { padding-top: env(safe-area-inset-top, 0px); } } ::-webkit-scrollbar { display: none; }</style><style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head><body class="bg-surface font-body-md text-on-surface min-h-screen flex flex-col antialiased selection:bg-primary/20 selection:text-primary"><header class="fixed top-0 w-full z-50 bg-surface/85 backdrop-blur-xl shadow-[0_1px_8px_rgba(28,25,23,0.04)] pt-safe"><div class="h-16 px-space-md flex items-center justify-between"><div class="flex items-center gap-space-sm"><h1 class="font-headline-md text-headline-md text-on-surface tracking-tight font-headline-md">Garage   My Vehicles</h1></div><div class="flex items-center gap-space-xs"><button aria-label="Notifications" class="w-11 h-11 flex items-center justify-center rounded-full text-on-surface-variant hover:text-primary hover:bg-surface-container active:scale-95 transition-all"><span class="material-symbols-outlined text-[24px]">notifications</span></button><button aria-label="Settings" class="w-11 h-11 flex items-center justify-center rounded-full text-on-surface-variant hover:text-primary hover:bg-surface-container active:scale-95 transition-all"><span class="material-symbols-outlined text-[24px]">settings</span></button><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center ml-space-xs shadow-sm"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div></div></div></header><main class="flex-1 w-full bg-surface pt-16 pb-28"><div class="flex flex-col w-full px-space-md pb-10 space-y-space-lg">
+<!-- Profile Showcase Card -->
+<section class="relative overflow-hidden rounded-xl bg-surface-container-lowest shadow-md p-space-md">
+<!-- Ambient Island Sun Halo -->
+<div class="absolute -right-10 -top-10 w-44 h-44 rounded-full bg-gradient-to-br from-secondary-container/20 via-primary-fixed/30 to-transparent pointer-events-none blur-2xl"></div>
+<div class="relative flex items-start gap-space-md">
+<!-- Avatar with Verified Ring -->
+<div class="relative flex-shrink-0">
+<div class="w-20 h-20 rounded-full overflow-hidden shadow-sm bg-surface-container-high">
+<img class="w-full h-full object-cover" data-alt="Portrait photo of Tariq, a smiling young Jamaican professional driver wearing a crisp casual shirt against a lush green tropical Blue Mountains backdrop with bright warm Caribbean sunshine." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAvk4GVw4hGeS0xpNDcVnf4hqMJIbBoh1uwS_oCkgAwU_0gU0pONixdkx8E0BMpq4O_lOyNin4R65FvFMbKoLuE_Ib4dnbm7HaEY6dw-fBv0y0OV6Tjh5uimkfxOOIINfxX6Aq-LqTnysWSTH-KSddqKgS0tAfK7zASoI2SzbxznzdncavKrfc7CC19kbemH8tA_I6aahmrGAA7SPK1iz2yUV_YfdZqLrzXT-ajAIT6rhU7O4nCMDbA"/>
+</div>
+<div class="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-surface-container-lowest flex items-center justify-center shadow">
+<span class="material-symbols-outlined text-[16px] text-primary" style="font-variation-settings: 'FILL' 1;">verified</span>
+</div>
+</div>
+<!-- Identity Details -->
+<div class="flex-1 min-w-0">
+<div class="flex items-center gap-1.5 flex-wrap">
+<h2 class="font-headline-sm text-headline-sm text-on-surface font-bold tracking-tight truncate">Tariq Campbell</h2>
+<span class="inline-flex items-center px-2 py-0.5 rounded-full bg-primary-fixed text-on-primary-fixed font-label-sm text-label-sm">
+            🇯🇲 St. Andrew
+          </span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-0.5">Kingston &amp; St. Andrew Metro Area</p>
+<!-- Rank Pill -->
+<div class="mt-2.5 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-surface-container text-on-surface font-label-sm text-label-sm shadow-sm">
+<span class="material-symbols-outlined text-[15px] text-secondary-container" style="font-variation-settings: 'FILL' 1;">local_fire_department</span>
+<span class="font-semibold text-primary">Road Scout Lvl 3</span>
+<span class="text-on-surface-variant font-normal">• Island #18 (340 XP)</span>
+</div>
+</div>
+</div>
+<!-- Quick Milestone Progress bar -->
+<div class="mt-4 pt-3 bg-surface-container-low rounded-lg p-2.5">
+<div class="flex items-center justify-between text-body-sm font-label-sm mb-1.5">
+<span class="text-on-surface-variant font-medium">Next Tier: Senior Scout (60 XP to go)</span>
+<span class="text-primary font-bold">85%</span>
+</div>
+<div class="w-full h-2 rounded-full bg-surface-container-highest overflow-hidden">
+<div class="h-full bg-gradient-to-r from-secondary-container to-primary rounded-full transition-all duration-500" style="width: 85%"></div>
+</div>
+<div class="flex items-center justify-between mt-1 text-on-surface-variant font-label-sm text-[11px]">
+<span>Member since May 2023</span>
+<span class="text-secondary font-medium">Island Contributor Pass</span>
+</div>
+</div>
+<!-- Glanceable Telemetry Grid -->
+<div class="grid grid-cols-2 gap-2 mt-3">
+<div class="p-2.5 rounded-lg bg-surface-container-low flex items-center gap-2.5">
+<div class="w-9 h-9 rounded-full bg-surface-container-lowest flex items-center justify-center text-primary shadow-xs flex-shrink-0">
+<span class="material-symbols-outlined text-[20px]">directions_car</span>
+</div>
+<div class="min-w-0">
+<p class="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">Garage</p>
+<p class="font-label-md text-label-md text-on-surface truncate font-semibold">1 Active Car</p>
+</div>
+</div>
+<div class="p-2.5 rounded-lg bg-surface-container-low flex items-center gap-2.5">
+<div class="w-9 h-9 rounded-full bg-surface-container-lowest flex items-center justify-center text-secondary-container shadow-xs flex-shrink-0">
+<span class="material-symbols-outlined text-[20px]">add_location_alt</span>
+</div>
+<div class="min-w-0">
+<p class="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">Mapped</p>
+<p class="font-label-md text-label-md text-on-surface font-semibold">14 Island Spots</p>
+</div>
+</div>
+<div class="p-2.5 rounded-lg bg-surface-container-low flex items-center gap-2.5">
+<div class="w-9 h-9 rounded-full bg-surface-container-lowest flex items-center justify-center text-tertiary shadow-xs flex-shrink-0">
+<span class="material-symbols-outlined text-[20px]">local_gas_station</span>
+</div>
+<div class="min-w-0">
+<p class="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">Updates</p>
+<p class="font-label-md text-label-md text-on-surface font-semibold">42 Fuel Rates</p>
+</div>
+</div>
+<div class="p-2.5 rounded-lg bg-surface-container-low flex items-center gap-2.5">
+<div class="w-9 h-9 rounded-full bg-surface-container-lowest flex items-center justify-center text-primary shadow-xs flex-shrink-0">
+<span class="material-symbols-outlined text-[20px]">payments</span>
+</div>
+<div class="min-w-0">
+<p class="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">Total Fuel</p>
+<p class="font-label-md text-label-md text-on-surface font-semibold truncate">J$14,200</p>
+</div>
+</div>
+</div>
+</section>
+<!-- Group 1: Motorist Core -->
+<section class="space-y-2">
+<div class="px-1 flex items-center justify-between">
+<h3 class="font-label-md text-label-md uppercase tracking-wider text-on-surface-variant font-bold">Motorist Core</h3>
+<span class="font-label-sm text-label-sm text-primary font-semibold">Vehicle Hub</span>
+</div>
+<div class="bg-surface-container-lowest rounded-xl shadow-sm overflow-hidden">
+<!-- Item: My Garage -->
+<a class="w-full flex items-center justify-between p-space-md hover:bg-surface-container-low transition-colors min-h-[56px] text-left active:bg-surface-container" href="#">
+<div class="flex items-center gap-space-md min-w-0">
+<div class="w-10 h-10 rounded-full bg-primary-fixed flex items-center justify-center text-primary flex-shrink-0">
+<span class="material-symbols-outlined text-[22px]">garage</span>
+</div>
+<div class="min-w-0">
+<p class="font-label-lg text-label-lg text-on-surface font-semibold truncate">My Garage</p>
+<p class="font-body-sm text-body-sm text-on-surface-variant truncate">1 vehicle active • 2019 Toyota Roomy</p>
+</div>
+</div>
+<div class="flex items-center gap-2 ml-2 flex-shrink-0">
+<span class="px-2 py-0.5 rounded-full bg-surface-container text-on-surface-variant font-label-sm text-[11px] font-semibold">Up to date</span>
+<span class="material-symbols-outlined text-outline text-[20px]">chevron_right</span>
+</div>
+</a>
+<div class="h-px bg-surface-container-high mx-space-md"></div>
+<!-- Item: My Contributions -->
+<a class="w-full flex items-center justify-between p-space-md hover:bg-surface-container-low transition-colors min-h-[56px] text-left active:bg-surface-container" href="#">
+<div class="flex items-center gap-space-md min-w-0">
+<div class="w-10 h-10 rounded-full bg-tertiary-fixed flex items-center justify-center text-tertiary flex-shrink-0">
+<span class="material-symbols-outlined text-[22px]">stars</span>
+</div>
+<div class="min-w-0">
+<p class="font-label-lg text-label-lg text-on-surface font-semibold truncate">My Contributions</p>
+<p class="font-body-sm text-body-sm text-on-surface-variant truncate">Level 3 Scout • 11 approved pins</p>
+</div>
+</div>
+<div class="flex items-center gap-2 ml-2 flex-shrink-0">
+<span class="px-2 py-0.5 rounded-full bg-secondary-fixed text-on-secondary-fixed font-label-sm text-[11px] font-semibold">+3 pending</span>
+<span class="material-symbols-outlined text-outline text-[20px]">chevron_right</span>
+</div>
+</a>
+<div class="h-px bg-surface-container-high mx-space-md"></div>
+<!-- Item: Documents & Renewals -->
+<a class="w-full flex items-center justify-between p-space-md hover:bg-surface-container-low transition-colors min-h-[56px] text-left active:bg-surface-container" href="#">
+<div class="flex items-center gap-space-md min-w-0">
+<div class="w-10 h-10 rounded-full bg-surface-container flex items-center justify-center text-on-surface flex-shrink-0">
+<span class="material-symbols-outlined text-[22px]">assignment</span>
+</div>
+<div class="min-w-0">
+<p class="font-label-lg text-label-lg text-on-surface font-semibold truncate">Documents &amp; Renewals</p>
+<p class="font-body-sm text-body-sm text-on-surface-variant truncate">Fitness expires in 14 days</p>
+</div>
+</div>
+<div class="flex items-center gap-2 ml-2 flex-shrink-0">
+<span class="w-2.5 h-2.5 rounded-full bg-secondary-container animate-pulse"></span>
+<span class="px-2 py-0.5 rounded-full bg-secondary-fixed text-on-secondary-fixed font-label-sm text-[11px] font-semibold">Action Due</span>
+<span class="material-symbols-outlined text-outline text-[20px]">chevron_right</span>
+</div>
+</a>
+</div>
+</section>
+<!-- Group 2: Preferences & Alerts -->
+<section class="space-y-2">
+<div class="px-1">
+<h3 class="font-label-md text-label-md uppercase tracking-wider text-on-surface-variant font-bold">Preferences &amp; Alerts</h3>
+</div>
+<div class="bg-surface-container-lowest rounded-xl shadow-sm overflow-hidden">
+<!-- Notification Settings -->
+<a class="w-full flex items-center justify-between p-space-md hover:bg-surface-container-low transition-colors min-h-[56px] text-left active:bg-surface-container" href="#">
+<div class="flex items-center gap-space-md min-w-0">
+<div class="w-10 h-10 rounded-full bg-surface-container flex items-center justify-center text-on-surface flex-shrink-0">
+<span class="material-symbols-outlined text-[22px]">notifications_active</span>
+</div>
+<div class="min-w-0">
+<p class="font-label-lg text-label-lg text-on-surface font-semibold truncate">Notification Settings</p>
+<p class="font-body-sm text-body-sm text-on-surface-variant truncate">SMS alerts, price drop radar &amp; reminders</p>
+</div>
+</div>
+<div class="flex items-center gap-2 ml-2 flex-shrink-0">
+<span class="material-symbols-outlined text-outline text-[20px]">chevron_right</span>
+</div>
+</a>
+<div class="h-px bg-surface-container-high mx-space-md"></div>
+<!-- Privacy & Data -->
+<a class="w-full flex items-center justify-between p-space-md hover:bg-surface-container-low transition-colors min-h-[56px] text-left active:bg-surface-container" href="#">
+<div class="flex items-center gap-space-md min-w-0">
+<div class="w-10 h-10 rounded-full bg-surface-container flex items-center justify-center text-on-surface flex-shrink-0">
+<span class="material-symbols-outlined text-[22px]">shield</span>
+</div>
+<div class="min-w-0">
+<p class="font-label-lg text-label-lg text-on-surface font-semibold truncate">Privacy &amp; Data</p>
+<p class="font-body-sm text-body-sm text-on-surface-variant truncate">Location permissions, telemetry &amp; offline sync</p>
+</div>
+</div>
+<div class="flex items-center gap-2 ml-2 flex-shrink-0">
+<span class="material-symbols-outlined text-outline text-[20px]">chevron_right</span>
+</div>
+</a>
+<div class="h-px bg-surface-container-high mx-space-md"></div>
+<!-- Settings -->
+<a class="w-full flex items-center justify-between p-space-md hover:bg-surface-container-low transition-colors min-h-[56px] text-left active:bg-surface-container" href="#">
+<div class="flex items-center gap-space-md min-w-0">
+<div class="w-10 h-10 rounded-full bg-surface-container flex items-center justify-center text-on-surface flex-shrink-0">
+<span class="material-symbols-outlined text-[22px]">tune</span>
+</div>
+<div class="min-w-0">
+<p class="font-label-lg text-label-lg text-on-surface font-semibold truncate">App Settings</p>
+<p class="font-body-sm text-body-sm text-on-surface-variant truncate">Measurement units (km / L / J$)</p>
+</div>
+</div>
+<div class="flex items-center gap-2 ml-2 flex-shrink-0">
+<span class="material-symbols-outlined text-outline text-[20px]">chevron_right</span>
+</div>
+</a>
+</div>
+</section>
+<!-- Group 3: Community & Support -->
+<section class="space-y-2">
+<div class="px-1">
+<h3 class="font-label-md text-label-md uppercase tracking-wider text-on-surface-variant font-bold">Community &amp; Support</h3>
+</div>
+<div class="bg-surface-container-lowest rounded-xl shadow-sm overflow-hidden">
+<!-- Help & Support -->
+<a class="w-full flex items-center justify-between p-space-md hover:bg-surface-container-low transition-colors min-h-[56px] text-left active:bg-surface-container" href="#">
+<div class="flex items-center gap-space-md min-w-0">
+<div class="w-10 h-10 rounded-full bg-surface-container flex items-center justify-center text-on-surface flex-shrink-0">
+<span class="material-symbols-outlined text-[22px]">support_agent</span>
+</div>
+<div class="min-w-0">
+<p class="font-label-lg text-label-lg text-on-surface font-semibold truncate">Help &amp; Support</p>
+<p class="font-body-sm text-body-sm text-on-surface-variant truncate">FAQs, Road Scout guides, WhatsApp support</p>
+</div>
+</div>
+<div class="flex items-center gap-2 ml-2 flex-shrink-0">
+<span class="material-symbols-outlined text-outline text-[20px]">chevron_right</span>
+</div>
+</a>
+<div class="h-px bg-surface-container-high mx-space-md"></div>
+<!-- About Roam Plug -->
+<a class="w-full flex items-center justify-between p-space-md hover:bg-surface-container-low transition-colors min-h-[56px] text-left active:bg-surface-container" href="#">
+<div class="flex items-center gap-space-md min-w-0">
+<div class="w-10 h-10 rounded-full bg-primary-fixed flex items-center justify-center text-primary flex-shrink-0">
+<span class="material-symbols-outlined text-[22px]">local_fire_department</span>
+</div>
+<div class="min-w-0">
+<p class="font-label-lg text-label-lg text-on-surface font-semibold truncate">About Roam Plug</p>
+<p class="font-body-sm text-body-sm text-on-surface-variant truncate">Version 2.4.1 • Made for Jamaican Drivers</p>
+</div>
+</div>
+<div class="flex items-center gap-2 ml-2 flex-shrink-0">
+<span class="px-2 py-0.5 rounded-full bg-surface-container text-on-surface-variant font-label-sm text-[11px] font-semibold">Latest</span>
+<span class="material-symbols-outlined text-outline text-[20px]">chevron_right</span>
+</div>
+</a>
+</div>
+</section>
+<!-- Group 4: Account Action -->
+<section class="space-y-2">
+<div class="bg-surface-container-lowest rounded-xl shadow-sm overflow-hidden p-space-sm">
+<button class="w-full flex items-center justify-between p-space-md rounded-lg bg-surface-container-lowest hover:bg-error-container/20 text-error transition-all min-h-[48px] active:scale-[0.99]" id="sign-out-btn" type="button">
+<div class="flex items-center gap-space-md">
+<div class="w-10 h-10 rounded-full bg-error-container flex items-center justify-center text-error flex-shrink-0">
+<span class="material-symbols-outlined text-[22px]">logout</span>
+</div>
+<div class="text-left">
+<p class="font-label-lg text-label-lg font-bold">Sign Out</p>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Signed in as +1 (876) 555-0192</p>
+</div>
+</div>
+<span class="material-symbols-outlined text-error text-[20px]">chevron_right</span>
+</button>
+</div>
+</section>
+<!-- Footer Meta -->
+<footer class="pt-2 text-center space-y-2">
+<p class="font-label-sm text-label-sm uppercase tracking-widest text-on-surface-variant font-semibold">
+      Roam Plug Jamaica • Built for Island Roads
+    </p>
+<div class="flex items-center justify-center gap-3 font-body-sm text-body-sm text-on-surface-variant">
+<a class="hover:text-primary transition-colors underline-offset-4 hover:underline" href="#">Terms of Service</a>
+<span>•</span>
+<a class="hover:text-primary transition-colors underline-offset-4 hover:underline" href="#">Privacy Policy</a>
+<span>•</span>
+<a class="hover:text-primary transition-colors underline-offset-4 hover:underline" href="#">Gazetted Fuel Notice</a>
+</div>
+<p class="font-body-sm text-[11px] text-on-surface-variant/70 max-w-xs mx-auto">
+      Fuel rates and toll tariffs are community-verified under the Jamaica Motoring Community Guidelines.
+    </p>
+</footer>
+</div>
+<script>
+  (function() {
+    const signOutBtn = document.getElementById('sign-out-btn');
+    if (signOutBtn) {
+      signOutBtn.addEventListener('click', function() {
+        if (confirm('Sign out of Roam Plug on this device? Your offline fuel logs and saved garage vehicles will remain safe in the cloud.')) {
+          // Graceful simulated sign out micro-interaction
+          signOutBtn.style.opacity = '0.5';
+          signOutBtn.innerText = 'Signing out...';
+          setTimeout(() => {
+            alert('Signed out successfully.');
+            signOutBtn.style.opacity = '1';
+          }, 600);
+        }
+      });
+    }
+  })();
+</script></main><nav class="fixed bottom-0 w-full z-50 pb-safe bg-surface/90 backdrop-blur-xl shadow-[0_-2px_12px_rgba(28,25,23,0.06)]" data-active-classes="text-primary font-label-md"><div class="relative flex items-center justify-around h-16 px-space-xs max-w-md mx-auto"><a class="flex flex-col items-center justify-center flex-1 h-full text-on-surface-variant hover:text-on-surface transition-colors py-1" data-path="explore" href="#"><span class="material-symbols-outlined text-[24px]">explore</span><span class="font-label-sm text-label-sm mt-0.5">Explore</span></a><a aria-current="page" class="flex flex-col items-center justify-center flex-1 h-full transition-colors py-1 text-primary font-label-md" data-path="garage---my-vehicles" href="#"><span class="material-symbols-outlined text-[24px]">garage_home</span><span class="font-label-sm text-label-sm mt-0.5">Garage</span></a><div class="relative flex flex-col items-center justify-center flex-1 h-full"><a class="absolute -top-5 w-14 h-14 rounded-full bg-gradient-to-tr from-primary to-secondary-container flex items-center justify-center text-on-primary shadow-[0_8px_20px_-4px_rgba(234,88,12,0.38)] active:scale-95 transition-transform" data-path="log-fuel" href="#"><span class="material-symbols-outlined text-[28px]">local_gas_station</span></a><span class="font-label-sm text-label-sm text-on-surface-variant mt-7">Log Fuel</span></div><a class="flex flex-col items-center justify-center flex-1 h-full text-on-surface-variant hover:text-on-surface transition-colors py-1" data-path="map-it" href="#"><span class="material-symbols-outlined text-[24px]">map</span><span class="font-label-sm text-label-sm mt-0.5">Map It</span></a><a class="flex flex-col items-center justify-center flex-1 h-full text-on-surface-variant hover:text-on-surface transition-colors py-1" data-path="account" href="#"><span class="material-symbols-outlined text-[24px]">account_circle</span><span class="font-label-sm text-label-sm mt-0.5">Account</span></a></div></nav></body></html>

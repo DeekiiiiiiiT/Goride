@@ -5,6 +5,8 @@
  */
 
 export const PRICE_BAND_PCT = 15;
+/** Same jump the driver and fleet scanners already flag. */
+export const ODOMETER_JUMP_KM = 1500;
 
 export type FillPlausibilityInput = {
   id?: string;
@@ -25,6 +27,7 @@ export type FillPlausibilityIssue = {
   code:
     | 'zero_liters_with_amount'
     | 'odometer_backwards'
+    | 'odometer_jump'
     | 'over_tank'
     | 'price_off_median'
     | 'duplicate_odometer'
@@ -60,6 +63,12 @@ export function assessFillPlausibility(input: FillPlausibilityInput): FillPlausi
       code: 'odometer_backwards',
       severity: 'block',
       message: 'Odometer is lower than the previous reading.',
+    });
+  } else if (odo > 0 && prev > 0 && odo - prev > ODOMETER_JUMP_KM) {
+    issues.push({
+      code: 'odometer_jump',
+      severity: 'confirm',
+      message: `Odometer jumped more than ${ODOMETER_JUMP_KM} km since the last reading.`,
     });
   }
   if (tank > 0 && liters > tank) {

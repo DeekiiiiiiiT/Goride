@@ -1279,7 +1279,7 @@ export async function rebuildDriverFinancialPeriod(
     // C-7: pass the signed toll charge. A negative charge (fleet-owes / refund)
     // must flow through settlement instead of being clamped to zero.
     tollPersonal: tollChargedToDriver,
-    fuelCredits: fuelFleetShare,
+    fuelCredits: fuelDriverSpend,
     cashWrittenOff,
     settlementPaid: settlementPaidRaw,
     tipsPaidToDriver: share.tipsPaidToDriver || 0,
@@ -1688,7 +1688,7 @@ export async function rebuildDriverFinancialPeriod(
             baseCashPaid: row.cashReturned,
             tollCashWash: tollCashWashEligible,
             tollPersonal: row.tollChargedToDriver,
-            fuelCredits: row.fuelFleetShare,
+            fuelCredits: row.fuelDriverSpend,
             cashWrittenOff: row.cashWrittenOff,
             settlementPaid: settlementPaidRaw,
             tipsPaidToDriver: row.tipsPaidToDriver || 0,
@@ -2405,7 +2405,7 @@ export async function syncPeriodCashFromTransactions(
     // C-7: pass signed — a negative charged-to-driver is a real reversal/credit,
     // not something to clamp to zero (settlement math handles the sign).
     tollPersonal: Number(existing.toll_charged_to_driver) || 0,
-    fuelCredits: Number(existing.fuel_fleet_share) || 0,
+    fuelCredits: Number(existing.fuel_driver_spend) || 0,
     cashWrittenOff,
     settlementPaid: settlementPaidRaw,
     tipsPaidToDriver,

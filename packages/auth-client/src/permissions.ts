@@ -49,7 +49,9 @@ export type Role =
   | 'driver'
   | 'unassigned'
   // Hauler (Roam Haul consumer)
-  | 'hauler';
+  | 'hauler'
+  /** Roam Plug public driver. No fleet org and no fleet money access. */
+  | 'explorer_user';
 
 /** Roles that have historically been stored in Supabase user_metadata. */
 export type LegacyRole = 'superadmin' | 'admin' | 'manager' | 'viewer';
@@ -225,6 +227,12 @@ export const ROLE_META: Record<Role, RoleMeta> = {
     level: 100,
     label: 'Hauler',
     description: 'Roam Haul — freight dispatch, manifest, earnings.',
+    tier: 'driver',
+  },
+  explorer_user: {
+    level: 50,
+    label: 'Roam Plug',
+    description: 'Personal garage, fuel log, and place pins. No fleet access.',
     tier: 'driver',
   },
 };
@@ -535,6 +543,7 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
   // Driver
   driver: [],
   hauler: [],
+  explorer_user: [],
 };
 
 // ---------------------------------------------------------------------------

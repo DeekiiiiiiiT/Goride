@@ -1,6 +1,6 @@
 # Roam Plug — Free Launch Strategy
 
-**Rev 4 · 2026-10-23 · Plan only — no code changed.**
+**Rev 5 · 2026-10-24 · ✅ READY TO BUILD.** Design is finished in Google Stitch (all screens). Cursor: start at **§13 Build instructions**.
 **App name:** **Roam Plug** (was "Roam Explorer" in the draw.io; same product).
 **Market:** Jamaica only — **island-wide launch, all 14 parishes**. **Scope:** the free public app only. Nothing is sold in this phase.
 The long-term marketplace design is summarised in §11 so the free launch doesn't block it.
@@ -15,6 +15,10 @@ The long-term marketplace design is summarised in §11 so the free launch doesn'
 **Owner decisions (Rev 4):**
 6. Domain: a Vercel domain for now (e.g. `roam-plug.vercel.app`); a real domain is bought later.
 7. **Gas stations use the existing Fleet process, unchanged.** Roam Plug fills feed the *same* Dominion Station Database the same way Roam Fleet fills do. The only difference is the **source** (Roam Fleet or Roam Plug). Fuel prices show right away.
+
+**Owner decisions (Rev 5):**
+8. Visual theme: **Sunset Orange** (light + dark), defined in `docs/stitch/ROAM_PLUG_STITCH_PROMPT.txt`.
+9. All screens are designed in Google Stitch (57 app screens + 4 Dominion Places Review screens). Stitch MCP is connected in Cursor. **Build can start.**
 
 ---
 
@@ -283,4 +287,91 @@ Nothing in §1–§10 should be built in a way that needs undoing for these: pla
 
 ## 12. Still open
 
-None. The station-storage check is done (§4.3): stations are already shared platform-wide.
+- Stitch project: **"Roam Plug"** (My Projects, Oct 24, 2026) — Cursor records its id in §13 Step 1.
+- The station-storage check is done (§4.3): stations are already shared platform-wide.
+
+---
+
+## 13. Build instructions (for Cursor)
+
+**Read §1–§10 first.** This section is the order of work; the sections above are the rules. Build in the phases below, one at a time. At the end of each phase, update the **Build log** (§13.6) and stop for the owner to check before starting the next phase.
+
+### 13.1 Step 1 — Pull the Stitch screens into the repo
+
+Use the Stitch MCP tools (`list_projects`, `get_project`, `list_screens`, `get_screen`).
+
+1. Open the Stitch project named exactly **"Roam Plug"**. It's in the owner's **My Projects** (not "Shared with me"), dated **Oct 24, 2026**, and it's a mobile project. Don't use the other Roam projects (Roam Fleet APP, roam rush admin design, Roam Rush Admin / Partner / Courier). Write its project id and design system id at the top of `docs/stitch/roam-plug/README.md`.
+2. Save every screen's HTML to `docs/stitch/roam-plug/html/` using the screen number from the prompt, e.g. `15-home-explore.html`, `D2-review-item.html`.
+3. In the README, add a table in the same format as `docs/stitch/roam-fleet-app/README.md`:
+
+   | # | Screen | File | Stitch screen id | App route / component |
+   |---|---|---|---|---|
+
+4. **Check the count against the prompt:** 57 app screens (1–57) + 4 Dominion screens (D1–D4); list in `docs/stitch/ROAM_PLUG_STITCH_PROMPT.txt` → bottom table. If any screen is missing, or Stitch has extra variants (dark mode, tablet), list them in the README. **Don't invent a missing screen.** Flag it in the Build log and build it from the prompt text in the same style.
+5. These HTML files are **layout references only**. Do not copy them into any app's `public/` folder, and do not ship Stitch's Tailwind CDN or inline styles. Rebuild each screen as React components using the shared UI kit.
+
+### 13.2 Step 2 — Theme tokens
+
+- Add the **Sunset Orange** theme (light + dark values from the Stitch prompt's BRAND IDENTITY block) to `@roam/design-tokens` as a named theme (e.g. `plug`). Components read tokens, never hard-coded hex.
+- Reuse `@roam/ui` components first; add new components to the shared kit only when no existing one fits (price bubble pin, fuel grade chip, maintenance status pill, GPS accuracy indicator, parts tier header, pending dashed pin).
+- Follow `.cursor/rules/ui-agent.mdc`: loading, empty and error states on every screen; ≥ 48px touch targets; 8px spacing grid.
+
+### 13.3 Step 3 — App scaffold
+
+| Item | Value |
+|---|---|
+| Folder | `apps/plug` |
+| Stack | Vite + React + Capacitor. Copy the **setup pattern** (config files, Capacitor, Sentry `instrument.ts`, offline provider) from `apps/driver`; don't copy driver screens. |
+| Package name | `@roam/plug` |
+| Capacitor app id | `co.roam.plug` (confirm with owner before the first store build) |
+| Hosting | Vercel project, temporary domain `roam-plug.vercel.app`; domain in **one** config value (§8) |
+| Auth | Same Supabase auth via `@roam/auth-client`; role `explorer_user`; phone OTP +1 876; Google/Apple sign-in |
+| Bottom nav | Explore · Garage · ⛽ Log Fuel (raised centre) · Map It · Account |
+| Guest mode | Explore, fuel prices and place details work signed-out; Log Fuel / Map It / Garage prompt sign-in |
+| Geography | Parishes, towns and communities come from **Dominion World Maps** (`platform-catalog` API, keyed by `pcode`) — never a hand-typed parish list in the app (see `docs/map-data-dominion-migration-audit.md`) |
+
+### 13.4 Step 4 — Build phases
+
+| Phase | Build | Screens | Done when |
+|---|---|---|---|
+| **P0 — Backend foundation** | §10 Step 0: station `source` tag (`roam_fleet` / `roam_plug`); Plug fills go through the **existing** station resolution; `explorer` schema (§4.2); `places` schema for non-fuel types; public read API in the `platform-catalog` stub (places near me, place detail, prices, parts tiers, schedules, tolls) served from read models with CDN cache headers; RLS on every new table | — | A test Plug fill creates/confirms a station exactly like a Fleet fill, tagged `roam_plug`, and appears in **no** fleet fuel log, reconciliation, gas-card or settlement table; `anon` can't read any raw table; migrations committed **and** recorded in `schema_migrations` under the same version |
+| **P1 — Shell, onboarding, auth** | App scaffold, theme, nav, guest mode, sign-up, OTP, profile, privacy consent, permissions, add vehicle (catalog picker + Pending catalog request + starting odometer), login | 1–14 | New user can sign up, consent, add a Roomy from the catalog, or request a car that isn't listed |
+| **P2 — Explore & fuel** | Map + bottom sheet, category chips, station list, filters, station / parts store / mechanic / facility details, pending-place view, tolls, search | 15–23, 48, 49 | Real stations and prices from the API; cheapest tag; price age; directions open Google Maps / Waze |
+| **P3 — Log Fuel** | Odometer scan → confirm → fuel details (station auto-detect via GPS) → saved / saved offline. **Reuse** `OdometerScanner`, the Fleet fuel entry logic and station resolution via shared packages (§3) | 24–28 | One fill updates the user's odometer, km/L, next service **and** the station price; works offline and syncs later |
+| **P4 — Garage & care** | My Garage, vehicle overview, maintenance schedule (`schedule_for_variant`, "General schedule" fallback), service detail, log service, history + PDF, fuel spend & mileage, documents & renewals, reminders | 29–37 | Service due dates move as fuel logs come in; reminders fire as push notifications |
+| **P5 — Parts info** | Categories, 5-tier results (`parts_for_vehicle`), part detail, "coming soon for your car" (readiness gate) | 38–41 | Ready vehicles show tiers; others show coming soon; no-result searches logged as anonymous demand |
+| **P6 — Map It & contributions** | Choose type, place pin (GPS accuracy gate, duplicate check), details, submitted, my contributions, levels/badges, help map your parish | 42–47 | A pin lands in the Dominion queue as pending; user sees "Awaiting approval"; approval/rejection notifies the user |
+| **P7 — Account & system** | Notifications inbox, account, notification settings, privacy & data (export / delete), settings, help, GPS issue, offline | 50–57 | Data export and account delete work end-to-end |
+| **P8 — Dominion Places Review** | In `apps/admin`: queue, split-view review, merge modal, coverage by parish (§5.2a). **Additive**: keep the existing Station Database and Resolution Queue screens as they are; add a "Source" filter there | D1–D4 | Owner approves / merges / rejects a grouped item in one click with keyboard shortcuts; next item auto-loads |
+| **P9 — Release** | Feature flags on for owner's account first, then Android (Play internal testing) → iOS → public | — | Owner maps 20 real places through the full loop; load test on the public API without Disk IO alarms |
+
+### 13.5 Rules Cursor must follow
+
+1. **Don't touch Roam Fleet money.** A Plug fill must never write to fleet fuel logs, reconciliation, gas cards, settlement, ledger or finance tables. Add a test that proves it.
+2. **Reuse, don't copy.** Shared logic moves into packages that both the driver app and Plug import. Edge code that needs the same logic uses the mirror file + Deno drift test pattern.
+3. **Dominion holds master data only.** No Plug user, vehicle, fuel log or location trail is stored in or shown in Dominion; only anonymised counts and approved places.
+4. **Nothing user-mapped goes public before approval**, except fuel prices within the Petrojam band on existing stations (§5.2).
+5. **No fake data in production.** No invented stations, prices, part numbers or schedules. Mock data only in dev fixtures and Storybook-style previews.
+6. **No selling.** Where the screens say "coming soon" (parts buying, booking), show only that note: no cart, checkout or payment code.
+7. **Public traffic goes through the edge API** with cached read models. No `anon` grants on raw tables, no `SECURITY DEFINER` function granted to `anon`, views `security_invoker = true`.
+8. **Feature flags default off** for every section.
+9. **Typecheck gate:** run `tsc` for `apps/plug` and every touched package. Report the count; don't raise an existing app's baseline (fleet `tsc` baseline is 500).
+10. **Migrations:** one new versioned file per change under `supabase/migrations/`; never edit an applied migration; confirm the version recorded in prod matches the file name.
+
+### 13.6 Build log (Cursor updates this after each phase)
+
+| Phase | Status | Commit | Deployed | Notes / deviations from the Stitch screens |
+|---|---|---|---|---|
+| Step 1 — Stitch pull | In repo | | | 59 HTML files saved. D1–D4 were not in the Stitch project. Two extra pin/submitted variants saved. |
+| P0 | In repo | 2026-10-24 | | Migration `20261024200000` is applied and recorded. Public catalog routes return cached cards. Anonymous clients have no grants on the new tables. |
+| P1 | In repo | | | Sign-up, consent, and add-vehicle routes in `apps/plug`. |
+| P2 | In repo | | | Explore, station detail, tolls, and search read `platform-catalog`. |
+| P3 | In repo | | | Log fuel calls the Plug save and can queue offline. |
+| P4 | In repo | | | Garage, schedule, documents, and reminders. |
+| P5 | In repo | | | Parts screens. Coming soon when the catalog has no rows. |
+| P6 | In repo | | | Map It pins go to the pending queue. |
+| P7 | In repo | | | Export and delete call the Plug account routes. |
+| P8 | In repo | | | Dominion Places Review plus a Station Database app filter. |
+| P9 | In repo | | | Flags stay off. Public catalog load test passed (health, stations, places, parishes, tolls). Store upload and the first 20 real pins still wait for the owner. |
+
+Only mark a phase **Done** when its "Done when" check has passed. Note the commit hash and the deployed version. Claude verifies each phase against git and the live build before it's treated as closed.

@@ -11,10 +11,8 @@ import { fromKvStore } from "./fleet_sql_bridge.ts";
 import { listCashHeldPeriods } from "./driver_financial_periods.ts";
 import { getRidesPaymentDb } from "../_shared/ridesPaymentDb.ts";
 import { driverDebtAccountKeyForUser } from "../_shared/ridesAccountKeys.ts";
-import {
-  DEFAULT_FLEET_TZ,
-  periodKeyFor,
-} from "../../../packages/finance-core/src/periodKey.ts";
+import { DEFAULT_FLEET_TZ } from "../../../packages/finance-core/src/periodKey.ts";
+import { expectedBankWeekKey } from "../../../packages/finance-core/src/businessStatement.ts";
 
 const PREFIX = "/make-server-37f42386";
 const DRIVER_LIST_CAP = 5000;
@@ -118,10 +116,9 @@ async function buildBankDepositsBalanceForPeriod(
 
   for (const raw of scoped) {
     if (String(raw.eventType || "") !== "payout_bank") continue;
-    const date =
-      String(raw.date || "").slice(0, 10) || String(raw.periodStart || "").slice(0, 10);
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
-    const weekStartYmd = periodKeyFor(date, DEFAULT_FLEET_TZ);
+    const driverId = String(raw.driverId || "");
+    if (driverId.startsWith("00000000") && !isOrgBankEvent(raw)) continue;
+    const weekStartYmd = expectedBankWeekKey(raw, DEFAULT_FLEET_TZ);
     if (!weekStartYmd) continue;
     const add = Math.abs(Number(raw.netAmount) || 0);
     if (add < 1e-9) continue;

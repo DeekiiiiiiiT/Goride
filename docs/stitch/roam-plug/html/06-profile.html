@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+
+<html lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" name="viewport"/><meta content="mobile_blank" name="shell-type"/><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&amp;family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&amp;display=block" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config = { darkMode: "class", theme: { extend: { colors: { "surface-container-highest": "#e8e1db", "surface-container": "#f4ede6", "on-surface": "#1e1b17", "error": "#ba1a1a", "surface-bright": "#fff8f2", "on-background": "#1e1b17", "outline": "#8e7166", "secondary-fixed": "#ffdbca", "on-secondary-fixed": "#341100", "surface-dim": "#e0d9d2", "inverse-on-surface": "#f7efe9", "tertiary-fixed": "#ffdf9a", "primary-container": "#cc4900", "primary-fixed": "#ffdbce", "surface-variant": "#e8e1db", "on-error": "#ffffff", "on-tertiary-fixed-variant": "#5a4300", "on-primary-fixed-variant": "#7f2b00", "tertiary-container": "#936f00", "error-container": "#ffdad6", "on-tertiary": "#ffffff", "on-tertiary-container": "#fffbff", "secondary": "#9d4300", "primary": "#a33900", "inverse-surface": "#33302c", "primary-fixed-dim": "#ffb599", "on-primary-container": "#fffbff", "inverse-primary": "#ffb599", "on-primary": "#ffffff", "surface": "#fff8f2", "background": "#fff8f2", "surface-container-high": "#eee7e0", "outline-variant": "#e2bfb2", "on-secondary": "#ffffff", "secondary-fixed-dim": "#ffb690", "surface-container-low": "#faf2eb", "on-secondary-fixed-variant": "#783200", "on-tertiary-fixed": "#251a00", "on-error-container": "#93000a", "surface-tint": "#a73a00", "on-surface-variant": "#5a4138", "secondary-container": "#fd761a", "tertiary": "#755800", "tertiary-fixed-dim": "#f7be1d", "on-secondary-container": "#5c2400", "surface-container-lowest": "#ffffff", "on-primary-fixed": "#370e00" }, borderRadius: { "DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px" }, spacing: { "gutter-sm": "0.75rem", "space-xs": "0.25rem", "space-md": "1rem", "space-xl": "2rem", "space-sm": "0.5rem", "gutter": "1rem", "space-lg": "1.5rem", "margin": "1rem", "margin-lg": "1.5rem" }, fontFamily: { "body-lg": ["Inter"], "display-lg-mobile": ["Inter"], "headline-md": ["Inter"], "headline-sm": ["Inter"], "label-md": ["Inter"], "display-lg": ["Inter"], "label-sm": ["Inter"], "price-display": ["Inter"], "headline-lg": ["Inter"], "label-lg": ["Inter"], "body-sm": ["Inter"], "body-md": ["Inter"] }, fontSize: { "body-lg": ["16px", { "lineHeight": "24px", "fontWeight": "400" }], "display-lg-mobile": ["32px", { "lineHeight": "40px", "letterSpacing": "-0.02em", "fontWeight": "800" }], "headline-md": ["22px", { "lineHeight": "28px", "letterSpacing": "-0.01em", "fontWeight": "700" }], "headline-sm": ["18px", { "lineHeight": "24px", "fontWeight": "600" }], "label-md": ["12px", { "lineHeight": "16px", "letterSpacing": "0.02em", "fontWeight": "600" }], "display-lg": ["40px", { "lineHeight": "48px", "letterSpacing": "-0.02em", "fontWeight": "800" }], "label-sm": ["10px", { "lineHeight": "12px", "letterSpacing": "0.04em", "fontWeight": "700" }], "price-display": ["24px", { "lineHeight": "28px", "letterSpacing": "-0.01em", "fontWeight": "700" }], "headline-lg": ["28px", { "lineHeight": "36px", "letterSpacing": "-0.01em", "fontWeight": "700" }], "label-lg": ["14px", { "lineHeight": "20px", "letterSpacing": "0.01em", "fontWeight": "600" }], "body-sm": ["12px", { "lineHeight": "16px", "fontWeight": "400" }], "body-md": ["14px", { "lineHeight": "20px", "fontWeight": "400" }] } } } };</script><style>@layer base{html,body{width:100%;margin:0;padding:0;}body{overscroll-behavior:none;}.pb-safe{padding-bottom:env(safe-area-inset-bottom,0px);}.pt-safe{padding-top:env(safe-area-inset-top,0px);}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head><body class="bg-surface text-on-surface antialiased flex flex-col min-h-screen"><div class="w-full pt-safe px-margin select-none"><div class="flex justify-between items-center pt-space-xs text-on-surface"><span class="font-label-md text-label-md font-semibold tracking-tight">9:41</span><div class="flex items-center gap-1.5"><span class="material-symbols-outlined text-[16px] leading-none">signal_cellular_alt</span><span class="material-symbols-outlined text-[16px] leading-none">wifi</span><span class="material-symbols-outlined text-[18px] leading-none">battery_full</span></div></div></div><main class="flex-1 flex flex-col relative w-full pb-safe bg-surface px-margin"><div class="flex flex-col w-full pb-8">
+<!-- Progress Header -->
+<div class="flex items-center justify-between py-3">
+<div class="flex items-center gap-2">
+<button aria-label="Go back" class="w-10 h-10 rounded-full flex items-center justify-center bg-surface-container text-on-surface hover:bg-surface-container-high transition-colors active:scale-95" type="button">
+<span class="material-symbols-outlined text-base">arrow_back</span>
+</button>
+<span class="font-label-md text-label-md uppercase tracking-wider text-on-surface-variant font-bold">Step 3 of 3</span>
+</div>
+<div class="px-3 py-1 rounded-full bg-secondary-fixed text-on-secondary-fixed font-label-sm text-label-sm font-extrabold tracking-wide uppercase shadow-sm">
+      Final Step
+    </div>
+</div>
+<!-- Progress Bar Line -->
+<div class="w-full bg-surface-container h-1.5 rounded-full overflow-hidden mb-4">
+<div class="bg-primary h-full w-full rounded-full transition-all duration-500"></div>
+</div>
+<!-- Heading Section -->
+<div class="mb-5">
+<div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-tertiary-fixed text-on-tertiary-fixed font-label-sm text-label-sm font-bold uppercase mb-2">
+<span class="material-symbols-outlined text-[14px]">local_gas_station</span>
+      Roam Plug Co-Pilot
+    </div>
+<h1 class="font-headline-lg text-headline-lg font-extrabold text-on-surface tracking-tight">
+      Set up your profile
+    </h1>
+<p class="font-body-md text-body-md text-on-surface-variant mt-1.5 leading-relaxed">
+      Personalize your motoring experience and how you appear to other island drivers when sharing fuel rates and road watches.
+    </p>
+</div>
+<!-- Profile Photo Upload Component -->
+<div class="flex flex-col items-center justify-center my-2 p-4 rounded-xl bg-surface-container-low shadow-sm">
+<div class="relative group cursor-pointer" id="avatar-container" onclick="triggerPhotoPick()">
+<!-- Ring Glow -->
+<div class="w-24 h-24 rounded-full p-1 bg-gradient-to-tr from-primary via-secondary-container to-tertiary-fixed shadow-md flex items-center justify-center">
+<!-- Inner Circular Placeholder -->
+<div class="w-full h-full rounded-full bg-surface-container-lowest flex flex-col items-center justify-center overflow-hidden relative">
+<span class="material-symbols-outlined text-4xl text-on-surface-variant/40 select-none">person</span>
+<div class="absolute inset-0 bg-primary/5 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+</div>
+</div>
+<!-- Camera FAB Overlay -->
+<div class="absolute -bottom-1 -right-1 w-8 h-8 rounded-full bg-primary text-on-primary flex items-center justify-center shadow-md active:scale-90 transition-transform">
+<span class="material-symbols-outlined text-[17px]">photo_camera</span>
+</div>
+</div>
+<div class="mt-2.5 text-center">
+<span class="font-label-lg text-label-lg font-bold text-on-surface block">Add photo (Optional)</span>
+<span class="font-body-sm text-body-sm text-primary font-semibold flex items-center justify-center gap-1 mt-0.5">
+<span class="material-symbols-outlined text-[14px]">touch_app</span> Tap to upload
+      </span>
+</div>
+</div>
+<!-- Form Fields Stack -->
+<div class="flex flex-col gap-4 mt-2">
+<!-- Field 1: First Name -->
+<div class="flex flex-col gap-1.5">
+<div class="flex items-center justify-between">
+<label class="font-label-lg text-label-lg font-bold text-on-surface" for="first-name-input">First Name</label>
+<span class="font-label-sm text-label-sm text-on-surface-variant font-medium">Required</span>
+</div>
+<div class="relative flex items-center">
+<div class="absolute left-3.5 flex items-center pointer-events-none text-on-surface-variant">
+<span class="material-symbols-outlined text-lg">badge</span>
+</div>
+<input class="w-full h-12 pl-11 pr-4 bg-surface-container-lowest text-on-surface rounded-xl font-body-lg text-body-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-primary transition-all" id="first-name-input" placeholder="e.g. Andre" type="text" value="Andre"/>
+</div>
+</div>
+<!-- Field 2: Display Name -->
+<div class="flex flex-col gap-1.5">
+<div class="flex items-center justify-between">
+<label class="font-label-lg text-label-lg font-bold text-on-surface" for="display-name-input">Display Name</label>
+<div class="flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 font-label-sm text-label-sm font-semibold">
+<span class="material-symbols-outlined text-[13px]">check_circle</span>
+<span>Available</span>
+</div>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant">
+        Shown on your map pins, speed alerts, and verified fuel price updates.
+      </p>
+<div class="relative flex items-center">
+<div class="absolute left-3.5 flex items-center pointer-events-none text-on-surface-variant">
+<span class="material-symbols-outlined text-lg">alternate_email</span>
+</div>
+<input class="w-full h-12 pl-11 pr-11 bg-surface-container-lowest text-on-surface rounded-xl font-body-lg text-body-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-primary transition-all" id="display-name-input" placeholder="e.g. Andre B." type="text" value="Andre B."/>
+<div class="absolute right-3.5 flex items-center pointer-events-none text-emerald-600">
+<span class="material-symbols-outlined text-xl">check</span>
+</div>
+</div>
+</div>
+<!-- Field 3: Home Parish Selector -->
+<div class="flex flex-col gap-1.5">
+<div class="flex items-center justify-between">
+<label class="font-label-lg text-label-lg font-bold text-on-surface" for="parish-select-btn">Home Parish</label>
+<span class="px-2 py-0.5 rounded-full bg-surface-container-highest text-on-surface-variant font-label-sm text-label-sm font-bold">14 Parishes</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant">
+        Used to prioritize local gas station rates, Petrojam updates, and parish road alerts.
+      </p>
+<!-- Dropdown Trigger Button -->
+<button class="w-full h-12 px-3.5 bg-surface-container-lowest text-on-surface rounded-xl shadow-sm flex items-center justify-between active:scale-[0.99] transition-all focus:outline-none focus:ring-2 focus:ring-primary" id="parish-select-btn" onclick="toggleParishMenu()" type="button">
+<div class="flex items-center gap-2.5">
+<span class="material-symbols-outlined text-primary text-xl">location_on</span>
+<span class="font-body-lg text-body-lg font-semibold text-on-surface" id="selected-parish-name">St. Catherine</span>
+<span class="px-2 py-0.5 rounded bg-surface-container text-on-surface-variant font-label-sm text-label-sm">Primary Route</span>
+</div>
+<span class="material-symbols-outlined text-on-surface-variant transition-transform duration-200" id="parish-chevron">expand_more</span>
+</button>
+<!-- Collapsible Parish Grid Picker -->
+<div class="hidden flex-col gap-2 mt-2 p-3 bg-surface-container-lowest rounded-xl shadow-md" id="parish-menu">
+<div class="flex items-center justify-between pb-2">
+<span class="font-label-md text-label-md font-bold text-on-surface">Select your base parish:</span>
+<span class="font-label-sm text-label-sm text-primary font-bold">Auto-detects GPS</span>
+</div>
+<div class="grid grid-cols-2 gap-1.5 max-h-48 overflow-y-auto pr-1">
+<button class="text-left px-3 py-2 rounded-lg font-body-sm text-body-sm hover:bg-surface-container text-on-surface" onclick="selectParish('Kingston')" type="button">Kingston</button>
+<button class="text-left px-3 py-2 rounded-lg font-body-sm text-body-sm hover:bg-surface-container text-on-surface" onclick="selectParish('St. Andrew')" type="button">St. Andrew</button>
+<button class="text-left px-3 py-2 rounded-lg font-body-sm text-body-sm hover:bg-surface-container text-on-surface" onclick="selectParish('St. Thomas')" type="button">St. Thomas</button>
+<button class="text-left px-3 py-2 rounded-lg font-body-sm text-body-sm hover:bg-surface-container text-on-surface" onclick="selectParish('Portland')" type="button">Portland</button>
+<button class="text-left px-3 py-2 rounded-lg font-body-sm text-body-sm hover:bg-surface-container text-on-surface" onclick="selectParish('St. Mary')" type="button">St. Mary</button>
+<button class="text-left px-3 py-2 rounded-lg font-body-sm text-body-sm hover:bg-surface-container text-on-surface" onclick="selectParish('St. Ann')" type="button">St. Ann</button>
+<button class="text-left px-3 py-2 rounded-lg font-body-sm text-body-sm hover:bg-surface-container text-on-surface" onclick="selectParish('Trelawny')" type="button">Trelawny</button>
+<button class="text-left px-3 py-2 rounded-lg font-body-sm text-body-sm hover:bg-surface-container text-on-surface" onclick="selectParish('St. James')" type="button">St. James</button>
+<button class="text-left px-3 py-2 rounded-lg font-body-sm text-body-sm hover:bg-surface-container text-on-surface" onclick="selectParish('Hanover')" type="button">Hanover</button>
+<button class="text-left px-3 py-2 rounded-lg font-body-sm text-body-sm hover:bg-surface-container text-on-surface" onclick="selectParish('Westmoreland')" type="button">Westmoreland</button>
+<button class="text-left px-3 py-2 rounded-lg font-body-sm text-body-sm hover:bg-surface-container text-on-surface" onclick="selectParish('St. Elizabeth')" type="button">St. Elizabeth</button>
+<button class="text-left px-3 py-2 rounded-lg font-body-sm text-body-sm hover:bg-surface-container text-on-surface" onclick="selectParish('Manchester')" type="button">Manchester</button>
+<button class="text-left px-3 py-2 rounded-lg font-body-sm text-body-sm hover:bg-surface-container text-on-surface" onclick="selectParish('Clarendon')" type="button">Clarendon</button>
+<button class="text-left px-3 py-2 rounded-lg font-body-sm text-body-sm font-bold bg-primary-fixed text-on-primary-fixed" onclick="selectParish('St. Catherine')" type="button">St. Catherine ✓</button>
+</div>
+</div>
+</div>
+</div>
+<!-- Island Co-Pilot Delight Feature Box -->
+<div class="mt-5 p-3.5 rounded-xl bg-surface-container-high flex items-start gap-3">
+<div class="w-8 h-8 rounded-lg bg-tertiary-fixed text-on-tertiary-fixed flex items-center justify-center shrink-0 mt-0.5">
+<span class="material-symbols-outlined text-lg">local_taxi</span>
+</div>
+<div class="flex-1">
+<h2 class="font-headline-sm text-headline-sm text-on-surface">Island Driver Perks</h2>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-0.5">
+        Contribute to live E-10 87, E-10 90 &amp; ULSD price pins to unlock parish toll badges &amp; fuel discount partner perks.
+      </p>
+</div>
+</div>
+<!-- Privacy & Trust Statement -->
+<div class="flex items-center gap-2.5 mt-5 px-1 py-1 text-on-surface-variant">
+<span class="material-symbols-outlined text-primary shrink-0 text-lg">verified_user</span>
+<p class="font-body-sm text-body-sm leading-tight text-on-surface-variant">
+      Your phone number stays strictly private. Only your <span class="font-bold text-on-surface">Display Name</span> is seen on community fuel pins.
+    </p>
+</div>
+<!-- Primary Action CTA Button -->
+<div class="mt-6 mb-2">
+<button class="w-full h-14 rounded-xl bg-primary text-on-primary font-headline-sm text-headline-sm font-bold flex items-center justify-center gap-2 shadow-lg hover:bg-primary-container active:scale-[0.98] transition-all" id="submit-btn" onclick="handleCompleteSetup()" type="button">
+<span>Complete Setup</span>
+<span class="material-symbols-outlined text-xl">arrow_forward</span>
+</button>
+</div>
+</div>
+<script>
+  function toggleParishMenu() {
+    const menu = document.getElementById('parish-menu');
+    const chevron = document.getElementById('parish-chevron');
+    if (menu.classList.contains('hidden')) {
+      menu.classList.remove('hidden');
+      menu.classList.add('flex');
+      chevron.style.transform = 'rotate(180deg)';
+    } else {
+      menu.classList.add('hidden');
+      menu.classList.remove('flex');
+      chevron.style.transform = 'rotate(0deg)';
+    }
+  }
+
+  function selectParish(parishName) {
+    document.getElementById('selected-parish-name').textContent = parishName;
+    toggleParishMenu();
+  }
+
+  function triggerPhotoPick() {
+    const btn = document.getElementById('avatar-container');
+    btn.classList.add('scale-95');
+    setTimeout(() => {
+      btn.classList.remove('scale-95');
+      alert('Upload avatar dialog: Camera or photo library access on Jamaica Roam Plug.');
+    }, 150);
+  }
+
+  function handleCompleteSetup() {
+    const btn = document.getElementById('submit-btn');
+    btn.innerHTML = `<span class="material-symbols-outlined animate-spin text-xl">progress_activity</span><span>Setting up route...</span>`;
+    setTimeout(() => {
+      btn.innerHTML = `<span class="material-symbols-outlined text-xl">done_all</span><span>Welcome to Roam Plug!</span>`;
+      btn.classList.remove('bg-primary');
+      btn.classList.add('bg-emerald-600');
+    }, 900);
+  }
+</script></main></body></html>
