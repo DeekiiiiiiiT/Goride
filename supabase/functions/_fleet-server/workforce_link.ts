@@ -8,6 +8,11 @@ import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import type * as KvStore from "./kv_store.tsx";
 import { getOpenMembership, setWorkforceMembership, type JoinedVia } from "./workforce_membership.ts";
 
+export type WorkforceLinkOpts = {
+  joinedVia?: JoinedVia;
+  joinRequestId?: string | null;
+};
+
 export type UpsertDriverProfileFn = (opts: {
   userId: string;
   mode: "fleet" | "independent";
@@ -120,7 +125,7 @@ export async function linkDriverToFleet(
   deps: WorkforceLinkDeps,
   userId: string,
   fleetId: string,
-  opts?: { joinedVia?: JoinedVia; joinRequestId?: string | null },
+  opts?: WorkforceLinkOpts,
 ): Promise<LinkDriverResult> {
   const trimmedFleetId = fleetId.trim();
   if (!trimmedFleetId) throw new Error("fleetId is required");
@@ -215,7 +220,7 @@ export async function linkCourierToFleet(
   deps: WorkforceCourierLinkDeps,
   userId: string,
   fleetId: string,
-  opts?: { joinedVia?: JoinedVia; joinRequestId?: string | null },
+  opts?: WorkforceLinkOpts,
 ): Promise<LinkCourierResult> {
   const trimmedFleetId = fleetId.trim();
   if (!trimmedFleetId) throw new Error("fleetId is required");

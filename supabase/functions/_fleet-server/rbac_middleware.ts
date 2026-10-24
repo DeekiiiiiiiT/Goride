@@ -485,13 +485,15 @@ async function loadAccessFacts(userId: string): Promise<{
       grantedAt: String(rec.granted_at || ""),
     };
   });
-  const ownedOrgs: OwnedOrg[] = (orgRes.data || []).map((row) => {
+  const ownedOrgs: OwnedOrg[] = [];
+  for (const row of orgRes.data || []) {
     const rec = row as { id?: string; product_line?: string };
-    return {
-      id: String(rec.id || ""),
-      productLine: rec.product_line === "enterprise" ? "enterprise" : "fleet",
-    };
-  }).filter((org) => org.id);
+    const id = String(rec.id || "");
+    if (!id) continue;
+    const productLine: OwnedOrg["productLine"] =
+      rec.product_line === "enterprise" ? "enterprise" : "fleet";
+    ownedOrgs.push({ id, productLine });
+  }
   const memberships: OpenMembership[] = (memRes.data || []).map((row) => {
     const rec = row as { organization_id?: string; service_line?: string; status?: string };
     return {

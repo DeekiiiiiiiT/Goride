@@ -8,7 +8,7 @@ import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import type { RbacUser } from "./rbac_middleware.ts";
 import { isFeatureEnabled, FEATURE_FLAGS } from "./feature_flags.ts";
 import { checkAcceptRateLimit } from "./workforce_invite_rate_limit.ts";
-import type { LinkCourierResult, LinkDriverResult } from "./workforce_link.ts";
+import type { LinkCourierResult, LinkDriverResult, WorkforceLinkOpts } from "./workforce_link.ts";
 
 function randomInviteCode(): string {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -46,8 +46,8 @@ export function registerWorkforceInviteRoutes(
     supabase: SupabaseClient;
     requireAuth: () => unknown;
     getOrgId: (c: { get: (k: string) => unknown }) => string | null;
-    linkDriverToFleet: (userId: string, fleetId: string) => Promise<LinkDriverResult>;
-    linkCourierToFleet: (userId: string, fleetId: string) => Promise<LinkCourierResult>;
+    linkDriverToFleet: (userId: string, fleetId: string, opts?: WorkforceLinkOpts) => Promise<LinkDriverResult>;
+    linkCourierToFleet: (userId: string, fleetId: string, opts?: WorkforceLinkOpts) => Promise<LinkCourierResult>;
   },
 ): void {
   app.post("/make-server-37f42386/workforce/invites", deps.requireAuth() as never, async (c) => {

@@ -6,7 +6,7 @@ import type { Hono } from "npm:hono@4.3.11";
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { hasPermission, effectiveRole, type Permission, type RbacUser } from "./rbac_middleware.ts";
 import { checkAcceptRateLimit } from "./workforce_invite_rate_limit.ts";
-import type { LinkCourierResult, LinkDriverResult } from "./workforce_link.ts";
+import type { LinkCourierResult, LinkDriverResult, WorkforceLinkOpts } from "./workforce_link.ts";
 
 const RESERVED_FLEET_TAGS = new Set([
   "admin",
@@ -169,8 +169,8 @@ export function registerFleetTagRoutes(
     supabase: SupabaseClient;
     requireAuth: () => unknown;
     getOrgId: (c: { get: (k: string) => unknown }) => string | null;
-    linkDriverToFleet: (userId: string, fleetId: string) => Promise<LinkDriverResult>;
-    linkCourierToFleet: (userId: string, fleetId: string) => Promise<LinkCourierResult>;
+    linkDriverToFleet: (userId: string, fleetId: string, opts?: WorkforceLinkOpts) => Promise<LinkDriverResult>;
+    linkCourierToFleet: (userId: string, fleetId: string, opts?: WorkforceLinkOpts) => Promise<LinkCourierResult>;
   },
 ): void {
   // ── Ensure / get own org Fleet Tag ─────────────────────────────────────
