@@ -715,7 +715,20 @@ app.get("/contributions", async (c) => {
     const user = await requireExplorer(c);
     const sb = admin();
     const { data: trust } = await sb.schema("explorer").from("trust").select("*").eq("user_id", user.id).maybeSingle();
-    return c.json({ level: contributorLevel(Number(trust?.approved_count || 0)), trust: trust || { score: 0, approved_count: 0, rejected_count: 0 } });
+    const { data: receipts } = await sb.schema("explorer").from("pin_receipt").select("place_id, created_at").eq("user_id", user.id).order("created_at", { ascending: false });
+    const ids = (receipts || []).map((row) => row.place_id).filter(Boolean);
+    const { data: places } = ids.length
+      ? await sb.schema("places").from("place").select("id, name, status, pcode, lat, lng").in("id", ids)
+      : { data: [] };
+    const pins = (places || []).map((place) => ({
+      id: place.id,
+      name: place.name,
+      status: place.status,
+      pcode: place.pcode,
+      lat: place.lat,
+      lng: place.lng,
+    }));
+    return c.json({ level: contributorLevel(Number(trust?.approved_count || 0)), trust: trust || { score: 0, approved_count: 0, rejected_count: 0 }, pins });
   } catch (err) {
     return c.json({ error: err instanceof Error ? err.message : "Could not load contributions" }, 400);
   }
@@ -786,6 +799,8 @@ app.post("/admin/places/:id", async (c) => {
     for (const receipt of receipts || []) {
       await notifyPlugUser(sb, receipt.user_id as string, note.title, note.body);
     }
+    const { error: coverageError } = await sb.schema("places").rpc("refresh_coverage");
+    if (coverageError) throw coverageError;
     return c.json({ ok: true });
   } catch (err) {
     return c.json({ error: err instanceof Error ? err.message : "Could not review" }, 400);

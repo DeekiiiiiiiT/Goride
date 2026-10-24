@@ -1,14 +1,27 @@
 @import "tailwindcss";
 @import "@roam/design-tokens/plug.css";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 @layer base {
   html, body, #root { min-height: 100%; margin: 0; }
   body {
     background: var(--color-background);
     color: var(--color-on-surface);
     font-family: var(--font-sans);
+    overscroll-behavior: none;
   }
   button, a, input, select, textarea { font: inherit; color: inherit; }
   a { text-decoration: none; }
   .tap { min-height: 48px; }
+  .pb-safe { padding-bottom: env(safe-area-inset-bottom, 0px); }
+  .pt-safe { padding-top: env(safe-area-inset-top, 0px); }
+  .no-scrollbar { scrollbar-width: none; }
+  .no-scrollbar::-webkit-scrollbar { display: none; }
 }
+
+@keyframes plug-fade-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: none; }
+}
+.animate-fade-in { animation: plug-fade-in 0.45s ease; }

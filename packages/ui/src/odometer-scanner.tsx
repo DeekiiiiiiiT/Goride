@@ -10,6 +10,13 @@ export interface ScanResult {
 
 type ScanPhoto = (file: File, signal: AbortSignal) => Promise<{ reading: number | null; confidence?: string }>;
 
+/** Same drop and 1,500 km jump rule the shared scanner uses. */
+export function reviewOdometerChange(lastOdometer: number, reading: number): 'ok' | 'drop' | 'jump' {
+  if (lastOdometer > 0 && reading > 0 && reading < lastOdometer) return 'drop';
+  if (lastOdometer > 0 && reading > lastOdometer + 1500) return 'jump';
+  return 'ok';
+}
+
 /**
  * Shared odometer camera. The scan call is passed in so Plug, Fleet, and Driver
  * do not share a login. A drop or a jump over 1,500 km must be confirmed.
@@ -36,9 +43,9 @@ export function OdometerScanner({
   const [confirmedJump, setConfirmedJump] = useState(false);
 
   const value = Number(reading);
-  const dropped = lastOdometer > 0 && value > 0 && value < lastOdometer;
-  const jumped = lastOdometer > 0 && value > lastOdometer + 1500;
-  const needsConfirm = dropped || jumped;
+  const issue = reviewOdometerChange(lastOdometer, value);
+  const dropped = issue === 'drop';
+  const needsConfirm = issue !== 'ok';
 
   const onFile = (file: File) => {
     setPhoto(file);

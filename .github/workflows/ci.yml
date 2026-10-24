@@ -311,6 +311,18 @@ jobs:
       - name: Typecheck fuel-core
         run: pnpm --filter @roam/fuel-core typecheck
 
+      - name: Typecheck Plug
+        env:
+          VITE_SUPABASE_URL: https://ci-placeholder.supabase.co
+          VITE_SUPABASE_ANON_KEY: ci-placeholder-anon-key
+        run: pnpm --filter @roam/plug typecheck
+
+      - name: Plug screens have a way out
+        run: node apps/plug/scripts/check-dead-buttons.mjs
+
+      - name: Public stations take parish from coordinates
+        run: node apps/plug/scripts/check-station-parish.mjs
+
       - name: Typecheck fleet money spine
         run: pnpm --filter @roam/fleet typecheck:money
 

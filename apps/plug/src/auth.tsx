@@ -4,10 +4,12 @@ import { supabasePlugApp } from '../../../packages/auth-client/src/supabase';
 import { PLUG_FLAGS, type PlugFlag, sectionEnabled } from '@roam/plug-core';
 import { PLUG_FLAGS_OPEN } from './config';
 import { plugSend } from './api';
+import { demoOn } from './demo/mode';
 
 type AuthValue = {
   session: Session | null;
   ready: boolean;
+  signedIn: boolean;
   flags: Record<PlugFlag, boolean>;
   flagOn: (flag: PlugFlag) => boolean;
   sendCode: (phone: string) => Promise<void>;
@@ -20,19 +22,24 @@ const AuthContext = createContext<AuthValue | null>(null);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [ready, setReady] = useState(false);
-  const [flags, setFlags] = useState<Record<PlugFlag, boolean>>(() => Object.fromEntries(PLUG_FLAGS.map((flag) => [flag, PLUG_FLAGS_OPEN])) as Record<PlugFlag, boolean>);
+  const [flags, setFlags] = useState<Record<PlugFlag, boolean>>(() => Object.fromEntries(PLUG_FLAGS.map((flag) => [flag, PLUG_FLAGS_OPEN || demoOn()])) as Record<PlugFlag, boolean>);
+  const [demoSignedIn, setDemoSignedIn] = useState(() => demoOn() && sessionStorage.getItem('plug-demo-signed-in') === '1');
 
   useEffect(() => {
+    if (demoOn()) {
+      setReady(true);
+      return;
+    }
     void supabasePlugApp.auth.getSession().then(({ data }) => {
       setSession(data.session);
       setReady(true);
-    });
+    }).catch(() => setReady(true));
     const { data } = supabasePlugApp.auth.onAuthStateChange((_event, next) => setSession(next));
     return () => data.subscription.unsubscribe();
   }, []);
 
   useEffect(() => {
-    if (!session || PLUG_FLAGS_OPEN) return;
+    if (demoOn() || !session || PLUG_FLAGS_OPEN) return;
     void plugSend<{ flags: Record<PlugFlag, boolean> }>('/flags', 'GET')
       .then((body) => setFlags(body.flags))
       .catch(() => setFlags(Object.fromEntries(PLUG_FLAGS.map((flag) => [flag, false])) as Record<PlugFlag, boolean>));
@@ -41,9 +48,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const value = useMemo<AuthValue>(() => ({
     session,
     ready,
+    signedIn: Boolean(session) || demoSignedIn,
     flags,
-    flagOn: (flag) => sectionEnabled(flag, flags[flag], false) || PLUG_FLAGS_OPEN,
+    flagOn: (flag) => demoOn() || sectionEnabled(flag, flags[flag], false) || PLUG_FLAGS_OPEN,
     sendCode: async (phone) => {
+      if (demoOn()) return;
       const { error } = await supabasePlugApp.auth.signInWithOtp({
         phone,
         options: { channel: 'sms', data: { app: 'plug' } },
@@ -51,11 +60,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (error) throw error;
     },
     verifyCode: async (phone, token) => {
+      if (demoOn()) {
+        if (token.replace(/\D/g, '').length < 6) throw new Error('Enter the 6-digit code');
+        sessionStorage.setItem('plug-demo-signed-in', '1');
+        setDemoSignedIn(true);
+        return;
+      }
       const { error } = await supabasePlugApp.auth.verifyOtp({ phone, token, type: 'sms' });
       if (error) throw error;
     },
-    signOut: async () => { await supabasePlugApp.auth.signOut(); },
-  }), [flags, session, ready]);
+    signOut: async () => {
+      if (demoOn()) {
+        sessionStorage.removeItem('plug-demo-signed-in');
+        setDemoSignedIn(false);
+        return;
+      }
+      await supabasePlugApp.auth.signOut();
+    },
+  }), [demoSignedIn, flags, session, ready]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
