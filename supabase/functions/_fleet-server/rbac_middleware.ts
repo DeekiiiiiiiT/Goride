@@ -1,10 +1,8 @@
 /**
  * RBAC Middleware — Roam Fleet (Server-Side)
  *
- * Server-side duplicate of the role/permission logic from /utils/permissions.ts.
- * Must be kept in sync manually. Server code cannot import frontend modules.
- *
- * Created: Phase 6 of the RBAC rollout (see /solution.md).
+ * Role resolution and request auth live here. The permission catalog is
+ * packages/auth-client/src/permissions.ts — do not keep a second copy.
  *
  * Exports:
  *   requireAuth()          — Hono middleware: validates token, sets user context
@@ -16,6 +14,7 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 import type { Context, Next } from "npm:hono@4.3.11";
 import { readAccessCache, writeAccessCache } from "./access_cache.ts";
 import { resolveAccess, type AccessDecision, type AccessSeat, type OpenMembership, type OwnedOrg } from "./access_resolution.ts";
+import { hasPermission as catalogHasPermission } from "../../../packages/auth-client/src/permissions.ts";
 
 // ---------------------------------------------------------------------------
 // 1. Types
@@ -298,100 +297,11 @@ const ROLE_LEVELS: Record<Role, number> = {
 };
 
 // ---------------------------------------------------------------------------
-// 4. Role -> Permissions map (mirror of /utils/permissions.ts)
-// ---------------------------------------------------------------------------
-
-const ALL_CUSTOMER_PERMISSIONS: Permission[] = [
-  'nav.dashboard', 'nav.imports', 'nav.drivers', 'nav.vehicles', 'nav.maintenance', 'nav.fleet',
-  'nav.fuel_overview', 'nav.fuel_review_queue', 'nav.fuel_audit',
-  'nav.fuel_integrity_gap', 'nav.fuel_reconciliation', 'nav.fuel_cards',
-  'nav.fuel_logs', 'nav.fuel_reports', 'nav.fuel_configuration',
-  'nav.toll_logs', 'nav.toll_reconciliation', 'nav.toll_tag_inventory',
-  'nav.toll_claimable_loss', 'nav.toll_analytics',
-  'nav.trips', 'nav.reports', 'nav.financial_analytics',
-  'nav.transaction_list', 'nav.performance', 'nav.tier_config',
-  'nav.user_management', 'nav.settings',
-  'nav.database_management',
-  'drivers.create', 'drivers.edit', 'drivers.delete', 'drivers.view',
-  'drivers.location.view',
-  'vehicles.create', 'vehicles.edit', 'vehicles.delete', 'vehicles.view',
-  // 'vehicles.bypass_catalog_gate' is platform-only (added below).
-  'fuel.approve', 'fuel.split_cash_override', 'fuel.reject', 'fuel.create_entry', 'fuel.edit_entry',
-  'fuel.delete_entry', 'fuel.view', 'fuel.export',
-  'fuel.finalize', 'fuel.reopen', 'fuel.accept_unexplained', 'fuel.second_approve',
-  'toll.manage', 'toll.view',
-  'transactions.approve', 'transactions.reject', 'transactions.edit',
-  'transactions.view', 'transactions.export',
-  // Settlement desk writes — same holders as transactions.edit (not accountant)
-  'settlements.collect', 'settlements.pay', 'settlements.write_off',
-  'settlements.reverse', 'settlements.approve',
-  'reports.generate', 'reports.export', 'reports.view',
-  'settings.edit',
-  'users.view', 'users.invite', 'users.edit_role', 'users.suspend', 'users.remove', 'users.send_reset_email',
-  'workforce.approve', 'workforce.pause', 'workforce.remove', 'fleet_tag.set',
-  'data.import', 'data.export', 'data.backfill',
-  'expenses.view', 'expenses.export', 'expenses.create', 'expenses.manage_rules',
-  'expenses.approve', 'expenses.pay', 'expenses.manage_vendors',
-  'recon.view', 'recon.prepare', 'recon.approve',
-];
-
-const FLEET_MANAGER_PERMISSIONS: Permission[] = ALL_CUSTOMER_PERMISSIONS.filter(
-  (p) =>
-    p !== 'nav.settings' &&
-    p !== 'nav.database_management' &&
-    p !== 'settings.edit' &&
-    p !== 'users.invite' &&
-    p !== 'users.edit_role' &&
-    p !== 'users.suspend' &&
-    p !== 'users.remove' &&
-    p !== 'users.send_reset_email' &&
-    p !== 'workforce.remove' &&
-    p !== 'fleet_tag.set' &&
-    p !== 'data.backfill' &&
-    p !== 'fuel.split_cash_override'
-);
-
-const FLEET_ACCOUNTANT_PERMISSIONS: Permission[] = [
-  'nav.dashboard', 'nav.fuel_logs', 'nav.fuel_reports',
-  'nav.fuel_reconciliation', 'nav.financial_analytics',
-  'nav.transaction_list', 'nav.reports',
-  'drivers.view', 'vehicles.view',
-  'fuel.view', 'fuel.export',
-  'fuel.finalize', 'fuel.reopen', 'fuel.accept_unexplained', 'fuel.second_approve',
-  'toll.view',
-  'transactions.view', 'transactions.export',
-  'reports.view', 'reports.export',
-  'data.export',
-  'expenses.view', 'expenses.export',
-  'recon.view', 'recon.prepare', 'recon.approve',
-];
-
-const FLEET_VIEWER_PERMISSIONS: Permission[] = [
-  'nav.dashboard',
-  'reports.view',
-  'recon.view',
-];
-
-const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
-  platform_owner:   [...ALL_CUSTOMER_PERMISSIONS, 'vehicles.bypass_catalog_gate', 'recon.external_sources'],
-  platform_support: ['recon.external_sources'],
-  platform_analyst: [],
-  fleet_owner:      ALL_CUSTOMER_PERMISSIONS,
-  fleet_manager:    FLEET_MANAGER_PERMISSIONS,
-  fleet_accountant: FLEET_ACCOUNTANT_PERMISSIONS,
-  fleet_viewer:     FLEET_VIEWER_PERMISSIONS,
-  driver:           [],
-  unassigned:       [],
-};
-
-// ---------------------------------------------------------------------------
-// 5. Helper functions
+// 4. Permission checks — catalog lives in @roam/auth-client
 // ---------------------------------------------------------------------------
 
 export function hasPermission(role: Role, permission: Permission): boolean {
-  const perms = ROLE_PERMISSIONS[role];
-  if (!perms) return false;
-  return perms.includes(permission);
+  return catalogHasPermission(role, permission);
 }
 
 export function getRoleLevel(role: Role): number {
@@ -460,7 +370,7 @@ async function loadAccessFacts(userId: string): Promise<{
       .order("granted_at", { ascending: true })
       .order("id", { ascending: true }),
     db.from("organizations").select("id, product_line").eq("owner_id", userId),
-    db.schema("fleet").from("workforce_memberships")
+    db.from("fleet_workforce_memberships")
       .select("organization_id, service_line, status")
       .eq("user_id", userId)
       .neq("status", "ended"),

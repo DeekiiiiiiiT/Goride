@@ -3066,14 +3066,6 @@ export const api = {
     if (!response.ok) throw await tollApiErrorFromResponse(response, 'Failed to delete toll plaza');
   },
 
-  async getUsers() {
-    const response = await fetchWithRetry(`${API_ENDPOINTS.admin}/users`, {
-        headers: await getHeaders(null)
-    });
-    if (!response.ok) throw new Error("Failed to fetch users");
-    return response.json();
-  },
-
   async updateUserPassword(userId: string, password: string) {
     const response = await fetchWithRetry(`${API_ENDPOINTS.admin}/update-password`, {
         method: 'POST',

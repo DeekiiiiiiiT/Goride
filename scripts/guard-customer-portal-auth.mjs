@@ -35,5 +35,12 @@ if (!updateSlice.includes("hasPlatformOwnerAccess")) {
   console.error("update-user must require hasPlatformOwnerAccess before a role write");
   failed = true;
 }
+
+const rbac = readFileSync(join(root, "rbac_middleware.ts"), "utf8");
+if (rbac.includes('schema("fleet")')) {
+  console.error('rbac_middleware.ts must read fleet_workforce_memberships, not schema("fleet")');
+  failed = true;
+}
+
 if (failed) process.exit(1);
 console.log("customer portal auth guard ok");

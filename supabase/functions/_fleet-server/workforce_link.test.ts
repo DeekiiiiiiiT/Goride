@@ -94,8 +94,8 @@ function makeDeps(overrides: Partial<{
   };
 
   return {
-    supabase: supabase as WorkforceLinkDeps["supabase"],
-    kv: kv as WorkforceLinkDeps["kv"],
+    supabase: supabase as unknown as WorkforceLinkDeps["supabase"],
+    kv: kv as unknown as WorkforceLinkDeps["kv"],
     upsertDriverProfile: async (opts) => {
       profileWrites.push(opts);
     },
@@ -271,8 +271,8 @@ function makeCourierDeps(overrides: Partial<{
   };
 
   return {
-    supabase: supabase as WorkforceCourierLinkDeps["supabase"],
-    kv: kv as WorkforceCourierLinkDeps["kv"],
+    supabase: supabase as unknown as WorkforceCourierLinkDeps["supabase"],
+    kv: kv as unknown as WorkforceCourierLinkDeps["kv"],
     invalidateDriverCache: () => {},
     kvWrites,
     courierUpdates,
@@ -414,7 +414,7 @@ Deno.test("healOrgCourierRoster strips rideshare from courier-only dual lines", 
       return { eq: () => ({ error: null }) };
     },
   };
-  (deps.supabase as { schema: (n: string) => unknown }).schema = (name: string) => {
+  (deps.supabase as unknown as { schema: (n: string) => unknown }).schema = (name: string) => {
     if (name !== "delivery") throw new Error("unexpected schema");
     return {
       from: (table: string) => {

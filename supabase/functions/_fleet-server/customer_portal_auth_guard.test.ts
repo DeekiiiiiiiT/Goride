@@ -32,3 +32,10 @@ Deno.test("customer portal team routes do not delete users or set passwords", as
     throw new Error("update-user does not require platform owner for role writes");
   }
 });
+
+Deno.test("access lookup does not read the fleet schema", async () => {
+  const text = await Deno.readTextFile(new URL("./rbac_middleware.ts", import.meta.url));
+  if (text.includes('schema("fleet")')) {
+    throw new Error('rbac_middleware.ts must read fleet_workforce_memberships, not schema("fleet")');
+  }
+});

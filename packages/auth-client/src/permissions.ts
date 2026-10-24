@@ -286,6 +286,7 @@ export type Permission =
   | 'drivers.edit'
   | 'drivers.delete'
   | 'drivers.view'
+  | 'drivers.location.view'
   // Vehicles
   | 'vehicles.create'
   | 'vehicles.edit'
@@ -341,6 +342,14 @@ export type Permission =
   | 'data.import'
   | 'data.export'
   | 'data.backfill'
+  // Expense Hub — must stay in this catalog. The server imports this file.
+  | 'expenses.view'
+  | 'expenses.export'
+  | 'expenses.create'
+  | 'expenses.approve'
+  | 'expenses.pay'
+  | 'expenses.manage_rules'
+  | 'expenses.manage_vendors'
   // Week Reconciliation wizard
   | 'recon.view'
   | 'recon.prepare'
@@ -395,6 +404,7 @@ const ALL_CUSTOMER_PERMISSIONS: Permission[] = [
   'courier.view_cash_balance',
   // Actions
   'drivers.create', 'drivers.edit', 'drivers.delete', 'drivers.view',
+  'drivers.location.view',
   'vehicles.create', 'vehicles.edit', 'vehicles.delete', 'vehicles.view',
   // NOTE: 'vehicles.bypass_catalog_gate' is intentionally NOT granted to fleet
   // roles — only platform_owner gets it (added explicitly below).
@@ -408,8 +418,21 @@ const ALL_CUSTOMER_PERMISSIONS: Permission[] = [
   'users.view', 'users.invite', 'users.edit_role', 'users.suspend', 'users.remove', 'users.send_reset_email',
   'workforce.approve', 'workforce.pause', 'workforce.remove', 'fleet_tag.set',
   'data.import', 'data.export', 'data.backfill',
+  'expenses.view', 'expenses.export', 'expenses.create', 'expenses.approve',
+  'expenses.pay', 'expenses.manage_rules', 'expenses.manage_vendors',
   'recon.view', 'recon.prepare', 'recon.approve',
 ];
+
+/** Expense Hub permissions. Owner and manager get all; accountant gets view + export. */
+export const EXPENSE_HUB_PERMISSIONS = [
+  'expenses.view',
+  'expenses.export',
+  'expenses.create',
+  'expenses.approve',
+  'expenses.pay',
+  'expenses.manage_rules',
+  'expenses.manage_vendors',
+] as const satisfies readonly Permission[];
 
 const FLEET_MANAGER_PERMISSIONS: Permission[] = ALL_CUSTOMER_PERMISSIONS.filter(
   (p) =>
@@ -452,6 +475,8 @@ const FLEET_ACCOUNTANT_PERMISSIONS: Permission[] = [
   'reports.view',
   'reports.export',
   'data.export',
+  'expenses.view',
+  'expenses.export',
   'recon.view',
   'recon.prepare',
   'recon.approve',
@@ -493,6 +518,11 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
   courier_admin: [],
   courier_ops: [],
   dash_concierge: [],
+  // Roam product admins, not fleet seats. Empty so the server catalog type-checks.
+  fleet_admin: [],
+  fleet_ops: [],
+  enterprise_admin: [],
+  enterprise_ops: [],
 
   // Customer
   fleet_owner: ALL_CUSTOMER_PERMISSIONS,
@@ -633,6 +663,7 @@ export const PAGE_PERMISSION_MAP: Record<string, Permission> = {
   'reports':            'nav.reports',
   'transactions':       'nav.financial_analytics',
   'business-finance':   'nav.financial_analytics',
+  'expense-hub':        'expenses.view',
   'transaction-list':   'nav.transaction_list',
   'couriers':           'nav.couriers',
   'courier-analytics':  'nav.courier_analytics',

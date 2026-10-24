@@ -29,6 +29,9 @@ jobs:
       - name: Check no edge→fleet imports
         run: node scripts/check-no-edge-fleet-imports.mjs
 
+      - name: Check Dominion is the only Jamaica map
+        run: node scripts/check-no-hardcoded-jamaica.mjs
+
       - name: Check no admin→fleet imports
         run: node scripts/check-no-admin-fleet-imports.mjs
 
@@ -132,6 +135,9 @@ jobs:
 
       - name: Check fleet edge duplicates
         run: node scripts/check-fleet-edge-duplicates.mjs
+
+      - name: Check customer portal auth guard
+        run: node scripts/guard-customer-portal-auth.mjs
 
       - name: Setup Deno
         uses: denoland/setup-deno@v2

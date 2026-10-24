@@ -19,6 +19,7 @@ on:
       - "packages/finance-core/**"
       - "packages/types/**"
       - "packages/toll-core/**"
+      - "packages/auth-client/**"
   workflow_dispatch:
     inputs:
       deploy_all:
@@ -169,8 +170,8 @@ jobs:
                 FNS+=("$fn")
               fi
             done
-            # Fleet monolith tree feeds these entrypoints
-            if echo "$CHANGED_FILES" | grep -q '^supabase/functions/_fleet-server/'; then
+            # Fleet monolith tree, and the shared permission catalog it bundles, feed these entrypoints
+            if echo "$CHANGED_FILES" | grep -qE '^supabase/functions/_fleet-server/|^packages/auth-client/'; then
               for dep in fleet-core fleet-fuel fleet-toll fleet-ops fleet-claims fleet-pay evidence-cleanup; do
                 already=false
                 for f in "${FNS[@]+"${FNS[@]}"}"; do

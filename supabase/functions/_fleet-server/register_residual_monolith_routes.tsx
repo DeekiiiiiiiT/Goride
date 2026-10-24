@@ -7722,59 +7722,10 @@ export function registerResidualMonolithRoutes(app: Hono) {
     c.json({ error: "moved", message: "Claims live on fleet-claims" }, 410),
   );
 
-  // Admin: List Users (org-scoped) — still on core
-  app.get("/make-server-37f42386/users", requireAuth(), requirePermission('users.edit_role'), async (c) => {
-    try {
-      const rbacUser = c.get('rbacUser') as any;
-      const { data: { users }, error } = await supabase.auth.admin.listUsers();
-      
-      if (error) throw error;
-      
-      const orgId = getOrgId(c);
-
-      const orgUsers = (users || []).filter((u: any) => {
-        const uOrgId = typeof u.app_metadata?.organizationId === 'string' ? u.app_metadata.organizationId : '';
-        const uRole = typeof u.app_metadata?.role === 'string' ? u.app_metadata.role : '';
-        
-        // Always hide platform-level users from anyone who isn't a platform role themselves
-        const platformRoles = ['superadmin', 'platform_owner', 'platform_support', 'platform_analyst'];
-        const isPlatformUser = platformRoles.includes(uRole);
-        const isRequestersPlatform = rbacUser?.resolvedRole && platformRoles.includes(rbacUser.resolvedRole);
-
-        // If requester is NOT a platform user, they can NEVER see platform users
-        if (isPlatformUser && !isRequestersPlatform) return false;
-
-        // If we have an orgId (legit customer session), only show users in that org
-        if (orgId) {
-          return uOrgId === orgId || u.id === orgId;
-        }
-
-        // If no orgId (anon passthrough), they should see NOTHING
-        if (rbacUser?.userId === '_anon_passthrough') return false;
-
-        // Platform users with no orgId (seeing everyone)
-        if (isRequestersPlatform) return true;
-
-        return false;
-      });
-      
-      // Transform to TeamMember format
-      const members = orgUsers.map((u: any) => ({
-          id: u.id,
-          name: u.user_metadata?.name || 'Unknown',
-          email: u.email || '',
-          role: u.app_metadata?.role || 'unassigned',
-          status: 'active', 
-          lastActive: u.last_sign_in_at ? new Date(u.last_sign_in_at).toLocaleDateString() : 'Never',
-          avatarUrl: u.user_metadata?.avatarUrl
-      }));
-      
-      return c.json(members);
-    } catch (e: any) {
-      console.error("List Users Error:", e);
-      return c.json({ error: e.message }, 500);
-    }
-  });
+  // Team directory lives on /team/staff. This list only ever returned the first auth page.
+  app.get("/make-server-37f42386/users", requireAuth(), (c) =>
+    c.json({ error: "moved", message: "Team lives on /team/staff", useEndpoint: "/team/staff" }, 410),
+  );
 
   // Public: Signup (Fleet Manager or Driver registration from LoginPage)
   // Phase 8: Proper organizationId assignment & error handling
