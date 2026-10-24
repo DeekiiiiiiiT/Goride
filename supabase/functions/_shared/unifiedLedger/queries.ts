@@ -1,5 +1,5 @@
 import { unifiedLedgerClient } from "./postEntry.ts";
-import { signedLedgerAmount } from "../../../packages/finance-core/src/platformFeeRecognition.ts";
+import { signedLedgerAmount } from "../../../../packages/finance-core/src/platformFeeRecognition.ts";
 
 export type IslandReconciliation = {
   source_system: string;
