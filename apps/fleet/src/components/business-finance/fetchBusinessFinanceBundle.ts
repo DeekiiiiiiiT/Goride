@@ -12,7 +12,12 @@ import type { DriverFinancialPeriodClient } from '../../hooks/useDriverFinancial
 import { buildPnLFromCanonicalEvents, sumExpenseRowsFromEvents } from './businessFinancePnL';
 import { buildExpensesSnapshot, fetchAllCanonicalEvents } from './expensesSnapshot';
 import { inPeriod } from './periodRange';
-import { computeIndriveWalletLoadsFromLedgerEntries } from '../../utils/indriveWalletMetrics';
+import {
+  agreementChecks,
+  cashHeldExcludingReceivable,
+  companyFuelCost,
+  profitAfterCompanyFuel,
+} from '@roam/finance-core';
 import type {
   BusinessFinanceBundle,
   BusinessFinancePeriod,
@@ -133,6 +138,7 @@ export async function fetchBusinessFinanceBundle(
 
   let cashCollected = 0;
   let cashStillHeld = 0;
+  let owedByDrivers = 0;
   let cashWrittenOff = 0;
   let fuelGasCardFromPeriods = 0;
   let fuelDriverFromPeriods = 0;
@@ -145,12 +151,14 @@ export async function fetchBusinessFinanceBundle(
     const inRange = pack.periods.filter((p) => inPeriod(String(p.periodAnchor || '').slice(0, 10), period));
     for (const p of inRange) {
       cashCollected += Number(p.cashCollected) || 0;
-      cashStillHeld += Number(p.cashStillHeld) || 0;
+      const receivable = fuelCreditAmount(p);
+      const held = cashHeldExcludingReceivable(Number(p.cashStillHeld) || 0, receivable);
+      cashStillHeld += held;
+      owedByDrivers += receivable;
       cashWrittenOff += Number(p.cashWrittenOff) || 0;
       fuelGasCardFromPeriods += Number(p.fuelGasCardSpend) || 0;
       fuelDriverFromPeriods += Number(p.fuelDriverSpend) || 0;
       driverCommissionFromPeriods += Number(p.driverShare) || 0;
-      const held = Number(p.cashStillHeld) || 0;
       const companyOwes = Math.max(0, Number(p.settlementAmount) || 0);
       if (held > 0.005) debtors.push({ driverId: pack.driverId, name: pack.name, amount: round2(held) });
       const weekBank = bankRows.find((r) => r.weekStartYmd === String(p.periodAnchor).slice(0, 10));
@@ -158,6 +166,7 @@ export async function fetchBusinessFinanceBundle(
         driverId: pack.driverId,
         name: pack.name,
         cashStillHeld: round2(held),
+        owedByDriver: receivable > 0.01 ? round2(receivable) : undefined,
         companyOwes: round2(companyOwes),
         bankSettled: weekBank
           ? weekBank.status === 'confirmed'
@@ -215,14 +224,8 @@ export async function fetchBusinessFinanceBundle(
   const otherIncome = Number(pnl.lines.find((l) => l.id === 'other_income')?.amount) || 0;
   const ledgerFailed = incomplete.some((s) => /canonical ledger/i.test(s));
 
-  // Wallet loads: sum canonical wallet_credit already in ledgerEvents (funding transfer, not P&L).
-  const { periodLoads: walletLoads } = computeIndriveWalletLoadsFromLedgerEntries(
-    ledgerEvents,
-    period.startYmd,
-    period.endYmd,
-  );
   const maintenance = expenseAgg.maintenance;
-  const fixedOverhead = expenseAgg.fixed;
+  let fixedOverhead = expenseAgg.fixed;
   const operatingExpenses = expenseAgg.operating;
   let businessPaymentOutflows = 0;
   let businessBankOrCardOutflows = 0;
@@ -263,14 +266,114 @@ export async function fetchBusinessFinanceBundle(
   }
 
   let walletShortDriverCount = 0;
+  let walletLoads = 0;
   try {
     const walletFleet = await api.getIndriveWalletFleet({
       startDate: period.startYmd,
       endDate: period.endYmd,
     });
     walletShortDriverCount = Number(walletFleet?.totals?.shortDriverCount) || 0;
+    walletLoads = Number(walletFleet?.totals?.periodLoads) || 0;
   } catch {
     incomplete.push('InDrive wallet');
+  }
+
+  let weekRead: Awaited<ReturnType<typeof fetchWeekRead>> | null = null;
+  try {
+    weekRead = await fetchWeekRead(period.startYmd, period.endYmd);
+  } catch {
+    incomplete.push('Week statements');
+  }
+
+  let ledgerEarnings: number | null = null;
+  try {
+    const summary = await api.getLedgerFleetSummary({
+      startDate: period.startYmd,
+      endDate: period.endYmd,
+    });
+    ledgerEarnings = Number(summary?.data?.totalEarnings);
+    if (!Number.isFinite(ledgerEarnings)) ledgerEarnings = null;
+  } catch {
+    incomplete.push('Ledgers');
+  }
+
+  const fuelInProfit = round2(Math.abs(pnl.lines.find((l) => l.id === 'fuel')?.amount || 0));
+  const companyFuel = weekRead
+    ? companyFuelCost({
+        sealed: weekRead.companyFuelSealed,
+        sealedCompanyShare: weekRead.sealedCompanyShare,
+        engineCompanyShare: weekRead.engineCompanyShare > 0.005
+          ? weekRead.engineCompanyShare
+          : round2(pnl.fuelBreakdown?.fleetLoss ?? fuel),
+      })
+    : round2(pnl.fuelBreakdown?.fleetLoss ?? fuel);
+  let fixedReplacement: number | null = null;
+  if (weekRead && weekRead.coverageRecognised > 0.005 && weekRead.coveredSourceIds.length) {
+    const covered = new Set(weekRead.coveredSourceIds);
+    let lump = 0;
+    for (const event of ledgerEvents) {
+      if (String(event.eventType || '') !== 'fixed_expense') continue;
+      const date = String(event.date || event.postingAt || '').slice(0, 10);
+      if (!inPeriod(date, period)) continue;
+      if (!covered.has(String(event.sourceId || ''))) continue;
+      lump += Math.abs(Number(event.netAmount) || Number(event.grossAmount) || 0);
+    }
+    fixedReplacement = round2(fixedOverhead - lump + weekRead.coverageRecognised);
+    fixedOverhead = fixedReplacement;
+  }
+  const movementPays = weekRead ? weekRead.movementPays : driverPayouts;
+  const collected = weekRead && weekRead.movementCollects > 0.005
+    ? weekRead.movementCollects
+    : round2(cashCollected);
+  const fuelLine = pnl.lines.find((line) => line.id === 'fuel');
+  if (fuelLine) fuelLine.amount = -companyFuel;
+  const fixedLine = pnl.lines.find((line) => line.id === 'fixed_overhead');
+  if (fixedLine && fixedReplacement != null) fixedLine.amount = -fixedOverhead;
+  const payoutLine = pnl.lines.find((line) => line.id === 'driver_payouts');
+  if (payoutLine) payoutLine.amount = -movementPays;
+  const cashBasis = opts.basis === 'cash';
+  const operatingProfit = ledgerFailed
+    ? 0
+    : profitAfterCompanyFuel({
+        operatingProfit: profitLine,
+        fuelInProfit,
+        companyFuel,
+        fixedInProfit: expenseAgg.fixed,
+        fixedReplacement,
+        cashBasis,
+        payoutsInProfit: cashBasis ? driverPayouts : 0,
+        movementPays,
+      });
+  const profitLineRow = pnl.lines.find((line) => line.id === 'operating_profit');
+  if (profitLineRow && !ledgerFailed) profitLineRow.amount = operatingProfit;
+  const statedBank = round2(
+    confirms
+      .filter((row) => inPeriod(String(row.weekStartYmd || '').slice(0, 10), period))
+      .reduce((sum, row) => sum + (Number(row.expectedAmount) || 0), 0),
+  );
+  const pumpSpend = round2(pnl.fuelBreakdown?.grossSpend || fuel);
+  const weekClosed = weekRead?.weekStatus === 'Closed';
+  const agreement = agreementChecks({
+    ledgerGross: round2(grossLine),
+    sealedEarningsGross: weekClosed || weekRead?.earningsHeld
+      ? (weekRead?.sealedEarningsGross ?? round2(grossLine))
+      : round2(grossLine),
+    earningsHeld: weekRead?.earningsHeld ?? false,
+    ledgerFuel: pumpSpend,
+    sealedFuelSpend: weekRead?.companyFuelSealed ? weekRead.sealedFuelSpend : pumpSpend,
+    ledgerTolls: tolls,
+    sealedTollNet: weekClosed ? (weekRead?.sealedTollNet ?? tolls) : tolls,
+    payouts: movementPays,
+    movementPays,
+    bankExpected,
+    bankDeposits: statedBank > 0.005 ? statedBank : bankExpected,
+    statementSummary: round2(grossLine),
+    ledgerStatement: ledgerEarnings ?? round2(grossLine),
+  });
+  if (!weekRead) {
+    for (const row of agreement) {
+      if (row.id === 'revenue' || row.id === 'fuel' || row.id === 'tolls') row.ok = false;
+    }
   }
 
   const overview: BusinessFinanceOverview = {
@@ -278,8 +381,9 @@ export async function fetchBusinessFinanceBundle(
       grossEarnings: round2(grossLine),
       bankExpected,
       bankReceived,
-      cashCollected: round2(cashCollected),
+      cashCollected: collected,
       cashStillHeld: round2(cashStillHeld),
+      owedByDrivers: round2(owedByDrivers),
     },
     moneyOut: {
       fuel,
@@ -287,20 +391,28 @@ export async function fetchBusinessFinanceBundle(
       maintenance,
       fixedOverhead,
       operatingExpenses,
-      driverPayouts,
+      driverPayouts: movementPays,
       cashWrittenOff: round2(cashWrittenOff),
       platformFees: round2(platformFees),
       driverCommission: round2(driverCommission),
       otherIncome: round2(otherIncome),
       fuelSpend: round2(pnl.fuelBreakdown?.grossSpend || fuel),
-      fleetFuelCost: round2(pnl.fuelBreakdown?.fleetLoss ?? fuel),
+      fleetFuelCost: companyFuel,
     },
     transfers: {
       bankToIndriveWallet: round2(walletLoads),
+      tagTopUps: weekRead?.tagTopUps || 0,
     },
+    courier: weekRead
+      ? { moneyIn: round2(weekRead.courierIn), moneyOut: round2(weekRead.courierOut) }
+      : undefined,
+    agreement,
+    weekStatus: ledgerFailed ? 'Unavailable' : (weekRead?.weekStatus ?? 'Open'),
     profit: {
-      operatingProfit: ledgerFailed ? 0 : round2(profitLine),
-      operatingRatio: ledgerFailed ? null : pnl.operatingRatio,
+      operatingProfit,
+      operatingRatio: ledgerFailed || grossLine <= 0.005
+        ? null
+        : round2(((grossLine - operatingProfit) / grossLine) * 100),
       withheld: ledgerFailed,
     },
     basis: opts.basis === 'cash' ? 'cash' : 'accrual',
@@ -370,6 +482,43 @@ export async function fetchBusinessFinanceBundle(
       truncateCap: truncated ? 80 : undefined,
     },
   };
+}
+
+type WeekRead = {
+  weekStatus: 'Closed' | 'Open';
+  earningsHeld: boolean;
+  companyFuelSealed: boolean;
+  sealedCompanyShare: number;
+  engineCompanyShare: number;
+  sealedFuelSpend: number;
+  sealedEarningsGross: number;
+  sealedTollNet: number;
+  movementPays: number;
+  movementCollects: number;
+  tagTopUps: number;
+  courierIn: number;
+  courierOut: number;
+  coverageRecognised: number;
+  coveredSourceIds: string[];
+};
+
+async function fetchWeekRead(startYmd: string, endYmd: string): Promise<WeekRead> {
+  const { API_ENDPOINTS } = await import('../../services/apiConfig');
+  const { requireAuthHeaders } = await import('../../utils/authHeaders');
+  const response = await fetch(
+    `${API_ENDPOINTS.fleetOps}/business-finance/week-read?startYmd=${startYmd}&endYmd=${endYmd}`,
+    { headers: await requireAuthHeaders(null) },
+  );
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(payload.error || 'Week read failed');
+  return payload.data as WeekRead;
+}
+
+function fuelCreditAmount(period: DriverFinancialPeriodClient): number {
+  const fc = (period.metadata as { financeCore?: { fuelCreditReceivable?: { amount?: number } } } | undefined)
+    ?.financeCore?.fuelCreditReceivable;
+  const amount = Number(fc?.amount) || 0;
+  return amount > 0.01 ? amount : 0;
 }
 
 function fuelCreditNote(period: DriverFinancialPeriodClient): string | undefined {

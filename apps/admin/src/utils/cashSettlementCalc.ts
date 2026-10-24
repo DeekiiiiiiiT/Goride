@@ -7,7 +7,7 @@
 // Pure function — no React, no side effects, no UI.
 // ════════════════════════════════════════════════════════════════════════════
 
-import { STATUS_SETTLED_EPS } from '@roam/finance-core';
+import { STATUS_SETTLED_EPS, settlementFuelCreditMajor } from '@roam/finance-core';
 import { Trip, FinancialTransaction, DriverMetrics } from '../types/data';
 import { isDriverTollChargeRow, netDriverTollCharges } from './netDriverTollCharges';
 import {
@@ -213,16 +213,14 @@ export function computeWeeklyCashSettlement(input: CashSettlementInput): CashWee
                 return isWithinInterval(tDate, { start: weekStart, end: weekEnd });
             })
             .reduce((sum, t) => {
-                // For Fuel Settlement Credit, use amount directly (it's already companyShare)
-                if (t.category === 'Fuel Settlement Credit') {
-                    return sum + (t.amount || 0);
-                }
-                // For legacy Fuel Settlement, prefer metadata.companyShare if available
-                if (t.category === 'Fuel Settlement' && t.metadata?.companyShare) {
-                    return sum + (t.metadata.companyShare || 0);
-                }
-                // Fallback: use transaction amount (may be netAdjustment for old Fuel Settlement)
-                return sum + (t.amount || 0);
+                const companyShare = t.category === 'Fuel Settlement Credit'
+                    ? Number(t.metadata?.companyShare ?? t.amount) || 0
+                    : Number(t.metadata?.companyShare) || 0;
+                return sum + settlementFuelCreditMajor({
+                    amount: t.amount,
+                    companyShare,
+                    driverPaidFuel: Number(t.metadata?.driverPaidFuel) || undefined,
+                });
             }, 0);
 
         const allocatedPaid = allocatedPayments.reduce((sum, t) => sum + (t.amount || 0), 0) + weeklyExpenses + weeklyFuelCredits;

@@ -45,12 +45,8 @@ export async function noteFleetPrice(entry: {
 }
 
 async function latestRetailEstimate(sb: SupabaseClient): Promise<number | null> {
-  const { data } = await sb.schema("fuel").from("petrojam_prices").select("gasolene_87, price_date").order("price_date", { ascending: false }).limit(1);
-  const row = data?.[0] as { gasolene_87?: number } | undefined;
-  const wholesale = Number(row?.gasolene_87);
-  if (!(wholesale > 0)) return null;
-  const { data: markup } = await sb.schema("fuel").from("retail_price_markup").select("gasolene_87_markup").eq("is_published", true).order("effective_from", { ascending: false }).limit(1);
-  const mark = Number((markup?.[0] as { gasolene_87_markup?: number } | undefined)?.gasolene_87_markup);
-  if (!(mark >= 0)) return null;
-  return wholesale + mark;
+  const { data, error } = await sb.schema("places").rpc("latest_retail_estimate", { p_grade: "e10_87" });
+  if (error) return null;
+  const value = Number(data);
+  return value > 0 ? value : null;
 }

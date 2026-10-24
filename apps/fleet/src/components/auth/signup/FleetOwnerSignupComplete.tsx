@@ -28,7 +28,7 @@ export function FleetOwnerSignupComplete({
   fromRoamdriver?: boolean;
   initialLine?: ServiceLine;
 }) {
-  const { user, refreshSession } = useAuth();
+  const { user, refreshSession, signOut } = useAuth();
   const [step, setStep] = useState<WizardStep>('company');
   const [companyName, setCompanyName] = useState('');
   const [tradingName, setTradingName] = useState('');
@@ -149,6 +149,21 @@ export function FleetOwnerSignupComplete({
           {fromRoamdriver
             ? 'Finish setting up your Roam Fleet portal. You can keep using Roam Driver with the same account.'
             : 'Set up your fleet — choose which service lines you operate.'}
+        </p>
+        <p className="mt-3 text-center text-sm text-slate-500 dark:text-slate-400">
+          Already have a fleet?{' '}
+          <button
+            type="button"
+            className="font-semibold text-indigo-600 hover:text-indigo-500 dark:text-indigo-400"
+            onClick={() => {
+              void signOut().then(() => {
+                window.history.replaceState({}, '', '/');
+                window.location.href = '/';
+              });
+            }}
+          >
+            Sign in
+          </button>
         </p>
 
         <div className="mt-6 flex justify-center gap-2">

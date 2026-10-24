@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildCanonicalImportEvents, pickPrimaryUberDriverId } from './buildCanonicalImportEvents';
+import { buildCanonicalImportEvents, earningWeekForOrgStatement, pickPrimaryUberDriverId } from './buildCanonicalImportEvents';
 import type { Trip, OrganizationMetrics, DisputeRefund } from '../types/data';
 import type { UberSsotTotals } from './uberSsot';
 
@@ -260,5 +260,37 @@ describe('buildCanonicalImportEvents', () => {
     expect(cash).toHaveLength(2);
     expect(cash.map((e) => e.date).sort()).toEqual(['2026-08-09', '2026-08-10']);
     expect(cash.reduce((s, e) => s + Number(e.netAmount), 0)).toBe(100);
+  });
+
+  it('puts an organization file that ends on the next Monday onto the trip week', () => {
+    expect(earningWeekForOrgStatement('2026-08-10', '2026-08-10', '2026-08-04')).toEqual({
+      periodStart: '2026-08-03',
+      periodEnd: '2026-08-09',
+    });
+    const batchId = 'batch-44444444-4444-4444-4444-444444444444';
+    const driverId = 'dddddddd-dddd-dddd-dddd-dddddddddddd';
+    const events = buildCanonicalImportEvents({
+      batchId,
+      trips: [baseTrip({ driverId, date: '2026-08-04' })],
+      organizationMetrics: {
+        periodStart: '2026-08-10',
+        periodEnd: '2026-08-16',
+        totalEarnings: 64155.16,
+        netFare: 63479.4,
+        balanceStart: 0,
+        balanceEnd: 0,
+        periodChange: 0,
+        fleetProfitMargin: 0,
+        cashPosition: 0,
+        bankTransfer: 37838.9,
+        refundsToll: 3660,
+      },
+      uberStatementsByDriverId: {},
+      disputeRefunds: [],
+    });
+    const orgBank = events.find((e) => e.eventType === 'payout_bank' && e.metadata?.recipient === 'org');
+    expect(orgBank?.periodStart).toBe('2026-08-03');
+    expect(orgBank?.periodEnd).toBe('2026-08-09');
+    expect(orgBank?.metadata?.weekKey).toBe('2026-08-03');
   });
 });

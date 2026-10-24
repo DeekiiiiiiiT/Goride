@@ -1550,7 +1550,7 @@ export function CloseWeekPage({
               pnlBlocker
                 ? MONEY(pnlBlocker.delta)
                 : pnlUnavailable
-                  ? 'P&L not available'
+                  ? 'Driver-lane contribution is not available'
                   : preview
                     ? MONEY(0)
                     : '—'

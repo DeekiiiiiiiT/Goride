@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+
+<html class="h-full" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" name="viewport"/>
+<title>Roam Plug - Inbox</title>
+<!-- Material Symbols Outlined -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Google Fonts: Inter -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind CSS with form plugins -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          "colors": {
+            "on-background": "#1e1b17",
+            "tertiary-container": "#936f00",
+            "on-error": "#ffffff",
+            "primary-container": "#cc4900",
+            "surface-container-highest": "#e8e1db",
+            "inverse-surface": "#33302c",
+            "on-secondary-fixed": "#341100",
+            "background": "#fff8f2",
+            "surface-container": "#f4ede6",
+            "secondary": "#9d4300",
+            "on-secondary": "#ffffff",
+            "on-primary": "#ffffff",
+            "on-error-container": "#93000a",
+            "on-tertiary-container": "#fffbff",
+            "error": "#ba1a1a",
+            "on-primary-fixed-variant": "#7f2b00",
+            "surface-container-high": "#eee7e0",
+            "primary-fixed-dim": "#ffb599",
+            "tertiary-fixed": "#ffdf9a",
+            "on-tertiary-fixed-variant": "#5a4300",
+            "on-surface-variant": "#5a4138",
+            "on-tertiary": "#ffffff",
+            "primary": "#a33900",
+            "surface-bright": "#fff8f2",
+            "tertiary": "#755800",
+            "outline": "#8e7166",
+            "on-surface": "#1e1b17",
+            "on-primary-container": "#fffbff",
+            "on-tertiary-fixed": "#251a00",
+            "on-secondary-container": "#5c2400",
+            "inverse-on-surface": "#f7efe9",
+            "surface-variant": "#e8e1db",
+            "secondary-fixed": "#ffdbca",
+            "secondary-fixed-dim": "#ffb690",
+            "tertiary-fixed-dim": "#f7be1d",
+            "primary-fixed": "#ffdbce",
+            "outline-variant": "#e2bfb2",
+            "surface-container-low": "#faf2eb",
+            "surface-dim": "#e0d9d2",
+            "secondary-container": "#fd761a",
+            "error-container": "#ffdad6",
+            "surface-tint": "#a73a00",
+            "surface-container-lowest": "#ffffff",
+            "on-secondary-fixed-variant": "#783200",
+            "inverse-primary": "#ffb599",
+            "surface": "#fff8f2",
+            "on-primary-fixed": "#370e00"
+          },
+          "borderRadius": {
+            "DEFAULT": "0.25rem",
+            "lg": "0.5rem",
+            "xl": "0.75rem",
+            "full": "9999px"
+          },
+          "spacing": {
+            "gutter": "1rem",
+            "margin": "1rem",
+            "space-lg": "1.5rem",
+            "space-xs": "0.25rem",
+            "space-md": "1rem",
+            "gutter-sm": "0.75rem",
+            "margin-lg": "1.5rem",
+            "space-xl": "2rem",
+            "space-sm": "0.5rem"
+          },
+          "fontFamily": {
+            "label-sm": ["Inter"],
+            "price-display": ["Inter"],
+            "body-lg": ["Inter"],
+            "display-lg-mobile": ["Inter"],
+            "headline-lg": ["Inter"],
+            "headline-sm": ["Inter"],
+            "headline-md": ["Inter"],
+            "label-lg": ["Inter"],
+            "display-lg": ["Inter"],
+            "label-md": ["Inter"],
+            "body-sm": ["Inter"],
+            "body-md": ["Inter"]
+          },
+          "fontSize": {
+            "label-sm": ["10px", { "lineHeight": "12px", "letterSpacing": "0.04em", "fontWeight": "700" }],
+            "price-display": ["24px", { "lineHeight": "28px", "letterSpacing": "-0.01em", "fontWeight": "700" }],
+            "body-lg": ["16px", { "lineHeight": "24px", "fontWeight": "400" }],
+            "display-lg-mobile": ["32px", { "lineHeight": "40px", "letterSpacing": "-0.02em", "fontWeight": "800" }],
+            "headline-lg": ["28px", { "lineHeight": "36px", "letterSpacing": "-0.01em", "fontWeight": "700" }],
+            "headline-sm": ["18px", { "lineHeight": "24px", "fontWeight": "600" }],
+            "headline-md": ["22px", { "lineHeight": "28px", "letterSpacing": "-0.01em", "fontWeight": "700" }],
+            "label-lg": ["14px", { "lineHeight": "20px", "letterSpacing": "0.01em", "fontWeight": "600" }],
+            "display-lg": ["40px", { "lineHeight": "48px", "letterSpacing": "-0.02em", "fontWeight": "800" }],
+            "label-md": ["12px", { "lineHeight": "16px", "letterSpacing": "0.02em", "fontWeight": "600" }],
+            "body-sm": ["12px", { "lineHeight": "16px", "fontWeight": "400" }],
+            "body-md": ["14px", { "lineHeight": "20px", "fontWeight": "400" }]
+          }
+        }
+      }
+    }
+  </script>
+<style>
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 500, 'GRAD' 0, 'opsz' 24;
+      display: inline-block;
+      vertical-align: middle;
+      line-height: 1;
+    }
+    .material-symbols-outlined.fill {
+      font-variation-settings: 'FILL' 1, 'wght' 600, 'GRAD' 0, 'opsz' 24;
+    }
+    body {
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+    }
+    .pb-safe {
+      padding-bottom: env(safe-area-inset-bottom, 16px);
+    }
+    .pt-safe {
+      padding-top: env(safe-area-inset-top, 0px);
+    }
+  </style>
+</head>
+<body class="bg-background text-on-surface font-body-md antialiased min-h-screen flex justify-center selection:bg-secondary-fixed selection:text-on-secondary-fixed">
+<!-- Mobile Frame Container (Max 390px, standard modern portrait co-pilot frame) -->
+<div class="w-full max-w-[390px] min-h-screen bg-background flex flex-col relative shadow-2xl overflow-hidden">
+<!-- Top App Bar / Safe Header Area -->
+<header class="sticky top-0 z-40 bg-surface-container-lowest/90 backdrop-blur-md transition-colors shadow-sm">
+<!-- Status bar visual spacer -->
+<div class="h-2 w-full pt-safe"></div>
+<div class="flex items-center justify-between px-4 h-14">
+<!-- Back Action -->
+<button aria-label="Go back" class="flex items-center justify-center w-10 h-10 -ml-1 rounded-full text-on-surface hover:bg-surface-container-high/50 active:scale-95 transition-all" type="button">
+<span class="material-symbols-outlined text-[24px]">arrow_back</span>
+</button>
+<!-- Screen Title -->
+<h1 class="font-headline-sm text-headline-sm font-bold text-on-surface tracking-tight">
+          Inbox
+        </h1>
+<!-- Secondary Right Action: Filter/Settings -->
+<button aria-label="Inbox options" class="flex items-center justify-center w-10 h-10 -mr-1 rounded-full text-on-surface hover:bg-surface-container-high/50 active:scale-95 transition-all" type="button">
+<span class="material-symbols-outlined text-[22px]">tune</span>
+</button>
+</div>
+<!-- Segment Tabs (Optional context: All vs Notifications) -->
+<div class="flex px-4 pt-1 pb-2.5 gap-2 border-b border-outline-variant/30">
+<button class="px-3.5 py-1.5 rounded-full bg-secondary text-on-secondary font-label-md text-label-md font-semibold transition-all shadow-sm">
+          All Updates
+        </button>
+<button class="px-3.5 py-1.5 rounded-full bg-surface-container-low text-on-surface-variant font-label-md text-label-md font-semibold hover:bg-surface-container hover:text-on-surface transition-all">
+          Parish Alerts
+        </button>
+<button class="px-3.5 py-1.5 rounded-full bg-surface-container-low text-on-surface-variant font-label-md text-label-md font-semibold hover:bg-surface-container hover:text-on-surface transition-all">
+          Receipts
+        </button>
+</div>
+</header>
+<!-- Main Content Area: Centered Empty State with High Sunlight Contrast -->
+<main class="flex-1 flex flex-col items-center justify-center px-6 py-8 relative z-10 text-center">
+<!-- Subtle Ambient Island Sun Halo -->
+<div class="absolute w-64 h-64 bg-secondary-fixed-dim/20 rounded-full blur-3xl pointer-events-none -translate-y-6"></div>
+<!-- Centerpiece Empty State Graphic -->
+<div class="relative z-10 mb-2 flex items-center justify-center">
+<div class="relative p-2 rounded-full transition-transform active:scale-95 duration-300">
+<img alt="Quiet mailbox illustration" class="w-[172px] h-[172px] object-contain drop-shadow-[0_8px_16px_rgba(163,57,0,0.08)]" src="https://lh3.googleusercontent.com/aida/AEtjO1VFwcjgU-QeYf9NpbyF5PiUDLcnH964admWNDssq7t8ayK2rsyApbY6_KKUco4t9Pv5SF1neQb1zuIP2pRDbtKW7n3pgGQUrX6KvpvmE_u9KZK5Rxn98rOm0Hzu_eCs-hZdmrjL_nT6fOBh88ftHj1rOkDS9qhS89oI_wn5MMMRrMGXmatFGlNTOqzCy790FXnNBdzE2_TvcbBiJvwy1mzQFcqCSqP5leOxAe4FpVTcaAcbBP7gEk_ElCQ"/>
+</div>
+</div>
+<!-- Typography Callout: Glanceable under direct sunlight -->
+<h2 class="font-headline-md text-headline-md text-on-surface font-extrabold tracking-tight mt-3">
+        Nothing waiting
+      </h2>
+<p class="font-body-md text-body-md text-on-surface-variant max-w-[270px] mt-2 leading-relaxed">
+        Approvals and place updates will show up here.
+      </p>
+<!-- Contextual Status Micro-Badge -->
+<div class="inline-flex items-center gap-1.5 mt-5 px-3 py-1 bg-surface-container-low border border-outline-variant/40 rounded-full text-on-surface-variant font-label-sm text-label-sm">
+<span class="w-1.5 h-1.5 rounded-full bg-green-600 animate-pulse"></span>
+<span>Synced with Road Network</span>
+</div>
+<!-- Utility Motorist Action Buttons -->
+<div class="w-full mt-7 flex flex-col gap-3 max-w-[280px]">
+<!-- Secondary Outlined Button -->
+<button class="w-full min-h-[48px] px-5 py-2.5 rounded-xl border-[1.5px] border-secondary text-secondary font-label-lg text-label-lg font-bold flex items-center justify-center gap-2 hover:bg-secondary-fixed/30 active:scale-[0.98] transition-all bg-surface-container-lowest/60 backdrop-blur-sm shadow-sm" type="button">
+<span class="material-symbols-outlined text-[20px]">history</span>
+<span>Explore recent activity</span>
+</button>
+<!-- Tertiary Soft Utility Link -->
+<button class="w-full py-2.5 text-on-surface-variant hover:text-on-surface font-label-md text-label-md font-semibold transition-colors flex items-center justify-center gap-1" type="button">
+<span>Check your contributions</span>
+<span class="material-symbols-outlined text-[16px]">chevron_right</span>
+</button>
+</div>
+</main>
+<!-- Bottom Navigation Bar (Docked full-width bottom, 5 items, Account Active) -->
+<nav class="sticky bottom-0 left-0 right-0 z-50 w-full bg-surface-container-lowest/95 backdrop-blur-md shadow-[0_-4px_16px_rgba(28,25,23,0.06)] border-t border-outline-variant/30 pb-safe">
+<div class="flex items-center justify-around h-16 px-1">
+<!-- Tab 1: Explore -->
+<a class="flex flex-col items-center justify-center text-on-surface-variant hover:text-primary transition-colors px-2 py-1 flex-1 group" href="#">
+<span class="material-symbols-outlined text-[22px] group-active:scale-90 transition-transform">explore</span>
+<span class="font-label-sm text-label-sm tracking-tight mt-1 text-on-surface-variant">Explore</span>
+</a>
+<!-- Tab 2: Garage -->
+<a class="flex flex-col items-center justify-center text-on-surface-variant hover:text-primary transition-colors px-2 py-1 flex-1 group" href="#">
+<span class="material-symbols-outlined text-[22px] group-active:scale-90 transition-transform">directions_car</span>
+<span class="font-label-sm text-label-sm tracking-tight mt-1 text-on-surface-variant">Garage</span>
+</a>
+<!-- Tab 3: Log Fuel (Elevated Center Quick Action) -->
+<div class="flex items-center justify-center flex-1 -mt-4">
+<button aria-label="Log Fuel" class="w-12 h-12 rounded-full bg-secondary hover:bg-primary text-on-secondary flex items-center justify-center shadow-[0_8px_16px_-2px_rgba(157,67,0,0.38)] active:scale-95 transition-all" type="button">
+<span class="material-symbols-outlined text-[24px] fill" style="font-variation-settings: 'FILL' 1;">local_gas_station</span>
+</button>
+</div>
+<!-- Tab 4: Map It -->
+<a class="flex flex-col items-center justify-center text-on-surface-variant hover:text-primary transition-colors px-2 py-1 flex-1 group" href="#">
+<span class="material-symbols-outlined text-[22px] group-active:scale-90 transition-transform">map</span>
+<span class="font-label-sm text-label-sm tracking-tight mt-1 text-on-surface-variant">Map It</span>
+</a>
+<!-- Tab 5: Account (ACTIVE / SELECTED) -->
+<a class="flex flex-col items-center justify-center text-primary font-bold px-2 py-1 flex-1 group" href="#">
+<div class="relative flex items-center justify-center">
+<span class="material-symbols-outlined text-[22px] fill text-primary" style="font-variation-settings: 'FILL' 1;">person</span>
+<!-- Orange active badge indicator dot -->
+<span class="absolute -top-0.5 -right-1 w-2 h-2 bg-secondary rounded-full ring-2 ring-surface-container-lowest"></span>
+</div>
+<span class="font-label-sm text-label-sm tracking-tight mt-1 text-primary font-bold">Account</span>
+</a>
+</div>
+</nav>
+</div>
+</body></html>

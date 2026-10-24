@@ -9,6 +9,18 @@ export {
   expectedBankWeekKey,
   fuelLedgerDrift,
 } from './businessStatement.ts';
+export {
+  netSettlementMovements,
+  cashHeldExcludingReceivable,
+  latestStatements,
+  periodSealStatus,
+  sumStatementAmount,
+  companyFuelCost,
+  profitAfterCompanyFuel,
+  agreementChecks,
+  settlementFuelCreditMajor,
+} from './businessWeekFacts.ts';
+export type { AgreementRow, MovementFact, StatementFact } from './businessWeekFacts.ts';
 export type { MoneyMinor } from './money.ts';
 export {
   periodKeyFor,

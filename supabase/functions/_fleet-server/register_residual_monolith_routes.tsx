@@ -2969,7 +2969,10 @@ export function registerResidualMonolithRoutes(app: Hono) {
               try {
                   // Fetch all stations from KV (single load, reused below)
                   const stationsRaw = await kv.getByPrefix("station:");
-                  allStationsCache = stationsRaw || [];
+                  const learntRaw = await kv.getByPrefix("learnt_location:");
+                  allStationsCache = [...(stationsRaw || []), ...(learntRaw || [])].map((station: any) => (
+                    station?.status === "learnt" ? { ...station, pinConfirmed: undefined } : station
+                  ));
 
                   // Single smart match against ALL stations at 600m with ambiguity detection
                   const smartResult = findMatchingStationSmart(
@@ -3044,7 +3047,8 @@ export function registerResidualMonolithRoutes(app: Hono) {
                               },
                               timestamp: new Date().toISOString(),
                               transactionId: transaction.id,
-                              status: 'learnt'
+                              status: 'learnt',
+                              originApp: 'roam_fleet',
                           };
                           await kv.set(`learnt_location:${learntId}`, stampOrg(learntLocation, c));
                           console.log(`[SmartGeoMatch] No station match — created Learnt Location: ${learntId}`);

@@ -6,6 +6,7 @@ CREATE TABLE IF NOT EXISTS fleet.expense_coverage_periods (
   organization_id text NOT NULL,
   contract_id text NOT NULL,
   vendor_name text,
+  service_line text NOT NULL,
   start_date date NOT NULL,
   end_date date NOT NULL,
   premium numeric NOT NULL,
@@ -158,7 +159,18 @@ BEGIN
 END;
 $$;
 
--- Spread a prepaid premium through today. Future days stay unposted.
+-- Spread a prepaid premium through today. The remainder sits on the last day so the bill still totals.
+CREATE OR REPLACE FUNCTION fleet.coverage_day_amount(p_premium numeric, p_start date, p_end date, p_day date)
+RETURNS numeric
+LANGUAGE sql
+IMMUTABLE
+AS $$
+  SELECT CASE
+    WHEN p_day = p_end THEN p_premium - round(p_premium / ((p_end - p_start) + 1), 2) * ((p_end - p_start))
+    ELSE round(p_premium / ((p_end - p_start) + 1), 2)
+  END;
+$$;
+
 CREATE OR REPLACE FUNCTION fleet.recognise_coverage_through_today(p_today date DEFAULT CURRENT_DATE)
 RETURNS integer
 LANGUAGE plpgsql
@@ -167,19 +179,19 @@ DECLARE
   inserted integer := 0;
   cov record;
   day date;
-  daily numeric;
   days integer;
+  day_amount numeric;
 BEGIN
   FOR cov IN SELECT * FROM fleet.expense_coverage_periods LOOP
     days := (cov.end_date - cov.start_date) + 1;
     IF days <= 0 THEN CONTINUE; END IF;
-    daily := round(cov.premium / days, 2);
     day := cov.start_date;
     WHILE day <= LEAST(cov.end_date, p_today) LOOP
+      day_amount := fleet.coverage_day_amount(cov.premium, cov.start_date, cov.end_date, day);
       INSERT INTO fleet.finance_period_lines (
         organization_id, service_line, line_date, line_code, amount, source
       ) VALUES (
-        cov.organization_id, 'rideshare', day, 'prepaid:' || cov.id, daily, 'coverage'
+        cov.organization_id, cov.service_line, day, 'prepaid:' || cov.id, day_amount, 'coverage'
       )
       ON CONFLICT (organization_id, service_line, line_date, line_code)
       DO UPDATE SET amount = EXCLUDED.amount, updated_at = now();
@@ -199,15 +211,79 @@ DECLARE
   n integer := 0;
 BEGIN
   INSERT INTO fleet.finance_statement_alerts (organization_id, line_date, line_code, stored_amount, recomputed_amount)
-  SELECT l.organization_id, l.line_date, l.line_code, l.amount, round(c.premium / ((c.end_date - c.start_date) + 1), 2)
+  SELECT l.organization_id, l.line_date, l.line_code, l.amount,
+         fleet.coverage_day_amount(c.premium, c.start_date, c.end_date, l.line_date)
   FROM fleet.finance_period_lines l
   JOIN fleet.expense_coverage_periods c ON l.line_code = 'prepaid:' || c.id
   WHERE l.line_date <= p_today
-    AND abs(l.amount - round(c.premium / ((c.end_date - c.start_date) + 1), 2)) > 0.01;
+    AND abs(l.amount - fleet.coverage_day_amount(c.premium, c.start_date, c.end_date, l.line_date)) > 0.01;
   GET DIAGNOSTICS n = ROW_COUNT;
+  INSERT INTO fleet.finance_statement_alerts (organization_id, line_date, line_code, stored_amount, recomputed_amount)
+  SELECT c.organization_id, c.end_date, 'prepaid:' || c.id, COALESCE(SUM(l.amount), 0), c.premium
+  FROM fleet.expense_coverage_periods c
+  LEFT JOIN fleet.finance_period_lines l ON l.line_code = 'prepaid:' || c.id
+  WHERE c.end_date <= p_today
+  GROUP BY c.organization_id, c.end_date, c.id, c.premium
+  HAVING abs(COALESCE(SUM(l.amount), 0) - c.premium) > 0.01;
   RETURN n;
 END;
 $$;
+
+CREATE OR REPLACE FUNCTION fleet.reject_overlapping_coverage()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  IF fleet.coverage_overlaps(NEW.contract_id, NEW.start_date, NEW.end_date, NEW.id) THEN
+    RAISE EXCEPTION 'coverage overlaps';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS expense_coverage_no_overlap ON fleet.expense_coverage_periods;
+CREATE TRIGGER expense_coverage_no_overlap
+  BEFORE INSERT OR UPDATE ON fleet.expense_coverage_periods
+  FOR EACH ROW EXECUTE FUNCTION fleet.reject_overlapping_coverage();
+
+CREATE OR REPLACE FUNCTION fleet.void_expense_bill(p_org text, p_bill_id text)
+RETURNS void
+LANGUAGE plpgsql
+AS $$
+DECLARE
+  bill_date date;
+  week_start date;
+BEGIN
+  SELECT b.bill_date INTO bill_date FROM fleet.expense_bills b
+  WHERE b.id = p_bill_id AND b.organization_id = p_org FOR UPDATE;
+  IF bill_date IS NULL THEN
+    RAISE EXCEPTION 'bill not found';
+  END IF;
+  week_start := bill_date - ((EXTRACT(ISODOW FROM bill_date)::int - 1));
+  IF EXISTS (
+    SELECT 1 FROM fleet.finance_period_locks
+    WHERE organization_id = p_org AND week_start = week_start
+  ) THEN
+    RAISE EXCEPTION 'week locked';
+  END IF;
+  UPDATE fleet.expense_bills SET status = 'voided' WHERE id = p_bill_id;
+END;
+$$;
+
+GRANT SELECT, INSERT, UPDATE, DELETE ON
+  fleet.expense_coverage_periods,
+  fleet.expense_bills,
+  fleet.expense_bill_lines,
+  fleet.expense_bill_payments,
+  fleet.finance_period_locks,
+  fleet.finance_period_lines,
+  fleet.finance_statement_alerts
+TO service_role;
+
+GRANT EXECUTE ON FUNCTION fleet.post_expense_bill(text, text, text, date, numeric, boolean) TO service_role;
+GRANT EXECUTE ON FUNCTION fleet.record_expense_payment(text, text, text, numeric, date, text) TO service_role;
+GRANT EXECUTE ON FUNCTION fleet.void_expense_bill(text, text) TO service_role;
+GRANT EXECUTE ON FUNCTION fleet.recognise_coverage_through_today(date) TO service_role;
 
 DO $cron$
 BEGIN

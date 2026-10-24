@@ -1,6 +1,8 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { Link, Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { FuelGradeChip, GpsAccuracyIndicator, MaintenanceStatusPill, PartsTierHeader, PendingDashedPin, PriceBubblePin } from '../../../packages/ui/src/plug-kit';
+import { CatalogSearchPicker } from '../../../packages/ui/src/catalog-search-picker';
+import { OdometerScanner } from '../../../packages/ui/src/odometer-scanner';
 import { documentStatus, priceAgeLabel, projectServiceDue, kmPerDay, contributorLevel } from '@roam/plug-core';
 import { Frame, Notice } from './Shell';
 import { googleDirections, plugSend, publicGet, wazeDirections } from './api';
@@ -99,26 +101,25 @@ export function Permissions() {
 }
 
 export function AddMake() {
-  const [q, setQ] = useState('');
-  const [rows, setRows] = useState<{ id: string; make: string; model: string; year: number; trim_series?: string }[]>([]);
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
   return (
     <Frame title="Add your vehicle">
-      <input className="tap w-full rounded-xl border border-line px-3" value={q} placeholder="Make or model" aria-label="Search catalog" onChange={(event) => setQ(event.target.value)} />
-      <button type="button" className="tap rounded-xl border border-primary px-4 text-primary" onClick={() => { setLoading(true); void publicGet<{ vehicles: typeof rows }>(`/vehicle-catalog?q=${encodeURIComponent(q)}`).then((body) => setRows(body.vehicles)).catch((err: unknown) => setError(err instanceof Error ? err.message : 'Search failed')).finally(() => setLoading(false)); }}>Search</button>
-      {loading ? <Notice kind="loading" text="Searching the catalog…" /> : null}
-      {error ? <Notice kind="error" text={error} /> : null}
-      {!loading && rows.length === 0 ? <Notice kind="empty" text="No cars yet. You can still request one." /> : null}
-      <ul className="space-y-2">
-        {rows.map((row) => (
-          <li key={row.id}><button type="button" className="tap w-full rounded-xl bg-surface px-3 text-left ring-1 ring-line" onClick={() => navigate(`/garage/add/odometer?variant=${row.id}&label=${encodeURIComponent(`${row.year} ${row.make} ${row.model}`)}`)}>{row.year} {row.make} {row.model}</button></li>
-        ))}
-      </ul>
-      <Link className="tap inline-flex items-center text-primary" to="/garage/add/missing">My car is not listed</Link>
+      <CatalogSearchPicker
+        onSearch={async (query) => {
+          const body = await publicGet<{ vehicles: { id: string; make: string; model: string; year: number }[] }>(`/vehicle-catalog?q=${encodeURIComponent(query)}`);
+          return (body.vehicles || []).map((row) => ({ id: row.id, label: `${row.year} ${row.make} ${row.model}` }));
+        }}
+        onPick={(hit) => navigate(`/garage/add/odometer?variant=${hit.id}&label=${encodeURIComponent(hit.label)}`)}
+        onMissing={() => navigate('/garage/add/missing')}
+      />
     </Frame>
   );
+}
+
+export function ModelYear() {
+  const [params] = useSearchParams();
+  const make = params.get('make') || '';
+  return <AddMake key={make} />;
 }
 
 export function MissingCar() {
@@ -162,7 +163,6 @@ type Station = { id: string; name: string; brand?: string; lat: number; lng: num
 export function Explore() {
   const load = useLoad<{ stations: Station[] }>('/stations');
   return (
-    <Gate flag="plug.explore">
       <Frame title="Explore">
         {load.loading ? <Notice kind="loading" text="Loading stations…" /> : null}
         {load.error ? <Notice kind="error" text={load.error} /> : null}
@@ -182,7 +182,6 @@ export function Explore() {
           })}
         </ul>
       </Frame>
-    </Gate>
   );
 }
 
@@ -211,8 +210,7 @@ export function StationDetail() {
           <FuelGradeChip grade="e10_87" price={station.prices.e10_87 ? `J$${station.prices.e10_87}` : undefined} />
           <FuelGradeChip grade="e10_90" price={station.prices.e10_90 ? `J$${station.prices.e10_90}` : undefined} />
           <FuelGradeChip grade="diesel" price={station.prices.diesel ? `J$${station.prices.diesel}` : undefined} />
-          <a className="tap flex items-center text-primary" href={googleDirections(station.lat, station.lng)}>Google Maps</a>
-          <a className="tap flex items-center text-primary" href={wazeDirections(station.lat, station.lng)}>Waze</a>
+          <Link className="tap flex items-center text-primary" to={`/stations/${station.id}/directions`}>Directions</Link>
         </div>
       ) : null}
     </Frame>
@@ -240,14 +238,12 @@ export function PendingPlace() {
 export function Tolls() {
   const load = useLoad<{ plazas: { id: string; name: string; highway: string | null; prices: unknown }[] }>('/tolls');
   return (
-    <Gate flag="plug.tolls">
       <Frame title="Tolls">
         {load.loading ? <Notice kind="loading" text="Loading tolls…" /> : null}
         {load.error ? <Notice kind="error" text={load.error} /> : null}
         {load.data && load.data.plazas.length === 0 ? <Notice kind="empty" text="No toll plazas published yet." /> : null}
         <ul>{(load.data?.plazas || []).map((plaza) => <li key={plaza.id} className="py-2 text-sm">{plaza.name} · {plaza.highway}</li>)}</ul>
       </Frame>
-    </Gate>
   );
 }
 
@@ -271,7 +267,17 @@ export function Search() {
 
 export function FuelScan() {
   const navigate = useNavigate();
-  return <Gate flag="plug.fuel_log"><Frame title="Odometer" action={{ label: 'Enter reading', onClick: () => navigate('/fuel/confirm') }}><p className="text-sm">Take a photo or type the reading. A drop, or a jump over 1,500 km, is checked before it saves.</p></Frame></Gate>;
+  return (
+    <Gate flag="plug.fuel_log">
+      <Frame title="Odometer">
+        <OdometerScanner
+          isFleetDriver={false}
+          onCancel={() => navigate('/explore')}
+          onScanComplete={(result) => navigate(`/fuel/details?odo=${result.reading}`)}
+        />
+      </Frame>
+    </Gate>
+  );
 }
 
 export function FuelConfirm() {
@@ -291,7 +297,18 @@ export function FuelDetails() {
   useEffect(() => { void plugSend<{ vehicles: { id: string; nickname: string | null }[] }>('/garage', 'GET').then((body) => { setVehicles(body.vehicles); setVehicleId(body.vehicles[0]?.id || ''); }).catch(() => setVehicles([])); }, []);
   return (
     <Frame title="Fuel details" action={{ label: 'Save', onClick: () => {
-      const body = { vehicleId, litres: Number(litres), amount: Number(amount), odometer: Number(params.get('odo')), grade: 'e10_87', clientId: crypto.randomUUID() };
+      const body = {
+        vehicleId,
+        litres: Number(litres),
+        amount: Number(amount),
+        odometer: Number(params.get('odo')),
+        grade: 'e10_87',
+        clientId: crypto.randomUUID(),
+        lat: Number(params.get('lat')) || undefined,
+        lng: Number(params.get('lng')) || undefined,
+        accuracyM: Number(params.get('accuracy')) || undefined,
+        mockLocation: params.get('mock') === '1',
+      };
       const save = () => plugSend('/fuel-logs', 'POST', body);
       if (!navigator.onLine) { enqueue('/fuel-logs', body); navigate('/fuel/offline'); return; }
       void save().then(() => navigate('/fuel/saved')).catch((err: unknown) => setError(err instanceof Error ? err.message : 'Could not save'));
@@ -345,8 +362,10 @@ export function VehicleOverview() {
       <p className="text-sm">General schedule — a schedule for your exact car is coming.</p>
       {startKm == null ? <Notice kind="empty" text="Log fuel to see mileage." /> : <MaintenanceStatusPill status={due.status === 'done' ? 'upcoming' : due.status} label={due.status.replace('_', ' ')} />}
       <Link className="tap flex text-primary" to={`/garage/${id}/schedule`}>Maintenance</Link>
+      <Link className="tap flex text-primary" to={`/garage/${id}/history`}>History</Link>
       <Link className="tap flex text-primary" to={`/garage/${id}/spend`}>Fuel spend</Link>
       <Link className="tap flex text-primary" to={`/garage/${id}/documents`}>Documents</Link>
+      <Link className="tap flex text-primary" to={`/garage/remove?id=${id}`}>Remove vehicle</Link>
     </Frame>
   );
 }
@@ -383,14 +402,53 @@ export function LogService() {
   return <Frame title="Log service" action={{ label: 'Save', onClick: () => { void plugSend('/services', 'POST', { vehicleId: id, opCode: 'oil', doneOn: new Date().toISOString().slice(0, 10) }).catch((err: unknown) => setError(err instanceof Error ? err.message : 'Could not save')); } }}>{error ? <Notice kind="error" text={error} /> : <p className="text-sm">This resets that service.</p>}</Frame>;
 }
 export function History() {
-  return <Frame title="History"><Notice kind="empty" text="No services logged yet." /><button type="button" className="tap rounded-xl border px-4" onClick={() => window.print()}>Save PDF</button></Frame>;
+  const { id } = useParams();
+  const [rows, setRows] = useState<{ id: string; op_code: string; done_on: string; odometer: number | null }[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    void plugSend<{ services: { id: string; op_code: string; done_on: string; odometer: number | null }[] }>(`/services?vehicleId=${id}`, 'GET')
+      .then((body) => setRows(body.services))
+      .catch((err: unknown) => setError(err instanceof Error ? err.message : 'Could not load history'));
+  }, [id]);
+  return (
+    <Frame title="History">
+      {rows === null && !error ? <Notice kind="loading" text="Loading history…" /> : null}
+      {error ? <Notice kind="error" text={error} /> : null}
+      {rows && rows.length === 0 ? <Notice kind="empty" text="No services logged yet." /> : null}
+      <ul>{(rows || []).map((row) => <li key={row.id} className="py-2 text-sm">{row.done_on}: {row.op_code}{row.odometer ? ` · ${row.odometer} km` : ''}</li>)}</ul>
+      <button type="button" className="tap rounded-xl border px-4" onClick={() => window.print()}>Save PDF</button>
+    </Frame>
+  );
 }
 export function Spend() {
-  return <Frame title="Fuel spend"><Notice kind="empty" text="Log a fill to see km per litre and monthly spend." /></Frame>;
+  const { id } = useParams();
+  const [logs, setLogs] = useState<{ id: string; litres: number; amount: number; created_at: string }[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    void plugSend<{ logs: { id: string; litres: number; amount: number; created_at: string }[] }>(`/fuel-logs?vehicleId=${id}`, 'GET')
+      .then((body) => setLogs(body.logs))
+      .catch((err: unknown) => setError(err instanceof Error ? err.message : 'Could not load spend'));
+  }, [id]);
+  const total = (logs || []).reduce((sum, row) => sum + (Number(row.amount) || 0), 0);
+  const litres = (logs || []).reduce((sum, row) => sum + (Number(row.litres) || 0), 0);
+  return (
+    <Frame title="Fuel spend">
+      {logs === null && !error ? <Notice kind="loading" text="Loading fills…" /> : null}
+      {error ? <Notice kind="error" text={error} /> : null}
+      {logs && logs.length === 0 ? <Notice kind="empty" text="Log a fill to see km per litre and monthly spend." /> : null}
+      {logs && logs.length > 0 ? <p className="text-sm">J${total.toFixed(0)} across {litres.toFixed(1)} litres.</p> : null}
+    </Frame>
+  );
 }
 export function Documents() {
-  const now = new Date().toISOString();
-  const state = documentStatus(null, now);
+  const { id } = useParams();
+  const [due, setDue] = useState<string | null>(null);
+  useEffect(() => {
+    void plugSend<{ reminders: { due_on: string | null }[] }>(`/reminders?vehicleId=${id}`, 'GET')
+      .then((body) => setDue(body.reminders.find((row) => row.due_on)?.due_on || null))
+      .catch(() => setDue(null));
+  }, [id]);
+  const state = documentStatus(due, new Date().toISOString());
   return <Gate flag="plug.documents"><Frame title="Documents"><MaintenanceStatusPill status={state === 'valid' ? 'done' : state === 'missing' ? 'upcoming' : state} label={state} /><Link to="edit" className="text-primary">Add a renewal date</Link></Frame></Gate>;
 }
 export function DocumentEdit() {
@@ -446,6 +504,10 @@ export function MapPin() {
     <Frame title="Place the pin" action={{ label: 'Use my location', onClick: () => {
       navigator.geolocation.getCurrentPosition((pos) => {
         setAccuracy(pos.coords.accuracy);
+        if (pos.coords.accuracy > 100) {
+          navigate('/map/pin/poor');
+          return;
+        }
         navigate(`/map/details?kind=${kind}&lat=${pos.coords.latitude}&lng=${pos.coords.longitude}&accuracy=${pos.coords.accuracy}`);
       }, () => navigate('/gps'));
     } }}>
@@ -464,8 +526,11 @@ export function MapSubmitted() {
   return <Frame title="Submitted"><PendingDashedPin /><p>Awaiting approval. You will be told when it is approved or rejected.</p></Frame>;
 }
 export function Contributions() {
-  const level = contributorLevel(0);
-  return <Frame title="Contributions"><p>{level.name}. Badges only — no cash and no discounts.</p><Link to="/parish" className="text-primary">Help map your parish</Link></Frame>;
+  const [name, setName] = useState('Scout');
+  useEffect(() => {
+    void plugSend<{ level: { name: string } }>('/contributions', 'GET').then((body) => setName(body.level.name)).catch(() => setName(contributorLevel(0).name));
+  }, []);
+  return <Frame title="Contributions"><p>{name}. Badges only — no cash and no discounts.</p><Link to="/parish" className="text-primary">Help map your parish</Link></Frame>;
 }
 export function ParishHelp() {
   const [areas, setAreas] = useState<{ pcode: string; name: string }[] | null>(null);
@@ -489,6 +554,7 @@ export function NotifySettings() {
 }
 export function PrivacyData() {
   const [error, setError] = useState<string | null>(null);
+  const { signOut } = useAuth();
   return (
     <Frame title="Privacy and data">
       <button type="button" className="tap w-full rounded-xl border px-4" onClick={() => { void plugSend<Record<string, unknown>>('/me/export', 'GET').then((body) => {
@@ -497,7 +563,10 @@ export function PrivacyData() {
         const a = document.createElement('a');
         a.href = url; a.download = 'roam-plug-export.json'; a.click();
       }).catch((err: unknown) => setError(err instanceof Error ? err.message : 'Export failed')); }}>Download my data</button>
-      <button type="button" className="tap w-full rounded-xl bg-error px-4 text-white" onClick={() => { if (window.confirm('Delete your garage and fuel logs? Approved places stay on the map.')) void plugSend('/me', 'DELETE'); }}>Delete account</button>
+      <button type="button" className="tap w-full rounded-xl bg-error px-4 text-white" onClick={() => {
+        if (!window.confirm('Delete your garage and fuel logs? Approved places stay on the map.')) return;
+        void plugSend('/me', 'DELETE').then(() => signOut()).catch((err: unknown) => setError(err instanceof Error ? err.message : 'Could not delete'));
+      }}>Delete account</button>
       {error ? <Notice kind="error" text={error} /> : null}
     </Frame>
   );
@@ -515,6 +584,70 @@ export function GpsIssue() {
 export function Offline() {
   const jobs = readQueue();
   return <Frame title="Offline">{jobs.length === 0 ? <Notice kind="empty" text="Nothing is waiting to sync." /> : <ul>{jobs.map((job) => <li key={job.id}><button type="button" onClick={() => removeJob(job.id)}>Queued {job.path}</button></li>)}</ul>}</Frame>;
+}
+
+export function Directions() {
+  const { id } = useParams();
+  const load = useLoad<{ station: Station }>(`/stations/${id}`);
+  const station = load.data?.station;
+  if (load.loading) return <Frame title="Directions"><Notice kind="loading" text="Loading station…" /></Frame>;
+  if (!station) return <Frame title="Directions"><Notice kind="empty" text="That station is not on the map." /></Frame>;
+  return (
+    <Frame title={station.name}>
+      <a className="tap flex items-center text-primary" href={googleDirections(station.lat, station.lng)}>Google Maps</a>
+      <a className="tap flex items-center text-primary" href={wazeDirections(station.lat, station.lng)}>Waze</a>
+    </Frame>
+  );
+}
+
+export function PlaceKind({ kind }: { kind: string }) {
+  const load = useLoad<{ places: { id: string; name: string }[] }>(`/places?kind=${kind}`);
+  return (
+    <Frame title={kind.replace('_', ' ')}>
+      {load.loading ? <Notice kind="loading" text="Loading places…" /> : null}
+      {load.error ? <Notice kind="error" text={load.error} /> : null}
+      {load.data && load.data.places.length === 0 ? <Notice kind="empty" text="None approved yet." /> : null}
+      <ul>{(load.data?.places || []).map((place) => <li key={place.id}><Link className="tap flex" to={`/places/${place.id}`}>{place.name}</Link></li>)}</ul>
+    </Frame>
+  );
+}
+
+export function RemoveVehicle() {
+  const [params] = useSearchParams();
+  const id = params.get('id') || '';
+  const [error, setError] = useState<string | null>(null);
+  const navigate = useNavigate();
+  return (
+    <Frame title="Remove vehicle" action={{ label: 'Remove', onClick: () => {
+      void plugSend(`/vehicles/${id}`, 'DELETE').then(() => navigate('/garage')).catch((err: unknown) => setError(err instanceof Error ? err.message : 'Could not remove'));
+    } }}>
+      <p className="text-sm">This deletes the car and its fuel logs from your garage.</p>
+      {error ? <Notice kind="error" text={error} /> : null}
+    </Frame>
+  );
+}
+
+export function WithdrawPin() {
+  const [params] = useSearchParams();
+  const id = params.get('id') || '';
+  const [error, setError] = useState<string | null>(null);
+  const navigate = useNavigate();
+  return (
+    <Frame title="Withdraw pin" action={{ label: 'Withdraw', onClick: () => {
+      void plugSend(`/pins/${id}/withdraw`, 'POST', {}).then(() => navigate('/contributions')).catch((err: unknown) => setError(err instanceof Error ? err.message : 'Could not withdraw'));
+    } }}>
+      <p className="text-sm">A pending pin you submitted can be taken back. Approved places stay on the map.</p>
+      {error ? <Notice kind="error" text={error} /> : null}
+    </Frame>
+  );
+}
+
+export function PoorGps() {
+  return <Frame title="Weak GPS"><Notice kind="error" text="The pin needs a fix closer than 100 metres. Step outside and try again." /></Frame>;
+}
+
+export function FuelError() {
+  return <Frame title="Could not save"><Notice kind="error" text="That fill was not saved. Check the litres, the amount, and the odometer, then try again." /></Frame>;
 }
 
 export function PlugAdmin() {

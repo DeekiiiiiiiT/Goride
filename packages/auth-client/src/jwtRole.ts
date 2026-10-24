@@ -31,11 +31,10 @@ export function jwtPrimaryRole(user: JwtUser): string {
 
 /** All roles on the JWT for permission checks (app_metadata only). */
 export function getJwtRoles(user: JwtUser): string[] {
-  const fromApp = readRolesArray(user.app_metadata);
-  if (fromApp.length > 0) return fromApp;
-
   const primary = jwtPrimaryRole(user);
-  return primary ? [primary] : [];
+  const fromApp = readRolesArray(user.app_metadata);
+  const merged = primary ? [primary, ...fromApp] : fromApp;
+  return [...new Set(merged)];
 }
 
 /** True when any JWT role is in the allowed set (use for write gates with multi-role users). */

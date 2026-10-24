@@ -14,7 +14,7 @@ export function Shell() {
   const { session } = useAuth();
   return (
     <div className="mx-auto flex min-h-screen max-w-md flex-col bg-background text-on-surface">
-      <main className="flex-1 px-4 pb-28 pt-4">
+      <main className="flex-1 pb-28 pt-4">
         <Outlet />
       </main>
       <nav className="fixed inset-x-0 bottom-0 mx-auto flex max-w-md items-end justify-around border-t border-line bg-surface/90 px-2 pb-[env(safe-area-inset-bottom)] backdrop-blur">
@@ -44,7 +44,7 @@ export function Frame({
 }) {
   const navigate = useNavigate();
   return (
-    <section className="space-y-4">
+    <section className="mx-auto max-w-md space-y-4 px-4">
       <header className="flex items-center justify-between gap-3">
         <button type="button" className="tap text-sm text-primary" onClick={() => navigate(-1)}>Back</button>
         <h1 className="text-xl font-bold">{title}</h1>

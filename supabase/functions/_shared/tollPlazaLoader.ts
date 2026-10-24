@@ -217,8 +217,7 @@ async function loadPlazasFromFleetSql(
 ): Promise<LoadedTollPlaza[]> {
   try {
     const { data, error } = await db
-      .schema("fleet")
-      .from("toll_plazas")
+      .from("fleet_toll_plazas")
       .select("id, legacy_kv_id, organization_id, payload_json")
       .limit(500);
     if (error) {

@@ -568,7 +568,7 @@ export function checkCloseInvariants(input: CloseInvariantInput): CloseBlocker[]
       persisted: num(input.settlementSumForWeek),
       expected: 0,
       delta: round2(num(input.settlementSumForWeek)),
-      message: 'Business Finance week P&L not available — settlement↔P&L tie skipped',
+      message: 'Driver-lane contribution is not available',
     });
   }
 

@@ -3791,7 +3791,8 @@ app.post(`${BASE_PATH}/stations/promote-learnt`, requirePermission("fuel.edit_en
                 verifiedAt: new Date().toISOString(),
                 verificationMethod: 'manual_promotion',
                 location: stationData?.location || learnt.location,
-                stats: { totalVisits: 1, lastUpdated: new Date().toISOString() }
+                stats: { totalVisits: 1, lastUpdated: new Date().toISOString() },
+                originApp: cleanStationData?.dataSource === "import" ? "manual" : "roam_fleet",
             };
 
             await kv.set(`station:${newStationId}`, newStation);
@@ -4399,8 +4400,7 @@ app.post(`${BASE_PATH}/fuel-entries`, async (c: Context) => {
       let duplicateOdometer = false;
       if (entry.vehicleId) {
         const { data: peers, error: peerError } = await getServiceClient()
-          .schema("fleet")
-          .from("fuel_entries")
+          .from("fleet_fuel_entries")
           .select("odometer, amount, liters")
           .eq("vehicle_id", String(entry.vehicleId))
           .order("date", { ascending: false })
@@ -6408,7 +6408,12 @@ app.post(`${BASE_PATH}/stations/demote`, requirePermission("fuel.delete_entry"),
 app.post(`${BASE_PATH}/stations`, requirePermission("fuel.edit_entry"), async (c) => {
     try {
         const station = await c.req.json();
-        if (!station.id) station.id = crypto.randomUUID();
+        if (!station.id) {
+            station.id = crypto.randomUUID();
+            if (!station.originApp && !station.origin_app) {
+                station.originApp = station.dataSource === "import" ? "manual" : "roam_fleet";
+            }
+        }
 
         // --- Duplicate Guard ---
         // Skip if the frontend explicitly overrode the duplicate check (Phase 5: "Create Anyway")

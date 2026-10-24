@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildFixedExpenseOccurrences,
   computeFixedExpenseVersionTag,
+  renewalCoverage,
 } from './fixedExpenseOccurrences';
 import type { FixedExpenseConfig } from '../types/expenses';
 
@@ -122,5 +123,26 @@ describe('buildFixedExpenseOccurrences', () => {
     const before = computeFixedExpenseVersionTag(cfg({ amount: 100 }));
     const after = computeFixedExpenseVersionTag(cfg({ amount: 120 }));
     expect(before).not.toBe(after);
+  });
+
+  it('renewal cover ends the day before the next term starts', () => {
+    expect(renewalCoverage('2026-10-14', 'annually')).toEqual({
+      startDate: '2026-10-15',
+      endDate: '2027-10-14',
+    });
+    expect(renewalCoverage('2026-01-31', 'monthly')).toEqual({
+      startDate: '2026-02-01',
+      endDate: '2026-02-28',
+    });
+  });
+
+  it('posts only months due through today, and a second run uses the same keys', () => {
+    const rule = cfg({ startDate: '2026-01-15' });
+    const first = buildFixedExpenseOccurrences(rule, rule.startDate, '2026-02-20');
+    const second = buildFixedExpenseOccurrences(rule, rule.startDate, '2026-02-20');
+    expect(first.map((o) => o.occurrenceYmd)).toEqual(['2026-01-15', '2026-02-15']);
+    expect(second.map((o) => o.idempotencyKey)).toEqual(first.map((o) => o.idempotencyKey));
+    const nextMonth = buildFixedExpenseOccurrences(rule, rule.startDate, '2026-03-20');
+    expect(nextMonth.map((o) => o.occurrenceYmd)).toEqual(['2026-01-15', '2026-02-15', '2026-03-15']);
   });
 });

@@ -46,6 +46,9 @@ describe('business statement', () => {
     const c = fuelCardUploadKey({ cardId: 'card', date: '2026-10-17', amount: 1500, uploadId: 'up1' });
     expect(a).toBe(b);
     expect(a).not.toBe(c);
+    const first = fuelCardUploadKey({ cardId: 'card', date: '2026-10-17', amount: 4000, uploadId: 'up1', litres: 40 });
+    const second = fuelCardUploadKey({ cardId: 'card', date: '2026-10-17', amount: 4000, uploadId: 'up1', litres: 41 });
+    expect(first).not.toBe(second);
   });
 
   it('dates a stamped payout to its own week, not the import day', () => {
@@ -66,10 +69,10 @@ describe('business statement', () => {
     ).toEqual([{ week: '2026-10-12', ledger: 21000, records: 19000, difference: 2000 }]);
   });
 
-  it('holds Aug 3 and Aug 24 until those Uber statements are checked', () => {
-    expect(uberWeekNeedsStatement('2026-08-03')).toBe(true);
-    expect(uberWeekNeedsStatement('2026-08-24')).toBe(true);
+  it('does not hold a week once its Uber statement has been checked', () => {
+    expect(uberWeekNeedsStatement('2026-08-03')).toBe(false);
+    expect(uberWeekNeedsStatement('2026-08-24')).toBe(false);
     expect(uberWeekNeedsStatement('2026-10-12')).toBe(false);
-    expect(uberEarningsTie({ ledgerUber: 1, uberTotal: 2, weekStart: '2026-08-03' }).held).toBe(true);
+    expect(uberEarningsTie({ ledgerUber: 1, uberTotal: 2, weekStart: '2026-08-03' }).held).toBe(false);
   });
 });

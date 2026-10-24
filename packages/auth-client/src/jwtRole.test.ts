@@ -18,6 +18,13 @@ describe('jwtPrimaryRole', () => {
     expect(jwtPrimaryRole(user)).toBe('driver_admin');
   });
 
+  it('keeps the fleet owner role when the account also drives', () => {
+    const user = {
+      app_metadata: { role: 'admin', roles: ['driver'] },
+    };
+    expect(getJwtRoles(user)).toEqual(['admin', 'driver']);
+  });
+
   it('uses app_metadata.roles when role is absent', () => {
     const user = {
       app_metadata: { roles: ['driver_admin', 'driver'] },

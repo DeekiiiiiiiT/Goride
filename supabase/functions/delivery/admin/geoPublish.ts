@@ -7,7 +7,12 @@
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { activeCoverageGeneration, compileMarketCoverageCells, recomputeMerchantCoverageCells } from "../coverageCompile.ts";
 import { suggestMarketIdsAgainstBorder, type BorderPreviewOverlay } from "./coverageZones.ts";
-import { decideMerchantMove, overlayZonesForCompile, shouldDeletePendingGrid } from "./geoPublishRules.ts";
+import {
+  decideMerchantMove,
+  overlayZonesForCompile,
+  shouldDeletePendingGrid,
+  shouldRepairRushCopy,
+} from "./geoPublishRules.ts";
 
 function geoDb() {
   return createClient(
@@ -87,6 +92,7 @@ export async function buildGeoImpact(
   db: SupabaseClient,
   pcode: string,
   versionId: string,
+  options?: { computeMovesWhenLive?: boolean },
 ): Promise<Impact> {
   const geo = geoDb();
   const { data: version, error } = await geo
@@ -134,7 +140,7 @@ export async function buildGeoImpact(
   let summaries: MoveSummary[] = [];
   let checked = 0;
 
-  if (!alreadyLive) {
+  if (!alreadyLive || options?.computeMovesWhenLive) {
     const { data: shift, error: shiftError } = await geo.rpc("preview_merchant_moves", {
       p_pcode: pcode,
       p_version_id: versionId,
@@ -250,6 +256,36 @@ async function refreshMerchantCells(
   }
 }
 
+/** True when Rush's parish or include-zone copy is not this Dominion version. */
+export async function rushCopyDiffers(
+  db: SupabaseClient,
+  pcode: string,
+  versionId: string,
+): Promise<boolean> {
+  const { data: parish, error: parishError } = await db
+    .from("service_parishes")
+    .select("adopted_version_id")
+    .eq("pcode", pcode)
+    .maybeSingle();
+  if (parishError) throw new Error(parishError.message);
+  const { data: zones, error: zoneError } = await db
+    .from("service_zone_polygons")
+    .select("boundary_version_id, kind")
+    .eq("boundary_pcode", pcode);
+  if (zoneError) throw new Error(zoneError.message);
+  const includeZoneVersionIds = (zones ?? [])
+    .filter((zone) => String(zone.kind ?? "include").toLowerCase() !== "exclude")
+    .map((zone) => String(zone.boundary_version_id ?? ""));
+  return shouldRepairRushCopy({
+    versionId,
+    hasParish: parish != null,
+    parishAdoptedVersionId: parish ? String(parish.adopted_version_id ?? "") : null,
+    includeZoneVersionIds,
+  });
+}
+
+const PUBLISH_BUSY_MESSAGE = "Another publish is still finishing. Wait a minute and try again.";
+
 export async function applyGeoPublish(
   db: SupabaseClient,
   input: {
@@ -260,9 +296,43 @@ export async function applyGeoPublish(
     systemHeal?: boolean;
   },
 ): Promise<Record<string, unknown>> {
-  const impact = await buildGeoImpact(db, input.pcode, input.versionId);
-  if (impact.already_live) {
-    return { ok: true, unchanged: true, impact };
+  // One publish at a time. The lock is taken before any grid row is deleted.
+  const geo = geoDb();
+  const holder = crypto.randomUUID();
+  const { data: claimed, error: lockError } = await geo.rpc("try_begin_publish", { p_holder: holder });
+  if (lockError) throw new Error(lockError.message);
+  if (claimed !== true) {
+    return { error: "publish_in_progress", message: PUBLISH_BUSY_MESSAGE };
+  }
+  try {
+    return await applyGeoPublishLocked(db, geo, input);
+  } finally {
+    const { error: releaseError } = await geo.rpc("finish_publish", { p_holder: holder });
+    if (releaseError) console.warn("[geo] publish lock release failed", releaseError.message);
+  }
+}
+
+async function applyGeoPublishLocked(
+  db: SupabaseClient,
+  geo: ReturnType<typeof geoDb>,
+  input: {
+    pcode: string;
+    versionId: string;
+    confirmName: string | null;
+    actorId: string | null;
+    systemHeal?: boolean;
+  },
+): Promise<Record<string, unknown>> {
+  // Heal republishes Dominion's current version onto a stale Rush copy.
+  // A person publishing that same version still gets "nothing to do."
+  const repair = input.systemHeal
+    ? await rushCopyDiffers(db, input.pcode, input.versionId)
+    : false;
+  const impact = await buildGeoImpact(db, input.pcode, input.versionId, {
+    computeMovesWhenLive: repair,
+  });
+  if (impact.already_live && !repair) {
+    return { ok: true, unchanged: true, repaired: false, impact };
   }
   if (impact.needs_typed_name && !input.systemHeal) {
     const typed = (input.confirmName || "").trim().toLowerCase();
@@ -275,7 +345,6 @@ export async function applyGeoPublish(
     }
   }
 
-  const geo = geoDb();
   const { data: parts, error: partsError } = await geo.rpc("version_coverage_parts", {
     p_version_id: input.versionId,
   });
@@ -339,6 +408,7 @@ export async function applyGeoPublish(
     }
     return {
       ok: true,
+      repaired: true,
       impact,
       result: data,
       ...(merchantCellsWarning ? { merchant_cells_warning: merchantCellsWarning } : {}),

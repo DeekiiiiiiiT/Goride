@@ -3386,7 +3386,9 @@ app.post("/internal/geo/apply", async (c) => {
       actorId: body.actor_id != null ? String(body.actor_id) : null,
       systemHeal: body.system_heal === true,
     });
-    if (result.error === "confirmation_required") return c.json(result, 409);
+    if (result.error === "confirmation_required" || result.error === "publish_in_progress") {
+      return c.json(result, 409);
+    }
     return c.json(result);
   } catch (e) {
     return c.json({ error: e instanceof Error ? e.message : "publish_failed" }, 500);
@@ -3413,17 +3415,25 @@ app.post("/internal/geo/reconcile", async (c) => {
     const { applyGeoPublish } = await import("./admin/geoPublish.ts");
     const healedPcodes = new Set<string>();
     let healed = 0;
+    const failed: Array<{ pcode: string; error: string }> = [];
     const heal = async (pcode: string, versionId: string) => {
       if (!pcode || !versionId || healedPcodes.has(pcode)) return;
       healedPcodes.add(pcode);
-      await applyGeoPublish(db, {
-        pcode,
-        versionId,
-        confirmName: null,
-        actorId: null,
-        systemHeal: true,
-      });
-      healed += 1;
+      try {
+        const result = await applyGeoPublish(db, {
+          pcode,
+          versionId,
+          confirmName: null,
+          actorId: null,
+          systemHeal: true,
+        });
+        if (result.repaired === true) healed += 1;
+        else if (result.error) {
+          failed.push({ pcode, error: String(result.error) });
+        }
+      } catch (e) {
+        failed.push({ pcode, error: e instanceof Error ? e.message : "reconcile_failed" });
+      }
     };
     for (const place of places ?? []) {
       if (Number(place.admin_level) !== 1) continue;
@@ -3442,7 +3452,7 @@ app.post("/internal/geo/reconcile", async (c) => {
       if (!current || String(zone.boundary_version_id || "") === current) continue;
       await heal(pcode, current);
     }
-    return c.json({ healed });
+    return c.json({ healed, failed });
   } catch (e) {
     return c.json({ error: e instanceof Error ? e.message : "reconcile_failed" }, 500);
   }

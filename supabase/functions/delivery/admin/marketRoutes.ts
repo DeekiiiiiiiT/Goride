@@ -265,6 +265,13 @@ function normalizeSource(input: unknown): "manual" | "radius" | "auto_outline" |
   return "manual";
 }
 
+/** Dominion's border copied onto a Rush town. Service areas and no-go zones are not this. */
+function isDominionBorderZone(row: Record<string, unknown>): boolean {
+  if (normalizeKind(row.kind) === "exclude") return false;
+  if (String(row.boundary_pcode ?? "").trim()) return true;
+  return normalizeSource(row.source) === "import";
+}
+
 function slugify(value: string): string {
   return value.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
 }
@@ -988,9 +995,21 @@ export function registerMarketAdminRoutes(app: Hono) {
     if (!ver) return c.json({ error: "Version not found" }, 404);
 
     const snapZones = Array.isArray(ver.zones_json) ? ver.zones_json as Record<string, unknown>[] : [];
-    await db.from("service_zone_polygons").delete().eq("market_id", marketId);
+    const { data: liveZones, error: liveErr } = await db
+      .from("service_zone_polygons")
+      .select("id, kind, source, boundary_pcode")
+      .eq("market_id", marketId);
+    if (liveErr) return c.json({ error: liveErr.message }, 500);
+    const keepIds = (liveZones ?? [])
+      .filter((z) => isDominionBorderZone(z as Record<string, unknown>))
+      .map((z) => String(z.id));
+    let wipe = db.from("service_zone_polygons").delete().eq("market_id", marketId);
+    if (keepIds.length > 0) wipe = wipe.not("id", "in", `(${keepIds.join(",")})`);
+    const { error: wipeErr } = await wipe;
+    if (wipeErr) return c.json({ error: wipeErr.message }, 500);
+    const rushSnap = snapZones.filter((z) => !isDominionBorderZone(z));
 
-    for (const z of snapZones) {
+    for (const z of rushSnap) {
       const polygon = normalizePolygon(z.polygon);
       const multi = Array.isArray(z.multiPolygon) ? z.multiPolygon : null;
       if (!polygon && !(multi && multi.length)) continue;
@@ -1127,66 +1146,27 @@ export function registerMarketAdminRoutes(app: Hono) {
     const { data: market } = await db.from("service_markets").select("*").eq("id", marketId).maybeSingle();
     if (!market) return c.json({ error: "Market not found" }, 404);
 
-    // as_service_area: add a live service include without wiping official / other includes.
-    // Otherwise: replace only the official foundation (source=import), keep service areas.
-    const asServiceArea = body.as_service_area === true;
-    if (!asServiceArea) {
-      const { data: foundationRows } = await db
-        .from("service_zone_polygons")
-        .select("id, source")
-        .eq("market_id", marketId)
-        .eq("kind", "include");
-      const toReplace = (foundationRows ?? []).filter((row) => {
-        const src = String((row as Record<string, unknown>).source ?? "import").toLowerCase();
-        return src === "import";
-      });
-      // Compat: if no import row yet, replace the sole include only when it is the only one
-      // (legacy single-border towns). Never wipe manual service areas.
-      if (toReplace.length === 0 && (foundationRows ?? []).length === 1) {
-        const only = foundationRows![0] as Record<string, unknown>;
-        const src = String(only.source ?? "").toLowerCase();
-        if (src !== "manual" && src !== "radius" && src !== "auto_outline") {
-          toReplace.push(only as { id: unknown; source: unknown });
-        } else if (body.replace_foundation === true) {
-          toReplace.push(only as { id: unknown; source: unknown });
-        }
-      }
-      for (const row of toReplace) {
-        await db.from("service_zone_polygons").delete().eq("id", String((row as Record<string, unknown>).id));
-      }
-    }
+    // A file can add a Rush service area. It cannot replace the official border.
+    if (body.as_service_area !== true) return geographyManagedResponse();
 
     const { data: zone, error } = await db.from("service_zone_polygons").insert({
       market_id: marketId,
-      name: asServiceArea
-        ? String(body.name || `Service area`).slice(0, 80)
-        : deliveryAreaName(String(market.name)),
+      name: String(body.name || "Service area").slice(0, 80),
       polygon,
       kind: "include",
-      priority: asServiceArea ? 10 : 0,
-      source: asServiceArea ? "manual" : "import",
+      priority: 10,
+      source: "manual",
       updated_by: adminUser.id || null,
     }).select().single();
     if (error) return c.json({ error: error.message }, 500);
     await markDraftDirty(db, marketId);
-
-    const promote = body.promote_template === true && !asServiceArea;
-    if (promote && market.slug) {
-      await db.from("town_outline_templates").upsert({
-        slug: String(market.slug),
-        name: String(market.name),
-        polygon,
-        version: 1,
-        updated_at: new Date().toISOString(),
-      }, { onConflict: "slug" });
-    }
 
     await writeKvAudit(
       adminUser,
       "roam_dash.coverage_imported",
       marketId,
       "",
-      JSON.stringify({ ...polygonSummary(polygon), promote }),
+      JSON.stringify(polygonSummary(polygon)),
     );
     return c.json({ zone }, 201);
   });
@@ -1365,7 +1345,17 @@ export function registerMarketAdminRoutes(app: Hono) {
       .maybeSingle();
     if (!before) return c.json({ error: "Zone not found" }, 404);
 
-    const beforeKind = normalizeKind((before as Record<string, unknown>).kind);
+    const beforeRow = before as Record<string, unknown>;
+    const changesBorder =
+      body.polygon != null ||
+      body.kind != null ||
+      body.center_lat != null ||
+      body.center_lng != null ||
+      body.radius_m != null ||
+      body.promote_template === true;
+    if (isDominionBorderZone(beforeRow) && changesBorder) return geographyManagedResponse();
+
+    const beforeKind = normalizeKind(beforeRow.kind);
     const nextKind = body.kind != null ? normalizeKind(body.kind) : beforeKind;
     const beforeSource = normalizeSource((before as Record<string, unknown>).source);
     const touchesFoundationGeometry =
@@ -1468,6 +1458,7 @@ export function registerMarketAdminRoutes(app: Hono) {
       .eq("market_id", marketId);
     const target = (existing ?? []).find((z) => String((z as Record<string, unknown>).id) === zoneId);
     if (!target) return c.json({ error: "Zone not found" }, 404);
+    if (isDominionBorderZone(target as Record<string, unknown>)) return geographyManagedResponse();
 
     const targetKind = normalizeKind((target as Record<string, unknown>).kind);
     const others = (existing ?? []).filter((z) => String((z as Record<string, unknown>).id) !== zoneId);

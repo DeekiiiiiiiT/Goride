@@ -77,20 +77,25 @@ export function tieOut(id: string, label: string, left: number, right: number): 
   return { id, label, difference, ok: Math.abs(difference) <= EPS };
 }
 
-/** Same card, date, amount, and upload is one fill. */
+/** Same card, day, amount, upload, and litres (or fill time) is one fill. */
 export function fuelCardUploadKey(input: {
   cardId?: string;
   date: string;
   amount: number;
   uploadId?: string;
+  litres?: number;
+  filledAt?: string;
 }): string {
   const card = String(input.cardId || '').trim();
   const upload = String(input.uploadId || '').trim();
-  return `${card}|${input.date.slice(0, 10)}|${(Number(input.amount) || 0).toFixed(2)}|${upload}`;
+  const litres = Number(input.litres);
+  const litrePart = Number.isFinite(litres) && litres > 0 ? litres.toFixed(3) : '';
+  const when = litrePart || String(input.filledAt || '').trim();
+  return `${card}|${input.date.slice(0, 10)}|${(Number(input.amount) || 0).toFixed(2)}|${upload}|${when}`;
 }
 
-/** Weeks that must not be auto-adjusted until the Uber statement is checked. */
-export const HELD_UBER_WEEKS = ['2026-08-03', '2026-08-24'] as const;
+/** Weeks still waiting on an Uber statement. Aug 3 and Aug 24 were checked and tied. */
+export const HELD_UBER_WEEKS = [] as const;
 
 export function uberWeekNeedsStatement(weekStart: string): boolean {
   return (HELD_UBER_WEEKS as readonly string[]).includes(weekStart.slice(0, 10));

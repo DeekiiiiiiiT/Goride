@@ -46,7 +46,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     sendCode: async (phone) => {
       const { error } = await supabasePlugApp.auth.signInWithOtp({
         phone,
-        options: { channel: 'sms', data: { role: 'explorer_user' } },
+        options: { channel: 'sms', data: { app: 'plug' } },
       });
       if (error) throw error;
     },

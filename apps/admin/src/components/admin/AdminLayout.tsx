@@ -125,8 +125,8 @@ export function AdminLayout({ children, currentPage, onNavigate }: AdminLayoutPr
   const [mobileOpen, setMobileOpen] = useState(false);
   const [pendingCatalogOpenCount, setPendingCatalogOpenCount] = useState(0);
 
-  const resolved = role || 'platform_owner';
-  const allowedPages = PLATFORM_ROLE_PAGES[resolved] || PLATFORM_ROLE_PAGES.platform_owner || [];
+  const resolved = role || '';
+  const allowedPages = PLATFORM_ROLE_PAGES[resolved] || [];
   const canViewPage = (pageId: string) => allowedPages.includes(pageId);
 
   const filterChildren = (items: NavChild[]) =>

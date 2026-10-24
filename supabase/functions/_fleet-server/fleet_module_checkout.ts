@@ -68,12 +68,7 @@ export async function completeFleetModulePurchase(
   purchaseId: string,
   payload: Record<string, string>,
 ): Promise<void> {
-  const { data: purchase, error } = await supabase
-    .schema("fleet")
-    .from("module_purchases")
-    .select("*")
-    .eq("id", purchaseId)
-    .maybeSingle();
+  const { data: purchase, error } = await supabase.rpc("svc_module_purchase_get", { p_id: purchaseId });
 
   if (error || !purchase) throw new Error("Purchase not found");
   if (purchase.status === "completed") return;
@@ -84,16 +79,11 @@ export async function completeFleetModulePurchase(
     payload.transactionid ||
     purchase.provider_transaction_id;
 
-  await supabase
-    .schema("fleet")
-    .from("module_purchases")
-    .update({
-      status: "completed",
-      completed_at: new Date().toISOString(),
-      provider_transaction_id: txnId,
-      provider_data: { ...purchase.provider_data as object, webhook: payload },
-    })
-    .eq("id", purchaseId);
+  await supabase.rpc("svc_module_purchase_complete", {
+    p_id: purchaseId,
+    p_txn: txnId ?? null,
+    p_provider_data: { ...(purchase.provider_data as object), webhook: payload },
+  });
 
   const orgId = purchase.organization_id as string | null;
   const lines = purchase.service_lines as string[];
@@ -134,19 +124,12 @@ export function registerFleetModuleCheckoutRoutes(
       const { data: authUser } = await deps.supabase.auth.admin.getUserById(rbac.userId);
       const customerEmail = authUser?.user?.email ?? "";
 
-      const { data: purchase, error: insertErr } = await deps.supabase
-        .schema("fleet")
-        .from("module_purchases")
-        .insert({
-          organization_id: orgId,
-          user_id: rbac.userId,
-          service_lines: serviceLines,
-          amount_jmd: amountJmd,
-          status: "pending",
-          provider: "wipay",
-        })
-        .select("*")
-        .single();
+      const { data: purchase, error: insertErr } = await deps.supabase.rpc("svc_module_purchase_insert", {
+        p_org: orgId,
+        p_user: rbac.userId,
+        p_lines: serviceLines,
+        p_amount: amountJmd,
+      });
 
       if (insertErr || !purchase) {
         return c.json({ error: insertErr?.message ?? "Could not create purchase" }, 500);
@@ -161,15 +144,12 @@ export function registerFleetModuleCheckoutRoutes(
 
       if (wipay.error) return c.json({ error: wipay.error }, 503);
 
-      await deps.supabase
-        .schema("fleet")
-        .from("module_purchases")
-        .update({
-          provider_transaction_id: wipay.transactionId,
-          payment_redirect_url: wipay.paymentUrl,
-          provider_data: { demo: wipay.demo ?? false },
-        })
-        .eq("id", purchase.id);
+      await deps.supabase.rpc("svc_module_purchase_set_redirect", {
+        p_id: purchase.id,
+        p_txn: wipay.transactionId,
+        p_url: wipay.paymentUrl,
+        p_provider_data: { demo: wipay.demo ?? false },
+      });
 
       if (wipay.demo) {
         await completeFleetModulePurchase(deps.supabase, purchase.id, {
@@ -201,12 +181,9 @@ export function registerFleetModuleCheckoutRoutes(
       if (!rbac) return c.json({ error: "Unauthorized" }, 401);
 
       const purchaseId = c.req.param("purchaseId");
-      const { data: purchase } = await deps.supabase
-        .schema("fleet")
-        .from("module_purchases")
-        .select("id, status, amount_jmd, currency, user_id, completed_at")
-        .eq("id", purchaseId)
-        .maybeSingle();
+      const { data: purchase } = await deps.supabase.rpc("svc_module_purchase_status", {
+        p_id: purchaseId,
+      });
 
       if (!purchase || purchase.user_id !== rbac.userId) {
         return c.json({ error: "Not found" }, 404);
@@ -242,15 +219,10 @@ export function registerFleetModuleCheckoutRoutes(
 
     const txnId = payload.transaction_id || payload.transactionId || payload.transactionid;
     if (!purchaseId && txnId) {
-      const { data: byTxn } = await deps.supabase
-        .schema("fleet")
-        .from("module_purchases")
-        .select("id")
-        .eq("provider_transaction_id", txnId)
-        .maybeSingle();
-      if (byTxn?.id) {
+      const { data: byTxn } = await deps.supabase.rpc("svc_module_purchase_id_by_txn", { p_txn: txnId });
+      if (byTxn) {
         if (wipaySuccess(payload.status || payload.payment_status)) {
-          await completeFleetModulePurchase(deps.supabase, byTxn.id, payload);
+          await completeFleetModulePurchase(deps.supabase, byTxn, payload);
         }
         return c.json({ received: true, success: wipaySuccess(payload.status) });
       }
@@ -263,11 +235,10 @@ export function registerFleetModuleCheckoutRoutes(
       return c.json({ received: true, success: true });
     }
 
-    await deps.supabase
-      .schema("fleet")
-      .from("module_purchases")
-      .update({ status: "failed", provider_data: { webhook: payload } })
-      .eq("id", purchaseId);
+    await deps.supabase.rpc("svc_module_purchase_fail", {
+      p_id: purchaseId,
+      p_provider_data: { webhook: payload },
+    });
 
     return c.json({ received: true, success: false });
   });

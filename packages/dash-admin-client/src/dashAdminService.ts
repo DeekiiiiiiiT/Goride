@@ -733,6 +733,7 @@ export interface DashZoneRow {
   priority: number;
   kind: DashZoneKind;
   source?: DashZoneSource | string | null;
+  boundary_pcode?: string | null;
   center_lat?: number | null;
   center_lng?: number | null;
   radius_m?: number | null;
@@ -825,20 +826,13 @@ export interface DashParishRow {
 }
 
 export interface DashAdminBoundary {
-  id: string;
   admin_level: number;
   pcode: string;
   parent_pcode?: string | null;
   name: string;
   slug: string;
-  area_sqkm?: number | null;
   center_lat?: number | null;
   center_lng?: number | null;
-  source?: string | null;
-  source_version?: string | null;
-  valid_on?: string | null;
-  properties?: Record<string, unknown>;
-  updated_at?: string;
 }
 
 export interface DashCoverageHealthParish {

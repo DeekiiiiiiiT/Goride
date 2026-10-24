@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" name="viewport"/>
+<title>Sunset Motoring - Place Approved</title>
+<!-- Material Symbols Outlined -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap" rel="stylesheet"/>
+<!-- Tailwind CSS -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<!-- Tailwind Config Verbatim -->
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          "colors": {
+            "tertiary-container": "#936f00",
+            "outline": "#8e7166",
+            "primary-fixed": "#ffdbce",
+            "on-primary": "#ffffff",
+            "secondary-container": "#fd761a",
+            "background": "#fff8f2",
+            "outline-variant": "#e2bfb2",
+            "on-tertiary-fixed": "#251a00",
+            "surface-tint": "#a73a00",
+            "error": "#ba1a1a",
+            "surface-container-highest": "#e8e1db",
+            "tertiary": "#755800",
+            "surface-container-low": "#faf2eb",
+            "on-secondary-fixed-variant": "#783200",
+            "inverse-primary": "#ffb599",
+            "on-secondary": "#ffffff",
+            "on-primary-container": "#fffbff",
+            "on-background": "#1e1b17",
+            "primary-fixed-dim": "#ffb599",
+            "secondary": "#9d4300",
+            "primary": "#a33900",
+            "on-tertiary-fixed-variant": "#5a4300",
+            "on-secondary-fixed": "#341100",
+            "secondary-fixed-dim": "#ffb690",
+            "on-primary-fixed-variant": "#7f2b00",
+            "inverse-on-surface": "#f7efe9",
+            "tertiary-fixed": "#ffdf9a",
+            "on-surface-variant": "#5a4138",
+            "surface": "#fff8f2",
+            "primary-container": "#cc4900",
+            "on-surface": "#1e1b17",
+            "secondary-fixed": "#ffdbca",
+            "on-secondary-container": "#5c2400",
+            "on-error-container": "#93000a",
+            "on-error": "#ffffff",
+            "on-tertiary": "#ffffff",
+            "surface-bright": "#fff8f2",
+            "tertiary-fixed-dim": "#f7be1d",
+            "surface-container-lowest": "#ffffff",
+            "surface-container": "#f4ede6",
+            "inverse-surface": "#33302c",
+            "surface-dim": "#e0d9d2",
+            "error-container": "#ffdad6",
+            "surface-container-high": "#eee7e0",
+            "on-tertiary-container": "#fffbff",
+            "on-primary-fixed": "#370e00",
+            "surface-variant": "#e8e1db"
+          },
+          "borderRadius": {
+            "DEFAULT": "0.25rem",
+            "lg": "0.5rem",
+            "xl": "0.75rem",
+            "full": "9999px"
+          },
+          "spacing": {
+            "gutter": "1rem",
+            "margin": "1rem",
+            "gutter-sm": "0.75rem",
+            "space-xl": "2rem",
+            "space-sm": "0.5rem",
+            "space-lg": "1.5rem",
+            "space-xs": "0.25rem",
+            "space-md": "1rem",
+            "margin-lg": "1.5rem"
+          },
+          "fontFamily": {
+            "body-sm": ["Inter"],
+            "body-md": ["Inter"],
+            "headline-lg": ["Inter"],
+            "display-lg": ["Inter"],
+            "label-md": ["Inter"],
+            "label-lg": ["Inter"],
+            "price-display": ["Inter"],
+            "headline-sm": ["Inter"],
+            "body-lg": ["Inter"],
+            "label-sm": ["Inter"],
+            "headline-md": ["Inter"],
+            "display-lg-mobile": ["Inter"]
+          },
+          "fontSize": {
+            "body-sm": ["12px", { "lineHeight": "16px", "fontWeight": "400" }],
+            "body-md": ["14px", { "lineHeight": "20px", "fontWeight": "400" }],
+            "headline-lg": ["28px", { "lineHeight": "36px", "letterSpacing": "-0.01em", "fontWeight": "700" }],
+            "display-lg": ["40px", { "lineHeight": "48px", "letterSpacing": "-0.02em", "fontWeight": "800" }],
+            "label-md": ["12px", { "lineHeight": "16px", "letterSpacing": "0.02em", "fontWeight": "600" }],
+            "label-lg": ["14px", { "lineHeight": "20px", "letterSpacing": "0.01em", "fontWeight": "600" }],
+            "price-display": ["24px", { "lineHeight": "28px", "letterSpacing": "-0.01em", "fontWeight": "700" }],
+            "headline-sm": ["18px", { "lineHeight": "24px", "fontWeight": "600" }],
+            "body-lg": ["16px", { "lineHeight": "24px", "fontWeight": "400" }],
+            "label-sm": ["10px", { "lineHeight": "12px", "letterSpacing": "0.04em", "fontWeight": "700" }],
+            "headline-md": ["22px", { "lineHeight": "28px", "letterSpacing": "-0.01em", "fontWeight": "700" }],
+            "display-lg-mobile": ["32px", { "lineHeight": "40px", "letterSpacing": "-0.02em", "fontWeight": "800" }]
+          }
+        }
+      }
+    }
+  </script>
+<style>
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 500, 'GRAD' 0, 'opsz' 24;
+      display: inline-block;
+      vertical-align: middle;
+      line-height: 1;
+    }
+    @keyframes floatParticle {
+      0%, 100% { transform: translateY(0px) rotate(0deg); }
+      50% { transform: translateY(-8px) rotate(12deg); }
+    }
+    .animate-float {
+      animation: floatParticle 3.2s ease-in-out infinite;
+    }
+    .animate-float-delayed {
+      animation: floatParticle 3.8s ease-in-out 1.2s infinite;
+    }
+  </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background text-on-surface antialiased min-h-screen selection:bg-primary-fixed selection:text-on-primary-fixed">
+<!-- Mobile Wrapper Frame -->
+<div class="max-w-md mx-auto min-h-screen flex flex-col bg-background relative shadow-2xl pb-24 overflow-x-hidden">
+<!-- Top Status Bar & App Bar from Shared Components JSON -->
+<header class="sticky top-0 z-40 bg-surface/95 backdrop-blur-md border-b border-outline-variant/40 shadow-sm">
+<div class="flex justify-between items-center w-full px-4 h-16 max-w-md mx-auto">
+<button aria-label="Go back" class="p-2 -ml-2 rounded-full text-on-surface-variant hover:bg-surface-container active:scale-95 transition-transform duration-150 flex items-center justify-center" type="button">
+<span class="material-symbols-outlined text-[24px]">arrow_back</span>
+</button>
+<h1 class="text-headline-sm font-headline-sm text-primary tracking-tight font-bold">
+          Place Approved
+        </h1>
+<button aria-label="Share approval" class="p-2 -mr-2 rounded-full text-primary hover:bg-surface-container active:scale-95 transition-transform duration-150 flex items-center justify-center" type="button">
+<span class="material-symbols-outlined text-[24px]">share</span>
+</button>
+</div>
+<!-- Live Island Grid Status Pill Toast -->
+<div class="px-4 pb-2.5 pt-0.5">
+<div class="bg-surface-container-lowest border border-outline-variant/60 rounded-full px-3 py-1.5 flex items-center justify-between shadow-sm">
+<div class="flex items-center space-x-2">
+<span class="flex h-2.5 w-2.5 relative">
+<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+<span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-600"></span>
+</span>
+<span class="text-label-md font-label-md text-on-surface font-semibold">
+              Live on Island Grid
+            </span>
+</div>
+<div class="flex items-center space-x-1 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+<span class="material-symbols-outlined text-emerald-700 text-[14px]" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+<span class="text-label-sm font-label-sm text-emerald-800 tracking-wider">VERIFIED</span>
+</div>
+</div>
+</div>
+</header>
+<!-- Main Content Canvas -->
+<main class="flex-1 px-4 pt-3 space-y-4">
+<!-- Hero Celebratory Milestone Card with Confetti particles -->
+<section class="relative bg-surface-container-lowest rounded-2xl p-5 border border-outline-variant/50 shadow-sm overflow-hidden">
+<!-- Floating Celebratory Confetti & Sparkles -->
+<div class="absolute -top-3 -right-3 w-28 h-28 bg-gradient-to-br from-tertiary-fixed/40 to-primary-fixed/20 rounded-full blur-2xl pointer-events-none"></div>
+<div class="absolute top-2 left-6 text-tertiary-container animate-float opacity-80 pointer-events-none select-none">
+<span class="material-symbols-outlined text-[18px]">celebration</span>
+</div>
+<div class="absolute top-4 right-10 text-secondary-container animate-float-delayed opacity-90 pointer-events-none select-none">
+<span class="material-symbols-outlined text-[16px]">arrow_back_ios_new</span>
+</div>
+<div class="absolute bottom-3 right-6 text-primary animate-float opacity-75 pointer-events-none select-none">
+<span class="material-symbols-outlined text-[14px]">auto_awesome</span>
+</div>
+<div class="absolute top-12 left-1 text-tertiary animate-float-delayed opacity-60 pointer-events-none select-none">
+<span class="material-symbols-outlined text-[12px]">grade</span>
+</div>
+<div class="relative z-10 flex flex-col items-center text-center">
+<!-- Glowing Icon Badge -->
+<div class="relative mb-3">
+<div class="w-16 h-16 rounded-full bg-gradient-to-tr from-primary to-secondary-container flex items-center justify-center shadow-lg shadow-primary/20 ring-4 ring-primary-fixed">
+<span class="material-symbols-outlined text-on-primary text-[32px]" style="font-variation-settings: 'FILL' 1;">task_alt</span>
+</div>
+<div class="absolute -bottom-1 -right-1 bg-emerald-600 text-white rounded-full p-1 border-2 border-surface-container-lowest shadow-sm flex items-center justify-center">
+<span class="material-symbols-outlined text-[12px]" style="font-variation-settings: 'FILL' 1;">check</span>
+</div>
+</div>
+<!-- Milestone Headline & Island Message -->
+<div class="inline-flex items-center space-x-1.5 px-2.5 py-0.5 rounded-full bg-primary-fixed/60 mb-1.5">
+<span class="material-symbols-outlined text-primary text-[14px]">local_police</span>
+<span class="text-label-sm font-label-sm text-primary tracking-wide">MILESTONE UNLOCKED</span>
+</div>
+<h2 class="text-headline-md font-headline-md text-on-background font-extrabold tracking-tight">
+            Your First Pin is Approved! 🎉
+          </h2>
+<p class="text-body-md font-body-md text-on-surface-variant mt-1.5 max-w-xs">
+            This place is now live on the island map for all Jamaican drivers.
+          </p>
+</div>
+</section>
+<!-- Approved Place Card Preview (High-Contrast Modern Utility) -->
+<section class="bg-surface-container-lowest rounded-2xl border border-outline-variant/60 shadow-sm overflow-hidden">
+<div class="p-4">
+<div class="flex items-start justify-between gap-3">
+<div class="flex items-center space-x-3">
+<div class="w-12 h-12 rounded-xl bg-surface-container flex items-center justify-center text-primary border border-outline-variant/30 flex-shrink-0">
+<span class="material-symbols-outlined text-[28px]" style="font-variation-settings: 'FILL' 1;">build_circle</span>
+</div>
+<div>
+<div class="flex items-center space-x-1.5 flex-wrap">
+<h3 class="text-headline-sm font-headline-sm text-on-background font-bold leading-tight">
+                    Sammy's Tyre & Alignment
+                  </h3>
+</div>
+<div class="flex items-center gap-1.5 mt-1">
+<span class="inline-flex items-center space-x-1 bg-emerald-100/80 text-emerald-800 px-2 py-0.5 rounded text-label-sm font-label-sm font-bold">
+<span class="material-symbols-outlined text-[12px]" style="font-variation-settings: 'FILL' 1;">verified</span>
+<span>Verified Place</span>
+</span>
+<span class="text-label-sm font-label-sm text-on-surface-variant bg-surface-container px-2 py-0.5 rounded">
+                    Tyre & Vulcanizing
+                  </span>
+</div>
+</div>
+</div>
+</div>
+<!-- Address details & Parish Tag -->
+<div class="mt-3.5 pt-3 border-t border-surface-container flex items-start space-x-2">
+<span class="material-symbols-outlined text-outline text-[18px] mt-0.5 flex-shrink-0">location_on</span>
+<div class="text-body-sm font-body-sm text-on-surface leading-snug">
+<span class="font-semibold text-on-background">14 Eastwood Park Rd</span>, Half-Way-Tree, Kingston & St. Andrew
+            </div>
+</div>
+</div>
+<!-- Mini Map Snippet Visual -->
+<div class="relative bg-surface-container-high border-t border-outline-variant/40 h-28 overflow-hidden flex items-center justify-center">
+<div class="absolute inset-0 opacity-80 mix-blend-multiply bg-[radial-gradient(#cc4900_1px,transparent_1px)] [background-size:12px_12px]"></div>
+<!-- Mock Map Roads & Terrain styling -->
+<div class="absolute inset-0 flex items-center justify-center pointer-events-none">
+<div class="w-full h-2 bg-surface-container-highest/90 rotate-12 absolute"></div>
+<div class="w-full h-3 bg-white/70 -rotate-45 absolute"></div>
+<div class="w-1.5 h-full bg-white/70 rotate-6 absolute"></div>
+</div>
+<!-- Center Pinned Marker with Pulse -->
+<div class="relative z-10 flex flex-col items-center">
+<div class="relative flex items-center justify-center">
+<div class="w-10 h-10 rounded-full bg-primary/20 animate-ping absolute"></div>
+<div class="w-9 h-9 rounded-full bg-primary text-white flex items-center justify-center shadow-lg border-2 border-white">
+<span class="material-symbols-outlined text-[20px]" style="font-variation-settings: 'FILL' 1;">pin_drop</span>
+</div>
+</div>
+<div class="mt-1 bg-inverse-surface text-surface text-label-sm font-label-sm px-2.5 py-0.5 rounded-full shadow-md whitespace-nowrap">
+              Live on Map • Pin ID #849
+            </div>
+</div>
+<!-- Corner Parish badge -->
+<div class="absolute bottom-2 left-2 z-10 bg-surface-container-lowest/90 backdrop-blur-xs px-2 py-0.5 rounded border border-outline-variant/50 text-label-sm font-label-sm text-on-surface-variant">
+            St. Andrew Grid
+          </div>
+</div>
+</section>
+<!-- Bento Grid: Contributor Rewards & Community Impact -->
+<div class="grid grid-cols-1 gap-3">
+<!-- Contributor Rewards Card -->
+<section class="bg-surface-container-lowest rounded-2xl p-4 border border-outline-variant/60 shadow-sm space-y-3">
+<div class="flex items-center justify-between">
+<div class="flex items-center space-x-2">
+<div class="w-8 h-8 rounded-lg bg-tertiary-fixed flex items-center justify-center text-on-tertiary-fixed">
+<span class="material-symbols-outlined text-[18px]" style="font-variation-settings: 'FILL' 1;">military_tech</span>
+</div>
+<h4 class="text-label-lg font-label-lg text-on-background font-bold">
+                Contributor Rewards
+              </h4>
+</div>
+<span class="bg-secondary-fixed text-on-secondary-fixed font-bold text-label-sm font-label-sm px-2.5 py-1 rounded-full flex items-center space-x-1">
+<span class="material-symbols-outlined text-[13px]" style="font-variation-settings: 'FILL' 1;">add</span>
+<span>50 Scout XP</span>
+</span>
+</div>
+<!-- Unlocked Badge Detail -->
+<div class="bg-surface-container-low p-3 rounded-xl border border-outline-variant/40 flex items-center space-x-3">
+<div class="w-10 h-10 rounded-full bg-primary-container text-on-primary-container flex items-center justify-center flex-shrink-0 shadow-sm">
+<span class="material-symbols-outlined text-[20px]" style="font-variation-settings: 'FILL' 1;">shield</span>
+</div>
+<div class="flex-1">
+<div class="text-label-sm font-label-sm text-primary font-bold uppercase tracking-wider">New Badge Unlocked</div>
+<div class="text-body-md font-body-md font-bold text-on-background">Road Scout Grade 2</div>
+</div>
+</div>
+<!-- Rank Progress Bar -->
+<div>
+<div class="flex justify-between items-center text-label-sm font-label-sm mb-1.5">
+<span class="text-on-surface-variant font-medium">Scout Grade Progress</span>
+<span class="text-on-background font-bold tracking-tight">365 / 500 XP</span>
+</div>
+<div class="w-full bg-surface-container rounded-full h-2.5 overflow-hidden">
+<div class="bg-gradient-to-r from-primary to-secondary-container h-full rounded-full transition-all duration-500" style="width: 73%;"></div>
+</div>
+</div>
+</section>
+<!-- Community Impact Callout -->
+<section class="bg-surface-container-low rounded-2xl p-4 border border-outline-variant/50 flex items-start space-x-3">
+<div class="w-8 h-8 rounded-full bg-emerald-100 text-emerald-800 flex items-center justify-center flex-shrink-0 mt-0.5">
+<span class="material-symbols-outlined text-[18px]" style="font-variation-settings: 'FILL' 1;">groups</span>
+</div>
+<div>
+<h4 class="text-label-lg font-label-lg text-on-background font-bold">
+              Island Community Impact
+            </h4>
+<p class="text-body-sm font-body-sm text-on-surface-variant mt-0.5 leading-relaxed">
+              Jamaican motorists can now find reliable tyre repair and air at this location thanks to your pin.
+            </p>
+</div>
+</section>
+</div>
+<!-- Action Buttons Cluster (Touch-first targets) -->
+<section class="pt-2 space-y-2.5">
+<!-- Primary Action -->
+<button class="w-full h-12 bg-primary hover:bg-primary-container text-on-primary rounded-xl font-label-lg font-label-lg font-bold flex items-center justify-center space-x-2 shadow-md shadow-primary/20 active:scale-[0.98] transition-all" type="button">
+<span class="material-symbols-outlined text-[20px]" style="font-variation-settings: 'FILL' 1;">map</span>
+<span>View on Island Map</span>
+</button>
+<!-- Secondary Action -->
+<button class="w-full h-12 bg-surface-container hover:bg-surface-container-high border border-outline-variant text-primary rounded-xl font-label-lg font-label-lg font-bold flex items-center justify-center space-x-2 active:scale-[0.98] transition-all" type="button">
+<span class="material-symbols-outlined text-[20px]">add_location_alt</span>
+<span>Map Another Place</span>
+</button>
+</section>
+</main>
+<!-- Bottom Navigation Bar from Shared Components JSON -->
+<!-- Destination count: 4 | Labels: ['Explore', 'Contribute', 'Rewards', 'Profile'] -->
+<!-- Active Tab: Contribute (Mapped exactly to the Contributions approval context) -->
+<nav class="fixed bottom-0 left-0 w-full z-50 flex justify-around items-center px-4 h-16 max-w-md mx-auto bg-surface/95 backdrop-blur-md shadow-[0_-4px_16px_rgba(28,25,23,0.06)]">
+<!-- Tab 1: Explore -->
+<a class="flex flex-col items-center justify-center text-on-surface-variant hover:text-primary transition-colors active:scale-95 transition-transform duration-150 min-h-[48px] min-w-[48px]" href="#explore">
+<span class="material-symbols-outlined text-[22px]">explore</span>
+<span class="text-label-sm font-label-sm mt-0.5">Explore</span>
+</a>
+<!-- Tab 2: Contribute (ACTIVE TAB - Exactly matching current approval milestone) -->
+<a class="flex flex-col items-center justify-center text-primary font-bold hover:text-primary transition-colors active:scale-95 transition-transform duration-150 min-h-[48px] min-w-[48px]" href="#contribute">
+<span class="material-symbols-outlined text-[22px]" style="font-variation-settings: 'FILL' 1;">add_location_alt</span>
+<span class="text-label-sm font-label-sm mt-0.5">Contribute</span>
+</a>
+<!-- Tab 3: Rewards -->
+<a class="flex flex-col items-center justify-center text-on-surface-variant hover:text-primary transition-colors active:scale-95 transition-transform duration-150 min-h-[48px] min-w-[48px]" href="#rewards">
+<span class="material-symbols-outlined text-[22px]">stars</span>
+<span class="text-label-sm font-label-sm mt-0.5">Rewards</span>
+</a>
+<!-- Tab 4: Profile -->
+<a class="flex flex-col items-center justify-center text-on-surface-variant hover:text-primary transition-colors active:scale-95 transition-transform duration-150 min-h-[48px] min-w-[48px]" href="#profile">
+<span class="material-symbols-outlined text-[22px]">person</span>
+<span class="text-label-sm font-label-sm mt-0.5">Profile</span>
+</a>
+</nav>
+</div>
+</body></html>

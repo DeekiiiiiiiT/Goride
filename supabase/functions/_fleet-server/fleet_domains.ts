@@ -352,7 +352,21 @@ export const FLEET_DOMAINS: FleetDomainDef[] = [
         : key.startsWith("unverified_vendor:")
           ? "unverified_vendor:"
           : "station:";
-      return base(key, v, prefix, { name: str(v.name) ?? str(v.stationName) });
+      const explicit = str(v.originApp) ?? str(v.origin_app);
+      const origin = explicit === "roam_fleet" || explicit === "roam_plug" || explicit === "manual"
+        ? explicit
+        : str(v.dataSource) === "import"
+          ? "manual"
+          : str(v.dataSource) === "log" || key.startsWith("learnt_location:")
+            ? "roam_fleet"
+            : key.startsWith("plug:")
+              ? "roam_plug"
+              : null;
+      if (origin && !v.originApp) v.originApp = origin;
+      return base(key, v, prefix, {
+        name: str(v.name) ?? str(v.stationName),
+        ...(origin ? { origin_app: origin } : {}),
+      });
     },
   },
   {

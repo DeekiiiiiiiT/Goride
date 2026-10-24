@@ -3,7 +3,7 @@
 - **Project id:** `7833067736952351487`
 - **Design system:** Sunset Motoring (`assets/8a1618be2b6e490a90c4ce9f3109eeeb`)
 
-HTML only, under `docs/stitch/roam-plug/html/`. These are layout references. Do not copy them into an app public folder. The live screens are React routes in `apps/plug`.
+HTML only, under `docs/stitch/roam-plug/html/`. The phone app shows these files. Do not copy them into an app public folder.
 
 | # | Screen | File | Stitch screen id | App route |
 |---|---|---|---|---|
@@ -67,9 +67,30 @@ HTML only, under `docs/stitch/roam-plug/html/`. These are layout references. Do 
 | 56 | GPS issue | `56-gps-issue.html` | `035ed5fd7fe6454ea4d123ef19e80c3b` | `/gps` |
 | 57 | Offline | `57-offline.html` | `39ada09d619c42b19d54d207bb417c45` | `/offline` |
 
-## Missing from Stitch
+## Added states
 
-Dominion review screens D1–D4 were not in the Roam Plug project. They are built in Dominion from the prompt, not invented as Stitch HTML.
+| Screen | File | App route |
+|---|---|---|
+| Explore loading | `15b-explore-loading.html` | `/explore/loading` |
+| Empty map | `15c-empty-map.html` | `/explore/empty` |
+| Offline chip | `15d-offline-chip.html` | `/explore/offline` |
+| Directions sheet | `19b-directions.html` | `/stations/:id/directions` |
+| Withdraw pin | `23b-withdraw.html` | `/map/withdraw` |
+| Save error | `26b-save-error.html` | `/fuel/error` |
+| First fuel save | `27b-first-save.html` | `/fuel/first` |
+| Empty garage | `29b-empty-garage.html` | `/garage/empty` |
+| Remove vehicle | `30b-remove-vehicle.html` | `/garage/remove` |
+| Poor GPS pin | `43c-poor-gps.html` | `/map/pin/poor` |
+| Submitted toast | `45c-submitted-toast.html` | `/map/submitted-toast` |
+| Approved pin | `46b-approved.html` | `/contributions/approved` |
+| Empty search | `49b-empty-search.html` | `/search/empty` |
+| Empty inbox | `50b-empty-inbox.html` | `/inbox/empty` |
+| Dominion review queue | `D1-review-queue.html` | Dominion Places Review |
+| Dominion split review | `D2-review-item.html` | Dominion Places Review |
+| Dominion merge | `D3-merge.html` | Dominion Places Review |
+| Dominion parish coverage | `D4-coverage.html` | Dominion Places Review |
+
+Dominion review itself is the admin screen, built from these desktop drawings.
 
 ## Extra variants
 

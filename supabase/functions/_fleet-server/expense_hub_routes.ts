@@ -12,7 +12,6 @@ import { appendCanonicalFixedExpenseIfEligible } from "./canonical_from_ops.ts";
 import { renewalCoverage } from "../../../packages/finance-core/src/fixedExpenseOccurrences.ts";
 import {
   appendCanonicalLedgerEvents,
-  deleteCanonicalLedgerBySource,
   deleteCanonicalLedgerBySourceFromDate,
 } from "./ledger_canonical.ts";
 import {
@@ -25,6 +24,7 @@ import {
   allocateEvenly,
 } from "../../../packages/finance-core/src/expenseHubJournal.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { getServiceClient } from "./service_client.ts";
 import {
   recordExpenseInputTax,
   reverseExpenseInputTax,
@@ -65,6 +65,21 @@ function ymd(d = new Date()) {
 function actorId(c: Context): string {
   const u = c.get("rbacUser") as { userId?: string } | undefined;
   return u?.userId || "unknown";
+}
+
+/** Atomic bill, payment, and void. A missing function means the v2 tables are not applied yet. */
+async function statementRpc(
+  fn: "post_expense_bill" | "record_expense_payment" | "void_expense_bill",
+  args: Record<string, unknown>,
+): Promise<void> {
+  const { error } = await getServiceClient().rpc(`svc_${fn}`, args);
+  if (!error) return;
+  const message = error.message || "";
+  if (/does not exist|schema cache/i.test(message)) return;
+  if (/week locked/i.test(message)) throw new Error("This week is closed.");
+  if (/overpay/i.test(message)) throw new Error("Payment is more than the balance");
+  if (/duplicate key|already exists|23505/i.test(message)) return;
+  throw new Error(message);
 }
 
 async function requireHubWrites(c: Context): Promise<Response | null> {
@@ -142,7 +157,6 @@ async function projectFixedExpenseFromAssignment(
   };
   const key = `fixed_expense:${config.vehicleId}:${config.id}`;
   await kv.set(key, stampOrg(config, c));
-  await deleteCanonicalLedgerBySource("financial_event", [String(config.id)]);
   const horizon = new Date();
   await appendCanonicalFixedExpenseIfEligible(config, startDate, horizon.toISOString().slice(0, 10), c);
   return config;
@@ -631,6 +645,14 @@ export function registerExpenseHubRoutes(app: {
         stampOrg(stampedJournal as unknown as Record<string, unknown>, c),
       );
       await appendHubDocumentLedger(c, next);
+      await statementRpc("post_expense_bill", {
+        p_org: getOrgId(c) || "",
+        p_bill_id: next.id,
+        p_coverage_id: null,
+        p_bill_date: next.incurredDate,
+        p_amount: Number(next.netAmount) || 0,
+        p_self_approved: Boolean(next.selfApproved),
+      });
       next.status = "posted";
       next.postedAt = nowIso();
       // Shadow-write GCT input tax when vendor has TRN (Accounting engine)
@@ -666,6 +688,10 @@ export function registerExpenseHubRoutes(app: {
       }
     }
     if (to === "voided") {
+      await statementRpc("void_expense_bill", {
+        p_org: getOrgId(c) || "",
+        p_bill_id: doc.id,
+      });
       try {
         const sb = createClient(
           Deno.env.get("SUPABASE_URL") ?? "",
@@ -805,6 +831,27 @@ export function registerExpenseHubRoutes(app: {
       const alreadyPaid = existing.reduce((s, p) => s + Number(p.amount || 0), 0);
       if (amount > doc.netAmount - alreadyPaid + 0.01) {
         return c.json({ error: "Payment is more than the balance" }, 400);
+      }
+      try {
+        await statementRpc("post_expense_bill", {
+          p_org: getOrgId(c) || "",
+          p_bill_id: id,
+          p_coverage_id: null,
+          p_bill_date: doc.incurredDate,
+          p_amount: Number(doc.netAmount) || 0,
+          p_self_approved: Boolean(doc.selfApproved),
+        });
+        await statementRpc("record_expense_payment", {
+          p_org: getOrgId(c) || "",
+          p_payment_id: crypto.randomUUID(),
+          p_bill_id: id,
+          p_amount: amount,
+          p_payment_date: body.paymentDate || ymd(),
+          p_idempotency_key: idempotencyKey || `pay:${id}:${amount}:${body.paymentDate || ymd()}`,
+        });
+      } catch (e) {
+        const message = e instanceof Error ? e.message : "Payment failed";
+        return c.json({ error: message }, 400);
       }
       const payment: ExpensePayment = {
         id: crypto.randomUUID(),
@@ -948,7 +995,14 @@ export function registerExpenseHubRoutes(app: {
           updatedAt: nowIso(),
         };
         await kv.set(`expense_rule_assignment:${assignmentId}`, stampOrg(assignment, c));
-        await projectFixedExpenseFromAssignment(c, nextGroup, assignment);
+        try {
+          await projectFixedExpenseFromAssignment(c, nextGroup, assignment);
+        } catch (e) {
+          if (e instanceof Error && e.message === "This week is closed.") {
+            return c.json({ error: e.message }, 400);
+          }
+          throw e;
+        }
         assignments.push(assignment);
       }
       await writeAudit(c, {
@@ -1131,7 +1185,14 @@ export function registerExpenseHubRoutes(app: {
           updatedAt: nowIso(),
         };
         await kv.set(`expense_rule_assignment:${assignmentId}`, stampOrg(assignment, c));
-        await projectFixedExpenseFromAssignment(c, group, assignment);
+        try {
+          await projectFixedExpenseFromAssignment(c, group, assignment);
+        } catch (e) {
+          if (e instanceof Error && e.message === "This week is closed.") {
+            return c.json({ error: e.message }, 400);
+          }
+          throw e;
+        }
         assignments.push(assignment);
       }
       await writeAudit(c, {
@@ -1208,7 +1269,14 @@ export function registerExpenseHubRoutes(app: {
             await kv.set(key, stampOrg({ ...existing, isActive: false, updatedAt: nowIso() }, c));
           }
         } else {
-          await projectFixedExpenseFromAssignment(c, next, updatedA);
+          try {
+            await projectFixedExpenseFromAssignment(c, next, updatedA);
+          } catch (e) {
+            if (e instanceof Error && e.message === "This week is closed.") {
+              return c.json({ error: e.message }, 400);
+            }
+            throw e;
+          }
         }
       }
       await writeAudit(c, {

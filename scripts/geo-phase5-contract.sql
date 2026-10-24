@@ -1,7 +1,11 @@
 -- G5 contract. Do not run this until 14 quiet days after 2026-10-24
--- with zero calls to the routes listed below, and a separate go-ahead.
--- It is not a migration. The drops stay commented. The check fails closed
--- while anything still uses these objects.
+-- (that is 2026-11-07) with zero calls to the routes listed below,
+-- and a separate go-ahead. It is not a migration. The drops stay commented.
+--
+-- Before this SQL, run: node scripts/geo-phase5-precheck.mjs
+-- That fails if supabase/functions or packages still name admin_boundaries.
+-- This block fails if a database function or view still names the old objects.
+-- The check fails closed while anything still uses these objects.
 
 -- Routes that still answer 410 (leave them until this script is approved):
 --   POST   /admin/parishes

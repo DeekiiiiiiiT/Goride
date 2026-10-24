@@ -34,7 +34,7 @@ export function weekPnlTieBlockers(input: {
       persisted: settlementSum,
       expected: 0,
       delta: settlementSum,
-      message: 'Engine week P&L unavailable for settlement tie-out',
+      message: 'Driver-lane contribution is not available',
     }];
   }
   return [];

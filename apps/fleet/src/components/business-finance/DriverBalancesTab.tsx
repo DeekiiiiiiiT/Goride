@@ -53,6 +53,7 @@ export function DriverBalancesTab({
             <TableRow>
               <TableHead>Driver</TableHead>
               <TableHead className="text-right">Cash still held</TableHead>
+              <TableHead className="text-right">Owed by driver</TableHead>
               <TableHead className="text-right">Company owes</TableHead>
               <TableHead>Bank settled</TableHead>
               <TableHead>Week</TableHead>
@@ -63,7 +64,7 @@ export function DriverBalancesTab({
           <TableBody>
             {rows.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} className="text-center text-slate-500 py-8">
+                <TableCell colSpan={8} className="text-center text-slate-500 py-8">
                   No driver balances for this period.
                 </TableCell>
               </TableRow>
@@ -87,6 +88,9 @@ export function DriverBalancesTab({
                     }`}
                   >
                     {formatMoney(r.cashStillHeld)}
+                  </TableCell>
+                  <TableCell className="text-right tabular-nums">
+                    {r.owedByDriver ? formatMoney(r.owedByDriver) : '—'}
                   </TableCell>
                   <TableCell className="text-right tabular-nums">{formatMoney(r.companyOwes)}</TableCell>
                   <TableCell>

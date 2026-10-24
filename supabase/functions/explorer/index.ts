@@ -37,9 +37,21 @@ async function userFrom(c: { req: { header: (name: string) => string | undefined
 }
 
 function roleOf(user: User): string {
-  const meta = user.app_metadata || {};
-  const userMeta = user.user_metadata || {};
-  return String(meta.role || userMeta.role || "");
+  const appMeta = user.app_metadata || {};
+  const explicit = appMeta.role;
+  if (typeof explicit === "string" && explicit.trim()) return explicit.trim();
+  const roles = appMeta.roles;
+  if (Array.isArray(roles)) {
+    const first = roles.find((role) => typeof role === "string" && role.trim());
+    if (typeof first === "string") return first.trim();
+  }
+  return "";
+}
+
+function userPepper(): string {
+  const pepper = Deno.env.get("PLUG_USER_HASH_PEPPER")?.trim() || "";
+  if (!pepper) throw new Error("PLUG_USER_HASH_PEPPER is not set");
+  return pepper;
 }
 
 async function requireExplorer(c: { req: { header: (name: string) => string | undefined } }): Promise<User> {
@@ -203,58 +215,52 @@ app.post("/fuel-logs", async (c) => {
       }
     }
 
-    const { data: stationRows } = await sb.schema("fleet").from("stations").select("id,name,payload_json").limit(1000);
-    const stations: StationProfile[] = (stationRows || []).map((row) => {
+    const { data: stationRows, error: stationError } = await sb.schema("places").rpc("station_match_candidates");
+    if (stationError) throw stationError;
+    const stations: StationProfile[] = (stationRows || []).map((row: { id: string; name: string | null; payload_json: Record<string, unknown> | null }) => {
       const payload = (row.payload_json || {}) as Record<string, unknown>;
       const location = (payload.location || {}) as { lat?: number; lng?: number };
+      const status = (payload.status as StationProfile["status"]) || "verified";
       return {
         id: String(row.id),
         name: String(row.name || payload.name || "Station"),
         brand: String(payload.brand || ""),
         address: String(payload.address || ""),
         location: { lat: Number(location.lat ?? payload.lat), lng: Number(location.lng ?? payload.lng) },
-        status: (payload.status as StationProfile["status"]) || "verified",
+        status,
         geofenceRadius: Number(payload.geofenceRadius) || undefined,
-        pinConfirmed: payload.pinConfirmed !== false,
+        pinConfirmed: status === "learnt" ? undefined : payload.pinConfirmed !== false,
         gpsAliases: Array.isArray(payload.gpsAliases) ? payload.gpsAliases as StationProfile["gpsAliases"] : undefined,
       };
-    }).filter((station) => station.status === "verified" && Number.isFinite(station.location.lat) && Number.isFinite(station.location.lng));
+    }).filter((station) => (station.status === "verified" || station.status === "learnt") && Number.isFinite(station.location.lat) && Number.isFinite(station.location.lng));
 
+    const mocked = Boolean(body.mockLocation);
     const match = Number.isFinite(lat) && Number.isFinite(lng)
       ? findMatchingStationSmart(lat, lng, stations, 600, Number(body.accuracyM) || 0)
       : { confidence: "none" as const, station: null, distance: Infinity, candidatesInRange: 0, secondClosestDistance: Infinity };
-    const decision = decidePlugStation(match);
+    let decision = decidePlugStation(match);
+    if (mocked && decision === "learnt") decision = "review";
     const pricePer = Number(body.litres) > 0 ? Number(body.amount) / Number(body.litres) : 0;
     const estimate = await retailEstimate(sb, String(body.grade || "e10_87"));
-    const priceCall = estimate ? plugPriceDecision(pricePer, estimate) : "hold";
+    const priceCall = mocked ? "hold" : estimate ? plugPriceDecision(pricePer, estimate) : "hold";
     const writes = planPlugFill({ decision, price: priceCall });
     const touched = writesTouchFleetMoney(writes.map((write) => write.table));
     if (touched.length) throw new Error("Plug fill tried to touch fleet money");
-
-    let stationId = decision === "confirm" || decision === "review" ? match.station?.id || null : null;
-    if (decision === "learnt" && Number.isFinite(lat) && Number.isFinite(lng)) {
+    let stationId = decision === "confirm" || (decision === "review" && match.station) ? match.station?.id || null : null;
+    if (!mocked && decision === "learnt" && Number.isFinite(lat) && Number.isFinite(lng)) {
       const id = crypto.randomUUID();
-      const { error } = await sb.schema("fleet").from("stations").insert({
-        id,
-        organization_id: null,
-        name: body.stationName || "Unconfirmed station",
-        legacy_kv_id: `plug:${id}`,
-        origin_app: "roam_plug",
-        payload_json: {
-          status: "learnt",
-          origin_app: "roam_plug",
-          dataSource: "log",
-          pinConfirmed: false,
-          location: { lat, lng },
-          brand: body.brand || null,
-        },
+      const { error } = await sb.schema("places").rpc("insert_plug_learnt_station", {
+        p_id: id,
+        p_name: body.stationName || "Unconfirmed station",
+        p_lat: lat,
+        p_lng: lng,
+        p_brand: body.brand || null,
       });
       if (error) throw error;
       stationId = id;
     }
 
-    const pepper = Deno.env.get("PLUG_USER_HASH_PEPPER") || "roam-plug";
-    const userHash = await hashExplorerUser(user.id, pepper);
+    const userHash = await hashExplorerUser(user.id, userPepper());
     const clientId = String(body.clientId || crypto.randomUUID());
     const { data: log, error: logError } = await sb.schema("explorer").from("fuel_log").insert({
       user_id: user.id,
@@ -280,7 +286,7 @@ app.post("/fuel-logs", async (c) => {
       source: "fuel",
       reference_id: log.id,
     });
-    if (stationId) {
+    if (stationId || mocked) {
       const { error: evidenceError } = await sb.schema("places").from("place_evidence").insert({
         station_id: stationId,
         user_hash: userHash,
@@ -288,7 +294,7 @@ app.post("/fuel-logs", async (c) => {
         lat: Number.isFinite(lat) ? lat : null,
         lng: Number.isFinite(lng) ? lng : null,
         accuracy_m: body.accuracyM ?? null,
-        mock_location: Boolean(body.mockLocation),
+        mock_location: mocked,
       });
       if (evidenceError) throw evidenceError;
     }
@@ -301,7 +307,7 @@ app.post("/fuel-logs", async (c) => {
         user_hash: userHash,
         in_band: priceCall === "publish",
       });
-      if (priceCall === "publish" && decision === "confirm") {
+      if (!mocked && priceCall === "publish" && decision === "confirm") {
         await sb.schema("places").from("price_current").upsert({
           station_id: stationId,
           grade: body.grade || "e10_87",
@@ -372,10 +378,21 @@ app.post("/pins", async (c) => {
     if (!(await hitLimit(sb, user.id, "pin", 20))) return c.json({ error: "Too many pins this hour" }, 429);
     const accuracy = Number(body.accuracyM);
     if (!(accuracy > 0) || accuracy > 100) return c.json({ error: "GPS is not accurate enough to pin this place" }, 422);
-    const pepper = Deno.env.get("PLUG_USER_HASH_PEPPER") || "roam-plug";
-    const userHash = await hashExplorerUser(user.id, pepper);
+    const userHash = await hashExplorerUser(user.id, userPepper());
     const lat = Number(body.lat);
     const lng = Number(body.lng);
+    if (body.mockLocation) {
+      await sb.schema("places").from("place_evidence").insert({
+        user_hash: userHash,
+        origin_app: "roam_plug",
+        lat,
+        lng,
+        accuracy_m: accuracy,
+        mock_location: true,
+        note: body.note || "Held for review",
+      });
+      return c.json({ status: "held", suggestion: "Held for review" });
+    }
     const { data: nearby } = await sb.schema("places").from("place").select("id,name,lat,lng,geofence_m,status").eq("status", "verified").limit(500);
     const hit = (nearby || []).find((place) => {
       const metres = Math.hypot((place.lat - lat) * 111_000, (place.lng - lng) * 111_000);
@@ -450,8 +467,7 @@ app.delete("/me", async (c) => {
   try {
     const user = await requireExplorer(c);
     const sb = admin();
-    const pepper = Deno.env.get("PLUG_USER_HASH_PEPPER") || "roam-plug";
-    const userHash = await hashExplorerUser(user.id, pepper);
+    const userHash = await hashExplorerUser(user.id, userPepper());
     await sb.schema("places").from("place_evidence").delete().eq("user_hash", userHash);
     await sb.schema("explorer").from("profile").delete().eq("user_id", user.id);
     return c.json({ ok: true });
@@ -469,6 +485,86 @@ app.get("/notifications", async (c) => {
     return c.json({ notifications: data || [] });
   } catch (err) {
     return c.json({ error: err instanceof Error ? err.message : "Could not load inbox" }, 400);
+  }
+});
+
+app.get("/fuel-logs", async (c) => {
+  try {
+    const user = await requireExplorer(c);
+    const sb = admin();
+    let query = sb.schema("explorer").from("fuel_log").select("*").eq("user_id", user.id).order("created_at", { ascending: false });
+    const vehicleId = c.req.query("vehicleId");
+    if (vehicleId) query = query.eq("vehicle_id", vehicleId);
+    const { data, error } = await query;
+    if (error) throw error;
+    return c.json({ logs: data || [] });
+  } catch (err) {
+    return c.json({ error: err instanceof Error ? err.message : "Could not load fuel logs" }, 400);
+  }
+});
+
+app.get("/services", async (c) => {
+  try {
+    const user = await requireExplorer(c);
+    const sb = admin();
+    let query = sb.schema("explorer").from("service_log").select("*").eq("user_id", user.id).order("done_on", { ascending: false });
+    const vehicleId = c.req.query("vehicleId");
+    if (vehicleId) query = query.eq("vehicle_id", vehicleId);
+    const { data, error } = await query;
+    if (error) throw error;
+    return c.json({ services: data || [] });
+  } catch (err) {
+    return c.json({ error: err instanceof Error ? err.message : "Could not load services" }, 400);
+  }
+});
+
+app.get("/reminders", async (c) => {
+  try {
+    const user = await requireExplorer(c);
+    const sb = admin();
+    let query = sb.schema("explorer").from("reminder").select("*").eq("user_id", user.id).order("due_on");
+    const vehicleId = c.req.query("vehicleId");
+    if (vehicleId) query = query.eq("vehicle_id", vehicleId);
+    const { data, error } = await query;
+    if (error) throw error;
+    return c.json({ reminders: data || [] });
+  } catch (err) {
+    return c.json({ error: err instanceof Error ? err.message : "Could not load reminders" }, 400);
+  }
+});
+
+app.delete("/vehicles/:id", async (c) => {
+  try {
+    const user = await requireExplorer(c);
+    const sb = admin();
+    const { data, error } = await sb.schema("explorer").from("user_vehicle").delete().eq("id", c.req.param("id")).eq("user_id", user.id).select("id");
+    if (error) throw error;
+    if (!data?.length) return c.json({ error: "That vehicle is not in your garage" }, 404);
+    return c.json({ ok: true });
+  } catch (err) {
+    return c.json({ error: err instanceof Error ? err.message : "Could not remove vehicle" }, 400);
+  }
+});
+
+app.post("/pins/:id/withdraw", async (c) => {
+  try {
+    const user = await requireExplorer(c);
+    const sb = admin();
+    const placeId = c.req.param("id");
+    const userHash = await hashExplorerUser(user.id, userPepper());
+    const { data: mine } = await sb.schema("places").from("place_evidence").select("id").eq("place_id", placeId).eq("user_hash", userHash);
+    if (!mine?.length) return c.json({ error: "That pin is not yours" }, 404);
+    await sb.schema("places").from("place_evidence").delete().eq("place_id", placeId).eq("user_hash", userHash);
+    const { count } = await sb.schema("places").from("place_evidence").select("id", { count: "exact", head: true }).eq("place_id", placeId);
+    const { data: place } = await sb.schema("places").from("place").select("status").eq("id", placeId).maybeSingle();
+    if (place?.status === "pending" && !count) {
+      await sb.schema("places").from("place_change_proposal").delete().eq("place_id", placeId);
+      await sb.schema("places").from("place_capability").delete().eq("place_id", placeId);
+      await sb.schema("places").from("place").delete().eq("id", placeId).eq("status", "pending");
+    }
+    return c.json({ ok: true });
+  } catch (err) {
+    return c.json({ error: err instanceof Error ? err.message : "Could not withdraw pin" }, 400);
   }
 });
 
@@ -505,7 +601,12 @@ app.post("/admin/places/:id", async (c) => {
     const { data: proposal } = await sb.schema("places").from("place_change_proposal").select("*").eq("id", id).single();
     if (!proposal) return c.json({ error: "That item is gone" }, 404);
     if (action === "approve") {
-      await sb.schema("places").from("place").update({ status: "verified", verified_at: new Date().toISOString() }).eq("id", proposal.place_id);
+      const name = typeof body.name === "string" ? body.name.trim() : "";
+      await sb.schema("places").from("place").update({
+        status: "verified",
+        verified_at: new Date().toISOString(),
+        ...(name ? { name } : {}),
+      }).eq("id", proposal.place_id);
       const { data: place } = await sb.schema("places").from("place").select("*").eq("id", proposal.place_id).single();
       const { data: cap } = await sb.schema("places").from("place_capability").select("kind,details").eq("place_id", proposal.place_id).limit(1);
       if (place) {
@@ -581,15 +682,14 @@ app.post("/demand", async (c) => {
 });
 
 async function retailEstimate(sb: SupabaseClient, grade: string): Promise<number | null> {
-  const column = grade === "e10_90" ? "gasolene_90" : grade === "diesel" ? "auto_diesel" : "gasolene_87";
-  const markupColumn = grade === "e10_90" ? "gasolene_90_markup" : grade === "diesel" ? "auto_diesel_markup" : "gasolene_87_markup";
-  const { data } = await sb.schema("fuel").from("petrojam_prices").select(`${column}, price_date`).order("price_date", { ascending: false }).limit(1);
-  const wholesale = Number((data?.[0] as Record<string, number> | undefined)?.[column]);
-  if (!(wholesale > 0)) return null;
-  const { data: markup } = await sb.schema("fuel").from("retail_price_markup").select(markupColumn).eq("is_published", true).order("effective_from", { ascending: false }).limit(1);
-  const mark = Number((markup?.[0] as Record<string, number> | undefined)?.[markupColumn]);
-  if (!(mark >= 0)) return null;
-  return wholesale + mark;
+  const { data, error } = await sb.schema("places").rpc("latest_retail_estimate", { p_grade: grade });
+  if (error) return null;
+  const value = Number(data);
+  return value > 0 ? value : null;
 }
 
-Deno.serve(app.fetch);
+if (!Deno.env.get("PLUG_USER_HASH_PEPPER")?.trim()) {
+  Deno.serve(() => Response.json({ error: "PLUG_USER_HASH_PEPPER is not set" }, { status: 500 }));
+} else {
+  Deno.serve(app.fetch);
+}

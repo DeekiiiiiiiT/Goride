@@ -1,11 +1,24 @@
-import { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { plugSend } from '../api';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
+import { googleDirections, plugSend, publicGet, wazeDirections } from '../api';
 import { useAuth } from '../auth';
+import { readQueue } from '../offline';
 import { presentStitch, stitchHtml } from './catalog';
+
+type StationCard = {
+  id: string;
+  name: string;
+  lat: number;
+  lng: number;
+  prices?: Record<string, number | null>;
+};
 
 type StitchMessage = {
   source?: string;
+  kind?: string;
+  app?: string;
+  grade?: string;
+  stationId?: string;
   id?: string;
   path?: string;
   label?: string;
@@ -31,9 +44,28 @@ function phoneFrom(raw: string): string {
 
 export function StitchScreen({ file }: { file: string }) {
   const navigate = useNavigate();
+  const params = useParams();
   const { sendCode, verifyCode, signOut } = useAuth();
   const [error, setError] = useState<string | null>(null);
+  const frameRef = useRef<HTMLIFrameElement>(null);
+  const stationsRef = useRef<StationCard[]>([]);
+  const stationsReady = useRef(false);
   const srcDoc = useMemo(() => presentStitch(file, stitchHtml(file)), [file]);
+
+  function tell(payload: Record<string, unknown>) {
+    frameRef.current?.contentWindow?.postMessage({ source: 'roam-plug-parent', ...payload }, '*');
+  }
+
+  function paintLive() {
+    const grade = sessionStorage.getItem('plug-grade') || 'e10_87';
+    if (file === '15-home-explore.html' || file === '17-station-list.html') {
+      tell(stationsReady.current
+        ? { kind: 'stations', stations: stationsRef.current, grade }
+        : { kind: 'loading' });
+    }
+    const waiting = readQueue().length;
+    if (waiting) tell({ kind: 'queue', count: waiting });
+  }
 
   useEffect(() => {
     if (file !== '01-splash.html') return;
@@ -42,9 +74,59 @@ export function StitchScreen({ file }: { file: string }) {
   }, [file, navigate]);
 
   useEffect(() => {
+    void publicGet<{ stations: StationCard[] }>('/stations')
+      .then((body) => { stationsRef.current = body.stations || []; stationsReady.current = true; paintLive(); })
+      .catch(() => { stationsReady.current = true; paintLive(); });
+  }, [file]);
+
+  useEffect(() => {
+    const pin = file === '43-place-pin.html' || file.includes('poor-gps');
+    if (!pin || !navigator.geolocation) {
+      if (pin) tell({ kind: 'gps', accuracy: null });
+      return;
+    }
+    const watch = navigator.geolocation.watchPosition(
+      (position) => tell({ kind: 'gps', accuracy: position.coords.accuracy }),
+      () => tell({ kind: 'gps', accuracy: null }),
+      { enableHighAccuracy: true },
+    );
+    return () => navigator.geolocation.clearWatch(watch);
+  }, [file]);
+
+  useEffect(() => {
+    if (file !== '27-saved.html' && file !== '27b-first-save.html' && file !== '46b-approved.html') return;
+    if (sessionStorage.getItem('plug-celebrated')) return;
+    sessionStorage.setItem('plug-celebrated', '1');
+    if (navigator.vibrate) navigator.vibrate(20);
+  }, [file]);
+
+  useEffect(() => {
     const onMessage = (event: MessageEvent<StitchMessage>) => {
       const message = event.data;
       if (!message || message.source !== 'roam-plug-stitch') return;
+      if (message.kind === 'grade' && message.grade) {
+        sessionStorage.setItem('plug-grade', message.grade);
+        tell({ kind: 'stations', stations: stationsRef.current, grade: message.grade });
+        return;
+      }
+      if (message.kind === 'open-station' && message.stationId) {
+        navigate(`/stations/${message.stationId}`);
+        return;
+      }
+      if (message.kind === 'directions' || message.kind === 'directions-sheet') {
+        const wanted = message.stationId || params.id;
+        const station = stationsRef.current.find((item) => item.id === wanted) || stationsRef.current[0];
+        if (!station) {
+          navigate('/stations/sample/directions');
+          return;
+        }
+        const app = message.app || (message.kind === 'directions-sheet' ? '' : 'google');
+        if (app === 'waze') window.open(wazeDirections(station.lat, station.lng), '_blank', 'noopener');
+        else if (app === 'google') window.open(googleDirections(station.lat, station.lng), '_blank', 'noopener');
+        else navigate(`/stations/${station.id}/directions`);
+        if (navigator.vibrate) navigator.vibrate(10);
+        return;
+      }
       void act(message);
     };
     window.addEventListener('message', onMessage);
@@ -204,8 +286,10 @@ export function StitchScreen({ file }: { file: string }) {
     <div style={{ minHeight: '100dvh', background: '#f4ede6', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
       {error ? <p role="alert" style={{ margin: 12, color: '#9d4300' }}>{error}</p> : null}
       <iframe
+        ref={frameRef}
         title={file}
         srcDoc={srcDoc}
+        onLoad={paintLive}
         style={{ width: '100%', maxWidth: 430, height: '100dvh', border: 0, background: '#fff8f2' }}
       />
     </div>

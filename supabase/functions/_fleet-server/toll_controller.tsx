@@ -3016,7 +3016,6 @@ async function afterTollLedgerInsert(
   }
 
   try {
-    const { postFinancialEvent } = await import("./financial_ledger.ts");
     const t = String(entry.type || "").toLowerCase();
     const abs = Math.abs(Number(entry.amount) || 0);
     if (abs > 0 && entry.driverId) {
@@ -3040,27 +3039,7 @@ async function afterTollLedgerInsert(
           }
         }
       } else if (t === "top_up") {
-        await postFinancialEvent({
-          idempotencyKey: `toll_ledger:${entry.id}|tag_top_up`,
-          domain: "toll",
-          eventType: "tag_top_up",
-          sourceSystem: "toll_workflow",
-          sourceId: String(entry.id),
-          driverId: String(entry.driverId),
-          vehicleId: entry.vehicleId || null,
-          occurredAt: entry.date,
-          amountMajor: abs,
-          direction: "inflow",
-          debitAccountKey: "platform:bank_clearing",
-          creditAccountKey: "platform:toll_tag_clearing",
-          allocations: [{
-            allocation_type: "tag_top_up",
-            amount_minor: Math.round(abs * 100),
-            toll_id: String(entry.id),
-            driver_id: String(entry.driverId),
-          }],
-          payload: { description: entry.location || "Balance Top-up" },
-        });
+        // One row: toll_top_up from the toll ledger dual-write. Shown as a transfer.
       }
     }
   } catch (e) {

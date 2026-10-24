@@ -90,6 +90,14 @@ export function OverviewTab({ overview, onNavigateTab, onNavigatePage }: Props) 
             value={profit.withheld ? 'Unavailable' : foot.ok ? 'Yes' : formatMoney(foot.difference)}
             valueClassName={!profit.withheld && !foot.ok ? 'text-rose-700' : undefined}
           />
+          {(overview.agreement || []).map((check) => (
+            <Row
+              key={check.id}
+              label={check.label}
+              value={check.held ? 'Waiting on Uber statement' : check.ok ? 'Yes' : formatMoney(check.difference)}
+              valueClassName={!check.held && !check.ok ? 'text-rose-700' : undefined}
+            />
+          ))}
           <Row
             label="Fuel company cost vs pump spend"
             value={formatMoney(fuelSpend - fleetFuel)}
@@ -101,7 +109,7 @@ export function OverviewTab({ overview, onNavigateTab, onNavigatePage }: Props) 
           />
           <Row
             label="Week status"
-            value={profit.withheld ? 'Unavailable' : 'Provisional'}
+            value={profit.withheld ? 'Unavailable' : (overview.weekStatus || 'Open')}
           />
         </CardContent>
       </Card>
@@ -133,6 +141,15 @@ export function OverviewTab({ overview, onNavigateTab, onNavigatePage }: Props) 
             valueClassName={moneyIn.cashStillHeld > 0.005 ? 'text-amber-700' : undefined}
             onClick={() => onNavigateTab('driver-balances')}
           />
+          {(moneyIn.owedByDrivers || 0) > 0.005 && (
+            <Row
+              label="Owed by driver (overpaid Oct 12)"
+              hint="Driver Balances"
+              value={formatMoney(moneyIn.owedByDrivers || 0)}
+              valueClassName="text-rose-700"
+              onClick={() => onNavigateTab('driver-balances')}
+            />
+          )}
         </CardContent>
       </Card>
 
@@ -206,11 +223,22 @@ export function OverviewTab({ overview, onNavigateTab, onNavigatePage }: Props) 
             onClick={() => onNavigateTab('cash-bank')}
           />
           <Row
+            label="Toll tag top-up"
+            hint="Moves cash onto the tag. Not an expense."
+            value={formatMoney(transfers.tagTopUps || 0)}
+          />
+          <Row
             label="Open InDrive Wallet"
             hint="Wallet Center"
             value="View"
             onClick={() => onNavigatePage?.('indrive-wallet')}
           />
+          {overview.courier && (overview.courier.moneyIn > 0.005 || overview.courier.moneyOut > 0.005) && (
+            <>
+              <Row label="Courier money in" value={formatMoney(overview.courier.moneyIn)} />
+              <Row label="Courier money out" value={formatMoney(overview.courier.moneyOut)} />
+            </>
+          )}
         </CardContent>
       </Card>
 

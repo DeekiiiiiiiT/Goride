@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" name="viewport"/>
+<title>Place Submitted | Roam Plug JA</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          "colors": {
+            "on-surface": "#1e1b17",
+            "tertiary-fixed": "#ffdf9a",
+            "inverse-surface": "#33302c",
+            "surface-container-low": "#faf2eb",
+            "primary-fixed": "#ffdbce",
+            "error-container": "#ffdad6",
+            "secondary-fixed": "#ffdbca",
+            "on-primary": "#ffffff",
+            "on-primary-container": "#fffbff",
+            "on-secondary-fixed-variant": "#783200",
+            "background": "#fff8f2",
+            "surface-container-highest": "#e8e1db",
+            "on-background": "#1e1b17",
+            "on-secondary-container": "#5c2400",
+            "on-primary-fixed": "#370e00",
+            "error": "#ba1a1a",
+            "surface-container-high": "#eee7e0",
+            "surface-container": "#f4ede6",
+            "tertiary-fixed-dim": "#f7be1d",
+            "on-primary-fixed-variant": "#7f2b00",
+            "inverse-primary": "#ffb599",
+            "on-tertiary-fixed-variant": "#5a4300",
+            "inverse-on-surface": "#f7efe9",
+            "on-tertiary": "#ffffff",
+            "primary": "#a33900",
+            "on-error": "#ffffff",
+            "outline": "#8e7166",
+            "surface-variant": "#e8e1db",
+            "on-secondary-fixed": "#341100",
+            "on-secondary": "#ffffff",
+            "tertiary-container": "#936f00",
+            "secondary": "#9d4300",
+            "surface-bright": "#fff8f2",
+            "primary-fixed-dim": "#ffb599",
+            "on-surface-variant": "#5a4138",
+            "surface-dim": "#e0d9d2",
+            "on-tertiary-container": "#fffbff",
+            "on-tertiary-fixed": "#251a00",
+            "secondary-fixed-dim": "#ffb690",
+            "outline-variant": "#e2bfb2",
+            "surface-tint": "#a73a00",
+            "surface-container-lowest": "#ffffff",
+            "secondary-container": "#fd761a",
+            "primary-container": "#cc4900",
+            "on-error-container": "#93000a",
+            "tertiary": "#755800",
+            "surface": "#fff8f2"
+          },
+          "borderRadius": {
+            "DEFAULT": "0.25rem",
+            "lg": "0.5rem",
+            "xl": "0.75rem",
+            "full": "9999px"
+          },
+          "spacing": {
+            "space-xl": "2rem",
+            "space-lg": "1.5rem",
+            "margin": "1rem",
+            "gutter": "1rem",
+            "space-xs": "0.25rem",
+            "space-md": "1rem",
+            "margin-lg": "1.5rem",
+            "gutter-sm": "0.75rem",
+            "space-sm": "0.5rem"
+          },
+          "fontFamily": {
+            "label-lg": ["Inter"],
+            "headline-md": ["Inter"],
+            "headline-lg": ["Inter"],
+            "label-sm": ["Inter"],
+            "label-md": ["Inter"],
+            "body-lg": ["Inter"],
+            "body-md": ["Inter"],
+            "price-display": ["Inter"],
+            "headline-sm": ["Inter"],
+            "display-lg-mobile": ["Inter"],
+            "body-sm": ["Inter"],
+            "display-lg": ["Inter"]
+          },
+          "fontSize": {
+            "label-lg": ["14px", {"lineHeight": "20px", "letterSpacing": "0.01em", "fontWeight": "600"}],
+            "headline-md": ["22px", {"lineHeight": "28px", "letterSpacing": "-0.01em", "fontWeight": "700"}],
+            "headline-lg": ["28px", {"lineHeight": "36px", "letterSpacing": "-0.01em", "fontWeight": "700"}],
+            "label-sm": ["10px", {"lineHeight": "12px", "letterSpacing": "0.04em", "fontWeight": "700"}],
+            "label-md": ["12px", {"lineHeight": "16px", "letterSpacing": "0.02em", "fontWeight": "600"}],
+            "body-lg": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+            "body-md": ["14px", {"lineHeight": "20px", "fontWeight": "400"}],
+            "price-display": ["24px", {"lineHeight": "28px", "letterSpacing": "-0.01em", "fontWeight": "700"}],
+            "headline-sm": ["18px", {"lineHeight": "24px", "fontWeight": "600"}],
+            "display-lg-mobile": ["32px", {"lineHeight": "40px", "letterSpacing": "-0.02em", "fontWeight": "800"}],
+            "body-sm": ["12px", {"lineHeight": "16px", "fontWeight": "400"}],
+            "display-lg": ["40px", {"lineHeight": "48px", "letterSpacing": "-0.02em", "fontWeight": "800"}]
+          }
+        }
+      }
+    }
+  </script>
+<style>
+    body {
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+    }
+    .safe-top {
+      padding-top: max(12px, env(safe-area-inset-top));
+    }
+    .safe-bottom {
+      padding-bottom: max(12px, env(safe-area-inset-bottom));
+    }
+  </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background text-on-surface antialiased flex flex-col justify-between min-h-screen font-body-md overflow-x-hidden">
+<!-- TOP GREEN TOAST BANNER (FIXED TOP NOTIFICATION) -->
+<div class="fixed top-0 left-0 right-0 z-50 px-margin safe-top pointer-events-none">
+<div class="pointer-events-auto mt-2 mx-auto max-w-sm flex items-center justify-between gap-3 bg-surface-container-lowest/95 backdrop-blur-md px-4 py-2.5 rounded-full border border-outline-variant shadow-lg">
+<div class="flex items-center gap-2.5">
+<div class="w-6 h-6 rounded-full bg-emerald-600 flex items-center justify-center text-white shrink-0 shadow-sm">
+<span class="material-symbols-outlined text-[16px]" style="font-variation-settings: 'FILL' 1;">check</span>
+</div>
+<div class="flex items-baseline gap-1.5">
+<span class="font-headline-sm text-label-lg font-bold text-on-surface tracking-tight">Submitted</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant font-medium">to Island Grid</span>
+</div>
+</div>
+<span class="font-label-sm text-label-sm bg-emerald-50 text-emerald-800 px-2.5 py-0.5 rounded-full font-bold uppercase tracking-wider border border-emerald-200">Live Sync</span>
+</div>
+</div>
+<!-- MAIN SCROLLABLE CONTENT CANVAS -->
+<main class="w-full max-w-md mx-auto pt-24 pb-28 px-margin flex flex-col gap-space-md">
+<!-- SUBMISSION CONFIRMATION SUMMARY -->
+<div class="flex items-center justify-between pt-1">
+<div>
+<div class="flex items-center gap-1.5 text-primary">
+<span class="material-symbols-outlined text-[18px]">verified</span>
+<span class="font-label-md text-label-md uppercase tracking-wider font-bold">Contribution Logged</span>
+</div>
+<h1 class="font-headline-lg-mobile text-headline-lg text-on-surface mt-0.5 tracking-tight">Sammy's Tyre &amp; Alignment</h1>
+</div>
+<!-- PENDING BADGE -->
+<div class="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-amber-50 border border-amber-200 text-amber-900 shadow-sm">
+<span class="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span>
+<span class="font-label-md text-label-md font-bold tracking-tight">Pending Review</span>
+</div>
+</div>
+<!-- GAMIFICATION & SCOUT XP REWARD CHIP -->
+<div class="bg-surface-container-lowest rounded-xl p-3.5 border border-outline-variant shadow-sm flex items-center justify-between">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-lg bg-tertiary-fixed/60 text-tertiary flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-[24px]" style="font-variation-settings: 'FILL' 1;">local_fire_department</span>
+</div>
+<div>
+<div class="flex items-center gap-1.5">
+<span class="font-headline-sm text-label-lg font-bold text-primary">+25 Scout XP awarded</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Rank: Road Scout Grade 2</p>
+</div>
+</div>
+<div class="text-right pl-2 border-l border-surface-container-high">
+<span class="font-label-sm text-label-sm uppercase text-on-surface-variant font-bold block">Scout Score</span>
+<span class="font-headline-sm text-headline-sm font-bold text-on-surface">340 <span class="font-body-sm text-body-sm font-normal text-on-surface-variant">/ 500</span></span>
+</div>
+</div>
+<!-- MAIN PLACE DETAILS CARD (High Contrast Modern Utility) -->
+<div class="bg-surface-container-lowest rounded-xl p-4 border border-outline-variant shadow-sm flex flex-col gap-3.5">
+<!-- Top Meta / Category -->
+<div class="flex items-center justify-between pb-3 border-b border-surface-container-high">
+<div class="flex items-center gap-2">
+<span class="inline-flex items-center gap-1 font-label-md text-label-md font-bold px-2.5 py-1 rounded bg-surface-container text-on-surface">
+<span class="material-symbols-outlined text-[16px] text-primary">car_repair</span>
+            Tyre &amp; Vulcanizing / Mechanic
+          </span>
+</div>
+<span class="font-body-sm text-body-sm text-on-surface-variant flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]">schedule</span> Just now
+        </span>
+</div>
+<!-- Address & Parish Row -->
+<div class="flex items-start gap-3">
+<div class="w-8 h-8 rounded-lg bg-surface-container flex items-center justify-center text-primary shrink-0 mt-0.5">
+<span class="material-symbols-outlined text-[20px]">location_on</span>
+</div>
+<div class="flex-1 min-w-0">
+<h2 class="font-headline-sm text-label-lg font-bold text-on-surface truncate">14 Eastwood Park Rd</h2>
+<p class="font-body-md text-body-md text-on-surface-variant">Half-Way-Tree, St. Andrew</p>
+</div>
+</div>
+<!-- Tabular GPS Coordinates for Jamaican Motorists -->
+<div class="bg-surface-container-low rounded-lg p-2.5 flex items-center justify-between border border-outline-variant/60">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[18px] text-on-surface-variant">my_location</span>
+<span class="font-body-sm text-body-sm text-on-surface font-mono font-medium">18.0125° N, 76.7993° W</span>
+</div>
+<span class="font-label-sm text-label-sm bg-surface-container px-2 py-0.5 rounded text-on-surface-variant font-bold">±6m accuracy</span>
+</div>
+<!-- SUBMITTED PHOTOS PREVIEW THUMBNAILS -->
+<div class="space-y-1.5 pt-1">
+<div class="flex items-center justify-between">
+<span class="font-label-md text-label-md text-on-surface-variant font-bold uppercase tracking-wider">Submitted Photos (2)</span>
+<span class="font-label-sm text-label-sm text-primary font-bold">Geo-tagged</span>
+</div>
+<div class="grid grid-cols-2 gap-2.5">
+<div class="relative h-28 rounded-lg overflow-hidden border border-outline-variant bg-surface-container">
+<img class="w-full h-full object-cover" data-alt="A clean daytime exterior shot of Sammy's Tyre and Alignment workshop in Half-Way-Tree, Jamaica under warm tropical daylight. Heavy car tyres are stacked neatly beside hydraulic lifts with an orange automotive sign. The composition features sharp realism, crisp shadows, and warm island vehicular aesthetics." src="https://lh3.googleusercontent.com/aida-public/AB6AXuA94Y-bsYfCcno5KOfJBmqoswdW9QwMoh7X680T3XROZxNuH9cQjqDWzy1eFpMd4EBy6P0E7-wFXel26qq7gEA0pA0l68UTGxYqbDqtin2IUpDTWMxAu9PJ_ytTlswW_yUGNSKlp371yvLmbMY6B9D7-8JxHPziMjGvPwIr_HuOMbMqzQSLc969slZnyhoQ9cItMdNm65VubKhzhu3A4JlZNAzgveLNetMEBaoTrnd4m3nk2IBeuwKpXX_rJATncV_7ESECgkFXKYM"/>
+<span class="absolute bottom-1.5 left-1.5 bg-black/75 backdrop-blur-sm text-white px-2 py-0.5 rounded font-label-sm text-label-sm">Storefront</span>
+</div>
+<div class="relative h-28 rounded-lg overflow-hidden border border-outline-variant bg-surface-container">
+<img class="w-full h-full object-cover" data-alt="An organized, bustling vulcanizing and tyre balancing bay interior in Kingston Jamaica with pneumatic air tools, digital alignment calibration monitors, and clean vehicle maintenance equipment under high ambient workshop lighting. Captured in a documentary automotive style with crisp contrast and warm amber tones." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCLud00MemeHjpO6Atv3LsI74DcxvT-eHiRF0qqRJxwrBmtSNHXoE8rwY3bm7CgUIGwbiV6xMM9UUVIiZ0EgkgyoUdAC00kp1-BFouakxOLb34tSP2vSdnjxGrCc0PteAWY0w8xGL_zbBuSI1F3Jfmu_40AkTbobrTa0qsViZ07Ji-sVZM75gE_JhxPfETFDExrHfqMn9KlgqVV9hYyA3PB5HClktxeWyyWgJtDxkAXpMv_NfmkCtAASCYFgGfJZJ-0zlljDg726nY"/>
+<span class="absolute bottom-1.5 left-1.5 bg-black/75 backdrop-blur-sm text-white px-2 py-0.5 rounded font-label-sm text-label-sm">Service Bay</span>
+</div>
+</div>
+</div>
+</div>
+<!-- INFORMATIONAL SCOUT STATUS CARD -->
+<div class="bg-amber-50/70 rounded-xl p-4 border border-amber-200/80 flex items-start gap-3.5">
+<div class="w-8 h-8 rounded-full bg-amber-100 text-amber-900 flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-[20px]">info</span>
+</div>
+<div class="flex-1 space-y-1">
+<h3 class="font-headline-sm text-label-lg font-bold text-amber-950">Waiting for Scout approval</h3>
+<p class="font-body-sm text-body-sm text-amber-900/90 leading-relaxed">
+          Local Jamaican Road Scouts review all submissions to keep island motoring data accurate. Typically verified within 2 to 4 hours.
+        </p>
+</div>
+</div>
+<!-- PRIMARY & SECONDARY ACTION BUTTONS -->
+<div class="flex flex-col gap-2.5 pt-1">
+<button class="w-full h-12 bg-primary-container hover:bg-primary active:scale-[0.98] transition-all duration-150 rounded-xl text-on-primary font-label-lg text-label-lg font-bold flex items-center justify-center gap-2 shadow-md" type="button">
+<span class="material-symbols-outlined text-[20px]">add_location_alt</span>
+<span>Map Another Place</span>
+</button>
+<div class="grid grid-cols-2 gap-2.5">
+<button class="w-full h-11 bg-surface-container-lowest border border-outline-variant active:scale-[0.98] transition-all duration-150 rounded-xl text-on-surface font-label-md text-label-md font-bold flex items-center justify-center gap-1.5 hover:bg-surface-container-low" type="button">
+<span class="material-symbols-outlined text-[18px] text-primary">map</span>
+<span>Back to Island Map</span>
+</button>
+<button class="w-full h-11 bg-surface-container-lowest border border-outline-variant active:scale-[0.98] transition-all duration-150 rounded-xl text-on-surface font-label-md text-label-md font-bold flex items-center justify-center gap-1.5 hover:bg-surface-container-low" type="button">
+<span class="material-symbols-outlined text-[18px] text-on-surface-variant">history_edu</span>
+<span>My Contributions</span>
+</button>
+</div>
+</div>
+</main>
+<!-- PERSISTENT BOTTOM NAVIGATION BAR (5 TABS: Explore, Garage, Log Fuel center button, Map It active, Account) -->
+<nav class="fixed bottom-0 left-0 right-0 z-50 bg-surface-container-lowest/90 backdrop-blur-md border-t border-outline-variant shadow-md safe-bottom">
+<div class="max-w-md mx-auto px-margin py-2 flex items-center justify-around">
+<!-- Tab 1: Explore -->
+<button class="flex flex-col items-center justify-center text-on-surface-variant active:scale-95 transition-transform duration-150 w-14" type="button">
+<span class="material-symbols-outlined text-[22px]">explore</span>
+<span class="font-label-sm text-label-sm mt-0.5">Explore</span>
+</button>
+<!-- Tab 2: Garage -->
+<button class="flex flex-col items-center justify-center text-on-surface-variant active:scale-95 transition-transform duration-150 w-14" type="button">
+<span class="material-symbols-outlined text-[22px]">garage</span>
+<span class="font-label-sm text-label-sm mt-0.5">Garage</span>
+</button>
+<!-- Center Action Button: Log Fuel -->
+<div class="relative -top-4 flex flex-col items-center">
+<button class="w-13 h-13 p-3 bg-primary-container text-on-primary rounded-full shadow-lg border-2 border-surface-container-lowest active:scale-90 transition-transform duration-150 flex items-center justify-center" type="button">
+<span class="material-symbols-outlined text-[26px]">local_gas_station</span>
+</button>
+<span class="font-label-sm text-label-sm text-primary font-bold mt-1">Log Fuel</span>
+</div>
+<!-- Tab 4: Map It (Active) -->
+<button class="flex flex-col items-center justify-center text-primary font-bold active:scale-95 transition-transform duration-150 w-14" type="button">
+<span class="material-symbols-outlined text-[22px]" style="font-variation-settings: 'FILL' 1;">add_location_alt</span>
+<span class="font-label-sm text-label-sm mt-0.5">Map It</span>
+</button>
+<!-- Tab 5: Account -->
+<button class="flex flex-col items-center justify-center text-on-surface-variant active:scale-95 transition-transform duration-150 w-14" type="button">
+<span class="material-symbols-outlined text-[22px]">account_circle</span>
+<span class="font-label-sm text-label-sm mt-0.5">Account</span>
+</button>
+</div>
+</nav>
+</body></html>

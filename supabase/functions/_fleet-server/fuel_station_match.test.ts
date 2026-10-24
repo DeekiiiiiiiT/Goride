@@ -101,4 +101,34 @@ Deno.test("split card with no GPS is held and both rows can still be saved", asy
   assertEquals(cash.id, "cash-2");
   assertEquals(cash.metadata.locationStatus, "unknown");
   assertEquals(card.id, "card-2");
+  const saved = store.get(`learnt_location:${card.metadata.learntLocationId}`) as { originApp?: string } | undefined;
+  assertEquals(saved?.originApp, "roam_fleet");
+});
+
+Deno.test("a second fill at a learnt pin reuses it", async () => {
+  const learnt = {
+    id: "learnt-1",
+    name: "Roadside pump",
+    status: "learnt",
+    pinConfirmed: false,
+    location: { lat: 17.991, lng: -76.979 },
+    geofenceRadius: 150,
+  };
+  const store = new Map<string, unknown>([[`learnt_location:${learnt.id}`, learnt]]);
+  const deps: StationMatchDeps = {
+    get: async (key) => store.get(key),
+    set: async (key, value) => { store.set(key, value); },
+    getByPrefix: async (prefix) => [...store.entries()].filter(([key]) => key.startsWith(prefix)).map(([, value]) => value),
+  };
+  const card: Record<string, any> = {
+    id: "card-learnt",
+    liters: 10,
+    amount: 2800,
+    metadata: { locationMetadata: { lat: 17.99105, lng: -76.979, accuracy: 5 } },
+  };
+  const match = await applyStationMatch(card, { deferSignature: true, deps });
+  assertEquals(match.outcome, "learnt");
+  assertEquals(card.metadata.learntLocationId, "learnt-1");
+  assertEquals(card.metadata.locationStatus, "unknown");
+  assertEquals([...store.keys()].filter((key) => key.startsWith("learnt_location:")).length, 1);
 });

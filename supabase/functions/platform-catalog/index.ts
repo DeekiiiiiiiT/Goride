@@ -105,7 +105,7 @@ app.get("/geo/parishes", async (c) => {
 app.get("/tolls", async () => {
   try {
     const sb = admin();
-    const { data, error } = await sb.schema("fleet").from("toll_plazas").select("id,name,highway,payload_json");
+    const { data, error } = await sb.from("fleet_toll_plazas").select("id,name,highway,payload_json");
     if (error) throw error;
     const plazas = (data || []).map((row) => {
       const payload = (row.payload_json || {}) as Record<string, unknown>;

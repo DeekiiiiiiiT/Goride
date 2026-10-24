@@ -145,7 +145,7 @@ export function isSoftDuplicatePair(
   return true;
 }
 
-/** Same card, day, amount, and upload is one fill — even when the odometer is missing. */
+/** Same card, day, amount, upload, and litres (or fill time) is one fill. */
 export function fuelCardUploadKey(entry: Record<string, unknown>): string | null {
   const meta = entryMeta(entry);
   const upload = String(
@@ -155,7 +155,10 @@ export function fuelCardUploadKey(entry: Record<string, unknown>): string | null
   const amount = Number(entry.amount ?? entry.totalCost ?? NaN);
   if (!date || !upload || !Number.isFinite(amount)) return null;
   const card = String(meta.cardId || meta.cardLast4 || entry.cardId || entry.cardLast4 || "").trim();
-  return `${card}|${date}|${amount.toFixed(2)}|${upload}`;
+  const litres = Number(entry.litres ?? entry.liters ?? meta.litres ?? meta.liters);
+  const litrePart = Number.isFinite(litres) && litres > 0 ? litres.toFixed(3) : "";
+  const when = litrePart || String(entry.time || meta.filledAt || meta.time || "").trim();
+  return `${card}|${date}|${amount.toFixed(2)}|${upload}|${when}`;
 }
 
 /**

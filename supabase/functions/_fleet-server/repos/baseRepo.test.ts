@@ -67,6 +67,11 @@ Deno.test("rowToKvValue mirrors typed trip columns when payload is empty", () =>
   assertEquals(payload.duration, 18);
 });
 
+Deno.test("rowToKvValue copies origin_app onto originApp", () => {
+  const payload = rowToKvValue({ origin_app: "roam_fleet", payload_json: { name: "Rubis" } });
+  assertEquals(payload.originApp, "roam_fleet");
+});
+
 Deno.test("rowToKvValue keeps payload platform when the blob is present", () => {
   const payload = rowToKvValue({
     platform: "Uber",

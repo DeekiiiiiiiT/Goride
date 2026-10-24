@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Explore - No Stations Found</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#fff8f2',
+              100: '#ffeedd',
+              200: '#fed7aa',
+              500: '#ea580c',
+              600: '#c2410c',
+              700: '#9a3412',
+            },
+            cream: {
+              50: '#fffbf7',
+              100: '#fff8f2',
+              200: '#faf2eb',
+              300: '#f5ede3',
+              400: '#e0d9d2',
+            },
+            surface: {
+              card: '#ffffff',
+              subtle: '#faf5ee',
+              border: '#f0e6dc',
+            }
+          },
+          fontFamily: {
+            sans: ['"Plus Jakarta Sans"', 'sans-serif'],
+            mono: ['"JetBrains Mono"', 'monospace'],
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 500, 'GRAD' 0, 'opsz' 24;
+    }
+    .material-symbols-outlined.fill-1 {
+      font-variation-settings: 'FILL' 1, 'wght' 500, 'GRAD' 0, 'opsz' 24;
+    }
+    body {
+      background-color: #fff8f2;
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      -webkit-tap-highlight-color: transparent;
+    }
+    /* Hide scrollbar */
+    ::-webkit-scrollbar {
+      display: none;
+    }
+    * {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+  </style>
+</head>
+<body class="bg-[#fff8f2] text-slate-800 antialiased flex justify-center min-h-screen">
+  <!-- Mobile Container (390px) -->
+  <div class="w-full max-w-[390px] min-h-screen bg-[#fff8f2] flex flex-col relative pb-[84px] shadow-2xl overflow-x-hidden border-x border-[#f0e6dc]">
+
+    <!-- Pull-to-Refresh Interactive Hint Bar -->
+    <div class="w-full bg-[#fceee1] border-b border-[#f3d9c2] px-4 py-2 flex items-center justify-center gap-2 text-xs font-medium text-[#9a3412] shadow-inner select-none transition-all">
+      <span class="material-symbols-outlined text-[17px] text-[#ea580c] animate-bounce">arrow_downward</span>
+      <span>Pull down to scan for newly updated pumps</span>
+    </div>
+
+    <!-- App Top Bar (Header) -->
+    <header class="bg-[#fff8f2] px-4 pt-3 pb-2.5 flex items-center justify-between border-b border-[#ebdcd0] sticky top-0 z-30">
+      <div class="flex items-center gap-2.5">
+        <div class="w-9 h-9 rounded-xl bg-[#ea580c] flex items-center justify-center text-white shadow-sm">
+          <span class="material-symbols-outlined fill-1 text-[20px]">local_gas_station</span>
+        </div>
+        <div>
+          <span class="text-[10px] uppercase font-bold tracking-wider text-[#ea580c]">ROAM PLUG</span>
+          <h1 class="text-base font-extrabold text-slate-900 leading-none">Explore</h1>
+        </div>
+      </div>
+      <div class="flex items-center gap-2">
+        <button class="w-9 h-9 rounded-full bg-[#faf2eb] border border-[#ebdcd0] flex items-center justify-center text-slate-700 hover:bg-[#f3e5d7] active:scale-95 transition-transform" aria-label="Notifications">
+          <span class="material-symbols-outlined text-[20px]">notifications</span>
+        </button>
+        <button class="w-9 h-9 rounded-full bg-[#ea580c] text-white flex items-center justify-center font-bold text-xs ring-2 ring-[#ffd8b8] shadow-sm" aria-label="Profile">
+          TC
+        </button>
+      </div>
+    </header>
+
+    <!-- Location Selector & Quick Search -->
+    <div class="px-4 pt-3 pb-2 flex flex-col gap-2.5 bg-[#fff8f2]">
+      <!-- Parish / Locality dropdown -->
+      <div class="flex items-center justify-between">
+        <div class="flex items-center gap-1.5 bg-[#faf2eb] border border-[#e6d8cb] px-3 py-1.5 rounded-full text-xs font-semibold text-slate-800 shadow-sm">
+          <span class="material-symbols-outlined text-[#ea580c] text-[17px]">location_on</span>
+          <span>Portland Parish, Jamaica</span>
+          <span class="material-symbols-outlined text-slate-500 text-[16px]">expand_more</span>
+        </div>
+        <div class="flex items-center gap-1.5 text-[11px] font-medium text-slate-500 bg-[#f5ede3] px-2.5 py-1 rounded-full border border-[#e5d9cd]">
+          <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+          <span>GPS Ready</span>
+        </div>
+      </div>
+
+      <!-- Search Bar -->
+      <div class="relative w-full">
+        <span class="material-symbols-outlined absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-[20px]">search</span>
+        <input 
+          type="text" 
+          placeholder="Search gas stations in Portland..." 
+          class="w-full pl-10 pr-10 py-2.5 bg-white border border-[#ebdcd0] rounded-xl text-sm placeholder-slate-400 text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#ea580c] focus:border-transparent shadow-sm"
+        />
+        <button class="absolute right-2.5 top-1/2 -translate-y-1/2 w-7 h-7 rounded-lg bg-[#faf2eb] text-slate-600 flex items-center justify-center hover:bg-[#f2e2d2]">
+          <span class="material-symbols-outlined text-[17px]">tune</span>
+        </button>
+      </div>
+
+      <!-- Filter Pills -->
+      <div class="flex items-center gap-2 overflow-x-auto pb-1 pt-0.5">
+        <button class="px-3 py-1.5 rounded-full text-xs font-bold bg-[#ea580c] text-white flex items-center gap-1 shadow-sm whitespace-nowrap">
+          <span class="material-symbols-outlined fill-1 text-[15px]">local_gas_station</span>
+          <span>Fuel (E-10/ULSD)</span>
+        </button>
+        <button class="px-3 py-1.5 rounded-full text-xs font-semibold bg-[#faf2eb] border border-[#e2d4c7] text-slate-700 hover:bg-[#f3e5d7] flex items-center gap-1 whitespace-nowrap">
+          <span class="material-symbols-outlined text-[15px]">build</span>
+          <span>Mechanics</span>
+        </button>
+        <button class="px-3 py-1.5 rounded-full text-xs font-semibold bg-[#faf2eb] border border-[#e2d4c7] text-slate-700 hover:bg-[#f3e5d7] flex items-center gap-1 whitespace-nowrap">
+          <span class="material-symbols-outlined text-[15px]">settings_suggest</span>
+          <span>Parts Stores</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Map Section (Stylized Clean Jamaica Map with NO Pins) -->
+    <div class="relative w-full h-[220px] bg-[#eef3ea] overflow-hidden border-y border-[#e2d8cd]">
+      <!-- Map Vector Art: Clean Coastlines, Roads, Topography, Zero Station Pins -->
+      <svg class="w-full h-full object-cover" viewBox="0 0 390 220" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <linearGradient id="oceanGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stop-color="#dce9ee"/>
+            <stop offset="100%" stop-color="#cfe0e6"/>
+          </linearGradient>
+          <pattern id="topoGrid" width="24" height="24" patternUnits="userSpaceOnUse">
+            <path d="M 24 0 L 0 0 0 24" fill="none" stroke="#d5dfd3" stroke-width="0.5" opacity="0.6"/>
+          </pattern>
+        </defs>
+
+        <!-- Sea Background -->
+        <rect width="390" height="220" fill="url(#oceanGrad)"/>
+        
+        <!-- Jamaica Coastline / Parish Landform (Stylized northeast/eastern sector Portland focus) -->
+        <path d="M -20 180 C 30 150, 70 165, 120 145 C 170 125, 210 135, 270 110 C 330 85, 370 100, 410 75 L 410 240 L -20 240 Z" fill="#e7eee3" stroke="#bed1ba" stroke-width="1.5"/>
+        <rect x="0" y="80" width="390" height="140" fill="url(#topoGrid)"/>
+
+        <!-- Blue Mountain range contour hints -->
+        <path d="M 80 190 Q 140 150 210 165 T 320 140" fill="none" stroke="#cfdec8" stroke-width="2.5" stroke-dasharray="3 4"/>
+        <path d="M 120 210 Q 190 175 260 185 T 360 160" fill="none" stroke="#cfdec8" stroke-width="2" stroke-dasharray="2 3"/>
+
+        <!-- Jamaican Highway / A4 Main Road Corridor (Uncluttered, No pins) -->
+        <path d="M 0 170 C 60 155, 110 148, 160 138 C 220 125, 280 115, 340 92 C 370 82, 390 78, 410 74" fill="none" stroke="#f6ca88" stroke-width="4.5" stroke-linecap="round"/>
+        <path d="M 0 170 C 60 155, 110 148, 160 138 C 220 125, 280 115, 340 92 C 370 82, 390 78, 410 74" fill="none" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-dasharray="8 6"/>
+
+        <!-- Secondary Road -->
+        <path d="M 210 128 C 215 155, 230 180, 245 220" fill="none" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round"/>
+
+        <!-- User Current Location Pulse (Blue Driver dot with radar ripple - NO STATIONS) -->
+        <circle cx="210" cy="128" r="32" fill="#ea580c" opacity="0.12"/>
+        <circle cx="210" cy="128" r="18" fill="#ea580c" opacity="0.2"/>
+        <circle cx="210" cy="128" r="7" fill="#ea580c" stroke="#ffffff" stroke-width="2.5"/>
+      </svg>
+
+      <!-- Map Floating Overlay Controls -->
+      <div class="absolute top-3 right-3 flex flex-col gap-2 z-10">
+        <button class="w-8 h-8 rounded-lg bg-white/95 backdrop-blur-sm border border-[#e0d3c5] text-slate-700 flex items-center justify-center shadow-md active:scale-95" title="Center Location">
+          <span class="material-symbols-outlined text-[19px] text-[#ea580c]">my_location</span>
+        </button>
+        <button class="w-8 h-8 rounded-lg bg-white/95 backdrop-blur-sm border border-[#e0d3c5] text-slate-700 flex items-center justify-center shadow-md active:scale-95" title="Layers">
+          <span class="material-symbols-outlined text-[19px]">layers</span>
+        </button>
+      </div>
+
+      <!-- Radar Search Perimeter Pill -->
+      <div class="absolute bottom-3 left-3 bg-white/95 backdrop-blur-sm border border-[#e2d5c7] rounded-full px-3 py-1 flex items-center gap-1.5 shadow-sm">
+        <span class="w-2 h-2 rounded-full bg-amber-500 animate-ping"></span>
+        <span class="text-[11px] font-bold text-slate-700">15 km Radar Search Radius</span>
+      </div>
+
+      <!-- Floating Map It shortcut -->
+      <div class="absolute bottom-3 right-3">
+        <a href="#map-it" class="bg-[#ea580c] hover:bg-[#c2410c] text-white text-xs font-bold px-3 py-1.5 rounded-full flex items-center gap-1 shadow-md active:scale-95 transition-transform">
+          <span class="material-symbols-outlined text-[15px] fill-1">add_location_alt</span>
+          <span>+ Pin Station</span>
+        </a>
+      </div>
+    </div>
+
+    <!-- Empty State Content Container (Cream Canvas) -->
+    <main class="flex-1 px-5 pt-5 pb-6 flex flex-col items-center text-center">
+
+      <!-- Custom Radar Illustration -->
+      <div class="w-44 h-36 flex items-center justify-center relative my-1">
+        <img 
+          src="https://lh3.googleusercontent.com/aida/AEtjO1WJXr8vsQEfMrFJ-sadpfp_sPYt6d-aA0LPD22pdD6jC2f0RrY7pmsEcIJ1GMiT5SKaFrEtsYgc5Oy-t_EYD5CEbbglGh4-Tig5g19LyB4giWaaXI_VR-68OZYgoJ26bsEU2KEktKh3XXWf7VMeF4bgMsz9j2qgsMjT4JPvMNidjIKCq6TCNjTx7eau0Q2-K4BSOJfrqb9UEWTVFeKFEKdlnp_UuWZBMNX5tJ94oCHeuWYJrkAfOPVxpSk" 
+          alt="Radar scanning for gas stations with zero results" 
+          class="w-full h-full object-contain filter drop-shadow-sm"
+        />
+      </div>
+
+      <!-- Mandatory Spec Heading -->
+      <h2 class="text-[20px] font-extrabold text-slate-900 tracking-tight mt-2 leading-snug">
+        No verified stations near you yet
+      </h2>
+
+      <!-- Subtext / Island Context Description -->
+      <p class="text-[13px] text-slate-600 font-normal mt-2 max-w-[310px] leading-relaxed">
+        We haven't recorded verified Petrojam pump prices in this sector of the parish yet. Help other Jamaican drivers by pinning the first spot!
+      </p>
+
+      <!-- Pull to Refresh Interactive Callout Card -->
+      <div class="w-full bg-[#faf2eb] border border-[#e8dacd] rounded-2xl p-3.5 mt-4 flex items-center gap-3 text-left shadow-sm">
+        <div class="w-10 h-10 rounded-xl bg-[#fff8f2] border border-[#e4d4c5] flex-shrink-0 flex items-center justify-center text-[#ea580c] shadow-xs">
+          <span class="material-symbols-outlined text-[22px]">sync</span>
+        </div>
+        <div class="flex-1">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-bold text-slate-900">Pull down to refresh</span>
+            <span class="text-[10px] font-bold text-[#ea580c] uppercase tracking-wider bg-[#fed7aa]/50 px-2 py-0.5 rounded-full">LIVE RADAR</span>
+          </div>
+          <p class="text-[11px] text-slate-500 mt-0.5">Swipe down on the map to sync newly approved community scout pins.</p>
+        </div>
+      </div>
+
+      <!-- Action Buttons -->
+      <div class="w-full flex flex-col gap-2.5 mt-5">
+        <!-- Primary Action: Pin Missing Spot -->
+        <button class="w-full py-3 px-4 rounded-xl bg-[#ea580c] hover:bg-[#c2410c] active:scale-[0.98] text-white font-bold text-sm flex items-center justify-center gap-2 shadow-md shadow-orange-500/20 transition-all">
+          <span class="material-symbols-outlined fill-1 text-[19px]">add_location</span>
+          <span>Pin a Gas Station Here (+25 XP)</span>
+        </button>
+
+        <!-- Secondary Action: Broaden Radius or Switch Parish -->
+        <button class="w-full py-2.5 px-4 rounded-xl bg-white border border-[#dfd2c4] hover:bg-[#faf2eb] active:scale-[0.98] text-slate-800 font-semibold text-xs flex items-center justify-center gap-1.5 shadow-sm transition-all">
+          <span class="material-symbols-outlined text-[17px] text-slate-600">travel_explore</span>
+          <span>Expand radar search to 30 km</span>
+        </button>
+      </div>
+
+      <!-- Scout Community Trust Note -->
+      <div class="mt-4 pt-3 border-t border-[#ebdcd0] w-full flex items-center justify-center gap-1.5 text-[11px] text-slate-500 font-medium">
+        <span class="material-symbols-outlined text-[15px] text-emerald-600 fill-1">verified_user</span>
+        <span>Every pin is reviewed before going live on the island radar</span>
+      </div>
+
+    </main>
+
+    <!-- Standard 5-Tab Persistent Bottom Navigation Bar (Same as Screen 90 & Screen 89) -->
+    <nav class="fixed bottom-0 w-full max-w-[390px] bg-[#fff8f2] border-t border-[#e2d5c7] flex justify-around items-center h-[72px] px-2 z-40 shadow-lg">
+      
+      <!-- 1. Explore (Active Tab) -->
+      <a href="#explore" class="flex flex-col items-center justify-center flex-1 h-full text-[#ea580c]">
+        <div class="w-10 h-7 rounded-full bg-[#fdecdb] flex items-center justify-center mb-0.5">
+          <span class="material-symbols-outlined fill-1 text-[21px]">explore</span>
+        </div>
+        <span class="text-[10px] font-bold tracking-tight">Explore</span>
+      </a>
+
+      <!-- 2. Garage -->
+      <a href="#garage" class="flex flex-col items-center justify-center flex-1 h-full text-slate-600 hover:text-slate-900 transition-colors">
+        <span class="material-symbols-outlined text-[21px] mb-0.5">garage_home</span>
+        <span class="text-[10px] font-medium tracking-tight">Garage</span>
+      </a>
+
+      <!-- 3. Center Elevated ⛽ LOG Action Button -->
+      <div class="flex flex-col items-center justify-center flex-1 -mt-5 relative z-50">
+        <button class="w-[52px] h-[52px] rounded-full bg-[#ea580c] hover:bg-[#c2410c] text-white flex flex-col items-center justify-center shadow-lg shadow-orange-600/35 border-[3px] border-[#fff8f2] active:scale-95 transition-transform" aria-label="Log Fuel & Odometer">
+          <span class="material-symbols-outlined fill-1 text-[21px] leading-none">local_gas_station</span>
+          <span class="text-[9px] font-extrabold uppercase tracking-tight mt-0.5">LOG</span>
+        </button>
+      </div>
+
+      <!-- 4. Map It -->
+      <a href="#map-it" class="flex flex-col items-center justify-center flex-1 h-full text-slate-600 hover:text-slate-900 transition-colors">
+        <span class="material-symbols-outlined text-[21px] mb-0.5">map</span>
+        <span class="text-[10px] font-medium tracking-tight">Map It</span>
+      </a>
+
+      <!-- 5. Account -->
+      <a href="#account" class="flex flex-col items-center justify-center flex-1 h-full text-slate-600 hover:text-slate-900 transition-colors">
+        <span class="material-symbols-outlined text-[21px] mb-0.5">person</span>
+        <span class="text-[10px] font-medium tracking-tight">Account</span>
+      </a>
+
+    </nav>
+
+  </div>
+</body>
+</html>

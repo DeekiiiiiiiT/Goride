@@ -57,8 +57,7 @@ function payloadCompanyId(payload: unknown): string | null {
 async function weekHasNullOrgFill(orgId: string, weekStart: string, weekEnd: string): Promise<boolean> {
   const sb = getServiceClient();
   const { data, error } = await sb
-    .schema("fleet")
-    .from("fuel_entries")
+    .from("fleet_fuel_entries")
     .select("id, vehicle_id, payload_json")
     .is("organization_id", null)
     .gte("date", weekStart)
@@ -74,8 +73,7 @@ async function weekHasNullOrgFill(orgId: string, weekStart: string, weekEnd: str
   const orgVehicles = new Set<string>();
   if (vehicleIds.length) {
     const { data: vehicles, error: vehicleError } = await sb
-      .schema("fleet")
-      .from("vehicles")
+      .from("fleet_vehicles")
       .select("id")
       .eq("organization_id", orgId)
       .in("id", vehicleIds);

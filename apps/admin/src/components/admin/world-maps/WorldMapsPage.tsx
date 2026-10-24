@@ -83,6 +83,18 @@ function firstRing(rings: Ring[] | undefined): DashZoneVertex[] {
   return (include?.polygon ?? []).filter((point) => Number.isFinite(point.lat) && Number.isFinite(point.lng));
 }
 
+function asVertices(points: unknown): DashZoneVertex[] {
+  if (!Array.isArray(points)) return [];
+  const ring: DashZoneVertex[] = [];
+  for (const point of points) {
+    if (!point || typeof point !== 'object') continue;
+    const lat = Number((point as { lat?: unknown }).lat);
+    const lng = Number((point as { lng?: unknown }).lng);
+    if (Number.isFinite(lat) && Number.isFinite(lng)) ring.push({ lat, lng });
+  }
+  return ring;
+}
+
 function ringToGeoJson(ring: DashZoneVertex[]) {
   const coordinates = ring.map((point) => [point.lng, point.lat]);
   const first = coordinates[0];
@@ -91,14 +103,6 @@ function ringToGeoJson(ring: DashZoneVertex[]) {
   return { type: 'Polygon', coordinates: [coordinates] };
 }
 
-function seedTriangle(lat: number, lng: number): DashZoneVertex[] {
-  const d = 0.02;
-  return [
-    { lat: lat + d, lng: lng - d },
-    { lat: lat + d, lng: lng + d },
-    { lat: lat - d, lng },
-  ];
-}
 
 export function WorldMapsPage({
   page,
@@ -284,10 +288,10 @@ function PlacePanel({ token, canWrite, pcode }: { token: string; canWrite: boole
   const [versions, setVersions] = useState<VersionRow[]>([]);
   const [chosen, setChosen] = useState<string | null>(null);
   const [liveRings, setLiveRings] = useState<DashZoneVertex[]>([]);
+  const [editRing, setEditRing] = useState<DashZoneVertex[]>([]);
   const [chosenRings, setChosenRings] = useState<DashZoneVertex[]>([]);
   const [vertexCount, setVertexCount] = useState(0);
   const [placeName, setPlaceName] = useState(pcode);
-  const [center, setCenter] = useState({ lat: 18.1, lng: -77.3 });
   const [adminLevel, setAdminLevel] = useState(1);
   const [impact, setImpact] = useState<Impact | null>(null);
   const [confirmName, setConfirmName] = useState('');
@@ -313,9 +317,6 @@ function PlacePanel({ token, canWrite, pcode }: { token: string; canWrite: boole
         if (cancelled) return;
         setPlaceName(place?.name ?? pcode);
         setAdminLevel(Number(place?.admin_level ?? 1));
-        if (place?.center_lat != null && place.center_lng != null) {
-          setCenter({ lat: place.center_lat, lng: place.center_lng });
-        }
         setVersions(rows);
         setChosen(current?.id ?? null);
       } catch (e) {
@@ -333,7 +334,7 @@ function PlacePanel({ token, canWrite, pcode }: { token: string; canWrite: boole
     void (async () => {
       try {
         const body = await geoFetch(token, `/geo/boundaries/${encodeURIComponent(pcode)}/versions/${chosen}/shape`);
-        const shape = body.shape as { rings?: Ring[]; vertex_count?: number };
+        const shape = body.shape as { rings?: Ring[]; vertex_count?: number; edit_ring?: unknown };
         if (!cancelled) {
           setChosenRings(firstRing(shape?.rings));
           setVertexCount(Number(shape?.vertex_count ?? 0));
@@ -341,10 +342,14 @@ function PlacePanel({ token, canWrite, pcode }: { token: string; canWrite: boole
         const live = versions.find((row) => row.status === 'published');
         if (live && live.id !== chosen) {
           const liveBody = await geoFetch(token, `/geo/boundaries/${encodeURIComponent(pcode)}/versions/${live.id}/shape`);
-          const liveShape = liveBody.shape as { rings?: Ring[] };
-          if (!cancelled) setLiveRings(firstRing(liveShape?.rings));
+          const liveShape = liveBody.shape as { rings?: Ring[]; edit_ring?: unknown };
+          if (!cancelled) {
+            setLiveRings(firstRing(liveShape?.rings));
+            setEditRing(asVertices(liveShape?.edit_ring));
+          }
         } else if (!cancelled) {
           setLiveRings(firstRing(shape?.rings));
+          setEditRing(asVertices(shape?.edit_ring));
         }
       } catch (e) {
         if (!cancelled) setError(e instanceof Error ? e.message : 'Could not load this border');
@@ -355,15 +360,30 @@ function PlacePanel({ token, canWrite, pcode }: { token: string; canWrite: boole
     };
   }, [token, pcode, chosen, versions]);
 
+  const reloadVersions = async (selectId?: string) => {
+    const versionBody = await geoFetch(token, `/geo/boundaries/${encodeURIComponent(pcode)}/versions`);
+    const rows = (versionBody.versions as VersionRow[]) ?? [];
+    setVersions(rows);
+    const next = selectId && rows.some((row) => row.id === selectId)
+      ? selectId
+      : (rows.find((row) => row.status === 'published') ?? rows[0])?.id ?? null;
+    setChosen(next);
+  };
+
   const preview = async () => {
     if (!chosen || !canWrite) return;
     setError('');
     setMessage('');
-    const body = await geoFetch(token, `/geo/boundaries/${encodeURIComponent(pcode)}/versions/${chosen}/impact`, {
-      method: 'POST',
-      body: '{}',
-    });
-    setImpact((body.impact as Impact) ?? null);
+    try {
+      const body = await geoFetch(token, `/geo/boundaries/${encodeURIComponent(pcode)}/versions/${chosen}/impact`, {
+        method: 'POST',
+        body: '{}',
+      });
+      setImpact((body.impact as Impact) ?? null);
+    } catch (e) {
+      setImpact(null);
+      setError(e instanceof Error ? e.message : 'Preview failed');
+    }
   };
 
   const publish = async () => {
@@ -376,6 +396,8 @@ function PlacePanel({ token, canWrite, pcode }: { token: string; canWrite: boole
       });
       setMessage('Published to all apps.');
       setImpact(null);
+      setConfirmName('');
+      await reloadVersions(chosen);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Publish failed');
     }
@@ -388,9 +410,7 @@ function PlacePanel({ token, canWrite, pcode }: { token: string; canWrite: boole
       body: JSON.stringify({ geojson, notes }),
     });
     const versionId = String(body.version_id ?? '');
-    const versionBody = await geoFetch(token, `/geo/boundaries/${encodeURIComponent(pcode)}/versions`);
-    setVersions((versionBody.versions as VersionRow[]) ?? []);
-    if (versionId) setChosen(versionId);
+    await reloadVersions(versionId || undefined);
     setDrawing(false);
     setImpact(null);
     setMessage('Draft saved. Preview it, then confirm publish. Nothing is live yet.');
@@ -417,6 +437,9 @@ function PlacePanel({ token, canWrite, pcode }: { token: string; canWrite: boole
                 className={`w-full rounded-lg border px-2 py-1.5 text-left text-xs ${chosen === version.id ? 'border-emerald-600 bg-emerald-50' : 'border-slate-200'}`}
               >
                 v{version.version} · {version.status}
+                {version.status === 'retired' ? (
+                  <span className="block text-emerald-700">Restore this version</span>
+                ) : null}
                 <span className="block text-slate-500">{version.source || 'map'} · {new Date(version.created_at).toLocaleDateString()}</span>
               </button>
             </li>
@@ -424,12 +447,13 @@ function PlacePanel({ token, canWrite, pcode }: { token: string; canWrite: boole
         </ul>
         <div className="min-h-[280px]">
           {drawing ? (
+            editRing.length >= 3 ? (
             <ZoneMapEditor
               zones={[]}
               uiMode="adjust"
               foundationScope={adminLevel === 1 ? 'parish' : 'town'}
-              townIncludePolygons={[seedTriangle(center.lat, center.lng)]}
-              initialPolygon={seedTriangle(center.lat, center.lng)}
+              townIncludePolygons={[editRing]}
+              initialPolygon={editRing}
               mapToolsPlacement="none"
               mapHeight={360}
               onCancel={() => setDrawing(false)}
@@ -439,6 +463,9 @@ function PlacePanel({ token, canWrite, pcode }: { token: string; canWrite: boole
                 });
               }}
             />
+            ) : (
+              <p className="text-sm text-slate-500">Loading the live border…</p>
+            )
           ) : (
             <ZoneMapEditor
               zones={liveRings.length >= 3 ? [{
@@ -459,9 +486,12 @@ function PlacePanel({ token, canWrite, pcode }: { token: string; canWrite: boole
           )}
         </div>
       </div>
-      <p className="text-xs text-slate-500">The map line is simplified so it can be drawn. Replacing a border uses an uploaded file or a new drawing. It never saves this simplified line back.</p>
+      <p className="text-xs text-slate-500">The map line is simplified. Draw a replacement starts from the full live border.</p>
       {canWrite ? (
         <div className="flex flex-wrap items-center gap-2">
+          {versions.find((version) => version.id === chosen)?.status === 'retired' ? (
+            <p className="w-full text-xs text-slate-600">Preview, then confirm publish. That makes this older border the live one.</p>
+          ) : null}
           <button type="button" onClick={() => void preview()} className="rounded-lg bg-slate-900 px-3 py-2 text-sm text-white">Preview</button>
           <button type="button" onClick={() => setDrawing(true)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm">Draw a replacement</button>
           <label className="rounded-lg border border-slate-300 px-3 py-2 text-sm">

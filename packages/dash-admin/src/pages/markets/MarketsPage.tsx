@@ -17,8 +17,6 @@ import {
   Satellite,
   Scissors,
   Download,
-  FileUp,
-  Upload,
   X,
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -33,7 +31,6 @@ import {
   deleteZone,
   fetchCustomerDeliveryZones,
   getMarketReadiness,
-  importMarketGeoJson,
   listActivityLog,
   listAdminBoundaries,
   listCoverageVersions,
@@ -72,7 +69,6 @@ import { ZoneMapEditor, type ZoneMapUiMode } from './ZoneMapEditor';
 import { JamaicaOverviewMap } from './JamaicaOverviewMap';
 import { detectCoverageConflicts, hasBlockingCoverageConflicts } from './coverageGeo';
 import { ManageZonesOverlay } from './ManageZonesOverlay';
-import { ImportTownBorderOverlay } from './ImportTownBorderOverlay';
 import {
   ExclusionDetailSheet,
   defaultExclusionForm,
@@ -82,10 +78,6 @@ import {
 } from './ExclusionDetailSheet';
 import {
   downloadTextFile,
-  parsePolygonCsv,
-  polygonFromGeoJson,
-  isLegacyGeoJsonBlocked,
-  LEGACY_IMPORT_BLOCKED_MESSAGE,
   polygonToCsv,
   polygonToGeoJson,
   slugFilename,
@@ -193,6 +185,12 @@ function primaryDeliveryArea(m: DashMarketRow): DashZoneRow | null {
 function isServiceInclude(z: DashZoneRow): boolean {
   const src = String(z.source ?? 'manual').toLowerCase();
   return src === 'manual' || src === 'radius' || src === 'auto_outline';
+}
+
+function isOfficialBorderZone(z: DashZoneRow): boolean {
+  if (z.kind === 'exclude') return false;
+  if (String(z.boundary_pcode ?? '').trim()) return true;
+  return String(z.source ?? '').toLowerCase() === 'import';
 }
 
 function serviceAreaZones(m: DashMarketRow): DashZoneRow[] {
@@ -687,11 +685,7 @@ type MapOverlayProps = {
   onRecomputeLockedChange: (value: boolean) => void;
   unlockAfter: boolean;
   onUnlockAfterChange: (value: boolean) => void;
-  onImportGeoJson: (text: string, promote: boolean) => void;
-  onImportCsv: (text: string, promote: boolean) => void;
   onRefreshReadiness: () => void;
-  onRequestEditFoundationOnMap: () => void;
-  onRequestEditFoundationCoordinates: () => void;
   onRemoveZone: (zone: DashZoneRow) => void;
   onRenameTown: (nextName: string) => void | Promise<void>;
 };
@@ -716,11 +710,7 @@ function TownMapOverlay({
   onRecomputeLockedChange,
   unlockAfter,
   onUnlockAfterChange,
-  onImportGeoJson,
-  onImportCsv,
   onRefreshReadiness,
-  onRequestEditFoundationOnMap,
-  onRequestEditFoundationCoordinates,
   onRemoveZone,
   onRenameTown,
 }: MapOverlayProps) {
@@ -731,10 +721,6 @@ function TownMapOverlay({
   const hasServiceAreas = marketUsesServiceAreas(town);
   const liveDeliveryCount = liveIncludeShapes(town).length;
   const [showHistory, setShowHistory] = useState(false);
-  const [importText, setImportText] = useState('');
-  const [showImport, setShowImport] = useState(false);
-  const [importKind, setImportKind] = useState<'geojson' | 'csv'>('geojson');
-  const [promoteTemplate, setPromoteTemplate] = useState(true);
   const [showManageZones, setShowManageZones] = useState(false);
   const [showIoMenu, setShowIoMenu] = useState(false);
   const [showEditMenu, setShowEditMenu] = useState(false);
@@ -1080,21 +1066,6 @@ function TownMapOverlay({
                     >
                       Draw non-delivery zone
                     </button>
-                    {delivery ? (
-                      <>
-                        <div className="my-1 border-t border-slate-800" />
-                        <button
-                          type="button"
-                          className="w-full text-left px-3 py-2 text-xs text-red-300 hover:bg-red-500/10"
-                          onClick={() => {
-                            setShowEditMenu(false);
-                            onRemoveZone(delivery);
-                          }}
-                        >
-                          Delete town border…
-                        </button>
-                      </>
-                    ) : null}
                   </div>
                 )}
               </div>
@@ -1110,37 +1081,11 @@ function TownMapOverlay({
                   className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-slate-500 text-xs text-slate-100"
                 >
                   <Download className="w-3.5 h-3.5" />
-                  Import / Export
+                  Export
                   <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
                 </button>
                 {showIoMenu && (
                   <div className="absolute right-0 top-full mt-1 z-30 w-56 rounded-lg border border-slate-700 bg-slate-900 shadow-xl py-1">
-                    <p className="px-3 py-1 text-[10px] uppercase tracking-wide text-slate-400">
-                      Import town border
-                    </p>
-                    <button
-                      type="button"
-                      className="w-full text-left px-3 py-2 text-xs text-slate-200 hover:bg-slate-800"
-                      onClick={() => {
-                        setImportKind('geojson');
-                        setShowImport(true);
-                        setShowIoMenu(false);
-                      }}
-                    >
-                      Import GeoJSON…
-                    </button>
-                    <button
-                      type="button"
-                      className="w-full text-left px-3 py-2 text-xs text-slate-200 hover:bg-slate-800"
-                      onClick={() => {
-                        setImportKind('csv');
-                        setShowImport(true);
-                        setShowIoMenu(false);
-                      }}
-                    >
-                      Import CSV…
-                    </button>
-                    <div className="my-1 border-t border-slate-800" />
                     <p className="px-3 py-1 text-[10px] uppercase tracking-wide text-slate-400">
                       Export
                     </p>
@@ -1369,13 +1314,10 @@ function TownMapOverlay({
                 </>
               ) : (
                 <>
-                  Green is this town’s live delivery border. Red zones are where you don’t deliver.
-                  Neighbor towns (gray) are reference only. Use{' '}
-                  <span className="text-amber-200 font-medium">Add service area</span> to launch
-                  pockets — the full border then becomes context only. Or{' '}
-                  <span className="text-amber-200 font-medium">Manage zones</span> →{' '}
-                  <span className="text-amber-200 font-medium">Edit on map</span> to redraw the
-                  foundation.
+                  Green is this town’s live delivery border from Dominion. You can’t redraw it here.
+                  Red zones are where you don’t deliver. Neighbor towns (gray) are reference only.
+                  Use <span className="text-amber-200 font-medium">Add service area</span> to launch
+                  pockets — the full border then becomes context only.
                 </>
               )}
             </p>
@@ -1465,7 +1407,7 @@ function TownMapOverlay({
                 canWrite && uiMode === 'view'
                   ? (zoneId) => {
                       const zone = zones.find((z) => z.id === zoneId);
-                      if (!zone) return;
+                      if (!zone || isOfficialBorderZone(zone)) return;
                       onSetEditor({
                         mode: 'adjust',
                         marketId: town.id,
@@ -1534,18 +1476,6 @@ function TownMapOverlay({
         serviceAreas={serviceAreas}
         excludes={excludes}
         onClose={() => setShowManageZones(false)}
-        onEditTownOnMap={() => {
-          setShowManageZones(false);
-          onRequestEditFoundationOnMap();
-        }}
-        onEditTownCoordinates={() => {
-          setShowManageZones(false);
-          onRequestEditFoundationCoordinates();
-        }}
-        onDeleteTownBorder={(zone) => {
-          setShowManageZones(false);
-          onRemoveZone(zone);
-        }}
         onEditServiceOnMap={(zone) => {
           setShowManageZones(false);
           onSetEditor({
@@ -1674,32 +1604,6 @@ function TownMapOverlay({
           </div>
         </div>
       ) : null}
-
-      <ImportTownBorderOverlay
-        open={showImport && uiMode === 'view'}
-        kind={importKind}
-        townName={town.name}
-        text={importText}
-        promoteTemplate={promoteTemplate}
-        saving={saving}
-        onTextChange={setImportText}
-        onPromoteChange={setPromoteTemplate}
-        onClose={() => {
-          setShowImport(false);
-          setImportText('');
-        }}
-        onImport={() => {
-          const text = importText.trim();
-          if (!text) return;
-          if (importKind === 'csv') {
-            onImportCsv(text, promoteTemplate);
-          } else {
-            onImportGeoJson(text, promoteTemplate);
-          }
-          setShowImport(false);
-          setImportText('');
-        }}
-      />
     </div>
   );
 }
@@ -2263,6 +2167,10 @@ export function MarketsPage({ embedded = false }: { embedded?: boolean } = {}) {
         });
         toast.success('Non-delivery zone saved — set details, then publish');
       } else {
+        if (isOfficialBorderZone(editor.zone)) {
+          toast.error('The official border comes from Dominion and can’t be changed here');
+          return;
+        }
         const isService =
           editor.zone.kind === 'include' && isServiceInclude(editor.zone);
         const isFoundation = editor.zone.kind === 'include' && !isService;
@@ -2761,41 +2669,6 @@ export function MarketsPage({ embedded = false }: { embedded?: boolean } = {}) {
           unlockAfter={unlockAfterOnPublish}
           onUnlockAfterChange={setUnlockAfterOnPublish}
           onRefreshReadiness={() => void refreshOverlayMeta()}
-          onRequestEditFoundationOnMap={() => {
-            const delivery = officialBorderZone(mapTown);
-            if (!delivery) {
-              toast.error('Town border missing — reload the page to restore it');
-              return;
-            }
-            void (async () => {
-              const ok = await confirm({
-                title: 'Edit official town border on the map?',
-                description: marketUsesServiceAreas(mapTown)
-                  ? 'You’ll reshape the official border (map context). Live delivery still uses service areas until you change those.'
-                  : 'You’ll redraw the green delivery foundation for this town. Non-delivery zones stay; publish when you’re done.',
-                confirmLabel: 'Edit on map',
-              });
-              if (!ok) return;
-              setEditor({
-                mode: 'adjust',
-                marketId: mapTown.id,
-                zone: delivery,
-              });
-            })();
-          }}
-          onRequestEditFoundationCoordinates={() => {
-            const delivery = officialBorderZone(mapTown);
-            if (!delivery) {
-              toast.error('Town border missing — reload the page to restore it');
-              return;
-            }
-            setEditor({
-              mode: 'adjust',
-              marketId: mapTown.id,
-              zone: delivery,
-              openCoordinates: true,
-            });
-          }}
           onRemoveZone={(zone) => void removeZone(mapTown.id, zone)}
           onRenameTown={async (nextName) => {
             setSaving(true);
@@ -2888,117 +2761,6 @@ export function MarketsPage({ embedded = false }: { embedded?: boolean } = {}) {
                 await refreshOverlayMeta();
               } catch (e) {
                 toast.error(e instanceof Error ? e.message : 'Restore failed');
-              } finally {
-                setSaving(false);
-              }
-            })();
-          }}
-          onImportGeoJson={(text, promote) => {
-            void (async () => {
-              setSaving(true);
-              try {
-                let payload: {
-                  polygon?: DashZoneVertex[];
-                  geojson?: unknown;
-                  promote_template?: boolean;
-                  as_service_area?: boolean;
-                  replace_foundation?: boolean;
-                  name?: string;
-                } = {
-                  promote_template: promote,
-                };
-                try {
-                  const parsed = JSON.parse(text) as unknown;
-                  if (Array.isArray(parsed)) {
-                    payload.polygon = parsed as DashZoneVertex[];
-                  } else if (isLegacyGeoJsonBlocked(parsed)) {
-                    toast.error(LEGACY_IMPORT_BLOCKED_MESSAGE);
-                    setSaving(false);
-                    return;
-                  } else {
-                    const ring = polygonFromGeoJson(parsed);
-                    if (ring) {
-                      payload.polygon = ring;
-                    } else {
-                      toast.error(
-                        'Need a single-ring Polygon. Use Import Boundaries for official multi-part files.',
-                      );
-                      setSaving(false);
-                      return;
-                    }
-                  }
-                } catch {
-                  toast.error('Invalid JSON');
-                  setSaving(false);
-                  return;
-                }
-                if (!payload.polygon && !payload.geojson) {
-                  toast.error('Need a single-ring Polygon');
-                  setSaving(false);
-                  return;
-                }
-
-                const hasServices = marketUsesServiceAreas(mapTown);
-                if (hasServices) {
-                  const asService = await confirm({
-                    title: 'Import as a new service area?',
-                    description:
-                      'Recommended: add this polygon as a live service area and keep the official town border as map context.',
-                    confirmLabel: 'Add as service area',
-                    cancelLabel: 'Other options…',
-                  });
-                  if (asService) {
-                    payload.as_service_area = true;
-                    payload.promote_template = false;
-                    payload.name = `Service area ${serviceAreaZones(mapTown).length + 1}`;
-                  } else {
-                    const replaceOfficial = await confirm({
-                      title: 'Replace official town border only?',
-                      description:
-                        'This updates the official context border. Existing service areas stay. Cancel to abort import.',
-                      confirmLabel: 'Replace official border',
-                    });
-                    if (!replaceOfficial) {
-                      setSaving(false);
-                      return;
-                    }
-                    payload.replace_foundation = true;
-                  }
-                }
-
-                await importMarketGeoJson(session.access_token, mapTown.id, payload);
-                toast.success(
-                  payload.as_service_area
-                    ? 'Service area imported — publish when ready'
-                    : 'Official town border imported — publish when ready',
-                );
-                await load();
-                await refreshOverlayMeta();
-              } catch (e) {
-                toast.error(e instanceof Error ? e.message : 'Import failed');
-              } finally {
-                setSaving(false);
-              }
-            })();
-          }}
-          onImportCsv={(text, promote) => {
-            void (async () => {
-              const polygon = parsePolygonCsv(text);
-              if (!polygon) {
-                toast.error('CSV needs at least 3 valid lat,lng rows');
-                return;
-              }
-              setSaving(true);
-              try {
-                await importMarketGeoJson(session.access_token, mapTown.id, {
-                  polygon,
-                  promote_template: promote,
-                });
-                toast.success(`Town border imported (${polygon.length} points) — publish when ready`);
-                await load();
-                await refreshOverlayMeta();
-              } catch (e) {
-                toast.error(e instanceof Error ? e.message : 'Import failed');
               } finally {
                 setSaving(false);
               }

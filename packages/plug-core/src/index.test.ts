@@ -39,6 +39,12 @@ describe('station and price decisions', () => {
     expect(decidePlugStation({ confidence: 'high', station: { id: 's', name: 'A', brand: '', address: '', location: { lat: 1, lng: 1 }, status: 'verified' } })).toBe('confirm');
     expect(decidePlugStation({ confidence: 'ambiguous', station: null })).toBe('review');
     expect(decidePlugStation({ confidence: 'none', station: null })).toBe('learnt');
+    expect(decidePlugStation({ confidence: 'high', station: { id: 'l', name: 'Learnt', brand: '', address: '', location: { lat: 1, lng: 1 }, status: 'learnt' } })).toBe('review');
+  });
+
+  it('reuses a learnt station instead of opening another one', () => {
+    const tables = planPlugFill({ decision: 'review', price: 'hold' }).map((w) => w.table);
+    expect(tables).not.toContain('fleet.stations');
   });
 
   it('publishes in-band prices and holds the rest', () => {

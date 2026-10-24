@@ -4,6 +4,8 @@ import type { UberSsotTotals } from './uberSsot';
 import { orgBankLedgerDriverId } from './fleetOrgIdentity';
 import {
   importMoneyIdempotencyKey,
+  periodEndForAnchor,
+  periodKeyFor,
   splitAmountByStatementWeeks,
   statementWeekWeightsFromTrips,
 } from '@roam/finance-core';
@@ -21,6 +23,29 @@ function toYmd(iso: string | undefined, fallback: string): string {
   if (!iso || typeof iso !== 'string') return fallback;
   const s = iso.trim().slice(0, 10);
   return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : fallback;
+}
+
+/**
+ * The organization CSV has no dates. A one-day stamp, or a span that starts after the
+ * trips, is the folder end (the next Monday). That must not become the earning week.
+ * The week is the Monday–Sunday that contains the trips in this upload.
+ */
+export function earningWeekForOrgStatement(
+  orgStart: string,
+  orgEnd: string,
+  tripDay: string,
+): { periodStart: string; periodEnd: string } {
+  const tripWeek = periodKeyFor(tripDay);
+  if (!tripWeek) return { periodStart: orgStart, periodEnd: orgEnd };
+  const tripWeekEnd = periodEndForAnchor(tripWeek);
+  const start = orgStart.slice(0, 10);
+  const end = orgEnd.slice(0, 10);
+  const sameDay = !start || !end || start === end;
+  const overlapsTrips = start <= tripWeekEnd && end >= tripWeek;
+  if (sameDay || !overlapsTrips) {
+    return { periodStart: tripWeek, periodEnd: tripWeekEnd };
+  }
+  return { periodStart: start, periodEnd: end };
 }
 
 /** Min/max trip `date` (YYYY-MM-DD) across a batch — used for Import History period matching. */
@@ -135,15 +160,16 @@ export function buildCanonicalImportEvents(
     params;
   const org = organizationMetrics ?? null;
   const bounds = tripDateBounds(trips);
-  const periodStart = org ? toYmd(org.periodStart, bounds.min) : bounds.min;
-  const periodEnd = org ? toYmd(org.periodEnd, bounds.max) : bounds.max;
+  const rawPeriodStart = org ? toYmd(org.periodStart, bounds.min) : bounds.min;
+  const rawPeriodEnd = org ? toYmd(org.periodEnd, bounds.max) : bounds.max;
   /**
    * Ledger `date` for import_batch rows (promotion, payouts, REFUNDS_TOLL): **earliest trip day** in the batch.
-   * Statement Summary and other views filter on `value->>date`. Uber org `periodStart` often precedes trip dates
-   * (billing week vs calendar), which excluded driver-level promotions from the selected range → $0 promotions.
-   * `periodStart` / `periodEnd` on each event still carry the financial statement window for overlap queries.
+   * The organization file has no week inside it. Use the trip week, not the folder's end Monday.
    */
   const ledgerPostingDate = bounds.min;
+  const earningWeek = earningWeekForOrgStatement(rawPeriodStart, rawPeriodEnd, ledgerPostingDate);
+  const periodStart = earningWeek.periodStart;
+  const periodEnd = earningWeek.periodEnd;
   const weekWeights = statementWeekWeightsFromTrips(trips);
 
   const primary = pickPrimaryUberDriverId(trips);

@@ -54,3 +54,19 @@ export function overlayZonesForCompile<T extends CompileZone>(
 export function shouldDeletePendingGrid(committed: boolean): boolean {
   return !committed;
 }
+
+/**
+ * Nightly repair rewrites Rush only when its copy is not Dominion's live version.
+ * A missing parish row is not drift. An include zone with a different (or empty)
+ * version id is. Exclude zones are not passed in.
+ */
+export function shouldRepairRushCopy(input: {
+  versionId: string;
+  hasParish: boolean;
+  parishAdoptedVersionId: string | null;
+  includeZoneVersionIds: string[];
+}): boolean {
+  if (!input.versionId) return false;
+  if (input.hasParish && (input.parishAdoptedVersionId ?? "") !== input.versionId) return true;
+  return input.includeZoneVersionIds.some((id) => id !== input.versionId);
+}

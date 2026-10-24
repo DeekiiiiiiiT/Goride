@@ -36,7 +36,10 @@ export type PlugStationDecision = 'confirm' | 'review' | 'learnt';
 
 export function decidePlugStation(match: Pick<SmartMatchResult, 'confidence' | 'station'>): PlugStationDecision {
   if (match.confidence === 'ambiguous') return 'review';
-  if ((match.confidence === 'high' || match.confidence === 'medium') && match.station) return 'confirm';
+  if ((match.confidence === 'high' || match.confidence === 'medium') && match.station) {
+    if (match.station.status === 'learnt') return 'review';
+    return 'confirm';
+  }
   return 'learnt';
 }
 

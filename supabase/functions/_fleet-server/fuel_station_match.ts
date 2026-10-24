@@ -286,13 +286,16 @@ export async function applyStationMatch(
     }
   }
 
-  // GPS match pool = verified GOD stations only (CSV unverified is reference, not a match candidate).
-  const allStationsForEntry =
+  // GPS pool is verified stations plus learnt pins. Unverified CSV rows stay out.
+  // A learnt pin is matchable even when its placeholder flag is false.
+  const stationRows =
     !skipGpsMatching && entryCoords ? (await deps.getByPrefix("station:")) || [] : [];
-  // pinConfirmed === false = placeholder pin — merchant/alias match still OK, GPS pool skip
-  const verifiedStationsForMatch = allStationsForEntry.filter(
-    (s: any) => s && s.status === "verified" && s.pinConfirmed !== false,
-  );
+  const learntRows =
+    !skipGpsMatching && entryCoords ? (await deps.getByPrefix("learnt_location:")) || [] : [];
+  const verifiedStationsForMatch = [...stationRows, ...learntRows]
+    .filter((s: any) => s && (s.status === "verified" || s.status === "learnt"))
+    .map((s: any) => (s.status === "learnt" ? { ...s, pinConfirmed: undefined } : s))
+    .filter((s: any) => s.status === "learnt" || s.pinConfirmed !== false);
 
   if (!skipGpsMatching && entryCoords) {
     const gpsAccuracyM = extractEntryGpsAccuracyMeters(entry);
@@ -307,6 +310,30 @@ export async function applyStationMatch(
 
     if (smartResult.station && (smartResult.confidence === "high" || smartResult.confidence === "medium")) {
       const matchedStation = smartResult.station as any;
+      if (matchedStation.status === "learnt") {
+        entry.metadata = {
+          ...entry.metadata,
+          locationStatus: "unknown",
+          verificationMethod: "learnt_reuse",
+          learntLocationId: matchedStation.id,
+          matchedStationId: matchedStation.id,
+          matchDistance: smartResult.distance,
+          matchConfidence: smartResult.confidence,
+          nearMissCandidates: candidates,
+          stationResolution: buildStationResolution({
+            state: "new_location",
+            reason: "GPS_IN_GEOFENCE",
+            stationId: matchedStation.id,
+            candidates,
+            entry,
+            decidedBy: "gps",
+          }),
+        };
+        console.log(
+          `[SmartGeoMatch] Reused learnt station ${matchedStation.id} for entry ${entry.id} at ${smartResult.distance}m`,
+        );
+        return { outcome: "learnt", stations: verifiedStationsForMatch };
+      }
       bumpStationPriceStats(matchedStation, entry);
       await deps.set(`station:${matchedStation.id}`, matchedStation);
 
@@ -490,6 +517,7 @@ export async function applyStationMatch(
         reason: unresolvedReason,
         nearMissCandidates: candidates,
         organizationId: entry.organizationId || entry.metadata?.organizationId || null,
+        originApp: "roam_fleet",
       };
       await deps.set(`learnt_location:${learntId}`, learntLocation);
       console.log(`[SmartGeoMatch] No match for entry ${entry.id} — created Learnt Location: ${learntId}`);
@@ -526,6 +554,7 @@ export async function applyStationMatch(
       vehicleId: entry.vehicleId,
       transactionId: entry.id,
       gateReason: "No GPS coordinates provided ? cannot verify station",
+      originApp: "roam_fleet",
     };
     await deps.set(`learnt_location:${learntId}`, learntLocation);
     entry.metadata = {
@@ -539,7 +568,7 @@ export async function applyStationMatch(
     return { outcome: "no_gps", stations: [] };
   }
 
-  return { outcome: "skipped", stations: allStationsForEntry };
+  return { outcome: "skipped", stations: [] };
 }
 
 /** Sign and auto-lock a verified card half after both split rows are stored. */

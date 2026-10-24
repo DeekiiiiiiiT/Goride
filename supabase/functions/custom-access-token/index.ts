@@ -107,6 +107,22 @@ Deno.serve(async (req) => {
       if (platformRoles.length > 0) {
         appMeta.roles = platformRoles;
         appMeta.role = platformRoles[0];
+      } else if (userMeta.app === "plug") {
+        const existing = typeof appMeta.role === "string" ? appMeta.role.trim() : "";
+        if (!existing) {
+          const auth = (await import("https://esm.sh/@supabase/supabase-js@2")).createClient(dbUrl, serviceKey);
+          const { data: existingUser } = await auth.auth.admin.getUserById(userId);
+          const stored = existingUser?.user?.app_metadata as Record<string, unknown> | undefined;
+          const storedRole = typeof stored?.role === "string" ? stored.role.trim() : "";
+          if (!storedRole) {
+            await auth.auth.admin.updateUserById(userId, {
+              app_metadata: { ...(stored || {}), role: "explorer_user" },
+            });
+            appMeta.role = "explorer_user";
+          } else {
+            appMeta.role = storedRole;
+          }
+        }
       }
     }
 

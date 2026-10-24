@@ -170,8 +170,7 @@ export async function listLiveTollLedgerIds(sourceIds: string[]): Promise<Set<st
   // Prefer fleet table; fall back to KV existence checks.
   try {
     const { data, error } = await sb()
-      .schema("fleet")
-      .from("toll_ledger")
+      .from("fleet_toll_ledger")
       .select("id, status, amount, metadata")
       .in("id", ids);
     if (!error && data) {
@@ -482,8 +481,7 @@ async function loadTollLedgerRowsByIds(
   if (uniq.length === 0) return out;
   try {
     const { data, error } = await sb()
-      .schema("fleet")
-      .from("toll_ledger")
+      .from("fleet_toll_ledger")
       .select(
         "id, amount, type, status, metadata, driver_id, vehicle_id, date, payment_method, plaza, trip_id, batch_id, audit_trail, payload_json",
       )
@@ -597,8 +595,7 @@ async function loadMissingTollSpendRowsForWeek(opts: {
     const weekStart = String(opts.periodAnchor).slice(0, 10);
     const weekEnd = periodEndForAnchor(weekStart);
     let q = sb()
-      .schema("fleet")
-      .from("toll_ledger")
+      .from("fleet_toll_ledger")
       .select(
         "id, amount, type, status, metadata, driver_id, vehicle_id, date, payment_method, plaza, trip_id, batch_id, audit_trail, payload_json",
       )

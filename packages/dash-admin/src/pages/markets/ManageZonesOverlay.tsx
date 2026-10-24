@@ -12,9 +12,6 @@ type ManageZonesOverlayProps = {
   serviceAreas: DashZoneRow[];
   excludes: DashZoneRow[];
   onClose: () => void;
-  onEditTownOnMap: () => void;
-  onEditTownCoordinates: () => void;
-  onDeleteTownBorder: (zone: DashZoneRow) => void;
   onEditServiceOnMap: (zone: DashZoneRow) => void;
   onDeleteService: (zone: DashZoneRow) => void;
   onAddServiceArea: () => void;
@@ -30,9 +27,6 @@ export function ManageZonesOverlay({
   serviceAreas,
   excludes,
   onClose,
-  onEditTownOnMap,
-  onEditTownCoordinates,
-  onDeleteTownBorder,
   onEditServiceOnMap,
   onDeleteService,
   onAddServiceArea,
@@ -41,8 +35,6 @@ export function ManageZonesOverlay({
   onDeleteExclude,
 }: ManageZonesOverlayProps) {
   if (!open) return null;
-
-  const hasServiceAreas = serviceAreas.length > 0;
 
   return (
     <div className="fixed inset-0 z-[90] flex items-end sm:items-center justify-center p-3 sm:p-6">
@@ -64,9 +56,7 @@ export function ManageZonesOverlay({
               Manage zones · {townName}
             </h2>
             <p className="text-xs text-slate-400 mt-0.5">
-              {hasServiceAreas
-                ? 'Service areas control live delivery. Official border is map context only.'
-                : 'Edit or delete the green town border. Non-delivery zones are listed below.'}
+              The official border comes from Dominion and cannot be changed here. Service areas and no-go zones are yours.
             </p>
           </div>
           <button
@@ -81,48 +71,17 @@ export function ManageZonesOverlay({
         <div className="overflow-y-auto flex-1 p-4 space-y-4">
           <section className="space-y-2">
             <p className="text-[10px] uppercase tracking-wide text-slate-500 font-medium">
-              {hasServiceAreas ? 'Official town border (context)' : 'Town border (foundation)'}
+              Official town border
             </p>
-            <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2.5 space-y-2">
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-emerald-100 truncate">
-                  {delivery?.name ?? 'Town border'}
-                </p>
-                <p className="text-[11px] text-emerald-200/70">
-                  {delivery
-                    ? `${delivery.polygon.length} points${hasServiceAreas ? ' · not live for customers' : ''}`
-                    : 'No border set — import GeoJSON or draw one on the map'}
-                </p>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  disabled={!delivery}
-                  onClick={onEditTownOnMap}
-                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-emerald-500 text-slate-950 text-xs font-semibold disabled:opacity-40"
-                >
-                  <MapIcon className="w-3.5 h-3.5" />
-                  Edit on map
-                </button>
-                <button
-                  type="button"
-                  disabled={!delivery}
-                  onClick={onEditTownCoordinates}
-                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-emerald-500/40 text-emerald-100 text-xs font-semibold disabled:opacity-40"
-                >
-                  <MapPin className="w-3.5 h-3.5" />
-                  Coordinates
-                </button>
-                <button
-                  type="button"
-                  disabled={!delivery}
-                  onClick={() => delivery && onDeleteTownBorder(delivery)}
-                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-red-500/40 text-red-200 text-xs font-semibold disabled:opacity-40"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                  Delete border
-                </button>
-              </div>
+            <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2.5">
+              <p className="text-sm font-medium text-emerald-100 truncate">
+                {delivery?.name ?? 'Town border'}
+              </p>
+              <p className="text-[11px] text-emerald-200/70">
+                {delivery
+                  ? `${delivery.polygon.length} points · view only`
+                  : 'No border yet. Apply the official border from Dominion.'}
+              </p>
             </div>
           </section>
 

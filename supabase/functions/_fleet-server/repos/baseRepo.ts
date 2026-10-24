@@ -88,6 +88,9 @@ export function rowToKvValue(row: Record<string, unknown>): Record<string, unkno
   if (!payload.paymentSource && row.payment_source) payload.paymentSource = row.payment_source;
   // Typed columns the list screens show. Only fill gaps so a full payload_json row stays unchanged.
   if (!payload.platform && row.platform) payload.platform = row.platform;
+  if (!payload.originApp && (row.origin_app === "roam_fleet" || row.origin_app === "roam_plug" || row.origin_app === "manual")) {
+    payload.originApp = row.origin_app;
+  }
   if (!payload.status && row.status) payload.status = row.status;
   if (payload.amount == null && row.amount != null) payload.amount = row.amount;
   if (!payload.category && row.category) payload.category = row.category;

@@ -309,6 +309,33 @@ export async function deleteAllCanonicalLedgerBySourceType(
   return { deleted: totalDeleted, idemDeleted: 0 };
 }
 
+/** Dates that already have a fixed-expense row for this rule. Amount edits must not post them again. */
+export async function postedFixedOccurrenceDates(configId: string): Promise<Set<string>> {
+  const id = String(configId || "").trim();
+  const dates = new Set<string>();
+  if (!id) return dates;
+  const client = supabaseKv();
+  const { data, error } = await client
+    .from("ledger_entries")
+    .select("effective_at, metadata")
+    .eq("reference_type", "financial_event")
+    .eq("reference_id", id)
+    .eq("entry_type", "fixed_expense")
+    .limit(2000);
+  if (error) {
+    console.warn("[CanonicalLedger] posted occurrence lookup failed", error.message);
+    return dates;
+  }
+  for (const row of data || []) {
+    const meta = (row as { metadata?: { occurrenceYmd?: string } }).metadata;
+    const stamped = typeof meta?.occurrenceYmd === "string" ? meta.occurrenceYmd.slice(0, 10) : "";
+    const effective = String((row as { effective_at?: string }).effective_at || "").slice(0, 10);
+    if (/^\d{4}-\d{2}-\d{2}$/.test(stamped)) dates.add(stamped);
+    else if (/^\d{4}-\d{2}-\d{2}$/.test(effective)) dates.add(effective);
+  }
+  return dates;
+}
+
 /** Delete unified entries stamped with a given import batchId. */
 export async function deleteCanonicalLedgerByBatchId(
   batchId: string,

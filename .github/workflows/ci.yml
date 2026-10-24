@@ -32,6 +32,9 @@ jobs:
       - name: Check Dominion is the only Jamaica map
         run: node scripts/check-no-hardcoded-jamaica.mjs
 
+      - name: Check Rush no longer names the old border table
+        run: node scripts/geo-phase5-precheck.mjs
+
       - name: Check no admin→fleet imports
         run: node scripts/check-no-admin-fleet-imports.mjs
 
@@ -224,6 +227,8 @@ jobs:
           supabase/functions/delivery/inHouse/customerMenu.test.ts
           supabase/functions/delivery/inHouse/dispatchOrigin.test.ts
           supabase/functions/delivery/admin/consoleAccess.test.ts
+          supabase/functions/delivery/admin/geoPublishRules.test.ts
+          supabase/functions/delivery/admin/geoManaged.test.ts
           tools/in-house-worker/guard.test.ts
 
       - name: Deno test Rush settings

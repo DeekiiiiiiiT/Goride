@@ -559,8 +559,20 @@ export async function appendCanonicalFixedExpenseIfEligible(
   windowEndYmd: string,
   c: Context,
 ): Promise<{ inserted: number; skipped: number; failed: number }> {
-  const events = buildCanonicalFixedExpenseEvents(config, windowStartYmd, windowEndYmd);
+  const { postedFixedOccurrenceDates } = await import("./ledger_canonical.ts");
+  const already = config.id ? await postedFixedOccurrenceDates(config.id) : new Set<string>();
+  const events = buildCanonicalFixedExpenseEvents(config, windowStartYmd, windowEndYmd)
+    .filter((event) => !already.has(String(event.date || "").slice(0, 10)));
   if (!events.length) return { inserted: 0, skipped: 0, failed: 0 };
+  const orgId = String((config as { organizationId?: string }).organizationId || "");
+  if (orgId) {
+    const { financeWeekIsLocked } = await import("./finance_period_lock.ts");
+    for (const event of events) {
+      if (await financeWeekIsLocked(orgId, String(event.date || ""))) {
+        throw new Error("This week is closed.");
+      }
+    }
+  }
   const totals = { inserted: 0, skipped: 0, failed: 0 };
   for (let i = 0; i < events.length; i += 200) {
     const result = await appendCanonicalLedgerEvents(events.slice(i, i + 200), c);

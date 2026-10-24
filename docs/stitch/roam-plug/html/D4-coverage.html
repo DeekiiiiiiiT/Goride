@@ -1,0 +1,1175 @@
+<!DOCTYPE html>
+
+<html class="h-full bg-background" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Roam Dominion - Parish Coverage Console</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          "colors": {
+            "surface-container-lowest": "#ffffff",
+            "surface-container-highest": "#dae2fd",
+            "on-background": "#131b2e",
+            "outline": "#75777d",
+            "surface-container-high": "#e2e7ff",
+            "on-surface-variant": "#45474c",
+            "on-secondary": "#ffffff",
+            "inverse-primary": "#bcc7de",
+            "surface-bright": "#faf8ff",
+            "secondary-fixed-dim": "#b4c5ff",
+            "on-error-container": "#93000a",
+            "secondary-container": "#316bf3",
+            "on-tertiary": "#ffffff",
+            "on-surface": "#131b2e",
+            "primary-container": "#1e293b",
+            "on-tertiary-fixed": "#001d31",
+            "surface-container-low": "#f2f3ff",
+            "inverse-on-surface": "#eef0ff",
+            "secondary-fixed": "#dbe1ff",
+            "on-error": "#ffffff",
+            "tertiary-fixed": "#cce5ff",
+            "primary": "#091426",
+            "surface-container": "#eaedff",
+            "error-container": "#ffdad6",
+            "tertiary": "#001626",
+            "surface": "#faf8ff",
+            "on-tertiary-fixed-variant": "#004b73",
+            "on-primary-fixed": "#111c2d",
+            "tertiary-fixed-dim": "#93ccff",
+            "outline-variant": "#c5c6cd",
+            "surface-tint": "#545f73",
+            "on-secondary-fixed-variant": "#003ea8",
+            "primary-fixed-dim": "#bcc7de",
+            "surface-dim": "#d2d9f4",
+            "on-primary": "#ffffff",
+            "inverse-surface": "#283044",
+            "background": "#faf8ff",
+            "secondary": "#0051d5",
+            "on-tertiary-container": "#2f96db",
+            "error": "#ba1a1a",
+            "on-secondary-fixed": "#00174b",
+            "surface-variant": "#dae2fd",
+            "primary-fixed": "#d8e3fb",
+            "on-secondary-container": "#fefcff",
+            "on-primary-container": "#8590a6",
+            "tertiary-container": "#002b45",
+            "on-primary-fixed-variant": "#3c475a"
+          },
+          "borderRadius": {
+            "DEFAULT": "0.125rem",
+            "lg": "0.25rem",
+            "xl": "0.5rem",
+            "full": "0.75rem"
+          },
+          "spacing": {
+            "space-xl": "1.5rem",
+            "space-2xl": "2rem",
+            "margin": "1.5rem",
+            "space-md": "0.75rem",
+            "space-xxs": "0.125rem",
+            "space-xs": "0.25rem",
+            "margin-compact": "1rem",
+            "space-lg": "1rem",
+            "gutter": "1rem",
+            "space-sm": "0.5rem",
+            "gutter-dense": "0.75rem"
+          },
+          "fontFamily": {
+            "body-lg": ["Inter"],
+            "body-sm": ["Inter"],
+            "headline-xl": ["Inter"],
+            "body-md": ["Inter"],
+            "code-tabular": ["JetBrains Mono"],
+            "label-sm": ["Inter"],
+            "label-md": ["Inter"],
+            "headline-sm": ["Inter"],
+            "headline-lg": ["Inter"],
+            "label-lg": ["Inter"],
+            "headline-md": ["Inter"]
+          },
+          "fontSize": {
+            "body-lg": ["15px", { "lineHeight": "22px", "fontWeight": "400" }],
+            "body-sm": ["12px", { "lineHeight": "16px", "fontWeight": "400" }],
+            "headline-xl": ["28px", { "lineHeight": "36px", "letterSpacing": "-0.02em", "fontWeight": "600" }],
+            "body-md": ["13px", { "lineHeight": "18px", "fontWeight": "400" }],
+            "code-tabular": ["12px", { "lineHeight": "16px", "fontWeight": "400" }],
+            "label-sm": ["11px", { "lineHeight": "14px", "letterSpacing": "0.04em", "fontWeight": "600" }],
+            "label-md": ["12px", { "lineHeight": "16px", "letterSpacing": "0.01em", "fontWeight": "500" }],
+            "headline-sm": ["15px", { "lineHeight": "20px", "letterSpacing": "-0.005em", "fontWeight": "600" }],
+            "headline-lg": ["22px", { "lineHeight": "28px", "letterSpacing": "-0.015em", "fontWeight": "600" }],
+            "label-lg": ["13px", { "lineHeight": "16px", "fontWeight": "500" }],
+            "headline-md": ["18px", { "lineHeight": "24px", "letterSpacing": "-0.01em", "fontWeight": "600" }]
+          }
+        }
+      }
+    }
+  </script>
+</head>
+<body class="min-h-screen bg-background font-body-md text-on-surface antialiased overflow-x-hidden">
+<!-- Fixed Left Sidebar (SideNavBar Anchor) -->
+<aside class="flex flex-col justify-between h-screen w-60 py-space-md px-space-xs fixed left-0 top-0 z-40 bg-primary-container border-r border-[#334155]">
+<div>
+<!-- Brand Header -->
+<div class="px-3 py-2 mb-4 border-b border-[#334155]/60 pb-3">
+<div class="flex items-center gap-2.5">
+<div class="w-8 h-8 rounded bg-secondary flex items-center justify-center text-white font-bold text-sm tracking-tight shadow-sm">
+            RD
+          </div>
+<div class="flex flex-col overflow-hidden">
+<span class="font-headline-sm text-headline-sm font-semibold tracking-tight text-white leading-tight">Roam Dominion</span>
+<span class="font-label-sm text-[10px] text-slate-400 uppercase tracking-wider">Fleet Operations Console</span>
+</div>
+</div>
+</div>
+<!-- Navigation Links -->
+<nav class="space-y-1">
+<!-- Vehicle Database -->
+<a class="flex items-center gap-2.5 px-3 py-2 text-slate-300 font-label-md text-label-md hover:bg-slate-800/80 hover:text-white rounded transition-colors duration-150" href="#">
+<span class="material-symbols-outlined text-[18px]">directions_car</span>
+<span>Vehicle Database</span>
+</a>
+<!-- Fuel -->
+<a class="flex items-center gap-2.5 px-3 py-2 text-slate-300 font-label-md text-label-md hover:bg-slate-800/80 hover:text-white rounded transition-colors duration-150" href="#">
+<span class="material-symbols-outlined text-[18px]">local_gas_station</span>
+<span>Fuel</span>
+</a>
+<!-- Places Review (ACTIVE) -->
+<a class="flex items-center gap-2.5 px-3 py-2 bg-[#0f172a] text-white font-label-md text-label-md rounded border-l-2 border-secondary font-medium" href="#">
+<span class="material-symbols-outlined text-[18px] text-secondary">rate_review</span>
+<span class="flex-1">Places Review</span>
+<span class="bg-[#57534e]/40 text-stone-300 border border-stone-600/50 text-[10px] px-1.5 py-0.2 rounded font-code-tabular font-medium">184</span>
+</a>
+<!-- Tolls -->
+<a class="flex items-center gap-2.5 px-3 py-2 text-slate-300 font-label-md text-label-md hover:bg-slate-800/80 hover:text-white rounded transition-colors duration-150" href="#">
+<span class="material-symbols-outlined text-[18px]">toll</span>
+<span>Tolls</span>
+</a>
+<!-- System Logs -->
+<a class="flex items-center gap-2.5 px-3 py-2 text-slate-300 font-label-md text-label-md hover:bg-slate-800/80 hover:text-white rounded transition-colors duration-150" href="#">
+<span class="material-symbols-outlined text-[18px]">terminal</span>
+<span>System Logs</span>
+</a>
+<!-- Settings -->
+<a class="flex items-center gap-2.5 px-3 py-2 text-slate-300 font-label-md text-label-md hover:bg-slate-800/80 hover:text-white rounded transition-colors duration-150" href="#">
+<span class="material-symbols-outlined text-[18px]">settings</span>
+<span>Settings</span>
+</a>
+</nav>
+</div>
+<!-- Sidebar Bottom Utilities & Actions -->
+<div class="px-2 pt-3 border-t border-[#334155]/60 space-y-2">
+<div class="p-2.5 bg-slate-900/60 rounded border border-slate-700/60 mb-2">
+<div class="flex items-center justify-between text-[11px] text-slate-400 mb-1">
+<span class="uppercase tracking-wider font-semibold">Mesh Coverage</span>
+<span class="text-emerald-400 font-code-tabular font-semibold">79.4%</span>
+</div>
+<div class="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden">
+<div class="bg-emerald-500 h-full rounded-full" style="width: 79.4%"></div>
+</div>
+</div>
+<button class="w-full flex items-center justify-center gap-2 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-label-sm font-label-sm rounded border border-slate-600 transition-colors">
+<span class="material-symbols-outlined text-[16px]">file_download</span>
+<span>Export Fleet Data</span>
+</button>
+<div class="flex items-center justify-between pt-2 px-1 text-slate-400 text-label-sm">
+<a class="flex items-center gap-1 hover:text-white transition-colors" href="#">
+<span class="material-symbols-outlined text-[14px]">help</span>
+<span>Documentation</span>
+</a>
+<a class="flex items-center gap-1 hover:text-white transition-colors" href="#">
+<span class="material-symbols-outlined text-[14px]">headset_mic</span>
+<span>Support</span>
+</a>
+</div>
+</div>
+</aside>
+<!-- Top App Bar (TopNavBar Anchor) -->
+<header class="flex justify-between items-center h-12 px-6 w-[calc(100%-15rem)] ml-60 fixed top-0 right-0 z-30 bg-surface-container-lowest border-b border-outline-variant/40 shadow-[0_1px_2px_rgba(15,23,42,0.03)]">
+<!-- Breadcrumbs & Status -->
+<div class="flex items-center gap-3">
+<div class="flex items-center gap-1.5 text-on-surface-variant font-body-sm text-body-sm">
+<span>Dominion Admin</span>
+<span class="text-slate-300">/</span>
+<span>Places</span>
+<span class="text-slate-300">/</span>
+<span class="text-on-surface font-semibold">Parish Coverage</span>
+</div>
+<!-- Live Mesh Sync Badge -->
+<div class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded border border-emerald-200 bg-emerald-50 text-emerald-700 text-[11px] font-label-sm">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+<span class="font-medium">Live Mesh Sync</span>
+</div>
+</div>
+<!-- Center Search & Filters -->
+<div class="flex items-center gap-3">
+<div class="relative w-64">
+<span class="material-symbols-outlined absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 text-[16px]">search</span>
+<input class="w-full h-8 pl-8 pr-3 text-body-sm bg-slate-50 border border-slate-200 rounded focus:bg-white focus:border-secondary focus:ring-1 focus:ring-secondary outline-none transition-all placeholder:text-slate-400" placeholder="Filter parishes, counties, or nodes..." type="text"/>
+</div>
+<div class="inline-flex items-center gap-1.5 h-8 px-2.5 bg-white border border-slate-200 rounded text-slate-700 font-label-sm text-label-sm hover:bg-slate-50 cursor-pointer transition-colors">
+<span class="material-symbols-outlined text-[15px] text-slate-500">calendar_today</span>
+<span>Past 30 Days (Q2 Sync)</span>
+<span class="material-symbols-outlined text-[15px] text-slate-400">arrow_drop_down</span>
+</div>
+</div>
+<!-- Right Actions & Profile -->
+<div class="flex items-center gap-3">
+<button class="inline-flex items-center gap-1.5 h-8 px-3 bg-secondary hover:bg-blue-700 text-white font-label-sm text-label-sm rounded shadow-sm transition-colors">
+<span class="material-symbols-outlined text-[16px]">sync</span>
+<span>Batch Sync</span>
+</button>
+<button class="w-8 h-8 flex items-center justify-center rounded text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-colors relative">
+<span class="material-symbols-outlined text-[19px]">notifications</span>
+<span class="absolute top-1.5 right-1.5 w-1.5 h-1.5 bg-red-500 rounded-full"></span>
+</button>
+<div class="h-5 w-[1px] bg-slate-200"></div>
+<!-- Admin User -->
+<div class="flex items-center gap-2 pl-1 cursor-pointer">
+<div class="w-7 h-7 rounded-full bg-slate-800 text-white flex items-center justify-center text-xs font-semibold ring-1 ring-slate-300">
+          AD
+        </div>
+<div class="flex flex-col text-left">
+<span class="text-[12px] font-semibold text-on-surface leading-tight">Admin Console</span>
+<span class="text-[10px] text-slate-500 leading-tight">Sec-Ops Lead</span>
+</div>
+</div>
+</div>
+</header>
+<!-- Main Canvas Container -->
+<main class="ml-60 pt-16 pb-12 px-space-xl max-w-[1440px]">
+<!-- Page Header & Geospatial Subtext -->
+<div class="flex items-center justify-between mb-5">
+<div>
+<h1 class="font-headline-lg text-headline-lg font-bold text-on-surface tracking-tight">Parish Infrastructure Coverage</h1>
+<p class="font-body-md text-body-md text-on-surface-variant">Geospatial verification audit of all 14 Jamaican parishes across Cornwall, Middlesex, and Surrey counties.</p>
+</div>
+<div class="flex items-center gap-2">
+<button class="inline-flex items-center gap-1.5 h-8 px-3 bg-white border border-slate-300 rounded font-label-md text-label-md text-slate-700 hover:bg-slate-50 transition-colors shadow-sm">
+<span class="material-symbols-outlined text-[16px] text-slate-500">file_download</span>
+<span>Export CSV</span>
+</button>
+<button class="inline-flex items-center gap-1.5 h-8 px-3 bg-slate-900 hover:bg-black text-white rounded font-label-md text-label-md transition-colors shadow-sm">
+<span class="material-symbols-outlined text-[16px]">map</span>
+<span>Open GIS Spatial Map</span>
+</button>
+</div>
+</div>
+<!-- Top Metric Summary Cards (Bento Metric Layout) -->
+<div class="grid grid-cols-4 gap-4 mb-6">
+<!-- Metric 1: Total Island Verified Places -->
+<div class="bg-surface-container-lowest p-4 rounded border border-slate-200/90 shadow-[0_1px_2px_rgba(15,23,42,0.04)] relative overflow-hidden">
+<div class="flex items-center justify-between mb-1.5">
+<span class="font-label-sm text-label-sm text-slate-500 uppercase tracking-wider font-semibold">Total Verified Places</span>
+<span class="inline-flex items-center gap-0.5 text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.2 rounded text-[11px] font-medium">
+<span class="material-symbols-outlined text-[13px]">trending_up</span> +8.4%
+          </span>
+</div>
+<div class="flex items-baseline gap-2">
+<span class="font-headline-xl text-headline-xl font-bold text-slate-900 font-code-tabular">2,490</span>
+<span class="text-xs text-slate-400">active POIs</span>
+</div>
+<div class="mt-2 text-xs text-slate-500 flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px] text-slate-400">check_circle</span>
+<span>100% telemetry verified via dashcam mesh</span>
+</div>
+</div>
+<!-- Metric 2: Pending Moderation Queue -->
+<div class="bg-surface-container-lowest p-4 rounded border border-slate-200/90 shadow-[0_1px_2px_rgba(15,23,42,0.04)] relative">
+<div class="flex items-center justify-between mb-1.5">
+<span class="font-label-sm text-label-sm text-slate-500 uppercase tracking-wider font-semibold">Pending Moderation</span>
+<span class="inline-flex items-center gap-0.5 text-[#57534e] bg-stone-100 border border-stone-300 px-1.5 py-0.2 rounded text-[11px] font-semibold">
+            Action Req.
+          </span>
+</div>
+<div class="flex items-baseline gap-2">
+<span class="font-headline-xl text-headline-xl font-bold text-[#57534e] font-code-tabular">184</span>
+<span class="text-xs text-slate-500">places in queue</span>
+</div>
+<div class="mt-2 text-xs text-stone-600 flex items-center justify-between">
+<span class="flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px] text-[#57534e]">schedule</span>
+<span>Avg resolution time: 3.2 hrs</span>
+</span>
+<a class="text-secondary font-medium hover:underline text-[11px]" href="#table-section">Audit Queue →</a>
+</div>
+</div>
+<!-- Metric 3: Average Island Coverage -->
+<div class="bg-surface-container-lowest p-4 rounded border border-slate-200/90 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
+<div class="flex items-center justify-between mb-1.5">
+<span class="font-label-sm text-label-sm text-slate-500 uppercase tracking-wider font-semibold">Average Island Coverage</span>
+<span class="inline-flex items-center text-slate-600 bg-slate-100 border border-slate-200 px-1.5 py-0.2 rounded text-[11px] font-medium">
+            Island Target: 85%
+          </span>
+</div>
+<div class="flex items-baseline gap-2">
+<span class="font-headline-xl text-headline-xl font-bold text-slate-900 font-code-tabular">79.4%</span>
+<span class="text-xs text-slate-500">across 14 parishes</span>
+</div>
+<div class="w-full bg-slate-100 h-1.5 rounded-full mt-2.5 overflow-hidden">
+<div class="bg-blue-600 h-full rounded-full" style="width: 79.4%"></div>
+</div>
+</div>
+<!-- Metric 4: Top Performing Parish -->
+<div class="bg-surface-container-lowest p-4 rounded border border-slate-200/90 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
+<div class="flex items-center justify-between mb-1.5">
+<span class="font-label-sm text-label-sm text-slate-500 uppercase tracking-wider font-semibold">Top Performing Parish</span>
+<span class="inline-flex items-center gap-0.5 text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.2 rounded text-[11px] font-semibold">
+            Surrey Peak
+          </span>
+</div>
+<div class="flex items-baseline justify-between">
+<div>
+<span class="font-headline-xl text-headline-xl font-bold text-slate-900">Kingston</span>
+<span class="text-xs text-slate-500 ml-1">Parish</span>
+</div>
+<span class="font-headline-lg text-headline-lg font-bold text-emerald-600 font-code-tabular">94.2%</span>
+</div>
+<div class="mt-2 text-xs text-slate-500 flex items-center gap-1.5">
+<span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+<span>482 verified hubs • 0 critical anomalies</span>
+</div>
+</div>
+</div>
+<!-- Filter & County Segment Rail -->
+<div class="flex items-center justify-between mb-3 bg-surface-container-lowest p-2.5 rounded border border-slate-200/80 shadow-[0_1px_2px_rgba(15,23,42,0.02)]">
+<div class="flex items-center gap-1">
+<span class="text-xs font-semibold text-slate-500 uppercase tracking-wider px-2">County Filter:</span>
+<button class="px-2.5 py-1 text-xs font-medium rounded bg-slate-900 text-white">All 14 Parishes</button>
+<button class="px-2.5 py-1 text-xs font-medium rounded text-slate-600 hover:bg-slate-100 transition-colors">Cornwall (5)</button>
+<button class="px-2.5 py-1 text-xs font-medium rounded text-slate-600 hover:bg-slate-100 transition-colors">Middlesex (5)</button>
+<button class="px-2.5 py-1 text-xs font-medium rounded text-slate-600 hover:bg-slate-100 transition-colors">Surrey (4)</button>
+</div>
+<div class="flex items-center gap-3">
+<div class="flex items-center gap-2 text-xs text-slate-500">
+<span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-[#16a34a]"></span> Optimal (&gt;75%)</span>
+<span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-amber-500"></span> Moderate (40-75%)</span>
+<span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-slate-300"></span> Deficit (&lt;40%)</span>
+</div>
+<div class="h-4 w-[1px] bg-slate-200"></div>
+<button class="inline-flex items-center gap-1 text-xs text-slate-600 hover:text-slate-900 font-medium">
+<span class="material-symbols-outlined text-[15px]">tune</span> Density Settings
+        </button>
+</div>
+</div>
+<!-- Main Table Section: Comprehensive 14 Jamaican Parishes -->
+<div class="bg-surface-container-lowest rounded border border-slate-200 shadow-[0_1px_2px_rgba(15,23,42,0.04)] overflow-hidden" id="table-section">
+<div class="overflow-x-auto">
+<table class="w-full text-left border-collapse">
+<thead>
+<tr class="h-[34px] bg-[#f8fafc] border-b border-slate-200 text-label-sm font-label-sm text-slate-600 uppercase tracking-wider select-none">
+<th class="w-10 px-3 text-center">
+<input class="w-3.5 h-3.5 rounded text-secondary border-slate-300 focus:ring-secondary cursor-pointer" type="checkbox"/>
+</th>
+<th class="px-3 font-semibold text-slate-700">Parish &amp; County</th>
+<th class="px-3 font-semibold text-slate-700">Infrastructure Breakdown (Fuel / Mech / Tyre / Rest)</th>
+<th class="px-3 font-semibold text-slate-700 w-64">Coverage Density</th>
+<th class="px-3 font-semibold text-slate-700 text-center">Pending Review</th>
+<th class="px-3 font-semibold text-slate-700 text-center">Audit Status</th>
+<th class="px-3 text-right font-semibold text-slate-700 pr-4">Actions</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-slate-100 font-body-sm text-body-sm">
+<!-- 1. Kingston -->
+<tr class="h-[40px] hover:bg-slate-50/80 transition-colors group">
+<td class="px-3 text-center">
+<input class="w-3.5 h-3.5 rounded text-secondary border-slate-300 focus:ring-secondary" type="checkbox"/>
+</td>
+<td class="px-3 py-2">
+<div class="flex items-center gap-2">
+<span class="font-semibold text-slate-900">Kingston</span>
+<span class="text-[10px] uppercase font-semibold text-slate-400 bg-slate-100 px-1.5 py-0.2 rounded border border-slate-200">Surrey</span>
+<span class="text-[10px] text-emerald-600 font-medium">Urban Core</span>
+</div>
+</td>
+<td class="px-3 py-2 text-slate-600">
+<div class="flex items-center gap-3 font-code-tabular text-[11px]">
+<span title="Fuel Stations"><strong class="text-slate-800">112</strong> Fuel</span>
+<span class="text-slate-300">•</span>
+<span title="Mechanic Garages"><strong class="text-slate-800">148</strong> Mech</span>
+<span class="text-slate-300">•</span>
+<span title="Tyre Repair"><strong class="text-slate-800">132</strong> Tyre</span>
+<span class="text-slate-300">•</span>
+<span title="Fleet Restrooms"><strong class="text-slate-800">90</strong> Rest</span>
+</div>
+</td>
+<td class="px-3 py-2">
+<div class="flex items-center gap-2.5">
+<div class="w-36 bg-slate-100 h-2 rounded-full overflow-hidden">
+<div class="bg-[#16a34a] h-full rounded-full" style="width: 94.2%"></div>
+</div>
+<span class="font-code-tabular font-semibold text-[#16a34a] text-xs">94.2%</span>
+</div>
+</td>
+<td class="px-3 py-2 text-center">
+<span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-[#f5f5f4] text-[#57534e] border border-[#e7e5e4]">
+                  6 pending
+                </span>
+</td>
+<td class="px-3 py-2 text-center">
+<span class="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Verified
+                </span>
+</td>
+<td class="px-3 py-2 text-right pr-4">
+<div class="flex items-center justify-end gap-1.5">
+<button class="h-6 px-2 text-[11px] font-medium text-slate-700 bg-white hover:bg-slate-100 border border-slate-200 rounded transition-colors">Inspect</button>
+<button class="h-6 px-2 text-[11px] font-medium text-white bg-slate-900 hover:bg-black rounded transition-colors">Audit</button>
+</div>
+</td>
+</tr>
+<!-- 2. St. Andrew -->
+<tr class="h-[40px] hover:bg-slate-50/80 transition-colors group">
+<td class="px-3 text-center">
+<input class="w-3.5 h-3.5 rounded text-secondary border-slate-300 focus:ring-secondary" type="checkbox"/>
+</td>
+<td class="px-3 py-2">
+<div class="flex items-center gap-2">
+<span class="font-semibold text-slate-900">St. Andrew</span>
+<span class="text-[10px] uppercase font-semibold text-slate-400 bg-slate-100 px-1.5 py-0.2 rounded border border-slate-200">Surrey</span>
+<span class="text-[10px] text-blue-600 font-medium">Metro Hub</span>
+</div>
+</td>
+<td class="px-3 py-2 text-slate-600">
+<div class="flex items-center gap-3 font-code-tabular text-[11px]">
+<span><strong class="text-slate-800">98</strong> Fuel</span>
+<span class="text-slate-300">•</span>
+<span><strong class="text-slate-800">124</strong> Mech</span>
+<span class="text-slate-300">•</span>
+<span><strong class="text-slate-800">92</strong> Tyre</span>
+<span class="text-slate-300">•</span>
+<span><strong class="text-slate-800">76</strong> Rest</span>
+</div>
+</td>
+<td class="px-3 py-2">
+<div class="flex items-center gap-2.5">
+<div class="w-36 bg-slate-100 h-2 rounded-full overflow-hidden">
+<div class="bg-[#16a34a] h-full rounded-full" style="width: 89.5%"></div>
+</div>
+<span class="font-code-tabular font-semibold text-[#16a34a] text-xs">89.5%</span>
+</div>
+</td>
+<td class="px-3 py-2 text-center">
+<span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-[#f5f5f4] text-[#57534e] border border-[#e7e5e4]">
+                  14 pending
+                </span>
+</td>
+<td class="px-3 py-2 text-center">
+<span class="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Verified
+                </span>
+</td>
+<td class="px-3 py-2 text-right pr-4">
+<div class="flex items-center justify-end gap-1.5">
+<button class="h-6 px-2 text-[11px] font-medium text-slate-700 bg-white hover:bg-slate-100 border border-slate-200 rounded transition-colors">Inspect</button>
+<button class="h-6 px-2 text-[11px] font-medium text-white bg-slate-900 hover:bg-black rounded transition-colors">Audit</button>
+</div>
+</td>
+</tr>
+<!-- 3. St. Catherine -->
+<tr class="h-[40px] hover:bg-slate-50/80 transition-colors group">
+<td class="px-3 text-center">
+<input class="w-3.5 h-3.5 rounded text-secondary border-slate-300 focus:ring-secondary" type="checkbox"/>
+</td>
+<td class="px-3 py-2">
+<div class="flex items-center gap-2">
+<span class="font-semibold text-slate-900">St. Catherine</span>
+<span class="text-[10px] uppercase font-semibold text-slate-400 bg-slate-100 px-1.5 py-0.2 rounded border border-slate-200">Middlesex</span>
+<span class="text-[10px] text-slate-500 font-medium">Spanish Town Corridor</span>
+</div>
+</td>
+<td class="px-3 py-2 text-slate-600">
+<div class="flex items-center gap-3 font-code-tabular text-[11px]">
+<span><strong class="text-slate-800">84</strong> Fuel</span>
+<span class="text-slate-300">•</span>
+<span><strong class="text-slate-800">95</strong> Mech</span>
+<span class="text-slate-300">•</span>
+<span><strong class="text-slate-800">78</strong> Tyre</span>
+<span class="text-slate-300">•</span>
+<span><strong class="text-slate-800">42</strong> Rest</span>
+</div>
+</td>
+<td class="px-3 py-2">
+<div class="flex items-center gap-2.5">
+<div class="w-36 bg-slate-100 h-2 rounded-full overflow-hidden">
+<div class="bg-[#16a34a] h-full rounded-full" style="width: 78.1%"></div>
+</div>
+<span class="font-code-tabular font-semibold text-[#16a34a] text-xs">78.1%</span>
+</div>
+</td>
+<td class="px-3 py-2 text-center">
+<span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-[#f5f5f4] text-[#57534e] border border-[#e7e5e4]">
+                  19 pending
+                </span>
+</td>
+<td class="px-3 py-2 text-center">
+<span class="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Verified
+                </span>
+</td>
+<td class="px-3 py-2 text-right pr-4">
+<div class="flex items-center justify-end gap-1.5">
+<button class="h-6 px-2 text-[11px] font-medium text-slate-700 bg-white hover:bg-slate-100 border border-slate-200 rounded transition-colors">Inspect</button>
+<button class="h-6 px-2 text-[11px] font-medium text-white bg-slate-900 hover:bg-black rounded transition-colors">Audit</button>
+</div>
+</td>
+</tr>
+<!-- 4. St. James -->
+<tr class="h-[40px] hover:bg-slate-50/80 transition-colors group">
+<td class="px-3 text-center">
+<input class="w-3.5 h-3.5 rounded text-secondary border-slate-300 focus:ring-secondary" type="checkbox"/>
+</td>
+<td class="px-3 py-2">
+<div class="flex items-center gap-2">
+<span class="font-semibold text-slate-900">St. James</span>
+<span class="text-[10px] uppercase font-semibold text-slate-400 bg-slate-100 px-1.5 py-0.2 rounded border border-slate-200">Cornwall</span>
+<span class="text-[10px] text-slate-500 font-medium">Montego Bay Hub</span>
+</div>
+</td>
+<td class="px-3 py-2 text-slate-600">
+<div class="flex items-center gap-3 font-code-tabular text-[11px]">
+<span><strong class="text-slate-800">76</strong> Fuel</span>
+<span class="text-slate-300">•</span>
+<span><strong class="text-slate-800">81</strong> Mech</span>
+<span class="text-slate-300">•</span>
+<span><strong class="text-slate-800">64</strong> Tyre</span>
+<span class="text-slate-300">•</span>
+<span><strong class="text-slate-800">38</strong> Rest</span>
+</div>
+</td>
+<td class="px-3 py-2">
+<div class="flex items-center gap-2.5">
+<div class="w-36 bg-slate-100 h-2 rounded-full overflow-hidden">
+<div class="bg-[#16a34a] h-full rounded-full" style="width: 75.4%"></div>
+</div>
+<span class="font-code-tabular font-semibold text-[#16a34a] text-xs">75.4%</span>
+</div>
+</td>
+<td class="px-3 py-2 text-center">
+<span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-[#f5f5f4] text-[#57534e] border border-[#e7e5e4]">
+                  11 pending
+                </span>
+</td>
+<td class="px-3 py-2 text-center">
+<span class="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Verified
+                </span>
+</td>
+<td class="px-3 py-2 text-right pr-4">
+<div class="flex items-center justify-end gap-1.5">
+<button class="h-6 px-2 text-[11px] font-medium text-slate-700 bg-white hover:bg-slate-100 border border-slate-200 rounded transition-colors">Inspect</button>
+<button class="h-6 px-2 text-[11px] font-medium text-white bg-slate-900 hover:bg-black rounded transition-colors">Audit</button>
+</div>
+</td>
+</tr>
+<!-- 5. Clarendon -->
+<tr class="h-[40px] hover:bg-slate-50/80 transition-colors group">
+<td class="px-3 text-center">
+<input class="w-3.5 h-3.5 rounded text-secondary border-slate-300 focus:ring-secondary" type="checkbox"/>
+</td>
+<td class="px-3 py-2">
+<div class="flex items-center gap-2">
+<span class="font-semibold text-slate-900">Clarendon</span>
+<span class="text-[10px] uppercase font-semibold text-slate-400 bg-slate-100 px-1.5 py-0.2 rounded border border-slate-200">Middlesex</span>
+<span class="text-[10px] text-slate-400 font-medium">May Pen Region</span>
+</div>
+</td>
+<td class="px-3 py-2 text-slate-600">
+<div class="flex items-center gap-3 font-code-tabular text-[11px]">
+<span><strong class="text-slate-800">54</strong> Fuel</span>
+<span class="text-slate-300">•</span>
+<span><strong class="text-slate-800">62</strong> Mech</span>
+<span class="text-slate-300">•</span>
+<span><strong class="text-slate-800">47</strong> Tyre</span>
+<span class="text-slate-300">•</span>
+<span><strong class="text-slate-800">22</strong> Rest</span>
+</div>
+</td>
+<td class="px-3 py-2">
+<div class="flex items-center gap-2.5">
+<div class="w-36 bg-slate-100 h-2 rounded-full overflow-hidden">
+<div class="bg-amber-500 h-full rounded-full" style="width: 68.2%"></div>
+</div>
+<span class="font-code-tabular font-semibold text-amber-600 text-xs">68.2%</span>
+</div>
+</td>
+<td class="px-3 py-2 text-center">
+<span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-[#f5f5f4] text-[#57534e] border border-[#e7e5e4]">
+                  22 pending
+                </span>
+</td>
+<td class="px-3 py-2 text-center">
+<span class="inline-flex items-center gap-1 text-[11px] font-medium text-amber-800 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded">
+<span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span> In Progress
+                </span>
+</td>
+<td class="px-3 py-2 text-right pr-4">
+<div class="flex items-center justify-end gap-1.5">
+<button class="h-6 px-2 text-[11px] font-medium text-slate-700 bg-white hover:bg-slate-100 border border-slate-200 rounded transition-colors">Inspect</button>
+<button class="h-6 px-2 text-[11px] font-medium text-white bg-slate-900 hover:bg-black rounded transition-colors">Audit</button>
+</div>
+</td>
+</tr>
+<!-- 6. Manchester -->
+<tr class="h-[40px] hover:bg-slate-50/80 transition-colors group">
+<td class="px-3 text-center">
+<input class="w-3.5 h-3.5 rounded text-secondary border-slate-300 focus:ring-secondary" type="checkbox"/>
+</td>
+<td class="px-3 py-2">
+<div class="flex items-center gap-2">
+<span class="font-semibold text-slate-900">Manchester</span>
+<span class="text-[10px] uppercase font-semibold text-slate-400 bg-slate-100 px-1.5 py-0.2 rounded border border-slate-200">Middlesex</span>
+<span class="text-[10px] text-slate-400 font-medium">Mandeville Plateau</span>
+</div>
+</td>
+<td class="px-3 py-2 text-slate-600">
+<div class="flex items-center gap-3 font-code-tabular text-[11px]">
+<span><strong class="text-slate-800">46</strong> Fuel</span>
+<span class="text-slate-300">•</span>
+<span><strong class="text-slate-800">51</strong> Mech</span>
+<span class="text-slate-300">•</span>
+<span><strong class="text-slate-800">40</strong> Tyre</span>
+<span class="text-slate-300">•</span>
+<span><strong class="text-slate-800">18</strong> Rest</span>
+</div>
+</td>
+<td class="px-3 py-2">
+<div class="flex items-center gap-2.5">
+<div class="w-36 bg-slate-100 h-2 rounded-full overflow-hidden">
+<div class="bg-amber-500 h-full rounded-full" style="width: 61.4%"></div>
+</div>
+<span class="font-code-tabular font-semibold text-amber-600 text-xs">61.4%</span>
+</div>
+</td>
+<td class="px-3 py-2 text-center">
+<span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-[#f5f5f4] text-[#57534e] border border-[#e7e5e4]">
+                  16 pending
+                </span>
+</td>
+<td class="px-3 py-2 text-center">
+<span class="inline-flex items-center gap-1 text-[11px] font-medium text-amber-800 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded">
+<span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span> In Progress
+                </span>
+</td>
+<td class="px-3 py-2 text-right pr-4">
+<div class="flex items-center justify-end gap-1.5">
+<button class="h-6 px-2 text-[11px] font-medium text-slate-700 bg-white hover:bg-slate-100 border border-slate-200 rounded transition-colors">Inspect</button>
+<button class="h-6 px-2 text-[11px] font-medium text-white bg-slate-900 hover:bg-black rounded transition-colors">Audit</button>
+</div>
+</td>
+</tr>
+<!-- 7. St. Ann -->
+<tr class="h-[40px] hover:bg-slate-50/80 transition-colors group">
+<td class="px-3 text-center">
+<input class="w-3.5 h-3.5 rounded text-secondary border-slate-300 focus:ring-secondary" type="checkbox"/>
+</td>
+<td class="px-3 py-2">
+<div class="flex items-center gap-2">
+<span class="font-semibold text-slate-900">St. Ann</span>
+<span class="text-[10px] uppercase font-semibold text-slate-400 bg-slate-100 px-1.5 py-0.2 rounded border border-slate-200">Middlesex</span>
+<span class="text-[10px] text-slate-400 font-medium">Ocho Rios Belt</span>
+</div>
+</td>
+<td class="px-3 py-2 text-slate-600">
+<div class="flex items-center gap-3 font-code-tabular text-[11px]">
+<span><strong class="text-slate-800">49</strong> Fuel</span>
+<span class="text-slate-300">•</span>
+<span><strong class="text-slate-800">55</strong> Mech</span>
+<span class="text-slate-300">•</span>
+<span><strong class="text-slate-800">38</strong> Tyre</span>
+<span class="text-slate-300">•</span>
+<span><strong class="text-slate-800">29</strong> Rest</span>
+</div>
+</td>
+<td class="px-3 py-2">
+<div class="flex items-center gap-2.5">
+<div class="w-36 bg-slate-100 h-2 rounded-full overflow-hidden">
+<div class="bg-amber-500 h-full rounded-full" style="width: 59.8%"></div>
+</div>
+<span class="font-code-tabular font-semibold text-amber-600 text-xs">59.8%</span>
+</div>
+</td>
+<td class="px-3 py-2 text-center">
+<span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-[#f5f5f4] text-[#57534e] border border-[#e7e5e4]">
+                  8 pending
+                </span>
+</td>
+<td class="px-3 py-2 text-center">
+<span class="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Verified
+                </span>
+</td>
+<td class="px-3 py-2 text-right pr-4">
+<div class="flex items-center justify-end gap-1.5">
+<button class="h-6 px-2 text-[11px] font-medium text-slate-700 bg-white hover:bg-slate-100 border border-slate-200 rounded transition-colors">Inspect</button>
+<button class="h-6 px-2 text-[11px] font-medium text-white bg-slate-900 hover:bg-black rounded transition-colors">Audit</button>
+</div>
+</td>
+</tr>
+<!-- 8. Westmoreland -->
+<tr class="h-[40px] hover:bg-slate-50/80 transition-colors group">
+<td class="px-3 text-center">
+<input class="w-3.5 h-3.5 rounded text-secondary border-slate-300 focus:ring-secondary" type="checkbox"/>
+</td>
+<td class="px-3 py-2">
+<div class="flex items-center gap-2">
+<span class="font-semibold text-slate-900">Westmoreland</span>
+<span class="text-[10px] uppercase font-semibold text-slate-400 bg-slate-100 px-1.5 py-0.2 rounded border border-slate-200">Cornwall</span>
+<span class="text-[10px] text-slate-400 font-medium">Savanna-la-Mar</span>
+</div>
+</td>
+<td class="px-3 py-2 text-slate-600">
+<div class="flex items-center gap-3 font-code-tabular text-[11px]">
+<span><strong class="text-slate-800">38</strong> Fuel</span>
+<span class="text-slate-300">•</span>
+<span><strong class="text-slate-800">41</strong> Mech</span>
+<span class="text-slate-300">•</span>
+<span><strong class="text-slate-800">32</strong> Tyre</span>
+<span class="text-slate-300">•</span>
+<span><strong class="text-slate-800">14</strong> Rest</span>
+</div>
+</td>
+<td class="px-3 py-2">
+<div class="flex items-center gap-2.5">
+<div class="w-36 bg-slate-100 h-2 rounded-full overflow-hidden">
+<div class="bg-amber-500 h-full rounded-full" style="width: 48.7%"></div>
+</div>
+<span class="font-code-tabular font-semibold text-amber-600 text-xs">48.7%</span>
+</div>
+</td>
+<td class="px-3 py-2 text-center">
+<span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-[#f5f5f4] text-[#57534e] border border-[#e7e5e4]">
+                  12 pending
+                </span>
+</td>
+<td class="px-3 py-2 text-center">
+<span class="inline-flex items-center gap-1 text-[11px] font-medium text-amber-800 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded">
+<span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span> In Progress
+                </span>
+</td>
+<td class="px-3 py-2 text-right pr-4">
+<div class="flex items-center justify-end gap-1.5">
+<button class="h-6 px-2 text-[11px] font-medium text-slate-700 bg-white hover:bg-slate-100 border border-slate-200 rounded transition-colors">Inspect</button>
+<button class="h-6 px-2 text-[11px] font-medium text-white bg-slate-900 hover:bg-black rounded transition-colors">Audit</button>
+</div>
+</td>
+</tr>
+<!-- 9. St. Elizabeth -->
+<tr class="h-[40px] hover:bg-slate-50/80 transition-colors group">
+<td class="px-3 text-center">
+<input class="w-3.5 h-3.5 rounded text-secondary border-slate-300 focus:ring-secondary" type="checkbox"/>
+</td>
+<td class="px-3 py-2">
+<div class="flex items-center gap-2">
+<span class="font-semibold text-slate-900">St. Elizabeth</span>
+<span class="text-[10px] uppercase font-semibold text-slate-400 bg-slate-100 px-1.5 py-0.2 rounded border border-slate-200">Cornwall</span>
+<span class="text-[10px] text-slate-400 font-medium">Black River Plains</span>
+</div>
+</td>
+<td class="px-3 py-2 text-slate-600">
+<div class="flex items-center gap-3 font-code-tabular text-[11px]">
+<span><strong class="text-slate-800">32</strong> Fuel</span>
+<span class="text-slate-300">•</span>
+<span><strong class="text-slate-800">36</strong> Mech</span>
+<span class="text-slate-300">•</span>
+<span><strong class="text-slate-800">28</strong> Tyre</span>
+<span class="text-slate-300">•</span>
+<span><strong class="text-slate-800">11</strong> Rest</span>
+</div>
+</td>
+<td class="px-3 py-2">
+<div class="flex items-center gap-2.5">
+<div class="w-36 bg-slate-100 h-2 rounded-full overflow-hidden">
+<div class="bg-amber-500 h-full rounded-full" style="width: 43.1%"></div>
+</div>
+<span class="font-code-tabular font-semibold text-amber-600 text-xs">43.1%</span>
+</div>
+</td>
+<td class="px-3 py-2 text-center">
+<span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-[#f5f5f4] text-[#57534e] border border-[#e7e5e4]">
+                  9 pending
+                </span>
+</td>
+<td class="px-3 py-2 text-center">
+<span class="inline-flex items-center gap-1 text-[11px] font-medium text-amber-800 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded">
+<span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span> In Progress
+                </span>
+</td>
+<td class="px-3 py-2 text-right pr-4">
+<div class="flex items-center justify-end gap-1.5">
+<button class="h-6 px-2 text-[11px] font-medium text-slate-700 bg-white hover:bg-slate-100 border border-slate-200 rounded transition-colors">Inspect</button>
+<button class="h-6 px-2 text-[11px] font-medium text-white bg-slate-900 hover:bg-black rounded transition-colors">Audit</button>
+</div>
+</td>
+</tr>
+<!-- 10. St. Mary -->
+<tr class="h-[40px] hover:bg-slate-50/80 transition-colors group">
+<td class="px-3 text-center">
+<input class="w-3.5 h-3.5 rounded text-secondary border-slate-300 focus:ring-secondary" type="checkbox"/>
+</td>
+<td class="px-3 py-2">
+<div class="flex items-center gap-2">
+<span class="font-semibold text-slate-900">St. Mary</span>
+<span class="text-[10px] uppercase font-semibold text-slate-400 bg-slate-100 px-1.5 py-0.2 rounded border border-slate-200">Middlesex</span>
+<span class="text-[10px] text-slate-400 font-medium">Port Maria North</span>
+</div>
+</td>
+<td class="px-3 py-2 text-slate-600">
+<div class="flex items-center gap-3 font-code-tabular text-[11px]">
+<span><strong class="text-slate-800">26</strong> Fuel</span>
+<span class="text-slate-300">•</span>
+<span><strong class="text-slate-800">29</strong> Mech</span>
+<span class="text-slate-300">•</span>
+<span><strong class="text-slate-800">21</strong> Tyre</span>
+<span class="text-slate-300">•</span>
+<span><strong class="text-slate-800">9</strong> Rest</span>
+</div>
+</td>
+<td class="px-3 py-2">
+<div class="flex items-center gap-2.5">
+<div class="w-36 bg-slate-100 h-2 rounded-full overflow-hidden">
+<div class="bg-amber-500 h-full rounded-full" style="width: 38.6%"></div>
+</div>
+<span class="font-code-tabular font-semibold text-amber-600 text-xs">38.6%</span>
+</div>
+</td>
+<td class="px-3 py-2 text-center">
+<span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-[#f5f5f4] text-[#57534e] border border-[#e7e5e4]">
+                  15 pending
+                </span>
+</td>
+<td class="px-3 py-2 text-center">
+<span class="inline-flex items-center gap-1 text-[11px] font-medium text-stone-700 bg-stone-100 border border-stone-200 px-2 py-0.5 rounded">
+<span class="w-1.5 h-1.5 rounded-full bg-stone-400"></span> Sparse Node
+                </span>
+</td>
+<td class="px-3 py-2 text-right pr-4">
+<div class="flex items-center justify-end gap-1.5">
+<button class="h-6 px-2 text-[11px] font-medium text-slate-700 bg-white hover:bg-slate-100 border border-slate-200 rounded transition-colors">Inspect</button>
+<button class="h-6 px-2 text-[11px] font-medium text-white bg-slate-900 hover:bg-black rounded transition-colors">Audit</button>
+</div>
+</td>
+</tr>
+<!-- 11. Hanover -->
+<tr class="h-[40px] hover:bg-slate-50/80 transition-colors group">
+<td class="px-3 text-center">
+<input class="w-3.5 h-3.5 rounded text-secondary border-slate-300 focus:ring-secondary" type="checkbox"/>
+</td>
+<td class="px-3 py-2">
+<div class="flex items-center gap-2">
+<span class="font-semibold text-slate-900">Hanover</span>
+<span class="text-[10px] uppercase font-semibold text-slate-400 bg-slate-100 px-1.5 py-0.2 rounded border border-slate-200">Cornwall</span>
+<span class="text-[10px] text-slate-400 font-medium">Lucea Coastal</span>
+</div>
+</td>
+<td class="px-3 py-2 text-slate-600">
+<div class="flex items-center gap-3 font-code-tabular text-[11px]">
+<span><strong class="text-slate-800">22</strong> Fuel</span>
+<span class="text-slate-300">•</span>
+<span><strong class="text-slate-800">24</strong> Mech</span>
+<span class="text-slate-300">•</span>
+<span><strong class="text-slate-800">19</strong> Tyre</span>
+<span class="text-slate-300">•</span>
+<span><strong class="text-slate-800">8</strong> Rest</span>
+</div>
+</td>
+<td class="px-3 py-2">
+<div class="flex items-center gap-2.5">
+<div class="w-36 bg-slate-100 h-2 rounded-full overflow-hidden">
+<div class="bg-amber-500 h-full rounded-full" style="width: 32.8%"></div>
+</div>
+<span class="font-code-tabular font-semibold text-amber-600 text-xs">32.8%</span>
+</div>
+</td>
+<td class="px-3 py-2 text-center">
+<span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-[#f5f5f4] text-[#57534e] border border-[#e7e5e4]">
+                  7 pending
+                </span>
+</td>
+<td class="px-3 py-2 text-center">
+<span class="inline-flex items-center gap-1 text-[11px] font-medium text-stone-700 bg-stone-100 border border-stone-200 px-2 py-0.5 rounded">
+<span class="w-1.5 h-1.5 rounded-full bg-stone-400"></span> Sparse Node
+                </span>
+</td>
+<td class="px-3 py-2 text-right pr-4">
+<div class="flex items-center justify-end gap-1.5">
+<button class="h-6 px-2 text-[11px] font-medium text-slate-700 bg-white hover:bg-slate-100 border border-slate-200 rounded transition-colors">Inspect</button>
+<button class="h-6 px-2 text-[11px] font-medium text-white bg-slate-900 hover:bg-black rounded transition-colors">Audit</button>
+</div>
+</td>
+</tr>
+<!-- 12. Trelawny (Rural deficit) -->
+<tr class="h-[40px] hover:bg-slate-50/80 transition-colors group">
+<td class="px-3 text-center">
+<input class="w-3.5 h-3.5 rounded text-secondary border-slate-300 focus:ring-secondary" type="checkbox"/>
+</td>
+<td class="px-3 py-2">
+<div class="flex items-center gap-2">
+<span class="font-semibold text-slate-900">Trelawny</span>
+<span class="text-[10px] uppercase font-semibold text-slate-400 bg-slate-100 px-1.5 py-0.2 rounded border border-slate-200">Cornwall</span>
+<span class="text-[10px] text-amber-700 font-medium">Cockpit Country</span>
+</div>
+</td>
+<td class="px-3 py-2 text-slate-600">
+<div class="flex items-center gap-3 font-code-tabular text-[11px]">
+<span><strong class="text-slate-800">18</strong> Fuel</span>
+<span class="text-slate-300">•</span>
+<span><strong class="text-slate-800">19</strong> Mech</span>
+<span class="text-slate-300">•</span>
+<span><strong class="text-slate-800">14</strong> Tyre</span>
+<span class="text-slate-300">•</span>
+<span><strong class="text-slate-800">6</strong> Rest</span>
+</div>
+</td>
+<td class="px-3 py-2">
+<div class="flex items-center gap-2.5">
+<div class="w-36 bg-slate-100 h-2 rounded-full overflow-hidden">
+<div class="bg-slate-400 h-full rounded-full" style="width: 24.5%"></div>
+</div>
+<span class="font-code-tabular font-semibold text-slate-600 text-xs">24.5%</span>
+</div>
+</td>
+<td class="px-3 py-2 text-center">
+<span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-[#f5f5f4] text-[#57534e] border border-[#e7e5e4]">
+                  18 pending
+                </span>
+</td>
+<td class="px-3 py-2 text-center">
+<span class="inline-flex items-center gap-1 text-[11px] font-medium text-amber-900 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded">
+<span class="w-1.5 h-1.5 rounded-full bg-amber-400"></span> Deficit Area
+                </span>
+</td>
+<td class="px-3 py-2 text-right pr-4">
+<div class="flex items-center justify-end gap-1.5">
+<button class="h-6 px-2 text-[11px] font-medium text-slate-700 bg-white hover:bg-slate-100 border border-slate-200 rounded transition-colors">Inspect</button>
+<button class="h-6 px-2 text-[11px] font-medium text-white bg-slate-900 hover:bg-black rounded transition-colors">Audit</button>
+</div>
+</td>
+</tr>
+<!-- 13. Portland (Rural deficit) -->
+<tr class="h-[40px] hover:bg-slate-50/80 transition-colors group">
+<td class="px-3 text-center">
+<input class="w-3.5 h-3.5 rounded text-secondary border-slate-300 focus:ring-secondary" type="checkbox"/>
+</td>
+<td class="px-3 py-2">
+<div class="flex items-center gap-2">
+<span class="font-semibold text-slate-900">Portland</span>
+<span class="text-[10px] uppercase font-semibold text-slate-400 bg-slate-100 px-1.5 py-0.2 rounded border border-slate-200">Surrey</span>
+<span class="text-[10px] text-amber-700 font-medium">Blue Mountains NE</span>
+</div>
+</td>
+<td class="px-3 py-2 text-slate-600">
+<div class="flex items-center gap-3 font-code-tabular text-[11px]">
+<span><strong class="text-slate-800">14</strong> Fuel</span>
+<span class="text-slate-300">•</span>
+<span><strong class="text-slate-800">15</strong> Mech</span>
+<span class="text-slate-300">•</span>
+<span><strong class="text-slate-800">11</strong> Tyre</span>
+<span class="text-slate-300">•</span>
+<span><strong class="text-slate-800">5</strong> Rest</span>
+</div>
+</td>
+<td class="px-3 py-2">
+<div class="flex items-center gap-2.5">
+<div class="w-36 bg-slate-100 h-2 rounded-full overflow-hidden">
+<div class="bg-slate-400 h-full rounded-full" style="width: 18.2%"></div>
+</div>
+<span class="font-code-tabular font-semibold text-slate-600 text-xs">18.2%</span>
+</div>
+</td>
+<td class="px-3 py-2 text-center">
+<span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-[#f5f5f4] text-[#57534e] border border-[#e7e5e4]">
+                  21 pending
+                </span>
+</td>
+<td class="px-3 py-2 text-center">
+<span class="inline-flex items-center gap-1 text-[11px] font-medium text-red-800 bg-red-50 border border-red-200 px-2 py-0.5 rounded">
+<span class="w-1.5 h-1.5 rounded-full bg-red-500"></span> Sparse Node
+                </span>
+</td>
+<td class="px-3 py-2 text-right pr-4">
+<div class="flex items-center justify-end gap-1.5">
+<button class="h-6 px-2 text-[11px] font-medium text-slate-700 bg-white hover:bg-slate-100 border border-slate-200 rounded transition-colors">Inspect</button>
+<button class="h-6 px-2 text-[11px] font-medium text-white bg-slate-900 hover:bg-black rounded transition-colors">Audit</button>
+</div>
+</td>
+</tr>
+<!-- 14. St. Thomas (Rural lowest) -->
+<tr class="h-[40px] hover:bg-slate-50/80 transition-colors group">
+<td class="px-3 text-center">
+<input class="w-3.5 h-3.5 rounded text-secondary border-slate-300 focus:ring-secondary" type="checkbox"/>
+</td>
+<td class="px-3 py-2">
+<div class="flex items-center gap-2">
+<span class="font-semibold text-slate-900">St. Thomas</span>
+<span class="text-[10px] uppercase font-semibold text-slate-400 bg-slate-100 px-1.5 py-0.2 rounded border border-slate-200">Surrey</span>
+<span class="text-[10px] text-red-600 font-medium">Eastern Coastal</span>
+</div>
+</td>
+<td class="px-3 py-2 text-slate-600">
+<div class="flex items-center gap-3 font-code-tabular text-[11px]">
+<span><strong class="text-slate-800">11</strong> Fuel</span>
+<span class="text-slate-300">•</span>
+<span><strong class="text-slate-800">12</strong> Mech</span>
+<span class="text-slate-300">•</span>
+<span><strong class="text-slate-800">9</strong> Tyre</span>
+<span class="text-slate-300">•</span>
+<span><strong class="text-slate-800">4</strong> Rest</span>
+</div>
+</td>
+<td class="px-3 py-2">
+<div class="flex items-center gap-2.5">
+<div class="w-36 bg-slate-100 h-2 rounded-full overflow-hidden">
+<div class="bg-slate-400 h-full rounded-full" style="width: 14.1%"></div>
+</div>
+<span class="font-code-tabular font-semibold text-slate-600 text-xs">14.1%</span>
+</div>
+</td>
+<td class="px-3 py-2 text-center">
+<span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-[#f5f5f4] text-[#57534e] border border-[#e7e5e4]">
+                  16 pending
+                </span>
+</td>
+<td class="px-3 py-2 text-center">
+<span class="inline-flex items-center gap-1 text-[11px] font-medium text-red-800 bg-red-50 border border-red-200 px-2 py-0.5 rounded">
+<span class="w-1.5 h-1.5 rounded-full bg-red-500"></span> Critical Deficit
+                </span>
+</td>
+<td class="px-3 py-2 text-right pr-4">
+<div class="flex items-center justify-end gap-1.5">
+<button class="h-6 px-2 text-[11px] font-medium text-slate-700 bg-white hover:bg-slate-100 border border-slate-200 rounded transition-colors">Inspect</button>
+<button class="h-6 px-2 text-[11px] font-medium text-white bg-slate-900 hover:bg-black rounded transition-colors">Audit</button>
+</div>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<!-- Table Footer / Pagination Metadata -->
+<div class="h-10 px-4 bg-[#f8fafc] border-t border-slate-200 flex items-center justify-between text-xs text-slate-500">
+<div class="flex items-center gap-2">
+<span>Displaying <strong>14</strong> of <strong>14</strong> parishes</span>
+<span class="text-slate-300">•</span>
+<span>Mesh Telemetry Sync Rate: <strong>99.8%</strong></span>
+</div>
+<div class="flex items-center gap-4">
+<div class="flex items-center gap-1">
+<span class="text-slate-400">Rows per page:</span>
+<span class="font-semibold text-slate-700">14 (All)</span>
+</div>
+<div class="flex items-center gap-1 text-slate-400">
+<button class="p-1 rounded opacity-50 cursor-not-allowed" disabled="">
+<span class="material-symbols-outlined text-[16px]">chevron_left</span>
+</button>
+<span class="font-code-tabular text-slate-700 px-1">1 / 1</span>
+<button class="p-1 rounded opacity-50 cursor-not-allowed" disabled="">
+<span class="material-symbols-outlined text-[16px]">chevron_right</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+<!-- Secondary Contextual Inspector Panel: Queue Breakdown & Spatial Density -->
+<div class="grid grid-cols-3 gap-4 mt-6">
+<!-- Moderator Action Box -->
+<div class="col-span-2 bg-surface-container-lowest p-4 rounded border border-slate-200 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
+<div class="flex items-center justify-between mb-3 border-b border-slate-100 pb-2">
+<div>
+<h3 class="font-headline-sm text-headline-sm font-semibold text-slate-900">High-Priority Moderation Backlog</h3>
+<p class="text-xs text-slate-500">Unresolved infrastructure submissions requiring geospatial bounding verification</p>
+</div>
+<button class="h-7 px-3 bg-secondary text-white text-xs font-medium rounded hover:bg-blue-700 transition-colors">
+            Process Next 10 Records
+          </button>
+</div>
+<div class="space-y-2">
+<!-- Item 1 -->
+<div class="flex items-center justify-between p-2.5 bg-slate-50 rounded border border-slate-200/80 hover:bg-slate-100/70 transition-colors">
+<div class="flex items-center gap-3">
+<span class="w-7 h-7 rounded bg-blue-100 text-blue-700 flex items-center justify-center material-symbols-outlined text-[16px]">local_gas_station</span>
+<div>
+<div class="flex items-center gap-2">
+<span class="font-semibold text-xs text-slate-900">TotalEnergies - Boulevard Superstation</span>
+<span class="text-[10px] text-stone-700 bg-stone-100 px-1.5 rounded border border-stone-300 font-medium">St. Andrew</span>
+</div>
+<span class="text-[11px] text-slate-500">New 24/7 EV Fast Charger &amp; HGV diesel bay reported by 3 fleet sensors</span>
+</div>
+</div>
+<div class="flex items-center gap-2">
+<span class="text-[11px] text-stone-500 font-code-tabular">42m ago</span>
+<button class="h-6 px-2.5 text-[11px] font-medium bg-white text-slate-700 border border-slate-300 rounded hover:bg-slate-50">Review</button>
+</div>
+</div>
+<!-- Item 2 -->
+<div class="flex items-center justify-between p-2.5 bg-slate-50 rounded border border-slate-200/80 hover:bg-slate-100/70 transition-colors">
+<div class="flex items-center gap-3">
+<span class="w-7 h-7 rounded bg-amber-100 text-amber-700 flex items-center justify-center material-symbols-outlined text-[16px]">build</span>
+<div>
+<div class="flex items-center gap-2">
+<span class="font-semibold text-xs text-slate-900">Falmouth Heavy Fleet Tyre &amp; Alignment</span>
+<span class="text-[10px] text-stone-700 bg-stone-100 px-1.5 rounded border border-stone-300 font-medium">Trelawny</span>
+</div>
+<span class="text-[11px] text-slate-500">Coordinate deviation detected (18.4912° N, 77.6548° W). Bounding box mismatch.</span>
+</div>
+</div>
+<div class="flex items-center gap-2">
+<span class="text-[11px] text-stone-500 font-code-tabular">1h 15m ago</span>
+<button class="h-6 px-2.5 text-[11px] font-medium bg-white text-slate-700 border border-slate-300 rounded hover:bg-slate-50">Review</button>
+</div>
+</div>
+</div>
+</div>
+<!-- Quick GIS County Coverage Ratio -->
+<div class="bg-surface-container-lowest p-4 rounded border border-slate-200 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
+<h3 class="font-headline-sm text-headline-sm font-semibold text-slate-900 mb-1">County Distribution</h3>
+<p class="text-xs text-slate-500 mb-4">Coverage density by geographic historical territory</p>
+<div class="space-y-3.5">
+<div>
+<div class="flex justify-between text-xs mb-1">
+<span class="font-medium text-slate-700">Surrey County</span>
+<span class="font-code-tabular font-semibold text-slate-900">84.1% Coverage</span>
+</div>
+<div class="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+<div class="bg-[#16a34a] h-full rounded-full" style="width: 84.1%"></div>
+</div>
+<span class="text-[10px] text-slate-400">Kingston, St. Andrew, St. Thomas, Portland</span>
+</div>
+<div>
+<div class="flex justify-between text-xs mb-1">
+<span class="font-medium text-slate-700">Middlesex County</span>
+<span class="font-code-tabular font-semibold text-slate-900">61.2% Coverage</span>
+</div>
+<div class="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+<div class="bg-amber-500 h-full rounded-full" style="width: 61.2%"></div>
+</div>
+<span class="text-[10px] text-slate-400">St. Catherine, Clarendon, Manchester, St. Mary, St. Ann</span>
+</div>
+<div>
+<div class="flex justify-between text-xs mb-1">
+<span class="font-medium text-slate-700">Cornwall County</span>
+<span class="font-code-tabular font-semibold text-slate-900">52.8% Coverage</span>
+</div>
+<div class="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+<div class="bg-amber-500 h-full rounded-full" style="width: 52.8%"></div>
+</div>
+<span class="text-[10px] text-slate-400">St. James, Hanover, Westmoreland, St. Elizabeth, Trelawny</span>
+</div>
+</div>
+<div class="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500">
+<span>Mesh Protocol: v4.18</span>
+<span class="text-emerald-600 font-medium flex items-center gap-1">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Latency 44ms
+          </span>
+</div>
+</div>
+</div>
+</main>
+</body></html>

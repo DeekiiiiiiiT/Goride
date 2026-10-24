@@ -23,6 +23,8 @@ import { nextAttemptStatus, plainComputeFailure } from "./recon_projection.ts";
 import { advanceOpenCloseWorkflows } from "./recon_close_workflow.ts";
 import { logReconPhase } from "./recon_phase_log.ts";
 import { writeDriverWeekBlockers, writeWeekLevelBlockers } from "./recon_week_blockers.ts";
+import { postDueFixedExpensesThroughToday } from "./fixed_expense_nightly.ts";
+import { lockSealedFinanceWeeks } from "./business_finance_week_read.ts";
 
 export const RECON_WORKER_HOST_DECISION = "container" as const;
 
@@ -443,6 +445,14 @@ export async function runNightlyIntegrity(): Promise<{
 }> {
   const startedAt = new Date().toISOString();
   const alerts: string[] = [];
+  try {
+    const posted = await postDueFixedExpensesThroughToday(startedAt.slice(0, 10));
+    if (posted.failed > 0) alerts.push("fixed_expense_post_failed");
+    console.log(JSON.stringify({ fixedExpenseNightly: posted }));
+  } catch (err) {
+    alerts.push("fixed_expense_post_failed");
+    console.error("[fixed-expense-nightly]", err);
+  }
   const since = new Date();
   since.setUTCDate(since.getUTCDate() - 120);
   const sinceKey = since.toISOString().slice(0, 10);
@@ -469,6 +479,13 @@ export async function runNightlyIntegrity(): Promise<{
     await enqueueUnit(orgId, "driver_week", weekKey, driverId, null, "nightly");
     weekKeys.add(weekKey);
     enqueued += 1;
+  }
+  for (const [orgId, weeks] of closedByOrg) {
+    try {
+      await lockSealedFinanceWeeks(orgId, weeks);
+    } catch (err) {
+      console.warn("[finance-period-lock]", orgId, err);
+    }
   }
   for (const [orgId, weeks] of closedByOrg) {
     const recent = weeks.sort().slice(-4);

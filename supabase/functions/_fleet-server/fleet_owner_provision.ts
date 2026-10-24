@@ -22,10 +22,10 @@ export function getJwtRoles(user: {
   app_metadata?: Record<string, unknown>;
 }): string[] {
   const fromApp = readRolesArray(user.app_metadata as Record<string, unknown> | undefined);
-  if (fromApp.length > 0) return fromApp;
   const appRole = user.app_metadata?.role;
-  if (typeof appRole === "string" && appRole.trim()) return [appRole.trim()];
-  return [];
+  const primary = typeof appRole === "string" && appRole.trim() ? appRole.trim() : "";
+  const merged = primary ? [primary, ...fromApp] : fromApp;
+  return [...new Set(merged)];
 }
 
 export function userCanAccessFleetPortal(user: {
@@ -157,15 +157,9 @@ export async function provisionFleetOwner(
   }
 
   if (serviceLines.includes("rush_delivery") && !isWipayDemoMode()) {
-    const { data: paidPurchase } = await deps.supabase
-      .schema("fleet")
-      .from("module_purchases")
-      .select("id")
-      .eq("user_id", userId)
-      .eq("status", "completed")
-      .order("completed_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
+    const { data: paidPurchase } = await deps.supabase.rpc("svc_module_purchase_latest_completed", {
+      p_user: userId,
+    });
     if (!paidPurchase) {
       return {
         ok: false,
@@ -250,13 +244,10 @@ export async function provisionFleetOwner(
         ),
       })
       .eq("id", orgId);
-    await deps.supabase
-      .schema("fleet")
-      .from("module_purchases")
-      .update({ organization_id: orgId })
-      .eq("user_id", userId)
-      .eq("status", "completed")
-      .is("organization_id", null);
+    await deps.supabase.rpc("svc_module_purchase_attach_org", {
+      p_user: userId,
+      p_org: orgId,
+    });
   } catch (orgErr) {
     console.warn("[provisionFleetOwner] org service_lines update failed:", orgErr);
   }

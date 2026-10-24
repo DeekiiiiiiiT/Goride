@@ -3,6 +3,7 @@ import {
   decideMerchantMove,
   overlayZonesForCompile,
   shouldDeletePendingGrid,
+  shouldRepairRushCopy,
 } from "./geoPublishRules.ts";
 
 Deno.test("a live merchant is not moved onto an inactive market", () => {
@@ -88,4 +89,44 @@ Deno.test("parish-border compile uses the new parish shape and keeps no-go zones
 Deno.test("a failed save drops the unpublished grid and a successful save keeps it", () => {
   assertEquals(shouldDeletePendingGrid(false), true);
   assertEquals(shouldDeletePendingGrid(true), false);
+});
+
+Deno.test("nightly repair rewrites Rush only when its copy differs from Dominion", () => {
+  const live = "version-live";
+  assertEquals(
+    shouldRepairRushCopy({
+      versionId: live,
+      hasParish: true,
+      parishAdoptedVersionId: live,
+      includeZoneVersionIds: [live],
+    }),
+    false,
+  );
+  assertEquals(
+    shouldRepairRushCopy({
+      versionId: live,
+      hasParish: true,
+      parishAdoptedVersionId: "version-old",
+      includeZoneVersionIds: [live],
+    }),
+    true,
+  );
+  assertEquals(
+    shouldRepairRushCopy({
+      versionId: live,
+      hasParish: false,
+      parishAdoptedVersionId: null,
+      includeZoneVersionIds: ["version-old"],
+    }),
+    true,
+  );
+  assertEquals(
+    shouldRepairRushCopy({
+      versionId: live,
+      hasParish: false,
+      parishAdoptedVersionId: null,
+      includeZoneVersionIds: [],
+    }),
+    false,
+  );
 });

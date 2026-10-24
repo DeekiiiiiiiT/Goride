@@ -2110,7 +2110,7 @@ async function closeWeekBody(
         persisted: settlementSumForWeek,
         expected: 0,
         delta: settlementSumForWeek,
-        message: "Engine week P&L unavailable for settlement tie-out",
+        message: "Driver-lane contribution is not available",
       });
     }
   }

@@ -343,18 +343,12 @@ function readRolesArray(meta: Record<string, unknown> | undefined): string[] {
     .map((r) => r.trim());
 }
 
-function collectAllJwtRoles(
-  appMeta: Record<string, unknown>,
-  userMeta: Record<string, unknown>,
-): string[] {
+function collectAllJwtRoles(appMeta: Record<string, unknown>): string[] {
   const roles = new Set<string>();
   if (typeof appMeta.role === 'string' && appMeta.role.trim()) {
     roles.add(appMeta.role.trim());
   }
   for (const r of readRolesArray(appMeta)) roles.add(r);
-  if (typeof userMeta.role === 'string' && userMeta.role.trim()) {
-    roles.add(userMeta.role.trim());
-  }
   return Array.from(roles);
 }
 
@@ -368,8 +362,7 @@ export function pickAuthRawRole(
 ): string {
   if (!user) return 'fleet_viewer';
   const appMeta = user.app_metadata ?? {};
-  const userMeta = user.user_metadata ?? {};
-  const allRoles = collectAllJwtRoles(appMeta, userMeta);
+  const allRoles = collectAllJwtRoles(appMeta);
 
   for (const platformRole of PLATFORM_RAW_ROLES) {
     if (allRoles.includes(platformRole)) return platformRole;
@@ -379,9 +372,6 @@ export function pickAuthRawRole(
   if (appRole && !PRODUCT_ADMIN_ROLES.has(appRole)) {
     return appRole;
   }
-
-  const userRole = typeof userMeta.role === 'string' ? userMeta.role.trim() : '';
-  if (userRole) return userRole;
 
   return 'fleet_viewer';
 }

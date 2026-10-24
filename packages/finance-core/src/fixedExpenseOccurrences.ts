@@ -133,7 +133,11 @@ function stepDate(start: Date, n: number, freq: CanonicalFrequency): Date {
   }
 }
 
-/** Next cover term. Start is the day after the old end. The owner can edit both dates. */
+/**
+ * Next cover term. Start is the day after the old end.
+ * End is the day before the same date next term, so the next renewal does not overlap.
+ * A renewal that starts 15 Oct 2026 ends 14 Oct 2027. The owner can edit both dates.
+ */
 export function renewalCoverage(
   endDate: string,
   frequency: string,
@@ -141,8 +145,10 @@ export function renewalCoverage(
   const end = parseYmd(endDate);
   const start = new Date(end.getTime() + 86_400_000);
   const freq = canonicalFrequency(frequency);
-  const nextEnd = freq === 'one_time' ? start : stepDate(start, 1, freq);
-  return { startDate: ymd(start), endDate: ymd(nextEnd) };
+  if (freq === 'one_time') return { startDate: ymd(start), endDate: ymd(start) };
+  const nextStart = stepDate(start, 1, freq);
+  const inclusiveEnd = new Date(nextStart.getTime() - 86_400_000);
+  return { startDate: ymd(start), endDate: ymd(inclusiveEnd) };
 }
 
 /**

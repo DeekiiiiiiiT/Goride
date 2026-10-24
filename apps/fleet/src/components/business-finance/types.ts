@@ -117,6 +117,8 @@ export type BusinessFinanceOverview = {
     bankReceived: number;
     cashCollected: number;
     cashStillHeld: number;
+    /** Overpayment the driver owes. Not cash they are carrying. */
+    owedByDrivers?: number;
   };
   moneyOut: {
     fuel: number;
@@ -137,7 +139,20 @@ export type BusinessFinanceOverview = {
   /** Bank → platform wallet transfers (not an expense). */
   transfers: {
     bankToIndriveWallet: number;
+    tagTopUps?: number;
   };
+  courier?: {
+    moneyIn: number;
+    moneyOut: number;
+  };
+  agreement?: Array<{
+    id: string;
+    label: string;
+    ok: boolean;
+    difference: number;
+    held?: boolean;
+  }>;
+  weekStatus?: 'Closed' | 'Open' | 'Unavailable';
   profit: {
     operatingProfit: number;
     operatingRatio: number | null;
@@ -228,6 +243,7 @@ export type DriverBalanceRow = {
   periodAnchor: string;
   status: string;
   note?: string;
+  owedByDriver?: number;
 };
 
 export type DriverBalancesSnapshot = {
