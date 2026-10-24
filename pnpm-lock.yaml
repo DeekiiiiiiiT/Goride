@@ -122,6 +122,9 @@ importers:
       '@roam/fuel-core':
         specifier: workspace:*
         version: link:../../packages/fuel-core
+      '@roam/geo-ui':
+        specifier: workspace:*
+        version: link:../../packages/geo-ui
       '@roam/platform-ops-ui':
         specifier: workspace:*
         version: link:../../packages/platform-ops-ui

@@ -1,14 +1,11 @@
 /**
- * Import COD-AB GeoJSON into delivery.admin_boundaries via upsert_admin_boundary RPC
- * using the Supabase service role (no dash-admin JWT required).
+ * Check a COD-AB GeoJSON folder. This does not write borders.
+ * Save a draft from World Maps, then publish that one place.
  *
  * Usage:
- *   set SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY (or pass --url --key)
- *   deno run -A scripts/import-codab-via-sql.ts --dir "<Mapping/Jamaica>" --levels 0,1
- *   deno run -A scripts/import-codab-via-sql.ts --dir "…" --levels 0,1 --dry-run
+ *   deno run -A scripts/import-codab-via-sql.ts --dir "<Mapping/Jamaica>" --levels 0,1 --dry-run
  */
 import { walk } from "jsr:@std/fs@1/walk";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 
 function flag(name: string, fallback = ""): string {
   const i = Deno.args.indexOf(`--${name}`);
@@ -26,7 +23,7 @@ const args = {
   "link-parishes": Deno.args.includes("--link-parishes") || !Deno.args.includes("--no-link-parishes"),
 };
 
-if (args.help || !args.dir || !args.key) {
+if (args.help || !args.dir || (!args["dry-run"] && !args.key)) {
   console.log(
     `Usage: deno run -A scripts/import-codab-via-sql.ts --dir <COD-AB root> [--key $SUPABASE_SERVICE_ROLE_KEY] [--levels 0,1] [--dry-run]`,
   );
@@ -146,65 +143,7 @@ if (args["dry-run"]) {
   Deno.exit(0);
 }
 
-const sb = createClient(String(args.url), String(args.key), {
-  auth: { persistSession: false, autoRefreshToken: false },
-});
-
-let ok = 0;
-let fail = 0;
-const errors: string[] = [];
-
-for (const f of all) {
-  const { data, error } = await sb.schema("delivery").rpc("upsert_admin_boundary", {
-    p_admin_level: f.admin_level,
-    p_pcode: f.pcode,
-    p_parent_pcode: f.parent_pcode,
-    p_name: f.name,
-    p_slug: f.slug,
-    p_geojson: f.geojson,
-    p_area_sqkm: f.area_sqkm,
-    p_center_lat: f.center_lat,
-    p_center_lng: f.center_lng,
-    p_source: "cod-ab",
-    p_source_version: f.source_version,
-    p_valid_on: f.valid_on,
-    p_properties: f.properties,
-  });
-  if (error) {
-    fail++;
-    errors.push(`${f.pcode}: ${error.message}`);
-    console.error("FAIL", f.pcode, error.message);
-  } else {
-    ok++;
-    if (ok % 25 === 0) console.log(`Upserted ${ok}…`);
-  }
-}
-
-// Link admin1 → service_parishes by slug (same as HTTP importer)
-if (args["link-parishes"]) {
-  const admin1 = all.filter((f) => f.admin_level === 1);
-  for (const f of admin1) {
-    const { data: parish } = await sb.schema("delivery").from("service_parishes").select("id").eq(
-      "slug",
-      f.slug,
-    ).maybeSingle();
-    if (!parish?.id) {
-      console.warn(`No parish slug match for ${f.slug} (${f.pcode})`);
-      continue;
-    }
-    const { error } = await sb.schema("delivery").rpc("promote_boundary_to_parish", {
-      p_parish_id: parish.id,
-      p_pcode: f.pcode,
-    });
-    if (error) {
-      console.error(`Promote ${f.slug}:`, error.message);
-      errors.push(`promote ${f.slug}: ${error.message}`);
-    } else {
-      console.log(`Promoted parish ${f.slug} ← ${f.pcode}`);
-    }
-  }
-}
-
-console.log({ ok, fail, errorCount: errors.length });
-if (errors.length) console.error(errors.slice(0, 30));
-Deno.exit(fail ? 1 : 0);
+console.error(
+  "This file check does not write borders. Save a draft from World Maps, then publish that one place.",
+);
+Deno.exit(1);

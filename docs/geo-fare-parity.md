@@ -7,16 +7,17 @@ The old handwritten boxes lived in `packages/business-config/src/jamaicaLocation
 What changes when the new Rides function is deployed:
 
 - A pickup is matched by the real parish border, then the town border inside it.
-- Where two parishes overlap, the smaller border wins. Kingston inside St. Andrew is the known case. The old boxes and the new borders will not always pick the same parish there.
+- No live fare uses a parish or a town, so that match does not change a price today.
 - A pin outside every border falls back to `jamaica`, the same fallback as a pin outside the old boxes.
 
-Checked on 24 Oct 2026 without changing live fares:
+Checked on 24 Oct 2026 against production, without changing live fares:
 
-- 20 town centres (Chapelton through Christiana) fall inside their parent parish on the adopted border. 20 of 20 match.
-- Parish copies equal the old borders. 0 mismatches. Coverage cells still 1154. One live market.
+- 4 fare rules are live. Every one uses `jamaica`. None uses a county, parish, or town.
+- Switching Rides to Dominion borders therefore changes 0 fares.
+- Official parish borders do not overlap, so the Kingston / St. Andrew note does not change any fare today. Re-check a pin before anyone adds the first parish or town fare.
 
 Sign-off
 
 - Name:
 - Date:
-- I accept the Kingston / St. Andrew differences and the switch to Dominion borders.
+- I accept the switch to Dominion borders. Rides stays on the current deploy until this is signed.

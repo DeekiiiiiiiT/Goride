@@ -27,11 +27,9 @@ import { useAdminConfirm } from '../../contexts/AdminConfirmContext';
 import {
   checkCoveragePoint,
   createMarket,
-  createParish,
   createTownFromBoundary,
   createZone,
   deleteMarket,
-  deleteParish,
   deleteZone,
   fetchCustomerDeliveryZones,
   getMarketReadiness,
@@ -51,8 +49,6 @@ import {
   unionCommunitiesToMarket,
   updateMarket,
   updateParish,
-  updateParishOutline,
-  updateParishTownPins,
   updateZone,
   type ActivityLogRow,
   type CoverageVersionRow,
@@ -77,8 +73,6 @@ import { JamaicaOverviewMap } from './JamaicaOverviewMap';
 import { detectCoverageConflicts, hasBlockingCoverageConflicts } from './coverageGeo';
 import { ManageZonesOverlay } from './ManageZonesOverlay';
 import { ImportTownBorderOverlay } from './ImportTownBorderOverlay';
-import { ImportParishTownPinsOverlay } from './ImportParishTownPinsOverlay';
-import { ImportBoundariesWizard } from './ImportBoundariesWizard';
 import {
   ExclusionDetailSheet,
   defaultExclusionForm,
@@ -89,7 +83,6 @@ import {
 import {
   downloadTextFile,
   parsePolygonCsv,
-  pinsFromGeoJson,
   polygonFromGeoJson,
   isLegacyGeoJsonBlocked,
   LEGACY_IMPORT_BLOCKED_MESSAGE,
@@ -1714,30 +1707,15 @@ function TownMapOverlay({
 type ParishMapOverlayProps = {
   parish: DashParishRow;
   accessToken: string;
-  canWrite: boolean;
   saving: boolean;
-  editing: boolean;
   onClose: () => void;
-  onSetEditing: (v: boolean) => void;
-  onSaveOutline: (polygon: DashZoneVertex[], promoteTemplate?: boolean) => void | Promise<void>;
-  onSaveTownPins: (pins: DashParishTownPin[]) => void;
-  onRequestEditFoundation: () => void;
-  /** Confirm foundation edit; returns true if import may proceed. */
-  onRequestImportGeoJson: () => Promise<boolean>;
 };
 
 function ParishMapOverlay({
   parish,
   accessToken,
-  canWrite,
   saving,
-  editing,
   onClose,
-  onSetEditing,
-  onSaveOutline,
-  onSaveTownPins,
-  onRequestEditFoundation,
-  onRequestImportGeoJson,
 }: ParishMapOverlayProps) {
   const foundation = parishFoundationVerts(parish);
   const townPins = parishTownPins(parish);
@@ -1760,17 +1738,10 @@ function ParishMapOverlay({
     },
   ];
 
-  const [showImport, setShowImport] = useState(false);
-  const [showPinImport, setShowPinImport] = useState(false);
-  const [importText, setImportText] = useState('');
-  const [pinImportText, setPinImportText] = useState('');
-  const [promoteTemplate, setPromoteTemplate] = useState(true);
-  const [showParishTools, setShowParishTools] = useState(false);
   const [showMapToolsMenu, setShowMapToolsMenu] = useState(false);
   const [mapType, setMapType] = useState<'roadmap' | 'hybrid'>('roadmap');
   const [showHexOverlay, setShowHexOverlay] = useState(false);
   const [testActive, setTestActive] = useState(false);
-  const parishToolsRef = useRef<HTMLDivElement>(null);
   const mapToolsMenuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -1782,27 +1753,16 @@ function ParishMapOverlay({
   }, [onClose]);
 
   useEffect(() => {
-    if (!showParishTools && !showMapToolsMenu) return;
+    if (!showMapToolsMenu) return;
     const onDoc = (e: MouseEvent) => {
       const t = e.target as Node;
-      if (showParishTools && parishToolsRef.current && !parishToolsRef.current.contains(t)) {
-        setShowParishTools(false);
-      }
       if (showMapToolsMenu && mapToolsMenuRef.current && !mapToolsMenuRef.current.contains(t)) {
         setShowMapToolsMenu(false);
       }
     };
     document.addEventListener('mousedown', onDoc);
     return () => document.removeEventListener('mousedown', onDoc);
-  }, [showParishTools, showMapToolsMenu]);
-
-  const openImport = () => {
-    void (async () => {
-      const ok = await onRequestImportGeoJson();
-      if (!ok) return;
-      setShowImport(true);
-    })();
-  };
+  }, [showMapToolsMenu]);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6">
@@ -1829,68 +1789,13 @@ function ParishMapOverlay({
               {townPins.length > 0
                 ? ` · ${townPins.length} legacy pin${townPins.length === 1 ? '' : 's'}`
                 : ''}
-              {editing ? ' · editing border' : null}
             </p>
           </div>
-          {canWrite && false && (
-            <div className="relative" ref={parishToolsRef}>
-              <button
-                type="button"
-                onClick={() => {
-                  setShowParishTools((v) => !v);
-                  setShowMapToolsMenu(false);
-                }}
-                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-slate-500 bg-slate-800 text-xs text-white font-medium"
-              >
-                <Pencil className="w-3.5 h-3.5 text-sky-300" />
-                Parish tools
-                <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
-              </button>
-              {showParishTools && (
-                <div className="absolute right-0 top-full mt-1 z-30 w-56 rounded-lg border border-slate-700 bg-slate-900 shadow-xl py-1">
-                  <button
-                    type="button"
-                    className="w-full text-left px-3 py-2 text-xs text-sky-100 hover:bg-slate-800"
-                    onClick={() => {
-                      setShowParishTools(false);
-                      setShowPinImport(true);
-                    }}
-                  >
-                    Import town pins (legacy)…
-                  </button>
-                  <button
-                    type="button"
-                    className="w-full text-left px-3 py-2 text-xs text-amber-100 hover:bg-slate-800"
-                    onClick={() => {
-                      setShowParishTools(false);
-                      if (editing) setShowImport(true);
-                      else openImport();
-                    }}
-                  >
-                    Import parish border…
-                  </button>
-                  {!editing ? (
-                    <button
-                      type="button"
-                      className="w-full text-left px-3 py-2 text-xs text-sky-100 hover:bg-slate-800"
-                      onClick={() => {
-                        setShowParishTools(false);
-                        onRequestEditFoundation();
-                      }}
-                    >
-                      Edit parish border…
-                    </button>
-                  ) : null}
-                </div>
-              )}
-            </div>
-          )}
           <div className="relative" ref={mapToolsMenuRef}>
             <button
               type="button"
               onClick={() => {
                 setShowMapToolsMenu((v) => !v);
-                setShowParishTools(false);
               }}
               className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs ${
                 showHexOverlay || testActive || mapType === 'hybrid'
@@ -1940,20 +1845,20 @@ function ParishMapOverlay({
 
         <div className="flex-1 overflow-y-auto p-4 space-y-3">
           <p className="text-xs text-slate-200/90 rounded-lg border border-slate-500/40 bg-slate-500/10 px-3 py-2">
-            Editing parish outline.
+            Parish border from Dominion. View only.
             {parish.coverage_mode === 'parish_boundary'
               ? ' Parish border mode — this outline is live customer delivery.'
               : ' Town zones mode — this outline is an outer gate on town delivery.'}
           </p>
 
           <ZoneMapEditor
-            key={`${parish.id}-${editing ? 'edit' : 'view'}`}
+            key={parish.id}
             zones={zones}
             contextTownPolygons={contextTownPolygons}
             showNeighborToggle={false}
             uiMode="view"
             initialPolygon={foundation}
-            editingZoneId={editing ? 'parish-foundation' : null}
+            editingZoneId={null}
             townIncludePolygons={
               foundation.length >= 3
                 ? [foundation]
@@ -1976,90 +1881,13 @@ function ParishMapOverlay({
             testActive={testActive}
             onTestActiveChange={setTestActive}
             onTestPoint={(lat, lng) => checkCoveragePoint(accessToken, lat, lng)}
-            onCancel={() => onSetEditing(false)}
+            onCancel={onClose}
             onSave={() => undefined}
           />
         </div>
       </div>
 
-      <ImportTownBorderOverlay
-        open={showImport}
-        kind="geojson"
-        scope="parish"
-        townName={parish.name}
-        text={importText}
-        promoteTemplate={promoteTemplate}
-        saving={saving}
-        onTextChange={setImportText}
-        onPromoteChange={setPromoteTemplate}
-        onClose={() => {
-          setShowImport(false);
-          setImportText('');
-        }}
-        onImport={() => {
-          void (async () => {
-            const text = importText.trim();
-            if (!text) return;
-            let parsed: unknown;
-            try {
-              parsed = JSON.parse(text);
-            } catch {
-              toast.error('Invalid JSON');
-              return;
-            }
-            if (!Array.isArray(parsed) && isLegacyGeoJsonBlocked(parsed)) {
-              toast.error(LEGACY_IMPORT_BLOCKED_MESSAGE);
-              return;
-            }
-            const ring = Array.isArray(parsed)
-              ? (parsed as DashZoneVertex[])
-              : polygonFromGeoJson(parsed);
-            if (!ring || ring.length < 3) {
-              toast.error(
-                isLegacyGeoJsonBlocked(parsed)
-                  ? LEGACY_IMPORT_BLOCKED_MESSAGE
-                  : 'Need a single-ring Polygon (or Feature with one). Use Import Boundaries for official files.',
-              );
-              return;
-            }
-            setShowImport(false);
-            setImportText('');
-            await onSaveOutline(sanitizeVertices(ring) as DashZoneVertex[], promoteTemplate);
-          })();
-        }}
-      />
-
-      <ImportParishTownPinsOverlay
-        open={showPinImport}
-        parishName={parish.name}
-        text={pinImportText}
-        saving={saving}
-        onTextChange={setPinImportText}
-        onClose={() => {
-          setShowPinImport(false);
-          setPinImportText('');
-        }}
-        onImport={() => {
-          const text = pinImportText.trim();
-          if (!text) return;
-          let parsed: unknown;
-          try {
-            parsed = JSON.parse(text);
-          } catch {
-            toast.error('Invalid JSON');
-            return;
-          }
-          const pins = pinsFromGeoJson(parsed);
-          if (!pins || pins.length === 0) {
-            toast.error('Need Point features (FeatureCollection with city/name properties)');
-            return;
-          }
-          setShowPinImport(false);
-          setPinImportText('');
-          onSaveTownPins(pins);
-        }}
-      />
-    </div>
+          </div>
   );
 }
 
@@ -2171,7 +1999,6 @@ export function MarketsPage({ embedded = false }: { embedded?: boolean } = {}) {
   const [markets, setMarkets] = useState<DashMarketRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [showCreateParish, setShowCreateParish] = useState(false);
   const [showJamaicaOverview, setShowJamaicaOverview] = useState(false);
   const [overviewShapes, setOverviewShapes] = useState<DashOverviewTownShape[]>([]);
   const [overviewParishShapes, setOverviewParishShapes] = useState<DashOverviewParishShape[]>([]);
@@ -2183,19 +2010,16 @@ export function MarketsPage({ embedded = false }: { embedded?: boolean } = {}) {
     couriersConfirmed: boolean;
     borderReviewed: boolean;
   } | null>(null);
-  const [newParishName, setNewParishName] = useState('');
   const [addTownParishId, setAddTownParishId] = useState<string | null>(null);
   const [newTownName, setNewTownName] = useState('');
   const [catalogTowns, setCatalogTowns] = useState<DashAdminBoundary[]>([]);
   const [catalogPcode, setCatalogPcode] = useState('');
-  const [showImportBoundaries, setShowImportBoundaries] = useState(false);
   const [listSearch, setListSearch] = useState('');
   const [editor, setEditor] = useState<EditorTarget | null>(null);
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [townExpanded, setTownExpanded] = useState<Record<string, boolean>>({});
   const [mapTownId, setMapTownId] = useState<string | null>(null);
   const [mapParishId, setMapParishId] = useState<string | null>(null);
-  const [parishEditing, setParishEditing] = useState(false);
   const [recomputeLockedOnPublish, setRecomputeLockedOnPublish] = useState(false);
   const [unlockAfterOnPublish, setUnlockAfterOnPublish] = useState(false);
   const [tipTownId, setTipTownId] = useState<string | null>(null);
@@ -2239,7 +2063,6 @@ export function MarketsPage({ embedded = false }: { embedded?: boolean } = {}) {
 
   const openTownMap = (townId: string, opts?: { editor?: EditorTarget }) => {
     setMapParishId(null);
-    setParishEditing(false);
     setMapTownId(townId);
     setEditor(opts?.editor ?? null);
   };
@@ -2255,49 +2078,15 @@ export function MarketsPage({ embedded = false }: { embedded?: boolean } = {}) {
     setMapTownId(null);
     setEditor(null);
     setMapParishId(parishId);
-    setParishEditing(false);
   };
 
   const closeParishMap = () => {
     setMapParishId(null);
-    setParishEditing(false);
   };
 
-  const saveParishTownPins = async (pins: DashParishTownPin[]) => {
-    if (!mapParishId || !canWrite) return;
-    setSaving(true);
-    try {
-      const res = await updateParishTownPins(session.access_token, mapParishId, { pins });
-      toast.success(`Town pins saved (${res.pin_count}) for ${mapParish?.name ?? 'this parish'}`);
-      await load();
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Import failed');
-    } finally {
-      setSaving(false);
-    }
-  };
+  ;
 
-  const saveParishOutline = async (polygon: DashZoneVertex[], promoteTemplate = true) => {
-    if (!mapParishId || !canWrite) return;
-    setSaving(true);
-    try {
-      const res = await updateParishOutline(session.access_token, mapParishId, {
-        polygon,
-        confirm_foundation_edit: true,
-        promote_template: promoteTemplate,
-      });
-      const name = res.parish?.name ?? mapParish?.name ?? 'this parish';
-      toast.success(
-        `Parish border saved (${polygon.length} points). This outline is now the default for ${name}.`,
-      );
-      setParishEditing(false);
-      await load();
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Save failed');
-    } finally {
-      setSaving(false);
-    }
-  };
+  ;
 
   const refreshOverlayMeta = useCallback(async () => {
     if (!mapTownId) return;
@@ -2369,21 +2158,7 @@ export function MarketsPage({ embedded = false }: { embedded?: boolean } = {}) {
     }
   };
 
-  const submitParish = async () => {
-    if (!canWrite || !newParishName.trim()) return;
-    setSaving(true);
-    try {
-      await createParish(session.access_token, { name: newParishName.trim() });
-      toast.success('Parish created');
-      setShowCreateParish(false);
-      setNewParishName('');
-      await load();
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Create failed');
-    } finally {
-      setSaving(false);
-    }
-  };
+  ;
 
   const submitTown = async (parishId: string | null) => {
     if (!canWrite || !newTownName.trim()) return;
@@ -2441,23 +2216,7 @@ export function MarketsPage({ embedded = false }: { embedded?: boolean } = {}) {
     }
   };
 
-  const removeParish = async (p: DashParishRow) => {
-    if (!canWrite) return;
-    if (
-      !window.confirm(
-        `Delete parish “${p.name}”? Towns under it will become unassigned (not deleted).`,
-      )
-    ) {
-      return;
-    }
-    try {
-      await deleteParish(session.access_token, p.id);
-      toast.success('Parish deleted');
-      await load();
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Delete failed');
-    }
-  };
+  ;
 
   const saveEditor = async (payload: {
     polygon: DashZoneVertex[];
@@ -2772,15 +2531,7 @@ export function MarketsPage({ embedded = false }: { embedded?: boolean } = {}) {
                 <Plus className="w-3.5 h-3.5" />
                 Add a town from the map
               </button>
-              <button
-                type="button"
-                hidden
-                onClick={() => void removeParish(p)}
-                className="p-1.5 rounded hover:bg-slate-800 text-red-400"
-                title="Delete parish"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-              </button>
+              
             </div>
           )}
         </div>
@@ -2944,28 +2695,6 @@ export function MarketsPage({ embedded = false }: { embedded?: boolean } = {}) {
           draw delivery zones, then publish coverage and activate.
         </p>
       </details>
-
-      {showCreateParish && (
-        <div className="rounded-xl border border-slate-700 bg-slate-900/60 p-4 flex flex-wrap items-end gap-3">
-          <div className="flex-1 min-w-[200px]">
-            <label className="block text-xs text-slate-400 mb-1">Parish name</label>
-            <input
-              value={newParishName}
-              onChange={(e) => setNewParishName(e.target.value)}
-              placeholder="e.g. St. Catherine"
-              className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-700 text-sm text-white"
-            />
-          </div>
-          <button
-            type="button"
-            disabled={saving || !newParishName.trim()}
-            onClick={() => void submitParish()}
-            className="px-4 py-2 rounded-lg bg-amber-500 text-slate-950 text-sm font-semibold disabled:opacity-50"
-          >
-            Create parish
-          </button>
-        </div>
-      )}
 
       {loading ? (
         <div className="flex justify-center py-16">
@@ -3347,43 +3076,10 @@ export function MarketsPage({ embedded = false }: { embedded?: boolean } = {}) {
         <ParishMapOverlay
           parish={mapParish}
           accessToken={session.access_token}
-          canWrite={canWrite}
           saving={saving}
-          editing={parishEditing}
           onClose={closeParishMap}
-          onSetEditing={setParishEditing}
-          onSaveOutline={(polygon, promote) => saveParishOutline(polygon, promote)}
-          onSaveTownPins={(pins) => void saveParishTownPins(pins)}
-          onRequestEditFoundation={() => {
-            void (async () => {
-              const ok = await confirm({
-                title: 'Edit parish foundation border?',
-                description:
-                  'This is the parish base outline. Only change it if the real parish boundary is wrong. Town delivery borders and cutouts are edited on each town map.',
-                confirmLabel: 'Edit parish border',
-              });
-              if (!ok) return;
-              setParishEditing(true);
-            })();
-          }}
-          onRequestImportGeoJson={async () => {
-            const ok = await confirm({
-              title: 'Import parish foundation border?',
-              description:
-                'This replaces the parish base outline with your GeoJSON file. Town delivery borders are unchanged.',
-              confirmLabel: 'Import GeoJSON',
-            });
-            return ok;
-          }}
         />
       )}
-
-      <ImportBoundariesWizard
-        open={showImportBoundaries}
-        accessToken={session.access_token}
-        onClose={() => setShowImportBoundaries(false)}
-        onImported={() => void load()}
-      />
 
       <ExclusionDetailSheet
         open={metaEditZone != null}

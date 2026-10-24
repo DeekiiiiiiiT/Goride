@@ -204,7 +204,7 @@ export function navIdToPath(navId: string): string {
     case 'markets':
       return '/markets';
     case 'markets-boundaries':
-      return '/markets?tab=boundaries';
+      return '/markets';
     case 'markets-coverage-health':
       return '/markets?tab=health';
     case 'finance':

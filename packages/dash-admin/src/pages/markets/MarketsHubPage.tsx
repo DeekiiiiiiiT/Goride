@@ -15,7 +15,6 @@ export function MarketsHubPage({
   health,
 }: {
   markets: ReactNode;
-  boundaries?: ReactNode;
   health: ReactNode;
 }) {
   const [tab, setTab] = useUrlTab('markets', TABS);

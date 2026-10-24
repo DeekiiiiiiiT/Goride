@@ -27,7 +27,7 @@ import { DriverOverviewCard } from './product-overviews/DriverOverviewCard';
 import { HaulOverviewCard } from './product-overviews/HaulOverviewCard';
 import { PartsSourcingManager } from './parts-sourcing/PartsSourcingManager';
 import { CatalogQualityPage } from './parts-sourcing/CatalogQualityPage';
-import { WorldMapsPage } from './world-maps/WorldMapsPage';
+import { WorldMapsPage, canWriteWorldMapsFromUser } from './world-maps/WorldMapsPage';
 import { PlatformsEnginesPage } from './parts-sourcing/PlatformsEnginesPage';
 import { AccountingCatalogManager } from './accounting/AccountingCatalogManager';
 import { PendingVendorRequestsManager } from './accounting/PendingVendorRequestsManager';
@@ -384,9 +384,7 @@ export function AdminPortal() {
           <WorldMapsPage
             page={currentPage}
             accessToken={accessToken}
-            canWrite={['platform_owner', 'superadmin'].includes(
-              String(user?.user_metadata?.role ?? user?.app_metadata?.role ?? ''),
-            )}
+            canWrite={canWriteWorldMapsFromUser(user)}
           />
         </div>
       )}

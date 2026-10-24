@@ -46,6 +46,7 @@
     "@roam/business-config": "workspace:*",
     "@roam/finance-core": "workspace:*",
     "@roam/fuel-core": "workspace:*",
+    "@roam/geo-ui": "workspace:*",
     "@roam/platform-settings": "workspace:*",
     "@roam/platform-ops-ui": "workspace:*",
     "@roam/roam-shared": "workspace:*",

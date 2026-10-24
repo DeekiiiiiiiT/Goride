@@ -66,9 +66,6 @@ const DASH_ADMIN_BASENAME = '/admin';
 const MarketsPage = React.lazy(() =>
   import('./pages/markets/MarketsPage').then((m) => ({ default: m.MarketsPage })),
 );
-const BoundaryLibraryPage = React.lazy(() =>
-  import('./pages/markets/BoundaryLibraryPage').then((m) => ({ default: m.BoundaryLibraryPage })),
-);
 const CoverageHealthPage = React.lazy(() =>
   import('./pages/markets/CoverageHealthPage').then((m) => ({ default: m.CoverageHealthPage })),
 );
@@ -415,14 +412,12 @@ export function DashAdminPortal() {
             <Route path="couriers/ledger" element={<RedirectKeep to="/orders?view=all&type=courier" />} />
             <Route path="couriers/:userId" element={<CourierDetailPage />} />
             <Route path="couriers" element={<CouriersHubPage />} />
-            <Route path="markets/boundaries" element={<RedirectKeep to="/markets?tab=boundaries" />} />
             <Route path="markets/coverage-health" element={<RedirectKeep to="/markets?tab=health" />} />
             <Route
               path="markets"
               element={
                 <MarketsHubPage
                   markets={<Suspense fallback={<AdminRouteFallback />}><MarketsPage embedded /></Suspense>}
-                  boundaries={<Suspense fallback={<AdminRouteFallback />}><BoundaryLibraryPage embedded /></Suspense>}
                   health={<Suspense fallback={<AdminRouteFallback />}><CoverageHealthPage embedded /></Suspense>}
                 />
               }

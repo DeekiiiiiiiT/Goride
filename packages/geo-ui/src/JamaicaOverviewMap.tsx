@@ -23,6 +23,10 @@ type Props = {
   communityShapes?: DashOverviewCommunityShape[];
   /** Loads community outlines once. The map does not refit when they arrive. */
   onLoadCommunities?: () => Promise<void>;
+  /** modal covers the screen. inline sits in the page. */
+  presentation?: 'modal' | 'inline';
+  /** Opens the place when a border is clicked. */
+  onPick?: (pcode: string) => void;
 };
 
 function foundationVerts(p: DashParishRow): DashZoneVertex[] {
@@ -77,6 +81,8 @@ export function JamaicaOverviewMap({
   showTowns = true,
   communityShapes = [],
   onLoadCommunities,
+  presentation = 'modal',
+  onPick,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<google.maps.Map | null>(null);
@@ -104,12 +110,13 @@ export function JamaicaOverviewMap({
   }, [showTowns]);
 
   useEffect(() => {
+    if (presentation !== 'modal') return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
+  }, [onClose, presentation]);
 
   useEffect(() => {
     let cancelled = false;
@@ -250,9 +257,13 @@ export function JamaicaOverviewMap({
               fillOpacity: 0.08,
               strokeWeight: 2.5,
               strokeOpacity: 0.95,
-              clickable: false,
+              clickable: Boolean(onPick),
               zIndex: 10,
             });
+            if (onPick) {
+              const pcode = parish.pcode || parish.id;
+              poly.addListener('click', () => onPick(pcode));
+            }
             overlaysRef.current.push(poly);
           }
         }
@@ -294,7 +305,7 @@ export function JamaicaOverviewMap({
       nameNodesRef.current = [];
       classicMarkersRef.current = [];
     };
-  }, [parishes, parishShapes, shapes, ready, layerParishes, layerTowns]);
+  }, [parishes, parishShapes, shapes, ready, layerParishes, layerTowns, onPick]);
 
   // Town borders are created only after zooming in, and only for towns on screen.
   useEffect(() => {
@@ -335,9 +346,12 @@ export function JamaicaOverviewMap({
             fillOpacity: cutout ? 0.28 : active ? 0.22 : 0.12,
             strokeWeight: active && !cutout ? 2.5 : 2,
             strokeOpacity: cutout ? 0.9 : 1,
-            clickable: false,
+            clickable: Boolean(onPick && shape.pcode),
             zIndex: cutout ? 40 : active ? 30 : 20,
           });
+          if (onPick && shape.pcode && !cutout) {
+            poly.addListener('click', () => onPick(shape.pcode as string));
+          }
           townPolysRef.current.push(poly);
         }
       }
@@ -349,7 +363,7 @@ export function JamaicaOverviewMap({
       google.maps.event.removeListener(listener);
       clearTowns();
     };
-  }, [shapes, ready, layerTowns]);
+  }, [shapes, ready, layerTowns, onPick]);
 
   // Community lines are a reference layer: outline only, culled to the view, off until asked.
   useEffect(() => {
@@ -388,9 +402,11 @@ export function JamaicaOverviewMap({
             strokeOpacity: onSatellite ? 0.85 : 0.35,
             strokeWeight: 1,
             fillOpacity: 0,
-            clickable: false,
+            clickable: Boolean(onPick),
             zIndex: 1,
           }));
+          const communityPoly = communityPolysRef.current[communityPolysRef.current.length - 1];
+          if (onPick && communityPoly) communityPoly.addListener('click', () => onPick(shape.pcode));
         }
 
         if (!showNames || !center || !shape.name) continue;
@@ -422,7 +438,7 @@ export function JamaicaOverviewMap({
       google.maps.event.removeListener(listener);
       clearCommunities();
     };
-  }, [communityShapes, ready, layerCommunities, mapType]);
+  }, [communityShapes, ready, layerCommunities, mapType, onPick]);
 
   const enableCommunities = () => {
     setLayerCommunities(true);
@@ -435,19 +451,24 @@ export function JamaicaOverviewMap({
     communityLoadRef.current = pending;
   };
 
+  const modal = presentation === 'modal';
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6">
-      <button
-        type="button"
-        className="absolute inset-0 bg-black/75"
-        aria-label="Close overview map"
-        onClick={onClose}
-      />
+    <div className={modal ? 'fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6' : 'relative'}>
+      {modal ? (
+        <button
+          type="button"
+          className="absolute inset-0 bg-black/75"
+          aria-label="Close overview map"
+          onClick={onClose}
+        />
+      ) : null}
       <div
-        role="dialog"
-        aria-modal="true"
+        role={modal ? 'dialog' : 'region'}
+        aria-modal={modal || undefined}
         aria-labelledby="jamaica-overview-title"
-        className="relative z-10 flex w-full max-w-6xl max-h-[94vh] flex-col rounded-xl border border-slate-700 bg-slate-950 shadow-2xl overflow-hidden"
+        className={modal
+          ? 'relative z-10 flex w-full max-w-6xl max-h-[94vh] flex-col rounded-xl border border-slate-700 bg-slate-950 shadow-2xl overflow-hidden'
+          : 'flex w-full flex-col overflow-hidden rounded-xl border border-slate-700 bg-slate-950'}
       >
         <div className="flex flex-wrap items-center gap-3 border-b border-slate-800 px-4 py-3 shrink-0">
           <div className="flex-1 min-w-0">
@@ -504,14 +525,16 @@ export function JamaicaOverviewMap({
             <Satellite className="w-3.5 h-3.5" />
             {mapType === 'hybrid' ? 'Satellite' : 'Streets'}
           </button>
-          <button
-            type="button"
-            onClick={onClose}
-            className="p-2 rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-900"
-            aria-label="Close"
-          >
-            <X className="w-4 h-4" />
-          </button>
+          {modal ? (
+            <button
+              type="button"
+              onClick={onClose}
+              className="p-2 rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-900"
+              aria-label="Close"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          ) : null}
         </div>
 
         <div className="overflow-y-auto p-4 space-y-3 flex flex-col">

@@ -27,6 +27,7 @@ export default defineConfig({
       { find: 'react-dom', replacement: reactDomRoot },
       { find: '@', replacement: adminSrc },
       { find: '@roam/toll-ui', replacement: path.resolve(repoRoot, 'packages/toll-ui/src/index.ts') },
+      { find: '@roam/geo-ui', replacement: path.resolve(repoRoot, 'packages/geo-ui/src/index.ts') },
       { find: '@roam/roam-shared', replacement: path.resolve(repoRoot, 'packages/roam-shared/src/index.ts') },
       { find: '@roam/finance-core', replacement: path.resolve(repoRoot, 'packages/finance-core/src/index.ts') },
       { find: '@roam/fuel-core', replacement: path.resolve(repoRoot, 'packages/fuel-core/src') },

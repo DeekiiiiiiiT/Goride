@@ -76,6 +76,16 @@ export function registerGeoRoutes(app: Hono) {
     return c.json({ boundaries: data ?? [] });
   });
 
+  app.get("/geo/boundaries/:pcode/versions/:id/shape", async (c) => {
+    const { data, error } = await geoDb().rpc("version_shape", {
+      p_pcode: c.req.param("pcode"),
+      p_version_id: c.req.param("id"),
+    });
+    if (error) return c.json({ error: error.message }, 500);
+    if (!data) return c.json({ error: "Version not found" }, 404);
+    return c.json({ shape: data });
+  });
+
   app.get("/geo/boundaries/:pcode/versions", async (c) => {
     const { data, error } = await geoDb()
       .from("boundary_versions")
@@ -176,41 +186,84 @@ export function registerGeoRoutes(app: Hono) {
     const denied = denyWrite(admin);
     if (denied) return denied;
     const body = await c.req.json().catch(() => ({}));
-    const dryRun = body.dry_run !== false;
+    const saveDrafts = body.save_drafts === true;
+    const dryRun = !saveDrafts && body.dry_run !== false;
     const features = Array.isArray(body.features) ? body.features : [];
     const db = geoDb();
-    let created = 0;
-    let unchanged = 0;
-    let updated = 0;
+    let matched = 0;
+    let unknown = 0;
+    let broken = 0;
+    let draftsSaved = 0;
     const errors: string[] = [];
+    const pending: Array<{ pcode: string; geometry: unknown; name: string }> = [];
     for (const feature of features) {
-      const pcode = String(feature?.pcode ?? "").trim();
+      const pcode = String(feature?.pcode ?? feature?.properties?.pcode ?? feature?.properties?.PCODE ?? "").trim();
+      const geometry = feature?.geometry ?? feature?.geojson ?? null;
       if (!pcode) {
+        broken += 1;
         errors.push("missing pcode");
         continue;
       }
       const { data: existing } = await db.from("boundaries").select("pcode").eq("pcode", pcode).maybeSingle();
-      if (existing) unchanged += 1;
-      else created += 1;
+      if (!existing) {
+        unknown += 1;
+        errors.push(`${pcode}: unknown place`);
+        continue;
+      }
+      matched += 1;
+      if (saveDrafts) pending.push({ pcode, geometry, name: String(feature?.name ?? feature?.properties?.name ?? pcode) });
     }
-    if (!dryRun) updated = created;
+    if (!dryRun && !saveDrafts) {
+      return c.json({
+        error: "geometry_required",
+        message: "Check the file, or save drafts from geometry. Import does not publish.",
+      }, 400);
+    }
+    if (saveDrafts) {
+      const missingGeometry = pending.filter((row) => !row.geometry);
+      if (missingGeometry.length === pending.length && pending.length > 0) {
+        return c.json({
+          error: "geometry_required",
+          message: "Saving drafts needs a geometry on each place. Nothing was written.",
+        }, 400);
+      }
+      for (const row of pending) {
+        if (!row.geometry) {
+          broken += 1;
+          errors.push(`${row.pcode}: no geometry`);
+          continue;
+        }
+        const { error } = await db.rpc("save_draft_border", {
+          p_pcode: row.pcode,
+          p_geojson: row.geometry,
+          p_notes: `Draft from ${body.file_name ?? "import"}`,
+          p_actor: admin.id,
+        });
+        if (error) {
+          broken += 1;
+          errors.push(`${row.pcode}: ${error.message}`);
+        } else {
+          draftsSaved += 1;
+        }
+      }
+    }
+    const report = {
+      matched,
+      unknown,
+      broken,
+      drafts_saved: draftsSaved,
+      dry_run: dryRun,
+      errors,
+    };
     await db.from("import_runs").insert({
       kind: "boundaries",
       file_name: body.file_name ?? null,
-      counts: { created: dryRun ? 0 : created, unchanged, updated: dryRun ? 0 : updated, seen: features.length },
+      counts: report,
       errors,
       dry_run: dryRun,
       created_by: admin.id,
     });
-    return c.json({
-      report: {
-        created: dryRun ? 0 : created,
-        unchanged,
-        updated: dryRun ? 0 : updated,
-        dry_run: dryRun,
-        errors,
-      },
-    });
+    return c.json({ report });
   });
 
   app.post("/geo/boundaries/:pcode/versions", async (c) => {

@@ -146,9 +146,7 @@ export function attachBoundaryAdminRoutes(admin: Hono) {
     const db = getDb();
     const { data, error } = await db.from("coverage_health_summary").select("*");
     if (error) return c.json({ error: error.message }, 500);
-    const { count: boundaryCount } = await db
-      .from("admin_boundaries")
-      .select("id", { count: "exact", head: true });
+    const { data: boundaryCount } = await db.rpc("geo_catalog_boundary_count");
     const driftRes = await db.rpc("legacy_jsonb_zone_drift");
     return c.json({
       parishes: data ?? [],

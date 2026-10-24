@@ -9,7 +9,9 @@ Dominion owns the map, and Dominion is law. Each app is its own company: it read
 ## Status
 Mostly built. The `geo` schema holds 921 borders, the Rush local copy matches the old borders exactly (0 mismatches), World Maps and the geo API are live, Rush border routes return 410, and the hard-coded Jamaica lists are gone (the CI guard passes).
 
-**⚠ Do not press "Publish to all apps" in World Maps until O‑1 and O‑2 are fixed.** It is live, and today it would move a live merchant out of delivery.
+**⚠ Publish was unsafe until 24 Oct.** The merchant rule and the delivery grid are now in the database. A same-border publish moves nobody. A failed publish leaves stores where they are. Do not confirm a real publish just to try the new screen.
+
+**Quiet period:** started 2026-10-24 when the Rush parish border buttons came off. The cleanup script stays unrun until 2026-11-07 and a separate go-ahead. Rides is not deployed until `docs/geo-fare-parity.md` is signed.
 
 ---
 
@@ -37,7 +39,7 @@ Mostly built. The `geo` schema holds 921 borders, the Rush local copy matches th
 - **G2:** a signed-in non-owner (for example a Rush ops role) gets 403 on every `/geo` write (import, versions, publish, places).
 - **G3 (branch DB, after O‑1 and O‑2):** publish a changed town border. Check that the impact counts equal what actually changed, the grid matches the new outline, a live merchant is never moved to an inactive market, and a forced failure leaves the generation and the merchants unchanged.
 - **G4:** 6 Rush roles + the Dominion owner at desktop and 375 px. No border editors left in Rush.
-- **G5:** 14 days with zero calls to the 410 routes. Starts after O‑5.
+- **G5:** Started 2026-10-24, the day the Rush parish border buttons were removed. 14 days with zero calls to the 410 routes. The cleanup script stays unrun until 2026-11-07 and a separate go-ahead.
 
 ## Order
 O‑1 → O‑2 → O‑4 (deploy) → O‑3 → G3 on a branch DB → O‑5 → O‑6 → O‑7 → O‑9/O‑10 commit → Rides sign-off + deploy → 14-day quiet period → O‑8.

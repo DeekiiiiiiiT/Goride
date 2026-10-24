@@ -3404,22 +3404,43 @@ app.post("/internal/geo/reconcile", async (c) => {
       { db: { schema: "geo" } },
     );
     const db = getServiceSupabase();
-    const { data: places } = await geo.from("boundaries").select("pcode, current_version_id").eq("admin_level", 1);
+    const { data: places } = await geo.from("boundaries").select("pcode, admin_level, current_version_id");
+    const currentByPcode = new Map(
+      (places ?? []).map((place) => [String(place.pcode), String(place.current_version_id || "")]),
+    );
     const { data: parishes } = await db.from("service_parishes").select("pcode, adopted_version_id");
     const adopted = new Map((parishes ?? []).map((p) => [String(p.pcode), String(p.adopted_version_id || "")]));
     const { applyGeoPublish } = await import("./admin/geoPublish.ts");
+    const healedPcodes = new Set<string>();
     let healed = 0;
-    for (const place of places ?? []) {
-      const current = String(place.current_version_id || "");
-      if (!current || adopted.get(String(place.pcode)) === current) continue;
+    const heal = async (pcode: string, versionId: string) => {
+      if (!pcode || !versionId || healedPcodes.has(pcode)) return;
+      healedPcodes.add(pcode);
       await applyGeoPublish(db, {
-        pcode: String(place.pcode),
-        versionId: current,
+        pcode,
+        versionId,
         confirmName: null,
         actorId: null,
         systemHeal: true,
       });
       healed += 1;
+    };
+    for (const place of places ?? []) {
+      if (Number(place.admin_level) !== 1) continue;
+      const current = String(place.current_version_id || "");
+      if (!current || adopted.get(String(place.pcode)) === current) continue;
+      await heal(String(place.pcode), current);
+    }
+    const { data: zones } = await db
+      .from("service_zone_polygons")
+      .select("boundary_pcode, boundary_version_id, kind")
+      .not("boundary_pcode", "is", null);
+    for (const zone of zones ?? []) {
+      if (String(zone.kind ?? "include").toLowerCase() === "exclude") continue;
+      const pcode = String(zone.boundary_pcode || "");
+      const current = currentByPcode.get(pcode);
+      if (!current || String(zone.boundary_version_id || "") === current) continue;
+      await heal(pcode, current);
     }
     return c.json({ healed });
   } catch (e) {
