@@ -16,7 +16,7 @@ export const extractionStatus = {
     "ops": {
       "slug": "fleet-ops",
       "cutover": "done",
-      "routeCount": 78
+      "routeCount": 81
     },
     "claims": {
       "slug": "fleet-claims",
@@ -26,7 +26,7 @@ export const extractionStatus = {
     "pay": {
       "slug": "fleet-pay",
       "cutover": "done",
-      "routeCount": 105
+      "routeCount": 107
     }
   }
 } as const;

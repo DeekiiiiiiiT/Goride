@@ -1,7 +1,7 @@
 {
   "slug": "fleet-ops",
-  "generatedAt": "2026-10-14T22:02:41.290Z",
-  "routeCount": 78,
+  "generatedAt": "2026-10-24T22:05:35.873Z",
+  "routeCount": 81,
   "routes": [
     "DELETE ${ADMIN_CAT}/:id",
     "DELETE ${ADMIN}/:id",
@@ -17,6 +17,7 @@
     "GET ${PREFIX}/spend-breakdown",
     "GET ${PREFIX}/summary",
     "GET ${PREFIX}/vendors",
+    "GET ${PREFIX}/week-read",
     "GET /admin/maintenance-categories",
     "GET /admin/maintenance-templates/:id/categories",
     "GET /admin/maintenance-templates/global",
@@ -60,6 +61,8 @@
     "POST ${PREFIX}/migrate/shadow-compare",
     "POST ${PREFIX}/rules",
     "POST ${PREFIX}/rules/:id/bulk",
+    "POST ${PREFIX}/rules/:id/renew",
+    "POST ${PREFIX}/rules/:id/reverse-occurrence",
     "POST ${PREFIX}/rules/preview",
     "POST ${PREFIX}/vendors",
     "POST ${PREFIX}/vendors/bulk",

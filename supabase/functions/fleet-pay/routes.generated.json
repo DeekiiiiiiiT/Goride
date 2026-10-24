@@ -1,7 +1,7 @@
 {
   "slug": "fleet-pay",
-  "generatedAt": "2026-09-25T17:34:20.515Z",
-  "routeCount": 105,
+  "generatedAt": "2026-10-24T22:05:35.937Z",
+  "routeCount": 107,
   "routes": [
     "GET ${BASE}/:anchor",
     "GET ${BASE}/automation-settings",
@@ -12,6 +12,7 @@
     "GET ${BASE}/driver-quality-snapshots",
     "GET ${BASE}/driver-toll-charges",
     "GET ${BASE}/export",
+    "GET ${BASE}/fuel-credit-scan",
     "GET ${BASE}/health",
     "GET ${BASE}/ledger",
     "GET ${BASE}/match-candidates",
@@ -65,6 +66,7 @@
     "POST ${BASE}/collect",
     "POST ${BASE}/driver-quality-snapshots/import",
     "POST ${BASE}/force-release",
+    "POST ${BASE}/fuel-credit-receivable",
     "POST ${BASE}/import",
     "POST ${BASE}/internal-rebuild",
     "POST ${BASE}/match-index/backfill",
