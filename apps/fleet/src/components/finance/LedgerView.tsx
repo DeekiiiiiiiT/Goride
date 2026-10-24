@@ -573,6 +573,17 @@ function LedgerViewInner({ driverId, vehicleId, compact = false, eventTypesFilte
     return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2 }).format(Math.abs(amount));
   }
 
+  /** One sign only. A reversal is already negative, so the direction must not add a second minus. */
+  function formatSignedLedgerAmount(amount: number | undefined | null, direction?: string): string {
+    const n = Number(amount);
+    if (!Number.isFinite(n)) return formatCurrency(0);
+    const negative = n < 0 || (n > 0 && direction === 'outflow');
+    const body = formatCurrency(n);
+    if (negative) return `-${body}`;
+    if (n > 0) return `+${body}`;
+    return body;
+  }
+
   function formatLedgerDate(dateStr: string): string {
     try {
       // dateStr is YYYY-MM-DD
@@ -1130,7 +1141,7 @@ function LedgerViewInner({ driverId, vehicleId, compact = false, eventTypesFilte
                             ) : (
                               <ArrowDownLeft className="h-3 w-3 flex-shrink-0" />
                             )}
-                            {isInflow ? '+' : '-'}{formatCurrency(entry.netAmount)}
+                            {formatSignedLedgerAmount(entry.netAmount, entry.direction)}
                           </span>
                         </div>
                         {entry.grossAmount !== undefined && entry.grossAmount !== entry.netAmount && Math.abs(entry.grossAmount) > 0 && (
@@ -1287,7 +1298,7 @@ function LedgerViewInner({ driverId, vehicleId, compact = false, eventTypesFilte
                         "text-xl font-bold tabular-nums",
                         detailEntry.direction === 'inflow' ? "text-emerald-700" : "text-red-600"
                       )}>
-                        {detailEntry.direction === 'inflow' ? '+' : '-'}{formatCurrency(detailEntry.netAmount)}
+                        {formatSignedLedgerAmount(detailEntry.netAmount, detailEntry.direction)}
                       </p>
                       {detailEntry.grossAmount !== undefined && detailEntry.grossAmount !== detailEntry.netAmount && Math.abs(detailEntry.grossAmount) > 0 && (
                         <p className="text-xs text-slate-400 mt-0.5">Gross: {formatCurrency(detailEntry.grossAmount)}</p>
@@ -1368,7 +1379,7 @@ function LedgerViewInner({ driverId, vehicleId, compact = false, eventTypesFilte
                           </div>
                           <div>
                             <span className="text-[10px] text-slate-400 uppercase">Net Amount</span>
-                            <p className={cn("font-semibold tabular-nums", detailEntry.direction === 'inflow' ? "text-emerald-700" : "text-red-600")}>{detailEntry.direction === 'inflow' ? '+' : '-'}{formatCurrency(detailEntry.netAmount)}</p>
+                            <p className={cn("font-semibold tabular-nums", detailEntry.direction === 'inflow' ? "text-emerald-700" : "text-red-600")}>{formatSignedLedgerAmount(detailEntry.netAmount, detailEntry.direction)}</p>
                           </div>
                           <div>
                             <span className="text-[10px] text-slate-400 uppercase">Currency</span>
