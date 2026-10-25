@@ -8,7 +8,7 @@
 
 DO $$
 DECLARE
-  v_email TEXT := 'sadikithomas@hotmail.com';
+  v_email TEXT := 'deekiiiiiii@gmail.com';
   v_user_id UUID;
   v_role_id UUID;
 BEGIN
