@@ -76,7 +76,14 @@ export function OdometerScanner({
           }
         } else setError('Could not read the odometer. Type it instead.');
       })
-      .catch(() => setError('Could not read the odometer. Type it instead.'))
+      .catch((err: unknown) => {
+        const message = err instanceof Error ? err.message : '';
+        if (/too many scans this hour|too large/i.test(message)) {
+          setError(/type the reading/i.test(message) ? message : `${message}. Type the reading.`);
+          return;
+        }
+        setError('Could not read the odometer. Type it instead.');
+      })
       .finally(() => setBusy(false));
   };
 

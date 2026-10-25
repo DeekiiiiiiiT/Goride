@@ -166,12 +166,17 @@ app.get("/health", (c) => c.json({ service: "explorer", status: "ok" }));
 
 app.post("/odometer-scan", async (c) => {
   try {
-    await requireExplorer(c);
+    const user = await requireExplorer(c);
     const body = await c.req.parseBody();
     const file = body.file;
     if (!(file instanceof File)) return c.json({ error: "File upload required" }, 400);
+    // Refuse before any paid read. A missing key must not count as a scan.
+    if (file.size > 5 * 1024 * 1024) return c.json({ error: "That photo is too large. Type the reading." }, 413);
     const apiKey = Deno.env.get("OPENAI_API_KEY");
     if (!apiKey) return c.json({ error: "Odometer reading is not available right now" }, 503);
+    const sb = admin();
+    await ensureProfile(sb, user);
+    if (!(await hitLimit(sb, user.id, "scan", 30))) return c.json({ error: "Too many scans this hour" }, 429);
     const openai = new OpenAI({ apiKey });
     const dataUrl = await dataUrlFromFile(file);
     const response = await openai.chat.completions.create(odometerVisionBody(dataUrl));
