@@ -1,7 +1,7 @@
 {
   "slug": "fleet-core",
-  "generatedAt": "2026-10-24T15:41:03.312Z",
-  "routeCount": 687,
+  "generatedAt": "2026-10-25T01:37:54.509Z",
+  "routeCount": 690,
   "routes": [
     "ALL /make-server-37f42386/webhooks/wipay-fleet-modules",
     "DELETE ${ADMIN_CAT}/:id",
@@ -261,6 +261,7 @@
     "GET /make-server-37f42386/fleet/module-checkout/:purchaseId",
     "GET /make-server-37f42386/fleet/vehicle-catalog/:catalogId",
     "GET /make-server-37f42386/fuel-disputes",
+    "GET /make-server-37f42386/fuel/dual-approval",
     "GET /make-server-37f42386/health",
     "GET /make-server-37f42386/inventory",
     "GET /make-server-37f42386/ledger/canonical-batch-audit/:batchId",
@@ -574,6 +575,7 @@
     "POST /make-server-37f42386/fuel-disputes",
     "POST /make-server-37f42386/fuel/backfill-rideshare-payment-source",
     "POST /make-server-37f42386/fuel/backfill-wallet-credits",
+    "POST /make-server-37f42386/fuel/dual-approval",
     "POST /make-server-37f42386/generate-vehicle-image",
     "POST /make-server-37f42386/internal/evidence-cleanup",
     "POST /make-server-37f42386/internal/trips/project",
@@ -622,6 +624,7 @@
     "POST /make-server-37f42386/scan-odometer",
     "POST /make-server-37f42386/scan-receipt",
     "POST /make-server-37f42386/scenarios",
+    "POST /make-server-37f42386/scenarios/backfill-tenancy",
     "POST /make-server-37f42386/settings/integrations",
     "POST /make-server-37f42386/settings/preferences",
     "POST /make-server-37f42386/signup",

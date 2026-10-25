@@ -2344,7 +2344,7 @@ export async function syncPeriodCashFromTransactions(
   const { data: existing, error } = await sb()
     .from("driver_financial_periods")
     .select(
-      "id, period_end, cash_collected, driver_share, fuel_deduction, fuel_fleet_share, toll_cash_spend, toll_charged_to_driver, fuel_finalized, settlement_status, settlement_paid, payout_status, toll_status, toll_workflow_actionable, toll_unmatched_count, tips_paid_to_driver, tips_withheld, metadata, status, closed_at",
+      "id, period_end, cash_collected, driver_share, fuel_deduction, fuel_driver_spend, fuel_fleet_share, toll_cash_spend, toll_charged_to_driver, fuel_finalized, settlement_status, settlement_paid, payout_status, toll_status, toll_workflow_actionable, toll_unmatched_count, tips_paid_to_driver, tips_withheld, metadata, status, closed_at",
     )
     .eq("driver_id", driverId)
     .eq("period_anchor", periodAnchor)
