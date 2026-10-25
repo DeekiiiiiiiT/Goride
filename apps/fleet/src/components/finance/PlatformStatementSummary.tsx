@@ -262,7 +262,7 @@ export function PlatformStatementSummary({
                 .filter(hasActivity)
                 .map((row) => (
                   <tr key={`${row.driverId}-${row.platform}`} className="border-t border-slate-100">
-                    <td className="px-3 py-2">{row.driverName || driverNameById.get(row.driverId) || row.driverId}</td>
+                    <td className="px-3 py-2">{row.driverName || driverNameById.get(row.driverId ?? '') || row.driverId}</td>
                     <td className="px-3 py-2">{row.platform}</td>
                     <td className="px-3 py-2 text-right">{formatMoney(row.totalEarnings)}</td>
                     <td className="px-3 py-2 text-right">{formatMoney(row.cashCollected)}</td>
