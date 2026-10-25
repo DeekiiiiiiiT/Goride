@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth';
-import { demoOn } from '../demo/mode';
+import { plugSend } from '../api';
+import { supabasePlugApp } from '../../../../packages/auth-client/src/supabase';
 import { currentPath, fallbackFor, showsTabs, tabFor, TAB_ROOT, type PlugTab } from '../nav';
 import { readQueue } from '../offline';
 import { setPlugRuntime, type PlugRuntime } from './click';
@@ -18,6 +19,7 @@ export function PlugShell({ children }: { children: ReactNode }) {
   const [ownBar, setOwnBar] = useState(false);
   const routeTabs = showsTabs(path);
   const tabsOn = routeTabs && !ownBar && keyboard === 0;
+  const mapHome = path === '/explore';
   const [toast, setToast] = useState<string | null>(null);
   const [confirm, setConfirm] = useState<{ message: string; yes: () => void; no: () => void } | null>(null);
   const [sheet, setSheet] = useState<string | null>(null);
@@ -143,11 +145,12 @@ export function PlugShell({ children }: { children: ReactNode }) {
       void releaseRef.current().then(() => setSheet(null));
     },
     signedIn: () => auth.signedIn,
-    flagOn: (flag) => demoOn() || auth.flagOn(flag as never),
+    flagOn: (flag) => auth.flagOn(flag as never),
     sendCode: auth.sendCode,
     verifyCode: auth.verifyCode,
     signOut: auth.signOut,
-  }), [active, auth.flagOn, auth.sendCode, auth.signOut, auth.signedIn, auth.verifyCode, navigate]);
+    continueWithGoogle: auth.continueWithGoogle,
+  }), [active, auth.continueWithGoogle, auth.flagOn, auth.sendCode, auth.signOut, auth.signedIn, auth.verifyCode, navigate]);
 
   useEffect(() => {
     setPlugRuntime(runtime);
@@ -159,8 +162,28 @@ export function PlugShell({ children }: { children: ReactNode }) {
     window.dispatchEvent(new Event('plug-refresh'));
   }, [auth.signedIn]);
 
+  const askedJoin = useRef(false);
   useEffect(() => {
-    if (demoOn() || !navigator.geolocation) return;
+    const session = auth.session;
+    if (!session) return;
+    const user = session.user;
+    const meta = (user.app_metadata || {}) as { role?: string; provider?: string; providers?: string[] };
+    const role = String(meta.role || '');
+    const google = meta.provider === 'google' || (meta.providers || []).includes('google');
+    if (!role && google && !askedJoin.current) {
+      askedJoin.current = true;
+      void plugSend('/join', 'POST', { ticket: sessionStorage.getItem('plug-join-ticket') || '' })
+        .then(() => supabasePlugApp.auth.refreshSession())
+        .catch(() => { askedJoin.current = false; });
+    }
+    if (!google) return;
+    const name = String(user.user_metadata?.full_name || user.user_metadata?.name || user.user_metadata?.display_name || '').trim();
+    const here = currentPath();
+    if (['/', '/welcome', '/signup', '/otp', '/login'].includes(here)) navigate(name ? '/explore' : '/profile');
+  }, [auth.session, navigate]);
+
+  useEffect(() => {
+    if (!navigator.geolocation) return;
     navigator.geolocation.getCurrentPosition((pos) => {
       sessionStorage.setItem('plug-lat', String(pos.coords.latitude));
       sessionStorage.setItem('plug-lng', String(pos.coords.longitude));
@@ -267,16 +290,11 @@ export function PlugShell({ children }: { children: ReactNode }) {
         className="relative mx-auto h-dvh w-full max-w-[430px] overflow-hidden bg-surface shadow-xl"
         style={{ transform: 'translateZ(0)' }}
       >
-        {demoOn() ? (
-          <div className="pointer-events-none absolute left-1/2 z-[70] -translate-x-1/2 rounded-full bg-tertiary-fixed px-3 py-1 text-[12px] font-bold tracking-wide text-on-tertiary-fixed" style={{ top: 'calc(var(--safe-top) + 0.5rem)' }}>
-            DEMO
-          </div>
-        ) : null}
-        <OfflineBanner belowDemo={demoOn()} onOpen={() => setSheet('queue')} />
-        <div ref={scrollRef} data-plug-scroll className={`h-full overflow-x-hidden overscroll-none ${overlayOpen ? 'overflow-hidden' : 'overflow-y-auto'}`}>
-          <div className={tabsOn ? 'pb-tabbar' : ''}>{children}</div>
+        <OfflineBanner onOpen={() => setSheet('queue')} />
+        <div ref={scrollRef} data-plug-scroll className={`h-full overflow-x-hidden overscroll-none ${overlayOpen || mapHome ? 'overflow-hidden' : 'overflow-y-auto'}`}>
+          <div className={tabsOn && !mapHome ? 'pb-tabbar' : ''}>{children}</div>
         </div>
-        {tabsOn ? <TabBar active={active} signedIn={auth.signedIn} flagOn={(flag) => demoOn() || auth.flagOn(flag as never)} /> : null}
+        {tabsOn ? <TabBar active={active} signedIn={auth.signedIn} flagOn={(flag) => auth.flagOn(flag as never)} /> : null}
         <PlugChrome
           toast={toast}
           confirm={confirm}
@@ -298,7 +316,7 @@ export function PlugShell({ children }: { children: ReactNode }) {
   );
 }
 
-function OfflineBanner({ belowDemo, onOpen }: { belowDemo: boolean; onOpen: () => void }) {
+function OfflineBanner({ onOpen }: { onOpen: () => void }) {
   const [offline, setOffline] = useState(() => typeof navigator !== 'undefined' && !navigator.onLine);
   const [waiting, setWaiting] = useState(() => readQueue().length);
   useEffect(() => {
@@ -316,7 +334,7 @@ function OfflineBanner({ belowDemo, onOpen }: { belowDemo: boolean; onOpen: () =
     };
   }, []);
   if (!offline && waiting === 0) return null;
-  const top = belowDemo ? 'calc(var(--safe-top) + 2.25rem)' : 'calc(var(--safe-top) + 0.5rem)';
+  const top = 'calc(var(--safe-top) + 0.5rem)';
   return (
     <button type="button" onClick={onOpen} className="pressable absolute left-1/2 z-[60] flex min-h-11 -translate-x-1/2 items-center gap-1 rounded-full bg-tertiary-fixed px-3 text-[12px] font-bold text-on-tertiary-fixed shadow-sm" style={{ top }}>
       <span className="material-symbols-outlined text-[16px]">sync</span>

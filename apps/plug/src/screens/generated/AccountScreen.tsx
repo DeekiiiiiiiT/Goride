@@ -40,8 +40,8 @@ export function AccountScreen() {
             <div className={"absolute -right-10 -top-10 w-44 h-44 rounded-full bg-gradient-to-br from-secondary-container/20 via-primary-fixed/30 to-transparent pointer-events-none blur-2xl"} />
             <div className={"relative flex items-start gap-space-md"}>
               <div className={"relative flex-shrink-0"}>
-                <div className={"w-20 h-20 rounded-full overflow-hidden shadow-sm bg-surface-container-high"}>
-                  <img className={"w-full h-full object-cover"} data-alt={"Portrait photo of Tariq, a smiling young Jamaican professional driver wearing a crisp casual shirt against a lush green tropical Blue Mountains backdrop with bright warm Caribbean sunshine."} src={"https://lh3.googleusercontent.com/aida-public/AB6AXuAvk4GVw4hGeS0xpNDcVnf4hqMJIbBoh1uwS_oCkgAwU_0gU0pONixdkx8E0BMpq4O_lOyNin4R65FvFMbKoLuE_Ib4dnbm7HaEY6dw-fBv0y0OV6Tjh5uimkfxOOIINfxX6Aq-LqTnysWSTH-KSddqKgS0tAfK7zASoI2SzbxznzdncavKrfc7CC19kbemH8tA_I6aahmrGAA7SPK1iz2yUV_YfdZqLrzXT-ajAIT6rhU7O4nCMDbA"} />
+                <div className={"w-20 h-20 rounded-full overflow-hidden shadow-sm bg-surface-container-high flex items-center justify-center font-bold text-primary"} data-initials={"You"}>
+                  You
                 </div>
                 <div className={"absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-surface-container-lowest flex items-center justify-center shadow"}>
                   <span className={"material-symbols-outlined text-[16px] text-primary"} style={{ fontVariationSettings: "'FILL' 1" }}>
@@ -51,48 +51,10 @@ export function AccountScreen() {
               </div>
               <div className={"flex-1 min-w-0"}>
                 <div className={"flex items-center gap-1.5 flex-wrap"}>
-                  <h2 className={"font-headline-sm text-headline-sm text-on-surface font-bold tracking-tight truncate"}>
-                    Tariq Campbell
+                  <h2 className={"font-headline-sm text-headline-sm text-on-surface font-bold tracking-tight truncate"} data-slot={"display-name"}>
+                    Your account
                   </h2>
-                  <span className={"inline-flex items-center px-2 py-0.5 rounded-full bg-primary-fixed text-on-primary-fixed font-label-sm text-label-sm"}>
-                    🇯🇲 St. Andrew
-                  </span>
                 </div>
-                <p className={"font-body-sm text-body-sm text-on-surface-variant mt-0.5"}>
-                  {"Kingston & St. Andrew Metro Area"}
-                </p>
-                <div className={"mt-2.5 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-surface-container text-on-surface font-label-sm text-label-sm shadow-sm"}>
-                  <span className={"material-symbols-outlined text-[15px] text-secondary-container"} style={{ fontVariationSettings: "'FILL' 1" }}>
-                    local_fire_department
-                  </span>
-                  <span className={"font-semibold text-primary"}>
-                    Road Scout Lvl 3
-                  </span>
-                  <span className={"text-on-surface-variant font-normal"}>
-                    • Island #18 (340 XP)
-                  </span>
-                </div>
-              </div>
-            </div>
-            <div className={"mt-4 pt-3 bg-surface-container-low rounded-lg p-2.5"}>
-              <div className={"flex items-center justify-between text-body-sm font-label-sm mb-1.5"}>
-                <span className={"text-on-surface-variant font-medium"}>
-                  Next Tier: Senior Scout (60 XP to go)
-                </span>
-                <span className={"text-primary font-bold"}>
-                  85%
-                </span>
-              </div>
-              <div className={"w-full h-2 rounded-full bg-surface-container-highest overflow-hidden"}>
-                <div className={"h-full bg-gradient-to-r from-secondary-container to-primary rounded-full transition-all duration-500"} style={{ width: "85%" }} />
-              </div>
-              <div className={"flex items-center justify-between mt-1 text-on-surface-variant font-label-sm text-[11px]"}>
-                <span>
-                  Member since May 2023
-                </span>
-                <span className={"text-secondary font-medium"}>
-                  Island Contributor Pass
-                </span>
               </div>
             </div>
             <div className={"grid grid-cols-2 gap-2 mt-3"}>
@@ -107,7 +69,7 @@ export function AccountScreen() {
                     Garage
                   </p>
                   <p className={"font-label-md text-label-md text-on-surface truncate font-semibold"}>
-                    1 Active Car
+                    No cars yet
                   </p>
                 </div>
               </div>
@@ -122,7 +84,7 @@ export function AccountScreen() {
                     Mapped
                   </p>
                   <p className={"font-label-md text-label-md text-on-surface font-semibold"}>
-                    14 Island Spots
+                    No places yet
                   </p>
                 </div>
               </div>
@@ -137,7 +99,7 @@ export function AccountScreen() {
                     Updates
                   </p>
                   <p className={"font-label-md text-label-md text-on-surface font-semibold"}>
-                    42 Fuel Rates
+                    No prices yet
                   </p>
                 </div>
               </div>
@@ -152,7 +114,7 @@ export function AccountScreen() {
                     Total Fuel
                   </p>
                   <p className={"font-label-md text-label-md text-on-surface font-semibold truncate"}>
-                    J$14,200
+                    No fills yet
                   </p>
                 </div>
               </div>
@@ -180,12 +142,12 @@ export function AccountScreen() {
                       My Garage
                     </p>
                     <p className={"font-body-sm text-body-sm text-on-surface-variant truncate"}>
-                      1 vehicle active • 2019 Toyota Roomy
+                      Add a car
                     </p>
                   </div>
                 </div>
                 <div className={"flex items-center gap-2 ml-2 flex-shrink-0"}>
-                  <span className={"px-2 py-0.5 rounded-full bg-surface-container text-on-surface-variant font-label-sm text-[11px] font-semibold"}>
+                  <span className={"px-2 py-0.5 rounded-full bg-surface-container text-on-surface-variant font-label-sm text-[12px] font-semibold"}>
                     Up to date
                   </span>
                   <span className={"material-symbols-outlined text-outline text-[20px]"}>
@@ -211,7 +173,7 @@ export function AccountScreen() {
                   </div>
                 </div>
                 <div className={"flex items-center gap-2 ml-2 flex-shrink-0"}>
-                  <span className={"px-2 py-0.5 rounded-full bg-secondary-fixed text-on-secondary-fixed font-label-sm text-[11px] font-semibold"}>
+                  <span className={"px-2 py-0.5 rounded-full bg-secondary-fixed text-on-secondary-fixed font-label-sm text-[12px] font-semibold"}>
                     +3 pending
                   </span>
                   <span className={"material-symbols-outlined text-outline text-[20px]"}>
@@ -232,13 +194,13 @@ export function AccountScreen() {
                       {"Documents & Renewals"}
                     </p>
                     <p className={"font-body-sm text-body-sm text-on-surface-variant truncate"}>
-                      Fitness expires in 14 days
+                      No reminder yet
                     </p>
                   </div>
                 </div>
                 <div className={"flex items-center gap-2 ml-2 flex-shrink-0"}>
                   <span className={"w-2.5 h-2.5 rounded-full bg-secondary-container animate-pulse"} />
-                  <span className={"px-2 py-0.5 rounded-full bg-secondary-fixed text-on-secondary-fixed font-label-sm text-[11px] font-semibold"}>
+                  <span className={"px-2 py-0.5 rounded-full bg-secondary-fixed text-on-secondary-fixed font-label-sm text-[12px] font-semibold"}>
                     Action Due
                   </span>
                   <span className={"material-symbols-outlined text-outline text-[20px]"}>
@@ -344,7 +306,7 @@ export function AccountScreen() {
                       {"Help & Support"}
                     </p>
                     <p className={"font-body-sm text-body-sm text-on-surface-variant truncate"}>
-                      FAQs, Road Scout guides, WhatsApp support
+                      FAQs and WhatsApp support
                     </p>
                   </div>
                 </div>
@@ -372,7 +334,7 @@ export function AccountScreen() {
                   </div>
                 </div>
                 <div className={"flex items-center gap-2 ml-2 flex-shrink-0"}>
-                  <span className={"px-2 py-0.5 rounded-full bg-surface-container text-on-surface-variant font-label-sm text-[11px] font-semibold"}>
+                  <span className={"px-2 py-0.5 rounded-full bg-surface-container text-on-surface-variant font-label-sm text-[12px] font-semibold"}>
                     Latest
                   </span>
                   <span className={"material-symbols-outlined text-outline text-[20px]"}>
@@ -396,7 +358,7 @@ export function AccountScreen() {
                       Sign Out
                     </p>
                     <p className={"font-body-sm text-body-sm text-on-surface-variant"}>
-                      Signed in as +1 (876) 555-0192
+                      
                     </p>
                   </div>
                 </div>
@@ -427,7 +389,7 @@ export function AccountScreen() {
                 Gazetted Fuel Notice
               </a>
             </div>
-            <p className={"font-body-sm text-[11px] text-on-surface-variant/70 max-w-xs mx-auto"}>
+            <p className={"font-body-sm text-[12px] text-on-surface-variant/70 max-w-xs mx-auto"}>
               Fuel rates and toll tariffs are community-verified under the Jamaica Motoring Community Guidelines.
             </p>
           </footer>

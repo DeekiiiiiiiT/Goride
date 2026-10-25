@@ -91,7 +91,7 @@ export function StationListScreen() {
               <span className={"font-label-lg text-label-lg font-semibold"}>
                 Filters
               </span>
-              <span className={"w-5 h-5 rounded-full bg-primary text-on-primary font-label-sm text-[10px] flex items-center justify-center leading-none font-bold"}>
+              <span className={"w-5 h-5 rounded-full bg-primary text-on-primary font-label-sm text-[12px] flex items-center justify-center leading-none font-bold"}>
                 3
               </span>
             </button>
@@ -103,7 +103,7 @@ export function StationListScreen() {
                   E-10 87
                 </div>
                 <div className={"flex flex-col text-left"}>
-                  <span className={"font-label-sm text-[10px] text-primary-fixed uppercase tracking-tight leading-none"}>
+                  <span className={"font-label-sm text-[12px] text-primary-fixed uppercase tracking-tight leading-none"}>
                     Parish Avg
                   </span>
                   <span className={"font-label-lg text-label-lg font-bold leading-none"}>
@@ -119,7 +119,7 @@ export function StationListScreen() {
                   E-10 90
                 </div>
                 <div className={"flex flex-col text-left"}>
-                  <span className={"font-label-sm text-[10px] text-on-surface-variant uppercase tracking-tight leading-none"}>
+                  <span className={"font-label-sm text-[12px] text-on-surface-variant uppercase tracking-tight leading-none"}>
                     Parish Avg
                   </span>
                   <span className={"font-label-lg text-label-lg font-bold leading-none text-on-surface"}>
@@ -132,7 +132,7 @@ export function StationListScreen() {
                   ULSD
                 </div>
                 <div className={"flex flex-col text-left"}>
-                  <span className={"font-label-sm text-[10px] text-on-surface-variant uppercase tracking-tight leading-none"}>
+                  <span className={"font-label-sm text-[12px] text-on-surface-variant uppercase tracking-tight leading-none"}>
                     Parish Avg
                   </span>
                   <span className={"font-label-lg text-label-lg font-bold leading-none text-on-surface"}>
@@ -180,7 +180,7 @@ export function StationListScreen() {
                 <span className={"material-symbols-outlined text-[14px]"} style={{ fontVariationSettings: "'FILL' 1" }}>
                   star
                 </span>
-                <span className={"font-label-sm text-[10px] font-bold tracking-wider uppercase"}>
+                <span className={"font-label-sm text-[12px] font-bold tracking-wider uppercase"}>
                   Cheapest in Parish
                 </span>
               </div>
@@ -225,7 +225,7 @@ export function StationListScreen() {
                       Verified 22m ago
                     </span>
                   </div>
-                  <span className={"font-body-sm text-[11px] text-on-surface-variant"}>
+                  <span className={"font-body-sm text-[12px] text-on-surface-variant"}>
                     by Andre B.
                   </span>
                 </div>
@@ -462,7 +462,7 @@ export function StationListScreen() {
                     </span>
                     5h ago
                   </span>
-                  <span className={"px-2 py-0.5 rounded bg-surface-container-highest text-on-surface-variant font-label-sm text-[10px] font-medium tracking-tight"}>
+                  <span className={"px-2 py-0.5 rounded bg-surface-container-highest text-on-surface-variant font-label-sm text-[12px] font-medium tracking-tight"}>
                     Unconfirmed Driver Report
                   </span>
                 </div>

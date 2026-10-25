@@ -51,7 +51,7 @@ export function WithdrawScreen() {
                     {"Tyre & Air Station"}
                   </span>
                   <h1 className={"font-headline-sm text-headline-sm font-bold text-on-surface"}>
-                    {"Sammy's Tyre Repair & Free Air Pump"}
+                    {""}
                   </h1>
                 </div>
                 <div className={"w-10 h-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center flex-shrink-0"}>
@@ -69,8 +69,8 @@ export function WithdrawScreen() {
                 </span>
               </div>
               <div className={"relative w-full h-32 rounded-xl overflow-hidden border border-outline-variant/30 mb-3 bg-surface-container-high"}>
-                <img className={"w-full h-full object-cover"} data-alt={"A modern digital vector map snippet of Kingston Jamaica street layout with a bright orange pin marker centered over Dunrobin Avenue under warm sunny golden hour daylight."} data-location={"Kingston, Jamaica"} src={"https://lh3.googleusercontent.com/aida-public/AB6AXuCeMsnANKPeiAF4UOcljalX77-A6KOa0Qztqmt8OmKgROXNJ4tsytDTYCrZhVQfqca9ojPA3z1cts_cX6gFkMpfXxZQxpLk--6K39g0cOjuTKZj2oFaiw3MvwNRVPgod75vszvCtF6Ytb4gK_a3jsPg0VqpoXlKxHPKYdBgNnHsQIJ3J1eGA_AhVNWCSENeBujMbMwHZA6QQ-lvu18aoX46KOPu3aEZ0E6cGzv89414qfZqBQwFgeOuC2SN23K3LvkVPP8bX0dXqS0"} />
-                <div className={"absolute bottom-2 left-2 bg-surface-container-lowest/90 px-2 py-1 rounded text-[11px] font-semibold text-on-surface shadow-xs"}>
+                <div className={"w-full h-full object-cover bg-surface-container flex items-center justify-center text-primary"} aria-hidden={"true"}><span className={"material-symbols-outlined text-[32px]"}>image</span></div>
+                <div className={"absolute bottom-2 left-2 bg-surface-container-lowest/90 px-2 py-1 rounded text-[12px] font-semibold text-on-surface shadow-xs"}>
                   St. Andrew Parish
                 </div>
               </div>
@@ -151,7 +151,7 @@ export function WithdrawScreen() {
               <p className={"font-body-md text-body-md text-on-surface-variant leading-relaxed mb-4 text-center"}>
                 If you withdraw, local Jamaican Road Scouts will stop reviewing
                 <strong className={"text-on-surface font-semibold"}>
-                  {"Sammy's Tyre Repair & Free Air Pump"}
+                  {""}
                 </strong>
                 and it won't be published to the island map.
               </p>
@@ -162,7 +162,7 @@ export function WithdrawScreen() {
                 <p className={"font-body-sm text-body-sm text-on-surface-variant"}>
                   Any pending
                   <strong className={"text-on-surface font-semibold"}>
-                    +25 Scout XP
+                    
                   </strong>
                   for this submission will be cancelled.
                 </p>

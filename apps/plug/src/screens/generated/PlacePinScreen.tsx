@@ -16,10 +16,10 @@ export function PlacePinScreen() {
               build
             </span>
             <div className={"flex flex-col"}>
-              <span className={"text-[11px] font-semibold text-on-surface leading-tight"}>
+              <span className={"text-[12px] font-semibold text-on-surface leading-tight"}>
                 Mario's Auto Parts
               </span>
-              <span className={"text-[9px] text-outline leading-none"}>
+              <span className={"text-[12px] text-outline leading-none"}>
                 180m away
               </span>
             </div>
@@ -29,17 +29,17 @@ export function PlacePinScreen() {
               fastfood
             </span>
             <div className={"flex flex-col"}>
-              <span className={"text-[11px] font-semibold text-on-surface leading-tight"}>
+              <span className={"text-[12px] font-semibold text-on-surface leading-tight"}>
                 Tastee HWT
               </span>
-              <span className={"text-[9px] text-outline leading-none"}>
+              <span className={"text-[12px] text-outline leading-none"}>
                 120m away
               </span>
             </div>
           </div>
           <div className={"absolute top-[230px] right-[112px] z-10 flex items-center gap-1 bg-surface-container-high/95 border border-outline/20 px-2 py-0.5 rounded-full shadow-sm pointer-events-none"}>
             <span className={"w-2 h-2 rounded-full bg-amber-600"} />
-            <span className={"text-[10px] font-semibold text-on-surface-variant"}>
+            <span className={"text-[12px] font-semibold text-on-surface-variant"}>
               Total HWT (25m)
             </span>
           </div>
@@ -54,7 +54,7 @@ export function PlacePinScreen() {
                 <span className={"material-symbols-outlined text-secondary-fixed text-[16px]"}>
                   touch_app
                 </span>
-                <span className={"text-[11px] font-medium tracking-tight"}>
+                <span className={"text-[12px] font-medium tracking-tight"}>
                   Drag map to align with station entrance
                 </span>
               </div>
@@ -110,7 +110,7 @@ export function PlacePinScreen() {
                 GPS Accuracy ±8 m
               </span>
             </div>
-            <span className={"text-[11px] text-on-surface-variant font-medium"}>
+            <span className={"text-[12px] text-on-surface-variant font-medium"}>
               Move outside if signal degrades
             </span>
           </div>

@@ -41,9 +41,10 @@ export interface ColumnConfig {
 interface TollLedgerPageProps {
   organizationId?: string;
   columnConfig?: ColumnConfig[];
+  onOpenTollRecon?: (opts: { startYmd: string; endYmd: string }) => void;
 }
 
-export function TollLedgerPage({ organizationId, columnConfig }: TollLedgerPageProps = {}) {
+export function TollLedgerPage({ organizationId, columnConfig, onOpenTollRecon }: TollLedgerPageProps = {}) {
   const { period, setPeriod } = useLedgerPeriod();
   const [page, setPage] = useState(0);
   const [pageSize, setPageSize] = useState(50);
@@ -170,6 +171,15 @@ export function TollLedgerPage({ organizationId, columnConfig }: TollLedgerPageP
         </div>
 
         <div className="flex items-center gap-2">
+          {onOpenTollRecon && period.startDate && period.endDate && (
+            <button
+              type="button"
+              onClick={() => onOpenTollRecon({ startYmd: period.startDate, endYmd: period.endDate })}
+              className="text-sm text-indigo-600 underline"
+            >
+              Toll Recon
+            </button>
+          )}
           <TollLedgerExport entries={entries} totalFiltered={total} />
           {showColumnToggle && (
             <TollLedgerColumnToggle

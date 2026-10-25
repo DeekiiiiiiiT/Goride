@@ -1,0 +1,12 @@
+---
+description: Keep live Supabase sign-in redirects from being replaced by localhost
+alwaysApply: true
+---
+
+# Supabase auth URLs
+
+`supabase config push` copies `supabase/config.toml` onto the live GoRide project.
+
+- `auth.site_url` stays `https://roamfleet.co`.
+- `auth.additional_redirect_urls` stays the full production and local list already in that file. Never replace it with only `127.0.0.1` or `localhost`.
+- Add a new app by appending its origin to that list and to `docs/auth/SUPABASE_REDIRECT_CHECKLIST.md`, then update the live allow list to match. Do not run `supabase config push` just to change these two fields.

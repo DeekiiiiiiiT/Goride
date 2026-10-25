@@ -37,6 +37,8 @@ export interface Trip {
     airportFees: number;
     timeAtStop: number;
     taxes: number;
+    priority?: number;
+    other?: number;
   };
   tollCharges?: number;
   netToDriver?: number; // "Your earnings" - adjustments

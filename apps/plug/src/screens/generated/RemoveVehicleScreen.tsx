@@ -9,30 +9,14 @@ export function RemoveVehicleScreen() {
   return (
     <div ref={ref} data-plug-screen={"30b-remove-vehicle.html"} className={"bg-background text-on-surface antialiased font-body-md min-h-screen flex items-center justify-center p-0 select-none sm:p-4"}>
       <div className={"relative w-full max-w-md h-[884px] max-h-[920px] bg-background overflow-hidden shadow-2xl flex flex-col sm:rounded-[40px] sm:border-[8px] sm:border-neutral-900"}>
-        <header className={"relative z-10 w-full px-6 pt-3 pb-2 flex justify-between items-center text-on-surface text-label-md font-label-md select-none bg-surface-container-lowest/80 backdrop-blur-md"}>
-          <span className={"tracking-tight font-bold"}>
-            9:41
-          </span>
-          <div className={"flex items-center gap-1.5 text-on-surface"}>
-            <span className={"material-symbols-outlined text-[17px]"}>
-              signal_cellular_4_bar
-            </span>
-            <span className={"material-symbols-outlined text-[17px]"}>
-              wifi
-            </span>
-            <span className={"material-symbols-outlined text-[18px]"}>
-              battery_full
-            </span>
-          </div>
-        </header>
-        <div className={"bg-surface-container-lowest/90 backdrop-blur-md shadow-sm border-b border-outline-variant/30 flex justify-between items-center w-full px-4 h-14 max-w-md mx-auto z-10"}>
+        <div className={"bg-surface pt-safe shadow-sm border-b border-outline-variant/30 flex justify-between items-center w-full px-4 min-h-14 max-w-md mx-auto z-10"}>
           <button onClick={onPlugClick} aria-label={"Back"} className={"w-10 h-10 flex items-center justify-center rounded-full hover:bg-surface-container-high/50 transition-colors text-primary active:scale-95"} data-act={"arrow-back"} data-way-out={"back"}>
             <span className={"material-symbols-outlined text-primary"}>
               arrow_back
             </span>
           </button>
           <h1 className={"text-headline-sm font-headline-sm font-extrabold text-primary tracking-tight"}>
-            Daily Workhorse
+            Add a car
           </h1>
           <button onClick={onPlugClick} aria-label={"Share"} className={"w-10 h-10 flex items-center justify-center rounded-full hover:bg-surface-container-high/50 transition-colors text-primary active:scale-95"} data-act={"share"}>
             <span className={"material-symbols-outlined text-primary"}>
@@ -43,7 +27,7 @@ export function RemoveVehicleScreen() {
         <div aria-hidden={"true"} className={"flex-1 overflow-y-auto px-4 pb-20 pt-2 space-y-4 pointer-events-none"}>
           <div className={"relative rounded-2xl overflow-hidden bg-surface-container-lowest border border-outline-variant/30 shadow-sm"}>
             <div className={"h-44 w-full relative overflow-hidden bg-surface-container-high"}>
-              <img className={"w-full h-full object-cover"} data-alt={"A clean, modern pearl white Japanese compact tall-wagon passenger car parked on a scenic coastal roadway in Jamaica during warm golden hour. The sunlight glints off the vehicle's glossy bodywork against a backdrop of Caribbean hills, captured in sharp, crisp automotive photography with soft amber and sunset orange tones."} src={"https://lh3.googleusercontent.com/aida-public/AB6AXuALoDhjo05-ZojyCIclJbBbo66E7KlQQYOYx1o28lNtNCjnKbkBunRXYv9tUiZYRK-xEFDI6U-b8y0CfYYQbNptnn-uay4Q2p9vzi99SIT4pTWkjeUVGvzDxqPGiA_tHAxVL1NoxXoXgko_s0tSJnr3aJpzK0baW2ODvkS9MsVUDoVP4TGAhdbRXnYbl2aEpHwmr4yCEelh7dt633045But9ILUxKc8voUa0Ihs7On2BoHkwsxPbymP7VclVOETnb3mjj4rBTji2Lc"} />
+              <div className={"w-full h-full object-cover bg-surface-container flex items-center justify-center text-primary"} aria-hidden={"true"}><span className={"material-symbols-outlined text-[32px]"}>image</span></div>
               <div className={"absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent"} />
               <div className={"absolute top-3 right-3 bg-surface-container-lowest/95 backdrop-blur-sm px-2.5 py-1 rounded-full text-label-sm font-label-sm font-bold text-on-surface border border-outline-variant/40 flex items-center gap-1"}>
                 <span className={"w-2 h-2 rounded-full bg-emerald-600"} />
@@ -51,11 +35,11 @@ export function RemoveVehicleScreen() {
               </div>
               <div className={"absolute bottom-3 left-4 right-4 text-white"}>
                 <div className={"text-label-sm font-label-sm uppercase tracking-wider text-orange-200"}>
-                  2019 Toyota Roomy Custom
+                  Add a car
                 </div>
                 <div className={"flex items-center justify-between mt-0.5"}>
                   <span className={"text-headline-md font-headline-md font-extrabold tracking-tight"}>
-                    8241-HY
+                    
                   </span>
                   <span className={"text-label-md font-label-md bg-white/20 backdrop-blur-md px-2.5 py-0.5 rounded-md font-mono"}>
                     Kingston, JA
@@ -69,7 +53,7 @@ export function RemoveVehicleScreen() {
                   Odometer
                 </p>
                 <p className={"text-label-lg font-label-lg font-bold text-on-surface mt-0.5"}>
-                  84,612 km
+                  
                 </p>
               </div>
               <div className={"text-center px-2"}>
@@ -118,7 +102,7 @@ export function RemoveVehicleScreen() {
                 </span>
               </div>
               <p className={"text-body-sm font-body-sm text-amber-900 mt-0.5"}>
-                Expires on 28 Apr 2025. Book vehicle test inspection at Island Traffic Authority Depot.
+                
               </p>
             </div>
           </div>
@@ -173,7 +157,7 @@ export function RemoveVehicleScreen() {
                   directions_car
                 </span>
                 <span className={"text-label-md font-label-md font-bold text-on-surface"}>
-                  2019 Toyota Roomy • 8241-HY
+                  Add a car
                 </span>
               </div>
               <div className={"mt-4 p-3 rounded-xl bg-surface-container-low border border-outline-variant/30 text-left"}>

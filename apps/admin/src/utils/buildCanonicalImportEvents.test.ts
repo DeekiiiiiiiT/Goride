@@ -127,12 +127,8 @@ describe('buildCanonicalImportEvents', () => {
     expect(events[0].sourceType).toBe('import_batch');
     expect(events.every((e) => e.sourceId === batchId)).toBe(true);
     
-    // REFUNDS_TOLL, promotion, payout_bank, toll_support_adjustment
-    expect(events.length).toBe(4);
-    const promoEv = events.find((e) => e.eventType === 'promotion');
-    expect(promoEv?.netAmount).toBe(5);
-    expect(promoEv?.idempotencyKey).toBe(`${batchId}|driver_promotion|${driverId.toLowerCase()}`);
-    expect(promoEv?.date).toBe('2026-03-01');
+    expect(events.some((e) => e.eventType === 'promotion')).toBe(false);
+    expect(events.length).toBe(3);
   });
 
   it('posts import_batch promotion on earliest trip date when org period starts earlier than trips', () => {
@@ -167,9 +163,6 @@ describe('buildCanonicalImportEvents', () => {
       uberStatementsByDriverId: ssot,
       disputeRefunds: [],
     });
-    const promoEv = events.find((e) => e.eventType === 'promotion');
-    expect(promoEv?.date).toBe('2026-03-23');
-    expect(promoEv?.periodStart).toBe('2026-03-17');
-    expect(promoEv?.periodEnd).toBe('2026-03-23');
+    expect(events.some((e) => e.eventType === 'promotion')).toBe(false);
   });
 });

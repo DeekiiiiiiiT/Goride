@@ -111,7 +111,7 @@ export function ApprovedScreen() {
                   <div>
                     <div className={"flex items-center space-x-1.5 flex-wrap"}>
                       <h3 className={"text-headline-sm font-headline-sm text-on-background font-bold leading-tight"}>
-                        {"Sammy's Tyre & Alignment"}
+                        {""}
                       </h3>
                     </div>
                     <div className={"flex items-center gap-1.5 mt-1"}>
@@ -185,7 +185,7 @@ export function ApprovedScreen() {
                     add
                   </span>
                   <span>
-                    50 Scout XP
+                    
                   </span>
                 </span>
               </div>
@@ -200,7 +200,7 @@ export function ApprovedScreen() {
                     New Badge Unlocked
                   </div>
                   <div className={"text-body-md font-body-md font-bold text-on-background"}>
-                    Road Scout Grade 2
+                    
                   </div>
                 </div>
               </div>
@@ -210,7 +210,7 @@ export function ApprovedScreen() {
                     Scout Grade Progress
                   </span>
                   <span className={"text-on-background font-bold tracking-tight"}>
-                    365 / 500 XP
+                    
                   </span>
                 </div>
                 <div className={"w-full bg-surface-container rounded-full h-2.5 overflow-hidden"}>

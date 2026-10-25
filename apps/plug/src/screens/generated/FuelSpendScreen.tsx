@@ -52,10 +52,9 @@ export function FuelSpendScreen() {
                 <p className={"font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider"}>
                   Active Ride
                 </p>
-                <p className={"font-headline-sm text-headline-sm text-on-surface truncate"}>
-                  2019 Toyota Roomy
-                  <span className={"text-primary font-label-md"}>
-                    (8241-HY)
+                <p className={"font-headline-sm text-headline-sm text-on-surface truncate"} data-slot={"car"}>
+                  Add a car<span className={"text-primary font-label-md"}>
+                    
                   </span>
                 </p>
               </div>
@@ -96,15 +95,15 @@ export function FuelSpendScreen() {
                     <span className={"material-symbols-outlined text-[13px]"}>
                       bolt
                     </span>
-                    Oct 2024
+                    
                   </span>
                 </div>
                 <div className={"flex items-baseline gap-space-xs mt-1"}>
                   <span className={"font-headline-md text-headline-md opacity-85"}>
                     J$
                   </span>
-                  <h2 className={"font-display-lg-mobile text-display-lg-mobile font-extrabold tracking-tight"}>
-                    18,450
+                  <h2 className={"font-display-lg-mobile text-display-lg-mobile font-extrabold tracking-tight"} data-slot={"spend"}>
+                    No fuel spend yet
                   </h2>
                 </div>
                 <div className={"flex flex-wrap items-center gap-space-xs pt-space-xs"}>
@@ -113,7 +112,7 @@ export function FuelSpendScreen() {
                       trending_down
                     </span>
                     <span>
-                      -8.4% vs Sept
+                      
                     </span>
                   </div>
                   <div className={"inline-flex items-center gap-1 bg-surface-container-lowest/25 font-label-sm text-label-sm px-space-sm py-1 rounded-full backdrop-blur-sm"}>
@@ -121,7 +120,7 @@ export function FuelSpendScreen() {
                       local_fire_department
                     </span>
                     <span>
-                      J$ 1,600 scout saved
+                      
                     </span>
                   </div>
                 </div>
@@ -179,7 +178,7 @@ export function FuelSpendScreen() {
                       </span>
                     </p>
                     <p className={"font-body-sm text-body-sm text-on-surface-variant mt-0.5"}>
-                      ~39.3 km/day
+                      
                     </p>
                   </div>
                 </div>
@@ -322,7 +321,7 @@ export function FuelSpendScreen() {
               <div className={"relative w-full pt-space-xs"}>
                 <svg aria-label={"Fuel efficiency line chart"} className={"w-full h-36 overflow-visible"} viewBox={"0 0 340 140"}>
                   <line stroke={"#936f00"} strokeDasharray={"4 4"} strokeOpacity={"0.6"} strokeWidth={"1.5"} x1={"16"} x2={"324"} y1={"86"} y2={"86"} />
-                  <text className={"font-label-sm text-[9px] font-semibold"} fill={"#755800"} x={"20"} y={"80"}>
+                  <text className={"font-label-sm text-[12px] font-semibold"} fill={"#755800"} x={"20"} y={"80"}>
                     Parish Avg (13.4 km/L)
                   </text>
                   <defs>
@@ -334,19 +333,19 @@ export function FuelSpendScreen() {
                   <polygon fill={"url(#efficiencyGlow)"} points={"24,105 108,98 200,32 300,42 300,126 24,126"} />
                   <polyline fill={"none"} points={"24,105 108,98 200,32 300,42"} stroke={"#a33900"} strokeLinecap={"round"} strokeLinejoin={"round"} strokeWidth={"3"} />
                   <circle cx={"24"} cy={"105"} fill={"#ffffff"} r={"4.5"} stroke={"#a33900"} strokeWidth={"2.5"} />
-                  <text className={"font-label-sm text-[10px]"} fill={"#5a4138"} textAnchor={"middle"} x={"24"} y={"125"}>
+                  <text className={"font-label-sm text-[12px]"} fill={"#5a4138"} textAnchor={"middle"} x={"24"} y={"125"}>
                     14.0
                   </text>
                   <circle cx={"108"} cy={"98"} fill={"#ffffff"} r={"4.5"} stroke={"#a33900"} strokeWidth={"2.5"} />
-                  <text className={"font-label-sm text-[10px]"} fill={"#5a4138"} textAnchor={"middle"} x={"108"} y={"125"}>
+                  <text className={"font-label-sm text-[12px]"} fill={"#5a4138"} textAnchor={"middle"} x={"108"} y={"125"}>
                     13.9
                   </text>
                   <circle cx={"200"} cy={"32"} fill={"#a33900"} r={"5"} stroke={"#ffdbce"} strokeWidth={"2"} />
-                  <text className={"font-label-md text-[11px] font-bold"} fill={"#a33900"} textAnchor={"middle"} x={"200"} y={"22"}>
+                  <text className={"font-label-md text-[12px] font-bold"} fill={"#a33900"} textAnchor={"middle"} x={"200"} y={"22"}>
                     14.4 ★
                   </text>
                   <circle cx={"300"} cy={"42"} fill={"#ffffff"} r={"4.5"} stroke={"#a33900"} strokeWidth={"2.5"} />
-                  <text className={"font-label-sm text-[10px]"} fill={"#5a4138"} textAnchor={"middle"} x={"300"} y={"28"}>
+                  <text className={"font-label-sm text-[12px]"} fill={"#5a4138"} textAnchor={"middle"} x={"300"} y={"28"}>
                     14.2
                   </text>
                 </svg>

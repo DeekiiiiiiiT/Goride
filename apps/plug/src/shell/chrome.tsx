@@ -1,7 +1,5 @@
 import { useEffect, useState } from 'react';
 import { publicGet } from '../api';
-import { demoOn, setDemo } from '../demo/mode';
-import { demoStations } from '../demo/store';
 import type { PlugTab } from '../nav';
 import { readQueue } from '../offline';
 import { getPlugRuntime } from './click';
@@ -27,7 +25,7 @@ export function TabBar({
 }) {
   const hide = (flag: string) => signedIn && !flagOn(flag);
   return (
-    <nav aria-label="Plug sections" className="absolute bottom-0 inset-x-0 z-50 pb-safe bg-surface/90 backdrop-blur-xl shadow-[0_-2px_12px_rgba(28,25,23,0.06)]" data-plug-tabs data-way-out="tabs">
+    <nav aria-label="Plug sections" className="absolute bottom-0 inset-x-0 z-50 pb-safe bg-surface shadow-[0_-2px_12px_rgba(28,25,23,0.06)]" data-plug-tabs data-way-out="tabs">
       <div className="relative flex justify-around items-center h-16 px-space-xs">
         <TabLink id="explore" label="Explore" icon={TAB_ICON.explore} active={active === 'explore'} />
         {hide('plug.garage') ? <span className="flex-1" /> : <TabLink id="garage" label="Garage" icon={TAB_ICON.garage} active={active === 'garage'} />}
@@ -35,7 +33,7 @@ export function TabBar({
           <div className="relative flex items-center justify-center w-14">
             <button type="button" aria-label="Log Fuel Action" data-path="log-fuel" data-way-out="primary" onClick={onPlugClick} className="pressable absolute -top-6 w-14 h-14 min-w-[48px] min-h-[48px] rounded-full bg-gradient-to-tr from-primary to-secondary-container text-on-primary flex flex-col items-center justify-center shadow-[0_8px_20px_-4px_rgba(163,57,0,0.45)]">
               <span className="material-symbols-outlined text-[26px]">local_gas_station</span>
-              <span className="font-label-sm text-[9px] uppercase tracking-tight -mt-0.5">Log</span>
+              <span className="font-label-sm text-[12px] uppercase tracking-tight -mt-0.5">Log</span>
             </button>
           </div>
         )}
@@ -158,6 +156,7 @@ function SignInSheet({ returnTo, keyboard, onClose, onDone }: { returnTo: string
         )}
         {error ? <p role="alert" className="mt-2 text-sm text-error">{error}</p> : null}
         <button type="submit" className="pressable mt-4 min-h-12 w-full rounded-xl bg-primary font-bold text-on-primary">{sent ? 'Verify' : 'Send code'}</button>
+        <button type="button" className="pressable mt-2 min-h-12 w-full rounded-xl bg-surface-container-lowest font-bold" data-act="continue-with-google" onClick={onPlugClick}>Continue with Google</button>
         <button type="button" className="pressable mt-2 min-h-12 w-full rounded-xl" onClick={onClose}>Not now</button>
       </form>
     </div>
@@ -182,9 +181,6 @@ function SheetBody({ name, onClose }: { name: string; onClose: () => void }) {
     return (
       <div>
         <FiltersScreen />
-        {!demoOn() ? null : (
-          <button type="button" data-act="demo-switch" onClick={onPlugClick} className="mt-3 min-h-12 w-full rounded-xl bg-surface-container">Demo data</button>
-        )}
       </div>
     );
   }
@@ -192,7 +188,7 @@ function SheetBody({ name, onClose }: { name: string; onClose: () => void }) {
 }
 
 function StationPicker({ onClose }: { onClose: () => void }) {
-  const [rows, setRows] = useState(() => (demoOn() ? demoStations() : []));
+  const [rows, setRows] = useState<Array<{ id: string; name: string; lat: number; lng: number }>>([]);
   useEffect(() => {
     void publicGet<{ stations: typeof rows }>('/stations').then((body) => setRows(body.stations as typeof rows)).catch(() => undefined);
   }, []);
@@ -218,14 +214,3 @@ function StationPicker({ onClose }: { onClose: () => void }) {
     </div>
   );
 }
-
-export function DemoSettingsRow() {
-  if (import.meta.env.PROD) return null;
-  return (
-    <button type="button" id="demo-switch" data-act="demo-switch" onClick={onPlugClick} className="mx-4 mb-6 min-h-12 w-[calc(100%-2rem)] rounded-xl bg-tertiary-fixed font-bold text-on-tertiary-fixed" title="Dev builds only">
-      {demoOn() ? 'Demo data is on' : 'Turn on demo data'}
-    </button>
-  );
-}
-
-export { setDemo };

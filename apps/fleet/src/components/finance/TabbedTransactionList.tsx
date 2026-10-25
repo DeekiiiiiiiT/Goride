@@ -1,15 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Car, Fuel, Receipt, FileText, Layers } from 'lucide-react';
+import { Car, Fuel, Receipt, FileText } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { TripLedgerWithManualAdd } from './TripLedgerWithManualAdd';
-import { FuelLedgerPage } from '../database/FuelLedgerPage';
+import { FuelLedgerPage, TollLedgerPage, mergeTripLedgerColumnConfig } from '@roam/platform-ops-ui';
 import { FuelExpenseLedgerPage } from '../database/FuelExpenseLedgerPage';
-import { TollLedgerPage } from '../database/TollLedgerPage';
-import { mergeTripLedgerColumnConfig } from '../database/LedgerColumnSettings';
 import { PlatformStatementSummary } from './PlatformStatementSummary';
-import { UnifiedLedgerAllTab } from './UnifiedLedgerAllTab';
 import { LedgerPeriodProvider, useLedgerPeriod } from '../../contexts/LedgerPeriodContext';
-import { useUnifiedLedgerFlag } from '../../hooks/useUnifiedLedgerFlag';
 import { PeriodWeekDropdown } from '../ui/PeriodWeekDropdown';
 import { ALL_TIME_OPTION_ID } from '../../utils/periodWeekOptions';
 import { useAuth } from '../auth/AuthContext';
@@ -17,7 +13,8 @@ import { useBusinessConfig } from '../auth/BusinessConfigContext';
 import { API_ENDPOINTS } from '../../services/apiConfig';
 import { BusinessType } from '../../types/data';
 
-type TransactionTab = 'trips' | 'fuel' | 'fuel-expenses' | 'toll' | 'statement' | 'all';
+type TransactionTab = 'trips' | 'fuel' | 'toll' | 'statement';
+type FuelView = 'fills' | 'accounting';
 
 type LedgerTab = 'main' | 'trip' | 'fuel' | 'toll';
 
@@ -36,13 +33,7 @@ interface LedgerConfig {
 
 const TRANSACTION_TABS: { id: TransactionTab; label: string; icon: React.ElementType; description: string }[] = [
   { id: 'trips', label: 'Trip Ledger', icon: Car, description: 'Individual trip records with earnings breakdown' },
-  { id: 'fuel', label: 'Fuel Ledger', icon: Fuel, description: 'Fuel fill-ups, costs, and odometer readings' },
-  {
-    id: 'fuel-expenses',
-    label: 'Fuel Expenses',
-    icon: Receipt,
-    description: 'Approved/rejected fuel Expense transactions (accounting)',
-  },
+  { id: 'fuel', label: 'Fuel', icon: Fuel, description: 'Fill-ups and approved fuel expenses' },
   { id: 'toll', label: 'Toll Ledger', icon: Receipt, description: 'Toll transactions and reconciliation status' },
   { id: 'statement', label: 'Statement Summary', icon: FileText, description: 'Period payouts, bank transfers, and statement totals' },
 ];
@@ -52,17 +43,8 @@ function readTabFromUrl(): TransactionTab {
     const sp = new URLSearchParams(window.location.search);
     const t = sp.get('ledgerTab');
     // Legacy Review Queue Closed / expense-ledger deep links
-    if (t === 'history' || t === 'fuel-expense-ledger') return 'fuel-expenses';
-    if (
-      t === 'trips' ||
-      t === 'fuel' ||
-      t === 'fuel-expenses' ||
-      t === 'toll' ||
-      t === 'statement' ||
-      t === 'all'
-    ) {
-      return t;
-    }
+    if (t === 'history' || t === 'fuel-expense-ledger' || t === 'fuel-expenses') return 'fuel';
+    if (t === 'trips' || t === 'fuel' || t === 'toll' || t === 'statement') return t;
   } catch { /* ignore */ }
   return 'trips';
 }
@@ -81,10 +63,15 @@ function LedgersInner({
   onOpenTollRecon?: (opts: { startYmd: string; endYmd: string }) => void;
 }) {
   const [activeTab, setActiveTab] = useState<TransactionTab>(readTabFromUrl);
+  const [fuelView, setFuelView] = useState<FuelView>(() => {
+    try {
+      const t = new URLSearchParams(window.location.search).get('ledgerTab');
+      return t === 'fuel-expenses' || t === 'fuel-expense-ledger' || t === 'history' ? 'accounting' : 'fills';
+    } catch { return 'fills'; }
+  });
   // R-03: mount panel content on first visit, then keep mounted behind hidden
   const [visited, setVisited] = useState<Set<TransactionTab>>(() => new Set([readTabFromUrl()]));
   const { period, setPeriod } = useLedgerPeriod();
-  const unified = useUnifiedLedgerFlag();
   const { session } = useAuth();
   const { businessType } = useBusinessConfig();
   const accessToken = session?.access_token;
@@ -116,12 +103,26 @@ function LedgersInner({
     writeTabToUrl(activeTab);
   }, [activeTab]);
 
-  const tabs = unified
-    ? [
-        ...TRANSACTION_TABS,
-        { id: 'all' as const, label: 'All', icon: Layers, description: 'Cross-type unified ledger entries' },
-      ]
-    : TRANSACTION_TABS;
+  useEffect(() => {
+    const sync = () => {
+      const next = readTabFromUrl();
+      setActiveTab(next);
+      setVisited((prev) => {
+        if (prev.has(next)) return prev;
+        const added = new Set(prev);
+        added.add(next);
+        return added;
+      });
+    };
+    window.addEventListener('popstate', sync);
+    window.addEventListener('goride:ledger-nav', sync);
+    return () => {
+      window.removeEventListener('popstate', sync);
+      window.removeEventListener('goride:ledger-nav', sync);
+    };
+  }, []);
+
+  const tabs = TRANSACTION_TABS;
 
   const selectTab = (id: TransactionTab) => {
     setActiveTab(id);
@@ -157,7 +158,7 @@ function LedgersInner({
             Trip, fuel, and toll records with full financial detail.
           </p>
         </div>
-        <div className="min-w-[220px]">
+        <div className="flex min-w-[220px] items-end gap-2">
           <PeriodWeekDropdown
             selectedStart={period.startDate || undefined}
             selectedEnd={period.endDate || undefined}
@@ -175,12 +176,6 @@ function LedgersInner({
           />
         </div>
       </div>
-
-      {unified && (
-        <div className="rounded-lg border border-indigo-200 bg-indigo-50 px-4 py-2 text-xs text-indigo-800 dark:border-indigo-800 dark:bg-indigo-950/40 dark:text-indigo-200">
-          Unified ledger read model (preview) — enable via localStorage <code>roam_ledger_read_model=1</code>.
-        </div>
-      )}
 
       <div className="border-b border-slate-200 dark:border-slate-700" role="tablist" aria-label="Ledger tabs">
         <div className="flex items-center gap-1 -mb-px overflow-x-auto">
@@ -232,13 +227,19 @@ function LedgersInner({
               {visited.has(tab.id) && (
                 <>
                   {tab.id === 'trips' && <TripLedgerWithManualAdd columnConfig={tripColumnConfig} />}
-                  {tab.id === 'fuel' && <FuelLedgerPage columnConfig={fuelColumnConfig} />}
-                  {tab.id === 'fuel-expenses' && <FuelExpenseLedgerPage />}
-                  {tab.id === 'toll' && <TollLedgerPage columnConfig={tollColumnConfig} />}
+                  {tab.id === 'fuel' && (
+                    <div className="space-y-3">
+                      <div className="flex gap-2" role="group" aria-label="Fuel view">
+                        <button type="button" aria-pressed={fuelView === 'fills'} className={`rounded-md px-3 py-1 text-sm ${fuelView === 'fills' ? 'bg-slate-900 text-white' : 'text-slate-600'}`} onClick={() => setFuelView('fills')}>Fill-ups</button>
+                        <button type="button" aria-pressed={fuelView === 'accounting'} className={`rounded-md px-3 py-1 text-sm ${fuelView === 'accounting' ? 'bg-slate-900 text-white' : 'text-slate-600'}`} onClick={() => setFuelView('accounting')}>Accounting</button>
+                      </div>
+                      {fuelView === 'fills' ? <FuelLedgerPage columnConfig={fuelColumnConfig} /> : <FuelExpenseLedgerPage />}
+                    </div>
+                  )}
+                  {tab.id === 'toll' && <TollLedgerPage columnConfig={tollColumnConfig} onOpenTollRecon={onOpenTollRecon} />}
                   {tab.id === 'statement' && (
                     <PlatformStatementSummary onOpenTollRecon={onOpenTollRecon} />
                   )}
-                  {tab.id === 'all' && unified && <UnifiedLedgerAllTab />}
                 </>
               )}
             </div>

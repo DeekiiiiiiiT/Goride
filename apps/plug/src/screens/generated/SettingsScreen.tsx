@@ -1,7 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { onPlugClick } from '../../shell/actions';
 import { bindScreen } from '../../shell/bind';
-import { DemoSettingsRow } from '../../shell/chrome';
 
 export function SettingsScreen() {
   const ref = useRef<HTMLDivElement>(null);
@@ -438,7 +437,6 @@ export function SettingsScreen() {
           </div>
         </div>
       </main>
-      <DemoSettingsRow />
     </div>
   );
 }

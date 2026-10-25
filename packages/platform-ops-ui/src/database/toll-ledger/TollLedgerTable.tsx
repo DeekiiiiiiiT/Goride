@@ -347,8 +347,8 @@ export const ALL_COLUMNS: RenderColumnDef[] = [
   },
   {
     key: 'refundAmount',
-    label: 'Refund Amount',
-    defaultVisible: false,
+    label: 'Refunded by platform',
+    defaultVisible: true,
     group: 'financial',
     render: (e) => {
       const v = typeof e.refundAmount === 'number' ? e.refundAmount : 0;

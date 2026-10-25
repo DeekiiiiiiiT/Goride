@@ -11,15 +11,22 @@ function toNum(val: unknown): number {
   return Number.isFinite(n) ? n : 0;
 }
 
-function cell(row: Record<string, unknown>, ...keys: string[]): unknown {
-  for (const k of keys) {
-    if (row[k] !== undefined && row[k] !== null && String(row[k]).trim() !== '') return row[k];
-    const found = Object.keys(row).find((rk) => rk.toLowerCase() === k.toLowerCase());
-    if (found && row[found] !== undefined && row[found] !== null && String(row[found]).trim() !== '') {
-      return row[found];
-    }
+/** Lowercase and drop whitespace. Colons stay, so fare tails still line up. */
+export function normalizeUberHeader(key: string): string {
+  return key.toLowerCase().replace(/\s+/g, '');
+}
+
+export function uberRowCell(row: Record<string, unknown>, ...keys: string[]): unknown {
+  const wanted = new Set(keys.map(normalizeUberHeader));
+  for (const [key, value] of Object.entries(row)) {
+    if (value == null || String(value).trim() === '') continue;
+    if (wanted.has(normalizeUberHeader(key))) return value;
   }
   return undefined;
+}
+
+function cell(row: Record<string, unknown>, ...keys: string[]): unknown {
+  return uberRowCell(row, ...keys);
 }
 
 function parseReportingAt(row: Record<string, unknown>): string {
@@ -35,13 +42,51 @@ function parseReportingAt(row: Record<string, unknown>): string {
   return new Date().toISOString();
 }
 
+const KNOWN_FARE_HEADERS = [
+  'fare:fare',
+  'fare:surge',
+  'fare:wait time at pickup',
+  'fare:time at stop',
+  'fare:cancellation',
+  'fare:airport surcharge',
+  'fare:uberx priority',
+  'fare:priority',
+];
+
+const KNOWN_FARE_TAILS = new Set(KNOWN_FARE_HEADERS.map(normalizeUberHeader));
+
+/** Unmapped `Your earnings:Fare:*` dollars, so a new Uber column is not dropped. */
+export function otherFareFromUberRow(row: Record<string, unknown>): number {
+  let sum = 0;
+  for (const [key, value] of Object.entries(row)) {
+    const norm = normalizeUberHeader(key);
+    if (!norm.includes('yourearnings:fare:')) continue;
+    const tail = norm.slice(norm.indexOf('fare:'));
+    if (KNOWN_FARE_TAILS.has(tail)) continue;
+    sum += toNum(value);
+  }
+  return sum;
+}
+
+export function uberFareComponentGap(earningsGross: number, parts: number, sawComponent: boolean): number | null {
+  if (!sawComponent || Math.abs(earningsGross) < 0.009) return null;
+  const gap = Math.round((earningsGross - parts) * 100) / 100;
+  return Math.abs(gap) > 0.05 ? gap : null;
+}
+
 function inferLineKind(description: string, fareBreakdown: PaymentLedgerLine['fareBreakdown']): PaymentLedgerLineKind {
   const d = description.toLowerCase();
+  const tipOnly = fareBreakdown.tip > 0
+    && fareBreakdown.base === 0
+    && fareBreakdown.surge === 0
+    && fareBreakdown.cancellation === 0
+    && (fareBreakdown.priority ?? 0) === 0
+    && (fareBreakdown.timeAtStop ?? 0) === 0;
   if (d.includes('so.payout') || d.includes('payout')) return 'payout';
+  if (tipOnly) return 'tip';
   if (isUberTripFareAdjustOrderDescription(description)) return 'prior_period_adjustment';
   if (d.startsWith('support adjustment')) return 'toll_refund';
   if (d.includes('cancellation')) return 'cancellation';
-  if (fareBreakdown.tip > 0 && fareBreakdown.base === 0 && fareBreakdown.surge === 0) return 'tip';
   if (Math.abs(fareBreakdown.tollRefund) > 0) return 'toll_refund';
   return 'fare_earning';
 }
@@ -92,6 +137,15 @@ export function extractPaymentLedgerLineFromUberRow(
     cancellation: toNum(
       cell(row, 'Paid to you:Your earnings:Fare:Cancellation', 'Paid to you : Your earnings : Fare:Cancellation'),
     ),
+    priority: toNum(
+      cell(
+        row,
+        'Paid to you:Your earnings:Fare:UberX Priority',
+        'Paid to you : Your earnings : Fare:UberX Priority',
+        'Paid to you:Your earnings:Fare:Priority',
+      ),
+    ),
+    other: otherFareFromUberRow(row),
     taxes: toNum(cell(row, 'Paid to you:Your earnings:Taxes', 'Paid to you : Your earnings : Taxes')),
     tip: toNum(cell(row, 'Paid to you:Your earnings:Tip', 'Paid to you : Your earnings : Tip')),
     tollRefund: toNum(cell(row, 'Paid to you:Trip balance:Refunds:Toll', 'Paid to you : Trip balance : Refunds : Toll')),
@@ -100,12 +154,21 @@ export function extractPaymentLedgerLineFromUberRow(
     ),
   };
 
+  const componentSum = fareBreakdown.base + fareBreakdown.surge + fareBreakdown.waitPickup
+    + fareBreakdown.timeAtStop + fareBreakdown.cancellation + (fareBreakdown.priority ?? 0)
+    + (fareBreakdown.other ?? 0) + fareBreakdown.taxes + fareBreakdown.tip + (fareBreakdown.airportFees ?? 0);
+  const sawComponent = Object.values(fareBreakdown).some((v) => Math.abs(Number(v) || 0) > 1e-9);
+  const gap = uberFareComponentGap(earningsGross, componentSum, sawComponent);
+  if (gap != null) {
+    throw new Error(`Uber fare components do not add up to Your earnings (difference ${gap}).`);
+  }
+
   const hasMoney =
     Math.abs(paidToYou) > 1e-9 ||
     Math.abs(earningsGross) > 1e-9 ||
     Math.abs(cashCollected) > 1e-9 ||
     Math.abs(bankTransferred) > 1e-9 ||
-    Object.values(fareBreakdown).some((v) => Math.abs(Number(v) || 0) > 1e-9);
+    sawComponent;
 
   if (!hasMoney && !description) return null;
 

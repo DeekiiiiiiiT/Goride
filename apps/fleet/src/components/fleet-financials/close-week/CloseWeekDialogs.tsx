@@ -267,7 +267,8 @@ export function CloseWeekDialogs({
           <DialogHeader>
             <DialogTitle>Re-open week of {weekLabel(weekKey)}?</DialogTitle>
             <DialogDescription>
-              Unlocks this week so Fuel, Tolls, and Settlement can be edited again. Does not reopen
+              Unlocks this week so Fuel, Tolls, and Settlement can be edited again. Tolls that an
+              earlier close locked are reopened with this same reason. Does not reopen
               fuel Consumption recon — use that screen separately if needed. You must re-close when
               done. Prefer Restatement Queue for money-only corrections.
             </DialogDescription>

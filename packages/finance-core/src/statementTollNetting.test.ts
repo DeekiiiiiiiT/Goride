@@ -77,18 +77,42 @@ describe('statementTollNetting presentation', () => {
     expect(p.statementTollExpense).toBe(0);
   });
 
-  it('bank plug uses statementTollExpense only', () => {
-    expect(deriveStatementBankPlug(10000, 0, 10000)).toBe(0);
-    expect(deriveStatementBankPlug(100, 50, 0)).toBe(50);
+  it('Uber toll credits use the statement line when it exists', () => {
+    let b = emptyStatementTollBuckets();
+    b = applyStatementTollEvent(
+      b,
+      { eventType: 'toll_reimbursement', sourceType: 'trip', sourceId: 't1', netAmount: 4980 },
+      'Uber',
+    )!;
+    b = applyStatementTollEvent(
+      b,
+      { eventType: 'statement_line', netAmount: 4910, metadata: { lineCode: 'REFUNDS_TOLL' } },
+      'Uber',
+    )!;
+    expect(presentStatementToll(b, 'Uber').uberTollCredits).toBe(4910);
   });
 
-  it('payout gap ignores credits-as-expense', () => {
+  it('bank plug adds refunds and subtracts cash', () => {
+    expect(deriveStatementBankPlug({
+      totalEarnings: 53693.27,
+      platformRefunds: 2535,
+      cashCollected: 22470.65,
+    })).toBe(33757.62);
+    expect(deriveStatementBankPlug({
+      totalEarnings: 10000,
+      platformRefunds: 0,
+      cashCollected: 10000,
+    })).toBe(0);
+  });
+
+  it('tie-out is zero when the bank deposit matches earnings plus refunds minus cash', () => {
     const gap = statementPayoutReconciliationGap({
-      totalEarnings: 10158.9,
-      statementTollExpense: 0,
+      totalEarnings: 53693.27,
+      platformRefunds: 2535,
       periodAdjustments: 0,
-      totalPayout: 11570,
+      cashCollected: 22470.65,
+      bankTransfer: 33757.62,
     });
-    expect(gap).toBe(1411.1);
+    expect(gap).toBe(0);
   });
 });

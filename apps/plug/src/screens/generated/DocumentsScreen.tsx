@@ -53,7 +53,7 @@ export function DocumentsScreen() {
               </div>
               <span className={"font-label-sm text-label-sm bg-surface-container text-on-surface-variant px-space-sm py-1 rounded-full flex items-center gap-1"}>
                 <span className={"w-1.5 h-1.5 rounded-full bg-primary animate-pulse"} />
-                TAJ Synced
+                
               </span>
             </div>
             <p className={"font-body-md text-body-md text-on-surface-variant"}>
@@ -70,10 +70,9 @@ export function DocumentsScreen() {
                   <span className={"font-label-sm text-label-sm text-on-surface-variant font-medium"}>
                     {"Active Vehicle & Operator"}
                   </span>
-                  <span className={"font-headline-sm text-headline-sm text-on-surface truncate"}>
-                    2019 Toyota Roomy
-                    <span className={"font-body-sm text-body-sm text-on-surface-variant font-normal"}>
-                      (8241-HY)
+                  <span className={"font-headline-sm text-headline-sm text-on-surface truncate"} data-slot={"car"}>
+                    Add a car<span className={"font-body-sm text-body-sm text-on-surface-variant font-normal"}>
+                      
                     </span>
                   </span>
                 </div>
@@ -113,7 +112,7 @@ export function DocumentsScreen() {
                 <span className={"material-symbols-outlined text-[16px]"}>
                   error
                 </span>
-                Insurance overdue by 3d
+                
               </span>
             </div>
           </div>
@@ -148,7 +147,7 @@ export function DocumentsScreen() {
                     Expiry Date
                   </span>
                   <span className={"font-label-lg text-label-lg text-on-surface font-semibold"}>
-                    12 Jun 2027
+                    Not set
                   </span>
                 </div>
                 <div className={"flex flex-col"}>
@@ -156,7 +155,7 @@ export function DocumentsScreen() {
                     Time Remaining
                   </span>
                   <span className={"font-label-lg text-label-lg text-emerald-700 font-semibold"}>
-                    962 days left
+                    Not set
                   </span>
                 </div>
               </div>
@@ -205,7 +204,7 @@ export function DocumentsScreen() {
                     Expiry Date
                   </span>
                   <span className={"font-label-lg text-label-lg text-on-surface font-semibold"}>
-                    10 Dec 2024
+                    Not set
                   </span>
                 </div>
                 <div className={"flex flex-col"}>
@@ -264,7 +263,7 @@ export function DocumentsScreen() {
                     Expiry Date
                   </span>
                   <span className={"font-label-lg text-label-lg text-on-surface font-semibold"}>
-                    15 Nov 2024
+                    Not set
                   </span>
                 </div>
                 <div className={"flex flex-col"}>
@@ -333,7 +332,7 @@ export function DocumentsScreen() {
                 </div>
                 <div className={"flex flex-col"}>
                   <span className={"font-label-sm text-label-sm text-error font-medium"}>
-                    Expired 21 Oct 2024
+                    Not set
                   </span>
                   <span className={"font-label-lg text-label-lg text-error font-extrabold"}>
                     Expired 3 days ago!

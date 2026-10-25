@@ -1230,6 +1230,12 @@ export function registerResidualMonolithRoutes(app: Hono) {
           return Number(t.indriveNetIncome);
         }
         const platformName = String(t?.platform || "").toLowerCase();
+        if (platformName === "roam" || platformName === "goride") {
+          const gross = t?.amount != null && Number.isFinite(Number(t.amount)) ? Number(t.amount) : null;
+          if (gross == null) return null;
+          const commission = Number(t?.roamCommission ?? t?.platformFee ?? 0);
+          return gross - (Number.isFinite(commission) ? commission : 0);
+        }
         if (platformName === "indrive" || platformName === "in drive") {
           const fee = t?.indriveServiceFee != null ? Number(t.indriveServiceFee) : null;
           const gross =
@@ -2372,6 +2378,7 @@ export function registerResidualMonolithRoutes(app: Hono) {
       const isSettlementDesk = c.req.query("desk") === "settlements";
       // Fuel Review Queue only. Other screens keep the full row.
       const isFuelQueue = c.req.query("fuelQueue") === "1" && !isSettlementDesk;
+      const isFuelExpenseLedger = c.req.query("fuelExpenseLedger") === "1" && !isSettlementDesk;
 
       // Unscoped list reads must be dated — all-time dumps are the egress leak.
       // Settlement desk always sends the Week from/to range so Done/Awaiting are not
@@ -2399,6 +2406,54 @@ export function registerResidualMonolithRoutes(app: Hono) {
         "value->>type.eq.Payment_Received,value->>type.eq.Payout,value->>type.eq.Cash_Write_Off,value->>category.eq.Cash Collection,value->>category.eq.Driver Payouts,value->>category.eq.Cash Write Off";
 
       const { shouldReadTable, queryFleet, FUEL_QUEUE_TX_COLUMNS, FUEL_QUEUE_TX_OR, isFuelQueueTransactionRow } = await import("./repos/baseRepo.ts");
+      if (isFuelExpenseLedger && shouldReadTable("transactions")) {
+        const orgId = getOrgId(c);
+        if (!orgId) return c.json({ error: "Organization is required", code: "ORG_REQUIRED" }, 403);
+        const search = String(c.req.query("search") || "").replace(/[%*,()]/g, "").trim();
+        const pageLimit = Math.min(limit, 100);
+        const pageOffset = Math.max(parseInt(String(offset || "0"), 10) || 0, 0);
+        const filters: import("./repos/baseRepo.ts").FleetQueryFilter[] = [
+          { op: "in", col: "status", value: ["Approved", "Rejected"] },
+          { op: "or", value: "category.ilike.*Fuel*,payload_json->>description.ilike.*fuel expense*,payload_json->>description.ilike.fuel:*,type.in.(Reimbursement,Fuel_Manual_Entry,Manual_Entry)" },
+        ];
+        if (search) {
+          filters.push({
+            op: "or",
+            value: `payload_json->>description.ilike.*${search}*,category.ilike.*${search}*`,
+          });
+        }
+        const res = await queryFleet("transactions", {
+          org: orgId,
+          dateFrom: startDate || undefined,
+          dateTo: endDate || undefined,
+          filters,
+          order: { col: "date", ascending: false },
+          limit: pageLimit,
+          offset: pageOffset,
+          count: true,
+        });
+        if (res.error) throw res.error;
+        const scoped = await filterByOrgSafe(res.data as Record<string, unknown>[], c, { endpoint: "/transactions" });
+        const { getServiceClient } = await import("./service_client.ts");
+        const totalsRes = await getServiceClient().rpc("fuel_expense_ledger_totals", {
+          p_org: orgId,
+          p_from: startDate || null,
+          p_to: endDate || null,
+          p_search: search || null,
+        });
+        const totalsRow = Array.isArray(totalsRes.data) ? totalsRes.data[0] : totalsRes.data;
+        const truncated = Boolean(totalsRes.error);
+        return c.json({
+          data: scoped,
+          total: res.count ?? scoped.length,
+          truncated,
+          totals: truncated ? null : {
+            approved: Number(totalsRow?.approved) || 0,
+            rejected: Number(totalsRow?.rejected) || 0,
+            pending: 0,
+          },
+        });
+      }
       if (shouldReadTable("transactions")) {
         const orgId = getOrgId(c);
         const filters: import("./repos/baseRepo.ts").FleetQueryFilter[] = [];

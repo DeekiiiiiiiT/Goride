@@ -71,6 +71,17 @@
   }
 }
 
+/* Top bars and the tab bar are one solid surface. Frosted bars showed list text through them. */
+[data-plug-tabs],
+[data-plug-screen] header.fixed,
+[data-plug-screen] header.sticky,
+[data-plug-screen] .fixed.bottom-0,
+[data-plug-screen] nav.fixed {
+  background-color: var(--color-surface);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
 @layer utilities {
   .min-h-screen { min-height: 100dvh !important; }
   .h-screen { height: 100dvh !important; }
@@ -82,6 +93,31 @@
   select:not([class*="display"]):not([class*="price"]):not([class*="headline"]) {
     font-size: max(16px, 1rem) !important;
   }
+}
+
+[data-plug-screen] button,
+[data-plug-screen] a,
+[data-plug-screen] [role="radio"],
+[data-plug-screen] [role="switch"],
+[data-plug-tabs] button,
+[data-plug-sheet] button,
+[data-plug-sheet] a {
+  min-width: 44px;
+  min-height: 44px;
+  box-sizing: border-box;
+}
+
+.leaflet-control-zoom a {
+  width: 44px !important;
+  height: 44px !important;
+  line-height: 44px !important;
+}
+
+[data-plug-screen] a,
+[data-plug-sheet] a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 @keyframes plug-fade-in {

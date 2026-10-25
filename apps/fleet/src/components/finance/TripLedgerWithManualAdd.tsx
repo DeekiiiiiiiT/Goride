@@ -2,7 +2,7 @@ import { useCallback, useState } from 'react';
 import { Plus } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { TripLedgerPage } from '../database/TripLedgerPage';
+import { TripLedgerPage } from '@roam/platform-ops-ui';
 import { ManualTripForm } from '../trips/ManualTripForm';
 import { TripMapDialog } from '../trips/TripMapDialog';
 import { DeleteConfirmationDialog } from '../trips/DeleteConfirmationDialog';
@@ -190,6 +190,7 @@ export function TripLedgerWithManualAdd({ columnConfig }: { columnConfig?: Colum
   return (
     <>
       <TripLedgerPage
+        hideOwnPeriod
         columnConfig={columnConfig}
         rowActions={{
           onViewRoute,

@@ -2,7 +2,7 @@ import { defineConfig, devices } from '@playwright/test';
 
 export default defineConfig({
   testDir: './e2e',
-  testMatch: /plug-(journeys|mobile-fit)\.spec\.ts/,
+  testMatch: /plug-(journeys|mobile-fit|empty)\.spec\.ts/,
   fullyParallel: false,
   retries: 0,
   workers: 1,

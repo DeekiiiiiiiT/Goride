@@ -72,7 +72,7 @@ export function PendingPlaceScreen() {
                     {"Tyre Shop & Air Compressor"}
                   </span>
                   <h2 className={"font-headline-md text-headline-md text-on-surface leading-tight tracking-tight"}>
-                    {"Sammy's Tyre Repair & Free Air Pump"}
+                    {""}
                   </h2>
                   <p className={"font-body-sm text-body-sm text-on-surface-variant flex items-center gap-1 mt-1"}>
                     <span className={"material-symbols-outlined text-[16px] text-outline"}>
@@ -141,7 +141,7 @@ export function PendingPlaceScreen() {
                     High Accuracy (±15m)
                   </span>
                 </div>
-                <div className={"absolute bottom-3 right-3 bg-inverse-surface/85 backdrop-blur-sm text-inverse-on-surface rounded-full px-2.5 py-1 text-[11px] font-semibold flex items-center gap-1"}>
+                <div className={"absolute bottom-3 right-3 bg-inverse-surface/85 backdrop-blur-sm text-inverse-on-surface rounded-full px-2.5 py-1 text-[12px] font-semibold flex items-center gap-1"}>
                   <span className={"material-symbols-outlined text-[13px] text-tertiary-fixed"}>
                     gps_fixed
                   </span>
@@ -180,7 +180,7 @@ export function PendingPlaceScreen() {
                 </span>
               </div>
               <div className={"relative rounded-lg overflow-hidden h-44 bg-surface-container"}>
-                <img alt={"Sammy's Tyre Repair shop front"} className={"w-full h-full object-cover"} data-alt={"A brightly lit Jamaican roadside vulcanizer tyre shop along Dunrobin Avenue Kingston, showing an industrial bright orange pneumatic tire compressor, neatly stacked commercial radial tires, a digital air pressure gauge mounted on painted concrete block wall under a clear sunny Caribbean sky with vivid warm tones."} src={"https://lh3.googleusercontent.com/aida-public/AB6AXuClHpyJLhXgsOMEvYBn-E4ZxcjaSFQaCflVyxjlzt-hc2fU5QNgmb8tiRZub4sNw5j0X9hYi39fe5ZHmdlR0oNGYOTJUdqEsrXK84dXtfXF_yeRpSZirxNVTu-LBYsLc8OMVAqlrQs3RiMEa1DwIqivAtp-VMPYwPDMDMvaS1gqJA2Db0p9n8Z4qDALSihljbMw0D2pvsWBikc5CM4XpIte_XzUWHUIkEE-2MNbT7suVULzjjyinXSn"} />
+                <div className={"w-full h-full object-cover bg-surface-container flex items-center justify-center text-primary"} aria-hidden={"true"}><span className={"material-symbols-outlined text-[32px]"}>image</span></div>
                 <div className={"absolute bottom-2 left-2 bg-on-surface/80 backdrop-blur-sm px-2.5 py-1 rounded text-surface font-label-sm text-label-sm flex items-center gap-1"}>
                   <span className={"material-symbols-outlined text-[14px] text-secondary-fixed"}>
                     verified
@@ -273,7 +273,7 @@ export function PendingPlaceScreen() {
                       Island-wide Publication
                     </span>
                     <span className={"font-body-sm text-body-sm text-on-surface-variant"}>
-                      Live to all Roam Plug drivers • Earn +25 Community Points
+                      Live to all Roam Plug drivers • Earn this pin
                     </span>
                   </div>
                 </div>
@@ -308,7 +308,7 @@ export function PendingPlaceScreen() {
                 Withdraw this pin?
               </h4>
               <p className={"font-body-sm text-body-sm text-on-surface-variant"}>
-                This will cancel your verification request for "Sammy's Tyre Repair" and forfeit the pending +25 Community Points.
+                This will cancel your verification request.
               </p>
               <div className={"flex gap-space-sm mt-space-sm"}>
                 <button onClick={onPlugClick} className={"flex-1 h-12 rounded-xl bg-surface-container text-on-surface font-label-md text-label-md"} id={"cancelModalBtn"} type={"button"} data-act={"cancelModalBtn"}>

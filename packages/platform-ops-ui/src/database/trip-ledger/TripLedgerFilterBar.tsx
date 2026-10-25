@@ -25,6 +25,8 @@ interface TripLedgerFilterBarProps {
   onChange: (filters: TripLedgerFilters) => void;
   loading?: boolean;
   totalResults: number;
+  /** Ledgers already has one week control. Hide this bar's week and dates. */
+  hidePeriod?: boolean;
 }
 
 // ── Constants ───────────────────────────────────────────────────────────────
@@ -147,7 +149,7 @@ function ChipDropdown({
 
 // ── Main Component ──────────────────────────────────────────────────────────
 
-export function TripLedgerFilterBar({ filters, onChange, loading, totalResults }: TripLedgerFilterBarProps) {
+export function TripLedgerFilterBar({ filters, onChange, loading, totalResults, hidePeriod }: TripLedgerFilterBarProps) {
   const [localSearch, setLocalSearch] = useState(filters.search);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>();
 
@@ -221,6 +223,8 @@ export function TripLedgerFilterBar({ filters, onChange, loading, totalResults }
           onChange={v => update({ status: v })}
         />
 
+        {!hidePeriod && (
+        <>
         <div className="flex items-center gap-1.5">
           <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 hidden sm:inline">
             Week
@@ -258,6 +262,8 @@ export function TripLedgerFilterBar({ filters, onChange, loading, totalResults }
             title="To date"
           />
         </div>
+        </>
+        )}
 
         {/* Clear all */}
         {active && (

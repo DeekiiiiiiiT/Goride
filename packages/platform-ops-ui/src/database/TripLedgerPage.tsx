@@ -81,9 +81,11 @@ interface TripLedgerPageProps {
   headerActions?: React.ReactNode;
   /** Shown only for trips logged in the app, and only when the caller can edit transactions. */
   rowActions?: TripLedgerRowActions;
+  /** When the parent already owns the week (Ledgers), hide this page's week and date pickers. */
+  hideOwnPeriod?: boolean;
 }
 
-export function TripLedgerPage({ organizationId, columnConfig, headerActions, rowActions }: TripLedgerPageProps = {}) {
+export function TripLedgerPage({ organizationId, columnConfig, headerActions, rowActions, hideOwnPeriod }: TripLedgerPageProps = {}) {
   const { scope } = useServiceLineScope();
   const { period, setPeriod } = useLedgerPeriod();
   const [page, setPage] = useState(0);
@@ -123,12 +125,28 @@ export function TripLedgerPage({ organizationId, columnConfig, headerActions, ro
   const lastPageTripsRef = useRef<Trip[]>([]);
 
   useEffect(() => {
-    try {
-      const sp = new URLSearchParams(window.location.search);
-      const p = Number(sp.get('page'));
-      if (Number.isFinite(p) && p >= 0) setPage(p);
-    } catch { /* ignore */ }
-  }, []);
+    const syncFromUrl = () => {
+      try {
+        const sp = new URLSearchParams(window.location.search);
+        setFilters((prev) => ({
+          ...prev,
+          search: sp.get('q') || '',
+          platform: sp.get('platform') || '',
+          status: sp.get('status') || '',
+          dateFrom: period.startDate,
+          dateTo: period.endDate,
+        }));
+        setPage(0);
+        setKeysetCursor(null);
+      } catch { /* ignore */ }
+    };
+    window.addEventListener('popstate', syncFromUrl);
+    window.addEventListener('goride:ledger-nav', syncFromUrl);
+    return () => {
+      window.removeEventListener('popstate', syncFromUrl);
+      window.removeEventListener('goride:ledger-nav', syncFromUrl);
+    };
+  }, [period.startDate, period.endDate]);
 
   const [localVisibleColumns, setLocalVisibleColumns] = useState<string[]>(loadVisibleColumns);
 
@@ -200,6 +218,7 @@ export function TripLedgerPage({ organizationId, columnConfig, headerActions, ro
   useEffect(() => {
     try {
       const url = new URL(window.location.href);
+      if (url.searchParams.get('ledgerTab') && url.searchParams.get('ledgerTab') !== 'trips') return;
       url.searchParams.set('ledgerTab', 'trips');
       if (filters.search) url.searchParams.set('q', filters.search);
       else url.searchParams.delete('q');
@@ -215,7 +234,7 @@ export function TripLedgerPage({ organizationId, columnConfig, headerActions, ro
         url.searchParams.delete('sort');
         url.searchParams.delete('dir');
       }
-      window.history.replaceState({}, '', url.toString());
+      window.history.replaceState(window.history.state, '', url.toString());
     } catch { /* ignore */ }
   }, [filters, page, sortKey, sortDir]);
 
@@ -318,6 +337,7 @@ export function TripLedgerPage({ organizationId, columnConfig, headerActions, ro
         onChange={handleFiltersChange}
         loading={loading}
         totalResults={total}
+        hidePeriod={hideOwnPeriod}
       />
 
       <div className="sr-only" aria-live="polite">

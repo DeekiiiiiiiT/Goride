@@ -11,6 +11,9 @@ import {
   fillCare,
   projectServiceDue,
   sectionEnabled,
+  joinDecision,
+  readJoinTicket,
+  signJoinTicket,
   suggestReview,
   writesTouchFleetMoney,
 } from './index';
@@ -127,6 +130,72 @@ describe('care, trust, and review', () => {
   it('keeps sections off until a global flag or an allowlist', () => {
     expect(sectionEnabled('plug.explore', false, false)).toBe(false);
     expect(sectionEnabled('plug.explore', false, true)).toBe(true);
+  });
+
+  it('grants Plug only to a new Google account that Plug started', async () => {
+    const now = '2026-10-25T18:00:00.000Z';
+    const fresh = '2026-10-25T17:59:30.000Z';
+    const ticketAt = '2026-10-25T17:59:00.000Z';
+    expect(joinDecision({
+      role: '',
+      createdAt: fresh,
+      now,
+      providers: ['google'],
+      ticketIssuedAt: ticketAt,
+    })).toBe('grant');
+    expect(joinDecision({
+      role: '',
+      createdAt: '2024-01-01T00:00:00.000Z',
+      now,
+      providers: ['google'],
+      ticketIssuedAt: ticketAt,
+    })).toBe('refuse');
+    expect(joinDecision({
+      role: '',
+      createdAt: fresh,
+      now,
+      providers: ['google'],
+      ticketIssuedAt: null,
+    })).toBe('refuse');
+    expect(joinDecision({
+      role: '',
+      createdAt: '2026-10-25T17:50:00.000Z',
+      now,
+      providers: ['google'],
+      ticketIssuedAt: ticketAt,
+    })).toBe('refuse');
+    expect(joinDecision({
+      role: 'driver',
+      createdAt: fresh,
+      now,
+      providers: ['google'],
+      ticketIssuedAt: ticketAt,
+    })).toBe('refuse');
+    expect(joinDecision({
+      role: 'explorer_user',
+      createdAt: fresh,
+      now,
+      providers: ['google'],
+      ticketIssuedAt: ticketAt,
+    })).toBe('refuse');
+    expect(joinDecision({
+      role: 'platform_owner',
+      createdAt: fresh,
+      now,
+      providers: ['google'],
+      ticketIssuedAt: ticketAt,
+    })).toBe('refuse');
+    expect(joinDecision({
+      role: '',
+      createdAt: fresh,
+      now,
+      providers: ['phone'],
+      ticketIssuedAt: ticketAt,
+    })).toBe('refuse');
+    const ticket = await signJoinTicket(ticketAt, 'pepper');
+    expect(await readJoinTicket(ticket, 'pepper', now)).toBe(ticketAt);
+    expect(await readJoinTicket(ticket, 'other', now)).toBeNull();
+    expect(await readJoinTicket('not-a-ticket', 'pepper', now)).toBeNull();
   });
 
   it('hashes a user so Dominion never stores the id', async () => {

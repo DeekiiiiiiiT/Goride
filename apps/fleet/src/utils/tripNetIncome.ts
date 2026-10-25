@@ -15,6 +15,14 @@ export function getTripNetIncome(t: Trip): number | null {
     return Number(t.indriveNetIncome);
   }
   const platform = String(t.platform || '').toLowerCase();
+  if (platform === 'roam' || platform === 'goride') {
+    const gross = t.amount != null && Number.isFinite(Number(t.amount)) ? Number(t.amount) : null;
+    if (gross == null) return null;
+    const commissionRaw = (t as Trip & { roamCommission?: number; platformFee?: number }).roamCommission
+      ?? (t as Trip & { platformFee?: number }).platformFee;
+    if (commissionRaw == null || !Number.isFinite(Number(commissionRaw))) return null;
+    return gross - Number(commissionRaw);
+  }
   if (platform === 'indrive' || platform === 'in drive') {
     const fee = t.indriveServiceFee != null ? Number(t.indriveServiceFee) : null;
     const gross =

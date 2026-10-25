@@ -71,11 +71,11 @@ export function FuelDetailsScreen() {
                           Verified Station
                         </span>
                       </div>
-                      <p className={"font-headline-sm text-headline-sm text-on-surface truncate mt-0.5"}>
+                      <p className={"font-headline-sm text-headline-sm text-on-surface truncate mt-0.5 max-w-full"}>
                         Texaco Barbican
                       </p>
-                      <p className={"font-label-sm text-label-sm text-on-surface-variant"}>
-                        2019 Toyota Roomy · GPS ±6 m · Matched by GPS
+                      <p className={"font-label-sm text-label-sm text-on-surface-variant truncate max-w-full"}>
+                        Matched by GPS
                       </p>
                       <p className={"font-body-sm text-body-sm text-on-surface-variant flex items-center gap-1 mt-0.5"}>
                         <span className={"material-symbols-outlined text-[15px] text-primary"}>

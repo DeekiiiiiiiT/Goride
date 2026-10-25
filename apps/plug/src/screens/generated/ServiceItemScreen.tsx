@@ -20,9 +20,8 @@ export function ServiceItemScreen() {
               <h1 className={"font-headline-sm text-headline-sm text-on-surface truncate"}>
                 Service Item Detail
               </h1>
-              <span className={"font-label-md text-label-md text-on-surface-variant truncate"}>
-                2019 Toyota Roomy
-              </span>
+              <span className={"font-label-md text-label-md text-on-surface-variant truncate"} data-slot={"car"}>
+                Add a car</span>
             </div>
           </div>
           <div className={"flex items-center gap-space-xs"}>
@@ -57,14 +56,13 @@ export function ServiceItemScreen() {
               {"Front Brake Pads & Rotors"}
             </h2>
             <div className={"flex items-center gap-2 text-on-surface-variant font-label-md text-label-md"}>
-              <span>
-                2019 Toyota Roomy
-              </span>
+              <span data-slot={"car"}>
+                Add a car</span>
               <span>
                 •
               </span>
               <span className={"text-primary font-semibold"}>
-                Odo: 84,612 km
+                Odo: 
               </span>
             </div>
           </div>
@@ -103,7 +101,7 @@ export function ServiceItemScreen() {
                   Last: 65k km
                 </span>
                 <span className={"text-primary font-semibold"}>
-                  Current: 84,612 km
+                  Current: 
                 </span>
                 <span>
                   Goal: 90k km
@@ -177,7 +175,7 @@ export function ServiceItemScreen() {
                   store
                 </span>
                 <span className={"font-semibold"}>
-                  Precision Auto Works
+                  
                 </span>
                 <span className={"text-on-surface-variant font-normal"}>
                   • Kingston
@@ -193,7 +191,7 @@ export function ServiceItemScreen() {
                   </span>
                 </div>
                 <span className={"font-label-lg text-label-lg text-primary font-bold"}>
-                  J$9,800
+                  
                 </span>
               </div>
             </div>
@@ -222,7 +220,7 @@ export function ServiceItemScreen() {
                 </p>
                 <div className={"flex items-center justify-between pt-1"}>
                   <span className={"font-label-sm text-label-sm text-on-surface-variant"}>
-                    Precision Auto Works
+                    
                   </span>
                   <span className={"font-label-md text-label-md font-semibold text-on-surface"}>
                     J$14,500 total
@@ -302,7 +300,7 @@ export function ServiceItemScreen() {
                         </span>
                       </div>
                       <p className={"font-body-sm text-body-sm text-on-surface-variant mt-0.5"}>
-                        Precision Auto Works • 1.4 km away in Kingston
+                         • 1.4 km away in Kingston
                       </p>
                     </div>
                   </div>

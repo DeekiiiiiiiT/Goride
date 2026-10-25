@@ -95,8 +95,8 @@ export function buildEarningsOverlayModel(
   const refundsLines: OverlayDetailLine[] = [];
   if (summary) {
     refundsLines.push({
-      label: 'Statement toll / expenses',
-      value: summary.totalRefundsExpenses,
+      label: summary.totalRefundsExpenses ? 'Statement toll / expenses' : 'Toll refund',
+      value: summary.totalRefundsExpenses || summary.tollRefund || 0,
     });
     const credits = summary.platformTollCredits ?? summary.uberTollCredits ?? 0;
     if (material(credits)) {

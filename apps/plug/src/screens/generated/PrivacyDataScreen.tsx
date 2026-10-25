@@ -116,7 +116,7 @@ export function PrivacyDataScreen() {
                       {"Vehicles & License plates"}
                     </div>
                     <p className={"font-body-sm text-body-sm text-on-surface-variant"}>
-                      2019 Toyota Roomy, registration serial, and vehicle chassis number
+                      Your car, registration, and chassis number
                     </p>
                   </div>
                 </div>

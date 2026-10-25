@@ -39,6 +39,7 @@ import {
   enforceCollectCap,
   assertCashReceiptSoftGuards,
   buildMovementRow,
+  assertOnlyKeys,
   SettlementCommandError,
   type SettlementMovementKind,
 } from "./settlement_commands.ts";
@@ -687,12 +688,28 @@ app.post(`${BASE}/approval-settings`, requireSettlementPerm("settlements.approve
   }
 });
 
+app.get(`${BASE}/past-weeks-cleanup`, requireSettlementPerm("settlements.approve"), async (c) => {
+  try {
+    const orgOrResp = await requireOrgId(c);
+    if (typeof orgOrResp !== "string") return orgOrResp;
+    const { pastWeeksCleanupStatus } = await import("./past_weeks_status.ts");
+    const result = await pastWeeksCleanupStatus(orgOrResp);
+    return c.json({ success: true, ...result });
+  } catch (e) {
+    return commandErrorResponse(c, e);
+  }
+});
+
 app.post(`${BASE}/fuel-share-corrections`, requireSettlementPerm("settlements.approve"), async (c) => {
   try {
     const orgOrResp = await requireOrgId(c);
     if (typeof orgOrResp !== "string") return orgOrResp;
     const user = c.get("rbacUser") as RbacUser;
-    const body = await c.req.json().catch(() => ({}));
+    const body = assertOnlyKeys(
+      await c.req.json().catch(() => ({})),
+      ["confirm", "driverId"],
+      "Fuel corrections",
+    );
     const { applyFuelShareCorrections } = await import("./settlement_corrections.ts");
     const result = await applyFuelShareCorrections({
       organizationId: orgOrResp,
@@ -711,14 +728,29 @@ app.post(`${BASE}/legacy-weeks`, requireSettlementPerm("settlements.approve"), a
     const orgOrResp = await requireOrgId(c);
     if (typeof orgOrResp !== "string") return orgOrResp;
     const user = c.get("rbacUser") as RbacUser;
-    const body = await c.req.json().catch(() => ({}));
+    const body = assertOnlyKeys(
+      await c.req.json().catch(() => ({})),
+      ["confirm", "driverId", "choices"],
+      "Older weeks",
+    );
+    const choices = Array.isArray(body.choices)
+      ? body.choices.map((choice) => {
+        const row = assertOnlyKeys(choice, ["week", "action", "reason", "amount"], "Each older week");
+        return {
+          week: String(row.week || ""),
+          action: row.action === "write_off" ? "write_off" as const : "carry" as const,
+          reason: row.reason != null ? String(row.reason) : undefined,
+          amount: row.amount == null ? undefined : Number(row.amount),
+        };
+      })
+      : undefined;
     const { applyLegacyChoices } = await import("./legacy_weeks.ts");
     const result = await applyLegacyChoices({
       organizationId: orgOrResp,
       driverId: body.driverId ? String(body.driverId) : undefined,
       actorId: user?.userId || "",
       confirm: body.confirm === true,
-      choices: Array.isArray(body.choices) ? body.choices : undefined,
+      choices,
     });
     return c.json({ success: true, ...result });
   } catch (e) {
@@ -731,7 +763,11 @@ app.post(`${BASE}/payout-backfill`, requireSettlementPerm("settlements.approve")
     const orgOrResp = await requireOrgId(c);
     if (typeof orgOrResp !== "string") return orgOrResp;
     const user = c.get("rbacUser") as RbacUser;
-    const body = await c.req.json().catch(() => ({}));
+    const body = assertOnlyKeys(
+      await c.req.json().catch(() => ({})),
+      ["confirm", "driverId"],
+      "Missing payments",
+    );
     const driverId = String(body.driverId || "").trim();
     if (!driverId) return c.json({ error: "driverId is required" }, 400);
     const { applyPayoutBackfill } = await import("./settlement_payout_backfill.ts");
@@ -740,6 +776,34 @@ app.post(`${BASE}/payout-backfill`, requireSettlementPerm("settlements.approve")
       driverId,
       actorId: user?.userId || "",
       confirm: body.confirm === true,
+    });
+    return c.json({ success: true, ...result });
+  } catch (e) {
+    return commandErrorResponse(c, e);
+  }
+});
+
+app.post(`${BASE}/legacy-kept-repair`, requireSettlementPerm("settlements.approve"), async (c) => {
+  try {
+    const orgOrResp = await requireOrgId(c);
+    if (typeof orgOrResp !== "string") return orgOrResp;
+    const user = c.get("rbacUser") as RbacUser;
+    const body = assertOnlyKeys(
+      await c.req.json().catch(() => ({})),
+      ["confirm", "driverId", "action"],
+      "Half-week repair",
+    );
+    const action = body.action === "leave" ? "leave" : body.action === "restore" ? "restore" : "";
+    if (body.confirm === true && !action) {
+      return c.json({ error: "UNKNOWN_FIELD", message: "Choose restore or leave. Nothing was posted." }, 400);
+    }
+    const { applyLegacyKeptRepair } = await import("./legacy_weeks.ts");
+    const result = await applyLegacyKeptRepair({
+      organizationId: orgOrResp,
+      driverId: body.driverId ? String(body.driverId) : undefined,
+      actorId: user?.userId || "",
+      confirm: body.confirm === true,
+      action: action || "restore",
     });
     return c.json({ success: true, ...result });
   } catch (e) {

@@ -69,7 +69,7 @@ export function TollsScreen() {
                 <span className={"font-label-md text-label-md text-on-surface truncate"}>
                   Linked Garage Vehicle:
                   <strong>
-                    2019 Toyota Roomy (Class 1)
+                    Add a car
                   </strong>
                 </span>
               </div>
@@ -578,7 +578,7 @@ export function TollsScreen() {
                   <h3 className={"font-label-lg text-label-lg font-bold text-on-surface"}>
                     T-Tag Transponder Discount
                   </h3>
-                  <span className={"px-1.5 py-0.5 rounded text-[10px] font-bold bg-secondary-fixed text-on-secondary-fixed"}>
+                  <span className={"px-1.5 py-0.5 rounded text-[12px] font-bold bg-secondary-fixed text-on-secondary-fixed"}>
                     SAVE 10%
                   </span>
                 </div>

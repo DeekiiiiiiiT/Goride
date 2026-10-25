@@ -172,7 +172,7 @@ export function TripLedgerStats({
         iconClasses="bg-amber-100 dark:bg-amber-900/40 text-amber-600 dark:text-amber-400"
       />
       <StatCard
-        label="Completion Rate"
+        label="Completion Rate (includes rider cancellations)"
         value={(useFilterKpis ? total > 0 : trips.length > 0) ? `${fmtNum(completionRate, 0)}%` : '—'}
         sub={useFilterKpis
           ? `${(filterCompleted ?? 0).toLocaleString()}/${total.toLocaleString()} in filter`

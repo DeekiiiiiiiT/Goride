@@ -118,6 +118,7 @@ import {
   type WeekCloseReconEvidence,
   type WeekCloseServiceLine,
 } from "./week_close_recon.ts";
+import { probeTollPeriodSealed, reopenTollPeriodForWeek } from "./toll_period_writable.ts";
 
 export type { CloseLaneForceOpts, CloseWeekOpts, PrepareWeekCloseOpts } from "./week_close_force_opts.ts";
 export { closeWeekLaneForceOpts, resolveCloseLaneForceOpts } from "./week_close_force_opts.ts";
@@ -3000,7 +3001,33 @@ export async function acknowledgeCashSourceMismatch(
 }
 
 /**
+ * A closed toll statement keeps toll edits sealed until the toll period row
+ * says reopened. Week reopen uses the same writer as the Tolls button.
+ * No-op when tolls are already writable. Throws if the toll reopen fails,
+ * before driver rows change.
+ */
+async function reopenSealedTollPeriod(
+  orgId: string,
+  weekKey: string,
+  actorId: string,
+  reason: string,
+  serviceLine: string,
+): Promise<void> {
+  const probe = await probeTollPeriodSealed(orgId, weekKey, serviceLine);
+  if (!probe.sealed) return;
+  await reopenTollPeriodForWeek({
+    organizationId: orgId,
+    weekKey,
+    reason,
+    actorId,
+    serviceLine,
+    audit: { source: "week_reopen" },
+  });
+}
+
+/**
  * Admin calendar reopen: clear period freeze for every driver in the org-week.
+ * Also reopens tolls when a closed toll statement still seals the week.
  * Does not reopen fuel recon or rewrite week_statements. Requires
  * acknowledgeSettlementRisk when any driver has settlement_paid moved.
  */
@@ -3044,6 +3071,7 @@ export async function reopenWeek(
   }
 
   if (frozenRows.length === 0) {
+    await reopenSealedTollPeriod(orgId, week, actorId, trimmedReason, serviceLine);
     return {
       organizationId: orgId,
       weekKey: week,
@@ -3100,6 +3128,8 @@ export async function reopenWeek(
       );
     }
   }
+
+  await reopenSealedTollPeriod(orgId, week, actorId, trimmedReason, serviceLine);
 
   const now = new Date().toISOString();
   let driversReopened = 0;

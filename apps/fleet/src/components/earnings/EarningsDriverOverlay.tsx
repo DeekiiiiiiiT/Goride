@@ -1,5 +1,6 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { formatMoney } from '@roam/ui/formatMoney';
 import { ChevronDown, ChevronRight, X } from 'lucide-react';
 import { api } from '../../services/api';
 import { useDriverOperationalPeriods } from '../../hooks/useDriverOperationalPeriods';
@@ -12,14 +13,6 @@ import {
   type OverlayDetailLine,
 } from '../../utils/buildEarningsOverlayModel';
 import type { StatementSummary } from '../../types/statementSummary';
-
-function formatMoney(n: number): string {
-  const abs = Math.abs(n).toLocaleString(undefined, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
-  return n < 0 ? `-$${abs}` : `$${abs}`;
-}
 
 function formatDistanceKm(km: number): string {
   return `${km.toLocaleString(undefined, {
@@ -48,6 +41,7 @@ type Props = {
   startDate: string;
   endDate: string;
   platformTab: EarningsPlatformTab;
+  summaries?: StatementSummary[];
 };
 
 export function EarningsDriverOverlay({
@@ -57,6 +51,7 @@ export function EarningsDriverOverlay({
   startDate,
   endDate,
   platformTab,
+  summaries: providedSummaries,
 }: Props) {
   const [earningsOpen, setEarningsOpen] = useState(true);
   const [refundsOpen, setRefundsOpen] = useState(false);
@@ -72,7 +67,7 @@ export function EarningsDriverOverlay({
         endDate,
         driverId: driver!.id,
       }),
-    enabled: open && Boolean(driver?.id && startDate && endDate),
+    enabled: open && providedSummaries == null && Boolean(driver?.id && startDate && endDate),
     staleTime: 30_000,
   });
 
@@ -83,12 +78,12 @@ export function EarningsDriverOverlay({
   );
 
   const model = useMemo(() => {
-    const summaries = (statementQuery.data?.summaries ?? []) as StatementSummary[];
+    const summaries = providedSummaries ?? ((statementQuery.data?.summaries ?? []) as StatementSummary[]);
     return buildEarningsOverlayModel(summaries, platformTab);
-  }, [statementQuery.data, platformTab]);
+  }, [providedSummaries, statementQuery.data, platformTab]);
 
   const summary = model.summary;
-  const loading = statementQuery.isLoading || statementQuery.isFetching;
+  const loading = providedSummaries == null && (statementQuery.isLoading || statementQuery.isFetching);
   const name = driver?.name?.trim() || 'Unknown driver';
 
   const tripCount =
@@ -155,7 +150,7 @@ export function EarningsDriverOverlay({
 
           <ExpandRow
             label="Refunds & expenses"
-            value={loading || !summary ? null : summary.totalRefundsExpenses}
+            value={loading || !summary ? null : (summary.tollRefund || summary.totalRefundsExpenses || summary.platformTollCredits || 0)}
             open={refundsOpen}
             onToggle={() => setRefundsOpen((v) => !v)}
           >

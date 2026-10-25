@@ -276,7 +276,7 @@ export function FacilityScreen() {
                 </span>
               </div>
               <div className={"relative w-full h-44 rounded-lg overflow-hidden bg-surface-container"}>
-                <img className={"w-full h-full object-cover"} data-alt={"A sunny midday snapshot of the Half-Way-Tree clocktower roundabout in Kingston Jamaica with yellow taxicabs, public transit buses, palm trees, and the TotalEnergies service station clean turnstile facility entrance bathed in warm Caribbean sunlight."} src={"https://lh3.googleusercontent.com/aida-public/AB6AXuDb0rvINPmB9vpWgI6hTK0O3aEiWpV_pP59RLOI67gdynjg5QtO-umBcHn0YAhKB9Ry-wj2YJq6MZDQPQJCQCcWWLbCSZ4HgE_Nr1cHOXDUv81gRMbIgG8l1roDoxxkyQ4zTIhUx7GyrqGp11cjvc1oUqaFKCkFeJd8N28JmEbhwNQcoY84Mtdz108_Jcnc2Fy_XSz47QifMzTAtgilcuIcuWQR8wpncOlVg-yC4d90qOZGTwdE_8NB"} />
+                <div className={"w-full h-full object-cover bg-surface-container flex items-center justify-center text-primary"} aria-hidden={"true"}><span className={"material-symbols-outlined text-[32px]"}>image</span></div>
                 <div className={"absolute bottom-2 left-2 bg-surface/90 backdrop-blur-md px-2.5 py-1 rounded-md flex items-center gap-1.5 shadow-sm"}>
                   <span className={"material-symbols-outlined text-[16px] text-primary"}>
                     visibility

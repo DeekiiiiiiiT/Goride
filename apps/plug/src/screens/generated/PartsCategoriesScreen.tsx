@@ -20,9 +20,8 @@ export function PartsCategoriesScreen() {
               <h1 className={"font-headline-sm text-headline-sm text-on-surface truncate"}>
                 Parts For My Car Categories
               </h1>
-              <span className={"font-label-md text-label-md text-on-surface-variant truncate"}>
-                2019 Toyota Roomy
-              </span>
+              <span className={"font-label-md text-label-md text-on-surface-variant truncate"} data-slot={"car"}>
+                Add a car</span>
             </div>
           </div>
           <div className={"flex items-center gap-space-xs"}>
@@ -46,16 +45,15 @@ export function PartsCategoriesScreen() {
                 </div>
                 <div className={"flex flex-col min-w-0"}>
                   <div className={"flex items-center gap-1.5"}>
-                    <span className={"font-headline-sm text-headline-sm text-on-surface truncate"}>
-                      2019 Toyota Roomy
-                    </span>
+                    <span className={"font-headline-sm text-headline-sm text-on-surface truncate"} data-slot={"car"}>
+                      Add a car</span>
                     <span className={"material-symbols-outlined text-primary text-[20px] transition-transform group-hover:translate-y-0.5"}>
                       expand_more
                     </span>
                   </div>
                   <div className={"flex items-center gap-2 mt-0.5 text-on-surface-variant font-label-md text-label-md flex-wrap"}>
                     <span className={"bg-surface-container-highest px-1.5 py-0.5 rounded text-on-surface font-semibold"}>
-                      8241-HY
+                      
                     </span>
                     <span>
                       1KR-FE Turbo

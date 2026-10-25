@@ -2,8 +2,7 @@ import type { Trip } from '@roam/types';
 
 /**
  * Honest net-to-driver for ledger display/export/stats.
- * Never falls back to gross or fare amount (those are not net).
- * Returns null when net is genuinely unknown → UI renders "—".
+ * Roam trips use fare minus the commission stored on the trip (0 when settlement takes the share later).
  */
 export function getTripNetIncome(t: Trip): number | null {
   if (t.netToDriver != null && Number.isFinite(Number(t.netToDriver))) {
@@ -14,6 +13,14 @@ export function getTripNetIncome(t: Trip): number | null {
     return Number(t.indriveNetIncome);
   }
   const platform = String(t.platform || '').toLowerCase();
+  if (platform === 'roam' || platform === 'goride') {
+    const gross = t.amount != null && Number.isFinite(Number(t.amount)) ? Number(t.amount) : null;
+    if (gross == null) return null;
+    const commissionRaw = (t as Trip & { roamCommission?: number; platformFee?: number }).roamCommission
+      ?? (t as Trip & { platformFee?: number }).platformFee;
+    if (commissionRaw == null || !Number.isFinite(Number(commissionRaw))) return null;
+    return gross - Number(commissionRaw);
+  }
   if (platform === 'indrive' || platform === 'in drive') {
     const fee = t.indriveServiceFee != null ? Number(t.indriveServiceFee) : null;
     const gross =

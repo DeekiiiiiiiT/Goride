@@ -1,544 +1,288 @@
-import React, { useState, useMemo, useRef } from 'react';
+import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { 
-  Calendar, 
-  Loader2, 
-  AlertCircle, 
-  RefreshCw,
-  Car,
-  FileText,
-  Users,
-  User,
-} from 'lucide-react';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '../ui/select';
-import { format, subDays, startOfMonth, endOfMonth, startOfWeek, endOfWeek, subMonths } from 'date-fns';
+import { AlertCircle, Car, FileText, Loader2 } from 'lucide-react';
 import { api } from '../../services/api';
-import { StatementSummaryCard, StatementTooltipIcon, STATEMENT_HELP } from './StatementSummaryCard';
-import {
-  StatementSummary,
-  StatementPlatform,
-  createEmptyFleetTollSnapshot,
-  type FleetTollSnapshot,
-} from '../../types/statementSummary';
-import { cn } from '../ui/utils';
-import { PeriodWeekDropdown } from '../ui/PeriodWeekDropdown';
-import { generatePeriodWeekOptions, type PeriodWeekOption } from '../../utils/periodWeekOptions';
+import { StatementSummaryCard } from './StatementSummaryCard';
+import type { StatementPlatform, StatementSummary } from '../../types/statementSummary';
 import { useLedgerPeriod } from '../../contexts/LedgerPeriodContext';
-
-type DatePreset = 'thisWeek' | 'lastWeek' | 'thisMonth' | 'lastMonth' | 'last30Days' | 'custom';
+import { addIsoDays } from '@roam/finance-core';
+import { formatMoney } from '@roam/ui/formatMoney';
+import { cn } from '../ui/utils';
 
 type OpenTollReconOpts = { startYmd: string; endYmd: string };
 
-const DATE_PRESETS: { id: DatePreset; label: string }[] = [
-  { id: 'thisWeek', label: 'This Week' },
-  { id: 'lastWeek', label: 'Last Week' },
-  { id: 'thisMonth', label: 'This Month' },
-  { id: 'lastMonth', label: 'Last Month' },
-  { id: 'last30Days', label: 'Last 30 Days' },
-  { id: 'custom', label: 'Custom' },
+const PLATFORM_TABS: { id: StatementPlatform | 'all'; label: string }[] = [
+  { id: 'all', label: 'All' },
+  { id: 'Uber', label: 'Uber' },
+  { id: 'Roam', label: 'Roam' },
+  { id: 'InDrive', label: 'InDrive' },
 ];
 
-function getDateRange(preset: DatePreset, customStart?: string, customEnd?: string): { startDate: string; endDate: string } {
-  const today = new Date();
-  
-  switch (preset) {
-    case 'thisWeek':
-      return {
-        startDate: format(startOfWeek(today, { weekStartsOn: 1 }), 'yyyy-MM-dd'),
-        endDate: format(endOfWeek(today, { weekStartsOn: 1 }), 'yyyy-MM-dd'),
-      };
-    case 'lastWeek': {
-      const lastWeekStart = subDays(startOfWeek(today, { weekStartsOn: 1 }), 7);
-      return {
-        startDate: format(lastWeekStart, 'yyyy-MM-dd'),
-        endDate: format(subDays(startOfWeek(today, { weekStartsOn: 1 }), 1), 'yyyy-MM-dd'),
-      };
-    }
-    case 'thisMonth':
-      return {
-        startDate: format(startOfMonth(today), 'yyyy-MM-dd'),
-        endDate: format(endOfMonth(today), 'yyyy-MM-dd'),
-      };
-    case 'lastMonth': {
-      const lastMonth = subMonths(today, 1);
-      return {
-        startDate: format(startOfMonth(lastMonth), 'yyyy-MM-dd'),
-        endDate: format(endOfMonth(lastMonth), 'yyyy-MM-dd'),
-      };
-    }
-    case 'last30Days':
-      return {
-        startDate: format(subDays(today, 30), 'yyyy-MM-dd'),
-        endDate: format(today, 'yyyy-MM-dd'),
-      };
-    case 'custom':
-      return {
-        startDate: customStart || format(subDays(today, 30), 'yyyy-MM-dd'),
-        endDate: customEnd || format(today, 'yyyy-MM-dd'),
-      };
-    default:
-      return {
-        startDate: format(subDays(today, 30), 'yyyy-MM-dd'),
-        endDate: format(today, 'yyyy-MM-dd'),
-      };
-  }
+function hasActivity(row: StatementSummary): boolean {
+  return Math.abs(row.totalEarnings) > 0.009
+    || Math.abs(row.cashCollected) > 0.009
+    || Math.abs(row.tollRefund ?? row.platformTollCredits ?? 0) > 0.009
+    || (row.tripCount ?? 0) > 0;
 }
 
-const PLATFORM_TABS: { id: StatementPlatform | 'all'; label: string; icon: React.ElementType }[] = [
-  { id: 'all', label: 'All Platforms', icon: FileText },
-  { id: 'Uber', label: 'Uber', icon: Car },
-  { id: 'Roam', label: 'Roam', icon: Car },
-  { id: 'InDrive', label: 'InDrive', icon: Car },
-];
+function openTrips(platform: string, status?: string) {
+  const url = new URL(window.location.href);
+  url.searchParams.set('ledgerTab', 'trips');
+  url.searchParams.set('platform', platform);
+  url.searchParams.delete('page');
+  if (status) url.searchParams.set('status', status);
+  else url.searchParams.delete('status');
+  // Keep the current page in history. A real popstate would read "/" as Dashboard.
+  window.history.replaceState(window.history.state, '', url.toString());
+  window.dispatchEvent(new Event('goride:ledger-nav'));
+}
 
-type SummaryScope = 'fleet' | 'driver';
+function tieLabel(row: StatementSummary): string {
+  if (row.tieState === 'not_checked' || (row.tieState == null && row.bankSource === 'computed')) {
+    return 'Not checked — no Uber deposit row';
+  }
+  if (row.tieState === 'off' || row.ties === false) return 'Off';
+  return 'Ties';
+}
 
 export function PlatformStatementSummary({
   onOpenTollRecon,
 }: {
-  /** Navigate to Week Reconciliation → Tolls for the statement week. */
   onOpenTollRecon?: (opts: OpenTollReconOpts) => void;
 } = {}) {
-  const { period, setPeriod } = useLedgerPeriod();
-  const [activeTab, setActiveTab] = useState<StatementPlatform | 'all'>('all');
-  const [summaryScope, setSummaryScope] = useState<SummaryScope>('fleet');
-  const [selectedDriverId, setSelectedDriverId] = useState<string>('');
-  const [datePreset, setDatePreset] = useState<DatePreset>('custom');
-  const [customStartDate, setCustomStartDate] = useState(period.startDate);
-  const [customEndDate, setCustomEndDate] = useState(period.endDate);
-  const [selectedPeriodId, setSelectedPeriodId] = useState<string | null>(null);
-  // R-06: period key we just wrote locally — effect must not force datePreset='custom'
-  const localPeriodKeyRef = useRef<string | null>(null);
-  const weekPeriodOptions = useMemo(() => generatePeriodWeekOptions(12), []);
+  const { period } = useLedgerPeriod();
+  const [activeTab, setActiveTab] = useState<StatementPlatform | 'all'>('Uber');
+  const [scope, setScope] = useState<'fleet' | 'driver'>('fleet');
+  const [driverId, setDriverId] = useState('');
+  const startDate = period.startDate;
+  const endDate = period.endDate;
+  const prevStart = startDate ? addIsoDays(startDate, -7) : '';
+  const prevEnd = endDate ? addIsoDays(endDate, -7) : '';
+  const scopedDriver = scope === 'driver' && driverId ? driverId : undefined;
 
-  const { startDate, endDate } = useMemo(() => {
-    if (selectedPeriodId) {
-      const p = weekPeriodOptions.find((x) => x.id === selectedPeriodId);
-      if (p) return { startDate: p.startDate, endDate: p.endDate };
-    }
-    if (datePreset === 'custom') {
-      return {
-        startDate: customStartDate || period.startDate,
-        endDate: customEndDate || period.endDate,
-      };
-    }
-    return getDateRange(datePreset, customStartDate, customEndDate);
-  }, [datePreset, customStartDate, customEndDate, selectedPeriodId, weekPeriodOptions, period.startDate, period.endDate]);
-
-  // Shared ledger period → statement range (N-08); skip when we originated the change (R-06)
-  React.useEffect(() => {
-    const key = `${period.startDate}|${period.endDate}`;
-    if (localPeriodKeyRef.current === key) {
-      setCustomStartDate(period.startDate);
-      setCustomEndDate(period.endDate);
-      return;
-    }
-    // All-time shared period (empty bounds): statement keeps its own date chips
-    if (!period.startDate || !period.endDate) return;
-    setDatePreset('custom');
-    setSelectedPeriodId(null);
-    setCustomStartDate(period.startDate);
-    setCustomEndDate(period.endDate);
-  }, [period.startDate, period.endDate]);
-
-  const handlePeriodSelect = (p: PeriodWeekOption) => {
-    localPeriodKeyRef.current = `${p.startDate}|${p.endDate}`;
-    setSelectedPeriodId(p.id);
-    setDatePreset('custom');
-    setPeriod({ startDate: p.startDate, endDate: p.endDate });
-  };
-
-  const handlePresetClick = (presetId: DatePreset) => {
-    setDatePreset(presetId);
-    setSelectedPeriodId(null);
-    if (presetId !== 'custom') {
-      const range = getDateRange(presetId);
-      localPeriodKeyRef.current = `${range.startDate}|${range.endDate}`;
-      setPeriod(range);
-    }
-  };
-
-  const { data: driversList } = useQuery({
-    queryKey: ['drivers', 'statement-summary-scope'],
-    queryFn: () => api.getDrivers(),
+  const rosterQuery = useQuery({
+    queryKey: ['drivers-roster', 'ledgers-statement'],
+    queryFn: () => api.getDriversRoster(),
     staleTime: 60_000,
   });
 
-  const driversSorted = useMemo(() => {
-    const raw = Array.isArray(driversList) ? driversList : [];
-    return [...raw].sort((a: { name?: string }, b: { name?: string }) =>
-      (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' }),
-    );
-  }, [driversList]);
-
-  const driverFilterReady =
-    summaryScope === 'fleet' || (summaryScope === 'driver' && selectedDriverId.trim().length > 0);
-
-  const driverIdTrim = selectedDriverId.trim();
-
   const statementQuery = useQuery({
-    queryKey: [
-      'statement-summary',
-      activeTab,
+    queryKey: ['statement-summary', 'ledgers', startDate, endDate, scopedDriver ?? 'fleet'],
+    queryFn: () => api.getStatementSummary({
+      platform: 'all',
       startDate,
       endDate,
-      summaryScope,
-      summaryScope === 'driver' ? driverIdTrim : null,
-    ],
-    queryFn: () =>
-      api.getStatementSummary({
-        platform: activeTab === 'all' ? 'all' : activeTab,
-        startDate,
-        endDate,
-        ...(summaryScope === 'driver' && driverIdTrim ? { driverId: driverIdTrim } : {}),
-      }),
-    enabled: driverFilterReady,
-    staleTime: 30000,
+      driverId: scopedDriver,
+    }),
+    enabled: Boolean(startDate && endDate),
+    staleTime: 30_000,
   });
 
-  const summaries = statementQuery.data?.summaries ?? [];
-  const fleetTollSnapshot: FleetTollSnapshot =
-    statementQuery.data?.fleetTollSnapshot ?? createEmptyFleetTollSnapshot();
+  const priorQuery = useQuery({
+    queryKey: ['statement-summary', 'ledgers', prevStart, prevEnd, scopedDriver ?? 'fleet'],
+    queryFn: () => api.getStatementSummary({
+      platform: 'all',
+      startDate: prevStart,
+      endDate: prevEnd,
+      driverId: scopedDriver,
+    }),
+    enabled: Boolean(prevStart && prevEnd),
+    staleTime: 30_000,
+  });
 
-  const isLoading = statementQuery.isLoading;
-  const isFetching = statementQuery.isFetching;
-  const error = statementQuery.error;
+  const summaries = (statementQuery.data?.summaries ?? []) as StatementSummary[];
+  const drivers = ((statementQuery.data as { drivers?: StatementSummary[] } | undefined)?.drivers ?? []) as StatementSummary[];
+  const weekClosed = Boolean((statementQuery.data as { meta?: { weekClosed?: boolean } } | undefined)?.meta?.weekClosed);
+  const imported = summaries.some((row) => row.importFileHash || row.importedAt);
+  const reconciled = summaries.some((row) => row.platform === 'Uber' && row.tieState === 'ties');
+  const priorRows = (priorQuery.data?.summaries ?? []) as StatementSummary[];
+  const roster = rosterQuery.data?.data ?? [];
+  const driverNameById = useMemo(() => {
+    const names = new Map<string, string>();
+    for (const driver of roster) {
+      if (!driver.name) continue;
+      names.set(driver.id, driver.name);
+      if (driver.uberDriverId) names.set(driver.uberDriverId, driver.name);
+      if (driver.inDriveDriverId) names.set(driver.inDriveDriverId, driver.name);
+    }
+    return names;
+  }, [roster]);
+  const visible = useMemo(
+    () => summaries.filter((row) => activeTab === 'all' || row.platform === activeTab),
+    [summaries, activeTab],
+  );
+  const active = visible.filter(hasActivity);
+  const empty = visible.filter((row) => !hasActivity(row));
 
-  const refetch = () => {
-    void statementQuery.refetch();
+  const downloadCsv = () => {
+    const lines = ['platform,line,amount'];
+    for (const row of active) {
+      lines.push(`${row.platform},Total earnings,${row.totalEarnings}`);
+      lines.push(`${row.platform},Fare,${row.fare ?? ''}`);
+      lines.push(`${row.platform},Cancellation,${row.cancellation ?? ''}`);
+      lines.push(`${row.platform},Time at stop,${row.timeAtStop ?? ''}`);
+      lines.push(`${row.platform},UberX Priority,${row.priority ?? ''}`);
+      lines.push(`${row.platform},Wait time,${row.waitTime ?? ''}`);
+      lines.push(`${row.platform},Tip,${row.tips}`);
+      lines.push(`${row.platform},Toll refund,${row.tollRefund ?? row.platformTollCredits ?? ''}`);
+      lines.push(`${row.platform},Cash collected,${row.cashCollected}`);
+      lines.push(`${row.platform},Net earnings,${row.netEarnings ?? row.bankTransfer}`);
+    }
+    const blob = new Blob([lines.join('\n')], { type: 'text/csv' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `statement-${startDate}-${endDate}.csv`;
+    a.click();
+    URL.revokeObjectURL(a.href);
   };
 
-  const openReconForStatementWeek = () => {
-    onOpenTollRecon?.({ startYmd: startDate, endYmd: endDate });
-  };
-
-  const filteredSummaries = activeTab === 'all' 
-    ? summaries 
-    : summaries.filter(s => s.platform === activeTab);
-
-  const hasSummaryData = (summary: StatementSummary) => {
-    return (
-      summary.totalEarnings > 0 ||
-      summary.totalPayout > 0 ||
-      (summary.platformTollCredits ?? 0) > 0 ||
-      (summary.statementTollExpense ?? summary.tolls) > 0 ||
-      (summary.tripCount && summary.tripCount > 0)
-    );
-  };
-
-  const linkedSpendFor = (platform: StatementPlatform) =>
-    fleetTollSnapshot.tagSpendByPlatform?.[platform] ?? 0;
+  if (!startDate || !endDate) {
+    return <p className="text-sm text-slate-500">Choose a statement week to see earnings.</p>;
+  }
 
   return (
     <div className="space-y-4">
-      {/* Header with Date Picker */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
-            Statement Summary
-          </h3>
-          <p className="text-sm text-slate-500 dark:text-slate-400">
-            {summaryScope === 'fleet'
-              ? 'Fleet: all drivers in range — breakdown by platform'
-              : 'Driver: ledger rows for this driver (Roam + linked platform IDs), same statement-summary API as fleet.'}
-          </p>
-        </div>
-
-        <div className="flex items-center gap-2">
-          {/* Date Preset Buttons */}
-          <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 rounded-lg p-1">
-            {DATE_PRESETS.slice(0, -1).map(preset => (
-              <button
-                key={preset.id}
-                onClick={() => handlePresetClick(preset.id)}
-                className={cn(
-                  'px-3 py-1.5 text-xs font-medium rounded-md transition-colors',
-                  datePreset === preset.id && !selectedPeriodId
-                    ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 shadow-sm'
-                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100'
-                )}
-              >
-                {preset.label}
-              </button>
-            ))}
-          </div>
-
-          {/* Refresh Button */}
-          <button
-            onClick={() => refetch()}
-            disabled={isFetching}
-            className="p-2 text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors disabled:opacity-50"
-            title="Refresh"
-          >
-            <RefreshCw className={cn('h-4 w-4', isFetching && 'animate-spin')} />
-          </button>
-        </div>
-      </div>
-
-      {/* Fleet vs driver scope */}
-      <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-3 p-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50/80 dark:bg-slate-800/40">
-        <div className="flex items-center gap-1 rounded-lg bg-slate-100 dark:bg-slate-800 p-1">
-          <button
-            type="button"
-            onClick={() => setSummaryScope('fleet')}
-            className={cn(
-              'inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors',
-              summaryScope === 'fleet'
-                ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 shadow-sm'
-                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900',
-            )}
-          >
-            <Users className="h-3.5 w-3.5" />
-            Fleet
-          </button>
-          <button
-            type="button"
-            onClick={() => setSummaryScope('driver')}
-            className={cn(
-              'inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors',
-              summaryScope === 'driver'
-                ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 shadow-sm'
-                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900',
-            )}
-          >
-            <User className="h-3.5 w-3.5" />
-            Driver
-          </button>
-        </div>
-        {summaryScope === 'driver' && (
-          <div className="flex flex-col sm:flex-row sm:items-center gap-2 min-w-0 flex-1 sm:max-w-md">
-            <span className="text-xs text-slate-500 shrink-0">Driver</span>
-            <Select value={selectedDriverId || undefined} onValueChange={setSelectedDriverId}>
-              <SelectTrigger className="w-full sm:min-w-[220px] bg-white dark:bg-slate-900">
-                <SelectValue placeholder="Select a driver" />
-              </SelectTrigger>
-              <SelectContent>
-                {driversSorted.map((d: { id: string; name?: string }) => (
-                  <SelectItem key={d.id} value={d.id}>
-                    {d.name || d.id}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        )}
-      </div>
-
-      {/* Custom Date Range (when custom preset is selected) */}
-      {datePreset === 'custom' && (
-        <div className="flex items-center gap-4 p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg">
-          <Calendar className="h-4 w-4 text-slate-500" />
-          <div className="flex items-center gap-2">
-            <input
-              type="date"
-              value={customStartDate}
-              onChange={(e) => setCustomStartDate(e.target.value)}
-              className="px-2 py-1 text-sm border border-slate-300 dark:border-slate-600 rounded bg-white dark:bg-slate-700"
-            />
-            <span className="text-slate-500">to</span>
-            <input
-              type="date"
-              value={customEndDate}
-              onChange={(e) => setCustomEndDate(e.target.value)}
-              className="px-2 py-1 text-sm border border-slate-300 dark:border-slate-600 rounded bg-white dark:bg-slate-700"
-            />
-          </div>
-        </div>
-      )}
-
-      {/* Week period picker (matches Trip Analytics / Driver detail) */}
-      <PeriodWeekDropdown
-        selectedStart={startDate}
-        selectedEnd={endDate}
-        onSelect={handlePeriodSelect}
-        placeholder="Select week period"
-        className="w-full sm:w-auto"
-        buttonClassName="w-full sm:w-auto min-h-[40px] px-4 py-2 text-sm justify-between"
-      />
-
-      {/* Platform Tabs */}
-      <div className="flex items-center gap-1 border-b border-slate-200 dark:border-slate-700 overflow-x-auto">
-        {PLATFORM_TABS.map(tab => {
-          const Icon = tab.icon;
-          const isActive = activeTab === tab.id;
-          const summary = summaries.find(s => s.platform === tab.id);
-          const hasData = tab.id === 'all' 
-            ? summaries.some(hasSummaryData)
-            : summary ? hasSummaryData(summary) : false;
-
-          return (
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div role="tablist" aria-label="Statement platform" className="flex gap-1">
+          {PLATFORM_TABS.map((tab, index) => (
             <button
               key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
+              type="button"
+              role="tab"
+              aria-selected={activeTab === tab.id}
               className={cn(
-                'flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 -mb-px whitespace-nowrap transition-colors',
-                isActive
-                  ? 'border-indigo-500 text-indigo-600 dark:text-indigo-400'
-                  : 'border-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 hover:border-slate-300'
+                'rounded-md px-3 py-1.5 text-sm',
+                activeTab === tab.id ? 'bg-slate-900 text-white' : 'text-slate-600',
               )}
+              onClick={() => setActiveTab(tab.id)}
+              onKeyDown={(e) => {
+                if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
+                e.preventDefault();
+                const next = e.key === 'ArrowRight'
+                  ? (index + 1) % PLATFORM_TABS.length
+                  : (index - 1 + PLATFORM_TABS.length) % PLATFORM_TABS.length;
+                setActiveTab(PLATFORM_TABS[next].id);
+              }}
             >
-              <Icon className="h-4 w-4" />
               {tab.label}
-              {!hasData && tab.id !== 'all' && (
-                <span className="text-xs text-slate-400">(no data)</span>
-              )}
             </button>
-          );
-        })}
+          ))}
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <div role="group" aria-label="Statement scope" className="flex gap-1">
+            <button type="button" aria-pressed={scope === 'fleet'} className={cn('rounded-md px-3 py-1.5 text-sm', scope === 'fleet' ? 'bg-slate-900 text-white' : 'text-slate-600')} onClick={() => setScope('fleet')}>Fleet</button>
+            <button type="button" aria-pressed={scope === 'driver'} className={cn('rounded-md px-3 py-1.5 text-sm', scope === 'driver' ? 'bg-slate-900 text-white' : 'text-slate-600')} onClick={() => setScope('driver')}>Driver</button>
+          </div>
+          {scope === 'driver' && (
+            <select
+              aria-label="Driver"
+              className="rounded-md border border-slate-200 px-2 py-1.5 text-sm"
+              value={driverId}
+              onChange={(e) => setDriverId(e.target.value)}
+            >
+              <option value="">Choose a driver</option>
+              {roster.map((driver) => (
+                <option key={driver.id} value={driver.id}>{driver.name || driver.id}</option>
+              ))}
+            </select>
+          )}
+          {imported && <span className="rounded-full bg-slate-100 px-2 py-1 text-xs text-slate-700">Imported</span>}
+          {reconciled && <span className="rounded-full bg-emerald-50 px-2 py-1 text-xs text-emerald-800">Reconciled</span>}
+          {weekClosed && <span className="rounded-full bg-slate-900 px-2 py-1 text-xs text-white">Closed</span>}
+          <button type="button" className="text-sm text-indigo-700 underline" onClick={downloadCsv}>
+            Download statement (CSV)
+          </button>
+          <button type="button" className="text-sm text-indigo-700 underline" onClick={() => window.print()}>
+            Download PDF
+          </button>
+        </div>
       </div>
 
-      {/* Content */}
-      {summaryScope === 'driver' && !selectedDriverId.trim() ? (
-        <div className="flex flex-col items-center justify-center py-12 text-slate-500 border border-dashed border-slate-200 dark:border-slate-700 rounded-xl">
-          <User className="h-10 w-10 mb-3 text-slate-300" />
-          <p className="text-sm font-medium text-slate-600 dark:text-slate-300">Select a driver</p>
-          <p className="text-xs text-slate-500 mt-1 text-center max-w-sm">
-            Choose a driver above to see Uber, Roam, and InDrive totals for this period.
+      {statementQuery.isLoading && (
+        <div className="flex items-center gap-2 text-sm text-slate-500">
+          <Loader2 className="h-4 w-4 animate-spin" /> Loading statement…
+        </div>
+      )}
+
+      {statementQuery.isError && (
+        <div className="flex items-center justify-between gap-3 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
+          <span className="flex items-center gap-2">
+            <AlertCircle className="h-4 w-4" />
+            {(statementQuery.error as Error)?.message || 'Failed to load statement summary'}
+          </span>
+          <button type="button" className="underline" onClick={() => void statementQuery.refetch()}>Retry</button>
+        </div>
+      )}
+
+      <div className="grid gap-4">
+        {active.map((row) => {
+          const prior = priorRows.find((item) => item.platform === row.platform);
+          const deltas = prior ? {
+            earnings: (row.totalEarnings || 0) - (prior.totalEarnings || 0),
+            net: (row.netEarnings ?? row.bankTransfer) - (prior.netEarnings ?? prior.bankTransfer),
+            trips: (row.tripCount ?? 0) - (prior.tripCount ?? 0),
+          } : null;
+          return (
+          <StatementSummaryCard
+            key={row.platform}
+            summary={row}
+            deltas={deltas}
+            onOpenTollRecon={() => onOpenTollRecon?.({ startYmd: startDate, endYmd: endDate })}
+            onOpenLine={(line) => {
+              if (line === 'toll') onOpenTollRecon?.({ startYmd: startDate, endYmd: endDate });
+              else if (line === 'cancellation') openTrips(row.platform, 'Cancelled');
+              else openTrips(row.platform);
+            }}
+          />
+          );
+        })}
+        {empty.map((row) => (
+          <p key={row.platform} className="text-sm text-slate-500">
+            No {row.platform} activity this week
           </p>
-        </div>
-      ) : isLoading ? (
-        <div className="flex items-center justify-center py-12">
-          <Loader2 className="h-8 w-8 animate-spin text-slate-400" />
-        </div>
-      ) : error ? (
-        <div className="flex items-center justify-center py-12 text-red-500">
-          <AlertCircle className="h-5 w-5 mr-2" />
-          <span>Failed to load statement summary</span>
-        </div>
-      ) : filteredSummaries.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-12 text-slate-500">
-          <FileText className="h-12 w-12 mb-4 text-slate-300" />
-          <p className="text-lg font-medium">No statement data</p>
-          <p className="text-sm">No earnings recorded for this period</p>
-        </div>
-      ) : activeTab === 'all' ? (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          {filteredSummaries.map(summary => (
-            <StatementSummaryCard 
-              key={summary.platform} 
-              summary={summary}
-              defaultExpanded={false}
-              showUberDriverScopePayoutNote={summaryScope === 'driver'}
-              linkedTagSpend={linkedSpendFor(summary.platform)}
-              onOpenTollRecon={onOpenTollRecon ? openReconForStatementWeek : undefined}
-            />
-          ))}
-        </div>
-      ) : (
-        <div className="max-w-xl">
-          {filteredSummaries.map(summary => (
-            <StatementSummaryCard 
-              key={summary.platform} 
-              summary={summary}
-              defaultExpanded={true}
-              showUberDriverScopePayoutNote={summaryScope === 'driver'}
-              linkedTagSpend={linkedSpendFor(summary.platform)}
-              onOpenTollRecon={onOpenTollRecon ? openReconForStatementWeek : undefined}
-            />
-          ))}
+        ))}
+      </div>
+
+      {drivers.length > 0 && (
+        <div className="overflow-auto rounded-xl border border-slate-200">
+          <table className="w-full text-sm">
+            <thead className="bg-slate-50 text-left text-slate-500">
+              <tr>
+                <th className="px-3 py-2">Driver</th>
+                <th className="px-3 py-2">Platform</th>
+                <th className="px-3 py-2 text-right">Earnings</th>
+                <th className="px-3 py-2 text-right">Cash</th>
+                <th className="px-3 py-2 text-right">Net</th>
+                <th className="px-3 py-2">Tie-out</th>
+              </tr>
+            </thead>
+            <tbody>
+              {drivers
+                .filter((row) => activeTab === 'all' || row.platform === activeTab)
+                .filter(hasActivity)
+                .map((row) => (
+                  <tr key={`${row.driverId}-${row.platform}`} className="border-t border-slate-100">
+                    <td className="px-3 py-2">{row.driverName || driverNameById.get(row.driverId) || row.driverId}</td>
+                    <td className="px-3 py-2">{row.platform}</td>
+                    <td className="px-3 py-2 text-right">{formatMoney(row.totalEarnings)}</td>
+                    <td className="px-3 py-2 text-right">{formatMoney(row.cashCollected)}</td>
+                    <td className="px-3 py-2 text-right">{formatMoney(row.netEarnings ?? row.bankTransfer)}</td>
+                    <td className="px-3 py-2">{tieLabel(row)}</td>
+                  </tr>
+                ))}
+            </tbody>
+          </table>
         </div>
       )}
 
-      {/* Combined: platform earnings rollup + fleet toll snapshot (not sum of platform “expenses”) */}
-      {summaryScope === 'fleet' && activeTab === 'all' && filteredSummaries.length > 0 && (
-        <div className="space-y-3">
-          <div className="bg-gradient-to-r from-indigo-50 to-purple-50 dark:from-indigo-900/20 dark:to-purple-900/20 rounded-xl p-4 border border-indigo-100 dark:border-indigo-800">
-            <h4 className="font-semibold text-slate-900 dark:text-slate-100 mb-3">
-              Platform earnings rollup
-            </h4>
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-              <div>
-                <div className="mb-0.5 flex items-center gap-1">
-                  <p className="text-xs text-slate-500 uppercase tracking-wide">Total Earnings</p>
-                  <StatementTooltipIcon content={STATEMENT_HELP.combinedTotalEarnings} />
-                </div>
-                <p className="text-lg font-bold text-emerald-600">
-                  ${filteredSummaries.reduce((sum, s) => sum + s.totalEarnings, 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                </p>
-              </div>
-              <div>
-                <div className="mb-0.5 flex items-center gap-1">
-                  <p className="text-xs text-slate-500 uppercase tracking-wide">Cash Collected</p>
-                  <StatementTooltipIcon content={STATEMENT_HELP.combinedCashCollected} />
-                </div>
-                <p className="text-lg font-bold text-slate-700 dark:text-slate-300">
-                  ${filteredSummaries.reduce((sum, s) => sum + s.cashCollected, 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                </p>
-              </div>
-              <div>
-                <div className="mb-0.5 flex items-center gap-1">
-                  <p className="text-xs text-slate-500 uppercase tracking-wide">Bank Transfer</p>
-                  <StatementTooltipIcon content={STATEMENT_HELP.combinedBankTransfer} />
-                </div>
-                <p className="text-lg font-bold text-slate-700 dark:text-slate-300">
-                  ${filteredSummaries.reduce((sum, s) => sum + s.bankTransfer, 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/80 dark:bg-slate-800/40 p-4">
-            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-              <h4 className="font-semibold text-slate-900 dark:text-slate-100">
-                Fleet toll snapshot
-              </h4>
-              {onOpenTollRecon && (
-                <button
-                  type="button"
-                  onClick={openReconForStatementWeek}
-                  className="text-xs font-medium text-indigo-600 hover:text-indigo-700 dark:text-indigo-400"
-                >
-                  Open Toll Recon
-                </button>
-              )}
-            </div>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <div>
-                <div className="mb-0.5 flex items-center gap-1">
-                  <p className="text-xs text-slate-500 uppercase tracking-wide">Spend</p>
-                  <StatementTooltipIcon content={STATEMENT_HELP.fleetTollSpend} />
-                </div>
-                <p className="text-lg font-bold text-red-600">
-                  ${fleetTollSnapshot.tagSpend.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                </p>
-              </div>
-              <div>
-                <div className="mb-0.5 flex items-center gap-1">
-                  <p className="text-xs text-slate-500 uppercase tracking-wide">Credits</p>
-                  <StatementTooltipIcon content={STATEMENT_HELP.fleetTollCredits} />
-                </div>
-                <p className="text-lg font-bold text-emerald-600">
-                  ${fleetTollSnapshot.platformCredits.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                </p>
-              </div>
-              <div>
-                <div className="mb-0.5 flex items-center gap-1">
-                  <p className="text-xs text-slate-500 uppercase tracking-wide">Charged</p>
-                  <StatementTooltipIcon content={STATEMENT_HELP.fleetTollCharged} />
-                </div>
-                <p className="text-lg font-bold text-slate-700 dark:text-slate-300">
-                  ${fleetTollSnapshot.chargedToDrivers.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                </p>
-              </div>
-              <div>
-                <div className="mb-0.5 flex items-center gap-1">
-                  <p className="text-xs text-slate-500 uppercase tracking-wide">Net Loss</p>
-                  <StatementTooltipIcon content={STATEMENT_HELP.fleetTollNetLoss} />
-                </div>
-                <p className="text-lg font-bold text-slate-900 dark:text-slate-100">
-                  ${fleetTollSnapshot.netTollLoss.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
+      {!statementQuery.isLoading && active.length === 0 && empty.length === 0 && (
+        <p className="flex items-center gap-2 text-sm text-slate-500">
+          <FileText className="h-4 w-4" /> No statement for this week yet.
+        </p>
       )}
+      <p className="flex items-center gap-1 text-xs text-slate-400">
+        <Car className="h-3.5 w-3.5" /> Week {startDate} to {endDate}
+      </p>
     </div>
   );
 }

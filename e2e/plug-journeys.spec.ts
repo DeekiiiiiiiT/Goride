@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { standIn } from './plug-stand-in';
 
 async function wayOut(page: Page) {
   const hash = await page.evaluate(() => location.hash);
@@ -11,9 +12,12 @@ async function press(page: Page, name: RegExp) {
   await wayOut(page);
 }
 
-test('eight Plug journeys in demo mode', async ({ page }) => {
-  await page.goto('/?demo=1#/');
-  await expect(page.getByText('DEMO').first()).toBeVisible();
+test.beforeEach(async ({ page }) => {
+  await standIn(page);
+});
+
+test('eight Plug journeys', async ({ page }) => {
+  await page.goto('/#/');
   await page.getByRole('button', { name: /Get Started/ }).click();
   await wayOut(page);
 
@@ -25,8 +29,9 @@ test('eight Plug journeys in demo mode', async ({ page }) => {
   await press(page, /Complete Setup/);
   await press(page, /I Agree/);
   await press(page, /^Continue/);
+  await page.getByRole('button', { name: /Toyota/ }).first().click();
   await press(page, /Continue with Toyota/);
-  await press(page, /^directions_car Roomy$/);
+  await page.getByRole('button', { name: /Roomy/ }).first().click();
   await press(page, /^2019$/);
   await press(page, /Continue with Roomy/);
   await press(page, /Finish & Go to Radar/);
@@ -40,7 +45,7 @@ test('eight Plug journeys in demo mode', async ({ page }) => {
   await expect(page).toHaveURL(/#\/welcome/);
 
   await press(page, /Explore without an account/);
-  await page.getByRole('button', { name: /DEMO Total/ }).first().click();
+  await page.getByRole('button', { name: /Total Half Way Tree/ }).first().click();
   await wayOut(page);
   await press(page, /Directions/);
   await page.getByRole('link', { name: /Waze/ }).click();
@@ -90,6 +95,7 @@ test('eight Plug journeys in demo mode', async ({ page }) => {
   await wayOut(page);
   await press(page, /confirm pin location/i);
   await press(page, /Snap station/);
+  await page.locator('#place-name').fill('Corner shop');
   await press(page, /Submit for Review/);
   await page.getByRole('button', { name: /My Contributions/ }).click();
   await wayOut(page);
@@ -102,7 +108,7 @@ test('eight Plug journeys in demo mode', async ({ page }) => {
   await wayOut(page);
   await page.getByRole('textbox', { name: /Search stations/ }).click();
   await page.getByRole('searchbox', { name: 'Search query' }).fill('Total');
-  await page.getByRole('button', { name: /DEMO Total/ }).first().click();
+  await page.getByRole('button', { name: /Total Half Way Tree/ }).first().click();
   await expect(page).toHaveURL(/#\/stations\//);
   await page.getByRole('button', { name: /go back/i }).first().click();
   await page.getByRole('button', { name: /^explore Explore$/ }).click();
@@ -132,33 +138,12 @@ test('eight Plug journeys in demo mode', async ({ page }) => {
   await expect(page).toHaveURL(/#\/welcome/);
 });
 
-test('public screens stay free of demo text when demo is off', async ({ page }) => {
-  const station = {
-    id: 'st_live',
-    name: 'Total Half Way Tree',
-    brand: 'Total',
-    lat: 18.01,
-    lng: -76.79,
-    prices: { e10_87: 210 },
-  };
-  await page.route('**/platform-catalog/**', async (route) => {
-    const url = route.request().url();
-    if (url.includes('/stations')) await route.fulfill({ json: { stations: [station], station } });
-    else if (url.includes('/tolls')) await route.fulfill({ json: { plazas: [{ id: 'plaza-1', name: 'Portmore', highway: 'Highway 2000' }] } });
-    else if (url.includes('/geo/parishes')) await route.fulfill({ json: { areas: [{ pcode: 'JM-SA', name: 'St Andrew' }] } });
-    else if (url.includes('/parts')) await route.fulfill({ json: { parts: [], comingSoon: true } });
-    else await route.fulfill({ json: { vehicles: [], places: [] } });
-  });
-  await page.route('**/explorer/**', async (route) => {
-    await route.fulfill({ json: { vehicles: [], notifications: [], logs: [], pins: [], flags: {} } });
-  });
+test('public screens stay free of sample people', async ({ page }) => {
   await page.goto('/#/explore');
   await expect(page.getByText('DEMO')).toHaveCount(0);
-  await expect(page.getByText('2019 Toyota Roomy')).toHaveCount(0);
+  await expect(page.getByText('Tariq Campbell')).toHaveCount(0);
   await expect(page.getByText('Total Half Way Tree').first()).toBeVisible();
-  await expect(page.getByText('demo-total')).toHaveCount(0);
-  await expect(page.getByText('demo-car')).toHaveCount(0);
   await page.goto('/#/tolls');
   await expect(page.getByText('DEMO')).toHaveCount(0);
-  await expect(page.getByText('demo-total')).toHaveCount(0);
+  await expect(page.getByText('Tariq Campbell')).toHaveCount(0);
 });

@@ -9,23 +9,7 @@ export function PoorGpsScreen() {
   return (
     <div ref={ref} data-plug-screen={"43c-poor-gps.html"} className={"flex justify-center items-center min-h-screen p-0 sm:p-4 bg-stone-900"}>
       <div className={"relative w-full max-w-[390px] h-[844px] bg-[#fff8f2] flex flex-col justify-between overflow-hidden shadow-2xl rounded-[40px] border-4 border-stone-800 select-none"}>
-        <div className={"absolute top-0 left-0 right-0 z-40 flex justify-between items-center px-7 pt-3 pb-2 text-stone-800 text-xs font-semibold"}>
-          <span>
-            9:41
-          </span>
-          <div className={"flex items-center gap-1.5"}>
-            <span className={"material-symbols-outlined text-[15px]"}>
-              signal_cellular_alt_1_bar
-            </span>
-            <span className={"material-symbols-outlined text-[15px]"}>
-              wifi
-            </span>
-            <span className={"material-symbols-outlined text-[18px]"}>
-              battery_3_bar
-            </span>
-          </div>
-        </div>
-        <header className={"absolute top-9 left-0 right-0 z-30 px-4 flex items-center justify-between pointer-events-auto"}>
+        <header className={"absolute top-0 left-0 right-0 z-30 px-4 pt-safe flex items-center justify-between pointer-events-auto"}>
           <button onClick={onPlugClick} className={"w-10 h-10 rounded-full bg-white/90 backdrop-blur-md shadow-md flex items-center justify-center text-stone-700 active:scale-95 transition-transform border border-amber-900/10"} aria-label={"Close"} data-act={"close"} data-way-out={"back"}>
             <span className={"material-symbols-outlined text-[20px]"}>
               close
@@ -58,16 +42,16 @@ export function PoorGpsScreen() {
                   <span className={"text-[12px] font-bold text-red-700"}>
                     {"GPS Accuracy &plusmn;86 m"}
                   </span>
-                  <span className={"text-[10px] uppercase font-extrabold px-1.5 py-0.5 rounded bg-red-100 text-red-700 tracking-wider"}>
+                  <span className={"text-[12px] uppercase font-extrabold px-1.5 py-0.5 rounded bg-red-100 text-red-700 tracking-wider"}>
                     Too Weak
                   </span>
                 </div>
-                <span className={"text-[11px] text-stone-600 font-medium truncate mt-0.5"}>
+                <span className={"text-[12px] text-stone-600 font-medium truncate mt-0.5"}>
                   Move to an open area
                 </span>
               </div>
             </div>
-            <button onClick={onPlugClick} className={"flex items-center gap-1 text-[11px] font-bold text-stone-700 bg-stone-100 hover:bg-stone-200 active:scale-95 px-2.5 py-1.5 rounded-lg transition-all border border-stone-200/60 flex-shrink-0"} data-act={"retry"}>
+            <button onClick={onPlugClick} className={"flex items-center gap-1 text-[12px] font-bold text-stone-700 bg-stone-100 hover:bg-stone-200 active:scale-95 px-2.5 py-1.5 rounded-lg transition-all border border-stone-200/60 flex-shrink-0"} data-act={"retry"}>
               <span className={"material-symbols-outlined text-[13px] text-red-600"}>
                 refresh
               </span>
@@ -131,10 +115,10 @@ export function PoorGpsScreen() {
               <span className={"material-symbols-outlined text-[13px] text-stone-500"}>
                 build
               </span>
-              <span className={"text-[10px] font-semibold text-stone-700"}>
+              <span className={"text-[12px] font-semibold text-stone-700"}>
                 Mario's Auto Parts
               </span>
-              <span className={"text-[9px] text-stone-400 font-medium"}>
+              <span className={"text-[12px] text-stone-400 font-medium"}>
                 180m
               </span>
             </div>
@@ -152,7 +136,7 @@ export function PoorGpsScreen() {
               <span className={"material-symbols-outlined text-[11px] text-amber-600"}>
                 storefront
               </span>
-              <span className={"text-[9px] font-medium text-stone-600"}>
+              <span className={"text-[12px] font-medium text-stone-600"}>
                 Tastee HWT
               </span>
             </div>
@@ -208,11 +192,11 @@ export function PoorGpsScreen() {
                 <h4 className={"text-xs font-bold text-red-900 tracking-tight"}>
                   Signal Too Weak to Verify
                 </h4>
-                <span className={"text-[10px] font-extrabold text-red-700 bg-red-100/90 px-1.5 py-0.5 rounded"}>
+                <span className={"text-[12px] font-extrabold text-red-700 bg-red-100/90 px-1.5 py-0.5 rounded"}>
                   {"&plusmn;86 m"}
                 </span>
               </div>
-              <p className={"text-[11px] text-red-800 font-medium leading-relaxed mt-0.5"}>
+              <p className={"text-[12px] text-red-800 font-medium leading-relaxed mt-0.5"}>
                 Roam Plug requires accuracy under
                 <span className={"font-bold"}>
                   {"&plusmn;20 m"}
@@ -237,11 +221,11 @@ export function PoorGpsScreen() {
               <p className={"text-[11.5px] font-bold text-stone-800 truncate"}>
                 {"Constant Spring Rd & Eastwood Park Rd"}
               </p>
-              <p className={"text-[10px] text-stone-500 truncate"}>
+              <p className={"text-[12px] text-stone-500 truncate"}>
                 {"Half-Way-Tree, Kingston 10 &bull; St. Andrew"}
               </p>
             </div>
-            <span className={"text-[10px] font-bold text-amber-700 bg-amber-100/80 px-2 py-0.5 rounded-full whitespace-nowrap"}>
+            <span className={"text-[12px] font-bold text-amber-700 bg-amber-100/80 px-2 py-0.5 rounded-full whitespace-nowrap"}>
               Unverified
             </span>
           </div>
@@ -253,7 +237,7 @@ export function PoorGpsScreen() {
               Confirm Location (Signal Too Weak)
             </span>
           </button>
-          <p className={"text-center text-[10px] text-stone-500 mt-2 font-medium"}>
+          <p className={"text-center text-[12px] text-stone-500 mt-2 font-medium"}>
             GPS Lock:
             <span className={"font-semibold text-stone-700"}>
               3/12 Satellites
@@ -266,7 +250,7 @@ export function PoorGpsScreen() {
             <span className={"material-symbols-outlined text-[21px]"}>
               explore
             </span>
-            <span className={"text-[10px] font-medium tracking-tight mt-0.5"}>
+            <span className={"text-[12px] font-medium tracking-tight mt-0.5"}>
               Explore
             </span>
           </button>
@@ -274,7 +258,7 @@ export function PoorGpsScreen() {
             <span className={"material-symbols-outlined text-[21px]"}>
               directions_car
             </span>
-            <span className={"text-[10px] font-medium tracking-tight mt-0.5"}>
+            <span className={"text-[12px] font-medium tracking-tight mt-0.5"}>
               Garage
             </span>
           </button>
@@ -283,7 +267,7 @@ export function PoorGpsScreen() {
               <span className={"material-symbols-outlined text-[20px] fill"}>
                 local_gas_station
               </span>
-              <span className={"text-[9px] font-black uppercase tracking-wider leading-none mt-0.5"}>
+              <span className={"text-[12px] font-black uppercase tracking-wider leading-none mt-0.5"}>
                 LOG
               </span>
             </button>
@@ -292,7 +276,7 @@ export function PoorGpsScreen() {
             <span className={"material-symbols-outlined text-[21px] fill"}>
               map
             </span>
-            <span className={"text-[10px] font-bold tracking-tight mt-0.5"}>
+            <span className={"text-[12px] font-bold tracking-tight mt-0.5"}>
               Map It
             </span>
           </button>
@@ -300,7 +284,7 @@ export function PoorGpsScreen() {
             <span className={"material-symbols-outlined text-[21px]"}>
               person
             </span>
-            <span className={"text-[10px] font-medium tracking-tight mt-0.5"}>
+            <span className={"text-[12px] font-medium tracking-tight mt-0.5"}>
               Account
             </span>
           </button>

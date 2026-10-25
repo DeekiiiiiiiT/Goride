@@ -8,8 +8,8 @@ export function HomeExploreScreen() {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => { if (ref.current) bindScreen("15-home-explore.html", ref.current); }, []);
   return (
-    <div ref={ref} data-plug-screen={"15-home-explore.html"} className={"bg-surface font-body-md text-on-surface flex flex-col min-h-screen"}>
-      <header className={"fixed top-0 inset-x-0 z-50 bg-surface/85 backdrop-blur-xl shadow-[0_1px_8px_rgba(0,0,0,0.04)] pt-safe"}>
+    <div ref={ref} data-plug-screen={"15-home-explore.html"} className={"bg-surface font-body-md text-on-surface flex flex-col h-dvh overflow-hidden"}>
+      <header className={"relative z-50 shrink-0 bg-surface shadow-[0_1px_8px_rgba(0,0,0,0.04)] pt-safe"}>
         <div className={"h-16 px-space-md flex items-center justify-between"}>
           <div className={"flex items-center gap-space-sm"}>
             <div className={"w-10 h-10 rounded-xl bg-primary flex items-center justify-center text-on-primary shadow-[0_4px_12px_rgba(163,57,0,0.25)]"}>
@@ -40,9 +40,9 @@ export function HomeExploreScreen() {
           </div>
         </div>
       </header>
-      <main className={"flex flex-col relative w-full pt-16 pb-28 bg-surface min-h-screen"}>
-        <div className={"flex flex-col w-full relative select-none"}>
-          <div className={"sticky top-0 z-30 flex flex-col w-full px-space-md pt-space-sm pb-space-xs gap-space-sm bg-gradient-to-b from-surface via-surface/90 to-transparent pointer-events-auto"}>
+      <main className={"flex min-h-0 flex-1 flex-col relative w-full bg-surface"}>
+        <div className={"flex min-h-0 flex-1 flex-col w-full relative select-none"}>
+          <div className={"shrink-0 z-30 flex flex-col w-full px-space-md pt-space-sm pb-space-xs gap-space-sm bg-surface"}>
             <div className={"flex items-center justify-between w-full"}>
               <button onClick={onPlugClick} className={"flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-surface-container-lowest shadow-md active:scale-95 transition-transform min-h-[44px]"} id={"parishSelectorBtn"} data-act={"parishSelectorBtn"}>
                 <span className={"material-symbols-outlined text-primary text-[18px]"}>
@@ -55,20 +55,6 @@ export function HomeExploreScreen() {
                   expand_more
                 </span>
               </button>
-              <div className={"flex items-center gap-space-xs"}>
-                <div className={"flex items-center gap-1 px-2.5 py-1 rounded-full bg-surface-container-high text-on-surface-variant"}>
-                  <span className={"w-2 h-2 rounded-full bg-emerald-500 animate-pulse"} />
-                  <span className={"font-label-sm text-[10px] uppercase font-bold text-on-surface-variant"}>
-                    Live Plugs
-                  </span>
-                </div>
-                <div className={"relative w-10 h-10 rounded-full bg-surface-container-highest flex items-center justify-center shadow-sm"}>
-                  <span className={"font-label-lg text-label-sm text-primary font-bold"}>
-                    AB
-                  </span>
-                  <span className={"absolute -top-0.5 -right-0.5 w-3 h-3 rounded-full bg-secondary-container ring-2 ring-surface"} />
-                </div>
-              </div>
             </div>
             <div className={"relative flex items-center w-full shadow-md rounded-2xl bg-surface-container-lowest"}>
               <div className={"pl-3.5 pr-2 flex items-center justify-center text-primary pointer-events-none"}>
@@ -168,10 +154,10 @@ export function HomeExploreScreen() {
               ULSD
             </button>
           </div>
-          <div className={"relative w-full h-[512px] bg-surface-container-low overflow-hidden cursor-grab active:cursor-grabbing"}>
+          <div className={"relative min-h-0 flex-1 w-full bg-surface-container-low overflow-hidden"}>
             <ExploreMap />
+            <ExploreSheet />
           </div>
-          <ExploreSheet />
         </div>
       </main>
     </div>

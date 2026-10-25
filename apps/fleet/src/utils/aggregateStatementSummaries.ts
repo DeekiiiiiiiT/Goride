@@ -41,6 +41,9 @@ export function computePeriodBalances(summary: StatementSummary | null | undefin
   endBalance: number;
 } {
   if (!summary) return { startBalance: 0, endBalance: 0 };
+  if (summary.netEarnings != null && Number.isFinite(summary.netEarnings)) {
+    return { startBalance: 0, endBalance: summary.netEarnings };
+  }
   const startBalance = 0;
   const endBalance =
     Math.round(

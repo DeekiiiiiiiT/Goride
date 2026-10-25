@@ -63,6 +63,30 @@ export type SettlementCommand =
   | WriteOffCommand
   | ReverseCommand;
 
+/** Refuse a body that carries fields this route does not understand. */
+export function assertOnlyKeys(
+  value: unknown,
+  allowed: readonly string[],
+  label: string,
+): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new SettlementCommandError(
+      "UNKNOWN_FIELD",
+      `${label} must be an object. Nothing was posted.`,
+      400,
+    );
+  }
+  const extra = Object.keys(value as Record<string, unknown>).filter((key) => !allowed.includes(key));
+  if (extra.length > 0) {
+    throw new SettlementCommandError(
+      "UNKNOWN_FIELD",
+      `This request has fields the server does not understand: ${extra.join(", ")}. Nothing was posted.`,
+      400,
+    );
+  }
+  return value as Record<string, unknown>;
+}
+
 export class SettlementCommandError extends Error {
   code: string;
   status: number;

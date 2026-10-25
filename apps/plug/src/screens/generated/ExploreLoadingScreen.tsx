@@ -9,26 +9,7 @@ export function ExploreLoadingScreen() {
   return (
     <div ref={ref} data-plug-screen={"15b-explore-loading.html"} className={"bg-surface-variant flex justify-center items-center min-h-screen text-on-surface antialiased p-0 sm:p-4 select-none"}>
       <main className={"w-[390px] h-[844px] bg-background relative flex flex-col overflow-hidden shadow-2xl sm:rounded-[36px] border border-surface-dim"}>
-        <header className={"w-full pt-3 px-6 flex justify-between items-center z-30 shrink-0"}>
-          <span className={"font-label-md text-label-md font-semibold text-on-surface"}>
-            9:41
-          </span>
-          <div className={"w-20 h-4 bg-inverse-surface rounded-full flex items-center justify-center"}>
-            <span className={"w-2 h-2 rounded-full bg-surface-dim mr-1 opacity-40"} />
-          </div>
-          <div className={"flex items-center space-x-1.5 text-on-surface"}>
-            <span className={"material-symbols-outlined text-[15px]"} data-icon={"signal_cellular_alt"}>
-              signal_cellular_alt
-            </span>
-            <span className={"material-symbols-outlined text-[15px]"} data-icon={"wifi"}>
-              wifi
-            </span>
-            <span className={"material-symbols-outlined text-[16px]"} data-icon={"battery_5_bar"}>
-              battery_5_bar
-            </span>
-          </div>
-        </header>
-        <header className={"w-full px-space-md pt-2 pb-2.5 z-20 shrink-0"}>
+        <header className={"w-full px-space-md pt-safe pb-2.5 z-20 shrink-0"}>
           <div className={"flex items-center justify-between gap-2 mb-2.5"}>
             <div className={"flex items-center gap-2"}>
               <div className={"w-8 h-8 rounded-lg bg-primary flex items-center justify-center text-on-primary shadow-sm shadow-primary/20"}>

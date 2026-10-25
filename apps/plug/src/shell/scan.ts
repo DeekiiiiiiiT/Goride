@@ -1,10 +1,7 @@
 import { getSupabaseFunctionsBaseUrl, supabaseAnonFunctionHeaders } from '@roam/api-client';
 import { supabasePlugApp } from '../../../../packages/auth-client/src/supabase';
-import { demoOn } from '../demo/mode';
-
-/** Reads a dashboard photo. Demo mode does not invent a number. */
+/** Reads a dashboard photo. Returns no number when the photo cannot be read. */
 export async function scanPlugPhoto(file: File, signal: AbortSignal): Promise<{ reading: number | null; confidence?: string }> {
-  if (demoOn()) return { reading: null };
   const { data } = await supabasePlugApp.auth.getSession();
   const token = data.session?.access_token;
   const form = new FormData();

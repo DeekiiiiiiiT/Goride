@@ -22,7 +22,7 @@ import {
   settlementPeriodOpenMessage,
 } from '../../utils/settlementPeriodGate';
 import { api } from '../../services/api';
-import { PastWeeksCard } from './settlements/PastWeeksCard';
+import { PastWeeksBanner } from './settlements/past-weeks/PastWeeksBanner';
 import { mergeDoneCashHistory } from '../../utils/settlementDoneHistory';
 import {
   applyLoggedReceiptsToWeekCash,
@@ -1694,7 +1694,9 @@ export function DriverSettlementsPage({
   return (
     <div className="w-full min-w-0 space-y-6 p-4 sm:p-6 md:mx-auto md:max-w-[1400px]">
       <BusinessFinanceDeskChrome deskLabel="Driver Settlements" onBack={onBackToBusinessFinance} />
-      <PastWeeksCard
+      <PastWeeksBanner
+        hubTab={hubTab}
+        driverNameFor={(id) => driverNameById.get(id) || ''}
         onOpenCloseWeek={(weekKey) => onNavigate?.('close-week', {
           weekKey,
           line: scope === 'rush_delivery' ? 'rush_delivery' : 'rideshare',

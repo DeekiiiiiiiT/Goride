@@ -20,9 +20,8 @@ export function PartsResultsScreen() {
               <h1 className={"font-headline-sm text-headline-sm text-on-surface truncate"}>
                 Parts Results 5 Tiers
               </h1>
-              <span className={"font-label-md text-label-md text-on-surface-variant truncate"}>
-                2019 Toyota Roomy
-              </span>
+              <span className={"font-label-md text-label-md text-on-surface-variant truncate"} data-slot={"car"}>
+                Add a car</span>
             </div>
           </div>
           <div className={"flex items-center gap-space-xs"}>
@@ -46,7 +45,7 @@ export function PartsResultsScreen() {
                   Fitment Verified
                 </span>
                 <h2 className={"font-headline-sm text-headline-sm text-on-surface"}>
-                  Brake pads (front) — 2019 Toyota Roomy
+                  Brake pads (front)
                 </h2>
                 <p className={"font-body-md text-body-md text-on-surface-variant"}>
                   Front disc brake pads • 1.0L Turbo GS (1KR-FE)
@@ -134,7 +133,7 @@ export function PartsResultsScreen() {
                   </div>
                 </div>
                 <div className={"w-16 h-16 rounded-lg bg-surface-container-low shrink-0 overflow-hidden flex items-center justify-center"}>
-                  <img className={"w-full h-full object-cover"} data-alt={"High-contrast studio product shot of an authentic genuine Toyota front disc brake pad box with holographic seal and 4 ceramic brake pads resting on warm metallic automotive backdrop"} src={"https://lh3.googleusercontent.com/aida-public/AB6AXuDeoyM_2r9KJbdAUSxQLH1zoVII4ZraWF0XY7XJfh0tQeFFybIPxN0MIWMHDRGVsnAdn6lxqepjM1uAvBh5YnNtVUio8R9uwklugENi5mS4pci_jWddF_cAIWEdzT_V9LI65NdGVxJ0RFBAEenl4xFmlFrwJcSBLUYe3TT-pf7boDP6Dofytq_z17faKbMVWhBWqeXVQko0FvbIQYa9q9NESEb8Ch3rtAJBOE7NOI7X2_m0FW6BueKn"} />
+                  <div className={"w-full h-full object-cover bg-surface-container flex items-center justify-center text-primary"} aria-hidden={"true"}><span className={"material-symbols-outlined text-[32px]"}>image</span></div>
                 </div>
               </div>
               <div className={"flex flex-wrap items-center gap-space-xs pt-1"}>
@@ -208,7 +207,7 @@ export function PartsResultsScreen() {
                   </div>
                 </div>
                 <div className={"w-16 h-16 rounded-lg bg-surface-container-low shrink-0 overflow-hidden flex items-center justify-center"}>
-                  <img className={"w-full h-full object-cover"} data-alt={"Official Daihatsu Motors branded automotive spare parts package on a crisp clean display stand in bright daylight, showing factory stamped metallic brake pads"} src={"https://lh3.googleusercontent.com/aida-public/AB6AXuBJF05OZl3lRRZsXj7rlHVwYTv5PXBIqEwksr1Z7sfQFdR4Th7Pgl1DIPnJ5-1o9avliJmc0VETf6MAfgmiLcyaW1dzuPTIOxntfcUTSwww69yNV9OidS0JMlTuRcD6Rfre8b1QOoRX3PlzCtILer9ad0Xcqz4g1HBfFeeqld5A_sAqxsqqdshxLbYF0dkwFllWEKG-_XMs0yFepCoO36lquJTPsZzOaBOiGNIz6wHY-BjIXYuzNGIS"} />
+                  <div className={"w-full h-full object-cover bg-surface-container flex items-center justify-center text-primary"} aria-hidden={"true"}><span className={"material-symbols-outlined text-[32px]"}>image</span></div>
                 </div>
               </div>
               <div className={"flex flex-wrap items-center gap-space-xs"}>
@@ -279,7 +278,7 @@ export function PartsResultsScreen() {
                   </div>
                 </div>
                 <div className={"w-16 h-16 rounded-lg bg-surface-container-low shrink-0 overflow-hidden flex items-center justify-center"}>
-                  <img className={"w-full h-full object-cover"} data-alt={"Advics blue and white automotive replacement brake parts box next to steel brake friction pads arranged neatly on a warm workshop counter"} src={"https://lh3.googleusercontent.com/aida-public/AB6AXuBwY6iGmdze43AQ5awRtczDy_PpurL3WpPo3gNcJXk-6doCdKvo8CQ0VTsOm5fHkCurVMXLCVYuzgM8uVQ583riuQJVO6e3X9YI5Y57fU1rBBhcVZV7xWtTx_DFSw2yGPQ35yeWT92whD2H_ZwYlORvgXalwNTMqmbeXG69B804iVxk8Qs_bJR8AbhqZESYOpph4bzIULFwehVzp_cZN3eTeLIWqdxe_T6oeTEkCbin7p2hgLBNBvqL"} />
+                  <div className={"w-full h-full object-cover bg-surface-container flex items-center justify-center text-primary"} aria-hidden={"true"}><span className={"material-symbols-outlined text-[32px]"}>image</span></div>
                 </div>
               </div>
               <div className={"flex flex-wrap items-center gap-space-xs"}>

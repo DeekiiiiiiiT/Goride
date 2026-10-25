@@ -6,7 +6,7 @@ Use this checklist in the **Supabase Dashboard** (Authentication → URL Configu
 
 Pick a single primary production URL for the project default (often your main marketing or admin entry). This does **not** block other redirect URLs if they are listed below; it mainly affects default email links if paths are wrong. Document your choice here: **`https://roamfleet.co`** (set 2026-08-02 after courier Google OAuth was falling back to `http://127.0.0.1:3000`).
 
-**Never** push local `supabase/config.toml` Auth URL defaults to the hosted project (`supabase config push`) — local `site_url` is `http://127.0.0.1:3000` and will break phone/production OAuth.
+`supabase/config.toml` holds this same list. `supabase config push` copies that file onto the live project, so the file must not be reduced to localhost. Restored on the live project 2026-10-25 after a push had replaced it with `http://127.0.0.1:3000`.
 
 ## Redirect URLs (add every exact pattern you use)
 
@@ -35,6 +35,7 @@ Include **scheme + host + port + path** where your apps handle the post-auth lan
 | Rides passenger (Android app) | — | `co.roamenterprise.rides://login` |
 | Roam Haul (hauler) | `http://localhost:3004/` | `https://roamhaul.co/` |
 | Roam Haul admin | `http://localhost:3004/admin` | `https://roamhaul.co/admin` |
+| Roam Plug | `http://localhost:3016/**` | `https://roamplug.app/**` and `https://roam-plug.vercel.app/**` |
 
 Also add:
 

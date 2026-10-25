@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import { publicGet } from '../api';
-import { demoOn } from '../demo/mode';
 import { kindFor } from './act-kind';
 import { fillScreen } from './fill';
 import { vehicleId } from './facts';
@@ -96,10 +95,10 @@ export function bindScreen(file: string, root: HTMLElement) {
   if (file === '25-confirm-odometer.html') {
     const input = root.querySelector('#odometerInput') as HTMLInputElement | null;
     const stored = sessionStorage.getItem('plug-odometer');
-    if (input && !stored && !demoOn()) input.value = '';
+    if (input && !stored) input.value = '';
   }
   if (file === '43-place-pin.html') {
-    const accuracy = Number(sessionStorage.getItem('plug-accuracy') || (demoOn() ? 12 : 999));
+    const accuracy = Number(sessionStorage.getItem('plug-accuracy') || 999);
     if (accuracy > 50) {
       root.querySelectorAll('button').forEach((button) => {
         if (/confirm pin location|confirm location/i.test(button.textContent || '')) {
@@ -163,7 +162,6 @@ const KIND_FLAG: Record<string, string> = {
 };
 
 function hideFlagged(root: HTMLElement) {
-  if (demoOn()) return;
   let runtime: ReturnType<typeof getPlugRuntime> | null = null;
   try {
     runtime = getPlugRuntime();

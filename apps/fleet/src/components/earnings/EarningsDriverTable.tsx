@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useQueries, useQuery } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
+import { formatMoney } from '@roam/ui/formatMoney';
 import { ChevronRight, Search } from 'lucide-react';
 import { api } from '../../services/api';
 import {
@@ -21,14 +22,6 @@ import {
 import type { StatementSummary } from '../../types/statementSummary';
 
 const PAGE_SIZE = 10;
-
-function formatMoney(n: number): string {
-  const abs = Math.abs(n).toLocaleString(undefined, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
-  return n < 0 ? `-$${abs}` : `$${abs}`;
-}
 
 type DriverRowMetrics = {
   totalEarnings: number;
@@ -57,7 +50,7 @@ function metricsFromSummaries(
   const { endBalance } = computePeriodBalances(agg);
   return {
     totalEarnings: agg.totalEarnings,
-    refundsExpenses: agg.totalRefundsExpenses,
+    refundsExpenses: agg.totalRefundsExpenses || agg.platformTollCredits || 0,
     adjustments: agg.periodAdjustments,
     payout: agg.totalPayout,
     netEarnings: endBalance,
@@ -68,12 +61,14 @@ type Props = {
   startDate: string;
   endDate: string;
   platformTab: EarningsPlatformTab;
+  driverSummaries?: StatementSummary[];
 };
 
 export function EarningsDriverTable({
   startDate,
   endDate,
   platformTab,
+  driverSummaries = [],
 }: Props) {
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(0);
@@ -109,23 +104,19 @@ export function EarningsDriverTable({
   const safePage = Math.min(page, pageCount - 1);
   const pageDrivers = filtered.slice(safePage * PAGE_SIZE, safePage * PAGE_SIZE + PAGE_SIZE);
 
-  const statementQueries = useQueries({
-    queries: pageDrivers.map((d) => ({
-      queryKey: ['statement-summary', 'driver', d.id, startDate, endDate] as const,
-      queryFn: () =>
-        api.getStatementSummary({
-          platform: 'all',
-          startDate,
-          endDate,
-          driverId: d.id,
-        }),
-      staleTime: 30_000,
-      enabled: Boolean(d.id && startDate && endDate),
-    })),
-  });
+  const byDriver = useMemo(() => {
+    const map = new Map<string, StatementSummary[]>();
+    for (const row of driverSummaries) {
+      const id = String(row.driverId || '');
+      if (!id) continue;
+      const list = map.get(id) ?? [];
+      list.push(row);
+      map.set(id, list);
+    }
+    return map;
+  }, [driverSummaries]);
 
-  const anyLoading =
-    rosterQuery.isLoading || statementQueries.some((q) => q.isLoading || q.isFetching);
+  const anyLoading = rosterQuery.isLoading;
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -186,13 +177,13 @@ export function EarningsDriverTable({
                 </TableCell>
               </TableRow>
             ) : (
-              pageDrivers.map((driver, idx) => {
-                const q = statementQueries[idx];
-                const metrics =
-                  q?.data?.summaries != null
-                    ? metricsFromSummaries(q.data.summaries as StatementSummary[], platformTab)
-                    : null;
-                const busy = !metrics && (q?.isLoading || q?.isFetching || rosterQuery.isLoading);
+              pageDrivers.map((driver) => {
+                const uberId = (driver as { uberDriverId?: string }).uberDriverId;
+                const metrics = metricsFromSummaries(
+                  byDriver.get(driver.id) ?? (uberId ? byDriver.get(uberId) ?? [] : []),
+                  platformTab,
+                );
+                const busy = rosterQuery.isLoading;
 
                 return (
                   <TableRow
@@ -284,6 +275,7 @@ export function EarningsDriverTable({
         startDate={startDate}
         endDate={endDate}
         platformTab={platformTab}
+        summaries={selectedDriver ? byDriver.get(selectedDriver.id) ?? [] : undefined}
       />
     </div>
   );

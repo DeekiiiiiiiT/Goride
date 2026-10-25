@@ -114,9 +114,8 @@ export function NotificationsScreen() {
                         </span>
                       </div>
                       <div className={"flex items-center gap-1.5 mt-0.5"}>
-                        <span className={"inline-flex items-center px-2 py-0.5 rounded-full bg-surface-container font-label-sm text-label-sm text-on-surface-variant font-semibold"}>
-                          2019 Toyota Roomy
-                        </span>
+                        <span className={"inline-flex items-center px-2 py-0.5 rounded-full bg-surface-container font-label-sm text-label-sm text-on-surface-variant font-semibold"} data-slot={"car"}>
+                          Add a car</span>
                         <span className={"font-body-sm text-body-sm text-outline"}>
                           84,210 km
                         </span>
@@ -170,7 +169,7 @@ export function NotificationsScreen() {
                     </div>
                     <div className={"flex flex-col min-w-0"}>
                       <h3 className={"font-headline-sm text-headline-sm text-on-surface truncate"}>
-                        Your pin 'Precision Auto Works' was approved
+                        Your pin '' was approved
                       </h3>
                       <p className={"font-body-sm text-body-sm text-on-surface-variant flex items-center gap-1 mt-0.5"}>
                         <span className={"material-symbols-outlined text-[14px] text-tertiary"}>
@@ -192,7 +191,7 @@ export function NotificationsScreen() {
                     <span className={"material-symbols-outlined text-[16px]"}>
                       stars
                     </span>
-                    +25 Scout XP
+                    
                   </span>
                   <span className={"w-1 h-1 rounded-full bg-outline-variant"} />
                   <span className={"font-label-sm text-label-sm text-on-surface-variant"}>
@@ -207,7 +206,7 @@ export function NotificationsScreen() {
                   {"navigated to this tire & brake depot today!"}
                 </p>
                 <div className={"mt-3 rounded-lg overflow-hidden relative h-28 bg-surface-variant flex items-end p-2.5"}>
-                  <img className={"absolute inset-0 w-full h-full object-cover"} data-alt={"Overhead aerial map shot of Constant Spring Road in Kingston Jamaica with warm tropical lighting, asphalt road intersections, automotive workshops, and Jamaican palm trees bathed in golden afternoon sunlight."} src={"https://lh3.googleusercontent.com/aida-public/AB6AXuCtOPNW2qS9AreOY1VZqWhNsDGvs1uJvTt6ecVtf8nk6utuqSc1JvWleFakHGdM0nrQYcRjDY5pXex-eI1jSs4wZYdJTI0xxWcD4SQq2PF6wsLNr_548lge6z_dDbI1fc2U--jHfYL3ZRQ__wsoWnbqucB4CnhtQe0v3uMERqUgtA3aUEPHu_TLal4L4bD90nrVVXd4g5K2GZOEQv2KKROGzBrnXJpE1au4cFTrP24PIcGc-7Ke6HrN"} />
+                  <div className={"absolute inset-0 w-full h-full object-cover bg-surface-container flex items-center justify-center text-primary"} aria-hidden={"true"}><span className={"material-symbols-outlined text-[32px]"}>image</span></div>
                   <div className={"absolute inset-0 bg-gradient-to-t from-inverse-surface/80 via-inverse-surface/30 to-transparent"} />
                   <div className={"relative z-10 flex items-center justify-between w-full text-surface-container-lowest"}>
                     <div className={"flex items-center gap-1.5"}>
@@ -260,9 +259,8 @@ export function NotificationsScreen() {
                         Fitness certificate expires in 14 days
                       </h3>
                       <p className={"font-body-sm text-body-sm text-on-surface-variant flex items-center gap-2 mt-0.5"}>
-                        <span>
-                          2019 Toyota Roomy
-                        </span>
+                        <span data-slot={"car"}>
+                          Add a car</span>
                         <span className={"w-1 h-1 rounded-full bg-outline-variant"} />
                         <span className={"font-semibold text-on-surface"}>
                           Plate: 4821-JR

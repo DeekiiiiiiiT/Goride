@@ -87,6 +87,19 @@ export const fuelService = {
   },
 
   // --- Fuel Entries ---
+  async getFuelAmountSum(options: { startDate: string; endDate: string }): Promise<number> {
+    const query = new URLSearchParams();
+    query.set('sumOnly', '1');
+    query.set('startDate', options.startDate);
+    query.set('endDate', options.endDate);
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/fuel-entries?${query.toString()}`, {
+      headers: await requireAuthHeaders(null),
+    });
+    if (!response.ok) throw new Error('Failed to total fuel fills');
+    const body = await response.json();
+    return Number(body?.sum) || 0;
+  },
+
   async getFuelEntries(options?: {
     limit?: number;
     offset?: number;

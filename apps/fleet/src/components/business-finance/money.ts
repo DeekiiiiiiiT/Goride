@@ -1,12 +1,5 @@
-/** Display money for Business Finance owner views. */
-export function formatMoney(n: number | null | undefined): string {
-  if (n == null || !Number.isFinite(n)) return '—';
-  const body = Math.abs(n).toLocaleString(undefined, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
-  return `${n < 0 ? '-' : ''}$${body}`;
-}
+/** Display money for Business Finance and Ledgers. */
+export { formatMoney } from '@roam/ui/formatMoney';
 
 export function round2(n: number): number {
   return Math.round((n + Number.EPSILON) * 100) / 100;

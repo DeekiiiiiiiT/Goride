@@ -37,7 +37,7 @@ export function PartsStoreScreen() {
       <main className={"flex-1 w-full bg-surface pt-16 pb-28"}>
         <div className={"flex flex-col w-full"}>
           <div className={"relative w-full h-56 bg-surface-container-high overflow-hidden"}>
-            <div className={"w-full h-full bg-cover bg-center"} data-alt={"Interior of an active Kingston auto parts store counter, neatly stacked shelves of Japanese vehicle brake pads, suspension bushings, oil filters, and spark plug boxes under bright tropical daylight, warm orange ambient accents, vibrant automotive retail setting"} style={{ backgroundImage: "url('https://lh3.googleusercontent.com/aida-public/AB6AXuCv5Ie9_IL6IGILvnnttpA0k03QBfdq4-CeKaqBnfJ4P4ghGw7yWB6g5zIBsVn427-B-hxKP-NciUH8-Y4rFSLdAkk8v0Cfo2uWpivwm8GhjE9OgBnGctaTBGcmj1g9WOxn1yMKqKiNppN1WF2uYgSJYR0I3KiSctrP2g2UC4iybh1vJcO-ewATBHRkpXdkP3qWVCgxvNh70oLMh7MJpScbcC2n3E50bQwxARnrxA42K09kXyl3pEF4')" }} />
+            <div className={"w-full h-full bg-surface-container flex items-center justify-center text-primary"} aria-hidden={"true"}><span className={"material-symbols-outlined text-[32px]"}>image</span></div>
             <div className={"absolute inset-0 bg-gradient-to-t from-surface via-transparent to-black/30"} />
             <div className={"absolute top-space-md right-space-md flex items-center gap-space-xs"}>
               <span className={"px-space-sm py-1 rounded-full bg-surface-container-lowest/90 backdrop-blur-md text-primary font-label-md text-label-md shadow-sm flex items-center gap-1"}>

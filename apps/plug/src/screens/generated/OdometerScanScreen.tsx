@@ -27,7 +27,7 @@ export function OdometerScanScreen() {
       <main className={"flex-1 flex flex-col relative w-full bg-surface"}>
         <div className={"flex flex-col w-full relative select-none"}>
           <div className={"relative w-full overflow-hidden rounded-xl bg-inverse-surface min-h-[640px] flex flex-col justify-between p-margin shadow-xl"}>
-            <div className={"absolute inset-0 bg-cover bg-center filter blur-[1.5px] scale-105 opacity-80"} data-alt={"Realistic close up view of a modern Japanese car dashboard instrument cluster backlit softly at dusk. The glowing orange and white digital LCD display shows numbers 84612 km next to an analog speedometer needle, bathed in warm sunset cabin light with deep cabin shadows."} style={{ backgroundImage: "url('https://lh3.googleusercontent.com/aida-public/AB6AXuATm8h_OUpQc1KGYczHzJ1GawSYEjrc50amyRGj-ei87KXaG-r-rdkxZAoHyEHY753u-gLAXg2pvFvcC7wtSBVd5Fh5cZGxq8XMR3o6TA1erxrZP_sDu2353lqa-EqHnvC8-J6GTUqVt4eeFe-esBOC6HRAmrC9YKqL-o0G4iDKKZM1wZrBbxcjfzZXuxUtcYwSU51kkhGzPePAOYixLvi8mVJMm50Zd3KsNbOU83RpnlIYP_paj9IZ')" }} />
+            <div className={"absolute inset-0 bg-surface-container flex items-center justify-center text-primary filter blur-[1.5px] scale-105 opacity-80"} aria-hidden={"true"}><span className={"material-symbols-outlined text-[32px]"}>image</span></div>
             <div className={"absolute inset-0 bg-gradient-to-b from-inverse-surface/90 via-transparent to-inverse-surface/95 pointer-events-none"} />
             <div className={"absolute inset-0 bg-radial from-transparent via-inverse-surface/20 to-inverse-surface/80 pointer-events-none"} />
             <div className={"relative z-20 flex flex-col items-center w-full space-y-space-sm pt-space-xs"}>
@@ -42,9 +42,8 @@ export function OdometerScanScreen() {
                     <span className={"material-symbols-outlined text-secondary-container"} style={{ fontVariationSettings: "'FILL' 1" }}>
                       directions_car
                     </span>
-                    <span className={"font-label-lg text-label-lg tracking-tight"}>
-                      2019 Toyota Roomy
-                    </span>
+                    <span className={"font-label-lg text-label-lg tracking-tight"} data-slot={"car"}>
+                      Add a car</span>
                     <span className={"material-symbols-outlined text-label-md text-surface-variant"}>
                       expand_more
                     </span>

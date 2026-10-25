@@ -8,25 +8,7 @@ export function HowItWorksScreen() {
   useEffect(() => { if (ref.current) bindScreen("03-how-it-works.html", ref.current); }, []);
   return (
     <div ref={ref} data-plug-screen={"03-how-it-works.html"} className={"bg-surface text-on-surface antialiased flex flex-col min-h-screen"}>
-      <div className={"w-full pt-safe px-margin select-none"}>
-        <div className={"flex justify-between items-center pt-space-xs text-on-surface"}>
-          <span className={"font-label-md text-label-md font-semibold tracking-tight"}>
-            9:41
-          </span>
-          <div className={"flex items-center gap-1.5"}>
-            <span className={"material-symbols-outlined text-[16px] leading-none"}>
-              signal_cellular_alt
-            </span>
-            <span className={"material-symbols-outlined text-[16px] leading-none"}>
-              wifi
-            </span>
-            <span className={"material-symbols-outlined text-[18px] leading-none"}>
-              battery_full
-            </span>
-          </div>
-        </div>
-      </div>
-      <main className={"flex-1 flex flex-col relative w-full pb-safe bg-surface px-margin"}>
+      <main className={"flex-1 flex flex-col relative w-full pt-safe pb-safe bg-surface px-margin"}>
         <div className={"flex flex-col w-full pb-6 select-none"}>
           <div className={"flex items-center justify-between w-full py-space-sm mb-space-sm"}>
             <div className={"flex items-center gap-2"}>
@@ -98,7 +80,7 @@ export function HowItWorksScreen() {
                         <div className={"min-w-0"}>
                           <div className={"flex items-center gap-1"}>
                             <span className={"font-label-lg text-label-lg text-on-surface truncate"}>
-                              Fesco - White River
+                              Example · Fesco - White River
                             </span>
                             <span className={"material-symbols-outlined text-[16px] text-primary"} style={{ fontVariationSettings: "'FILL' 1" }}>
                               verified
@@ -175,7 +157,7 @@ export function HowItWorksScreen() {
                           minor_crash
                         </span>
                         <span className={"font-label-lg text-label-lg text-on-surface"}>
-                          Toyota Probox (2018)
+                          Example · Toyota Probox (2018)
                         </span>
                       </div>
                       <span className={"font-label-sm text-label-sm bg-surface-container px-2 py-0.5 rounded-full text-on-surface"}>

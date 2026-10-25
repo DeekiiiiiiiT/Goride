@@ -516,7 +516,8 @@ export function ReconCloseStep({
           <DialogHeader>
             <DialogTitle>Re-open week of {weekLabel(weekKey)}?</DialogTitle>
             <DialogDescription>
-              Unlocks this week so earlier steps can be edited again. You must re-close when done.
+              Unlocks this week so earlier steps can be edited again. Tolls that an earlier close
+              locked are reopened with this same reason. You must re-close when done.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">

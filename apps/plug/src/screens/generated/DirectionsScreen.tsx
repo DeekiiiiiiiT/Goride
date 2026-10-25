@@ -36,7 +36,7 @@ export function DirectionsScreen() {
         <main className={"flex-1 px-4 pt-3 space-y-4"}>
           <section className={"relative w-full rounded-xl overflow-hidden shadow-sm border border-outline-variant/40 bg-surface-container-lowest"}>
             <div className={"relative h-44 w-full"}>
-              <img className={"w-full h-full object-cover"} data-alt={"A modern Rubis gas station canopy in Kingston, Jamaica, during bright midday tropical sunlight. Multiple clean digital pump lanes are visible with island transit taxis and private vehicles fueling up. Vibrant red, warm white, and deep orange branded accents accentuate the clean forecourt against blue Jamaican skies."} src={"https://lh3.googleusercontent.com/aida-public/AB6AXuC0uyweKfrpQSXY04Z_rs8LHI5--X9VSaFXFOlQnp_EJ2DKflJm_YF9QPj72QPQX49AAnFUNuntHF7KdGC4_JtgZHptbgN53ZtFjyDyk9hnprYQhEHRBgv_RQ4JiM7Y_7PhyIJb9Z2p1X_4-7GaSt78xKoQyoIETIa6aheP-rjEYWTvNIs0S-fMWemhQ0eATVoyi5WdU_P3a8z_SuHCq8x5nxeekFHBlhJD1T5Ng58qXxXyXZeFiZnSEZHpRbLD2zzakEMVQvUVPLc"} />
+              <div className={"w-full h-full object-cover bg-surface-container flex items-center justify-center text-primary"} aria-hidden={"true"}><span className={"material-symbols-outlined text-[32px]"}>image</span></div>
               <div className={"absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent"} />
               <div className={"absolute top-3 left-3 flex items-center gap-2"}>
                 <span className={"inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-600 text-white font-label-sm tracking-wider uppercase shadow-sm"}>
@@ -245,7 +245,7 @@ export function DirectionsScreen() {
                       <span className={"font-headline-sm text-stone-900 leading-tight"}>
                         Google Maps
                       </span>
-                      <span className={"bg-blue-100 text-blue-800 text-[10px] font-bold px-1.5 py-0.5 rounded"}>
+                      <span className={"bg-blue-100 text-blue-800 text-[12px] font-bold px-1.5 py-0.5 rounded"}>
                         Default
                       </span>
                     </div>
@@ -280,7 +280,7 @@ export function DirectionsScreen() {
                       <span className={"font-headline-sm text-stone-900 leading-tight"}>
                         Waze
                       </span>
-                      <span className={"bg-amber-100 text-amber-900 text-[10px] font-bold px-1.5 py-0.5 rounded flex items-center gap-0.5"}>
+                      <span className={"bg-amber-100 text-amber-900 text-[12px] font-bold px-1.5 py-0.5 rounded flex items-center gap-0.5"}>
                         <span className={"material-symbols-outlined text-[10px]"} data-icon={"warning"}>
                           warning
                         </span>

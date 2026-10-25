@@ -3031,6 +3031,18 @@ app.get(`${BASE_PATH}/fuel-entries`, async (c) => {
       filters.push({ op: "eq", col: "organization_id", value: orgFilter });
     }
 
+    if (c.req.query("sumOnly") === "1") {
+      if (!orgFilter) return c.json({ error: "Organization is required", code: "ORG_REQUIRED" }, 403);
+      const { getServiceClient } = await import("./service_client.ts");
+      const sumRes = await getServiceClient().rpc("fuel_entries_amount_sum", {
+        p_org: orgFilter,
+        p_from: startDate,
+        p_to: endDate,
+      });
+      if (sumRes.error) return c.json({ error: sumRes.error.message, truncated: true }, 500);
+      return c.json({ sum: Number(sumRes.data) || 0, truncated: false });
+    }
+
     const { appliedKey, sqlCol, ascending } = resolveFuelSort(c.req.query("sortKey"), c.req.query("sortDir"));
 
     const res = await queryFleet("fuel_entries", {

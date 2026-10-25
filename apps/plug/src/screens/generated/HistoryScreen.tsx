@@ -20,9 +20,8 @@ export function HistoryScreen() {
               <h1 className={"font-headline-sm text-headline-sm text-on-surface truncate"}>
                 Maintenance History
               </h1>
-              <span className={"font-label-md text-label-md text-on-surface-variant truncate"}>
-                2019 Toyota Roomy
-              </span>
+              <span className={"font-label-md text-label-md text-on-surface-variant truncate"} data-slot={"car"}>
+                Add a car</span>
             </div>
           </div>
           <div className={"flex items-center gap-space-xs"}>
@@ -35,6 +34,7 @@ export function HistoryScreen() {
         </div>
       </header>
       <main className={"flex-1 flex flex-col relative w-full px-gutter pt-16 pb-safe bg-surface"}>
+        <p data-slot={"history"} className={"px-4 py-3"}>No fuel logs yet.</p>
         <div className={"flex flex-col w-full pb-24"}>
           <section className={"mt- space-y-space-md"}>
             <div className={"relative overflow-hidden rounded-xl bg-surface-container-lowest p-space-md shadow-sm"}>
@@ -65,7 +65,7 @@ export function HistoryScreen() {
                     CURRENT ODOMETER
                   </span>
                   <span className={"font-headline-sm text-headline-sm text-on-surface flex items-center gap-1"}>
-                    84,612
+                    
                     <span className={"font-label-md text-label-md text-on-surface-variant font-normal"}>
                       km
                     </span>
@@ -76,7 +76,7 @@ export function HistoryScreen() {
                     LAST LOGGED
                   </span>
                   <span className={"font-headline-sm text-headline-sm text-secondary flex items-center gap-1"}>
-                    14 Sep
+                    
                     <span className={"font-label-md text-label-md text-on-surface-variant font-normal"}>
                       2024
                     </span>
@@ -159,189 +159,10 @@ export function HistoryScreen() {
           <section className={"mt-space-lg relative"}>
             <div className={"absolute left-4 top-4 bottom-8 w-0.5 bg-surface-container-highest -z-0"} />
             <div className={"space-y-space-md relative z-10"}>
-              <article className={"flex gap-space-sm items-start"}>
-                <div className={"w-8 h-8 rounded-full bg-primary text-on-primary flex items-center justify-center shadow-md shrink-0 mt-2"}>
-                  <span className={"material-symbols-outlined text-[18px]"}>
-                    tire_repair
-                  </span>
-                </div>
-                <div className={"flex-1 bg-surface-container-lowest rounded-xl p-space-md shadow-sm"}>
-                  <div className={"flex items-center justify-between gap-space-xs"}>
-                    <span className={"font-label-sm text-label-sm font-bold text-secondary uppercase tracking-wider"}>
-                      14 Sep 2024 • 80,000 km
-                    </span>
-                    <span className={"inline-flex items-center gap-1 text-[11px] font-semibold text-tertiary bg-tertiary-fixed/60 px-2 py-0.5 rounded-full"}>
-                      <span className={"material-symbols-outlined text-[13px]"}>
-                        attach_file
-                      </span>
-                      Receipt
-                    </span>
-                  </div>
-                  <h3 className={"font-headline-sm text-headline-sm text-on-surface mt-1"}>
-                    {"Tyre Rotation & High-Speed Balancing"}
-                  </h3>
-                  <div className={"flex items-center gap-1.5 mt-1 text-on-surface-variant font-body-sm text-body-sm"}>
-                    <span className={"material-symbols-outlined text-[16px] text-primary"}>
-                      storefront
-                    </span>
-                    <span>
-                      Sammy's Tyre Repair (Dunrobin Ave)
-                    </span>
-                  </div>
-                  <div className={"my-space-sm p-space-sm rounded-lg bg-surface-container-low text-on-surface-variant font-body-sm text-body-sm"}>
-                    Front tyres rotated to rear; checked pressure 32 PSI all round. Road tested smoothly on Kingston bypass.
-                  </div>
-                  <div className={"flex items-center justify-between pt-space-xs"}>
-                    <span className={"font-label-md text-label-md text-on-surface-variant"}>
-                      Total Cost
-                    </span>
-                    <span className={"font-price-display text-price-display text-on-surface"}>
-                      J$ 4,500
-                    </span>
-                  </div>
-                </div>
-              </article>
-              <article className={"flex gap-space-sm items-start"}>
-                <div className={"w-8 h-8 rounded-full bg-secondary-container text-on-secondary-container flex items-center justify-center shadow-md shrink-0 mt-2"}>
-                  <span className={"material-symbols-outlined text-[18px]"}>
-                    warning
-                  </span>
-                </div>
-                <div className={"flex-1 bg-surface-container-lowest rounded-xl p-space-md shadow-sm"}>
-                  <div className={"flex items-center justify-between gap-space-xs"}>
-                    <span className={"font-label-sm text-label-sm font-bold text-secondary uppercase tracking-wider"}>
-                      14 Mar 2024 • 79,950 km
-                    </span>
-                    <span className={"inline-flex items-center gap-1 text-[11px] font-semibold text-primary bg-primary-fixed px-2 py-0.5 rounded-full"}>
-                      <span className={"material-symbols-outlined text-[13px]"}>
-                        verified
-                      </span>
-                      OEM Parts
-                    </span>
-                  </div>
-                  <h3 className={"font-headline-sm text-headline-sm text-on-surface mt-1"}>
-                    Front Brake Pads Replacement
-                  </h3>
-                  <div className={"flex items-center gap-1.5 mt-1 text-on-surface-variant font-body-sm text-body-sm"}>
-                    <span className={"material-symbols-outlined text-[16px] text-secondary"}>
-                      precision_manufacturing
-                    </span>
-                    <span>
-                      Precision Auto Works
-                    </span>
-                  </div>
-                  <div className={"mt-space-sm grid grid-cols-2 gap-2 p-space-sm rounded-lg bg-surface-container-low font-label-sm text-label-sm"}>
-                    <div>
-                      <span className={"text-on-surface-variant block"}>
-                        Akebono Pads
-                      </span>
-                      <span className={"font-bold text-on-surface"}>
-                        J$ 9,800
-                      </span>
-                    </div>
-                    <div>
-                      <span className={"text-on-surface-variant block"}>
-                        {"Skimming & Labour"}
-                      </span>
-                      <span className={"font-bold text-on-surface"}>
-                        J$ 5,000
-                      </span>
-                    </div>
-                  </div>
-                  <p className={"mt-space-xs text-on-surface-variant font-body-sm text-body-sm"}>
-                    Rotors skimmed; brake fluid level topped up with Castrol DOT 4.
-                  </p>
-                  <div className={"flex items-center justify-between pt-space-xs mt-space-xs"}>
-                    <span className={"font-label-md text-label-md text-on-surface-variant"}>
-                      Total Cost
-                    </span>
-                    <span className={"font-price-display text-price-display text-on-surface"}>
-                      J$ 14,800
-                    </span>
-                  </div>
-                </div>
-              </article>
-              <article className={"flex gap-space-sm items-start"}>
-                <div className={"w-8 h-8 rounded-full bg-primary text-on-primary flex items-center justify-center shadow-md shrink-0 mt-2"}>
-                  <span className={"material-symbols-outlined text-[18px]"}>
-                    oil_barrel
-                  </span>
-                </div>
-                <div className={"flex-1 bg-surface-container-lowest rounded-xl p-space-md shadow-sm"}>
-                  <div className={"flex items-center justify-between gap-space-xs"}>
-                    <span className={"font-label-sm text-label-sm font-bold text-secondary uppercase tracking-wider"}>
-                      12 Jan 2024 • 75,000 km
-                    </span>
-                    <span className={"inline-flex items-center gap-1 text-[11px] font-semibold text-tertiary bg-tertiary-fixed/60 px-2 py-0.5 rounded-full"}>
-                      <span className={"material-symbols-outlined text-[13px]"}>
-                        tune
-                      </span>
-                      Full Service
-                    </span>
-                  </div>
-                  <h3 className={"font-headline-sm text-headline-sm text-on-surface mt-1"}>
-                    {"Full Synthetic Oil & Filter Service + Coolant Flush"}
-                  </h3>
-                  <div className={"flex items-center gap-1.5 mt-1 text-on-surface-variant font-body-sm text-body-sm"}>
-                    <span className={"material-symbols-outlined text-[16px] text-secondary"}>
-                      handyman
-                    </span>
-                    <span>
-                      Precision Auto Works
-                    </span>
-                  </div>
-                  <div className={"my-space-sm p-space-sm rounded-lg bg-surface-container-low text-on-surface-variant font-body-sm text-body-sm"}>
-                    {"Idemitsu 0W-20 Synthetic, OEM Toyota filter replaced, genuine pink coolant level checked & topped up."}
-                  </div>
-                  <div className={"flex items-center justify-between pt-space-xs"}>
-                    <span className={"font-label-md text-label-md text-on-surface-variant"}>
-                      Total Cost
-                    </span>
-                    <span className={"font-price-display text-price-display text-on-surface"}>
-                      J$ 16,500
-                    </span>
-                  </div>
-                </div>
-              </article>
-              <article className={"flex gap-space-sm items-start"}>
-                <div className={"w-8 h-8 rounded-full bg-surface-container-highest text-on-surface flex items-center justify-center shadow-sm shrink-0 mt-2"}>
-                  <span className={"material-symbols-outlined text-[18px]"}>
-                    person_apron
-                  </span>
-                </div>
-                <div className={"flex-1 bg-surface-container-lowest rounded-xl p-space-md shadow-sm"}>
-                  <div className={"flex items-center justify-between gap-space-xs"}>
-                    <span className={"font-label-sm text-label-sm font-bold text-secondary uppercase tracking-wider"}>
-                      02 Nov 2023 • 70,120 km
-                    </span>
-                    <span className={"inline-flex items-center gap-1 text-[11px] font-medium text-on-surface-variant bg-surface-container px-2 py-0.5 rounded-full"}>
-                      DIY Self-Log
-                    </span>
-                  </div>
-                  <h3 className={"font-headline-sm text-headline-sm text-on-surface mt-1"}>
-                    {"Engine Oil & Filter Service"}
-                  </h3>
-                  <div className={"flex items-center gap-1.5 mt-1 text-on-surface-variant font-body-sm text-body-sm"}>
-                    <span className={"material-symbols-outlined text-[16px] text-outline"}>
-                      home_repair_service
-                    </span>
-                    <span>
-                      Did it myself (DIY)
-                    </span>
-                  </div>
-                  <p className={"mt-space-sm text-on-surface-variant font-body-sm text-body-sm"}>
-                    Parts bought at Mario's Auto Parts (Half Way Tree). Oil drain plug washer replaced.
-                  </p>
-                  <div className={"flex items-center justify-between pt-space-xs mt-space-xs"}>
-                    <span className={"font-label-md text-label-md text-on-surface-variant"}>
-                      Parts Cost
-                    </span>
-                    <span className={"font-price-display text-price-display text-on-surface"}>
-                      J$ 8,500
-                    </span>
-                  </div>
-                </div>
-              </article>
+              
+              
+              
+              
             </div>
           </section>
           <section className={"mt-space-lg mb-space-sm"}>
@@ -356,7 +177,7 @@ export function HistoryScreen() {
                   ITA Road Fitness
                 </p>
                 <p className={"font-body-sm text-body-sm text-on-surface-variant"}>
-                  Valid until 28 Feb 2025 • Depot: Swallowfield
+                  
                 </p>
               </div>
               <span className={"material-symbols-outlined text-secondary"}>

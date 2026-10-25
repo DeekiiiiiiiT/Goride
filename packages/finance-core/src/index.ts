@@ -312,6 +312,8 @@ export * from './maintenanceScheduleEngine.ts';
 export * from './maintenanceOverdueDetails.ts';
 export * from './canonicalOdometerMath.ts';
 export * from './statementTollNetting.ts';
+export * from './statementCard.ts';
+export * from './statementControl.ts';
 export {
   RECON_SOURCES,
   RECON_SOURCE_IDS,
@@ -395,3 +397,23 @@ export type {
   CompletedStepSnapshot,
   EvaluateRunStage,
 } from './evaluateRun.ts';
+export {
+  PAST_WEEKS_CLOSE,
+  CORRECTIONS_LAND_ON,
+  AUGUST_BUCKET_START,
+  CORRECTION_HISTORY_TOTAL,
+  OCT12_CORRECTION_AMOUNT,
+  WRITE_OFF_REASON_MIN,
+  resolvePastWeeksStep,
+  fuelCorrectionBuckets,
+  openWeekMove,
+  legacyChoiceTotals,
+  splitLegacyWriteOff,
+  LEGACY_KEPT_REPAIR_WEEKS,
+  legacyKeptHalf,
+} from './pastWeeksCleanup.ts';
+export type {
+  PastWeeksStep,
+  CorrectionBucketLine,
+  FuelCorrectionBuckets,
+} from './pastWeeksCleanup.ts';

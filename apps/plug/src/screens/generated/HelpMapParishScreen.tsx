@@ -37,7 +37,7 @@ export function HelpMapParishScreen() {
                 explore
               </span>
               <span className={"font-label-md text-label-md uppercase tracking-wider"}>
-                Road Scout Mission
+                Parish map
               </span>
             </div>
             <h2 className={"font-headline-lg text-headline-lg text-on-surface tracking-tight mb-space-xs"}>
@@ -67,7 +67,7 @@ export function HelpMapParishScreen() {
                   7 Parishes Critical
                 </span>
                 <span className={"bg-primary-fixed text-on-primary-fixed-variant px-2 py-0.5 rounded-full font-bold"}>
-                  +50 XP In Priority Zones
+                  
                 </span>
               </div>
             </div>
@@ -100,47 +100,47 @@ export function HelpMapParishScreen() {
                   </defs>
                   <rect fill={"url(#gridPattern)"} height={"100%"} rx={"8"} width={"100%"} />
                   <polygon className={"cursor-pointer transition-colors hover:opacity-80"} fill={"#ffdf9a"} id={"parish-hanover"} points={"25,55 68,48 72,82 32,84"} />
-                  <text className={"font-label-sm text-[8px] fill-[#5a4300] font-bold"} x={"40"} y={"68"}>
+                  <text className={"font-label-sm text-[12px] fill-[#5a4300] font-bold"} x={"40"} y={"68"}>
                     HAN
                   </text>
                   <polygon className={"cursor-pointer transition-colors hover:opacity-80"} fill={"#ffdf9a"} id={"parish-westmoreland"} points={"20,85 73,83 95,118 35,124 15,102"} />
-                  <text className={"font-label-sm text-[9px] fill-[#5a4300] font-bold"} x={"38"} y={"106"}>
+                  <text className={"font-label-sm text-[12px] fill-[#5a4300] font-bold"} x={"38"} y={"106"}>
                     WEST
                   </text>
                   <polygon className={"cursor-pointer transition-colors hover:opacity-80"} fill={"#ffdf9a"} id={"parish-stjames"} points={"69,47 114,44 118,92 74,82"} />
-                  <text className={"font-label-sm text-[8px] fill-[#5a4300] font-bold"} x={"82"} y={"70"}>
+                  <text className={"font-label-sm text-[12px] fill-[#5a4300] font-bold"} x={"82"} y={"70"}>
                     ST. JAM
                   </text>
                   <polygon className={"cursor-pointer transition-colors hover:opacity-80"} fill={"#ffdf9a"} id={"parish-trelawny"} points={"115,44 172,42 168,102 119,92"} />
-                  <text className={"font-label-sm text-[9px] fill-[#5a4300] font-bold"} x={"130"} y={"74"}>
+                  <text className={"font-label-sm text-[12px] fill-[#5a4300] font-bold"} x={"130"} y={"74"}>
                     TRELAWNY
                   </text>
                   <polygon className={"cursor-pointer transition-colors hover:opacity-80"} fill={"#ffdbce"} id={"parish-stelizabeth"} points={"74,84 120,93 148,150 96,152 72,122"} />
-                  <text className={"font-label-sm text-[9px] fill-[#7f2b00] font-extrabold"} x={"94"} y={"122"}>
+                  <text className={"font-label-sm text-[12px] fill-[#7f2b00] font-extrabold"} x={"94"} y={"122"}>
                     ST. ELIZ
                   </text>
                   <polygon className={"cursor-pointer transition-colors hover:opacity-80"} fill={"#ffb599"} id={"parish-manchester"} points={"121,94 170,103 178,156 148,151"} />
-                  <text className={"font-label-sm text-[9px] fill-[#7f2b00] font-extrabold"} x={"135"} y={"128"}>
+                  <text className={"font-label-sm text-[12px] fill-[#7f2b00] font-extrabold"} x={"135"} y={"128"}>
                     MANCH
                   </text>
                   <polygon className={"cursor-pointer transition-colors hover:opacity-80"} fill={"#ffdf9a"} id={"parish-stann"} points={"173,42 260,40 248,98 169,102"} />
-                  <text className={"font-label-sm text-[10px] fill-[#5a4300] font-bold"} x={"202"} y={"72"}>
+                  <text className={"font-label-sm text-[12px] fill-[#5a4300] font-bold"} x={"202"} y={"72"}>
                     ST. ANN
                   </text>
                   <polygon className={"cursor-pointer transition-colors hover:opacity-80"} fill={"#ffdbce"} id={"parish-clarendon"} points={"171,104 235,99 238,172 179,157"} />
-                  <text className={"font-label-sm text-[9px] fill-[#7f2b00] font-bold"} x={"190"} y={"134"}>
+                  <text className={"font-label-sm text-[12px] fill-[#7f2b00] font-bold"} x={"190"} y={"134"}>
                     CLAR
                   </text>
                   <polygon className={"cursor-pointer transition-colors hover:opacity-80"} fill={"#ffdf9a"} id={"parish-stmary"} points={"261,40 338,58 318,102 249,97"} />
-                  <text className={"font-label-sm text-[9px] fill-[#5a4300] font-bold"} x={"278"} y={"72"}>
+                  <text className={"font-label-sm text-[12px] fill-[#5a4300] font-bold"} x={"278"} y={"72"}>
                     ST. MARY
                   </text>
                   <polygon className={"cursor-pointer transition-colors hover:opacity-80"} fill={"#ffdf9a"} id={"parish-stcatherine"} points={"236,99 308,103 298,162 239,171"} />
-                  <text className={"font-label-sm text-[9px] fill-[#5a4300] font-bold"} x={"254"} y={"132"}>
+                  <text className={"font-label-sm text-[12px] fill-[#5a4300] font-bold"} x={"254"} y={"132"}>
                     ST. CATH
                   </text>
                   <polygon className={"cursor-pointer transition-colors hover:opacity-80"} fill={"#bbf7d0"} id={"parish-standrew"} points={"309,104 365,108 358,154 299,161"} />
-                  <text className={"font-label-sm text-[8px] fill-[#14532d] font-extrabold"} x={"318"} y={"128"}>
+                  <text className={"font-label-sm text-[12px] fill-[#14532d] font-extrabold"} x={"318"} y={"128"}>
                     ST. ANDREW
                   </text>
                   <circle cx={"332"} cy={"146"} fill={"#22c55e"} r={"10"} />
@@ -148,11 +148,11 @@ export function HelpMapParishScreen() {
                     KGN
                   </text>
                   <polygon className={"cursor-pointer transition-colors hover:opacity-80"} fill={"#ffb599"} id={"parish-portland"} points={"339,59 428,102 384,138 319,103"} />
-                  <text className={"font-label-sm text-[9px] fill-[#7f2b00] font-extrabold"} x={"358"} y={"96"}>
+                  <text className={"font-label-sm text-[12px] fill-[#7f2b00] font-extrabold"} x={"358"} y={"96"}>
                     PORTLAND
                   </text>
                   <polygon className={"cursor-pointer transition-colors hover:opacity-80"} fill={"#ffdbce"} id={"parish-stthomas"} points={"366,110 442,126 432,152 359,153"} />
-                  <text className={"font-label-sm text-[8px] fill-[#7f2b00] font-bold"} x={"382"} y={"138"}>
+                  <text className={"font-label-sm text-[12px] fill-[#7f2b00] font-bold"} x={"382"} y={"138"}>
                     ST. THOM
                   </text>
                   <g transform={"translate(148, 114)"}>
@@ -228,7 +228,7 @@ export function HelpMapParishScreen() {
                           Auto Parts Stores
                         </h4>
                         <span className={"bg-secondary-fixed text-on-secondary-fixed font-label-sm text-label-sm px-1.5 py-0.2 rounded font-bold"}>
-                          +50 XP
+                          
                         </span>
                       </div>
                       <p className={"font-body-sm text-body-sm text-on-surface-variant"}>
@@ -255,7 +255,7 @@ export function HelpMapParishScreen() {
                           Spur Tree Mechanics
                         </h4>
                         <span className={"bg-secondary-fixed text-on-secondary-fixed font-label-sm text-label-sm px-1.5 py-0.2 rounded font-bold"}>
-                          +50 XP
+                          
                         </span>
                       </div>
                       <p className={"font-body-sm text-body-sm text-on-surface-variant"}>
@@ -282,7 +282,7 @@ export function HelpMapParishScreen() {
                           24/7 Working Air Pumps
                         </h4>
                         <span className={"bg-surface-container-highest text-on-surface font-label-sm text-label-sm px-1.5 py-0.2 rounded font-bold"}>
-                          +30 XP
+                          
                         </span>
                       </div>
                       <p className={"font-body-sm text-body-sm text-on-surface-variant"}>
@@ -334,7 +334,7 @@ export function HelpMapParishScreen() {
                   </div>
                   <div className={"flex items-center gap-1.5"}>
                     <span className={"font-label-sm text-label-sm bg-primary-fixed text-on-primary-fixed-variant px-1.5 py-0.2 rounded font-bold"}>
-                      +50 XP
+                      
                     </span>
                     <span className={"font-headline-sm text-headline-sm text-error font-bold"}>
                       22%
@@ -365,7 +365,7 @@ export function HelpMapParishScreen() {
                   </div>
                   <div className={"flex items-center gap-1.5"}>
                     <span className={"font-label-sm text-label-sm bg-primary-fixed text-on-primary-fixed-variant px-1.5 py-0.2 rounded font-bold"}>
-                      +50 XP
+                      
                     </span>
                     <span className={"font-headline-sm text-headline-sm text-primary font-bold"}>
                       34%
@@ -396,7 +396,7 @@ export function HelpMapParishScreen() {
                   </div>
                   <div className={"flex items-center gap-1.5"}>
                     <span className={"font-label-sm text-label-sm bg-primary-fixed text-on-primary-fixed-variant px-1.5 py-0.2 rounded font-bold"}>
-                      +50 XP
+                      
                     </span>
                     <span className={"font-headline-sm text-headline-sm text-primary font-bold"}>
                       38%
@@ -556,7 +556,7 @@ export function HelpMapParishScreen() {
               </div>
               <div className={"flex flex-col min-w-0"}>
                 <h4 className={"font-label-lg text-label-lg text-on-surface font-bold mb-0.5"}>
-                  Road Scout Impact
+                  
                 </h4>
                 <p className={"font-body-sm text-body-sm text-on-surface-variant leading-relaxed"}>
                   Every verified pin helps over
@@ -582,7 +582,7 @@ export function HelpMapParishScreen() {
                 history_edu
               </span>
               <span>
-                View My Contributions (3 Pins Added • 140 XP)
+                View my contributions
               </span>
             </button>
           </div>

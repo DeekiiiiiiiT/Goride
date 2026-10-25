@@ -79,6 +79,9 @@ jobs:
       - name: Check fuel org-scope
         run: node scripts/check-fuel-org-scope.mjs
 
+      - name: Check statement summary org-scope
+        run: node scripts/check-statement-org-scope.mjs
+
       - name: Check no client service-line derivation (fuel)
         run: node scripts/check-no-client-service-line-derivation.mjs
 
@@ -324,9 +327,6 @@ jobs:
 
       - name: Plug screens have a way out
         run: node --experimental-strip-types apps/plug/scripts/check-dead-buttons.mjs
-
-      - name: Plug demo data stays in demo mode
-        run: node apps/plug/scripts/check-demo-leaks.mjs
 
       - name: Install Playwright browser
         run: npx playwright install --with-deps chromium

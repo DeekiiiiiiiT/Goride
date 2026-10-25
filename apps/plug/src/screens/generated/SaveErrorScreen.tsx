@@ -9,23 +9,7 @@ export function SaveErrorScreen() {
   return (
     <div ref={ref} data-plug-screen={"26b-save-error.html"} className={"h-full bg-surface-dim font-body-md text-on-surface antialiased flex justify-center items-center p-0 md:p-6 overflow-hidden"}>
       <main className={"relative w-full h-full md:h-[844px] max-w-[390px] bg-surface flex flex-col shadow-2xl overflow-hidden md:rounded-[40px] md:border md:border-outline-variant/40"}>
-        <header className={"w-full bg-surface-container-lowest/90 backdrop-blur-md px-6 pt-3 pb-1 flex justify-between items-center text-on-surface text-label-sm font-label-sm z-30"}>
-          <span>
-            9:41
-          </span>
-          <div className={"flex items-center space-x-1.5"}>
-            <span className={"material-symbols-outlined text-sm"}>
-              signal_cellular_4_bar
-            </span>
-            <span className={"material-symbols-outlined text-sm"}>
-              wifi
-            </span>
-            <span className={"material-symbols-outlined text-sm"}>
-              battery_5_bar
-            </span>
-          </div>
-        </header>
-        <div className={"bg-surface-container-lowest/90 backdrop-blur-md text-primary shadow-sm z-20"}>
+        <div className={"bg-surface pt-safe text-primary shadow-sm z-20"}>
           <div className={"flex justify-between items-center w-full px-4 h-14 max-w-md mx-auto"}>
             <button onClick={onPlugClick} aria-label={"Back"} className={"w-10 h-10 flex items-center justify-center rounded-full hover:bg-surface-container-high/50 transition-colors text-primary active:scale-95 duration-150"} type={"button"} data-act={"arrow-back"} data-way-out={"back"}>
               <span className={"material-symbols-outlined"} data-icon={"arrow_back"}>
@@ -81,7 +65,7 @@ export function SaveErrorScreen() {
                     directions_car
                   </span>
                   <span className={"font-semibold text-on-surface"}>
-                    2019 Toyota Roomy (84,612 km)
+                    Add a car
                   </span>
                 </div>
                 <button onClick={onPlugClick} className={"text-primary text-label-sm font-label-sm font-bold flex items-center"} data-act={"edit"}>
@@ -197,7 +181,7 @@ export function SaveErrorScreen() {
                   Odometer
                 </span>
                 <span className={"text-body-lg font-body-lg font-bold text-on-surface"}>
-                  84,612 km
+                  
                 </span>
               </div>
               <div className={"p-3 bg-surface-container-lowest rounded-xl border border-outline-variant/40 flex items-center justify-between"}>

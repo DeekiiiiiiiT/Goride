@@ -1,5 +1,4 @@
 import { plugSend, publicGet } from '../api';
-import { demoOn } from '../demo/mode';
 import { catalogVariant, rememberVehicle, vehicleId } from './facts';
 import { getPlugRuntime } from './click';
 
@@ -22,8 +21,6 @@ type Station = {
   prices?: Record<string, number>;
 };
 
-const SAMPLES = ['2019 Toyota Roomy', '8241-HY', 'Tariq Campbell', 'Daily Workhorse', 'Rubis Hope Road', '1KR-FE Turbo', 'GS Grade'];
-
 function replaceText(root: ParentNode, from: string, to: string) {
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
   let node: Node | null;
@@ -32,9 +29,10 @@ function replaceText(root: ParentNode, from: string, to: string) {
   }
 }
 
-function clearSamples(root: HTMLElement) {
-  if (demoOn()) return;
-  for (const sample of SAMPLES) replaceText(root, sample, '');
+function slotText(root: ParentNode, slot: string, text: string) {
+  root.querySelectorAll<HTMLElement>(`[data-slot="${slot}"]`).forEach((node) => {
+    node.textContent = text;
+  });
 }
 
 function note(root: HTMLElement, text: string, role: 'status' | 'alert') {
@@ -57,28 +55,30 @@ async function garage(): Promise<Vehicle[]> {
 }
 
 async function fillVehicle(root: HTMLElement) {
-  const cars = await garage();
+  let cars: Vehicle[] = [];
+  try {
+    cars = await garage();
+  } catch {
+    cars = [];
+  }
   const id = vehicleId();
   const car = cars.find((row) => row.id === id) || cars[0];
   if (!car) {
-    clearSamples(root);
+    slotText(root, 'car', 'Add a car');
     note(root, 'Add a car to see it here.', 'status');
     return;
   }
   rememberVehicle(car);
-  const name = carLabel(car);
-  replaceText(root, '2019 Toyota Roomy', name);
-  replaceText(root, 'Daily Workhorse', name);
-  replaceText(root, '8241-HY', '');
+  slotText(root, 'car', carLabel(car));
   const reading = car.starting_odometer;
-  if (reading != null) replaceText(root, '84,210', Number(reading).toLocaleString());
+  const odo = root.querySelector('[data-slot="odometer"]');
+  if (odo) odo.textContent = reading == null ? '' : Number(reading).toLocaleString();
 }
 
 async function fillGarage(root: HTMLElement) {
   const cars = await garage();
   const cards = [...root.querySelectorAll('h3')].map((heading) => heading.closest('div.w-full')).filter((card): card is HTMLElement => Boolean(card));
   if (!cars.length) {
-    clearSamples(root);
     note(root, 'No cars in this garage yet.', 'status');
     cards.forEach((card) => card.remove());
     return;
@@ -90,8 +90,7 @@ async function fillGarage(root: HTMLElement) {
   cars.forEach((car, index) => {
     const card = index === 0 ? template : template.cloneNode(true) as HTMLElement;
     const name = carLabel(car);
-    replaceText(card, '2019 Toyota Roomy', name);
-    replaceText(card, '2016 Nissan AD Wagon', name);
+    slotText(card, 'car', name);
     card.querySelectorAll('h3').forEach((heading) => { heading.textContent = name; });
     card.dataset.vehicleId = car.id;
     card.addEventListener('click', () => { getPlugRuntime().go(`/garage/${car.id}`); });
@@ -106,10 +105,7 @@ async function fillGarage(root: HTMLElement) {
 
 async function fillStation(root: HTMLElement) {
   const id = decodeURIComponent((window.location.hash.match(/\/stations\/([^/?]+)/) || [])[1] || sessionStorage.getItem('plug-station') || '');
-  if (!id) {
-    clearSamples(root);
-    return;
-  }
+  if (!id) return;
   const body = await publicGet<{ station: Station }>(`/stations/${id}`);
   const station = body.station;
   if (!station) return;
@@ -140,10 +136,33 @@ async function fillTolls(root: HTMLElement) {
 }
 
 async function fillAccount(root: HTMLElement) {
-  const body = await plugSend<{ profile?: { display_name?: string | null }[] }>('/me/export', 'GET');
-  const name = body.profile?.[0]?.display_name || sessionStorage.getItem('plug-name') || '';
-  replaceText(root, 'Tariq Campbell', name || (demoOn() ? 'DEMO driver' : 'Your account'));
-  if (!demoOn()) replaceText(root, 'Road Scout Lvl 3', '');
+  const [exported, contributions, garageBody] = await Promise.all([
+    plugSend<{ profile?: { display_name?: string | null; created_at?: string | null }[]; fuel_log?: { amount?: number | null }[]; user_vehicle?: { nickname?: string | null; year?: number | null; make?: string | null; model?: string | null }[] }>('/me/export', 'GET').catch(() => ({ profile: [], fuel_log: [], user_vehicle: [] })),
+    plugSend<{ pins?: { status?: string }[] }>('/contributions', 'GET').catch(() => ({ pins: [] })),
+    plugSend<{ vehicles?: { nickname?: string | null; year?: number | null; make?: string | null; model?: string | null }[] }>('/garage', 'GET').catch(() => ({ vehicles: [] })),
+  ]);
+  const profile = exported.profile?.[0];
+  const name = profile?.display_name || sessionStorage.getItem('plug-name') || 'Your account';
+  const initials = name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase() || '').join('') || 'You';
+  slotText(root, 'display-name', name);
+  const cars = garageBody.vehicles?.length ? garageBody.vehicles : exported.user_vehicle || [];
+  const car = cars[0];
+  const carName = car ? (car.nickname || [car.year, car.make, car.model].filter(Boolean).join(' ')) : '';
+  const pins = contributions.pins || [];
+  const spend = (exported.fuel_log || []).reduce((sum, row) => sum + Number(row.amount || 0), 0);
+  replaceText(root, 'No cars yet', cars.length ? `${cars.length} active` : 'No cars yet');
+  replaceText(root, '1 Active Car', cars.length ? `${cars.length} active` : 'No cars yet');
+  replaceText(root, 'No places yet', pins.length ? `${pins.length} place${pins.length === 1 ? '' : 's'}` : 'No places yet');
+  replaceText(root, '14 Island Spots', pins.length ? `${pins.length} place${pins.length === 1 ? '' : 's'}` : 'No places yet');
+  replaceText(root, 'No prices yet', '');
+  replaceText(root, '42 Fuel Rates', '');
+  replaceText(root, 'No fills yet', exported.fuel_log?.length ? `J$${Math.round(spend).toLocaleString()}` : 'No fills yet');
+  replaceText(root, 'J$14,200', exported.fuel_log?.length ? `J$${Math.round(spend).toLocaleString()}` : 'No fills yet');
+  replaceText(root, 'No reminder yet', 'No reminder yet');
+  replaceText(root, 'Fitness expires in 14 days', 'No reminder yet');
+  const avatar = root.querySelector('[data-initials]');
+  if (avatar) avatar.textContent = initials;
+  if (carName) slotText(root, 'car', carName);
 }
 
 async function fillHistory(root: HTMLElement) {
@@ -153,28 +172,28 @@ async function fillHistory(root: HTMLElement) {
     'GET',
   );
   const logs = body.logs || [];
+  const slot = root.querySelector<HTMLElement>('[data-slot="history"]');
   if (!logs.length) {
-    clearSamples(root);
-    note(root, 'No fuel logs yet.', 'status');
+    if (slot) slot.textContent = 'No fuel logs yet.';
     return;
   }
-  const cards = [...root.querySelectorAll('h3, h2')].slice(0, 1);
-  const first = logs[0];
-  if (cards[0]) cards[0].textContent = `${first.grade || 'Fuel'} · ${first.litres || 0} L`;
-  if (first.amount != null) replaceText(root, 'J$', `J$${Number(first.amount).toFixed(2)} `);
+  if (slot) {
+    slot.textContent = '';
+    logs.forEach((row) => {
+      const line = document.createElement('p');
+      line.className = 'px-4 py-3 font-bold';
+      const when = row.created_at ? new Date(row.created_at).toLocaleDateString('en-JM') : '';
+      line.textContent = [row.grade || 'Fuel', row.litres ? `${row.litres} L` : '', row.amount != null ? `J$${Number(row.amount).toFixed(2)}` : '', when].filter(Boolean).join(' · ');
+      slot.appendChild(line);
+    });
+  }
 }
 
 async function fillSpend(root: HTMLElement) {
   const id = vehicleId();
   const body = await plugSend<{ logs: { amount?: number }[] }>(`/fuel-logs${id ? `?vehicleId=${encodeURIComponent(id)}` : ''}`, 'GET');
   const total = (body.logs || []).reduce((sum, row) => sum + Number(row.amount || 0), 0);
-  const heading = [...root.querySelectorAll('h1, h2, strong')].find((node) => /J\$|spend|total/i.test(node.textContent || ''));
-  if (!body.logs?.length) {
-    clearSamples(root);
-    note(root, 'No fuel spend yet.', 'status');
-    return;
-  }
-  if (heading) heading.textContent = `J$${total.toFixed(2)}`;
+  slotText(root, 'spend', body.logs?.length ? `J$${total.toFixed(2)}` : 'No fuel spend yet');
 }
 
 async function fillDocs(root: HTMLElement) {
@@ -190,26 +209,23 @@ async function fillDocs(root: HTMLElement) {
     const card = heading.closest('div');
     if (!card) return;
     card.setAttribute('data-kind', match?.kind || kind);
-    const date = card.querySelector('span');
-    if (match?.due_on && date) date.textContent = match.due_on;
-    else if (!match && !demoOn()) {
-      const badge = [...card.querySelectorAll('span')].find((node) => /valid|expired|due/i.test(node.textContent || ''));
-      if (badge) badge.textContent = 'Not set';
-    }
+    const dates = [...card.querySelectorAll('span')].filter((node) => (node.textContent || '').trim() === 'Not set');
+    if (match?.due_on && dates[0]) dates[0].textContent = match.due_on;
+    else if (!match && dates[0]) dates[0].textContent = 'Not set';
   });
 }
 
 async function fillSchedule(root: HTMLElement) {
   const variant = catalogVariant();
   if (!variant) {
-    if (!demoOn()) note(root, 'Add a catalog car to see its service schedule.', 'status');
+    note(root, 'Add a catalog car to see its service schedule.', 'status');
     return;
   }
   const body = await publicGet<{ tasks: { op_code?: string; name?: string; title?: string }[] }>(`/schedules?variant=${encodeURIComponent(variant)}`);
   const tasks = body.tasks || [];
   const cards = [...root.querySelectorAll('div.cursor-pointer')];
   if (!tasks.length) {
-    if (!demoOn()) note(root, 'No service schedule for this car yet.', 'status');
+    note(root, 'No service schedule for this car yet.', 'status');
     return;
   }
   tasks.forEach((task, index) => {
@@ -260,16 +276,20 @@ async function fillInbox(root: HTMLElement) {
 async function fillPins(root: HTMLElement) {
   const body = await plugSend<{ pins: { id: string; name: string; status: string }[] }>('/contributions', 'GET');
   const pins = body.pins || [];
-  if (!pins.length) {
-    clearSamples(root);
-    note(root, 'No pins yet.', 'status');
-    return;
-  }
+  const slot = root.querySelector<HTMLElement>('[data-slot="pins"]');
   const pending = pins.find((pin) => pin.status === 'pending');
   if (pending) sessionStorage.setItem('plug-pin', pending.id);
-  const titles = [...root.querySelectorAll('h2, h3')];
-  pins.forEach((pin, index) => {
-    if (titles[index]) titles[index].textContent = pin.name;
+  if (!slot) return;
+  if (!pins.length) {
+    slot.textContent = 'No places yet.';
+    return;
+  }
+  slot.textContent = '';
+  pins.forEach((pin) => {
+    const line = document.createElement('p');
+    line.className = 'px-4 py-3 font-bold';
+    line.textContent = `${pin.name} · ${pin.status === 'approved' ? 'Approved' : 'Waiting for approval'}`;
+    slot.appendChild(line);
   });
 }
 
@@ -298,13 +318,25 @@ async function fillCatalog(root: HTMLElement, query: string) {
   });
 }
 
+async function paintCarName(root: HTMLElement) {
+  let cars: Vehicle[] = [];
+  try {
+    cars = await garage();
+  } catch {
+    cars = [];
+  }
+  const car = cars.find((row) => row.id === vehicleId()) || cars[0];
+  slotText(root, 'car', car ? carLabel(car) : 'Add a car');
+}
+
 export async function fillScreen(file: string, root: HTMLElement) {
+  root.querySelector('[data-fill-note]')?.remove();
   try {
     if (file === '30-vehicle-overview.html' || file === '13-vehicle-added.html') await fillVehicle(root);
     else if (file === '29-my-vehicles.html') await fillGarage(root);
     else if (file === '19-station-detail.html' || file === '17-station-list.html') await fillStation(root);
     else if (file === '48-tolls.html') await fillTolls(root);
-    else if (file === '51-account.html') await fillAccount(root);
+    else if (file === '51-account.html' || file === '52-notification-settings.html') await fillAccount(root);
     else if (file === '34-history.html') await fillHistory(root);
     else if (file === '35-fuel-spend.html') await fillSpend(root);
     else if (file === '36-documents.html') await fillDocs(root);
@@ -315,9 +347,9 @@ export async function fillScreen(file: string, root: HTMLElement) {
     else if (file === '47-help-map-parish.html') await fillParish(root);
     else if (file === '09-add-vehicle-make.html') await fillCatalog(root, '');
     else if (file === '10-model-year.html') await fillCatalog(root, sessionStorage.getItem('plug-make') || '');
-    else if (!demoOn()) clearSamples(root);
+    await paintCarName(root);
   } catch {
-    clearSamples(root);
+    slotText(root, 'car', 'Add a car');
     note(root, 'Could not load this. Go back and try again.', 'alert');
   }
 }

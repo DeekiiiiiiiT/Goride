@@ -31,6 +31,11 @@ describe('getTripNetIncome', () => {
     expect(getTripNetIncome(trip({ platform: 'Uber', grossEarnings: 50, amount: 50 }))).toBeNull();
   });
 
+  it('does not invent a Roam net when no commission was stored', () => {
+    expect(getTripNetIncome(trip({ platform: 'Roam', amount: 100 }))).toBeNull();
+    expect(getTripNetIncome(trip({ platform: 'Roam', amount: 100, roamCommission: 15 } as Trip))).toBe(85);
+  });
+
   it('returns null when unknown', () => {
     expect(getTripNetIncome(trip({ platform: 'InDrive', amount: 50 }))).toBeNull();
   });

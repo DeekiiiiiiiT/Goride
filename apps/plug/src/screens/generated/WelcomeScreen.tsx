@@ -8,25 +8,7 @@ export function WelcomeScreen() {
   useEffect(() => { if (ref.current) bindScreen("02-welcome.html", ref.current); }, []);
   return (
     <div ref={ref} data-plug-screen={"02-welcome.html"} className={"bg-surface text-on-surface antialiased flex flex-col min-h-screen"}>
-      <div className={"w-full pt-safe px-margin select-none"}>
-        <div className={"flex justify-between items-center pt-space-xs text-on-surface"}>
-          <span className={"font-label-md text-label-md font-semibold tracking-tight"}>
-            9:41
-          </span>
-          <div className={"flex items-center gap-1.5"}>
-            <span className={"material-symbols-outlined text-[16px] leading-none"}>
-              signal_cellular_alt
-            </span>
-            <span className={"material-symbols-outlined text-[16px] leading-none"}>
-              wifi
-            </span>
-            <span className={"material-symbols-outlined text-[18px] leading-none"}>
-              battery_full
-            </span>
-          </div>
-        </div>
-      </div>
-      <main className={"flex-1 flex flex-col relative w-full pb-safe bg-surface px-margin"}>
+      <main className={"flex-1 flex flex-col relative w-full pt-safe pb-safe bg-surface px-margin"}>
         <div className={"flex flex-col w-full pb-6 space-y-5 animate-fade-in"}>
           <header className={"flex items-center justify-between w-full pt-2"}>
             <div className={"flex items-center gap-2"}>
@@ -51,14 +33,8 @@ export function WelcomeScreen() {
           </header>
           <div className={"relative w-full rounded-xl overflow-hidden bg-surface-container shadow-md group"}>
             <div className={"relative w-full aspect-[4/3] overflow-hidden"}>
-              <img alt={"Roam Plug gas station experience across Jamaican hills"} className={"w-full h-full object-cover transform transition-transform duration-700 ease-out group-hover:scale-105"} src={"https://lh3.googleusercontent.com/aida-public/AB6AXuDM9P7iBQTX--eXioy1YCz6OgTT9w8lGqdfS1D_eVk3uwpyyVsfLKCEcnQ6VnodBbFoin8qhE6QGlcZW0aVweC5yzIWaNBAsB1EIr-Hq6vCBsXfkxQyAGzqUZlZlcmnWluKZZPWfTLiua2EKgpYJv8xfx_7rAab4GnX3aQdt3nTbnU02piOaRcj9kyXX60Bc4EW1bsQQLrw7hxGzbYrY3HcURujv6WkaQOY8Q6SBIsBSAvAV4A0gs2U"} />
+              <div className={"w-full h-full object-cover transform transition-transform duration-700 ease-out group-hover:scale-105 bg-surface-container flex items-center justify-center text-primary"} aria-hidden={"true"}><span className={"material-symbols-outlined text-[32px]"}>image</span></div>
               <div className={"absolute inset-0 bg-gradient-to-t from-on-surface/40 via-transparent to-transparent pointer-events-none"} />
-              <div className={"absolute bottom-3 left-3 flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-surface/90 backdrop-blur-md shadow-sm"}>
-                <span className={"w-2 h-2 rounded-full bg-emerald-600 animate-pulse"} />
-                <span className={"font-label-sm text-label-sm text-on-surface font-semibold tracking-wide"}>
-                  14 Parishes Active
-                </span>
-              </div>
               <div className={"absolute top-3 right-3 flex items-center gap-1 px-2.5 py-1 rounded-full bg-secondary-container text-on-secondary-container shadow-md"}>
                 <span className={"material-symbols-outlined text-[14px]"}>
                   local_gas_station
@@ -77,7 +53,7 @@ export function WelcomeScreen() {
               Island-Wide Driver Network
             </div>
             <h1 className={"font-display-lg-mobile text-display-lg-mobile text-on-surface font-extrabold tracking-tight"}>
-              Welcome to
+              Welcome to{" "}
               <span className={"text-primary-container"}>
                 Roam Plug
               </span>
@@ -115,6 +91,9 @@ export function WelcomeScreen() {
             </div>
           </div>
           <div className={"flex flex-col w-full space-y-3 pt-2"}>
+            <button onClick={onPlugClick} className={"w-full min-h-[52px] px-6 py-3.5 rounded-xl bg-surface-container-lowest text-on-surface font-headline-sm text-headline-sm flex items-center justify-center gap-2 shadow-sm active:scale-[0.98] transition-all duration-150"} type={"button"} data-act={"continue-with-google"} data-way-out={"primary"}>
+              Continue with Google
+            </button>
             <button onClick={onPlugClick} className={"w-full min-h-[52px] px-6 py-3.5 rounded-xl bg-primary-container text-on-primary font-headline-sm text-headline-sm flex items-center justify-center gap-2 shadow-md active:scale-[0.98] transition-all duration-150"} id={"get-started-btn"} type={"button"} data-act={"get-started-btn"} data-way-out={"primary"}>
               <span>
                 Get Started

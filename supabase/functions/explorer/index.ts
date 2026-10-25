@@ -11,12 +11,15 @@ import {
   hashExplorerUser,
   impossibleTravel,
   fillCare,
+  joinDecision,
   planPlugFill,
   plugPriceDecision,
+  readJoinTicket,
   suggestReview,
   writesTouchFleetMoney,
   PLUG_FLAGS,
   sectionEnabled,
+  signJoinTicket,
 } from "../_shared/plugCore.ts";
 
 const app = new Hono().basePath("/explorer");
@@ -71,10 +74,13 @@ async function requireOwner(c: { req: { header: (name: string) => string | undef
 }
 
 async function ensureProfile(sb: SupabaseClient, user: User) {
+  const meta = user.user_metadata || {};
+  const googleName = typeof meta.full_name === "string" ? meta.full_name : typeof meta.name === "string" ? meta.name : null;
   await sb.schema("explorer").from("profile").upsert({
     user_id: user.id,
     phone: user.phone || null,
-    display_name: user.user_metadata?.display_name || null,
+    email: user.email || null,
+    display_name: meta.display_name || googleName || null,
   }, { onConflict: "user_id" });
 }
 
@@ -162,7 +168,53 @@ async function hitLimit(sb: SupabaseClient, userId: string, action: string, max:
   return true;
 }
 
+function providersOf(user: User): string[] {
+  const identities = (user.identities || []).map((identity) => identity.provider).filter((provider) => Boolean(provider));
+  if (identities.length) return identities;
+  const listed = user.app_metadata?.providers;
+  if (Array.isArray(listed)) return listed.filter((provider) => typeof provider === "string");
+  const one = user.app_metadata?.provider;
+  return typeof one === "string" ? [one] : [];
+}
+
 app.get("/health", (c) => c.json({ service: "explorer", status: "ok" }));
+
+app.post("/join/ticket", async (c) => {
+  try {
+    const issuedAt = new Date().toISOString();
+    const ticket = await signJoinTicket(issuedAt, userPepper());
+    return c.json({ ticket });
+  } catch (err) {
+    return c.json({ error: err instanceof Error ? err.message : "Could not start sign-up" }, 400);
+  }
+});
+
+app.post("/join", async (c) => {
+  try {
+    const user = await userFrom(c);
+    const body = await c.req.json().catch(() => ({} as { ticket?: string }));
+    const now = new Date().toISOString();
+    const ticket = typeof body.ticket === "string" ? body.ticket : "";
+    const ticketIssuedAt = ticket ? await readJoinTicket(ticket, userPepper(), now) : null;
+    if (joinDecision({
+      role: roleOf(user),
+      createdAt: user.created_at || "",
+      now,
+      providers: providersOf(user),
+      ticketIssuedAt,
+    }) !== "grant") {
+      return c.json({ error: "This account already belongs to another Roam app" }, 403);
+    }
+    const sb = admin();
+    await ensureProfile(sb, user);
+    const appMeta = { ...(user.app_metadata || {}), role: "explorer_user" };
+    const { error } = await sb.auth.admin.updateUserById(user.id, { app_metadata: appMeta });
+    if (error) throw error;
+    return c.json({ ok: true, role: "explorer_user" });
+  } catch (err) {
+    return c.json({ error: err instanceof Error ? err.message : "Could not open Roam Plug" }, 400);
+  }
+});
 
 app.post("/odometer-scan", async (c) => {
   try {
@@ -251,8 +303,9 @@ app.post("/profile", async (c) => {
     const sb = admin();
     await sb.schema("explorer").from("profile").upsert({
       user_id: user.id,
-      display_name: body.displayName || null,
+      display_name: body.displayName || user.user_metadata?.full_name || user.user_metadata?.name || null,
       phone: user.phone || body.phone || null,
+      email: user.email || null,
       parish_pcode: body.parishPcode || null,
       consent_at: body.consent ? new Date().toISOString() : null,
     });

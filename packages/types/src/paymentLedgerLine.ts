@@ -42,6 +42,10 @@ export interface PaymentLedgerFareBreakdown {
   tip: number;
   tollRefund: number;
   airportFees?: number;
+  /** UberX Priority. Absent on files imported before the column was parsed. */
+  priority?: number;
+  /** Any other Paid to you:Your earnings:Fare:* column. */
+  other?: number;
 }
 
 export interface PaymentLedgerLine {

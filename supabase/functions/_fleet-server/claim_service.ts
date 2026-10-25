@@ -174,6 +174,23 @@ async function enforceClaimChargeGuard(claim: any, opts?: UpsertClaimOptions): P
 }
 
 /**
+ * A platform login has no company on the session. The toll already belongs to one.
+ * Charge Driver has to keep that company or the money row is refused.
+ */
+async function chargeRecordWithCompany<T extends Record<string, unknown>>(
+  record: T,
+  c: unknown,
+  transactionId?: string | null,
+): Promise<T> {
+  const stamped = stampOrg(record, c as never);
+  if (stamped.organizationId || !transactionId) return stamped;
+  const toll = await getTollLedgerEntry(String(transactionId));
+  const company = toll?.organizationId || toll?.organization_id;
+  if (!company) return stamped;
+  return { ...stamped, organizationId: String(company) };
+}
+
+/**
  * Upsert a claim, applying the reversible claim/driver-charge/toll_ledger
  * sync when the claim's resolvedness changes. `claimInput` is the FULL
  * desired claim object (id optional — generated if absent, same as the
@@ -241,7 +258,7 @@ export async function upsertClaim(claimInput: any, c: unknown, opts?: UpsertClai
     // no toll_ledger sync. Identical to the pre-existing code path.
     if (claim.status === "Resolved" && claim.resolutionReason === "Charge Driver" && !claim.resolutionTransactionId) {
       const txId = crypto.randomUUID();
-      const transaction = {
+      const transaction = await chargeRecordWithCompany({
         id: txId,
         driverId: claim.driverId,
         date: new Date().toISOString(),
@@ -253,13 +270,13 @@ export async function upsertClaim(claimInput: any, c: unknown, opts?: UpsertClai
         status: "Completed",
         paymentMethod: "Cash",
         metadata: { claimId: claim.id, source: "claim_resolution" },
-      };
-      await kv.set(`transaction:${txId}`, stampOrg(transaction, c as never));
+      }, c, claim.transactionId);
+      await kv.set(`transaction:${txId}`, transaction);
       claim.resolutionTransactionId = txId;
     }
   }
 
-  await kv.set(`claim:${claim.id}`, stampOrg(claim, c as never));
+  await kv.set(`claim:${claim.id}`, await chargeRecordWithCompany(claim, c, claim.transactionId));
   await syncTollLinkage(claim);
   return claim;
 }

@@ -20,9 +20,8 @@ export function PartsComingSoonScreen() {
               <h1 className={"font-headline-sm text-headline-sm text-on-surface truncate"}>
                 Parts Coming Soon
               </h1>
-              <span className={"font-label-md text-label-md text-on-surface-variant truncate"}>
-                2019 Toyota Roomy
-              </span>
+              <span className={"font-label-md text-label-md text-on-surface-variant truncate"} data-slot={"car"}>
+                Add a car</span>
             </div>
           </div>
           <div className={"flex items-center gap-space-xs"}>
@@ -58,7 +57,7 @@ export function PartsComingSoonScreen() {
               </div>
             </div>
             <h2 className={"font-headline-sm text-headline-sm text-on-surface mb-space-xs font-bold leading-tight"}>
-              Parts for your 2019 Toyota Roomy are coming soon
+              Parts for your car are coming soon
             </h2>
             <p className={"font-body-md text-body-md text-on-surface-variant max-w-xs mx-auto"}>
               We're building our verified parts database car by car. Yours is currently on the lift!
@@ -106,7 +105,7 @@ export function PartsComingSoonScreen() {
               <div className={"w-full h-2 rounded-full bg-surface-container-highest overflow-hidden"}>
                 <div className={"h-full bg-gradient-to-r from-secondary to-primary-container rounded-full w-[72%] transition-all duration-1000"} />
               </div>
-              <div className={"flex items-center justify-between mt-1 text-[11px] font-label-sm text-on-surface-variant"}>
+              <div className={"flex items-center justify-between mt-1 text-[12px] font-label-sm text-on-surface-variant"}>
                 <span>
                   {"Suspension & Filters done"}
                 </span>
@@ -128,7 +127,7 @@ export function PartsComingSoonScreen() {
                   <h4 className={"font-headline-sm text-headline-sm text-[16px] text-on-surface leading-tight"}>
                     Notify me when ready
                   </h4>
-                  <span className={"bg-primary-fixed text-on-primary-fixed px-1.5 py-0.5 rounded text-[10px] font-label-sm font-bold"}>
+                  <span className={"bg-primary-fixed text-on-primary-fixed px-1.5 py-0.5 rounded text-[12px] font-label-sm font-bold"}>
                     SMS / Push
                   </span>
                 </div>
@@ -164,10 +163,9 @@ export function PartsComingSoonScreen() {
                 <span className={"font-label-sm text-label-sm text-on-surface-variant uppercase"}>
                   Vehicle
                 </span>
-                <span className={"font-label-md text-label-md text-on-surface truncate font-semibold"}>
-                  2019 Toyota Roomy
-                </span>
-                <span className={"font-body-sm text-body-sm text-on-surface-variant text-[11px] truncate"}>
+                <span className={"font-label-md text-label-md text-on-surface truncate font-semibold"} data-slot={"car"}>
+                  Add a car</span>
+                <span className={"font-body-sm text-body-sm text-on-surface-variant text-[12px] truncate"}>
                   1.0L Turbo GS Custom
                 </span>
               </div>
@@ -178,7 +176,7 @@ export function PartsComingSoonScreen() {
                 <span className={"font-price-display text-price-display text-[16px] text-primary truncate font-bold"}>
                   M900A
                 </span>
-                <span className={"font-body-sm text-body-sm text-on-surface-variant text-[11px] truncate"}>
+                <span className={"font-body-sm text-body-sm text-on-surface-variant text-[12px] truncate"}>
                   JDM Micro-Van
                 </span>
               </div>
@@ -189,7 +187,7 @@ export function PartsComingSoonScreen() {
                 <span className={"font-headline-sm text-headline-sm text-[15px] text-on-surface font-semibold truncate"}>
                   1KR-VET
                 </span>
-                <span className={"font-body-sm text-body-sm text-on-surface-variant text-[11px] truncate"}>
+                <span className={"font-body-sm text-body-sm text-on-surface-variant text-[12px] truncate"}>
                   3-Cyl DOHC VVT
                 </span>
               </div>
@@ -200,7 +198,7 @@ export function PartsComingSoonScreen() {
                 <span className={"font-headline-sm text-headline-sm text-[15px] text-on-surface font-semibold truncate"}>
                   St. Andrew
                 </span>
-                <span className={"font-body-sm text-body-sm text-on-surface-variant text-[11px] truncate"}>
+                <span className={"font-body-sm text-body-sm text-on-surface-variant text-[12px] truncate"}>
                   Kingston Metro hub
                 </span>
               </div>

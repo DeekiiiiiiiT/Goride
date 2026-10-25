@@ -105,7 +105,7 @@ export function EmptySearchScreen() {
               <span className={"font-bold text-primary font-mono tracking-tight"}>
                 "zzznone"
               </span>
-              <span className={"text-[10px] text-outline"}>
+              <span className={"text-[12px] text-outline"}>
                 • 0 results in KSA
               </span>
             </div>
@@ -180,8 +180,8 @@ export function EmptySearchScreen() {
                     <span>
                       Pin a missing station
                     </span>
-                    <span className={"inline-flex items-center px-1.5 py-0.2 rounded bg-tertiary text-on-tertiary font-bold text-[10px] tracking-wide"}>
-                      +25 XP
+                    <span className={"inline-flex items-center px-1.5 py-0.2 rounded bg-tertiary text-on-tertiary font-bold text-[12px] tracking-wide"}>
+                      
                     </span>
                   </p>
                 </div>
@@ -197,7 +197,7 @@ export function EmptySearchScreen() {
                 local_shipping
               </span>
               <span className={"text-body-sm font-body-sm"}>
-                312 Verified pumps active island-wide
+                
               </span>
             </div>
             <span className={"text-label-sm font-label-sm font-bold text-on-surface"}>

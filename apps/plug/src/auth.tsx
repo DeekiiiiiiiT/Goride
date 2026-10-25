@@ -4,7 +4,6 @@ import { supabasePlugApp } from '../../../packages/auth-client/src/supabase';
 import { PLUG_FLAGS, type PlugFlag, sectionEnabled } from '@roam/plug-core';
 import { PLUG_FLAGS_OPEN } from './config';
 import { plugSend } from './api';
-import { demoOn } from './demo/mode';
 
 type AuthValue = {
   session: Session | null;
@@ -15,21 +14,21 @@ type AuthValue = {
   sendCode: (phone: string) => Promise<void>;
   verifyCode: (phone: string, code: string) => Promise<void>;
   signOut: () => Promise<void>;
+  continueWithGoogle: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthValue | null>(null);
 
+const FLAGS_OFF = Object.fromEntries(PLUG_FLAGS.map((flag) => [flag, false])) as Record<PlugFlag, boolean>;
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [ready, setReady] = useState(false);
-  const [flags, setFlags] = useState<Record<PlugFlag, boolean>>(() => Object.fromEntries(PLUG_FLAGS.map((flag) => [flag, PLUG_FLAGS_OPEN || demoOn()])) as Record<PlugFlag, boolean>);
-  const [demoSignedIn, setDemoSignedIn] = useState(() => demoOn() && sessionStorage.getItem('plug-demo-signed-in') === '1');
+  const [flags, setFlags] = useState<Record<PlugFlag, boolean>>(() => (
+    Object.fromEntries(PLUG_FLAGS.map((flag) => [flag, PLUG_FLAGS_OPEN])) as Record<PlugFlag, boolean>
+  ));
 
   useEffect(() => {
-    if (demoOn()) {
-      setReady(true);
-      return;
-    }
     void supabasePlugApp.auth.getSession().then(({ data }) => {
       setSession(data.session);
       setReady(true);
@@ -39,20 +38,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    if (demoOn() || !session || PLUG_FLAGS_OPEN) return;
+    if (!session || PLUG_FLAGS_OPEN) return;
     void plugSend<{ flags: Record<PlugFlag, boolean> }>('/flags', 'GET')
       .then((body) => setFlags(body.flags))
-      .catch(() => setFlags(Object.fromEntries(PLUG_FLAGS.map((flag) => [flag, false])) as Record<PlugFlag, boolean>));
+      .catch(() => setFlags(FLAGS_OFF));
   }, [session]);
 
   const value = useMemo<AuthValue>(() => ({
     session,
     ready,
-    signedIn: Boolean(session) || demoSignedIn,
+    signedIn: Boolean(session),
     flags,
-    flagOn: (flag) => demoOn() || sectionEnabled(flag, flags[flag], false) || PLUG_FLAGS_OPEN,
+    flagOn: (flag) => sectionEnabled(flag, flags[flag], false) || PLUG_FLAGS_OPEN,
     sendCode: async (phone) => {
-      if (demoOn()) return;
       const { error } = await supabasePlugApp.auth.signInWithOtp({
         phone,
         options: { channel: 'sms', data: { app: 'plug' } },
@@ -60,24 +58,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (error) throw error;
     },
     verifyCode: async (phone, token) => {
-      if (demoOn()) {
-        if (token.replace(/\D/g, '').length < 6) throw new Error('Enter the 6-digit code');
-        sessionStorage.setItem('plug-demo-signed-in', '1');
-        setDemoSignedIn(true);
-        return;
-      }
       const { error } = await supabasePlugApp.auth.verifyOtp({ phone, token, type: 'sms' });
       if (error) throw error;
     },
     signOut: async () => {
-      if (demoOn()) {
-        sessionStorage.removeItem('plug-demo-signed-in');
-        setDemoSignedIn(false);
-        return;
-      }
       await supabasePlugApp.auth.signOut();
     },
-  }), [demoSignedIn, flags, session, ready]);
+    continueWithGoogle: async () => {
+      const { ticket } = await plugSend<{ ticket: string }>('/join/ticket', 'POST', {});
+      sessionStorage.setItem('plug-join-ticket', ticket);
+      const { error } = await supabasePlugApp.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: window.location.origin,
+          queryParams: { prompt: 'select_account' },
+        },
+      });
+      if (error) throw error;
+    },
+  }), [flags, session, ready]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

@@ -100,7 +100,49 @@ export function tripHasMoneyForLedgerProjection(trip: Record<string, unknown>): 
  * Creates fare_earning, tip (Uber if tips > 0). Uber promotions: see buildCanonicalImportEvents.
  * For Uber: uberFareComponents, uberTips; InDrive: indrive net/fee handling.
  */
+function isCancelledTripStatus(status: unknown): boolean {
+  const s = String(status ?? "").trim().toLowerCase();
+  return s.includes("cancel");
+}
+
+function cancellationFeeOf(trip: Record<string, unknown>): number {
+  const direct = coerceAmount(trip.cancellationFare);
+  if (direct > 0.005) return direct;
+  const breakdown = trip.fareBreakdown;
+  if (breakdown && typeof breakdown === "object") {
+    return coerceAmount((breakdown as Record<string, unknown>).cancellation);
+  }
+  return 0;
+}
+
 export function buildCanonicalTripFareEventsFromTrip(trip: Record<string, unknown>): Record<string, unknown>[] {
+  if (isCancelledTripStatus(trip.status)) {
+    const fee = cancellationFeeOf(trip);
+    const id = String(trip.id ?? "").trim();
+    const driverId = String(trip.driverId ?? "").trim();
+    const date = (typeof trip.date === "string" ? trip.date.trim() : "").slice(0, 10);
+    if (fee <= 0.005 || !id || !driverId || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return [];
+    const carried = String(trip.carriedFromWeek || "").slice(0, 10);
+    return [{
+      driverId,
+      date,
+      currency: "JMD",
+      sourceType: "trip",
+      sourceId: id,
+      platform: String(trip.platform || "Uber").trim(),
+      idempotencyKey: `trip:${id}|fare_earning`,
+      eventType: "fare_earning",
+      direction: "inflow",
+      netAmount: fee,
+      grossAmount: fee,
+      description: "Cancellation fee",
+      metadata: {
+        tripId: id,
+        kind: "cancellation",
+        ...(carried ? { carriedFromWeek: carried } : {}),
+      },
+    }];
+  }
   if (!tripHasMoneyForLedgerProjection(trip)) return [];
 
   const id = String(trip.id ?? "").trim();
@@ -244,7 +286,12 @@ export function buildCanonicalTripFareEventsFromTrip(trip: Record<string, unknow
         netAmount: priorAdj,
         grossAmount: Math.abs(priorAdj),
         description: `Adjustment from previous period (${platform})`,
-        metadata: { tripId: id },
+        metadata: {
+          tripId: id,
+          ...(String(trip.carriedFromWeek || "").slice(0, 10)
+            ? { carriedFromWeek: String(trip.carriedFromWeek).slice(0, 10) }
+            : {}),
+        },
       });
     }
   }

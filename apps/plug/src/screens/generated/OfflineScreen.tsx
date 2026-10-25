@@ -91,7 +91,7 @@ export function OfflineScreen() {
           </div>
           <div className={"px-space-md pt-space-xs pb-space-sm"}>
             <div className={"relative w-full h-44 rounded-xl overflow-hidden shadow-sm"}>
-              <div className={"w-full h-full bg-cover bg-center"} data-location={"Kingston, Jamaica"} style={{ backgroundImage: "url('https://lh3.googleusercontent.com/aida-public/AB6AXuC7cgJkoiDjsDFoO6mvtjHK0Kiic3Jgzsbc09u5d0iBGjg3iqCp3mKxcaRGbEcpNEwLwePTVdflplbFYrC0q1QOzmBLQ77PALAewO5i3FxG1xj6stUGB83E9TuC8AaIO8hLjzHAz8aoM-xpf1WspsbAHAXSww3Sr_GM1RS0WCYit32_-ZYFBOlqxgYBgCd3Uq9CoStUpWysCFS1-unwNt3RoPtkQc7eOlgJTNx1Xguy5EKtggBfgN7b')" }} />
+              <div className={"w-full h-full bg-surface-container flex items-center justify-center text-primary"} aria-hidden={"true"}><span className={"material-symbols-outlined text-[32px]"}>image</span></div>
               <div className={"absolute inset-0 bg-surface-dim/40 backdrop-blur-[1px] flex flex-col justify-between p-space-md pointer-events-none"}>
                 <div className={"flex items-center justify-between"}>
                   <span className={"inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-surface-container-lowest/90 backdrop-blur-md text-on-surface font-label-md text-label-md shadow-sm"}>
@@ -128,7 +128,7 @@ export function OfflineScreen() {
               <span className={"font-body-md text-body-md text-on-surface-variant flex-1 truncate"}>
                 Searching cached spots in parish...
               </span>
-              <span className={"bg-surface-container-high text-on-surface-variant text-[10px] font-label-sm px-2 py-1 rounded"}>
+              <span className={"bg-surface-container-high text-on-surface-variant text-[12px] font-label-sm px-2 py-1 rounded"}>
                 LOCAL ONLY
               </span>
             </div>

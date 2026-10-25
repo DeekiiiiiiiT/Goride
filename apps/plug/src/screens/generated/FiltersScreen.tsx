@@ -42,7 +42,7 @@ export function FiltersScreen() {
       <main className={"flex flex-col relative w-full pt-16 pb-28 bg-surface min-h-screen"}>
         <div className={"flex flex-col w-full relative"}>
           <div className={"relative w-full h-80 overflow-hidden select-none pointer-events-none opacity-40 filter blur-[1.5px] -mb-16"}>
-            <div className={"w-full h-96 bg-cover bg-center"} data-location={"Half-Way-Tree, Kingston, Jamaica"} style={{ backgroundImage: "url('https://lh3.googleusercontent.com/aida-public/AB6AXuCTimA3LSXWy5I1Ur500kFzftnwLNzZqIyFOXDcHpOyqTlV85AqXRoi_3oTGpuUPwmIGGbcvPPudcOZoSQiXLCE9A1_l4zlk5Z__ADzE36lMf15f5Z-CJIpo_SggDV9FSLQKm4nbCMnC9qY_TkkP5ENCzI_GKh8oLlK2QQaBBfqhWgaEv_OigbIhoePuUzJA3uzcjTCsZn9mZsUrjnaG7F79xh_g10vhfl8e0CYoW0xBJ_EL2NHD21R')" }} />
+            <div className={"w-full h-96 bg-surface-container flex items-center justify-center text-primary"} aria-hidden={"true"}><span className={"material-symbols-outlined text-[32px]"}>image</span></div>
             <div className={"absolute inset-0 bg-surface-container-highest/60 mix-blend-multiply"} />
           </div>
           <div className={"relative z-20 flex flex-col w-full bg-surface-container-lowest rounded-t-3xl shadow-[0_-8px_30px_rgba(28,25,23,0.18)] transition-all duration-300 ease-out"}>
@@ -228,7 +228,7 @@ export function FiltersScreen() {
                     <span className={"font-bold"}>
                       Fesco
                     </span>
-                    <span className={"text-[10px] px-1.5 py-0.5 rounded-full bg-primary text-on-primary font-bold"}>
+                    <span className={"text-[12px] px-1.5 py-0.5 rounded-full bg-primary text-on-primary font-bold"}>
                       Yard Fav
                     </span>
                     <span className={"material-symbols-outlined text-[16px] text-primary ml-0.5"}>

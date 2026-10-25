@@ -80,7 +80,7 @@ export function PlaceDetailsScreen() {
                   <span className={"font-body-sm text-body-sm text-on-surface-variant"}>
                     St. Andrew Parish
                   </span>
-                  <span className={"inline-flex items-center gap-1 text-[11px] font-semibold text-tertiary bg-tertiary-fixed/60 px-2 py-0.5 rounded-full"}>
+                  <span className={"inline-flex items-center gap-1 text-[12px] font-semibold text-tertiary bg-tertiary-fixed/60 px-2 py-0.5 rounded-full"}>
                     <span className={"material-symbols-outlined text-[12px]"}>
                       gps_fixed
                     </span>
@@ -104,7 +104,7 @@ export function PlaceDetailsScreen() {
                 </span>
               </label>
               <div className={"relative"}>
-                <input className={"w-full h-12 px-4 rounded-xl bg-surface-container-lowest text-on-surface font-body-lg text-body-lg shadow-sm focus:outline-none focus:bg-surface-container-low transition-colors"} id={"place-name"} placeholder={"e.g. TotalEnergies Half-Way-Tree"} required={true} type={"text"} defaultValue={"TotalEnergies Half-Way-Tree"} />
+                <input className={"w-full h-12 px-4 rounded-xl bg-surface-container-lowest text-on-surface font-body-lg text-body-lg shadow-sm focus:outline-none focus:bg-surface-container-low transition-colors"} id={"place-name"} placeholder={"Place name"} required={true} type={"text"} defaultValue={""} />
                 <span className={"material-symbols-outlined absolute right-3 top-3 text-secondary text-[22px]"}>
                   verified
                 </span>
@@ -419,7 +419,7 @@ export function PlaceDetailsScreen() {
               <div className={"flex items-center justify-between p-2.5 bg-surface-container-lowest rounded-xl shadow-sm mt-1"}>
                 <div className={"flex items-center gap-3 min-w-0"}>
                   <div className={"w-14 h-14 rounded-lg overflow-hidden shrink-0 bg-surface-container-highest"}>
-                    <img className={"w-full h-full object-cover"} data-alt={"Close up photography of vibrant digital fuel pricing totem sign in Kingston Jamaica displaying glowing red and green LED numerals against bright sunny afternoon Caribbean sky"} src={"https://lh3.googleusercontent.com/aida-public/AB6AXuCeoiVO77zHxYHCMLD9vlpY4QIp8cRPrPPCff2x7oPRB70uOgcpgDhz8avDYf7sge45K3c6kTPNn5Zcpc2g4PKoPMkwioVwaYI0i3C5TKF9XS-s_iz5A5PgEn0RvNB-heXDHn0uY-j03pa9UpoW8tQsteoi6aSGsWMDAuY-1O9-RAzCDx3siyc76DDFH3IT_dJRrZLPNElMeMuGUEJsLQIqVb2Nuva55y4sLJu0nM2qWD8K98gnozbi"} />
+                    <div className={"w-full h-full object-cover bg-surface-container flex items-center justify-center text-primary"} aria-hidden={"true"}><span className={"material-symbols-outlined text-[32px]"}>image</span></div>
                   </div>
                   <div className={"flex flex-col min-w-0"}>
                     <span className={"font-label-md text-label-md text-on-surface font-bold truncate"}>

@@ -18,6 +18,9 @@ import { ReconTagAccountStep } from './ReconTagAccountStep';
 import { ReconTripsEarningsStep } from './ReconTripsEarningsStep';
 import { ReconSettlementStep } from './ReconSettlementStep';
 import { ReconCloseStep } from './ReconCloseStep';
+import { PastWeeksReturnLink } from '../settlements/past-weeks/PastWeeksReturnLink';
+import { TollsCheckFailedBanner, TollsLockedBanner } from './TollsLockedBanner';
+import { api } from '../../../services/api';
 import { Button } from '../../ui/button';
 import { cn } from '../../ui/utils';
 import { toast } from 'sonner';
@@ -145,6 +148,14 @@ export function ReconRunPage({
   const [activeStep, setActiveStep] = useState<RunStepId>(() => stepFromQuery());
   const queryClient = useQueryClient();
   const runQueryKey = useMemo(() => ['recon-run', line, weekKey] as const, [line, weekKey]);
+  const sealQuery = useQuery({
+    queryKey: ['toll-period-seal', line, weekKey],
+    queryFn: () => api.getTollPeriodSeal(weekKey, line),
+    enabled: Boolean(weekKey),
+    retry: false,
+  });
+  const tollsSealed = sealQuery.isSuccess && sealQuery.data?.sealed === true;
+  const tollsCheckFailed = sealQuery.isError;
   const [advancing, setAdvancing] = useState(false);
   const autoSkipKey = useRef<string | null>(null);
   const autoSkipInFlight = useRef(false);
@@ -470,6 +481,7 @@ export function ReconRunPage({
   return (
     <div className="grid gap-4 lg:grid-cols-[220px_minmax(0,1fr)_240px]">
       <nav className="space-y-1 rounded-xl border border-slate-200 bg-white p-2" aria-label="Steps">
+        <PastWeeksReturnLink onReturn={() => onNavigate?.('driver-settlements')} />
         <Button type="button" variant="ghost" size="sm" className="mb-2 w-full justify-start" onClick={onBack}>
           <ArrowLeft className="mr-1 h-4 w-4" />
           All weeks
@@ -479,6 +491,8 @@ export function ReconRunPage({
           const lockedBy = lockedByStep.get(stepId);
           const active = stepId === activeStep;
           const hint = stepRailHint(status, lockedBy, stepId);
+          const tollsLocked = stepId === 'tolls' && tollsSealed && status !== 'locked';
+          const tollsUnknown = stepId === 'tolls' && tollsCheckFailed && status !== 'locked';
           return (
             <button
               key={stepId}
@@ -492,7 +506,9 @@ export function ReconRunPage({
               )}
             >
               <span className="font-medium">{RECON_STEP_LABELS[stepId]}</span>
-              <span className="text-xs text-slate-500">{stepRailCaption(status, lockedBy)}</span>
+              <span className={cn('text-xs', tollsLocked || tollsUnknown ? 'font-medium text-amber-800' : 'text-slate-500')}>
+                {tollsLocked ? 'Tolls locked' : tollsUnknown ? "Couldn't check tolls" : stepRailCaption(status, lockedBy)}
+              </span>
               {hint ? <span className="mt-0.5 text-[10px] leading-snug text-slate-400">{hint}</span> : null}
             </button>
           );
@@ -542,15 +558,35 @@ export function ReconRunPage({
         ) : null}
 
         {activeStep === 'tolls' ? (
-          <Suspense fallback={<Loader2 className="mx-auto h-6 w-6 animate-spin" />}>
-            <TollReconciliationLazy
-              embedded
-              hideLanding
-              initialWeekStart={weekKey}
-              serviceLine={line}
-              onPeriodFinished={handleTollsPeriodFinished}
-            />
-          </Suspense>
+          <>
+            {tollsCheckFailed ? (
+              <TollsCheckFailedBanner
+                busy={sealQuery.isFetching}
+                onRetry={() => {
+                  void sealQuery.refetch();
+                }}
+              />
+            ) : null}
+            {tollsSealed ? (
+              <TollsLockedBanner
+                weekKey={weekKey}
+                serviceLine={line}
+                onReopened={() => {
+                  void sealQuery.refetch();
+                }}
+              />
+            ) : null}
+            <Suspense fallback={<Loader2 className="mx-auto h-6 w-6 animate-spin" />}>
+              <TollReconciliationLazy
+                key={tollsSealed ? 'tolls-sealed' : 'tolls-open'}
+                embedded
+                hideLanding
+                initialWeekStart={weekKey}
+                serviceLine={line}
+                onPeriodFinished={handleTollsPeriodFinished}
+              />
+            </Suspense>
+          </>
         ) : null}
 
         {activeStep === 'fuel' ? (

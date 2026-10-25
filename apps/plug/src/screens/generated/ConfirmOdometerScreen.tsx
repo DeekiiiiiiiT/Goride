@@ -41,16 +41,15 @@ export function ConfirmOdometerScreen() {
                 </div>
                 <div className={"flex flex-col min-w-0"}>
                   <div className={"flex items-center gap-space-xs"}>
-                    <span className={"font-headline-sm text-headline-sm text-on-surface truncate"}>
-                      2019 Toyota Roomy
-                    </span>
+                    <span className={"font-headline-sm text-headline-sm text-on-surface truncate"} data-slot={"car"}>
+                      Add a car</span>
                     <span className={"inline-flex items-center px-1.5 py-0.5 rounded-full bg-secondary-container text-on-secondary-container font-label-sm text-label-sm uppercase tracking-wider"}>
                       Route Taxi
                     </span>
                   </div>
                   <div className={"flex items-center gap-2 mt-0.5"}>
                     <span className={"font-label-md text-label-md px-2 py-0.5 rounded bg-surface-container-lowest text-on-surface font-semibold tracking-wider"}>
-                      8241-HY
+                      
                     </span>
                     <span className={"text-on-surface-variant font-body-sm text-body-sm flex items-center gap-1"}>
                       <span className={"w-1.5 h-1.5 rounded-full bg-tertiary"} />
@@ -81,7 +80,7 @@ export function ConfirmOdometerScreen() {
                 </span>
               </div>
               <div className={"relative w-full h-32 rounded-lg overflow-hidden bg-inverse-surface mt-1 shadow-inner flex items-center justify-center"}>
-                <img className={"w-full h-full object-cover opacity-85"} data-alt={"Close-up macro shot of a Japanese compact car backlit digital LCD odometer showing high-contrast illuminated black digits reading 084612 km on an amber illuminated dashboard instrument panel with subtle dust textures and sharp focus in warm sunlight."} src={"https://lh3.googleusercontent.com/aida-public/AB6AXuD23viHIAK2sxOQ6tPWYrZHwbuhxb-kWiSHnzgX7yFFCoLBRq5E_PdSTM1WlXS_ZWpy6vqh0yKd-cV_d101oQGYYI0of457f6nUpH9olFgUB9C-SAK4AcupwZ0Ns6wofyfDGw_0VMug-2ZxTe_rGwGnLniIE_kq4STgGniEN4JbctAN9XfTjlFsCmPT8Py-lEDBCzx_nkfGs37_VT_JGsc9G77mJPJHwHEsY46YXS3PEk5mIExKcXKf"} />
+                <div className={"w-full h-full object-cover opacity-85 bg-surface-container flex items-center justify-center text-primary"} aria-hidden={"true"}><span className={"material-symbols-outlined text-[32px]"}>image</span></div>
                 <div className={"absolute inset-0 bg-gradient-to-t from-inverse-surface/80 via-transparent to-inverse-surface/30"} />
                 <div className={"absolute inset-x-8 inset-y-4 rounded bg-primary/10 flex items-center justify-between px-4"}>
                   <div className={"w-2.5 h-2.5 -top-1 -left-1 absolute bg-secondary-container rounded-sm"} />

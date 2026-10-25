@@ -1,7 +1,7 @@
 {
   "slug": "fleet-pay",
-  "generatedAt": "2026-10-25T01:37:54.231Z",
-  "routeCount": 112,
+  "generatedAt": "2026-10-25T13:28:05.162Z",
+  "routeCount": 113,
   "routes": [
     "GET ${BASE}/:anchor",
     "GET ${BASE}/approval-settings",
@@ -20,6 +20,7 @@
     "GET ${BASE}/match-detail/:id",
     "GET ${BASE}/match-index/status",
     "GET ${BASE}/movements",
+    "GET ${BASE}/past-weeks-cleanup",
     "GET ${BASE}/queue",
     "GET ${BASE}/reconciled",
     "GET ${BASE}/refund-suggestions",

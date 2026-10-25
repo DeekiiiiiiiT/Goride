@@ -1,7 +1,5 @@
 import { useEffect, useState } from 'react';
 import { plugSend, publicGet } from '../api';
-import { demoOn } from '../demo/mode';
-import { readDb } from '../demo/store';
 import { onPlugClick } from '../shell/actions';
 
 type Station = {
@@ -25,20 +23,16 @@ export function ExploreSheet() {
   const [chip, setChip] = useState(sessionStorage.getItem('plug-chip') || 'fuel');
   const [stations, setStations] = useState<Station[]>([]);
   const [places, setPlaces] = useState<Place[]>([]);
-  const [signedIn, setSignedIn] = useState(sessionStorage.getItem('plug-demo-signed-in') === '1');
+  const [signedIn, setSignedIn] = useState(document.body.dataset.signedIn === '1');
   const [carName, setCarName] = useState<string | null>(null);
 
   useEffect(() => {
     const load = () => {
       setGrade(sessionStorage.getItem('plug-grade') || 'e10_87');
       setChip(sessionStorage.getItem('plug-chip') || 'fuel');
-      const signed = sessionStorage.getItem('plug-demo-signed-in') === '1' || document.body.dataset.signedIn === '1';
+      const signed = document.body.dataset.signedIn === '1';
       setSignedIn(signed);
-      if (demoOn()) {
-        const db = readDb();
-        const picked = db.vehicles.find((row) => row.id === sessionStorage.getItem('plug-vehicle')) || db.vehicles[0];
-        setCarName(signed ? picked?.nickname || null : null);
-      } else if (signed) {
+      if (signed) {
         void plugSend<{ vehicles: { id: string; nickname?: string; make?: string; model?: string }[] }>('/garage', 'GET')
           .then((body) => {
             const car = body.vehicles?.[0];
@@ -64,7 +58,7 @@ export function ExploreSheet() {
   const gradeLabel = grade === 'e10_90' ? 'E-10 90' : grade === 'diesel' ? 'Diesel' : 'E-10 87';
 
   return (
-    <div className="relative z-30 flex flex-col w-full -mt-4 bg-surface rounded-t-3xl shadow-2xl px-space-md pt-3 pb-8">
+    <div className="absolute inset-x-0 z-30 flex max-h-[58%] flex-col overflow-y-auto bg-surface rounded-t-3xl shadow-2xl px-space-md pt-3 pb-4" style={{ bottom: 'var(--tabbar-total)' }}>
       <div className="w-full flex justify-center py-1">
         <div className="w-12 h-1.5 rounded-full bg-surface-container-highest" />
       </div>
@@ -85,7 +79,7 @@ export function ExploreSheet() {
         <button type="button" onClick={onPlugClick} data-act="my-car" className="w-full rounded-xl bg-surface-container-high p-3 mb-space-md flex items-center justify-between text-left">
           <span>
             <span className="block font-bold">{carName}</span>
-            <span className="text-sm text-tertiary">{sessionStorage.getItem('plug-care') || (demoOn() ? 'Oil change due soon' : 'Open the garage for service dates')}</span>
+            <span className="text-sm text-tertiary">{sessionStorage.getItem('plug-care') || 'Open the garage for service dates'}</span>
           </span>
           <span className="font-bold text-primary">Garage</span>
         </button>
@@ -116,7 +110,7 @@ function StationHero({ station, grade, gradeLabel, cheapest }: { station: Statio
       <div className="flex items-start justify-between gap-2">
         <div>
           <div className="font-bold">{station.name}</div>
-          {cheapest ? <span className="text-[10px] font-bold text-on-tertiary-fixed">Cheapest {gradeLabel}</span> : null}
+          {cheapest ? <span className="text-[12px] font-bold text-on-tertiary-fixed">Cheapest {gradeLabel}</span> : null}
         </div>
         <div className="text-right font-bold text-primary">{Number.isFinite(price) ? `J$${price.toFixed(2)}` : '—'}</div>
       </div>

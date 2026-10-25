@@ -37,7 +37,7 @@ export function MechanicScreen() {
       <main className={"flex-1 w-full bg-surface pt-16 pb-28"}>
         <div className={"flex flex-col w-full pb-6"}>
           <div className={"relative w-full h-56 bg-surface-container-high overflow-hidden shadow-sm"}>
-            <div className={"w-full h-full bg-cover bg-center"} data-alt={"A clean, vibrant Caribbean automotive mechanic workshop in Kingston Jamaica with hydraulic vehicle lift bays, modern Snap-on diagnostic scanning machines, tool racks, warm tropical sun rays coming through roof louvers, deep orange and amber tool chest accents, shot on professional camera."} style={{ backgroundImage: "url('https://lh3.googleusercontent.com/aida-public/AB6AXuD1fMu7uwZAAgY7FA-mEvF9SmlHQkKLRloZ_s768QRGVyPARA1S6EA5IbaGfeGQURJs6feKWvgd2_el_yoypbn-Z4RlOkQrTmTWH4uLY0vJLCZk0UkKYnekc-QiemBUhWxPSP_HjefLd14UkbjsXVYTsnjF6eOdLqVQH5b1IOREJd0LeASRPvbtH7cACrJFD9vbrxAt299dVCdGNk4yafDs0bZj7k-lVckKz_KQIwWMoNmM_Sm12j7r')" }} />
+            <div className={"w-full h-full bg-surface-container flex items-center justify-center text-primary"} aria-hidden={"true"}><span className={"material-symbols-outlined text-[32px]"}>image</span></div>
             <div className={"absolute inset-0 bg-gradient-to-t from-on-background/80 via-on-background/30 to-transparent"} />
             <div className={"absolute bottom-3 left-4 right-4 flex items-center justify-between gap-2"}>
               <div className={"flex items-center gap-1.5 bg-surface-container-lowest/95 backdrop-blur-md px-2.5 py-1 rounded-full shadow-sm"}>
@@ -72,7 +72,7 @@ export function MechanicScreen() {
                     </span>
                   </div>
                   <h1 className={"font-headline-md text-headline-md text-on-surface leading-tight"}>
-                    Precision Auto Works
+                    
                   </h1>
                   <p className={"font-body-sm text-body-sm text-on-surface-variant flex items-center gap-1 mt-1"}>
                     <span className={"material-symbols-outlined text-[16px] text-primary"}>
@@ -161,7 +161,7 @@ export function MechanicScreen() {
               <div className={"flex gap-2.5 overflow-x-auto pb-1 -mx-margin px-margin no-scrollbar scroll-smooth"}>
                 <div className={"flex-shrink-0 w-44 flex flex-col gap-1.5"}>
                   <div className={"w-44 h-28 rounded-xl bg-surface-container overflow-hidden shadow-sm"}>
-                    <div className={"w-full h-full bg-cover bg-center"} data-alt={"Hydraulic two-post lift lifting a silver Japanese compact SUV inside a bright Kingston Jamaica mechanic shop, tool chests lined up against white and terracotta painted walls."} style={{ backgroundImage: "url('https://lh3.googleusercontent.com/aida-public/AB6AXuCzNUBxvrMWBdwcdxNO4Qt4Ry-V1c9GnxSxgRWLZDUkuNJMFjxK1p-ge1Qn5kwHr54QHIIK_EM_s83gB59Zq372n5FFr08NpNJkN6_ZLZrj8qZhQn6gKpEA0dWncF9xjsTKx02b-iKkodRLu0XroJGETijdPSGWtaa1GDFluxgQpKjybOJMpAOc8sYLzbtd7Mtu9eaJjjjMMecuvW_FPQe1mU_m9O2iPsli6wUTCIPKozo9kwPHGqIk')" }} />
+                    <div className={"w-full h-full bg-surface-container flex items-center justify-center text-primary"} aria-hidden={"true"}><span className={"material-symbols-outlined text-[32px]"}>image</span></div>
                   </div>
                   <span className={"font-label-sm text-label-sm text-on-surface font-semibold truncate"}>
                     Lifting Bay (3 Ramps)
@@ -169,7 +169,7 @@ export function MechanicScreen() {
                 </div>
                 <div className={"flex-shrink-0 w-44 flex flex-col gap-1.5"}>
                   <div className={"w-44 h-28 rounded-xl bg-surface-container overflow-hidden shadow-sm"}>
-                    <div className={"w-full h-full bg-cover bg-center"} data-alt={"Close up of an advanced tablet OBD-II diagnostic vehicle scanner tool connected to a car dashboard with colorful real-time engine telemetry graphs, professional lighting in Caribbean automotive garage."} style={{ backgroundImage: "url('https://lh3.googleusercontent.com/aida-public/AB6AXuBRF2Xonj4Jecmyy3IQSxEfEADlsa23sCrW0W4PrcqGHdI5nR50yTICg6luhivq3XPPI4VTet4RFkFOOtLCLzF3cur3rfnKAfKum2FzEQYaGexYEMhrr0yGz8U_fpxIRtoib69GakkD0eN9wUqwm73c_k0VDG0DuhtsSq7uB-tKidCQIAGAcSgzqc5WIWhPJ9Om3x5B417jTyTFLX-hnxOqlHv72aFBZy3Zlvbo7RtafUm4puwoVWhy')" }} />
+                    <div className={"w-full h-full bg-surface-container flex items-center justify-center text-primary"} aria-hidden={"true"}><span className={"material-symbols-outlined text-[32px]"}>image</span></div>
                   </div>
                   <span className={"font-label-sm text-label-sm text-on-surface font-semibold truncate"}>
                     OBD-II Diagnostic Hub
@@ -177,7 +177,7 @@ export function MechanicScreen() {
                 </div>
                 <div className={"flex-shrink-0 w-44 flex flex-col gap-1.5"}>
                   <div className={"w-44 h-28 rounded-xl bg-surface-container overflow-hidden shadow-sm"}>
-                    <div className={"w-full h-full bg-cover bg-center"} data-alt={"Mechanic inspecting drilled brake rotors and fresh caliper pads on vehicle hub assembly in clean garage bay, golden afternoon Jamaican sunlight."} style={{ backgroundImage: "url('https://lh3.googleusercontent.com/aida-public/AB6AXuBWDM-DK7QKxU1hFaCAzW0q533jm3nhDbTTQEQGfwx35gRr2poDRZGIzUWjLbd3g669EI5HvpnZXpW7rwBMtYQAqr-pb04tFQPYCRFW7K50jYQDbu6KQ-Uq3kULyT9OrRZuzo0aR9NMVyLCeRwX5PMoQ1uAnQtnZvHX6BLTJ5C6Px8pLrLaJf4cSWMfvS04YKUId5KE1AEKys0sPhRxjpilDvOlgIGDflgq_OOtAuAus1tHgB24YUeg')" }} />
+                    <div className={"w-full h-full bg-surface-container flex items-center justify-center text-primary"} aria-hidden={"true"}><span className={"material-symbols-outlined text-[32px]"}>image</span></div>
                   </div>
                   <span className={"font-label-sm text-label-sm text-on-surface font-semibold truncate"}>
                     {"Brake & Rotor Lathe"}
@@ -185,7 +185,7 @@ export function MechanicScreen() {
                 </div>
                 <div className={"flex-shrink-0 w-44 flex flex-col gap-1.5"}>
                   <div className={"w-44 h-28 rounded-xl bg-surface-container overflow-hidden shadow-sm"}>
-                    <div className={"w-full h-full bg-cover bg-center"} data-alt={"Clean and comfortable air conditioned mechanic customer waiting lounge with cold beverage cooler, TV screen, automotive magazines on coffee table."} style={{ backgroundImage: "url('https://lh3.googleusercontent.com/aida-public/AB6AXuDf3bu6g6X_hd7gTWlOQ04oT7ag_aV08KlGiapgurdrsSbTJS4WutpvuIjrJsiHYkLy0-627Y2X6W3fmBiiR5JMX4XGwglvquynVOcFeTMsNrrzoaVUK8cEcWKCdjACdhH838ReltKF08_XxlTNsahnMT2HzZvzr4W6D7J3dnAj1t5mn3vD9D_SDdL0ZjWlOWns7fcXV-8SNHvav7M_SsooujKo5QzwQvy8Eu66wvy3jX9zyBWrl0cs')" }} />
+                    <div className={"w-full h-full bg-surface-container flex items-center justify-center text-primary"} aria-hidden={"true"}><span className={"material-symbols-outlined text-[32px]"}>image</span></div>
                   </div>
                   <span className={"font-label-sm text-label-sm text-on-surface font-semibold truncate"}>
                     Customer Lounge (A/C)

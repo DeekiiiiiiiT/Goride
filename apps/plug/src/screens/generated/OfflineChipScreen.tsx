@@ -59,13 +59,13 @@ export function OfflineChipScreen() {
                   <span className={"material-symbols-outlined text-[13px] text-tertiary-container animate-pulse"}>
                     sync
                   </span>
-                  <span className={"font-label-sm text-[10px] font-bold text-on-tertiary-fixed tracking-tight whitespace-nowrap"}>
+                  <span className={"font-label-sm text-[12px] font-bold text-on-tertiary-fixed tracking-tight whitespace-nowrap"}>
                     2 logs waiting
                   </span>
                 </div>
                 <div className={"flex items-center gap-1 px-2.5 py-1 rounded-full bg-surface-container-high text-on-surface-variant"}>
                   <span className={"w-2 h-2 rounded-full bg-emerald-500 animate-pulse"} />
-                  <span className={"font-label-sm text-[10px] uppercase font-bold text-on-surface-variant"}>
+                  <span className={"font-label-sm text-[12px] uppercase font-bold text-on-surface-variant"}>
                     Live Plugs
                   </span>
                 </div>
@@ -208,7 +208,7 @@ export function OfflineChipScreen() {
               </div>
               <div className={"mt-1 px-2 py-0.5 rounded-full bg-surface-container-lowest/90 backdrop-blur-sm shadow-sm flex items-center gap-1"}>
                 <span className={"w-1.5 h-1.5 rounded-full bg-primary"} />
-                <span className={"font-label-sm text-[9px] text-on-surface font-bold whitespace-nowrap"}>
+                <span className={"font-label-sm text-[12px] text-on-surface font-bold whitespace-nowrap"}>
                   You on Hope Rd
                 </span>
               </div>
@@ -219,16 +219,16 @@ export function OfflineChipScreen() {
                   <span className={"material-symbols-outlined text-[13px] text-tertiary-container"} style={{ fontVariationSettings: "'FILL' 1" }}>
                     star
                   </span>
-                  <span className={"font-label-sm text-[10px] font-bold uppercase tracking-tight text-tertiary-container"}>
+                  <span className={"font-label-sm text-[12px] font-bold uppercase tracking-tight text-tertiary-container"}>
                     Best J$208.20
                   </span>
                 </div>
                 <div className={"px-3 py-1.5 rounded-xl bg-surface-container-lowest shadow-lg flex items-center gap-1.5 active:scale-95 transition-transform"}>
-                  <span className={"w-5 h-5 rounded-md bg-secondary-container flex items-center justify-center text-on-primary font-bold text-[10px]"}>
+                  <span className={"w-5 h-5 rounded-md bg-secondary-container flex items-center justify-center text-on-primary font-bold text-[12px]"}>
                     F
                   </span>
                   <div className={"flex flex-col leading-none"}>
-                    <span className={"font-label-sm text-[10px] font-bold text-on-surface"}>
+                    <span className={"font-label-sm text-[12px] font-bold text-on-surface"}>
                       Fesco Beechwood
                     </span>
                     <span className={"font-price-display text-label-sm text-primary font-bold"}>
@@ -242,10 +242,10 @@ export function OfflineChipScreen() {
             <div className={"absolute top-[230px] left-[260px] z-10 -translate-x-1/2 -translate-y-full cursor-pointer"}>
               <div className={"flex flex-col items-center active:scale-95 transition-transform"}>
                 <div className={"px-2.5 py-1 rounded-xl bg-surface-container-lowest shadow-md flex items-center gap-1.5"}>
-                  <span className={"w-4 h-4 rounded-full bg-error flex items-center justify-center text-on-primary text-[9px] font-bold"}>
+                  <span className={"w-4 h-4 rounded-full bg-error flex items-center justify-center text-on-primary text-[12px] font-bold"}>
                     ★
                   </span>
-                  <span className={"font-label-sm text-[11px] font-bold text-on-surface"}>
+                  <span className={"font-label-sm text-[12px] font-bold text-on-surface"}>
                     Texaco
                   </span>
                   <span className={"font-price-display text-label-sm text-on-surface-variant font-bold"}>
@@ -261,7 +261,7 @@ export function OfflineChipScreen() {
                   <span className={"material-symbols-outlined text-primary text-[14px]"}>
                     local_gas_station
                   </span>
-                  <span className={"font-label-sm text-[11px] font-bold text-on-surface"}>
+                  <span className={"font-label-sm text-[12px] font-bold text-on-surface"}>
                     Cool Oasis
                   </span>
                   <span className={"font-price-display text-label-sm text-secondary font-bold"}>
@@ -275,10 +275,10 @@ export function OfflineChipScreen() {
               <div className={"flex flex-col items-center active:scale-95 transition-transform"}>
                 <div className={"px-2 py-0.5 rounded-lg bg-surface-container-lowest shadow-sm flex items-center gap-1"}>
                   <span className={"w-2 h-2 rounded-full bg-primary"} />
-                  <span className={"font-label-sm text-[10px] text-on-surface font-semibold"}>
+                  <span className={"font-label-sm text-[12px] text-on-surface font-semibold"}>
                     TotalEnergies
                   </span>
-                  <span className={"font-label-sm text-[10px] font-bold text-on-surface-variant"}>
+                  <span className={"font-label-sm text-[12px] font-bold text-on-surface-variant"}>
                     217.90
                   </span>
                 </div>
@@ -287,13 +287,13 @@ export function OfflineChipScreen() {
             <div className={"absolute top-[410px] left-[260px] z-10 cursor-pointer"}>
               <div className={"flex flex-col items-center active:scale-95 transition-transform"}>
                 <div className={"px-2.5 py-1 rounded-xl bg-surface-container-lowest shadow-md flex items-center gap-1"}>
-                  <span className={"w-3.5 h-3.5 rounded-full bg-blue-600 text-[8px] text-white flex items-center justify-center font-bold"}>
+                  <span className={"w-3.5 h-3.5 rounded-full bg-blue-600 text-[12px] text-white flex items-center justify-center font-bold"}>
                     R
                   </span>
-                  <span className={"font-label-sm text-[10px] font-bold text-on-surface"}>
+                  <span className={"font-label-sm text-[12px] font-bold text-on-surface"}>
                     Rubis
                   </span>
-                  <span className={"font-label-sm text-[10px] text-on-surface-variant font-bold"}>
+                  <span className={"font-label-sm text-[12px] text-on-surface-variant font-bold"}>
                     J$215.00
                   </span>
                 </div>
@@ -318,7 +318,7 @@ export function OfflineChipScreen() {
                 <span className={"material-symbols-outlined text-[12px] text-tertiary"}>
                   hourglass_top
                 </span>
-                <span className={"font-label-sm text-[9px] font-medium"}>
+                <span className={"font-label-sm text-[12px] font-medium"}>
                   AutoPlugs Review
                 </span>
               </div>
@@ -371,7 +371,7 @@ export function OfflineChipScreen() {
                       <span className={"material-symbols-outlined text-[16px] text-emerald-600"} style={{ fontVariationSettings: "'FILL' 1" }}>
                         verified
                       </span>
-                      <span className={"font-label-sm text-[10px] px-1.5 py-0.5 rounded-full bg-tertiary-fixed text-on-tertiary-fixed font-bold"}>
+                      <span className={"font-label-sm text-[12px] px-1.5 py-0.5 rounded-full bg-tertiary-fixed text-on-tertiary-fixed font-bold"}>
                         Cheapest E-10
                       </span>
                     </div>
@@ -384,14 +384,14 @@ export function OfflineChipScreen() {
                   <span className={"font-price-display text-price-display text-primary leading-tight font-extrabold"}>
                     J$208.20
                   </span>
-                  <span className={"font-label-sm text-[10px] text-on-surface-variant font-medium"}>
+                  <span className={"font-label-sm text-[12px] text-on-surface-variant font-medium"}>
                     per Litre (E-10 87)
                   </span>
                 </div>
               </div>
               <div className={"flex items-center justify-between mt-3 pt-2.5 bg-surface-container-low/60 -mx-space-md px-space-md"}>
                 <div className={"flex items-center gap-2"}>
-                  <span className={"font-label-sm text-[11px] text-on-surface-variant flex items-center gap-1"}>
+                  <span className={"font-label-sm text-[12px] text-on-surface-variant flex items-center gap-1"}>
                     <span className={"material-symbols-outlined text-[14px] text-primary"}>
                       update
                     </span>
@@ -438,11 +438,10 @@ export function OfflineChipScreen() {
                 </div>
                 <div className={"flex flex-col"}>
                   <div className={"flex items-center gap-1.5"}>
-                    <span className={"font-headline-sm text-body-md text-on-surface font-bold"}>
-                      2019 Toyota Roomy
-                    </span>
+                    <span className={"font-headline-sm text-body-md text-on-surface font-bold"} data-slot={"car"}>
+                      Add a car</span>
                     <span className={"w-1.5 h-1.5 rounded-full bg-tertiary"} />
-                    <span className={"font-label-sm text-[10px] text-on-surface-variant"}>
+                    <span className={"font-label-sm text-[12px] text-on-surface-variant"}>
                       Fleet
                     </span>
                   </div>
@@ -479,7 +478,7 @@ export function OfflineChipScreen() {
                       <span className={"font-headline-sm text-body-md text-on-surface font-bold"}>
                         Cool Oasis
                       </span>
-                      <span className={"font-label-sm text-[10px] text-on-surface-variant font-normal"}>
+                      <span className={"font-label-sm text-[12px] text-on-surface-variant font-normal"}>
                         • Kingsway
                       </span>
                     </div>
@@ -488,11 +487,11 @@ export function OfflineChipScreen() {
                         1.4 km
                       </span>
                       <span className={"w-1 h-1 rounded-full bg-outline-variant"} />
-                      <span className={"font-label-sm text-[10px] px-1.5 py-0.2 rounded bg-surface-container text-on-surface-variant font-medium"}>
+                      <span className={"font-label-sm text-[12px] px-1.5 py-0.2 rounded bg-surface-container text-on-surface-variant font-medium"}>
                         Free Air
                       </span>
                       <span className={"w-1 h-1 rounded-full bg-outline-variant"} />
-                      <span className={"font-label-sm text-[10px] text-emerald-600 font-bold"}>
+                      <span className={"font-label-sm text-[12px] text-emerald-600 font-bold"}>
                         Open 24/7
                       </span>
                     </div>
@@ -502,7 +501,7 @@ export function OfflineChipScreen() {
                   <span className={"font-price-display text-body-lg text-on-surface font-extrabold tabular-nums"}>
                     J$209.50
                   </span>
-                  <span className={"font-label-sm text-[10px] text-on-surface-variant"}>
+                  <span className={"font-label-sm text-[12px] text-on-surface-variant"}>
                     E-10 87
                   </span>
                 </div>
@@ -519,7 +518,7 @@ export function OfflineChipScreen() {
                       <span className={"font-headline-sm text-body-md text-on-surface font-bold"}>
                         Texaco
                       </span>
-                      <span className={"font-label-sm text-[10px] text-on-surface-variant font-normal"}>
+                      <span className={"font-label-sm text-[12px] text-on-surface-variant font-normal"}>
                         • Clock Tower
                       </span>
                     </div>
@@ -528,11 +527,11 @@ export function OfflineChipScreen() {
                         0.4 km
                       </span>
                       <span className={"w-1 h-1 rounded-full bg-outline-variant"} />
-                      <span className={"font-label-sm text-[10px] px-1.5 py-0.2 rounded bg-surface-container text-on-surface-variant font-medium"}>
+                      <span className={"font-label-sm text-[12px] px-1.5 py-0.2 rounded bg-surface-container text-on-surface-variant font-medium"}>
                         ATM
                       </span>
                       <span className={"w-1 h-1 rounded-full bg-outline-variant"} />
-                      <span className={"font-label-sm text-[10px] text-on-surface-variant font-medium"}>
+                      <span className={"font-label-sm text-[12px] text-on-surface-variant font-medium"}>
                         Restrooms
                       </span>
                     </div>
@@ -542,7 +541,7 @@ export function OfflineChipScreen() {
                   <span className={"font-price-display text-body-lg text-on-surface font-extrabold tabular-nums"}>
                     J$214.50
                   </span>
-                  <span className={"font-label-sm text-[10px] text-on-surface-variant"}>
+                  <span className={"font-label-sm text-[12px] text-on-surface-variant"}>
                     E-10 87
                   </span>
                 </div>

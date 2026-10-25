@@ -1451,7 +1451,7 @@ export const api = {
     );
   },
 
-  async getTransactions(driverIdOrIds?: string | string[], options?: { limit?: number; offset?: number; startDate?: string; endDate?: string; desk?: 'settlements'; fuelQueue?: boolean }) {
+  async getTransactions(driverIdOrIds?: string | string[], options?: { limit?: number; offset?: number; startDate?: string; endDate?: string; desk?: 'settlements'; fuelQueue?: boolean; fuelExpenseLedger?: boolean; search?: string }) {
     let url = `${API_ENDPOINTS.financial}/transactions`;
     const params = new URLSearchParams();
     if (driverIdOrIds) {
@@ -1466,6 +1466,8 @@ export const api = {
     if (options?.endDate) params.set('endDate', options.endDate);
     if (options?.desk) params.set('desk', options.desk);
     if (options?.fuelQueue) params.set('fuelQueue', '1');
+    if (options?.fuelExpenseLedger) params.set('fuelExpenseLedger', '1');
+    if (options?.search) params.set('search', options.search);
     const qs = params.toString();
     if (qs) url += `?${qs}`;
     // Phase 1: Use JWT for proper org scoping
@@ -4067,14 +4069,39 @@ export const api = {
     };
   },
 
+  /** Whether a closed toll statement still blocks edits for this week. */
+  async getTollPeriodSeal(weekKey: string, serviceLine?: 'rideshare' | 'rush_delivery') {
+    const line = serviceLine ? `?line=${encodeURIComponent(serviceLine)}` : '';
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.toll}/toll-reconciliation/periods/${encodeURIComponent(weekKey)}/seal${line}`,
+      { headers: await requireAuthHeaders(null) },
+    );
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const msg = data?.message || data?.error || 'Failed to check whether tolls are locked';
+      throw Object.assign(new Error(msg), { status: response.status, data });
+    }
+    return data as {
+      success: boolean;
+      weekKey: string;
+      sealed: boolean;
+      source: string;
+      state: string | null;
+    };
+  },
+
   /** Phase 5 / TR-C2: reopen a sealed toll week so mutations are allowed again. */
-  async reopenTollReconciliationPeriod(weekKey: string, reason: string) {
+  async reopenTollReconciliationPeriod(
+    weekKey: string,
+    reason: string,
+    serviceLine?: 'rideshare' | 'rush_delivery',
+  ) {
     const response = await fetchWithRetry(
       `${API_ENDPOINTS.toll}/toll-reconciliation/periods/${encodeURIComponent(weekKey)}/reopen`,
       {
         method: 'POST',
         headers: await requireAuthHeaders(),
-        body: JSON.stringify({ reason }),
+        body: JSON.stringify({ reason, serviceLine: serviceLine || 'rideshare' }),
       },
     );
     const data = await response.json().catch(() => ({}));

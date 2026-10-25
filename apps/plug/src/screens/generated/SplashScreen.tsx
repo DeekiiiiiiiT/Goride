@@ -7,25 +7,7 @@ export function SplashScreen() {
   useEffect(() => { if (ref.current) bindScreen("01-splash.html", ref.current); }, []);
   return (
     <div ref={ref} data-plug-screen={"01-splash.html"} className={"bg-surface text-on-surface antialiased flex flex-col min-h-screen"}>
-      <div className={"w-full pt-safe px-margin select-none"}>
-        <div className={"flex justify-between items-center pt-space-xs text-on-surface"}>
-          <span className={"font-label-md text-label-md font-semibold tracking-tight"}>
-            9:41
-          </span>
-          <div className={"flex items-center gap-1.5"}>
-            <span className={"material-symbols-outlined text-[16px] leading-none"}>
-              signal_cellular_alt
-            </span>
-            <span className={"material-symbols-outlined text-[16px] leading-none"}>
-              wifi
-            </span>
-            <span className={"material-symbols-outlined text-[18px] leading-none"}>
-              battery_full
-            </span>
-          </div>
-        </div>
-      </div>
-      <main className={"flex-1 flex flex-col relative w-full pb-safe bg-surface px-margin"}>
+      <main className={"flex-1 flex flex-col relative w-full pt-safe pb-safe bg-surface px-margin"}>
         <div className={"flex flex-col w-full items-center justify-between min-h-[calc(100vh-6rem)] py-space-lg select-none relative overflow-hidden"}>
           <div className={"absolute inset-0 pointer-events-none opacity-25 flex items-center justify-center"}>
             <svg className={"w-full h-full"} fill={"none"} viewBox={"0 0 400 700"} xmlns={"http://www.w3.org/2000/svg"}>

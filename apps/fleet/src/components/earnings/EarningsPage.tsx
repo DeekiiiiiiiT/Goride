@@ -33,6 +33,7 @@ export function EarningsPage() {
   });
 
   const summaries = (statementQuery.data?.summaries ?? []) as StatementSummary[];
+  const driverSummaries = ((statementQuery.data as { drivers?: StatementSummary[] } | undefined)?.drivers ?? []) as StatementSummary[];
 
   const cardSummary = useMemo(() => {
     if (platformTab === 'all') {
@@ -67,6 +68,7 @@ export function EarningsPage() {
           startDate={startDate}
           endDate={endDate}
           platformTab={platformTab}
+          driverSummaries={driverSummaries}
         />
       </div>
     </div>

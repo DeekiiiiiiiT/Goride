@@ -10,22 +10,6 @@ export function VehicleAddedScreen() {
     <div ref={ref} data-plug-screen={"13-vehicle-added.html"} className={"bg-surface font-body-md text-on-surface flex flex-col min-h-screen pt-safe pb-safe"}>
       <main className={"flex-1 flex flex-col relative w-full bg-surface"}>
         <div className={"flex flex-col w-full px-margin pb-space-xl"}>
-          <div className={"flex items-center justify-between py-space-xs text-on-surface-variant font-label-md"}>
-            <span className={"font-bold tracking-tight"}>
-              9:41
-            </span>
-            <div className={"flex items-center space-x-space-xs"}>
-              <span className={"material-symbols-outlined text-[18px]"}>
-                signal_cellular_alt
-              </span>
-              <span className={"material-symbols-outlined text-[18px]"}>
-                wifi
-              </span>
-              <span className={"material-symbols-outlined text-[18px]"}>
-                battery_full
-              </span>
-            </div>
-          </div>
           <div className={"flex flex-col items-center text-center mt-space-md mb-space-lg relative"}>
             <div className={"relative flex items-center justify-center mb-space-md"}>
               <div className={"absolute w-24 h-24 rounded-full bg-gradient-to-tr from-secondary to-tertiary-fixed-dim opacity-20 blur-xl animate-pulse"} />
@@ -59,7 +43,7 @@ export function VehicleAddedScreen() {
               Vehicle Connected!
             </h1>
             <p className={"font-body-md text-body-md text-on-surface-variant max-w-[320px]"}>
-              Your 2019 Toyota Roomy is now synced with Jamaican parish service schedules and live gas feeds.
+              Your car is ready.
             </p>
           </div>
           <div className={"bg-surface-container-lowest rounded-xl p-space-md shadow-sm mb-space-lg relative overflow-hidden"}>
@@ -72,9 +56,8 @@ export function VehicleAddedScreen() {
                 </div>
                 <div>
                   <div className={"flex items-center gap-1.5"}>
-                    <h2 className={"font-headline-sm text-headline-sm text-on-surface"}>
-                      2019 Toyota Roomy
-                    </h2>
+                    <h2 className={"font-headline-sm text-headline-sm text-on-surface"} data-slot={"car"}>
+                      Add a car</h2>
                     <span className={"material-symbols-outlined text-primary text-[18px]"} style={{ fontVariationSettings: "'FILL' 1" }}>
                       verified
                     </span>

@@ -1,5 +1,6 @@
 import type { CanonicalLedgerEventInput } from '../types/ledgerCanonical';
 import type { PaymentLedgerLine } from '@roam/types/paymentLedgerLine';
+import { earningWeekForDeposit } from '@roam/finance-core';
 
 function toYmd(iso: string): string {
   if (!iso) return new Date().toISOString().slice(0, 10);
@@ -58,6 +59,7 @@ export function buildPaymentLedgerCanonicalEvents(
     const absAmt = Math.abs(amt);
     const date = toYmd(line.reportingAt);
     const sourceId = line.tripId || line.externalTransactionId || line.id;
+    const depositWeek = eventType === 'payout_bank' ? earningWeekForDeposit(date) : null;
 
     out.push({
       idempotencyKey: `payment_line:${line.idempotencyKey}`,
@@ -72,6 +74,8 @@ export function buildPaymentLedgerCanonicalEvents(
       sourceId,
       batchId,
       sourceFileHash,
+      periodStart: depositWeek?.periodStart,
+      periodEnd: depositWeek?.periodEnd,
       platform: 'Uber',
       description: line.description,
       externalTransactionId: line.externalTransactionId,
@@ -80,6 +84,8 @@ export function buildPaymentLedgerCanonicalEvents(
       paymentMethod: line.paymentMethod,
       metadata: {
         lineKind: line.lineKind,
+        kind: line.lineKind === 'cancellation' ? 'cancellation' : undefined,
+        bankRole: eventType === 'payout_bank' ? 'actual_deposit' : undefined,
         tripId: line.tripId,
         paidToYou: line.paidToYou,
         earningsGross: line.earningsGross,

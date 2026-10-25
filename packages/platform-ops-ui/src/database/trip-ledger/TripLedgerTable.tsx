@@ -854,7 +854,7 @@ const DataRow = React.memo(function DataRow({ trip, idx, activeCols, loading, is
           // Special handling for ID column (copy-to-clipboard button)
           if (col.key === 'id') {
             return (
-              <td key={col.key} className="px-3 py-2.5 whitespace-nowrap">
+              <td key={col.key} className="sticky left-0 z-10 bg-white px-3 py-2.5 whitespace-nowrap dark:bg-slate-900">
                 <span className="inline-flex items-center">
                 <button
                   onClick={(e) => { e.stopPropagation(); onCopyId(trip.id); }}
@@ -882,10 +882,11 @@ const DataRow = React.memo(function DataRow({ trip, idx, activeCols, loading, is
                 ${col.align === 'right' ? 'text-right' : 'text-left'}
                 ${isNetIncome ? 'font-medium text-emerald-700 dark:text-emerald-400' : ''}
                 ${isAmount ? 'font-medium text-slate-800 dark:text-slate-200' : ''}
-                ${isDriver ? 'max-w-[150px] truncate text-slate-700 dark:text-slate-300' : ''}
+                ${isDriver ? 'sticky left-24 z-10 max-w-[150px] truncate bg-white text-slate-700 dark:bg-slate-900 dark:text-slate-300' : ''}
                 ${!isNetIncome && !isAmount && !isDriver ? 'text-slate-600 dark:text-slate-400' : ''}
               `}
               style={col.minWidth ? { minWidth: col.minWidth } : undefined}
+              title={isDriver ? (trip.driverName || '') : undefined}
             >
               {col.render(trip)}
             </td>

@@ -80,7 +80,7 @@ export function NotificationSettingsScreen() {
                   </div>
                   <div className={"flex flex-col text-left truncate"}>
                     <span className={"font-label-md text-label-md text-on-surface"}>
-                      SMS alerts (+1 876 555-0192)
+                      SMS alerts
                     </span>
                     <span className={"font-body-sm text-body-sm text-on-surface-variant"}>
                       {"Low-data & offline transit texts"}

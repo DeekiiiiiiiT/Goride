@@ -191,48 +191,9 @@ export function buildCanonicalImportEvents(
     });
   }
 
-  // ─── PROMOTIONS (exact payments_driver total per driver, one row per batch) ─
+  // Payments-driver "Total Earnings : Promotions" is already inside trip fare.
+  // Uber's earnings screen has no promotions line (Oct 5 and Oct 12, 2026). Do not post it again.
   const ssot = uberStatementsByDriverId ?? null;
-  if (ssot && Object.keys(ssot).length > 0) {
-    const driverIds = Object.keys(ssot).sort((a, b) => a.localeCompare(b));
-    for (const driverId of driverIds) {
-      const totals = ssot[driverId];
-      if (!totals) continue;
-      const promo = Number(totals.promotions) || 0;
-      if (Math.abs(promo) < 1e-9) continue;
-      const did = String(driverId).trim();
-      if (!did) continue;
-      const promoSlices = splitAmountByStatementWeeks(promo, weekWeights, ledgerPostingDate);
-      for (const slice of promoSlices) {
-        const multi = promoSlices.length > 1;
-        out.push({
-          idempotencyKey: importMoneyIdempotencyKey(
-            sourceFileHash,
-            batchId,
-            multi
-              ? `driver_promotion|${did.toLowerCase()}|${slice.weekKey}`
-              : `driver_promotion|${did.toLowerCase()}`,
-          ),
-          date: slice.date,
-          driverId: did,
-          eventType: 'promotion',
-          direction: 'inflow',
-          netAmount: slice.amount,
-          grossAmount: slice.amount,
-          currency: 'JMD',
-          sourceType: 'import_batch',
-          sourceId: batchId,
-          batchId,
-          sourceFileHash,
-          periodStart,
-          periodEnd,
-          platform: 'Uber',
-          description: 'Promotions (payments_driver statement total)',
-          metadata: { source: 'payments_driver', weekKey: slice.weekKey },
-        });
-      }
-    }
-  }
 
   // ─── ORG BANK DEPOSIT (payments_organization — fleet account wire, not a driver) ─
   if (org) {
@@ -246,7 +207,7 @@ export function buildCanonicalImportEvents(
           `payout|bank|org|${orgLedgerId.toLowerCase()}`,
         ),
         date: periodStart !== periodEnd ? periodStart : ledgerPostingDate,
-        driverId: orgLedgerId,
+        driverId: 'org-bank',
         eventType: 'payout_bank',
         direction: 'inflow',
         netAmount: orgBank,
@@ -263,7 +224,7 @@ export function buildCanonicalImportEvents(
         metadata: {
           source: 'payments_organization',
           recipient: 'org',
-          bankRole: 'org_deposit',
+          bankRole: 'statement_net',
           weekKey: periodStart !== periodEnd ? periodStart : undefined,
           organizationUuid: org.organizationUuid || orgLedgerId,
           organizationName: org.organizationName || undefined,

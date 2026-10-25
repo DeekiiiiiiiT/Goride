@@ -1,37 +1,23 @@
-import { demoOn } from '../demo/mode';
 import { currentPath } from '../nav';
 
-/** The open car. Demo mode may use the labelled sample car. Real mode never invents one. */
+/** The open car. Never invents one. */
 export function vehicleId(): string | null {
   const match = currentPath().match(/^\/garage\/([^/]+)/);
   if (match && !['add', 'added', 'empty', 'remove'].includes(match[1])) return decodeURIComponent(match[1]);
-  const stored = sessionStorage.getItem('plug-vehicle');
-  if (stored) return stored;
-  if (demoOn()) return 'demo-car';
-  return null;
+  return sessionStorage.getItem('plug-vehicle');
 }
 
 export function catalogVariant(): string | null {
-  const stored = sessionStorage.getItem('plug-catalog');
-  if (stored) return stored;
-  if (demoOn()) return 'demo-variant';
-  return null;
+  return sessionStorage.getItem('plug-catalog');
 }
 
 export type Fix = { lat: number; lng: number; accuracyM: number };
 
-/** A GPS fix the phone actually reported. Demo mode may use the labelled sample fix. */
+/** A GPS fix the phone actually reported. */
 export function deviceFix(): Fix | null {
   const lat = Number(sessionStorage.getItem('plug-lat'));
   const lng = Number(sessionStorage.getItem('plug-lng'));
   const accuracyM = Number(sessionStorage.getItem('plug-accuracy'));
-  if (demoOn()) {
-    return {
-      lat: Number.isFinite(lat) ? lat : 18.0128,
-      lng: Number.isFinite(lng) ? lng : -76.7967,
-      accuracyM: accuracyM > 0 ? accuracyM : 12,
-    };
-  }
   if (!(accuracyM > 0) || accuracyM > 100) return null;
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
   return { lat, lng, accuracyM };
@@ -41,13 +27,6 @@ export function pinFix(): Fix | null {
   const lat = Number(sessionStorage.getItem('plug-pin-lat'));
   const lng = Number(sessionStorage.getItem('plug-pin-lng'));
   const accuracyM = Number(sessionStorage.getItem('plug-accuracy'));
-  if (demoOn()) {
-    return {
-      lat: Number.isFinite(lat) ? lat : 18.0128,
-      lng: Number.isFinite(lng) ? lng : -76.7967,
-      accuracyM: accuracyM > 0 ? accuracyM : 12,
-    };
-  }
   if (!(accuracyM > 0) || accuracyM > 50) return null;
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
   return { lat, lng, accuracyM };
@@ -55,9 +34,7 @@ export function pinFix(): Fix | null {
 
 export function lastOdometer(): number {
   const stored = sessionStorage.getItem('plug-last-odo');
-  if (stored) return Number(stored) || 0;
-  if (demoOn()) return 84210;
-  return 0;
+  return stored ? Number(stored) || 0 : 0;
 }
 
 export function rememberVehicle(row: { id?: string; catalog_variant_id?: string | null; starting_odometer?: number | null; nickname?: string | null }) {

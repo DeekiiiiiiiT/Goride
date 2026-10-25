@@ -37,9 +37,31 @@ import { appendCanonicalLedgerEvents } from "./ledger_canonical.ts";
 import { stampOrg } from "./org_scope.ts";
 import { postFinancialEvent } from "./financial_ledger.ts";
 import { deterministicProjectionTxId } from "./driver_toll_charge_id.ts";
+import { getServiceClient } from "./service_client.ts";
 
 const SETTINGS_KEY = "toll_reconciliation:settings";
 const PROJECTION_MARKER_PREFIX = "toll_charge_projection:";
+
+/**
+ * A platform login has no company on the session. The toll already belongs to one.
+ * The charge has to keep that company or the money row is refused.
+ */
+async function companyOnToll(tollId: string): Promise<string | null> {
+  const toll = (await kv.get(`toll_ledger:${tollId}`)) as Record<string, unknown> | null;
+  const fromKv = toll?.organizationId || toll?.organization_id;
+  if (fromKv) return String(fromKv);
+  const { data } = await getServiceClient()
+    .from("fleet_toll_ledger")
+    .select("organization_id")
+    .eq("id", tollId)
+    .maybeSingle();
+  return data?.organization_id ? String(data.organization_id) : null;
+}
+
+function withTollCompany<T extends Record<string, unknown>>(record: T, company: string | null): T {
+  if (record.organizationId || !company) return record;
+  return { ...record, organizationId: company };
+}
 
 /** Feature flag — default OFF via strict `=== true` (mirrors refund automation). */
 export async function isDriverTollChargeSyncEnabled(): Promise<boolean> {
@@ -192,10 +214,13 @@ export async function emitDriverTollCharge(
     console.error("[DriverTollCharge] canonical write failed:", err);
   }
 
+  const company = await companyOnToll(p.tollId);
+
   // Always post to SQL unified financial ledger (not behind the projection flag).
   try {
     const fin = await postFinancialEvent({
       idempotencyKey: `toll_charge:${p.tollId}:v${version}`,
+      organizationId: company,
       domain: "toll",
       eventType: "toll_charged_to_driver",
       sourceSystem: "driver_charge",
@@ -240,7 +265,7 @@ export async function emitDriverTollCharge(
   // Deterministic id (NOT random): closes the concurrent-double-charge race —
   // two racing emits for the same toll+version upsert the same row.
   const txId = await deterministicProjectionTxId(p.tollId, version);
-  const projectionTx = stampOrg(
+  const projectionTx = withTollCompany(stampOrg(
     {
       id: txId,
       driverId: p.driverId,
@@ -261,7 +286,7 @@ export async function emitDriverTollCharge(
       },
     } as Record<string, unknown>,
     c as never,
-  );
+  ), company);
 
   await kv.set(`transaction:${txId}`, projectionTx);
   await kv.set(markerKey, {
@@ -377,7 +402,8 @@ export async function reverseDriverTollCharge(
   }
 
   const reversalTxId = crypto.randomUUID();
-  const reversalTx = stampOrg(
+  const reversalCompany = await companyOnToll(p.tollId);
+  const reversalTx = withTollCompany(stampOrg(
     {
       id: reversalTxId,
       driverId: originalDriverId,
@@ -399,7 +425,7 @@ export async function reverseDriverTollCharge(
       },
     } as Record<string, unknown>,
     c as never,
-  );
+  ), reversalCompany);
 
   await kv.set(`transaction:${reversalTxId}`, reversalTx);
   await kv.set(markerKey, {

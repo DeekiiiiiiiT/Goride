@@ -210,7 +210,7 @@ export function VehicleNotFoundScreen() {
                 </div>
               </div>
               <div className={"relative w-full h-36 rounded-lg bg-surface-container overflow-hidden flex flex-col items-center justify-center cursor-pointer group shadow-inner"}>
-                <img className={"absolute inset-0 w-full h-full object-cover opacity-20 group-hover:opacity-30 transition-opacity"} data-alt={"Close up photograph of a Japanese import vehicle silver chassis ID placard stamped inside the engine bay with VIN, engine code, and color code, photographed under bright tropical Caribbean sunlight with clean mechanics tools in soft focus"} src={"https://lh3.googleusercontent.com/aida-public/AB6AXuCUKWD6MFOlYGcS2JxQwbYouI2uEFHEL0mePS1ZD4LfLBMGhzR1o4zcrRJzUAi2LhmgwINwW-zxBjag0719XRe_VxYy5h447HtM_5oY_IO_Fuqz54wmFCHaAMd4VEsvSZxEF0Iocr3QDhZkOVvpDtkLGyBoHcC-4jgniQVqvvN8X_LPNoLuBRPcXtr9q_3wF56VKctwUMKf1_4kBbgB3kR8qbUf7QwGRwJRtdox5AWPgGCEJ1KnNjyj"} />
+                <div className={"absolute inset-0 w-full h-full object-cover opacity-20 group-hover:opacity-30 transition-opacity bg-surface-container flex items-center justify-center text-primary"} aria-hidden={"true"}><span className={"material-symbols-outlined text-[32px]"}>image</span></div>
                 <div className={"relative z-10 flex flex-col items-center text-center px-4"}>
                   <div className={"w-12 h-12 rounded-full bg-surface-container-lowest shadow-md flex items-center justify-center text-primary mb-2"}>
                     <span className={"material-symbols-outlined text-[24px]"}>

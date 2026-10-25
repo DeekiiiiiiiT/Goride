@@ -22,6 +22,8 @@ export type StatementTollBuckets = {
   tollRefunds: number;
   /** Fare-embedded credits (Uber CSV Refunds:Toll → toll_reimbursement). */
   tollReimbursements: number;
+  /** Organisation statement line REFUNDS_TOLL. Wins over the trip sum when present. */
+  statementLineToll: number;
   reimbursedTripIds: Set<string>;
 };
 
@@ -47,7 +49,9 @@ export function presentStatementToll(
 ): StatementTollPresentation {
   const expense = round2(Math.max(0, buckets.tollCharges));
   const refunds = round2(Math.max(0, buckets.tollRefunds));
-  const credits = round2(Math.max(0, buckets.tollReimbursements + buckets.tollRefunds));
+  const statementLine = round2(Math.max(0, buckets.statementLineToll || 0));
+  const tripCredits = round2(Math.max(0, buckets.tollReimbursements + buckets.tollRefunds));
+  const credits = statementLine > STATEMENT_TOLL_RECON_EPS ? statementLine : tripCredits;
   const reimbursementsOnly = round2(Math.max(0, buckets.tollReimbursements));
   const plat = String(platform || '');
 
@@ -165,8 +169,8 @@ export function applyStatementTollEvent(
     case 'toll_charge_offset':
       return null;
     case 'statement_line':
-      if (event.metadata?.lineCode === 'REFUNDS_TOLL' && platform !== 'Uber') {
-        return { ...buckets, tollReimbursements: buckets.tollReimbursements + mag };
+      if (event.metadata?.lineCode === 'REFUNDS_TOLL') {
+        return { ...buckets, statementLineToll: (buckets.statementLineToll || 0) + mag };
       }
       return null;
     default:
@@ -179,28 +183,33 @@ export function emptyStatementTollBuckets(): StatementTollBuckets {
     tollCharges: 0,
     tollRefunds: 0,
     tollReimbursements: 0,
+    statementLineToll: 0,
     reimbursedTripIds: new Set(),
   };
 }
 
-export function deriveStatementBankPlug(
-  totalEarnings: number,
-  statementTollExpense: number,
-  cashCollected: number,
-): number {
-  return round2(totalEarnings - statementTollExpense - cashCollected);
+/** Net paid to bank = earnings + platform refunds + adjustments − cash. */
+export function deriveStatementBankPlug(args: {
+  totalEarnings: number;
+  platformRefunds: number;
+  cashCollected: number;
+  periodAdjustments?: number;
+}): number {
+  return round2(
+    args.totalEarnings + args.platformRefunds + (args.periodAdjustments || 0) - args.cashCollected,
+  );
 }
 
+/** Bank deposit minus the statement net. Zero means the card ties. */
 export function statementPayoutReconciliationGap(args: {
   totalEarnings: number;
-  statementTollExpense: number;
+  platformRefunds: number;
   periodAdjustments: number;
-  totalPayout: number;
+  cashCollected: number;
+  bankTransfer: number;
 }): number {
-  const expected = round2(
-    args.totalEarnings - args.statementTollExpense + args.periodAdjustments,
-  );
-  return round2(args.totalPayout - expected);
+  const net = deriveStatementBankPlug(args);
+  return round2(args.bankTransfer - net);
 }
 
 export type FleetTollSnapshot = {

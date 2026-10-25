@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
+import { formatMoney } from '@roam/ui/formatMoney';
 import { cn } from '../ui/utils';
 import type { StatementSummary } from '../../types/statementSummary';
 import { computePeriodBalances } from '../../utils/aggregateStatementSummaries';
@@ -12,14 +13,6 @@ const PLATFORM_TABS: { id: EarningsPlatformTab; label: string }[] = [
   { id: 'Uber', label: 'Uber' },
   { id: 'InDrive', label: 'InDrive' },
 ];
-
-function formatMoney(n: number): string {
-  const abs = Math.abs(n).toLocaleString(undefined, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
-  return n < 0 ? `-$${abs}` : `$${abs}`;
-}
 
 type Props = {
   summary: StatementSummary | null;
@@ -38,7 +31,7 @@ export function EarningsSummaryCard({
   const { startBalance, endBalance } = computePeriodBalances(summary);
 
   const earnings = summary?.totalEarnings ?? 0;
-  const refunds = summary?.totalRefundsExpenses ?? 0;
+  const refunds = summary?.tollRefund || summary?.totalRefundsExpenses || summary?.platformTollCredits || 0;
   const adjustments = summary?.periodAdjustments ?? 0;
   const payout = summary?.totalPayout ?? 0;
   const cash = summary?.cashCollected ?? 0;

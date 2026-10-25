@@ -17,6 +17,7 @@ import {
   type CorrectionLine,
 } from "../../../packages/finance-core/src/fuelShareCorrection.ts";
 import { round2 } from "../../../packages/finance-core/src/money.ts";
+import { CORRECTIONS_LAND_ON } from "../../../packages/finance-core/src/pastWeeksCleanup.ts";
 
 const FROM = FUEL_CORRECTION_FROM;
 const THROUGH = FUEL_CORRECTION_THROUGH;
@@ -117,13 +118,35 @@ export async function previewFuelShareCorrections(organizationId: string, driver
     lines: pending,
     oct12Amount: oct12?.amount ?? null,
   });
+  const landingDriver = driverId || pending[0]?.driverId;
+  const landingWeek = await newestOpenWeekAnchor(organizationId, landingDriver);
   return {
     lines: pending,
     net: check.net,
     oct12,
     matchesAudit: check.ok,
     reason: check.reason,
+    landingWeek,
   };
+}
+
+/** Newest week that is still open. Corrections post onto this week. */
+export async function newestOpenWeekAnchor(
+  organizationId: string,
+  driverId?: string,
+): Promise<string | null> {
+  let q = sb()
+    .from("driver_financial_periods")
+    .select("period_anchor, status, closed_at, settlement_status, metadata")
+    .eq("organization_id", organizationId)
+    .order("period_anchor", { ascending: false });
+  if (driverId) q = q.eq("driver_id", driverId);
+  const { data, error } = await q;
+  if (error) throw new Error(error.message);
+  for (const row of data || []) {
+    if (!isPeriodFrozen(periodGateFromRow(row))) return weekOf(row);
+  }
+  return null;
 }
 
 async function openWeekReceivable(organizationId: string, driverId?: string): Promise<Oct12Line> {
@@ -168,6 +191,16 @@ export async function applyFuelShareCorrections(opts: {
     throw new SettlementCommandError(
       "CORRECTION_PREVIEW_MISMATCH",
       preview.reason || "Corrections do not match the audit. Nothing was posted.",
+      409,
+    );
+  }
+  const landing = String(preview.landingWeek || "").slice(0, 10);
+  if (landing !== CORRECTIONS_LAND_ON) {
+    throw new SettlementCommandError(
+      "CORRECTIONS_WRONG_WEEK",
+      landing
+        ? `Corrections have to land on the week of ${CORRECTIONS_LAND_ON}. They would land on ${landing} instead. Nothing was posted.`
+        : `Corrections have to land on the week of ${CORRECTIONS_LAND_ON}. There is no open week. Nothing was posted.`,
       409,
     );
   }

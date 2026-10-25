@@ -11,6 +11,7 @@ import {
   type ClosePeriodRow,
 } from "../../../packages/finance-core/src/closeInvariants.ts";
 import { shouldCompareWeekToLiveTrips } from "../../../packages/finance-core/src/closedWeekLiveCompare.ts";
+import { classifyStatementControl } from "../../../packages/finance-core/src/statementControl.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -523,6 +524,145 @@ Deno.serve(async (req) => {
       }
     } catch (remitErr) {
       console.warn("[finance-recon] remittance recon skipped:", errMsg(remitErr));
+    }
+
+    // Statement control: fare vs trip facts, toll line vs trip refunds, one cash source.
+    // Known audit weeks stay historical. Only unexplained differences become drifts.
+    try {
+      const orgIds = [...new Set(rows.map((p) => String(p.organization_id || "")).filter(Boolean))];
+      const weeks: string[] = [];
+      const cursor = new Date(`${fromYmd}T00:00:00Z`);
+      while (cursor.getUTCDay() !== 1) cursor.setUTCDate(cursor.getUTCDate() + 1);
+      const end = new Date(`${toYmd}T00:00:00Z`);
+      while (cursor <= end) {
+        weeks.push(cursor.toISOString().slice(0, 10));
+        cursor.setUTCDate(cursor.getUTCDate() + 7);
+      }
+      const { data: ledgerRows, error: ledgerErr } = await supabase
+        .from("ledger_entries")
+        .select("organization_id, entry_type, amount_minor, effective_at, metadata")
+        .gte("effective_at", `${fromYmd}T00:00:00Z`)
+        .lte("effective_at", `${toYmd}T23:59:59Z`)
+        .in("entry_type", ["fare_earning", "statement_line", "payout_cash"])
+        .limit(8000);
+      if (ledgerErr) throw ledgerErr;
+      if ((ledgerRows ?? []).length >= 8000) {
+        console.warn("[finance-recon] statement control ledger read hit 8000; skipped to avoid a partial verdict");
+      } else {
+        type Bucket = { fare: number; toll: number; cash: number; tripCash: number; cashSources: number };
+        const buckets = new Map<string, Bucket>();
+        const mondayOf = (ymd: string) => {
+          const d = new Date(`${ymd}T00:00:00Z`);
+          const back = (d.getUTCDay() + 6) % 7;
+          d.setUTCDate(d.getUTCDate() - back);
+          return d.toISOString().slice(0, 10);
+        };
+        for (const row of ledgerRows ?? []) {
+          const meta = (row.metadata ?? {}) as Record<string, unknown>;
+          const rawDate = String(meta.periodStart || row.effective_at || "").slice(0, 10);
+          if (!/^\d{4}-\d{2}-\d{2}$/.test(rawDate)) continue;
+          const week = mondayOf(rawDate);
+          const driver = String(meta.driverId || "");
+          const platform = String(meta.platform || "Uber");
+          const key = `${row.organization_id}|${week}|${platform}|${driver}`;
+          const b = buckets.get(key) ?? { fare: 0, toll: 0, cash: 0, tripCash: 0, cashSources: 0 };
+          const amount = (Number(row.amount_minor) || 0) / 100;
+          if (row.entry_type === "fare_earning" && meta.reversal !== true) {
+            b.fare += amount;
+            const collected = Number(meta.cashCollected);
+            if (Number.isFinite(collected) && Math.abs(collected) > 0.01) {
+              b.tripCash += Math.abs(collected);
+              b.cashSources |= 1;
+            }
+          }
+          if (row.entry_type === "statement_line" && meta.lineCode === "REFUNDS_TOLL") b.toll += amount;
+          if (row.entry_type === "payout_cash") {
+            b.cash += Math.abs(amount);
+            b.cashSources |= 2;
+          }
+          buckets.set(key, b);
+        }
+        let unexplained = 0;
+        for (const orgId of orgIds) {
+          for (const week of weeks) {
+            const sunday = new Date(`${week}T00:00:00Z`);
+            sunday.setUTCDate(sunday.getUTCDate() + 6);
+            const { data: rollup, error: rollupErr } = await supabase.rpc("statement_week_rollup", {
+              p_org: orgId,
+              p_from: week,
+              p_to: sunday.toISOString().slice(0, 10),
+            });
+            if (rollupErr) throw rollupErr;
+            const facts = Array.isArray(rollup) ? rollup : [];
+            for (const fact of facts as Array<Record<string, unknown>>) {
+              const driver = String(fact.driverId || "");
+              const platform = String(fact.platform || "");
+              const key = `${orgId}|${week}|${platform}|${driver}`;
+              const b = buckets.get(key);
+              if (!b) continue;
+              const fareClass = classifyStatementControl({
+                week,
+                kind: "fare",
+                difference: b.fare - Number(fact.totalEarnings || 0),
+              });
+              if (fareClass === "unexplained") {
+                unexplained += 1;
+                drifts.push({
+                  runId,
+                  driverId: driver,
+                  week,
+                  kind: "STATEMENT_FARE_DRIFT",
+                  field: platform,
+                  persisted: Math.round(b.fare * 100) / 100,
+                  expected: Math.round(Number(fact.totalEarnings || 0) * 100) / 100,
+                  severity: "warning",
+                });
+              }
+              const tollClass = classifyStatementControl({
+                week,
+                kind: "toll",
+                difference: b.toll - Number(fact.tollRefundTrips || 0),
+              });
+              if (tollClass === "unexplained") {
+                unexplained += 1;
+                drifts.push({
+                  runId,
+                  driverId: driver,
+                  week,
+                  kind: "STATEMENT_TOLL_DRIFT",
+                  field: platform,
+                  persisted: Math.round(b.toll * 100) / 100,
+                  expected: Math.round(Number(fact.tollRefundTrips || 0) * 100) / 100,
+                  severity: "warning",
+                });
+              }
+              if (b.cashSources === 3) {
+                const cashClass = classifyStatementControl({
+                  week,
+                  kind: "cash",
+                  difference: b.cash - b.tripCash,
+                });
+                if (cashClass === "unexplained") {
+                  unexplained += 1;
+                  drifts.push({
+                    runId,
+                    driverId: driver,
+                    week,
+                    kind: "STATEMENT_CASH_DUAL_SOURCE",
+                    field: platform,
+                    persisted: Math.round(b.cash * 100) / 100,
+                    expected: Math.round(b.tripCash * 100) / 100,
+                    severity: "warning",
+                  });
+                }
+              }
+            }
+          }
+        }
+        console.log(`[finance-recon] statement control unexplained=${unexplained}`);
+      }
+    } catch (statementErr) {
+      console.warn("[finance-recon] statement control skipped:", errMsg(statementErr));
     }
 
     const ok = drifts.length === 0;

@@ -66,7 +66,10 @@ describe('buildPaymentLedgerCanonicalEvents', () => {
     };
 
     const events = buildPaymentLedgerCanonicalEvents([line], 'batch-1');
-    expect(events.some((e) => e.eventType === 'payout_bank')).toBe(true);
+    const payout = events.find((e) => e.eventType === 'payout_bank');
+    expect(payout?.metadata && (payout.metadata as { bankRole?: string }).bankRole).toBe('actual_deposit');
+    expect(payout?.periodStart).toBe('2026-03-09');
+    expect(payout?.periodEnd).toBe('2026-03-15');
   });
 
   it('keeps tip lines as payment_line so trip tip events stay SSOT', () => {

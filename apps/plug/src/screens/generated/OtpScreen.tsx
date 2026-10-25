@@ -8,25 +8,7 @@ export function OtpScreen() {
   useEffect(() => { if (ref.current) bindScreen("05-otp.html", ref.current); }, []);
   return (
     <div ref={ref} data-plug-screen={"05-otp.html"} className={"bg-surface text-on-surface antialiased flex flex-col min-h-screen"}>
-      <div className={"w-full pt-safe px-margin select-none"}>
-        <div className={"flex justify-between items-center pt-space-xs text-on-surface"}>
-          <span className={"font-label-md text-label-md font-semibold tracking-tight"}>
-            9:41
-          </span>
-          <div className={"flex items-center gap-1.5"}>
-            <span className={"material-symbols-outlined text-[16px] leading-none"}>
-              signal_cellular_alt
-            </span>
-            <span className={"material-symbols-outlined text-[16px] leading-none"}>
-              wifi
-            </span>
-            <span className={"material-symbols-outlined text-[18px] leading-none"}>
-              battery_full
-            </span>
-          </div>
-        </div>
-      </div>
-      <main className={"flex-1 flex flex-col relative w-full pb-safe bg-surface px-margin"}>
+      <main className={"flex-1 flex flex-col relative w-full pt-safe pb-safe bg-surface px-margin"}>
         <div className={"flex flex-col w-full pb-6 space-y-5"}>
           <div className={"flex items-center justify-between pt-2"}>
             <button onClick={onPlugClick} aria-label={"Go back"} className={"w-12 h-12 flex items-center justify-center rounded-full bg-surface-container-low text-on-surface active:bg-surface-container transition-colors"} type={"button"} data-act={"arrow-back"} data-way-out={"back"}>
@@ -157,7 +139,7 @@ export function OtpScreen() {
                 <span className={"font-headline-sm text-headline-sm font-bold text-on-surface leading-none"}>
                   1
                 </span>
-                <span className={"font-label-sm text-[8px] text-on-surface-variant tracking-widest leading-none mt-0.5"}>
+                <span className={"font-label-sm text-[12px] text-on-surface-variant tracking-widest leading-none mt-0.5"}>
                   JAM
                 </span>
               </button>
@@ -165,7 +147,7 @@ export function OtpScreen() {
                 <span className={"font-headline-sm text-headline-sm font-bold text-on-surface leading-none"}>
                   2
                 </span>
-                <span className={"font-label-sm text-[8px] text-on-surface-variant tracking-widest leading-none mt-0.5"}>
+                <span className={"font-label-sm text-[12px] text-on-surface-variant tracking-widest leading-none mt-0.5"}>
                   ABC
                 </span>
               </button>
@@ -173,7 +155,7 @@ export function OtpScreen() {
                 <span className={"font-headline-sm text-headline-sm font-bold text-on-surface leading-none"}>
                   3
                 </span>
-                <span className={"font-label-sm text-[8px] text-on-surface-variant tracking-widest leading-none mt-0.5"}>
+                <span className={"font-label-sm text-[12px] text-on-surface-variant tracking-widest leading-none mt-0.5"}>
                   DEF
                 </span>
               </button>
@@ -181,7 +163,7 @@ export function OtpScreen() {
                 <span className={"font-headline-sm text-headline-sm font-bold text-on-surface leading-none"}>
                   4
                 </span>
-                <span className={"font-label-sm text-[8px] text-on-surface-variant tracking-widest leading-none mt-0.5"}>
+                <span className={"font-label-sm text-[12px] text-on-surface-variant tracking-widest leading-none mt-0.5"}>
                   GHI
                 </span>
               </button>
@@ -189,7 +171,7 @@ export function OtpScreen() {
                 <span className={"font-headline-sm text-headline-sm font-bold text-on-surface leading-none"}>
                   5
                 </span>
-                <span className={"font-label-sm text-[8px] text-on-surface-variant tracking-widest leading-none mt-0.5"}>
+                <span className={"font-label-sm text-[12px] text-on-surface-variant tracking-widest leading-none mt-0.5"}>
                   JKL
                 </span>
               </button>
@@ -197,7 +179,7 @@ export function OtpScreen() {
                 <span className={"font-headline-sm text-headline-sm font-bold text-on-surface leading-none"}>
                   6
                 </span>
-                <span className={"font-label-sm text-[8px] text-on-surface-variant tracking-widest leading-none mt-0.5"}>
+                <span className={"font-label-sm text-[12px] text-on-surface-variant tracking-widest leading-none mt-0.5"}>
                   MNO
                 </span>
               </button>
@@ -205,7 +187,7 @@ export function OtpScreen() {
                 <span className={"font-headline-sm text-headline-sm font-bold text-on-surface leading-none"}>
                   7
                 </span>
-                <span className={"font-label-sm text-[8px] text-on-surface-variant tracking-widest leading-none mt-0.5"}>
+                <span className={"font-label-sm text-[12px] text-on-surface-variant tracking-widest leading-none mt-0.5"}>
                   PQRS
                 </span>
               </button>
@@ -213,7 +195,7 @@ export function OtpScreen() {
                 <span className={"font-headline-sm text-headline-sm font-bold text-on-surface leading-none"}>
                   8
                 </span>
-                <span className={"font-label-sm text-[8px] text-on-surface-variant tracking-widest leading-none mt-0.5"}>
+                <span className={"font-label-sm text-[12px] text-on-surface-variant tracking-widest leading-none mt-0.5"}>
                   TUV
                 </span>
               </button>
@@ -221,7 +203,7 @@ export function OtpScreen() {
                 <span className={"font-headline-sm text-headline-sm font-bold text-on-surface leading-none"}>
                   9
                 </span>
-                <span className={"font-label-sm text-[8px] text-on-surface-variant tracking-widest leading-none mt-0.5"}>
+                <span className={"font-label-sm text-[12px] text-on-surface-variant tracking-widest leading-none mt-0.5"}>
                   WXYZ
                 </span>
               </button>
@@ -234,7 +216,7 @@ export function OtpScreen() {
                 <span className={"font-headline-sm text-headline-sm font-bold text-on-surface leading-none"}>
                   0
                 </span>
-                <span className={"font-label-sm text-[8px] text-on-surface-variant tracking-widest leading-none mt-0.5"}>
+                <span className={"font-label-sm text-[12px] text-on-surface-variant tracking-widest leading-none mt-0.5"}>
                   +
                 </span>
               </button>

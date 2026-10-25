@@ -37,7 +37,7 @@ export function StationDetailScreen() {
       <main className={"flex-1 w-full bg-surface pt-16 pb-28"}>
         <div className={"flex flex-col w-full pb-8"}>
           <div className={"relative w-full h-56 bg-surface-container-high overflow-hidden shadow-sm"}>
-            <div className={"w-full h-full bg-cover bg-center"} data-alt={"A modern, sunlit Rubis service station on bustling Hope Road in Kingston Jamaica with signature blue canopy, red accents, tropical palm silhouettes, clean concrete forecourt, and sleek taxi vehicles under bright warm Caribbean sky"} style={{ backgroundImage: "url('https://lh3.googleusercontent.com/aida-public/AB6AXuALqACSg1Ikhjvy1Xn-9XL4uPNidATPdmLqlVxf9vlXLsOQUMta705r7p9YVWS9VTDSLmUU0Av_3ea6ZJzdBG2Ey8owHRlBzhCSflWMIzBedWmVabzxIP9hI1cOIaNmPng_3m5JO_M-ywiyZM7a_2rzligrnhozNfunQEXAhCYUD4yVa6fqR42xvb6VdLWUYXx8NTSgu8O-YlsfJX-9R1-RlzbEFWAwahMXaIn-y0xkXvClvY0gd2ec')" }} />
+            <div className={"w-full h-full bg-surface-container flex items-center justify-center text-primary"} aria-hidden={"true"}><span className={"material-symbols-outlined text-[32px]"}>image</span></div>
             <div className={"absolute inset-0 bg-gradient-to-t from-on-background/80 via-transparent to-black/30"} />
             <div className={"absolute bottom-3 right-4 bg-inverse-surface/80 backdrop-blur-md px-3 py-1 rounded-full flex items-center gap-1.5 shadow-sm"}>
               <span className={"material-symbols-outlined text-[16px] text-inverse-on-surface"}>
@@ -76,7 +76,7 @@ export function StationDetailScreen() {
                 </h1>
               </div>
               <div className={"w-12 h-12 rounded-xl bg-surface-container-lowest shadow-md flex items-center justify-center p-1.5 flex-shrink-0"}>
-                <div className={"w-full h-full rounded-lg bg-red-600 flex flex-col items-center justify-center font-black text-white text-[11px] leading-tight shadow-inner"}>
+                <div className={"w-full h-full rounded-lg bg-red-600 flex flex-col items-center justify-center font-black text-white text-[12px] leading-tight shadow-inner"}>
                   <span className={"tracking-tighter"}>
                     RUBIS
                   </span>
@@ -399,7 +399,7 @@ export function StationDetailScreen() {
                 Hope Rd / Liguanea
               </span>
             </div>
-            <div className={"w-full h-36 rounded-2xl bg-cover bg-center shadow-sm relative overflow-hidden"} data-location={"123 Hope Road, Kingston, Jamaica"} style={{ backgroundImage: "url('https://lh3.googleusercontent.com/aida-public/AB6AXuDGBhobGKz_n68k9iJq1UBkbiYCjSzfg3SfGUsQy3Jb7s3Nhs0QEDl8z77JaBXgoQXFAMiU275gKH-BI6JNYKiejCK264Pptxgd1XM5JtGxrklACIUG7Xe5VJuM4m1FDkFI7N8t5J5TX2eARCS5Tw82iLUnnaLmCkuO-LY7fFcATGz-BI8r_ri8MkpQLx8cn7h1I_BdF_OopLk1jTgrauSKtC3jBEuUTl4SPP7L-1WXkKZpbsg1QagS')" }}>
+            <div className={"w-full h-36 rounded-2xl bg-cover bg-center shadow-sm relative overflow-hidden"} data-location={"123 Hope Road, Kingston, Jamaica"}>
               <div className={"absolute inset-0 bg-black/20 flex items-center justify-center"}>
                 <div className={"bg-surface/90 backdrop-blur-md px-3.5 py-1.5 rounded-full shadow-lg flex items-center gap-2"}>
                   <span className={"material-symbols-outlined text-[18px] text-primary"}>
@@ -454,7 +454,7 @@ export function StationDetailScreen() {
                 <div className={"inline-block h-8 w-8 rounded-full bg-tertiary text-on-tertiary flex items-center justify-center font-bold text-xs ring-2 ring-surface"}>
                   TR
                 </div>
-                <div className={"inline-block h-8 w-8 rounded-full bg-surface-container-highest text-on-surface flex items-center justify-center font-bold text-[10px] ring-2 ring-surface"}>
+                <div className={"inline-block h-8 w-8 rounded-full bg-surface-container-highest text-on-surface flex items-center justify-center font-bold text-[12px] ring-2 ring-surface"}>
                   +11
                 </div>
               </div>

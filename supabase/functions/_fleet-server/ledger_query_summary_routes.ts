@@ -6,17 +6,7 @@ import * as kv from "./kv_store.tsx";
 import { requireAuth } from "./rbac_middleware.ts";
 import { filterByOrg, getOrgId } from "./org_scope.ts";
 import { fromKvStore } from "./fleet_sql_bridge.ts";
-// Static: CLI packager drops dynamic ./fleet_toll_statement_snapshot imports.
-import { buildFleetTollSnapshotForRange } from "./fleet_toll_statement_snapshot.ts";
-import {
-  applyStatementTollEvent,
-  emptyStatementTollBuckets,
-  presentStatementToll,
-  deriveStatementBankPlug,
-  statementPayoutReconciliationGap,
-  STATEMENT_TOLL_RECON_EPS,
-} from "../../../packages/finance-core/src/statementTollNetting.ts";
-import { statementEarningDelta } from "../../../packages/finance-core/src/platformFeeRecognition.ts";
+import { buildStatementCards } from "./statement_summary_build.ts";
 
 const PREFIX = "/make-server-37f42386";
 
@@ -305,15 +295,19 @@ export function registerLedgerQuerySummaryRoutes(app: Hono) {
   // ─── GET /ledger/statement-summary — Universal Statement Summary per platform ──
   // All platforms (Uber, Roam, InDrive): fare_earning, tip, promotion, toll_* from ledger.entries.
   // Uber also uses payout_cash/payout_bank for actual cash/bank totals from org import.
-  app.get(`${PREFIX}/ledger/statement-summary`, requireAuth(), async (c) => {
+  app.get(`${PREFIX}/ledger/statement-summary`, requireAuth({ requireOrg: true }), async (c) => {
     try {
       const platform = c.req.query("platform"); // Uber, Roam, InDrive, or 'all'
       const startDate = c.req.query("startDate");
       const endDate = c.req.query("endDate");
       const driverIdParam = c.req.query("driverId");
+      const organizationId = getOrgId(c) || String(c.req.query("organizationId") || "").trim();
 
       if (!startDate || !endDate) {
         return c.json({ error: "startDate and endDate are required" }, 400);
+      }
+      if (!organizationId) {
+        return c.json({ error: "Organization is required", code: "ORG_REQUIRED" }, 403);
       }
 
       const platforms =
@@ -321,28 +315,21 @@ export function registerLedgerQuerySummaryRoutes(app: Hono) {
           ? (["Uber", "Roam", "InDrive"] as const)
           : ([platform] as ("Uber" | "Roam" | "InDrive")[]);
 
-      const summaries = await buildOrgStatementSummaries(c, {
+      const built = await buildOrgStatementSummaries(c, {
         startDate,
         endDate,
         platforms: [...platforms],
         driverId: driverIdParam,
-      });
-
-      const fleetTollSnapshot = await buildFleetTollSnapshotForRange(c, {
-        startDate,
-        endDate,
-        driverId: driverIdParam && String(driverIdParam).trim()
-          ? String(driverIdParam).trim()
-          : undefined,
+        organizationId,
       });
 
       return c.json({
         success: true,
-        summaries,
-        fleetTollSnapshot,
+        summaries: built.summaries,
+        drivers: built.drivers,
         periodStart: startDate,
         periodEnd: endDate,
-        meta: { source: "ledger.entries" as const },
+        meta: { source: built.rollupSource, weekClosed: built.weekClosed },
       });
     } catch (e: any) {
       console.error("[Statement Summary] Error: " + (e.message || e));
@@ -351,7 +338,7 @@ export function registerLedgerQuerySummaryRoutes(app: Hono) {
   });
 }
 
-/** Shared statement builder — Earnings + Wallet Balance SSOT. */
+/** Shared statement builder — Ledgers and Earnings read the same cards. */
 export async function buildOrgStatementSummaries(
   c: { get?: (k: string) => unknown },
   opts: {
@@ -359,178 +346,20 @@ export async function buildOrgStatementSummaries(
     endDate: string;
     platforms?: string[];
     driverId?: string | null;
+    organizationId?: string | null;
   },
-): Promise<any[]> {
-  const startDate = opts.startDate;
-  const endDate = opts.endDate;
+) {
   const driverIdParam = opts.driverId;
-
   const driverIdVariants =
     driverIdParam && String(driverIdParam).trim()
       ? await expandStatementSummaryDriverIds(driverIdParam)
       : [];
-
-  const platforms =
-    opts.platforms && opts.platforms.length > 0
-      ? opts.platforms
-      : ["Uber", "Roam", "InDrive"];
-
-  const {
-    listAllUnifiedCanonicalEvents,
-    filterCanonicalEventsByPlatform,
-    dedupeOrgBankCanonicalEvents,
-  } = await import("../_shared/unifiedLedger/queries.ts");
-
-  const statementTypes = [
-    "fare_earning",
-    "tip",
-    "promotion",
-    "toll_charge",
-    "toll_reimbursement",
-    "toll_refund",
-    "toll_support_adjustment",
-    "toll_charge_offset",
-    "prior_period_adjustment",
-    "payout_cash",
-    "payout_bank",
-    "statement_line",
-  ];
-  const all = dedupeOrgBankCanonicalEvents(
-    await listAllUnifiedCanonicalEvents({
-      products: ["roam_driver", "roam_fleet"],
-      entryTypes: statementTypes,
-      maxRows: 100_000,
-    }),
-  );
-  const scoped = filterByOrg(all, c as any).filter((e) => {
-    if (driverIdVariants.length === 0) return true;
-    const did = String(e.driverId || "");
-    return driverIdVariants.some((v) => v === did || v.toLowerCase() === did.toLowerCase());
+  return buildStatementCards(c, {
+    startDate: opts.startDate,
+    endDate: opts.endDate,
+    platforms: opts.platforms,
+    driverId: driverIdParam,
+    driverIdVariants,
+    organizationId: opts.organizationId,
   });
-
-  const summaries: any[] = [];
-  for (const plat of platforms) {
-    const raw = filterCanonicalEventsByPlatform(scoped, plat);
-    const uberImportTypes = new Set(["promotion", "payout_cash", "payout_bank", "statement_line"]);
-    const entries = raw.filter((e: any) => {
-      const t = String(e.eventType || "");
-      const d = String(e.date || "").slice(0, 10);
-      const ps = String(e.periodStart || "").slice(0, 10);
-      const pe = String(e.periodEnd || "").slice(0, 10);
-      const inDate = !!(d && d >= startDate && d <= endDate);
-      if (plat === "Uber" && uberImportTypes.has(t)) {
-        const periodOverlap = !!(ps && pe && ps <= endDate && pe >= startDate);
-        return inDate || periodOverlap;
-      }
-      return inDate;
-    });
-
-    let netFare = 0,
-      promotions = 0,
-      tips = 0;
-    let tollBuckets = emptyStatementTollBuckets();
-    let periodAdjustments = 0;
-    let cashCollected = 0,
-      bankTransfer = 0;
-    let tripCount = 0;
-    let hasPayoutEvents = false;
-
-    for (const e of entries) {
-      if (String(e.eventType || "") !== "toll_reimbursement") continue;
-      const next = applyStatementTollEvent(tollBuckets, e, plat);
-      if (next) tollBuckets = next;
-    }
-
-    for (const e of entries) {
-      const net = Number(e.netAmount) || 0;
-      const mag = Math.abs(net);
-      const et = String(e.eventType || "");
-      if (et === "toll_reimbursement") continue;
-
-      const tollNext = applyStatementTollEvent(tollBuckets, e, plat);
-      if (tollNext) {
-        tollBuckets = tollNext;
-        continue;
-      }
-
-      switch (et) {
-        case "fare_earning":
-        case "tip":
-        case "promotion": {
-          const delta = statementEarningDelta(e);
-          netFare += delta.netFare;
-          tips += delta.tips;
-          promotions += delta.promotions;
-          tripCount += delta.tripCount;
-          cashCollected += delta.cashCollected;
-          break;
-        }
-        case "prior_period_adjustment":
-          periodAdjustments += net;
-          break;
-        case "payout_cash":
-          cashCollected += mag;
-          hasPayoutEvents = true;
-          break;
-        case "payout_bank": {
-          const driverId = String(e.driverId || "");
-          // Nil-driver statement lines are the previous week's payout, not this deposit.
-          if (driverId.startsWith("00000000")) break;
-          bankTransfer += mag;
-          hasPayoutEvents = true;
-          break;
-        }
-      }
-    }
-
-    const tollPres = presentStatementToll(tollBuckets, plat);
-    const computedNetFare = plat === "Uber" ? netFare - promotions : netFare;
-    const totalEarnings = computedNetFare + promotions + tips;
-    if (!hasPayoutEvents) {
-      bankTransfer = deriveStatementBankPlug(
-        totalEarnings,
-        tollPres.statementTollExpense,
-        cashCollected,
-      );
-    }
-
-    const totalPayout = cashCollected + bankTransfer;
-    const payoutGap = statementPayoutReconciliationGap({
-      totalEarnings,
-      statementTollExpense: tollPres.statementTollExpense,
-      periodAdjustments,
-      totalPayout,
-    });
-
-    summaries.push({
-      platform: plat,
-      periodStart: startDate,
-      periodEnd: endDate,
-      sourceType: "computed",
-      netFare: Number(computedNetFare.toFixed(2)),
-      promotions: Number(promotions.toFixed(2)),
-      tips: Number(tips.toFixed(2)),
-      totalEarnings: Number(totalEarnings.toFixed(2)),
-      tollStory: tollPres.tollStory,
-      uberTollCredits: tollPres.uberTollCredits,
-      platformTollCredits: tollPres.platformTollCredits,
-      statementTollExpense: tollPres.statementTollExpense,
-      tolls: tollPres.statementTollExpense,
-      tollCharges: tollPres.tollCharges,
-      tollRefunds: tollPres.tollRefunds,
-      tollReimbursements: tollPres.tollReimbursements,
-      tollAdjustments: tollPres.tollAdjustments,
-      totalRefundsExpenses: tollPres.statementTollExpense,
-      periodAdjustments: Number(periodAdjustments.toFixed(2)),
-      cashCollected: Number(cashCollected.toFixed(2)),
-      bankTransfer: Number(bankTransfer.toFixed(2)),
-      totalPayout: Number(totalPayout.toFixed(2)),
-      payoutObserved: hasPayoutEvents,
-      payoutReconciliationGap:
-        Math.abs(payoutGap) >= STATEMENT_TOLL_RECON_EPS ? payoutGap : 0,
-      tripCount,
-    });
-  }
-
-  return summaries;
 }

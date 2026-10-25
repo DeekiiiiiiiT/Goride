@@ -20,9 +20,8 @@ export function MaintenanceScheduleScreen() {
               <h1 className={"font-headline-sm text-headline-sm text-on-surface truncate"}>
                 Maintenance Schedule
               </h1>
-              <span className={"font-label-md text-label-md text-on-surface-variant truncate"}>
-                2019 Toyota Roomy
-              </span>
+              <span className={"font-label-md text-label-md text-on-surface-variant truncate"} data-slot={"car"}>
+                Add a car</span>
             </div>
           </div>
           <div className={"flex items-center gap-space-xs"}>
@@ -40,9 +39,8 @@ export function MaintenanceScheduleScreen() {
             <div className={"flex items-start justify-between gap-space-sm mb-space-sm"}>
               <div className={"flex flex-col min-w-0"}>
                 <div className={"flex items-center gap-space-xs"}>
-                  <span className={"font-headline-sm text-headline-sm text-on-surface truncate"}>
-                    2019 Toyota Roomy
-                  </span>
+                  <span className={"font-headline-sm text-headline-sm text-on-surface truncate"} data-slot={"car"}>
+                    Add a car</span>
                   <span className={"material-symbols-outlined text-primary text-[20px]"} style={{ fontVariationSettings: "'FILL' 1" }}>
                     verified
                   </span>
@@ -53,16 +51,16 @@ export function MaintenanceScheduleScreen() {
                       🔒
                     </span>
                     <span className={"tracking-wider"}>
-                      8241-HY
+                      
                     </span>
                   </span>
                   <span className={"font-label-md text-label-md text-on-surface-variant"}>
-                    • 84,612 km
+                    • 
                   </span>
                 </div>
               </div>
               <div className={"w-12 h-12 rounded-lg bg-surface-container-highest overflow-hidden flex-shrink-0 shadow-sm"}>
-                <img className={"w-full h-full object-cover"} data-alt={"A compact metallic bronze 2019 Toyota Roomy parked gracefully under bright Caribbean midday sun with palm trees reflecting off windshield, realistic automotive photography"} src={"https://lh3.googleusercontent.com/aida-public/AB6AXuAUiOcWucZnld91gH_Ck_Gj32W0rsXuYKJKZ7JgqyCfmR-rDozatjb1NptFMEoakffxHZzIqfD2Vk0pH1DOEtgJTh_gpuomGTvsmTxczMl87UIcXjdT9xdVFK60yFvKN9Qi6KhQgw0Dk3yJdkuMFjLqxkAxrDW9I-khn-tDVaX0SE62vx8D6sC9ydrtuVSJvVvRStB0PkM3mCGWeDj_EjCd8Jl1tCu7x5b_FNYSVa_diAIFaz4CZZqk"} />
+                <div className={"w-full h-full object-cover bg-surface-container flex items-center justify-center text-primary"} aria-hidden={"true"}><span className={"material-symbols-outlined text-[32px]"}>image</span></div>
               </div>
             </div>
             <div className={"bg-surface-container-lowest rounded-lg p-space-sm flex items-center gap-space-xs shadow-sm"}>
@@ -92,7 +90,7 @@ export function MaintenanceScheduleScreen() {
                   </span>
                 </div>
                 <p className={"font-label-lg text-label-lg text-on-surface truncate"}>
-                  ~48 km/day
+                  ~
                   <span className={"font-body-sm text-body-sm text-on-surface-variant"}>
                     (Kingston ↔ Spanish Town)
                   </span>
@@ -160,12 +158,12 @@ export function MaintenanceScheduleScreen() {
                 <div className={"w-full bg-surface-container-highest h-2.5 rounded-full overflow-hidden"}>
                   <div className={"bg-secondary-container h-full rounded-full"} style={{ width: "92%" }} />
                 </div>
-                <div className={"flex justify-between items-center mt-1 text-[11px] font-label-sm text-on-surface-variant"}>
+                <div className={"flex justify-between items-center mt-1 text-[12px] font-label-sm text-on-surface-variant"}>
                   <span>
                     80,000 km
                   </span>
                   <span className={"text-secondary font-semibold"}>
-                    Current: 84,612 km (92%)
+                    Current:  (92%)
                   </span>
                   <span>
                     85,000 km
@@ -365,7 +363,7 @@ export function MaintenanceScheduleScreen() {
                       </span>
                     </div>
                     <p className={"font-body-sm text-body-sm text-on-surface-variant mt-0.5"}>
-                      14 Sep 2024 • Sammy's Tyre Repair
+                      
                     </p>
                   </div>
                 </div>
@@ -387,7 +385,7 @@ export function MaintenanceScheduleScreen() {
                       </span>
                     </div>
                     <p className={"font-body-sm text-body-sm text-on-surface-variant mt-0.5"}>
-                      12 May 2024 • Precision Auto Works
+                      
                     </p>
                   </div>
                 </div>

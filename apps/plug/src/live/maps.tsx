@@ -1,15 +1,27 @@
 import { useEffect, useRef, useState } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+import 'leaflet.markercluster';
+import 'leaflet.markercluster/dist/MarkerCluster.css';
 import { publicGet } from '../api';
-import { demoOn } from '../demo/mode';
 import { getPlugRuntime } from '../shell/click';
 
-type Station = { id: string; name: string; lat: number; lng: number; prices?: Record<string, number> };
+type Station = { id: string; name: string; brand?: string; lat: number; lng: number; prices?: Record<string, number> };
 
-function money(prices: Record<string, number> | undefined, grade: string): string {
+function pinPrice(prices: Record<string, number> | undefined, grade: string): string {
   const value = prices?.[grade];
-  return value == null ? '' : `J$${Number(value).toFixed(2)}`;
+  return value == null || !Number.isFinite(Number(value)) ? '' : String(Math.round(Number(value)));
+}
+
+function pinColor(name: string, brand?: string): string {
+  const blob = `${brand || ''} ${name}`.toLowerCase();
+  if (blob.includes('rubis')) return '#c8102e';
+  if (blob.includes('total')) return '#d1001c';
+  if (blob.includes('texaco')) return '#e10600';
+  if (blob.includes('fesco')) return '#c8960c';
+  if (blob.includes('petcom')) return '#0b7a3b';
+  if (blob.includes('unipet')) return '#1d4e89';
+  return '#a33900';
 }
 
 function listenRecenter(map: L.Map, zoom: number) {
@@ -55,28 +67,43 @@ export function ExploreMap() {
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '&copy; OpenStreetMap',
     }).addTo(map);
-    const markers = stations.filter((row) => Number.isFinite(row.lat) && Number.isFinite(row.lng)).map((row) => {
-      const price = money(row.prices, grade);
+    const group = L.markerClusterGroup({
+      showCoverageOnHover: false,
+      maxClusterRadius: 56,
+      disableClusteringAtZoom: 17,
+      spiderfyOnMaxZoom: true,
+      iconCreateFunction: (cluster) => L.divIcon({
+        className: '',
+        html: `<span style="display:flex;width:44px;height:44px;border-radius:999px;background:#a33900;color:#fff;align-items:center;justify-content:center;font:700 13px Inter,sans-serif;border:2px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.28)">${cluster.getChildCount()}</span>`,
+        iconSize: [44, 44],
+        iconAnchor: [22, 22],
+      }),
+    });
+    stations.filter((row) => Number.isFinite(row.lat) && Number.isFinite(row.lng)).forEach((row) => {
+      const price = pinPrice(row.prices, grade);
+      const color = pinColor(row.name, row.brand);
+      const label = row.name.replace(/[<>&"]/g, '');
       const icon = L.divIcon({
         className: '',
-        html: `<button type="button" data-station-id="${row.id}" style="min-height:44px;min-width:44px;border:0;border-radius:999px;background:#fff;padding:6px 10px;font:700 12px Inter,sans-serif;box-shadow:0 4px 12px rgba(0,0,0,.15)">${row.name.replace(/^DEMO /, '')} ${price}</button>`,
-        iconSize: [120, 44],
-        iconAnchor: [60, 44],
+        html: `<button type="button" aria-label="${label}" data-station-id="${row.id}" style="width:44px;height:44px;border:2px solid #fff;border-radius:999px;background:${color};color:#fff;padding:0;font:700 11px Inter,sans-serif;box-shadow:0 2px 8px rgba(0,0,0,.28)">${price}</button>`,
+        iconSize: [44, 44],
+        iconAnchor: [22, 22],
       });
-      return L.marker([row.lat, row.lng], { icon }).addTo(map).on('click', () => {
+      L.marker([row.lat, row.lng], { icon }).on('click', () => {
         sessionStorage.setItem('plug-station', row.id);
         getPlugRuntime().go(`/stations/${row.id}`);
-      });
+      }).addTo(group);
     });
+    group.addTo(map);
     const stopRecenter = listenRecenter(map, map.getZoom());
     return () => {
       stopRecenter();
-      markers.forEach((marker) => marker.remove());
+      group.remove();
       map.remove();
     };
   }, [stations, grade]);
 
-  return <div ref={node} className="absolute inset-0 z-0" data-demo={demoOn() ? '1' : '0'} />;
+  return <div ref={node} className="absolute inset-0 z-0" />;
 }
 
 export function PinMap() {
@@ -97,8 +124,7 @@ export function PinMap() {
     };
     map.on('moveend', save);
     save();
-    if (demoOn()) sessionStorage.setItem('plug-accuracy', '12');
-    else if (navigator.geolocation) {
+    if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (pos) => {
           sessionStorage.setItem('plug-accuracy', String(pos.coords.accuracy));

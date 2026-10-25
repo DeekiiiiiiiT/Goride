@@ -20,9 +20,8 @@ export function PartDetailScreen() {
               <h1 className={"font-headline-sm text-headline-sm text-on-surface truncate"}>
                 Part Detail
               </h1>
-              <span className={"font-label-md text-label-md text-on-surface-variant truncate"}>
-                2019 Toyota Roomy
-              </span>
+              <span className={"font-label-md text-label-md text-on-surface-variant truncate"} data-slot={"car"}>
+                Add a car</span>
             </div>
           </div>
           <div className={"flex items-center gap-space-xs"}>
@@ -60,7 +59,7 @@ export function PartDetailScreen() {
               </span>
             </div>
             <div className={"relative w-full h-44 rounded-lg overflow-hidden mb-space-md bg-surface-container-low flex items-center justify-center"}>
-              <img className={"w-full h-full object-cover"} data-alt={"Official Toyota genuine front brake pad set in original red and white branded packaging with authentic inspection seals, positioned on a sunlit mechanic workbench with metallic calipers in background, high contrast, warm amber ambient light, crisp automotive photography"} src={"https://lh3.googleusercontent.com/aida-public/AB6AXuDvi5U-YoFsXyEO6kPXcA0iwlQXfuJwZ7Wmvwe4ZIgRCvCD8HzosiZ59mfdV6rSGCLe7fH86qJ_VMEUghrgU-dQTN57KScombwL-hwHHerf0uSH8c7iJg7aMGmkRPLNmvvLGhD_KjtdBVAbbQgP81sdlYiNwlTcZntg3oyrEdxwSa7Ks2oOQjOajla__01g_8LP_WUpbmbxQAdTqxPPH1y99GqBTrzXjfaCdjW5WchRM2CA73mN93RG"} />
+              <div className={"w-full h-full object-cover bg-surface-container flex items-center justify-center text-primary"} aria-hidden={"true"}><span className={"material-symbols-outlined text-[32px]"}>image</span></div>
               <div className={"absolute inset-0 bg-gradient-to-t from-surface-container-lowest/80 via-transparent to-transparent"} />
               <div className={"absolute bottom-2 left-2 flex items-center gap-1.5 px-2.5 py-1 bg-surface-container-lowest/90 backdrop-blur-md rounded-lg shadow-sm"}>
                 <span className={"material-symbols-outlined text-primary text-[18px]"}>
@@ -108,7 +107,7 @@ export function PartDetailScreen() {
                   100% Fit Guarantee
                 </span>
                 <span className={"font-body-sm text-body-sm text-on-surface truncate"}>
-                  Pre-checked for your 2019 Toyota Roomy (M900A)
+                  Parts for your car
                 </span>
               </div>
             </div>
@@ -343,7 +342,7 @@ export function PartDetailScreen() {
                 {"Kingston & St. Andrew"}
               </span>
             </div>
-            <div className={"w-full h-36 bg-cover bg-center rounded-lg relative overflow-hidden mb-space-md shadow-inner"} data-location={"Half-Way-Tree, Kingston, Jamaica"} style={{ backgroundImage: "url('https://lh3.googleusercontent.com/aida-public/AB6AXuCP-CQ1nlDt1sr2TXeDcw-RLJ5rrl6eSodg1eTvmB5ptAgoCCNUh1eNYZKNCbZ78NrN8hupQDcINqW3d_MC06BQx1zFk7FZjzsKJD9i_DzOHkT8H8bhTHJftMIndIvNAJ8IG1gVGkuUegEHE8-raCX8j6UGCl8EB-arkoXSIJwoRbPjHtv-Hj1QJLsFs9jp_u7zpsu0QeKzw1DRLlvy1Jf3dNIRxATz9HbzenhKnVBeh7Fsb0Neze_W')" }}>
+            <div className={"w-full h-36 bg-cover bg-center rounded-lg relative overflow-hidden mb-space-md shadow-inner"} data-location={"Half-Way-Tree, Kingston, Jamaica"}>
               <div className={"absolute inset-0 bg-gradient-to-t from-inverse-surface/60 via-transparent to-transparent flex items-end p-2.5"}>
                 <span className={"px-2 py-1 bg-surface-container-lowest/90 backdrop-blur-sm rounded text-on-surface font-label-sm text-label-sm font-semibold flex items-center gap-1 shadow-sm"}>
                   <span className={"material-symbols-outlined text-[14px] text-primary"} style={{ fontVariationSettings: "'FILL' 1" }}>

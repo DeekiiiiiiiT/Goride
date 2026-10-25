@@ -8,25 +8,7 @@ export function SignupPhoneScreen() {
   useEffect(() => { if (ref.current) bindScreen("04-signup-phone.html", ref.current); }, []);
   return (
     <div ref={ref} data-plug-screen={"04-signup-phone.html"} className={"bg-surface text-on-surface antialiased flex flex-col min-h-screen"}>
-      <div className={"w-full pt-safe px-margin select-none"}>
-        <div className={"flex justify-between items-center pt-space-xs text-on-surface"}>
-          <span className={"font-label-md text-label-md font-semibold tracking-tight"}>
-            9:41
-          </span>
-          <div className={"flex items-center gap-1.5"}>
-            <span className={"material-symbols-outlined text-[16px] leading-none"}>
-              signal_cellular_alt
-            </span>
-            <span className={"material-symbols-outlined text-[16px] leading-none"}>
-              wifi
-            </span>
-            <span className={"material-symbols-outlined text-[18px] leading-none"}>
-              battery_full
-            </span>
-          </div>
-        </div>
-      </div>
-      <main className={"flex-1 flex flex-col relative w-full pb-safe bg-surface px-margin"}>
+      <main className={"flex-1 flex flex-col relative w-full pt-safe pb-safe bg-surface px-margin"}>
         <div className={"flex flex-col w-full pb-space-xl"}>
           <header className={"flex items-center justify-between w-full py-space-sm mb-space-sm"}>
             <button onClick={onPlugClick} aria-label={"Go back"} className={"flex items-center justify-center w-12 h-12 rounded-full bg-surface-container active:bg-surface-container-highest transition-colors shadow-sm"} type={"button"} data-act={"arrow-back"} data-way-out={"back"}>
@@ -155,7 +137,7 @@ export function SignupPhoneScreen() {
             </button>
           </div>
           <div className={"w-full rounded-2xl overflow-hidden bg-surface-container-low mb-space-md shadow-sm relative"}>
-            <div className={"w-full h-24 bg-cover bg-center"} data-alt={"Scenic sun-drenched Jamaican coastal highway with vibrant asphalt road, lush green Blue Mountains background, clear Caribbean sunlight, and a cheerful modern hatchback navigating smoothly."} style={{ backgroundImage: "url('https://lh3.googleusercontent.com/aida-public/AB6AXuD9PxhNy3xACpZJn_cmpGX6kBPMFt6D_Z6Q1mmsJ8OtaDQP2i4uA--3AKVkqPoVLaoA_CPLivkScPkBhvrqsP-fouhkDfcEiji798bpWp-jGfvIX8IlEOJqHCwsxoSef9cDKTK5QRdAavt67UArFH11LbHM1N61qFory1dgIUNOOoS_0Yu-qQ1tmjUTZjnHb_OqIZjziLR3_JMQliHpZ2gOdrtqcdk_TInI8SzogEdFf5w8lMmRrb9j')" }} />
+            <div className={"w-full h-24 bg-surface-container flex items-center justify-center text-primary"} aria-hidden={"true"}><span className={"material-symbols-outlined text-[32px]"}>image</span></div>
             <div className={"p-3 bg-surface-container-high/90 flex items-center justify-between"}>
               <div className={"flex items-center gap-2"}>
                 <span className={"material-symbols-outlined text-secondary text-[20px]"} style={{ fontVariationSettings: "'FILL' 1" }}>

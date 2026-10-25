@@ -42,7 +42,7 @@ export function SubmittedToastScreen() {
               </span>
             </div>
             <h1 className={"font-headline-lg-mobile text-headline-lg text-on-surface mt-0.5 tracking-tight"}>
-              {"Sammy's Tyre & Alignment"}
+              {""}
             </h1>
           </div>
           <div className={"shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-amber-50 border border-amber-200 text-amber-900 shadow-sm"}>
@@ -62,11 +62,11 @@ export function SubmittedToastScreen() {
             <div>
               <div className={"flex items-center gap-1.5"}>
                 <span className={"font-headline-sm text-label-lg font-bold text-primary"}>
-                  +25 Scout XP awarded
+                  
                 </span>
               </div>
               <p className={"font-body-sm text-body-sm text-on-surface-variant"}>
-                Rank: Road Scout Grade 2
+                
               </p>
             </div>
           </div>
@@ -138,13 +138,13 @@ export function SubmittedToastScreen() {
             </div>
             <div className={"grid grid-cols-2 gap-2.5"}>
               <div className={"relative h-28 rounded-lg overflow-hidden border border-outline-variant bg-surface-container"}>
-                <img className={"w-full h-full object-cover"} data-alt={"A clean daytime exterior shot of Sammy's Tyre and Alignment workshop in Half-Way-Tree, Jamaica under warm tropical daylight. Heavy car tyres are stacked neatly beside hydraulic lifts with an orange automotive sign. The composition features sharp realism, crisp shadows, and warm island vehicular aesthetics."} src={"https://lh3.googleusercontent.com/aida-public/AB6AXuA94Y-bsYfCcno5KOfJBmqoswdW9QwMoh7X680T3XROZxNuH9cQjqDWzy1eFpMd4EBy6P0E7-wFXel26qq7gEA0pA0l68UTGxYqbDqtin2IUpDTWMxAu9PJ_ytTlswW_yUGNSKlp371yvLmbMY6B9D7-8JxHPziMjGvPwIr_HuOMbMqzQSLc969slZnyhoQ9cItMdNm65VubKhzhu3A4JlZNAzgveLNetMEBaoTrnd4m3nk2IBeuwKpXX_rJATncV_7ESECgkFXKYM"} />
+                <div className={"w-full h-full object-cover bg-surface-container flex items-center justify-center text-primary"} aria-hidden={"true"}><span className={"material-symbols-outlined text-[32px]"}>image</span></div>
                 <span className={"absolute bottom-1.5 left-1.5 bg-black/75 backdrop-blur-sm text-white px-2 py-0.5 rounded font-label-sm text-label-sm"}>
                   Storefront
                 </span>
               </div>
               <div className={"relative h-28 rounded-lg overflow-hidden border border-outline-variant bg-surface-container"}>
-                <img className={"w-full h-full object-cover"} data-alt={"An organized, bustling vulcanizing and tyre balancing bay interior in Kingston Jamaica with pneumatic air tools, digital alignment calibration monitors, and clean vehicle maintenance equipment under high ambient workshop lighting. Captured in a documentary automotive style with crisp contrast and warm amber tones."} src={"https://lh3.googleusercontent.com/aida-public/AB6AXuCLud00MemeHjpO6Atv3LsI74DcxvT-eHiRF0qqRJxwrBmtSNHXoE8rwY3bm7CgUIGwbiV6xMM9UUVIiZ0EgkgyoUdAC00kp1-BFouakxOLb34tSP2vSdnjxGrCc0PteAWY0w8xGL_zbBuSI1F3Jfmu_40AkTbobrTa0qsViZ07Ji-sVZM75gE_JhxPfETFDExrHfqMn9KlgqVV9hYyA3PB5HClktxeWyyWgJtDxkAXpMv_NfmkCtAASCYFgGfJZJ-0zlljDg726nY"} />
+                <div className={"w-full h-full object-cover bg-surface-container flex items-center justify-center text-primary"} aria-hidden={"true"}><span className={"material-symbols-outlined text-[32px]"}>image</span></div>
                 <span className={"absolute bottom-1.5 left-1.5 bg-black/75 backdrop-blur-sm text-white px-2 py-0.5 rounded font-label-sm text-label-sm"}>
                   Service Bay
                 </span>

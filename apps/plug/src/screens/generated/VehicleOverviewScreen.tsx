@@ -50,17 +50,16 @@ export function VehicleOverviewScreen() {
                     <span className={"material-symbols-outlined text-[13px] text-tertiary"}>
                       lock
                     </span>
-                    8241-HY
+                    
                   </span>
                   <span className={"text-on-surface-variant font-label-sm text-label-sm tracking-tight opacity-75"}>
                     Private
                   </span>
                 </div>
-                <h2 className={"font-headline-md text-headline-md text-on-surface truncate"}>
-                  2019 Toyota Roomy
-                </h2>
+                <h2 className={"font-headline-md text-headline-md text-on-surface truncate"} data-slot={"car"}>
+                  Add a car</h2>
                 <p className={"font-label-lg text-label-lg text-primary font-semibold"}>
-                  “Daily Workhorse”
+                  Add a car
                 </p>
               </div>
               <div className={"flex flex-col items-end shrink-0"}>
@@ -88,7 +87,7 @@ export function VehicleOverviewScreen() {
               </div>
             </div>
             <div className={"relative w-full rounded-lg overflow-hidden bg-surface-container flex flex-col"}>
-              <div className={"w-full h-44 relative bg-cover bg-center"} data-alt={"Modern 2019 silver Toyota Roomy compact mini-wagon parked under tropical Jamaican morning sunlight, clean pavement, mountains in the warm atmospheric background, automotive photography, crisp sharp reflections, warm sunset motoring palette tone"} style={{ backgroundImage: "url('https://lh3.googleusercontent.com/aida-public/AB6AXuBOz1AgeKNR59w-PMg2jcOwdGYi7RvjhR6rPS1SP8oxUFPez3CcFg99uZ4bimV4PR7huz6qpHZ6OXPw0ELhesJ26IEMyoVZ2-LwEPcHe4XYtNpN8IfaqJk0FtpofziLDcIEEYtkk07ikWHWIWw5GOsXbOu7Lz0KEOKfDuUMWAOqqWCSv1qfmXQvBh97BsWOBfdDHPyOM0K6Sr8E6GHDZxeWkOBamdF5nxX-mKHLicYyGa5rgNhRIh-p')" }}>
+              <div className={"w-full h-44 relative bg-surface-container-high"}>
                 <div className={"absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent"} />
                 <div className={"absolute bottom-3 left-3 right-3 flex items-center justify-between"}>
                   <span className={"inline-flex items-center gap-1.5 bg-black/60 backdrop-blur-md px-2.5 py-1 rounded-full text-white font-label-md text-label-md"}>
@@ -169,7 +168,7 @@ export function VehicleOverviewScreen() {
               </div>
               <div className={"mt-1"}>
                 <p className={"font-headline-sm text-headline-sm text-on-surface font-bold tracking-tight"}>
-                  84,612
+                  
                   <span className={"font-label-md text-label-md font-normal text-on-surface-variant"}>
                     km
                   </span>
@@ -190,14 +189,8 @@ export function VehicleOverviewScreen() {
                 </span>
               </div>
               <div className={"mt-1"}>
-                <p className={"font-headline-sm text-headline-sm text-on-surface font-bold tracking-tight"}>
-                  48
-                  <span className={"font-label-md text-label-md font-normal text-on-surface-variant"}>
-                    km / day
-                  </span>
-                </p>
-                <p className={"font-body-sm text-body-sm text-on-surface-variant truncate mt-0.5"} title={"Kingston – Spanish Town corridor"}>
-                  Kgn – Spanish Town
+                <p className={"font-body-md text-on-surface"}>
+                  No fills yet
                 </p>
               </div>
             </div>
@@ -211,17 +204,8 @@ export function VehicleOverviewScreen() {
                 </span>
               </div>
               <div className={"mt-1"}>
-                <p className={"font-headline-sm text-headline-sm text-on-surface font-bold tracking-tight"}>
-                  14.2
-                  <span className={"font-label-md text-label-md font-normal text-on-surface-variant"}>
-                    km/L
-                  </span>
-                </p>
-                <p className={"font-body-sm text-body-sm text-emerald-700 font-semibold mt-0.5 flex items-center gap-0.5"}>
-                  <span className={"material-symbols-outlined text-[14px]"}>
-                    trending_up
-                  </span>
-                  +6% vs Parish
+                <p className={"font-body-md text-on-surface"}>
+                  No fills yet
                 </p>
               </div>
             </div>
@@ -236,7 +220,7 @@ export function VehicleOverviewScreen() {
               </div>
               <div className={"mt-1"}>
                 <p className={"font-headline-sm text-headline-sm text-primary font-bold tracking-tight"}>
-                  J$16,840
+                  No fills yet
                 </p>
                 <p className={"font-body-sm text-body-sm text-on-surface-variant mt-0.5"}>
                   3 fill-ups recorded
@@ -511,7 +495,7 @@ export function VehicleOverviewScreen() {
             </div>
             <div className={"p-space-sm rounded-lg bg-surface-container-low flex items-center justify-between gap-2"}>
               <div className={"flex items-center gap-3 min-w-0"}>
-                <div className={"w-9 h-9 rounded-full bg-emerald-700 text-white flex items-center justify-center font-bold text-[11px] shrink-0"}>
+                <div className={"w-9 h-9 rounded-full bg-emerald-700 text-white flex items-center justify-center font-bold text-[12px] shrink-0"}>
                   87
                 </div>
                 <div className={"min-w-0"}>

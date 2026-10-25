@@ -20,9 +20,8 @@ export function LogServiceScreen() {
               <h1 className={"font-headline-sm text-headline-sm text-on-surface truncate"}>
                 Log Service
               </h1>
-              <span className={"font-label-md text-label-md text-on-surface-variant truncate"}>
-                2019 Toyota Roomy
-              </span>
+              <span className={"font-label-md text-label-md text-on-surface-variant truncate"} data-slot={"car"}>
+                Add a car</span>
             </div>
           </div>
           <div className={"flex items-center gap-space-xs"}>
@@ -48,11 +47,10 @@ export function LogServiceScreen() {
                   Active Vehicle
                 </span>
                 <div className={"flex items-center gap-1.5 truncate"}>
-                  <span className={"font-headline-sm text-headline-sm text-on-surface truncate"}>
-                    2019 Toyota Roomy
-                  </span>
+                  <span className={"font-headline-sm text-headline-sm text-on-surface truncate"} data-slot={"car"}>
+                    Add a car</span>
                   <span className={"bg-surface-container-highest px-2 py-0.5 rounded text-on-surface-variant font-label-md text-label-md font-semibold flex-shrink-0"}>
-                    8241-HY
+                    
                   </span>
                 </div>
               </div>
@@ -161,7 +159,7 @@ export function LogServiceScreen() {
                   </button>
                 </label>
                 <div className={"relative flex items-center"}>
-                  <input className={"w-full h-12 px-4 pr-11 rounded-xl bg-surface-container-lowest font-headline-sm text-headline-sm text-on-surface focus:outline-none focus:bg-surface-container-low shadow-sm"} id={"odometerInput"} type={"text"} defaultValue={"84,612 km"} />
+                  <input className={"w-full h-12 px-4 pr-11 rounded-xl bg-surface-container-lowest font-headline-sm text-headline-sm text-on-surface focus:outline-none focus:bg-surface-container-low shadow-sm"} id={"odometerInput"} type={"text"} defaultValue={""} />
                   <div className={"absolute right-3 text-on-surface-variant pointer-events-none flex items-center"}>
                     <span className={"material-symbols-outlined text-[20px]"}>
                       edit
@@ -169,7 +167,7 @@ export function LogServiceScreen() {
                   </div>
                 </div>
                 <p className={"font-body-sm text-body-sm text-on-surface-variant"}>
-                  Last known was 79,400 km in May
+                  
                 </p>
               </div>
               <div className={"flex flex-col gap-space-xs"}>
@@ -180,7 +178,7 @@ export function LogServiceScreen() {
                   Date of Service
                 </label>
                 <div className={"relative flex items-center"}>
-                  <input className={"w-full h-12 px-4 pr-11 rounded-xl bg-surface-container-lowest font-body-lg text-body-lg text-on-surface focus:outline-none focus:bg-surface-container-low shadow-sm"} id={"dateInput"} type={"text"} defaultValue={"Today, 24 Oct 2024"} />
+                  <input className={"w-full h-12 px-4 pr-11 rounded-xl bg-surface-container-lowest font-body-lg text-body-lg text-on-surface focus:outline-none focus:bg-surface-container-low shadow-sm"} id={"dateInput"} type={"text"} defaultValue={""} />
                   <div className={"absolute right-3 text-primary pointer-events-none flex items-center"}>
                     <span className={"material-symbols-outlined text-[22px]"}>
                       calendar_month
@@ -223,7 +221,7 @@ export function LogServiceScreen() {
                   <div className={"flex flex-col min-w-0"}>
                     <div className={"flex items-center gap-1.5"}>
                       <span className={"font-headline-sm text-headline-sm text-on-surface truncate"}>
-                        Precision Auto Works
+                        
                       </span>
                       <span className={"inline-flex items-center text-emerald-600 flex-shrink-0"} title={"Verified Workshop"}>
                         <span className={"material-symbols-outlined text-[18px]"} style={{ fontVariationSettings: "'FILL' 1" }}>
@@ -239,7 +237,7 @@ export function LogServiceScreen() {
                         Authorized Partner
                       </span>
                       <span className={"font-label-sm text-label-sm text-on-surface-variant"}>
-                        4.9 ★ (128 reviews)
+                        
                       </span>
                     </div>
                   </div>
@@ -321,7 +319,7 @@ export function LogServiceScreen() {
               <div className={"p-space-md rounded-2xl bg-surface-container-lowest shadow-sm flex flex-col gap-3"}>
                 <div className={"flex items-center gap-3"}>
                   <div className={"relative w-16 h-16 rounded-xl overflow-hidden bg-surface-container-high flex-shrink-0 group"}>
-                    <img className={"w-full h-full object-cover"} data-alt={"A close-up photograph of an official Jamaican automotive repair invoice on branded receipt paper with clear Jamaican dollar breakdowns, stamped and verified under warm indoor workshop light."} src={"https://lh3.googleusercontent.com/aida-public/AB6AXuBkyNeYkXGbAbKD_-LSKE-5Eb9lceGaLGrOLt7cw1UKYTvNCaTK4wALAty3KSju5WCuzAlxIsYtPTYxwJZn7_QnR0jaxJepllVZF-drGRswLBgeAmJx6PNoQsFLIUTPlXOlUJCTgrUO3F__oSuv3D6cpI_kA4QiyAJRS5mikpMRO3EgqQ3FH2MW-SIcKc6O3CEdGfk8fYoL6GOqRyzr1m6zUi-L07m-mBRBlKFDZFJinARosZhu0Hct"} />
+                    <div className={"w-full h-full object-cover bg-surface-container flex items-center justify-center text-primary"} aria-hidden={"true"}><span className={"material-symbols-outlined text-[32px]"}>image</span></div>
                     <div className={"absolute inset-0 bg-on-surface/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"}>
                       <span className={"material-symbols-outlined text-surface-container-lowest text-[18px]"}>
                         zoom_in
@@ -420,7 +418,7 @@ export function LogServiceScreen() {
               <div className={"flex flex-col gap-2"}>
                 <button onClick={onPlugClick} className={"p-3 text-left rounded-xl bg-surface-container-low hover:bg-surface-container flex flex-col"} type={"button"} data-act={"precision-auto-works-14-dunrobin-ave-st-andrew-a"}>
                   <span className={"font-label-lg text-label-lg text-on-surface font-semibold"}>
-                    Precision Auto Works
+                    
                   </span>
                   <span className={"font-body-sm text-body-sm text-on-surface-variant"}>
                     14 Dunrobin Ave, St. Andrew (Authorized)

@@ -15,6 +15,8 @@ import type { PaymentLedgerLine } from '@roam/types/paymentLedgerLine';
 import {
   extractPaymentLedgerLineFromUberRow,
   applyPaymentLineRollupsToTrips,
+  otherFareFromUberRow,
+  uberRowCell,
 } from './extractPaymentLedgerLines';
 import { naiveToUtcBrowser } from '../services/import-validator';
 
@@ -1854,17 +1856,25 @@ export function mergeAndProcessData(
                     current.cashPercentage = totalEarnings !== 0 ? (totalCash / totalEarnings) * 100 : 0;
 
                     // Detailed Financial Breakdown (New Requirement) - Accumulate
-                    const existingBreakdown = current.fareBreakdown || { baseFare: 0, tips: 0, waitTime: 0, surge: 0, airportFees: 0, timeAtStop: 0, taxes: 0 };
+                    const existingBreakdown = current.fareBreakdown || { baseFare: 0, tips: 0, waitTime: 0, surge: 0, airportFees: 0, timeAtStop: 0, taxes: 0, priority: 0, other: 0 };
                     
+                    const fareRow = row as Record<string, unknown>;
                     current.fareBreakdown = {
-                        baseFare: existingBreakdown.baseFare + parseCurrency(row['Paid to you:Your earnings:Fare:Fare']),
+                        baseFare: existingBreakdown.baseFare + parseCurrency(uberRowCell(fareRow, 'Paid to you:Your earnings:Fare:Fare')),
                         tips: existingBreakdown.tips + (isPriorPeriodFareAdjust ? 0 : tipColumnVal),
-                        waitTime: existingBreakdown.waitTime + parseCurrency(row['Paid to you:Your earnings:Fare:Wait Time at Pickup']),
-                        surge: existingBreakdown.surge + parseCurrency(row['Paid to you:Your earnings:Fare:Surge']),
-                        airportFees: existingBreakdown.airportFees + parseCurrency(row['Paid to you:Your earnings:Fare:Airport Surcharge']),
-                        timeAtStop: existingBreakdown.timeAtStop + parseCurrency(row['Paid to you:Your earnings:Fare:Time at Stop']),
-                        taxes: existingBreakdown.taxes + parseCurrency(row['Paid to you : Your earnings : Taxes'] || row['Paid to you:Your earnings:Taxes'])
+                        waitTime: existingBreakdown.waitTime + parseCurrency(uberRowCell(fareRow, 'Paid to you:Your earnings:Fare:Wait Time at Pickup')),
+                        surge: existingBreakdown.surge + parseCurrency(uberRowCell(fareRow, 'Paid to you:Your earnings:Fare:Surge')),
+                        airportFees: existingBreakdown.airportFees + parseCurrency(uberRowCell(fareRow, 'Paid to you:Your earnings:Fare:Airport Surcharge')),
+                        timeAtStop: existingBreakdown.timeAtStop + parseCurrency(uberRowCell(fareRow, 'Paid to you:Your earnings:Fare:Time at Stop')),
+                        taxes: existingBreakdown.taxes + parseCurrency(uberRowCell(fareRow, 'Paid to you:Your earnings:Taxes', 'Paid to you : Your earnings : Taxes')),
+                        priority: (existingBreakdown.priority || 0) + parseCurrency(
+                            uberRowCell(fareRow, 'Paid to you:Your earnings:Fare:UberX Priority', 'Paid to you : Your earnings : Fare:UberX Priority'),
+                        ),
+                        other: (existingBreakdown.other || 0) + otherFareFromUberRow(fareRow),
                     };
+                    current.cancellationFare = (current.cancellationFare || 0) + parseCurrency(
+                        uberRowCell(fareRow, 'Paid to you:Your earnings:Fare:Cancellation', 'Paid to you : Your earnings : Fare:Cancellation'),
+                    );
                     
                     current.tollCharges = (current.tollCharges || 0) + parseCurrency(row['Paid to you:Trip balance:Refunds:Toll']);
                     

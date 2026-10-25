@@ -90,21 +90,30 @@ export function decideTollPeriodSealed(input: {
   return { sealed: false, source: "none", state };
 }
 
+export function normalizeTollServiceLine(raw?: string | null): "rideshare" | "rush_delivery" {
+  return raw === "rush_delivery" ? "rush_delivery" : "rideshare";
+}
+
 export async function probeTollPeriodSealed(
   organizationId: string,
   weekKey: string,
+  serviceLine?: string | null,
 ): Promise<TollPeriodSealedProbe> {
   const sb = getServiceClient();
   const wk = String(weekKey).slice(0, 10);
+  const line = normalizeTollServiceLine(serviceLine);
 
   const { data: period, error: periodErr } = await sb
     .from("toll_reconciliation_period")
     .select("state")
     .eq("organization_id", organizationId)
     .eq("week_key", wk)
+    .eq("service_line", line)
     .maybeSingle();
   if (periodErr) throw new Error(periodErr.message);
 
+  // Statements are per driver-week, not per service line. This line's period
+  // row still decides: reopened stays writable even when a statement is closed.
   const { data: stmts, error: stmtErr } = await sb
     .from("week_statements")
     .select("id")
@@ -128,7 +137,7 @@ export async function probeTollPeriodSealed(
 export async function assertTollPeriodWritable(
   organizationId: string,
   weekKey: string,
-  opts?: { route?: string; mode?: TollPeriodWriteGuardMode },
+  opts?: { route?: string; mode?: TollPeriodWriteGuardMode; serviceLine?: string | null },
 ): Promise<void> {
   const mode = opts?.mode ?? getTollPeriodWriteGuardMode();
   if (mode === "off") return;
@@ -136,7 +145,7 @@ export async function assertTollPeriodWritable(
   const wk = String(weekKey || "").slice(0, 10);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(wk)) return;
 
-  const probe = await probeTollPeriodSealed(organizationId, wk);
+  const probe = await probeTollPeriodSealed(organizationId, wk, opts?.serviceLine);
   if (!probe.sealed) return;
 
   const route = opts?.route || "unknown";
@@ -179,6 +188,54 @@ export async function insertTollPeriodAudit(
   if (error) {
     console.warn("[toll_period_audit] insert failed", action, error.message);
   }
+}
+
+/**
+ * Writes the toll period to reopened and audits it.
+ * Callers decide whether the week is sealed. A closed toll statement stays
+ * sealed until this row exists — a draft restatement does not unlock writes.
+ */
+export async function reopenTollPeriodForWeek(input: {
+  organizationId: string;
+  weekKey: string;
+  reason: string;
+  actorId: string | null;
+  expectedVersion?: number | null;
+  serviceLine?: string | null;
+  audit?: Record<string, unknown>;
+}): Promise<Record<string, unknown>> {
+  const reason = String(input.reason || "").trim();
+  if (!reason) {
+    throw new Error("reason is required to reopen a sealed toll period");
+  }
+  const weekKey = String(input.weekKey).slice(0, 10);
+  const serviceLine = input.serviceLine === "rush_delivery" ? "rush_delivery" : "rideshare";
+  const now = new Date().toISOString();
+  const row = await upsertTollPeriodRow(
+    input.organizationId,
+    weekKey,
+    {
+      state: "reopened",
+      reopened_at: now,
+      reopened_by: input.actorId,
+      reopen_reason: reason.slice(0, 2000),
+      reviewed_by: null,
+      reviewed_at: null,
+      readiness_hash: null,
+    },
+    {
+      expectedVersion: input.expectedVersion ?? null,
+      serviceLine,
+    },
+  );
+  await insertTollPeriodAudit(
+    input.organizationId,
+    tollPeriodIdFor(input.organizationId, weekKey, serviceLine),
+    "reopen",
+    { reason, ...(input.audit || {}) },
+    input.actorId,
+  );
+  return row;
 }
 
 export async function upsertTollPeriodRow(
@@ -249,13 +306,14 @@ export async function refuseIfTollPeriodSealed(
   c: Context,
   weekKey: string | null | undefined,
   route: string,
+  serviceLine?: string | null,
 ): Promise<Response | null> {
   const orgId = getOrgId(c);
   if (!orgId) return null;
   const wk = weekKey ? String(weekKey).slice(0, 10) : "";
   if (!/^\d{4}-\d{2}-\d{2}$/.test(wk)) return null;
   try {
-    await assertTollPeriodWritable(orgId, wk, { route });
+    await assertTollPeriodWritable(orgId, wk, { route, serviceLine });
     return null;
   } catch (e) {
     if (e instanceof TollPeriodSealedError) {

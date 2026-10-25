@@ -149,12 +149,47 @@ file_size_limit = "50MiB"
 
 [auth]
 enabled = true
-# LOCAL ONLY. Hosted Site URL / redirect allowlist live in Dashboard (or Management API).
-# Do NOT `supabase config push` these Auth URL fields — production was broken (Google → 127.0.0.1:3000)
-# when local defaults overwrote hosted config. See docs/auth/SUPABASE_REDIRECT_CHECKLIST.md.
-site_url = "http://127.0.0.1:3000"
-# A list of *exact* URLs that auth providers are permitted to redirect to post authentication.
-additional_redirect_urls = ["https://127.0.0.1:3000"]
+# This file is what `supabase config push` copies onto the live GoRide project.
+# site_url and additional_redirect_urls must stay the production list. A localhost-only
+# list sends every Google sign-in to 127.0.0.1. See docs/auth/SUPABASE_REDIRECT_CHECKLIST.md.
+site_url = "https://roamfleet.co"
+additional_redirect_urls = [
+  "https://roamfleet.co/**",
+  "https://www.roamfleet.co/**",
+  "https://roamenterprise.co/**",
+  "https://courier.roamenterprise.co/**",
+  "https://freight-forwarder.roamenterprise.co/**",
+  "https://roamdominion.co/**",
+  "https://roamdriver.co/**",
+  "https://roamrush.app/**",
+  "https://*.roamrush.app/**",
+  "https://roam-s.co/**",
+  "https://roamhaul.co/**",
+  "https://roamplug.app/**",
+  "https://www.roamplug.app/**",
+  "https://roam-plug.vercel.app/**",
+  "co.roamenterprise.fleet://login",
+  "co.roamenterprise.driver://login",
+  "co.roamenterprise.rush://login",
+  "co.roamenterprise.courier://login",
+  "co.roamenterprise.partner://login",
+  "co.roamenterprise.rides://login",
+  "http://localhost:3000/**",
+  "http://127.0.0.1:3000/**",
+  "https://127.0.0.1:3000/**",
+  "http://localhost:3001/**",
+  "http://localhost:3002/**",
+  "http://localhost:3003/**",
+  "http://courier.localhost:3003/**",
+  "http://freight-forwarder.localhost:3003/**",
+  "http://localhost:3004/**",
+  "http://localhost:5174/**",
+  "http://localhost:5175/**",
+  "http://localhost:5176/**",
+  "http://localhost:5180/**",
+  "http://localhost:3016/**",
+  "http://127.0.0.1:3016/**",
+]
 # How long tokens are valid for, in seconds. Defaults to 3600 (1 hour), maximum 604,800 (1 week).
 jwt_expiry = 3600
 # JWT issuer URL. If not set, defaults to the local API URL (http://127.0.0.1:<port>/auth/v1).

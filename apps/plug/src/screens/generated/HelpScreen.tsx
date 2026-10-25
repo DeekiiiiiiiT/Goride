@@ -174,7 +174,7 @@ export function HelpScreen() {
                     </span>
                   </div>
                   <p className={"font-body-sm text-body-sm text-on-surface-variant mt-0.5 line-clamp-2"}>
-                    Pinning tyre shops, verification process, earning Scout XP
+                    Pinning tyre shops and how verification works
                   </p>
                 </div>
               </button>
@@ -285,7 +285,7 @@ export function HelpScreen() {
                 </button>
                 <div className={"faq-content hidden px-space-md pb-space-md pt-1 text-on-surface-variant font-body-sm text-body-sm bg-surface-container-low/50"}>
                   <p className={"leading-relaxed"}>
-                    Community scout submissions undergo a dual-verification process. Once two other verified drivers or a Parish Scout confirm the GPS pin and operating hours, the pin turns green on the public live map. This typically happens within 2 to 4 hours. You will receive 50 Scout XP immediately upon approval!
+                    Community scout submissions undergo a dual-verification process. Once two other verified drivers or a Parish Scout confirm the GPS pin and operating hours, the pin turns green on the public live map. This typically happens within 2 to 4 hours. You will be told when it is approved.
                   </p>
                 </div>
               </div>
@@ -343,7 +343,7 @@ export function HelpScreen() {
                       <span className={"font-label-lg text-label-lg font-bold"}>
                         WhatsApp Support
                       </span>
-                      <span className={"px-1.5 py-0.5 rounded text-[10px] bg-white/25 font-bold tracking-wider uppercase"}>
+                      <span className={"px-1.5 py-0.5 rounded text-[12px] bg-white/25 font-bold tracking-wider uppercase"}>
                         Fastest
                       </span>
                     </div>

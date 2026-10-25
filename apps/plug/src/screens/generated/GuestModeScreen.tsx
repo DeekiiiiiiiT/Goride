@@ -149,20 +149,20 @@ export function GuestModeScreen() {
             </div>
           </section>
           <section className={"relative w-full h-[330px] overflow-hidden bg-surface-container-high my-space-xs"}>
-            <div className={"w-full h-full bg-cover bg-center"} data-location={"Half-Way-Tree Clock Tower, Kingston, Jamaica"} style={{ backgroundImage: "url('https://lh3.googleusercontent.com/aida-public/AB6AXuBHwwz2hF8SYQMOre2ARUUEoQrj7KHpAOWIXTNRhIsjWinHO7y-HMemiuEVdbGLT01ElXQGi32BQMbqvpHPgcOlULJ-_mSqMaU2hDW7dmsftlnVi1PnIxzzq27JH_XczNoWtC6o9Yd3BM003-RemRBhid4R934VcL5XQsfewcvvw5dnYZUNgVHF3HjbuBCzWqrqXh3ORQ6KvcH1WaOORV3AWh_rgN9uP-_yDLtm_t1mqkcT9bVrj-rq')" }} />
+            <div className={"w-full h-full bg-surface-container flex items-center justify-center text-primary"} aria-hidden={"true"}><span className={"material-symbols-outlined text-[32px]"}>image</span></div>
             <div className={"absolute inset-0 bg-gradient-to-b from-surface/60 via-transparent to-surface/90 pointer-events-none"} />
             <div className={"absolute top-4 left-6 pointer-events-none"}>
-              <span className={"px-2 py-0.5 rounded bg-surface/90 text-on-surface-variant font-label-sm text-[9px] font-bold tracking-wider shadow-sm uppercase"}>
+              <span className={"px-2 py-0.5 rounded bg-surface/90 text-on-surface-variant font-label-sm text-[12px] font-bold tracking-wider shadow-sm uppercase"}>
                 Hope Rd
               </span>
             </div>
             <div className={"absolute top-12 right-8 pointer-events-none"}>
-              <span className={"px-2 py-0.5 rounded bg-surface/90 text-on-surface-variant font-label-sm text-[9px] font-bold tracking-wider shadow-sm uppercase"}>
+              <span className={"px-2 py-0.5 rounded bg-surface/90 text-on-surface-variant font-label-sm text-[12px] font-bold tracking-wider shadow-sm uppercase"}>
                 Constant Spring Rd
               </span>
             </div>
             <div className={"absolute bottom-16 left-12 pointer-events-none"}>
-              <span className={"px-2 py-0.5 rounded bg-surface/90 text-on-surface-variant font-label-sm text-[9px] font-bold tracking-wider shadow-sm uppercase"}>
+              <span className={"px-2 py-0.5 rounded bg-surface/90 text-on-surface-variant font-label-sm text-[12px] font-bold tracking-wider shadow-sm uppercase"}>
                 HWT Roundabout
               </span>
             </div>
@@ -175,7 +175,7 @@ export function GuestModeScreen() {
                   J$208.20
                 </span>
               </div>
-              <div className={"bg-surface-container-lowest px-2 py-0.5 rounded-md shadow-sm text-on-surface font-label-sm text-[10px] font-bold mt-0.5"}>
+              <div className={"bg-surface-container-lowest px-2 py-0.5 rounded-md shadow-sm text-on-surface font-label-sm text-[12px] font-bold mt-0.5"}>
                 Fesco Beechwood
               </div>
               <div className={"w-2 h-2 bg-tertiary-container rotate-45 -mt-1 shadow-sm"} />
@@ -186,7 +186,7 @@ export function GuestModeScreen() {
                   J$209.50
                 </span>
               </div>
-              <div className={"bg-surface-container-lowest px-1.5 py-0.5 rounded shadow-sm text-on-surface-variant font-label-sm text-[9px] mt-0.5"}>
+              <div className={"bg-surface-container-lowest px-1.5 py-0.5 rounded shadow-sm text-on-surface-variant font-label-sm text-[12px] mt-0.5"}>
                 Cool Oasis
               </div>
               <div className={"w-1.5 h-1.5 bg-surface-container-lowest rotate-45 -mt-1"} />
@@ -197,7 +197,7 @@ export function GuestModeScreen() {
                   J$214.50
                 </span>
               </div>
-              <div className={"bg-surface-container-lowest px-1.5 py-0.5 rounded shadow-sm text-on-surface-variant font-label-sm text-[9px] mt-0.5"}>
+              <div className={"bg-surface-container-lowest px-1.5 py-0.5 rounded shadow-sm text-on-surface-variant font-label-sm text-[12px] mt-0.5"}>
                 Texaco
               </div>
               <div className={"w-1.5 h-1.5 bg-surface-container-lowest rotate-45 -mt-1"} />
@@ -364,7 +364,7 @@ export function GuestModeScreen() {
                       <span className={"font-body-sm text-body-sm text-on-surface-variant"}>
                         1.4 km away
                       </span>
-                      <span className={"text-on-surface-variant text-[10px]"}>
+                      <span className={"text-on-surface-variant text-[12px]"}>
                         •
                       </span>
                       <span className={"font-label-sm text-label-sm text-emerald-700 font-semibold bg-emerald-50 px-2 py-0.5 rounded"}>
@@ -400,7 +400,7 @@ export function GuestModeScreen() {
                       <span className={"font-body-sm text-body-sm text-on-surface-variant"}>
                         0.4 km away
                       </span>
-                      <span className={"text-on-surface-variant text-[10px]"}>
+                      <span className={"text-on-surface-variant text-[12px]"}>
                         •
                       </span>
                       <span className={"font-label-sm text-label-sm text-on-surface-variant bg-surface-container px-2 py-0.5 rounded"}>

@@ -1,7 +1,5 @@
 import type { MouseEvent as ReactMouseEvent } from 'react';
 import { plugSend, publicGet } from '../api';
-import { demoOn, setDemo } from '../demo/mode';
-import { readDb } from '../demo/store';
 import { currentPath } from '../nav';
 import { readQueue } from '../offline';
 import { kindFor } from './act-kind';
@@ -64,6 +62,18 @@ export async function handlePlugClick(el: HTMLElement) {
     window.dispatchEvent(new Event('plug-recenter'));
     return;
   }
+  if (act === 'continue-with-google' || kind === 'google') {
+    try {
+      await rt.continueWithGoogle();
+    } catch (err) {
+      rt.toast(err instanceof Error ? err.message : 'Google sign-in did not start');
+    }
+    return;
+  }
+  if (act === 'continue-with-apple' || kind === 'apple') {
+    rt.toast('Apple sign-in is not available');
+    return;
+  }
 
   if (el.dataset.theme) {
     const theme = el.dataset.theme;
@@ -71,10 +81,6 @@ export async function handlePlugClick(el: HTMLElement) {
     document.documentElement.classList.toggle('dark', dark);
     localStorage.setItem('plug-theme', dark ? 'dark' : 'light');
     rt.toast(dark ? 'Dark theme on' : 'Light theme on');
-    return;
-  }
-  if (id === 'demo-switch' || blob.includes('demo data')) {
-    setDemo(sessionStorage.getItem('plug-demo') !== '1');
     return;
   }
   if (el.dataset.act === 'open-place' && el.dataset.stationId) {
@@ -239,11 +245,8 @@ export async function handlePlugClick(el: HTMLElement) {
     const typed = String(fields['make-search-input'] || '');
     if (typed) sessionStorage.setItem('plug-make', typed);
     if (!sessionStorage.getItem('plug-make')) {
-      if (!demoOn()) {
-        rt.toast('Choose a make');
-        return;
-      }
-      sessionStorage.setItem('plug-make', 'Toyota');
+      rt.toast('Choose a make');
+      return;
     }
     rt.go('/garage/add/model');
     return;
@@ -258,18 +261,15 @@ export async function handlePlugClick(el: HTMLElement) {
   if (path === '/garage/add/model' && /can't find|cannot find/i.test(blob)) return rt.go('/garage/add/missing');
   if (path === '/garage/add/model' && /continue|next|save/i.test(blob)) {
     const fields = screenFields(el);
-    const model = String(fields['model-input'] || fields.model || sessionStorage.getItem('plug-model') || (demoOn() ? 'Roomy' : ''));
+    const model = String(fields['model-input'] || fields.model || sessionStorage.getItem('plug-model') || '');
     if (!model) {
       rt.toast('Choose a model');
       return;
     }
     sessionStorage.setItem('plug-model', model);
     if (!sessionStorage.getItem('plug-year')) {
-      if (!demoOn()) {
-        rt.toast('Choose a year');
-        return;
-      }
-      sessionStorage.setItem('plug-year', '2019');
+      rt.toast('Choose a year');
+      return;
     }
     rt.go('/garage/add/odometer');
     return;
@@ -288,15 +288,15 @@ export async function handlePlugClick(el: HTMLElement) {
       rt.toast(warning);
       return;
     }
-    const make = sessionStorage.getItem('plug-make') || (demoOn() ? 'Toyota' : '');
-    const model = sessionStorage.getItem('plug-model') || (demoOn() ? 'Roomy' : '');
-    const year = sessionStorage.getItem('plug-year') || (demoOn() ? '2019' : '');
+    const make = sessionStorage.getItem('plug-make') || '';
+    const model = sessionStorage.getItem('plug-model') || '';
+    const year = sessionStorage.getItem('plug-year') || '';
     if (!make || !model || !year) {
       rt.toast('Choose the make, model, and year');
       return;
     }
     let catalogVariantId = sessionStorage.getItem('plug-catalog');
-    if (!demoOn() && !catalogVariantId) {
+    if (!catalogVariantId) {
       try {
         const catalog = await publicGet<{ vehicles: { id: string; make: string; model: string; year: number }[] }>(
           `/vehicle-catalog?q=${encodeURIComponent(`${make} ${model}`)}`,
@@ -317,9 +317,7 @@ export async function handlePlugClick(el: HTMLElement) {
         make,
         model,
         year: Number(year),
-        nickname: demoOn()
-          ? `DEMO ${year} ${make} ${model}`.replace(/^DEMO DEMO /, 'DEMO ')
-          : `${year} ${make} ${model}`,
+        nickname: `${year} ${make} ${model}`,
         startingOdometer: reading || null,
         catalogVariantId: catalogVariantId || null,
       });
@@ -574,7 +572,7 @@ export async function handlePlugClick(el: HTMLElement) {
     const fields = screenFields(el);
     const ticks = Object.entries(fields).filter(([, value]) => value === true).map(([key]) => key);
     const fix = pinFix();
-    const name = String(fields.name || fields['place-name'] || (demoOn() ? 'DEMO place' : '')).trim();
+    const name = String(fields.name || fields['place-name'] || '').trim();
     if (!name || !fix) {
       rt.toast(name ? 'GPS is not accurate enough yet' : 'Add a place name');
       if (!fix) rt.go('/map/pin/poor');
@@ -609,7 +607,7 @@ export async function handlePlugClick(el: HTMLElement) {
       rt.go('/map/withdraw');
       return;
     }
-    const pinId = el.dataset.pinId || sessionStorage.getItem('plug-pin') || (demoOn() ? readDb().pins.find((row) => row.status === 'pending')?.id : '');
+    const pinId = el.dataset.pinId || sessionStorage.getItem('plug-pin') || '';
     if (!pinId) {
       rt.toast('Choose a pin to withdraw');
       return;

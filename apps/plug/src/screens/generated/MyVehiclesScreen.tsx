@@ -57,23 +57,22 @@ export function MyVehiclesScreen() {
           </div>
           <div className={"w-full bg-surface-container-lowest rounded-xl shadow-sm overflow-hidden flex flex-col"}>
             <div className={"relative w-full h-44 bg-surface-container-high overflow-hidden"}>
-              <img className={"w-full h-full object-cover"} data-alt={"A clean modern 2019 Toyota Roomy pearl white compact micro-van parked under sunny Caribbean palm trees on a Jamaican coastal road, cinematic warm golden hour sunset motoring style, hyper-realistic reflections, sharp automotive photography."} src={"https://lh3.googleusercontent.com/aida-public/AB6AXuBX05uBkS1fT3GgejqHtlKS7q3fLBZ7fJEbY0PmLyzB9uFYSSYDm__gBJdl_CypikB3UvHtbo6uTRPeu4yB3a4qjwdgocjiiXDNQ_6Gbrun5h0R-y3bvGbgSQ4z9F_JzScNVVgcDdGzWTfC5vzM1WPHhMlo_uqDzV_arme8GTski3U9RRqCXTXvmW_8T8EKUXcL2lVckX3ie6OKU5ZpMLYvkIfyNRCRGC4pZa5YcF6gllX88syZOhAg"} />
+              <div className={"w-full h-full object-cover bg-surface-container flex items-center justify-center text-primary"} aria-hidden={"true"}><span className={"material-symbols-outlined text-[32px]"}>image</span></div>
               <div className={"absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent"} />
               <div className={"absolute top-space-sm left-space-sm right-space-sm flex items-center justify-between"}>
                 <span className={"px-2.5 py-1 rounded-full bg-surface-container-lowest/90 backdrop-blur-md text-on-surface font-label-sm text-label-sm tracking-wider uppercase shadow-sm"}>
-                  🇯🇲 8241-HY
+                  
                 </span>
                 <span className={"px-2.5 py-1 rounded-full bg-primary text-on-primary font-label-sm text-label-sm flex items-center gap-1 shadow-sm"}>
                   <span className={"material-symbols-outlined text-[14px]"}>
                     star
                   </span>
-                  Daily Workhorse
+                  Add a car
                 </span>
               </div>
               <div className={"absolute bottom-space-sm left-space-md right-space-md text-on-primary"}>
-                <h3 className={"font-headline-sm text-headline-sm font-headline-lg tracking-tight leading-tight drop-shadow-sm"}>
-                  2019 Toyota Roomy
-                </h3>
+                <h3 className={"font-headline-sm text-headline-sm font-headline-lg tracking-tight leading-tight drop-shadow-sm"} data-slot={"car"}>
+                  Add a car</h3>
                 <p className={"font-body-sm text-body-sm text-on-primary/90"}>
                   1.0L Turbo GS • Auto CVT • Pearl White
                 </p>
@@ -102,7 +101,7 @@ export function MyVehiclesScreen() {
                     Odo
                   </span>
                   <span className={"font-label-lg text-label-lg text-on-surface mt-0.5"}>
-                    84,612
+                    
                   </span>
                   <span className={"font-label-sm text-label-sm text-on-surface-variant"}>
                     km
@@ -164,7 +163,7 @@ export function MyVehiclesScreen() {
           </div>
           <div className={"w-full bg-surface-container-lowest rounded-xl shadow-sm overflow-hidden flex flex-col"}>
             <div className={"relative w-full h-44 bg-surface-container-high overflow-hidden"}>
-              <img className={"w-full h-full object-cover"} data-alt={"A clean white 2016 Nissan AD Wagon commercial estate car parked along a bustling Jamaican parish street in Spanish Town, bright daylight, authentic Jamaican transit vibes, hyper-sharp automotive portrait."} src={"https://lh3.googleusercontent.com/aida-public/AB6AXuCZcxJ54Ik5EpjExX52UP89Hyq39GwcVfKfoF_PLVmjYnNsi1SiJSVSSvjK7_UmwGR_HhOH3xe5MBBYUlxcqL9aqJPMJN5FWmcom-BGXxwD38yXJOnoqYs8TBDMUEaAlTGXeA9gtwIHGzs4WPnfADOrvhakR19kHMmGP3xPgustbbKDjxodFwPn5MFFI0Qno68WHKKIO1vUTMmlQYxGPy12jbO4PwsWTjvL4urQ2z0Lducg3YFgaFK0"} />
+              <div className={"w-full h-full object-cover bg-surface-container flex items-center justify-center text-primary"} aria-hidden={"true"}><span className={"material-symbols-outlined text-[32px]"}>image</span></div>
               <div className={"absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent"} />
               <div className={"absolute top-space-sm left-space-sm right-space-sm flex items-center justify-between"}>
                 <span className={"px-2.5 py-1 rounded-full bg-surface-container-lowest/90 backdrop-blur-md text-on-surface font-label-sm text-label-sm tracking-wider uppercase shadow-sm"}>

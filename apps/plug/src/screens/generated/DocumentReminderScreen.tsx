@@ -85,7 +85,7 @@ export function DocumentReminderScreen() {
                     <span className={"font-label-md text-label-md block leading-tight truncate"}>
                       Driver's Licence
                     </span>
-                    <span className={"font-body-sm text-body-sm text-on-surface-variant text-[11px] block truncate"}>
+                    <span className={"font-body-sm text-body-sm text-on-surface-variant text-[12px] block truncate"}>
                       Personal ID
                     </span>
                   </div>
@@ -100,7 +100,7 @@ export function DocumentReminderScreen() {
                     <span className={"font-label-md text-label-md block leading-tight truncate"}>
                       Registration
                     </span>
-                    <span className={"font-body-sm text-body-sm text-on-surface-variant text-[11px] block truncate"}>
+                    <span className={"font-body-sm text-body-sm text-on-surface-variant text-[12px] block truncate"}>
                       Tax Admin (TAJ)
                     </span>
                   </div>
@@ -115,7 +115,7 @@ export function DocumentReminderScreen() {
                     <span className={"font-label-md text-label-md block leading-tight truncate"}>
                       Fitness (ITA)
                     </span>
-                    <span className={"font-body-sm text-body-sm text-on-primary-container/80 text-[11px] block truncate"}>
+                    <span className={"font-body-sm text-body-sm text-on-primary-container/80 text-[12px] block truncate"}>
                       Roadworthiness
                     </span>
                   </div>
@@ -130,7 +130,7 @@ export function DocumentReminderScreen() {
                     <span className={"font-label-md text-label-md block leading-tight truncate"}>
                       Insurance Policy
                     </span>
-                    <span className={"font-body-sm text-body-sm text-on-surface-variant text-[11px] block truncate"}>
+                    <span className={"font-body-sm text-body-sm text-on-surface-variant text-[12px] block truncate"}>
                       Coverage certificate
                     </span>
                   </div>
@@ -163,7 +163,7 @@ export function DocumentReminderScreen() {
               </label>
               <div className={"flex flex-col gap-space-xs"} id={"vehicle-radio-group"}>
                 <label className={"vehicle-option relative flex items-center justify-between p-space-md rounded-xl bg-surface-container-lowest text-on-surface shadow-sm cursor-pointer select-none"}>
-                  <input defaultChecked={true} className={"sr-only peer"} name={"linked_vehicle"} type={"radio"} defaultValue={"8241-HY"} />
+                  <input defaultChecked={true} className={"sr-only peer"} name={"linked_vehicle"} type={"radio"} defaultValue={""} />
                   <div className={"flex items-center gap-space-md min-w-0"}>
                     <div className={"w-10 h-10 rounded-xl bg-surface-container-high flex items-center justify-center text-primary shrink-0"}>
                       <span className={"material-symbols-outlined text-[22px]"}>
@@ -172,9 +172,8 @@ export function DocumentReminderScreen() {
                     </div>
                     <div className={"min-w-0"}>
                       <div className={"flex items-center gap-space-xs"}>
-                        <span className={"font-label-lg text-label-lg text-on-surface truncate"}>
-                          2019 Toyota Roomy
-                        </span>
+                        <span className={"font-label-lg text-label-lg text-on-surface truncate"} data-slot={"car"}>
+                          Add a car</span>
                         <span className={"font-label-sm text-label-sm bg-surface-container-high px-space-xs py-0.5 rounded text-on-surface-variant font-bold"}>
                           PPV
                         </span>
@@ -182,7 +181,7 @@ export function DocumentReminderScreen() {
                       <p className={"font-body-sm text-body-sm text-on-surface-variant"}>
                         Plate:
                         <span className={"font-bold text-on-surface"}>
-                          8241-HY
+                          
                         </span>
                         {"• Kingston & St. Andrew"}
                       </p>
@@ -238,7 +237,7 @@ export function DocumentReminderScreen() {
                       <span className={"font-label-md text-label-md text-on-surface truncate block"}>
                         Driver Personal
                       </span>
-                      <p className={"font-body-sm text-body-sm text-on-surface-variant text-[11px]"}>
+                      <p className={"font-body-sm text-body-sm text-on-surface-variant text-[12px]"}>
                         Not bound to an individual vehicle chassis
                       </p>
                     </div>
@@ -312,7 +311,7 @@ export function DocumentReminderScreen() {
                     calendar_month
                   </span>
                 </div>
-                <input className={"w-full h-14 pl-12 pr-space-md rounded-xl bg-surface-container-low font-headline-sm text-headline-sm text-on-surface outline-none focus:bg-surface-container-lowest shadow-inner cursor-pointer"} id={"expiry-date-input"} type={"date"} defaultValue={"2024-11-15"} />
+                <input className={"w-full h-14 pl-12 pr-space-md rounded-xl bg-surface-container-low font-headline-sm text-headline-sm text-on-surface outline-none focus:bg-surface-container-lowest shadow-inner cursor-pointer"} id={"expiry-date-input"} type={"date"} defaultValue={""} />
               </div>
               <div className={"flex items-center justify-between pt-space-xs text-on-surface-variant"}>
                 <div className={"flex items-center gap-1 text-[12px] font-body-sm"}>
@@ -322,7 +321,7 @@ export function DocumentReminderScreen() {
                   <span>
                     Formatted:
                     <strong className={"text-on-surface"} id={"formatted-preview"}>
-                      15 Nov 2024
+                      Not set
                     </strong>
                   </span>
                 </div>
@@ -437,7 +436,7 @@ export function DocumentReminderScreen() {
                   (Max 5MB)
                 </p>
                 <input accept={"image/*"} className={"sr-only"} id={"file-uploader"} type={"file"} />
-                <div className={"mt-space-md flex items-center gap-1.5 px-space-sm py-1 rounded-full bg-surface-container-lowest text-on-surface-variant shadow-sm text-[11px] font-label-md"}>
+                <div className={"mt-space-md flex items-center gap-1.5 px-space-sm py-1 rounded-full bg-surface-container-lowest text-on-surface-variant shadow-sm text-[12px] font-label-md"}>
                   <span className={"material-symbols-outlined text-[14px] text-tertiary"} style={{ fontVariationSettings: "'FILL' 1" }}>
                     security
                   </span>
@@ -449,13 +448,13 @@ export function DocumentReminderScreen() {
               <div className={"flex items-center justify-between p-space-sm rounded-xl bg-surface-container-low shadow-inner"} id={"preview-container"}>
                 <div className={"flex items-center gap-space-sm min-w-0"}>
                   <div className={"w-12 h-12 rounded-lg bg-surface-container overflow-hidden shrink-0"}>
-                    <img className={"w-full h-full object-cover"} data-alt={"A clear close-up photograph of an official Jamaican vehicle fitness certificate held over a warm wooden dashboard with amber sunlight spilling over the paper watermark and serial stamp."} src={"https://lh3.googleusercontent.com/aida-public/AB6AXuB69-SH4M6ECkRZrPOWP--oBW2RzZpj_AzaiJy0DDchdIVENuvqMXvr9VYPr4HAznOabLV1X2QnMEvDT19YZsl6bO7vAHTacDYJ2EnBGRYemp5qVtq8xvzOkw2IhKJftmRSdyJx0oWB5i2AYE3efz_GHGifhs_Uo3R2CfcaAg6TY-mVne6ChdFSGOQOyXJ2ZmKZ5xzLnSKxRrue8x12SZOyWX4sEoeTgVP7PrfxkKQ"} />
+                    <div className={"w-full h-full object-cover bg-surface-container flex items-center justify-center text-primary"} aria-hidden={"true"}><span className={"material-symbols-outlined text-[32px]"}>image</span></div>
                   </div>
                   <div className={"min-w-0"}>
                     <span className={"font-label-md text-label-md text-on-surface truncate block"}>
                       ita_fitness_cert_front.jpg
                     </span>
-                    <span className={"font-body-sm text-body-sm text-on-surface-variant text-[11px]"}>
+                    <span className={"font-body-sm text-body-sm text-on-surface-variant text-[12px]"}>
                       1.8 MB • Encrypted
                     </span>
                   </div>

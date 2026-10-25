@@ -25,6 +25,7 @@ import {
 import { toast } from 'sonner';
 import { computeTollCardIdentityResidual } from '@roam/toll-core';
 import { MONEY_EPS, CLOSE_INVARIANT_EPS, isCashSourceAckValid } from '@roam/finance-core';
+import { PastWeeksReturnLink } from '../components/fleet-financials/settlements/past-weeks/PastWeeksReturnLink';
 import { Button } from '../components/ui/button';
 import {
   Select,
@@ -896,6 +897,7 @@ export function CloseWeekPage({
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <PastWeeksReturnLink onReturn={() => onNavigate?.('driver-settlements')} />
           <Select
             value={String(year)}
             onValueChange={(v) => onYearChange(Number(v))}

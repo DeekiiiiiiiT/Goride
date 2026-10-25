@@ -11,7 +11,7 @@ export function GpsIssueScreen() {
       <main className={"flex-1 flex flex-col relative w-full bg-surface"}>
         <div className={"flex flex-col w-full relative overflow-hidden select-none"}>
           <div className={"relative w-full h-80 overflow-hidden"}>
-            <div className={"w-full h-full bg-cover bg-center filter blur-[2px] brightness-[0.72] scale-105 transition-transform duration-700"} data-location={"Kingston, Jamaica"} style={{ backgroundImage: "url('https://lh3.googleusercontent.com/aida-public/AB6AXuC7cgJkoiDjsDFoO6mvtjHK0Kiic3Jgzsbc09u5d0iBGjg3iqCp3mKxcaRGbEcpNEwLwePTVdflplbFYrC0q1QOzmBLQ77PALAewO5i3FxG1xj6stUGB83E9TuC8AaIO8hLjzHAz8aoM-xpf1WspsbAHAXSww3Sr_GM1RS0WCYit32_-ZYFBOlqxgYBgCd3Uq9CoStUpWysCFS1-unwNt3RoPtkQc7eOlgJTNx1Xguy5EKtggBfgN7b')" }} />
+            <div className={"w-full h-full bg-surface-container flex items-center justify-center text-primary filter blur-[2px] brightness-[0.72] scale-105 transition-transform duration-700"} aria-hidden={"true"}><span className={"material-symbols-outlined text-[32px]"}>image</span></div>
             <div className={"absolute inset-0 bg-gradient-to-b from-inverse-surface/40 via-surface/70 to-surface"} />
             <div className={"absolute top-0 left-0 right-0 p-margin flex items-center justify-between z-10"}>
               <div className={"inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-surface-container-lowest/90 backdrop-blur-md shadow-sm"}>

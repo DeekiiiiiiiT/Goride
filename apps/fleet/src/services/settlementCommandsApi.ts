@@ -353,11 +353,44 @@ async function getQueueLegacy(params: SettlementQueueParams): Promise<Settlement
   };
 }
 
+export type PastWeeksCleanupStatus = {
+  applicable: boolean;
+  driverId: string;
+  step: 1 | 2 | 3 | 4 | 'done';
+  complete: boolean;
+  alreadyPosted: boolean;
+  nextCloseWeek: string | null;
+  /** Present once the server that owns the step also lists which close-weeks are still open. */
+  openCloseWeeks?: string[];
+  landingWeek: string | null;
+  /** True only on the server that refuses a write-off with no amount. */
+  partialWriteOff?: boolean;
+  keptRepair?: {
+    driverId: string;
+    canRestore: boolean;
+    openWeek: string | null;
+    weeks: Array<{ week: string; balance: number; keep: number }>;
+    net: number;
+    reason: string | null;
+  } | null;
+};
+
 export const settlementCommandsApi = {
+  async pastWeeksStatus() {
+    const response = await fetchWithRetry(`${BASE}/past-weeks-cleanup`, {
+      headers: await requireAuthHeaders(),
+    });
+    if (!response.ok) {
+      const { message, code } = await parseErrorBody(response, 'Could not check past-week clean-up');
+      throw new SettlementCommandApiError(message, response.status, code);
+    }
+    return response.json() as Promise<PastWeeksCleanupStatus & { success?: boolean }>;
+  },
+
   async legacyWeeks(body: {
     confirm?: boolean;
     driverId?: string;
-    choices?: Array<{ week: string; action: 'carry' | 'write_off'; reason?: string }>;
+    choices?: Array<{ week: string; action: 'carry' | 'write_off'; reason?: string; amount?: number }>;
   }) {
     return postJson<{
       weeks: Array<{ week: string; driverId: string; amount: number; closed: boolean }>;
@@ -373,8 +406,19 @@ export const settlementCommandsApi = {
       oct12: { sourceWeek: string; amount: number; sentence: string } | null;
       matchesAudit: boolean;
       reason: string;
+      landingWeek?: string | null;
       applied?: boolean;
     }>('/fuel-share-corrections', body, 'Could not load corrections');
+  },
+
+  async legacyKeptRepair(body: { confirm: boolean; action: 'restore' | 'leave'; driverId?: string }) {
+    return postJson<{
+      available: boolean;
+      canRestore: boolean;
+      posted?: boolean;
+      confirmedFullWriteOff?: boolean;
+      net: number;
+    }>('/legacy-kept-repair', body, 'Could not update the two half weeks');
   },
 
   async payoutBackfill(body: { confirm?: boolean; driverId: string }) {
@@ -382,6 +426,7 @@ export const settlementCommandsApi = {
       payouts: Array<{ week: string; amount: number }>;
       june15Payment: { week: string; amount: number };
       ready: boolean;
+      alreadyPosted?: boolean;
       stillOff: Array<{ week: string; gap: number }>;
       posted?: boolean;
     }>('/payout-backfill', body, 'Could not load missing payments');

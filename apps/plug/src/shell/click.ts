@@ -1,7 +1,5 @@
 import { reviewOdometerChange } from '../../../../packages/ui/src/odometer-scanner';
 import { googleDirections, plugSend, publicGet, wazeDirections } from '../api';
-import { demoOn } from '../demo/mode';
-import { demoStations } from '../demo/store';
 import { currentPath, fallbackFor, isFuel, pathNeedsAccount, tabFor } from '../nav';
 import { enqueue } from '../offline';
 import { deviceFix, lastOdometer, vehicleId as openVehicle } from './facts';
@@ -22,6 +20,7 @@ export type PlugRuntime = {
   sendCode: (phone: string) => Promise<void>;
   verifyCode: (phone: string, code: string) => Promise<void>;
   signOut: () => Promise<void>;
+  continueWithGoogle: () => Promise<void>;
 };
 
 let runtime: PlugRuntime | null = null;
@@ -75,10 +74,8 @@ export function phoneFrom(raw: string): string {
 
 export async function openDirections(stationId?: string) {
   const id = stationId || sessionStorage.getItem('plug-station') || '';
-  let station: { id: string; lat: number; lng: number; name: string } | null = demoOn()
-    ? demoStations().find((row) => row.id === id) || null
-    : null;
-  if (!station && id) {
+  let station: { id: string; lat: number; lng: number; name: string } | null = null;
+  if (id) {
     try {
       const body = await publicGet<{ station: { id: string; lat: number; lng: number; name: string } }>(`/stations/${id}`);
       station = body.station;

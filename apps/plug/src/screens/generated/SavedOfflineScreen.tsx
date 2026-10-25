@@ -104,7 +104,7 @@ export function SavedOfflineScreen() {
                     Odometer
                   </span>
                   <span className={"font-label-lg text-label-lg text-on-surface font-bold"}>
-                    84,612 km
+                    
                   </span>
                 </div>
               </div>

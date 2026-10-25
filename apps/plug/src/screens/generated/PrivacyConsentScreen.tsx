@@ -8,25 +8,7 @@ export function PrivacyConsentScreen() {
   useEffect(() => { if (ref.current) bindScreen("07-privacy-consent.html", ref.current); }, []);
   return (
     <div ref={ref} data-plug-screen={"07-privacy-consent.html"} className={"bg-surface font-body-md text-on-surface antialiased min-h-screen flex flex-col"}>
-      <header className={"fixed top-0 w-full z-50 bg-surface/80 backdrop-blur-xl pt-safe"}>
-        <div className={"h-12 px-margin flex items-center justify-between text-on-surface"}>
-          <span className={"font-label-md text-label-md font-bold tracking-tight"}>
-            9:41
-          </span>
-          <div className={"flex items-center gap-space-xs text-on-surface"}>
-            <span className={"material-symbols-outlined text-[18px]"}>
-              signal_cellular_4_bar
-            </span>
-            <span className={"material-symbols-outlined text-[18px]"}>
-              wifi
-            </span>
-            <span className={"material-symbols-outlined text-[20px]"}>
-              battery_full
-            </span>
-          </div>
-        </div>
-      </header>
-      <main className={"flex-1 flex flex-col relative w-full pt-12 pb-safe bg-surface"}>
+      <main className={"flex-1 flex flex-col relative w-full pt-safe pb-safe bg-surface"}>
         <div className={"flex flex-col w-full pb-6"}>
           <div className={"flex items-center justify-between px-margin py-space-sm"}>
             <button onClick={onPlugClick} aria-label={"Go Back"} className={"w-12 h-12 flex items-center justify-center rounded-full bg-surface-container-high text-on-surface active:scale-95 transition-transform duration-150"} type={"button"} data-act={"arrow-back"} data-way-out={"back"}>

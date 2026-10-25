@@ -92,6 +92,8 @@ import { isFeatureEnabled, FEATURE_FLAGS } from "./feature_flags.ts";
 import { periodEndForAnchor } from "../../../packages/finance-core/src/periodKey.ts";
 import {
   insertTollPeriodAudit,
+  probeTollPeriodSealed,
+  reopenTollPeriodForWeek,
   tollPeriodIdFor,
   upsertTollPeriodRow,
   deriveTollSealChip,
@@ -945,6 +947,30 @@ app.post(
   },
 );
 
+// ─── GET /toll-reconciliation/periods/:weekKey/seal ──────────────────────────
+// Cheap read for the week wizard. Closed toll statements seal the week until
+// a toll period row says reopened.
+app.get(`${BASE}/periods/:weekKey/seal`, requirePermission("toll.view"), async (c: Context) => {
+  try {
+    const orgId = getOrgId(c);
+    if (!orgId) return c.json({ error: "ORG_REQUIRED" }, 400);
+    const weekKey = String(c.req.param("weekKey") || "").slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(weekKey)) {
+      return c.json({ error: "weekKey (YYYY-MM-DD Monday) is required" }, 400);
+    }
+    const probe = await probeTollPeriodSealed(orgId, weekKey, c.req.query("line"));
+    return c.json({
+      success: true,
+      weekKey,
+      sealed: probe.sealed,
+      source: probe.source,
+      state: probe.state,
+    });
+  } catch (e: any) {
+    return safeErrorResponse(c, e, "TollPeriodController.sealStatus");
+  }
+});
+
 // ─── POST /toll-reconciliation/periods/:weekKey/reopen ───────────────────────
 // Explicit reopen restores writability (TR-C2). Audited; requires toll.manage.
 app.post(
@@ -958,14 +984,16 @@ app.post(
       if (!/^\d{4}-\d{2}-\d{2}$/.test(weekKey)) {
         return c.json({ error: "weekKey (YYYY-MM-DD Monday) is required" }, 400);
       }
-      const body = (await c.req.json().catch(() => ({}))) as { reason?: string };
+      const body = (await c.req.json().catch(() => ({}))) as {
+        reason?: string;
+        serviceLine?: string;
+      };
       const reason = String(body.reason || "").trim();
       if (!reason) {
         return c.json({ error: "reason is required to reopen a sealed toll period" }, 400);
       }
       const user = c.get("rbacUser") as RbacUser | undefined;
       const actorId = user?.userId || null;
-      const now = new Date().toISOString();
 
       const ifMatchRaw = c.req.header("If-Match");
       const expectedVersion =
@@ -973,20 +1001,14 @@ app.post(
 
       let row: Record<string, unknown>;
       try {
-        row = await upsertTollPeriodRow(
-          orgId,
+        row = await reopenTollPeriodForWeek({
+          organizationId: orgId,
           weekKey,
-          {
-            state: "reopened",
-            reopened_at: now,
-            reopened_by: actorId,
-            reopen_reason: reason.slice(0, 2000),
-            reviewed_by: null,
-            reviewed_at: null,
-            readiness_hash: null,
-          },
-          { expectedVersion: Number.isFinite(expectedVersion as number) ? expectedVersion : null },
-        );
+          reason,
+          actorId,
+          serviceLine: body.serviceLine,
+          expectedVersion: Number.isFinite(expectedVersion as number) ? expectedVersion : null,
+        });
       } catch (ve: any) {
         if (ve?.code === "version_conflict" || ve?.message === "version_conflict") {
           return c.json(
@@ -996,13 +1018,6 @@ app.post(
         }
         throw ve;
       }
-      await insertTollPeriodAudit(
-        orgId,
-        tollPeriodIdFor(orgId, weekKey),
-        "reopen",
-        { reason },
-        actorId,
-      );
 
       return c.json({ success: true, weekKey, state: "reopened", period: row });
     } catch (e: any) {

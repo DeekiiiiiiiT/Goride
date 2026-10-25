@@ -45,6 +45,21 @@ export function payoutBackfillPreview() {
   };
 }
 
+/** True when every planned back-fill payment is already in the movement log. */
+export async function payoutKeysPosted(organizationId: string, driverId: string): Promise<boolean> {
+  const keys = plannedPays(driverId).map((row) => row.idempotencyKey);
+  if (!driverId || keys.length === 0) return false;
+  const { data, error } = await sb()
+    .from("settlement_movements")
+    .select("idempotency_key")
+    .eq("organization_id", organizationId)
+    .eq("driver_id", driverId)
+    .in("idempotency_key", keys);
+  if (error) throw new Error(error.message);
+  const found = new Set((data || []).map((row) => String(row.idempotency_key || "")));
+  return keys.every((key) => found.has(key));
+}
+
 async function reconciliation(organizationId: string, driverId: string) {
   const { data: periods, error } = await sb()
     .from("driver_financial_periods")
@@ -85,7 +100,8 @@ export async function applyPayoutBackfill(opts: {
   const preview = payoutBackfillPreview();
   const stillOff = await reconciliation(opts.organizationId, opts.driverId);
   const ready = stillOff.length === 0;
-  if (!opts.confirm) return { ...preview, stillOff, ready, posted: false };
+  const alreadyPosted = await payoutKeysPosted(opts.organizationId, opts.driverId);
+  if (!opts.confirm) return { ...preview, stillOff, ready, alreadyPosted, posted: false };
   if (!ready) {
     throw new SettlementCommandError(
       "PAYOUT_BACKFILL_GAP",
@@ -110,5 +126,5 @@ export async function applyPayoutBackfill(opts: {
     );
     if (error && !/duplicate|unique/i.test(error.message)) throw new Error(error.message);
   }
-  return { ...preview, stillOff, ready: true, posted: true };
+  return { ...preview, stillOff, ready: true, alreadyPosted: true, posted: true };
 }

@@ -25,7 +25,7 @@ export function EmptyMapScreen() {
               </span>
             </div>
             <div>
-              <span className={"text-[10px] uppercase font-bold tracking-wider text-[#ea580c]"}>
+              <span className={"text-[12px] uppercase font-bold tracking-wider text-[#ea580c]"}>
                 ROAM PLUG
               </span>
               <h1 className={"text-base font-extrabold text-slate-900 leading-none"}>
@@ -57,7 +57,7 @@ export function EmptyMapScreen() {
                 expand_more
               </span>
             </div>
-            <div className={"flex items-center gap-1.5 text-[11px] font-medium text-slate-500 bg-[#f5ede3] px-2.5 py-1 rounded-full border border-[#e5d9cd]"}>
+            <div className={"flex items-center gap-1.5 text-[12px] font-medium text-slate-500 bg-[#f5ede3] px-2.5 py-1 rounded-full border border-[#e5d9cd]"}>
               <span className={"w-2 h-2 rounded-full bg-emerald-500"} />
               <span>
                 GPS Ready
@@ -139,7 +139,7 @@ export function EmptyMapScreen() {
           </div>
           <div className={"absolute bottom-3 left-3 bg-white/95 backdrop-blur-sm border border-[#e2d5c7] rounded-full px-3 py-1 flex items-center gap-1.5 shadow-sm"}>
             <span className={"w-2 h-2 rounded-full bg-amber-500 animate-ping"} />
-            <span className={"text-[11px] font-bold text-slate-700"}>
+            <span className={"text-[12px] font-bold text-slate-700"}>
               15 km Radar Search Radius
             </span>
           </div>
@@ -175,11 +175,11 @@ export function EmptyMapScreen() {
                 <span className={"text-xs font-bold text-slate-900"}>
                   Pull down to refresh
                 </span>
-                <span className={"text-[10px] font-bold text-[#ea580c] uppercase tracking-wider bg-[#fed7aa]/50 px-2 py-0.5 rounded-full"}>
+                <span className={"text-[12px] font-bold text-[#ea580c] uppercase tracking-wider bg-[#fed7aa]/50 px-2 py-0.5 rounded-full"}>
                   LIVE RADAR
                 </span>
               </div>
-              <p className={"text-[11px] text-slate-500 mt-0.5"}>
+              <p className={"text-[12px] text-slate-500 mt-0.5"}>
                 Swipe down on the map to sync newly approved community scout pins.
               </p>
             </div>
@@ -190,7 +190,7 @@ export function EmptyMapScreen() {
                 add_location
               </span>
               <span>
-                Pin a Gas Station Here (+25 XP)
+                Pin a gas station here
               </span>
             </button>
             <button onClick={onPlugClick} className={"w-full py-2.5 px-4 rounded-xl bg-white border border-[#dfd2c4] hover:bg-[#faf2eb] active:scale-[0.98] text-slate-800 font-semibold text-xs flex items-center justify-center gap-1.5 shadow-sm transition-all"} data-act={"expand-radar-search-to-30-km"}>
@@ -202,7 +202,7 @@ export function EmptyMapScreen() {
               </span>
             </button>
           </div>
-          <div className={"mt-4 pt-3 border-t border-[#ebdcd0] w-full flex items-center justify-center gap-1.5 text-[11px] text-slate-500 font-medium"}>
+          <div className={"mt-4 pt-3 border-t border-[#ebdcd0] w-full flex items-center justify-center gap-1.5 text-[12px] text-slate-500 font-medium"}>
             <span className={"material-symbols-outlined text-[15px] text-emerald-600 fill-1"}>
               verified_user
             </span>
@@ -218,7 +218,7 @@ export function EmptyMapScreen() {
                 explore
               </span>
             </div>
-            <span className={"text-[10px] font-bold tracking-tight"}>
+            <span className={"text-[12px] font-bold tracking-tight"}>
               Explore
             </span>
           </a>
@@ -226,7 +226,7 @@ export function EmptyMapScreen() {
             <span className={"material-symbols-outlined text-[21px] mb-0.5"}>
               garage_home
             </span>
-            <span className={"text-[10px] font-medium tracking-tight"}>
+            <span className={"text-[12px] font-medium tracking-tight"}>
               Garage
             </span>
           </a>
@@ -235,7 +235,7 @@ export function EmptyMapScreen() {
               <span className={"material-symbols-outlined fill-1 text-[21px] leading-none"}>
                 local_gas_station
               </span>
-              <span className={"text-[9px] font-extrabold uppercase tracking-tight mt-0.5"}>
+              <span className={"text-[12px] font-extrabold uppercase tracking-tight mt-0.5"}>
                 LOG
               </span>
             </button>
@@ -244,7 +244,7 @@ export function EmptyMapScreen() {
             <span className={"material-symbols-outlined text-[21px] mb-0.5"}>
               map
             </span>
-            <span className={"text-[10px] font-medium tracking-tight"}>
+            <span className={"text-[12px] font-medium tracking-tight"}>
               Map It
             </span>
           </a>
@@ -252,7 +252,7 @@ export function EmptyMapScreen() {
             <span className={"material-symbols-outlined text-[21px] mb-0.5"}>
               person
             </span>
-            <span className={"text-[10px] font-medium tracking-tight"}>
+            <span className={"text-[12px] font-medium tracking-tight"}>
               Account
             </span>
           </a>

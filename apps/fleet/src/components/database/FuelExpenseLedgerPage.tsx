@@ -2,11 +2,12 @@
  * Ledgers › Fuel Expenses — Approved/Rejected fuel expense & reimbursement rows (KV).
  * Distinct from Fuel Ledger (fuel_entry fills).
  */
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Pencil, Trash2, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '../../services/api';
+import { fuelService } from '../../services/fuelService';
 import {
   purgeFuelExpense,
   saveFuelExpense,
@@ -74,12 +75,39 @@ export function FuelExpenseLedgerPage() {
   const [editOpen, setEditOpen] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [page, setPage] = useState(0);
+  const [search, setSearch] = useState('');
+  const [exporting, setExporting] = useState(false);
+  const pageSize = 50;
+  useEffect(() => setPage(0), [startDate, endDate, search]);
 
-  const { data: transactions = [], isLoading, isError, refetch } = useQuery({
-    queryKey: ['fuel-expense-ledger', startDate, endDate],
-    queryFn: () => api.getAllTransactionsInRange({ startDate, endDate }),
+  const { data: ledgerPage, isLoading, isError, error, refetch } = useQuery({
+    queryKey: ['fuel-expense-ledger', startDate, endDate, page, search],
+    queryFn: () => api.getTransactions(undefined, {
+      startDate,
+      endDate,
+      limit: pageSize,
+      offset: page * pageSize,
+      fuelExpenseLedger: true,
+      search: search.trim() || undefined,
+    }) as Promise<{
+      data: FinancialTransaction[];
+      total: number;
+      truncated?: boolean;
+      totals: { approved: number; rejected: number; pending: number } | null;
+    }>,
     staleTime: 30_000,
   });
+  const fillsQuery = useQuery({
+    queryKey: ['fuel-fills-tieout', startDate, endDate],
+    queryFn: () => fuelService.getFuelAmountSum({ startDate, endDate }),
+    enabled: Boolean(startDate && endDate),
+    staleTime: 30_000,
+  });
+  const fillsTotal = fillsQuery.data ?? 0;
+  const transactions = ledgerPage?.data ?? [];
+  const total = ledgerPage?.total ?? transactions.length;
+  const totals = ledgerPage?.totals;
 
   const { data: drivers = [] } = useQuery({
     queryKey: ['drivers-roster-fuel-expense-ledger'],
@@ -97,9 +125,54 @@ export function FuelExpenseLedgerPage() {
 
   const rows = useMemo(() => {
     return (transactions as FinancialTransaction[])
-      .filter((t) => isFuelExpenseLedgerVisibleRow(t))
-      .sort((a, b) => txYmd(b).localeCompare(txYmd(a)));
+      .filter((t) => isFuelExpenseLedgerVisibleRow(t));
   }, [transactions]);
+
+  const exportCsv = async () => {
+    setExporting(true);
+    try {
+      const collected: FinancialTransaction[] = [];
+      let offset = 0;
+      let total = Infinity;
+      while (offset < total && offset < 5000) {
+        const pageResult = await api.getTransactions(undefined, {
+          startDate,
+          endDate,
+          limit: 100,
+          offset,
+          fuelExpenseLedger: true,
+          search: search.trim() || undefined,
+        }) as { data: FinancialTransaction[]; total: number };
+        const batch = (pageResult.data ?? []).filter((t) => isFuelExpenseLedgerVisibleRow(t));
+        collected.push(...batch);
+        total = pageResult.total ?? collected.length;
+        if (!pageResult.data?.length) break;
+        offset += pageResult.data.length;
+      }
+      const lines = ['date,driver,vehicle,type,status,amount,description'];
+      for (const row of collected) {
+        lines.push([
+          txYmd(row),
+          row.driverName || row.driverId || '',
+          row.vehiclePlate || '',
+          row.type || '',
+          row.status || '',
+          row.amount ?? '',
+          String(row.description || '').replace(/,/g, ' '),
+        ].join(','));
+      }
+      const blob = new Blob([lines.join('\n')], { type: 'text/csv' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `fuel-expenses-${startDate}-${endDate}.csv`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Export failed');
+    } finally {
+      setExporting(false);
+    }
+  };
 
   const canEdit = can('fuel.edit_entry');
   const canDelete = can('fuel.delete_entry');
@@ -176,7 +249,7 @@ export function FuelExpenseLedgerPage() {
   if (isError) {
     return (
       <div className="rounded-md border border-rose-200 bg-rose-50 px-4 py-6 text-center text-sm text-rose-800">
-        Could not load fuel expenses.{' '}
+        Could not load fuel expenses. {(error as Error)?.message || ''}{' '}
         <button type="button" className="underline font-medium" onClick={() => void refetch()}>
           Retry
         </button>
@@ -186,11 +259,30 @@ export function FuelExpenseLedgerPage() {
 
   return (
     <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search vendor or description"
+          aria-label="Search fuel expenses"
+          className="h-9 w-full max-w-xs rounded-md border border-slate-200 px-3 text-sm"
+        />
+        <Button type="button" variant="outline" size="sm" onClick={() => void exportCsv()} disabled={exporting}>
+          {exporting ? 'Exporting…' : 'Export CSV'}
+        </Button>
+      </div>
+      {ledgerPage?.truncated && (
+        <p className="text-sm text-amber-800">Totals could not be calculated for the full week. The list is still paged.</p>
+      )}
       <div className="rounded-lg border border-slate-200 bg-slate-50/80 px-4 py-3 text-sm text-slate-700">
         <p className="font-medium text-slate-800">Fuel expenses (accounting)</p>
         <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-          Approved or rejected fuel claims and Expense lines. Click a row for details, edit, or
-          delete where allowed. Posted fill-ups live under Fuel Ledger / Transaction Logs.
+          Approved {totals ? totals.approved.toLocaleString(undefined, { minimumFractionDigits: 2 }) : '—'}
+          {' · '}Rejected {totals ? totals.rejected.toLocaleString(undefined, { minimumFractionDigits: 2 }) : '—'}
+          {' · '}Pending {totals ? totals.pending.toLocaleString(undefined, { minimumFractionDigits: 2 }) : '—'}
+          {' · '}Fills {fillsTotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+          {' · '}Difference {(fillsTotal - (totals?.approved ?? 0)).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+          {' · '}{total} rows
         </p>
       </div>
 
@@ -247,6 +339,13 @@ export function FuelExpenseLedgerPage() {
               ))}
             </TableBody>
           </Table>
+        </div>
+      )}
+      {total > pageSize && (
+        <div className="flex items-center justify-between text-sm">
+          <button type="button" className="underline disabled:opacity-40" disabled={page === 0} onClick={() => setPage((p) => Math.max(0, p - 1))}>Previous</button>
+          <span>Page {page + 1} of {Math.ceil(total / pageSize)}</span>
+          <button type="button" className="underline disabled:opacity-40" disabled={(page + 1) * pageSize >= total} onClick={() => setPage((p) => p + 1)}>Next</button>
         </div>
       )}
 

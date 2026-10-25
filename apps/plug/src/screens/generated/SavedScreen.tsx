@@ -35,9 +35,9 @@ export function SavedScreen() {
               Fuel Logged!
             </h1>
             <p className={"font-body-md text-body-md text-on-surface-variant mt-space-xs max-w-xs"}>
-              2019 Toyota Roomy updated • Odometer at
+              Odometer saved
               <span className={"font-label-lg text-on-surface"}>
-                84,612 km
+                
               </span>
             </p>
           </div>
@@ -50,7 +50,7 @@ export function SavedScreen() {
                   </span>
                   Fuel Economy
                 </span>
-                <span className={"inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full bg-surface-container text-on-surface text-[11px] font-label-md"}>
+                <span className={"inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full bg-surface-container text-on-surface text-[12px] font-label-md"}>
                   <span className={"material-symbols-outlined text-[14px] text-tertiary"} style={{ fontVariationSettings: "'wght' 700" }}>
                     arrow_upward
                   </span>

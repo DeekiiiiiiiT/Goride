@@ -32,7 +32,6 @@ describe('buildCanonicalImportEvents', () => {
    * Fare data now comes from trip-level fare_earning/tip/promotion events via buildCanonicalTripFareEventsFromTrip.
    * 
    * This test verifies the events that ARE still emitted:
-   * - promotion (payments_driver total per driver)
    * - payout_cash / payout_bank (org-level cash/bank totals)
    * - REFUNDS_TOLL statement_line (org-level toll refunds)
    * - toll_support_adjustment / dispute_refund (support case refunds)
@@ -128,12 +127,8 @@ describe('buildCanonicalImportEvents', () => {
     expect(events[0].sourceType).toBe('import_batch');
     expect(events.every((e) => e.sourceId === batchId)).toBe(true);
     
-    // REFUNDS_TOLL, promotion, org bank, toll_support_adjustment
-    expect(events.length).toBe(4);
-    const promoEv = events.find((e) => e.eventType === 'promotion');
-    expect(promoEv?.netAmount).toBe(5);
-    expect(promoEv?.idempotencyKey).toBe(`${batchId}|driver_promotion|${driverId.toLowerCase()}`);
-    expect(promoEv?.date).toBe('2026-03-01');
+    expect(events.some((e) => e.eventType === 'promotion')).toBe(false);
+    expect(events.length).toBe(3);
   });
 
   it('emits org bank deposit + per-driver bank share; never dumps org bank onto a primary driver', () => {
@@ -186,13 +181,15 @@ describe('buildCanonicalImportEvents', () => {
     expect(cash?.driverId).toBe(driverId);
     expect(cash?.netAmount).toBeCloseTo(34051.85, 2);
     expect(orgBank?.netAmount).toBeCloseTo(88888, 2);
-    expect(orgBank?.driverId).toBe(orgUuid);
+    expect(orgBank?.driverId).toBe('org-bank');
+    expect(orgBank?.metadata?.organizationUuid).toBe(orgUuid);
+    expect(orgBank?.metadata?.bankRole).toBe('statement_net');
     expect(shareBank?.driverId).toBe(driverId);
     expect(shareBank?.netAmount).toBeCloseTo(58668.5, 2);
     expect(cash?.idempotencyKey).toBe(`${batchId}|payout|cash|${driverId}`);
   });
 
-  it('posts import_batch promotion on earliest trip date when org period starts earlier than trips', () => {
+  it('does not post payments-driver promotions that are already inside trip fare', () => {
     const batchId = 'batch-22222222-2222-2222-2222-222222222222';
     const driverId = 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee';
     const ssot: Record<string, UberSsotTotals> = {
@@ -224,10 +221,7 @@ describe('buildCanonicalImportEvents', () => {
       uberStatementsByDriverId: ssot,
       disputeRefunds: [],
     });
-    const promoEv = events.find((e) => e.eventType === 'promotion');
-    expect(promoEv?.date).toBe('2026-03-23');
-    expect(promoEv?.periodStart).toBe('2026-03-17');
-    expect(promoEv?.periodEnd).toBe('2026-03-23');
+    expect(events.some((e) => e.eventType === 'promotion')).toBe(false);
   });
 
   it('splits cash across fleet weeks when trips span two Mondays', () => {
