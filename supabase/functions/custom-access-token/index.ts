@@ -105,8 +105,12 @@ Deno.serve(async (req) => {
         role === "platform_analyst"
       );
       if (platformRoles.length > 0) {
-        appMeta.roles = platformRoles;
-        appMeta.role = platformRoles[0];
+        const current = typeof appMeta.role === "string" ? appMeta.role.trim() : "";
+        const listed = Array.isArray(appMeta.roles)
+          ? appMeta.roles.filter((role): role is string => typeof role === "string" && role.trim().length > 0)
+          : [];
+        appMeta.roles = [...new Set([...(current ? [current] : []), ...listed, ...platformRoles])];
+        if (!current) appMeta.role = platformRoles[0];
       }
     }
 
