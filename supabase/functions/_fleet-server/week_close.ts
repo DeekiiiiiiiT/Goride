@@ -17,12 +17,14 @@ import { getServiceClient } from "./service_client.ts";
 import {
   clearPeriodFreeze,
   isPeriodFrozen,
+  periodGateFromRow,
   markPeriodFrozen,
   assertPeriodEndedForReconciliation,
 } from "./settlement_period_freeze.ts";
 import { SettlementCommandError } from "./settlement_commands.ts";
 import {
   closeWeekStatements,
+  publishWeekStatement,
   getLatestWeekStatements,
   getLatestWeekStatementsForOrgWeek,
   hasPendingRestatementDrafts,
@@ -1347,6 +1349,35 @@ async function orgWeekNeedsForceTollReseal(orgId: string, week: string): Promise
  * H-1: Pure read preview — does NOT seal lanes or write recon drifts.
  * Use {@link prepareWeekClose} before close when lanes need sealing.
  */
+async function earlierOpenWeek(orgId: string, week: string): Promise<string | null> {
+  const { data, error } = await sb()
+    .from("driver_financial_periods")
+    .select("period_anchor, status, closed_at, metadata, settlement_status")
+    .eq("organization_id", orgId)
+    .lt("period_anchor", week)
+    .order("period_anchor", { ascending: true });
+  if (error) throw new Error(error.message);
+  for (const row of data || []) {
+    if (isPeriodFrozen(periodGateFromRow(row))) continue;
+    const fc = ((row.metadata as { financeCore?: { legacyCleanup?: unknown } } | null)?.financeCore) || {};
+    if (fc.legacyCleanup) continue;
+    return String(row.period_anchor).slice(0, 10);
+  }
+  return null;
+}
+
+function earlierWeekBlocker(week: string, earlier: string): CloseBlocker {
+  return {
+    code: "EARLIER_WEEK_OPEN",
+    severity: "block",
+    week,
+    persisted: 0,
+    expected: 0,
+    delta: 0,
+    message: `Close the week of ${earlier} first. An earlier week is still open.`,
+  };
+}
+
 export async function previewWeekClose(
   orgId: string,
   weekKey: string,
@@ -1553,6 +1584,8 @@ export async function previewWeekClose(
     Math.round((tollSpend - tollReimbursed - tollCharged - tollNetLoss) * 100) / 100;
   const weekClosed = rows.length > 0 && driversFrozen === rows.length;
   const openEngineDriftCount = await countOpenFinanceReconDrifts(orgId, week);
+  const earlier = await earlierOpenWeek(orgId, week);
+  if (earlier) weekBlockers.push(earlierWeekBlocker(week, earlier));
 
   return {
     weekKey: week,
@@ -1987,6 +2020,32 @@ async function closeWeekBody(
   const perDriver: DriverCloseResult[] = [];
   const allBlockers: CloseBlocker[] = [];
   const periodRows = periods ?? [];
+  const earlier = await earlierOpenWeek(orgId, week);
+  let overrideReason = String(opts?.earlierWeekOverrideReason || "").trim();
+  if (!overrideReason) {
+    const kv = await import("./kv_store.tsx");
+    const saved = (await kv.get(`week_close_override:${orgId}:${week}`)) as { reason?: string } | null;
+    overrideReason = String(saved?.reason || "").trim();
+  }
+  if (earlier && overrideReason.length < 8) {
+    const blocker = earlierWeekBlocker(week, earlier);
+    return {
+      organizationId: orgId,
+      weekKey: week,
+      closed: false,
+      driversClosed: 0,
+      driversBlocked: periodRows.length,
+      blockers: [blocker],
+      perDriver: periodRows.map((p) => ({
+        driverId: String(p.driver_id),
+        closed: false,
+        blockers: [blocker],
+      })),
+    };
+  }
+  if (earlier && overrideReason) {
+    console.log("[week_close] earlier-week override", { orgId, week, earlier, overrideReason });
+  }
   const driverIds = periodRows.map((p) => String(p.driver_id)).filter(Boolean);
   const serviceLine = normalizeWeekCloseServiceLine(opts?.serviceLine);
 
@@ -2457,6 +2516,23 @@ async function closeWeekBody(
       resolvedCustodyTargets.set(v.driverId, v.resolvedCustodyTarget);
     }
 
+    try {
+      await publishWeekStatement({
+        kind: "settlement",
+        organizationId: orgId,
+        driverId: v.driverId,
+        weekKey: week,
+        status: "closed",
+        amountsMinor: {
+          settlementAmount: Math.round((Number(v.period.settlement_amount) || 0) * 100),
+          settlementPaid: Math.round((Number(v.period.settlement_paid) || 0) * 100),
+        },
+        closedBy: actorId,
+        closeReason: v.closeReason,
+      });
+    } catch (sealErr) {
+      console.warn("[week_close] settlement statement not sealed", sealErr);
+    }
     await closeWeekStatements(orgId, v.driverId, week, actorId, v.closeReason);
 
     freezeBatch.push({

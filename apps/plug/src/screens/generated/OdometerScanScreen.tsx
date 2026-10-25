@@ -1,12 +1,27 @@
 import { useEffect, useRef } from 'react';
+import { OdometerScanner, type ScanResult } from '../../../../../packages/ui/src/odometer-scanner';
 import { onPlugClick } from '../../shell/actions';
 import { bindScreen } from '../../shell/bind';
+import { scanPlugPhoto } from '../../shell/scan';
+import { lastOdometer } from '../../shell/facts';
 
 
 export function OdometerScanScreen() {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => { if (ref.current) bindScreen("24-odometer-scan.html", ref.current); }, []);
   return (
+    <>
+    <OdometerScanner
+      embedded
+      isFleetDriver={false}
+      lastOdometer={lastOdometer()}
+      scanPhoto={scanPlugPhoto}
+      onCancel={() => { window.location.hash = '#/explore'; }}
+      onScanComplete={(result: ScanResult) => {
+        sessionStorage.setItem('plug-odometer', String(result.reading));
+        window.location.hash = '#/fuel/confirm';
+      }}
+    />
     <div ref={ref} data-plug-screen={"24-odometer-scan.html"} className={"bg-surface font-body-md text-on-surface flex flex-col min-h-screen pt-safe pb-safe"}>
       <main className={"flex-1 flex flex-col relative w-full bg-surface"}>
         <div className={"flex flex-col w-full relative select-none"}>
@@ -128,5 +143,6 @@ export function OdometerScanScreen() {
         </div>
       </main>
     </div>
+    </>
   );
 }

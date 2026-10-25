@@ -1,5 +1,10 @@
 import { useEffect, useState } from 'react';
 import { publicGet } from '../api';
+import { demoOn } from '../demo/mode';
+import { kindFor } from './act-kind';
+import { fillScreen } from './fill';
+import { vehicleId } from './facts';
+import { getPlugRuntime } from './click';
 import { onPlugClick } from '../shell/actions';
 
 type Station = { id: string; name: string; brand?: string };
@@ -16,7 +21,8 @@ export function SearchBody() {
   }, []);
   const shown = rows.filter((row) => !query || `${row.name} ${row.brand || ''}`.toLowerCase().includes(query.toLowerCase()));
   if (query && shown.length === 0) {
-    return <p className="px-4 py-8 pt-24 text-center text-on-surface-variant" role="status">No matches for “{query}”.</p>;
+    window.location.hash = '#/search/empty';
+    return null;
   }
   return (
     <div className="flex flex-col gap-2 px-4 pb-3 pt-24">
@@ -63,41 +69,35 @@ export function bindScreen(file: string, root: HTMLElement) {
     root.querySelectorAll('div.cursor-pointer').forEach((card) => {
       card.addEventListener('click', () => {
         const name = card.textContent || '';
-        sessionStorage.setItem('plug-service', /oil/i.test(name) ? 'oil' : 'service');
-        const id = sessionStorage.getItem('plug-vehicle') || 'demo-car';
+        const service = name.replace(/\s+/g, ' ').trim();
+        if (!service) return;
+        sessionStorage.setItem('plug-service', service);
+        const id = vehicleId();
+        if (!id) return;
         window.location.hash = `#/garage/${id}/service`;
       });
     });
   }
   if (file === '36-documents.html') {
     root.querySelectorAll('h2').forEach((heading) => {
-      if (!/fitness/i.test(heading.textContent || '')) return;
+      const kind = (heading.textContent || '').replace(/\s+/g, ' ').trim();
+      if (!kind) return;
       const card = heading.closest('div');
       card?.addEventListener('click', () => {
-        sessionStorage.setItem('plug-doc', 'fitness');
-        const id = sessionStorage.getItem('plug-vehicle') || 'demo-car';
+        sessionStorage.setItem('plug-doc', kind);
+        const id = vehicleId();
+        if (!id) return;
         window.location.hash = `#/garage/${id}/documents/edit`;
       });
     });
   }
-  if (file === '24-odometer-scan.html' && !root.querySelector('#plug-odo-file')) {
-    const input = document.createElement('input');
-    input.id = 'plug-odo-file';
-    input.type = 'file';
-    input.accept = 'image/*';
-    input.capture = 'environment';
-    input.className = 'sr-only';
-    input.addEventListener('change', () => {
-      const reading = sessionStorage.getItem('plug-last-odo') || '84612';
-      const next = String(Number(reading) + 120);
-      sessionStorage.setItem('plug-odometer', next);
-      window.location.hash = '#/fuel/confirm';
-    });
-    root.appendChild(input);
+  if (file === '25-confirm-odometer.html') {
+    const input = root.querySelector('#odometerInput') as HTMLInputElement | null;
+    const stored = sessionStorage.getItem('plug-odometer');
+    if (input && !stored && !demoOn()) input.value = '';
   }
   if (file === '43-place-pin.html') {
-    const accuracy = Number(sessionStorage.getItem('plug-accuracy') || (sessionStorage.getItem('plug-demo') === '1' ? 12 : 999));
-    sessionStorage.setItem('plug-accuracy', String(accuracy));
+    const accuracy = Number(sessionStorage.getItem('plug-accuracy') || (demoOn() ? 12 : 999));
     if (accuracy > 50) {
       root.querySelectorAll('button').forEach((button) => {
         if (/confirm pin location|confirm location/i.test(button.textContent || '')) {
@@ -107,4 +107,31 @@ export function bindScreen(file: string, root: HTMLElement) {
       });
     }
   }
+  hideFlagged(root);
+  void fillScreen(file, root);
+}
+
+const KIND_FLAG: Record<string, string> = {
+  'log-fuel': 'plug.fuel_log',
+  parts: 'plug.parts',
+  'parts-map': 'plug.parts',
+  tolls: 'plug.tolls',
+  documents: 'plug.documents',
+  map: 'plug.map_it',
+  'map-kind': 'plug.map_it',
+};
+
+function hideFlagged(root: HTMLElement) {
+  if (demoOn()) return;
+  let runtime: ReturnType<typeof getPlugRuntime> | null = null;
+  try {
+    runtime = getPlugRuntime();
+  } catch {
+    return;
+  }
+  const screen = root.getAttribute('data-plug-screen') || '';
+  root.querySelectorAll<HTMLElement>('[data-act]').forEach((el) => {
+    const flag = KIND_FLAG[kindFor(el.dataset.act || '', screen) || ''];
+    if (flag && !runtime?.flagOn(flag)) el.hidden = true;
+  });
 }

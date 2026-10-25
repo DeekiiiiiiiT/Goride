@@ -252,10 +252,11 @@ export function resolveDriverVersionForWeek(
   }
 
   const defaultPolicy =
-    scenarios.find((s) => s.isDefault) || scenarios[0];
+    scenarios.find((s) => !s.archived && s.isDefault) ||
+    scenarios.find((s) => !s.archived);
   if (!defaultPolicy) return undefined;
   const normalized = normalizeScenarioVersions(defaultPolicy);
-  const version = resolveVersionForWeek(normalized, key);
+  const version = resolveVersionForWeek(normalized, key) || templateAsVersion(normalized);
   if (!version) return undefined;
   return { scenario: normalized, version };
 }
@@ -278,7 +279,9 @@ export function resolveVersionForWeek(
           return synth ? [synth] : [];
         })();
   const applicable = list.filter((v) => versionAppliesToWeek(v, key));
-  if (applicable.length === 0) return list[0];
+  // A real schedule with no covering window is "no version".
+  // Do not reuse the first window outside its dates.
+  if (applicable.length === 0) return undefined;
   return applicable[applicable.length - 1];
 }
 
@@ -617,4 +620,137 @@ export function migrateFuelScenarioIdOntoVersions(
   }
 
   return Array.from(byId.values());
+}
+
+/** Monday of the last week included when effectiveUntil is the exclusive end Monday. */
+export function lastIncludedMonday(effectiveUntilExclusive: string): string {
+  const until = String(effectiveUntilExclusive).split('T')[0];
+  return formatYmd(addWeeksLocal(ymdToLocalDate(until), -1));
+}
+
+/** Frozen Mondays covered by a schedule window. */
+export function frozenWeeksInWindow(
+  effectiveFrom: string,
+  effectiveUntil: string | null | undefined,
+  frozenMondays: readonly string[],
+): string[] {
+  const probe = {
+    id: 'probe',
+    effectiveFrom,
+    ...(effectiveUntil ? { effectiveUntil } : {}),
+    rules: [],
+    driverIds: [],
+    createdAt: '',
+  } as FuelScenarioVersion;
+  return frozenMondays.filter((week) => versionAppliesToWeek(probe, week));
+}
+
+export type DriverScheduleGap = {
+  driverId: string;
+  afterWeek: string;
+  beforeWeek: string;
+};
+
+/** Weeks between a driver's windows where no policy lists them. */
+export function findDriverScheduleGaps(
+  scenarios: FuelScenario[],
+  driverId: string,
+): DriverScheduleGap[] {
+  const windows = listDriverVersionAssignments(scenarios, driverId)
+    .map((h) => h.version)
+    .sort((a, b) => a.effectiveFrom.localeCompare(b.effectiveFrom));
+  const gaps: DriverScheduleGap[] = [];
+  for (let i = 0; i < windows.length - 1; i++) {
+    const end = windows[i].effectiveUntil;
+    const nextFrom = windows[i + 1].effectiveFrom;
+    if (!end || end >= nextFrom) continue;
+    gaps.push({ driverId, afterWeek: end, beforeWeek: nextFrom });
+  }
+  return gaps;
+}
+
+function companyPercent(rules: FuelRule[] | undefined): number | null {
+  const fuel = (rules || []).find((r) => r.category === 'Fuel');
+  if (!fuel) return null;
+  const n = Number(fuel.rideShareCoverage ?? fuel.coverageValue);
+  return Number.isFinite(n) ? n : null;
+}
+
+/** Who is charged the frozen schedule percent, not the template being edited. */
+export function activeScheduleCharges(
+  scenarios: FuelScenario[],
+  asOfMonday?: string,
+): Array<{ driverId: string; policyName: string; companyPercent: number; since: string }> {
+  const week = asOfMonday || mondayYmdForDate(new Date());
+  const out: Array<{ driverId: string; policyName: string; companyPercent: number; since: string }> = [];
+  const seen = new Set<string>();
+  for (const raw of scenarios) {
+    if (raw.archived) continue;
+    const s = normalizeScenarioVersions(raw);
+    for (const v of s.versions || []) {
+      if (!versionAppliesToWeek(v, week)) continue;
+      const pct = companyPercent(v.rules);
+      if (pct == null) continue;
+      for (const driverId of v.driverIds || []) {
+        if (seen.has(driverId)) continue;
+        seen.add(driverId);
+        out.push({
+          driverId,
+          policyName: s.name,
+          companyPercent: pct,
+          since: v.effectiveFrom,
+        });
+      }
+    }
+  }
+  return out;
+}
+
+/** Server-side schedule checks. Returns an error sentence or null. */
+export function validateScenarioSchedule(
+  scenario: FuelScenario,
+  allScenarios: FuelScenario[],
+): string | null {
+  const versions = scenario.versions || [];
+  for (const v of versions) {
+    if (!isMondayYmd(String(v.effectiveFrom || ''))) {
+      return 'Each schedule window must start on a Monday.';
+    }
+    if (v.effectiveUntil && !isMondayYmd(String(v.effectiveUntil))) {
+      return 'Each schedule end must be a Monday.';
+    }
+    if (v.effectiveUntil && v.effectiveUntil <= v.effectiveFrom) {
+      return 'A schedule end must be after its start.';
+    }
+    for (const rule of v.rules || []) {
+      if (rule.category !== 'Fuel' || rule.coverageType !== 'Percentage') continue;
+      const fields = [
+        'rideShareCoverage',
+        'companyUsageCoverage',
+        'deadheadCoverage',
+        'personalCoverage',
+        'miscCoverage',
+        'commuteCoverage',
+      ] as const;
+      for (const field of fields) {
+        const val = rule[field];
+        if (val === undefined || val === null) continue;
+        if (typeof val !== 'number' || !Number.isFinite(val) || val < 0 || val > 100) {
+          return `${field} must be a number between 0 and 100.`;
+        }
+      }
+    }
+    try {
+      assertNoDriverWindowCollision({
+        scenarios: allScenarios,
+        driverIds: v.driverIds || [],
+        effectiveFrom: v.effectiveFrom,
+        effectiveUntil: v.effectiveUntil,
+        ignoreVersionId: v.id,
+      });
+    } catch (e) {
+      return e instanceof Error ? e.message : 'Drivers overlap on this schedule.';
+    }
+  }
+  return null;
 }

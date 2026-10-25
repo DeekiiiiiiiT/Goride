@@ -256,6 +256,11 @@ jobs:
           deno test --allow-read
           supabase/functions/_shared/plugCore.drift.test.ts
 
+      - name: Deno test odometer vision prompt drift
+        run: >
+          deno test --allow-read
+          supabase/functions/_shared/odometerVision.drift.test.ts
+
       - name: Deno test recon sources mirror drift
         run: >
           deno test --allow-read
@@ -318,7 +323,16 @@ jobs:
         run: pnpm --filter @roam/plug typecheck
 
       - name: Plug screens have a way out
-        run: node apps/plug/scripts/check-dead-buttons.mjs
+        run: node --experimental-strip-types apps/plug/scripts/check-dead-buttons.mjs
+
+      - name: Plug demo data stays in demo mode
+        run: node apps/plug/scripts/check-demo-leaks.mjs
+
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
+      - name: Plug journeys
+        run: npx playwright test -c playwright.plug.config.ts
 
       - name: Public stations take parish from coordinates
         run: node apps/plug/scripts/check-station-parish.mjs

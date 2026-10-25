@@ -19,6 +19,8 @@ import type { FuelScenario, FuelScenarioVersion } from '../../types/fuel';
 import { VersionScheduleEditor } from './VersionScheduleEditor';
 import { FuelCoverageMatrix } from './FuelCoverageMatrix';
 import {
+  findDriverScheduleGaps,
+  lastIncludedMonday,
   mondayYmdForDate,
   normalizeScenarioVersions,
   removeScenarioVersion,
@@ -358,6 +360,17 @@ export function PolicySchedulePanel({
                 </div>
               </div>
 
+              {drivers.flatMap((driver) =>
+                findDriverScheduleGaps(scenarios, String(driver.id)).map((gap) => (
+                  <Alert key={`${driver.id}-${gap.afterWeek}`} className="border-amber-200 bg-amber-50">
+                    <AlertTitle>Schedule gap</AlertTitle>
+                    <AlertDescription>
+                      {driver.name || driver.fullName || 'A driver'} has no window from {gap.afterWeek} until {gap.beforeWeek}. Those weeks use Default.
+                    </AlertDescription>
+                  </Alert>
+                )),
+              )}
+
               {versionsNewestFirst.length === 0 ? (
                 <div className="rounded-lg border border-dashed border-slate-200 py-10 text-center text-sm text-slate-400">
                   No versions yet. Add a period and assign drivers to use this policy in recon.
@@ -390,7 +403,7 @@ export function PolicySchedulePanel({
                               </div>
                               <CardDescription className="text-xs">
                                 {ver.effectiveUntil
-                                  ? 'Applies to weeks starting on/after the start Monday and before the end Monday.'
+                                  ? `Last week included: ${lastIncludedMonday(ver.effectiveUntil)}.`
                                   : 'Applies to weeks starting on/after the start Monday with no end (Never).'}
                               </CardDescription>
                             </div>

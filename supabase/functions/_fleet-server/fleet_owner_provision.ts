@@ -270,6 +270,8 @@ export async function provisionFleetOwner(
   }
 
   try {
+    const { ensureStandardFuelPolicy } = await import("./register_fuel_scenario_routes.ts");
+    await ensureStandardFuelPolicy(orgId);
     await kv.set(`preferences:${userId}`, { businessType: primaryBusinessType, serviceLines });
     const existingGeneral = await kv.get("preferences:general") || {};
     await kv.set("preferences:general", { ...existingGeneral, businessType: "rideshare" });

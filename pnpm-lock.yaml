@@ -1552,6 +1552,9 @@ importers:
       '@roam/auth-client':
         specifier: workspace:*
         version: link:../../packages/auth-client
+      '@roam/design-tokens':
+        specifier: workspace:*
+        version: link:../../packages/design-tokens
       '@roam/plug-core':
         specifier: workspace:*
         version: link:../../packages/plug-core

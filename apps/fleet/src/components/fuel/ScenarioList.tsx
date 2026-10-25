@@ -26,7 +26,7 @@ import {
   sumSplitTotals,
 } from '../../utils/fuelCoverageSplit';
 import { orphanDrivers, driversForPolicy } from '../../utils/fuelPolicyAssignment';
-import { normalizeScenarioVersions } from '../../utils/fuelPolicyVersion';
+import { activeScheduleCharges, normalizeScenarioVersions } from '../../utils/fuelPolicyVersion';
 import { runFuelPolicyDriverCutoverOnce, runFuelPolicyVersionDriverCutoverOnce } from '../../utils/fuelPolicyCutover';
 import {
   evaluateFuelPolicyDeleteGuard,
@@ -399,6 +399,21 @@ export function ScenarioList({
                                 </CardHeader>
                                 <CardContent className="space-y-4 pt-4">
                                     <FuelCoverageMatrix rule={rule} compact />
+                                    <p className="text-xs text-slate-500">
+                                      Editing this template applies to new periods only.
+                                    </p>
+                                    {activeScheduleCharges(scenarios)
+                                      .filter((charge) => charge.policyName === scenario.name)
+                                      .map((charge) => {
+                                        const person = drivers.find((d) => d.id === charge.driverId);
+                                        const name = person?.name || person?.fullName || 'Driver';
+                                        const driverPct = Math.round(100 - charge.companyPercent);
+                                        return (
+                                          <p key={charge.driverId} className="text-xs text-slate-700">
+                                            {name}: {charge.companyPercent}/{driverPct} since {charge.since}
+                                          </p>
+                                        );
+                                      })}
 
                                     <div>
                                         <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500">

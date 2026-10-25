@@ -8,7 +8,7 @@ import { loadPriorWeekCredit, prepareFuelWeekReports } from "./fuel_week_prepare
 import type { PriorWeekFact } from "../../../packages/fuel-core/src/priorWeekCredit.ts";
 import { loadWeekFuelEntries } from "./fuel_period_build_snapshots.ts";
 import { queryFleet } from "./repos/baseRepo.ts";
-import { filterRecordsByOrganizationId } from "./org_scope.ts";
+import { filterFuelScenariosForOrg } from "./fuel_scenario_scope.ts";
 import { loadOrgPreferences } from "./fuel_org_preferences.ts";
 import { listOdometerLedger } from "./odometer_ledger.ts";
 import { listAllUnifiedCanonicalEvents } from "../_shared/unifiedLedger/queries.ts";
@@ -165,7 +165,7 @@ export async function hashFuelWeekInputs(orgId: string, weekStart: string, weekE
     const day = ymd(row.date);
     return day >= weekStart && day <= weekEnd;
   });
-  const scenarios = filterRecordsByOrganizationId(
+  const scenarios = filterFuelScenariosForOrg(
     ((scenariosRaw || []) as Record<string, unknown>[]),
     orgId,
   );

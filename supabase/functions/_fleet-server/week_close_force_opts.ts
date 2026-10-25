@@ -28,6 +28,8 @@ export type CloseWeekOpts = WeekCloseServiceLineOpts & {
   skipPrepare?: boolean;
   /** Read saved books. Do not run fuel, toll, or earnings engines in this request. */
   skipEngineProbe?: boolean;
+  /** Owner override when an earlier week is still open. Stored with the close. */
+  earlierWeekOverrideReason?: string;
 };
 
 export function resolveCloseLaneForceOpts(opts?: PrepareWeekCloseOpts): CloseLaneForceOpts {

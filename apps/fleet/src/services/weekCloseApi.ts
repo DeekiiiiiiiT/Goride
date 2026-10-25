@@ -304,6 +304,7 @@ export const weekCloseApi = {
       idempotencyKey?: string;
       skipPrepare?: boolean;
       serviceLine?: 'rideshare' | 'rush_delivery';
+      earlierWeekOverrideReason?: string;
       onProgress?: (step: string) => void;
     },
   ): Promise<WeekCloseResult> {
@@ -314,6 +315,9 @@ export const weekCloseApi = {
         weekKey,
         serviceLine: opts?.serviceLine ?? 'rideshare',
         reason,
+        ...(opts?.earlierWeekOverrideReason
+          ? { earlierWeekOverrideReason: opts.earlierWeekOverrideReason }
+          : {}),
         ...(opts?.idempotencyKey ? { idempotencyKey: opts.idempotencyKey } : {}),
         ...(opts?.skipPrepare ? { skipPrepare: true } : {}),
       }),

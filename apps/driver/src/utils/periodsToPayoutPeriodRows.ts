@@ -29,7 +29,7 @@ export function periodsToPayoutPeriodRows(
       const periodEnd = parseISO(`${String(p.periodEnd).slice(0, 10)}T23:59:59`);
       const driverShare = Number(p.driverShare) || 0;
       const fuelDeduction = Number(p.fuelDeduction) || 0;
-      const fuelCredits = Number(p.fuelFleetShare) || 0;
+      const fuelCredits = Number(p.fuelDriverSpend) || 0;
       const passengerCash = Number(p.cashCollected) || 0;
       const cashPaid = Number(p.cashReturned) || 0;
       const cashWrittenOff = Number(p.cashWrittenOff) || 0;

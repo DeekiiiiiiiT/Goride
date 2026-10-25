@@ -14,6 +14,7 @@
     "@capacitor/core": "^7.6.5",
     "@roam/api-client": "workspace:*",
     "@roam/auth-client": "workspace:*",
+    "@roam/design-tokens": "workspace:*",
     "@roam/plug-core": "workspace:*",
     "@roam/ui": "workspace:*",
     "@sentry/react": "^10.69.0",

@@ -76,8 +76,8 @@ export function ExploreSheet() {
         <span className="font-label-md text-label-sm text-on-surface-variant">Sorted by lowest {gradeLabel}</span>
       </div>
       {!signedIn ? (
-        <button type="button" onClick={onPlugClick} data-act="create-account" className="mb-3 min-h-12 w-full rounded-xl bg-primary-container px-3 text-left font-bold text-on-primary">
-          Create account to save your car
+        <button type="button" onClick={onPlugClick} data-act="sign-up-with-phone" className="mb-3 min-h-12 w-full rounded-xl bg-primary-container px-3 text-left font-bold text-on-primary">
+          Create an account to pin price updates and save your car
         </button>
       ) : null}
       {chip === 'fuel' && top ? <StationHero station={top} grade={grade} gradeLabel={gradeLabel} cheapest /> : null}
@@ -85,7 +85,7 @@ export function ExploreSheet() {
         <button type="button" onClick={onPlugClick} data-act="my-car" className="w-full rounded-xl bg-surface-container-high p-3 mb-space-md flex items-center justify-between text-left">
           <span>
             <span className="block font-bold">{carName}</span>
-            <span className="text-sm text-tertiary">Oil change due in 620 km</span>
+            <span className="text-sm text-tertiary">{sessionStorage.getItem('plug-care') || (demoOn() ? 'Oil change due soon' : 'Open the garage for service dates')}</span>
           </span>
           <span className="font-bold text-primary">Garage</span>
         </button>

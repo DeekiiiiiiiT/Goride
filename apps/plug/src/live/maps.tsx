@@ -62,8 +62,8 @@ export function PinMap() {
   useEffect(() => {
     const host = node.current;
     if (!host) return;
-    const startLat = Number(sessionStorage.getItem('plug-pin-lat') || 18.0128);
-    const startLng = Number(sessionStorage.getItem('plug-pin-lng') || -76.7967);
+    const startLat = Number(sessionStorage.getItem('plug-pin-lat') || sessionStorage.getItem('plug-lat') || 18.017);
+    const startLng = Number(sessionStorage.getItem('plug-pin-lng') || sessionStorage.getItem('plug-lng') || -76.8);
     const map = L.map(host, { zoomControl: false }).setView([startLat, startLng], 17);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '&copy; OpenStreetMap',
@@ -80,6 +80,10 @@ export function PinMap() {
       navigator.geolocation.getCurrentPosition(
         (pos) => {
           sessionStorage.setItem('plug-accuracy', String(pos.coords.accuracy));
+          sessionStorage.setItem('plug-lat', String(pos.coords.latitude));
+          sessionStorage.setItem('plug-lng', String(pos.coords.longitude));
+          sessionStorage.setItem('plug-pin-lat', String(pos.coords.latitude));
+          sessionStorage.setItem('plug-pin-lng', String(pos.coords.longitude));
           map.setView([pos.coords.latitude, pos.coords.longitude], 17);
         },
         () => sessionStorage.setItem('plug-accuracy', '999'),

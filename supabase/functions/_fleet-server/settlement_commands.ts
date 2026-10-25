@@ -8,7 +8,8 @@ export type SettlementMovementKind =
   | "pay"
   | "write_off"
   | "reverse"
-  | "verify";
+  | "verify"
+  | "correction";
 
 export type SettlementApprovalState = "none" | "pending" | "approved" | "rejected";
 export type SettlementMovementStatus = "posted" | "pending" | "void";
@@ -343,6 +344,7 @@ export function residualDeltaMinor(
   if (st === "void" || st === "pending") return 0;
   const a = Math.trunc(Math.abs(Number(amountMinor) || 0));
   if (kind === "pay") return -a;
+  if (kind === "correction") return 0;
   return a; // collect | write_off
 }
 

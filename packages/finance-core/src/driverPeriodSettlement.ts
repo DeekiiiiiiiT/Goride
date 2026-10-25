@@ -17,6 +17,11 @@ export interface PeriodSettlementInput {
    * Increases adjCashBalance / cash_still_held so Collect can discharge it on an open week.
    */
   openingCashCustody?: number;
+  /**
+   * Signed corrections on this open week. Positive means the company owes more.
+   * Never folded into cash held.
+   */
+  postedAdjustments?: number;
 }
 
 export interface PeriodSettlementResult {
@@ -106,10 +111,11 @@ export function computePeriodSettlementMinor(i: PeriodSettlementInput): PeriodSe
   const cashPaidMinor = (toMoneyMinor(i.baseCashPaid || 0) + tollCashWashMinor) as MoneyMinor;
   const cashBalanceMinor = (cashOwedMinor - cashPaidMinor) as MoneyMinor;
   const openingCustodyMinor = toMoneyMinor(i.openingCashCustody || 0);
+  const adjustmentMinor = toMoneyMinor(i.postedAdjustments || 0);
   const adjCashBalanceMinor = (
     cashBalanceMinor - fuelCreditsMinor - cashWrittenOffMinor + openingCustodyMinor
   ) as MoneyMinor;
-  const grossSettlementMinor = (netPayoutMinor - adjCashBalanceMinor) as MoneyMinor;
+  const grossSettlementMinor = (netPayoutMinor - adjCashBalanceMinor + adjustmentMinor) as MoneyMinor;
 
   const grossPosMinor = Math.max(0, grossSettlementMinor) as MoneyMinor;
   const overpaidAmountMinor = Math.max(0, settlementPaidMinor - grossPosMinor) as MoneyMinor;

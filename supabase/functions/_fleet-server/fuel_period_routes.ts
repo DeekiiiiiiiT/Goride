@@ -17,10 +17,7 @@ import { buildFuelPeriodSnapshots } from "./fuel_period_build_snapshots.ts";
 import {
   fuelAutoCloseApproverId,
   fuelAutoCloseFinalizerId,
-  loadOrgPreferences,
-  resolveAutoCloseDualApprovalMode,
-  resolveDualApprovalUiMode,
-  secondApproverThresholdFromPrefs,
+  loadFuelDualApproval,
 } from "./fuel_org_preferences.ts";
 import { sealFuelWeek } from "./fuel_week_seal.ts";
 import { runFuelSpendShadow } from "./fuel_week_category_loader.ts";
@@ -589,7 +586,19 @@ async function processJobRow(job: Record<string, unknown>) {
 
     const threshold = Number(cursor.secondApproverThreshold) || 0;
     const totalSpend = Number(cursor.totalSpend) || Number(period.total_spend) || 0;
-    if (threshold > 0 && totalSpend > threshold) {
+    if (threshold > 0 && totalSpend > threshold && cursor.soleApprover === true) {
+      try {
+        await insertAudit(
+          orgId,
+          periodId,
+          "sole_approver_ack",
+          { totalSpend, secondApproverThreshold: threshold, note: "Only one approver." },
+          actor,
+        );
+      } catch (ackErr) {
+        console.warn("[fuel finalize] sole approver note failed", ackErr);
+      }
+    } else if (threshold > 0 && totalSpend > threshold) {
       const periodVersion = Number(period.version) || 1;
       const { data: approvals } = await sb
         .from("fuel_period_audit")
@@ -1544,36 +1553,14 @@ export function registerFuelPeriodRoutes(app: Hono) {
       const actor = actorId(c);
       // Program 4: UI service_only — record system second_approve before finalize if needed.
       // Bulk finalize with explicit ack may also request service second_approve (high-spend weeks).
-      const orgPrefs = await loadOrgPreferences(orgId);
-      const uiMode = resolveDualApprovalUiMode(orgPrefs.fuelDualApprovalUiMode);
-      const thr =
-        Number(body.secondApproverThreshold) ||
-        secondApproverThresholdFromPrefs(orgPrefs);
-      // H-6: only org pref service_only may stamp service second approve — never client flag.
-      const allowServiceSecondApprove = uiMode === "service_only";
-      const stampServiceSecondApproveIfNeeded = async (cursorSpend?: number) => {
-        const effectiveSpend = Math.max(
-          Number(body.totalSpend) || 0,
-          Number(period.total_spend) || 0,
-          Number(cursorSpend) || 0,
-        );
-        if (!allowServiceSecondApprove || !(thr > 0 && effectiveSpend > thr) || !actor) {
-          return;
-        }
-        const approver = fuelAutoCloseApproverId();
-        if (approver === actor) return;
-        await insertAudit(
-          orgId,
-          periodId,
-          "second_approve",
-          {
-            source: "ui_service_approve",
-            totalSpend: effectiveSpend,
-            secondApproverThreshold: thr,
-            periodVersion: Number(period.version) || 1,
-          },
-          approver,
-        );
+      const dual = await loadFuelDualApproval(orgId);
+      const thr = dual.threshold;
+      const serverSpend = Number(period.total_spend) || 0;
+      const { anotherApproverExists } = await import("./settlement_approval_settings.ts");
+      const soleApprover = !(await anotherApproverExists(orgId));
+      // A one-person company is not given a fake second approver.
+      const stampServiceSecondApproveIfNeeded = async (_cursorSpend?: number) => {
+        if (soleApprover || dual.uiMode !== "service_only") return;
       };
 
       const { data: existing } = await sb
@@ -1627,8 +1614,9 @@ export function registerFuelPeriodRoutes(app: Hono) {
             snapshots,
             completedDriverIds: [],
             failures: [],
-            totalSpend: body.totalSpend,
-            secondApproverThreshold: body.secondApproverThreshold ?? thr,
+            totalSpend: serverSpend,
+            secondApproverThreshold: thr,
+            soleApprover,
             step: "stage",
             snapshotVersion: body.snapshotVersion ?? null,
             forceReason: body.forceReason || null,
@@ -2801,11 +2789,11 @@ export function registerFuelPeriodRoutes(app: Hono) {
     // Prefs loaded per org inside the loop (org-scoped + general fallback).
 
     for (const orgId of orgIds) {
-      const orgPrefs = await loadOrgPreferences(orgId);
-      const secondApproverThreshold = secondApproverThresholdFromPrefs(orgPrefs);
-      const dualMode = resolveAutoCloseDualApprovalMode(
-        orgPrefs.fuelAutoCloseDualApprovalMode,
-      );
+      const dual = await loadFuelDualApproval(orgId);
+      const secondApproverThreshold = dual.threshold;
+      const dualMode = dual.autoCloseMode;
+      const { anotherApproverExists } = await import("./settlement_approval_settings.ts");
+      const soleApprover = !(await anotherApproverExists(orgId));
 
       const { data: rows } = await sb
         .from("fuel_reconciliation_period")
@@ -2916,7 +2904,7 @@ export function registerFuelPeriodRoutes(app: Hono) {
         const needsDual =
           secondApproverThreshold > 0 && totalSpend > secondApproverThreshold;
         let createdBy: string | null = null;
-        if (needsDual) {
+        if (needsDual && !soleApprover) {
           if (dualMode === "skip") {
             bumpSkip(orgId, periodId, "skip_needs_approval");
             continue;
@@ -2953,6 +2941,7 @@ export function registerFuelPeriodRoutes(app: Hono) {
               autoClose: true,
               totalSpend,
               secondApproverThreshold,
+              soleApprover,
             },
             progress_total: Math.max(snaps.length, 1),
             created_by: createdBy,

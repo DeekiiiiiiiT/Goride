@@ -12,7 +12,7 @@ export function MyVehiclesScreen() {
         <div className={"h-16 px-space-md flex items-center justify-between"}>
           <div className={"flex items-center gap-space-sm"}>
             <h1 className={"font-headline-md text-headline-md text-on-surface tracking-tight font-headline-md"}>
-              Garage My Vehicles
+              My Vehicles
             </h1>
           </div>
           <div className={"flex items-center gap-space-xs"}>

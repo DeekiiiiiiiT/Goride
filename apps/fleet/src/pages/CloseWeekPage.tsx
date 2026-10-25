@@ -156,6 +156,7 @@ export function CloseWeekPage({
   const [closing, setClosing] = useState(false);
   const [closeConfirmOpen, setCloseConfirmOpen] = useState(false);
   const [closeConfirmReason, setCloseConfirmReason] = useState('');
+  const [earlierWeekOverride, setEarlierWeekOverride] = useState('');
   /** C-3: stable per confirm-session; reused on retry / network replay. */
   const [closeIdempotencyKey, setCloseIdempotencyKey] = useState<string | null>(null);
   /** H-1: last successful preview/sync — Close skips prepare while fresh. */
@@ -600,7 +601,7 @@ export function CloseWeekPage({
 
   const doClose = async (
     reason: string,
-    opts?: { idempotencyKey?: string; skipPrepare?: boolean },
+    opts?: { idempotencyKey?: string; skipPrepare?: boolean; earlierWeekOverrideReason?: string },
   ) => {
     setClosing(true);
     setResult(null);
@@ -609,6 +610,7 @@ export function CloseWeekPage({
       const res = await weekCloseApi.close(weekKey, reason, {
         idempotencyKey: opts?.idempotencyKey,
         skipPrepare: opts?.skipPrepare === true,
+        earlierWeekOverrideReason: opts?.earlierWeekOverrideReason,
       });
       setResult(res);
       setCloseIdempotencyKey(null);
@@ -695,7 +697,11 @@ export function CloseWeekPage({
 
     setCloseConfirmOpen(false);
     setConfirmNeedsReconfirm(false);
-    await doClose(reason, { idempotencyKey: key, skipPrepare: true });
+    await doClose(reason, {
+      idempotencyKey: key,
+      skipPrepare: true,
+      earlierWeekOverrideReason: earlierWeekOverride.trim() || undefined,
+    });
   };
 
   const doRetryFreeze = async () => {
@@ -1631,6 +1637,17 @@ export function CloseWeekPage({
             </span>
           )}
         </div>
+        {(preview?.weekBlockers || []).some((b) => b.code === 'EARLIER_WEEK_OPEN') ? (
+          <label className="mb-3 block text-sm text-slate-700">
+            An earlier week is still open. To close this week anyway, write the reason.
+            <input
+              className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2"
+              value={earlierWeekOverride}
+              onChange={(e) => setEarlierWeekOverride(e.target.value)}
+              placeholder="Why this week is closing out of order"
+            />
+          </label>
+        ) : null}
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
           {weekAlreadyClosed ? (
             <Button

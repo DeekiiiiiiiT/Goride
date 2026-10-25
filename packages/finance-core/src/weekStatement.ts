@@ -13,7 +13,7 @@
 import { round2 } from './money.ts';
 import { buildCloseHash } from './closeHash.ts';
 
-export type WeekStatementKind = 'fuel' | 'toll' | 'earnings' | 'courier_earnings';
+export type WeekStatementKind = 'fuel' | 'toll' | 'earnings' | 'courier_earnings' | 'settlement';
 export type WeekStatementStatus = 'draft' | 'closed' | 'restated';
 
 /** Rideshare driver-week lanes required before settlement sign-off. */

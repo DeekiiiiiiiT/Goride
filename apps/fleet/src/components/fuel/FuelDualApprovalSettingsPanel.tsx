@@ -4,7 +4,9 @@
 import React, { useEffect, useState } from 'react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
-import { api } from '../../services/api';
+import { API_ENDPOINTS } from '../../services/apiConfig';
+import { fetchWithRetry } from '../../services/api';
+import { requireAuthHeaders } from '../../utils/authHeaders';
 import { toast } from 'sonner';
 import {
   FUEL_SECOND_APPROVER_THRESHOLD,
@@ -28,20 +30,17 @@ export function FuelDualApprovalSettingsPanel() {
     let cancelled = false;
     void (async () => {
       try {
-        const p = (await api.getPreferences().catch(() => ({}))) as Record<string, unknown>;
+        const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/fuel/dual-approval`, {
+          headers: await requireAuthHeaders(null),
+        });
+        const p = response.ok
+          ? ((await response.json()) as { threshold?: number; autoCloseMode?: string; uiMode?: string })
+          : {};
         if (cancelled) return;
         setPrefs(p || {});
-        setThreshold(
-          String(resolveFuelSecondApproverThreshold(p?.fuelSecondApproverThreshold as number)),
-        );
-        setAutoCloseMode(
-          resolveFuelAutoCloseDualApprovalMode(
-            p?.fuelAutoCloseDualApprovalMode as string | null,
-          ),
-        );
-        setUiMode(
-          resolveFuelDualApprovalUiMode(p?.fuelDualApprovalUiMode as string | null),
-        );
+        setThreshold(String(resolveFuelSecondApproverThreshold(p?.threshold as number)));
+        setAutoCloseMode(resolveFuelAutoCloseDualApprovalMode(p?.autoCloseMode));
+        setUiMode(resolveFuelDualApprovalUiMode(p?.uiMode));
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -58,13 +57,13 @@ export function FuelDualApprovalSettingsPanel() {
       if (!Number.isFinite(n) || n < 0) {
         throw new Error('Enter a non-negative amount (0 turns dual approval off)');
       }
-      const next = {
-        ...prefs,
-        fuelSecondApproverThreshold: n,
-        fuelAutoCloseDualApprovalMode: autoCloseMode,
-        fuelDualApprovalUiMode: uiMode,
-      };
-      await api.savePreferences(next);
+      const next = { threshold: n, autoCloseMode, uiMode };
+      const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/fuel/dual-approval`, {
+        method: 'POST',
+        headers: await requireAuthHeaders(),
+        body: JSON.stringify(next),
+      });
+      if (!response.ok) throw new Error('Could not save dual-approval settings');
       setPrefs(next);
       toast.success(
         n === 0
@@ -159,8 +158,8 @@ export function FuelDualApprovalSettingsPanel() {
                 onChange={() => setUiMode('service_only')}
               />
               <span>
-                <strong>System-only</strong> second approval on Finalize (you remain the finalizer;
-                SoD is system approver ≠ you).
+                <strong>You are the only approver. There is no second person.</strong> A week over
+                the limit still shows a warning. It does not invent a second approver.
               </span>
             </label>
           </fieldset>

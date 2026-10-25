@@ -43,7 +43,7 @@ test('eight Plug journeys in demo mode', async ({ page }) => {
   await page.getByRole('button', { name: /DEMO Total/ }).first().click();
   await wayOut(page);
   await press(page, /Directions/);
-  await page.getByRole('button', { name: /^Waze$/ }).click();
+  await page.getByRole('link', { name: /Waze/ }).click();
   await page.getByRole('button', { name: /Log Fuel Action/ }).click();
   await expect(page.getByRole('dialog', { name: 'Sign in' })).toBeVisible();
   await page.getByRole('textbox', { name: 'Phone' }).fill('5550199');
@@ -91,12 +91,12 @@ test('eight Plug journeys in demo mode', async ({ page }) => {
   await press(page, /confirm pin location/i);
   await press(page, /Snap station/);
   await press(page, /Submit for Review/);
-  await page.getByRole('link', { name: /View My Submitted Places/ }).click();
+  await page.getByRole('button', { name: /My Contributions/ }).click();
   await wayOut(page);
   await page.getByRole('button', { name: /Awaiting approval/ }).click();
   await expect(page).toHaveURL(/#\/pending/);
   await press(page, /Withdraw Pin/);
-  await page.getByRole('dialog').getByRole('button', { name: 'Confirm' }).click();
+  await page.getByRole('dialog').getByRole('button', { name: /Withdraw Pin/ }).click();
 
   await page.getByRole('button', { name: /^explore Explore$/ }).click();
   await wayOut(page);
@@ -130,4 +130,35 @@ test('eight Plug journeys in demo mode', async ({ page }) => {
   await page.getByRole('button', { name: /go back/i }).first().click();
   await press(page, /Sign Out/);
   await expect(page).toHaveURL(/#\/welcome/);
+});
+
+test('public screens stay free of demo text when demo is off', async ({ page }) => {
+  const station = {
+    id: 'st_live',
+    name: 'Total Half Way Tree',
+    brand: 'Total',
+    lat: 18.01,
+    lng: -76.79,
+    prices: { e10_87: 210 },
+  };
+  await page.route('**/platform-catalog/**', async (route) => {
+    const url = route.request().url();
+    if (url.includes('/stations')) await route.fulfill({ json: { stations: [station], station } });
+    else if (url.includes('/tolls')) await route.fulfill({ json: { plazas: [{ id: 'plaza-1', name: 'Portmore', highway: 'Highway 2000' }] } });
+    else if (url.includes('/geo/parishes')) await route.fulfill({ json: { areas: [{ pcode: 'JM-SA', name: 'St Andrew' }] } });
+    else if (url.includes('/parts')) await route.fulfill({ json: { parts: [], comingSoon: true } });
+    else await route.fulfill({ json: { vehicles: [], places: [] } });
+  });
+  await page.route('**/explorer/**', async (route) => {
+    await route.fulfill({ json: { vehicles: [], notifications: [], logs: [], pins: [], flags: {} } });
+  });
+  await page.goto('/#/explore');
+  await expect(page.getByText('DEMO')).toHaveCount(0);
+  await expect(page.getByText('2019 Toyota Roomy')).toHaveCount(0);
+  await expect(page.getByText('Total Half Way Tree').first()).toBeVisible();
+  await expect(page.getByText('demo-total')).toHaveCount(0);
+  await expect(page.getByText('demo-car')).toHaveCount(0);
+  await page.goto('/#/tolls');
+  await expect(page.getByText('DEMO')).toHaveCount(0);
+  await expect(page.getByText('demo-total')).toHaveCount(0);
 });

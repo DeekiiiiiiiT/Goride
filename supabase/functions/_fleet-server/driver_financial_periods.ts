@@ -44,7 +44,7 @@ import {
 } from "./settlement_period_select.ts";
 import { derivePeriodStatus } from "./period_projector.ts";
 import { persistPeriodRowWithVersion, updatePeriodCashWithVersion } from "./period_persist.ts";
-import { isPeriodFrozen } from "./settlement_period_freeze.ts";
+import { isPeriodFrozen, periodGateFromRow } from "./settlement_period_freeze.ts";
 import { getServiceClientWithSchema } from "./service_client.ts";
 import { isPlatformReimbursedPlazaToll } from "./toll_platform_reimbursed.ts";
 import {
@@ -1284,6 +1284,7 @@ export async function rebuildDriverFinancialPeriod(
     settlementPaid: settlementPaidRaw,
     tipsPaidToDriver: share.tipsPaidToDriver || 0,
     openingCashCustody,
+    postedAdjustments: round2(Number(priorFcForCustody.postedAdjustments) || 0),
   });
   // Pocket cash cannot go negative (DB cash_nonneg). Over-return vs collected
   // is fleet-owes on settlement_amount, not a negative held balance.
@@ -2309,10 +2310,7 @@ export async function rebuildPeriodsForAnchors(
   const frozenAnchors = new Set<string>();
   for (const r of existingRows || []) {
     if (
-      isPeriodFrozen({
-        metadata: (r.metadata as Record<string, unknown> | null) ?? null,
-        settlementStatus: (r.status as string | null) ?? null,
-      })
+      isPeriodFrozen(periodGateFromRow(r))
     ) {
       frozenAnchors.add(String(r.period_anchor || "").slice(0, 10));
     }
@@ -2410,6 +2408,7 @@ export async function syncPeriodCashFromTransactions(
     settlementPaid: settlementPaidRaw,
     tipsPaidToDriver,
     openingCashCustody: round2(Math.max(0, Number(fc.openingCashCustody) || 0)),
+    postedAdjustments: round2(Number(fc.postedAdjustments) || 0),
   });
 
   const fuelFinalized = !!existing.fuel_finalized;
@@ -2490,6 +2489,8 @@ export type CompanyOwesPeriodRow = {
   /** Calendar freeze from Close Week — Pay/Collect must be disabled. */
   periodFrozen?: boolean;
   moneyUnlocked?: boolean;
+  /** Set when this week's balance was moved onto the open week. */
+  balanceMovedTo?: string | null;
 };
 
 /** M-4: fail-closed org scope for every period list query. */
@@ -2622,7 +2623,7 @@ export async function listCompanyOwesPeriods(opts?: PeriodListQueryOpts): Promis
     console.error("[DriverFinancialPeriods] company_owes list:", error.message);
     throw new Error(error.message);
   }
-  return (data || []).map((r: any) => {
+  return (data || []).filter((r: any) => !offTheMoneyQueue(r)).map((r: any) => {
     const row = mapPeriodListRow(r);
     const oa = Number(r.metadata?.financeCore?.overpaidAmount);
     return {
@@ -2837,12 +2838,15 @@ function mapPeriodListRow(r: any): CompanyOwesPeriodRow {
     fuelFinalized: !!r.fuel_finalized,
     tripCount: Number(r.trip_count) || 0,
     cashSourceMismatch: Number.isFinite(mismatch) ? mismatch : 0,
-    periodFrozen: isPeriodFrozen({
-      metadata: meta,
-      settlementStatus: String(r.settlement_status || ""),
-    }),
+    periodFrozen: isPeriodFrozen(periodGateFromRow(r)),
     moneyUnlocked: fc.moneyUnlocked === true,
+    balanceMovedTo: fc.balanceMovedTo ? String(fc.balanceMovedTo).slice(0, 10) : null,
   };
+}
+
+function offTheMoneyQueue(r: { metadata?: { financeCore?: { legacyCleanup?: unknown; balanceMovedTo?: unknown } } }): boolean {
+  const fc = r.metadata?.financeCore;
+  return Boolean(fc?.legacyCleanup || fc?.balanceMovedTo);
 }
 
 /** Org-wide driver_owes queue — collect cash drivers still owe after finalize. */
@@ -2868,7 +2872,7 @@ export async function listDriverOwesPeriods(opts?: PeriodListQueryOpts): Promise
     console.error("[DriverFinancialPeriods] driver_owes list:", error.message);
     throw new Error(error.message);
   }
-  return (data || []).map((r: any) => {
+  return (data || []).filter((r: any) => !offTheMoneyQueue(r)).map((r: any) => {
     const row = mapPeriodListRow(r);
     const oa = Number(r.metadata?.financeCore?.overpaidAmount);
     return {

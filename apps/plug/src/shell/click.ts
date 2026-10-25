@@ -1,8 +1,10 @@
 import { reviewOdometerChange } from '../../../../packages/ui/src/odometer-scanner';
 import { googleDirections, plugSend, publicGet, wazeDirections } from '../api';
+import { demoOn } from '../demo/mode';
 import { demoStations } from '../demo/store';
 import { currentPath, fallbackFor, isFuel, pathNeedsAccount, tabFor } from '../nav';
 import { enqueue } from '../offline';
+import { deviceFix, lastOdometer, vehicleId as openVehicle } from './facts';
 
 export type PlugRuntime = {
   go: (path: string) => void;
@@ -54,10 +56,14 @@ export function screenFields(el: HTMLElement): Record<string, string | boolean> 
   return fields;
 }
 
-export function vehicleId(): string {
-  const match = currentPath().match(/^\/garage\/([^/]+)/);
-  if (match && !['add', 'added'].includes(match[1])) return match[1];
-  return sessionStorage.getItem('plug-vehicle') || 'demo-car';
+export function vehicleId(): string | null {
+  return openVehicle();
+}
+
+export function garagePath(suffix = ''): string {
+  const id = openVehicle();
+  if (!id) return '/garage';
+  return suffix ? `/garage/${id}/${suffix}` : `/garage/${id}`;
 }
 
 export function phoneFrom(raw: string): string {
@@ -69,22 +75,15 @@ export function phoneFrom(raw: string): string {
 
 export async function openDirections(stationId?: string) {
   const id = stationId || sessionStorage.getItem('plug-station') || '';
-  let station = demoStations().find((row) => row.id === id) || null;
+  let station: { id: string; lat: number; lng: number; name: string } | null = demoOn()
+    ? demoStations().find((row) => row.id === id) || null
+    : null;
   if (!station && id) {
     try {
       const body = await publicGet<{ station: { id: string; lat: number; lng: number; name: string } }>(`/stations/${id}`);
-      station = { ...demoStations()[0], ...body.station, brand: '', pcode: '', parish: '', prices: {}, price_updated_at: '', capabilities: [] };
+      station = body.station;
     } catch {
       station = null;
-    }
-  }
-  if (!station) {
-    try {
-      const body = await publicGet<{ stations: { id: string; lat: number; lng: number; name: string }[] }>('/stations');
-      const first = body.stations[0];
-      if (first) station = { ...demoStations()[0], ...first, brand: '', pcode: '', parish: '', prices: {}, price_updated_at: '', capabilities: [] };
-    } catch {
-      station = demoStations()[0];
     }
   }
   if (!station) return;
@@ -132,6 +131,11 @@ export async function saveFuel(el: HTMLElement) {
   const amount = Number(fields['amount-input'] || 0);
   const litres = Number(fields['litres-input'] || 0);
   const vehicle = vehicleId();
+  const fix = deviceFix();
+  if (!vehicle || !fix) {
+    rt.go('/fuel/error');
+    return;
+  }
   const payload = {
     vehicleId: vehicle,
     grade,
@@ -139,9 +143,9 @@ export async function saveFuel(el: HTMLElement) {
     litres,
     odometer,
     stationId: sessionStorage.getItem('plug-station'),
-    lat: Number(sessionStorage.getItem('plug-station-lat') || 18.0128),
-    lng: Number(sessionStorage.getItem('plug-station-lng') || -76.7967),
-    accuracyM: Number(sessionStorage.getItem('plug-accuracy') || 12),
+    lat: fix.lat,
+    lng: fix.lng,
+    accuracyM: fix.accuracyM,
     confirmed: true,
   };
   if (!navigator.onLine) {
@@ -161,7 +165,7 @@ export async function saveFuel(el: HTMLElement) {
 }
 
 export function odometerWarning(reading: number): string | null {
-  const last = Number(sessionStorage.getItem('plug-last-odo') || 84210);
+  const last = lastOdometer();
   const issue = reviewOdometerChange(last, reading);
   if (issue === 'drop') return 'That reading is lower than the last one. Confirm to continue.';
   if (issue === 'jump') return 'That reading jumped more than 1,500 km. Confirm to continue.';

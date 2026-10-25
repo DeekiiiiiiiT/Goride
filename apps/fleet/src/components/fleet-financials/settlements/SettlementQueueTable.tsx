@@ -48,7 +48,7 @@ function periodFrozenBlocked(r: Pick<SettlementQueueRow, 'periodFrozen'>): boole
   return r.periodFrozen === true;
 }
 
-const FROZEN_TITLE = 'Week closed — reopen on Close Week to change money';
+const FROZEN_TITLE = 'This week is closed.';
 const SEAL_BROKEN_TITLE =
   'Seal broken — close hash no longer matches; reopen on Close Week before Log Cash / Pay';
 

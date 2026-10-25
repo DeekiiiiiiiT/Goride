@@ -215,6 +215,8 @@ export interface FuelScenario {
   rules: FuelRule[];
   isDefault?: boolean;
   versions?: FuelScenarioVersion[];
+  /** Kept for history. Hidden from the rules list. Weeks already charged still use it. */
+  archived?: boolean;
   /** Line override (§4.5). null/undefined = org default. */
   serviceLine?: 'rideshare' | 'rush_delivery' | null;
   overridesOfId?: string;

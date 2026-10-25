@@ -3,7 +3,7 @@
  * Distances are saved first. This function does not close tank cycles or lock the week.
  */
 import * as kv from "./kv_store.tsx";
-import { filterRecordsByOrganizationId } from "./org_scope.ts";
+import { filterFuelScenariosForOrg } from "./fuel_scenario_scope.ts";
 import { getServiceClient } from "./service_client.ts";
 import { queryFleet } from "./repos/baseRepo.ts";
 import { loadWeekFuelEntries } from "./fuel_period_build_snapshots.ts";
@@ -336,7 +336,7 @@ export async function prepareFuelWeekReports(args: {
       kv.getByPrefix("fuel_scenario:"),
       loadOrgPreferences(orgId),
     ]);
-    const scenarios = filterRecordsByOrganizationId(
+    const scenarios = filterFuelScenariosForOrg(
       ((scenariosRaw || []) as Record<string, unknown>[]),
       orgId,
     );

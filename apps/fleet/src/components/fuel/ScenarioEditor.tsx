@@ -31,7 +31,6 @@ export function validateFuelRule(rule: FuelRule): string | null {
             ['Company Ops', rule.companyUsageCoverage],
             ['Deadhead', rule.deadheadCoverage],
             ['Personal Usage', rule.personalCoverage],
-            ['Misc / Leakage', rule.miscCoverage],
             ['Commute', rule.commuteCoverage],
         ];
         for (const [label, value] of granular) {
@@ -237,8 +236,8 @@ export function ScenarioEditor({
                                 </Select>
                                 <p className="text-xs text-slate-500">
                                     {fuelRule.coverageType === 'Percentage' && 'Company covers %; Driver pays = 100 − Company.'}
-                                    {fuelRule.coverageType === 'Full' && 'Ride Share, Company Ops, Deadhead, and Misc are fully company. Personal is always paid by the driver.'}
-                                    {fuelRule.coverageType === 'Fixed_Amount' && 'One weekly allowance covers Ride Share + Misc. Company Ops and Deadhead are fully company; Personal is fully driver.'}
+                                    {fuelRule.coverageType === 'Full' && 'Ride Share, Company Ops, and Deadhead are fully company. Miscellaneous fuel always belongs to the company. Personal is always paid by the driver.'}
+                                    {fuelRule.coverageType === 'Fixed_Amount' && 'One weekly allowance covers Ride Share. Miscellaneous fuel always belongs to the company. Company Ops and Deadhead are fully company; Personal is fully driver.'}
                                 </p>
                             </div>
 
@@ -256,7 +255,7 @@ export function ScenarioEditor({
 
                             {fuelRule.coverageType === 'Full' && (
                                 <div className="rounded-md border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600 space-y-1">
-                                    <p><span className="font-medium text-indigo-700">Company 100%:</span> Ride Share, Company Ops, Deadhead, Misc</p>
+                                    <p><span className="font-medium text-indigo-700">Company 100%:</span> Ride Share, Company Ops, Deadhead. Miscellaneous fuel always belongs to the company.</p>
                                     <p><span className="font-medium text-rose-600">Driver 100%:</span> Personal</p>
                                 </div>
                             )}

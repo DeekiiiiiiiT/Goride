@@ -110,6 +110,15 @@ export function PlugShell({ children }: { children: ReactNode }) {
   }, [auth.signedIn]);
 
   useEffect(() => {
+    if (demoOn() || !navigator.geolocation) return;
+    navigator.geolocation.getCurrentPosition((pos) => {
+      sessionStorage.setItem('plug-lat', String(pos.coords.latitude));
+      sessionStorage.setItem('plug-lng', String(pos.coords.longitude));
+      sessionStorage.setItem('plug-accuracy', String(pos.coords.accuracy));
+    }, () => sessionStorage.setItem('plug-accuracy', '999'), { enableHighAccuracy: true });
+  }, []);
+
+  useEffect(() => {
     if (path !== '/') return;
     if (!auth.ready) return;
     const timer = window.setTimeout(() => navigate(auth.signedIn ? '/explore' : '/welcome'), 1500);
@@ -145,8 +154,11 @@ function OfflineBanner({ waiting, onOpen }: { waiting: number; onOpen: () => voi
   const offline = typeof navigator !== 'undefined' && !navigator.onLine;
   if (!offline && waiting === 0) return null;
   return (
-    <button type="button" onClick={onOpen} className="sticky top-0 z-[60] w-full bg-inverse-surface px-4 py-2 text-left text-sm text-inverse-on-surface">
-      {offline ? 'You are offline.' : `${waiting} item${waiting === 1 ? '' : 's'} waiting to send.`} Tap to see them.
+    <button type="button" onClick={onOpen} className="sticky top-0 z-[60] mx-auto flex w-fit items-center gap-1 rounded-full bg-tertiary-fixed px-2.5 py-1 text-on-tertiary-fixed shadow-sm">
+      <span className="material-symbols-outlined text-[13px]">sync</span>
+      <span className="text-[10px] font-bold tracking-tight">
+        {offline ? 'Offline' : `${waiting} log${waiting === 1 ? '' : 's'} waiting`}
+      </span>
     </button>
   );
 }

@@ -12,6 +12,7 @@ import { fromKvStore } from "./fleet_sql_bridge.ts";
 import { fleetSelect } from "./fleet_select.ts";
 import { countBy, listByBatch, queryFleet, fleetDb, fleetTable, rowToKvValue } from "./repos/baseRepo.ts";
 import OpenAI from "npm:openai";
+import { dataUrlFromFile, odometerVisionBody, parseOdometerVision } from "../_shared/odometerVision.ts";
 import { GoogleGenerativeAI } from "npm:@google/generative-ai";
 import * as kv from "./kv_store.tsx";
 import { stampDriverHomePin } from "./fuel_shift_km.ts";
@@ -4224,40 +4225,14 @@ export function registerResidualMonolithRoutes(app: Hono) {
 
       const openai = new OpenAI({ apiKey });
 
-      const arrayBuffer = await file.arrayBuffer();
-      const base64Data = Buffer.from(arrayBuffer).toString('base64');
-      const dataUrl = `data:${file.type};base64,${base64Data}`;
-
-      const prompt = `
-        You are an AI assistant for a vehicle fleet.
-        Analyze this image of a vehicle dashboard to find the Odometer reading.
-        Return a valid JSON object with these fields:
-        - reading (number | null): The odometer value (e.g. 15043). Do not include decimals unless it is clearly part of the main odometer. Ignore trip meters (which are usually smaller or resetable).
-        - unit (string): "km" or "mi" if visible, otherwise default to "km"
-        - confidence (string): "high", "medium", or "low"
-
-        If you cannot clearly see an odometer, set reading to null.
-        Output only valid JSON.
-      `;
+      const dataUrl = await dataUrlFromFile(file);
 
       const response = await trackedProviderCall({
           provider: "openai",
           service: "vision",
           route: "/make-server-37f42386/scan-odometer",
           model: "gpt-4o",
-          run: () => openai.chat.completions.create({
-              model: "gpt-4o",
-              messages: [
-                  {
-                      role: "user",
-                      content: [
-                          { type: "text", text: prompt },
-                          { type: "image_url", image_url: { url: dataUrl } }
-                      ]
-                  }
-              ],
-              response_format: { type: "json_object" }
-          }),
+          run: () => openai.chat.completions.create(odometerVisionBody(dataUrl)),
           extractUsage: (r: any) => ({
               inputTokens: r?.usage?.prompt_tokens,
               outputTokens: r?.usage?.completion_tokens,
@@ -4266,7 +4241,7 @@ export function registerResidualMonolithRoutes(app: Hono) {
       });
 
       const text = response.choices[0].message.content || "{}";
-      const data = JSON.parse(text);
+      const data = parseOdometerVision(text);
 
       return c.json({ success: true, data });
 

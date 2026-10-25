@@ -4,8 +4,9 @@ import { demoOn, setDemo } from '../demo/mode';
 import { demoStations } from '../demo/store';
 import type { PlugTab } from '../nav';
 import { readQueue } from '../offline';
-import { getPlugRuntime, launchDirections } from './click';
+import { getPlugRuntime } from './click';
 import { onPlugClick } from './actions';
+import { DirectionsScreen } from '../screens/generated/DirectionsScreen';
 import { FiltersScreen } from '../screens/generated/FiltersScreen';
 
 const TAB_ICON: Record<PlugTab, string> = {
@@ -92,7 +93,7 @@ export function PlugChrome({
       {signReturn ? <SignInSheet returnTo={signReturn} onClose={onCloseSign} onDone={onSignedIn} /> : null}
       {sheet ? (
         <div className="fixed inset-0 z-[75] flex items-end justify-center bg-on-surface/40" onClick={onCloseSheet}>
-          <div className="max-h-[85dvh] w-full max-w-[430px] overflow-auto rounded-t-3xl bg-surface p-4" onClick={(event) => event.stopPropagation()}>
+          <div className="max-h-[85dvh] w-full max-w-[430px] overflow-auto rounded-t-3xl bg-surface" data-plug-sheet={sheet} onClick={(event) => event.stopPropagation()}>
             <SheetBody name={sheet} onClose={onCloseSheet} />
           </div>
         </div>
@@ -146,15 +147,7 @@ function SignInSheet({ returnTo, onClose, onDone }: { returnTo: string; onClose:
 }
 
 function SheetBody({ name, onClose }: { name: string; onClose: () => void }) {
-  if (name === 'directions') {
-    return (
-      <div>
-        <h2 className="font-headline-sm text-headline-sm">Directions</h2>
-        <button type="button" className="mt-3 min-h-12 w-full rounded-xl bg-primary font-bold text-on-primary" onClick={() => launchDirections('google')}>Google Maps</button>
-        <button type="button" className="mt-2 min-h-12 w-full rounded-xl bg-surface-container-high" onClick={() => launchDirections('waze')}>Waze</button>
-      </div>
-    );
-  }
+  if (name === 'directions') return <DirectionsScreen />;
   if (name === 'stations') return <StationPicker onClose={onClose} />;
   if (name === 'queue') {
     const jobs = readQueue();
@@ -181,7 +174,7 @@ function SheetBody({ name, onClose }: { name: string; onClose: () => void }) {
 }
 
 function StationPicker({ onClose }: { onClose: () => void }) {
-  const [rows, setRows] = useState(demoStations());
+  const [rows, setRows] = useState(() => (demoOn() ? demoStations() : []));
   useEffect(() => {
     void publicGet<{ stations: typeof rows }>('/stations').then((body) => setRows(body.stations as typeof rows)).catch(() => undefined);
   }, []);

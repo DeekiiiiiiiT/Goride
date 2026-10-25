@@ -3,6 +3,8 @@ import { cors } from "npm:hono@4.3.11/cors";
 import { createClient, type SupabaseClient, type User } from "npm:@supabase/supabase-js@2";
 import { assessFillPlausibility } from "../../../packages/fuel-core/src/fillPlausibility.ts";
 import { findMatchingStationSmart, type StationProfile } from "../../../packages/location/src/stationMatch.ts";
+import OpenAI from "npm:openai";
+import { dataUrlFromFile, odometerVisionBody, parseOdometerVision } from "../_shared/odometerVision.ts";
 import {
   contributorLevel,
   decidePlugStation,
@@ -161,6 +163,23 @@ async function hitLimit(sb: SupabaseClient, userId: string, action: string, max:
 }
 
 app.get("/health", (c) => c.json({ service: "explorer", status: "ok" }));
+
+app.post("/odometer-scan", async (c) => {
+  try {
+    await requireExplorer(c);
+    const body = await c.req.parseBody();
+    const file = body.file;
+    if (!(file instanceof File)) return c.json({ error: "File upload required" }, 400);
+    const apiKey = Deno.env.get("OPENAI_API_KEY");
+    if (!apiKey) return c.json({ error: "Odometer reading is not available right now" }, 503);
+    const openai = new OpenAI({ apiKey });
+    const dataUrl = await dataUrlFromFile(file);
+    const response = await openai.chat.completions.create(odometerVisionBody(dataUrl));
+    return c.json(parseOdometerVision(response.choices[0]?.message?.content || "{}"));
+  } catch (err) {
+    return c.json({ error: err instanceof Error ? err.message : "Could not read the odometer" }, 400);
+  }
+});
 
 app.get("/flags", async (c) => {
   try {

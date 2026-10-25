@@ -134,6 +134,11 @@ function EarningsWeekCard({
             Tips held by fleet (quota missed): ${plainAmount(week.tipsWithheld)}
           </p>
         ) : null}
+        {(week.notes || []).map((note) => (
+          <p key={note} className="text-xs text-slate-600 dark:text-slate-300">
+            {note}
+          </p>
+        ))}
       </CardContent>
     </Card>
   );

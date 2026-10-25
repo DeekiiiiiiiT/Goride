@@ -27,12 +27,15 @@ export function OdometerScanner({
   onCancel,
   scanPhoto,
   isFleetDriver = true,
+  embedded = false,
 }: {
   lastOdometer?: number;
   onScanComplete: (result: ScanResult) => void;
   onCancel: () => void;
   scanPhoto?: ScanPhoto;
   isFleetDriver?: boolean;
+  /** Plug keeps the camera frame and only borrows this scanner. */
+  embedded?: boolean;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [reading, setReading] = useState('');
@@ -58,8 +61,20 @@ export function OdometerScanner({
     setError(null);
     void scanPhoto(file, controller.signal)
       .then((result) => {
-        if (result.reading != null) setReading(String(result.reading));
-        else setError('Could not read the odometer. Type it instead.');
+        if (result.reading != null) {
+          setReading(String(result.reading));
+          const issue = reviewOdometerChange(lastOdometer, result.reading);
+          if (embedded && issue === 'ok') {
+            onScanComplete({
+              reading: result.reading,
+              photo: file,
+              method: 'ai_verified',
+              confidence: result.confidence,
+            });
+          } else if (embedded) {
+            setError(issue === 'drop' ? 'That reading is lower than the last one. Type it to confirm.' : 'That reading jumped more than 1,500 km. Type it to confirm.');
+          }
+        } else setError('Could not read the odometer. Type it instead.');
       })
       .catch(() => setError('Could not read the odometer. Type it instead.'))
       .finally(() => setBusy(false));
@@ -82,6 +97,19 @@ export function OdometerScanner({
       manualReason: needsConfirm ? (dropped ? 'reading dropped' : 'jump over 1500 km') : undefined,
     });
   };
+
+  if (embedded) {
+    return (
+      <div id="plug-odometer-scanner">
+        <input id="plug-odo-file" ref={inputRef} type="file" accept="image/*" capture="environment" className="sr-only" onChange={(event) => {
+          const file = event.target.files?.[0];
+          if (file) onFile(file);
+        }} />
+        {busy ? <p role="status" className="px-4 text-sm">Reading the photo…</p> : null}
+        {error ? <p role="alert" className="px-4 text-sm">{error}</p> : null}
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-3">

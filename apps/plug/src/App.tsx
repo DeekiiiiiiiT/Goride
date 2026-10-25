@@ -6,12 +6,16 @@ import { readQueue, removeJob } from './offline';
 import { PlugShell } from './shell/provider';
 import { ExploreGate, GarageGate, InboxGate, PartsGate, SavedGate } from './screens/gates';
 import { AccountScreen } from './screens/generated/AccountScreen';
+import { ApprovedScreen } from './screens/generated/ApprovedScreen';
 import { AddVehicleMakeScreen } from './screens/generated/AddVehicleMakeScreen';
 import { ChooseTypeScreen } from './screens/generated/ChooseTypeScreen';
 import { ConfirmOdometerScreen } from './screens/generated/ConfirmOdometerScreen';
 import { ContributionsScreen } from './screens/generated/ContributionsScreen';
 import { DocumentReminderScreen } from './screens/generated/DocumentReminderScreen';
+import { DirectionsScreen } from './screens/generated/DirectionsScreen';
 import { DocumentsScreen } from './screens/generated/DocumentsScreen';
+import { EmptySearchScreen } from './screens/generated/EmptySearchScreen';
+import { GuestModeScreen } from './screens/generated/GuestModeScreen';
 import { FacilityScreen } from './screens/generated/FacilityScreen';
 import { FuelDetailsScreen } from './screens/generated/FuelDetailsScreen';
 import { FuelSpendScreen } from './screens/generated/FuelSpendScreen';
@@ -31,7 +35,11 @@ import { OtpScreen } from './screens/generated/OtpScreen';
 import { PartDetailScreen } from './screens/generated/PartDetailScreen';
 import { PartsResultsScreen } from './screens/generated/PartsResultsScreen';
 import { PartsStoreScreen } from './screens/generated/PartsStoreScreen';
+import { OfflineChipScreen } from './screens/generated/OfflineChipScreen';
 import { PendingPlaceScreen } from './screens/generated/PendingPlaceScreen';
+import { PoorGpsScreen } from './screens/generated/PoorGpsScreen';
+import { RemoveVehicleScreen } from './screens/generated/RemoveVehicleScreen';
+import { SaveErrorScreen } from './screens/generated/SaveErrorScreen';
 import { PermissionsScreen } from './screens/generated/PermissionsScreen';
 import { PlaceDetailsScreen } from './screens/generated/PlaceDetailsScreen';
 import { PlacePinScreen } from './screens/generated/PlacePinScreen';
@@ -48,9 +56,11 @@ import { StartingOdometerScreen } from './screens/generated/StartingOdometerScre
 import { StationDetailScreen } from './screens/generated/StationDetailScreen';
 import { StationListScreen } from './screens/generated/StationListScreen';
 import { SubmittedScreen } from './screens/generated/SubmittedScreen';
+import { SubmittedToastScreen } from './screens/generated/SubmittedToastScreen';
 import { TollsScreen } from './screens/generated/TollsScreen';
 import { VehicleAddedScreen } from './screens/generated/VehicleAddedScreen';
 import { VehicleNotFoundScreen } from './screens/generated/VehicleNotFoundScreen';
+import { WithdrawScreen } from './screens/generated/WithdrawScreen';
 import { VehicleOverviewScreen } from './screens/generated/VehicleOverviewScreen';
 import { WelcomeScreen } from './screens/generated/WelcomeScreen';
 
@@ -87,29 +97,29 @@ export default function App() {
             <Route path="/login" element={<LoginScreen />} />
             <Route path="/explore/loading" element={<Navigate to="/explore" replace />} />
             <Route path="/explore/empty" element={<Navigate to="/explore" replace />} />
-            <Route path="/explore/offline" element={<Navigate to="/explore" replace />} />
-            <Route path="/explore/guest" element={<Navigate to="/explore" replace />} />
+            <Route path="/explore/offline" element={<OfflineChipScreen />} />
+            <Route path="/explore/guest" element={<GuestModeScreen />} />
             <Route path="/explore" element={<ExploreGate />} />
             <Route path="/explore/list" element={<StationListScreen />} />
             <Route path="/filters" element={<Navigate to="/explore" replace />} />
-            <Route path="/stations/:id/directions" element={<StationDetailScreen />} />
+            <Route path="/stations/:id/directions" element={<DirectionsScreen />} />
             <Route path="/stations/:id" element={<StationDetailScreen />} />
             <Route path="/places/mechanic" element={<MechanicScreen />} />
             <Route path="/places/facility" element={<FacilityScreen />} />
             <Route path="/places/:id" element={<PartsStoreScreen />} />
             <Route path="/pending" element={<PendingPlaceScreen />} />
             <Route path="/tolls" element={<TollsScreen />} />
-            <Route path="/search/empty" element={<Navigate to="/search" replace />} />
+            <Route path="/search/empty" element={<EmptySearchScreen />} />
             <Route path="/search" element={<SearchScreen />} />
             <Route path="/fuel" element={<OdometerScanScreen />} />
             <Route path="/fuel/confirm" element={<ConfirmOdometerScreen />} />
             <Route path="/fuel/details" element={<FuelDetailsScreen />} />
             <Route path="/fuel/saved" element={<SavedGate />} />
             <Route path="/fuel/first" element={<Navigate to="/fuel/saved" replace />} />
-            <Route path="/fuel/error" element={<Navigate to="/fuel/details" replace />} />
+            <Route path="/fuel/error" element={<SaveErrorScreen />} />
             <Route path="/fuel/offline" element={<SavedOfflineScreen />} />
             <Route path="/garage/empty" element={<Navigate to="/garage" replace />} />
-            <Route path="/garage/remove" element={<Navigate to="/garage" replace />} />
+            <Route path="/garage/:id/remove" element={<RemoveVehicleScreen />} />
             <Route path="/garage" element={<GarageGate />} />
             <Route path="/garage/add" element={<AddVehicleMakeScreen />} />
             <Route path="/garage/add/model" element={<ModelYearScreen />} />
@@ -129,13 +139,13 @@ export default function App() {
             <Route path="/parts/soon" element={<Navigate to="/parts" replace />} />
             <Route path="/parts/:partId" element={<PartDetailScreen />} />
             <Route path="/map" element={<ChooseTypeScreen />} />
-            <Route path="/map/pin/poor" element={<Navigate to="/map/pin" replace />} />
+            <Route path="/map/pin/poor" element={<PoorGpsScreen />} />
             <Route path="/map/pin" element={<PlacePinScreen />} />
-            <Route path="/map/withdraw" element={<Navigate to="/pending" replace />} />
+            <Route path="/map/withdraw" element={<WithdrawScreen />} />
             <Route path="/map/details" element={<PlaceDetailsScreen />} />
             <Route path="/map/submitted" element={<SubmittedScreen />} />
-            <Route path="/map/submitted-toast" element={<Navigate to="/map/submitted" replace />} />
-            <Route path="/contributions/approved" element={<Navigate to="/contributions" replace />} />
+            <Route path="/map/submitted-toast" element={<SubmittedToastScreen />} />
+            <Route path="/contributions/approved" element={<ApprovedScreen />} />
             <Route path="/contributions" element={<ContributionsScreen />} />
             <Route path="/parish" element={<HelpMapParishScreen />} />
             <Route path="/inbox/empty" element={<Navigate to="/inbox" replace />} />
@@ -146,7 +156,7 @@ export default function App() {
             <Route path="/settings" element={<SettingsScreen />} />
             <Route path="/help" element={<HelpScreen />} />
             <Route path="/gps" element={<GpsIssueScreen />} />
-            <Route path="/offline" element={<Navigate to="/explore" replace />} />
+            <Route path="/offline" element={<OfflineChipScreen />} />
             <Route path="/admin" element={<Navigate to="/explore" replace />} />
             <Route path="*" element={<Navigate to="/explore" replace />} />
           </Routes>

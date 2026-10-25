@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { plugSend, publicGet } from '../api';
+import { catalogVariant } from '../shell/facts';
 import { EmptyGarageScreen } from './generated/EmptyGarageScreen';
 import { EmptyInboxScreen } from './generated/EmptyInboxScreen';
 import { EmptyMapScreen } from './generated/EmptyMapScreen';
@@ -9,16 +10,29 @@ import { HomeExploreScreen } from './generated/HomeExploreScreen';
 import { MyVehiclesScreen } from './generated/MyVehiclesScreen';
 import { NotificationsScreen } from './generated/NotificationsScreen';
 import { PartsCategoriesScreen } from './generated/PartsCategoriesScreen';
+import { OfflineChipScreen } from './generated/OfflineChipScreen';
 import { PartsComingSoonScreen } from './generated/PartsComingSoonScreen';
 import { SavedScreen } from './generated/SavedScreen';
 
 export function ExploreGate() {
+  const [offline, setOffline] = useState(() => typeof navigator !== 'undefined' && !navigator.onLine);
   const [mode, setMode] = useState<'loading' | 'empty' | 'ready'>('loading');
+  useEffect(() => {
+    const on = () => setOffline(false);
+    const off = () => setOffline(true);
+    window.addEventListener('online', on);
+    window.addEventListener('offline', off);
+    return () => {
+      window.removeEventListener('online', on);
+      window.removeEventListener('offline', off);
+    };
+  }, []);
   useEffect(() => {
     void publicGet<{ stations: unknown[] }>('/stations')
       .then((body) => setMode(body.stations?.length ? 'ready' : 'empty'))
       .catch(() => setMode('empty'));
   }, []);
+  if (offline) return <OfflineChipScreen />;
   if (mode === 'loading') return <ExploreLoadingScreen />;
   if (mode === 'empty') return <EmptyMapScreen />;
   return <HomeExploreScreen />;
@@ -56,8 +70,12 @@ export function SavedGate() {
 export function PartsGate() {
   const [soon, setSoon] = useState<boolean | null>(null);
   useEffect(() => {
-    const variant = 'demo-variant';
-    void publicGet<{ comingSoon?: boolean; parts?: unknown[] }>(`/parts?variant=${variant}`)
+    const variant = catalogVariant();
+    if (!variant) {
+      setSoon(true);
+      return;
+    }
+    void publicGet<{ comingSoon?: boolean; parts?: unknown[] }>(`/parts?variant=${encodeURIComponent(variant)}`)
       .then((body) => setSoon(Boolean(body.comingSoon) || (body.parts || []).length === 0))
       .catch(() => setSoon(true));
   }, []);

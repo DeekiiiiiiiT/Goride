@@ -196,6 +196,8 @@ function numField(r: Record<string, unknown>, ...keys: string[]): number {
 
 function legacyPeriodFrozen(r: Record<string, unknown>): boolean {
   if (r.periodFrozen === true || r.period_frozen === true) return true;
+  if (String(r.status || '').toLowerCase() === 'closed') return true;
+  if (r.closed_at || r.closedAt) return true;
   const meta = (r.metadata || {}) as Record<string, unknown>;
   if (meta.periodFrozen === true || meta.signedWeek === true) return true;
   const fc = (meta.financeCore || {}) as Record<string, unknown>;
@@ -355,6 +357,18 @@ async function getQueueLegacy(params: SettlementQueueParams): Promise<Settlement
 }
 
 export const settlementCommandsApi = {
+  async legacyWeeks(body: {
+    confirm?: boolean;
+    driverId?: string;
+    choices?: Array<{ week: string; action: 'carry' | 'write_off'; reason?: string }>;
+  }) {
+    return postJson<{
+      weeks: Array<{ week: string; driverId: string; amount: number; closed: boolean }>;
+      net: number;
+      posted?: boolean;
+    }>('/legacy-weeks', body, 'Could not load older weeks');
+  },
+
   async collect(body: SettlementCollectBody) {
     return postJson('/collect', body, 'Collect failed');
   },

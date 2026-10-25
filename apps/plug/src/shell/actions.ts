@@ -2,10 +2,13 @@ import type { MouseEvent as ReactMouseEvent } from 'react';
 import { plugSend, publicGet } from '../api';
 import { demoOn, setDemo } from '../demo/mode';
 import { readDb } from '../demo/store';
-import { currentPath, fallbackFor } from '../nav';
+import { currentPath } from '../nav';
 import { readQueue } from '../offline';
+import { kindFor } from './act-kind';
+import { pinFix } from './facts';
 import {
   controlLabel,
+  garagePath,
   getPlugRuntime,
   goPath,
   gradeKey,
@@ -42,6 +45,14 @@ export function onPlugClick(event: ReactMouseEvent<HTMLElement>) {
 
 export async function handlePlugClick(el: HTMLElement) {
   const rt = getPlugRuntime();
+  const act = el.dataset.act || '';
+  const screen = el.closest('[data-plug-screen]')?.getAttribute('data-plug-screen') || '';
+  if (el.closest('[data-plug-sheet]') && (act === 'arrow-back' || act === 'close' || act === 'cancel')) {
+    rt.closeSheet();
+    return;
+  }
+  const kind = act ? kindFor(act, screen) : '';
+  if (act && !kind && !el.dataset.path && !el.dataset.theme && !el.dataset.make && !el.dataset.stationId) return;
   const label = controlLabel(el);
   const blob = text(el).toLowerCase();
   const icon = iconName(el);
@@ -85,7 +96,7 @@ export async function handlePlugClick(el: HTMLElement) {
     return;
   }
   if (el.dataset.act === 'my-car') {
-    goPath(`/garage/${vehicleId()}`);
+    goPath(garagePath());
     return;
   }
   if (el.dataset.act === 'create-account') {
@@ -222,7 +233,13 @@ export async function handlePlugClick(el: HTMLElement) {
     const fields = screenFields(el);
     const typed = String(fields['make-search-input'] || '');
     if (typed) sessionStorage.setItem('plug-make', typed);
-    if (!sessionStorage.getItem('plug-make')) sessionStorage.setItem('plug-make', 'Toyota');
+    if (!sessionStorage.getItem('plug-make')) {
+      if (!demoOn()) {
+        rt.toast('Choose a make');
+        return;
+      }
+      sessionStorage.setItem('plug-make', 'Toyota');
+    }
     rt.go('/garage/add/model');
     return;
   }
@@ -236,9 +253,19 @@ export async function handlePlugClick(el: HTMLElement) {
   if (path === '/garage/add/model' && /can't find|cannot find/i.test(blob)) return rt.go('/garage/add/missing');
   if (path === '/garage/add/model' && /continue|next|save/i.test(blob)) {
     const fields = screenFields(el);
-    const model = String(fields['model-input'] || fields.model || sessionStorage.getItem('plug-model') || 'Roomy');
+    const model = String(fields['model-input'] || fields.model || sessionStorage.getItem('plug-model') || (demoOn() ? 'Roomy' : ''));
+    if (!model) {
+      rt.toast('Choose a model');
+      return;
+    }
     sessionStorage.setItem('plug-model', model);
-    if (!sessionStorage.getItem('plug-year')) sessionStorage.setItem('plug-year', '2019');
+    if (!sessionStorage.getItem('plug-year')) {
+      if (!demoOn()) {
+        rt.toast('Choose a year');
+        return;
+      }
+      sessionStorage.setItem('plug-year', '2019');
+    }
     rt.go('/garage/add/odometer');
     return;
   }
@@ -256,9 +283,13 @@ export async function handlePlugClick(el: HTMLElement) {
       rt.toast(warning);
       return;
     }
-    const make = sessionStorage.getItem('plug-make') || 'Toyota';
-    const model = sessionStorage.getItem('plug-model') || 'Roomy';
-    const year = sessionStorage.getItem('plug-year') || '2019';
+    const make = sessionStorage.getItem('plug-make') || (demoOn() ? 'Toyota' : '');
+    const model = sessionStorage.getItem('plug-model') || (demoOn() ? 'Roomy' : '');
+    const year = sessionStorage.getItem('plug-year') || (demoOn() ? '2019' : '');
+    if (!make || !model || !year) {
+      rt.toast('Choose the make, model, and year');
+      return;
+    }
     let catalogVariantId = sessionStorage.getItem('plug-catalog');
     if (!demoOn() && !catalogVariantId) {
       try {
@@ -331,7 +362,7 @@ export async function handlePlugClick(el: HTMLElement) {
     return;
   }
   if ((path === '/fuel/saved' || path === '/fuel/offline') && /see my car|fuel history|my car|garage/i.test(blob)) {
-    rt.go(`/garage/${vehicleId()}`);
+    rt.go(garagePath());
     return;
   }
   if ((path === '/fuel/saved' || path === '/fuel/offline') && /done/i.test(label)) {
@@ -379,10 +410,11 @@ export async function handlePlugClick(el: HTMLElement) {
     sessionStorage.setItem('plug-place-prefill', sessionStorage.getItem('plug-station') || '');
     return goPath('/map');
   }
-  if (/my car|garage/i.test(label) && path === '/explore') return goPath(`/garage/${vehicleId()}`);
+  if (/my car|garage/i.test(label) && path === '/explore') return goPath(garagePath());
 
-  if (path === '/search' && /total|station|fesco|rubis/i.test(blob)) {
-    rt.go('/stations/demo-total');
+  if (path === '/search' && el.dataset.stationId) {
+    sessionStorage.setItem('plug-station', el.dataset.stationId);
+    rt.go(`/stations/${el.dataset.stationId}`);
     return;
   }
   if ((id === 'search-input' || /search stations/i.test(el.getAttribute('placeholder') || '')) && path === '/explore') {
@@ -391,38 +423,45 @@ export async function handlePlugClick(el: HTMLElement) {
   }
 
   if (path === '/garage' && /add vehicle|add a car|add car|\+/i.test(blob)) return goPath('/garage/add');
-  if (path === '/garage' && !/add /i.test(blob)) return goPath(`/garage/${vehicleId()}`);
+  if (path === '/garage' && !/add /i.test(blob)) return goPath(garagePath());
 
   if (/^\/garage\/[^/]+$/.test(path)) {
     if (el.dataset.act === 'find-parts' || /find parts|parts for/i.test(blob)) return goPath('/parts');
-    if (el.dataset.act === 'log-service' || /^log service$/i.test(label)) return rt.go(`/garage/${vehicleId()}/log-service`);
-    if (el.dataset.act === 'service' || el.dataset.act === 'view-all-8' || /maintenance|schedule|view all/i.test(blob)) return rt.go(`/garage/${vehicleId()}/schedule`);
-    if (el.dataset.act === 'docs' || /documents/i.test(blob)) return rt.go(`/garage/${vehicleId()}/documents`);
-    if (el.dataset.act === 'fuel' || /fuel spend|spend/i.test(blob)) return rt.go(`/garage/${vehicleId()}/spend`);
-    if (el.dataset.act === 'history') return rt.go(`/garage/${vehicleId()}/history`);
+    if (el.dataset.act === 'log-service' || /^log service$/i.test(label)) return rt.go(garagePath('log-service'));
+    if (el.dataset.act === 'service' || el.dataset.act === 'view-all-8' || /maintenance|schedule|view all/i.test(blob)) return rt.go(garagePath('schedule'));
+    if (el.dataset.act === 'docs' || /documents/i.test(blob)) return rt.go(garagePath('documents'));
+    if (el.dataset.act === 'fuel' || /fuel spend|spend/i.test(blob)) return rt.go(garagePath('spend'));
+    if (el.dataset.act === 'history') return rt.go(garagePath('history'));
   }
 
-  if (/maintenance/i.test(blob) && path.startsWith('/garage/')) return rt.go(`/garage/${vehicleId()}/schedule`);
-  if (/^history$/i.test(label) || icon === 'history') return rt.go(`/garage/${vehicleId()}/history`);
-  if (/fuel spend|spend/i.test(blob) && path.includes('/garage/')) return rt.go(`/garage/${vehicleId()}/spend`);
-  if (/documents/i.test(blob) && path.includes('/garage/') && !path.endsWith('/documents')) return rt.go(`/garage/${vehicleId()}/documents`);
+  if (/maintenance/i.test(blob) && path.startsWith('/garage/')) return rt.go(garagePath('schedule'));
+  if (/^history$/i.test(label) || icon === 'history') return rt.go(garagePath('history'));
+  if (/fuel spend|spend/i.test(blob) && path.includes('/garage/')) return rt.go(garagePath('spend'));
+  if (/documents/i.test(blob) && path.includes('/garage/') && !path.endsWith('/documents')) return rt.go(garagePath('documents'));
   if (/find parts|parts for/i.test(blob)) return goPath('/parts');
-  if (/remove vehicle|remove car/i.test(blob)) {
-    const ok = await rt.confirm('Remove this vehicle from your garage?');
-    if (!ok) return;
-    try {
-      await plugSend(`/vehicles/${vehicleId()}`, 'DELETE');
-      rt.toast('Vehicle removed');
-      rt.go('/garage');
-    } catch (err) {
-      rt.toast(err instanceof Error ? err.message : 'Could not remove that vehicle');
+  if (/remove vehicle|remove car/i.test(blob) || el.dataset.act === 'delete-vehicle' || el.dataset.act === 'more-vert') {
+    if (el.dataset.act === 'delete-vehicle') {
+      const id = vehicleId();
+      if (!id) return;
+      try {
+        await plugSend(`/vehicles/${id}`, 'DELETE');
+        sessionStorage.removeItem('plug-vehicle');
+        rt.toast('Vehicle removed');
+        rt.go('/garage');
+      } catch (err) {
+        rt.toast(err instanceof Error ? err.message : 'Could not remove that vehicle');
+      }
+      return;
     }
+    rt.go(`${garagePath()}/remove`);
     return;
   }
-  if (path.endsWith('/schedule') && /history/i.test(blob)) return rt.go(`/garage/${vehicleId()}/history`);
+  if (path.endsWith('/schedule') && /history/i.test(blob)) return rt.go(garagePath('history'));
   if (path.endsWith('/schedule') && !/back/i.test(blob)) {
-    sessionStorage.setItem('plug-service', label || 'oil');
-    rt.go(`/garage/${vehicleId()}/service`);
+    const service = (el.dataset.op || label || '').trim();
+    if (!service) return;
+    sessionStorage.setItem('plug-service', service);
+    rt.go(garagePath('service'));
     return;
   }
   if (path.endsWith('/log-service') && (id === 'saveBtn' || /save/i.test(label))) {
@@ -430,24 +469,26 @@ export async function handlePlugClick(el: HTMLElement) {
     try {
       await plugSend('/services', 'POST', {
         vehicleId: vehicleId(),
-        opCode: sessionStorage.getItem('plug-service') || label || 'oil',
+        opCode: sessionStorage.getItem('plug-service') || label,
         odometer: Number(fields.odometer || sessionStorage.getItem('plug-last-odo') || 0) || null,
         doneOn: new Date().toISOString().slice(0, 10),
       });
       rt.toast(`${sessionStorage.getItem('plug-service') || 'Service'} saved`);
-      rt.finish(`/garage/${vehicleId()}/schedule`);
+      rt.finish(garagePath('schedule'));
     } catch (err) {
       rt.toast(err instanceof Error ? err.message : 'Could not save that service');
     }
     return;
   }
   if (path.endsWith('/service') && /log this service|log service|mark as done/i.test(blob)) {
-    rt.go(`/garage/${vehicleId()}/log-service`);
+    rt.go(garagePath('log-service'));
     return;
   }
   if (path.endsWith('/documents') && !/back/i.test(blob)) {
-    sessionStorage.setItem('plug-doc', /fitness/i.test(blob) ? 'fitness' : label || 'fitness');
-    rt.go(`/garage/${vehicleId()}/documents/edit`);
+    const docKind = (el.dataset.kind || label || '').trim();
+    if (!docKind) return;
+    sessionStorage.setItem('plug-doc', docKind);
+    rt.go(garagePath('documents/edit'));
     return;
   }
   if (path.endsWith('/documents/edit') && /save|set|remind/i.test(blob)) {
@@ -456,11 +497,11 @@ export async function handlePlugClick(el: HTMLElement) {
     try {
       await plugSend('/reminders', 'POST', {
         vehicleId: vehicleId(),
-        kind: sessionStorage.getItem('plug-doc') || 'fitness',
+        kind: sessionStorage.getItem('plug-doc') || label,
         dueOn: due || null,
       });
       rt.toast('Reminder saved');
-      rt.finish(`/garage/${vehicleId()}/documents`);
+      rt.finish(garagePath('documents'));
     } catch (err) {
       rt.toast(err instanceof Error ? err.message : 'Could not save that reminder');
     }
@@ -474,7 +515,13 @@ export async function handlePlugClick(el: HTMLElement) {
     rt.go('/explore');
     return;
   }
-  if (path.startsWith('/parts/results')) return rt.go('/parts/demo-brake');
+  if (path.startsWith('/parts/results')) {
+    const screen = el.closest('[data-plug-screen]') as HTMLElement | null;
+    const partId = el.dataset.partId || (el.dataset.act?.startsWith('tier-') ? screen?.dataset.firstPart : '');
+    if (!partId) return;
+    rt.go(`/parts/${partId}`);
+    return;
+  }
   if (path.startsWith('/parts/') && /find nearby|parts stores|directions/i.test(blob)) {
     sessionStorage.setItem('plug-chip', 'parts_store');
     rt.go('/explore');
@@ -499,10 +546,9 @@ export async function handlePlugClick(el: HTMLElement) {
   }
   if (path === '/map' && /my pins/i.test(blob)) return goPath('/contributions');
   if (path === '/map/pin' && (el.dataset.act === 'confirm-pin-location' || /confirm pin location|confirm location|use this|this spot/i.test(blob))) {
-    const accuracy = Number(sessionStorage.getItem('plug-accuracy') || 12);
-    if (!(accuracy > 0) || accuracy > 50) {
-      rt.toast('GPS is not accurate enough yet');
-      rt.go('/gps');
+    const fix = pinFix();
+    if (!fix) {
+      rt.go('/map/pin/poor');
       return;
     }
     rt.go('/map/details');
@@ -522,33 +568,49 @@ export async function handlePlugClick(el: HTMLElement) {
   if (path === '/map/details' && (id === 'submit-btn' || /submit|send/i.test(label))) {
     const fields = screenFields(el);
     const ticks = Object.entries(fields).filter(([, value]) => value === true).map(([key]) => key);
+    const fix = pinFix();
+    const name = String(fields.name || fields['place-name'] || (demoOn() ? 'DEMO place' : '')).trim();
+    if (!name || !fix) {
+      rt.toast(name ? 'GPS is not accurate enough yet' : 'Add a place name');
+      if (!fix) rt.go('/map/pin/poor');
+      return;
+    }
     try {
-      await plugSend('/pins', 'POST', {
-        name: String(fields.name || fields['place-name'] || 'DEMO place'),
+      const saved = await plugSend<{ placeId?: string; id?: string }>('/pins', 'POST', {
+        name,
         kind: sessionStorage.getItem('plug-place-kind') || 'mechanic',
-        lat: Number(sessionStorage.getItem('plug-pin-lat') || 18.012),
-        lng: Number(sessionStorage.getItem('plug-pin-lng') || -76.797),
-        accuracyM: Number(sessionStorage.getItem('plug-accuracy') || 12),
+        lat: fix.lat,
+        lng: fix.lng,
+        accuracyM: fix.accuracyM,
         note: ticks.join(', '),
       });
-      rt.toast('Submitted for approval');
-      rt.go('/map/submitted');
+      if (saved.placeId || saved.id) sessionStorage.setItem('plug-pin', String(saved.placeId || saved.id));
+      rt.go('/map/submitted-toast');
     } catch (err) {
       rt.toast(err instanceof Error ? err.message : 'Could not submit that pin');
     }
     return;
   }
-  if (path === '/map/submitted' && /map another/i.test(blob)) return rt.go('/map');
-  if (path === '/map/submitted' && /back to map/i.test(blob)) return rt.go('/map');
-  if (path === '/map/submitted' && /my pins|see my pins|submitted places/i.test(blob)) return goPath('/contributions');
+  if ((path === '/map/submitted' || path === '/map/submitted-toast') && /map another/i.test(blob)) return rt.go('/map');
+  if ((path === '/map/submitted' || path === '/map/submitted-toast') && /back to (map|island)/i.test(blob)) return rt.go('/map');
+  if ((path === '/map/submitted' || path === '/map/submitted-toast') && /my pins|see my pins|submitted places|my contributions/i.test(blob)) return goPath('/contributions');
+  if (path === '/contributions/approved' && /map another/i.test(blob)) return rt.go('/map');
+  if (path === '/contributions/approved' && /view on island|explore/i.test(blob)) return rt.go('/explore');
   if (path === '/contributions' && /help map|parish/i.test(blob)) return rt.go('/parish');
+  if (path === '/contributions' && /approved/i.test(blob) && !/not approved|awaiting/i.test(blob)) return rt.go('/contributions/approved');
   if (path === '/contributions') return rt.go('/pending');
-  if (path === '/pending' && /withdraw/i.test(blob)) {
-    const ok = await rt.confirm('Withdraw this pin? It leaves the review queue.');
-    if (!ok) return;
-    const pin = readDb().pins.find((row) => row.status === 'pending');
+  if ((path === '/pending' || path === '/map/withdraw') && /withdraw/i.test(blob)) {
+    if (path === '/pending' && el.dataset.act !== 'confirmWithdrawBtn' && el.dataset.act !== 'withdraw-pin') {
+      rt.go('/map/withdraw');
+      return;
+    }
+    const pinId = el.dataset.pinId || sessionStorage.getItem('plug-pin') || (demoOn() ? readDb().pins.find((row) => row.status === 'pending')?.id : '');
+    if (!pinId) {
+      rt.toast('Choose a pin to withdraw');
+      return;
+    }
     try {
-      if (pin) await plugSend(`/pins/${pin.id}/withdraw`, 'POST');
+      await plugSend(`/pins/${pinId}/withdraw`, 'POST');
       rt.toast('Pin withdrawn');
       rt.go('/contributions');
     } catch (err) {
@@ -620,15 +682,12 @@ export async function handlePlugClick(el: HTMLElement) {
     return;
   }
 
-  const stationLike = /fesco|total|rubis|texaco|cool oasis|station/i.test(blob);
-  if (stationLike && !path.startsWith('/map') && !path.startsWith('/parts') && !path.startsWith('/garage') && !path.startsWith('/account') && !path.startsWith('/fuel')) {
-    rt.go('/stations/demo-total');
+  if (el.dataset.stationId && !path.startsWith('/map') && !path.startsWith('/parts') && !path.startsWith('/garage') && !path.startsWith('/account') && !path.startsWith('/fuel')) {
+    sessionStorage.setItem('plug-station', el.dataset.stationId);
+    rt.go(`/stations/${el.dataset.stationId}`);
     return;
   }
   if (path.startsWith('/stations') && /log fuel/i.test(blob)) return goPath('/fuel');
-
-  if (label) rt.toast(label);
-  else rt.go(fallbackFor(path));
 }
 
 export function queueCount(): number {
@@ -646,7 +705,7 @@ export async function nearestStationName(): Promise<string> {
       return first.name;
     }
   } catch {
-    /* keep the design label */
+    return '';
   }
-  return 'DEMO Total Half-Way-Tree';
+  return '';
 }

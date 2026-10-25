@@ -46,7 +46,7 @@ function demoPublic(path: string): unknown {
     if (!row) throw new Error('Place not found');
     return { place: row };
   }
-  if (name === '/geo/parishes') return { parishes: DEMO_PARISHES };
+  if (name === '/geo/parishes') return { areas: DEMO_PARISHES, parishes: DEMO_PARISHES };
   if (name === '/tolls') return { plazas: DEMO_TOLLS };
   if (name === '/parts') return { parts: demoParts(), comingSoon: false };
   if (name === '/schedules') return { tasks: DEMO_TASKS, generalSchedule: false };

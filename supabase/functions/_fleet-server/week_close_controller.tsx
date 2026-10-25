@@ -201,12 +201,21 @@ app.post(BASE, requireAnyPermission("recon.approve", "transactions.edit"), async
       weekKey?: string;
       serviceLine?: string;
       reason?: string;
+      earlierWeekOverrideReason?: string;
       idempotencyKey?: string;
       skipPrepare?: boolean;
     };
     const weekKey = String(body.weekKey || "").slice(0, 10);
     if (!WEEK_RE.test(weekKey)) {
       return c.json({ error: "weekKey (YYYY-MM-DD) is required" }, 400);
+    }
+    const override = String(body.earlierWeekOverrideReason || "").trim();
+    if (override) {
+      await kv.set(`week_close_override:${org}:${weekKey}`, {
+        reason: override,
+        actorId: user.userId,
+        at: new Date().toISOString(),
+      });
     }
     const idempotencyKey = String(body.idempotencyKey || "").trim();
     const serviceLine = normalizeWeekCloseServiceLine(body.serviceLine);

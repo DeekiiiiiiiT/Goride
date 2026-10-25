@@ -28,6 +28,8 @@ export interface FleetExpenseWeekGroup {
   deductionsTotal: number;
   /** earned − deductionsTotal. */
   net: number;
+  /** Plain-language lines for older weeks carried onto this week. */
+  notes?: string[];
   /** Tips the fleet kept because quota was missed. 0 when quota was met. */
   tipsWithheld: number;
   quotaMet: boolean | null;
@@ -182,6 +184,11 @@ export function buildEarningsWeeksFromPeriods(input: {
         : {};
     const tipsWithheld = round2(Math.max(0, Number(fc.tipsWithheld) || 0));
     const quotaMet = typeof fc.quotaMet === 'boolean' ? fc.quotaMet : null;
+    const notes = Array.isArray(fc.correctionLines)
+      ? (fc.correctionLines as Array<{ sentence?: string }>)
+          .map((line) => String(line.sentence || '').trim())
+          .filter(Boolean)
+      : [];
 
     return {
       weekKey,
@@ -192,6 +199,7 @@ export function buildEarningsWeeksFromPeriods(input: {
       net,
       tipsWithheld,
       quotaMet,
+      notes,
       total: deductionsTotal,
       categories,
     };

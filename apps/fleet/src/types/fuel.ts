@@ -540,6 +540,8 @@ export interface FuelScenario {
    */
   rules: FuelRule[];
   isDefault?: boolean;
+  /** Kept for history. Hidden from the rules list. Weeks already charged still use it. */
+  archived?: boolean;
   /** Period + driver windows (Schedule). Overlap allowed only for different drivers. */
   versions?: FuelScenarioVersion[];
   /**

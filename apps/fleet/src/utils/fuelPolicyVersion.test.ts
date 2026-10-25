@@ -80,6 +80,23 @@ describe('fuelPolicyVersion', () => {
     expect(resolveScenarioForWeek(s, '2026-07-13').rules[0].deadheadCoverage).toBe(50);
   });
 
+  it('does not reuse the first window when the week sits outside every window', () => {
+    const s = normalizeScenarioVersions(
+      scenario({
+        versions: [
+          {
+            id: 'v1',
+            effectiveFrom: '2026-04-06',
+            rules: [baseRule(90)],
+            driverIds: [],
+            createdAt: '2026-04-06T00:00:00.000Z',
+          },
+        ],
+      }),
+    );
+    expect(resolveVersionForWeek(s, '2026-03-30')).toBeUndefined();
+  });
+
   it('detects overlapping windows', () => {
     expect(
       versionWindowsOverlap(

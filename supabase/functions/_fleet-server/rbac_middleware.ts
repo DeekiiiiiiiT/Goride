@@ -48,7 +48,7 @@ export type Permission =
   | 'vehicles.bypass_catalog_gate'
   | 'fuel.approve' | 'fuel.split_cash_override' | 'fuel.reject' | 'fuel.create_entry' | 'fuel.edit_entry'
   | 'fuel.delete_entry' | 'fuel.view' | 'fuel.export'
-  | 'fuel.finalize' | 'fuel.reopen' | 'fuel.accept_unexplained' | 'fuel.second_approve'
+  | 'fuel.finalize' | 'fuel.configure' | 'fuel.reopen' | 'fuel.accept_unexplained' | 'fuel.second_approve'
   | 'toll.manage' | 'toll.view'
   | 'transactions.approve' | 'transactions.reject' | 'transactions.edit'
   | 'transactions.view' | 'transactions.export'

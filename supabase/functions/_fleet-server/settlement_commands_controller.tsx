@@ -44,6 +44,8 @@ import {
 } from "./settlement_commands.ts";
 import {
   assertPeriodNotFrozen,
+  assertFinancePeriodNotLocked,
+  periodGateFromRow,
   assertFrozenPeriodHashIntact,
   assertMovementAllowed,
 } from "./settlement_period_freeze.ts";
@@ -54,7 +56,6 @@ import {
 import { reviewSettlementPay } from "../../../packages/finance-core/src/driverFuelCredit.ts";
 import { hasPendingRestatementDrafts } from "../../../packages/finance-core/src/weekStatement.ts";
 import { getLatestWeekStatements } from "./week_statements.ts";
-import { previewOrApplyFuelCreditReceivable, scanFuelCreditOverpayments } from "./fuel_credit_receivable.ts";
 
 function requiresApproval(amount: number, threshold = SETTLEMENT_APPROVAL_THRESHOLD): boolean {
   return requiresSettlementApproval(amount, threshold);
@@ -356,14 +357,11 @@ async function insertMovementAndDualWrite(
   const periodForGate = await loadPeriodDb(opts.driverId, opts.weekAnchor, opts.organizationId);
   assertMovementAllowed({
     weekAnchor: opts.weekAnchor,
-    period: {
-      metadata: (periodForGate?.metadata as Record<string, unknown>) || null,
-      settlementStatus: periodForGate ? String(periodForGate.settlement_status || "") : null,
-      signedAt: periodForGate?.signed_at ? String(periodForGate.signed_at) : null,
-    },
+      period: periodGateFromRow(periodForGate),
     requireMoneyUnlocked: false,
     isCashReceipt,
   });
+  await assertFinancePeriodNotLocked(opts.organizationId, opts.weekAnchor);
   if (periodForGate) {
     await assertFrozenPeriodHashIntact(
       periodForGate as Parameters<typeof assertFrozenPeriodHashIntact>[0],
@@ -533,11 +531,8 @@ app.post(`${BASE}/collect`, requireSettlementPerm("settlements.collect"), async 
     if (!periodDb) {
       return c.json({ error: "PERIOD_NOT_FOUND", message: "No financial period for this driver/week" }, 404);
     }
-    assertPeriodNotFrozen({
-      metadata: (periodDb.metadata as Record<string, unknown>) || null,
-      settlementStatus: String(periodDb.settlement_status || ""),
-      signedAt: periodDb.signed_at ? String(periodDb.signed_at) : null,
-    });
+    assertPeriodNotFrozen(periodGateFromRow(periodDb));
+    await assertFinancePeriodNotLocked(organizationId, weekAnchor);
     await assertFrozenPeriodHashIntact(periodDb as Parameters<typeof assertFrozenPeriodHashIntact>[0]);
     const settlementAmount = Number(periodDb.settlement_amount) || 0;
     const owed = driverOwesResidual(settlementAmount);
@@ -597,21 +592,20 @@ app.post(`${BASE}/pay`, requireSettlementPerm("settlements.pay"), async (c) => {
     if (!periodDb) {
       return c.json({ error: "PERIOD_NOT_FOUND", message: "No financial period for this driver/week" }, 404);
     }
-    assertPeriodNotFrozen({
-      metadata: (periodDb.metadata as Record<string, unknown>) || null,
-      settlementStatus: String(periodDb.settlement_status || ""),
-      signedAt: periodDb.signed_at ? String(periodDb.signed_at) : null,
-    });
+    assertPeriodNotFrozen(periodGateFromRow(periodDb));
+    await assertFinancePeriodNotLocked(organizationId, weekAnchor);
     await assertFrozenPeriodHashIntact(periodDb as Parameters<typeof assertFrozenPeriodHashIntact>[0]);
     const settlementAmount = Number(periodDb.settlement_amount) || 0;
     const settlementPaid = Number(periodDb.settlement_paid) || 0;
     const residual = companyOwesResidual(settlementAmount);
     const statements = await getLatestWeekStatements(organizationId, driverId, weekAnchor);
+    const { loadSettlementApprovalThreshold } = await import("./settlement_approval_settings.ts");
+    const approvalThreshold = await loadSettlementApprovalThreshold(organizationId);
     const payReview = reviewSettlementPay({
       amount,
       closedResidual: residual,
       hasPendingRestatement: hasPendingRestatementDrafts(statements),
-      threshold: SETTLEMENT_APPROVAL_THRESHOLD,
+      threshold: approvalThreshold,
     });
     if (!payReview.ok) {
       return c.json({ error: payReview.code, message: payReview.message }, 400);
@@ -648,39 +642,107 @@ app.post(`${BASE}/pay`, requireSettlementPerm("settlements.pay"), async (c) => {
   }
 });
 
-app.get(`${BASE}/fuel-credit-scan`, requireSettlementPerm("settlements.approve"), async (c) => {
+app.get(`${BASE}/fuel-credit-scan`, requireSettlementPerm("settlements.approve"), (c) => {
+  return c.json({ error: "RETIRED", message: "Use fuel-share corrections. This tool double-booked cash held." }, 410);
+});
+
+app.post(`${BASE}/fuel-credit-receivable`, requireSettlementPerm("settlements.approve"), (c) => {
+  return c.json({ error: "RETIRED", message: "Use fuel-share corrections. This tool double-booked cash held." }, 410);
+});
+
+app.get(`${BASE}/approval-settings`, requireSettlementPerm("settlements.approve"), async (c) => {
   try {
     const orgOrResp = await requireOrgId(c);
     if (typeof orgOrResp !== "string") return orgOrResp;
-    const hits = await scanFuelCreditOverpayments(orgOrResp);
-    return c.json({ success: true, hits });
+    const { loadSettlementApprovalThreshold, anotherApproverExists } = await import(
+      "./settlement_approval_settings.ts"
+    );
+    const threshold = await loadSettlementApprovalThreshold(orgOrResp);
+    const secondApprover = await anotherApproverExists(orgOrResp);
+    return c.json({
+      threshold,
+      secondApprover,
+      soleApprover: !secondApprover,
+    });
   } catch (e) {
     return commandErrorResponse(c, e);
   }
 });
 
-// ── POST /fuel-credit-receivable ────────────────────────────────────────────
-// Preview unless confirm is true. Does not change the cash already paid.
-app.post(`${BASE}/fuel-credit-receivable`, requireSettlementPerm("settlements.approve"), async (c) => {
+app.post(`${BASE}/approval-settings`, requireSettlementPerm("settlements.approve"), async (c) => {
   try {
     const orgOrResp = await requireOrgId(c);
     if (typeof orgOrResp !== "string") return orgOrResp;
+    const user = c.get("rbacUser") as RbacUser;
     const body = await c.req.json().catch(() => ({}));
-    const driverId = String(body.driverId || "").trim();
-    const sourceWeek = String(body.sourceWeek || body.weekAnchor || "").slice(0, 10);
-    if (!driverId || !/^\d{4}-\d{2}-\d{2}$/.test(sourceWeek)) {
-      return c.json({ error: "driverId and sourceWeek are required" }, 400);
-    }
-    const result = await previewOrApplyFuelCreditReceivable({
+    const { saveSettlementApprovalThreshold } = await import("./settlement_approval_settings.ts");
+    const threshold = await saveSettlementApprovalThreshold(
+      orgOrResp,
+      Number(body.threshold),
+      user?.userId || "",
+    );
+    return c.json({ success: true, threshold });
+  } catch (e) {
+    return commandErrorResponse(c, e);
+  }
+});
+
+app.post(`${BASE}/fuel-share-corrections`, requireSettlementPerm("settlements.approve"), async (c) => {
+  try {
+    const orgOrResp = await requireOrgId(c);
+    if (typeof orgOrResp !== "string") return orgOrResp;
+    const user = c.get("rbacUser") as RbacUser;
+    const body = await c.req.json().catch(() => ({}));
+    const { applyFuelShareCorrections } = await import("./settlement_corrections.ts");
+    const result = await applyFuelShareCorrections({
       organizationId: orgOrResp,
-      driverId,
-      sourceWeek,
+      driverId: body.driverId ? String(body.driverId) : undefined,
+      actorId: user?.userId || null,
       confirm: body.confirm === true,
     });
     return c.json({ success: true, ...result });
   } catch (e) {
-    const message = e instanceof Error ? e.message : String(e);
-    if (message === "PERIOD_NOT_FOUND") return c.json({ error: message }, 404);
+    return commandErrorResponse(c, e);
+  }
+});
+
+app.post(`${BASE}/legacy-weeks`, requireSettlementPerm("settlements.approve"), async (c) => {
+  try {
+    const orgOrResp = await requireOrgId(c);
+    if (typeof orgOrResp !== "string") return orgOrResp;
+    const user = c.get("rbacUser") as RbacUser;
+    const body = await c.req.json().catch(() => ({}));
+    const { applyLegacyChoices } = await import("./legacy_weeks.ts");
+    const result = await applyLegacyChoices({
+      organizationId: orgOrResp,
+      driverId: body.driverId ? String(body.driverId) : undefined,
+      actorId: user?.userId || "",
+      confirm: body.confirm === true,
+      choices: Array.isArray(body.choices) ? body.choices : undefined,
+    });
+    return c.json({ success: true, ...result });
+  } catch (e) {
+    return commandErrorResponse(c, e);
+  }
+});
+
+app.post(`${BASE}/payout-backfill`, requireSettlementPerm("settlements.approve"), async (c) => {
+  try {
+    const orgOrResp = await requireOrgId(c);
+    if (typeof orgOrResp !== "string") return orgOrResp;
+    const user = c.get("rbacUser") as RbacUser;
+    const body = await c.req.json().catch(() => ({}));
+    const driverId = String(body.driverId || "").trim();
+    if (!driverId) return c.json({ error: "driverId is required" }, 400);
+    const { applyPayoutBackfill } = await import("./settlement_payout_backfill.ts");
+    const result = await applyPayoutBackfill({
+      organizationId: orgOrResp,
+      driverId,
+      actorId: user?.userId || "",
+      confirm: body.confirm === true,
+    });
+    return c.json({ success: true, ...result });
+  } catch (e) {
     return commandErrorResponse(c, e);
   }
 });
@@ -719,11 +781,8 @@ app.post(`${BASE}/write-off`, requireSettlementPerm("settlements.write_off"), as
     if (!periodDb) {
       return c.json({ error: "PERIOD_NOT_FOUND", message: "No financial period for this driver/week" }, 404);
     }
-    assertPeriodNotFrozen({
-      metadata: (periodDb.metadata as Record<string, unknown>) || null,
-      settlementStatus: String(periodDb.settlement_status || ""),
-      signedAt: periodDb.signed_at ? String(periodDb.signed_at) : null,
-    });
+    assertPeriodNotFrozen(periodGateFromRow(periodDb));
+    await assertFinancePeriodNotLocked(organizationId, weekAnchor);
     await assertFrozenPeriodHashIntact(periodDb as Parameters<typeof assertFrozenPeriodHashIntact>[0]);
     const settlementAmount = Number(periodDb.settlement_amount) || 0;
     const owed = driverOwesResidual(settlementAmount);
@@ -812,12 +871,9 @@ app.post(`${BASE}/reverse`, requireSettlementPerm("settlements.reverse"), async 
         const periodForLock = await loadPeriodDb(driverId, weekAnchor, organizationId);
         assertMovementAllowed({
           weekAnchor,
-          period: {
-            metadata: (periodForLock?.metadata as Record<string, unknown>) || null,
-            settlementStatus: periodForLock ? String(periodForLock.settlement_status || "") : null,
-            signedAt: periodForLock?.signed_at ? String(periodForLock.signed_at) : null,
-          },
+          period: periodGateFromRow(periodForLock),
         });
+        await assertFinancePeriodNotLocked(organizationId, weekAnchor);
         if (periodForLock) {
           await assertFrozenPeriodHashIntact(
             periodForLock as Parameters<typeof assertFrozenPeriodHashIntact>[0],
@@ -894,17 +950,14 @@ app.post(`${BASE}/reverse`, requireSettlementPerm("settlements.reverse"), async 
     const periodForLock = await loadPeriodDb(driverId, weekAnchor, organizationId);
     assertMovementAllowed({
       weekAnchor,
-      period: {
-        metadata: (periodForLock?.metadata as Record<string, unknown>) || null,
-        settlementStatus: periodForLock ? String(periodForLock.settlement_status || "") : null,
-        signedAt: periodForLock?.signed_at ? String(periodForLock.signed_at) : null,
-      },
+      period: periodGateFromRow(periodForLock),
     });
     if (periodForLock) {
       await assertFrozenPeriodHashIntact(
         periodForLock as Parameters<typeof assertFrozenPeriodHashIntact>[0],
       );
     }
+    await assertFinancePeriodNotLocked(organizationId, weekAnchor);
     const observedVersion = Number(periodForLock?.row_version) || 1;
     await claimPeriodWriteLock(driverId, weekAnchor, organizationId, observedVersion);
 
@@ -1094,17 +1147,14 @@ app.post(`${BASE}/verify`, requireSettlementPerm("settlements.pay"), async (c) =
     const periodForLock = await loadPeriodDb(resolvedDriver, resolvedWeek, organizationId);
     assertMovementAllowed({
       weekAnchor: resolvedWeek,
-      period: {
-        metadata: (periodForLock?.metadata as Record<string, unknown>) || null,
-        settlementStatus: periodForLock ? String(periodForLock.settlement_status || "") : null,
-        signedAt: periodForLock?.signed_at ? String(periodForLock.signed_at) : null,
-      },
+      period: periodGateFromRow(periodForLock),
     });
     if (periodForLock) {
       await assertFrozenPeriodHashIntact(
         periodForLock as Parameters<typeof assertFrozenPeriodHashIntact>[0],
       );
     }
+    await assertFinancePeriodNotLocked(organizationId, resolvedWeek);
     const observedVersion = Number(periodForLock?.row_version) || 1;
     await claimPeriodWriteLock(resolvedDriver, resolvedWeek, organizationId, observedVersion);
 
@@ -1403,15 +1453,30 @@ app.post(`${BASE}/:movementId/approve`, requireSettlementPerm("settlements.appro
     const periodForLock = await loadPeriodDb(driverId, weekAnchor, organizationId);
     assertMovementAllowed({
       weekAnchor,
-      period: {
-        metadata: (periodForLock?.metadata as Record<string, unknown>) || null,
-        settlementStatus: periodForLock ? String(periodForLock.settlement_status || "") : null,
-        signedAt: periodForLock?.signed_at ? String(periodForLock.signed_at) : null,
-      },
+      period: periodGateFromRow(periodForLock),
     });
     if (periodForLock) {
       await assertFrozenPeriodHashIntact(
         periodForLock as Parameters<typeof assertFrozenPeriodHashIntact>[0],
+      );
+    }
+    await assertFinancePeriodNotLocked(organizationId, weekAnchor);
+    const { loadSettlementApprovalThreshold, anotherApproverExists } = await import(
+      "./settlement_approval_settings.ts"
+    );
+    const approvalThreshold = await loadSettlementApprovalThreshold(organizationId);
+    const amountMajor = Math.abs(Number(movement.amount_minor) || 0) / 100;
+    const secondApprover = await anotherApproverExists(organizationId);
+    const selfApproval = String(movement.actor_id || "") === String(user.userId);
+    if (
+      decision === "approved" &&
+      secondApprover &&
+      selfApproval &&
+      requiresApproval(amountMajor, approvalThreshold)
+    ) {
+      return c.json(
+        { error: "SELF_APPROVAL", message: "Someone else has to approve this." },
+        403,
       );
     }
     const observedVersion = Number(periodForLock?.row_version) || 1;
@@ -1427,6 +1492,8 @@ app.post(`${BASE}/:movementId/approve`, requireSettlementPerm("settlements.appro
           approvalNote: note || null,
           approvedBy: user.userId,
           approvedAt: new Date().toISOString(),
+          soleApprover: secondApprover ? false : true,
+          approvalThreshold,
         },
       })
       .eq("id", movementId)

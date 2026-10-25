@@ -8,6 +8,7 @@ import {
   settlementPeriodOpenMessage,
 } from "../../../packages/finance-core/src/settlementPeriodGate.ts";
 import { SettlementCommandError } from "./settlement_commands.ts";
+import { getServiceClient } from "./service_client.ts";
 
 export function isPeriodFrozen(period: {
   metadata?: Record<string, unknown> | null;
@@ -32,11 +33,55 @@ export function isPeriodFrozen(period: {
   return false;
 }
 
+/** Map a driver_financial_periods row onto the freeze check. status and closed_at are real columns; signed_at is not. */
+export function periodGateFromRow(row: {
+  metadata?: unknown;
+  settlement_status?: unknown;
+  status?: unknown;
+  closed_at?: unknown;
+} | null | undefined): Parameters<typeof isPeriodFrozen>[0] {
+  return {
+    metadata: (row?.metadata as Record<string, unknown> | null) ?? null,
+    settlementStatus: row ? String(row.settlement_status || "") : null,
+    status: row?.status != null ? String(row.status) : null,
+    closedAt: row?.closed_at != null ? String(row.closed_at) : null,
+  };
+}
+
+/** Expense-week lock. A locked week cannot take a settlement movement. */
+export async function assertFinancePeriodNotLocked(
+  organizationId: string | null | undefined,
+  weekStart: string,
+): Promise<void> {
+  const orgId = String(organizationId || "").trim();
+  const week = String(weekStart || "").slice(0, 10);
+  if (!orgId || !/^\d{4}-\d{2}-\d{2}$/.test(week)) return;
+  const { data, error } = await getServiceClient()
+    .from("finance_period_locks")
+    .select("week_start")
+    .eq("organization_id", orgId)
+    .eq("week_start", week)
+    .maybeSingle();
+  if (error) {
+    const msg = String(error.message || "");
+    if (/does not exist|schema cache|Could not find/i.test(msg)) return;
+    throw new Error(msg);
+  }
+  if (data) {
+    throw new SettlementCommandError(
+      "PERIOD_LOCKED",
+      "This week is closed.",
+      409,
+      { weekAnchor: week },
+    );
+  }
+}
+
 export function assertPeriodNotFrozen(period: Parameters<typeof isPeriodFrozen>[0]): void {
   if (isPeriodFrozen(period)) {
     throw new SettlementCommandError(
       "PERIOD_FROZEN",
-      "PERIOD_FROZEN: this settlement week is closed and cannot accept new movements",
+      "This week is closed.",
       409,
     );
   }
