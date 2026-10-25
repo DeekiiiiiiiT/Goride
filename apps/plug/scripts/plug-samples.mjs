@@ -39,6 +39,15 @@ export const BANNED_PHRASES = [
   'Member since May 2023',
   '18,450',
   '85%',
+  '123 Hope Road',
+  'Rubis Hope Road',
+  'Rubis Ultra',
+  'RUBIS ULTRA',
+  '84,210',
+  'Invoice_Dunrobin_8241.jpg',
+  'Road Scouts',
+  'Road Scout',
+  'community XP',
 ];
 
 const PHRASES = [
@@ -254,7 +263,34 @@ export function sanitizePlugScreen(source, fileName = '') {
   next = next.replace(/18,450/g, 'No fuel spend yet');
   next = labelExamples(next);
   next = tagName(next);
+  next = stripMockReadings(next);
   return next;
+}
+
+function stripMockReadings(source) {
+  return source
+    .replace(/123 Hope Road, Liguanea, Kingston 6, St\. Andrew/g, '')
+    .replace(/123 Hope Road, Kingston, Jamaica/g, '')
+    .replace(/GPS ±6 m · Rubis Hope Road/g, '')
+    .replace(/Rubis Hope Road/g, '')
+    .replace(/Rubis Ultra/g, '')
+    .replace(/RUBIS ULTRA/g, '')
+    .replace(/84,210 km/g, 'No reading yet')
+    .replace(/84,210/g, 'No reading yet')
+    .replace(/Invoice_Dunrobin_8241\.jpg/g, 'No file attached')
+    .replace(/1\.4 MB • Uploaded/g, '')
+    .replace(/1\/6 Photos/g, '')
+    .replace(/Updated 18m ago/g, '')
+    .replace(/Under Review by 2 Road Scouts/g, 'Waiting for Roam')
+    .replace(/local Jamaican Road Scouts will stop reviewing/g, 'Roam will stop reviewing')
+    .replace(/Local Jamaican Road Scouts review all submissions to keep island motoring data accurate\. Typically verified within 2 to 4 hours\./g, 'Roam reviews every place.')
+    .replace(/Join fellow Jamaican Road Scouts in filling missing fuel stops, tyre shops, and trusted roadside mechanics across all 14 parishes\./g, 'Help fill in missing fuel stops, tyre shops, and mechanics across all 14 parishes.')
+    .replace(/verified by Road Scouts/g, 'approved by Roam')
+    .replace(/and community XP/g, '')
+    .replace(/A Kingston Road Scout verified your coordinates\./g, 'Roam reviews every place.')
+    .replace(/\+50 First-Time Bonus XP & \+15 Points/g, '')
+    .replace(/Road Scouts/g, 'Roam')
+    .replace(/Road Scout/g, 'Roam');
 }
 
 export function sampleViolations(source) {

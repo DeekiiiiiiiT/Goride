@@ -249,6 +249,21 @@ function overlapsWeek(start: string, end: string, periodStart: string, periodEnd
   return !!(start && end && start <= periodEnd && end >= periodStart);
 }
 
+/** A statement row belongs to this week. The following Monday's row is the next week, even though it sits in the deposit window. */
+function statementRowMatchesWeek(
+  e: StatementLedgerEvent,
+  periodStart: string,
+  periodEnd: string,
+): boolean {
+  const period = periodOf(e);
+  if (overlapsWeek(period.start, period.end, periodStart, periodEnd)) return true;
+  if (period.start && !period.end && period.start >= periodStart && period.start <= periodEnd) return true;
+  if (period.start || period.end) return false;
+  const day = ymd(e.date);
+  if (!day) return true;
+  return day >= periodStart && day <= periodEnd;
+}
+
 /** A deposit belongs to this week by its saved earning week, or by matching the statement net. */
 function depositMatchesWeek(
   e: StatementLedgerEvent,
@@ -288,6 +303,7 @@ function pickBank(
       deposits.push(e);
       continue;
     }
+    if (!statementRowMatchesWeek(e, periodStart, periodEnd)) continue;
     if (scope === 'fleet' && role === 'statement_net') {
       sawStatement = true;
       statementNet = round2(statementNet + mag);

@@ -36,7 +36,7 @@ export function WithdrawScreen() {
                     Verification Queue
                   </p>
                   <p className={"font-label-md text-label-md text-on-surface font-semibold"}>
-                    Under Review by 2 Road Scouts
+                    Waiting for Roam
                   </p>
                 </div>
               </div>
@@ -149,7 +149,7 @@ export function WithdrawScreen() {
                 It leaves the review queue.
               </p>
               <p className={"font-body-md text-body-md text-on-surface-variant leading-relaxed mb-4 text-center"}>
-                If you withdraw, local Jamaican Road Scouts will stop reviewing
+                If you withdraw, Roam will stop reviewing
                 <strong className={"text-on-surface font-semibold"}>
                   {""}
                 </strong>

@@ -8,9 +8,23 @@ import {
   resolvePastWeeksStep,
   legacyKeptHalf,
   splitLegacyWriteOff,
+  legacyBalanceSentence,
 } from './pastWeeksCleanup.ts';
 
 describe('past weeks cleanup math', () => {
+  it('names the driver on a half-week balance', () => {
+    expect(legacyBalanceSentence('2025-12-29', -11714.75, 'Kenny')).toBe(
+      'Week of 2025-12-29: older balance Kenny still owes $11714.75.',
+    );
+    expect(legacyBalanceSentence('2026-01-12', 2601.61, 'Kenny')).toBe(
+      'Week of 2026-01-12: older balance the company still owes Kenny $2601.61.',
+    );
+    expect(legacyBalanceSentence('2025-12-29', -10, '  ')).toBe(
+      'Week of 2025-12-29: older balance the driver still owes $10.00.',
+    );
+    expect(legacyBalanceSentence('2025-12-29', -10, 'Kenny')).not.toMatch(/\bhe\b/i);
+  });
+
   const early = [
     ...Array.from({ length: 24 }, (_, index) => {
       const day = new Date(Date.UTC(2026, 0, 19) + index * 7 * 86400000);

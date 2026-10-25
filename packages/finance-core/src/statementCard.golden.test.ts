@@ -193,6 +193,40 @@ describe('Uber statement golden weeks', () => {
     expect(card.payoutReconciliationGap).toBe(0);
   });
 
+  it('does not add next week’s bank row to this week’s tie', () => {
+    const events = doubledWeek({
+      cash: 19139.16,
+      bank: 67384.03,
+      tollStatement: 4910,
+      fileHash: 'oct5',
+      periodStart: '2026-10-05',
+      periodEnd: '2026-10-11',
+      depositDate: '2026-10-12',
+    });
+    events.push({
+      eventType: 'payout_bank',
+      netAmount: 33757.62,
+      driverId: 'org-bank',
+      date: '2026-10-13',
+      periodStart: '2026-10-12',
+      periodEnd: '2026-10-18',
+      metadata: { bankRole: 'statement_net', recipient: 'org' },
+    });
+    const card = assemblePlatformStatement({
+      platform: 'Uber',
+      periodStart: '2026-10-05',
+      periodEnd: '2026-10-11',
+      rollup: OCT_5,
+      scope: 'fleet',
+      events,
+    });
+    expect(card.netEarnings).toBe(67384.03);
+    expect(card.tieState).toBe('ties');
+    expect(card.tieOutDifference).toBe(0);
+    expect(card.actualDeposit).toBe(67384.03);
+    expect(card.actualDepositDate).toBe('2026-10-12');
+  });
+
   it('uses the residual for UberX Priority until the column is parsed', () => {
     const card = assemblePlatformStatement({
       platform: 'Uber',

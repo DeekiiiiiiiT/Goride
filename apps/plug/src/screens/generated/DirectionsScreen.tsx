@@ -44,27 +44,17 @@ export function DirectionsScreen() {
                   Pumps Active Now
                 </span>
               </div>
-              <div className={"absolute bottom-3 right-3 bg-black/60 backdrop-blur-md text-white font-label-md px-2.5 py-1 rounded-full flex items-center gap-1"}>
-                <span className={"material-symbols-outlined text-sm"} data-icon={"photo_camera"}>
-                  photo_camera
-                </span>
-                <span>
-                  1/6 Photos
-                </span>
-              </div>
-              <div className={"absolute -bottom-4 left-4 w-12 h-12 rounded-xl bg-surface-container-lowest p-1 shadow-md border border-outline-variant/40 flex items-center justify-center"}>
-                <div className={"w-full h-full rounded-lg bg-red-600 flex items-center justify-center text-white font-black tracking-tighter text-xs"}>
-                  RUBIS
+              <div className={"hidden absolute -bottom-4 left-4 w-12 h-12 rounded-xl bg-surface-container-lowest p-1 shadow-md border border-outline-variant/40 flex items-center justify-center"} data-slot-row={"brand"} style={{ display: "none" }}>
+                <div className={"w-full h-full rounded-lg bg-surface-container flex items-center justify-center text-on-surface font-black tracking-tighter text-xs"}>
+                  <span data-slot={"brand"} />
                 </div>
               </div>
             </div>
             <div className={"pt-6 pb-4 px-4"}>
               <div className={"flex items-center gap-2 flex-wrap mb-1"}>
-                <h2 className={"text-headline-md font-headline-md text-on-background"}>
-                  Rubis Hope Road
-                </h2>
-                <span className={"px-2 py-0.5 rounded bg-primary-fixed text-on-primary-fixed font-label-sm font-bold"}>
-                  RUBIS ULTRA
+                <h2 className={"text-headline-md font-headline-md text-on-background"} data-slot={"station-name"} />
+                <span className={"hidden px-2 py-0.5 rounded bg-primary-fixed text-on-primary-fixed font-label-sm font-bold"} data-slot-row={"brand"} style={{ display: "none" }}>
+                  <span data-slot={"brand"} />
                 </span>
                 <span className={"inline-flex items-center gap-0.5 text-emerald-700 font-label-sm font-semibold"}>
                   <span className={"material-symbols-outlined text-sm text-emerald-600"} data-icon={"verified"} style={{ fontVariationSettings: "'FILL' 1" }}>
@@ -73,11 +63,11 @@ export function DirectionsScreen() {
                   Verified
                 </span>
               </div>
-              <p className={"text-body-sm font-body-sm text-on-surface-variant flex items-center gap-1"}>
+              <p className={"hidden text-body-sm font-body-sm text-on-surface-variant flex items-center gap-1"} data-slot-row={"address"} style={{ display: "none" }}>
                 <span className={"material-symbols-outlined text-sm text-primary"} data-icon={"location_on"}>
                   location_on
                 </span>
-                123 Hope Road, Liguanea, Kingston 6, St. Andrew
+                <span data-slot={"address"} />
               </p>
               <div className={"grid grid-cols-2 gap-2 mt-4 pt-3 border-t border-outline-variant/30"}>
                 <button onClick={onPlugClick} className={"tap-target w-full rounded-lg bg-primary-container text-on-primary-container font-label-lg flex items-center justify-center gap-2 shadow-sm ring-2 ring-primary"} data-act={"directions"} data-way-out={"primary"}>
@@ -109,47 +99,13 @@ export function DirectionsScreen() {
                   Live Pump Rates
                 </h3>
               </div>
-              <span className={"text-body-sm font-body-sm text-on-surface-variant"}>
-                Updated 18m ago
+              <span className={"hidden text-body-sm font-body-sm text-on-surface-variant"} data-slot-row={"price-updated"} style={{ display: "none" }}>
+                <span data-slot={"price-updated"} />
               </span>
             </div>
-            <div className={"grid grid-cols-3 gap-2"}>
-              <div className={"rounded-lg p-2.5 bg-surface-container-low border border-outline-variant/40 flex flex-col items-center text-center"}>
-                <span className={"px-2 py-0.5 rounded-full bg-emerald-600 text-white font-label-sm font-bold tracking-wide"}>
-                  E-10 87
-                </span>
-                <span className={"text-price-display font-price-display text-on-surface mt-2"}>
-                  214.50
-                </span>
-                <span className={"text-label-sm font-label-sm text-on-surface-variant"}>
-                  JMD / Litre
-                </span>
-              </div>
-              <div className={"rounded-lg p-2.5 bg-surface-container-low border border-outline-variant/40 flex flex-col items-center text-center"}>
-                <span className={"px-2 py-0.5 rounded-full bg-red-600 text-white font-label-sm font-bold tracking-wide"}>
-                  E-10 90
-                </span>
-                <span className={"text-price-display font-price-display text-on-surface mt-2"}>
-                  226.90
-                </span>
-                <span className={"text-label-sm font-label-sm text-on-surface-variant"}>
-                  JMD / Litre
-                </span>
-              </div>
-              <div className={"rounded-lg p-2.5 bg-surface-container-low border border-outline-variant/40 flex flex-col items-center text-center"}>
-                <span className={"px-2 py-0.5 rounded-full bg-stone-900 text-white font-label-sm font-bold tracking-wide"}>
-                  ULSD
-                </span>
-                <span className={"text-price-display font-price-display text-on-surface mt-2"}>
-                  219.00
-                </span>
-                <span className={"text-label-sm font-label-sm text-on-surface-variant"}>
-                  JMD / Litre
-                </span>
-              </div>
-            </div>
+            <div className={"grid grid-cols-3 gap-2"} data-slot={"prices"} />
           </section>
-          <section className={"bg-surface-container-lowest rounded-xl p-4 border border-outline-variant/40 shadow-sm"}>
+          <section className={"bg-surface-container-lowest rounded-xl p-4 border border-outline-variant/40 shadow-sm"} style={{ display: "none" }}>
             <h3 className={"text-headline-sm font-headline-sm text-on-surface mb-3"}>
               Station Amenities
             </h3>
@@ -217,19 +173,10 @@ export function DirectionsScreen() {
                 <h2 className={"text-headline-md font-headline-md text-stone-900 tracking-tight"}>
                   Get directions
                 </h2>
-                <span className={"inline-flex items-center gap-1 text-primary bg-primary-fixed/60 px-2 py-0.5 rounded-full font-label-sm"}>
-                  <span className={"material-symbols-outlined text-xs"} data-icon={"near_me"}>
-                    near_me
-                  </span>
-                  4.6 km
-                </span>
               </div>
               <p className={"text-body-md font-body-md text-on-surface-variant mt-1 leading-snug"}>
                 Choose navigation app for
-                <span className={"font-semibold text-on-surface"}>
-                  Rubis Hope Road
-                </span>
-                (~12 min drive)
+                <span className={"font-semibold text-on-surface"} data-slot={"station-name"} />
               </p>
             </div>
             <div className={"space-y-3 pt-1"}>
@@ -254,14 +201,6 @@ export function DirectionsScreen() {
                     </p>
                   </div>
                   <div className={"text-right shrink-0 flex items-center gap-1"}>
-                    <div>
-                      <span className={"block font-label-lg text-stone-900 font-bold"}>
-                        12 min
-                      </span>
-                      <span className={"block text-label-sm text-stone-500 font-medium"}>
-                        4.6 km
-                      </span>
-                    </div>
                     <span className={"material-symbols-outlined text-on-surface-variant text-lg"} data-icon={"chevron_right"}>
                       chevron_right
                     </span>
@@ -292,14 +231,6 @@ export function DirectionsScreen() {
                     </p>
                   </div>
                   <div className={"text-right shrink-0 flex items-center gap-1"}>
-                    <div>
-                      <span className={"block font-label-lg text-stone-900 font-bold"}>
-                        14 min
-                      </span>
-                      <span className={"block text-label-sm text-emerald-700 font-semibold"}>
-                        Active data
-                      </span>
-                    </div>
                     <span className={"material-symbols-outlined text-on-surface-variant text-lg"} data-icon={"chevron_right"}>
                       chevron_right
                     </span>

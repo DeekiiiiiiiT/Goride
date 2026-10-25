@@ -64,6 +64,7 @@ export type SettlementMovementRow = {
   approvalState?: string;
   /** Legacy dual-write / pre-migration transaction id when reversing via bridge. */
   sourceTransactionId?: string;
+  metadata?: Record<string, unknown> | null;
 };
 
 export type MovementHistoryTableProps = {

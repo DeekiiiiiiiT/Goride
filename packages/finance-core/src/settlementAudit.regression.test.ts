@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { round2 } from './money.ts';
-import { computePeriodSettlement } from './driverPeriodSettlement.ts';
+import { computePeriodSettlement, statementBackedSettlement } from './driverPeriodSettlement.ts';
 import { getAdjCashBalance, getPeriodSettlementComponents } from './driverSettlementMath.ts';
+import { sumCorrectionLines } from './fuelShareCorrection.ts';
 import { getTierForEarningsEH } from './periodShareCash.ts';
 import { isClearedDriverCashPayment } from './driverCashPayment.ts';
 import { foldPayoutCashByWeek } from './payoutCashDedupe.ts';
@@ -36,6 +37,53 @@ describe('settlement audit regressions', () => {
     expect(withTips.netPayout).toBe(10080);
     expect(missingTips.netPayout).toBe(9500);
     expect(withTips.netPayout - missingTips.netPayout).toBe(580);
+  });
+
+  it('statement-backed week counts correction lines', () => {
+    const lines = [
+      { sourceWeek: '2026-08-03', amount: 57902.01, sentence: 'Company owes the earlier weeks.', kind: 'fuel_share' as const },
+      { sourceWeek: '2026-10-12', amount: -13191.88, sentence: 'Oct 12 gas-card credit.', kind: 'fuel_share' as const },
+    ];
+    const postedAdjustments = sumCorrectionLines(lines);
+    expect(postedAdjustments).toBe(44710.13);
+    const base = {
+      driverShare: 0,
+      fuelDeduction: 0,
+      baseCashOwed: 7313,
+      baseCashPaid: 0,
+      tollCashWash: 0,
+      tollPersonal: 0,
+      fuelCredits: 0,
+      cashWrittenOff: 0,
+      settlementPaid: 0,
+      tipsPaidToDriver: 0,
+      openingCashCustody: 0,
+    };
+    const without = statementBackedSettlement(base, { postedAdjustments: 0 });
+    const withLines = statementBackedSettlement(base, { postedAdjustments });
+    expect(without.settlement).toBe(-7313);
+    expect(withLines.settlement).toBe(37397.13);
+    expect(withLines.adjCashBalance).toBe(without.adjCashBalance);
+  });
+
+  it('driver week math counts the same corrections', () => {
+    const row: SettlementPeriodRow = {
+      isFinalized: true,
+      netPayout: 0,
+      passengerCash: 7313,
+      cashOwed: 7313,
+      cashPaid: 0,
+      cashTollWash: 0,
+      personalTollCharge: 0,
+      fuelCredits: 0,
+      cashWrittenOff: 0,
+      settlementPaid: 0,
+      postedAdjustments: 44710.13,
+      settlementAmount: 37397.13,
+    };
+    const parts = getPeriodSettlementComponents(row);
+    expect(parts.settlement).toBe(37397.13);
+    expect(parts.adjCashBalance).toBe(7313);
   });
 
   it('1.2 adjCashBalance may be negative; clamp for cash_still_held is caller-side', () => {

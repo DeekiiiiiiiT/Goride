@@ -369,6 +369,7 @@ function mapApiMovementToRow(r: {
   approvalState?: string;
   sourceTransactionId?: string | null;
   createdAt?: string;
+  metadata?: Record<string, unknown> | null;
 }): SettlementMovementRow {
   return {
     id: String(r.id),
@@ -387,6 +388,7 @@ function mapApiMovementToRow(r: {
     approvalState: r.approvalState,
     // Always set when from movements API (empty = no dual-write tx) so reverse/verify can detect movement rows.
     sourceTransactionId: r.sourceTransactionId ? String(r.sourceTransactionId) : '',
+    metadata: r.metadata ?? null,
   };
 }
 

@@ -75,6 +75,36 @@ describe('mergeDoneCashHistory', () => {
     expect(rows[0].id).toBe('mov-1');
   });
 
+  it('keeps older write-off records off the cash list', () => {
+    const rows = mergeDoneCashHistory({
+      direction: 'collect',
+      movements: [
+        {
+          id: 'audit-write-off',
+          kind: 'write_off',
+          driverId: 'd1',
+          amount: 77436.54,
+          status: 'posted',
+          periodAnchor: '2026-01-05',
+          metadata: { legacyAudit: true },
+        },
+        {
+          id: 'real-collect',
+          kind: 'collect',
+          driverId: 'd1',
+          amount: 100,
+          status: 'posted',
+          periodAnchor: '2026-08-24',
+        },
+      ],
+      legacyTxs: [],
+      weekFrom: '2025-01-01',
+      weekTo: '2026-12-31',
+      isClearedTx: isCleared,
+    });
+    expect(rows.map((row) => row.id)).toEqual(['real-collect']);
+  });
+
   it('unions posted movements with other cash logs', () => {
     const rows = mergeDoneCashHistory({
       direction: 'collect',

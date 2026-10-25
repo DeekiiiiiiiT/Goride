@@ -13,9 +13,11 @@ import {
   CORRECTIONS_LAND_ON,
   LEGACY_KEPT_REPAIR_WEEKS,
   WRITE_OFF_REASON_MIN,
+  legacyBalanceSentence,
   legacyKeptHalf,
   splitLegacyWriteOff,
 } from "../../../packages/finance-core/src/pastWeeksCleanup.ts";
+import * as kv from "./kv_store.tsx";
 
 const THROUGH = "2026-01-12";
 
@@ -25,6 +27,19 @@ function sb() {
 
 function round2(n: number): number {
   return Math.round(n * 100) / 100;
+}
+
+async function driverName(driverId: string): Promise<string> {
+  try {
+    const d = await kv.get(`driver:${driverId}`);
+    if (d && typeof d === "object" && (d as { name?: string }).name) {
+      const name = String((d as { name: string }).name).trim();
+      if (name) return name;
+    }
+  } catch {
+    /* the sentence falls back to "the driver" */
+  }
+  return "";
 }
 
 export type LegacyChoice = {
@@ -134,6 +149,7 @@ export async function applyLegacyChoices(opts: {
     const meta = (open.metadata || {}) as Record<string, unknown>;
     const fc = { ...((meta.financeCore || {}) as Record<string, unknown>) };
     const lines = Array.isArray(fc.correctionLines) ? [...(fc.correctionLines as CorrectionLine[])] : [];
+    const name = await driverName(driverId);
 
     for (const week of weeks) {
       const choice = choiceByWeek.get(week.week) || { week: week.week, action: "carry" as const };
@@ -142,9 +158,7 @@ export async function applyLegacyChoices(opts: {
         : { writeOff: 0, keep: week.amount };
       const openAnchor = String(open.period_anchor).slice(0, 10);
       if (Math.abs(split.keep) > 0.01) {
-        const sentence = split.keep >= 0
-          ? `Week of ${week.week}: older balance the company still owes $${split.keep.toFixed(2)}.`
-          : `Week of ${week.week}: older balance he still owes $${Math.abs(split.keep).toFixed(2)}.`;
+        const sentence = legacyBalanceSentence(week.week, split.keep, name);
         lines.push({ sourceWeek: week.week, amount: split.keep, sentence, kind: "legacy_balance" });
         const idempotencyKey = `legacy-balance:${driverId}:${week.week}`;
         const { error } = await sb().from("settlement_movements").insert(
@@ -358,12 +372,14 @@ export async function applyLegacyKeptRepair(opts: {
   const meta = { ...((openRows.metadata || {}) as Record<string, unknown>) };
   const fc = financeCoreOf(openRows);
   const lines = Array.isArray(fc.correctionLines) ? [...(fc.correctionLines as CorrectionLine[])] : [];
+  const name = await driverName(driverId);
 
   for (const week of preview.weeks) {
-    const sentence = week.keep >= 0
-      ? `Week of ${week.week}: older balance the company still owes $${week.keep.toFixed(2)}.`
-      : `Week of ${week.week}: older balance he still owes $${Math.abs(week.keep).toFixed(2)}.`;
-    if (!lines.some((line) => line.kind === "legacy_balance" && line.sourceWeek === week.week)) {
+    const sentence = legacyBalanceSentence(week.week, week.keep, name);
+    const existing = lines.find((line) => line.kind === "legacy_balance" && line.sourceWeek === week.week);
+    if (existing) {
+      existing.sentence = sentence;
+    } else {
       lines.push({ sourceWeek: week.week, amount: week.keep, sentence, kind: "legacy_balance" });
     }
     const idempotencyKey = `legacy-balance:${driverId}:${week.week}`;

@@ -17,7 +17,7 @@ import { periodAnchorFor, periodEndForAnchor, minorToMajor } from "./financial_l
 import {
   resolveActiveEarningsBundleForDriverWeek,
 } from "./earnings_policy_runtime.ts";
-import { cashHeldClampStamp, computePeriodSettlement } from "./driver_period_settlement.ts";
+import { cashHeldClampStamp, computePeriodSettlement, statementBackedSettlement } from "./driver_period_settlement.ts";
 import {
   computeWeekCommissionShare,
   computeWeekCashBase,
@@ -1682,7 +1682,13 @@ export async function rebuildDriverFinancialPeriod(
             const gross = statementAmountMajor(earnings, "gross");
             if (gross > 0) row.earningsGross = gross;
           }
-          settled = computePeriodSettlement({
+          const rowFc = (row.metadata?.financeCore || {}) as Record<string, unknown>;
+          const stampFc = {
+            postedAdjustments: rowFc.postedAdjustments != null
+              ? rowFc.postedAdjustments
+              : priorFcForCustody.postedAdjustments,
+          };
+          settled = statementBackedSettlement({
             driverShare: row.driverShare,
             fuelDeduction: row.fuelDeduction,
             baseCashOwed: row.cashCollected,
@@ -1694,7 +1700,7 @@ export async function rebuildDriverFinancialPeriod(
             settlementPaid: settlementPaidRaw,
             tipsPaidToDriver: row.tipsPaidToDriver || 0,
             openingCashCustody,
-          });
+          }, stampFc);
           row.settlementAmount = round2(settled.settlement);
           row.payoutNet = round2(settled.netPayout);
           row.settlementPaid = round2(settled.settlementPaid);

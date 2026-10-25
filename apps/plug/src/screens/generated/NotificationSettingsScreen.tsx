@@ -171,7 +171,7 @@ export function NotificationSettingsScreen() {
                     Pin approval updates
                   </p>
                   <p className={"font-body-sm text-body-sm text-on-surface-variant"}>
-                    Notifications when your submitted garages, tyre shops, or fuel stations are verified by Road Scouts
+                    Notifications when Roam approves a garage, tyre shop, or fuel station you submitted
                   </p>
                 </div>
                 <button onClick={onPlugClick} aria-checked={"true"} className={"shrink-0 relative w-14 h-8 bg-secondary-container rounded-full p-1 cursor-pointer transition-colors duration-200 focus:outline-none flex items-center"} id={"toggle-pins"} role={"switch"} type={"button"} data-act={"toggle-pins"}>

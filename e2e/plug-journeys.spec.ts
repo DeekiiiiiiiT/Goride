@@ -138,7 +138,37 @@ test('eight Plug journeys', async ({ page }) => {
   await expect(page).toHaveURL(/#\/welcome/);
 });
 
+const SAMPLE_COPY = [
+  '123 Hope Road',
+  'Rubis Hope Road',
+  'Rubis Ultra',
+  'RUBIS ULTRA',
+  '84,210',
+  'Invoice_Dunrobin_8241.jpg',
+  'Road Scouts',
+  'community XP',
+];
+
 test('public screens stay free of sample people', async ({ page }) => {
+  const routes = [
+    '/explore',
+    '/tolls',
+    '/stations/st_live',
+    '/stations/st_live/directions',
+    '/fuel',
+    '/fuel/confirm',
+    '/garage/added',
+    '/garage/car-1/spend',
+    '/garage/car-1/log-service',
+  ];
+  for (const route of routes) {
+    await page.goto(`/#${route}`);
+    await page.locator('body').waitFor({ state: 'visible' });
+    const text = await page.locator('body').innerText();
+    for (const phrase of SAMPLE_COPY) {
+      expect(text, `${route} shows “${phrase}”`).not.toContain(phrase);
+    }
+  }
   await page.goto('/#/explore');
   await expect(page.getByText('DEMO')).toHaveCount(0);
   await expect(page.getByText('Tariq Campbell')).toHaveCount(0);

@@ -126,7 +126,7 @@ export function FuelSpendScreen() {
                 </div>
               </div>
             </div>
-            <div>
+            <div style={{ display: "none" }}>
               <div className={"flex items-center justify-between mb-space-sm"}>
                 <h3 className={"font-headline-sm text-headline-sm text-on-surface"}>
                   Efficiency Pulse
@@ -301,7 +301,7 @@ export function FuelSpendScreen() {
                 </div>
               </div>
             </div>
-            <div className={"bg-surface-container-lowest rounded-xl p-space-md shadow-sm flex flex-col gap-space-sm"}>
+            <div className={"bg-surface-container-lowest rounded-xl p-space-md shadow-sm flex flex-col gap-space-sm"} style={{ display: "none" }}>
               <div className={"flex items-center justify-between"}>
                 <div>
                   <h4 className={"font-headline-sm text-headline-sm text-on-surface"}>
@@ -318,7 +318,7 @@ export function FuelSpendScreen() {
                   </span>
                 </div>
               </div>
-              <div className={"relative w-full pt-space-xs"}>
+              <div className={"relative w-full pt-space-xs"} style={{ display: "none" }}>
                 <svg aria-label={"Fuel efficiency line chart"} className={"w-full h-36 overflow-visible"} viewBox={"0 0 340 140"}>
                   <line stroke={"#936f00"} strokeDasharray={"4 4"} strokeOpacity={"0.6"} strokeWidth={"1.5"} x1={"16"} x2={"324"} y1={"86"} y2={"86"} />
                   <text className={"font-label-sm text-[12px] font-semibold"} fill={"#755800"} x={"20"} y={"80"}>
@@ -368,203 +368,13 @@ export function FuelSpendScreen() {
             <div className={"flex flex-col gap-space-sm"}>
               <div className={"flex items-center justify-between"}>
                 <h3 className={"font-headline-sm text-headline-sm text-on-surface"}>
-                  October Fuel Logs
+                  Fuel logs
                 </h3>
-                <span className={"font-label-md text-label-md text-primary font-semibold"}>
-                  4 entries
-                </span>
+                <span className={"font-label-md text-label-md text-primary font-semibold"} data-slot={"fill-count"} />
               </div>
-              <div className={"flex flex-col gap-space-xs"}>
-                <div className={"bg-surface-container-lowest rounded-xl p-space-md shadow-sm flex flex-col gap-space-xs transition-transform active:scale-[0.99]"}>
-                  <div className={"flex items-start justify-between"}>
-                    <div className={"flex items-center gap-space-sm"}>
-                      <div className={"w-10 h-10 rounded-full bg-secondary-fixed flex items-center justify-center shrink-0"}>
-                        <span className={"material-symbols-outlined text-secondary text-[22px]"}>
-                          local_gas_station
-                        </span>
-                      </div>
-                      <div>
-                        <div className={"flex items-center gap-1.5"}>
-                          <h4 className={"font-headline-sm text-headline-sm text-on-surface"}>
-                            Texaco Barbican
-                          </h4>
-                          <span className={"w-1.5 h-1.5 rounded-full bg-primary shrink-0"} />
-                          <span className={"font-label-sm text-label-sm px-1.5 py-0.5 rounded bg-surface-container text-on-surface-variant"}>
-                            E-10 87
-                          </span>
-                        </div>
-                        <p className={"font-body-sm text-body-sm text-on-surface-variant"}>
-                          24 Oct • Kingston 6
-                        </p>
-                      </div>
-                    </div>
-                    <div className={"text-right"}>
-                      <p className={"font-price-display text-price-display text-on-surface font-bold"}>
-                        J$ 4,290
-                      </p>
-                      <span className={"font-label-sm text-label-sm text-on-surface-variant"}>
-                        J$ 214.50 / L
-                      </span>
-                    </div>
-                  </div>
-                  <div className={"flex items-center justify-between pt-space-xs text-on-surface-variant font-label-md text-label-md bg-surface-container-low px-space-sm py-1.5 rounded-lg"}>
-                    <span className={"flex items-center gap-1"}>
-                      <span className={"material-symbols-outlined text-[16px] text-primary"}>
-                        opacity
-                      </span>
-                      20.0 L
-                    </span>
-                    <span className={"flex items-center gap-1 font-semibold text-on-surface"}>
-                      <span className={"material-symbols-outlined text-[16px] text-secondary"}>
-                        speed
-                      </span>
-                      14.2 km/L
-                    </span>
-                  </div>
-                </div>
-                <div className={"bg-surface-container-lowest rounded-xl p-space-md shadow-sm flex flex-col gap-space-xs transition-transform active:scale-[0.99]"}>
-                  <div className={"flex items-start justify-between"}>
-                    <div className={"flex items-center gap-space-sm"}>
-                      <div className={"w-10 h-10 rounded-full bg-primary-fixed flex items-center justify-center shrink-0"}>
-                        <span className={"material-symbols-outlined text-primary text-[22px]"}>
-                          local_gas_station
-                        </span>
-                      </div>
-                      <div>
-                        <div className={"flex items-center gap-1.5"}>
-                          <h4 className={"font-headline-sm text-headline-sm text-on-surface"}>
-                            Rubis Hope Road
-                          </h4>
-                          <span className={"w-1.5 h-1.5 rounded-full bg-primary shrink-0"} />
-                          <span className={"font-label-sm text-label-sm px-1.5 py-0.5 rounded bg-surface-container text-on-surface-variant"}>
-                            E-10 87
-                          </span>
-                        </div>
-                        <p className={"font-body-sm text-body-sm text-on-surface-variant"}>
-                          17 Oct • St. Andrew
-                        </p>
-                      </div>
-                    </div>
-                    <div className={"text-right"}>
-                      <p className={"font-price-display text-price-display text-on-surface font-bold"}>
-                        J$ 5,160
-                      </p>
-                      <span className={"font-label-sm text-label-sm text-on-surface-variant"}>
-                        J$ 215.00 / L
-                      </span>
-                    </div>
-                  </div>
-                  <div className={"flex items-center justify-between pt-space-xs text-on-surface-variant font-label-md text-label-md bg-surface-container-low px-space-sm py-1.5 rounded-lg"}>
-                    <span className={"flex items-center gap-1"}>
-                      <span className={"material-symbols-outlined text-[16px] text-primary"}>
-                        opacity
-                      </span>
-                      24.0 L
-                    </span>
-                    <span className={"flex items-center gap-1 font-semibold text-primary"}>
-                      <span className={"material-symbols-outlined text-[16px]"}>
-                        military_tech
-                      </span>
-                      14.4 km/L (Best)
-                    </span>
-                  </div>
-                </div>
-                <div className={"bg-surface-container-lowest rounded-xl p-space-md shadow-sm flex flex-col gap-space-xs transition-transform active:scale-[0.99]"}>
-                  <div className={"flex items-start justify-between"}>
-                    <div className={"flex items-center gap-space-sm"}>
-                      <div className={"w-10 h-10 rounded-full bg-secondary-fixed flex items-center justify-center shrink-0"}>
-                        <span className={"material-symbols-outlined text-secondary text-[22px]"}>
-                          local_gas_station
-                        </span>
-                      </div>
-                      <div>
-                        <div className={"flex items-center gap-1.5"}>
-                          <h4 className={"font-headline-sm text-headline-sm text-on-surface"}>
-                            Total Half-Way-Tree
-                          </h4>
-                          <span className={"w-1.5 h-1.5 rounded-full bg-primary shrink-0"} />
-                          <span className={"font-label-sm text-label-sm px-1.5 py-0.5 rounded bg-surface-container text-on-surface-variant"}>
-                            E-10 87
-                          </span>
-                        </div>
-                        <p className={"font-body-sm text-body-sm text-on-surface-variant"}>
-                          10 Oct • Kingston 10
-                        </p>
-                      </div>
-                    </div>
-                    <div className={"text-right"}>
-                      <p className={"font-price-display text-price-display text-on-surface font-bold"}>
-                        J$ 4,200
-                      </p>
-                      <span className={"font-label-sm text-label-sm text-on-surface-variant"}>
-                        J$ 215.38 / L
-                      </span>
-                    </div>
-                  </div>
-                  <div className={"flex items-center justify-between pt-space-xs text-on-surface-variant font-label-md text-label-md bg-surface-container-low px-space-sm py-1.5 rounded-lg"}>
-                    <span className={"flex items-center gap-1"}>
-                      <span className={"material-symbols-outlined text-[16px] text-primary"}>
-                        opacity
-                      </span>
-                      19.5 L
-                    </span>
-                    <span className={"flex items-center gap-1 font-semibold text-on-surface"}>
-                      <span className={"material-symbols-outlined text-[16px] text-secondary"}>
-                        speed
-                      </span>
-                      13.9 km/L
-                    </span>
-                  </div>
-                </div>
-                <div className={"bg-surface-container-lowest rounded-xl p-space-md shadow-sm flex flex-col gap-space-xs transition-transform active:scale-[0.99]"}>
-                  <div className={"flex items-start justify-between"}>
-                    <div className={"flex items-center gap-space-sm"}>
-                      <div className={"w-10 h-10 rounded-full bg-tertiary-fixed flex items-center justify-center shrink-0"}>
-                        <span className={"material-symbols-outlined text-tertiary text-[22px]"}>
-                          local_gas_station
-                        </span>
-                      </div>
-                      <div>
-                        <div className={"flex items-center gap-1.5"}>
-                          <h4 className={"font-headline-sm text-headline-sm text-on-surface"}>
-                            Petcom Dunrobin
-                          </h4>
-                          <span className={"w-1.5 h-1.5 rounded-full bg-primary shrink-0"} />
-                          <span className={"font-label-sm text-label-sm px-1.5 py-0.5 rounded bg-surface-container text-on-surface-variant"}>
-                            E-10 87
-                          </span>
-                        </div>
-                        <p className={"font-body-sm text-body-sm text-on-surface-variant"}>
-                          02 Oct • St. Andrew
-                        </p>
-                      </div>
-                    </div>
-                    <div className={"text-right"}>
-                      <p className={"font-price-display text-price-display text-on-surface font-bold"}>
-                        J$ 4,800
-                      </p>
-                      <span className={"font-label-sm text-label-sm text-on-surface-variant"}>
-                        J$ 213.33 / L
-                      </span>
-                    </div>
-                  </div>
-                  <div className={"flex items-center justify-between pt-space-xs text-on-surface-variant font-label-md text-label-md bg-surface-container-low px-space-sm py-1.5 rounded-lg"}>
-                    <span className={"flex items-center gap-1"}>
-                      <span className={"material-symbols-outlined text-[16px] text-primary"}>
-                        opacity
-                      </span>
-                      22.5 L
-                    </span>
-                    <span className={"flex items-center gap-1 font-semibold text-on-surface"}>
-                      <span className={"material-symbols-outlined text-[16px] text-secondary"}>
-                        speed
-                      </span>
-                      14.0 km/L
-                    </span>
-                  </div>
-                </div>
+              <div className={"flex flex-col gap-space-xs"} data-slot={"fills"}>
+                <p className={"font-body-md text-body-md text-on-surface-variant"}>No fills yet</p>
               </div>
-            </div>
             <div className={"pt-space-xs pb-space-lg flex flex-col gap-space-sm"}>
               <button onClick={onPlugClick} className={"w-full h-12 rounded-xl bg-primary text-on-primary font-label-lg text-label-lg flex items-center justify-center gap-space-xs shadow-md active:bg-secondary transition-all active:scale-[0.98]"} type={"button"} data-act={"log-fuel"} data-way-out={"primary"}>
                 <span className={"material-symbols-outlined text-[20px]"}>
@@ -582,6 +392,7 @@ export function FuelSpendScreen() {
                   Export Fuel Report (CSV/PDF)
                 </span>
               </button>
+            </div>
             </div>
           </div>
         </div>

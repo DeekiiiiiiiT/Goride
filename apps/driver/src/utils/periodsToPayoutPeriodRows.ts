@@ -37,6 +37,13 @@ export function periodsToPayoutPeriodRows(
       const tollPersonal = Number(p.tollChargedToDriver) || 0;
       const cashTollWash = Number(p.tollCashSpend) || 0;
       const netPayout = Number(p.payoutNet) || 0;
+      const fc =
+        p.metadata && typeof p.metadata.financeCore === 'object'
+          ? (p.metadata.financeCore as Record<string, unknown>)
+          : {};
+      const postedAdjustments = Math.round((Number(fc.postedAdjustments) || 0) * 100) / 100;
+      const openingCashCustody = Math.round(Math.max(0, Number(fc.openingCashCustody) || 0) * 100) / 100;
+      const savedSettlement = Number(p.settlementAmount);
       const cashBalance = Math.round((passengerCash - cashPaid) * 100) / 100;
       const expenseDeductions = Math.round((fuelDeduction + tollPersonal) * 100) / 100;
 
@@ -68,6 +75,9 @@ export function periodsToPayoutPeriodRows(
         personalTollCharge: tollPersonal,
         cashWrittenOff,
         settlementPaid,
+        settlementAmount: Number.isFinite(savedSettlement) ? Math.round(savedSettlement * 100) / 100 : undefined,
+        postedAdjustments,
+        openingCashCustody,
         bankSettled: 0,
         status: mapPayoutStatus(p),
         cashPaidBreakdown: {

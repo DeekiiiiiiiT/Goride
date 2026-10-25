@@ -4,7 +4,7 @@
  */
 import type { Context } from "npm:hono@4.3.11";
 import { filterByOrgSafe, getOrgId } from "./org_scope.ts";
-import { getServiceClient, getServiceClientWithSchema } from "./service_client.ts";
+import { getServiceClient } from "./service_client.ts";
 import { fromKvStore } from "./fleet_sql_bridge.ts";
 import { listByOrg, shouldReadTable } from "./repos/baseRepo.ts";
 import {
@@ -106,7 +106,7 @@ async function loadDriverAliases(c: { get?: (k: string) => unknown }, orgId: str
 }
 
 async function weekIsClosed(orgId: string, weekStart: string): Promise<boolean> {
-  const { data, error } = await getServiceClientWithSchema("fleet")
+  const { data, error } = await getServiceClient()
     .from("finance_period_locks")
     .select("week_start")
     .eq("organization_id", orgId)

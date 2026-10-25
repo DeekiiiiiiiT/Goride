@@ -20,6 +20,7 @@ export type DoneHistoryMovement = {
   description?: string;
   approvalState?: string;
   sourceTransactionId?: string;
+  metadata?: Record<string, unknown> | null;
 };
 
 export type DoneHistoryTx = {
@@ -68,6 +69,7 @@ export function mergeDoneCashHistory(opts: {
   };
 
   const fromMovements = (opts.movements || []).filter((m) => {
+    if (m.metadata && m.metadata.legacyAudit === true) return false;
     const st = String(m.status || '').toLowerCase();
     const ap = String(m.approvalState || '').toLowerCase();
     if (st === 'void' || st === 'pending') return false;

@@ -86,6 +86,7 @@ export {
   computePeriodSettlement,
   computePeriodSettlementMinor,
   cashHeldClampStamp,
+  statementBackedSettlement,
 } from './driverPeriodSettlement.ts';
 export type { PeriodSettlementInput, PeriodSettlementResult, PeriodSettlementMinorResult } from './driverPeriodSettlement.ts';
 export {
@@ -411,6 +412,7 @@ export {
   splitLegacyWriteOff,
   LEGACY_KEPT_REPAIR_WEEKS,
   legacyKeptHalf,
+  legacyBalanceSentence,
 } from './pastWeeksCleanup.ts';
 export type {
   PastWeeksStep,

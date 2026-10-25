@@ -51,15 +51,13 @@ export function OdometerScanScreen() {
                   <div className={"mt-1 px-2.5 py-0.5 rounded-full bg-inverse-surface/90 backdrop-blur-sm"}>
                     <span className={"font-label-sm text-label-sm text-surface-variant uppercase tracking-wider"}>
                       Last:
-                      <strong className={"text-inverse-on-surface"}>
-                        84,210 km
+                      <strong className={"text-inverse-on-surface"} data-slot={"last-reading"}>
+                        No reading yet
                       </strong>
                     </span>
                   </div>
-                  <div className={"mt-1 px-2.5 py-0.5 rounded-full bg-inverse-surface/90 backdrop-blur-sm"}>
-                    <span className={"font-label-sm text-label-sm text-surface-variant"}>
-                      GPS ±6 m · Rubis Hope Road
-                    </span>
+                  <div className={"hidden mt-1 px-2.5 py-0.5 rounded-full bg-inverse-surface/90 backdrop-blur-sm"} data-slot-row={"gps"} style={{ display: "none" }}>
+                    <span className={"font-label-sm text-label-sm text-surface-variant"} data-slot={"gps"} />
                   </div>
                 </div>
                 <button onClick={onPlugClick} aria-label={"Toggle dash torch"} className={"w-12 h-12 rounded-full bg-inverse-surface/60 backdrop-blur-md flex items-center justify-center text-inverse-on-surface active:scale-95 transition-transform duration-150"} id={"torch-toggle"} type={"button"} data-act={"torch-toggle"}>

@@ -11,8 +11,8 @@
  * - If a record has no organizationId (pre-backfill), it is INCLUDED on read
  *   (graceful fallback during transition).
  * - If the user has no organizationId (anon passthrough), NO filtering is applied.
- * - Platform roles (platform_owner, platform_support, platform_analyst) bypass
- *   org filtering — they can see all organizations' data.
+ * - A platform role with no fleet selected can see every organization.
+ *   A platform role that belongs to a fleet stays on that fleet.
  *
  * STRICT MODE (feature flags ON):
  * - Records without organizationId are EXCLUDED from fleet views
@@ -73,9 +73,10 @@ export function isLegacyOrgPlaceholder(organizationId: unknown): boolean {
 export function getOrgId(c: Context): string | null {
   const user = c.get('rbacUser') as RbacUser | undefined;
   if (!user) return null;
-  // Platform roles see everything — no org filter
-  if (PLATFORM_ROLES.has(user.resolvedRole)) return null;
-  return user.organizationId;
+  // Keep a platform owner inside the fleet on their account. Seeing every
+  // fleet is only for a platform login that has no fleet selected.
+  if (user.organizationId) return user.organizationId;
+  return null;
 }
 
 /**

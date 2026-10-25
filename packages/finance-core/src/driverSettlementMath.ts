@@ -49,6 +49,8 @@ export function getPeriodSettlementComponents(
     fuelCredits,
     cashWrittenOff,
     settlementPaid,
+    postedAdjustments: row.postedAdjustments || 0,
+    openingCashCustody: row.openingCashCustody || 0,
   });
 
   return {

@@ -148,74 +148,17 @@ export function ConfirmOdometerScreen() {
                 </button>
               </div>
             </div>
-            <div className={"flex flex-col gap-space-xs p-space-md bg-secondary-fixed/50 rounded-xl shadow-sm"}>
-              <div className={"flex items-start gap-space-sm"}>
-                <div className={"w-8 h-8 rounded-full bg-secondary-container text-on-secondary-container flex items-center justify-center flex-shrink-0 mt-0.5"}>
-                  <span className={"material-symbols-outlined text-[20px]"} style={{ fontVariationSettings: "'FILL' 1" }}>
-                    insights
-                  </span>
-                </div>
-                <div className={"flex flex-col min-w-0"}>
-                  <span className={"font-label-lg text-label-lg font-bold text-on-secondary-fixed"}>
-                    Smart Route Validation
-                  </span>
-                  <p className={"font-body-md text-body-md text-on-secondary-fixed-variant mt-0.5"}>
-                    That's
-                    <strong className={"font-bold text-on-surface"} id={"calcDiff"}>
-                      402 km
-                    </strong>
-                    since your last log (
-                    <span className={"font-semibold"}>
-                      84,210 km
-                    </span>
-                    ) — looks right for your Kingston → Ocho Rios round trip commute!
-                  </p>
-                </div>
-              </div>
-            </div>
-            <div className={"grid grid-cols-2 gap-space-sm"}>
-              <div className={"p-space-md bg-surface-container-lowest rounded-xl shadow-sm flex flex-col justify-between"}>
-                <div className={"flex items-center gap-1.5 text-on-surface-variant"}>
-                  <span className={"material-symbols-outlined text-[18px]"}>
-                    straighten
-                  </span>
-                  <span className={"font-label-md text-label-md uppercase tracking-wider"}>
-                    Distance Run
-                  </span>
-                </div>
-                <div className={"mt-2 flex items-baseline gap-1"}>
-                  <span className={"font-display-lg-mobile text-display-lg-mobile font-extrabold text-on-surface"} id={"statDiffKm"}>
-                    402
-                  </span>
-                  <span className={"font-label-lg text-label-lg font-bold text-on-surface-variant"}>
-                    km
-                  </span>
-                </div>
-                <span className={"font-body-sm text-body-sm text-on-surface-variant mt-1"}>
-                  Since 3 days ago
+            <div className={"hidden flex flex-col gap-space-xs p-space-md bg-secondary-fixed/50 rounded-xl shadow-sm"} data-slot-row={"since-last"} style={{ display: "none" }}>
+              <p className={"font-body-md text-body-md text-on-secondary-fixed-variant"}>
+                <span className={"font-bold text-on-surface"} data-slot={"since-last"} />
+                <span>
+                  {" since your last reading ("}
                 </span>
-              </div>
-              <div className={"p-space-md bg-surface-container-lowest rounded-xl shadow-sm flex flex-col justify-between"}>
-                <div className={"flex items-center gap-1.5 text-secondary"}>
-                  <span className={"material-symbols-outlined text-[18px]"} style={{ fontVariationSettings: "'FILL' 1" }}>
-                    local_gas_station
-                  </span>
-                  <span className={"font-label-md text-label-md uppercase tracking-wider"}>
-                    Est. Burned
-                  </span>
-                </div>
-                <div className={"mt-2 flex items-baseline gap-1"}>
-                  <span className={"font-display-lg-mobile text-display-lg-mobile font-extrabold text-secondary"} id={"statEstLiters"}>
-                    24.5
-                  </span>
-                  <span className={"font-label-lg text-label-lg font-bold text-secondary"}>
-                    Liters
-                  </span>
-                </div>
-                <span className={"font-body-sm text-body-sm text-on-surface-variant mt-1"}>
-                  ~16.4 km/L rating
+                <span className={"font-semibold"} data-slot={"last-reading"}>
+                  No reading yet
                 </span>
-              </div>
+                ).
+              </p>
             </div>
             <div className={"flex flex-col bg-surface-container-lowest rounded-xl shadow-sm overflow-hidden"}>
               <button onClick={onPlugClick} aria-expanded={"false"} className={"w-full min-h-[48px] px-space-md py-space-sm flex items-center justify-between text-left active:bg-surface-container transition-colors"} id={"safeguardBtn"} type={"button"} data-act={"safeguardBtn"}>
@@ -234,10 +177,10 @@ export function ConfirmOdometerScreen() {
               <div className={"hidden px-space-md pb-space-md pt-1 flex-col gap-space-xs bg-surface-container-low"} id={"safeguardContent"}>
                 <p className={"font-body-sm text-body-sm text-on-surface-variant"}>
                   If your new odometer entry is lower than your last recorded trip (
-                  <span className={"font-semibold text-on-surface"}>
-                    84,210 km
+                  <span className={"font-semibold text-on-surface"} data-slot={"last-reading"}>
+                    No reading yet
                   </span>
-                  ), our mileage engine marks it as a cluster replacement or manual reset. You'll be prompted for a reason before statutory fuel consumption calculations update.
+                  ), it is kept for you to confirm.
                 </p>
                 <div className={"flex items-center gap-2 mt-2 pt-2 border-t border-surface-container-high/50 text-tertiary"}>
                   <span className={"material-symbols-outlined text-[16px]"}>

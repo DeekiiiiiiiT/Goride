@@ -327,26 +327,9 @@ export function LogServiceScreen() {
                     </div>
                   </div>
                   <div className={"flex flex-col min-w-0 flex-1"}>
-                    <span className={"font-label-lg text-label-lg text-on-surface truncate"}>
-                      Invoice_Dunrobin_8241.jpg
+                    <span className={"font-label-lg text-label-lg text-on-surface truncate"} data-slot={"receipt"}>
+                      No file attached
                     </span>
-                    <span className={"font-body-sm text-body-sm text-on-surface-variant"}>
-                      1.4 MB • Uploaded
-                    </span>
-                    <div className={"mt-1 flex items-center gap-2"}>
-                      <button onClick={onPlugClick} className={"font-label-sm text-label-sm text-secondary hover:underline flex items-center gap-0.5"} type={"button"} data-act={"replace"}>
-                        <span className={"material-symbols-outlined text-[13px]"}>
-                          refresh
-                        </span>
-                        Replace
-                      </button>
-                      <button onClick={onPlugClick} className={"font-label-sm text-label-sm text-error hover:underline flex items-center gap-0.5"} type={"button"} data-act={"remove"}>
-                        <span className={"material-symbols-outlined text-[13px]"}>
-                          delete
-                        </span>
-                        Remove
-                      </button>
-                    </div>
                   </div>
                 </div>
                 <button onClick={onPlugClick} className={"w-full py-2.5 px-4 rounded-xl bg-surface-container-low active:bg-surface-container flex items-center justify-center gap-2 text-on-surface-variant hover:text-primary transition-colors"} type={"button"} data-act={"snap-additional-invoice-or-oil-sticker"}>

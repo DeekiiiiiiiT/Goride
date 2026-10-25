@@ -294,7 +294,7 @@ export function PrivacyDataScreen() {
                 </div>
               </div>
               <p className={"font-body-sm text-body-sm text-on-surface-variant"}>
-                Permanently remove your profile, registered cars, maintenance records, and community XP. Approved community map pins will remain anonymous to keep road guides functional for other Jamaican drivers.
+                Permanently remove your profile, registered cars, and maintenance records. Approved map pins stay on the map without your name.
               </p>
               <div className={"pt-2"}>
                 <button onClick={onPlugClick} className={"w-full h-12 rounded-lg bg-surface-container-high hover:bg-error-container hover:text-on-error-container active:scale-[0.98] transition-all flex items-center justify-center gap-2 text-error font-label-lg text-label-lg"} type={"button"} data-act={"delete-my-account-and-data"}>

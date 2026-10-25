@@ -16,7 +16,7 @@ export const CORRECTIONS_LAND_ON = '2026-10-19';
 /** August bucket starts here. Earlier correction lines are the double-charged fuel. */
 export const AUGUST_BUCKET_START = '2026-08-03';
 
-/** Payment history total. The Oct 12 line is not a movement row. */
+/** Payment history total. The Oct 12 line is its own movement and is not included here. */
 export const CORRECTION_HISTORY_TOTAL = FUEL_CORRECTION_NET;
 
 export const OCT12_CORRECTION_AMOUNT = OCT12_CORRECTION;
@@ -32,6 +32,20 @@ export const LEGACY_KEPT_REPAIR_WEEKS = [
   { week: '2025-12-29', balance: -23429.49 },
   { week: '2026-01-12', balance: 5203.22 },
 ] as const;
+
+/** Half-week note. Uses the driver's name. Never "he". */
+export function legacyBalanceSentence(
+  week: string,
+  keep: number,
+  driverName?: string | null,
+): string {
+  const name = String(driverName || '').trim() || 'the driver';
+  const money = Math.abs(Number(keep) || 0).toFixed(2);
+  if ((Number(keep) || 0) >= 0) {
+    return `Week of ${week}: older balance the company still owes ${name} $${money}.`;
+  }
+  return `Week of ${week}: older balance ${name} still owes $${money}.`;
+}
 
 /** Kept half of a stored week balance, same sign. Rounded to the cent. */
 export function legacyKeptHalf(balance: number): number {

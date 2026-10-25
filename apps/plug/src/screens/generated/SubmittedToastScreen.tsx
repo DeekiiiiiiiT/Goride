@@ -160,10 +160,10 @@ export function SubmittedToastScreen() {
           </div>
           <div className={"flex-1 space-y-1"}>
             <h3 className={"font-headline-sm text-label-lg font-bold text-amber-950"}>
-              Waiting for Scout approval
+              Waiting for Roam
             </h3>
             <p className={"font-body-sm text-body-sm text-amber-900/90 leading-relaxed"}>
-              Local Jamaican Road Scouts review all submissions to keep island motoring data accurate. Typically verified within 2 to 4 hours.
+              Roam reviews every place.
             </p>
           </div>
         </div>

@@ -59,7 +59,7 @@ export function landingWeekBlock(landingWeek: string | null | undefined): string
 }
 
 export function correctionHistoryNote(): string {
-  return `The payment history will total ${formatMoney(CORRECTION_HISTORY_TOTAL)}. The Oct 12 amount replaces cash already held, so it shows on the week and not as its own history row.`;
+  return `The payment history will total ${formatMoney(CORRECTION_HISTORY_TOTAL)}. The Oct 12 amount is its own history row. It replaces cash already held, so it is not part of that total.`;
 }
 
 export function countWord(count: number): string {

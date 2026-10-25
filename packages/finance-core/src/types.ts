@@ -55,4 +55,10 @@ export type SettlementPeriodRow = {
   fuelCredits?: number;
   cashWrittenOff?: number;
   settlementPaid?: number;
+  /** Signed corrections on this week. Positive means the company owes more. */
+  postedAdjustments?: number;
+  /** Cash custody brought forward from a prior closed week. */
+  openingCashCustody?: number;
+  /** Saved week balance. A finished week shows this instead of a second calculation. */
+  settlementAmount?: number;
 };

@@ -62,9 +62,7 @@ export function VehicleAddedScreen() {
                       verified
                     </span>
                   </div>
-                  <span className={"font-body-sm text-body-sm text-on-surface-variant"}>
-                    Custom Micro-Van • JDM Import
-                  </span>
+                  <span className={"hidden font-body-sm text-body-sm text-on-surface-variant"} />
                 </div>
               </div>
             </div>
@@ -76,23 +74,12 @@ export function VehicleAddedScreen() {
                   </span>
                   Baseline
                 </span>
-                <span className={"font-bold text-on-surface"}>
-                  84,210 km
-                </span>
-              </div>
-              <div className={"flex items-center justify-between text-on-surface font-label-md text-label-md"}>
-                <span className={"flex items-center gap-1 text-on-surface-variant"}>
-                  <span className={"material-symbols-outlined text-[16px]"}>
-                    tune
-                  </span>
-                  Powertrain
-                </span>
-                <span>
-                  1.0L Turbo (1KR-FE) • CVT
+                <span className={"font-bold text-on-surface"} data-slot={"last-reading"}>
+                  No reading yet
                 </span>
               </div>
             </div>
-            <div className={"flex flex-wrap items-center gap-space-xs"}>
+            <div className={"flex flex-wrap items-center gap-space-xs"} style={{ display: "none" }}>
               <span className={"inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-surface-container text-on-surface font-label-sm"}>
                 <span>
                   🇯🇲

@@ -39,6 +39,12 @@ export interface PayoutPeriodRow {
   personalTollCharge?: number;
   cashWrittenOff?: number;
   settlementPaid?: number;
+  /** Saved week balance. A finished week shows this, not a second calculation. */
+  settlementAmount?: number;
+  /** Signed corrections. Positive means the company owes more. */
+  postedAdjustments?: number;
+  /** Cash brought forward from a prior closed week. */
+  openingCashCustody?: number;
   bankSettled: number;
   status: PayoutStatus;
   cashPaidBreakdown?: CashPaidBreakdown;

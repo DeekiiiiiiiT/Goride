@@ -44,33 +44,8 @@ export function HelpMapParishScreen() {
               Help Map Your Parish
             </h2>
             <p className={"font-body-md text-body-md text-on-surface-variant leading-relaxed mb-space-md"}>
-              Join fellow Jamaican Road Scouts in filling missing fuel stops, tyre shops, and trusted roadside mechanics across all 14 parishes.
+              Help fill in missing fuel stops, tyre shops, and mechanics across all 14 parishes.
             </p>
-            <div className={"bg-surface-container rounded-xl p-space-sm shadow-sm flex flex-col gap-space-xs"}>
-              <div className={"flex items-center justify-between"}>
-                <span className={"font-label-md text-label-md text-on-surface-variant flex items-center gap-1"}>
-                  <span className={"w-2 h-2 rounded-full bg-secondary"} />
-                  Islandwide Coverage
-                </span>
-                <span className={"font-headline-sm text-headline-sm text-secondary font-bold"}>
-                  54%
-                </span>
-              </div>
-              <div className={"w-full bg-surface-container-highest rounded-full h-2 overflow-hidden"}>
-                <div className={"bg-primary h-full rounded-full"} style={{ width: "54%" }} />
-              </div>
-              <div className={"flex items-center justify-between pt-1 font-label-sm text-label-sm text-on-surface-variant"}>
-                <span className={"flex items-center gap-1"}>
-                  <span className={"material-symbols-outlined text-[14px] text-primary"}>
-                    priority_high
-                  </span>
-                  7 Parishes Critical
-                </span>
-                <span className={"bg-primary-fixed text-on-primary-fixed-variant px-2 py-0.5 rounded-full font-bold"}>
-                  
-                </span>
-              </div>
-            </div>
           </div>
           <div className={"px-gutter mb-space-lg"}>
             <div className={"bg-surface-container-lowest rounded-2xl p-space-md shadow-sm"}>

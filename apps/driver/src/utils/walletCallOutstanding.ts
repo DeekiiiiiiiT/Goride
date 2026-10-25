@@ -62,7 +62,12 @@ export function walletCallOutstandingFromPeriod(
   row: PayoutPeriodRow,
 ): WalletCallOutstanding {
   const weekKey = format(row.periodStart, 'yyyy-MM-dd');
-  const { adjCashBalance, settlement, netPayoutApplied } = getPeriodSettlementComponents(row);
+  const { adjCashBalance, settlement: recalculated, netPayoutApplied } = getPeriodSettlementComponents(row);
+  const saved = Number(row.settlementAmount);
+  const hasSaved = row.settlementAmount != null && Number.isFinite(saved);
+  const hasCorrections = Math.abs(Number(row.postedAdjustments) || 0) > 0.005;
+  const useSaved = hasSaved && (row.isFinalized || hasCorrections);
+  const settlement = useSaved ? round2(saved) : recalculated;
   const stillHeld = round2(adjCashBalance);
   const inputs = readCashInputs(row);
   const breakdown: WalletCashBreakdown = {
@@ -71,12 +76,12 @@ export function walletCallOutstandingFromPeriod(
     netPayoutApplied: round2(netPayoutApplied),
   };
 
-  if (row.isFinalized) {
+  if (row.isFinalized || useSaved) {
     const s = round2(settlement);
     if (s < -0.005) {
       return {
         weekKey,
-        finalized: true,
+        finalized: row.isFinalized,
         stillHeld,
         settlement: s,
         callAmount: round2(-s),
@@ -88,7 +93,7 @@ export function walletCallOutstandingFromPeriod(
     if (s > 0.005) {
       return {
         weekKey,
-        finalized: true,
+        finalized: row.isFinalized,
         stillHeld,
         settlement: s,
         callAmount: s,
@@ -99,7 +104,7 @@ export function walletCallOutstandingFromPeriod(
     }
     return {
       weekKey,
-      finalized: true,
+      finalized: row.isFinalized,
       stillHeld,
       settlement: s,
       callAmount: 0,

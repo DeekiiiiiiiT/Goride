@@ -15,10 +15,20 @@ type Vehicle = {
 type Station = {
   id: string;
   name: string;
-  brand?: string;
-  parish?: string;
-  address?: string;
+  brand?: string | null;
+  address?: string | null;
   prices?: Record<string, number>;
+  price_updated_at?: string | null;
+};
+
+type FuelLog = {
+  station_id?: string | null;
+  grade?: string | null;
+  amount?: number | null;
+  litres?: number | null;
+  odometer?: number | null;
+  price_per_litre?: number | null;
+  created_at?: string | null;
 };
 
 function replaceText(root: ParentNode, from: string, to: string) {
@@ -33,6 +43,42 @@ function slotText(root: ParentNode, slot: string, text: string) {
   root.querySelectorAll<HTMLElement>(`[data-slot="${slot}"]`).forEach((node) => {
     node.textContent = text;
   });
+}
+
+function setSlot(root: ParentNode, slot: string, text: string | null) {
+  root.querySelectorAll<HTMLElement>(`[data-slot="${slot}"]`).forEach((node) => {
+    const row = (node.closest('[data-slot-row]') as HTMLElement | null) || node;
+    if (!text) {
+      row.style.display = 'none';
+      if (node !== row) node.textContent = '';
+      return;
+    }
+    node.textContent = text;
+    row.style.display = '';
+    row.classList.remove('hidden');
+  });
+}
+
+function gradeLabel(grade?: string | null): string {
+  const key = String(grade || '').toLowerCase();
+  if (key === 'e10_90') return 'E-10 90';
+  if (key === 'ulsd') return 'ULSD';
+  if (key === 'diesel') return 'Diesel';
+  if (key === 'e10_87') return 'E-10 87';
+  return key ? key.replace(/_/g, ' ') : 'Fuel';
+}
+
+function money(value: number): string {
+  return `J$${Number(value).toFixed(2)}`;
+}
+
+function readingLabel(value: number | null): string {
+  return value == null ? 'No reading yet' : `${Number(value).toLocaleString('en-JM')} km`;
+}
+
+function asKm(value: unknown): number | null {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
 }
 
 function note(root: HTMLElement, text: string, role: 'status' | 'alert') {
@@ -65,14 +111,72 @@ async function fillVehicle(root: HTMLElement) {
   const car = cars.find((row) => row.id === id) || cars[0];
   if (!car) {
     slotText(root, 'car', 'Add a car');
-    note(root, 'Add a car to see it here.', 'status');
+    slotText(root, 'last-reading', 'No reading yet');
+    paintGps(root);
     return;
   }
   rememberVehicle(car);
   slotText(root, 'car', carLabel(car));
-  const reading = car.starting_odometer;
+  const reading = await lastReading(car);
   const odo = root.querySelector('[data-slot="odometer"]');
-  if (odo) odo.textContent = reading == null ? '' : Number(reading).toLocaleString();
+  if (odo) odo.textContent = reading == null ? '' : Number(reading).toLocaleString('en-JM');
+  slotText(root, 'last-reading', readingLabel(reading));
+  paintSinceLast(root, reading);
+  paintGps(root);
+}
+
+async function lastReading(car: Vehicle | undefined): Promise<number | null> {
+  if (!car) return null;
+  try {
+    const body = await plugSend<{ logs: FuelLog[] }>(`/fuel-logs?vehicleId=${encodeURIComponent(car.id)}`, 'GET');
+    const logged = (body.logs || []).map((row) => asKm(row.odometer)).find((value) => value != null);
+    if (logged != null) return logged;
+  } catch {
+    /* A signed-out screen still shows the saved starting reading. */
+  }
+  return asKm(car.starting_odometer);
+}
+
+function paintGps(root: HTMLElement) {
+  const name = sessionStorage.getItem('plug-station-name');
+  const accuracy = Number(sessionStorage.getItem('plug-accuracy'));
+  const parts: string[] = [];
+  if (accuracy > 0 && accuracy <= 100) parts.push(`GPS ±${Math.round(accuracy)} m`);
+  if (name) parts.push(name);
+  setSlot(root, 'gps', parts.length ? parts.join(' · ') : null);
+}
+
+function paintSinceLast(root: HTMLElement, last: number | null) {
+  const current = asKm(String(sessionStorage.getItem('plug-odometer') || '').replace(/,/g, ''));
+  if (last == null || current == null) {
+    setSlot(root, 'since-last', null);
+    return;
+  }
+  const distance = Math.round(current - last);
+  setSlot(root, 'since-last', distance > 0 ? `${distance.toLocaleString('en-JM')} km` : null);
+}
+
+function paintPrices(root: HTMLElement, station: Station) {
+  const prices = station.prices || {};
+  root.querySelectorAll<HTMLElement>('[data-slot="prices"]').forEach((slot) => {
+    slot.textContent = '';
+    Object.entries(prices).forEach(([grade, value]) => {
+      const amount = Number(value);
+      if (!Number.isFinite(amount)) return;
+      const row = document.createElement('div');
+      row.className = 'p-3 rounded-xl bg-surface-container-low flex items-center justify-between';
+      const name = document.createElement('span');
+      name.className = 'font-label-lg text-on-surface';
+      name.textContent = gradeLabel(grade);
+      const price = document.createElement('span');
+      price.className = 'font-bold text-on-surface';
+      price.textContent = money(amount);
+      row.append(name, price);
+      slot.appendChild(row);
+    });
+  });
+  const when = station.price_updated_at ? new Date(station.price_updated_at) : null;
+  setSlot(root, 'price-updated', when && !Number.isNaN(when.getTime()) ? `Updated ${when.toLocaleDateString('en-JM')}` : null);
 }
 
 async function fillGarage(root: HTMLElement) {
@@ -111,12 +215,12 @@ async function fillStation(root: HTMLElement) {
   if (!station) return;
   sessionStorage.setItem('plug-station', station.id);
   sessionStorage.setItem('plug-station-name', station.name);
-  replaceText(root, 'Rubis Hope Road', station.name);
-  const title = root.querySelector('h1.font-headline-md');
-  if (title) title.textContent = station.name;
-  const prices = station.prices || {};
-  const first = Object.entries(prices)[0];
-  if (first) replaceText(root, 'J$214.50', `J$${Number(first[1]).toFixed(2)}`);
+  slotText(root, 'station-name', station.name);
+  const brand = station.brand?.trim() || '';
+  setSlot(root, 'brand', brand || null);
+  setSlot(root, 'address', station.address?.trim() || null);
+  paintPrices(root, station);
+  paintGps(root);
 }
 
 async function fillTolls(root: HTMLElement) {
@@ -191,9 +295,55 @@ async function fillHistory(root: HTMLElement) {
 
 async function fillSpend(root: HTMLElement) {
   const id = vehicleId();
-  const body = await plugSend<{ logs: { amount?: number }[] }>(`/fuel-logs${id ? `?vehicleId=${encodeURIComponent(id)}` : ''}`, 'GET');
-  const total = (body.logs || []).reduce((sum, row) => sum + Number(row.amount || 0), 0);
-  slotText(root, 'spend', body.logs?.length ? `J$${total.toFixed(2)}` : 'No fuel spend yet');
+  const [logsBody, cars, stationsBody] = await Promise.all([
+    plugSend<{ logs: FuelLog[] }>(`/fuel-logs${id ? `?vehicleId=${encodeURIComponent(id)}` : ''}`, 'GET'),
+    garage().catch(() => [] as Vehicle[]),
+    publicGet<{ stations: Station[] }>('/stations').catch(() => ({ stations: [] as Station[] })),
+  ]);
+  const logs = logsBody.logs || [];
+  const total = logs.reduce((sum, row) => sum + Number(row.amount || 0), 0);
+  slotText(root, 'spend', logs.length ? money(total) : 'No fuel spend yet');
+  const names = new Map((stationsBody.stations || []).map((station) => [station.id, station.name]));
+  const car = cars.find((row) => row.id === id) || cars[0];
+  const slot = root.querySelector<HTMLElement>('[data-slot="fills"]');
+  const count = root.querySelector<HTMLElement>('[data-slot="fill-count"]');
+  if (count) count.textContent = logs.length ? `${logs.length}` : '';
+  if (!slot) return;
+  if (!logs.length) {
+    slot.textContent = 'No fills yet';
+    return;
+  }
+  const ordered = [...logs].sort((a, b) => String(a.created_at || '').localeCompare(String(b.created_at || '')));
+  let previous = asKm(car?.starting_odometer);
+  const economy = new Map<FuelLog, number>();
+  ordered.forEach((row) => {
+    const reading = asKm(row.odometer);
+    const litres = Number(row.litres);
+    if (previous != null && reading != null && reading > previous && litres > 0) {
+      economy.set(row, (reading - previous) / litres);
+    }
+    if (reading != null) previous = reading;
+  });
+  slot.textContent = '';
+  logs.forEach((row) => {
+    const card = document.createElement('div');
+    card.className = 'rounded-xl bg-surface-container-lowest p-4 shadow-sm';
+    const title = document.createElement('p');
+    title.className = 'font-bold';
+    const when = row.created_at ? new Date(row.created_at).toLocaleDateString('en-JM') : '';
+    const station = row.station_id ? names.get(row.station_id) : '';
+    title.textContent = [station || 'Fuel stop', gradeLabel(row.grade), when].filter(Boolean).join(' · ');
+    const detail = document.createElement('p');
+    detail.className = 'text-sm';
+    const km = economy.get(row);
+    detail.textContent = [
+      row.litres != null ? `${Number(row.litres)} L` : '',
+      row.amount != null ? money(Number(row.amount)) : '',
+      km != null ? `${km.toFixed(1)} km/L` : '',
+    ].filter(Boolean).join(' · ');
+    card.append(title, detail);
+    slot.appendChild(card);
+  });
 }
 
 async function fillDocs(root: HTMLElement) {
@@ -332,9 +482,9 @@ async function paintCarName(root: HTMLElement) {
 export async function fillScreen(file: string, root: HTMLElement) {
   root.querySelector('[data-fill-note]')?.remove();
   try {
-    if (file === '30-vehicle-overview.html' || file === '13-vehicle-added.html') await fillVehicle(root);
+    if (file === '30-vehicle-overview.html' || file === '13-vehicle-added.html' || file === '24-odometer-scan.html' || file === '25-confirm-odometer.html') await fillVehicle(root);
     else if (file === '29-my-vehicles.html') await fillGarage(root);
-    else if (file === '19-station-detail.html' || file === '17-station-list.html') await fillStation(root);
+    else if (file === '19-station-detail.html' || file === '19b-directions.html' || file === '17-station-list.html') await fillStation(root);
     else if (file === '48-tolls.html') await fillTolls(root);
     else if (file === '51-account.html' || file === '52-notification-settings.html') await fillAccount(root);
     else if (file === '34-history.html') await fillHistory(root);

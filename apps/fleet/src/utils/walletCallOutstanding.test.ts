@@ -87,6 +87,42 @@ describe('walletCallOutstandingFromPeriod', () => {
     expect(o.breakdown.cashWrittenOff).toBeCloseTo(250, 2);
   });
 
+  it('an open week with corrections shows the saved balance the desk saved', () => {
+    const o = walletCallOutstandingFromPeriod(
+      row({
+        periodStart: new Date('2026-10-19T12:00:00'),
+        isFinalized: false,
+        passengerCash: 7313,
+        cashOwed: 7313,
+        settlementAmount: 37397.13,
+        postedAdjustments: 44710.13,
+      }),
+    );
+    expect(o.finalized).toBe(false);
+    expect(o.callDirection).toBe('fleet_owes');
+    expect(o.callLabel).toBe('Fleet owes driver');
+    expect(o.callAmount).toBeCloseTo(37397.13, 2);
+  });
+
+  it('a finished week shows the saved balance, including corrections', () => {
+    const o = walletCallOutstandingFromPeriod(
+      row({
+        periodStart: new Date('2026-10-19T12:00:00'),
+        isFinalized: true,
+        netPayout: 0,
+        passengerCash: 7313,
+        cashOwed: 7313,
+        cashPaid: 0,
+        settlementAmount: 37397.13,
+        postedAdjustments: 44710.13,
+      }),
+    );
+    expect(o.callDirection).toBe('fleet_owes');
+    expect(o.callLabel).toBe('Fleet owes driver');
+    expect(o.callAmount).toBeCloseTo(37397.13, 2);
+    expect(o.settlement).toBeCloseTo(37397.13, 2);
+  });
+
   it('finalized zero settlement → settled / reconciled', () => {
     // stillHeld = 5000 − 2000 − 1000 = 2000; net payout 2000 → settlement 0
     const o = walletCallOutstandingFromPeriod(

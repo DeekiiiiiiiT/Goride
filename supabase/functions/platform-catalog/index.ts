@@ -38,7 +38,7 @@ app.get("/health", () => cached({ service: "platform-catalog", status: "ok" }));
 app.get("/stations", async () => {
   try {
     const sb = admin();
-    const { data, error } = await sb.schema("places").from("public_station").select("id,name,brand,lat,lng,pcode,prices,price_updated_at,capabilities");
+    const { data, error } = await sb.schema("places").from("public_station").select("id,name,brand,address,lat,lng,pcode,prices,price_updated_at,capabilities");
     if (error) throw error;
     return cached({ stations: data || [] });
   } catch (err) {
@@ -49,7 +49,7 @@ app.get("/stations", async () => {
 app.get("/stations/:id", async (c) => {
   try {
     const sb = admin();
-    const { data, error } = await sb.schema("places").from("public_station").select("id,name,brand,lat,lng,pcode,prices,price_updated_at,capabilities").eq("id", c.req.param("id")).maybeSingle();
+    const { data, error } = await sb.schema("places").from("public_station").select("id,name,brand,address,lat,lng,pcode,prices,price_updated_at,capabilities").eq("id", c.req.param("id")).maybeSingle();
     if (error) throw error;
     if (!data) return Response.json({ error: "Station not found" }, { status: 404 });
     return cached({ station: data });

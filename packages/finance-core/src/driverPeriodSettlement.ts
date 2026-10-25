@@ -136,6 +136,20 @@ export function computePeriodSettlementMinor(i: PeriodSettlementInput): PeriodSe
   };
 }
 
+/**
+ * Statement stamp must use the same corrections as the first pass.
+ * Reads postedAdjustments off the week. Callers cannot leave them out.
+ */
+export function statementBackedSettlement(
+  input: Omit<PeriodSettlementInput, 'postedAdjustments'>,
+  financeCore: { postedAdjustments?: unknown } | null | undefined,
+): PeriodSettlementResult {
+  return computePeriodSettlement({
+    ...input,
+    postedAdjustments: round2(Number(financeCore?.postedAdjustments) || 0),
+  });
+}
+
 /** Major-unit wrapper — delegates to minor path then converts at boundary. */
 export function computePeriodSettlement(i: PeriodSettlementInput): PeriodSettlementResult {
   const m = computePeriodSettlementMinor(i);

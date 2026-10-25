@@ -116,8 +116,8 @@ export function NotificationsScreen() {
                       <div className={"flex items-center gap-1.5 mt-0.5"}>
                         <span className={"inline-flex items-center px-2 py-0.5 rounded-full bg-surface-container font-label-sm text-label-sm text-on-surface-variant font-semibold"} data-slot={"car"}>
                           Add a car</span>
-                        <span className={"font-body-sm text-body-sm text-outline"}>
-                          84,210 km
+                        <span className={"font-body-sm text-body-sm text-outline"} data-slot={"last-reading"}>
+                          No reading yet
                         </span>
                       </div>
                     </div>
@@ -199,11 +199,7 @@ export function NotificationsScreen() {
                   </span>
                 </div>
                 <p className={"mt-2.5 font-body-md text-body-md text-on-surface-variant"}>
-                  A Kingston Road Scout verified your coordinates.
-                  <strong className={"text-on-surface"}>
-                    18 motorists
-                  </strong>
-                  {"navigated to this tire & brake depot today!"}
+                  Roam reviews every place.
                 </p>
                 <div className={"mt-3 rounded-lg overflow-hidden relative h-28 bg-surface-variant flex items-end p-2.5"}>
                   <div className={"absolute inset-0 w-full h-full object-cover bg-surface-container flex items-center justify-center text-primary"} aria-hidden={"true"}><span className={"material-symbols-outlined text-[32px]"}>image</span></div>

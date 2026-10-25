@@ -75,6 +75,12 @@ export interface PayoutPeriodRow {
    * Cleared Driver Payouts tagged to this Settlement Week — reduces company-owes residual.
    */
   settlementPaid?: number;
+  /** Saved week balance. A finished week shows this, not a second calculation. */
+  settlementAmount?: number;
+  /** Signed corrections. Positive means the company owes more. */
+  postedAdjustments?: number;
+  /** Cash brought forward from a prior closed week. */
+  openingCashCustody?: number;
   /** Tips paid to driver (quota met). */
   tipsPaidToDriver?: number;
   /** Tips withheld (quota miss) — fleet retained. */

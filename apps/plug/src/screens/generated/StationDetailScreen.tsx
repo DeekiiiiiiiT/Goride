@@ -39,14 +39,6 @@ export function StationDetailScreen() {
           <div className={"relative w-full h-56 bg-surface-container-high overflow-hidden shadow-sm"}>
             <div className={"w-full h-full bg-surface-container flex items-center justify-center text-primary"} aria-hidden={"true"}><span className={"material-symbols-outlined text-[32px]"}>image</span></div>
             <div className={"absolute inset-0 bg-gradient-to-t from-on-background/80 via-transparent to-black/30"} />
-            <div className={"absolute bottom-3 right-4 bg-inverse-surface/80 backdrop-blur-md px-3 py-1 rounded-full flex items-center gap-1.5 shadow-sm"}>
-              <span className={"material-symbols-outlined text-[16px] text-inverse-on-surface"}>
-                photo_camera
-              </span>
-              <span className={"font-label-sm text-label-sm text-inverse-on-surface tracking-wider"}>
-                1/6 Photos
-              </span>
-            </div>
             <div className={"absolute bottom-3 left-4 bg-surface/95 backdrop-blur-md px-3 py-1 rounded-full flex items-center gap-2 shadow-sm"}>
               <span className={"relative flex h-2.5 w-2.5"}>
                 <span className={"animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"} />
@@ -61,8 +53,8 @@ export function StationDetailScreen() {
             <div className={"flex items-start justify-between gap-space-sm"}>
               <div className={"flex-1 min-w-0"}>
                 <div className={"flex items-center gap-2 mb-1 flex-wrap"}>
-                  <span className={"px-2.5 py-0.5 rounded-full bg-surface-container-highest text-secondary font-label-sm text-label-sm uppercase tracking-wider font-extrabold"}>
-                    Rubis Ultra
+                  <span className={"hidden px-2.5 py-0.5 rounded-full bg-surface-container-highest text-secondary font-label-sm text-label-sm uppercase tracking-wider font-extrabold"} data-slot-row={"brand"} style={{ display: "none" }}>
+                    <span data-slot={"brand"} />
                   </span>
                   <span className={"px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-label-sm text-label-sm flex items-center gap-1 font-bold"}>
                     <span className={"material-symbols-outlined text-[14px]"}>
@@ -71,45 +63,20 @@ export function StationDetailScreen() {
                     Verified by Roam
                   </span>
                 </div>
-                <h1 className={"font-headline-md text-headline-md text-on-surface truncate"}>
-                  Rubis Hope Road
-                </h1>
+                <h1 className={"font-headline-md text-headline-md text-on-surface truncate"} data-slot={"station-name"} />
               </div>
-              <div className={"w-12 h-12 rounded-xl bg-surface-container-lowest shadow-md flex items-center justify-center p-1.5 flex-shrink-0"}>
-                <div className={"w-full h-full rounded-lg bg-red-600 flex flex-col items-center justify-center font-black text-white text-[12px] leading-tight shadow-inner"}>
-                  <span className={"tracking-tighter"}>
-                    RUBIS
-                  </span>
+              <div className={"hidden w-12 h-12 rounded-xl bg-surface-container-lowest shadow-md flex items-center justify-center p-1.5 flex-shrink-0"} data-slot-row={"brand"} style={{ display: "none" }}>
+                <div className={"w-full h-full rounded-lg bg-surface-container flex flex-col items-center justify-center font-black text-on-surface text-[12px] leading-tight"}>
+                  <span className={"tracking-tighter"} data-slot={"brand"} />
                 </div>
               </div>
             </div>
-            <div className={"flex flex-col gap-1.5 text-on-surface-variant font-body-sm text-body-sm"}>
+            <div className={"hidden flex flex-col gap-1.5 text-on-surface-variant font-body-sm text-body-sm"} data-slot-row={"address"} style={{ display: "none" }}>
               <div className={"flex items-center gap-1.5"}>
                 <span className={"material-symbols-outlined text-[18px] text-primary"}>
                   location_on
                 </span>
-                <span className={"truncate"}>
-                  123 Hope Road, Liguanea, Kingston 6, St. Andrew
-                </span>
-              </div>
-              <div className={"flex items-center gap-2 mt-0.5"}>
-                <button onClick={onPlugClick} className={"inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-surface-container text-on-surface font-label-sm text-label-sm hover:bg-surface-container-high transition-colors active:scale-95"} id={"copy-code-btn"} data-act={"copy-code-btn"}>
-                  <span className={"material-symbols-outlined text-[15px] text-on-surface-variant"}>
-                    content_copy
-                  </span>
-                  <span className={"font-mono font-semibold"}>
-                    7GRM+QX Kingston
-                  </span>
-                </button>
-                <span className={"hidden font-label-sm text-label-sm text-emerald-700 font-bold animate-pulse"} id={"copy-feedback"}>
-                  Copied!
-                </span>
-                <span className={"text-on-surface-variant/50"}>
-                  •
-                </span>
-                <span className={"font-label-sm text-label-sm text-on-surface-variant"}>
-                  St. Andrew Hub
-                </span>
+                <span className={"truncate"} data-slot={"address"} />
               </div>
             </div>
           </div>
@@ -144,7 +111,7 @@ export function StationDetailScreen() {
                 </button>
               </div>
               <p className={"font-body-sm text-body-sm text-on-surface-variant"}>
-                Select your preferred navigation co-pilot for Hope Road traffic routing:
+                Choose Google Maps or Waze.
               </p>
               <div className={"grid grid-cols-2 gap-2 pt-2"}>
                 <button onClick={onPlugClick} className={"p-3 rounded-xl bg-surface-container text-on-surface flex flex-col items-center gap-1 font-label-md text-label-md active:bg-surface-container-high"} data-act={"google-maps"}>
@@ -180,92 +147,14 @@ export function StationDetailScreen() {
                     </p>
                   </div>
                 </div>
-                <span className={"px-2 py-1 rounded bg-amber-100 text-amber-900 font-label-sm text-label-sm uppercase font-extrabold tracking-wide"}>
-                  Petrojam Indexed
+                <span className={"hidden px-2 py-1 rounded bg-surface-container text-on-surface-variant font-label-sm text-label-sm"} data-slot-row={"price-updated"} style={{ display: "none" }}>
+                  <span data-slot={"price-updated"} />
                 </span>
               </div>
-              <div className={"flex flex-col gap-2.5"}>
-                <div className={"p-3 rounded-xl bg-surface-container-low flex items-center justify-between"}>
-                  <div className={"flex items-center gap-3"}>
-                    <div className={"w-10 h-10 rounded-lg bg-emerald-700 flex items-center justify-center text-white font-extrabold text-sm shadow-sm"}>
-                      87
-                    </div>
-                    <div className={"flex flex-col"}>
-                      <span className={"font-label-lg text-label-lg text-on-surface"}>
-                        E-10 87 Unleaded
-                      </span>
-                      <span className={"font-body-sm text-body-sm text-on-surface-variant"}>
-                        Updated 2h ago by Andre B.
-                      </span>
-                    </div>
-                  </div>
-                  <div className={"flex flex-col items-end"}>
-                    <span className={"font-price-display text-price-display text-primary"}>
-                      J$214.50
-                    </span>
-                    <span className={"font-label-sm text-label-sm text-on-surface-variant font-medium"}>
-                      / Litre
-                    </span>
-                  </div>
-                </div>
-                <div className={"p-3 rounded-xl bg-surface-container-low flex items-center justify-between"}>
-                  <div className={"flex items-center gap-3"}>
-                    <div className={"w-10 h-10 rounded-lg bg-red-700 flex items-center justify-center text-white font-extrabold text-sm shadow-sm"}>
-                      90
-                    </div>
-                    <div className={"flex flex-col"}>
-                      <span className={"font-label-lg text-label-lg text-on-surface"}>
-                        E-10 90 Unleaded
-                      </span>
-                      <span className={"font-body-sm text-body-sm text-on-surface-variant"}>
-                        Updated 2h ago
-                      </span>
-                    </div>
-                  </div>
-                  <div className={"flex flex-col items-end"}>
-                    <span className={"font-price-display text-price-display text-primary"}>
-                      J$224.10
-                    </span>
-                    <span className={"font-label-sm text-label-sm text-on-surface-variant font-medium"}>
-                      / Litre
-                    </span>
-                  </div>
-                </div>
-                <div className={"p-3 rounded-xl bg-surface-container-low flex items-center justify-between"}>
-                  <div className={"flex items-center gap-3"}>
-                    <div className={"w-10 h-10 rounded-lg bg-neutral-900 flex items-center justify-center text-white font-extrabold text-xs shadow-sm"}>
-                      ULSD
-                    </div>
-                    <div className={"flex flex-col"}>
-                      <span className={"font-label-lg text-label-lg text-on-surface truncate max-w-[140px]"}>
-                        Ultra Low Diesel
-                      </span>
-                      <span className={"font-body-sm text-body-sm text-on-surface-variant"}>
-                        Updated yesterday
-                      </span>
-                    </div>
-                  </div>
-                  <div className={"flex flex-col items-end"}>
-                    <span className={"font-price-display text-price-display text-primary"}>
-                      J$231.80
-                    </span>
-                    <span className={"font-label-sm text-label-sm text-on-surface-variant font-medium"}>
-                      / Litre
-                    </span>
-                  </div>
-                </div>
-              </div>
-              <div className={"flex items-center gap-2 pt-1 text-on-surface-variant font-body-sm text-body-sm"}>
-                <span className={"material-symbols-outlined text-[16px] text-tertiary"}>
-                  info
-                </span>
-                <span>
-                  {"Prices verified from local taxi drivers' logs & pump receipts."}
-                </span>
-              </div>
+              <div className={"flex flex-col gap-2.5"} data-slot={"prices"} />
             </div>
           </div>
-          <div className={"px-gutter mt-space-md"}>
+          <div className={"hidden px-gutter mt-space-md"}>
             <div className={"bg-surface-container-lowest rounded-xl p-space-md shadow-sm flex items-center justify-between"}>
               <div className={"flex items-center gap-3"}>
                 <div className={"w-9 h-9 rounded-lg bg-surface-container flex items-center justify-center text-on-surface"}>
@@ -288,7 +177,7 @@ export function StationDetailScreen() {
               </span>
             </div>
           </div>
-          <div className={"px-gutter mt-space-lg"}>
+          <div className={"hidden px-gutter mt-space-lg"}>
             <div className={"flex items-center justify-between mb-space-sm"}>
               <h3 className={"font-headline-sm text-headline-sm text-on-surface"}>
                 Station Amenities
@@ -395,19 +284,14 @@ export function StationDetailScreen() {
               <h3 className={"font-headline-sm text-headline-sm text-on-surface"}>
                 {"Location & Approach"}
               </h3>
-              <span className={"font-label-sm text-label-sm text-primary font-bold"}>
-                Hope Rd / Liguanea
-              </span>
             </div>
-            <div className={"w-full h-36 rounded-2xl bg-cover bg-center shadow-sm relative overflow-hidden"} data-location={"123 Hope Road, Kingston, Jamaica"}>
+            <div className={"w-full h-36 rounded-2xl bg-surface-container shadow-sm relative overflow-hidden"}>
               <div className={"absolute inset-0 bg-black/20 flex items-center justify-center"}>
                 <div className={"bg-surface/90 backdrop-blur-md px-3.5 py-1.5 rounded-full shadow-lg flex items-center gap-2"}>
                   <span className={"material-symbols-outlined text-[18px] text-primary"}>
                     pin_drop
                   </span>
-                  <span className={"font-label-md text-label-md text-on-surface font-bold"}>
-                    Opposite Sovereign Centre
-                  </span>
+                  <span className={"font-label-md text-label-md text-on-surface font-bold"} data-slot={"station-name"} />
                 </div>
               </div>
             </div>
@@ -442,7 +326,7 @@ export function StationDetailScreen() {
               </button>
             </div>
           </div>
-          <div className={"px-gutter mt-space-md"}>
+          <div className={"hidden px-gutter mt-space-md"}>
             <div className={"bg-surface-container-highest/60 rounded-xl p-space-md flex items-center gap-3"}>
               <div className={"flex -space-x-2 overflow-hidden flex-shrink-0"}>
                 <div className={"inline-block h-8 w-8 rounded-full bg-secondary text-on-secondary flex items-center justify-center font-bold text-xs ring-2 ring-surface"}>

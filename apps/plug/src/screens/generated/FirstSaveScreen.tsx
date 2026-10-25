@@ -175,18 +175,12 @@ export function FirstSaveScreen() {
                 <p className={"font-headline-sm text-headline-sm font-semibold leading-snug mt-1 text-on-primary"}>
                   You completed your very first log — welcome to Roam Plug! You updated E-10 87 for all drivers 🇯🇲
                 </p>
-                <div className={"flex flex-wrap items-center justify-between gap-2 pt-space-xs mt-space-xs"}>
+                <div className={"flex flex-wrap items-center justify-between gap-2 pt-space-xs mt-space-xs"} style={{ display: "none" }}>
                   <div className={"inline-flex items-center gap-1.5 bg-on-secondary-container/30 px-space-sm py-1 rounded-full text-on-primary font-label-md text-label-md backdrop-blur-sm"}>
                     <span className={"material-symbols-outlined text-[16px] text-tertiary-fixed-dim"} style={{ fontVariationSettings: "'FILL' 1" }}>
                       military_tech
                     </span>
-                    <span>
-                      {"+50 First-Time Bonus XP & +15 Points"}
-                    </span>
                   </div>
-                  <span className={"font-label-sm text-label-sm text-tertiary-fixed font-bold tracking-wider uppercase"}>
-                    New Scout Driver
-                  </span>
                 </div>
               </div>
             </div>

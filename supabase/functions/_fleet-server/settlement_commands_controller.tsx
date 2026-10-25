@@ -1003,6 +1003,13 @@ app.post(`${BASE}/reverse`, requireSettlementPerm("settlements.reverse"), async 
     if (String(original.status) === "void" || String(original.kind) === "reverse") {
       return c.json({ error: "ALREADY_REVERSED", message: "Movement is already void or is a reversal" }, 400);
     }
+    const originalMeta = (original.metadata || {}) as Record<string, unknown>;
+    if (originalMeta.legacyAudit === true) {
+      return c.json({
+        error: "LEGACY_AUDIT_RECORD",
+        message: "This is a record of an older write-off. It does not change what anyone owes.",
+      }, 409);
+    }
 
     const driverId = String(original.driver_id);
     const weekAnchor = String(original.period_anchor).slice(0, 10);
