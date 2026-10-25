@@ -4,6 +4,7 @@ import { onPlugClick } from '../../shell/actions';
 import { bindScreen } from '../../shell/bind';
 import { scanPlugPhoto } from '../../shell/scan';
 import { lastOdometer } from '../../shell/facts';
+import { getPlugRuntime } from '../../shell/click';
 
 
 export function OdometerScanScreen() {
@@ -16,10 +17,10 @@ export function OdometerScanScreen() {
       isFleetDriver={false}
       lastOdometer={lastOdometer()}
       scanPhoto={scanPlugPhoto}
-      onCancel={() => { window.location.hash = '#/explore'; }}
+      onCancel={() => { getPlugRuntime().go(sessionStorage.getItem('plug-fuel-from') || '/explore'); }}
       onScanComplete={(result: ScanResult) => {
         sessionStorage.setItem('plug-odometer', String(result.reading));
-        window.location.hash = '#/fuel/confirm';
+        getPlugRuntime().go('/fuel/confirm');
       }}
     />
     <div ref={ref} data-plug-screen={"24-odometer-scan.html"} className={"bg-surface font-body-md text-on-surface flex flex-col min-h-screen pt-safe pb-safe"}>

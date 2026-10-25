@@ -3,12 +3,32 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { publicGet } from '../api';
 import { demoOn } from '../demo/mode';
+import { getPlugRuntime } from '../shell/click';
 
 type Station = { id: string; name: string; lat: number; lng: number; prices?: Record<string, number> };
 
 function money(prices: Record<string, number> | undefined, grade: string): string {
   const value = prices?.[grade];
   return value == null ? '' : `J$${Number(value).toFixed(2)}`;
+}
+
+function listenRecenter(map: L.Map, zoom: number) {
+  const recenter = () => {
+    const lat = Number(sessionStorage.getItem('plug-lat'));
+    const lng = Number(sessionStorage.getItem('plug-lng'));
+    if (Number.isFinite(lat) && Number.isFinite(lng)) {
+      map.setView([lat, lng], zoom);
+      return;
+    }
+    if (!navigator.geolocation) return;
+    navigator.geolocation.getCurrentPosition((pos) => {
+      sessionStorage.setItem('plug-lat', String(pos.coords.latitude));
+      sessionStorage.setItem('plug-lng', String(pos.coords.longitude));
+      map.setView([pos.coords.latitude, pos.coords.longitude], zoom);
+    });
+  };
+  window.addEventListener('plug-recenter', recenter);
+  return () => window.removeEventListener('plug-recenter', recenter);
 }
 
 export function ExploreMap() {
@@ -39,16 +59,18 @@ export function ExploreMap() {
       const price = money(row.prices, grade);
       const icon = L.divIcon({
         className: '',
-        html: `<button type="button" data-station-id="${row.id}" style="min-height:36px;border:0;border-radius:999px;background:#fff;padding:4px 8px;font:700 12px Inter,sans-serif;box-shadow:0 4px 12px rgba(0,0,0,.15)">${row.name.replace(/^DEMO /, '')} ${price}</button>`,
-        iconSize: [120, 36],
-        iconAnchor: [60, 36],
+        html: `<button type="button" data-station-id="${row.id}" style="min-height:44px;min-width:44px;border:0;border-radius:999px;background:#fff;padding:6px 10px;font:700 12px Inter,sans-serif;box-shadow:0 4px 12px rgba(0,0,0,.15)">${row.name.replace(/^DEMO /, '')} ${price}</button>`,
+        iconSize: [120, 44],
+        iconAnchor: [60, 44],
       });
       return L.marker([row.lat, row.lng], { icon }).addTo(map).on('click', () => {
         sessionStorage.setItem('plug-station', row.id);
-        window.location.hash = `#/stations/${row.id}`;
+        getPlugRuntime().go(`/stations/${row.id}`);
       });
     });
+    const stopRecenter = listenRecenter(map, map.getZoom());
     return () => {
+      stopRecenter();
       markers.forEach((marker) => marker.remove());
       map.remove();
     };
@@ -90,7 +112,11 @@ export function PinMap() {
         { enableHighAccuracy: true },
       );
     }
-    return () => { map.remove(); };
+    const stopRecenter = listenRecenter(map, 17);
+    return () => {
+      stopRecenter();
+      map.remove();
+    };
   }, []);
   return <div ref={node} className="absolute inset-0 z-0" />;
 }

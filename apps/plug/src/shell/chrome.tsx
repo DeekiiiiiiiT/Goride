@@ -27,13 +27,13 @@ export function TabBar({
 }) {
   const hide = (flag: string) => signedIn && !flagOn(flag);
   return (
-    <nav aria-label="Plug sections" className="fixed bottom-0 inset-x-0 z-50 pb-safe bg-surface/90 backdrop-blur-xl shadow-[0_-2px_12px_rgba(28,25,23,0.06)]" data-plug-tabs data-way-out="tabs">
+    <nav aria-label="Plug sections" className="absolute bottom-0 inset-x-0 z-50 pb-safe bg-surface/90 backdrop-blur-xl shadow-[0_-2px_12px_rgba(28,25,23,0.06)]" data-plug-tabs data-way-out="tabs">
       <div className="relative flex justify-around items-center h-16 px-space-xs">
         <TabLink id="explore" label="Explore" icon={TAB_ICON.explore} active={active === 'explore'} />
         {hide('plug.garage') ? <span className="flex-1" /> : <TabLink id="garage" label="Garage" icon={TAB_ICON.garage} active={active === 'garage'} />}
         {hide('plug.fuel_log') ? <span className="w-14" /> : (
           <div className="relative flex items-center justify-center w-14">
-            <button type="button" aria-label="Log Fuel Action" data-path="log-fuel" data-way-out="primary" onClick={onPlugClick} className="absolute -top-6 w-14 h-14 min-w-[48px] min-h-[48px] rounded-full bg-gradient-to-tr from-primary to-secondary-container text-on-primary flex flex-col items-center justify-center shadow-[0_8px_20px_-4px_rgba(163,57,0,0.45)] active:scale-95">
+            <button type="button" aria-label="Log Fuel Action" data-path="log-fuel" data-way-out="primary" onClick={onPlugClick} className="pressable absolute -top-6 w-14 h-14 min-w-[48px] min-h-[48px] rounded-full bg-gradient-to-tr from-primary to-secondary-container text-on-primary flex flex-col items-center justify-center shadow-[0_8px_20px_-4px_rgba(163,57,0,0.45)]">
               <span className="material-symbols-outlined text-[26px]">local_gas_station</span>
               <span className="font-label-sm text-[9px] uppercase tracking-tight -mt-0.5">Log</span>
             </button>
@@ -48,7 +48,7 @@ export function TabBar({
 
 function TabLink({ id, label, icon, active }: { id: string; label: string; icon: string; active: boolean }) {
   return (
-    <button type="button" data-path={id} onClick={onPlugClick} className={`flex-1 flex flex-col items-center justify-center gap-0.5 min-h-[48px] min-w-[48px] transition-colors ${active ? 'text-primary font-bold' : 'text-on-surface-variant'}`}>
+    <button type="button" data-path={id} onClick={onPlugClick} aria-current={active ? 'page' : undefined} className={`pressable flex-1 flex flex-col items-center justify-center gap-0.5 min-h-[48px] min-w-[48px] ${active ? 'text-primary font-bold' : 'text-on-surface-variant'}`}>
       <span className="material-symbols-outlined text-[24px]">{icon}</span>
       <span className="font-label-sm text-label-sm">{label}</span>
     </button>
@@ -60,6 +60,8 @@ export function PlugChrome({
   confirm,
   sheet,
   signReturn,
+  tabsOn,
+  keyboard,
   onCloseSheet,
   onCloseSign,
   onSignedIn,
@@ -68,32 +70,48 @@ export function PlugChrome({
   confirm: { message: string; yes: () => void; no: () => void } | null;
   sheet: string | null;
   signReturn: string | null;
+  tabsOn: boolean;
+  keyboard: number;
   onCloseSheet: () => void;
   onCloseSign: () => void;
   onSignedIn: (dest: string) => void;
 }) {
+  const open = Boolean(confirm || sheet || signReturn);
+  useEffect(() => {
+    if (!open) return;
+    const previous = document.activeElement as HTMLElement | null;
+    const dialog = document.querySelector<HTMLElement>('[data-plug-overlay]');
+    const focusable = dialog?.querySelector<HTMLElement>('input, button, textarea, select, a');
+    focusable?.focus();
+    return () => previous?.focus?.();
+  }, [open, confirm, sheet, signReturn]);
+  const toastBottom = keyboard > 0
+    ? `calc(${keyboard}px + 12px)`
+    : tabsOn
+      ? 'calc(var(--tabbar-total) + 12px)'
+      : 'calc(var(--safe-bottom) + 12px)';
   return (
     <>
       {toast ? (
-        <p role="status" className="fixed bottom-24 left-1/2 z-[80] w-[min(400px,calc(100%-2rem))] -translate-x-1/2 rounded-xl bg-inverse-surface px-4 py-3 text-sm text-inverse-on-surface shadow-lg">
+        <p role="status" aria-live="polite" className="absolute left-1/2 z-[80] w-[min(400px,calc(100%-2rem))] -translate-x-1/2 rounded-xl bg-inverse-surface px-4 py-3 text-sm text-inverse-on-surface shadow-lg" style={{ bottom: toastBottom }}>
           {toast}
         </p>
       ) : null}
       {confirm ? (
-        <div className="fixed inset-0 z-[80] flex items-end justify-center bg-on-surface/40 p-4" role="dialog">
-          <div className="w-full max-w-[430px] rounded-2xl bg-surface p-4 shadow-xl">
+        <div className="absolute inset-0 z-[80] flex items-end justify-center bg-on-surface/40 p-4 pb-safe" data-plug-overlay onClick={confirm.no}>
+          <div role="dialog" aria-modal="true" className="w-full max-w-[400px] rounded-2xl bg-surface p-4 shadow-xl" onClick={(event) => event.stopPropagation()}>
             <p className="text-on-surface">{confirm.message}</p>
             <div className="mt-4 grid grid-cols-2 gap-2">
-              <button type="button" className="min-h-12 rounded-xl bg-surface-container" onClick={confirm.no}>Keep</button>
-              <button type="button" className="min-h-12 rounded-xl bg-primary font-bold text-on-primary" onClick={confirm.yes}>Confirm</button>
+              <button type="button" className="pressable min-h-12 rounded-xl bg-surface-container" onClick={confirm.no}>Keep</button>
+              <button type="button" className="pressable min-h-12 rounded-xl bg-primary font-bold text-on-primary" onClick={confirm.yes}>Confirm</button>
             </div>
           </div>
         </div>
       ) : null}
-      {signReturn ? <SignInSheet returnTo={signReturn} onClose={onCloseSign} onDone={onSignedIn} /> : null}
+      {signReturn ? <SignInSheet returnTo={signReturn} keyboard={keyboard} onClose={onCloseSign} onDone={onSignedIn} /> : null}
       {sheet ? (
-        <div className="fixed inset-0 z-[75] flex items-end justify-center bg-on-surface/40" onClick={onCloseSheet}>
-          <div className="max-h-[85dvh] w-full max-w-[430px] overflow-auto rounded-t-3xl bg-surface" data-plug-sheet={sheet} onClick={(event) => event.stopPropagation()}>
+        <div className="absolute inset-0 z-[75] flex items-end justify-center bg-on-surface/40" data-plug-overlay onClick={onCloseSheet}>
+          <div role="dialog" aria-modal="true" aria-label={sheet} className="max-h-[90dvh] w-full max-w-[430px] overflow-auto rounded-t-3xl bg-surface pb-safe" data-plug-sheet={sheet} style={{ marginBottom: keyboard }} onClick={(event) => event.stopPropagation()}>
             <SheetBody name={sheet} onClose={onCloseSheet} />
           </div>
         </div>
@@ -102,7 +120,7 @@ export function PlugChrome({
   );
 }
 
-function SignInSheet({ returnTo, onClose, onDone }: { returnTo: string; onClose: () => void; onDone: (dest: string) => void }) {
+function SignInSheet({ returnTo, keyboard, onClose, onDone }: { returnTo: string; keyboard: number; onClose: () => void; onDone: (dest: string) => void }) {
   const [phone, setPhone] = useState('');
   const [code, setCode] = useState('');
   const [sent, setSent] = useState(false);
@@ -129,18 +147,18 @@ function SignInSheet({ returnTo, onClose, onDone }: { returnTo: string; onClose:
     }
   };
   return (
-    <div className="fixed inset-0 z-[75] flex items-end justify-center bg-on-surface/40" role="dialog" aria-label="Sign in">
-      <form className="w-full max-w-[430px] rounded-t-3xl bg-surface p-4" onSubmit={(event) => { event.preventDefault(); void (sent ? verify() : send()); }}>
+    <div className="absolute inset-0 z-[75] flex items-end justify-center bg-on-surface/40" data-plug-overlay onClick={onClose}>
+      <form className="w-full max-w-[430px] rounded-t-3xl bg-surface p-4 pb-safe" style={{ marginBottom: keyboard }} role="dialog" aria-label="Sign in" aria-modal="true" onClick={(event) => event.stopPropagation()} onSubmit={(event) => { event.preventDefault(); void (sent ? verify() : send()); }}>
         <h2 className="font-headline-sm text-headline-sm">Sign in to continue</h2>
         <p className="mt-1 text-sm text-on-surface-variant">You will come back to the same place.</p>
         {sent ? (
-          <input className="mt-4 h-12 w-full rounded-xl bg-surface-container-low px-3" inputMode="numeric" aria-label="Code" value={code} onChange={(event) => setCode(event.target.value)} placeholder="6-digit code" />
+          <input className="mt-4 h-12 w-full rounded-xl bg-surface-container-low px-3" type="text" inputMode="numeric" autoComplete="one-time-code" enterKeyHint="done" aria-label="Code" value={code} onChange={(event) => setCode(event.target.value)} placeholder="6-digit code" />
         ) : (
-          <input className="mt-4 h-12 w-full rounded-xl bg-surface-container-low px-3" inputMode="tel" aria-label="Phone" value={phone} onChange={(event) => setPhone(event.target.value)} placeholder="876 555 0199" />
+          <input className="mt-4 h-12 w-full rounded-xl bg-surface-container-low px-3" type="tel" inputMode="tel" autoComplete="tel" enterKeyHint="send" aria-label="Phone" value={phone} onChange={(event) => setPhone(event.target.value)} placeholder="876 555 0199" />
         )}
         {error ? <p role="alert" className="mt-2 text-sm text-error">{error}</p> : null}
-        <button type="submit" className="mt-4 min-h-12 w-full rounded-xl bg-primary font-bold text-on-primary">{sent ? 'Verify' : 'Send code'}</button>
-        <button type="button" className="mt-2 min-h-12 w-full rounded-xl" onClick={onClose}>Not now</button>
+        <button type="submit" className="pressable mt-4 min-h-12 w-full rounded-xl bg-primary font-bold text-on-primary">{sent ? 'Verify' : 'Send code'}</button>
+        <button type="button" className="pressable mt-2 min-h-12 w-full rounded-xl" onClick={onClose}>Not now</button>
       </form>
     </div>
   );

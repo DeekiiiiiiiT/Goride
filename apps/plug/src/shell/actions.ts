@@ -60,6 +60,11 @@ export async function handlePlugClick(el: HTMLElement) {
   const id = el.id;
   const dataPath = el.dataset.path || '';
 
+  if (act === 'my-location') {
+    window.dispatchEvent(new Event('plug-recenter'));
+    return;
+  }
+
   if (el.dataset.theme) {
     const theme = el.dataset.theme;
     const dark = theme === 'dark' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);

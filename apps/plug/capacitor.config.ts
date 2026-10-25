@@ -6,7 +6,7 @@ const config: CapacitorConfig = {
   webDir: 'dist',
   server: { androidScheme: 'https', iosScheme: 'https' },
   plugins: {
-    SplashScreen: { launchAutoHide: true, backgroundColor: '#FAFAF9', showSpinner: false },
+    SplashScreen: { launchAutoHide: true, backgroundColor: '#fff8f2', showSpinner: false },
   },
 };
 

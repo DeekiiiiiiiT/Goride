@@ -1,6 +1,7 @@
 import { plugSend, publicGet } from '../api';
 import { demoOn } from '../demo/mode';
 import { catalogVariant, rememberVehicle, vehicleId } from './facts';
+import { getPlugRuntime } from './click';
 
 type Vehicle = {
   id: string;
@@ -93,7 +94,7 @@ async function fillGarage(root: HTMLElement) {
     replaceText(card, '2016 Nissan AD Wagon', name);
     card.querySelectorAll('h3').forEach((heading) => { heading.textContent = name; });
     card.dataset.vehicleId = car.id;
-    card.addEventListener('click', () => { window.location.hash = `#/garage/${car.id}`; });
+    card.addEventListener('click', () => { getPlugRuntime().go(`/garage/${car.id}`); });
     if (index > 0) parent.appendChild(card);
     rememberVehicle(car);
   });

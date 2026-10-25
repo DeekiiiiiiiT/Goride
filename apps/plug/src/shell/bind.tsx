@@ -20,10 +20,10 @@ export function SearchBody() {
     return () => input?.removeEventListener('input', onInput);
   }, []);
   const shown = rows.filter((row) => !query || `${row.name} ${row.brand || ''}`.toLowerCase().includes(query.toLowerCase()));
-  if (query && shown.length === 0) {
-    window.location.hash = '#/search/empty';
-    return null;
-  }
+  useEffect(() => {
+    if (query && shown.length === 0 && rows.length > 0) getPlugRuntime().go('/search/empty');
+  }, [query, rows.length, shown.length]);
+  if (query && shown.length === 0) return null;
   return (
     <div className="flex flex-col gap-2 px-4 pb-3 pt-24">
       {shown.map((row) => (
@@ -74,7 +74,8 @@ export function bindScreen(file: string, root: HTMLElement) {
         sessionStorage.setItem('plug-service', service);
         const id = vehicleId();
         if (!id) return;
-        window.location.hash = `#/garage/${id}/service`;
+        window.dispatchEvent(new Event('plug-refresh'));
+        getPlugRuntime().go(`/garage/${id}/service`);
       });
     });
   }
@@ -87,7 +88,8 @@ export function bindScreen(file: string, root: HTMLElement) {
         sessionStorage.setItem('plug-doc', kind);
         const id = vehicleId();
         if (!id) return;
-        window.location.hash = `#/garage/${id}/documents/edit`;
+        window.dispatchEvent(new Event('plug-refresh'));
+        getPlugRuntime().go(`/garage/${id}/documents/edit`);
       });
     });
   }
@@ -108,7 +110,46 @@ export function bindScreen(file: string, root: HTMLElement) {
     }
   }
   hideFlagged(root);
+  tuneFields(root);
   void fillScreen(file, root);
+}
+
+function tuneFields(root: HTMLElement) {
+  root.querySelectorAll('input, textarea').forEach((node) => {
+    const input = node as HTMLInputElement;
+    const hint = `${input.id} ${input.getAttribute('aria-label') || ''} ${input.placeholder || ''}`.toLowerCase();
+    if (/phone/.test(hint)) {
+      input.type = 'tel';
+      input.inputMode = 'tel';
+      if (!input.autocomplete) input.autocomplete = 'tel';
+      input.enterKeyHint = 'next';
+    } else if (/otp|code|one-time/.test(hint)) {
+      input.inputMode = 'numeric';
+      input.autocomplete = 'one-time-code';
+      input.enterKeyHint = 'done';
+    } else if (/email/.test(hint)) {
+      input.type = 'email';
+      input.autocomplete = 'email';
+      input.enterKeyHint = 'next';
+    } else if (/amount|litre|liter|cost|price/.test(hint)) {
+      if (input.type === 'number') input.type = 'text';
+      input.inputMode = 'decimal';
+      input.autocomplete = 'off';
+      input.enterKeyHint = 'next';
+    } else if (/odometer|mileage|km\b/.test(hint)) {
+      if (input.type === 'number') input.type = 'text';
+      input.inputMode = 'numeric';
+      input.autocomplete = 'off';
+      input.enterKeyHint = 'next';
+    } else if (/search/.test(hint)) {
+      input.enterKeyHint = 'search';
+      if (!input.autocomplete) input.autocomplete = 'off';
+    } else if (/name|nickname|plate/.test(hint)) {
+      if (!input.autocomplete) input.autocomplete = 'name';
+      input.enterKeyHint = 'next';
+    }
+    if (!input.enterKeyHint) input.enterKeyHint = 'done';
+  });
 }
 
 const KIND_FLAG: Record<string, string> = {

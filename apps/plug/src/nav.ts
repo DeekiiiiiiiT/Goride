@@ -38,8 +38,16 @@ export function isFuel(path: string): boolean {
   return path === '/fuel' || path.startsWith('/fuel/');
 }
 
+/** Pin, details, and any screen that already draws its own bottom bar. */
+export function hidesShellTabs(path: string): boolean {
+  if (path === '/map' || path === '/map/pin' || path === '/map/pin/poor' || path === '/map/details') return true;
+  if (path === '/search/empty' || path === '/contributions/approved' || path === '/tolls' || path === '/parts/results' || path === '/parish') return true;
+  if (/^\/stations\/[^/]+\/directions$/.test(path)) return true;
+  return false;
+}
+
 export function showsTabs(path: string): boolean {
-  return !isOnboarding(path) && !isFuel(path);
+  return !isOnboarding(path) && !isFuel(path) && !hidesShellTabs(path);
 }
 
 /** Shared pages stay on the tab the person was already using. */

@@ -1,46 +1,64 @@
 # Roam Plug — Free Launch
 
-**Rev 13 · 2026-10-24 · App code is done and checks are green. Left: commit, deploy `explorer`, rate-limit the odometer scan, then the phone checks. Do not deploy the app to Vercel until you say ship.**
+**Rev 15 · 2026-10-24 · Scan cap is live (explorer v7, `f0c278d0`). The mobile polish is built and nothing scrolls sideways, but it's uncommitted, tap targets are still small on most screens, and there are no app icons. Then the phone checks. Do not deploy to Vercel until you say ship.**
 This doc lists only what is still open. Earlier revisions are in git history.
 
 **What it is:** a free public app for Jamaica, island-wide. Gas stations and prices, My Garage, parts, mechanics, facilities, tolls and reminders. Nothing is sold. The owner approves every mapped place in Dominion. Stitch project "Roam Plug" (`7833067736952351487`).
 
-**Verified this round (2026-10-24):** `tsc` clean. `check-dead-buttons` now fails on any `data-act` without a handler. `check-demo-leaks` passes. Both Playwright tests pass (8 journeys with demo on, public screens with demo off), and all of them are in `ci.yml`. A grep for demo ids finds them only behind `demoOn()`.
+**Verified 2026-10-24:**
+- `tsc` is clean, and `check-dead-buttons` and `check-demo-leaks` pass.
+- Playwright: both journey tests and the 360 px fit test pass.
+- A sweep of all 50 routes at 320 px and 360 px found **no sideways page scroll anywhere**.
+- Safe areas, keyboard inset, scroll lock, toast placement, reduced motion and focus rings are in.
 
 ---
 
-## 1. Open (do in this order)
+## 1. Open (in this order)
 
-| # | What | Why | Done when |
-|---|---|---|---|
-| O1 | **Commit the Plug work.** These files are uncommitted: `apps/plug/**` (with the new `act-kind.ts`, `facts.ts`, `fill.ts`, `scan.ts` and `check-demo-leaks.mjs`), `e2e/plug-journeys.spec.ts`, `supabase/functions/explorer/index.ts` and `.github/workflows/ci.yml`. Commit them on their own, separate from the unrelated finance and settlement changes in the same working tree. | CI only protects what is committed. | `git status` shows no Plug files. |
-| O2 | **Rate-limit `POST /explorer/odometer-scan`.** Every call is a paid OpenAI request, and the app is free and public. Fuel logs and pins already use `hitLimit()`, but the scan doesn't. Add `hitLimit(sb, user.id, "scan", 30)` and refuse files over about 5 MB. | One account could run up the OpenAI bill. | A 31st scan in an hour gets 429. |
-| O3 | **Deploy `explorer`.** Live is v6, which doesn't have `/odometer-scan`, so the scanner fails on a real phone. | The R3 scan is only in local code. | The new version is listed, and a scan with a real photo returns a reading. |
+| # | What | Done when |
+|---|---|---|
+| M1 | **Commit the mobile polish on its own.** These are uncommitted: `apps/plug/index.html`, `capacitor.config.ts`, `src/index.css`, `live/maps.tsx`, `nav.ts`, `shell/*` (including the new `viewport.ts`), `OdometerScanScreen.tsx`, `public/manifest.webmanifest`, `e2e/plug-mobile-fit.spec.ts` and `playwright.plug.config.ts`. | `git status` shows no Plug files. |
+| M2 | **Tap targets under 44 px on 45 of 50 screens.** The fit test only measures the tab bar and the sign-in sheet, so these got through. The worst are listed below. Fix them by enlarging the hit area with padding or `tap-target`, leaving the visual size the same. | Extend `plug-mobile-fit.spec.ts` to every route in `App.tsx` at 360 px, failing on anything under 44×44. It is green. |
+| M3 | **No app icons.** The manifest has no `icons`, and there's no `favicon.svg` or `apple-touch-icon`. Android won't offer "Install app", and iOS uses a screenshot as the home-screen icon. **Needs the owner's logo.** | 192 px, 512 px and maskable 512 px PNGs, plus a 180 px apple-touch-icon, are in `dist/`. |
 
-## 2. Phone checks (demo off, after §1)
-Run journeys 1–8 on a real phone:
+**M2, worst offenders:**
+- **Back buttons** 24–41 px wide: Documents edit, Documents, Fuel spend, Vehicle overview, Map It, Profile.
+- **Chips and tabs** 28–36 px tall: Explore filters and voice, History, Inbox, Fuel spend periods, Parts tiers, Fuel details grade chips.
+- **Small controls:**
+  - Settings theme radios: 20×20.
+  - OTP "Edit phone number": 24×24.
+  - Parish "add location": 32×32.
+  - Notification toggles: 56×32.
+  - Log service ticks: 40 tall.
+  - Footer links on Account and Login: 20–32 tall.
+  - Map pin close and info: 36×36.
+
+## 2. Owner decision
+- **Small text.** Every screen has labels under 12 px in the Stitch design itself, up to 42 on the station list. Raising them changes the look, so Cursor correctly left them. Decide: keep as designed, or allow a minimum of 12 px for small labels.
+- **Phone app.** There are no `ios/` or `android/` projects yet, so Plug runs only in the browser or as an installed web app. Native items (status bar, Android back button, splash) start when you run `cap add`.
+
+## 3. Phone checks (demo off, after §1)
+Run journeys 1–8 on a real phone, both in the browser and after Add to Home Screen:
 1. New user: Splash → Welcome → sign up → OTP → profile → consent → permissions → add car → Explore.
 2. Guest: Explore as guest → station → Directions → Waze. Log Fuel → sign-in sheet → back to Log Fuel.
-3. Log fuel: ⛽ → scan → confirm → details (station detected, 87 chosen) → save → Saved → "See my car".
-4. Car care: Garage → car → Maintenance → oil change → Log service → back with toast. Then Documents → Fitness → date → back.
-5. Parts: Garage → car → Parts → Brakes → results → part → "Find nearby parts stores" → Explore filtered.
+3. Log fuel: ⛽ → scan (real dashboard photo) → confirm → details → save → Saved → "See my car".
+4. Car care: Garage → car → Maintenance → oil change → Log service → toast. Documents → Fitness → date → back.
+5. Parts: Garage → car → Parts → Brakes → results → part → "Find nearby parts stores".
 6. Map It: Mechanic → drag pin → details + photo → submit → See my pins → pending → withdraw.
-7. Explore: search "Total" → station; Tolls; bell → Inbox; Filters → apply → list.
-8. Account: Privacy & data → download; Settings → dark theme; Help; Sign out → Welcome.
+7. Explore: search "Total" → station; Tolls; Inbox; Filters → apply → list.
+8. Account: Privacy & data → download; Settings → dark theme; Help; Sign out.
 
-While you go, check these too:
-- **Your own data on every screen.** `fill.ts` fills each screen by swapping out known Stitch sample text, such as "2019 Toyota Roomy" and "8241-HY". Any sample text that isn't on its list will still show. Look at each screen for a name, number or plate that isn't yours.
-- **The scan.** A real dashboard photo fills Confirm. A bad photo asks you to type the reading.
-- **GPS.** With GPS off, Map It shows Poor GPS and a fill shows Save error. Neither should drop a pin or fill on Kingston.
-- **Switched-off sections** don't appear on screen.
-- **The rest of the loop:**
-  - Prices show after the first in-band fill.
-  - A reminder push arrives.
-  - A pin reaches the Dominion queue, and approving it notifies the user.
-  - After delete, the same number can't open the old garage.
-  - Dominion approve, merge and reject each work in one click.
+Also check these:
+- No sample name, plate or number that isn't yours on any screen (`fill.ts` swaps only known sample text).
+- With GPS off, there's no pin or fill on Kingston.
+- The keyboard never covers a field or the Save button.
+- Switched-off sections are hidden.
+- Prices show after the first in-band fill.
+- A reminder push arrives.
+- A pin reaches Dominion, and approving it notifies the user.
+- After delete, the same number can't open the old garage.
 
-## 3. Owner tasks
+## 4. Owner tasks
 - Decide on 2 close station pairs:
   - `st_1ba3015a` / `st_2f35d794` (St Ann's Bay, 36 m apart, both unverified).
   - RUBiS HWT / TotalEnergies HWT Clock Tower (50 m apart, both verified).
@@ -57,5 +75,6 @@ While you go, check these too:
 5. One version of the app, ever. The Stitch design is the app. Change screens in place, and never load Stitch's Tailwind CDN.
 6. Public reads go through the edge API. Never add a schema to the API list without checking its grants.
 7. Flags stay off by default. Run `tsc` on touched apps. Use one migration per change. Every paid or abusable endpoint gets `hitLimit()`.
+8. Fit tests cover every route, not a sample. Tap targets are at least 44×44, made with padding, not by resizing the design.
 
 Mark an item **Done** only after its check passes in the real app, with the commit and deploy version.

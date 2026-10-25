@@ -1,0 +1,12 @@
+{
+  "id": "/",
+  "name": "Roam Plug",
+  "short_name": "Plug",
+  "description": "Free fuel prices, garage, and places for Jamaican drivers.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#fff8f2",
+  "theme_color": "#a33900"
+}
