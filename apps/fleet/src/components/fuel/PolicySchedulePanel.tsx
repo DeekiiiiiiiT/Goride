@@ -15,6 +15,7 @@ import {
 import { Loader2, Plus, CalendarRange, Info, Users, Trash2, Pencil } from 'lucide-react';
 import { toast } from 'sonner';
 import { fuelService } from '../../services/fuelService';
+import { weekCloseApi } from '../../services/weekCloseApi';
 import type { FuelScenario, FuelScenarioVersion } from '../../types/fuel';
 import { VersionScheduleEditor } from './VersionScheduleEditor';
 import { FuelCoverageMatrix } from './FuelCoverageMatrix';
@@ -25,6 +26,7 @@ import {
   normalizeScenarioVersions,
   removeScenarioVersion,
   resolveVersionForWeek,
+  earliestEndAfterClosedWeeks,
   versionWindowLabel,
 } from '../../utils/fuelPolicyVersion';
 import { Alert, AlertDescription, AlertTitle } from '../ui/alert';
@@ -83,6 +85,7 @@ export function PolicySchedulePanel({
   const [editingVersion, setEditingVersion] = useState<FuelScenarioVersion | null>(null);
   const [versionToDelete, setVersionToDelete] = useState<FuelScenarioVersion | null>(null);
   const [deletingVersion, setDeletingVersion] = useState(false);
+  const [frozenMondays, setFrozenMondays] = useState<string[]>([]);
 
   const loadAll = async () => {
     setLoading(true);
@@ -113,6 +116,18 @@ export function PolicySchedulePanel({
 
   useEffect(() => {
     loadAll();
+  }, []);
+
+  useEffect(() => {
+    void Promise.all([
+      weekCloseApi.listClosed(2025).catch(() => []),
+      weekCloseApi.listClosed(2026).catch(() => []),
+    ]).then(([prior, current]) => {
+      const keys = [...prior, ...current]
+        .map((week) => String(week.weekKey || '').slice(0, 10))
+        .filter(Boolean);
+      setFrozenMondays([...new Set(keys)]);
+    });
   }, []);
 
   useEffect(() => {
@@ -405,6 +420,15 @@ export function PolicySchedulePanel({
                                 {ver.effectiveUntil
                                   ? `Last week included: ${lastIncludedMonday(ver.effectiveUntil)}.`
                                   : 'Applies to weeks starting on/after the start Monday with no end (Never).'}
+                                {(() => {
+                                  const end = earliestEndAfterClosedWeeks(
+                                    ver.effectiveFrom,
+                                    ver.effectiveUntil,
+                                    frozenMondays,
+                                  );
+                                  if (!end) return null;
+                                  return ` Closed weeks keep this split. End it from ${end}, then add the next split.`;
+                                })()}
                               </CardDescription>
                             </div>
                             <div className="flex shrink-0 gap-1">
@@ -497,6 +521,7 @@ export function PolicySchedulePanel({
                 editingVersion={editingVersion}
                 drivers={drivers}
                 vehicles={vehicles}
+                frozenMondays={frozenMondays}
               />
 
               <AlertDialog

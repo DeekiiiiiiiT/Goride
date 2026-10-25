@@ -21,6 +21,7 @@ import {
 import { FuelCoverageMatrix } from './FuelCoverageMatrix';
 import type { FuelScenario, FuelScenarioVersion } from '../../types/fuel';
 import {
+  earliestEndAfterClosedWeeks,
   mondayYmdForDate,
   nextMondayYmd,
   upcomingMondayOptions,
@@ -43,6 +44,7 @@ export function VersionScheduleEditor({
   editingVersion,
   drivers,
   vehicles,
+  frozenMondays = [],
 }: {
   isOpen: boolean;
   onClose: () => void;
@@ -52,6 +54,7 @@ export function VersionScheduleEditor({
   editingVersion: FuelScenarioVersion | null;
   drivers: any[];
   vehicles: any[];
+  frozenMondays?: string[];
 }) {
   const fleetTz = useFleetTimezone();
   const [effectiveFromMonday, setEffectiveFromMonday] = useState('');
@@ -78,10 +81,23 @@ export function VersionScheduleEditor({
         : thisMonday;
     return upcomingMondayOptions(16, fleetTz || undefined, new Date(), earliest);
   }, [fleetTz, thisMonday, editingVersion?.effectiveFrom]);
-  const untilOptions = useMemo(
-    () => weekOptions.filter((o) => !effectiveFromMonday || o.value > effectiveFromMonday),
-    [weekOptions, effectiveFromMonday],
-  );
+  const earliestEnd = useMemo(() => {
+    if (!editingVersion) return null;
+    return earliestEndAfterClosedWeeks(
+      editingVersion.effectiveFrom,
+      editingVersion.effectiveUntil,
+      frozenMondays,
+    );
+  }, [editingVersion, frozenMondays]);
+  const coversClosedWeeks = Boolean(earliestEnd);
+  const untilOptions = useMemo(() => {
+    const endFloor = coversClosedWeeks ? earliestEnd : null;
+    return weekOptions.filter((o) => {
+      if (effectiveFromMonday && o.value <= effectiveFromMonday) return false;
+      if (endFloor && o.value < endFloor) return false;
+      return true;
+    });
+  }, [weekOptions, effectiveFromMonday, coversClosedWeeks, earliestEnd]);
 
   const templateRule = scenario.rules?.find((r) => r.category === 'Fuel');
   const displayRule =
@@ -172,8 +188,11 @@ export function VersionScheduleEditor({
         <div className="flex-1 min-h-0 overflow-y-auto px-6 py-4 space-y-5">
           <div className="space-y-2">
             <Label>Starts (week starting Monday)</Label>
-            <Select value={effectiveFromMonday} onValueChange={setEffectiveFromMonday}>
-              <SelectTrigger>
+            <Select
+              value={effectiveFromMonday}
+              onValueChange={setEffectiveFromMonday}
+            >
+              <SelectTrigger disabled={coversClosedWeeks}>
                 <SelectValue placeholder="Select start week" />
               </SelectTrigger>
               <SelectContent>
@@ -204,8 +223,9 @@ export function VersionScheduleEditor({
               </SelectContent>
             </Select>
             <p className="text-xs text-slate-500">
-              Ending Monday is exclusive. Leave Never for open-ended. Same dates can be used for
-              different drivers; the same driver cannot overlap another version.
+              {coversClosedWeeks
+                ? `Closed weeks keep this split. End it from ${earliestEnd}, then add the next split.`
+                : 'Ending Monday is exclusive. Leave Never for open-ended. The same driver cannot overlap another version.'}
             </p>
           </div>
 
@@ -241,7 +261,10 @@ export function VersionScheduleEditor({
                     >
                       <Checkbox
                         checked={checked}
-                        onCheckedChange={() => toggleDriver(d.id)}
+                        disabled={coversClosedWeeks}
+                        onCheckedChange={() => {
+                          if (!coversClosedWeeks) toggleDriver(d.id);
+                        }}
                       />
                       <span className="text-sm text-slate-800 flex-1 min-w-0 truncate">
                         {driverDisplayName(d)}

@@ -1,34 +1,28 @@
 /**
  * Preview and post one fuel-share correction per closed week onto the open week.
- * Closed weeks stay closed. Cash held is not used as the bucket.
+ * The closed week's money is not rewritten. Cash held is not the bucket.
  */
 import { getServiceClient } from "./service_client.ts";
 import { periodGateFromRow, isPeriodFrozen } from "./settlement_period_freeze.ts";
-import { buildMovementRow } from "./settlement_commands.ts";
+import { buildMovementRow, SettlementCommandError } from "./settlement_commands.ts";
 import { persistPeriodRowWithVersion } from "./period_persist.ts";
 import { syncPeriodCashFromTransactions } from "./driver_financial_periods.ts";
 import {
+  FUEL_CORRECTION_FROM,
+  FUEL_CORRECTION_THROUGH,
+  correctionPreviewAccepted,
   fuelShareCorrectionDelta,
   fuelShareCorrectionSentence,
   sumCorrectionLines,
   type CorrectionLine,
 } from "../../../packages/finance-core/src/fuelShareCorrection.ts";
 import { round2 } from "../../../packages/finance-core/src/money.ts";
-import {
-  buildCloseHash,
-  buildPeriodCloseHashPayload,
-} from "../../../packages/finance-core/src/closeHash.ts";
-import { getLatestWeekStatement } from "./week_statements.ts";
 
-const FROM = "2026-01-19";
-const THROUGH = "2026-08-31";
+const FROM = FUEL_CORRECTION_FROM;
+const THROUGH = FUEL_CORRECTION_THROUGH;
 
 function sb() {
   return getServiceClient();
-}
-
-function minorToMajor(n: unknown): number {
-  return round2((Number(n) || 0) / 100);
 }
 
 type PeriodRow = Record<string, unknown>;
@@ -38,42 +32,8 @@ function fcOf(row: PeriodRow): Record<string, unknown> {
   return { ...((meta.financeCore as Record<string, unknown>) || {}) };
 }
 
-async function fuelTruth(orgId: string, driverId: string, week: string, row: PeriodRow) {
-  const statement = await getLatestWeekStatement(orgId, driverId, week, "fuel");
-  const sealed = statement?.status === "closed" ? statement.amountsMinor : null;
-  const driverShare = sealed ? minorToMajor(sealed.driverShare) : Number(row.fuel_deduction) || 0;
-  const companyShare = sealed ? minorToMajor(sealed.companyShare) : Number(row.fuel_fleet_share) || 0;
-  const driverPaid = Number(row.fuel_driver_spend) || 0;
-  const total = round2(driverShare + companyShare);
-  const gasCard = round2(Math.max(0, total - driverPaid));
-  return { driverShare, companyShare, driverPaid, gasCard, sealed: Boolean(sealed) };
-}
-
-function hashRow(row: PeriodRow, fuelDeduction: number, fuelFleetShare: number) {
-  const n = (k: string) => Number(row[k]) || 0;
-  return {
-    tollSpend: n("toll_spend"),
-    tollCashSpend: n("toll_cash_spend"),
-    tollTagSpend: n("toll_tag_spend"),
-    tollReimbursed: n("toll_reimbursed"),
-    tollChargedToDriver: n("toll_charged_to_driver"),
-    tollUnmatchedCount: n("toll_unmatched_count"),
-    disputeRefundMatched: n("dispute_refund_matched"),
-    disputeRefundUnmatched: n("dispute_refund_unmatched"),
-    fuelDeduction,
-    fuelFleetShare,
-    fuelFinalized: Boolean(row.fuel_finalized),
-    driverShare: n("driver_share"),
-    fleetShare: n("fleet_share"),
-    earningsGross: n("earnings_gross"),
-    tipsPaidToDriver: n("tips_paid_to_driver"),
-    cashCollected: n("cash_collected"),
-    cashReturned: n("cash_returned"),
-    cashStillHeld: n("cash_still_held"),
-    settlementPaid: n("settlement_paid"),
-    settlementAmount: n("settlement_amount"),
-    payoutNet: n("payout_net"),
-  };
+function weekOf(row: PeriodRow): string {
+  return String(row.period_anchor).slice(0, 10);
 }
 
 export type FuelCorrectionPreviewLine = CorrectionLine & {
@@ -81,6 +41,25 @@ export type FuelCorrectionPreviewLine = CorrectionLine & {
   companyFuelShare: number;
   alreadyMoved: boolean;
 };
+
+type Oct12Line = { sourceWeek: string; amount: number; sentence: string } | null;
+
+function receivableOn(row: PeriodRow): Oct12Line {
+  const receivable = fcOf(row).fuelCreditReceivable as { sourceWeek?: string; amount?: number } | undefined;
+  const amount = round2(Number(receivable?.amount) || 0);
+  if (!receivable?.sourceWeek || amount <= 0.01) return null;
+  const sourceWeek = String(receivable.sourceWeek).slice(0, 10);
+  const delta = -amount;
+  return {
+    sourceWeek,
+    amount: delta,
+    sentence: fuelShareCorrectionSentence({
+      week: sourceWeek,
+      delta,
+      gasCard: amount,
+    }),
+  };
+}
 
 export async function previewFuelShareCorrections(organizationId: string, driverId?: string) {
   let q = sb()
@@ -98,11 +77,21 @@ export async function previewFuelShareCorrections(organizationId: string, driver
   for (const row of data || []) {
     if (!isPeriodFrozen(periodGateFromRow(row))) continue;
     const id = String(row.driver_id);
-    const week = String(row.period_anchor).slice(0, 10);
-    const truth = await fuelTruth(organizationId, id, week, row);
+    const week = weekOf(row);
+    const driverPaid = Number(row.fuel_driver_spend) || 0;
+    const companyShare = Number(row.fuel_fleet_share) || 0;
     const delta = fuelShareCorrectionDelta({
-      driverPaidFuel: truth.driverPaid,
-      companyFuelShare: truth.companyShare,
+      driverShare: Number(row.driver_share) || 0,
+      fuelDeduction: Number(row.fuel_deduction) || 0,
+      cashCollected: Number(row.cash_collected) || 0,
+      cashReturned: Number(row.cash_returned) || 0,
+      tollChargedToDriver: Number(row.toll_charged_to_driver) || 0,
+      tollCashSpend: Number(row.toll_cash_spend) || 0,
+      driverPaidFuel: driverPaid,
+      cashWrittenOff: Number(row.cash_written_off) || 0,
+      settlementPaid: Number(row.settlement_paid) || 0,
+      tipsPaidToDriver: Number(row.tips_paid_to_driver) || 0,
+      storedSettlement: Number(row.settlement_amount) || 0,
     });
     if (Math.abs(delta) <= 0.01) continue;
     const moved = fcOf(row).balanceMovedTo;
@@ -110,17 +99,48 @@ export async function previewFuelShareCorrections(organizationId: string, driver
       driverId: id,
       sourceWeek: week,
       amount: delta,
-      sentence: fuelShareCorrectionSentence({ week, delta, gasCard: truth.gasCard }),
+      sentence: fuelShareCorrectionSentence({
+        week,
+        delta,
+        gasCard: Number(row.fuel_gas_card_spend) || 0,
+      }),
       kind: "fuel_share",
-      driverPaidFuel: truth.driverPaid,
-      companyFuelShare: truth.companyShare,
+      driverPaidFuel: driverPaid,
+      companyFuelShare: companyShare,
       alreadyMoved: Boolean(moved),
     });
   }
+
+  const pending = lines.filter((line) => !line.alreadyMoved);
+  const oct12 = await openWeekReceivable(organizationId, driverId);
+  const check = correctionPreviewAccepted({
+    lines: pending,
+    oct12Amount: oct12?.amount ?? null,
+  });
   return {
-    lines: lines.filter((l) => !l.alreadyMoved),
-    net: round2(lines.filter((l) => !l.alreadyMoved).reduce((s, l) => s + l.amount, 0)),
+    lines: pending,
+    net: check.net,
+    oct12,
+    matchesAudit: check.ok,
+    reason: check.reason,
   };
+}
+
+async function openWeekReceivable(organizationId: string, driverId?: string): Promise<Oct12Line> {
+  let q = sb()
+    .from("driver_financial_periods")
+    .select("driver_id, period_anchor, status, closed_at, settlement_status, metadata")
+    .eq("organization_id", organizationId)
+    .order("period_anchor", { ascending: false });
+  if (driverId) q = q.eq("driver_id", driverId);
+  const { data, error } = await q;
+  if (error) throw new Error(error.message);
+  for (const row of data || []) {
+    if (isPeriodFrozen(periodGateFromRow(row))) continue;
+    const line = receivableOn(row);
+    if (line) return line;
+  }
+  return null;
 }
 
 async function openWeek(organizationId: string, driverId: string): Promise<PeriodRow> {
@@ -144,6 +164,13 @@ export async function applyFuelShareCorrections(opts: {
 }) {
   const preview = await previewFuelShareCorrections(opts.organizationId, opts.driverId);
   if (!opts.confirm) return { preview: true, ...preview, applied: false };
+  if (!preview.matchesAudit) {
+    throw new SettlementCommandError(
+      "CORRECTION_PREVIEW_MISMATCH",
+      preview.reason || "Corrections do not match the audit. Nothing was posted.",
+      409,
+    );
+  }
 
   const byDriver = new Map<string, FuelCorrectionPreviewLine[]>();
   for (const line of preview.lines) {
@@ -155,7 +182,7 @@ export async function applyFuelShareCorrections(opts: {
 
   for (const [driverId, lines] of byDriver) {
     const open = await openWeek(opts.organizationId, driverId);
-    const openAnchor = String(open.period_anchor).slice(0, 10);
+    const openAnchor = weekOf(open);
     const meta = { ...((open.metadata as Record<string, unknown>) || {}) };
     const fc = fcOf(open);
     const existing = Array.isArray(fc.correctionLines)
@@ -197,7 +224,7 @@ export async function applyFuelShareCorrections(opts: {
         kind: "fuel_share",
       });
       have.add(key);
-      await restateClosedFuel(opts.organizationId, driverId, line.sourceWeek, openAnchor);
+      await stampBalanceMoved(opts.organizationId, driverId, line.sourceWeek, openAnchor);
       const idempotencyKey = `fuel-share-correction:${driverId}:${line.sourceWeek}`;
       const { data: prior } = await sb()
         .from("settlement_movements")
@@ -236,7 +263,8 @@ export async function applyFuelShareCorrections(opts: {
   return { preview: false, ...preview, applied: true };
 }
 
-async function restateClosedFuel(
+/** Mark the closed week as moved. Do not change its fuel charge or settlement. */
+async function stampBalanceMoved(
   orgId: string,
   driverId: string,
   week: string,
@@ -244,45 +272,20 @@ async function restateClosedFuel(
 ) {
   const { data: row, error } = await sb()
     .from("driver_financial_periods")
-    .select("*")
+    .select("id, metadata")
     .eq("organization_id", orgId)
     .eq("driver_id", driverId)
     .eq("period_anchor", week)
     .maybeSingle();
   if (error) throw new Error(error.message);
   if (!row) return;
-  const truth = await fuelTruth(orgId, driverId, week, row);
   const meta = { ...((row.metadata as Record<string, unknown>) || {}) };
   const fc = fcOf(row);
-  fc.fuelRestatedFromStatement = truth.sealed;
-  fc.fuelRestatedAt = new Date().toISOString();
   fc.balanceMovedTo = movedTo;
   meta.financeCore = fc;
-  const fuelDeduction = truth.sealed ? truth.driverShare : Number(row.fuel_deduction) || 0;
-  const fuelFleetShare = truth.sealed ? truth.companyShare : Number(row.fuel_fleet_share) || 0;
-  const storedIds = Array.isArray(fc.closeSourceRowIds)
-    ? (fc.closeSourceRowIds as unknown[]).map(String)
-    : [];
-  const engine =
-    typeof fc.closeEngineVersion === "string" && fc.closeEngineVersion.trim()
-      ? String(fc.closeEngineVersion)
-      : "week-statement@1";
-  const closeHash = await buildCloseHash(
-    buildPeriodCloseHashPayload({
-      row: hashRow(row, fuelDeduction, fuelFleetShare),
-      sourceRowIds: storedIds,
-      engineVersion: engine,
-    }),
-  );
   const { error: updErr } = await sb()
     .from("driver_financial_periods")
-    .update({
-      fuel_deduction: fuelDeduction,
-      fuel_fleet_share: fuelFleetShare,
-      close_hash: closeHash,
-      metadata: meta,
-      updated_at: new Date().toISOString(),
-    })
+    .update({ metadata: meta, updated_at: new Date().toISOString() })
     .eq("id", row.id);
   if (updErr) throw new Error(updErr.message);
 }

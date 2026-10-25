@@ -18,6 +18,8 @@ import {
   upcomingMondayOptions,
   upsertPolicyVersion,
   versionWindowsOverlap,
+  closedScheduleChangeError,
+  earliestEndAfterClosedWeeks,
 } from './fuelPolicyVersion';
 
 const baseRule = (deadhead = 100): FuelRule => ({
@@ -339,5 +341,39 @@ describe('fuelPolicyVersion', () => {
       ],
     };
     expect(() => removeScenarioVersion(prev, 'v1')).toThrow(/at least one/);
+  });
+});
+
+describe('closed week end date', () => {
+  const frozen = ['2026-04-06', '2026-08-03', '2026-10-12'];
+  const window = {
+    effectiveFrom: '2026-04-06',
+    rules: [baseRule(80)],
+    driverIds: ['kenny'],
+  };
+
+  it('allows an end date after the last closed week', () => {
+    expect(closedScheduleChangeError(
+      [{ ...window }],
+      [{ ...window, effectiveUntil: '2026-10-19' }],
+      frozen,
+    )).toBeNull();
+    expect(earliestEndAfterClosedWeeks('2026-04-06', null, frozen)).toBe('2026-10-19');
+  });
+
+  it('refuses an end date that drops a closed week', () => {
+    expect(closedScheduleChangeError(
+      [{ ...window }],
+      [{ ...window, effectiveUntil: '2026-09-07' }],
+      frozen,
+    )).toMatch(/closed week/);
+  });
+
+  it('refuses a split change on a window that covers a closed week', () => {
+    expect(closedScheduleChangeError(
+      [{ ...window }],
+      [{ ...window, rules: [baseRule(50)], effectiveUntil: '2026-10-19' }],
+      frozen,
+    )).toMatch(/closed week/);
   });
 });

@@ -1391,36 +1391,25 @@ export function registerFuelPeriodRoutes(app: Hono) {
       const snapMoney: MaterializeSnapMoneyOk | MaterializeSnapMoneyMiss = weekStart
         ? await aggregateMaterializeMoneyFromSnaps(orgId, weekStart)
         : { ok: false, snapCount: 0 };
+      if (!snapMoney.ok) {
+        return c.json({
+          error: "SNAPSHOTS_MISSING",
+          message: "Fuel totals aren't ready yet. Finish the fuel report before continuing.",
+        }, 409);
+      }
       const patch = {
-        total_spend: snapMoney.ok
-          ? snapMoney.totalSpend
-          : Number(body.totalSpend) || 0,
-        gas_card_spend: snapMoney.ok
-          ? snapMoney.gasCardSpend
-          : Number(body.gasCardSpend) || 0,
-        // F-10: prefer snap cash split; fall back to client body.
-        cash_from_earnings: snapMoney.ok
-          ? snapMoney.driverSpend
-          : Number(body.cashFromEarnings) || 0,
-        company_share: snapMoney.ok
-          ? snapMoney.companyShare
-          : Number(body.companyShare) || 0,
-        driver_share: snapMoney.ok
-          ? snapMoney.driverShare
-          : Number(body.driverShare) || 0,
-        unexplained: snapMoney.ok
-          ? snapMoney.unexplained
-          : Number(body.unexplained) || 0,
+        total_spend: snapMoney.totalSpend,
+        gas_card_spend: snapMoney.gasCardSpend,
+        cash_from_earnings: snapMoney.driverSpend,
+        company_share: snapMoney.companyShare,
+        driver_share: snapMoney.driverShare,
+        unexplained: snapMoney.unexplained,
         vehicle_count: Number(body.vehicleCount) || 0,
         driver_count: Number(body.driverCount) || 0,
         // F-5: persist client degraded signal for server auto-close gate.
         degraded_inputs: Boolean(body.degradedInputs),
         computed_at: now,
-        computed_from_hash: snapMoney.ok
-          ? `server:materialize:snaps:${snapMoney.snapCount}`
-          : weekStart
-          ? `server:materialize:${weekStart}`
-          : `server:materialize:${now.slice(0, 10)}`,
+        computed_from_hash: `server:materialize:snaps:${snapMoney.snapCount}`,
         updated_at: now,
         counts: serverCounts,
       };

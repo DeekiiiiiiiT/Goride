@@ -14,7 +14,7 @@ import {
   type FuelScenarioRecord,
 } from "./fuel_scenario_scope.ts";
 import {
-  frozenWeeksInWindow,
+  closedScheduleChangeError,
   validateScenarioSchedule,
 } from "../../../packages/fuel-core/src/fuelPolicyVersion.ts";
 import type { FuelScenario } from "../../../packages/fuel-core/src/fuelTypes.ts";
@@ -81,34 +81,9 @@ function scheduleHitsFrozen(
   after: FuelScenarioRecord,
   frozen: string[],
 ): string | null {
-  const prior = new Map(
-    ((before?.versions as Array<Record<string, unknown>> | undefined) || []).map((v) => [
-      String(v.id),
-      v,
-    ]),
-  );
-  const next = ((after.versions as Array<Record<string, unknown>> | undefined) || []);
-  const nextIds = new Set(next.map((v) => String(v.id)));
-  const changed: Array<Record<string, unknown>> = [];
-  for (const v of next) {
-    const old = prior.get(String(v.id));
-    if (!old || JSON.stringify(old) !== JSON.stringify(v)) changed.push(v);
-    if (old && JSON.stringify(old) !== JSON.stringify(v)) changed.push(old);
-  }
-  for (const [id, old] of prior) {
-    if (!nextIds.has(id)) changed.push(old);
-  }
-  for (const v of changed) {
-    const hits = frozenWeeksInWindow(
-      String(v.effectiveFrom || ""),
-      v.effectiveUntil ? String(v.effectiveUntil) : null,
-      frozen,
-    );
-    if (hits.length) {
-      return `This schedule covers a closed week (${hits[0]}). Start a new window from the first open week.`;
-    }
-  }
-  return null;
+  const prior = (before?.versions as Array<Record<string, unknown>> | undefined) || [];
+  const next = (after.versions as Array<Record<string, unknown>> | undefined) || [];
+  return closedScheduleChangeError(prior, next, frozen);
 }
 
 export function registerFuelScenarioRoutes(app: Hono) {

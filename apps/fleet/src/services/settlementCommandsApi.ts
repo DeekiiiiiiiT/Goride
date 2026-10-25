@@ -153,12 +153,9 @@ async function parseErrorBody(
     const j = await response.json();
     if (j && typeof j === 'object') {
       const code = typeof (j as { code?: string }).code === 'string' ? (j as { code: string }).code : undefined;
-      if (typeof (j as { error?: string }).error === 'string') {
-        return { message: (j as { error: string }).error, code };
-      }
-      if (typeof (j as { message?: string }).message === 'string') {
-        return { message: (j as { message: string }).message, code };
-      }
+      const message = typeof (j as { message?: string }).message === 'string' ? (j as { message: string }).message : '';
+      const error = typeof (j as { error?: string }).error === 'string' ? (j as { error: string }).error : '';
+      if (message || error) return { message: message || error, code };
     }
   } catch {
     /* ignore */
@@ -367,6 +364,27 @@ export const settlementCommandsApi = {
       net: number;
       posted?: boolean;
     }>('/legacy-weeks', body, 'Could not load older weeks');
+  },
+
+  async fuelShareCorrections(body: { confirm?: boolean; driverId?: string }) {
+    return postJson<{
+      lines: Array<{ sourceWeek: string; amount: number; sentence: string; driverId: string }>;
+      net: number;
+      oct12: { sourceWeek: string; amount: number; sentence: string } | null;
+      matchesAudit: boolean;
+      reason: string;
+      applied?: boolean;
+    }>('/fuel-share-corrections', body, 'Could not load corrections');
+  },
+
+  async payoutBackfill(body: { confirm?: boolean; driverId: string }) {
+    return postJson<{
+      payouts: Array<{ week: string; amount: number }>;
+      june15Payment: { week: string; amount: number };
+      ready: boolean;
+      stillOff: Array<{ week: string; gap: number }>;
+      posted?: boolean;
+    }>('/payout-backfill', body, 'Could not load missing payments');
   },
 
   async collect(body: SettlementCollectBody) {

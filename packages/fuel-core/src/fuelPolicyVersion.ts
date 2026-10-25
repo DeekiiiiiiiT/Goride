@@ -645,6 +645,72 @@ export function frozenWeeksInWindow(
   return frozenMondays.filter((week) => versionAppliesToWeek(probe, week));
 }
 
+type ClosedCoverageVersion = {
+  effectiveFrom?: string;
+  effectiveUntil?: string | null;
+  rules?: unknown;
+  driverIds?: string[];
+};
+
+/** Start, drivers, and split. The end date is not part of a closed week. */
+export function closedCoverageKey(version: ClosedCoverageVersion): string {
+  return JSON.stringify({
+    effectiveFrom: String(version.effectiveFrom || '').slice(0, 10),
+    driverIds: [...(version.driverIds || [])].map(String).filter(Boolean).sort(),
+    rules: version.rules || [],
+  });
+}
+
+function coverageKeysForWeek(versions: ClosedCoverageVersion[], week: string): string[] {
+  return versions
+    .filter((version) =>
+      versionAppliesToWeek(
+        {
+          id: 'probe',
+          effectiveFrom: String(version.effectiveFrom || ''),
+          ...(version.effectiveUntil ? { effectiveUntil: version.effectiveUntil } : {}),
+          rules: [],
+          driverIds: [],
+          createdAt: '',
+        } as FuelScenarioVersion,
+        week,
+      ),
+    )
+    .map(closedCoverageKey)
+    .sort();
+}
+
+/**
+ * Closed weeks must keep the same start, drivers, and split.
+ * An end date on or after the last closed week is allowed.
+ */
+export function closedScheduleChangeError(
+  beforeVersions: ClosedCoverageVersion[],
+  afterVersions: ClosedCoverageVersion[],
+  frozenMondays: readonly string[],
+): string | null {
+  for (const week of frozenMondays) {
+    const before = coverageKeysForWeek(beforeVersions, week).join('|');
+    const after = coverageKeysForWeek(afterVersions, week).join('|');
+    if (before === after) continue;
+    return `This schedule covers a closed week (${week}). Start a new window from the first open week.`;
+  }
+  return null;
+}
+
+/** Earliest exclusive end Monday that still covers every closed week in the window. */
+export function earliestEndAfterClosedWeeks(
+  effectiveFrom: string,
+  effectiveUntil: string | null | undefined,
+  frozenMondays: readonly string[],
+): string | null {
+  const covered = frozenWeeksInWindow(effectiveFrom, effectiveUntil, frozenMondays);
+  if (!covered.length) return null;
+  const last = [...covered].sort().at(-1);
+  if (!last) return null;
+  return formatYmd(addWeeksLocal(ymdToLocalDate(last), 1));
+}
+
 export type DriverScheduleGap = {
   driverId: string;
   afterWeek: string;

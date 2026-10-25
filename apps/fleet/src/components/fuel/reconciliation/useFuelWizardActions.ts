@@ -77,8 +77,11 @@ export async function materializeWizardPeriodCounts(input: {
       driverCount: input.driverCount,
       degradedInputs: Boolean(input.degradedInputs),
     });
-  } catch {
-    /* offline — counts stay local */
+  } catch (err) {
+    const message = err instanceof Error ? err.message : '';
+    if (message.includes("aren't ready yet") || message.includes('SNAPSHOTS_MISSING')) {
+      toast.error("Fuel totals aren't ready yet. Finish the fuel report before continuing.");
+    }
   }
 }
 
