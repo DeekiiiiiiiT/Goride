@@ -50,8 +50,8 @@ export function StationListScreen() {
                 <span className={"material-symbols-outlined text-primary text-[20px]"} style={{ fontVariationSettings: "'FILL' 1" }}>
                   location_on
                 </span>
-                <span className={"font-headline-sm text-headline-sm font-bold tracking-tight"}>
-                  Half-Way-Tree, St Andrew
+                <span className={"font-headline-sm text-headline-sm font-bold tracking-tight"} data-slot={"where"}>
+                  Near you
                 </span>
                 <span className={"material-symbols-outlined text-on-surface-variant text-[20px]"}>
                   keyboard_arrow_down
@@ -107,7 +107,7 @@ export function StationListScreen() {
                     Parish Avg
                   </span>
                   <span className={"font-label-lg text-label-lg font-bold leading-none"}>
-                    J$208.20
+                    
                   </span>
                 </div>
                 <span className={"material-symbols-outlined text-[18px] text-on-primary"}>
@@ -123,7 +123,7 @@ export function StationListScreen() {
                     Parish Avg
                   </span>
                   <span className={"font-label-lg text-label-lg font-bold leading-none text-on-surface"}>
-                    J$216.40
+                    
                   </span>
                 </div>
               </button>
@@ -136,7 +136,7 @@ export function StationListScreen() {
                     Parish Avg
                   </span>
                   <span className={"font-label-lg text-label-lg font-bold leading-none text-on-surface"}>
-                    J$219.00
+                    
                   </span>
                 </div>
               </button>
@@ -162,406 +162,27 @@ export function StationListScreen() {
                 update
               </span>
               <span>
-                Petrojam sync 18m ago
+                
               </span>
             </div>
           </section>
           <main className={"px-margin pt-space-xs flex flex-col gap-space-md"}>
+          <div data-live-list={"stations"} className={"flex flex-col gap-2"}>
+            <p data-slot={"stations-empty"}>No stations nearby</p>
+          </div>
             <div className={"flex items-center justify-between"}>
               <h2 className={"font-headline-sm text-headline-sm text-on-surface font-bold"}>
-                18 Stations in St Andrew
+                
               </h2>
               <span className={"font-label-sm text-label-sm text-on-surface-variant"}>
-                Radius: 5 km
+                
               </span>
             </div>
-            <article className={"relative flex flex-col bg-surface-container-lowest rounded-xl p-space-md shadow-md overflow-hidden transition-all active:scale-[0.99]"}>
-              <div className={"absolute top-0 right-0 bg-tertiary-fixed text-on-tertiary-fixed px-3 py-1 rounded-bl-xl flex items-center gap-1 shadow-sm"}>
-                <span className={"material-symbols-outlined text-[14px]"} style={{ fontVariationSettings: "'FILL' 1" }}>
-                  star
-                </span>
-                <span className={"font-label-sm text-[12px] font-bold tracking-wider uppercase"}>
-                  Cheapest in Parish
-                </span>
-              </div>
-              <div className={"flex items-start gap-3 pt-1"}>
-                <div className={"w-12 h-12 rounded-xl bg-secondary-container text-on-primary flex items-center justify-center font-display-lg-mobile text-[16px] font-extrabold shadow-sm flex-shrink-0"}>
-                  FS
-                </div>
-                <div className={"flex flex-col min-w-0 pr-24"}>
-                  <div className={"flex items-center gap-1.5"}>
-                    <h3 className={"font-headline-sm text-headline-sm font-bold text-on-surface truncate"}>
-                      Fesco Beechwood
-                    </h3>
-                    <span className={"material-symbols-outlined text-primary text-[18px]"} style={{ fontVariationSettings: "'FILL' 1" }} title={"Community Verified"}>
-                      verified
-                    </span>
-                  </div>
-                  <p className={"font-body-sm text-body-sm text-on-surface-variant truncate"}>
-                    0.8 km • Beechwood Ave, Kingston 5
-                  </p>
-                </div>
-              </div>
-              <div className={"mt-space-sm p-space-sm bg-surface-container-low rounded-xl flex items-baseline justify-between"}>
-                <div className={"flex flex-col"}>
-                  <span className={"font-label-sm text-label-sm text-primary font-bold uppercase tracking-wide"}>
-                    E-10 87 Grade
-                  </span>
-                  <div className={"flex items-baseline gap-1"}>
-                    <span className={"font-price-display text-price-display text-on-surface font-black"}>
-                      J$208.20
-                    </span>
-                    <span className={"font-label-md text-label-md text-on-surface-variant"}>
-                      / Litre
-                    </span>
-                  </div>
-                </div>
-                <div className={"text-right flex flex-col items-end"}>
-                  <div className={"flex items-center gap-1 text-[#15803d]"}>
-                    <span className={"material-symbols-outlined text-[14px]"} style={{ fontVariationSettings: "'FILL' 1" }}>
-                      check_circle
-                    </span>
-                    <span className={"font-label-sm text-label-sm font-semibold"}>
-                      Verified 22m ago
-                    </span>
-                  </div>
-                  <span className={"font-body-sm text-[12px] text-on-surface-variant"}>
-                    by Andre B.
-                  </span>
-                </div>
-              </div>
-              <div className={"mt-space-sm flex items-center gap-2 overflow-x-auto no-scrollbar py-0.5"}>
-                <span className={"inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-surface-container text-on-surface font-label-sm text-label-sm"}>
-                  <span className={"material-symbols-outlined text-[14px]"}>
-                    air
-                  </span>
-                  Free Air
-                </span>
-                <span className={"inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-surface-container text-on-surface font-label-sm text-label-sm"}>
-                  <span className={"material-symbols-outlined text-[14px]"}>
-                    wc
-                  </span>
-                  Restroom
-                </span>
-                <span className={"inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-surface-container text-on-surface font-label-sm text-label-sm"}>
-                  <span className={"material-symbols-outlined text-[14px]"}>
-                    storefront
-                  </span>
-                  Minimart
-                </span>
-                <span className={"inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-surface-container text-on-surface font-label-sm text-label-sm"}>
-                  <span className={"material-symbols-outlined text-[14px]"}>
-                    atm
-                  </span>
-                  NCB ATM
-                </span>
-              </div>
-              <div className={"mt-space-md pt-space-xs flex items-center gap-space-sm"}>
-                <button onClick={onPlugClick} className={"flex-1 h-12 rounded-xl bg-primary text-on-primary font-label-lg text-label-lg font-bold flex items-center justify-center gap-2 shadow-sm active:bg-on-primary-fixed-variant transition-colors"} type={"button"} data-act={"directions-3-min"} data-way-out={"primary"}>
-                  <span className={"material-symbols-outlined text-[20px]"}>
-                    directions
-                  </span>
-                  <span>
-                    Directions (3 min)
-                  </span>
-                </button>
-                <button onClick={onPlugClick} aria-label={"Log new price for Fesco"} className={"min-w-[48px] h-12 px-space-md rounded-xl bg-surface-container text-secondary font-label-lg text-label-lg font-bold flex items-center justify-center gap-1 active:bg-surface-container-high transition-colors"} type={"button"} data-act={"log"}>
-                  <span className={"material-symbols-outlined text-[18px]"}>
-                    add_circle
-                  </span>
-                  <span>
-                    Log
-                  </span>
-                </button>
-              </div>
-            </article>
-            <article className={"flex flex-col bg-surface-container-lowest rounded-xl p-space-md shadow-sm transition-all active:scale-[0.99]"}>
-              <div className={"flex items-start justify-between gap-3"}>
-                <div className={"flex items-start gap-3 min-w-0"}>
-                  <div className={"w-12 h-12 rounded-xl bg-tertiary-fixed text-on-tertiary-fixed flex items-center justify-center font-display-lg-mobile text-[16px] font-extrabold shadow-sm flex-shrink-0"}>
-                    CO
-                  </div>
-                  <div className={"flex flex-col min-w-0"}>
-                    <div className={"flex items-center gap-1.5"}>
-                      <h3 className={"font-headline-sm text-headline-sm font-bold text-on-surface truncate"}>
-                        Cool Oasis Kingsway
-                      </h3>
-                      <span className={"material-symbols-outlined text-primary text-[18px]"} style={{ fontVariationSettings: "'FILL' 1" }}>
-                        verified
-                      </span>
-                    </div>
-                    <p className={"font-body-sm text-body-sm text-on-surface-variant truncate"}>
-                      1.4 km • Kingsway, St Andrew
-                    </p>
-                  </div>
-                </div>
-              </div>
-              <div className={"mt-space-sm p-space-sm bg-surface-container-low rounded-xl flex items-baseline justify-between"}>
-                <div className={"flex flex-col"}>
-                  <span className={"font-label-sm text-label-sm text-on-surface-variant font-medium"}>
-                    E-10 87 Grade
-                  </span>
-                  <div className={"flex items-baseline gap-1"}>
-                    <span className={"font-price-display text-price-display text-on-surface font-black"}>
-                      J$209.50
-                    </span>
-                    <span className={"font-label-md text-label-md text-on-surface-variant"}>
-                      / L
-                    </span>
-                  </div>
-                </div>
-                <div className={"text-right"}>
-                  <span className={"inline-flex items-center gap-1 text-on-surface-variant font-label-sm text-label-sm"}>
-                    <span className={"material-symbols-outlined text-[14px]"}>
-                      schedule
-                    </span>
-                    Updated 1h ago
-                  </span>
-                </div>
-              </div>
-              <div className={"mt-space-sm flex items-center gap-2 overflow-x-auto no-scrollbar py-0.5"}>
-                <span className={"inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-surface-container text-on-surface font-label-sm text-label-sm"}>
-                  <span className={"material-symbols-outlined text-[14px]"}>
-                    local_car_wash
-                  </span>
-                  Car Wash
-                </span>
-                <span className={"inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-surface-container text-on-surface font-label-sm text-label-sm"}>
-                  <span className={"material-symbols-outlined text-[14px]"}>
-                    air
-                  </span>
-                  Air Pump
-                </span>
-                <span className={"inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-surface-container text-on-surface font-label-sm text-label-sm"}>
-                  <span className={"material-symbols-outlined text-[14px]"}>
-                    nest_clock_farsight_analog
-                  </span>
-                  24/7
-                </span>
-              </div>
-              <div className={"mt-space-md pt-space-xs flex items-center gap-space-sm"}>
-                <button onClick={onPlugClick} className={"w-full h-12 rounded-xl bg-primary text-on-primary font-label-lg text-label-lg font-bold flex items-center justify-center gap-2 shadow-sm active:bg-on-primary-fixed-variant transition-colors"} type={"button"} data-act={"directions-5-min"} data-way-out={"primary"}>
-                  <span className={"material-symbols-outlined text-[20px]"}>
-                    directions
-                  </span>
-                  <span>
-                    Directions (5 min)
-                  </span>
-                </button>
-              </div>
-            </article>
-            <article className={"flex flex-col bg-surface-container-lowest rounded-xl p-space-md shadow-sm transition-all active:scale-[0.99]"}>
-              <div className={"flex items-start justify-between gap-3"}>
-                <div className={"flex items-start gap-3 min-w-0"}>
-                  <div className={"w-12 h-12 rounded-xl bg-error text-on-error flex items-center justify-center font-display-lg-mobile text-[16px] font-extrabold shadow-sm flex-shrink-0"}>
-                    TX
-                  </div>
-                  <div className={"flex flex-col min-w-0"}>
-                    <div className={"flex items-center gap-1.5"}>
-                      <h3 className={"font-headline-sm text-headline-sm font-bold text-on-surface truncate"}>
-                        Texaco Clock Tower
-                      </h3>
-                      <span className={"material-symbols-outlined text-primary text-[18px]"} style={{ fontVariationSettings: "'FILL' 1" }}>
-                        verified
-                      </span>
-                    </div>
-                    <p className={"font-body-sm text-body-sm text-on-surface-variant truncate"}>
-                      0.4 km • Half-Way-Tree Rd
-                    </p>
-                  </div>
-                </div>
-              </div>
-              <div className={"mt-space-sm p-space-sm bg-surface-container-low rounded-xl flex items-baseline justify-between"}>
-                <div className={"flex flex-col"}>
-                  <span className={"font-label-sm text-label-sm text-on-surface-variant font-medium"}>
-                    E-10 87 Grade
-                  </span>
-                  <div className={"flex items-baseline gap-1"}>
-                    <span className={"font-price-display text-price-display text-on-surface font-black"}>
-                      J$214.50
-                    </span>
-                    <span className={"font-label-md text-label-md text-on-surface-variant"}>
-                      / L
-                    </span>
-                  </div>
-                </div>
-                <div className={"text-right"}>
-                  <span className={"inline-flex items-center gap-1 text-on-surface-variant font-label-sm text-label-sm"}>
-                    <span className={"material-symbols-outlined text-[14px]"}>
-                      schedule
-                    </span>
-                    Updated 3h ago
-                  </span>
-                </div>
-              </div>
-              <div className={"mt-space-sm flex items-center gap-2 overflow-x-auto no-scrollbar py-0.5"}>
-                <span className={"inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-surface-container text-on-surface font-label-sm text-label-sm"}>
-                  <span className={"material-symbols-outlined text-[14px]"}>
-                    storefront
-                  </span>
-                  Star Mart
-                </span>
-                <span className={"inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-surface-container text-on-surface font-label-sm text-label-sm"}>
-                  <span className={"material-symbols-outlined text-[14px]"}>
-                    atm
-                  </span>
-                  ATM
-                </span>
-                <span className={"inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-surface-container text-on-surface font-label-sm text-label-sm"}>
-                  <span className={"material-symbols-outlined text-[14px]"}>
-                    wc
-                  </span>
-                  Restroom
-                </span>
-              </div>
-              <div className={"mt-space-md pt-space-xs flex items-center gap-space-sm"}>
-                <button onClick={onPlugClick} className={"w-full h-12 rounded-xl bg-primary text-on-primary font-label-lg text-label-lg font-bold flex items-center justify-center gap-2 shadow-sm active:bg-on-primary-fixed-variant transition-colors"} type={"button"} data-act={"directions-2-min"} data-way-out={"primary"}>
-                  <span className={"material-symbols-outlined text-[20px]"}>
-                    directions
-                  </span>
-                  <span>
-                    Directions (2 min)
-                  </span>
-                </button>
-              </div>
-            </article>
-            <article className={"flex flex-col bg-surface-container-lowest rounded-xl p-space-md shadow-sm transition-all active:scale-[0.99]"}>
-              <div className={"flex items-start justify-between gap-3"}>
-                <div className={"flex items-start gap-3 min-w-0"}>
-                  <div className={"w-12 h-12 rounded-xl bg-surface-container-highest text-on-surface flex items-center justify-center font-display-lg-mobile text-[16px] font-extrabold shadow-sm flex-shrink-0"}>
-                    TE
-                  </div>
-                  <div className={"flex flex-col min-w-0"}>
-                    <h3 className={"font-headline-sm text-headline-sm font-bold text-on-surface truncate"}>
-                      Total Constant Spring
-                    </h3>
-                    <p className={"font-body-sm text-body-sm text-on-surface-variant truncate"}>
-                      1.6 km • Constant Spring Rd
-                    </p>
-                  </div>
-                </div>
-              </div>
-              <div className={"mt-space-sm p-space-sm bg-surface-container-low rounded-xl flex items-baseline justify-between"}>
-                <div className={"flex flex-col"}>
-                  <span className={"font-label-sm text-label-sm text-on-surface-variant font-medium"}>
-                    E-10 87 Grade
-                  </span>
-                  <div className={"flex items-baseline gap-1"}>
-                    <span className={"font-price-display text-price-display text-on-surface font-black"}>
-                      J$217.90
-                    </span>
-                    <span className={"font-label-md text-label-md text-on-surface-variant"}>
-                      / L
-                    </span>
-                  </div>
-                </div>
-                <div className={"text-right flex flex-col items-end"}>
-                  <span className={"inline-flex items-center gap-1 text-on-surface-variant font-label-sm text-label-sm"}>
-                    <span className={"material-symbols-outlined text-[14px]"}>
-                      history
-                    </span>
-                    5h ago
-                  </span>
-                  <span className={"px-2 py-0.5 rounded bg-surface-container-highest text-on-surface-variant font-label-sm text-[12px] font-medium tracking-tight"}>
-                    Unconfirmed Driver Report
-                  </span>
-                </div>
-              </div>
-              <div className={"mt-space-sm flex items-center gap-2 overflow-x-auto no-scrollbar py-0.5"}>
-                <span className={"inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-surface-container text-on-surface font-label-sm text-label-sm"}>
-                  <span className={"material-symbols-outlined text-[14px]"}>
-                    coffee
-                  </span>
-                  Bonjour Cafe
-                </span>
-                <span className={"inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-surface-container text-on-surface font-label-sm text-label-sm"}>
-                  <span className={"material-symbols-outlined text-[14px]"}>
-                    air
-                  </span>
-                  Free Air
-                </span>
-                <span className={"inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-surface-container text-on-surface font-label-sm text-label-sm"}>
-                  <span className={"material-symbols-outlined text-[14px]"}>
-                    ev_station
-                  </span>
-                  EV Fast
-                </span>
-              </div>
-              <div className={"mt-space-md pt-space-xs flex items-center gap-space-sm"}>
-                <button onClick={onPlugClick} className={"w-full h-12 rounded-xl bg-primary text-on-primary font-label-lg text-label-lg font-bold flex items-center justify-center gap-2 shadow-sm active:bg-on-primary-fixed-variant transition-colors"} type={"button"} data-act={"directions-6-min"} data-way-out={"primary"}>
-                  <span className={"material-symbols-outlined text-[20px]"}>
-                    directions
-                  </span>
-                  <span>
-                    Directions (6 min)
-                  </span>
-                </button>
-              </div>
-            </article>
-            <article className={"flex flex-col bg-surface-container-lowest rounded-xl p-space-md shadow-sm transition-all active:scale-[0.99]"}>
-              <div className={"flex items-start justify-between gap-3"}>
-                <div className={"flex items-start gap-3 min-w-0"}>
-                  <div className={"w-12 h-12 rounded-xl bg-inverse-primary text-on-primary-fixed flex items-center justify-center font-display-lg-mobile text-[16px] font-extrabold shadow-sm flex-shrink-0"}>
-                    RB
-                  </div>
-                  <div className={"flex flex-col min-w-0"}>
-                    <h3 className={"font-headline-sm text-headline-sm font-bold text-on-surface truncate"}>
-                      Rubis Dunrobin
-                    </h3>
-                    <p className={"font-body-sm text-body-sm text-on-surface-variant truncate"}>
-                      2.1 km • Dunrobin Ave
-                    </p>
-                  </div>
-                </div>
-              </div>
-              <div className={"mt-space-sm p-space-sm bg-surface-container-low rounded-xl flex items-baseline justify-between"}>
-                <div className={"flex flex-col"}>
-                  <span className={"font-label-sm text-label-sm text-on-surface-variant font-medium"}>
-                    E-10 87 Grade
-                  </span>
-                  <div className={"flex items-baseline gap-1"}>
-                    <span className={"font-price-display text-price-display text-on-surface font-black"}>
-                      J$215.20
-                    </span>
-                    <span className={"font-label-md text-label-md text-on-surface-variant"}>
-                      / L
-                    </span>
-                  </div>
-                </div>
-                <div className={"text-right"}>
-                  <span className={"inline-flex items-center gap-1 text-on-surface-variant font-label-sm text-label-sm"}>
-                    <span className={"material-symbols-outlined text-[14px]"}>
-                      calendar_today
-                    </span>
-                    Updated yesterday
-                  </span>
-                </div>
-              </div>
-              <div className={"mt-space-sm flex items-center gap-2 overflow-x-auto no-scrollbar py-0.5"}>
-                <span className={"inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-surface-container text-on-surface font-label-sm text-label-sm"}>
-                  <span className={"material-symbols-outlined text-[14px]"}>
-                    air
-                  </span>
-                  Air
-                </span>
-                <span className={"inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-surface-container text-on-surface font-label-sm text-label-sm"}>
-                  <span className={"material-symbols-outlined text-[14px]"}>
-                    shopping_bag
-                  </span>
-                  Ultra Shop
-                </span>
-              </div>
-              <div className={"mt-space-md pt-space-xs flex items-center gap-space-sm"}>
-                <button onClick={onPlugClick} className={"w-full h-12 rounded-xl bg-primary text-on-primary font-label-lg text-label-lg font-bold flex items-center justify-center gap-2 shadow-sm active:bg-on-primary-fixed-variant transition-colors"} type={"button"} data-act={"directions-7-min"} data-way-out={"primary"}>
-                  <span className={"material-symbols-outlined text-[20px]"}>
-                    directions
-                  </span>
-                  <span>
-                    Directions (7 min)
-                  </span>
-                </button>
-              </div>
-            </article>
+            
+            
+            
+            
+            
             <div className={"p-space-md rounded-xl bg-surface-container flex items-center gap-3"}>
               <div className={"w-10 h-10 rounded-full bg-tertiary-fixed text-on-tertiary-fixed flex items-center justify-center flex-shrink-0"}>
                 <span className={"material-symbols-outlined text-[20px]"}>

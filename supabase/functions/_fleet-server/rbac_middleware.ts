@@ -425,7 +425,9 @@ export function requireAuth(options?: RequireAuthOptions) {
       path.includes("/driver-login") ||
       path.includes("/admin-login") ||
       path.includes("/admin-check") ||
+      // Retired. No handler remains. Skipping the login gate lets the request fall through to 404.
       path.includes("/admin-seed") ||
+      path.includes("/recover-platform-owner") ||
       path.includes("/signup") ||
       path.includes("/platform-status") ||
       path.includes("/platform-feature-flags") ||

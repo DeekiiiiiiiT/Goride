@@ -194,7 +194,7 @@ export function DocumentReminderScreen() {
                   </div>
                 </label>
                 <label className={"vehicle-option relative flex items-center justify-between p-space-md rounded-xl bg-surface-container-lowest text-on-surface shadow-sm cursor-pointer select-none opacity-80 hover:opacity-100 transition-opacity"}>
-                  <input className={"sr-only peer"} name={"linked_vehicle"} type={"radio"} defaultValue={"PA-4910"} />
+                  <input className={"sr-only peer"} name={"linked_vehicle"} type={"radio"} defaultValue={""} />
                   <div className={"flex items-center gap-space-md min-w-0"}>
                     <div className={"w-10 h-10 rounded-xl bg-surface-container-high flex items-center justify-center text-on-surface-variant shrink-0"}>
                       <span className={"material-symbols-outlined text-[22px]"}>
@@ -273,7 +273,7 @@ export function DocumentReminderScreen() {
                   <span className={"absolute left-space-md text-on-surface-variant pointer-events-none material-symbols-outlined text-[20px]"}>
                     pin
                   </span>
-                  <input className={"w-full h-12 pl-11 pr-space-md rounded-xl bg-surface-container-low font-body-md text-body-md text-on-surface placeholder:text-outline outline-none focus:bg-surface-container-lowest shadow-inner transition-colors"} id={"doc-number"} placeholder={"e.g. TF-94021-JM"} type={"text"} defaultValue={"TF-94021-JM"} />
+                  <input className={"w-full h-12 pl-11 pr-space-md rounded-xl bg-surface-container-low font-body-md text-body-md text-on-surface placeholder:text-outline outline-none focus:bg-surface-container-lowest shadow-inner transition-colors"} id={"doc-number"} placeholder={"e.g. TF-94021-JM"} type={"text"} defaultValue={""} />
                 </div>
               </div>
               <div className={"flex flex-col gap-space-xs"}>
@@ -284,7 +284,7 @@ export function DocumentReminderScreen() {
                   <span className={"absolute left-space-md text-on-surface-variant pointer-events-none material-symbols-outlined text-[20px]"}>
                     assured_workload
                   </span>
-                  <input className={"w-full h-12 pl-11 pr-space-md rounded-xl bg-surface-container-low font-body-md text-body-md text-on-surface placeholder:text-outline outline-none focus:bg-surface-container-lowest shadow-inner transition-colors"} id={"issuing-authority"} placeholder={"e.g. Advantage General / ITA Swallowfield"} type={"text"} defaultValue={"Island Traffic Authority (ITA)"} />
+                  <input className={"w-full h-12 pl-11 pr-space-md rounded-xl bg-surface-container-low font-body-md text-body-md text-on-surface placeholder:text-outline outline-none focus:bg-surface-container-lowest shadow-inner transition-colors"} id={"issuing-authority"} placeholder={"e.g. Advantage General / ITA Swallowfield"} type={"text"} defaultValue={""} />
                 </div>
               </div>
             </div>

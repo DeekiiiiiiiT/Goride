@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { sampleViolations, sanitizePlugScreen } from './plug-samples.mjs';
+import { readingViolations, sampleViolations, sanitizePlugScreen } from './plug-samples.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
 const htmlDir = path.join(root, 'docs/stitch/roam-plug/html');
@@ -318,7 +318,7 @@ ${rendered}    </div>
 }
 `;
   const clean = sanitizePlugScreen(source, `${name}.tsx`);
-  const banned = sampleViolations(clean);
+  const banned = [...sampleViolations(clean), ...readingViolations(clean)];
   if (banned.length) {
     console.error(`${name} still has sample content: ${banned.join(', ')}`);
     process.exitCode = 1;

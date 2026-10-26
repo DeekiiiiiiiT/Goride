@@ -51,12 +51,12 @@ export function HistoryScreen() {
                       Logged Health
                     </span>
                     <p className={"font-price-display text-price-display text-primary mt-0.5"}>
-                      J$ 64,300
+                      No services yet
                     </p>
                   </div>
                 </div>
                 <span className={"px-2.5 py-1 rounded-full bg-surface-container-high text-on-surface font-label-md text-label-md font-semibold"}>
-                  6 Services
+                  
                 </span>
               </div>
               <div className={"grid grid-cols-2 gap-space-sm bg-surface-container-low rounded-lg p-space-sm mb-space-md"}>
@@ -110,7 +110,7 @@ export function HistoryScreen() {
                 Filter Records
               </span>
               <span className={"font-label-sm text-label-sm text-secondary"}>
-                Showing all 6 logs
+                
               </span>
             </div>
             <div className={"flex gap-space-xs overflow-x-auto pb-1 -mx-gutter px-gutter scroll-smooth no-scrollbar"} id={"chip-filters"}>

@@ -127,12 +127,11 @@ export function VehicleAddedScreen() {
                       </h4>
                     </div>
                     <span className={"px-2 py-0.5 rounded-full bg-error-container text-on-error-container font-label-sm font-bold animate-pulse"}>
-                      Due in 790 km
-                    </span>
+                      </span>
                   </div>
                   <div className={"flex items-center gap-2 mb-2"}>
                     <span className={"font-label-md text-label-md text-on-surface font-semibold"}>
-                      Target: 85,000 km
+                      Target: 
                     </span>
                     <span className={"text-on-surface-variant font-body-sm text-body-sm"}>
                       • Interval #9
@@ -160,12 +159,12 @@ export function VehicleAddedScreen() {
                       </h4>
                     </div>
                     <span className={"px-2 py-0.5 rounded-full bg-surface-container text-on-surface-variant font-label-sm"}>
-                      In 5,790 km
+                      In 
                     </span>
                   </div>
                   <div className={"flex items-center gap-2 mb-2"}>
                     <span className={"font-label-md text-label-md text-on-surface font-semibold"}>
-                      Target: 90,000 km
+                      Target: 
                     </span>
                     <span className={"text-on-surface-variant font-body-sm text-body-sm"}>
                       • Standard Interval

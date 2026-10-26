@@ -1,6 +1,12 @@
 import React, { useEffect } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { AuthRecoveryGate, flashAdminLoginError } from '@roam/auth-client';
+import {
+  AuthRecoveryGate,
+  clearDominionAccessDenied,
+  dominionAccessDeniedMessage,
+  flashAdminLoginError,
+  recordDominionAccessDenied,
+} from '@roam/auth-client';
 import { PlatformConfigProvider, PlatformSessionProvider } from '@roam/platform-ops-ui';
 import { AuthProvider, useAuth } from './components/auth/AuthContext';
 import { AdminConfirmProvider } from '@roam/admin-core';
@@ -37,10 +43,15 @@ function AppContent() {
   const pathNeedsSession =
     typeof window !== 'undefined' && requiresSessionGate(window.location.pathname);
 
-  // Non-platform account: kick back to login with generic error (no wrong-portal redirects)
+  useEffect(() => {
+    if (isPlatformUser) clearDominionAccessDenied();
+  }, [isPlatformUser]);
+
+  // Non-platform account: kick back to login. The first time stays generic.
   useEffect(() => {
     if (loading || !user || isPlatformUser) return;
-    flashAdminLoginError();
+    const count = recordDominionAccessDenied();
+    flashAdminLoginError(dominionAccessDeniedMessage(count));
     void signOut();
   }, [loading, user, isPlatformUser, signOut]);
 

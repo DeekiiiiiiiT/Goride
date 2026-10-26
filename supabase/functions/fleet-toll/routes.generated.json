@@ -1,7 +1,7 @@
 {
   "slug": "fleet-toll",
-  "generatedAt": "2026-10-05T23:50:33.703Z",
-  "routeCount": 99,
+  "generatedAt": "2026-10-25T23:17:39.350Z",
+  "routeCount": 100,
   "routes": [
     "DELETE /toll-plazas/:id",
     "DELETE /toll-tags/:id",
@@ -13,6 +13,7 @@
     "GET ${BASE}/match-index/status",
     "GET ${BASE}/periods",
     "GET ${BASE}/periods/:weekKey/readiness",
+    "GET ${BASE}/periods/:weekKey/seal",
     "GET ${BASE}/reconciled",
     "GET ${BASE}/refund-suggestions",
     "GET ${BASE}/rematch-candidates",

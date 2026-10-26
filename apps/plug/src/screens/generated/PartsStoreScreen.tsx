@@ -64,10 +64,10 @@ export function PartsStoreScreen() {
               <div className={"flex items-start justify-between gap-space-sm"}>
                 <div className={"flex flex-col"}>
                   <h2 className={"font-headline-md text-headline-md text-on-surface tracking-tight"}>
-                    Mario's Auto Parts
+                    
                   </h2>
                   <span className={"font-label-lg text-label-lg text-primary font-semibold"}>
-                    Constant Spring Branch
+                    
                   </span>
                 </div>
                 <div className={"w-12 h-12 rounded-xl bg-surface-container-low flex items-center justify-center shrink-0 shadow-sm"}>
@@ -204,7 +204,7 @@ export function PartsStoreScreen() {
                     near_me
                   </span>
                   <span className={"font-label-md text-label-md font-bold"}>
-                    1.8 km away
+                     away
                   </span>
                 </div>
                 <div className={"absolute inset-0 flex items-center justify-center pointer-events-none"}>

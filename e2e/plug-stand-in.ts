@@ -10,6 +10,9 @@ const FLAGS = {
   'plug.documents': true,
 };
 
+export const PLUG_SUPPLIED_NAMES = ['Total Half Way Tree', 'Portmore'];
+export const PLUG_SUPPLIED_PRICES = [210];
+
 const STATION = {
   id: 'st_live',
   name: 'Total Half Way Tree',

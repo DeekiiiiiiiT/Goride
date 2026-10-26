@@ -54,12 +54,11 @@ export function SavedScreen() {
                   <span className={"material-symbols-outlined text-[14px] text-tertiary"} style={{ fontVariationSettings: "'wght' 700" }}>
                     arrow_upward
                   </span>
-                  +0.8 km/L
+                  +/L
                 </span>
               </div>
               <div className={"flex items-baseline gap-space-xs mt-space-xs"}>
-                <span className={"font-display-lg-mobile text-display-lg-mobile text-on-surface font-extrabold tracking-tight"}>
-                  14.2
+                <span className={"font-display-lg-mobile text-display-lg-mobile text-on-surface font-extrabold tracking-tight"} data-slot={"receipt-economy"}>
                 </span>
                 <span className={"font-headline-sm text-headline-sm text-on-surface-variant font-semibold"}>
                   km/L
@@ -67,7 +66,7 @@ export function SavedScreen() {
               </div>
               <p className={"font-body-sm text-body-sm text-on-surface-variant mt-space-xs flex items-center gap-1"}>
                 <span className={"w-1.5 h-1.5 rounded-full bg-tertiary"} />
-                Better than St. Andrew average for Roomy 1.0L (13.4 km/L)
+                Better than St. Andrew average for Roomy 1.0L (/L)
               </p>
               <div className={"w-full bg-surface-container h-2 rounded-full mt-space-sm overflow-hidden flex"}>
                 <div className={"bg-tertiary-container h-full rounded-full"} style={{ width: "78%" }} />
@@ -78,25 +77,25 @@ export function SavedScreen() {
                 <span className={"font-label-sm text-label-sm uppercase tracking-wider text-on-surface-variant"}>
                   This Refuel
                 </span>
-                <span className={"px-2.5 py-1 rounded bg-surface-container-highest text-on-surface font-label-md text-label-md flex items-center gap-1"}>
+                <span className={"px-2.5 py-1 rounded bg-surface-container-highest text-on-surface font-label-md text-label-md flex items-center gap-1"} data-slot={"receipt-grade"}>
                   <span className={"w-2 h-2 rounded-full bg-primary"} />
-                  E-10 87 @ J$214.50/L
+                  E-10 87 @ /L
                 </span>
               </div>
               <div className={"flex items-baseline justify-between mt-space-xs"}>
                 <div>
-                  <span className={"font-price-display text-price-display text-on-surface font-bold"}>
-                    J$4,290
+                  <span className={"font-price-display text-price-display text-on-surface font-bold"} data-slot={"receipt-amount"}>
+                    
                   </span>
                   <span className={"font-body-md text-body-md text-on-surface-variant ml-1"}>
-                    • 20.00 L
+                    <span data-slot={"receipt-litres"}></span>
                   </span>
                 </div>
-                <div className={"flex items-center text-primary font-label-md text-label-md gap-0.5"}>
+                <div className={"flex items-center text-primary font-label-md text-label-md gap-0.5"} data-slot={"receipt-station"}>
                   <span className={"material-symbols-outlined text-[16px]"}>
                     pin_drop
                   </span>
-                  Texaco Barbican
+                  
                 </div>
               </div>
             </div>
@@ -109,13 +108,11 @@ export function SavedScreen() {
                       build
                     </span>
                     <span className={"font-headline-sm text-headline-sm text-on-surface"}>
-                      Oil change due in 380 km
-                    </span>
+                      </span>
                   </div>
                   <span className={"font-body-sm text-body-sm text-on-surface-variant mt-1"}>
-                    Target threshold:
                     <strong className={"text-on-surface"}>
-                      85,000 km
+                      
                     </strong>
                     • Approx. 6 days left at your pace
                   </span>
@@ -137,7 +134,7 @@ export function SavedScreen() {
                   </span>
                 </div>
                 <p className={"font-headline-sm text-headline-sm font-semibold leading-snug mt-1 text-on-primary"}>
-                  You updated the E-10 87 price at Texaco Barbican for every driver 🎉
+                  
                 </p>
                 <div className={"flex items-center justify-between pt-space-xs mt-space-xs"}>
                   <div className={"inline-flex items-center gap-1.5 bg-on-secondary-container/30 px-space-sm py-1 rounded-full text-on-primary font-label-md text-label-md backdrop-blur-sm"}>

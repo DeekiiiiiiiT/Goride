@@ -57,6 +57,7 @@ import {
   type RbacUser,
 } from "./rbac_middleware.ts";
 import { logAdminAction, getAuditLogs, getAuditLogsByActor } from "./audit_log.ts";
+import { logRoleChange } from "../_shared/auditLog.ts";
 import { 
   stampOrg, 
   stampRecord,
@@ -316,6 +317,15 @@ import {
   userCanAccessFleetPortal,
   userCanAccessDriverPortal,
 } from "./fleet_owner_provision.ts";
+import {
+  displayedPlatformRole,
+  dominionAccessDecision,
+  hasPlatformOwnerAppRole,
+  listAllAuthUsers,
+  mergePlatformStaffRole,
+  removePlatformStaffRoles,
+  userIsFleetManager,
+} from "./dominion_access.ts";
 import { resolveCatalogIdForKvVehicle } from "./vehicle_catalog_resolve.ts";
 import {
   applyCatalogGateOnCreate,
@@ -8441,8 +8451,7 @@ export function registerResidualMonolithRoutes(app: Hono) {
       const { data: { user: orgOwner }, error: getOrgErr } = await supabase.auth.admin.getUserById(organizationId);
       if (getOrgErr || !orgOwner) return c.json({ error: "Target organization not found" }, 404);
 
-      const orgRole = orgOwner.user_metadata?.role;
-      if (orgRole !== 'admin' && orgRole !== 'superadmin') {
+      if (!userIsFleetManager(orgOwner)) {
         return c.json({ error: "Target organization ID does not belong to a fleet owner" }, 400);
       }
 
@@ -8842,6 +8851,25 @@ export function registerResidualMonolithRoutes(app: Hono) {
   // Phase 1: Platform Team Management Endpoints
   // ---------------------------------------------------------------------------
 
+  const platformDb = () => supabase.schema("platform");
+
+  async function staffRoleIds(names: string[]): Promise<{ id: string; name: string }[]> {
+    const { data, error } = await platformDb().from("roles").select("id, name").in("name", names);
+    if (error) throw new Error(error.message);
+    return (data || []) as { id: string; name: string }[];
+  }
+
+  async function writeTrustedAppRoles(
+    userId: string,
+    appMeta: Record<string, unknown>,
+    next: { role: string; roles: string[] },
+  ) {
+    const { error } = await supabase.auth.admin.updateUserById(userId, {
+      app_metadata: { ...appMeta, role: next.role, roles: next.roles },
+    });
+    if (error) throw error;
+  }
+
   // GET /admin/platform-team — List all platform staff (owner, support, analyst)
   app.get("/make-server-37f42386/admin/platform-team", requireAuth(), async (c) => {
     try {
@@ -8851,17 +8879,14 @@ export function registerResidualMonolithRoutes(app: Hono) {
         return c.json({ error: "Only the platform owner can view platform team" }, 403);
       }
 
-      const { data, error } = await supabase.auth.admin.listUsers({ perPage: 1000 });
-      if (error) throw new Error(`Auth API error: ${error.message}`);
-
-      const platformRoles = ['platform_owner', 'platform_support', 'platform_analyst', 'superadmin'];
-      const members = (data?.users || [])
-        .filter((u: any) => platformRoles.includes(u.user_metadata?.role))
+      const users = await listAllAuthUsers((args) => supabase.auth.admin.listUsers(args));
+      const members = users
+        .filter((u) => displayedPlatformRole(u))
         .map((u: any) => ({
           id: u.id,
           email: u.email || "",
           name: u.user_metadata?.name || "",
-          role: u.user_metadata?.role === 'superadmin' ? 'platform_owner' : u.user_metadata?.role,
+          role: displayedPlatformRole(u),
           createdAt: u.created_at || null,
           lastSignIn: u.last_sign_in_at || null,
           status: u.last_sign_in_at
@@ -8897,7 +8922,7 @@ export function registerResidualMonolithRoutes(app: Hono) {
       }
 
       // Prevent changing your own role
-      const callerId = rbacUser?.id;
+      const callerId = rbacUser?.userId;
       if (callerId === targetId) {
         return c.json({ error: "You cannot change your own role" }, 400);
       }
@@ -8908,27 +8933,49 @@ export function registerResidualMonolithRoutes(app: Hono) {
         return c.json({ error: "User not found" }, 404);
       }
 
-      // Prevent changing the platform_owner's role
-      const targetRole = targetUser.user_metadata?.role;
-      if (targetRole === 'platform_owner' || targetRole === 'superadmin') {
+      const targetRole = displayedPlatformRole(targetUser);
+      if (targetRole === 'platform_owner') {
         return c.json({ error: "Cannot change the platform owner's role" }, 403);
       }
-
-      // Verify target is a platform user
-      const platformSubRoles = ['platform_support', 'platform_analyst'];
-      if (!platformSubRoles.includes(targetRole)) {
+      if (targetRole !== 'platform_support' && targetRole !== 'platform_analyst') {
         return c.json({ error: "This user is not a platform staff member" }, 400);
       }
 
-      const oldRole = targetRole;
-      const { error: updateErr } = await supabase.auth.admin.updateUserById(targetId, {
-        user_metadata: { ...targetUser.user_metadata, role }
+      const roleRows = await staffRoleIds(['platform_support', 'platform_analyst', role]);
+      const nextRole = roleRows.find((row) => row.name === role);
+      if (!nextRole) return c.json({ error: "Role not found" }, 500);
+      const oldIds = roleRows.filter((row) => row.name !== role).map((row) => row.id);
+      if (oldIds.length > 0) {
+        const { error: deleteSeatErr } = await platformDb()
+          .from("user_roles")
+          .delete()
+          .eq("user_id", targetId)
+          .in("role_id", oldIds);
+        if (deleteSeatErr) throw new Error(deleteSeatErr.message);
+      }
+      const { error: grantErr } = await platformDb().from("user_roles").insert({
+        user_id: targetId,
+        role_id: nextRole.id,
+        granted_by: callerId ?? null,
+        scope_type: "global",
+        status: "active",
       });
-      if (updateErr) throw updateErr;
+      if (grantErr && !/duplicate|unique/i.test(grantErr.message)) throw new Error(grantErr.message);
 
-      console.log(`[Platform Team] Changed role for ${targetUser.email}: ${oldRole} → ${role}`);
-      await logAdminAction({ actorId: rbacUser?.id, actorName: rbacUser?.name || 'Admin', action: 'change_platform_role', targetId: targetId, targetEmail: targetUser.email || '', details: `From ${oldRole} to ${role}` });
-      return c.json({ success: true, message: `Role changed from ${oldRole} to ${role}` });
+      const appMeta = (targetUser.app_metadata || {}) as Record<string, unknown>;
+      await writeTrustedAppRoles(targetId, appMeta, mergePlatformStaffRole(appMeta, role));
+
+      console.log(`[Platform Team] Changed role for ${targetUser.email}: ${targetRole} → ${role}`);
+      await logRoleChange({
+        actorUserId: callerId ?? null,
+        targetUserId: targetId,
+        action: "role.granted",
+        roleName: role,
+        request: c.req.raw,
+        metadata: { source: "platform-team", from: targetRole },
+      });
+      await logAdminAction({ actorId: callerId, actorName: rbacUser?.email || 'Admin', action: 'change_platform_role', targetId: targetId, targetEmail: targetUser.email || '', details: `From ${targetRole} to ${role}` });
+      return c.json({ success: true, message: `Role changed from ${targetRole} to ${role}` });
     } catch (e: any) {
       console.error("[Platform Team Role Change] Error:", e);
       return c.json({ error: e.message }, 500);
@@ -8946,8 +8993,8 @@ export function registerResidualMonolithRoutes(app: Hono) {
 
       const targetId = c.req.param('id');
 
-      // Prevent deleting yourself
-      const callerId = rbacUser?.id;
+      // Prevent removing yourself
+      const callerId = rbacUser?.userId;
       if (callerId === targetId) {
         return c.json({ error: "You cannot remove yourself" }, 400);
       }
@@ -8958,75 +9005,41 @@ export function registerResidualMonolithRoutes(app: Hono) {
         return c.json({ error: "User not found" }, 404);
       }
 
-      // Prevent deleting the platform_owner
-      const targetRole = targetUser.user_metadata?.role;
-      if (targetRole === 'platform_owner' || targetRole === 'superadmin') {
+      const targetRole = displayedPlatformRole(targetUser);
+      if (targetRole === 'platform_owner') {
         return c.json({ error: "Cannot remove the platform owner" }, 403);
       }
-
-      // Verify target is a platform user
-      const deletableRoles = ['platform_support', 'platform_analyst'];
-      if (!deletableRoles.includes(targetRole)) {
+      if (targetRole !== 'platform_support' && targetRole !== 'platform_analyst') {
         return c.json({ error: "This user is not a platform staff member" }, 400);
       }
 
-      const { error: deleteErr } = await supabase.auth.admin.deleteUser(targetId);
-      if (deleteErr) throw deleteErr;
+      const roleRows = await staffRoleIds(['platform_support', 'platform_analyst']);
+      const oldIds = roleRows.map((row) => row.id);
+      if (oldIds.length > 0) {
+        const { error: deleteSeatErr } = await platformDb()
+          .from("user_roles")
+          .delete()
+          .eq("user_id", targetId)
+          .in("role_id", oldIds);
+        if (deleteSeatErr) throw new Error(deleteSeatErr.message);
+      }
 
-      console.log(`[Platform Team] Removed ${targetUser.email} (was ${targetRole})`);
-      await logAdminAction({ actorId: rbacUser?.id, actorName: rbacUser?.name || 'Admin', action: 'remove_platform_staff', targetId: targetId, targetEmail: targetUser.email || '' });
+      const appMeta = (targetUser.app_metadata || {}) as Record<string, unknown>;
+      await writeTrustedAppRoles(targetId, appMeta, removePlatformStaffRoles(appMeta));
+
+      console.log(`[Platform Team] Removed platform access for ${targetUser.email} (was ${targetRole})`);
+      await logRoleChange({
+        actorUserId: callerId ?? null,
+        targetUserId: targetId,
+        action: "role.revoked",
+        roleName: targetRole,
+        request: c.req.raw,
+        metadata: { source: "platform-team" },
+      });
+      await logAdminAction({ actorId: callerId, actorName: rbacUser?.email || 'Admin', action: 'remove_platform_staff', targetId: targetId, targetEmail: targetUser.email || '' });
       return c.json({ success: true, message: `Removed ${targetUser.email} from platform team` });
     } catch (e: any) {
       console.error("[Platform Team Remove] Error:", e);
-      return c.json({ error: e.message }, 500);
-    }
-  });
-
-  // ONE-TIME RECOVERY: Recreate the platform owner (superadmin) account
-  // This endpoint does NOT require auth since the account was deleted.
-  // It is protected by a one-time secret and will refuse to create duplicates.
-  app.post("/make-server-37f42386/recover-platform-owner", async (c) => {
-    try {
-      const { email, password, name, recoverySecret } = await c.req.json();
-
-      // Protect with a hardcoded one-time secret
-      if (recoverySecret !== 'ROAMFLEET-RECOVER-2026-EMERGENCY') {
-        return c.json({ error: "Invalid recovery secret" }, 403);
-      }
-
-      if (!email || !password) {
-        return c.json({ error: "Email and password are required" }, 400);
-      }
-
-      // Check if a platform_owner already exists to prevent abuse
-      const { data: { users: allUsers } } = await supabase.auth.admin.listUsers({ perPage: 1000 });
-      const existingOwner = (allUsers || []).find((u: any) =>
-        u.user_metadata?.role === 'platform_owner' || u.user_metadata?.role === 'superadmin'
-      );
-      if (existingOwner) {
-        return c.json({ error: `A platform owner already exists: ${existingOwner.email}. Recovery not needed.` }, 409);
-      }
-
-      const { data, error } = await supabase.auth.admin.createUser({
-        email,
-        password,
-        user_metadata: {
-          name: name || 'Platform Owner',
-          role: 'platform_owner',
-        },
-        email_confirm: true,
-      });
-
-      if (error) throw error;
-
-      console.log(`[RECOVERY] Platform owner account recreated: ${email}, id: ${data.user.id}`);
-      return c.json({
-        success: true,
-        message: `Platform owner account recreated successfully. You can now log in at /admin.`,
-        userId: data.user.id,
-      });
-    } catch (e: any) {
-      console.error("[RECOVERY] Error:", e);
       return c.json({ error: e.message }, 500);
     }
   });
@@ -10557,96 +10570,6 @@ export function registerResidualMonolithRoutes(app: Hono) {
     }
   });
 
-  // POST /admin-seed — One-time creation of the super admin account
-  // Self-locking: refuses to create a second superadmin if one already exists
-  app.post("/make-server-37f42386/admin-seed", async (c) => {
-    try {
-      const { email, password, name } = await c.req.json();
-
-      if (!email || !password) {
-        return c.json({ error: "Email and password are required for admin seed" }, 400);
-      }
-
-      // Check if a superadmin already exists (self-locking)
-      const existing = await kv.get("platform:superadmin_created");
-      if (existing && (existing as any).created === true) {
-        return c.json({ error: "Super admin account already exists. This endpoint can only be used once." }, 400);
-      }
-
-      // Create the superadmin user via Supabase Auth
-      const { data, error } = await supabase.auth.admin.createUser({
-        email,
-        password,
-        user_metadata: {
-          name: name || "Super Admin",
-          role: "superadmin",
-        },
-        // Automatically confirm the email since an email server hasn't been configured.
-        email_confirm: true,
-      });
-
-      if (error) {
-        console.log(`Admin seed error: ${error.message}`);
-        // If the user already exists in Supabase Auth, recover gracefully:
-        // look them up, set the KV lock, and return success (idempotent).
-        if (error.message?.includes('already been registered')) {
-          console.log(`Super admin email already registered — recovering by setting KV lock`);
-          try {
-            const { data: listData } = await supabase.auth.admin.listUsers({ perPage: 1000 });
-            const existingUser = listData?.users?.find(
-              (u: any) => u.email === email && u.user_metadata?.role === 'superadmin'
-            );
-            if (existingUser) {
-              // Update password to match the submitted form so auto sign-in works
-              await supabase.auth.admin.updateUserById(existingUser.id, { password });
-              await kv.set("platform:superadmin_created", {
-                created: true,
-                userId: existingUser.id,
-                email,
-                createdAt: existingUser.created_at || new Date().toISOString(),
-              });
-              console.log(`KV lock restored for existing super admin: ${email} (${existingUser.id})`);
-              return c.json({ success: true, userId: existingUser.id, recovered: true });
-            }
-            // If the email exists but isn't a superadmin, promote them
-            const anyUser = listData?.users?.find((u: any) => u.email === email);
-            if (anyUser) {
-              await supabase.auth.admin.updateUserById(anyUser.id, {
-                password,
-                user_metadata: { ...anyUser.user_metadata, role: 'superadmin', name: name || anyUser.user_metadata?.name || 'Super Admin' },
-              });
-              await kv.set("platform:superadmin_created", {
-                created: true,
-                userId: anyUser.id,
-                email,
-                createdAt: new Date().toISOString(),
-              });
-              console.log(`Existing user promoted to super admin: ${email} (${anyUser.id})`);
-              return c.json({ success: true, userId: anyUser.id, recovered: true, promoted: true });
-            }
-          } catch (recoverErr: any) {
-            console.log(`Recovery attempt failed: ${recoverErr.message}`);
-          }
-        }
-        throw error;
-      }
-
-      // Lock the endpoint — persist the superadmin record
-      await kv.set("platform:superadmin_created", {
-        created: true,
-        userId: data.user.id,
-        email,
-        createdAt: new Date().toISOString(),
-      });
-
-      console.log(`Super admin created successfully: ${email} (${data.user.id})`);
-      return c.json({ success: true, userId: data.user.id });
-    } catch (e: any) {
-      console.log(`Admin seed fatal error: ${e.message}`);
-      return c.json({ error: `Failed to create super admin: ${e.message}` }, 500);
-    }
-  });
-
   // ---------------------------------------------------------------------------
   // POST /fleet-login — Server-side Fleet Manager login with rate limiting
   // Rejects driver accounts. Returns session tokens.
@@ -10945,9 +10868,24 @@ export function registerResidualMonolithRoutes(app: Hono) {
     }
   });
 
-  // POST /admin-login — Server-side admin login (whitelist: superadmin + platform roles only)
-  // Auto-recovery removed in Phase 4 — wrong password simply fails, no password overwrite.
-  // Returns session tokens so the frontend can call supabase.auth.setSession()
+  async function recordDominionLogin(input: {
+    outcome: "success" | "bad_password" | "no_platform_role";
+    email: string;
+    userId?: string | null;
+    ip?: string | null;
+  }) {
+    const { error } = await supabase.schema("platform").from("portal_login_events").insert({
+      portal: "dominion",
+      email: input.email.toLowerCase(),
+      user_id: input.userId ?? null,
+      outcome: input.outcome,
+      ip_address: input.ip ?? null,
+    });
+    if (error) console.warn(`[AdminLogin] audit write failed: ${error.message}`);
+  }
+
+  // POST /admin-login — password check, then the trusted app-record platform role.
+  // A wrong role is not a failed password and must not lock the account.
   app.post("/make-server-37f42386/admin-login", async (c) => {
     try {
       const { email, password } = await c.req.json();
@@ -10977,50 +10915,48 @@ export function registerResidualMonolithRoutes(app: Hono) {
       let { data, error: signInError } = signInResult;
 
       if (signInError) {
-        // Auto-recovery removed (Phase 4): wrong password = fail. No password overwrite, no role promotion.
-        console.log(`[AdminLogin] Login failed for ${email}: ${signInError.message}`);
+        console.log(`[AdminLogin] reason=bad_password email=${email}`);
         await recordFailedAttempt(clientIp, 'admin');
         await recordFailedAttempt(email.toLowerCase(), 'admin');
-        return c.json({ error: "Incorrect credentials" }, 401);
+        const remaining = await checkRateLimit(email.toLowerCase(), 'admin');
+        await recordDominionLogin({
+          outcome: "bad_password",
+          email,
+          ip: clientIp,
+        });
+        return c.json({
+          error: "Incorrect credentials",
+          attemptsRemaining: remaining.remaining,
+        }, 401);
       }
 
-      if (!data?.session) {
+      if (!data?.session || !data.user) {
         return c.json({ error: "Sign-in succeeded but no session was returned" }, 500);
       }
 
-      let role = data.user?.user_metadata?.role;
-      if (role !== "superadmin") {
-        // Role metadata missing — check KV to see if this email IS the registered superadmin
-        console.log(`User ${email} signed in but role is '${role}', not superadmin — checking KV record`);
-        const kvRecord = await kv.get("platform:superadmin_created") as any;
-        if (kvRecord?.email === email) {
-          // This IS the superadmin — promote their metadata so future logins work immediately
-          console.log(`KV confirms ${email} is the superadmin — promoting user_metadata`);
-          await supabase.auth.admin.updateUserById(data.user.id, {
-            user_metadata: { ...data.user.user_metadata, role: 'superadmin' },
-          });
-          role = "superadmin";
-
-          // IMPORTANT: Re-authenticate to get a FRESH session with the new role in the JWT
-          const fresh = await anonClient.auth.signInWithPassword({ email, password });
-          if (fresh.data?.session) {
-            data = fresh.data;
-            console.log(`Fresh session obtained for promoted superadmin: ${email}`);
-          }
-        } else {
-          console.log(`User ${email} is not the registered superadmin (KV email: ${kvRecord?.email || 'none'})`);
-          await anonClient.auth.signOut();
-          await recordFailedAttempt(clientIp, 'admin');
-          await recordFailedAttempt(email.toLowerCase(), 'admin');
-          // Same copy as wrong password — do not disclose role / portal mismatch
-          return c.json({ error: "Incorrect credentials" }, 401);
-        }
+      const access = dominionAccessDecision(data.user);
+      if (!access.ok) {
+        console.log(`[AdminLogin] reason=no_platform_role email=${email}`);
+        await anonClient.auth.signOut();
+        await recordDominionLogin({
+          outcome: "no_platform_role",
+          email,
+          userId: data.user.id,
+          ip: clientIp,
+        });
+        return c.json({ error: "Incorrect credentials", reason: "no_platform_role" }, 401);
       }
 
       // Success — clear rate limit counters
       await clearRateLimit(clientIp, 'admin');
       await clearRateLimit(email.toLowerCase(), 'admin');
-      console.log(`Admin login successful: ${email}`);
+      console.log(`[AdminLogin] reason=ok email=${email} role=${access.role}`);
+      await recordDominionLogin({
+        outcome: "success",
+        email,
+        userId: data.user.id,
+        ip: clientIp,
+      });
       return c.json({
         success: true,
         access_token: data.session.access_token,
@@ -11029,7 +10965,7 @@ export function registerResidualMonolithRoutes(app: Hono) {
           id: data.user.id,
           email: data.user.email,
           name: data.user.user_metadata?.name,
-          role: data.user.user_metadata?.role,
+          role: access.role,
         },
       });
     } catch (e: any) {
@@ -11038,12 +10974,11 @@ export function registerResidualMonolithRoutes(app: Hono) {
     }
   });
 
-  // GET /rate-limit-stats — Rate limiter monitoring (superadmin only)
+  // GET /rate-limit-stats — platform staff only, from the trusted app record
   app.get("/make-server-37f42386/rate-limit-stats", requireAuth(), async (c) => {
     try {
-      const user = (c as any).user;
-      const role = user?.user_metadata?.role;
-      if (role !== 'superadmin') {
+      const rbacUser = c.get('rbacUser') as RbacUser | undefined;
+      if (!rbacUser || !hasPlatformStaffAccess(rbacUser)) {
         return c.json({ error: "Superadmin access required" }, 403);
       }
       return c.json(getRateLimitStats());
@@ -11052,43 +10987,14 @@ export function registerResidualMonolithRoutes(app: Hono) {
     }
   });
 
-  // GET /admin-check — Check whether a superadmin has been set up
-  // Used by the /admin frontend to decide whether to show Setup vs Login
+  // GET /admin-check — does any account hold platform owner on the trusted app record?
   app.get("/make-server-37f42386/admin-check", async (c) => {
     try {
-      const existing = await kv.get("platform:superadmin_created");
-      if (existing && (existing as any).created === true) {
-        return c.json({ exists: true });
-      }
-
-      // Heal: KV lock may be missing after env reset / migration, but Auth still has a platform admin.
-      // Prefer login over forcing a second "Initial Setup" when a superadmin already exists.
-      try {
-        const { data } = await supabase.auth.admin.listUsers({ perPage: 1000 });
-        const platformAdmin = data?.users?.find((u: any) => {
-          const role = u.user_metadata?.role;
-          return role === 'superadmin' || role === 'platform_owner';
-        });
-        if (platformAdmin) {
-          await kv.set("platform:superadmin_created", {
-            created: true,
-            userId: platformAdmin.id,
-            email: platformAdmin.email,
-            createdAt: platformAdmin.created_at || new Date().toISOString(),
-            healedAt: new Date().toISOString(),
-            healedFrom: 'admin-check',
-          });
-          console.log(`[admin-check] Healed KV lock from Auth user ${platformAdmin.email} (${platformAdmin.id})`);
-          return c.json({ exists: true, healed: true });
-        }
-      } catch (healErr: any) {
-        console.log(`[admin-check] Auth heal failed: ${healErr.message}`);
-      }
-
-      return c.json({ exists: false });
+      const users = await listAllAuthUsers((args) => supabase.auth.admin.listUsers(args));
+      const exists = users.some((user) => hasPlatformOwnerAppRole(user));
+      return c.json({ exists });
     } catch (e: any) {
       console.log(`Admin check error: ${e.message}`);
-      // Prefer login UI on hard failure so operators are not blocked behind setup
       return c.json({ exists: true, degraded: true });
     }
   });
@@ -11121,6 +11027,7 @@ export function registerResidualMonolithRoutes(app: Hono) {
 
           for (const u of data.users) {
             const role = u.user_metadata?.role;
+            if (displayedPlatformRole(u)) platformStaffCount++;
             if (role === 'admin') {
               customerCount++;
               const line = inferProductLineFromUser(u.user_metadata as Record<string, unknown>);
@@ -11135,8 +11042,6 @@ export function registerResidualMonolithRoutes(app: Hono) {
               const orgLine = orgId ? orgProductLineMap[orgId] : null;
               if (orgLine === 'enterprise') enterpriseTeamMemberCount++;
               else if (orgLine === 'fleet') fleetTeamMemberCount++;
-            } else if (role === 'platform_support' || role === 'platform_analyst' || role === 'platform_owner' || role === 'superadmin') {
-              platformStaffCount++;
             }
           }
           unlinkedDriverCount = driverCount - linkedDriverCount;
@@ -13178,7 +13083,7 @@ export function registerResidualMonolithRoutes(app: Hono) {
       if (getErr || !target.user) {
         return c.json({ error: "User not found" }, 404);
       }
-      if (target.user.user_metadata?.role !== "admin") {
+      if (!userIsFleetManager(target.user)) {
         return c.json({ error: "Not a fleet manager account" }, 400);
       }
       if (inferProductLineFromUser(target.user.user_metadata) !== "fleet") {
@@ -13408,7 +13313,7 @@ export function registerResidualMonolithRoutes(app: Hono) {
         if (!users?.length) break;
 
         for (const u of users) {
-          if (u.user_metadata?.role !== "admin") continue;
+          if (!userIsFleetManager(u)) continue;
           if (u.user_metadata?.productLine && isProductLine(u.user_metadata.productLine)) {
             skipped++;
             continue;

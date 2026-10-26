@@ -4,6 +4,7 @@ import 'leaflet/dist/leaflet.css';
 import 'leaflet.markercluster';
 import 'leaflet.markercluster/dist/MarkerCluster.css';
 import { publicGet } from '../api';
+import { writeStationCache } from '../offline';
 import { getPlugRuntime } from '../shell/click';
 
 type Station = { id: string; name: string; brand?: string; lat: number; lng: number; prices?: Record<string, number> };
@@ -52,7 +53,11 @@ export function ExploreMap() {
     const load = () => {
       setGrade(sessionStorage.getItem('plug-grade') || 'e10_87');
       void publicGet<{ stations: Station[] }>('/stations')
-        .then((body) => setStations(body.stations || []))
+        .then((body) => {
+          const rows = body.stations || [];
+          writeStationCache(rows);
+          setStations(rows);
+        })
         .catch(() => setStations([]));
     };
     load();
@@ -67,7 +72,16 @@ export function ExploreMap() {
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '&copy; OpenStreetMap',
     }).addTo(map);
-    const group = L.markerClusterGroup({
+    const leaflet = L as typeof L & {
+      markerClusterGroup: (options: {
+        showCoverageOnHover: boolean;
+        maxClusterRadius: number;
+        disableClusteringAtZoom: number;
+        spiderfyOnMaxZoom: boolean;
+        iconCreateFunction: (cluster: { getChildCount: () => number }) => L.DivIcon;
+      }) => L.LayerGroup;
+    };
+    const group = leaflet.markerClusterGroup({
       showCoverageOnHover: false,
       maxClusterRadius: 56,
       disableClusteringAtZoom: 17,
@@ -85,7 +99,7 @@ export function ExploreMap() {
       const label = row.name.replace(/[<>&"]/g, '');
       const icon = L.divIcon({
         className: '',
-        html: `<button type="button" aria-label="${label}" data-station-id="${row.id}" style="width:44px;height:44px;border:2px solid #fff;border-radius:999px;background:${color};color:#fff;padding:0;font:700 11px Inter,sans-serif;box-shadow:0 2px 8px rgba(0,0,0,.28)">${price}</button>`,
+        html: `<button type="button" aria-label="${label}" data-station-id="${row.id}" data-live-name="${label}" data-live-row="station" style="width:44px;height:44px;border:2px solid #fff;border-radius:999px;background:${color};color:#fff;padding:0;font:700 11px Inter,sans-serif;box-shadow:0 2px 8px rgba(0,0,0,.28)">${price}</button>`,
         iconSize: [44, 44],
         iconAnchor: [22, 22],
       });

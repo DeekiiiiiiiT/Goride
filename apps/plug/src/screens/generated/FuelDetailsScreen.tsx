@@ -71,8 +71,8 @@ export function FuelDetailsScreen() {
                           Verified Station
                         </span>
                       </div>
-                      <p className={"font-headline-sm text-headline-sm text-on-surface truncate mt-0.5 max-w-full"}>
-                        Texaco Barbican
+                      <p className={"font-headline-sm text-headline-sm text-on-surface truncate mt-0.5 max-w-full"} data-slot={"receipt-station"}>
+                        
                       </p>
                       <p className={"font-label-sm text-label-sm text-on-surface-variant truncate max-w-full"}>
                         Matched by GPS
@@ -81,7 +81,7 @@ export function FuelDetailsScreen() {
                         <span className={"material-symbols-outlined text-[15px] text-primary"}>
                           location_on
                         </span>
-                        St. Andrew • Barbican Sq.
+                        
                       </p>
                     </div>
                   </div>
@@ -200,7 +200,7 @@ export function FuelDetailsScreen() {
                     <span className={"font-headline-sm text-headline-sm font-bold text-primary mr-1 select-none"}>
                       J$
                     </span>
-                    <input className={"w-full bg-transparent font-price-display text-price-display text-on-surface focus:outline-none tracking-tight font-bold"} id={"amount-input"} inputMode={"decimal"} step={10} type={"number"} defaultValue={"4290"} />
+                    <input className={"w-full bg-transparent font-price-display text-price-display text-on-surface focus:outline-none tracking-tight font-bold"} id={"amount-input"} inputMode={"decimal"} step={10} type={"number"} defaultValue={""} />
                   </div>
                   <span className={"font-label-sm text-label-sm text-on-surface-variant pl-1"}>
                     Pump total with GCT
@@ -214,7 +214,7 @@ export function FuelDetailsScreen() {
                     Volume
                   </label>
                   <div className={"bg-surface-container-low rounded-xl px-space-sm py-2.5 flex items-center focus-within:bg-surface-container-high transition-colors min-h-[48px]"}>
-                    <input className={"w-full bg-transparent font-price-display text-price-display text-on-surface focus:outline-none tracking-tight font-bold text-right pr-1"} id={"litres-input"} inputMode={"decimal"} step={"0.01"} type={"number"} defaultValue={"20.00"} />
+                    <input className={"w-full bg-transparent font-price-display text-price-display text-on-surface focus:outline-none tracking-tight font-bold text-right pr-1"} id={"litres-input"} inputMode={"decimal"} step={"0.01"} type={"number"} defaultValue={""} />
                     <span className={"font-headline-sm text-headline-sm font-bold text-on-surface-variant select-none"}>
                       L
                     </span>
@@ -236,16 +236,16 @@ export function FuelDetailsScreen() {
                       Computed Rate
                     </span>
                     <span className={"font-body-sm text-body-sm text-on-surface-variant block"} id={"rate-formula"}>
-                      J$4,290 ÷ 20.00 L
+                      Not entered yet
                     </span>
                   </div>
                 </div>
                 <div className={"text-right"}>
                   <div className={"font-headline-sm text-headline-sm font-bold text-secondary"} id={"rate-display"}>
-                    J$214.50 / L
+                     / L
                   </div>
                   <span className={"font-label-sm text-label-sm text-green-700 font-semibold block"}>
-                    • Competitive vs Barbican Avg
+                    • 
                   </span>
                 </div>
               </div>

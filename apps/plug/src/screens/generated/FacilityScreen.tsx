@@ -77,7 +77,7 @@ export function FacilityScreen() {
                     </span>
                   </div>
                   <h2 className={"font-headline-md text-headline-md text-on-surface font-bold mt-1 leading-snug"}>
-                    Restroom — Total Half-Way-Tree
+                    
                   </h2>
                 </div>
               </div>
@@ -130,7 +130,7 @@ export function FacilityScreen() {
               </div>
               <div className={"flex items-baseline gap-2"}>
                 <span className={"font-display-lg-mobile text-display-lg-mobile font-extrabold text-primary"}>
-                  J$100
+                  
                 </span>
                 <span className={"font-body-md text-body-md text-on-surface-variant font-medium"}>
                   (pay attendant)

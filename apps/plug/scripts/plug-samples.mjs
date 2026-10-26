@@ -297,6 +297,44 @@ export function sampleViolations(source) {
   return BANNED_PHRASES.filter((phrase) => source.includes(phrase));
 }
 
+/** Search-radius chips are choices, not a reading of someone's car or a fake station. */
+const ALLOWED_KM = new Set(['2 km', '5 km', '10 km', '25 km']);
+
+function moneyPattern() {
+  return /J\$\s*[\d,]+(?:\.\d+)?k?(?:\s*[–—-]\s*(?:J\$\s*)?[\d,]+(?:\.\d+)?k?)?/gi;
+}
+
+function kmPattern() {
+  return /\d[\d,]*(?:\.\d+)?\s*km/gi;
+}
+
+function kmAllowed(source, match) {
+  const text = match[0].replace(/\s+/g, ' ');
+  const before = source[match.index - 1] || '';
+  return ALLOWED_KM.has(text.toLowerCase()) && !/\d/.test(before);
+}
+
+function visibleSource(source) {
+  return source.replace(/<[^>]+>/g, ' ').replace(/\{"[^"]*"\}/g, ' ');
+}
+
+export function readingViolations(source) {
+  const text = visibleSource(source);
+  const money = [...text.matchAll(moneyPattern())].map((match) => match[0]);
+  const km = [...text.matchAll(kmPattern())].filter((match) => !kmAllowed(text, match)).map((match) => match[0]);
+  return [...money, ...km];
+}
+
+export function stripSampleReadings(source) {
+  const withoutMoney = source.replace(moneyPattern(), '');
+  return withoutMoney.replace(kmPattern(), (match, offset) => {
+    const text = match.replace(/\s+/g, ' ');
+    const before = withoutMoney[offset - 1] || '';
+    if (ALLOWED_KM.has(text.toLowerCase()) && !/\d/.test(before)) return match;
+    return '';
+  });
+}
+
 export function polishPlugFile(source) {
   return floorType(stripPhotos(source));
 }

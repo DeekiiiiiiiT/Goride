@@ -153,7 +153,7 @@ export function PartsResultsScreen() {
                     Estimated Retail
                   </span>
                   <span className={"font-price-display text-price-display text-primary"}>
-                    J$ 11,500 – 14,000
+                    
                   </span>
                 </div>
                 <button onClick={onPlugClick} className={"h-12 px-4 rounded-lg bg-primary hover:bg-primary-container text-on-primary font-label-lg text-label-lg shadow-sm flex items-center gap-1.5 transition-transform active:scale-95"} data-act={"find-stores-6-in-kgn"} data-way-out={"primary"}>
@@ -224,7 +224,7 @@ export function PartsResultsScreen() {
                     Estimated Retail
                   </span>
                   <span className={"font-price-display text-price-display text-on-surface"}>
-                    J$ 10,800 – 13,200
+                    
                   </span>
                 </div>
                 <button onClick={onPlugClick} className={"h-12 px-4 rounded-lg bg-secondary text-on-secondary font-label-lg text-label-lg shadow-sm flex items-center gap-1.5 active:scale-95 transition-transform"} data-act={"find-stores-4-stores"}>
@@ -295,7 +295,7 @@ export function PartsResultsScreen() {
                     Estimated Retail
                   </span>
                   <span className={"font-price-display text-price-display text-on-surface"}>
-                    J$ 8,500 – 10,500
+                    
                   </span>
                 </div>
                 <button onClick={onPlugClick} className={"h-12 px-4 rounded-lg bg-surface-container-highest hover:bg-surface-container-high text-on-surface font-label-lg text-label-lg flex items-center gap-1.5 active:scale-95 transition-transform"} data-act={"find-stores-9-stores"}>
@@ -355,8 +355,7 @@ export function PartsResultsScreen() {
               </div>
               <div className={"flex items-baseline justify-between pt-1"}>
                 <span className={"font-headline-sm text-headline-sm text-on-surface"}>
-                  ~J$ 7,800 – 9,200
-                </span>
+                  </span>
                 <span className={"font-body-sm text-body-sm text-primary"}>
                   In stock across 8 yards
                 </span>
@@ -386,8 +385,7 @@ export function PartsResultsScreen() {
               </div>
               <div className={"flex items-baseline justify-between pt-1"}>
                 <span className={"font-headline-sm text-headline-sm text-on-surface"}>
-                  ~J$ 6,500 – 8,000
-                </span>
+                  </span>
                 <span className={"font-body-sm text-body-sm text-primary"}>
                   In stock across 4 yards
                 </span>
@@ -456,8 +454,7 @@ export function PartsResultsScreen() {
                     </span>
                   </div>
                   <span className={"font-label-lg text-label-lg text-primary"}>
-                    ~J$ 1,200
-                  </span>
+                    </span>
                 </div>
                 <div className={"p-space-sm bg-surface-container-lowest rounded-lg flex items-center justify-between"}>
                   <div>
@@ -469,8 +466,7 @@ export function PartsResultsScreen() {
                     </span>
                   </div>
                   <span className={"font-label-lg text-label-lg text-primary"}>
-                    ~J$ 850
-                  </span>
+                    </span>
                 </div>
               </div>
             </div>

@@ -132,7 +132,7 @@ export function DirectionsScreen() {
                     Clean Restrooms
                   </p>
                   <p className={"text-body-sm text-on-surface-variant"}>
-                    J$100 token fee
+                     token fee
                   </p>
                 </div>
               </div>

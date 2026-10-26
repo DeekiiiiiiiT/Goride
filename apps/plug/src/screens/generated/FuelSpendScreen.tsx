@@ -171,11 +171,7 @@ export function FuelSpendScreen() {
                     </div>
                   </div>
                   <div className={"mt-space-sm"}>
-                    <p className={"font-headline-md text-headline-md text-on-surface"}>
-                      1,220
-                      <span className={"font-label-md text-label-md text-on-surface-variant"}>
-                        km
-                      </span>
+                    <p className={"font-headline-md text-headline-md text-on-surface"} data-slot={"spend-distance"}>
                     </p>
                     <p className={"font-body-sm text-body-sm text-on-surface-variant mt-0.5"}>
                       
@@ -195,7 +191,7 @@ export function FuelSpendScreen() {
                   </div>
                   <div className={"mt-space-sm"}>
                     <p className={"font-headline-sm text-headline-sm text-on-surface"}>
-                      J$ 214.53
+                      
                     </p>
                     <span className={"inline-block mt-0.5 px-1.5 py-0.5 rounded bg-surface-container-high text-on-surface font-label-sm text-label-sm"}>
                       E-10 87 Blend
@@ -215,7 +211,7 @@ export function FuelSpendScreen() {
                   </div>
                   <div className={"mt-space-sm"}>
                     <p className={"font-headline-sm text-headline-sm text-on-surface"}>
-                      J$ 15.12
+                      
                     </p>
                     <p className={"font-body-sm text-body-sm text-primary font-semibold mt-0.5"}>
                       Top 15% island-wide
@@ -244,7 +240,7 @@ export function FuelSpendScreen() {
                 <div className={"h-44 w-full flex items-end justify-between gap-3 px-2 pb-2"}>
                   <div className={"flex-1 flex flex-col items-center gap-1 group"}>
                     <span className={"font-label-sm text-label-sm text-on-surface-variant group-hover:text-primary transition-colors"}>
-                      J$4.8k
+                      
                     </span>
                     <div className={"w-full bg-surface-container rounded-t-lg relative flex items-end justify-center overflow-hidden h-36"}>
                       <div className={"w-full bg-secondary-container rounded-t-lg transition-all duration-500 ease-out"} style={{ height: "72%" }} />
@@ -255,7 +251,7 @@ export function FuelSpendScreen() {
                   </div>
                   <div className={"flex-1 flex flex-col items-center gap-1 group"}>
                     <span className={"font-label-sm text-label-sm text-on-surface-variant group-hover:text-primary transition-colors"}>
-                      J$4.2k
+                      
                     </span>
                     <div className={"w-full bg-surface-container rounded-t-lg relative flex items-end justify-center overflow-hidden h-36"}>
                       <div className={"w-full bg-secondary-container rounded-t-lg transition-all duration-500 ease-out"} style={{ height: "62%" }} />
@@ -267,7 +263,7 @@ export function FuelSpendScreen() {
                   <div className={"flex-1 flex flex-col items-center gap-1 group"}>
                     <div className={"flex items-center gap-0.5 bg-primary text-on-primary px-1.5 py-0.5 rounded-full shadow-sm"}>
                       <span className={"font-label-sm text-label-sm font-bold"}>
-                        J$5.2k
+                        
                       </span>
                     </div>
                     <div className={"w-full bg-surface-container rounded-t-lg relative flex items-end justify-center overflow-hidden h-36"}>
@@ -281,7 +277,7 @@ export function FuelSpendScreen() {
                   </div>
                   <div className={"flex-1 flex flex-col items-center gap-1 group"}>
                     <span className={"font-label-sm text-label-sm text-on-surface-variant group-hover:text-primary transition-colors"}>
-                      J$4.3k
+                      
                     </span>
                     <div className={"w-full bg-surface-container rounded-t-lg relative flex items-end justify-center overflow-hidden h-36"}>
                       <div className={"w-full bg-secondary-container rounded-t-lg transition-all duration-500 ease-out"} style={{ height: "64%" }} />
@@ -296,7 +292,7 @@ export function FuelSpendScreen() {
                     Total: 4 Transactions
                   </span>
                   <span className={"font-semibold text-primary"}>
-                    Avg: J$ 4,612.50 / week
+                    Avg:  / week
                   </span>
                 </div>
               </div>
@@ -314,7 +310,7 @@ export function FuelSpendScreen() {
                 <div className={"flex items-center gap-1 bg-surface-container px-2 py-1 rounded-full"}>
                   <span className={"w-2 h-2 rounded-full bg-tertiary"} />
                   <span className={"font-label-sm text-label-sm text-on-surface"}>
-                    Target: 13.4 km/L
+                    Target: /L
                   </span>
                 </div>
               </div>
@@ -322,7 +318,7 @@ export function FuelSpendScreen() {
                 <svg aria-label={"Fuel efficiency line chart"} className={"w-full h-36 overflow-visible"} viewBox={"0 0 340 140"}>
                   <line stroke={"#936f00"} strokeDasharray={"4 4"} strokeOpacity={"0.6"} strokeWidth={"1.5"} x1={"16"} x2={"324"} y1={"86"} y2={"86"} />
                   <text className={"font-label-sm text-[12px] font-semibold"} fill={"#755800"} x={"20"} y={"80"}>
-                    Parish Avg (13.4 km/L)
+                    Parish Avg (/L)
                   </text>
                   <defs>
                     <linearGradient id={"efficiencyGlow"} x1={"0"} x2={"0"} y1={"0"} y2={"1"}>

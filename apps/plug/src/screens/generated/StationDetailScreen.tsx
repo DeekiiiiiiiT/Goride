@@ -213,7 +213,7 @@ export function StationDetailScreen() {
                     Restroom
                   </span>
                   <span className={"font-body-sm text-body-sm text-on-surface-variant"}>
-                    Clean • J$100 fee
+                    Clean •  fee
                   </span>
                 </div>
               </div>

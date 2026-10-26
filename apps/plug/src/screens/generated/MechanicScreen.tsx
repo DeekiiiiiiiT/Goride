@@ -79,7 +79,7 @@ export function MechanicScreen() {
                       location_on
                     </span>
                     <span>
-                      14 Dunrobin Avenue, Kingston 10, St. Andrew
+                      
                     </span>
                   </p>
                 </div>
@@ -425,14 +425,14 @@ export function MechanicScreen() {
               <h2 className={"font-headline-sm text-headline-sm text-on-surface"}>
                 {"Location & Access"}
               </h2>
-              <div className={"w-full h-40 bg-surface-container rounded-xl shadow-sm bg-cover bg-center overflow-hidden relative"} data-location={"14 Dunrobin Avenue, Kingston 10, Jamaica"} style={{  }}>
+              <div className={"w-full h-40 bg-surface-container rounded-xl shadow-sm bg-cover bg-center overflow-hidden relative"} data-location={""} style={{  }}>
                 <div className={"absolute bottom-2 left-2 right-2 bg-surface-container-lowest/90 backdrop-blur-md rounded-lg p-2.5 flex items-center justify-between"}>
                   <div className={"flex flex-col min-w-0"}>
                     <span className={"font-label-md text-label-md font-bold text-on-surface truncate"}>
-                      {"Dunrobin Ave & Constant Spring Rd"}
+                      {"Dunrobin Ave & "}
                     </span>
                     <span className={"font-body-sm text-body-sm text-on-surface-variant truncate"}>
-                      Opposite Dunrobin Plaza • Easy turning
+                      
                     </span>
                   </div>
                   <span className={"material-symbols-outlined text-[20px] text-primary shrink-0"}>

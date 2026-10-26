@@ -78,7 +78,7 @@ export function PendingPlaceScreen() {
                     <span className={"material-symbols-outlined text-[16px] text-outline"}>
                       location_on
                     </span>
-                    Dunrobin Ave (Opposite Dunrobin Plaza), St. Andrew
+                    
                   </p>
                 </div>
               </div>
@@ -198,7 +198,7 @@ export function PendingPlaceScreen() {
               </h3>
               <div className={"bg-surface-container-low rounded-lg p-space-sm mt-1"}>
                 <p className={"font-body-md text-body-md text-on-surface italic leading-relaxed"}>
-                  “24/7 vulcanizer with digital air gauge. J$100 tip appreciated for air, quick tire plugging for taxis.”
+                  “24/7 vulcanizer with digital air gauge.  tip appreciated for air, quick tire plugging for taxis.”
                 </p>
               </div>
               <div className={"flex items-center gap-3 pt-1 text-on-surface-variant font-label-sm text-label-sm"}>

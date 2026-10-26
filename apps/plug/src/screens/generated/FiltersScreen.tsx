@@ -450,14 +450,14 @@ export function FiltersScreen() {
                   local_gas_station
                 </span>
                 <span>
-                  Show 24 Stations
+                  Show 0 stations
                 </span>
               </button>
               <span className={"font-body-sm text-body-sm text-on-surface-variant flex items-center gap-1 text-center"}>
                 <span className={"material-symbols-outlined text-[14px] text-primary"}>
                   lock_clock
                 </span>
-                Filter preferences saved for your current parish (St. Andrew)
+                
               </span>
             </div>
           </div>

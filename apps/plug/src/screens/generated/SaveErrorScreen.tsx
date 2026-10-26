@@ -43,20 +43,20 @@ export function SaveErrorScreen() {
                   </div>
                   <div>
                     <div className={"flex items-center space-x-1.5"}>
-                      <h2 className={"text-headline-sm font-headline-sm text-on-surface font-bold"}>
-                        Texaco Barbican
+                      <h2 className={"text-headline-sm font-headline-sm text-on-surface font-bold"} data-slot={"receipt-station"}>
+                        
                       </h2>
                       <span className={"material-symbols-outlined text-primary text-base"} data-icon={"verified"} data-weight={"fill"}>
                         verified
                       </span>
                     </div>
                     <p className={"text-body-sm font-body-sm text-on-surface-variant"}>
-                      Barbican Rd, Kingston 6 • St. Andrew
+                      
                     </p>
                   </div>
                 </div>
                 <span className={"px-2 py-0.5 rounded-full bg-surface-container text-on-surface text-label-sm font-label-sm border border-outline-variant/30"}>
-                  0.8 km
+                  
                 </span>
               </div>
               <div className={"mt-3 pt-3 border-t border-surface-container-high flex items-center justify-between"}>
@@ -91,7 +91,7 @@ export function SaveErrorScreen() {
                     E-10 87
                   </span>
                   <span className={"mt-1 px-2 py-0.5 rounded bg-primary text-on-primary text-label-sm font-label-sm font-bold"}>
-                    J$214.50
+                    
                   </span>
                   <div className={"absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-primary text-on-primary flex items-center justify-center"}>
                     <span className={"material-symbols-outlined text-xs font-bold"} data-icon={"check"}>
@@ -107,7 +107,7 @@ export function SaveErrorScreen() {
                     E-10 90
                   </span>
                   <span className={"mt-1 px-2 py-0.5 rounded bg-surface-container text-on-surface-variant text-label-sm font-label-sm"}>
-                    J$228.90
+                    
                   </span>
                 </button>
                 <button onClick={onPlugClick} className={"flex flex-col items-center justify-center p-3 rounded-xl bg-surface-container-lowest border border-outline-variant/40 shadow-sm opacity-75"} type={"button"} data-act={"diesel-ulsd-j-221-10"}>
@@ -118,7 +118,7 @@ export function SaveErrorScreen() {
                     ULSD
                   </span>
                   <span className={"mt-1 px-2 py-0.5 rounded bg-surface-container text-on-surface-variant text-label-sm font-label-sm"}>
-                    J$221.10
+                    
                   </span>
                 </button>
               </div>
@@ -137,7 +137,7 @@ export function SaveErrorScreen() {
                   <div className={"absolute left-3.5 flex items-center pointer-events-none text-on-surface-variant font-bold text-headline-sm font-headline-sm"}>
                     J$
                   </div>
-                  <input className={"w-full h-12 pl-12 pr-4 bg-surface-container-low border border-outline-variant rounded-lg text-headline-sm font-headline-sm font-bold text-on-surface focus:outline-none"} id={"total-cost"} readOnly={true} type={"text"} defaultValue={"4,290"} />
+                  <input className={"w-full h-12 pl-12 pr-4 bg-surface-container-low border border-outline-variant rounded-lg text-headline-sm font-headline-sm font-bold text-on-surface focus:outline-none"} id={"total-cost"} readOnly={true} type={"text"} defaultValue={""} />
                 </div>
               </div>
               <div>
@@ -150,7 +150,7 @@ export function SaveErrorScreen() {
                   </span>
                 </div>
                 <div className={"relative flex items-center"}>
-                  <input className={"w-full h-12 pl-3.5 pr-10 bg-surface-container-low border border-outline-variant rounded-lg text-headline-sm font-headline-sm font-bold text-on-surface focus:outline-none"} id={"volume-litres"} readOnly={true} type={"text"} defaultValue={"20.00"} />
+                  <input className={"w-full h-12 pl-3.5 pr-10 bg-surface-container-low border border-outline-variant rounded-lg text-headline-sm font-headline-sm font-bold text-on-surface focus:outline-none"} id={"volume-litres"} readOnly={true} type={"text"} defaultValue={""} />
                   <div className={"absolute right-3.5 flex items-center pointer-events-none text-on-surface-variant font-bold text-body-md font-body-md"}>
                     L
                   </div>
@@ -167,7 +167,7 @@ export function SaveErrorScreen() {
                 </div>
                 <div className={"text-right"}>
                   <span className={"text-headline-sm font-headline-sm font-extrabold text-primary"}>
-                    J$214.50
+                    
                   </span>
                   <span className={"text-label-sm font-label-sm text-on-surface-variant"}>
                     / L
@@ -223,7 +223,7 @@ export function SaveErrorScreen() {
                     Could not save. Try again.
                   </h3>
                   <p className={"text-label-sm font-label-sm text-on-error/85 tracking-normal mt-0.5"}>
-                    Network timeout on Barbican gateway
+                    
                   </p>
                 </div>
               </div>

@@ -65,7 +65,7 @@ export function WithdrawScreen() {
                   location_on
                 </span>
                 <span>
-                  48 Dunrobin Ave, Kingston 10, St. Andrew
+                  
                 </span>
               </div>
               <div className={"relative w-full h-32 rounded-xl overflow-hidden border border-outline-variant/30 mb-3 bg-surface-container-high"}>

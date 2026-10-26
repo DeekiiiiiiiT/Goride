@@ -76,7 +76,7 @@ export function HelpScreen() {
                       Quick Dispatch
                     </a>
                     <span className={"font-label-sm text-label-sm text-on-primary/80"}>
-                      Avg reply ~10 min
+                      Avg reply 10 min
                     </span>
                   </div>
                 </div>

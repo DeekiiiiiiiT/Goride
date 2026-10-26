@@ -186,7 +186,7 @@ export function GpsIssueScreen() {
                   </span>
                 </div>
                 <span className={"font-label-sm text-secondary bg-secondary-fixed/50 px-2 py-0.5 rounded-full"}>
-                  14.2 km cached
+                  
                 </span>
               </div>
             </div>

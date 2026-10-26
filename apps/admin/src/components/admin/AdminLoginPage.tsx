@@ -1,107 +1,63 @@
-import React, { useState, useEffect } from 'react';
-import { Shield, Loader2, AlertCircle, KeyRound, UserPlus } from 'lucide-react';
+import React, { useState } from 'react';
+import { Shield, Loader2, AlertCircle, KeyRound } from 'lucide-react';
 import { supabase } from '../../utils/supabase/client';
 import { API_ENDPOINTS } from '../../services/apiConfig';
 import { supabaseAnonFunctionHeaders } from '@roam/api-client';
-import { requestPasswordReset, rememberRecoverySignInHref, consumeAdminLoginErrorFlash, ADMIN_INCORRECT_CREDENTIALS } from '@roam/auth-client';
+import {
+  requestPasswordReset,
+  rememberRecoverySignInHref,
+  consumeAdminLoginErrorFlash,
+  ADMIN_INCORRECT_CREDENTIALS,
+  GOOGLE_OAUTH_EMAIL_ONLY_SCOPES,
+  adminPasswordFailureMessage,
+  clearDominionAccessDenied,
+  dominionAccessDeniedMessage,
+  recordDominionAccessDenied,
+} from '@roam/auth-client';
 import { LockoutCountdown } from '../auth/LockoutCountdown';
 
+function GoogleMark({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" aria-hidden>
+      <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+      <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+      <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
+      <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
+    </svg>
+  );
+}
+
 /**
- * AdminLoginPage — shown at /admin when no user is logged in.
- * Two modes:
- *   1. Setup mode (first-time): email + password + name to seed the superadmin account
- *   2. Login mode (subsequent): email + password to sign in
- * The mode is determined by calling GET /admin-check on mount.
+ * Dominion sign-in. There is no first-time setup screen.
+ * Google is the path for the owner account. Email and password stay for a password that was set here.
  */
 export function AdminLoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [name, setName] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [checking, setChecking] = useState(true);
+  const [googleLoading, setGoogleLoading] = useState(false);
   const [error, setError] = useState<string | null>(() => consumeAdminLoginErrorFlash());
   const [success, setSuccess] = useState<string | null>(null);
-  const [adminExists, setAdminExists] = useState(true);
   const [lockoutSeconds, setLockoutSeconds] = useState<number | null>(null);
   const [forgotMode, setForgotMode] = useState(false);
 
-  // Check if superadmin already exists
-  useEffect(() => {
-    (async () => {
-      try {
-        let res: Response | null = null;
-        for (let attempt = 0; attempt < 3; attempt++) {
-          try {
-            res = await fetch(`${API_ENDPOINTS.admin}/admin-check`, {
-              headers: supabaseAnonFunctionHeaders(),
-            });
-            break; // success
-          } catch (fetchErr) {
-            if (attempt < 2) {
-              await new Promise(r => setTimeout(r, 300 * (attempt + 1)));
-              continue;
-            }
-            throw fetchErr; // exhausted retries
-          }
-        }
-        const data = await res!.json().catch(() => ({}));
-        // Only show Initial Setup when the API explicitly says no admin exists.
-        // Auth errors / odd payloads must fall back to Login (your account already exists).
-        if (!res!.ok) {
-          console.warn('[AdminLogin] admin-check not ok — defaulting to login', res!.status, data);
-          setAdminExists(true);
-        } else {
-          setAdminExists(data.exists === true);
-        }
-      } catch (e) {
-        console.error('Admin check failed:', e);
-        // Default to login mode on error
-        setAdminExists(true);
-      } finally {
-        setChecking(false);
-      }
-    })();
-  }, []);
-
-  const handleSetup = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsLoading(true);
+  const handleGoogle = async () => {
+    setGoogleLoading(true);
     setError(null);
     setSuccess(null);
-
     try {
-      const res = await fetch(`${API_ENDPOINTS.admin}/admin-seed`, {
-        method: 'POST',
-        headers: supabaseAnonFunctionHeaders({ 'Content-Type': 'application/json' }),
-        body: JSON.stringify({ email, password, name }),
+      const { error: oauthError } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: `${window.location.origin}/`,
+          scopes: GOOGLE_OAUTH_EMAIL_ONLY_SCOPES,
+          queryParams: { prompt: 'select_account' },
+        },
       });
-
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to create super admin');
-
-      setSuccess('Super admin account created! Signing you in...');
-
-      // Auto sign-in via server-side endpoint (handles password recovery)
-      const loginRes = await fetch(`${API_ENDPOINTS.admin}/admin-login`, {
-        method: 'POST',
-        headers: supabaseAnonFunctionHeaders({ 'Content-Type': 'application/json' }),
-        body: JSON.stringify({ email, password }),
-      });
-      const loginData = await loginRes.json();
-      if (!loginRes.ok) throw new Error(loginData.error || 'Auto sign-in failed');
-
-      // Set session client-side so AuthContext picks it up
-      await supabase.auth.setSession({
-        access_token: loginData.access_token,
-        refresh_token: loginData.refresh_token,
-      });
-
-      // Auth state change will trigger re-render via AuthContext
-    } catch (err: any) {
-      console.error('Admin setup error:', err);
-      setError(err.message || 'Setup failed');
-    } finally {
-      setIsLoading(false);
+      if (oauthError) throw oauthError;
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Google sign-in failed.');
+      setGoogleLoading(false);
     }
   };
 
@@ -151,41 +107,33 @@ export function AdminLoginPage() {
       }
 
       if (!res.ok) {
+        if (data?.reason === 'no_platform_role') {
+          const count = recordDominionAccessDenied();
+          throw new Error(dominionAccessDeniedMessage(count));
+        }
+        clearDominionAccessDenied();
         throw new Error(
           res.status === 401 || res.status === 403
-            ? ADMIN_INCORRECT_CREDENTIALS
+            ? adminPasswordFailureMessage(data?.attemptsRemaining)
             : data.error || ADMIN_INCORRECT_CREDENTIALS,
         );
       }
 
-      // Set session client-side so AuthContext picks it up
+      clearDominionAccessDenied();
       await supabase.auth.setSession({
         access_token: data.access_token,
         refresh_token: data.refresh_token,
       });
-
-      // Auth state change will trigger re-render via AuthContext
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Admin login error:', err);
-      setError(err.message || ADMIN_INCORRECT_CREDENTIALS);
+      setError(err instanceof Error ? err.message : ADMIN_INCORRECT_CREDENTIALS);
     } finally {
       setIsLoading(false);
     }
   };
 
-  if (checking) {
-    return (
-      <div className="flex items-center justify-center h-screen bg-slate-100 dark:bg-slate-950">
-        <Loader2 className="w-6 h-6 text-slate-400 animate-spin" />
-      </div>
-    );
-  }
-
-  const isSetup = !adminExists;
-
   return (
     <div className="min-h-screen bg-slate-100 dark:bg-slate-950 flex">
-      {/* Left panel — branding */}
       <div className="hidden lg:flex lg:w-1/2 flex-col items-center justify-center p-12 bg-gradient-to-br from-slate-100 to-slate-200 border-r border-slate-200 dark:from-slate-900 dark:to-slate-950 dark:border-slate-800">
         <div className="flex items-center gap-3 mb-6">
           <div className="bg-amber-500/20 p-3 rounded-xl">
@@ -201,10 +149,8 @@ export function AdminLoginPage() {
         </p>
       </div>
 
-      {/* Right panel — form */}
       <div className="flex-1 flex items-center justify-center p-8">
         <div className="w-full max-w-md">
-          {/* Mobile branding */}
           <div className="lg:hidden flex items-center gap-3 mb-8 justify-center">
             <div className="bg-amber-500/20 p-2.5 rounded-xl">
               <Shield className="w-6 h-6 text-amber-400" />
@@ -216,30 +162,22 @@ export function AdminLoginPage() {
           </div>
 
           <div className="bg-white border border-slate-200 dark:bg-slate-900 dark:border-slate-800 rounded-2xl p-8">
-            {/* Header */}
             <div className="flex items-center gap-3 mb-6">
-              <div className={`p-2 rounded-lg ${isSetup ? 'bg-emerald-500/20' : 'bg-blue-500/20'}`}>
-                {isSetup
-                  ? <UserPlus className="w-5 h-5 text-emerald-400" />
-                  : <KeyRound className="w-5 h-5 text-blue-400" />
-                }
+              <div className="p-2 rounded-lg bg-blue-500/20">
+                <KeyRound className="w-5 h-5 text-blue-400" />
               </div>
               <div>
                 <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
-                  {forgotMode ? 'Reset Password' : isSetup ? 'Initial Setup' : 'Admin Login'}
+                  {forgotMode ? 'Reset Password' : 'Admin Login'}
                 </h2>
                 <p className="text-slate-400 text-sm">
                   {forgotMode
                     ? 'We will email a link that opens on roamdominion.co'
-                    : isSetup
-                    ? 'Create the platform super admin account'
-                    : 'Sign in to the admin portal'
-                  }
+                    : 'Sign in to the admin portal'}
                 </p>
               </div>
             </div>
 
-            {/* Error */}
             {lockoutSeconds !== null && lockoutSeconds > 0 ? (
               <LockoutCountdown
                 retryAfterSec={lockoutSeconds}
@@ -259,28 +197,32 @@ export function AdminLoginPage() {
               </div>
             )}
 
-            {/* Success */}
             {success && (
               <div className="mb-4 bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 rounded-lg px-3 py-2.5 text-sm">
                 {success}
               </div>
             )}
 
-            {/* Form */}
-            <form onSubmit={forgotMode ? handleForgotPassword : isSetup ? handleSetup : handleLogin} className="space-y-4">
-              {isSetup && (
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Full Name</label>
-                  <input
-                    type="text"
-                    value={name}
-                    onChange={e => setName(e.target.value)}
-                    placeholder="Platform Administrator"
-                    className="w-full px-3 py-2.5 bg-white border border-slate-300 rounded-lg text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:border-amber-500/50 text-sm dark:bg-slate-800 dark:border-slate-700 dark:text-white dark:placeholder:text-slate-500"
-                  />
+            {!forgotMode && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => void handleGoogle()}
+                  disabled={googleLoading || isLoading}
+                  className="flex w-full items-center justify-center gap-3 rounded-lg border border-slate-300 bg-white py-2.5 text-sm font-semibold text-slate-800 shadow-sm hover:bg-slate-50 disabled:opacity-50 dark:border-slate-600 dark:bg-slate-900/60 dark:text-slate-100"
+                >
+                  {googleLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : <GoogleMark className="h-5 w-5" />}
+                  Sign in with Google
+                </button>
+                <div className="my-4 flex items-center gap-3">
+                  <div className="h-px flex-1 bg-slate-200 dark:bg-slate-700" />
+                  <span className="text-xs text-slate-500">or</span>
+                  <div className="h-px flex-1 bg-slate-200 dark:bg-slate-700" />
                 </div>
-              )}
+              </>
+            )}
 
+            <form onSubmit={forgotMode ? handleForgotPassword : handleLogin} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Email</label>
                 <input
@@ -300,14 +242,14 @@ export function AdminLoginPage() {
                   type="password"
                   value={password}
                   onChange={e => setPassword(e.target.value)}
-                  placeholder={isSetup ? 'Create a strong password' : 'Enter password'}
+                  placeholder="Enter password"
                   required
                   className="w-full px-3 py-2.5 bg-white border border-slate-300 rounded-lg text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:border-amber-500/50 text-sm dark:bg-slate-800 dark:border-slate-700 dark:text-white dark:placeholder:text-slate-500"
                 />
               </div>
               )}
 
-              {!isSetup && !forgotMode && (
+              {!forgotMode && (
                 <button
                   type="button"
                   onClick={() => { setForgotMode(true); setError(null); setSuccess(null); }}
@@ -329,25 +271,24 @@ export function AdminLoginPage() {
 
               <button
                 type="submit"
-                disabled={isLoading}
+                disabled={isLoading || googleLoading}
                 className="w-full py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-semibold rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 text-sm"
               >
                 {isLoading ? (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin" />
-                    {isSetup ? 'Creating Account...' : 'Signing In...'}
+                    Signing In...
                   </>
                 ) : forgotMode ? (
                   'Send reset email'
                 ) : (
-                  isSetup ? 'Create Super Admin Account' : 'Sign In'
+                  'Sign In'
                 )}
               </button>
             </form>
             </>
             )}
 
-            {/* Footer link back to regular app */}
             <div className="mt-6 pt-4 border-t border-slate-200 dark:border-slate-800 text-center">
               <a
                 href="/"

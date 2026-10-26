@@ -61,7 +61,7 @@ export function RemoveVehicleScreen() {
                   Efficiency
                 </p>
                 <p className={"text-label-lg font-label-lg font-bold text-primary mt-0.5"}>
-                  14.8 km/L
+                  /L
                 </p>
               </div>
               <div className={"text-center px-2"}>
@@ -98,7 +98,7 @@ export function RemoveVehicleScreen() {
                   Statutory Fitness Certificate
                 </h4>
                 <span className={"text-label-sm font-label-sm font-bold bg-amber-200/80 text-amber-900 px-2 py-0.5 rounded-full"}>
-                  Due in 18 days
+                  18 days
                 </span>
               </div>
               <p className={"text-body-sm font-body-sm text-amber-900 mt-0.5"}>

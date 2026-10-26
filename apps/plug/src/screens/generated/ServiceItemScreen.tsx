@@ -47,8 +47,7 @@ export function ServiceItemScreen() {
             <div className={"flex items-center gap-1.5 bg-tertiary-fixed text-on-tertiary-fixed px-2.5 py-1 rounded-full shadow-sm"}>
               <span className={"w-2 h-2 rounded-full bg-tertiary animate-pulse"} />
               <span className={"font-label-sm text-label-sm font-bold"}>
-                Due in 5,388 km
-              </span>
+                </span>
             </div>
           </div>
           <div className={"flex flex-col space-y-1"}>
@@ -88,7 +87,7 @@ export function ServiceItemScreen() {
                   Target Replace
                 </span>
                 <span className={"font-headline-sm text-headline-sm text-primary font-bold"}>
-                  90,000 km
+                  
                 </span>
               </div>
             </div>
@@ -114,7 +113,7 @@ export function ServiceItemScreen() {
                   Spec Interval
                 </span>
                 <span className={"font-label-lg text-label-lg text-on-surface font-semibold"}>
-                  25,000 km / 18 mos
+                   / 18 mos
                 </span>
               </div>
               <div className={"bg-surface-container-low rounded-lg p-2.5"}>
@@ -164,7 +163,7 @@ export function ServiceItemScreen() {
             <div className={"bg-surface-container-low rounded-lg p-space-sm space-y-2"}>
               <div className={"flex justify-between items-baseline"}>
                 <span className={"font-headline-sm text-headline-sm text-on-surface"}>
-                  65,000 km
+                  
                 </span>
                 <span className={"font-label-md text-label-md text-on-surface-variant font-medium"}>
                   14 March 2024
@@ -209,7 +208,7 @@ export function ServiceItemScreen() {
               <div className={"pb-space-sm space-y-1.5"}>
                 <div className={"flex justify-between items-center"}>
                   <span className={"font-label-lg text-label-lg font-bold text-on-surface"}>
-                    {"65,000 km • Pad & Fluid Refresh"}
+                    {" • Pad & Fluid Refresh"}
                   </span>
                   <span className={"font-label-sm text-label-sm text-on-surface-variant"}>
                     Mar 2024
@@ -223,14 +222,14 @@ export function ServiceItemScreen() {
                     
                   </span>
                   <span className={"font-label-md text-label-md font-semibold text-on-surface"}>
-                    J$14,500 total
+                     total
                   </span>
                 </div>
               </div>
               <div className={"pt-space-sm space-y-1.5"}>
                 <div className={"flex justify-between items-center"}>
                   <span className={"font-label-lg text-label-lg font-bold text-on-surface"}>
-                    {"40,120 km • Inspection & Cleaning"}
+                    {" • Inspection & Cleaning"}
                   </span>
                   <span className={"font-label-sm text-label-sm text-on-surface-variant"}>
                     Nov 2022
@@ -241,10 +240,10 @@ export function ServiceItemScreen() {
                 </p>
                 <div className={"flex items-center justify-between pt-1"}>
                   <span className={"font-label-sm text-label-sm text-on-surface-variant"}>
-                    Toyota Jamaica (Liguanea)
+                    
                   </span>
                   <span className={"font-label-md text-label-md font-semibold text-on-surface"}>
-                    J$4,200
+                    
                   </span>
                 </div>
               </div>
@@ -273,7 +272,7 @@ export function ServiceItemScreen() {
                         </span>
                       </div>
                       <p className={"font-body-sm text-body-sm text-on-surface-variant mt-0.5"}>
-                        Mario's Auto Parts (Constant Spring) • OEM Ready
+                         • OEM Ready
                       </p>
                     </div>
                   </div>
@@ -300,7 +299,7 @@ export function ServiceItemScreen() {
                         </span>
                       </div>
                       <p className={"font-body-sm text-body-sm text-on-surface-variant mt-0.5"}>
-                         • 1.4 km away in Kingston
+                         •  away in Kingston
                       </p>
                     </div>
                   </div>
@@ -325,7 +324,7 @@ export function ServiceItemScreen() {
                 alarm
               </span>
               <span>
-                Add to To-Do / Remind me in 3,000 km
+                Add to To-Do / Remind me in 
               </span>
             </button>
           </div>

@@ -1,6 +1,6 @@
 # Roam Plug — Free Launch
 
-**Rev 20 · 2026-10-25 · The 6 screens from Rev 19 are fixed in code, but that fix is uncommitted. A wider sweep found Stitch sample data on about 20 more screens, including fake stations and prices on the public map.**
+**Rev 21 · 2026-10-25 · The Rev 19 fixes are committed (`c50eddad`) and live. In the live bundle, "123 Hope Road", "84,210", the fake invoice and "Road Scout" no longer appear. One item is still open: the Stitch sample data on about 20 screens (§2), which is also still in the live bundle.**
 
 **What it is:** a free public app for Jamaica, island-wide. Gas stations and prices, My Garage, parts, mechanics, facilities, tolls and reminders. Nothing is sold. The owner approves every mapped place in Dominion. Stitch project "Roam Plug" (`7833067736952351487`).
 
@@ -11,10 +11,7 @@
 
 ---
 
-## 1. Commit (🔴)
-The fixes are in 17 Plug files that aren't committed yet, so the live site still shows the old screens.
-- Commit `apps/plug` and `e2e/plug-*` on their own.
-- The working copy also has driver and fleet settlement changes. Keep those out of this commit.
+**Note:** `c50eddad` also carried driver and fleet settlement files, which breaks Rule 10. It doesn't break anything, but commit the next Plug fix on its own.
 
 ## 2. Stitch sample data on about 20 more screens (🔴)
 Test setup: a new account with no car, no fills and no pins. The only test station was Total Half Way Tree. Everything below is fixed text in the generated screens, and none of it comes from the test data:
@@ -35,7 +32,7 @@ Test setup: a new account with no car, no fills and no pins. The only test stati
 
 Then nothing new can slip through.
 
-## 3. Yours (after 1–2 are live)
+## 3. Yours (after 2 is live)
 1. **On your phone at roam-plug.vercel.app:**
    - Continue with Google → Explore → Map It → the pin appears in the Dominion queue.
    - A brand-new account shows nothing that isn't its own.

@@ -190,7 +190,7 @@ export function OfflineScreen() {
                   </div>
                 </div>
                 <span className={"font-label-md text-label-md text-primary bg-primary-fixed px-2.5 py-0.5 rounded-full flex-shrink-0"}>
-                  1.2 km
+                  
                 </span>
               </div>
               <div className={"flex items-center justify-between bg-surface-container-low rounded-lg p-space-sm"}>
@@ -199,7 +199,7 @@ export function OfflineScreen() {
                     E-10 87
                   </span>
                   <span className={"font-price-display text-price-display text-on-surface"}>
-                    J$ 204.85
+                    
                   </span>
                 </div>
                 <div className={"flex items-center gap-1 text-on-surface-variant font-body-sm text-body-sm"}>
@@ -213,7 +213,7 @@ export function OfflineScreen() {
               </div>
               <div className={"flex items-center justify-between pt-0.5"}>
                 <span className={"font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider"}>
-                  Queue: Light • Diesel J$ 212.00
+                  Queue: Light • Diesel 
                 </span>
                 <button onClick={onPlugClick} aria-label={"Route to Rubis Waterloo"} className={"flex items-center gap-1 font-label-md text-label-md text-secondary"} data-act={"offline-route"}>
                   <span className={"material-symbols-outlined text-[16px]"}>
@@ -248,7 +248,7 @@ export function OfflineScreen() {
                   </div>
                 </div>
                 <span className={"font-label-md text-label-md text-primary bg-primary-fixed px-2.5 py-0.5 rounded-full flex-shrink-0"}>
-                  2.1 km
+                  
                 </span>
               </div>
               <div className={"flex items-center justify-between bg-surface-container-low rounded-lg p-space-sm"}>
@@ -257,7 +257,7 @@ export function OfflineScreen() {
                     E-10 87
                   </span>
                   <span className={"font-price-display text-price-display text-on-surface"}>
-                    J$ 205.10
+                    
                   </span>
                 </div>
                 <div className={"flex items-center gap-1 text-on-surface-variant font-body-sm text-body-sm"}>
@@ -271,7 +271,7 @@ export function OfflineScreen() {
               </div>
               <div className={"flex items-center justify-between pt-0.5"}>
                 <span className={"font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider"}>
-                  E-10 90: J$ 218.40 • Verified
+                  E-10 90:  • Verified
                 </span>
                 <button onClick={onPlugClick} aria-label={"Route to Total Half-Way-Tree"} className={"flex items-center gap-1 font-label-md text-label-md text-secondary"} data-act={"offline-route-2"}>
                   <span className={"material-symbols-outlined text-[16px]"}>
@@ -294,7 +294,7 @@ export function OfflineScreen() {
                   <div>
                     <div className={"flex items-center gap-1"}>
                       <h3 className={"font-headline-sm text-headline-sm text-on-surface leading-tight"}>
-                        Texaco Dunrobin Ave
+                        
                       </h3>
                       <span className={"material-symbols-outlined text-secondary text-[16px]"} title={"Saved on Device"}>
                         offline_pin
@@ -306,7 +306,7 @@ export function OfflineScreen() {
                   </div>
                 </div>
                 <span className={"font-label-md text-label-md text-primary bg-primary-fixed px-2.5 py-0.5 rounded-full flex-shrink-0"}>
-                  2.8 km
+                  
                 </span>
               </div>
               <div className={"flex items-center justify-between bg-surface-container-low rounded-lg p-space-sm"}>
@@ -315,7 +315,7 @@ export function OfflineScreen() {
                     E-10 87
                   </span>
                   <span className={"font-price-display text-price-display text-on-surface"}>
-                    J$ 206.20
+                    
                   </span>
                 </div>
                 <div className={"flex items-center gap-1 text-on-surface-variant font-body-sm text-body-sm"}>
@@ -331,7 +331,7 @@ export function OfflineScreen() {
                 <span className={"font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider"}>
                   {"Air Pump • Cash & Card (Offline)"}
                 </span>
-                <button onClick={onPlugClick} aria-label={"Route to Texaco Dunrobin"} className={"flex items-center gap-1 font-label-md text-label-md text-secondary"} data-act={"offline-route-3"}>
+                <button onClick={onPlugClick} aria-label={""} className={"flex items-center gap-1 font-label-md text-label-md text-secondary"} data-act={"offline-route-3"}>
                   <span className={"material-symbols-outlined text-[16px]"}>
                     near_me
                   </span>

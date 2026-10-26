@@ -79,7 +79,7 @@ export function SubmittedScreen() {
                   TotalEnergies Half-Way-Tree
                 </h2>
                 <p className={"text-xs text-on-surface-variant truncate mt-0.5"}>
-                  Constant Spring Rd, Kingston 10
+                  , Kingston 10
                 </p>
               </div>
             </div>
@@ -93,7 +93,7 @@ export function SubmittedScreen() {
             </span>
             <span className={"inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-surface-container-low text-secondary border border-secondary-container/30 text-xs font-bold"}>
               <span className={"w-2 h-2 rounded-full bg-secondary-container animate-pulse"} />
-              Pending Review • ~2-4 hours est.
+              Pending Review • 2-4 hours est.
             </span>
           </div>
         </div>

@@ -111,7 +111,7 @@ export function ConfirmOdometerScreen() {
                 </div>
               </div>
               <div className={"relative flex items-baseline justify-center py-2 bg-surface-container-low rounded-xl group transition-all cursor-pointer"} id={"readingContainer"}>
-                <input className={"w-56 bg-transparent text-center font-display-lg-mobile text-display-lg-mobile text-on-surface font-extrabold tracking-tight outline-none select-all"} id={"odometerInput"} inputMode={"numeric"} type={"number"} defaultValue={"84612"} />
+                <input className={"w-56 bg-transparent text-center font-display-lg-mobile text-display-lg-mobile text-on-surface font-extrabold tracking-tight outline-none select-all"} id={"odometerInput"} inputMode={"numeric"} type={"number"} defaultValue={""} />
                 <span className={"font-headline-md text-headline-md text-on-surface-variant font-bold ml-1"}>
                   km
                 </span>
@@ -127,7 +127,7 @@ export function ConfirmOdometerScreen() {
                     remove
                   </span>
                   <span>
-                    10 km
+                    10
                   </span>
                 </button>
                 <button onClick={onPlugClick} className={"h-12 min-h-[48px] rounded-lg bg-surface-container hover:bg-surface-container-high active:scale-95 text-on-surface font-label-lg text-label-lg flex items-center justify-center gap-1 transition-all"} type={"button"} data-act={"10-km-2"}>
@@ -135,7 +135,7 @@ export function ConfirmOdometerScreen() {
                     add
                   </span>
                   <span>
-                    10 km
+                    10
                   </span>
                 </button>
                 <button onClick={onPlugClick} className={"h-12 min-h-[48px] rounded-lg bg-surface-container-highest hover:bg-surface-variant active:scale-95 text-on-surface-variant font-label-lg text-label-lg flex items-center justify-center gap-1 transition-all"} type={"button"} data-act={"retake"}>

@@ -145,6 +145,13 @@ export async function saveFuel(el: HTMLElement) {
     accuracyM: fix.accuracyM,
     confirmed: true,
   };
+  sessionStorage.setItem('plug-last-fill', JSON.stringify({
+    stationName: sessionStorage.getItem('plug-station-name') || '',
+    grade,
+    amount,
+    litres,
+    odometer,
+  }));
   if (!navigator.onLine) {
     enqueue('/fuel-logs', payload);
     rt.toast('Saved on this phone. It will send when you are back online.');

@@ -84,7 +84,7 @@ export function MyVehiclesScreen() {
                   build_circle
                 </span>
                 <span className={"font-label-md text-label-md"}>
-                  Service due soon • 380 km left
+                  Service due soon •  left
                 </span>
               </div>
               <span className={"font-label-sm text-label-sm text-on-tertiary-fixed-variant uppercase tracking-wider"}>
@@ -116,10 +116,6 @@ export function MyVehiclesScreen() {
                   </span>
                   <div className={"flex items-baseline gap-0.5 mt-0.5"}>
                     <span className={"font-label-lg text-label-lg text-on-surface"}>
-                      14.2
-                    </span>
-                    <span className={"font-label-sm text-label-sm text-primary"}>
-                      +0.8
                     </span>
                   </div>
                   <span className={"font-label-sm text-label-sm text-on-surface-variant"}>
@@ -208,7 +204,6 @@ export function MyVehiclesScreen() {
                     Odo
                   </span>
                   <span className={"font-label-lg text-label-lg text-on-surface mt-0.5"}>
-                    142,300
                   </span>
                   <span className={"font-label-sm text-label-sm text-on-surface-variant"}>
                     km
@@ -223,7 +218,6 @@ export function MyVehiclesScreen() {
                   </span>
                   <div className={"flex items-baseline gap-0.5 mt-0.5"}>
                     <span className={"font-label-lg text-label-lg text-on-surface"}>
-                      11.8
                     </span>
                   </div>
                   <span className={"font-label-sm text-label-sm text-on-surface-variant"}>
@@ -321,10 +315,10 @@ export function MyVehiclesScreen() {
                 </div>
                 <div className={"mt-2"}>
                   <p className={"font-price-display text-price-display text-on-surface tracking-tight"}>
-                    J$ 28,450
+                    
                   </p>
                   <p className={"font-label-sm text-label-sm text-on-surface-variant"}>
-                    184 Litres logged
+                    No fills yet
                   </p>
                 </div>
               </div>
@@ -339,13 +333,9 @@ export function MyVehiclesScreen() {
                 </div>
                 <div className={"mt-2"}>
                   <p className={"font-price-display text-price-display text-on-surface tracking-tight"}>
-                    2,140
-                    <span className={"font-label-md text-label-md"}>
-                      km
-                    </span>
                   </p>
                   <p className={"font-label-sm text-label-sm text-primary"}>
-                    +340 km vs Sept
+                    + vs Sept
                   </p>
                 </div>
               </div>
@@ -358,7 +348,7 @@ export function MyVehiclesScreen() {
               </div>
               <div className={"flex-1 min-w-0"}>
                 <p className={"font-label-md text-label-md font-label-lg"}>
-                  J$ 1,820 Parish Savings
+                   Parish Savings
                 </p>
                 <p className={"font-body-sm text-body-sm text-on-primary-fixed-variant leading-tight mt-0.5"}>
                   {"Saved this month by choosing lowest-rate stations along Constant Spring & Spanish Town Rd."}

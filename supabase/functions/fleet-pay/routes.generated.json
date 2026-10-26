@@ -1,7 +1,7 @@
 {
   "slug": "fleet-pay",
-  "generatedAt": "2026-10-25T13:28:05.162Z",
-  "routeCount": 113,
+  "generatedAt": "2026-10-25T23:17:39.400Z",
+  "routeCount": 114,
   "routes": [
     "GET ${BASE}/:anchor",
     "GET ${BASE}/approval-settings",
@@ -73,6 +73,7 @@
     "POST ${BASE}/fuel-share-corrections",
     "POST ${BASE}/import",
     "POST ${BASE}/internal-rebuild",
+    "POST ${BASE}/legacy-kept-repair",
     "POST ${BASE}/legacy-weeks",
     "POST ${BASE}/match-index/backfill",
     "POST ${BASE}/pay",

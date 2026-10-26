@@ -70,12 +70,12 @@ export function SavedOfflineScreen() {
               <div className={"flex items-start justify-between gap-2 pt-1"}>
                 <div className={"flex flex-col min-w-0"}>
                   <div className={"flex items-center gap-1.5"}>
-                    <span className={"font-headline-sm text-headline-sm text-on-surface truncate"}>
-                      Texaco Barbican
+                    <span className={"font-headline-sm text-headline-sm text-on-surface truncate"} data-slot={"receipt-station"}>
+                      Not entered yet
                     </span>
                   </div>
                   <p className={"font-body-sm text-body-sm text-on-surface-variant"}>
-                    Barbican Rd, Kingston 6
+                    
                   </p>
                 </div>
                 <span className={"inline-flex items-center justify-center px-2 py-1 rounded bg-[#16a34a] text-white font-label-sm text-label-sm font-bold shadow-sm whitespace-nowrap"}>
@@ -87,8 +87,8 @@ export function SavedOfflineScreen() {
                   <span className={"font-label-sm text-label-sm text-on-surface-variant uppercase"}>
                     Amount
                   </span>
-                  <span className={"font-label-lg text-label-lg text-on-surface font-bold"}>
-                    J$4,290
+                  <span className={"font-label-lg text-label-lg text-on-surface font-bold"} data-slot={"receipt-amount"}>
+                    Not entered yet
                   </span>
                 </div>
                 <div className={"flex flex-col"}>
@@ -96,7 +96,7 @@ export function SavedOfflineScreen() {
                     Volume
                   </span>
                   <span className={"font-label-lg text-label-lg text-on-surface font-bold"}>
-                    20.0 L
+                    <span data-slot={"receipt-litres"}></span>
                   </span>
                 </div>
                 <div className={"flex flex-col"}>
@@ -144,7 +144,7 @@ export function SavedOfflineScreen() {
                 </span>
               </div>
               <span className={"font-label-lg text-label-lg text-primary font-bold"}>
-                11.4 km/L
+                /L
               </span>
             </div>
           </div>

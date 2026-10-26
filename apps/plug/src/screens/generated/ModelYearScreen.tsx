@@ -221,7 +221,7 @@ export function ModelYearScreen() {
                     speed
                   </span>
                   <span>
-                    16.8 km/L Est. Kingston Urban
+                    /L Est. Kingston Urban
                   </span>
                 </div>
                 <div className={"w-16 h-8 flex items-center justify-end text-primary opacity-80"}>
@@ -273,7 +273,7 @@ export function ModelYearScreen() {
                   speed
                 </span>
                 <span>
-                  18.2 km/L Est. Island Commute
+                  /L Est. Island Commute
                 </span>
               </div>
             </div>
@@ -315,7 +315,7 @@ export function ModelYearScreen() {
                   speed
                 </span>
                 <span>
-                  15.4 km/L Est. Hill Route Spec
+                  /L Est. Hill Route Spec
                 </span>
               </div>
             </div>

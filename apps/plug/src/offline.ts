@@ -1,4 +1,29 @@
 const KEY = 'roam-plug-offline';
+const STATIONS = 'roam-plug-stations';
+
+export type CachedStation = {
+  id: string;
+  name: string;
+  brand?: string | null;
+  address?: string | null;
+  lat?: number;
+  lng?: number;
+  pcode?: string | null;
+  prices?: Record<string, number>;
+};
+
+export function writeStationCache(stations: CachedStation[]) {
+  localStorage.setItem(STATIONS, JSON.stringify(stations));
+}
+
+export function readStationCache(): CachedStation[] {
+  try {
+    const rows = JSON.parse(localStorage.getItem(STATIONS) || '[]') as CachedStation[];
+    return Array.isArray(rows) ? rows : [];
+  } catch {
+    return [];
+  }
+}
 
 export type OfflineJob = { id: string; path: string; body: unknown; at: string };
 

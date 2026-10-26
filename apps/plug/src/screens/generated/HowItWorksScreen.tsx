@@ -80,7 +80,7 @@ export function HowItWorksScreen() {
                         <div className={"min-w-0"}>
                           <div className={"flex items-center gap-1"}>
                             <span className={"font-label-lg text-label-lg text-on-surface truncate"}>
-                              Example · Fesco - White River
+                              
                             </span>
                             <span className={"material-symbols-outlined text-[16px] text-primary"} style={{ fontVariationSettings: "'FILL' 1" }}>
                               verified
@@ -92,7 +92,7 @@ export function HowItWorksScreen() {
                         </div>
                       </div>
                       <span className={"font-label-sm text-label-sm text-on-surface-variant bg-surface-container px-2 py-0.5 rounded-full flex-shrink-0"}>
-                        2.1 km away
+                         away
                       </span>
                     </div>
                     <div className={"grid grid-cols-2 gap-2"}>
@@ -101,7 +101,7 @@ export function HowItWorksScreen() {
                           E-10 87 Octane
                         </span>
                         <span className={"font-price-display text-price-display text-primary font-bold"}>
-                          J$208.50
+                          
                         </span>
                       </div>
                       <div className={"bg-surface-container-low rounded-lg p-2 flex flex-col"}>
@@ -109,7 +109,7 @@ export function HowItWorksScreen() {
                           Ultra Diesel
                         </span>
                         <span className={"font-price-display text-price-display text-on-surface font-bold"}>
-                          J$214.20
+                          
                         </span>
                       </div>
                     </div>
@@ -161,7 +161,7 @@ export function HowItWorksScreen() {
                         </span>
                       </div>
                       <span className={"font-label-sm text-label-sm bg-surface-container px-2 py-0.5 rounded-full text-on-surface"}>
-                        148,220 km
+                        
                       </span>
                     </div>
                     <div className={"flex flex-col gap-2 pt-1"}>
@@ -175,8 +175,7 @@ export function HowItWorksScreen() {
                           </span>
                         </div>
                         <span className={"font-label-sm text-label-sm text-primary font-semibold"}>
-                          Due in 780 km
-                        </span>
+                          </span>
                       </div>
                       <div className={"flex items-center justify-between p-2 rounded-lg bg-surface-container-low"}>
                         <div className={"flex items-center gap-2"}>
@@ -238,12 +237,12 @@ export function HowItWorksScreen() {
                           Front Brake Pads Set (OEM)
                         </span>
                         <span className={"font-body-sm text-body-sm text-on-surface-variant"}>
-                          Spanish Town Road Auto Parts
+                          
                         </span>
                       </div>
                       <div className={"text-right"}>
                         <span className={"font-headline-sm text-headline-sm text-primary"}>
-                          J$4,800
+                          
                         </span>
                       </div>
                     </div>

@@ -230,7 +230,7 @@ export function LogServiceScreen() {
                       </span>
                     </div>
                     <span className={"font-body-sm text-body-sm text-on-surface-variant truncate"}>
-                      14 Dunrobin Ave, St. Andrew (Kingston 10)
+                      
                     </span>
                     <div className={"mt-2 flex items-center gap-2"}>
                       <span className={"px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 font-label-sm text-label-sm font-semibold"}>
@@ -281,7 +281,7 @@ export function LogServiceScreen() {
                 <div className={"absolute left-4 font-headline-sm text-headline-sm text-primary font-bold"}>
                   J$
                 </div>
-                <input className={"w-full h-12 pl-12 pr-4 rounded-xl bg-surface-container-lowest font-headline-sm text-headline-sm text-on-surface focus:outline-none focus:bg-surface-container-low shadow-sm"} id={"costInput"} placeholder={"0.00"} type={"text"} defaultValue={"12,500"} />
+                <input className={"w-full h-12 pl-12 pr-4 rounded-xl bg-surface-container-lowest font-headline-sm text-headline-sm text-on-surface focus:outline-none focus:bg-surface-container-low shadow-sm"} id={"costInput"} placeholder={"0.00"} type={"text"} defaultValue={""} />
               </div>
               <p className={"font-body-sm text-body-sm text-on-surface-variant flex items-center gap-1 mt-0.5"}>
                 <span className={"material-symbols-outlined text-[15px] text-tertiary"}>
@@ -302,7 +302,7 @@ export function LogServiceScreen() {
                   Optional
                 </span>
               </div>
-              <textarea className={"w-full p-3.5 rounded-xl bg-surface-container-lowest font-body-md text-body-md text-on-surface placeholder:text-outline focus:outline-none focus:bg-surface-container-low shadow-sm resize-none"} id={"serviceNotes"} placeholder={"e.g. Used Castrol Edge 5W-30 (4L) + OEM Toyota filter from Mario's Auto Parts. Inspected front brake pad wear at 70%."} rows={3} />
+              <textarea className={"w-full p-3.5 rounded-xl bg-surface-container-lowest font-body-md text-body-md text-on-surface placeholder:text-outline focus:outline-none focus:bg-surface-container-low shadow-sm resize-none"} id={"serviceNotes"} placeholder={"e.g. Used Castrol Edge 5W-30 (4L) + OEM Toyota filter from . Inspected front brake pad wear at 70%."} rows={3} />
             </div>
             <div className={"flex flex-col gap-space-xs"}>
               <div className={"flex items-center justify-between"}>
@@ -355,7 +355,7 @@ export function LogServiceScreen() {
                 <p className={"font-body-sm text-body-sm text-on-surface-variant mt-0.5"}>
                   Saving resets the oil cycle countdown to
                   <span className={"font-bold text-on-surface"}>
-                    5,000 km
+                    
                   </span>
                   or
                   <span className={"font-bold text-on-surface"}>
@@ -404,7 +404,7 @@ export function LogServiceScreen() {
                     
                   </span>
                   <span className={"font-body-sm text-body-sm text-on-surface-variant"}>
-                    14 Dunrobin Ave, St. Andrew (Authorized)
+                    
                   </span>
                 </button>
                 <button onClick={onPlugClick} className={"p-3 text-left rounded-xl bg-surface-container-low hover:bg-surface-container flex flex-col"} type={"button"} data-act={"motor-sales-service-ltd-half-way-tree-road-kings"}>

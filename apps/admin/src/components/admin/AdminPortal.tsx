@@ -84,7 +84,7 @@ type NavExtras = { userId?: string; customer?: unknown } | null;
  */
 export function AdminPortal() {
   const { session, user, signOut } = useAuth();
-  const [mfaNeeded, setMfaNeeded] = useState(false);
+  const [mfaNeeded, setMfaNeeded] = useState(true);
   const queryClient = useQueryClient();
   const [currentPageRaw, setCurrentPageRaw] = useState(() => {
     if (typeof window !== 'undefined') {
@@ -190,13 +190,13 @@ export function AdminPortal() {
 
   useEffect(() => {
     if (!session) {
-      setMfaNeeded(false);
+      setMfaNeeded(true);
       return;
     }
     let cancelled = false;
     void supabase.auth.mfa.getAuthenticatorAssuranceLevel().then(({ data }) => {
       if (cancelled) return;
-      setMfaNeeded(data?.currentLevel !== 'aal2' && data?.nextLevel === 'aal2');
+      setMfaNeeded(data?.currentLevel !== 'aal2');
     });
     return () => {
       cancelled = true;
@@ -214,7 +214,12 @@ export function AdminPortal() {
   }, []);
 
   if (mfaNeeded) {
-    return <StaffMfaStep onCancel={() => void signOut()} />;
+    return (
+      <StaffMfaStep
+        onCancel={() => void signOut()}
+        onVerified={() => setMfaNeeded(false)}
+      />
+    );
   }
 
   return (

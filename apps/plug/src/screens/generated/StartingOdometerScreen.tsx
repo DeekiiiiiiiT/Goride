@@ -104,7 +104,7 @@ export function StartingOdometerScreen() {
               </div>
               <div className={"flex items-baseline justify-between rounded-xl bg-surface-container-low px-4 py-3.5"}>
                 <div className={"flex items-baseline gap-1.5 flex-1 overflow-x-auto"}>
-                  <input aria-label={"Odometer value in kilometers"} className={"font-display-lg-mobile text-display-lg-mobile text-on-surface bg-transparent outline-none w-full tabular-nums font-extrabold tracking-tight selection:bg-secondary-fixed"} id={"odometerDisplay"} inputMode={"numeric"} type={"text"} defaultValue={"84,320"} />
+                  <input aria-label={"Odometer value in kilometers"} className={"font-display-lg-mobile text-display-lg-mobile text-on-surface bg-transparent outline-none w-full tabular-nums font-extrabold tracking-tight selection:bg-secondary-fixed"} id={"odometerDisplay"} inputMode={"numeric"} type={"text"} defaultValue={""} />
                 </div>
                 <span className={"font-headline-md text-headline-md text-primary font-bold shrink-0 ml-2"}>
                   km
@@ -116,7 +116,7 @@ export function StartingOdometerScreen() {
                     remove
                   </span>
                   <span>
-                    1,000 km
+                    1,000
                   </span>
                 </button>
                 <button onClick={onPlugClick} className={"flex items-center justify-center gap-1.5 h-12 rounded-lg bg-surface-container font-label-md text-label-md text-on-surface active:bg-surface-container-high transition-colors"} id={"plus1000"} type={"button"} data-act={"plus1000"}>
@@ -124,7 +124,7 @@ export function StartingOdometerScreen() {
                     add
                   </span>
                   <span>
-                    1,000 km
+                    1,000
                   </span>
                 </button>
               </div>
@@ -202,19 +202,7 @@ export function StartingOdometerScreen() {
                   Island Fuel Plug
                 </h2>
                 <p className={"font-body-sm text-body-sm text-on-surface-variant mt-0.5 leading-snug"}>
-                  Next fill-up at
-                  <strong>
-                    Fesco
-                  </strong>
-                  ,
-                  <strong>
-                    Cool Oasis
-                  </strong>
-                  , or
-                  <strong>
-                    Texaco
-                  </strong>
-                  , just key in liters and current km. Roam Plug calculates your exact Jamaican Dollar cost per kilometer automatically.
+                  On your next fill-up, enter the litres and the odometer. Roam Plug works out the cost from what you type.
                 </p>
               </div>
             </div>

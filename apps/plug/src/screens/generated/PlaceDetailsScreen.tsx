@@ -74,7 +74,7 @@ export function PlaceDetailsScreen() {
               </span>
               <div className={"min-w-0"}>
                 <p className={"font-label-lg text-label-lg text-on-surface font-semibold truncate"}>
-                  Constant Spring Rd, Half-Way-Tree
+                  , Half-Way-Tree
                 </p>
                 <div className={"flex items-center gap-2 mt-0.5"}>
                   <span className={"font-body-sm text-body-sm text-on-surface-variant"}>

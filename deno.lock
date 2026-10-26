@@ -75,6 +75,7 @@
     "npm:@testing-library/react@^16.3.3": "16.3.3_@testing-library+dom@10.4.1_@types+react@18.3.31_@types+react-dom@18.3.7__@types+react@18.3.31_react@18.3.1_react-dom@18.3.1__react@18.3.1",
     "npm:@testing-library/user-event@^14.6.6": "14.6.6_@testing-library+dom@10.4.1",
     "npm:@types/google.maps@^3.64.1": "3.65.5",
+    "npm:@types/leaflet.markercluster@^1.5.6": "1.5.6",
     "npm:@types/leaflet@*": "1.9.22",
     "npm:@types/leaflet@^1.9.21": "1.9.22",
     "npm:@types/node@^20.10.0": "20.19.43",
@@ -101,6 +102,7 @@
     "npm:jszip@*": "3.10.1",
     "npm:leaflet.heat@0.2": "0.2.0",
     "npm:leaflet.heat@0.2.0": "0.2.0",
+    "npm:leaflet.markercluster@^1.5.3": "1.5.3_leaflet@1.9.4",
     "npm:leaflet@*": "1.9.4",
     "npm:leaflet@1.9.4": "1.9.4",
     "npm:leaflet@^1.9.4": "1.9.4",
@@ -3315,6 +3317,12 @@
     "@types/google.maps@3.65.5": {
       "integrity": "sha512-oR9Hq/WaKGzIguZEwoCuyQ0ofDhCbefmS9RrjLUZ5scMziwTE6xA90drJYt2ZsyUCYmCqnxQcDpfGqeRE/Zgog=="
     },
+    "@types/leaflet.markercluster@1.5.6": {
+      "integrity": "sha512-I7hZjO2+isVXGYWzKxBp8PsCzAYCJBc29qBdFpquOCkS7zFDqUsUvkEOyQHedsk/Cy5tocQzf+Ndorm5W9YKTQ==",
+      "dependencies": [
+        "@types/leaflet"
+      ]
+    },
     "@types/leaflet@1.9.22": {
       "integrity": "sha512-h3lhECYEKDasG7LFHu+GiHqAvsgLuQvlJvVZzJDGONo3sEL+wUOqSFLnwkZlK0qVxnxbuGFW8iBlJNYs5wgndA==",
       "dependencies": [
@@ -4668,6 +4676,12 @@
     },
     "leaflet.heat@0.2.0": {
       "integrity": "sha512-Cd5PbAA/rX3X3XKxfDoUGi9qp78FyhWYurFg3nsfhntcM/MCNK08pRkf4iEenO1KNqwVPKCmkyktjW3UD+h9bQ=="
+    },
+    "leaflet.markercluster@1.5.3_leaflet@1.9.4": {
+      "integrity": "sha512-vPTw/Bndq7eQHjLBVlWpnGeLa3t+3zGiuM7fJwCkiMFq+nmRuG3RI3f7f4N4TDX7T4NpbAXpR2+NTRSEGfCSeA==",
+      "dependencies": [
+        "leaflet"
+      ]
     },
     "leaflet@1.9.4": {
       "integrity": "sha512-nxS1ynzJOmOlHp+iL3FyWqK89GtNL8U8rvlMOsQdTTssxZwCXh8N2NB3GDQOL+YR3XnWyZAxwQixURb+FA74PA=="
@@ -7109,10 +7123,12 @@
             "npm:@sentry/react@^10.69.0",
             "npm:@supabase/supabase-js@2",
             "npm:@tailwindcss/vite@4.1.12",
+            "npm:@types/leaflet.markercluster@^1.5.6",
             "npm:@types/leaflet@^1.9.21",
             "npm:@types/react-dom@^18.3.5",
             "npm:@types/react@^18.3.18",
             "npm:@vitejs/plugin-react@^4.7.0",
+            "npm:leaflet.markercluster@^1.5.3",
             "npm:leaflet@1.9.4",
             "npm:react-dom@^18.3.1",
             "npm:react-router-dom@^7.6.0",

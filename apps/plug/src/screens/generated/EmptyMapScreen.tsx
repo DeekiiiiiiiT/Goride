@@ -140,7 +140,7 @@ export function EmptyMapScreen() {
           <div className={"absolute bottom-3 left-3 bg-white/95 backdrop-blur-sm border border-[#e2d5c7] rounded-full px-3 py-1 flex items-center gap-1.5 shadow-sm"}>
             <span className={"w-2 h-2 rounded-full bg-amber-500 animate-ping"} />
             <span className={"text-[12px] font-bold text-slate-700"}>
-              15 km Radar Search Radius
+              
             </span>
           </div>
           <div className={"absolute bottom-3 right-3"}>
@@ -198,7 +198,7 @@ export function EmptyMapScreen() {
                 travel_explore
               </span>
               <span>
-                Expand radar search to 30 km
+                
               </span>
             </button>
           </div>

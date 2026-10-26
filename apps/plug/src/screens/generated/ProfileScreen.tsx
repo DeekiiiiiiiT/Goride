@@ -86,7 +86,7 @@ export function ProfileScreen() {
                     badge
                   </span>
                 </div>
-                <input className={"w-full h-12 pl-11 pr-4 bg-surface-container-lowest text-on-surface rounded-xl font-body-lg text-body-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-primary transition-all"} id={"first-name-input"} placeholder={"e.g. Andre"} type={"text"} defaultValue={"Andre"} />
+                <input className={"w-full h-12 pl-11 pr-4 bg-surface-container-lowest text-on-surface rounded-xl font-body-lg text-body-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-primary transition-all"} id={"first-name-input"} placeholder={"e.g. Andre"} type={"text"} defaultValue={""} />
               </div>
             </div>
             <div className={"flex flex-col gap-1.5"}>
@@ -112,7 +112,7 @@ export function ProfileScreen() {
                     alternate_email
                   </span>
                 </div>
-                <input className={"w-full h-12 pl-11 pr-11 bg-surface-container-lowest text-on-surface rounded-xl font-body-lg text-body-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-primary transition-all"} id={"display-name-input"} placeholder={"e.g. Andre B."} type={"text"} defaultValue={"Andre B."} />
+                <input className={"w-full h-12 pl-11 pr-11 bg-surface-container-lowest text-on-surface rounded-xl font-body-lg text-body-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-primary transition-all"} id={"display-name-input"} placeholder={"e.g. "} type={"text"} defaultValue={""} />
                 <div className={"absolute right-3.5 flex items-center pointer-events-none text-emerald-600"}>
                   <span className={"material-symbols-outlined text-xl"}>
                     check

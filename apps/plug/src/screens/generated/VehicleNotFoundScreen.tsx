@@ -71,7 +71,7 @@ export function VehicleNotFoundScreen() {
                   Make
                 </label>
                 <div className={"relative flex items-center"}>
-                  <input className={"w-full h-12 px-3.5 rounded-lg bg-surface-container-low text-on-surface font-body-md text-body-md focus:bg-surface-container-lowest outline-none shadow-sm"} id={"car-make"} placeholder={"e.g. Toyota, Honda, Subaru, BYD"} type={"text"} defaultValue={"Toyota"} />
+                  <input className={"w-full h-12 px-3.5 rounded-lg bg-surface-container-low text-on-surface font-body-md text-body-md focus:bg-surface-container-lowest outline-none shadow-sm"} id={"car-make"} placeholder={"e.g. Toyota, Honda, Subaru, BYD"} type={"text"} defaultValue={""} />
                   <span className={"material-symbols-outlined absolute right-3 text-secondary text-[20px]"}>
                     check_circle
                   </span>
@@ -81,7 +81,7 @@ export function VehicleNotFoundScreen() {
                 <label className={"font-label-md text-label-md text-on-surface"} htmlFor={"car-model"}>
                   Model / Chassis Trim
                 </label>
-                <input className={"w-full h-12 px-3.5 rounded-lg bg-surface-container-low text-on-surface font-body-md text-body-md focus:bg-surface-container-lowest outline-none shadow-sm"} id={"car-model"} placeholder={"e.g. Probox, Succeed, Passo, Axio, Fit Shuttle"} type={"text"} defaultValue={"Succeed Hybrid"} />
+                <input className={"w-full h-12 px-3.5 rounded-lg bg-surface-container-low text-on-surface font-body-md text-body-md focus:bg-surface-container-lowest outline-none shadow-sm"} id={"car-model"} placeholder={"e.g. Probox, Succeed, Passo, Axio, Fit Shuttle"} type={"text"} defaultValue={""} />
               </div>
               <div className={"grid grid-cols-2 gap-3"}>
                 <div className={"flex flex-col gap-1.5"}>
@@ -133,7 +133,7 @@ export function VehicleNotFoundScreen() {
                   <label className={"font-label-md text-label-md text-on-surface"} htmlFor={"car-engine"}>
                     Displacement
                   </label>
-                  <input className={"w-full h-12 px-3 rounded-lg bg-surface-container-low text-on-surface font-body-md text-body-md focus:bg-surface-container-lowest outline-none shadow-sm"} id={"car-engine"} placeholder={"e.g. 1.5L 1NZ-FXE"} type={"text"} defaultValue={"1.5L"} />
+                  <input className={"w-full h-12 px-3 rounded-lg bg-surface-container-low text-on-surface font-body-md text-body-md focus:bg-surface-container-lowest outline-none shadow-sm"} id={"car-engine"} placeholder={"e.g. 1.5L 1NZ-FXE"} type={"text"} defaultValue={""} />
                 </div>
               </div>
               <div className={"flex flex-col gap-2 pt-1"}>

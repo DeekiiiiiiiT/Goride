@@ -384,8 +384,7 @@ export function VehicleOverviewScreen() {
                       {"Engine Oil & Filter Service"}
                     </h4>
                     <span className={"font-label-sm text-label-sm font-bold text-primary bg-primary-fixed px-2 py-0.5 rounded shrink-0"}>
-                      Due in 380 km
-                    </span>
+                      </span>
                   </div>
                   <p className={"font-body-sm text-body-sm text-on-surface-variant mt-0.5"}>
                     0W-20 / 5W-30 Synthetic • High-temp tropical stop-and-go
@@ -394,7 +393,7 @@ export function VehicleOverviewScreen() {
                     <span>
                       Target:
                       <strong>
-                        85,000 km
+                        
                       </strong>
                     </span>
                     <span>
@@ -419,8 +418,7 @@ export function VehicleOverviewScreen() {
                       {"Front Brake Pad & Rotor Check"}
                     </h4>
                     <span className={"font-label-sm text-label-sm font-semibold text-on-surface-variant bg-surface-container px-2 py-0.5 rounded shrink-0"}>
-                      Due in 5,388 km
-                    </span>
+                      </span>
                   </div>
                   <p className={"font-body-sm text-body-sm text-on-surface-variant mt-0.5"}>
                     {"Crucial for Mount Rosser & Junction grade descents"}
@@ -429,7 +427,7 @@ export function VehicleOverviewScreen() {
                     <span>
                       Target:
                       <strong>
-                        90,000 km
+                        
                       </strong>
                     </span>
                     <span>
@@ -454,8 +452,7 @@ export function VehicleOverviewScreen() {
                       CVT Transmission Fluid Flush
                     </h4>
                     <span className={"font-label-sm text-label-sm font-semibold text-on-surface-variant bg-surface-container px-2 py-0.5 rounded shrink-0"}>
-                      Due in 15,388 km
-                    </span>
+                      </span>
                   </div>
                   <p className={"font-body-sm text-body-sm text-on-surface-variant mt-0.5"}>
                     Toyota TC / FE Fluid spec • CVT longevity prevention
@@ -464,7 +461,7 @@ export function VehicleOverviewScreen() {
                     <span>
                       Target:
                       <strong>
-                        100,000 km
+                        
                       </strong>
                     </span>
                   </div>
@@ -499,28 +496,19 @@ export function VehicleOverviewScreen() {
                   87
                 </div>
                 <div className={"min-w-0"}>
-                  <p className={"font-label-lg text-label-lg font-bold text-on-surface truncate"}>
-                    Texaco Barbican
+                  <p className={"font-label-lg text-label-lg font-bold text-on-surface truncate"} data-slot={"last-station"}>
+                    No fills yet
                   </p>
-                  <p className={"font-body-sm text-body-sm text-on-surface-variant flex items-center gap-1.5 mt-0.5"}>
-                    <span>
-                      20.0 L
-                    </span>
-                    <span>
-                      •
-                    </span>
-                    <span>
-                      Today, 3:45 PM
-                    </span>
+                  <p className={"font-body-sm text-body-sm text-on-surface-variant flex items-center gap-1.5 mt-0.5"} data-slot={"last-detail"}>
                   </p>
                 </div>
               </div>
               <div className={"text-right shrink-0"}>
                 <span className={"font-headline-sm text-headline-sm font-bold text-on-surface"}>
-                  J$4,290
+                  
                 </span>
                 <p className={"font-label-sm text-label-sm text-emerald-700 font-semibold"}>
-                  J$214.50 / L
+                   / L
                 </p>
               </div>
             </div>
@@ -532,7 +520,7 @@ export function VehicleOverviewScreen() {
                 Full tank to Full tank logged
               </span>
               <span className={"font-semibold text-on-surface"}>
-                Eff: 14.4 km/L
+                Eff: /L
               </span>
             </div>
           </section>

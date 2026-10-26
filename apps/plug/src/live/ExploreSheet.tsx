@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { plugSend, publicGet } from '../api';
+import { writeStationCache } from '../offline';
 import { onPlugClick } from '../shell/actions';
 
 type Station = {
@@ -41,7 +42,11 @@ export function ExploreSheet() {
           })
           .catch(() => setCarName(null));
       } else setCarName(null);
-      void publicGet<{ stations: Station[] }>('/stations').then((body) => setStations(body.stations || [])).catch(() => setStations([]));
+      void publicGet<{ stations: Station[] }>('/stations').then((body) => {
+        const rows = body.stations || [];
+        writeStationCache(rows);
+        setStations(rows);
+      }).catch(() => setStations([]));
       const kind = sessionStorage.getItem('plug-chip');
       if (kind && kind !== 'fuel') {
         void publicGet<{ places: Place[] }>(`/places?kind=${encodeURIComponent(kind)}`).then((body) => setPlaces(body.places || [])).catch(() => setPlaces([]));
@@ -94,7 +99,7 @@ export function ExploreSheet() {
         <button type="button" onClick={onPlugClick} data-act="see-all" className="min-h-9 font-bold text-primary">See all</button>
       </div>
       {rest.map((row) => (
-        <button key={row.id} type="button" onClick={onPlugClick} data-station-id={row.id} data-act="open-station" className="mt-2 flex w-full items-center justify-between rounded-xl bg-surface-container-lowest p-3 text-left shadow-sm">
+        <button key={row.id} type="button" onClick={onPlugClick} data-station-id={row.id} data-act="open-station" data-live-name={row.name} data-live-row="station" className="mt-2 flex min-h-12 w-full items-center justify-between rounded-xl bg-surface-container-lowest p-3 text-left shadow-sm">
           <span className="font-bold">{row.name}</span>
           <span>{priceOf(row, grade) < Number.POSITIVE_INFINITY ? `J$${priceOf(row, grade).toFixed(2)}` : ''}</span>
         </button>
@@ -106,7 +111,7 @@ export function ExploreSheet() {
 function StationHero({ station, grade, gradeLabel, cheapest }: { station: Station; grade: string; gradeLabel: string; cheapest: boolean }) {
   const price = priceOf(station, grade);
   return (
-    <div className="w-full rounded-2xl bg-surface-container-lowest p-space-md shadow-md mb-space-md">
+    <div className="w-full rounded-2xl bg-surface-container-lowest p-space-md shadow-md mb-space-md" data-live-name={station.name} data-live-row="station">
       <div className="flex items-start justify-between gap-2">
         <div>
           <div className="font-bold">{station.name}</div>

@@ -48,8 +48,8 @@ export function HomeExploreScreen() {
                 <span className={"material-symbols-outlined text-primary text-[18px]"}>
                   location_on
                 </span>
-                <span className={"font-headline-sm text-label-md text-on-surface font-bold tracking-tight"}>
-                  Half-Way-Tree, St Andrew
+                <span className={"font-headline-sm text-label-md text-on-surface font-bold tracking-tight"} data-slot={"where"}>
+                  Near you
                 </span>
                 <span className={"material-symbols-outlined text-on-surface-variant text-[16px]"}>
                   expand_more

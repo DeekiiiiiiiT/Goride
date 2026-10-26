@@ -90,9 +90,8 @@ export function MaintenanceScheduleScreen() {
                   </span>
                 </div>
                 <p className={"font-label-lg text-label-lg text-on-surface truncate"}>
-                  ~
                   <span className={"font-body-sm text-body-sm text-on-surface-variant"}>
-                    (Kingston ↔ Spanish Town)
+                    
                   </span>
                 </p>
               </div>
@@ -138,7 +137,7 @@ export function MaintenanceScheduleScreen() {
                       {"Engine Oil & Filter Service"}
                     </span>
                     <span className={"font-body-sm text-body-sm text-on-surface-variant"}>
-                      Every 5,000 km or 6 months
+                      Every  or 6 months
                     </span>
                   </div>
                 </div>
@@ -149,10 +148,10 @@ export function MaintenanceScheduleScreen() {
               <div className={"bg-surface-container-low rounded-lg p-space-sm my-space-sm"}>
                 <div className={"flex items-center justify-between mb-space-xs"}>
                   <span className={"font-label-md text-label-md text-secondary font-semibold"}>
-                    Due at 85,000 km
+                    Due at 
                   </span>
                   <span className={"font-label-md text-label-md text-secondary font-bold"}>
-                    ~388 km left (~8 days)
+                    left (8 days)
                   </span>
                 </div>
                 <div className={"w-full bg-surface-container-highest h-2.5 rounded-full overflow-hidden"}>
@@ -160,13 +159,13 @@ export function MaintenanceScheduleScreen() {
                 </div>
                 <div className={"flex justify-between items-center mt-1 text-[12px] font-label-sm text-on-surface-variant"}>
                   <span>
-                    80,000 km
+                    
                   </span>
                   <span className={"text-secondary font-semibold"}>
                     Current:  (92%)
                   </span>
                   <span>
-                    85,000 km
+                    
                   </span>
                 </div>
               </div>
@@ -207,12 +206,12 @@ export function MaintenanceScheduleScreen() {
                         {"Front Brake Pads & Rotors"}
                       </span>
                       <span className={"font-body-sm text-body-sm text-on-surface-variant"}>
-                        Every 25,000 km
+                        Every 
                       </span>
                     </div>
                   </div>
                   <span className={"font-label-md text-label-md text-on-surface-variant font-medium"}>
-                    5,388 km left
+                     left
                   </span>
                 </div>
                 <div className={"mt-space-sm"}>
@@ -221,10 +220,10 @@ export function MaintenanceScheduleScreen() {
                   </div>
                   <div className={"flex justify-between items-center mt-1"}>
                     <span className={"font-body-sm text-body-sm text-on-surface-variant"}>
-                      Due at 90,000 km
+                      Due at 
                     </span>
                     <span className={"font-label-sm text-label-sm text-on-surface-variant"}>
-                      ~3.5 months
+                      3.5 months
                     </span>
                   </div>
                 </div>
@@ -242,12 +241,12 @@ export function MaintenanceScheduleScreen() {
                         {"Air Filter & Cabin AC Filter"}
                       </span>
                       <span className={"font-body-sm text-body-sm text-on-surface-variant"}>
-                        Every 15,000 km
+                        Every 
                       </span>
                     </div>
                   </div>
                   <span className={"font-label-md text-label-md text-on-surface-variant font-medium"}>
-                    10,388 km left
+                     left
                   </span>
                 </div>
                 <div className={"mt-space-sm"}>
@@ -256,10 +255,10 @@ export function MaintenanceScheduleScreen() {
                   </div>
                   <div className={"flex justify-between items-center mt-1"}>
                     <span className={"font-body-sm text-body-sm text-on-surface-variant"}>
-                      Due at 95,000 km
+                      Due at 
                     </span>
                     <span className={"font-label-sm text-label-sm text-on-surface-variant"}>
-                      ~7 months
+                      7 months
                     </span>
                   </div>
                 </div>
@@ -277,12 +276,12 @@ export function MaintenanceScheduleScreen() {
                         CVT Transmission Fluid (TC/FE)
                       </span>
                       <span className={"font-body-sm text-body-sm text-on-surface-variant"}>
-                        Every 40,000 km
+                        Every 
                       </span>
                     </div>
                   </div>
                   <span className={"font-label-md text-label-md text-on-surface-variant font-medium"}>
-                    15,388 km left
+                     left
                   </span>
                 </div>
                 <div className={"mt-space-sm"}>
@@ -291,10 +290,10 @@ export function MaintenanceScheduleScreen() {
                   </div>
                   <div className={"flex justify-between items-center mt-1"}>
                     <span className={"font-body-sm text-body-sm text-on-surface-variant"}>
-                      Due at 100,000 km
+                      Due at 
                     </span>
                     <span className={"font-label-sm text-label-sm text-on-surface-variant"}>
-                      ~11 months
+                      11 months
                     </span>
                   </div>
                 </div>
@@ -312,12 +311,12 @@ export function MaintenanceScheduleScreen() {
                         Spark Plugs (Iridium)
                       </span>
                       <span className={"font-body-sm text-body-sm text-on-surface-variant"}>
-                        Every 60,000 km
+                        Every 
                       </span>
                     </div>
                   </div>
                   <span className={"font-label-md text-label-md text-on-surface-variant font-medium"}>
-                    35,388 km left
+                     left
                   </span>
                 </div>
                 <div className={"mt-space-sm"}>
@@ -326,10 +325,10 @@ export function MaintenanceScheduleScreen() {
                   </div>
                   <div className={"flex justify-between items-center mt-1"}>
                     <span className={"font-body-sm text-body-sm text-on-surface-variant"}>
-                      Due at 120,000 km
+                      Due at 
                     </span>
                     <span className={"font-label-sm text-label-sm text-on-surface-variant"}>
-                      ~2 years
+                      2 years
                     </span>
                   </div>
                 </div>
@@ -359,7 +358,7 @@ export function MaintenanceScheduleScreen() {
                         {"Tyre Rotation & Balancing"}
                       </span>
                       <span className={"font-label-sm text-label-sm text-on-surface-variant"}>
-                        80,000 km
+                        
                       </span>
                     </div>
                     <p className={"font-body-sm text-body-sm text-on-surface-variant mt-0.5"}>
@@ -381,7 +380,7 @@ export function MaintenanceScheduleScreen() {
                         {"Coolant Flush & Top-up"}
                       </span>
                       <span className={"font-label-sm text-label-sm text-on-surface-variant"}>
-                        75,000 km
+                        
                       </span>
                     </div>
                     <p className={"font-body-sm text-body-sm text-on-surface-variant mt-0.5"}>

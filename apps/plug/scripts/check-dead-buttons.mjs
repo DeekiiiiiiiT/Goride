@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { kindFor } from '../src/shell/act-kind.ts';
-import { sampleViolations } from './plug-samples.mjs';
+import { readingViolations, sampleViolations } from './plug-samples.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
 const dir = path.join(root, 'apps/plug/src/screens/generated');
@@ -26,6 +26,7 @@ const samples = [];
 for (const file of files) {
   const text = fs.readFileSync(path.join(dir, file), 'utf8');
   for (const phrase of sampleViolations(text)) samples.push(`${file} still shows ${phrase}`);
+  for (const phrase of readingViolations(text)) samples.push(`${file} still shows a sample reading (${phrase.trim()})`);
 }
 if (failures.length || samples.length) {
   console.error([...failures, ...samples].join('\n'));

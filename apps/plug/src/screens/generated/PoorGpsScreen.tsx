@@ -98,16 +98,16 @@ export function PoorGpsScreen() {
             <circle cx={"195"} cy={"425"} r={"42"} fill={"#ffffff"} stroke={"#e8d3bf"} strokeWidth={"3"} />
             <circle cx={"195"} cy={"425"} r={"28"} fill={"#fef3e9"} stroke={"#fed7aa"} strokeWidth={"2"} />
             <text x={"180"} y={"195"} fontSize={"9"} fontWeight={"700"} fill={"#9a3412"} letterSpacing={"1"} transform={"rotate(-90 180 195)"}>
-              CONSTANT SPRING RD
+              
             </text>
             <text x={"180"} y={"650"} fontSize={"9"} fontWeight={"700"} fill={"#9a3412"} letterSpacing={"1"} transform={"rotate(-90 180 650)"}>
-              HALF-WAY-TREE RD
+              
             </text>
             <text x={"260"} y={"475"} fontSize={"9"} fontWeight={"700"} fill={"#78350f"} letterSpacing={"0.5"} transform={"rotate(18 260 475)"}>
-              {"HOPE ROAD &rarr;"}
+              {" &rarr;"}
             </text>
             <text x={"40"} y={"525"} fontSize={"8.5"} fontWeight={"600"} fill={"#8c7865"} letterSpacing={"0.5"} transform={"rotate(-40 40 525)"}>
-              HAGLEY PARK RD
+              
             </text>
           </svg>
           <div className={"absolute top-44 left-8 pointer-events-auto opacity-75 hover:opacity-100 transition-opacity"}>
@@ -116,7 +116,7 @@ export function PoorGpsScreen() {
                 build
               </span>
               <span className={"text-[12px] font-semibold text-stone-700"}>
-                Mario's Auto Parts
+                
               </span>
               <span className={"text-[12px] text-stone-400 font-medium"}>
                 180m
@@ -137,7 +137,7 @@ export function PoorGpsScreen() {
                 storefront
               </span>
               <span className={"text-[12px] font-medium text-stone-600"}>
-                Tastee HWT
+                
               </span>
             </div>
           </div>
@@ -219,7 +219,7 @@ export function PoorGpsScreen() {
             </span>
             <div className={"flex-1 min-w-0"}>
               <p className={"text-[11.5px] font-bold text-stone-800 truncate"}>
-                {"Constant Spring Rd & Eastwood Park Rd"}
+                {" & Eastwood Park Rd"}
               </p>
               <p className={"text-[12px] text-stone-500 truncate"}>
                 {"Half-Way-Tree, Kingston 10 &bull; St. Andrew"}

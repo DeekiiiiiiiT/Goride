@@ -17,7 +17,7 @@ export function PlacePinScreen() {
             </span>
             <div className={"flex flex-col"}>
               <span className={"text-[12px] font-semibold text-on-surface leading-tight"}>
-                Mario's Auto Parts
+                
               </span>
               <span className={"text-[12px] text-outline leading-none"}>
                 180m away
@@ -30,7 +30,7 @@ export function PlacePinScreen() {
             </span>
             <div className={"flex flex-col"}>
               <span className={"text-[12px] font-semibold text-on-surface leading-tight"}>
-                Tastee HWT
+                
               </span>
               <span className={"text-[12px] text-outline leading-none"}>
                 120m away
@@ -130,11 +130,7 @@ export function PlacePinScreen() {
                   </span>
                 </div>
                 <p className={"text-[12px] text-on-surface-variant mt-0.5 leading-snug"}>
-                  Is this
-                  <strong className={"text-on-surface font-semibold"}>
-                    Total Half-Way-Tree
-                  </strong>
-                  ? It's already on the map 25m away.
+                  No place selected
                 </p>
               </div>
             </div>
@@ -164,7 +160,7 @@ export function PlacePinScreen() {
               </span>
               <div className={"flex-1 min-w-0"}>
                 <p className={"text-[12px] font-semibold text-on-surface truncate"}>
-                  {"Constant Spring Rd & Eastwood Park Rd, St. Andrew (Kingston 10)"}
+                  {" & Eastwood Park Rd, St. Andrew (Kingston 10)"}
                 </p>
               </div>
               <span className={"material-symbols-outlined text-green-700 text-[18px] shrink-0"}>

@@ -85,8 +85,8 @@ describe('Phase 8 golden import bundle', () => {
   });
 
   /**
-   * Promotions: one import_batch `promotion` per driver from payments_driver. Fares from trip ledger events.
-   * Also: payouts, toll refunds, toll support adjustments.
+   * Promotions stay inside trip fare and are not posted again.
+   * Events here: payouts, toll refunds, toll support adjustments.
    */
   it('buildCanonicalImportEvents matches golden counts (no fare statement lines)', () => {
     const batch = mergeAndProcessData(loadGoldenBundle(), []);

@@ -1,6 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { BANNED_PHRASES } from '../apps/plug/scripts/plug-samples.mjs';
-import { standIn } from './plug-stand-in';
+import { PLUG_SUPPLIED_NAMES, PLUG_SUPPLIED_PRICES, standIn } from './plug-stand-in';
 
 const ROUTES = [
   '/welcome',
@@ -71,15 +70,58 @@ test.beforeEach(async ({ page }) => {
   await standIn(page);
 });
 
+const READING_ROUTES = new Set([
+  '/garage',
+  '/garage/car-1',
+  '/garage/car-1/history',
+  '/garage/car-1/spend',
+  '/garage/car-1/service',
+  '/fuel',
+  '/fuel/confirm',
+  '/fuel/details',
+  '/fuel/saved',
+  '/fuel/error',
+  '/fuel/offline',
+]);
+
 test('an empty account shows no sample content', async ({ page }) => {
   test.setTimeout(240_000);
   for (const route of ROUTES) {
     await page.goto(`/#${route}`);
     await page.locator('body').waitFor({ state: 'visible' });
-    const text = await page.locator('body').innerText();
-    for (const phrase of BANNED_PHRASES) {
-      expect(text, `${route} shows “${phrase}”`).not.toContain(phrase);
-    }
+    const report = await page.evaluate(({ prices }) => {
+      const moneyRe = /J\$\s*[\d,]+(?:\.\d+)?/g;
+      const kmRe = /\d[\d,]*(?:\.\d+)?\s*km/gi;
+      const allowedKm = new Set(['2 km', '5 km', '10 km', '25 km']);
+      const names = [...document.querySelectorAll('[data-live-name]')].map((node) => node.getAttribute('data-live-name') || '');
+      const strayMoney: string[] = [];
+      const offPrice: string[] = [];
+      const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+      let node = walker.nextNode();
+      while (node) {
+        const parent = node.parentElement;
+        const hidden = parent ? getComputedStyle(parent).display === 'none' || getComputedStyle(parent).visibility === 'hidden' : false;
+        const text = node.textContent || '';
+        if (!hidden) {
+          for (const hit of text.match(moneyRe) || []) {
+            const live = parent?.closest('[data-live-row]');
+            const value = Number(hit.replace(/[^\d.]/g, ''));
+            if (!live) strayMoney.push(hit);
+            else if (!prices.some((price) => Math.abs(price - value) < 0.02)) offPrice.push(hit);
+          }
+        }
+        node = walker.nextNode();
+      }
+      const km = [...(document.body.innerText.match(kmRe) || [])]
+        .map((hit) => hit.replace(/\s+/g, ' ').toLowerCase())
+        .filter((hit) => !allowedKm.has(hit));
+      return { names, strayMoney, offPrice, km };
+    }, { prices: PLUG_SUPPLIED_PRICES });
+    const unknown = report.names.filter((name) => !PLUG_SUPPLIED_NAMES.includes(name));
+    expect(unknown, `${route} shows a place the test did not supply`).toEqual([]);
+    expect(report.strayMoney, `${route} shows a price with no live row`).toEqual([]);
+    expect(report.offPrice, `${route} shows a price the stand-in did not return`).toEqual([]);
+    if (READING_ROUTES.has(route)) expect(report.km, `${route} shows a km reading`).toEqual([]);
     await expect(page.locator('img[src*="aida-public"], [style*="aida-public"]'), route).toHaveCount(0);
   }
 });

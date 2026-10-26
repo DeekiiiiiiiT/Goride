@@ -442,9 +442,10 @@ Auth Audit (account-takeover / JWT-metadata) remediation Waves 0–7 implemented i
 
 ### Post-fix diagnostics (2026-07-18)
 
-**Privileged user_metadata vs app_metadata mismatches** (manual review — do not auto-promote):
-- `sadikithomas@hotmail.com` — user_metadata `superadmin` vs app_metadata `platform_owner` (aligned enough; user_meta is stale)
-- `prodigiousinvestments101@gmail.com` — user_metadata `superadmin` vs app_metadata `courier_admin` (spoof/stale user_meta; keep app_metadata)
+**Privileged user_metadata vs app_metadata mismatches** (manual review ? do not auto-promote):
+- `sadikithomas@hotmail.com` ? as of 2026-10-25 this account is a driver, not the platform owner. Dominion must not treat it as one.
+- `deekiiiiiii@gmail.com` ? platform owner. The editable profile stays `admin` on purpose so Fleet still treats this account as a fleet. Dominion reads the trusted app record, not that profile field.
+- `prodigiousinvestments101@gmail.com` ? product admin. It must never be the platform owner. The editable profile field `superadmin` is removed by `supabase/scripts/cleanup_stale_superadmin_markers.sql` after the public recovery link is gone. Keep the trusted product-admin roles.
 
 **Unconfirmed accounts with privileged-looking user_metadata:** none found.
 

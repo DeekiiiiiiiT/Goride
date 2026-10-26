@@ -48,6 +48,11 @@ export * from './jwtRole';
 export * from './productAdminRoles';
 export {
   ADMIN_INCORRECT_CREDENTIALS,
+  DOMINION_ACCESS_DENIED_MESSAGE,
+  adminPasswordFailureMessage,
+  dominionAccessDeniedMessage,
+  recordDominionAccessDenied,
+  clearDominionAccessDenied,
   flashAdminLoginError,
   consumeAdminLoginErrorFlash,
 } from './adminLoginErrors';

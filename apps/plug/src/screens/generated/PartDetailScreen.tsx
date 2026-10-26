@@ -348,7 +348,7 @@ export function PartDetailScreen() {
                   <span className={"material-symbols-outlined text-[14px] text-primary"} style={{ fontVariationSettings: "'FILL' 1" }}>
                     location_on
                   </span>
-                  {"3 Stores Identified along Constant Spring & Dunrobin corridor"}
+                  {""}
                 </span>
               </div>
             </div>
@@ -358,18 +358,18 @@ export function PartDetailScreen() {
                   <div className={"flex flex-col min-w-0"}>
                     <div className={"flex items-center gap-1.5"}>
                       <span className={"font-headline-sm text-headline-sm text-on-surface font-bold truncate"}>
-                        Mario's Auto Parts
+                        
                       </span>
                       <span className={"material-symbols-outlined text-[#16a34a] text-[18px]"} style={{ fontVariationSettings: "'FILL' 1" }}>
                         verified
                       </span>
                     </div>
                     <span className={"font-body-sm text-body-sm text-on-surface-variant"}>
-                      Constant Spring Rd / Half-Way-Tree
+                       / Half-Way-Tree
                     </span>
                   </div>
                   <span className={"px-2 py-0.5 rounded-full bg-surface-container font-label-md text-label-md font-bold text-on-surface shrink-0"}>
-                    1.8 km
+                    
                   </span>
                 </div>
                 <div className={"flex items-center gap-1.5"}>
@@ -408,7 +408,7 @@ export function PartDetailScreen() {
                     </span>
                   </div>
                   <span className={"px-2 py-0.5 rounded-full bg-surface-container font-label-md text-label-md font-bold text-on-surface shrink-0"}>
-                    4.2 km
+                    
                   </span>
                 </div>
                 <p className={"font-body-sm text-body-sm text-on-surface-variant"}>
@@ -429,14 +429,14 @@ export function PartDetailScreen() {
                 <div className={"flex items-start justify-between gap-space-sm"}>
                   <div className={"flex flex-col min-w-0"}>
                     <span className={"font-label-lg text-label-lg text-on-surface font-bold truncate"}>
-                      {"Kingston Spares & Imports"}
+                      {""}
                     </span>
                     <span className={"font-body-sm text-body-sm text-on-surface-variant"}>
                       Dunrobin Avenue
                     </span>
                   </div>
                   <span className={"px-2 py-0.5 rounded-full bg-surface-container font-label-md text-label-md font-bold text-on-surface shrink-0"}>
-                    2.1 km
+                    
                   </span>
                 </div>
                 <p className={"font-body-sm text-body-sm text-on-surface-variant"}>
