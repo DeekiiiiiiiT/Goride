@@ -1,44 +1,42 @@
 # Roam Plug — Free Launch
 
-**Rev 21 · 2026-10-25 · The Rev 19 fixes are committed (`c50eddad`) and live. In the live bundle, "123 Hope Road", "84,210", the fake invoice and "Road Scout" no longer appear. One item is still open: the Stitch sample data on about 20 screens (§2), which is also still in the live bundle.**
+**Rev 22 · 2026-10-25 · Rev 21 is mostly closed and live (`d4170b95`). The fake stations, prices, fills, toll rates and most of the fake shops are gone from the live bundle. `plug-empty` now checks the rule itself. One small item is left: dates, times and opening hours that are still typed into 8 screens.**
 
 **What it is:** a free public app for Jamaica, island-wide. Gas stations and prices, My Garage, parts, mechanics, facilities, tolls and reminders. Nothing is sold. The owner approves every mapped place in Dominion. Stitch project "Roam Plug" (`7833067736952351487`).
 
-**Checked 2026-10-25:**
+**Checked:**
 - Plug `tsc` is clean and the dead-button check passes.
-- Playwright: 6 passed and 1 skipped, which includes the new `plug-empty`.
-- "123 Hope Road", "84,210 km", the fake invoice file and the Road Scout/XP wording are gone from the source.
+- Playwright: 5 passed and 1 skipped (screenshots), including `plug-empty`.
+- I swept every route as an empty account. The only station and price shown is the one the test supplied.
 
 ---
 
-**Note:** `c50eddad` also carried driver and fleet settlement files, which breaks Rule 10. It doesn't break anything, but commit the next Plug fix on its own.
+## 1. Last Stitch leftovers (🟠)
+`plug-empty` checks money and km, but it doesn't check **dates, times or opening hours**, so these got through:
 
-## 2. Stitch sample data on about 20 more screens (🔴)
-Test setup: a new account with no car, no fills and no pins. The only test station was Total Half Way Tree. Everything below is fixed text in the generated screens, and none of it comes from the test data:
-
-| Area | Shows | Files |
+| Screen | Shows | File |
 |---|---|---|
-| **Public map (worst)** | Fake stations and prices in Guest Explore, the station list and the offline view: "Fesco Beechwood J$208.20", "Cool Oasis J$209.50", "Texaco J$214.50", "PARISH AVG J$208.20". Anyone who opens the site sees these. | `GuestModeScreen`, `StationListScreen`, `OfflineChipScreen`, `OfflineScreen`, `FiltersScreen`, `StartingOdometerScreen` |
-| **Garage with no fills** | A fake fill (Barbican, 20 L, J$4,290, "Today 3:45 PM"), "J$64,300 · 6 Services", a fake service history (J$14,500, "Toyota Jamaica (Liguanea)", J$4,200), and "4 Transactions · Avg J$4,612.50" | `VehicleOverviewScreen`, `HistoryScreen`, `ServiceItemScreen`, `FuelSpendScreen` |
-| **Fuel flow** | J$4,290 / 20.00 L / J$214.50 / Barbican shown before anything was entered | `FuelDetailsScreen`, `SavedScreen`, `SavedOfflineScreen`, `SaveErrorScreen`, `FirstSaveScreen` |
-| **Places + parts** | Fake shops: "14 / 48 Dunrobin Ave", "Mario's Auto Parts", "Kingston Spares & Imports". Made-up price ranges ("J$11,500 – 14,000"). A "J$100" entry fee. | `MechanicScreen`, `PendingPlaceScreen`, `WithdrawScreen`, `PlacePinScreen`, `PoorGpsScreen`, `PartDetailScreen`, `PartsStoreScreen`, `PartsResultsScreen`, `LogServiceScreen`, `FacilityScreen`, `StationDetailScreen`, `DirectionsScreen` |
-| **Tolls** | Plaza rates typed into the screen (Vineyards J$650, Spanish Town J$260, J$720 one-way) and not read from `/tolls`. If a rate changes, the app is wrong. | `TollsScreen` |
+| Vehicle overview | "Certificate of Fitness · Expires in 21 days (Nov 15, 2024) · DUE SOON" with no document saved | `VehicleOverviewScreen` |
+| Service item | "Last Service Record · Verified Work · 14 March 2024" | `ServiceItemScreen` |
+| Fuel details / Saved offline | "Today, 3:45 PM" / "Today at 3:45 PM" instead of the real fill time | `FuelDetailsScreen:300`, `SavedOfflineScreen:66` |
+| Pending place | "Oct 24, 2024 • 3:15 PM", "Original capture • Dunrobin Ave" | `PendingPlaceScreen:188` |
+| Mechanic / Facility / Place | "Open Now", "Mon–Fri 8:00 AM – 6:00 PM", "Closes 5:30 PM", "Open Daily 6:00 AM – 10:00 PM", and "Dunrobin Ave &" | `MechanicScreen:432`, `FacilityScreen`, `PartsStoreScreen` |
+| Part detail | Store at "Dunrobin Avenue" | `PartDetailScreen:435` |
 
-**Fix:** each value is rendered from the API, or the block becomes an empty state ("No fills yet", "No stations nearby"). Station lists show only rows from `/stations`.
+**Fix:** show the real date, time and hours, or hide the line. Places have no hours data yet, so remove the hours block and "Open Now".
+**Test:** in `plug-empty`, add a date/time pattern (`\d{1,2}:\d{2} ?[AP]M`, month names with a day) to the same rule as money and km. Also check that every street name shown is one the test supplied.
 
-**Test change (this is the third round of the same problem):** the banned-phrase list in `plug-samples.mjs` can't keep up. Make `plug-empty` check the rule itself:
-- With an empty account, garage, fuel-history and spend screens contain no `J$` amount and no km reading.
-- Every station or shop name shown is one the test supplied.
+**Owner choice:** Help says "support desk staffed 7:00 AM – 9:00 PM daily". Keep it only if that's true.
 
-Then nothing new can slip through.
-
-## 3. Yours (after 2 is live)
+## 2. Yours
 1. **On your phone at roam-plug.vercel.app:**
    - Continue with Google → Explore → Map It → the pin appears in the Dominion queue.
    - A brand-new account shows nothing that isn't its own.
    - The 8 journeys pass.
 2. **Map 20 real places.**
 3. **Decide on the 2 close station pairs in Dominion:** St Ann's Bay `st_1ba3015a` / `st_2f35d794`, and RUBiS HWT / TotalEnergies HWT.
+
+**Note:** `d4170b95` also carried admin and fleet files. Commit Plug fixes on their own (Rule 10).
 
 ---
 
@@ -47,7 +45,7 @@ Then nothing new can slip through.
 2. Reuse through packages. Edge copies need a mirror file and a Deno drift test.
 3. Dominion holds master data only, never users, vehicles, fills or location trails.
 4. Nothing user-mapped goes public before approval, except in-band prices. **No demo or sample data anywhere.** A value with no real source is removed, not faked or hidden at runtime.
-5. One version of the app, ever. The Stitch design is the app. Mockup furniture from Stitch (status bars, sample people, places, numbers and photos) is not part of the design.
+5. One version of the app, ever. The Stitch design is the app. Mockup furniture from Stitch (status bars, sample people, places, numbers, dates and photos) is not part of the design.
 6. Public reads go through the edge API. Never add a schema to the API list without checking its grants.
 7. Flags stay off by default. Run `tsc` on touched apps. Use one migration per change. Every paid or abusable endpoint gets `hitLimit()`.
 8. Fit tests cover every route. Tap targets are at least 44×44, made with padding.

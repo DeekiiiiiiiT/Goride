@@ -163,7 +163,7 @@ export function OfflineScreen() {
               </h2>
             </div>
             <span className={"font-label-md text-label-md text-on-surface-variant"}>
-              3 Stations Stored
+              <span data-slot={"station-count"} />
             </span>
           </div>
           <div className={"px-space-md flex flex-col gap-space-sm pb-space-md"}>
@@ -178,14 +178,12 @@ export function OfflineScreen() {
                   <div>
                     <div className={"flex items-center gap-1"}>
                       <h3 className={"font-headline-sm text-headline-sm text-on-surface leading-tight"}>
-                        Rubis Waterloo Road
                       </h3>
                       <span className={"material-symbols-outlined text-secondary text-[16px]"} title={"Saved on Device"}>
                         offline_pin
                       </span>
                     </div>
                     <p className={"font-body-sm text-body-sm text-on-surface-variant"}>
-                      Waterloo Rd • Kingston 10
                     </p>
                   </div>
                 </div>
@@ -236,14 +234,12 @@ export function OfflineScreen() {
                   <div>
                     <div className={"flex items-center gap-1"}>
                       <h3 className={"font-headline-sm text-headline-sm text-on-surface leading-tight"}>
-                        TotalEnergies HWT
                       </h3>
                       <span className={"material-symbols-outlined text-secondary text-[16px]"} title={"Saved on Device"}>
                         offline_pin
                       </span>
                     </div>
                     <p className={"font-body-sm text-body-sm text-on-surface-variant"}>
-                      Half-Way-Tree Clock Tower • Kingston
                     </p>
                   </div>
                 </div>
@@ -301,7 +297,6 @@ export function OfflineScreen() {
                       </span>
                     </div>
                     <p className={"font-body-sm text-body-sm text-on-surface-variant"}>
-                      Dunrobin Avenue • St. Andrew
                     </p>
                   </div>
                 </div>

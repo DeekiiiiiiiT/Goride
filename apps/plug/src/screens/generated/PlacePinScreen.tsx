@@ -160,7 +160,6 @@ export function PlacePinScreen() {
               </span>
               <div className={"flex-1 min-w-0"}>
                 <p className={"text-[12px] font-semibold text-on-surface truncate"}>
-                  {" & Eastwood Park Rd, St. Andrew (Kingston 10)"}
                 </p>
               </div>
               <span className={"material-symbols-outlined text-green-700 text-[18px] shrink-0"}>

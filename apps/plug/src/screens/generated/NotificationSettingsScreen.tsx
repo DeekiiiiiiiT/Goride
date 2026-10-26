@@ -280,9 +280,6 @@ export function NotificationSettingsScreen() {
                   <span className={"font-label-lg text-label-lg text-on-surface"}>
                     Quiet Hours
                   </span>
-                  <span className={"font-label-md text-label-md text-primary font-semibold"}>
-                    10:00 PM – 6:00 AM
-                  </span>
                   <p className={"font-body-sm text-body-sm text-on-surface-variant mt-1"}>
                     {"Mutes non-essential pings. Urgent parish roadblock alerts & emergency hazard notices remain active."}
                   </p>

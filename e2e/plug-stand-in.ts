@@ -12,6 +12,8 @@ const FLAGS = {
 
 export const PLUG_SUPPLIED_NAMES = ['Total Half Way Tree', 'Portmore'];
 export const PLUG_SUPPLIED_PRICES = [210];
+export const PLUG_SUPPLIED_CLOCKS: string[] = [];
+export const PLUG_SUPPLIED_STREETS: string[] = [];
 
 const STATION = {
   id: 'st_live',

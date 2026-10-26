@@ -107,7 +107,6 @@ export function SubmittedToastScreen() {
             </div>
             <div className={"flex-1 min-w-0"}>
               <h2 className={"font-headline-sm text-label-lg font-bold text-on-surface truncate"}>
-                14 Eastwood Park Rd
               </h2>
               <p className={"font-body-md text-body-md text-on-surface-variant"}>
                 Half-Way-Tree, St. Andrew

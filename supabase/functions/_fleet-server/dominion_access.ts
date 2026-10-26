@@ -30,6 +30,17 @@ export function dominionAccessDecision(user: AuthRoleUser): DominionAccess {
   return { ok: true, role };
 }
 
+/**
+ * Public sign-in refusal. A wrong password and a right password with no platform
+ * role must return the same fields. The real cause stays in the server log.
+ */
+export function dominionLoginDeniedBody(attemptsRemaining: number): {
+  error: "Incorrect credentials";
+  attemptsRemaining: number;
+} {
+  return { error: "Incorrect credentials", attemptsRemaining };
+}
+
 /** True when the trusted app record says this person is the platform owner. */
 export function hasPlatformOwnerAppRole(user: AuthRoleUser): boolean {
   const roles = getJwtRoles(user);

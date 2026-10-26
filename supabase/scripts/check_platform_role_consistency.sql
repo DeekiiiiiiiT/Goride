@@ -1,6 +1,6 @@
 -- Read-only check. It must return zero rows, and exactly one platform owner.
 -- The same check runs nightly and writes platform.permission_audit_log when it fails.
--- Apply migration 20261026040000 first.
+-- Apply migration 20261025232640 first.
 
 SELECT email, jwt_roles, table_roles, problem
 FROM platform.role_consistency_problems();

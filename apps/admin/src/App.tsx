@@ -47,7 +47,7 @@ function AppContent() {
     if (isPlatformUser) clearDominionAccessDenied();
   }, [isPlatformUser]);
 
-  // Non-platform account: kick back to login. The first time stays generic.
+  // A signed-in account with no Dominion access goes back to the login screen.
   useEffect(() => {
     if (loading || !user || isPlatformUser) return;
     const count = recordDominionAccessDenied();

@@ -351,7 +351,7 @@ export function MyVehiclesScreen() {
                    Parish Savings
                 </p>
                 <p className={"font-body-sm text-body-sm text-on-primary-fixed-variant leading-tight mt-0.5"}>
-                  {"Saved this month by choosing lowest-rate stations along Constant Spring & Spanish Town Rd."}
+                  Saved this month by choosing the lowest pump price.
                 </p>
               </div>
             </div>

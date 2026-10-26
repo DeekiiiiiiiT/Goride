@@ -186,9 +186,7 @@ export function HowItWorksScreen() {
                             Fitness Certificate
                           </span>
                         </div>
-                        <span className={"font-label-sm text-label-sm text-on-surface-variant"}>
-                          Due Oct 14
-                        </span>
+                        <span className={"font-label-sm text-label-sm text-on-surface-variant"} />
                       </div>
                     </div>
                   </div>

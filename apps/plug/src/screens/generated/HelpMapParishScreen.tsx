@@ -261,7 +261,7 @@ export function HelpMapParishScreen() {
                         </span>
                       </div>
                       <p className={"font-body-sm text-body-sm text-on-surface-variant"}>
-                        Functional gauges along A2 Main Road
+                        Working air gauges confirmed by drivers
                       </p>
                     </div>
                   </div>

@@ -326,36 +326,8 @@ export function HelpScreen() {
               <h2 className={"font-headline-sm text-headline-sm text-on-surface"}>
                 Still Need Assistance?
               </h2>
-              <p className={"font-body-sm text-body-sm text-on-surface-variant mt-0.5"}>
-                Our Kingston support desk is staffed 7:00 AM – 9:00 PM daily
-              </p>
             </div>
             <div className={"flex flex-col gap-space-sm"}>
-              <a onClick={onPlugClick} className={"w-full min-h-[58px] p-space-md rounded-xl bg-[#128C7E] text-white flex items-center justify-between shadow-md hover:bg-[#075E54] active:scale-[0.98] transition-all group"} href={"https://wa.me/18765557626"} rel={"noopener noreferrer"} target={"_blank"} data-act={"whatsapp-support-fastest-1-876-555-roam-avg-repl"}>
-                <div className={"flex items-center gap-space-md"}>
-                  <div className={"w-10 h-10 rounded-full bg-white/20 flex items-center justify-center shrink-0"}>
-                    <span className={"material-symbols-outlined text-[22px] text-white"}>
-                      chat
-                    </span>
-                  </div>
-                  <div className={"text-left min-w-0"}>
-                    <div className={"flex items-center gap-2"}>
-                      <span className={"font-label-lg text-label-lg font-bold"}>
-                        WhatsApp Support
-                      </span>
-                      <span className={"px-1.5 py-0.5 rounded text-[12px] bg-white/25 font-bold tracking-wider uppercase"}>
-                        Fastest
-                      </span>
-                    </div>
-                    <p className={"font-body-sm text-body-sm text-white/90 truncate"}>
-                      +1 (876) 555-ROAM • Avg reply 10 mins
-                    </p>
-                  </div>
-                </div>
-                <span className={"material-symbols-outlined text-white/80 group-hover:translate-x-1 transition-transform text-[22px]"}>
-                  arrow_forward
-                </span>
-              </a>
               <a onClick={onPlugClick} className={"w-full min-h-[58px] p-space-md rounded-xl bg-surface-container-lowest text-on-surface flex items-center justify-between shadow-sm hover:bg-surface-container-low active:scale-[0.98] transition-all group"} href={"mailto:support@roamplug.jm"} data-act={"email-driver-desk-support-roamplug-jm-within-24-"}>
                 <div className={"flex items-center gap-space-md"}>
                   <div className={"w-10 h-10 rounded-full bg-surface-container-high flex items-center justify-center shrink-0 text-primary"}>

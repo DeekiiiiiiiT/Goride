@@ -163,18 +163,9 @@ export function StationDetailScreen() {
                   </span>
                 </div>
                 <div>
-                  <span className={"font-label-lg text-label-lg text-on-surface block"}>
-                    Operating Hours
-                  </span>
-                  <span className={"font-body-sm text-body-sm text-on-surface-variant"}>
-                    Always Open • 24 Hours, 7 Days
-                  </span>
+                  <span className={"hidden font-body-sm text-body-sm text-on-surface-variant"} data-slot={"place-hours"} data-slot-row={"place-hours"} style={{ display: "none" }} />
                 </div>
               </div>
-              <span className={"px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 font-label-sm text-label-sm font-bold flex items-center gap-1"}>
-                <span className={"w-2 h-2 rounded-full bg-emerald-600"} />
-                Open Now
-              </span>
             </div>
           </div>
           <div className={"hidden px-gutter mt-space-lg"}>

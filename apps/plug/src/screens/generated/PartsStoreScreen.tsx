@@ -47,17 +47,6 @@ export function PartsStoreScreen() {
                 Roam Verified
               </span>
             </div>
-            <div className={"absolute bottom-space-md left-space-md flex items-center gap-space-xs"}>
-              <div className={"flex items-center gap-1.5 px-3 py-1 rounded-full bg-surface-container-lowest shadow-md"}>
-                <span className={"w-2.5 h-2.5 rounded-full bg-emerald-600 animate-pulse"} />
-                <span className={"font-label-md text-label-md text-on-surface font-semibold"}>
-                  Open Now
-                </span>
-                <span className={"text-on-surface-variant font-label-sm text-label-sm ml-1"}>
-                  Closes 5:30 PM
-                </span>
-              </div>
-            </div>
           </div>
           <div className={"px-space-md -mt-2 relative z-10 flex flex-col gap-space-md"}>
             <div className={"bg-surface-container-lowest rounded-xl p-space-md shadow-sm flex flex-col gap-space-sm"}>
@@ -81,42 +70,24 @@ export function PartsStoreScreen() {
                   location_on
                 </span>
                 <div className={"flex flex-col"}>
-                  <p className={"font-body-md text-body-md text-on-surface font-medium leading-snug"}>
-                    84 Constant Spring Road, Kingston 10
-                  </p>
-                  <p className={"font-body-sm text-body-sm text-on-surface-variant"}>
-                    St. Andrew • Opposite Tax Office / Manor Park turnoff
-                  </p>
+                  <p className={"font-body-md text-body-md text-on-surface font-medium leading-snug"} data-slot={"place-address"} />
                 </div>
               </div>
               <div className={"flex flex-wrap items-center gap-space-xs pt-1"}>
-                <button onClick={onPlugClick} aria-label={"Copy Plus Code"} className={"flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-surface-container hover:bg-surface-container-high transition-colors active:scale-95"} id={"copy-plus-code-btn"} data-act={"copy-plus-code-btn"}>
-                  <span className={"material-symbols-outlined text-[16px] text-secondary"}>
-                    explore
-                  </span>
-                  <span className={"font-label-md text-label-md text-on-surface font-medium"} id={"plus-code-text"}>
-                    7GQJ+9R Kingston
-                  </span>
-                  <span className={"material-symbols-outlined text-[15px] text-on-surface-variant ml-0.5"}>
-                    content_copy
-                  </span>
-                </button>
-                <div className={"flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-surface-container text-on-surface-variant"}>
+                <div className={"hidden items-center gap-1.5 px-3 py-1.5 rounded-lg bg-surface-container text-on-surface-variant"} data-slot-row={"place-hours"} style={{ display: "none" }}>
                   <span className={"material-symbols-outlined text-[16px]"}>
                     schedule
                   </span>
-                  <span className={"font-label-md text-label-md"}>
-                    Mon–Sat: 8:00 AM – 5:30 PM
-                  </span>
+                  <span className={"font-label-md text-label-md"} data-slot={"place-hours"} />
                 </div>
               </div>
               <div className={"grid grid-cols-2 gap-space-sm pt-space-xs mt-1"}>
-                <a onClick={onPlugClick} className={"h-[52px] rounded-xl bg-surface-container-high active:bg-surface-container-highest flex items-center justify-center gap-2 px-3 text-on-surface font-label-lg text-label-lg font-bold shadow-sm transition-transform active:scale-98"} href={"tel:+18769264412"} data-act={"call-counter"}>
+                <a onClick={onPlugClick} className={"hidden h-[52px] rounded-xl bg-surface-container-high active:bg-surface-container-highest flex items-center justify-center gap-2 px-3 text-on-surface font-label-lg text-label-lg font-bold shadow-sm transition-transform active:scale-98"} href={"#"} data-slot={"place-phone-link"} data-slot-row={"place-phone"} data-act={"call-counter"} style={{ display: "none" }}>
                   <span className={"material-symbols-outlined text-[22px] text-primary"} style={{ fontVariationSettings: "'FILL' 1" }}>
                     phone_in_talk
                   </span>
-                  <span>
-                    Call Counter
+                  <span data-slot={"place-phone"}>
+                    Call
                   </span>
                 </a>
                 <a onClick={onPlugClick} className={"h-[52px] rounded-xl bg-gradient-to-r from-primary to-secondary-container active:brightness-95 flex items-center justify-center gap-2 px-3 text-on-primary font-label-lg text-label-lg font-bold shadow-md transition-transform active:scale-98"} href={"#map-preview"} data-act={"get-directions"}>
@@ -217,14 +188,9 @@ export function PartsStoreScreen() {
               </div>
               <div className={"p-space-md flex items-center justify-between gap-space-sm"}>
                 <div className={"flex flex-col"}>
-                  <span className={"font-headline-sm text-headline-sm text-on-surface"}>
-                    Constant Spring Road Corridor
-                  </span>
-                  <span className={"font-body-sm text-body-sm text-on-surface-variant"}>
-                    Direct road frontage with quick curbside pull-in parking
-                  </span>
+                  <span className={"font-headline-sm text-headline-sm text-on-surface"} data-slot={"place-name"} />
                 </div>
-                <a onClick={onPlugClick} aria-label={"Open in external maps"} className={"min-w-[48px] min-h-[48px] rounded-full bg-surface-container flex items-center justify-center text-primary hover:bg-surface-container-high transition-colors active:scale-95 shrink-0"} href={"https://maps.google.com/?q=84+Constant+Spring+Road+Kingston"} rel={"noopener noreferrer"} target={"_blank"} data-act={"open-in-new"}>
+                <a onClick={onPlugClick} aria-label={"Open in external maps"} className={"min-w-[48px] min-h-[48px] rounded-full bg-surface-container flex items-center justify-center text-primary hover:bg-surface-container-high transition-colors active:scale-95 shrink-0"} href={"#"} data-act={"open-in-new"}>
                   <span className={"material-symbols-outlined text-[24px]"}>
                     open_in_new
                   </span>

@@ -136,7 +136,6 @@ export function ApprovedScreen() {
                 </span>
                 <div className={"text-body-sm font-body-sm text-on-surface leading-snug"}>
                   <span className={"font-semibold text-on-background"}>
-                    14 Eastwood Park Rd
                   </span>
                   {", Half-Way-Tree, Kingston & St. Andrew"}
                 </div>

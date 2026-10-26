@@ -98,26 +98,9 @@ export function DocumentsScreen() {
                 1 Attention Needed
               </span>
             </div>
-            <div className={"w-full grid grid-cols-4 gap-1.5 h-2 rounded-full overflow-hidden bg-surface-container-highest"}>
-              <div className={"bg-emerald-600 rounded-sm"} title={"Licence: Valid"} />
-              <div className={"bg-amber-500 rounded-sm"} title={"Tax Disc: Expiring soon"} />
-              <div className={"bg-amber-500 rounded-sm"} title={"Fitness: Expiring soon"} />
-              <div className={"bg-error rounded-sm animate-pulse"} title={"Insurance: Overdue"} />
-            </div>
-            <div className={"flex items-center justify-between text-on-surface-variant font-body-sm text-body-sm pt-0.5"}>
-              <span>
-                3 active covers
-              </span>
-              <span className={"text-error font-medium flex items-center gap-1"}>
-                <span className={"material-symbols-outlined text-[16px]"}>
-                  error
-                </span>
-                
-              </span>
-            </div>
           </div>
           <div className={"flex flex-col gap-space-md"}>
-            <div className={"bg-surface-container-lowest rounded-xl p-space-md shadow-sm flex flex-col gap-space-sm relative overflow-hidden transition-transform active:scale-[0.99]"}>
+            <div data-doc={""} className={"bg-surface-container-lowest rounded-xl p-space-md shadow-sm flex flex-col gap-space-sm relative overflow-hidden transition-transform active:scale-[0.99]"}>
               <div className={"flex items-start justify-between gap-space-sm"}>
                 <div className={"flex items-center gap-space-sm min-w-0"}>
                   <div className={"w-11 h-11 rounded-lg bg-emerald-50 text-emerald-700 flex items-center justify-center flex-shrink-0 shadow-sm"}>
@@ -129,34 +112,23 @@ export function DocumentsScreen() {
                     <h2 className={"font-headline-sm text-headline-sm text-on-surface truncate"}>
                       Driver's Licence
                     </h2>
-                    <span className={"font-body-sm text-body-sm text-on-surface-variant truncate"}>
-                      Tax Administration Jamaica (TAJ)
-                    </span>
+                    <span className={"hidden font-body-sm text-body-sm text-on-surface-variant truncate"} data-slot={"doc-due"} data-slot-row={"doc-due"} style={{ display: "none" }} />
                   </div>
                 </div>
-                <span className={"font-label-md text-label-md bg-emerald-100 text-emerald-800 px-space-sm py-1 rounded-full font-bold flex items-center gap-1 flex-shrink-0"}>
-                  <span className={"material-symbols-outlined text-[14px]"}>
-                    check_circle
-                  </span>
-                  Valid
-                </span>
+                <span className={"hidden font-label-md text-label-md px-space-sm py-1 rounded-full font-bold flex-shrink-0"} data-slot={"doc-status"} data-slot-row={"doc-status"} style={{ display: "none" }} />
               </div>
               <div className={"grid grid-cols-2 gap-space-sm bg-surface-container-low p-space-sm rounded-lg"}>
                 <div className={"flex flex-col"}>
                   <span className={"font-label-sm text-label-sm text-on-surface-variant"}>
                     Expiry Date
                   </span>
-                  <span className={"font-label-lg text-label-lg text-on-surface font-semibold"}>
-                    Not set
-                  </span>
+                  <span className={"font-label-lg text-label-lg text-on-surface font-semibold"} />
                 </div>
                 <div className={"flex flex-col"}>
                   <span className={"font-label-sm text-label-sm text-on-surface-variant"}>
                     Time Remaining
                   </span>
-                  <span className={"font-label-lg text-label-lg text-emerald-700 font-semibold"}>
-                    Not set
-                  </span>
+                  <span className={"font-label-lg text-label-lg text-emerald-700 font-semibold"} />
                 </div>
               </div>
               <div className={"flex items-center justify-between pt-space-xs gap-space-xs"}>
@@ -174,7 +146,7 @@ export function DocumentsScreen() {
                 </button>
               </div>
             </div>
-            <div className={"bg-surface-container-lowest rounded-xl p-space-md shadow-sm flex flex-col gap-space-sm relative overflow-hidden transition-transform active:scale-[0.99]"}>
+            <div data-doc={""} className={"bg-surface-container-lowest rounded-xl p-space-md shadow-sm flex flex-col gap-space-sm relative overflow-hidden transition-transform active:scale-[0.99]"}>
               <div className={"flex items-start justify-between gap-space-sm"}>
                 <div className={"flex items-center gap-space-sm min-w-0"}>
                   <div className={"w-11 h-11 rounded-lg bg-amber-50 text-amber-800 flex items-center justify-center flex-shrink-0 shadow-sm"}>
@@ -186,34 +158,23 @@ export function DocumentsScreen() {
                     <h2 className={"font-headline-sm text-headline-sm text-on-surface truncate"}>
                       Registration (Tax Disc)
                     </h2>
-                    <span className={"font-body-sm text-body-sm text-on-surface-variant truncate"}>
-                      TAJ Motor Vehicle Licensing
-                    </span>
+                    <span className={"hidden font-body-sm text-body-sm text-on-surface-variant truncate"} data-slot={"doc-due"} data-slot-row={"doc-due"} style={{ display: "none" }} />
                   </div>
                 </div>
-                <span className={"font-label-md text-label-md bg-amber-100 text-amber-900 px-space-sm py-1 rounded-full font-bold flex items-center gap-1 flex-shrink-0"}>
-                  <span className={"material-symbols-outlined text-[14px]"}>
-                    timelapse
-                  </span>
-                  Expiring Soon
-                </span>
+                <span className={"hidden font-label-md text-label-md px-space-sm py-1 rounded-full font-bold flex-shrink-0"} data-slot={"doc-status"} data-slot-row={"doc-status"} style={{ display: "none" }} />
               </div>
               <div className={"grid grid-cols-2 gap-space-sm bg-surface-container-low p-space-sm rounded-lg"}>
                 <div className={"flex flex-col"}>
                   <span className={"font-label-sm text-label-sm text-on-surface-variant"}>
                     Expiry Date
                   </span>
-                  <span className={"font-label-lg text-label-lg text-on-surface font-semibold"}>
-                    Not set
-                  </span>
+                  <span className={"font-label-lg text-label-lg text-on-surface font-semibold"} />
                 </div>
                 <div className={"flex flex-col"}>
                   <span className={"font-label-sm text-label-sm text-on-surface-variant"}>
                     Time Remaining
                   </span>
-                  <span className={"font-label-lg text-label-lg text-secondary font-semibold"}>
-                    Expires in 45 days
-                  </span>
+                  <span className={"font-label-lg text-label-lg text-secondary font-semibold"} />
                 </div>
               </div>
               <div className={"flex items-center justify-between pt-space-xs gap-space-xs flex-wrap"}>
@@ -233,7 +194,7 @@ export function DocumentsScreen() {
                 </button>
               </div>
             </div>
-            <div className={"bg-surface-container-lowest rounded-xl p-space-md shadow-sm flex flex-col gap-space-sm relative overflow-hidden transition-transform active:scale-[0.99]"}>
+            <div data-doc={""} className={"bg-surface-container-lowest rounded-xl p-space-md shadow-sm flex flex-col gap-space-sm relative overflow-hidden transition-transform active:scale-[0.99]"}>
               <div className={"flex items-start justify-between gap-space-sm"}>
                 <div className={"flex items-center gap-space-sm min-w-0"}>
                   <div className={"w-11 h-11 rounded-lg bg-secondary-fixed text-on-secondary-fixed-variant flex items-center justify-center flex-shrink-0 shadow-sm"}>
@@ -245,34 +206,23 @@ export function DocumentsScreen() {
                     <h2 className={"font-headline-sm text-headline-sm text-on-surface truncate"}>
                       Certificate of Fitness
                     </h2>
-                    <span className={"font-body-sm text-body-sm text-on-surface-variant truncate"}>
-                      ITA Swallowfield Depot
-                    </span>
+                    <span className={"hidden font-body-sm text-body-sm text-on-surface-variant truncate"} data-slot={"doc-due"} data-slot-row={"doc-due"} style={{ display: "none" }} />
                   </div>
                 </div>
-                <span className={"font-label-md text-label-md bg-secondary-fixed text-on-secondary-fixed-variant px-space-sm py-1 rounded-full font-bold flex items-center gap-1 flex-shrink-0"}>
-                  <span className={"material-symbols-outlined text-[14px]"}>
-                    notification_important
-                  </span>
-                  Action Required
-                </span>
+                <span className={"hidden font-label-md text-label-md px-space-sm py-1 rounded-full font-bold flex-shrink-0"} data-slot={"doc-status"} data-slot-row={"doc-status"} style={{ display: "none" }} />
               </div>
               <div className={"grid grid-cols-2 gap-space-sm bg-surface-container-low p-space-sm rounded-lg"}>
                 <div className={"flex flex-col"}>
                   <span className={"font-label-sm text-label-sm text-on-surface-variant"}>
                     Expiry Date
                   </span>
-                  <span className={"font-label-lg text-label-lg text-on-surface font-semibold"}>
-                    Not set
-                  </span>
+                  <span className={"font-label-lg text-label-lg text-on-surface font-semibold"} />
                 </div>
                 <div className={"flex flex-col"}>
                   <span className={"font-label-sm text-label-sm text-on-surface-variant"}>
                     Urgency
                   </span>
-                  <span className={"font-label-lg text-label-lg text-secondary font-semibold"}>
-                    Expires in 21 days
-                  </span>
+                  <span className={"font-label-lg text-label-lg text-secondary font-semibold"} />
                 </div>
               </div>
               <div className={"flex flex-col gap-space-xs pt-space-xs"}>
@@ -287,15 +237,9 @@ export function DocumentsScreen() {
                     {"Kingston & St. Andrew"}
                   </span>
                 </div>
-                <button onClick={onPlugClick} className={"w-full min-h-[48px] rounded-lg bg-secondary text-on-secondary font-label-lg text-label-lg font-bold flex items-center justify-center gap-space-xs shadow-md active:opacity-90 transition-all"} data-act={"book-inspection-at-swallowfield"}>
-                  <span className={"material-symbols-outlined text-[20px]"}>
-                    calendar_month
-                  </span>
-                  Book Inspection at Swallowfield
-                </button>
               </div>
             </div>
-            <div className={"bg-surface-container-lowest rounded-xl p-space-md shadow-md flex flex-col gap-space-sm relative overflow-hidden bg-gradient-to-b from-error-container/20 to-surface-container-lowest"}>
+            <div data-doc={""} className={"bg-surface-container-lowest rounded-xl p-space-md shadow-md flex flex-col gap-space-sm relative overflow-hidden bg-gradient-to-b from-error-container/20 to-surface-container-lowest"}>
               <div className={"flex items-start justify-between gap-space-sm"}>
                 <div className={"flex items-center gap-space-sm min-w-0"}>
                   <div className={"w-11 h-11 rounded-lg bg-error-container text-on-error-container flex items-center justify-center flex-shrink-0 shadow-sm animate-pulse"}>
@@ -309,43 +253,24 @@ export function DocumentsScreen() {
                         Vehicle Insurance
                       </h2>
                     </div>
-                    <span className={"font-body-sm text-body-sm text-on-surface-variant truncate"}>
-                      Advantage General (Comprehensive)
-                    </span>
+                    <span className={"hidden font-body-sm text-body-sm text-on-surface-variant truncate"} data-slot={"doc-due"} data-slot-row={"doc-due"} style={{ display: "none" }} />
                   </div>
                 </div>
-                <span className={"font-label-md text-label-md bg-error text-on-error px-space-sm py-1 rounded-full font-bold flex items-center gap-1 flex-shrink-0 shadow-sm"}>
-                  <span className={"material-symbols-outlined text-[14px]"}>
-                    warning
-                  </span>
-                  Overdue
-                </span>
+                <span className={"hidden font-label-md text-label-md px-space-sm py-1 rounded-full font-bold flex-shrink-0"} data-slot={"doc-status"} data-slot-row={"doc-status"} style={{ display: "none" }} />
               </div>
               <div className={"grid grid-cols-2 gap-space-sm bg-error-container/30 p-space-sm rounded-lg"}>
                 <div className={"flex flex-col"}>
                   <span className={"font-label-sm text-label-sm text-on-surface-variant font-medium"}>
                     Policy No.
                   </span>
-                  <span className={"font-label-lg text-label-lg text-on-surface font-bold tracking-tight"}>
-                    POL-88219-JM
-                  </span>
+                  <span className={"font-label-lg text-label-lg text-on-surface font-bold tracking-tight"} />
                 </div>
                 <div className={"flex flex-col"}>
-                  <span className={"font-label-sm text-label-sm text-error font-medium"}>
-                    Not set
+                  <span className={"font-label-sm text-label-sm text-on-surface-variant font-medium"}>
+                    Expiry Date
                   </span>
-                  <span className={"font-label-lg text-label-lg text-error font-extrabold"}>
-                    Expired 3 days ago!
-                  </span>
+                  <span className={"font-label-lg text-label-lg text-error font-extrabold"} />
                 </div>
-              </div>
-              <div className={"flex items-center gap-1.5 text-error font-body-sm text-body-sm font-semibold px-1"}>
-                <span className={"material-symbols-outlined text-[18px]"}>
-                  announcement
-                </span>
-                <span>
-                  ⚠️ Urgent Reminder Active • Vehicle not road legal
-                </span>
               </div>
               <div className={"flex gap-space-xs pt-space-xs"}>
                 <button onClick={onPlugClick} className={"flex-1 min-h-[48px] rounded-lg bg-primary text-on-primary font-label-lg text-label-lg font-bold flex items-center justify-center gap-space-xs shadow-md active:opacity-90 transition-all"} data-act={"call-broker-renew"} data-way-out={"primary"}>

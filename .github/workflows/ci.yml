@@ -156,6 +156,9 @@ jobs:
       - name: Deno check fleet-toll tag types
         run: node scripts/check-fleet-toll-types.mjs
 
+      - name: Deno test dominion access
+        run: deno test --no-check supabase/functions/_fleet-server/dominion_access.test.ts
+
       - name: Deno test parts sourcing rules
         run: >
           deno test --allow-read --allow-env

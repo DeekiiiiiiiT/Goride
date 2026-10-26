@@ -48,14 +48,6 @@ export function EmptySearchScreen() {
                 E-10 87
               </span>
             </div>
-            <button onClick={onPlugClick} className={"flex-shrink-0 h-8 px-3 rounded-full bg-surface-container-lowest border border-outline-variant/60 text-on-surface-variant text-label-md font-label-md flex items-center gap-1 hover:border-primary/40 active:scale-95 transition-all"} type={"button"} data-act={"open-now"}>
-              <span className={"material-symbols-outlined text-[16px] text-[#16a34a]"}>
-                schedule
-              </span>
-              <span>
-                Open Now
-              </span>
-            </button>
             <button onClick={onPlugClick} className={"flex-shrink-0 h-8 px-3 rounded-full bg-surface-container-lowest border border-outline-variant/60 text-on-surface-variant text-label-md font-label-md flex items-center gap-1 hover:border-primary/40 active:scale-95 transition-all"} type={"button"} data-act={"verified-only"}>
               <span className={"material-symbols-outlined text-[16px] text-primary"} style={{ fontVariationSettings: "'FILL' 1" }}>
                 verified
@@ -150,14 +142,6 @@ export function EmptySearchScreen() {
                 </span>
                 <span className={"truncate"}>
                   Half-Way-Tree
-                </span>
-              </button>
-              <button onClick={onPlugClick} className={"h-10 px-2 rounded-xl bg-surface-container-lowest border border-outline-variant/60 hover:border-primary/50 text-on-surface text-label-md font-label-md flex items-center justify-center gap-1 shadow-sm active:scale-95 transition-all"} type={"button"} data-act={"hope-road"}>
-                <span className={"material-symbols-outlined text-[14px] text-tertiary"}>
-                  route
-                </span>
-                <span className={"truncate"}>
-                  Hope Road
                 </span>
               </button>
             </div>

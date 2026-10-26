@@ -77,9 +77,7 @@ export function ServiceItemScreen() {
                   <p className={"font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider"}>
                     Interval Wear Life
                   </p>
-                  <p className={"font-headline-sm text-headline-sm text-on-surface"}>
-                    78% Expended
-                  </p>
+                  <p className={"font-headline-sm text-headline-sm text-on-surface"} />
                 </div>
               </div>
               <div className={"text-right"}>
@@ -93,17 +91,10 @@ export function ServiceItemScreen() {
             </div>
             <div className={"space-y-1.5 pt-1"}>
               <div className={"h-3 w-full bg-surface-container-highest rounded-full overflow-hidden p-0.5 flex"}>
-                <div className={"h-full bg-gradient-to-r from-secondary-container via-primary to-primary-container rounded-full transition-all duration-700 ease-out"} style={{ width: "78%" }} />
               </div>
               <div className={"flex justify-between items-center text-on-surface-variant font-label-sm text-label-sm px-0.5"}>
-                <span>
-                  Last: 65k km
-                </span>
                 <span className={"text-primary font-semibold"}>
-                  Current: 
-                </span>
-                <span>
-                  Goal: 90k km
+                  Current:
                 </span>
               </div>
             </div>
@@ -112,17 +103,13 @@ export function ServiceItemScreen() {
                 <span className={"font-label-sm text-label-sm text-on-surface-variant block"}>
                   Spec Interval
                 </span>
-                <span className={"font-label-lg text-label-lg text-on-surface font-semibold"}>
-                   / 18 mos
-                </span>
+                <span className={"font-label-lg text-label-lg text-on-surface font-semibold"} />
               </div>
               <div className={"bg-surface-container-low rounded-lg p-2.5"}>
                 <span className={"font-label-sm text-label-sm text-on-surface-variant block"}>
                   Projected Service
                 </span>
-                <span className={"font-label-lg text-label-lg text-on-surface font-semibold"}>
-                  Est. Jan 2025
-                </span>
+                <span className={"font-label-lg text-label-lg text-on-surface font-semibold"} data-slot={"projected-service"} />
               </div>
             </div>
           </div>
@@ -148,106 +135,15 @@ export function ServiceItemScreen() {
               </div>
             </div>
           </div>
-          <div className={"bg-surface-container-lowest rounded-xl p-space-md shadow-sm space-y-space-sm"}>
-            <div className={"flex items-center justify-between"}>
-              <h3 className={"font-label-lg text-label-lg text-on-surface font-bold flex items-center gap-1.5"}>
-                <span className={"material-symbols-outlined text-primary text-[20px]"}>
-                  history_edu
-                </span>
-                Last Service Record
-              </h3>
-              <span className={"font-label-sm text-label-sm bg-surface-container px-2 py-0.5 rounded-full text-on-surface-variant"}>
-                Verified Work
+          <div className={"hidden bg-surface-container-lowest rounded-xl p-space-md shadow-sm space-y-space-sm"} data-slot-row={"last-service"} style={{ display: "none" }}>
+            <h3 className={"font-label-lg text-label-lg text-on-surface font-bold flex items-center gap-1.5"}>
+              <span className={"material-symbols-outlined text-primary text-[20px]"}>
+                history_edu
               </span>
-            </div>
-            <div className={"bg-surface-container-low rounded-lg p-space-sm space-y-2"}>
-              <div className={"flex justify-between items-baseline"}>
-                <span className={"font-headline-sm text-headline-sm text-on-surface"}>
-                  
-                </span>
-                <span className={"font-label-md text-label-md text-on-surface-variant font-medium"}>
-                  14 March 2024
-                </span>
-              </div>
-              <div className={"flex items-center gap-2 text-on-surface font-body-md text-body-md"}>
-                <span className={"material-symbols-outlined text-primary text-[18px]"}>
-                  store
-                </span>
-                <span className={"font-semibold"}>
-                  
-                </span>
-                <span className={"text-on-surface-variant font-normal"}>
-                  • Kingston
-                </span>
-              </div>
-              <div className={"pt-1 flex items-center justify-between"}>
-                <div className={"flex items-center gap-1.5 bg-surface-container-lowest px-2 py-1 rounded"}>
-                  <span className={"material-symbols-outlined text-[16px] text-tertiary"}>
-                    check_circle
-                  </span>
-                  <span className={"font-label-sm text-label-sm text-on-surface"}>
-                    Akebono Ceramic OEM Spec
-                  </span>
-                </div>
-                <span className={"font-label-lg text-label-lg text-primary font-bold"}>
-                  
-                </span>
-              </div>
-            </div>
-          </div>
-          <div className={"space-y-space-xs"}>
-            <div className={"flex items-center justify-between px-1"}>
-              <h3 className={"font-headline-sm text-headline-sm text-on-surface"}>
-                Component History
-              </h3>
-              <span className={"font-label-sm text-label-sm text-on-surface-variant"}>
-                2 Recorded Logs
-              </span>
-            </div>
-            <div className={"bg-surface-container-lowest rounded-xl p-space-md shadow-sm divide-y divide-surface-container"}>
-              <div className={"pb-space-sm space-y-1.5"}>
-                <div className={"flex justify-between items-center"}>
-                  <span className={"font-label-lg text-label-lg font-bold text-on-surface"}>
-                    {" • Pad & Fluid Refresh"}
-                  </span>
-                  <span className={"font-label-sm text-label-sm text-on-surface-variant"}>
-                    Mar 2024
-                  </span>
-                </div>
-                <p className={"font-body-sm text-body-sm text-on-surface-variant"}>
-                  Rotors skimmed and fitted with Akebono pads. System bled with DOT 4 fluid.
-                </p>
-                <div className={"flex items-center justify-between pt-1"}>
-                  <span className={"font-label-sm text-label-sm text-on-surface-variant"}>
-                    
-                  </span>
-                  <span className={"font-label-md text-label-md font-semibold text-on-surface"}>
-                     total
-                  </span>
-                </div>
-              </div>
-              <div className={"pt-space-sm space-y-1.5"}>
-                <div className={"flex justify-between items-center"}>
-                  <span className={"font-label-lg text-label-lg font-bold text-on-surface"}>
-                    {" • Inspection & Cleaning"}
-                  </span>
-                  <span className={"font-label-sm text-label-sm text-on-surface-variant"}>
-                    Nov 2022
-                  </span>
-                </div>
-                <p className={"font-body-sm text-body-sm text-on-surface-variant"}>
-                  Cleaned caliper slide pins, 55% pad thickness remaining. Calipers lubed.
-                </p>
-                <div className={"flex items-center justify-between pt-1"}>
-                  <span className={"font-label-sm text-label-sm text-on-surface-variant"}>
-                    
-                  </span>
-                  <span className={"font-label-md text-label-md font-semibold text-on-surface"}>
-                    
-                  </span>
-                </div>
-              </div>
-            </div>
+              Last Service Record
+            </h3>
+            <p className={"font-label-md text-label-md text-on-surface-variant"} data-slot={"last-service-date"} />
+            <p className={"font-body-md text-body-md text-on-surface"} data-slot={"last-service-shop"} data-slot-row={"last-service-shop"} />
           </div>
           <div className={"space-y-space-xs"}>
             <h3 className={"font-headline-sm text-headline-sm text-on-surface px-1"}>

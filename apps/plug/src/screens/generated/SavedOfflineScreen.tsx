@@ -62,9 +62,7 @@ export function SavedOfflineScreen() {
                   <span className={"material-symbols-outlined text-[14px]"}>
                     schedule
                   </span>
-                  <span className={"font-body-sm text-body-sm"}>
-                    Today at 3:45 PM
-                  </span>
+                  <span className={"hidden font-body-sm text-body-sm"} data-slot={"fill-time"} data-slot-row={"fill-time"} style={{ display: "none" }} />
                 </div>
               </div>
               <div className={"flex items-start justify-between gap-2 pt-1"}>

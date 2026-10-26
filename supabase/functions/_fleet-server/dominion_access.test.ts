@@ -2,11 +2,19 @@ import { assertEquals } from "https://deno.land/std@0.208.0/assert/mod.ts";
 import {
   displayedPlatformRole,
   dominionAccessDecision,
+  dominionLoginDeniedBody,
   hasPlatformOwnerAppRole,
   mergePlatformStaffRole,
   removePlatformStaffRoles,
   userIsFleetManager,
 } from "./dominion_access.ts";
+
+Deno.test("dominion login refusal uses the same fields for every cause", () => {
+  const body = dominionLoginDeniedBody(4);
+  assertEquals(Object.keys(body).sort(), ["attemptsRemaining", "error"]);
+  assertEquals(body, { error: "Incorrect credentials", attemptsRemaining: 4 });
+  assertEquals("reason" in body, false);
+});
 
 Deno.test("dominion login allows a platform role on the trusted app record", () => {
   const owner = dominionAccessDecision({

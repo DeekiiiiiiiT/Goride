@@ -23,6 +23,10 @@ import { loadFuelDualApproval, saveFuelDualApproval } from "./fuel_org_preferenc
 
 const PREFIX = "fuel_scenario:";
 
+function readRbacUser(c: { get: (key: string) => unknown }): RbacUser | undefined {
+  return c.get("rbacUser") as RbacUser | undefined;
+}
+
 async function loadAll(): Promise<FuelScenarioRecord[]> {
   return ((await kv.getByPrefix(PREFIX)) || []) as FuelScenarioRecord[];
 }
@@ -106,7 +110,7 @@ export function registerFuelScenarioRoutes(app: Hono) {
       try {
         const orgId = getOrgId(c);
         if (!orgId) return c.json({ error: "ORG_REQUIRED" }, 400);
-        const user = c.get("rbacUser") as RbacUser | undefined;
+        const user = readRbacUser(c);
         const item = await c.req.json();
         const validationError = validateFuelScenarioPayload(item);
         if (validationError) return c.json({ error: validationError }, 400);
@@ -163,7 +167,7 @@ export function registerFuelScenarioRoutes(app: Hono) {
       try {
         const orgId = getOrgId(c);
         if (!orgId) return c.json({ error: "ORG_REQUIRED" }, 400);
-        const user = c.get("rbacUser") as RbacUser | undefined;
+        const user = readRbacUser(c);
         const mine = filterFuelScenariosForOrg(await loadAll(), orgId);
         const target = mine.find((s) => s?.id === id);
         if (!target) return c.json({ error: "Not found" }, 404);
@@ -224,7 +228,7 @@ export function registerFuelScenarioRoutes(app: Hono) {
     async (c) => {
       const orgId = getOrgId(c);
       if (!orgId) return c.json({ error: "ORG_REQUIRED" }, 400);
-      const user = c.get("rbacUser") as RbacUser | undefined;
+      const user = readRbacUser(c);
       const body = await c.req.json().catch(() => ({}));
       const saved = await saveFuelDualApproval(
         orgId,

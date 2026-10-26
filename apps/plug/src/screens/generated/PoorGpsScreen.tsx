@@ -219,7 +219,6 @@ export function PoorGpsScreen() {
             </span>
             <div className={"flex-1 min-w-0"}>
               <p className={"text-[11.5px] font-bold text-stone-800 truncate"}>
-                {" & Eastwood Park Rd"}
               </p>
               <p className={"text-[12px] text-stone-500 truncate"}>
                 {"Half-Way-Tree, Kingston 10 &bull; St. Andrew"}

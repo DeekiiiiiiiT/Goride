@@ -403,26 +403,6 @@ export function FiltersScreen() {
                 <div className={"flex flex-col space-y-2"}>
                   <div className={"flex items-center justify-between p-3.5 rounded-2xl bg-surface-container-low"}>
                     <div className={"flex items-center gap-3"}>
-                      <div className={"w-9 h-9 rounded-xl bg-[#16a34a]/15 text-[#16a34a] flex items-center justify-center"}>
-                        <span className={"material-symbols-outlined text-[20px]"}>
-                          schedule
-                        </span>
-                      </div>
-                      <div className={"flex flex-col"}>
-                        <span className={"font-label-lg text-label-lg text-on-surface font-semibold"}>
-                          Open Now Only
-                        </span>
-                        <span className={"font-body-sm text-body-sm text-on-surface-variant"}>
-                          Hide closed pumps and evening lockouts
-                        </span>
-                      </div>
-                    </div>
-                    <button onClick={onPlugClick} aria-label={"Toggle open now"} className={"w-13 h-7 w-12 rounded-full bg-[#16a34a] p-1 flex items-center justify-end transition-colors cursor-pointer"} data-act={"button"}>
-                      <div className={"w-5 h-5 rounded-full bg-on-primary shadow-md"} />
-                    </button>
-                  </div>
-                  <div className={"flex items-center justify-between p-3.5 rounded-2xl bg-surface-container-low"}>
-                    <div className={"flex items-center gap-3"}>
                       <div className={"w-9 h-9 rounded-xl bg-primary-fixed text-primary flex items-center justify-center"}>
                         <span className={"material-symbols-outlined text-[20px]"}>
                           verified_user

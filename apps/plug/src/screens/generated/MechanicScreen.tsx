@@ -39,16 +39,7 @@ export function MechanicScreen() {
           <div className={"relative w-full h-56 bg-surface-container-high overflow-hidden shadow-sm"}>
             <div className={"w-full h-full bg-surface-container flex items-center justify-center text-primary"} aria-hidden={"true"}><span className={"material-symbols-outlined text-[32px]"}>image</span></div>
             <div className={"absolute inset-0 bg-gradient-to-t from-on-background/80 via-on-background/30 to-transparent"} />
-            <div className={"absolute bottom-3 left-4 right-4 flex items-center justify-between gap-2"}>
-              <div className={"flex items-center gap-1.5 bg-surface-container-lowest/95 backdrop-blur-md px-2.5 py-1 rounded-full shadow-sm"}>
-                <span className={"w-2.5 h-2.5 rounded-full bg-emerald-600 animate-pulse"} />
-                <span className={"font-label-md text-label-md text-on-surface font-bold tracking-tight"}>
-                  Open Now
-                </span>
-                <span className={"text-on-surface-variant text-label-sm"}>
-                  • Until 6:00 PM
-                </span>
-              </div>
+            <div className={"absolute bottom-3 left-4 right-4 flex items-center justify-end gap-2"}>
               <div className={"flex items-center gap-1 bg-primary px-2.5 py-1 rounded-full text-on-primary shadow-sm"}>
                 <span className={"material-symbols-outlined text-[16px]"} style={{ fontVariationSettings: "'FILL' 1" }}>
                   verified
@@ -84,47 +75,24 @@ export function MechanicScreen() {
                   </p>
                 </div>
               </div>
-              <div className={"grid grid-cols-2 gap-2 pt-2 bg-surface-container-low p-2.5 rounded-lg text-on-surface"}>
-                <div className={"flex flex-col min-w-0"}>
-                  <span className={"font-label-sm text-label-sm text-on-surface-variant uppercase"}>
-                    Plus Code
-                  </span>
-                  <span className={"font-label-md text-label-md font-bold text-on-surface truncate"}>
-                    7GPH+3C Kingston
-                  </span>
-                </div>
-                <div className={"flex flex-col min-w-0"}>
-                  <span className={"font-label-sm text-label-sm text-on-surface-variant uppercase"}>
-                    Operating Parish
-                  </span>
-                  <span className={"font-label-md text-label-md font-bold text-on-surface"}>
-                    St. Andrew
-                  </span>
-                </div>
-              </div>
-              <div className={"flex items-start gap-2.5 text-on-surface-variant bg-surface rounded-lg p-2.5"}>
+              <div className={"hidden flex items-start gap-2.5 text-on-surface-variant bg-surface rounded-lg p-2.5"} data-slot-row={"place-hours"} style={{ display: "none" }}>
                 <span className={"material-symbols-outlined text-[20px] text-primary shrink-0 mt-0.5"}>
                   schedule
                 </span>
                 <div className={"flex flex-col text-body-sm font-body-sm leading-snug"}>
                   <span className={"font-label-md text-label-md text-on-surface font-semibold"}>
-                    Working Hours
+                    Hours
                   </span>
-                  <span>
-                    Mon - Fri: 8:00 AM - 6:00 PM
-                  </span>
-                  <span>
-                    Sat: 8:00 AM - 3:00 PM • Sun: Closed
-                  </span>
+                  <span data-slot={"place-hours"} />
                 </div>
               </div>
               <div className={"grid grid-cols-2 gap-3 pt-1"}>
-                <a onClick={onPlugClick} className={"min-h-[48px] rounded-xl bg-primary text-on-primary flex items-center justify-center gap-2 font-label-lg text-label-lg font-bold shadow-md active:bg-primary-container transition-colors"} href={"tel:+18769310855"} data-act={"call-mechanic"} data-way-out={"primary"}>
+                <a onClick={onPlugClick} className={"hidden min-h-[48px] rounded-xl bg-primary text-on-primary flex items-center justify-center gap-2 font-label-lg text-label-lg font-bold shadow-md active:bg-primary-container transition-colors"} href={"#"} data-slot={"place-phone-link"} data-slot-row={"place-phone"} data-act={"call-mechanic"} data-way-out={"primary"} style={{ display: "none" }}>
                   <span className={"material-symbols-outlined text-[20px]"} style={{ fontVariationSettings: "'FILL' 1" }}>
                     call
                   </span>
-                  <span>
-                    Call Mechanic
+                  <span data-slot={"place-phone"}>
+                    Call
                   </span>
                 </a>
                 <button onClick={onPlugClick} className={"min-h-[48px] rounded-xl bg-secondary-container text-on-secondary-container flex items-center justify-center gap-2 font-label-lg text-label-lg font-bold shadow-sm active:opacity-90 transition-opacity"} id={"directionsBtn"} data-act={"directionsBtn"}>
@@ -428,9 +396,7 @@ export function MechanicScreen() {
               <div className={"w-full h-40 bg-surface-container rounded-xl shadow-sm bg-cover bg-center overflow-hidden relative"} data-location={""} style={{  }}>
                 <div className={"absolute bottom-2 left-2 right-2 bg-surface-container-lowest/90 backdrop-blur-md rounded-lg p-2.5 flex items-center justify-between"}>
                   <div className={"flex flex-col min-w-0"}>
-                    <span className={"font-label-md text-label-md font-bold text-on-surface truncate"}>
-                      {"Dunrobin Ave & "}
-                    </span>
+                    <span className={"font-label-md text-label-md font-bold text-on-surface truncate"} data-slot={"place-address"} />
                     <span className={"font-body-sm text-body-sm text-on-surface-variant truncate"}>
                       
                     </span>

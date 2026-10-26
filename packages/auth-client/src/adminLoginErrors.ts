@@ -1,9 +1,9 @@
 /** Generic message for wrong password or non-admin role — never disclose which. */
 export const ADMIN_INCORRECT_CREDENTIALS = 'Incorrect credentials';
 
-/** Shown only after two access refusals in this browser. The password already worked. */
+/** Shown after two failed sign-ins in this browser. Must not say whether the password worked. */
 export const DOMINION_ACCESS_DENIED_MESSAGE =
-  "This account doesn't have access to Roam Dominion. If you recently changed the owner account, sign in with the new owner email.";
+  "Recently changed the owner account? Sign in with the new owner email.";
 
 const FLASH_KEY = 'roam_admin_login_error';
 const ACCESS_DENIED_COUNT_KEY = 'roam_dominion_access_denied_count';
@@ -20,7 +20,7 @@ export function adminPasswordFailureMessage(attemptsRemaining: number | undefine
   return ADMIN_INCORRECT_CREDENTIALS;
 }
 
-/** Count consecutive "password worked, no Dominion access" results in this browser. */
+/** Count failed Dominion sign-ins in this browser, whatever the cause. */
 export function recordDominionAccessDenied(): number {
   try {
     const next = Number(sessionStorage.getItem(ACCESS_DENIED_COUNT_KEY) || '0') + 1;

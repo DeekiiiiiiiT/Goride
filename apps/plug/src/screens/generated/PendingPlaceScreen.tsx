@@ -87,10 +87,10 @@ export function PendingPlaceScreen() {
                   <span className={"material-symbols-outlined text-[14px]"}>
                     event_available
                   </span>
-                  Oct 24, 2024 • 3:15 PM
+                  <span className={"hidden"} data-slot={"pin-when"} data-slot-row={"pin-when"} style={{ display: "none" }} />
                 </span>
                 <span className={"font-mono bg-surface-container px-2 py-0.5 rounded text-on-surface"}>
-                  18.0241° N, 76.7932° W
+                  <span className={"hidden"} data-slot={"pin-where"} data-slot-row={"pin-where"} style={{ display: "none" }} />
                 </span>
               </div>
             </div>
@@ -110,12 +110,6 @@ export function PendingPlaceScreen() {
                   <path d={"M-20 80 Q 180 80, 420 80"} stroke={"#fd761a"} strokeDasharray={"8 6"} strokeWidth={"3"} />
                   <path d={"M105 -10 L 105 230"} stroke={"#ffffff"} strokeWidth={"16"} />
                   <path d={"M250 -10 L 250 230"} stroke={"#ffffff"} strokeWidth={"14"} />
-                  <text fill={"#8e7166"} fontFamily={"sans-serif"} fontSize={"10"} fontWeight={"700"} letterSpacing={"1"} x={"130"} y={"74"}>
-                    DUNROBIN AVENUE
-                  </text>
-                  <text fill={"#8e7166"} fontFamily={"sans-serif"} fontSize={"9"} fontWeight={"600"} x={"265"} y={"130"}>
-                    DUNROBIN PLAZA
-                  </text>
                 </svg>
                 <div className={"absolute inset-0 flex items-center justify-center pointer-events-none"}>
                   <div className={"relative flex items-center justify-center"}>
@@ -138,7 +132,6 @@ export function PendingPlaceScreen() {
                 <div className={"absolute top-3 left-3 bg-surface-container-lowest/95 backdrop-blur-sm rounded-full px-3 py-1 flex items-center gap-1.5 shadow-sm"}>
                   <span className={"w-2 h-2 rounded-full bg-green-600 animate-pulse"} />
                   <span className={"font-label-sm text-label-sm text-on-surface font-bold tracking-wide"}>
-                    High Accuracy (±15m)
                   </span>
                 </div>
                 <div className={"absolute bottom-3 right-3 bg-inverse-surface/85 backdrop-blur-sm text-inverse-on-surface rounded-full px-2.5 py-1 text-[12px] font-semibold flex items-center gap-1"}>
@@ -154,7 +147,6 @@ export function PendingPlaceScreen() {
                     explore
                   </span>
                   <span className={"font-body-sm text-body-sm text-on-surface-variant"}>
-                    Kingston 10 • St. Andrew Parish Corridor
                   </span>
                 </div>
                 <button onClick={onPlugClick} className={"font-label-md text-label-md text-primary font-bold active:opacity-70 flex items-center gap-0.5"} type={"button"} data-act={"view-map"}>
@@ -176,7 +168,6 @@ export function PendingPlaceScreen() {
                   Attached Verification Photo
                 </h3>
                 <span className={"font-label-sm text-label-sm text-on-surface-variant bg-surface-container px-2 py-0.5 rounded"}>
-                  1 Photo
                 </span>
               </div>
               <div className={"relative rounded-lg overflow-hidden h-44 bg-surface-container"}>
@@ -185,7 +176,6 @@ export function PendingPlaceScreen() {
                   <span className={"material-symbols-outlined text-[14px] text-secondary-fixed"}>
                     verified
                   </span>
-                  Original capture • Dunrobin Ave
                 </div>
               </div>
             </div>
@@ -197,9 +187,7 @@ export function PendingPlaceScreen() {
                 {"Driver & Operator Notes"}
               </h3>
               <div className={"bg-surface-container-low rounded-lg p-space-sm mt-1"}>
-                <p className={"font-body-md text-body-md text-on-surface italic leading-relaxed"}>
-                  “24/7 vulcanizer with digital air gauge.  tip appreciated for air, quick tire plugging for taxis.”
-                </p>
+                <p className={"font-body-md text-body-md text-on-surface leading-relaxed"} />
               </div>
               <div className={"flex items-center gap-3 pt-1 text-on-surface-variant font-label-sm text-label-sm"}>
                 <span className={"flex items-center gap-1"}>

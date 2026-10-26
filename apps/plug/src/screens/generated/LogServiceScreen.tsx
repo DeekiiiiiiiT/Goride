@@ -407,22 +407,6 @@ export function LogServiceScreen() {
                     
                   </span>
                 </button>
-                <button onClick={onPlugClick} className={"p-3 text-left rounded-xl bg-surface-container-low hover:bg-surface-container flex flex-col"} type={"button"} data-act={"motor-sales-service-ltd-half-way-tree-road-kings"}>
-                  <span className={"font-label-lg text-label-lg text-on-surface font-semibold"}>
-                    {"Motor Sales & Service Ltd"}
-                  </span>
-                  <span className={"font-body-sm text-body-sm text-on-surface-variant"}>
-                    Half-Way-Tree Road, Kingston 5
-                  </span>
-                </button>
-                <button onClick={onPlugClick} className={"p-3 text-left rounded-xl bg-surface-container-low hover:bg-surface-container flex flex-col"} type={"button"} data-act={"bogue-lube-tyre-centre-alice-eldemire-dr-montego"}>
-                  <span className={"font-label-lg text-label-lg text-on-surface font-semibold"}>
-                    {"Bogue Lube & Tyre Centre"}
-                  </span>
-                  <span className={"font-body-sm text-body-sm text-on-surface-variant"}>
-                    Alice Eldemire Dr, Montego Bay
-                  </span>
-                </button>
               </div>
             </div>
           </div>

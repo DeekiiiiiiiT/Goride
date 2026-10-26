@@ -36,6 +36,7 @@ export type SavedFill = {
   amount?: number;
   litres?: number;
   odometer?: number;
+  savedAt?: string;
 };
 
 export function rememberFill(fill: SavedFill) {
@@ -100,6 +101,32 @@ function gradeLabel(grade?: string | null): string {
 
 function money(value: number): string {
   return `J$${Number(value).toFixed(2)}`;
+}
+
+function whenLabel(value: string, withTime: boolean): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  if (!withTime) return date.toLocaleDateString('en-JM', { day: 'numeric', month: 'short', year: 'numeric' });
+  return date.toLocaleString('en-JM', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' });
+}
+
+function daysUntil(value: string): number | null {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  const start = new Date();
+  start.setHours(0, 0, 0, 0);
+  const due = new Date(date);
+  due.setHours(0, 0, 0, 0);
+  return Math.round((due.getTime() - start.getTime()) / 86_400_000);
+}
+
+function reminderTitle(kind: string): string {
+  const key = kind.toLowerCase();
+  if (key.includes('fitness')) return 'Certificate of Fitness';
+  if (key.includes('insur')) return 'Motor Vehicle Insurance';
+  if (key.includes('licen')) return "Driver's Licence";
+  if (key.includes('tax') || key.includes('regist')) return 'Road Tax & Registration';
+  return kind;
 }
 
 function readingLabel(value: number | null): string {
@@ -445,6 +472,11 @@ function paintReceipt(root: HTMLElement) {
   if (total && saved && document.activeElement !== total && !total.value) total.value = saved.amount ? String(saved.amount) : '';
   const volume = root.querySelector<HTMLInputElement>('#volume-litres, #litres-input');
   if (volume && saved && document.activeElement !== volume && !volume.value) volume.value = saved.litres ? String(saved.litres) : '';
+  const savedAt = saved?.savedAt ? whenLabel(saved.savedAt, true) : '';
+  setSlot(root, 'fill-time', savedAt || null);
+  root.querySelectorAll<HTMLElement>('[data-slot="fill-time"]').forEach((node) => {
+    if (savedAt) node.dataset.liveRow = 'fill';
+  });
 }
 
 async function fillPlace(root: HTMLElement) {
@@ -452,11 +484,15 @@ async function fillPlace(root: HTMLElement) {
   const reserved = new Set(['mechanic', 'facility', 'store']);
   let name = '';
   let address = '';
+  let hours = '';
+  let phone = '';
   if (raw && !reserved.has(raw)) {
     try {
-      const body = await publicGet<{ place?: { name?: string; brand?: string | null; details?: { address?: string } | null } }>(`/places/${encodeURIComponent(raw)}`);
+      const body = await publicGet<{ place?: { name?: string; brand?: string | null; details?: { address?: string; hours?: string | null; phone?: string | null } | null } }>(`/places/${encodeURIComponent(raw)}`);
       name = body.place?.name || '';
       address = body.place?.details?.address || body.place?.brand || '';
+      hours = body.place?.details?.hours?.trim() || '';
+      phone = body.place?.details?.phone?.trim() || '';
     } catch {
       name = '';
     }
@@ -468,6 +504,11 @@ async function fillPlace(root: HTMLElement) {
   });
   slotText(root, 'place-name', title);
   slotText(root, 'place-address', address);
+  setSlot(root, 'place-hours', hours || null);
+  setSlot(root, 'place-phone', phone || null);
+  root.querySelectorAll<HTMLAnchorElement>('[data-slot="place-phone-link"]').forEach((link) => {
+    if (phone) link.href = `tel:${phone}`;
+  });
   if (name) {
     const row = root.querySelector<HTMLElement>('[data-slot="place-name"]');
     if (row) {
@@ -628,23 +669,80 @@ async function fillSpend(root: HTMLElement) {
   });
 }
 
-async function fillDocs(root: HTMLElement) {
+type Reminder = { kind?: string; due_on?: string | null };
+
+async function loadReminders(): Promise<Reminder[]> {
   const id = vehicleId();
-  const body = await plugSend<{ reminders: { kind?: string; due_on?: string | null }[] }>(
+  const body = await plugSend<{ reminders: Reminder[] }>(
     `/reminders${id ? `?vehicleId=${encodeURIComponent(id)}` : ''}`,
     'GET',
   );
-  const reminders = body.reminders || [];
+  return body.reminders || [];
+}
+
+function paintReminders(root: HTMLElement, reminders: Reminder[]) {
+  const slot = root.querySelector<HTMLElement>('[data-slot="reminders"]');
+  if (!slot) return;
+  const rows = reminders.filter((row) => row.due_on);
+  slot.textContent = '';
+  if (!rows.length) {
+    slot.style.display = 'none';
+    return;
+  }
+  slot.style.display = '';
+  slot.classList.remove('hidden');
+  rows.forEach((row) => {
+    const due = whenLabel(String(row.due_on), false);
+    if (!due) return;
+    const card = document.createElement('div');
+    card.className = 'rounded-xl bg-surface-container-low p-3';
+    card.dataset.liveRow = 'reminder';
+    const title = document.createElement('p');
+    title.className = 'font-bold';
+    title.textContent = reminderTitle(String(row.kind || 'Reminder'));
+    const line = document.createElement('p');
+    line.textContent = due;
+    card.append(title, line);
+    const days = daysUntil(String(row.due_on));
+    if (days != null && days >= 0 && days <= 30) {
+      const badge = document.createElement('p');
+      badge.textContent = 'Due soon';
+      card.append(badge);
+    }
+    slot.append(card);
+  });
+  if (!slot.childElementCount) slot.style.display = 'none';
+}
+
+async function fillDocs(root: HTMLElement) {
+  const reminders = await loadReminders();
+  paintReminders(root, reminders);
   root.querySelectorAll('h2').forEach((heading) => {
     const kind = (heading.textContent || '').trim();
     const match = reminders.find((row) => kind.toLowerCase().includes(String(row.kind || '').toLowerCase()) || String(row.kind || '').toLowerCase().includes(kind.toLowerCase().slice(0, 6)));
-    const card = heading.closest('div');
+    const card = heading.closest('[data-doc]') as HTMLElement | null;
     if (!card) return;
-    card.setAttribute('data-kind', match?.kind || kind);
-    const dates = [...card.querySelectorAll('span')].filter((node) => (node.textContent || '').trim() === 'Not set');
-    if (match?.due_on && dates[0]) dates[0].textContent = match.due_on;
-    else if (!match && dates[0]) dates[0].textContent = 'Not set';
+    const due = match?.due_on ? whenLabel(match.due_on, false) : '';
+    setSlot(card, 'doc-due', due || null);
+    const days = match?.due_on ? daysUntil(match.due_on) : null;
+    setSlot(card, 'doc-status', days != null && days >= 0 && days <= 30 ? 'Due soon' : null);
+    const dueNode = card.querySelector<HTMLElement>('[data-slot="doc-due"]');
+    if (dueNode && due) dueNode.dataset.liveRow = 'reminder';
   });
+}
+
+async function fillServiceRecord(root: HTMLElement) {
+  const id = vehicleId();
+  const body = await plugSend<{ services?: { name?: string; shop?: string; done_on?: string }[] }>(
+    `/services${id ? `?vehicleId=${encodeURIComponent(id)}` : ''}`,
+    'GET',
+  ).catch(() => ({ services: [] as { name?: string; shop?: string; done_on?: string }[] }));
+  const latest = (body.services || []).find((row) => row.done_on);
+  const due = latest?.done_on ? whenLabel(latest.done_on, false) : '';
+  setSlot(root, 'last-service-date', due || null);
+  setSlot(root, 'last-service-shop', latest?.shop?.trim() || null);
+  const row = root.querySelector<HTMLElement>('[data-slot="last-service-date"]');
+  if (row && due) row.dataset.liveRow = 'service';
 }
 
 async function fillSchedule(root: HTMLElement) {
@@ -722,11 +820,20 @@ async function fillInbox(root: HTMLElement) {
 }
 
 async function fillPins(root: HTMLElement) {
-  const body = await plugSend<{ pins: { id: string; name: string; status: string }[] }>('/contributions', 'GET');
+  const body = await plugSend<{ pins: { id: string; name: string; status: string; lat?: number | null; lng?: number | null; created_at?: string | null }[] }>('/contributions', 'GET');
   const pins = body.pins || [];
   const slot = root.querySelector<HTMLElement>('[data-slot="pins"]');
   const pending = pins.find((pin) => pin.status === 'pending');
   if (pending) sessionStorage.setItem('plug-pin', pending.id);
+  const when = pending?.created_at ? whenLabel(pending.created_at, true) : '';
+  setSlot(root, 'pin-when', when || null);
+  const where = pending && Number.isFinite(Number(pending.lat)) && Number.isFinite(Number(pending.lng))
+    ? `${Number(pending.lat).toFixed(4)}, ${Number(pending.lng).toFixed(4)}`
+    : '';
+  setSlot(root, 'pin-where', where || null);
+  root.querySelectorAll<HTMLElement>('[data-slot="pin-when"]').forEach((node) => {
+    if (when) node.dataset.liveRow = 'pin';
+  });
   if (!slot) return;
   root.querySelectorAll('h1, h2').forEach((node) => {
     if (!(node.textContent || '').replace(/\s+/g, ' ').trim()) node.textContent = pending?.name || 'No place waiting';
@@ -792,14 +899,21 @@ export async function fillScreen(file: string, root: HTMLElement) {
     else if (file === '18-filters.html') await fillStationList(root, false);
     if (file === '15-home-explore.html' || file === '15d-offline-chip.html' || file === '16-guest-mode.html' || file === '17-station-list.html') await fillWhere(root);
     if (file === '15d-offline-chip.html' || file === '57-offline.html') queueNote(root);
-    if (file === '30-vehicle-overview.html') await fillLatestFill(root);
+    if (file === '30-vehicle-overview.html') {
+      await fillLatestFill(root);
+      paintReminders(root, await loadReminders().catch(() => [] as Reminder[]));
+    }
     if (file === '26-fuel-details.html' || file === '27-saved.html' || file === '27b-first-save.html' || file === '28-saved-offline.html' || file === '26b-save-error.html') paintReceipt(root);
     if (file === '21-mechanic.html' || file === '22-facility.html' || file === '20-parts-store.html' || file === '43-place-pin.html' || file === '43c-poor-gps.html' || file === '23b-withdraw.html') await fillPlace(root);
     else if (file === '51-account.html' || file === '52-notification-settings.html') await fillAccount(root);
     else if (file === '34-history.html') await fillHistory(root);
     else if (file === '35-fuel-spend.html') await fillSpend(root);
     else if (file === '36-documents.html') await fillDocs(root);
-    else if (file === '31-maintenance-schedule.html' || file === '32-service-item.html') await fillSchedule(root);
+    else if (file === '31-maintenance-schedule.html') await fillSchedule(root);
+    else if (file === '32-service-item.html') {
+      await fillSchedule(root);
+      await fillServiceRecord(root);
+    }
     else if (file === '39-parts-results.html' || file === '40-part-detail.html') await fillParts(root);
     else if (file === '50-notifications.html') await fillInbox(root);
     else if (file === '46-contributions.html' || file === '23-pending-place.html' || file === '46b-approved.html') await fillPins(root);

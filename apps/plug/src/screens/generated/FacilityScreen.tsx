@@ -86,26 +86,9 @@ export function FacilityScreen() {
                   <span className={"material-symbols-outlined text-[18px] shrink-0 text-primary"}>
                     pin_drop
                   </span>
-                  <p className={"font-body-md text-body-md font-medium text-on-surface"}>
-                    Clock Tower Roundabout, Half-Way-Tree
-                  </p>
+                  <p className={"font-body-md text-body-md font-medium text-on-surface"} data-slot={"place-address"} />
                 </div>
-                <div className={"flex items-center gap-space-sm mt-1"}>
-                  <button onClick={onPlugClick} className={"flex items-center gap-1.5 bg-surface-container hover:bg-surface-container-high active:scale-95 transition-all px-3 py-1.5 rounded-lg w-fit"} id={"copyPlusCodeBtn"} data-act={"copyPlusCodeBtn"}>
-                    <span className={"material-symbols-outlined text-[16px] text-primary"}>
-                      tag
-                    </span>
-                    <span className={"font-label-md text-label-md font-semibold text-on-surface"} id={"plusCodeText"}>
-                      7GQM+2X Kingston
-                    </span>
-                    <span className={"material-symbols-outlined text-[14px] text-outline ml-1"} id={"copyIcon"}>
-                      content_copy
-                    </span>
-                  </button>
-                  <span className={"font-body-sm text-body-sm text-on-surface-variant"}>
-                    Standalone Motorist Facility
-                  </span>
-                </div>
+                <p className={"hidden font-body-sm text-body-sm text-on-surface mt-1"} data-slot={"place-hours"} data-slot-row={"place-hours"} style={{ display: "none" }} />
               </div>
             </div>
             <a onClick={onPlugClick} className={"h-14 w-full bg-primary active:bg-on-primary-fixed-variant text-on-primary rounded-xl font-headline-sm text-headline-sm font-bold flex items-center justify-center gap-space-sm shadow-md active:scale-[0.99] transition-all"} href={"https://maps.google.com/?q=TotalEnergies+Half+Way+Tree+Clock+Tower"} rel={"noopener noreferrer"} target={"_blank"} data-act={"get-directions-now"} data-way-out={"primary"}>
@@ -146,27 +129,6 @@ export function FacilityScreen() {
               </div>
             </div>
             <div className={"grid grid-cols-2 gap-space-md"}>
-              <div className={"bg-surface-container-lowest rounded-xl p-space-md shadow-sm flex flex-col justify-between"}>
-                <div className={"flex items-center justify-between"}>
-                  <span className={"material-symbols-outlined text-primary text-[22px]"}>
-                    schedule
-                  </span>
-                  <span className={"bg-surface-container-high text-primary font-label-sm text-label-sm px-2 py-0.5 rounded-full font-bold"}>
-                    Open Now
-                  </span>
-                </div>
-                <div className={"mt-4"}>
-                  <span className={"font-label-sm text-label-sm text-on-surface-variant uppercase"}>
-                    Hours
-                  </span>
-                  <p className={"font-body-md text-body-md font-bold text-on-surface mt-0.5"}>
-                    Open Daily
-                  </p>
-                  <p className={"font-body-sm text-body-sm text-on-surface-variant"}>
-                    6:00 AM – 10:00 PM
-                  </p>
-                </div>
-              </div>
               <div className={"bg-surface-container-lowest rounded-xl p-space-md shadow-sm flex flex-col justify-between"}>
                 <div className={"flex items-center justify-between"}>
                   <span className={"material-symbols-outlined text-primary text-[22px]"} style={{ fontVariationSettings: "'FILL' 1" }}>

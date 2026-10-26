@@ -320,6 +320,7 @@ import {
 import {
   displayedPlatformRole,
   dominionAccessDecision,
+  dominionLoginDeniedBody,
   hasPlatformOwnerAppRole,
   listAllAuthUsers,
   mergePlatformStaffRole,
@@ -10885,7 +10886,8 @@ export function registerResidualMonolithRoutes(app: Hono) {
   }
 
   // POST /admin-login — password check, then the trusted app-record platform role.
-  // A wrong role is not a failed password and must not lock the account.
+  // A missing platform role uses the same Dominion reply and attempt counter as a
+  // wrong password. Driver and rider apps keep their own counters.
   app.post("/make-server-37f42386/admin-login", async (c) => {
     try {
       const { email, password } = await c.req.json();
@@ -10924,10 +10926,7 @@ export function registerResidualMonolithRoutes(app: Hono) {
           email,
           ip: clientIp,
         });
-        return c.json({
-          error: "Incorrect credentials",
-          attemptsRemaining: remaining.remaining,
-        }, 401);
+        return c.json(dominionLoginDeniedBody(remaining.remaining), 401);
       }
 
       if (!data?.session || !data.user) {
@@ -10938,13 +10937,16 @@ export function registerResidualMonolithRoutes(app: Hono) {
       if (!access.ok) {
         console.log(`[AdminLogin] reason=no_platform_role email=${email}`);
         await anonClient.auth.signOut();
+        await recordFailedAttempt(clientIp, 'admin');
+        await recordFailedAttempt(email.toLowerCase(), 'admin');
+        const remaining = await checkRateLimit(email.toLowerCase(), 'admin');
         await recordDominionLogin({
           outcome: "no_platform_role",
           email,
           userId: data.user.id,
           ip: clientIp,
         });
-        return c.json({ error: "Incorrect credentials", reason: "no_platform_role" }, 401);
+        return c.json(dominionLoginDeniedBody(remaining.remaining), 401);
       }
 
       // Success — clear rate limit counters

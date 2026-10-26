@@ -467,7 +467,7 @@ app.post("/fuel-logs", async (c) => {
       mock_location: Boolean(body.mockLocation),
       station_id: stationId,
       client_id: clientId,
-    }).select("id").single();
+    }).select("id, created_at").single();
     if (logError) throw logError;
 
     await sb.schema("explorer").from("odometer_reading").insert({
@@ -520,6 +520,7 @@ app.post("/fuel-logs", async (c) => {
     await syncServiceReminder(sb, user.id, body.vehicleId, care);
     return c.json({
       id: log.id,
+      createdAt: log.created_at,
       stationId,
       decision,
       price: priceCall,
@@ -793,6 +794,7 @@ app.get("/contributions", async (c) => {
     const sb = admin();
     const { data: trust } = await sb.schema("explorer").from("trust").select("*").eq("user_id", user.id).maybeSingle();
     const { data: receipts } = await sb.schema("explorer").from("pin_receipt").select("place_id, created_at").eq("user_id", user.id).order("created_at", { ascending: false });
+    const submitted = new Map((receipts || []).map((row) => [row.place_id, row.created_at]));
     const ids = (receipts || []).map((row) => row.place_id).filter(Boolean);
     const { data: places } = ids.length
       ? await sb.schema("places").from("place").select("id, name, status, pcode, lat, lng").in("id", ids)
@@ -804,6 +806,7 @@ app.get("/contributions", async (c) => {
       pcode: place.pcode,
       lat: place.lat,
       lng: place.lng,
+      created_at: submitted.get(place.id) || null,
     }));
     return c.json({ level: contributorLevel(Number(trust?.approved_count || 0)), trust: trust || { score: 0, approved_count: 0, rejected_count: 0 }, pins });
   } catch (err) {

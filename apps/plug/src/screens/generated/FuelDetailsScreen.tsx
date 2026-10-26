@@ -292,17 +292,12 @@ export function FuelDetailsScreen() {
                     calendar_today
                   </span>
                   <span className={"font-label-lg text-label-lg font-bold"}>
-                    Fill Timestamp
+                    Fill time
                   </span>
                 </div>
-                <button onClick={onPlugClick} className={"flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-surface-container text-on-surface hover:bg-surface-container-high min-h-[44px] transition-colors"} type={"button"} data-act={"today-3-45-pm"}>
-                  <span className={"font-label-md text-label-md font-bold text-primary"}>
-                    Today, 3:45 PM
-                  </span>
-                  <span className={"material-symbols-outlined text-[16px] text-on-surface-variant"}>
-                    edit
-                  </span>
-                </button>
+                <span className={"font-body-sm text-body-sm text-on-surface-variant"}>
+                  Recorded when you save
+                </span>
               </div>
               <div className={"pt-space-xs"}>
                 <label className={"font-label-md text-label-md text-on-surface-variant mb-1.5 block"}>

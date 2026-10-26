@@ -98,6 +98,7 @@ export function SavedScreen() {
                   
                 </div>
               </div>
+              <p className={"hidden font-body-sm text-body-sm text-on-surface-variant mt-1"} data-slot={"fill-time"} data-slot-row={"fill-time"} style={{ display: "none" }} />
             </div>
             <div className={"bg-surface-container-lowest rounded-xl p-space-md shadow-sm relative overflow-hidden"}>
               <div className={"absolute left-0 top-0 bottom-0 w-1.5 bg-secondary-container"} />

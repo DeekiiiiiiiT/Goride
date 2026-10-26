@@ -145,21 +145,27 @@ export async function saveFuel(el: HTMLElement) {
     accuracyM: fix.accuracyM,
     confirmed: true,
   };
-  sessionStorage.setItem('plug-last-fill', JSON.stringify({
-    stationName: sessionStorage.getItem('plug-station-name') || '',
-    grade,
-    amount,
-    litres,
-    odometer,
-  }));
+  const queuedAt = new Date().toISOString();
+  const remember = (savedAt: string) => {
+    sessionStorage.setItem('plug-last-fill', JSON.stringify({
+      stationName: sessionStorage.getItem('plug-station-name') || '',
+      grade,
+      amount,
+      litres,
+      odometer,
+      savedAt,
+    }));
+  };
   if (!navigator.onLine) {
+    remember(queuedAt);
     enqueue('/fuel-logs', payload);
     rt.toast('Saved on this phone. It will send when you are back online.');
     rt.go('/fuel/offline');
     return;
   }
   try {
-    const saved = await plugSend<{ first?: boolean }>('/fuel-logs', 'POST', payload);
+    const saved = await plugSend<{ first?: boolean; createdAt?: string }>('/fuel-logs', 'POST', payload);
+    remember(saved.createdAt || queuedAt);
     if (saved.first) sessionStorage.setItem('plug-first-fill', '1');
     else sessionStorage.removeItem('plug-first-fill');
     rt.go('/fuel/saved');
