@@ -14,7 +14,9 @@ async function authHeaders(): Promise<Record<string, string>> {
 
 export async function publicGet<T>(path: string): Promise<T> {
   const versioned = path.startsWith('/v1/') ? path : `/v1${path}`;
-  const response = await fetch(`${catalog}${versioned}`, { headers: supabaseAnonFunctionHeaders() });
+  const response = await fetch(`${catalog}${versioned}`, {
+    headers: { ...supabaseAnonFunctionHeaders(), 'x-roam-app': 'plug' },
+  });
   const body = await response.json();
   if (!response.ok) throw new Error(body.error || 'Could not load that');
   return body as T;

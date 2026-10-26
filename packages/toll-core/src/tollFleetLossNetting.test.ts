@@ -79,6 +79,37 @@ describe('sumTollChargedToDriversFromEvents — H-9 canonical wallet path', () =
     expect(sumTollChargedToDriversFromEvents(events)).toBeCloseTo(-200, 2);
   });
 
+  it('counts one active charge when the same version was written twice and later reversed', () => {
+    const toll = '090bd599-309f-4949-aab5-f83dc214aedf';
+    const events = [
+      {
+        eventType: 'toll_charged_to_driver',
+        sourceId: toll,
+        netAmount: -275,
+        metadata: { version: 1 },
+      },
+      {
+        eventType: 'toll_charged_to_driver',
+        sourceId: toll,
+        netAmount: -275,
+        metadata: { version: 1 },
+      },
+      {
+        eventType: 'toll_charge_reversed',
+        sourceId: toll,
+        netAmount: 275,
+        metadata: { version: 1 },
+      },
+      {
+        eventType: 'toll_charged_to_driver',
+        sourceId: toll,
+        netAmount: -275,
+        metadata: { version: 4 },
+      },
+    ];
+    expect(sumTollChargedToDriversFromEvents(events)).toBeCloseTo(275, 2);
+  });
+
   it('reports no canonical events when only fleet-loss events exist', () => {
     expect(hasCanonicalChargedToDriverEvents([{ eventType: 'toll_charge' }])).toBe(false);
     expect(sumTollChargedToDriversFromEvents([{ eventType: 'toll_charge' }])).toBe(0);

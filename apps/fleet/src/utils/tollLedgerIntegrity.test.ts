@@ -168,6 +168,33 @@ describe('tollLedgerIntegrity', () => {
     expect(matchesSyntheticCashTollSignature(apiRow)).toBe(true);
   });
 
+  it('keeps a charged personal toll in spend when rejected or pending', () => {
+    expect(isTollIncludedInSpend({
+      status: 'rejected',
+      resolution: 'personal',
+      amount: -275,
+      paymentMethod: 'fleet_account',
+    })).toBe(true);
+    expect(isTollIncludedInSpend({
+      status: 'Rejected',
+      metadata: { resolution: 'personal' },
+      amount: -275,
+    })).toBe(true);
+    expect(isTollIncludedInSpend({
+      status: 'pending',
+      resolution: 'personal',
+      amount: -275,
+    })).toBe(true);
+  });
+
+  it('does not invent spend for an uncharged rejected toll', () => {
+    expect(isTollIncludedInSpend({
+      status: 'rejected',
+      amount: -275,
+      paymentMethod: 'fleet_account',
+    })).toBe(false);
+  });
+
   it('does not quarantine tag-batch imports', () => {
     const row = {
       paymentMethod: 'tag_balance',

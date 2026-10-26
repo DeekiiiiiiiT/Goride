@@ -63,6 +63,7 @@ import { PlayStoreLaunchPage } from './admin/pages/PlayStoreLaunchPage';
 import { RideOperationsPage } from './admin/pages/RideOperationsPage';
 import { TripLedgerPage } from './admin/pages/TripLedgerPage';
 import { RidersListPage } from './admin/pages/users/RidersListPage';
+import { LiveTollPage } from './admin/pages/LiveTollPage';
 import { RiderDetailPage } from './admin/pages/users/RiderDetailPage';
 import { DisputesPage } from './admin/pages/DisputesPage';
 import { SettlementOverridesPage } from './admin/pages/SettlementOverridesPage';
@@ -147,6 +148,7 @@ export default function App() {
       <Route path="/admin" element={<RidesAdminLayout />}>
         <Route index element={<RidesAdminDashboard />} />
         <Route path="users" element={<RidersListPage />} />
+        <Route path="live-tolls" element={<LiveTollPage />} />
         <Route path="users/:userId" element={<RiderDetailPage />} />
         <Route path="fare-rules" element={<FareRulesLayout />}>
           <Route index element={<FareRulesPage />} />

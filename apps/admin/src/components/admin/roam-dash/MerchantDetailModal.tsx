@@ -423,7 +423,9 @@ export function MerchantDetailModal({
         merchantName={merchant?.name || ""}
         targetStatus={actionStatus}
         busy={busy}
-        onConfirm={(payload) => actionStatus && submitAction(actionStatus, payload)}
+        onConfirm={(payload) => {
+          if (actionStatus) void submitAction(actionStatus, payload);
+        }}
       />
 
       {zoomImage && (

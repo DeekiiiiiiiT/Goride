@@ -18,6 +18,7 @@
  *   POST /toll-reconciliation/reset-for-reconciliation – pending + clear trip/match (re-queue for Unmatched)
  */
 
+import { isOpenUnreconciledToll } from "../../../packages/toll-core/src/tollSpend.ts";
 import { withTollIdempotency } from "./toll_request_idempotency.ts";
 import { runPerfectMatchAutoMatch } from "./toll_auto_match.ts";
 
@@ -1764,7 +1765,7 @@ app.get(`${BASE}/summary`, async (c) => {
       if (isCashClaim) {
         return tx.status === "Pending" && !tx.isReconciled;
       }
-      return !tx.isReconciled || !tx.tripId;
+      return isOpenUnreconciledToll(tx);
     });
 
     // Reconciled (trip-linked or claim/personal closed without a trip)
@@ -1988,7 +1989,7 @@ app.get(`${BASE}/unreconciled`, async (c) => {
       if (isCashClaim) {
         return tx.status === "Pending" && !tx.isReconciled;
       }
-      return !tx.isReconciled || !tx.tripId;
+      return isOpenUnreconciledToll(tx);
     });
 
     // Phase F4: optional period scoping for the gated reconciliation wizard.
@@ -2269,7 +2270,7 @@ app.post(`${BASE}/auto-match`, requirePermission('toll.manage'), async (c) => {
         if (!isReconcilableTollExpense(tx)) return false;
         const isCashClaim = tx.paymentMethod === "Cash" || !!tx.receiptUrl;
         if (isCashClaim) return tx.status === "Pending" && !tx.isReconciled;
-        return !tx.isReconciled || !tx.tripId;
+        return isOpenUnreconciledToll(tx);
       });
       unreconciled = await filterByDateRange(unreconciled, from, to);
 
@@ -6265,6 +6266,7 @@ async function safeSyncPlazaTollPnlOffset(
     await syncPlazaTollPnlOffset(entry, c);
   } catch (err) {
     console.error(`[TollReconciliation] ${label} P&L sync failed for ${entry.id}:`, err);
+    if (label === "unreconcile") throw err;
   }
 }
 

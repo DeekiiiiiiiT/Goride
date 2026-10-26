@@ -5,7 +5,7 @@
 import { Hono } from 'https://deno.land/x/hono@v4.3.11/mod.ts';
 import { cors } from 'https://deno.land/x/hono@v4.3.11/middleware.ts';
 import { createClient, type SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { requirePlatformAdmin } from '../_shared/platformAdmin.ts';
+import { requirePlatformAdmin, requirePlatformOwner } from '../_shared/platformAdmin.ts';
 import {
   resolveRatePercentAsOf,
   resolveCreditableInputTax,
@@ -109,7 +109,7 @@ app.get('/rates', async (c) => {
 });
 
 app.post('/rates', async (c) => {
-  const auth = await requirePlatformAdmin(c);
+  const auth = await requirePlatformOwner(c);
   if (auth instanceof Response) return auth;
   if (!WRITE_ROLES.has(auth.role)) {
     return c.json({ error: 'Only platform_owner can append rates' }, 403);
@@ -156,7 +156,7 @@ app.post('/rates', async (c) => {
 });
 
 app.get('/entities', async (c) => {
-  const auth = await requirePlatformAdmin(c);
+  const auth = await requirePlatformOwner(c);
   if (auth instanceof Response) return auth;
   const a = acct(svc());
   const needsReview = c.req.query('needs_review') === '1';
@@ -168,7 +168,7 @@ app.get('/entities', async (c) => {
 });
 
 app.patch('/entities/:id', async (c) => {
-  const auth = await requirePlatformAdmin(c);
+  const auth = await requirePlatformOwner(c);
   if (auth instanceof Response) return auth;
   if (!WRITE_ROLES.has(auth.role)) {
     return c.json({ error: 'Only platform_owner can update registrations' }, 403);
@@ -206,7 +206,7 @@ app.patch('/entities/:id', async (c) => {
 });
 
 app.get('/threshold-watchlist', async (c) => {
-  const auth = await requirePlatformAdmin(c);
+  const auth = await requirePlatformOwner(c);
   if (auth instanceof Response) return auth;
 
   const sb = svc();
@@ -257,7 +257,7 @@ app.get('/threshold-watchlist', async (c) => {
 });
 
 app.get('/ledger', async (c) => {
-  const auth = await requirePlatformAdmin(c);
+  const auth = await requirePlatformOwner(c);
   if (auth instanceof Response) return auth;
   const a = acct(svc());
   const kind = c.req.query('kind') || 'output';
@@ -280,7 +280,7 @@ app.get('/ledger', async (c) => {
 });
 
 app.get('/periods', async (c) => {
-  const auth = await requirePlatformAdmin(c);
+  const auth = await requirePlatformOwner(c);
   if (auth instanceof Response) return auth;
   const a = acct(svc());
   const { data, error } = await a
@@ -293,7 +293,7 @@ app.get('/periods', async (c) => {
 });
 
 app.post('/periods/ensure-month', async (c) => {
-  const auth = await requirePlatformAdmin(c);
+  const auth = await requirePlatformOwner(c);
   if (auth instanceof Response) return auth;
   const body = await c.req.json().catch(() => ({}));
   const ref = body.year && body.month
@@ -323,7 +323,7 @@ app.post('/periods/ensure-month', async (c) => {
 });
 
 app.post('/periods/:id/close', async (c) => {
-  const auth = await requirePlatformAdmin(c);
+  const auth = await requirePlatformOwner(c);
   if (auth instanceof Response) return auth;
   if (!WRITE_ROLES.has(auth.role)) {
     return c.json({ error: 'Only platform_owner can close periods' }, 403);
@@ -432,7 +432,7 @@ app.post('/periods/:id/close', async (c) => {
 });
 
 app.post('/input-tax', async (c) => {
-  const auth = await requirePlatformAdmin(c);
+  const auth = await requirePlatformOwner(c);
   if (auth instanceof Response) return auth;
   if (!WRITE_ROLES.has(auth.role)) return c.json({ error: 'Forbidden' }, 403);
 
@@ -469,7 +469,7 @@ app.post('/input-tax', async (c) => {
 });
 
 app.post('/input-tax/batch', async (c) => {
-  const auth = await requirePlatformAdmin(c);
+  const auth = await requirePlatformOwner(c);
   if (auth instanceof Response) return auth;
   if (!WRITE_ROLES.has(auth.role)) return c.json({ error: 'Forbidden' }, 403);
 
@@ -507,7 +507,7 @@ app.post('/input-tax/batch', async (c) => {
 });
 
 app.get('/orphans', async (c) => {
-  const auth = await requirePlatformAdmin(c);
+  const auth = await requirePlatformOwner(c);
   if (auth instanceof Response) return auth;
   const a = acct(svc());
   const [{ data: output }, { data: input }] = await Promise.all([
@@ -523,7 +523,7 @@ app.get('/orphans', async (c) => {
 });
 
 app.post('/orphans/assign', async (c) => {
-  const auth = await requirePlatformAdmin(c);
+  const auth = await requirePlatformOwner(c);
   if (auth instanceof Response) return auth;
   if (!WRITE_ROLES.has(auth.role)) return c.json({ error: 'Forbidden' }, 403);
 
@@ -553,7 +553,7 @@ app.post('/orphans/assign', async (c) => {
 });
 
 app.post('/resolver-flags', async (c) => {
-  const auth = await requirePlatformAdmin(c);
+  const auth = await requirePlatformOwner(c);
   if (auth instanceof Response) return auth;
   if (!WRITE_ROLES.has(auth.role)) return c.json({ error: 'Forbidden' }, 403);
 
@@ -575,6 +575,8 @@ app.post('/resolver-flags', async (c) => {
 });
 
 app.get('/config', async (c) => {
+  const auth = await requirePlatformOwner(c);
+  if (auth instanceof Response) return auth;
   const sb = svc();
   const config = await loadGlobalGctConfig(sb);
   return c.json({

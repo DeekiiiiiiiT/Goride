@@ -51,7 +51,6 @@ export interface TollTag {
     assignedBy?: string;           // Admin name/ID (future use)
   }>;
   createdAt: string;
-  updatedAt?: string;
 }
 
 export interface VehicleDocument {

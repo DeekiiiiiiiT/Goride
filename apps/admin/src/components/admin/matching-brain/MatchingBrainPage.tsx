@@ -43,7 +43,7 @@ function hasWriteAccess(role: string | undefined | null): boolean {
 }
 
 export function MatchingBrainPage() {
-  const { session, profile } = useAuth();
+  const { session, role } = useAuth();
   const flags = useFeatureFlags();
   
   const [loading, setLoading] = useState(true);
@@ -56,7 +56,7 @@ export function MatchingBrainPage() {
   const [selectedPolicy, setSelectedPolicy] = useState<MatchingPolicy | null>(null);
   const [activeTab, setActiveTab] = useState("dispatch");
 
-  const canEdit = hasWriteAccess(profile?.role);
+  const canEdit = hasWriteAccess(role);
 
   const fetchData = useCallback(async () => {
     if (!session) return;

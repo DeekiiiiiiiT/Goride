@@ -193,7 +193,7 @@ export function evaluateLiveCoverage(
   return evaluateCoverage(lat, lng, filterLiveCoverageZones(zones), at);
 }
 
-export type { ActiveCoverageZone, LatLng, ZoneKind } from './zonesPayload.ts';
+export type { ActiveCoverageZone, LatLng } from './zonesPayload.ts';
 export {
   DELIVERY_ZONES_CACHE_KEY,
   DELIVERY_ZONES_CACHE_TTL_MS,
@@ -232,4 +232,3 @@ export {
   customerCopyForReason,
   evaluateHexCoverage,
 } from './hexCoverage.ts';
-export type { CoverageReasonCode } from './zoneEval.ts';

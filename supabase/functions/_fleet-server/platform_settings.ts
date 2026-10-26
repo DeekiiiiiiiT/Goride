@@ -7,7 +7,7 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 import * as kv from "./kv_store.tsx";
 import * as memCache from "./memory_cache.ts";
 import { resolveProductLine, type ProductLine } from "./product_line.ts";
-import { isPlatformStaffFromAuthUser } from "./rbac_middleware.ts";
+import { isPlatformStaffFromAuthUser, platformMfaRequiredResponse, rbacUserFromSupabaseUser } from "./rbac_middleware.ts";
 import { requireProductAdmin, type FleetProductKey } from "./product_admin_guard.ts";
 import { DEFAULT_ENTERPRISE_MODULES } from "./enterprise_modules.ts";
 
@@ -339,6 +339,8 @@ export async function verifySettingsAccess(c: Context): Promise<SettingsActor | 
   };
 
   if (isPlatformStaffFromAuthUser(user)) {
+    const mfaBlock = platformMfaRequiredResponse(c, rbacUserFromSupabaseUser(user));
+    if (mfaBlock) return mfaBlock;
     return actor;
   }
 

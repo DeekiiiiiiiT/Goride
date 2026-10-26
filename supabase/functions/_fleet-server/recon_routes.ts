@@ -9,6 +9,7 @@ import {
   requireAnyPermission,
   hasPlatformStaffAccess,
   hasPermission,
+  platformMfaRequiredResponse,
   type Permission,
   type RbacUser,
 } from "./rbac_middleware.ts";
@@ -1948,6 +1949,8 @@ export function registerReconRoutes(app: Hono) {
       try {
         const user = c.get("rbacUser") as RbacUser | undefined;
         if (!user) return c.json({ error: "Unauthorized" }, 401);
+        const mfaBlock = platformMfaRequiredResponse(c, user);
+        if (mfaBlock) return mfaBlock;
         if (!canAccessExternalQueue(user)) {
           return c.json({
             error: "Forbidden",

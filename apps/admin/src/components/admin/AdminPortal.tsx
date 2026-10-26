@@ -1,70 +1,106 @@
 import React, { useState, useEffect, useCallback, useMemo, lazy, Suspense } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
 import { AdminLayout } from './AdminLayout';
-import { AdminDashboard } from './AdminDashboard';
-import { CustomerAccounts } from './CustomerAccounts';
-import { PlatformTeam } from './PlatformTeam';
-import { TeamMembers } from './TeamMembers';
-import { ActivityLog } from './ActivityLog';
-import { TollDatabaseView } from '../toll/TollDatabaseView';
-import { TollInfoPage } from '../toll/TollInfoPage';
-import { PlatformSettings } from './PlatformSettings';
-import { GlobalPlatformSettingsPage } from '@roam/admin-core/settings';
-import { ApiCommandCenter } from './api-center/ApiCommandCenter';
-import { DatabaseManagement } from '../database/DatabaseManagement';
-import { BusinessTypeCustomers } from '../database/BusinessTypeCustomers';
-import { CustomerLedgerView } from '../database/CustomerLedgerView';
-import { LedgerColumnSettings } from '../database/LedgerColumnSettings';
-import { BusinessType } from '../../types/data';
-import { VehicleCatalogManager } from './vehicle-catalog/VehicleCatalogManager';
-import { PendingVehicleCatalogManager } from './vehicle-catalog/PendingVehicleCatalogManager';
-import { MaintenanceTemplatesManager } from './maintenance-templates/MaintenanceTemplatesManager';
-import { DashOverviewCard } from './product-overviews/DashOverviewCard';
-import { EnterpriseOverviewCard } from './product-overviews/EnterpriseOverviewCard';
-import { FleetOverviewCard } from './product-overviews/FleetOverviewCard';
-import { RidesOverviewCard } from './product-overviews/RidesOverviewCard';
-import { DriverOverviewCard } from './product-overviews/DriverOverviewCard';
-import { HaulOverviewCard } from './product-overviews/HaulOverviewCard';
-import { PartsSourcingManager } from './parts-sourcing/PartsSourcingManager';
-import { CatalogQualityPage } from './parts-sourcing/CatalogQualityPage';
-import { WorldMapsPage, canWriteWorldMapsFromUser } from './world-maps/WorldMapsPage';
-import { PlatformsEnginesPage } from './parts-sourcing/PlatformsEnginesPage';
-import { AccountingCatalogManager } from './accounting/AccountingCatalogManager';
-import { PendingVendorRequestsManager } from './accounting/PendingVendorRequestsManager';
-import { GctEnginePage } from './gct/GctEnginePage';
-import { GctRatesPage } from './gct/GctRatesPage';
-import { GctEntitiesPage } from './gct/GctEntitiesPage';
-import { GctLedgerPage } from './gct/GctLedgerPage';
-import { GctRemittancePage } from './gct/GctRemittancePage';
-import { GctKnowledgeBasePage } from './gct/GctKnowledgeBasePage';
+import type { BusinessType } from '../../types/data';
+import { canWriteWorldMapsFromUser } from './world-maps/WorldMapsPage';
+
+const lazyNamed = (loader: () => Promise<Record<string, unknown>>, name: string) =>
+  lazy(() => loader().then((mod) => ({ default: mod[name] as React.ComponentType<any> })));
+
+const AdminDashboard = lazyNamed(() => import('./AdminDashboard'), 'AdminDashboard');
+const CustomerAccounts = lazyNamed(() => import('./CustomerAccounts'), 'CustomerAccounts');
+const PlatformTeam = lazyNamed(() => import('./PlatformTeam'), 'PlatformTeam');
+const TeamMembers = lazyNamed(() => import('./TeamMembers'), 'TeamMembers');
+const ActivityLog = lazyNamed(() => import('./ActivityLog'), 'ActivityLog');
+const TollDatabaseView = lazyNamed(() => import('../toll/TollDatabaseView'), 'TollDatabaseView');
+const TollInfoPage = lazyNamed(() => import('../toll/TollInfoPage'), 'TollInfoPage');
+const PlatformSettings = lazyNamed(() => import('./PlatformSettings'), 'PlatformSettings');
+const GlobalPlatformSettingsPage = lazyNamed(() => import('@roam/admin-core/settings'), 'GlobalPlatformSettingsPage');
+const ApiCommandCenter = lazyNamed(() => import('./api-center/ApiCommandCenter'), 'ApiCommandCenter');
+const DatabaseManagement = lazyNamed(() => import('../database/DatabaseManagement'), 'DatabaseManagement');
+const BusinessTypeCustomers = lazyNamed(() => import('../database/BusinessTypeCustomers'), 'BusinessTypeCustomers');
+const CustomerLedgerView = lazyNamed(() => import('../database/CustomerLedgerView'), 'CustomerLedgerView');
+const LedgerColumnSettings = lazyNamed(() => import('../database/LedgerColumnSettings'), 'LedgerColumnSettings');
+const VehicleCatalogManager = lazyNamed(() => import('./vehicle-catalog/VehicleCatalogManager'), 'VehicleCatalogManager');
+const PendingVehicleCatalogManager = lazyNamed(() => import('./vehicle-catalog/PendingVehicleCatalogManager'), 'PendingVehicleCatalogManager');
+const MaintenanceTemplatesManager = lazyNamed(() => import('./maintenance-templates/MaintenanceTemplatesManager'), 'MaintenanceTemplatesManager');
+const DashOverviewCard = lazyNamed(() => import('./product-overviews/DashOverviewCard'), 'DashOverviewCard');
+const EnterpriseOverviewCard = lazyNamed(() => import('./product-overviews/EnterpriseOverviewCard'), 'EnterpriseOverviewCard');
+const FleetOverviewCard = lazyNamed(() => import('./product-overviews/FleetOverviewCard'), 'FleetOverviewCard');
+const RidesOverviewCard = lazyNamed(() => import('./product-overviews/RidesOverviewCard'), 'RidesOverviewCard');
+const DriverOverviewCard = lazyNamed(() => import('./product-overviews/DriverOverviewCard'), 'DriverOverviewCard');
+const HaulOverviewCard = lazyNamed(() => import('./product-overviews/HaulOverviewCard'), 'HaulOverviewCard');
+const PartsSourcingManager = lazyNamed(() => import('./parts-sourcing/PartsSourcingManager'), 'PartsSourcingManager');
+const CatalogQualityPage = lazyNamed(() => import('./parts-sourcing/CatalogQualityPage'), 'CatalogQualityPage');
+const WorldMapsPage = lazyNamed(() => import('./world-maps/WorldMapsPage'), 'WorldMapsPage');
+const PlatformsEnginesPage = lazyNamed(() => import('./parts-sourcing/PlatformsEnginesPage'), 'PlatformsEnginesPage');
+const AccountingCatalogManager = lazyNamed(() => import('./accounting/AccountingCatalogManager'), 'AccountingCatalogManager');
+const PendingVendorRequestsManager = lazyNamed(() => import('./accounting/PendingVendorRequestsManager'), 'PendingVendorRequestsManager');
+const GctEnginePage = lazyNamed(() => import('./gct/GctEnginePage'), 'GctEnginePage');
+const GctRatesPage = lazyNamed(() => import('./gct/GctRatesPage'), 'GctRatesPage');
+const GctEntitiesPage = lazyNamed(() => import('./gct/GctEntitiesPage'), 'GctEntitiesPage');
+const GctLedgerPage = lazyNamed(() => import('./gct/GctLedgerPage'), 'GctLedgerPage');
+const GctRemittancePage = lazyNamed(() => import('./gct/GctRemittancePage'), 'GctRemittancePage');
+const GctKnowledgeBasePage = lazyNamed(() => import('./gct/GctKnowledgeBasePage'), 'GctKnowledgeBasePage');
 import { ErrorBoundary } from '@roam/roam-shared';
-import { StationDatabaseView } from '../fuel/stations/StationDatabaseView';
-import { PlacesReview } from '@roam/platform-ops-ui';
 import type { ResolutionQueueSubTab } from '../fuel/stations/ResolutionQueueTab';
-import { GasStationAnalytics } from '../fuel/stations/GasStationAnalytics';
-import { fuelService } from '../../services/fuelService';
-import { FuelEntry } from '../../types/fuel';
+const StationDatabaseView = lazyNamed(() => import('../fuel/stations/StationDatabaseView'), 'StationDatabaseView');
+const PlacesReview = lazyNamed(() => import('@roam/platform-ops-ui'), 'PlacesReview');
+const GasStationAnalytics = lazyNamed(() => import('../fuel/stations/GasStationAnalytics'), 'GasStationAnalytics');
 import { API_ENDPOINTS } from '../../services/apiConfig';
 import { useAuth } from '../auth/AuthContext';
 import { StaffMfaStep } from '../auth/StaffMfaStep';
 import { supabase } from '../../utils/supabase/client';
-import { LEGACY_PAGE_REDIRECTS, settingsTabFromPageId } from './adminNavConfig';
-import { MerchantVerificationManager } from './roam-dash/MerchantVerificationManager';
-import { GlobalIdentitySearch } from './platform/GlobalIdentitySearch';
-import { MatchingBrainPage } from './matching-brain/MatchingBrainPage';
-import { FuelBrainPage } from './fuel-brain/FuelBrainPage';
-import { FuelPricesPage } from './fuel-prices/FuelPricesPage';
-import { FuelCostAnalyticsPage } from './fuel-cost-analytics/FuelCostAnalyticsPage';
-import { EvidenceBridgeAnalytics } from './fuel-evidence-bridge/EvidenceBridgeAnalytics';
-import { AdminJaaGasCardsPage } from './fuel/AdminJaaGasCardsPage';
-import { TollBrainPage } from './toll-brain/TollBrainPage';
-import { DriverUsersPage } from './product-users/DriverUsersPage';
-import { DriverUserDetailPage } from './product-users/DriverUserDetailPage';
-import { RiderUsersPage } from './product-users/RiderUsersPage';
-import { RiderUserDetailPage } from './product-users/RiderUserDetailPage';
+import { LEGACY_PAGE_REDIRECTS, pageAllowedForRole, settingsTabFromPageId } from './adminNavConfig';
+const MerchantVerificationManager = lazyNamed(() => import('./roam-dash/MerchantVerificationManager'), 'MerchantVerificationManager');
+const GlobalIdentitySearch = lazyNamed(() => import('./platform/GlobalIdentitySearch'), 'GlobalIdentitySearch');
+const MatchingBrainPage = lazyNamed(() => import('./matching-brain/MatchingBrainPage'), 'MatchingBrainPage');
+const FuelBrainPage = lazyNamed(() => import('./fuel-brain/FuelBrainPage'), 'FuelBrainPage');
+const FuelPricesPage = lazyNamed(() => import('./fuel-prices/FuelPricesPage'), 'FuelPricesPage');
+const FuelCostAnalyticsPage = lazyNamed(() => import('./fuel-cost-analytics/FuelCostAnalyticsPage'), 'FuelCostAnalyticsPage');
+const EvidenceBridgeAnalytics = lazyNamed(() => import('./fuel-evidence-bridge/EvidenceBridgeAnalytics'), 'EvidenceBridgeAnalytics');
+const AdminJaaGasCardsPage = lazyNamed(() => import('./fuel/AdminJaaGasCardsPage'), 'AdminJaaGasCardsPage');
+const TollBrainPage = lazyNamed(() => import('./toll-brain/TollBrainPage'), 'TollBrainPage');
+const DriverUsersPage = lazyNamed(() => import('./product-users/DriverUsersPage'), 'DriverUsersPage');
+const DriverUserDetailPage = lazyNamed(() => import('./product-users/DriverUserDetailPage'), 'DriverUserDetailPage');
+const RiderUsersPage = lazyNamed(() => import('./product-users/RiderUsersPage'), 'RiderUsersPage');
+const RiderUserDetailPage = lazyNamed(() => import('./product-users/RiderUserDetailPage'), 'RiderUserDetailPage');
 import { applyPortalTheme } from '../../hooks/usePortalTheme';
 import { api } from '../../services/api';
-import { UnifiedLedgerFeed } from './UnifiedLedgerFeed';
+import { MovedNotice } from './MovedNotice';
+const UnifiedLedgerFeed = lazyNamed(() => import('./UnifiedLedgerFeed'), 'UnifiedLedgerFeed');
+const AppsDirectory = lazyNamed(() => import('./DominionHomes'), 'AppsDirectory');
+const ChangeRequestInbox = lazyNamed(() => import('./DominionHomes'), 'ChangeRequestInbox');
+const FuelHome = lazyNamed(() => import('./DominionHomes'), 'FuelHome');
+const PlacesHome = lazyNamed(() => import('./DominionHomes'), 'PlacesHome');
+const PlatformOpsHome = lazyNamed(() => import('./DominionHomes'), 'PlatformOpsHome');
+const TaxVendorsHome = lazyNamed(() => import('./DominionHomes'), 'TaxVendorsHome');
+const TollsHome = lazyNamed(() => import('./DominionHomes'), 'TollsHome');
+const VehiclesHome = lazyNamed(() => import('./DominionHomes'), 'VehiclesHome');
+
+const MOVED_NOTICES: Record<string, { title: string; appName: string; href: string }> = {
+  'driver-users': { title: 'Driver users', appName: 'Roam Driver admin', href: 'https://roamdriver.co/admin/users' },
+  'driver-user-detail': { title: 'Driver user', appName: 'Roam Driver admin', href: 'https://roamdriver.co/admin/users' },
+  'roam-driver-overview': { title: 'Roam Driver', appName: 'Roam Driver admin', href: 'https://roamdriver.co/admin' },
+  'rides-users': { title: 'Riders', appName: 'Roam Rides admin', href: 'https://roam-s.co/admin/users' },
+  'rider-user-detail': { title: 'Rider', appName: 'Roam Rides admin', href: 'https://roam-s.co/admin/users' },
+  'roam-rides-overview': { title: 'Roam Rides', appName: 'Roam Rides admin', href: 'https://roam-s.co/admin' },
+  'dash-merchants': { title: 'Merchants', appName: 'Roam Rush admin', href: 'https://roamrush.app/admin' },
+  'roam-dash-overview': { title: 'Roam Rush', appName: 'Roam Rush admin', href: 'https://roamrush.app/admin' },
+  'enterprise-team-members': { title: 'Enterprise team', appName: 'Roam Enterprise admin', href: 'https://roamenterprise.co/admin' },
+  'enterprise-customers': { title: 'Enterprise customers', appName: 'Roam Enterprise admin', href: 'https://roamenterprise.co/admin' },
+  'enterprise-overview': { title: 'Roam Enterprise', appName: 'Roam Enterprise admin', href: 'https://roamenterprise.co/admin' },
+  'fleet-customers': { title: 'Fleet customers', appName: 'Roam Fleet admin', href: 'https://roamfleet.co/admin' },
+  'fleet-team-members': { title: 'Fleet team', appName: 'Roam Fleet admin', href: 'https://roamfleet.co/admin' },
+  'fleet-overview': { title: 'Roam Fleet', appName: 'Roam Fleet admin', href: 'https://roamfleet.co/admin' },
+  'toll-live-monitor': { title: 'Live tolls', appName: 'Roam Rides admin', href: 'https://roam-s.co/admin/live-tolls' },
+  'roam-haul-overview': { title: 'Roam Haul', appName: 'Roam Haul admin', href: 'https://roamhaul.co/admin' },
+  'db-management': { title: 'Customer books', appName: 'Roam Fleet admin', href: 'https://roamfleet.co/admin' },
+  'db-settings': { title: 'Customer books', appName: 'Roam Fleet admin', href: 'https://roamfleet.co/admin' },
+  'fuel-analytics': { title: 'Station analytics', appName: 'Roam Fleet admin', href: 'https://roamfleet.co/admin' },
+  'fuel-cost-analytics': { title: 'Fuel cost', appName: 'Roam Fleet admin', href: 'https://roamfleet.co/admin' },
+  'fuel-evidence-bridge': { title: 'Evidence bridge', appName: 'Roam Fleet admin', href: 'https://roamfleet.co/admin' },
+  'unified-ledger': { title: 'Combined ledger', appName: 'Roam Fleet admin', href: 'https://roamfleet.co/admin' },
+};
 
 const TollLiveMonitorPage = lazy(() =>
   import('../../pages/TollLiveMonitorPage').then((m) => ({ default: m.TollLiveMonitorPage })),
@@ -77,15 +113,18 @@ function normalizePortalPage(page: string): string {
   return LEGACY_PAGE_REDIRECTS[page] ?? page;
 }
 
-type NavExtras = { userId?: string; customer?: unknown } | null;
+type NavExtras = {
+  userId?: string;
+  customer?: { id: string; name: string; email: string; businessType: BusinessType };
+} | null;
 
 /**
  * AdminPortal — Dominion platform shell that routes purely via internal page IDs.
  */
 export function AdminPortal() {
-  const { session, user, signOut } = useAuth();
+  const { session, user, role, signOut } = useAuth();
   const [mfaNeeded, setMfaNeeded] = useState(true);
-  const queryClient = useQueryClient();
+  const [fillSummary, setFillSummary] = useState<{ stationId: string; fillCount: number; lastFillAt: string | null }[]>([]);
   const [currentPageRaw, setCurrentPageRaw] = useState(() => {
     if (typeof window !== 'undefined') {
       const page = new URLSearchParams(window.location.search).get('page');
@@ -108,22 +147,31 @@ export function AdminPortal() {
     }
     return params.get('sub') === 'spatial-review' ? 'spatial-review' : 'unresolved-stops';
   }, []);
-  const [fuelLogs, setFuelLogs] = useState<FuelEntry[]>([]);
-  const [fuelLoading, setFuelLoading] = useState(false);
   const [navData, setNavData] = useState<NavExtras>(null);
   const [navHistory, setNavHistory] = useState<string[]>([]);
 
-  const setCurrentPage = useCallback((page: string) => {
-    setNavData(null);
-    setCurrentPageRaw(normalizePortalPage(page));
+  const writePageUrl = useCallback((page: string) => {
+    const url = new URL(window.location.href);
+    url.searchParams.set('page', page);
+    window.history.pushState({ page }, '', `${url.pathname}${url.search}`);
   }, []);
+
+  const setCurrentPage = useCallback((page: string) => {
+    const next = normalizePortalPage(page);
+    setNavData(null);
+    setCurrentPageRaw(next);
+    writePageUrl(next);
+  }, [writePageUrl]);
 
   const currentPage = currentPageRaw;
 
   const handleNavigate = (page: string, data?: unknown) => {
     setNavHistory((prev) => [...prev, currentPage]);
     if (data && typeof data === 'object') {
-      const d = data as { userId?: string; customer?: unknown };
+      const d = data as {
+        userId?: string;
+        customer?: NonNullable<NavExtras>['customer'];
+      };
       if (d.customer !== undefined) {
         setNavData({ customer: d.customer, userId: d.userId });
       } else if (d.userId) {
@@ -134,14 +182,18 @@ export function AdminPortal() {
     } else {
       setNavData(null);
     }
-    setCurrentPageRaw(normalizePortalPage(page));
+    const next = normalizePortalPage(page);
+    setCurrentPageRaw(next);
+    writePageUrl(next);
   };
 
   const handleBack = () => {
     const prev = navHistory[navHistory.length - 1];
     if (prev) {
       setNavHistory((h) => h.slice(0, -1));
-      setCurrentPageRaw(normalizePortalPage(prev));
+      const next = normalizePortalPage(prev);
+      setCurrentPageRaw(next);
+      writePageUrl(next);
       setNavData(null);
     }
   };
@@ -149,44 +201,21 @@ export function AdminPortal() {
   const accessToken = session?.access_token;
 
   useEffect(() => {
-    if (!accessToken) return;
-    (['enterprise', 'fleet'] as const).forEach((productLine) => {
-      void queryClient.prefetchQuery({
-        queryKey: ['adminCustomers', productLine],
-        queryFn: async () => {
-          const qs = new URLSearchParams({ productLine });
-          const res = await fetch(`${API_ENDPOINTS.admin}/admin/customers?${qs.toString()}`, {
-            headers: { Authorization: `Bearer ${accessToken}` },
-          });
-          if (!res.ok) {
-            const body = await res.json().catch(() => ({}));
-            throw new Error(body.error || `HTTP ${res.status}`);
-          }
-          const data = await res.json();
-          return data.customers || [];
-        },
-        staleTime: 2 * 60 * 1000,
-      });
-    });
-  }, [accessToken, queryClient]);
-
-  const loadFuelLogs = useCallback(async () => {
-    setFuelLoading(true);
-    try {
-      const entries = await fuelService.getFuelEntries();
-      setFuelLogs(entries);
-    } catch (e) {
-      console.error('[AdminPortal] Failed to load fuel entries:', e);
-    } finally {
-      setFuelLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (currentPage === 'fuel-analytics' || currentPage === 'fuel-stations') {
-      loadFuelLogs();
-    }
-  }, [currentPage, loadFuelLogs]);
+    if (mfaNeeded || !accessToken || currentPage !== 'fuel-stations') return;
+    let cancel = false;
+    void fetch(`${API_ENDPOINTS.admin}/admin/station-fill-summary`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    })
+      .then(async (res) => {
+        if (!res.ok || cancel) return;
+        const data = await res.json();
+        if (!cancel) setFillSummary(Array.isArray(data.stations) ? data.stations : []);
+      })
+      .catch(() => {});
+    return () => {
+      cancel = true;
+    };
+  }, [accessToken, currentPage, mfaNeeded]);
 
   useEffect(() => {
     if (!session) {
@@ -202,6 +231,16 @@ export function AdminPortal() {
       cancelled = true;
     };
   }, [session]);
+
+  useEffect(() => {
+    const onPop = () => {
+      const page = new URLSearchParams(window.location.search).get('page') || 'dashboard';
+      setNavData(null);
+      setCurrentPageRaw(normalizePortalPage(page));
+    };
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, []);
 
   useEffect(() => {
     api.getPreferences()
@@ -222,9 +261,50 @@ export function AdminPortal() {
     );
   }
 
+  const moved = MOVED_NOTICES[currentPage]
+    ?? (currentPage.startsWith('fleet-settings-')
+      ? { title: 'Fleet settings', appName: 'Roam Fleet admin', href: 'https://roamfleet.co/admin' }
+      : null)
+    ?? (currentPage.startsWith('enterprise-settings-')
+      ? { title: 'Enterprise settings', appName: 'Roam Enterprise admin', href: 'https://roamenterprise.co/admin' }
+      : null)
+    ?? (currentPage.startsWith('db-biz-') || currentPage.startsWith('db-customer-')
+      ? { title: 'Customer books', appName: 'Roam Fleet admin', href: 'https://roamfleet.co/admin' }
+      : null);
+
+  if (!pageAllowedForRole(role, currentPage)) {
+    return (
+      <AdminLayout currentPage={currentPage} onNavigate={setCurrentPage}>
+        <div className="rounded-xl border border-slate-200 bg-white p-8 dark:border-slate-800 dark:bg-slate-900/40">
+          <h1 className="text-lg font-semibold text-slate-900 dark:text-white">Not allowed</h1>
+          <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
+            Your role cannot open this page.
+          </p>
+        </div>
+      </AdminLayout>
+    );
+  }
+
+  if (moved) {
+    return (
+      <AdminLayout currentPage={currentPage} onNavigate={setCurrentPage}>
+        <MovedNotice title={moved.title} appName={moved.appName} href={moved.href} />
+      </AdminLayout>
+    );
+  }
+
   return (
     <AdminLayout currentPage={currentPage} onNavigate={setCurrentPage}>
+      <Suspense fallback={<div className="p-8 text-sm text-slate-500">Loading…</div>}>
       {currentPage === 'dashboard' && <AdminDashboard onNavigate={setCurrentPage} />}
+      {currentPage === 'vehicles-home' && <VehiclesHome onNavigate={setCurrentPage} />}
+      {currentPage === 'places-home' && <PlacesHome onNavigate={setCurrentPage} />}
+      {currentPage === 'fuel-home' && <FuelHome onNavigate={setCurrentPage} />}
+      {currentPage === 'tolls-home' && <TollsHome onNavigate={setCurrentPage} />}
+      {currentPage === 'tax-vendors-home' && <TaxVendorsHome onNavigate={setCurrentPage} />}
+      {currentPage === 'apps-directory' && <AppsDirectory />}
+      {currentPage === 'change-requests' && <ChangeRequestInbox onNavigate={setCurrentPage} />}
+      {currentPage === 'platform-ops' && <PlatformOpsHome onNavigate={setCurrentPage} />}
 
       {currentPage === 'enterprise-overview' && (
         <div className="rounded-xl border border-slate-200 bg-white overflow-hidden min-h-[560px] dark:border-slate-800 dark:bg-slate-900/40">
@@ -252,14 +332,14 @@ export function AdminPortal() {
       {currentPage === 'dash-merchants' && <MerchantVerificationManager />}
 
       {currentPage === 'driver-users' && (
-        <DriverUsersPage onOpenUser={(id) => handleNavigate('driver-user-detail', { userId: id })} />
+        <DriverUsersPage onOpenUser={(id: string) => handleNavigate('driver-user-detail', { userId: id })} />
       )}
       {currentPage === 'driver-user-detail' && navData?.userId && (
         <DriverUserDetailPage userId={navData.userId} onBack={handleBack} />
       )}
 
       {currentPage === 'rides-users' && (
-        <RiderUsersPage onOpenUser={(id) => handleNavigate('rider-user-detail', { userId: id })} />
+        <RiderUsersPage onOpenUser={(id: string) => handleNavigate('rider-user-detail', { userId: id })} />
       )}
       {currentPage === 'rider-user-detail' && navData?.userId && (
         <RiderUserDetailPage userId={navData.userId} onBack={handleBack} />
@@ -273,7 +353,7 @@ export function AdminPortal() {
       )}
       {currentPage === 'fuel-jaa-cards' && (
         <div className="rounded-xl border border-slate-200 bg-white overflow-hidden min-h-[560px] dark:border-slate-800 dark:bg-slate-900/40">
-          <AdminJaaGasCardsPage />
+          <AdminJaaGasCardsPage scope="platform" />
         </div>
       )}
       {currentPage === 'fuel-brain' && (
@@ -290,8 +370,8 @@ export function AdminPortal() {
       {currentPage === 'fuel-stations' && (
         <div className="min-h-[600px] rounded-xl bg-white shadow-sm overflow-x-auto overflow-y-visible dark:bg-card dark:shadow-none dark:ring-1 dark:ring-border">
           <StationDatabaseView
-            logs={fuelLogs}
-            loading={fuelLoading}
+            logs={[]}
+            fillSummary={fillSummary}
             defaultTab={stationDbDefaultTab}
             defaultResolutionSubTab={resolutionSubTab}
           />
@@ -307,7 +387,7 @@ export function AdminPortal() {
       )}
       {currentPage === 'fuel-analytics' && (
         <div className="bg-white rounded-xl shadow-sm overflow-hidden min-h-[600px]">
-          <GasStationAnalytics logs={fuelLogs} loading={fuelLoading} onRequestRefresh={loadFuelLogs} />
+          <GasStationAnalytics logs={[]} loading={false} onRequestRefresh={() => undefined} />
         </div>
       )}
       {currentPage === 'fuel-cost-analytics' && (
@@ -474,7 +554,7 @@ export function AdminPortal() {
           apiBaseUrl={API_ENDPOINTS.admin}
           accessToken={session?.access_token}
           userEmail={user?.email}
-          userRole={(user?.user_metadata?.role as string | undefined) ?? 'superadmin'}
+          userRole={role ?? ''}
           activeTab={settingsTabFromPageId(currentPage) ?? 'general'}
         />
       )}
@@ -519,6 +599,7 @@ export function AdminPortal() {
           onBack={handleBack}
         />
       )}
+      </Suspense>
     </AdminLayout>
   );
 }

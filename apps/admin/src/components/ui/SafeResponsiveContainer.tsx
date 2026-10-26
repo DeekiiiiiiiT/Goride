@@ -14,6 +14,12 @@ import { ResponsiveContainerProps } from 'recharts';
  *  3. Recharts' own ResponsiveContainer is never used, so it can never
  *     see a negative measurement.
  */
+function cssSize(value: string | number | undefined, fallback: string): string {
+  if (typeof value === 'number') return `${value}px`;
+  if (typeof value === 'string' && value.length > 0) return value;
+  return fallback;
+}
+
 const SafeResponsiveContainer = (props: ResponsiveContainerProps) => {
   const divRef = useRef<HTMLDivElement>(null);
   const [shouldRender, setShouldRender] = useState(false);
@@ -66,13 +72,12 @@ const SafeResponsiveContainer = (props: ResponsiveContainerProps) => {
   return (
     <div 
       ref={divRef} 
-      className={className}
-      style={{ 
-        width: width, 
-        height: height, 
-        minWidth: minWidth ?? 0, 
-        minHeight: minHeight ?? 0,
-        ...style 
+      className={typeof className === 'string' ? className : undefined}
+      style={{
+        width: cssSize(width, '100%'),
+        height: cssSize(height, '100%'),
+        minWidth: '0',
+        minHeight: '0',
       }}
     >
       {shouldRender && dimensions.width > 0 && dimensions.height > 0 ? (

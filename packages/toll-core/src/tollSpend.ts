@@ -31,3 +31,39 @@ export function cashWashTripSpendAmount(
   const tc = Math.abs(Number(trip.tollCharges) || 0);
   return tc > 0 ? tc : 0;
 }
+
+/**
+ * A charged personal toll is reconciled and has no trip. It used to match
+ * both lists, so Toll Spend added it twice. It belongs on the reconciled
+ * list only.
+ */
+export function isOpenUnreconciledToll(tx: {
+  isReconciled?: boolean | null;
+  tripId?: string | null;
+  resolution?: string | null;
+  paymentMethod?: string | null;
+  receiptUrl?: string | null;
+  status?: string | null;
+}): boolean {
+  const isCashClaim = tx.paymentMethod === 'Cash' || !!tx.receiptUrl;
+  if (isCashClaim) {
+    return String(tx.status || '') === 'Pending' && !tx.isReconciled;
+  }
+  if (!tx.isReconciled) return true;
+  return !tx.tripId && !String(tx.resolution || '').trim();
+}
+
+/** First copy wins. Overlapping reconciled and unreconciled rows count once. */
+export function uniqueTollRowsById<T extends { id?: string | null }>(rows: readonly T[]): T[] {
+  const seen = new Set<string>();
+  const out: T[] = [];
+  for (const row of rows) {
+    const id = row?.id ? String(row.id) : '';
+    if (id) {
+      if (seen.has(id)) continue;
+      seen.add(id);
+    }
+    out.push(row);
+  }
+  return out;
+}

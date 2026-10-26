@@ -2,7 +2,8 @@
  * Dual-write from KV writes into fleet.* tables (via public.fleet_* views).
  * Failures must throw — silent drops caused Approved fuel expenses with no Transaction Log row.
  */
-import { getServiceClient } from "./service_client.ts";
+import { getServiceClient, getServiceClientWithSchema } from "./service_client.ts";
+import { currentMasterActor } from "./master_actor.ts";
 import { orgOf, resolveDomain } from "./fleet_domains.ts";
 import {
   isFleetTableWriteEnabled,
@@ -20,6 +21,7 @@ function tableName(table: string): string {
 
 /** Global catalogs. Every other fleet domain belongs to one company. */
 const GLOBAL_DOMAINS = new Set(["stations", "toll_plazas", "platform_vendors"]);
+const MASTER_TABLES = new Set(["stations", "toll_plazas", "platform_vendors"]);
 
 async function logMetric(domain: FleetDomain, status: string, reason?: string, legacyKvId?: string) {
   try {
@@ -52,6 +54,21 @@ export async function dualWriteFleetKvUpsert(key: string, value: unknown): Promi
     const reason = "missing_organization_id";
     await logMetric(def.domain, "fail", reason, key);
     throw new Error(`[fleetDualWrite] ${def.domain} ${key} is missing a company`);
+  }
+  if (MASTER_TABLES.has(def.table)) {
+    const { error: rpcError } = await getServiceClientWithSchema("fleet").rpc("upsert_master", {
+      p_table: def.table,
+      p_row: row,
+      p_actor: currentMasterActor() ?? "",
+      p_action: "",
+    });
+    if (rpcError) {
+      console.error(`[fleetDualWrite] upsert ${def.domain} ${key}:`, rpcError.message);
+      await logMetric(def.domain, "fail", rpcError.message, key);
+      throw new Error(`[fleetDualWrite] upsert ${def.domain} failed: ${rpcError.message}`);
+    }
+    await logMetric(def.domain, "ok", "upserted", key);
+    return;
   }
   const { error } = await fleetClient().from(tableName(def.table)).upsert(row, { onConflict: "id" });
   if (error) {

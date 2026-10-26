@@ -140,6 +140,10 @@ export function StaffMfaStep({
       });
       if (verifyError) throw new Error('That code was not accepted. Try the next one.');
       await supabase.auth.refreshSession();
+      const { data: level } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+      if (level?.currentLevel !== 'aal2') {
+        throw new Error('That code was not accepted. Try the next one.');
+      }
       onVerified();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'That code was not accepted.');

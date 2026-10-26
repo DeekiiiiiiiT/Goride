@@ -42,6 +42,8 @@ export type ProductAdminUser = {
 /** Fallback when platform.staff_security has not loaded — matches catalog default. */
 export const DEFAULT_MFA_REQUIRED_ROLES = [
   "platform_owner",
+  "platform_support",
+  "platform_analyst",
   "dash_admin",
   "courier_admin",
   "identity_admin",

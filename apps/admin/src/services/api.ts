@@ -2246,7 +2246,9 @@ export const api = {
 
     const combined = [...dataUnderscore, ...dataHyphen];
     // Deduplicate by ID
-    return Array.from(new Map(combined.map(item => [item.id, item])).values());
+    return Array.from(
+      new Map((combined as { id: string }[]).map((item) => [item.id, item])).values(),
+    );
   },
 
   async getCheckInsByVehicle(vehicleId: string): Promise<any[]> {

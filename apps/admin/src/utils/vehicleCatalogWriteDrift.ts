@@ -38,7 +38,7 @@ export function catalogCreateDriftFieldNames(
   for (const k of DRIFT_KEYS) {
     const s = (sent as Record<string, unknown>)[k];
     if (!sentMeaningful(s)) continue;
-    const r = (returned as Record<string, unknown>)[k];
+    const r = (returned as unknown as Record<string, unknown>)[k];
     if (storedEmpty(r)) drift.push(k);
   }
   return drift;

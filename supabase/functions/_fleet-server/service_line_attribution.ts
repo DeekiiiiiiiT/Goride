@@ -3,6 +3,7 @@
  * Fuel Phase 0: T0–T5 ladder + sticky explicit (see FUEL_SERVICE_LINE_SPLIT_AUDIT.md §3.1).
  */
 import * as kv from "./kv_store.tsx";
+import { getServiceClient } from "./service_client.ts";
 
 export type ServiceLine = "rideshare" | "rush_delivery";
 
@@ -15,7 +16,9 @@ export type ServiceLineSource =
   | "driver"
   | "unattributed"
   /** Top-ups fund a shared tag account — not a line cost (WR-C2 / recon P0). */
-  | "org";
+  | "org"
+  /** One-line fleet fallback. Keeps the service line. Not a top-up. */
+  | "org_default";
 
 export type ResolvedFuelServiceLine = {
   /** Null when source is unattributed — conservation bucket, not a guess. */
@@ -49,7 +52,8 @@ function isServiceLineSource(v: unknown): v is ServiceLineSource {
     v === "vehicle" ||
     v === "driver" ||
     v === "unattributed" ||
-    v === "org"
+    v === "org" ||
+    v === "org_default"
   );
 }
 
@@ -63,18 +67,41 @@ function isTollTopUp(record: Record<string, unknown>): boolean {
  * No program tier (tolls are not JAA-scoped).
  */
 export function resolveTollLedgerServiceLine(
-  input: ResolveFuelServiceLineInput & { isTopUp?: boolean },
+  input: ResolveFuelServiceLineInput & { isTopUp?: boolean; orgServiceLines?: unknown },
 ): ResolvedFuelServiceLine {
   if (input.isTopUp) {
     return { serviceLine: null, source: "org" };
   }
-  return resolveFuelEntryServiceLine({
+  const resolved = resolveFuelEntryServiceLine({
     existingLine: input.existingLine,
     existingSource: input.existingSource,
     tripServiceLine: input.tripServiceLine,
     vehicleServiceLines: input.vehicleServiceLines,
     driverServiceLines: input.driverServiceLines,
   });
+  if (resolved.source !== "unattributed") return resolved;
+
+  const existingSource = isServiceLineSource(input.existingSource) ? input.existingSource : null;
+  const existingLine = isServiceLine(input.existingLine) ? input.existingLine : null;
+  // Unlinking a trip must not wipe a line we already learned.
+  if (
+    existingLine &&
+    (existingSource === "trip" ||
+      existingSource === "vehicle" ||
+      existingSource === "driver" ||
+      existingSource === "org" ||
+      existingSource === "org_default")
+  ) {
+    // A usage row stamped org was the one-line fallback, not a top-up.
+    const source = existingSource === "org" ? "org_default" : existingSource;
+    return { serviceLine: existingLine, source };
+  }
+
+  const orgLines = normalizeLines(input.orgServiceLines);
+  if (orgLines.length === 1) {
+    return { serviceLine: orgLines[0], source: "org_default" };
+  }
+  return resolved;
 }
 
 /**
@@ -98,21 +125,26 @@ export async function ensureTollLedgerServiceLine(
     }
     return record;
   }
-  // Sticky org (top-up) — do not re-ladder into a line.
-  if (existingSource === "org") {
-    return applyServiceLineResolution(record, { serviceLine: null, source: "org" });
-  }
-
   if (isTollTopUp(record)) {
     return applyServiceLineResolution(record, { serviceLine: null, source: "org" });
   }
 
+  // A usage row already filed on a line stays there. A null org line is a top-up.
+  if (existingSource === "org" || existingSource === "org_default") {
+    const kept = record.service_line ?? record.serviceLine;
+    if (isServiceLine(kept)) {
+      return applyServiceLineResolution(record, { serviceLine: kept, source: "org_default" });
+    }
+  }
+
   const cache = opts?.lookupCache;
-  const [tripServiceLine, vehicleServiceLines, driverServiceLines] = await Promise.all([
-    loadTripServiceLine(record, cache),
-    loadVehicleServiceLines(record, cache),
-    loadDriverServiceLines(record, cache),
-  ]);
+  const [tripServiceLine, vehicleServiceLines, driverServiceLines, orgServiceLines] =
+    await Promise.all([
+      loadTripServiceLine(record, cache),
+      loadVehicleServiceLines(record, cache),
+      loadDriverServiceLines(record, cache),
+      loadOrgServiceLines(record),
+    ]);
 
   const resolved = resolveTollLedgerServiceLine({
     existingLine: record.service_line ?? record.serviceLine,
@@ -120,6 +152,7 @@ export async function ensureTollLedgerServiceLine(
     tripServiceLine,
     vehicleServiceLines,
     driverServiceLines,
+    orgServiceLines,
   });
 
   return applyServiceLineResolution(record, resolved);
@@ -360,6 +393,34 @@ async function loadVehicleServiceLines(
   > | null;
   if (!vehicle) return [];
   return normalizeLines(vehicle.serviceLines ?? vehicle.service_lines);
+}
+
+const orgServiceLineCache = new Map<string, ServiceLine[]>();
+
+async function loadOrgServiceLines(record: Record<string, unknown>): Promise<ServiceLine[]> {
+  const organizationId = record.organizationId ?? record.organization_id;
+  if (!organizationId) return [];
+  const key = String(organizationId);
+  const cached = orgServiceLineCache.get(key);
+  if (cached) return cached;
+  try {
+    const sb = getServiceClient();
+    const { data, error } = await sb
+      .from("organizations")
+      .select("service_lines")
+      .eq("id", key)
+      .maybeSingle();
+    if (error) {
+      console.warn("[service-line] org lines", error.message);
+      return [];
+    }
+    const lines = normalizeLines(data?.service_lines);
+    orgServiceLineCache.set(key, lines);
+    return lines;
+  } catch (err) {
+    console.warn("[service-line] org lines failed", err);
+    return [];
+  }
 }
 
 async function loadDriverServiceLines(

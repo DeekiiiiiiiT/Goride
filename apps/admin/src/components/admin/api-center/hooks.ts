@@ -359,7 +359,7 @@ export function useSyncSupabaseUsage() {
   const { session } = useAuth();
   const token = session?.access_token;
   const qc = useQueryClient();
-  return useMutation({
+  return useMutation<unknown, Error, boolean>({
     mutationFn: async (force = false) => {
       const res = await fetch(`${BASE}/supabase/sync${force ? '?force=1' : ''}`, {
         method: 'POST',

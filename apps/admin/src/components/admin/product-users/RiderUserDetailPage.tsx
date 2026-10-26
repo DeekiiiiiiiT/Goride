@@ -3,7 +3,6 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '../../auth/AuthContext';
-import { resolveRole } from '../../../utils/permissions';
 import {
   banRider,
   deleteRider,
@@ -22,7 +21,7 @@ interface RiderUserDetailPageProps {
 export function RiderUserDetailPage({ userId, onBack }: RiderUserDetailPageProps) {
   const { session, role } = useAuth();
   const token = session?.access_token;
-  const resolved = resolveRole(role || (session?.user as { user_metadata?: { role?: string } })?.user_metadata?.role);
+  const resolved = role;
   const qc = useQueryClient();
   const [reason, setReason] = useState('Platform review');
 

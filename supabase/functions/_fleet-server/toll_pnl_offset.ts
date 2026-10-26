@@ -22,7 +22,11 @@
  */
 
 import * as kv from "./kv_store.tsx";
-import { appendCanonicalLedgerEvents, canonicalEventExistsByIdemKey } from "./ledger_canonical.ts";
+import {
+  appendCanonicalLedgerEvents,
+  canonicalEventExistsByIdemKey,
+  getCanonicalEventByIdemKey,
+} from "./ledger_canonical.ts";
 import {
   isFleetAbsorbingTollResolution,
   isPersonalTollResolution,
@@ -67,6 +71,7 @@ export interface EmitTollChargeOffsetParams {
   /** Positive magnitude of the toll amount being offset. */
   amount: number;
   reason: TollPnlOffsetReason;
+  organizationId?: string | null;
 }
 
 export interface EmitTollChargeOffsetResult {
@@ -110,6 +115,7 @@ function buildOffsetEvent(
       offsetsIdempotencyKey: originalChargeKeyFor(p.sourceType, p.sourceId),
       version,
     },
+    ...(p.organizationId ? { organizationId: p.organizationId } : {}),
   };
 }
 
@@ -128,7 +134,16 @@ export async function emitTollChargeOffset(
   const markerKey = markerKeyFor(p.sourceType, p.sourceId);
   const marker = (await kv.get(markerKey)) as TollPnlOffsetMarker | null;
 
-  if (!marker?.active) {
+  let markerIsLive = !!(marker && marker.active);
+  if (markerIsLive && marker) {
+    const reinstateKey = `${p.sourceType}:${p.sourceId}|toll_charge_reinstate:v${marker.version}`;
+    if (await canonicalEventExistsByIdemKey(reinstateKey)) {
+      // Marker still says "on" but that version was already cancelled.
+      markerIsLive = false;
+    }
+  }
+
+  if (!markerIsLive) {
     // Only guard the FIRST emission — if a marker is already active we're
     // just re-posting the same idempotent event (see below), not creating a
     // new "recovered" dollar, so the existence check isn't needed there.
@@ -141,7 +156,7 @@ export async function emitTollChargeOffset(
     }
   }
 
-  if (marker && marker.active) {
+  if (markerIsLive && marker) {
     // Already offset — idempotent no-op. Re-write the SAME event key so a
     // redundant call is a safe no-op end-to-end (dedup by idempotencyKey).
     const event = buildOffsetEvent(p, marker.version, amountAbs, dateOnly);
@@ -187,12 +202,39 @@ export interface ReinstateTollChargeParams {
   date: string;
   /** Positive magnitude of the toll amount being reinstated. */
   amount: number;
+  organizationId?: string | null;
 }
 
 export interface ReinstateTollChargeResult {
   /** True when an active offset was found and reinstated. False = safe no-op (nothing active). */
   reinstated: boolean;
   idempotencyKey: string | null;
+}
+
+/**
+ * Highest platform_reimbursed inflow that does not already have a cancel.
+ * Used when the marker was cleared but the recovery is still live.
+ */
+async function findLivePlatformOffsetVersion(
+  sourceType: TollPnlOffsetSourceType,
+  sourceId: string,
+  hintVersion: number,
+): Promise<number | null> {
+  const ceiling = Math.max(hintVersion, 1) + 20;
+  for (let version = ceiling; version >= 1; version--) {
+    const offsetKey = `${sourceType}:${sourceId}|toll_charge_offset:v${version}`;
+    const row = await getCanonicalEventByIdemKey(offsetKey);
+    if (!row) continue;
+    const meta = (row.metadata && typeof row.metadata === "object"
+      ? row.metadata
+      : {}) as { reason?: string; direction?: string };
+    if (String(meta.reason || "") !== "platform_reimbursed") continue;
+    if (String(meta.direction || "") === "outflow") continue;
+    const reinstateKey = `${sourceType}:${sourceId}|toll_charge_reinstate:v${version}`;
+    if (await canonicalEventExistsByIdemKey(reinstateKey)) continue;
+    return version;
+  }
+  return null;
 }
 
 /**
@@ -208,13 +250,22 @@ export async function reinstateTollCharge(
   const markerKey = markerKeyFor(p.sourceType, p.sourceId);
   const marker = (await kv.get(markerKey)) as TollPnlOffsetMarker | null;
 
-  if (!marker || !marker.active) {
-    return { reinstated: false, idempotencyKey: null };
+  let version = marker?.active ? marker.version : 0;
+  let offsetIdempotencyKey = marker?.offsetIdempotencyKey;
+  if (!marker?.active) {
+    const live = await findLivePlatformOffsetVersion(
+      p.sourceType,
+      p.sourceId,
+      marker?.version ?? 0,
+    );
+    if (live == null) return { reinstated: false, idempotencyKey: null };
+    version = live;
+    offsetIdempotencyKey = `${p.sourceType}:${p.sourceId}|toll_charge_offset:v${live}`;
   }
 
   const amountAbs = Math.abs(Number(p.amount) || 0);
   const dateOnly = (p.date || "").split("T")[0] || new Date().toISOString().split("T")[0];
-  const idempotencyKey = `${p.sourceType}:${p.sourceId}|toll_charge_reinstate:v${marker.version}`;
+  const idempotencyKey = `${p.sourceType}:${p.sourceId}|toll_charge_reinstate:v${version}`;
 
   const event = {
     idempotencyKey,
@@ -232,9 +283,10 @@ export async function reinstateTollCharge(
     description: "Toll charge reinstated (resolution reverted)",
     metadata: {
       category: "Toll Reconciliation",
-      reinstatesOffsetKey: marker.offsetIdempotencyKey,
-      version: marker.version,
+      reinstatesOffsetKey: offsetIdempotencyKey,
+      version,
     },
+    ...(p.organizationId ? { organizationId: p.organizationId } : {}),
   };
 
   const result = await appendCanonicalLedgerEvents([event], c as never);
@@ -245,15 +297,15 @@ export async function reinstateTollCharge(
 
   await kv.set(markerKey, {
     active: false,
-    version: marker.version,
-    reason: marker.reason,
-    offsetIdempotencyKey: marker.offsetIdempotencyKey,
+    version,
+    reason: marker?.reason ?? "platform_reimbursed",
+    offsetIdempotencyKey,
     reinstateIdempotencyKey: idempotencyKey,
     at: new Date().toISOString(),
   } as TollPnlOffsetMarker);
 
   console.log(
-    `[TollPnlOffset] Reinstated ${p.sourceType}:${p.sourceId} v${marker.version} via ${idempotencyKey}`,
+    `[TollPnlOffset] Reinstated ${p.sourceType}:${p.sourceId} v${version} via ${idempotencyKey}`,
   );
   return { reinstated: true, idempotencyKey };
 }
@@ -274,13 +326,14 @@ export type PlazaTollPnlSyncLike = {
   tripId?: string | null;
   isReconciled?: boolean;
   status?: string | null;
+  organizationId?: string | null;
 };
 
 /**
  * Keep the plaza/tag canonical charge in sync with Toll Recon:
  * matched/refunded → offset (not a fleet cost); write-off/business → leave
- * (or reinstate) as fleet cost; unmatched → reinstate. Personal is owned by
- * the Charge Driver emitter — never touch that offset here.
+ * (or reinstate) as fleet cost; unmatched → reinstate. Personal cancels a
+ * leftover platform recovery and leaves a real personal offset alone.
  */
 export async function syncPlazaTollPnlOffset(
   entry: PlazaTollPnlSyncLike,
@@ -290,7 +343,27 @@ export async function syncPlazaTollPnlOffset(
   if (!id) return;
   const kind = String(entry.type || "").toLowerCase().replace("-", "_");
   if (kind === "top_up" || kind === "refund" || kind === "adjustment") return;
-  if (isPersonalTollResolution(entry.resolution)) return;
+  if (isPersonalTollResolution(entry.resolution)) {
+    const marker = (await kv.get(markerKeyFor("toll_ledger", id))) as TollPnlOffsetMarker | null;
+    // A personal charge must not also keep a platform recovery. Leave a real
+    // personal offset alone.
+    if (marker?.active && marker.reason !== "platform_reimbursed") return;
+    const amount = Math.abs(Number(entry.amount) || 0);
+    if (amount <= 0.005) return;
+    await reinstateTollCharge(
+      {
+        sourceType: "toll_ledger",
+        sourceId: id,
+        driverId: entry.driverId,
+        vehicleId: entry.vehicleId,
+        date: String(entry.date || new Date().toISOString()),
+        amount,
+        organizationId: entry.organizationId,
+      },
+      c,
+    );
+    return;
+  }
 
   const amount = Math.abs(Number(entry.amount) || 0);
   if (amount <= 0.005) return;
@@ -301,6 +374,7 @@ export async function syncPlazaTollPnlOffset(
     vehicleId: entry.vehicleId,
     date: String(entry.date || new Date().toISOString()),
     amount,
+    organizationId: entry.organizationId,
   };
 
   if (isFleetAbsorbingTollResolution(entry.resolution)) {

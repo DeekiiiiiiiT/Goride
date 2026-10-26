@@ -48,6 +48,21 @@ Deno.test("rowToKvValue typed null trip_id clears stale payload tripId", () => {
   assertEquals(payload.tripId, null);
 });
 
+Deno.test("rowToKvValue prefers typed service line over stale unattributed payload", () => {
+  const payload = rowToKvValue({
+    service_line: "rideshare",
+    service_line_source: "org_default",
+    payload_json: {
+      service_line_source: "unattributed",
+      serviceLineSource: "unattributed",
+    },
+  });
+  assertEquals(payload.serviceLine, "rideshare");
+  assertEquals(payload.service_line, "rideshare");
+  assertEquals(payload.serviceLineSource, "org_default");
+  assertEquals(payload.service_line_source, "org_default");
+});
+
 Deno.test("rowToKvValue mirrors typed trip columns when payload is empty", () => {
   const payload = rowToKvValue({
     id: "t1",

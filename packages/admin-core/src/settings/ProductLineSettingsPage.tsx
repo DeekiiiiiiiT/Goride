@@ -49,10 +49,8 @@ import {
   DEFAULT_FLEET_SETTINGS,
   mergeSettings,
   defaultSettingsForSegment,
-  defaultConsumerSegmentSettings,
   type FleetProductSettings,
   type SettingsSegment,
-  type ConsumerSegmentSettings,
 } from '@roam/platform-settings';
 import { businessTypesForSegment } from '@roam/business-config';
 import { ENTERPRISE_MODULE_CATALOG, type ModuleCatalogEntry } from '@roam/platform-settings';
@@ -84,15 +82,14 @@ export type ProductLineSettingsPageProps = {
   moduleGroups?: Array<ModuleCatalogEntry['group']>;
 };
 
-type SettingsData = FleetProductSettings | ConsumerSegmentSettings | Record<string, unknown>;
+type SettingsData = FleetProductSettings & { platformFeeRate?: number };
 
 function defaultForSegment(segment: SettingsSegment): SettingsData {
-  if (segment === 'fleet') return { ...DEFAULT_FLEET_SETTINGS };
-  if (segment === 'enterprise') return { ...DEFAULT_ENTERPRISE_SETTINGS };
-  if (segment === 'rides' || segment === 'driver' || segment === 'haul' || segment === 'dash') {
-    return defaultConsumerSegmentSettings(segment);
-  }
-  return defaultSettingsForSegment(segment) as SettingsData;
+  return {
+    ...DEFAULT_FLEET_SETTINGS,
+    ...DEFAULT_ENTERPRISE_SETTINGS,
+    ...(defaultSettingsForSegment(segment) as Partial<SettingsData>),
+  };
 }
 
 function isProductLineSegment(segment: SettingsSegment): segment is ProductLineSegment {
@@ -295,13 +292,13 @@ export function ProductLineSettingsPage({
 
   const toggleModule = (key: string) => {
     if (!('enabledModules' in settings) || !settings.enabledModules) return;
-    const mods = settings.enabledModules as Record<string, boolean>;
+    const mods = settings.enabledModules as unknown as Record<string, boolean>;
     setSettings(prev => ({
       ...prev,
       enabledModules: {
-        ...prev.enabledModules,
-        [key]: !prev.enabledModules[key],
-      },
+        ...mods,
+        [key]: !mods[key],
+      } as unknown as SettingsData['enabledModules'],
     }));
     setDirty(true);
   };
@@ -462,8 +459,8 @@ export function ProductLineSettingsPage({
               max={100}
               step={0.1}
               value={
-                typeof (settings as ConsumerSegmentSettings).platformFeeRate === 'number'
-                  ? Math.round(((settings as ConsumerSegmentSettings).platformFeeRate as number) * 10000) / 100
+                typeof settings.platformFeeRate === 'number'
+                  ? Math.round(settings.platformFeeRate * 10000) / 100
                   : 5
               }
               onChange={(e) => {
@@ -621,7 +618,7 @@ export function ProductLineSettingsPage({
       >
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <ReadOnlyField label="Super Admin" value={userEmail || '—'} />
-          <ReadOnlyField label="Admin Role" value={userRole || 'superadmin'} />
+          <ReadOnlyField label="Admin Role" value={userRole || 'Unknown'} />
           <ReadOnlyField label="Settings Segment" value={resolvedSegment} />
           <ReadOnlyField label="Platform" value={platformLabel} />
           <ReadOnlyField label="Environment" value="Production" />
@@ -831,7 +828,7 @@ export function ProductLineSettingsPage({
               {visibleModules.map((mod) => {
                 const on = Boolean(
                   settings.enabledModules &&
-                    (settings.enabledModules as Record<string, boolean>)[mod.key],
+                    (settings.enabledModules as unknown as Record<string, boolean>)[mod.key],
                 );
                 const IconComp =
                   mod.key === 'fuelManagement' ? Fuel

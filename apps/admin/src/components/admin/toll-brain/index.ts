@@ -1,1 +1,0 @@
-export { TollBrainPage } from './TollBrainPage';

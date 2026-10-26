@@ -95,7 +95,16 @@ export function rowToKvValue(row: Record<string, unknown>): Record<string, unkno
   if (payload.amount == null && row.amount != null) payload.amount = row.amount;
   if (!payload.category && row.category) payload.category = row.category;
   if (!payload.type && row.type) payload.type = row.type;
-  if (!payload.serviceLine && row.service_line) payload.serviceLine = row.service_line;
+  // Typed service line wins over a stale payload. Payload still saying
+  // "unattributed" hid charged personal tolls from the rideshare spend screen.
+  if (row.service_line) {
+    payload.serviceLine = row.service_line;
+    payload.service_line = row.service_line;
+  }
+  if (row.service_line_source) {
+    payload.serviceLineSource = row.service_line_source;
+    payload.service_line_source = row.service_line_source;
+  }
   if (payload.distance == null && row.distance != null) payload.distance = row.distance;
   if (payload.duration == null && row.duration != null) payload.duration = row.duration;
   if (payload.netToDriver == null && row.net_to_driver != null) payload.netToDriver = row.net_to_driver;

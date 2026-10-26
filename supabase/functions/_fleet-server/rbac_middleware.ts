@@ -12,9 +12,11 @@
 
 import { createClient } from "npm:@supabase/supabase-js@2";
 import type { Context, Next } from "npm:hono@4.3.11";
+import { jwtAssuranceLevel } from "../_shared/productAdmin.ts";
 import { readAccessCache, writeAccessCache } from "./access_cache.ts";
 import { resolveAccess, type AccessDecision, type AccessSeat, type OpenMembership, type OwnedOrg } from "./access_resolution.ts";
 import { hasPermission as catalogHasPermission } from "../../../packages/auth-client/src/permissions.ts";
+import { runAsMasterActor } from "./master_actor.ts";
 
 // ---------------------------------------------------------------------------
 // 1. Types
@@ -217,6 +219,29 @@ export function hasPlatformOwnerAccess(user: RbacUser): boolean {
   return user.resolvedRole === 'platform_owner'
     || user.rawRole === 'superadmin'
     || user.rawRole === 'platform_owner';
+}
+
+/**
+ * Platform staff and owners are not signed in until the token is aal2.
+ * Fleet owners and other product roles are left alone.
+ * Returns null when the request may continue.
+ */
+export function platformMfaRequiredResponse(
+  c: Context,
+  user: RbacUser | null | undefined,
+): Response | null {
+  if (!user) return null;
+  if (!hasPlatformStaffAccess(user) && !hasPlatformOwnerAccess(user)) return null;
+  const authHeader = c.req.header("Authorization") ?? "";
+  if (jwtAssuranceLevel(authHeader) === "aal2") return null;
+  return c.json(
+    {
+      error: "Forbidden",
+      message: "Two-step login required",
+      code: "mfa_required",
+    },
+    403,
+  ) as unknown as Response;
 }
 
 type SupabaseAuthUser = {
@@ -557,7 +582,7 @@ export function requireAuth(options?: RequireAuthOptions) {
         }
       }
 
-      await next();
+      await runAsMasterActor(rbacUser.email || rbacUser.userId, () => next());
     } catch (err) {
       // Fail closed — never synthesize fleet_owner on auth errors
       console.error('[RBAC] Auth error (fail closed):', err);
@@ -673,6 +698,9 @@ export function requirePlatformStaff() {
       }, 403);
     }
 
+    const mfaBlock = platformMfaRequiredResponse(c, user);
+    if (mfaBlock) return mfaBlock;
+
     await next();
   };
 }
@@ -697,5 +725,5 @@ export function assertPlatformStaffResponse(c: Context): Response | null {
       message: 'Only platform staff (owner, support, or analyst) can access this resource.',
     }, 403) as unknown as Response;
   }
-  return null;
+  return platformMfaRequiredResponse(c, user);
 }

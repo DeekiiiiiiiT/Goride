@@ -186,7 +186,11 @@ export function SupabasePlatformTab() {
   const onSync = async () => {
     setSyncOk(null);
     try {
-      const result = await syncMut.mutateAsync(true);
+      const result = (await syncMut.mutateAsync(true)) as {
+        ok?: boolean;
+        detail?: string;
+        reason?: string;
+      };
       if (result?.ok === false) {
         throw new Error(result.detail || result.reason || 'Sync failed');
       }

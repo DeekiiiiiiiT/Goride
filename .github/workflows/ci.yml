@@ -124,6 +124,15 @@ jobs:
           VITE_SUPABASE_ANON_KEY: ci-placeholder-anon-key
         run: pnpm --filter @roam/admin test
 
+      - name: Admin reachability
+        run: node scripts/admin-reachability.mjs
+
+      - name: Catalog contract
+        run: node scripts/catalog-contract.mjs
+
+      - name: Typecheck admin
+        run: node scripts/admin-typecheck-baseline.mjs
+
       - name: Test parts catalog CSV import
         env:
           VITE_SUPABASE_URL: https://ci-placeholder.supabase.co
@@ -158,6 +167,9 @@ jobs:
 
       - name: Deno test dominion access
         run: deno test --no-check supabase/functions/_fleet-server/dominion_access.test.ts
+
+      - name: Deno test platform MFA gate
+        run: deno test --no-check supabase/functions/_fleet-server/platform_mfa_gate.test.ts
 
       - name: Deno test parts sourcing rules
         run: >

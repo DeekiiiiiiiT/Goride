@@ -15,6 +15,7 @@ import {
   type LoadedTollPlaza,
 } from "../_shared/tollPlazaLoader.ts";
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { resolveDriverVehicleAssignment } from "./driver_vehicle_assignment.ts";
 
 export interface FleetRoutePoint {
   lat: number;
@@ -185,11 +186,17 @@ export async function replayAndPersistFleetTripTolls(input: {
     (input.trip.date && String(input.trip.date).split("T")[0]) ||
     now.split("T")[0];
 
-  const vehicleId =
+  let vehicleId =
     input.trip.vehicleId && input.trip.vehicleId !== "unknown"
       ? String(input.trip.vehicleId)
       : null;
   const driverId = input.trip.driverId ? String(input.trip.driverId) : null;
+  if (!vehicleId && driverId) {
+    const assigned = await resolveDriverVehicleAssignment(driverId, {
+      organizationId: orgId,
+    });
+    if (assigned.vehicleId) vehicleId = assigned.vehicleId;
+  }
 
   for (const hit of hits) {
     const ref = `fleet_replay:${tripId}:${hit.plazaId}:${hit.pointIndex}`;

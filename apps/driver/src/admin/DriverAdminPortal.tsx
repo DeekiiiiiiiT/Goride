@@ -6,6 +6,7 @@ import {
   jwtPrimaryRole,
   flashAdminLoginError,
 } from '@roam/auth-client';
+import { PlatformStaffMfaStep, usePlatformStaffMfa } from '@roam/admin-core';
 import { Session } from '@supabase/supabase-js';
 import {
   LayoutDashboard,
@@ -216,6 +217,7 @@ export function DriverAdminPortal() {
   }, []);
 
   const hasAccess = !!session && hasProductAdminRole(session.user, 'driver');
+  const mfa = usePlatformStaffMfa(supabase, hasAccess ? session?.user : null);
 
   // Wrong role: clear admin session and return to login (no Access Denied / redirects)
   useEffect(() => {
@@ -234,6 +236,24 @@ export function DriverAdminPortal() {
 
   if (!session) {
     return <DriverAdminLoginForm />;
+  }
+
+  if (mfa.status !== 'ready') {
+    if (mfa.status === 'required') {
+      return (
+        <PlatformStaffMfaStep
+          client={supabase}
+          issuer="Roam Driver"
+          onCancel={() => void supabase.auth.signOut().then(() => setSession(null))}
+          onVerified={mfa.confirm}
+        />
+      );
+    }
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-950 text-slate-400">
+        <Loader2 className="w-8 h-8 animate-spin" />
+      </div>
+    );
   }
 
   return (

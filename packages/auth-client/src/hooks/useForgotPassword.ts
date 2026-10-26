@@ -1,8 +1,6 @@
 import { useCallback, useState } from 'react';
-import {
-  type AuthRecoverySurface,
-  requestPasswordReset,
-} from '../requestPasswordReset';
+import { type AuthRecoverySurface } from '../authRecoveryRedirects';
+import { requestPasswordReset } from '../requestPasswordReset';
 import { rememberRecoverySignInHref } from '../recoverySignInStorage';
 
 export type UseForgotPasswordOptions = {

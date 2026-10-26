@@ -2,6 +2,7 @@
 export { AdminShell } from './components/AdminShell';
 export { AdminSidebar } from './components/AdminSidebar';
 export { AdminAuthGate } from './components/AdminAuthGate';
+export { PlatformStaffMfaStep, usePlatformStaffMfa } from './components/PlatformStaffMfaStep';
 export { PermissionGate } from './components/PermissionGate';
 export { AppPermissionsTable } from './components/AppPermissionsTable';
 export { AdminConfirmDialog } from './components/AdminConfirmDialog';

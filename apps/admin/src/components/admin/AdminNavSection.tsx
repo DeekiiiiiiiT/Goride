@@ -41,6 +41,8 @@ export function AdminNavSection({
       <button
         type="button"
         onClick={onToggle}
+        aria-expanded={open}
+        aria-label={label}
         className={`
           w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm font-medium transition-colors
           ${nested ? 'text-[13px]' : 'px-3 py-2.5 gap-3'}
@@ -58,7 +60,9 @@ export function AdminNavSection({
         <div className={`${nested ? 'ml-3' : 'ml-4'} mt-1 space-y-0.5 border-l border-slate-200 dark:border-slate-800 pl-2`}>
           {children.map((child) => {
             const ChildIcon = child.icon;
-            const active = currentPage === child.id && !child.href;
+            const active = !child.href && (
+              currentPage === child.id || (child.activeWhen?.includes(currentPage) ?? false)
+            );
             if (child.href) {
               return (
                 <a

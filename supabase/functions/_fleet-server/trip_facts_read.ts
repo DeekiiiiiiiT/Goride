@@ -3,7 +3,8 @@
  */
 import type { Context } from "npm:hono@4.3.11";
 import { getServiceClient } from "./service_client.ts";
-import { hasPlatformStaffAccess, type RbacUser } from "./rbac_middleware.ts";
+import { hasPlatformStaffAccess, platformMfaRequiredResponse, type RbacUser } from "./rbac_middleware.ts";
+import { jwtAssuranceLevel } from "../_shared/productAdmin.ts";
 import { buildTripAnalyticsFilter } from "./trip_analytics_definitions.ts";
 import { projectTripListValue } from "./trip_list_projection.ts";
 import { resolveTripSort } from "./trip_sort.ts";
@@ -12,15 +13,33 @@ import { periodKeyFor } from "../../../packages/finance-core/src/periodKey.ts";
 
 type RpcError = { message?: string; code?: string; details?: string };
 
-export function resolveTripAnalyticsOrg(user: RbacUser | undefined, bodyOrg: unknown): string | null {
+export function resolveTripAnalyticsOrg(
+  user: RbacUser | undefined,
+  bodyOrg: unknown,
+  assurance: "aal1" | "aal2" = "aal1",
+): string | null {
   const requested = typeof bodyOrg === "string" && bodyOrg.trim() ? bodyOrg.trim() : null;
-  if (user && hasPlatformStaffAccess(user)) return requested || user.organizationId || null;
-  return user?.organizationId || null;
+  const own = user?.organizationId || null;
+  if (user && hasPlatformStaffAccess(user) && assurance === "aal2") {
+    return requested || own;
+  }
+  return own;
+}
+
+/** Password session must not read another fleet. Own-fleet reads stay open. */
+export function tripCrossFleetMfaResponse(c: Context, bodyOrg: unknown): Response | null {
+  const user = c.get("rbacUser") as RbacUser | undefined;
+  if (!user || !hasPlatformStaffAccess(user)) return null;
+  const requested = typeof bodyOrg === "string" && bodyOrg.trim() ? bodyOrg.trim() : null;
+  if (!requested) return null;
+  if (user.organizationId && requested === user.organizationId) return null;
+  return platformMfaRequiredResponse(c, user);
 }
 
 export function orgFromTripRequest(c: Context, body: Record<string, unknown> | null | undefined): string | null {
   const user = c.get("rbacUser") as RbacUser | undefined;
-  return resolveTripAnalyticsOrg(user, body?.organizationId);
+  const assurance = jwtAssuranceLevel(c.req.header("Authorization") ?? "");
+  return resolveTripAnalyticsOrg(user, body?.organizationId, assurance);
 }
 
 function missingFacts(error: RpcError | null | undefined): boolean {

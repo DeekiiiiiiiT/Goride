@@ -41,6 +41,8 @@ import {
   BadgeCheck,
   BookOpen,
   BookMarked,
+  Fuel,
+  AppWindow,
 } from 'lucide-react';
 
 export type NavChild = {
@@ -50,9 +52,11 @@ export type NavChild = {
   href?: string;
   /** Optional live badge (e.g. open pending count). */
   badgeCount?: number;
+  /** Other page ids that should highlight this menu item. */
+  activeWhen?: string[];
 };
 
-export const NAV_ITEMS = [{ id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard }];
+export const NAV_ITEMS = [{ id: 'dashboard', label: 'Overview', icon: LayoutDashboard }];
 
 export const PLATFORM_CHILDREN: NavChild[] = [
   { id: 'platform-team', label: 'Platform Team', icon: Shield },
@@ -154,9 +158,6 @@ export const ACCOUNTING_VENDOR_CHILDREN: NavChild[] = [
   { id: 'pending-vendor-requests', label: 'Pending vendor requests', icon: Inbox },
 ];
 
-/** @deprecated Prefer GCT_CHILDREN + ACCOUNTING_VENDOR_CHILDREN. */
-export const ACCOUNTING_CHILDREN = [...GCT_CHILDREN, ...ACCOUNTING_VENDOR_CHILDREN];
-
 export const ROAM_FLEET_CHILDREN: NavChild[] = [
   { id: 'fleet-overview', label: 'Overview', icon: BarChart3 },
   { id: 'fleet-customers', label: 'Customer Accounts', icon: Users },
@@ -205,10 +206,8 @@ const FLEET_SETTINGS_PAGES = FLEET_SETTINGS_CHILDREN.map((c) => c.id);
 const ENTERPRISE_SETTINGS_PAGES = ENTERPRISE_SETTINGS_CHILDREN.map((c) => c.id);
 const LEGACY_SETTINGS_PAGES = SETTINGS_CHILDREN.map((c) => c.id);
 
-const SHARED_PLATFORM_PAGES = [
-  'dashboard',
-  'platform-team',
-  'matching-brain',
+/** Customer operations and Roam's own tax books. Owner only until each screen moves. */
+const OWNER_ONLY_PAGES = [
   'global-identity',
   'activity-log',
   'enterprise-overview',
@@ -226,19 +225,41 @@ const SHARED_PLATFORM_PAGES = [
   'roam-haul-overview',
   'roam-dash-overview',
   'dash-merchants',
+  'fuel-analytics',
+  'fuel-cost-analytics',
+  'fuel-evidence-bridge',
+  'toll-live-monitor',
+  'gct-entities',
+  'gct-ledger',
+  'gct-remittance',
+  'db-management',
+  'db-settings',
+  'unified-ledger',
+  ...FLEET_SETTINGS_PAGES,
+  ...ENTERPRISE_SETTINGS_PAGES,
+];
+
+const SHARED_PLATFORM_PAGES = [
+  'dashboard',
+  'vehicles-home',
+  'places-home',
+  'fuel-home',
+  'tolls-home',
+  'tax-vendors-home',
+  'apps-directory',
+  'change-requests',
+  'platform-ops',
+  'platform-team',
+  'matching-brain',
   'fuel-jaa-cards',
   'fuel-brain',
   'fuel-prices',
   'fuel-stations',
   'plug-places',
-  'fuel-analytics',
-  'fuel-cost-analytics',
-  'fuel-evidence-bridge',
   'toll-brain',
   'toll-stations',
   'toll-info',
   'toll-settings',
-  'toll-live-monitor',
   'motor-vehicles',
   'platforms-engines',
   'pending-motor-vehicles',
@@ -255,20 +276,26 @@ const SHARED_PLATFORM_PAGES = [
   'world-quality',
   'gct-engine',
   'gct-rates',
-  'gct-entities',
-  'gct-ledger',
-  'gct-remittance',
   'gct-knowledge',
   'vendor-database',
   'pending-vendor-requests',
   ...GLOBAL_SETTINGS_PAGES,
-  ...FLEET_SETTINGS_PAGES,
-  ...ENTERPRISE_SETTINGS_PAGES,
 ];
+
+export function pageAllowedForRole(role: string | null | undefined, pageId: string): boolean {
+  if (role === 'platform_owner') {
+    if (pageId.startsWith('db-biz-') || pageId.startsWith('db-customer-')) return true;
+    const ownerPages = PLATFORM_ROLE_PAGES.platform_owner ?? [];
+    return ownerPages.includes(pageId);
+  }
+  const allowed = (role && PLATFORM_ROLE_PAGES[role]) || [];
+  return allowed.includes(pageId);
+}
 
 export const PLATFORM_ROLE_PAGES: Record<string, string[]> = {
   platform_owner: [
     ...SHARED_PLATFORM_PAGES,
+    ...OWNER_ONLY_PAGES,
     'api-center',
     'api-center-overview',
     'api-center-usage',
@@ -279,14 +306,10 @@ export const PLATFORM_ROLE_PAGES: Record<string, string[]> = {
     'api-center-billing',
     'settings',
     ...LEGACY_SETTINGS_PAGES,
-    'db-management',
-    'db-settings',
-    'unified-ledger',
   ],
   platform_support: [...SHARED_PLATFORM_PAGES],
   platform_analyst: [
     'dashboard',
-    'fuel-evidence-bridge',
     'api-center',
     'api-center-overview',
     'api-center-usage',
@@ -318,6 +341,98 @@ export const LEGACY_PAGE_REDIRECTS: Record<string, string> = {
   'tag-inventory': 'toll-live-monitor',
   'toll-tags': 'toll-live-monitor',
 };
+
+/** Two-level Dominion menu. Customer apps are not listed here. */
+export const DOMINION_SECTIONS: { id: string; label: string; icon: typeof LayoutDashboard; children: NavChild[] }[] = [
+  {
+    id: 'master',
+    label: 'Master data',
+    icon: Database,
+    children: [
+      {
+        id: 'vehicles-home',
+        label: 'Vehicles',
+        icon: Car,
+        activeWhen: ['motor-vehicles', 'platforms-engines', 'pending-motor-vehicles', 'maintenance-templates', 'parts-catalog', 'suppliers-prices', 'catalog-quality'],
+      },
+      {
+        id: 'places-home',
+        label: 'Places and Maps',
+        icon: MapPin,
+        activeWhen: ['world-jamaica', 'world-parishes', 'world-towns', 'world-communities', 'world-places', 'world-imports', 'world-quality', 'plug-places'],
+      },
+      {
+        id: 'fuel-home',
+        label: 'Fuel',
+        icon: Fuel,
+        activeWhen: ['fuel-stations', 'fuel-prices', 'fuel-jaa-cards'],
+      },
+      {
+        id: 'tolls-home',
+        label: 'Tolls',
+        icon: MapPin,
+        activeWhen: ['toll-stations', 'toll-info'],
+      },
+      {
+        id: 'tax-vendors-home',
+        label: 'Tax and Vendors',
+        icon: Store,
+        activeWhen: ['vendor-database', 'pending-vendor-requests', 'gct-engine', 'gct-rates', 'gct-knowledge'],
+      },
+    ],
+  },
+  {
+    id: 'engines',
+    label: 'Engines',
+    icon: Brain,
+    children: [
+      { id: 'fuel-brain', label: 'Fuel Brain', icon: Brain },
+      { id: 'toll-brain', label: 'Toll Brain', icon: Brain, activeWhen: ['toll-settings'] },
+      { id: 'matching-brain', label: 'Matching Brain', icon: Brain },
+    ],
+  },
+  {
+    id: 'distribution',
+    label: 'Distribution',
+    icon: AppWindow,
+    children: [
+      { id: 'apps-directory', label: 'Apps', icon: AppWindow },
+      {
+        id: 'api-center-overview',
+        label: 'Data API',
+        icon: Gauge,
+        activeWhen: ['api-center', 'api-center-usage', 'api-center-supabase', 'api-center-keys', 'api-center-budgets', 'api-center-logs', 'api-center-billing'],
+      },
+      { id: 'change-requests', label: 'Change requests', icon: Inbox },
+    ],
+  },
+  {
+    id: 'platform',
+    label: 'Platform',
+    icon: Shield,
+    children: [
+      { id: 'platform-team', label: 'Staff and roles', icon: Shield },
+      { id: 'activity-log', label: 'Activity log', icon: ClipboardList },
+      { id: 'platform-ops', label: 'Platform Ops', icon: ShieldCheck },
+      {
+        id: 'global-settings-general',
+        label: 'Global settings',
+        icon: Globe,
+        activeWhen: ['global-settings-security', 'global-settings-danger', 'settings'],
+      },
+    ],
+  },
+  {
+    id: 'back-office',
+    label: 'Back office',
+    icon: Scale,
+    children: [
+      { id: 'gct-entities', label: 'GCT registrations', icon: BadgeCheck },
+      { id: 'gct-ledger', label: 'Ledger', icon: BookOpen },
+      { id: 'gct-remittance', label: 'Remittance', icon: Receipt },
+    ],
+  },
+];
 
 export const SECTION_META = {
   platform: { label: 'Platform', icon: Shield },

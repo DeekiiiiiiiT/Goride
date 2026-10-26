@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import type { ReconRunPayload } from '../../../services/reconApi';
 import { postReconAttribution } from '../../../services/reconApi';
+import { useBusinessConfig } from '../../auth/BusinessConfigContext';
 import { Button } from '../../ui/button';
 
 export function ReconAttributionStep({
@@ -14,6 +15,8 @@ export function ReconAttributionStep({
   const unattributed = run.attribution?.rowCount ?? 0;
   const amount = run.attribution?.amountMajor ?? 0;
   const sampleRows = run.attribution?.rows ?? [];
+  const { serviceLines } = useBusinessConfig();
+  const showDelivery = serviceLines.includes('rush_delivery');
   const [busy, setBusy] = useState<'rideshare' | 'rush_delivery' | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -48,7 +51,8 @@ export function ReconAttributionStep({
   return (
     <div className="space-y-4">
       <p className="text-sm text-slate-600">
-        Shared fuel and toll rows need a service line before both weeks can close.
+        We couldn&apos;t tell if this toll was for Rideshare or Delivery. Pick one — it
+        doesn&apos;t change what the driver owes.
       </p>
       <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 tabular-nums">
         <p className="text-2xl font-bold text-slate-900">{unattributed}</p>
@@ -70,15 +74,17 @@ export function ReconAttributionStep({
             {busy === 'rideshare' ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
             Rideshare
           </Button>
-          <Button
-            type="button"
-            variant="outline"
-            disabled={busy !== null}
-            onClick={() => void assignAll('rush_delivery')}
-          >
-            {busy === 'rush_delivery' ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-            Delivery
-          </Button>
+          {showDelivery ? (
+            <Button
+              type="button"
+              variant="outline"
+              disabled={busy !== null}
+              onClick={() => void assignAll('rush_delivery')}
+            >
+              {busy === 'rush_delivery' ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              Delivery
+            </Button>
+          ) : null}
         </div>
       )}
       {sampleRows.length > 0 && sampleRows.length < unattributed ? (

@@ -40,15 +40,18 @@ export function PlatformSessionProvider({
     return { accessToken, getAuthHeaders };
   }, [accessToken, getAuthHeadersProp]);
 
+  // Bind during render so a child page can load on its first open.
+  // A parent effect runs too late: the child's load effect fires first.
+  bindPlatformSessionAuth({
+    accessToken: value.accessToken,
+    getAuthHeaders: value.getAuthHeaders,
+  });
+
   useEffect(() => {
-    bindPlatformSessionAuth({
-      accessToken: value.accessToken,
-      getAuthHeaders: value.getAuthHeaders,
-    });
     return () => {
       bindPlatformSessionAuth({ accessToken: null, getAuthHeaders: undefined });
     };
-  }, [value]);
+  }, []);
 
   return (
     <PlatformSessionContext.Provider value={value}>{children}</PlatformSessionContext.Provider>

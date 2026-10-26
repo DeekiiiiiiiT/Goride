@@ -1,7 +1,7 @@
 /**
  * Product-scoped admin roles — shared by client and edge guards.
  */
-export type ProductKey = 'fleet' | 'enterprise' | 'dash' | 'rides' | 'driver' | 'haul' | 'courier';
+import type { ProductKey } from './platformPermissions';
 
 /** Platform roles that have access to all product admins */
 export const PLATFORM_ROLES = new Set([

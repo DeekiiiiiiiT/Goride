@@ -53,10 +53,8 @@ export interface Trip {
   route?: RoutePoint[]; // Phase 2: Live Trip Route Data
   stops?: TripStop[];   // Phase 2.1: Multi-Stop Support
   totalWaitTime?: number; // Phase 2.1: Wait Time Tracking
-  
+
   // Phase 1 (Trip Logs Enhancement): Enhanced Data Fields
-  requestTime?: string; // ISO date string
-  dropoffTime?: string; // ISO date string
   productType?: string; // UberX, Comfort, etc.
   earningsPerKm?: number;
   earningsPerMin?: number;

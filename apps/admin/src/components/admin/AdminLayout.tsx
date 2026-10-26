@@ -37,6 +37,7 @@ import {
   DATABASE_MANAGEMENT_ITEM,
   PLATFORM_ROLE_PAGES,
   SECTION_META,
+  DOMINION_SECTIONS,
   type NavChild,
 } from './adminNavConfig';
 
@@ -75,6 +76,7 @@ function allNavChildren(): NavChild[] {
     ...SETTINGS_CHILDREN,
     ...API_CENTER_CHILDREN,
     DATABASE_MANAGEMENT_ITEM,
+    ...DOMINION_SECTIONS.flatMap((section) => section.children),
   ];
 }
 
@@ -222,6 +224,7 @@ export function AdminLayout({ children, currentPage, onNavigate }: AdminLayoutPr
   const [businessSegmentsOpen, setBusinessSegmentsOpen] = useSectionOpen(currentPage, businessSegmentIds);
   const [globalSettingsOpen, setGlobalSettingsOpen] = useSectionOpen(currentPage, globalSettingsIds);
   const [apiCenterOpen, setApiCenterOpen] = useSectionOpen(currentPage, apiIds);
+  const [openSections, setOpenSections] = useState<Record<string, boolean>>({});
 
   const isDbPage =
     currentPage === 'db-management'
@@ -387,13 +390,14 @@ export function AdminLayout({ children, currentPage, onNavigate }: AdminLayoutPr
           <button
             type="button"
             onClick={() => setMobileOpen(false)}
+            aria-label="Close menu"
             className="lg:hidden ml-auto p-1 text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-1">
+        <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-1" aria-label="Dominion">
           {NAV_ITEMS.map((item) => {
             const Icon = item.icon;
             const active = currentPage === item.id;
@@ -414,119 +418,31 @@ export function AdminLayout({ children, currentPage, onNavigate }: AdminLayoutPr
             );
           })}
 
-          {visiblePlatform.length > 0 && (
-            <AdminNavSection
-              key={platformSection.key}
-              label={platformSection.label}
-              icon={platformSection.icon}
-              children={platformSection.children}
-              currentPage={currentPage}
-              open={platformSection.open}
-              onToggle={() => platformSection.setOpen(!platformSection.open)}
-              onNavigate={handleNav}
-              isActive={platformSection.isActive}
-            />
-          )}
-
-          <AdminNavGroup
-            label={SECTION_META.businessSegments.label}
-            icon={SECTION_META.businessSegments.icon}
-            sections={businessSegmentSections}
-            currentPage={currentPage}
-            open={businessSegmentsOpen}
-            onToggle={() => setBusinessSegmentsOpen(!businessSegmentsOpen)}
-            onNavigate={handleNav}
-            isActive={businessSegmentIds.includes(currentPage)}
-          />
-
-          {infraSections.map((section) => (
-            <AdminNavSection
-              key={section.key}
-              label={section.label}
-              icon={section.icon}
-              children={section.children}
-              currentPage={currentPage}
-              open={section.open}
-              onToggle={() => section.setOpen(!section.open)}
-              onNavigate={handleNav}
-              isActive={section.isActive}
-            />
-          ))}
-
-          {(visibleGct.length > 0 || visibleAccountingVendors.length > 0) && (
-            <AdminNavGroup
-              label={SECTION_META.accounting.label}
-              icon={SECTION_META.accounting.icon}
-              sections={accountingSections}
-              currentPage={currentPage}
-              open={accountingOpen}
-              onToggle={() => setAccountingOpen(!accountingOpen)}
-              onNavigate={handleNav}
-              isActive={accountingIds.includes(currentPage)}
-            />
-          )}
-
-          {visibleApiCenter.length > 0 && (
-            <AdminNavSection
-              label="API Command Center"
-              icon={Shield}
-              children={visibleApiCenter}
-              currentPage={currentPage}
-              open={apiCenterOpen}
-              onToggle={() => setApiCenterOpen(!apiCenterOpen)}
-              onNavigate={handleNav}
-              isActive={apiIds.includes(currentPage) || currentPage === 'api-center'}
-            />
-          )}
-
-          {visibleGlobalSettings.length > 0 && (
-            <AdminNavSection
-              label="Global Settings"
-              icon={Shield}
-              children={visibleGlobalSettings}
-              currentPage={currentPage}
-              open={globalSettingsOpen}
-              onToggle={() => setGlobalSettingsOpen(!globalSettingsOpen)}
-              onNavigate={handleNav}
-              isActive={
-                globalSettingsIds.includes(currentPage)
-                || legacySettingsIds.includes(currentPage)
-                || currentPage === 'settings'
-              }
-            />
-          )}
-
-          {canViewDbManagement && (
-            <div className="space-y-1">
-              <button
-                type="button"
-                onClick={() => handleNav('db-management')}
-                className={`
-                  w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors
-                  ${currentPage === 'db-management' || (isDbPage && currentPage !== 'unified-ledger') ? 'bg-amber-500/15 text-amber-700 dark:text-amber-300' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-white dark:hover:bg-slate-800'}
-                `}
-              >
-                <Database className="w-4.5 h-4.5 shrink-0" />
-                <span className="truncate">{DATABASE_MANAGEMENT_ITEM.label}</span>
-                {(currentPage === 'db-management' || (isDbPage && currentPage !== 'unified-ledger')) && (
-                  <ChevronRight className="w-3.5 h-3.5 ml-auto text-amber-400/60" />
-                )}
-              </button>
-              {canViewPage('unified-ledger') && (
-                <button
-                  type="button"
-                  onClick={() => handleNav('unified-ledger')}
-                  className={`
-                    w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ml-2
-                    ${currentPage === 'unified-ledger' ? 'bg-amber-500/15 text-amber-700 dark:text-amber-300' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-white dark:hover:bg-slate-800'}
-                  `}
-                >
-                  <Receipt className="w-4 h-4 shrink-0" />
-                  <span className="truncate">Unified Ledger</span>
-                </button>
-              )}
-            </div>
-          )}
+          {DOMINION_SECTIONS.map((section) => {
+            const children = section.children
+              .filter((child) => canViewPage(child.id))
+              .map((child) =>
+                child.id === 'vehicles-home' || child.id === 'change-requests'
+                  ? { ...child, badgeCount: pendingCatalogOpenCount }
+                  : child,
+              );
+            if (children.length === 0) return null;
+            const pageIds = children.flatMap((child) => [child.id, ...(child.activeWhen ?? [])]);
+            const open = openSections[section.id] ?? pageIds.includes(currentPage);
+            return (
+              <AdminNavSection
+                key={section.id}
+                label={section.label}
+                icon={section.icon}
+                children={children}
+                currentPage={currentPage}
+                open={open}
+                onToggle={() => setOpenSections((prev) => ({ ...prev, [section.id]: !open }))}
+                onNavigate={handleNav}
+                isActive={pageIds.includes(currentPage)}
+              />
+            );
+          })}
         </nav>
 
         <div className="border-t border-slate-200 dark:border-slate-800 p-4 shrink-0">
@@ -541,12 +457,13 @@ export function AdminLayout({ children, currentPage, onNavigate }: AdminLayoutPr
           </div>
           <div className="flex items-center gap-2">
             <span className="text-[10px] uppercase tracking-wider text-amber-700 dark:text-amber-400/80 bg-amber-500/10 px-2 py-0.5 rounded font-semibold">
-              {resolved === 'platform_support' ? 'Support' : resolved === 'platform_analyst' ? 'Analyst' : 'Super Admin'}
+              {resolved === 'platform_support' ? 'Support' : resolved === 'platform_analyst' ? 'Analyst' : resolved === 'platform_owner' ? 'Owner' : 'Staff'}
             </span>
             <button
               type="button"
               onClick={() => void signOut()}
               className="ml-auto p-1.5 text-slate-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
+              aria-label="Sign out"
               title="Sign out"
             >
               <LogOut className="w-4 h-4" />
@@ -560,6 +477,7 @@ export function AdminLayout({ children, currentPage, onNavigate }: AdminLayoutPr
           <button
             type="button"
             onClick={() => setMobileOpen(true)}
+            aria-label="Open menu"
             className="lg:hidden p-2 -ml-2 text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white mr-3"
           >
             <Menu className="w-5 h-5" />

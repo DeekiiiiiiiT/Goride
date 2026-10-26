@@ -1,4 +1,5 @@
-import { hasProductAdminAccess, type ProductKey } from './productAdminRoles';
+import { hasProductAdminAccess } from './productAdminRoles';
+import type { ProductKey } from './platformPermissions';
 
 export type JwtUser = {
   user_metadata?: Record<string, unknown>;

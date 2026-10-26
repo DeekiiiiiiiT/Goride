@@ -193,7 +193,7 @@ export function GlobalPlatformSettingsPage({
             </div>
             <div>
               <p className="text-xs text-slate-500">Admin Role</p>
-              <p className="text-slate-900 dark:text-white">{userRole || 'superadmin'}</p>
+              <p className="text-slate-900 dark:text-white">{userRole || 'Unknown'}</p>
             </div>
             <div>
               <p className="text-xs text-slate-500">Settings Segment</p>

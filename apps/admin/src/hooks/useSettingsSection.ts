@@ -7,7 +7,7 @@
 
 import { useState, useCallback, useMemo } from 'react';
 
-export interface UseSettingsSectionOptions<T extends Record<string, unknown>> {
+export interface UseSettingsSectionOptions<T extends object> {
   /** Initial data for the section */
   initialData: T | null;
   /** Keys belonging to this section (for partial updates) */
@@ -18,7 +18,7 @@ export interface UseSettingsSectionOptions<T extends Record<string, unknown>> {
   validate?: (data: Partial<T>) => string | null;
 }
 
-export interface UseSettingsSectionResult<T extends Record<string, unknown>> {
+export interface UseSettingsSectionResult<T extends object> {
   /** Current form data (full object) */
   formData: T | null;
   /** Whether this section is in edit mode */
@@ -43,7 +43,7 @@ export interface UseSettingsSectionResult<T extends Record<string, unknown>> {
   resetData: (newData: T | null) => void;
 }
 
-export function useSettingsSection<T extends Record<string, unknown>>({
+export function useSettingsSection<T extends object>({
   initialData,
   sectionKeys,
   onSave,

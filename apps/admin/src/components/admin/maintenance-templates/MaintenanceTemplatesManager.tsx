@@ -245,14 +245,9 @@ const TAB_TRIGGER_CLASS =
   "rounded-lg font-medium transition-colors text-slate-700 shadow-none border-0 data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-sm dark:text-slate-300 dark:data-[state=active]:bg-amber-500/20 dark:data-[state=active]:text-amber-50 dark:data-[state=active]:shadow-none dark:data-[state=active]:ring-1 dark:data-[state=active]:ring-amber-400/45";
 
 export function MaintenanceTemplatesManager() {
-  const { session, user } = useAuth();
+  const { session, role } = useAuth();
   const token = session?.access_token;
-  const rawRole =
-    (user as { app_metadata?: { role?: string }; user_metadata?: { role?: string } })?.app_metadata?.role ||
-    (user as { user_metadata?: { role?: string } })?.user_metadata?.role ||
-    "";
-  const canMigrate =
-    rawRole === "platform_owner" || rawRole === "superadmin" || rawRole === "platform_support";
+  const canMigrate = role === "platform_owner" || role === "platform_support";
 
   const [catalog, setCatalog] = useState<VehicleCatalogRecord[]>([]);
   const [loading, setLoading] = useState(true);
@@ -457,7 +452,7 @@ export function MaintenanceTemplatesManager() {
     const byCode = new Map(categories.map((c) => [c.code, c]));
     return codes
       .map((code) => byCode.get(code))
-      .filter((c): c is MaintenanceServiceCategory => Boolean(c) && resolveCategoryKind(c) !== "system")
+      .filter((c): c is MaintenanceServiceCategory => c != null && resolveCategoryKind(c) !== "system")
       .map((c) => c.id);
   };
 

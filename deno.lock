@@ -7235,6 +7235,7 @@
             "npm:@supabase/supabase-js@2",
             "npm:clsx@*",
             "npm:lucide-react@0.487",
+            "npm:qrcode.react@^4.2.0",
             "npm:sonner@^2.0.3",
             "npm:tailwind-merge@*",
             "npm:vitest@^3.2.4"

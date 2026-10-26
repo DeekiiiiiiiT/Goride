@@ -7,7 +7,7 @@ import { requireAuth, requirePermission, type RbacUser } from "./rbac_middleware
 import { FEATURE_FLAGS, isFeatureEnabled } from "./feature_flags.ts";
 import * as cache from "./cache.ts";
 import { buildTripAnalyticsFilter } from "./trip_analytics_definitions.ts";
-import { loadStoredTripForOrg, loadTripForOrg, orgFromTripRequest } from "./trip_facts_read.ts";
+import { loadStoredTripForOrg, loadTripForOrg, orgFromTripRequest, tripCrossFleetMfaResponse } from "./trip_facts_read.ts";
 
 const SECTIONS = [
   "kpis",
@@ -87,6 +87,8 @@ export function registerTripAnalyticsRoutes(app: Hono) {
   app.post("/make-server-37f42386/trips/analytics", requireAuth({ requireOrg: true }), async (c) => {
     try {
       const body = await c.req.json().catch(() => ({})) as Record<string, unknown>;
+      const crossFleet = tripCrossFleetMfaResponse(c, body.organizationId);
+      if (crossFleet) return crossFleet;
       const orgId = orgFromTripRequest(c, body);
       if (!orgId) return c.json({ error: "Missing organization" }, 403);
       const filters = buildTripAnalyticsFilter(body.filters && typeof body.filters === "object"
@@ -139,6 +141,8 @@ export function registerTripAnalyticsRoutes(app: Hono) {
   app.post("/make-server-37f42386/trips/analytics/review", requireAuth({ requireOrg: true }), requirePermission("transactions.edit"), async (c) => {
     try {
       const body = await c.req.json() as Record<string, unknown>;
+      const crossFleet = tripCrossFleetMfaResponse(c, body.organizationId);
+      if (crossFleet) return crossFleet;
       const orgId = orgFromTripRequest(c, body);
       if (!orgId) return c.json({ error: "Missing organization" }, 403);
       const tripId = String(body.tripId || "");
@@ -165,6 +169,8 @@ export function registerTripAnalyticsRoutes(app: Hono) {
   app.post("/make-server-37f42386/trips/analytics/settings", requireAuth({ requireOrg: true }), requirePermission("transactions.edit"), async (c) => {
     try {
       const body = await c.req.json() as Record<string, unknown>;
+      const crossFleet = tripCrossFleetMfaResponse(c, body.organizationId);
+      if (crossFleet) return crossFleet;
       const orgId = orgFromTripRequest(c, body);
       if (!orgId) return c.json({ error: "Missing organization" }, 403);
       const { error } = await fleet().rpc("trip_analytics_settings_save", {
@@ -191,6 +197,8 @@ export function registerTripAnalyticsRoutes(app: Hono) {
     async (c) => {
       try {
         const body = await c.req.json().catch(() => ({})) as Record<string, unknown>;
+      const crossFleet = tripCrossFleetMfaResponse(c, body.organizationId);
+      if (crossFleet) return crossFleet;
         const orgId = orgFromTripRequest(c, body);
         if (!orgId) return c.json({ error: "Missing organization" }, 403);
         const tripId = String(body.tripId || "").trim();
@@ -207,6 +215,8 @@ export function registerTripAnalyticsRoutes(app: Hono) {
   app.post("/make-server-37f42386/trips/analytics/trip", requireAuth({ requireOrg: true }), async (c) => {
     try {
       const body = await c.req.json().catch(() => ({})) as Record<string, unknown>;
+      const crossFleet = tripCrossFleetMfaResponse(c, body.organizationId);
+      if (crossFleet) return crossFleet;
       const orgId = orgFromTripRequest(c, body);
       if (!orgId) return c.json({ error: "Missing organization" }, 403);
       const tripId = String(body.tripId || "").trim();

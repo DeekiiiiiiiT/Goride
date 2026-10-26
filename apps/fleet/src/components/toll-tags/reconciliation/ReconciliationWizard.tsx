@@ -63,6 +63,7 @@ import {
   type TollWithLinkedTrip,
 } from "../../../utils/tollFinancialOverview";
 import { isTollIncludedInSpend } from "../../../utils/tollLedgerIntegrity";
+import { uniqueTollRowsById } from "@roam/toll-core";
 import { tollReconTruncationMessage } from "../../../utils/tollReconCaps";
 import { collectReadyToLinkPairs, partitionSuggestions } from "../../../utils/suggestionPartition";
 
@@ -891,7 +892,7 @@ function ReconciliationWizardInner({
       byPlatform: tollSpendByPlatform,
     } = computeGrossTollSpendByPlatform({
       tolls: filterTollsToWizardPeriod(
-        [...pUnreconciled, ...pReconciled] as TollWithLinkedTrip[],
+        uniqueTollRowsById([...pUnreconciled, ...pReconciled] as TollWithLinkedTrip[]),
         period.startDate,
         fleetTz,
       ).filter(isTollIncludedInSpend),
@@ -900,7 +901,7 @@ function ReconciliationWizardInner({
       resolvedRefunds: pResolved,
     });
     const periodTolls = filterTollsToWizardPeriod(
-      [...pUnreconciled, ...pReconciled] as TollWithLinkedTrip[],
+      uniqueTollRowsById([...pUnreconciled, ...pReconciled] as TollWithLinkedTrip[]),
       period.startDate,
       fleetTz,
     ).filter(isTollIncludedInSpend);

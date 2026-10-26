@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { LogOut } from 'lucide-react';
-import { CustomerAccounts, TeamMembers } from '@roam/admin-core';
+import { CustomerAccounts, PlatformStaffMfaStep, TeamMembers, usePlatformStaffMfa } from '@roam/admin-core';
+import { supabaseEnterpriseAdmin } from '@roam/auth-client';
 import { ProductLineSettingsPage } from '@roam/admin-core/settings';
 import { API_ENDPOINTS } from '@roam/api-client';
 import { useAdminAuth } from '@/app/auth/AdminAuthProvider';
@@ -12,6 +13,7 @@ import { AdminExternalOrgsPage } from '@/app/admin/AdminExternalOrgsPage';
 import { AdminStorageBillingPage } from '@/app/admin/AdminStorageBillingPage';
 
 type PrimaryTab = 'team' | 'courier' | 'freight_forwarder' | 'platform';
+type PlatformPage = 'general' | 'registration' | 'security' | 'announcements';
 type CourierPage = 'customers' | 'companies' | 'features';
 type FfPage =
   | 'customers'
@@ -21,6 +23,13 @@ type FfPage =
   | 'external'
   | 'billing'
   | 'features';
+
+const PLATFORM_PAGES: { id: PlatformPage; label: string }[] = [
+  { id: 'general', label: 'General' },
+  { id: 'registration', label: 'Registration' },
+  { id: 'security', label: 'Security' },
+  { id: 'announcements', label: 'Announcements' },
+];
 
 const PRIMARY: { id: PrimaryTab; label: string }[] = [
   { id: 'courier', label: 'Courier' },
@@ -53,9 +62,11 @@ function tabClass(active: boolean) {
 
 export function EnterpriseAdminPage() {
   const { session, user, role, loading, signOut } = useAdminAuth();
+  const mfa = usePlatformStaffMfa(supabaseEnterpriseAdmin, session?.user);
   const [primary, setPrimary] = useState<PrimaryTab>('courier');
   const [courierPage, setCourierPage] = useState<CourierPage>('customers');
   const [ffPage, setFfPage] = useState<FfPage>('customers');
+  const [platformPage, setPlatformPage] = useState<PlatformPage>('general');
   const [pendingClaims, setPendingClaims] = useState(0);
 
   useEffect(() => {
@@ -82,6 +93,24 @@ export function EnterpriseAdminPage() {
 
   if (!session?.access_token) {
     return <EnterpriseAdminLogin />;
+  }
+
+  if (mfa.status !== 'ready') {
+    if (mfa.status === 'required') {
+      return (
+        <PlatformStaffMfaStep
+          client={supabaseEnterpriseAdmin}
+          issuer="Roam Enterprise"
+          onCancel={() => void signOut()}
+          onVerified={mfa.confirm}
+        />
+      );
+    }
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-slate-950 text-sm text-slate-400">
+        Loading…
+      </div>
+    );
   }
 
   const accessToken = session.access_token;
@@ -169,6 +198,20 @@ export function EnterpriseAdminPage() {
             ))}
           </nav>
         ) : null}
+        {primary === 'platform' ? (
+          <nav className="mx-auto mt-2 flex max-w-6xl gap-1">
+            {PLATFORM_PAGES.map((t) => (
+              <button
+                key={t.id}
+                type="button"
+                onClick={() => setPlatformPage(t.id)}
+                className={tabClass(platformPage === t.id)}
+              >
+                {t.label}
+              </button>
+            ))}
+          </nav>
+        ) : null}
       </header>
 
       <div className="mx-auto max-w-6xl p-6">
@@ -240,11 +283,11 @@ export function EnterpriseAdminPage() {
         {primary === 'platform' && (
           <ProductLineSettingsPage
             {...settingsBase}
-            activeTab="general"
+            activeTab={platformPage}
             showBusinessTypes={false}
-            showProductToggles
+            showProductToggles={platformPage === 'general'}
             pageTitle="Platform"
-            pageDescription="Shared name, currency, timezone, and which products new customers can use."
+            pageDescription="Shared name, currency, timezone, registration, security, and announcements."
           />
         )}
       </div>

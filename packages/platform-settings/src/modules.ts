@@ -262,7 +262,10 @@ export function rushModuleOverridesForServiceLines(
   serviceLines: string[] | null | undefined,
   existing: Partial<Record<string, boolean>> | null | undefined = null,
 ): Record<string, boolean> {
-  const merged: Record<string, boolean> = { ...(existing ?? {}) };
+  const merged: Record<string, boolean> = {};
+  for (const [key, value] of Object.entries(existing ?? {})) {
+    if (typeof value === 'boolean') merged[key] = value;
+  }
   const hasRush = Array.isArray(serviceLines) && serviceLines.includes('rush_delivery');
   for (const key of RUSH_MODULE_KEYS) {
     merged[key] = hasRush;

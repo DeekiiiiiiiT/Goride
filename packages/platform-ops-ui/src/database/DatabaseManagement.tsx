@@ -9,6 +9,7 @@ import { BUSINESS_TYPES } from '@roam/business-config';
 
 interface DatabaseManagementProps {
   onNavigate: (page: string, data?: any) => void;
+  customersUrl?: string;
 }
 
 interface Customer {
@@ -19,13 +20,14 @@ interface Customer {
   status: string;
 }
 
-export function DatabaseManagement({ onNavigate }: DatabaseManagementProps) {
+export function DatabaseManagement({ onNavigate, customersUrl }: DatabaseManagementProps) {
   const { accessToken } = usePlatformSession();
+  const listUrl = customersUrl ?? `${API_ENDPOINTS.admin}/admin/customers`;
 
   const { data: customers = [], isLoading } = useQuery<Customer[]>({
-    queryKey: ['adminCustomers'],
+    queryKey: ['adminCustomers', listUrl],
     queryFn: async () => {
-      const res = await fetch(`${API_ENDPOINTS.admin}/admin/customers`, {
+      const res = await fetch(listUrl, {
         headers: { Authorization: `Bearer ${accessToken}` },
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);

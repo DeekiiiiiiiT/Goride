@@ -1,142 +1,108 @@
 import React, { useEffect, useState } from 'react';
-import { Users, Fuel, MapPin, Settings, ArrowRight, Loader2, Activity, Car, UserCog, Shield, Utensils, Navigation, Building2, Truck } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import { API_ENDPOINTS } from '../../services/apiConfig';
-import { withSettingsSegmentHeaders } from '@roam/api-client';
 import { useAuth } from '../auth/AuthContext';
-import { getMerchantStats } from '../../services/dashMerchantVerificationService';
-
-interface DashboardCardProps {
-  icon: React.ReactNode;
-  label: string;
-  value: string | number;
-  subtitle: string;
-  color: string;
-  onClick?: () => void;
-}
-
-function DashboardCard({ icon, label, value, subtitle, color, onClick }: DashboardCardProps) {
-  return (
-    <button
-      onClick={onClick}
-      className="bg-white border border-slate-200 rounded-xl p-5 text-left hover:border-slate-300 hover:shadow-sm dark:bg-slate-900 dark:border-slate-800 dark:hover:border-slate-300 dark:hover:border-slate-300 dark:hover:border-slate-300 dark:hover:border-slate-300 dark:hover:border-slate-700 transition-colors group w-full"
-    >
-      <div className="flex items-start justify-between mb-4">
-        <div className={`p-2.5 rounded-lg ${color}`}>
-          {icon}
-        </div>
-        <ArrowRight className="w-4 h-4 text-slate-400 group-hover:text-slate-600 dark:text-slate-600 dark:group-hover:text-slate-400 transition-colors" />
-      </div>
-      <p className="text-2xl font-bold text-slate-900 dark:text-white mb-1">{value}</p>
-      <p className="text-sm font-medium text-slate-700 dark:text-slate-300">{label}</p>
-      <p className="text-xs text-slate-500 mt-0.5">{subtitle}</p>
-    </button>
-  );
-}
+import { PageShell } from './PageShell';
 
 interface AdminDashboardProps {
   onNavigate: (page: string) => void;
 }
 
+type Score = { dataset?: string; score?: number | null; failing?: number; checked_at?: string; note?: string | null };
+type Change = { id: string; dataset?: string; record_id?: string; action?: string; actor?: string | null; reason?: string | null; created_at?: string };
+type Consumer = { app_key?: string; name?: string; last_sync_at?: string | null };
+
+const DATASET_PAGE: Record<string, string> = {
+  stations: 'fuel-stations',
+  tolls: 'toll-stations',
+  vendors: 'suppliers-prices',
+  vehicles: 'motor-vehicles',
+  maps: 'world-quality',
+  gct_rates: 'gct-rates',
+};
+
+const DATASET_LABEL: Record<string, string> = {
+  stations: 'Stations',
+  tolls: 'Tolls',
+  vendors: 'Vendors',
+  vehicles: 'Vehicles',
+  maps: 'Maps',
+  gct_rates: 'GCT rates',
+};
+
+function when(iso?: string | null): string {
+  if (!iso) return 'Not scored yet';
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return 'Not scored yet';
+  return date.toLocaleString();
+}
+
 export function AdminDashboard({ onNavigate }: AdminDashboardProps) {
   const { session } = useAuth();
   const accessToken = session?.access_token;
-  const [stats, setStats] = useState({
-    customerCount: 0,
-    fuelStationCount: 0,
-    tollStationCount: 0,
-    driverCount: 0,
-    linkedDriverCount: 0,
-    unlinkedDriverCount: 0,
-    teamMemberCount: 0,
-    platformStaffCount: 0,
-    riderCount: 0,
-    enterpriseCustomerCount: 0,
-    enterpriseTeamMemberCount: 0,
-    fleetCustomerCount: 0,
-    fleetTeamMemberCount: 0,
-    loading: true,
-  });
-  const [dashMerchantCounts, setDashMerchantCounts] = useState({
-    pending: 0,
-    in_review: 0,
-    docs_requested: 0,
-    approved: 0,
-    rejected: 0,
-  });
-  const [platformName, setPlatformName] = useState('Roam Dominion');
-  const [platformVersion, setPlatformVersion] = useState('1.0.0');
+  const [loading, setLoading] = useState(true);
+  const [failed, setFailed] = useState(false);
+  const [scores, setScores] = useState<Score[]>([]);
+  const [changes, setChanges] = useState<Change[]>([]);
+  const [consumers, setConsumers] = useState<Consumer[]>([]);
+  const [attention, setAttention] = useState<{ id: string; label: string; count: number; page: string }[]>([]);
+  const [scoredAt, setScoredAt] = useState<string | null>(null);
+
+  const load = async () => {
+    if (!accessToken) return;
+    setLoading(true);
+    setFailed(false);
+    const headers = { Authorization: `Bearer ${accessToken}` };
+    try {
+      const [qualityRes, changesRes, appsRes, statsRes, vehiclesRes, vendorsRes, placesRes] = await Promise.all([
+        fetch(`${API_ENDPOINTS.catalog}/admin/quality`, { headers }),
+        fetch(`${API_ENDPOINTS.catalog}/admin/changes`, { headers }),
+        fetch(`${API_ENDPOINTS.catalog}/admin/consumers`, { headers }),
+        fetch(`${API_ENDPOINTS.admin}/admin-stats`, { headers }),
+        fetch(`${API_ENDPOINTS.admin}/admin/vehicle-catalog-pending-requests?status=open&limit=1`, { headers }),
+        fetch(`${API_ENDPOINTS.admin}/admin/platform-vendors?status=pending`, { headers }),
+        fetch(`${API_ENDPOINTS.explorer}/admin/coverage`, { headers }),
+      ]);
+      const quality = qualityRes.ok ? await qualityRes.json() : { scores: [] };
+      const changeBody = changesRes.ok ? await changesRes.json() : { changes: [] };
+      const apps = appsRes.ok ? await appsRes.json() : { consumers: [] };
+      const stats = statsRes.ok ? await statsRes.json() : {};
+      const vehicles = vehiclesRes.ok ? await vehiclesRes.json() : { total: 0 };
+      const vendors = vendorsRes.ok ? await vendorsRes.json() : {};
+      const places = placesRes.ok ? await placesRes.json() : { pending: 0 };
+
+      const nextScores: Score[] = quality.scores || [];
+      setScores(nextScores);
+      setChanges(changeBody.changes || []);
+      setConsumers(apps.consumers || []);
+      const latest = nextScores
+        .map((row) => row.checked_at)
+        .filter((value): value is string => !!value)
+        .sort()
+        .at(-1) ?? null;
+      setScoredAt(latest);
+
+      const unverified = Math.max(0, Number(stats.fuelStationCount || 0) - Number(stats.stationVerified || 0));
+      const vendorList = Array.isArray(vendors) ? vendors : vendors.vendors || vendors.items || [];
+      const rows = [
+        { id: 'vehicles', label: 'Pending vehicles', count: Number(vehicles.total || 0), page: 'pending-motor-vehicles' },
+        { id: 'vendors', label: 'Pending vendors', count: Number(vendors.total ?? vendorList.length ?? 0), page: 'pending-vendor-requests' },
+        { id: 'stations', label: 'Unverified stations', count: unverified, page: 'fuel-stations' },
+        { id: 'places', label: 'Places to review', count: Number(places.pending || 0), page: 'plug-places' },
+      ].filter((row) => row.count > 0);
+      setAttention(rows);
+    } catch {
+      setFailed(true);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    loadStats();
-    loadPlatformSettings();
-    void loadMerchantStats();
+    void load();
   }, [accessToken]);
 
-  const loadMerchantStats = async () => {
-    if (!accessToken) return;
-    try {
-      const res = await getMerchantStats(accessToken);
-      setDashMerchantCounts(res.counts);
-    } catch {
-      // Endpoint not deployed yet or no permission - leave zeros
-    }
-  };
-
-  const loadStats = async () => {
-    try {
-      // Load counts from KV using the admin-check pattern
-      // These will be wired to real data in later phases
-      // For now, we'll attempt to read from KV and fall back to 0
-      const res = await fetch(`${API_ENDPOINTS.admin}/admin-stats`, {
-        headers: { Authorization: `Bearer ${accessToken}` },
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setStats({
-          customerCount: data.customerCount || 0,
-          fuelStationCount: data.fuelStationCount || 0,
-          tollStationCount: data.tollStationCount || 0,
-          driverCount: data.driverCount || 0,
-          linkedDriverCount: data.linkedDriverCount || 0,
-          unlinkedDriverCount: data.unlinkedDriverCount || 0,
-          teamMemberCount: data.teamMemberCount || 0,
-          platformStaffCount: data.platformStaffCount || 0,
-          riderCount: data.riderCount || 0,
-          enterpriseCustomerCount: data.enterprise?.customerCount ?? 0,
-          enterpriseTeamMemberCount: data.enterprise?.teamMemberCount ?? 0,
-          fleetCustomerCount: data.fleet?.customerCount ?? 0,
-          fleetTeamMemberCount: data.fleet?.teamMemberCount ?? 0,
-          loading: false,
-        });
-      } else {
-        // Endpoint might not exist yet — that's fine, show zeros
-        setStats(s => ({ ...s, loading: false }));
-      }
-    } catch {
-      setStats(s => ({ ...s, loading: false }));
-    }
-  };
-
-  const loadPlatformSettings = async () => {
-    try {
-      const res = await fetch(`${API_ENDPOINTS.admin}/admin/platform-settings`, {
-        headers: withSettingsSegmentHeaders('enterprise', {
-          Authorization: `Bearer ${accessToken}`,
-        }),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        if (data.settings) {
-          setPlatformName(data.settings.platformName || 'Roam Dominion');
-          setPlatformVersion(data.settings.platformVersion || '1.0.0');
-        }
-      }
-    } catch {
-      // Ignore — defaults are fine
-    }
-  };
-
-  if (stats.loading) {
+  if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
         <Loader2 className="w-6 h-6 text-slate-500 animate-spin" />
@@ -145,196 +111,92 @@ export function AdminDashboard({ onNavigate }: AdminDashboardProps) {
   }
 
   return (
-    <div className="space-y-8">
-      {/* Welcome */}
-      <div>
-        <h1 className="text-xl font-bold text-slate-900 dark:text-white mb-1">Platform Overview</h1>
-        <p className="text-sm text-slate-600 dark:text-slate-400">
-          Manage customer accounts, databases, and platform settings.
-        </p>
-      </div>
-
-      {/* Summary cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-        <DashboardCard
-          icon={<Users className="w-5 h-5 text-blue-400" />}
-          color="bg-blue-500/15"
-          label="Customer Accounts (combined)"
-          value={stats.customerCount}
-          subtitle="Split by Fleet vs Enterprise below"
-          onClick={() => onNavigate('enterprise-customers')}
-        />
-        <DashboardCard
-          icon={<Car className="w-5 h-5 text-amber-400" />}
-          color="bg-amber-500/15"
-          label="Total Drivers"
-          value={stats.driverCount}
-          subtitle={`${stats.linkedDriverCount} linked, ${stats.unlinkedDriverCount} unlinked`}
-          onClick={() => onNavigate('driver-users')}
-        />
-        <DashboardCard
-          icon={<UserCog className="w-5 h-5 text-cyan-400" />}
-          color="bg-cyan-500/15"
-          label="Team Members"
-          value={stats.teamMemberCount}
-          subtitle="Fleet + Enterprise operators"
-          onClick={() => onNavigate('enterprise-team-members')}
-        />
-        <DashboardCard
-          icon={<Shield className="w-5 h-5 text-rose-400" />}
-          color="bg-rose-500/15"
-          label="Platform Staff"
-          value={stats.platformStaffCount}
-          subtitle="Support & Analyst accounts"
-          onClick={() => onNavigate('platform-team')}
-        />
-        <DashboardCard
-          icon={<Fuel className="w-5 h-5 text-emerald-400" />}
-          color="bg-emerald-500/15"
-          label="Gas Stations"
-          value={stats.fuelStationCount}
-          subtitle="Verified gas stations"
-          onClick={() => onNavigate('fuel-stations')}
-        />
-        <DashboardCard
-          icon={<MapPin className="w-5 h-5 text-purple-400" />}
-          color="bg-purple-500/15"
-          label="Toll Database"
-          value={stats.tollStationCount}
-          subtitle="Toll plaza catalogue"
-          onClick={() => onNavigate('toll-stations')}
-        />
-        <DashboardCard
-          icon={<Navigation className="w-5 h-5 text-teal-400" />}
-          color="bg-teal-500/15"
-          label="Registered Riders"
-          value={stats.riderCount}
-          subtitle="Roam Rides traveler profiles"
-          onClick={() => onNavigate('rides-users')}
-        />
-        <DashboardCard
-          icon={<Utensils className={`w-5 h-5 ${dashMerchantCounts.pending > 0 ? 'text-amber-300' : 'text-emerald-400'}`} />}
-          color={dashMerchantCounts.pending > 0 ? 'bg-amber-500/20' : 'bg-emerald-500/15'}
-          label="Pending Merchants"
-          value={dashMerchantCounts.pending}
-          subtitle={`${dashMerchantCounts.approved} approved · ${dashMerchantCounts.in_review} in review`}
-          onClick={() => onNavigate('dash-merchants')}
-        />
-        <DashboardCard
-          icon={<Activity className="w-5 h-5 text-slate-400" />}
-          color="bg-slate-500/15"
-          label="Platform Settings"
-          value={platformName}
-          subtitle={`Version ${platformVersion}`}
-          onClick={() => onNavigate('settings')}
-        />
-      </div>
-
-      {/* Product-line breakout */}
-      <div className="space-y-4">
-        <h2 className="text-sm font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-wider">Dominion splits</h2>
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <DashboardCard
-            icon={<Building2 className="w-5 h-5 text-sky-400" />}
-            color="bg-sky-500/15"
-            label="Enterprise customers"
-            value={stats.enterpriseCustomerCount}
-            subtitle={`${stats.enterpriseTeamMemberCount} team operators`}
-            onClick={() => onNavigate('enterprise-overview')}
-          />
-          <DashboardCard
-            icon={<Truck className="w-5 h-5 text-amber-400" />}
-            color="bg-amber-500/15"
-            label="Fleet customers"
-            value={stats.fleetCustomerCount}
-            subtitle={`${stats.fleetTeamMemberCount} fleet operators`}
-            onClick={() => onNavigate('fleet-overview')}
-          />
-          <DashboardCard
-            icon={<Users className="w-5 h-5 text-slate-400" />}
-            color="bg-slate-700/30"
-            label="Enterprise team"
-            value={stats.enterpriseTeamMemberCount}
-            subtitle="Fleet managers & staff"
-            onClick={() => onNavigate('enterprise-team-members')}
-          />
-          <DashboardCard
-            icon={<Car className="w-5 h-5 text-amber-300" />}
-            color="bg-amber-500/15"
-            label="Fleet team"
-            value={stats.fleetTeamMemberCount}
-            subtitle="Rideshare org staff"
-            onClick={() => onNavigate('fleet-team-members')}
-          />
-        </div>
-      </div>
-
-      {/* Quick actions */}
-      <div>
-        <h2 className="text-sm font-semibold text-slate-600 dark:text-slate-300 mb-3 uppercase tracking-wider">Quick Actions</h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          <QuickAction
-            label="Customer accounts — Enterprise"
-            description="Fleet managers registered on Enterprise"
-            onClick={() => onNavigate('enterprise-customers')}
-          />
-          <QuickAction
-            label="Customer accounts — Fleet rideshare"
-            description="Fleet managers on rideshare product line"
-            onClick={() => onNavigate('fleet-customers')}
-          />
-          <QuickAction
-            label="Station Database"
-            description="Manage verified stations, spatial audit, and learnt locations"
-            onClick={() => onNavigate('fuel-stations')}
-          />
-          <QuickAction
-            label="Fuel Analytics"
-            description="Refueling trends, station pricing, and fleet analytics"
-            onClick={() => onNavigate('fuel-analytics')}
-          />
-          <QuickAction
-            label="Toll Database"
-            description="Manage toll plazas, spatial audit, and verified records"
-            onClick={() => onNavigate('toll-stations')}
-          />
-          <QuickAction
-            label="Toll Info"
-            description="Manage toll rates, vehicle classes, and operator details"
-            onClick={() => onNavigate('toll-info')}
-          />
-          <QuickAction
-            label="Motor vehicle catalog"
-            description="Platform-wide make, model, and specification reference data"
-            onClick={() => onNavigate('motor-vehicles')}
-          />
-          <QuickAction
-            label="Review Merchants"
-            description={`${dashMerchantCounts.pending} pending Roam Rush restaurant applications`}
-            onClick={() => onNavigate('dash-merchants')}
-          />
-          <QuickAction
-            label="Platform Settings"
-            description="Configure global platform options"
-            onClick={() => onNavigate('settings')}
-          />
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function QuickAction({ label, description, onClick }: { label: string; description: string; onClick: () => void }) {
-  return (
-    <button
-      onClick={onClick}
-      className="flex items-center gap-3 bg-white border border-slate-200 rounded-lg px-4 py-3 hover:border-slate-300 hover:bg-slate-50 dark:bg-slate-900/50 dark:border-slate-800 dark:hover:border-slate-300 dark:hover:border-slate-300 dark:hover:border-slate-300 dark:hover:border-slate-300 dark:hover:border-slate-700 dark:hover:bg-slate-900 transition-colors text-left group"
+    <PageShell
+      title="Overview"
+      description="Is the master data healthy, and what needs attention?"
+      action={failed ? (
+        <button type="button" className="text-sm font-medium text-amber-700 underline dark:text-amber-300" onClick={() => void load()}>
+          Retry
+        </button>
+      ) : undefined}
     >
-      <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium text-slate-900 dark:text-slate-200 group-hover:text-slate-950 dark:group-hover:text-slate-900 transition-colors dark:hover:text-white">{label}</p>
-        <p className="text-xs text-slate-500">{description}</p>
-      </div>
-      <ArrowRight className="w-4 h-4 text-slate-400 group-hover:text-slate-600 dark:text-slate-600 dark:group-hover:text-slate-400 transition-colors shrink-0" />
-    </button>
+      <section>
+        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-300">Needs attention</h2>
+        {attention.length === 0 ? (
+          <p className="text-sm text-slate-500">Nothing is waiting.</p>
+        ) : (
+          <div className="grid gap-3 sm:grid-cols-2">
+            {attention.map((row) => (
+              <button
+                key={row.id}
+                type="button"
+                onClick={() => onNavigate(row.page)}
+                className="rounded-xl border border-slate-200 bg-white p-4 text-left hover:border-slate-300 dark:border-slate-800 dark:bg-slate-900"
+              >
+                <p className="text-2xl font-bold text-slate-900 dark:text-white">{row.count}</p>
+                <p className="text-sm text-slate-600 dark:text-slate-300">{row.label}</p>
+              </button>
+            ))}
+          </div>
+        )}
+      </section>
+
+      <section>
+        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-300">Health</h2>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          {(scores.length ? scores : Object.keys(DATASET_LABEL).map((dataset): Score => ({ dataset, score: null, failing: 0, note: 'Not scored yet' }))).map((row) => {
+            const key = row.dataset || 'dataset';
+            const label = DATASET_LABEL[key] || key;
+            const scoreText = typeof row.score === 'number' ? `${row.score}% pass` : (row.note || 'Not scored yet');
+            return (
+              <button
+                key={key}
+                type="button"
+                onClick={() => onNavigate(DATASET_PAGE[key] || 'dashboard')}
+                className="rounded-xl border border-slate-200 bg-white p-4 text-left hover:border-slate-300 dark:border-slate-800 dark:bg-slate-900"
+              >
+                <p className="text-sm font-medium text-slate-700 dark:text-slate-300">{label}</p>
+                <p className="mt-1 text-2xl font-bold text-slate-900 dark:text-white">{scoreText}</p>
+                <p className="mt-1 text-xs text-slate-500">
+                  {typeof row.failing === 'number' ? `${row.failing} failing` : 'Not scored yet'}
+                  {row.checked_at ? ` · ${when(row.checked_at)}` : ''}
+                </p>
+              </button>
+            );
+          })}
+        </div>
+      </section>
+
+      <section>
+        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-300">Recent changes</h2>
+        {changes.length === 0 ? (
+          <p className="text-sm text-slate-500">No saves yet.</p>
+        ) : (
+          <ul className="divide-y divide-slate-200 rounded-xl border border-slate-200 bg-white dark:divide-slate-800 dark:border-slate-800 dark:bg-slate-900">
+            {changes.map((row) => (
+              <li key={row.id} className="px-4 py-3 text-sm text-slate-700 dark:text-slate-300">
+                <span className="font-medium text-slate-900 dark:text-white">{row.actor || 'Unknown'}</span>
+                {' '}{row.reason || row.action || 'updated'} {row.dataset || 'a record'}
+                <span className="mt-0.5 block text-xs text-slate-500">{when(row.created_at)}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      <section>
+        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-300">Jobs</h2>
+        <div className="rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300">
+          <p>Nightly score: {when(scoredAt)}</p>
+          <ul className="mt-3 space-y-1">
+            {consumers.map((app) => (
+              <li key={app.app_key || app.name}>
+                {app.name}: {app.last_sync_at ? when(app.last_sync_at) : 'Not connected yet'}
+              </li>
+            ))}
+          </ul>
+        </div>
+      </section>
+    </PageShell>
   );
 }

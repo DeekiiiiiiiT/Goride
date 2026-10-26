@@ -303,6 +303,10 @@ export const FLEET_DOMAINS: FleetDomainDef[] = [
       base(key, v, "toll_plaza:", {
         name: str(v.name) ?? str(v.plaza) ?? str(v.id),
         highway: str(v.highway),
+        status: str(v.status) ?? "published",
+        publish_state: "published",
+        lat: num(v.lat) ?? num(v.latitude),
+        lng: num(v.lng) ?? num(v.longitude),
       }),
   },
   {
@@ -365,6 +369,17 @@ export const FLEET_DOMAINS: FleetDomainDef[] = [
       if (origin && !v.originApp) v.originApp = origin;
       return base(key, v, prefix, {
         name: str(v.name) ?? str(v.stationName),
+        brand: str(v.brand),
+        status: str(v.status),
+        publish_state: str(v.status) === "verified"
+          ? "published"
+          : str(v.status) === "resolved"
+            ? "retired"
+            : "in_review",
+        lat: num(v.lat) ?? num(v.latitude),
+        lng: num(v.lng) ?? num(v.longitude),
+        address: str(v.address),
+        pcode: str(v.pcode) ?? str(v.parishPcode),
         ...(origin ? { origin_app: origin } : {}),
       });
     },
@@ -487,7 +502,12 @@ export const FLEET_DOMAINS: FleetDomainDef[] = [
     prefixes: ["platform_vendor:", "expense_vendor:"],
     mapRow: (key, v) => {
       const prefix = key.startsWith("expense_vendor:") ? "expense_vendor:" : "platform_vendor:";
-      return base(key, v, prefix, { name: str(v.name) });
+      return base(key, v, prefix, {
+        name: str(v.name),
+        status: str(v.status) ?? "published",
+        publish_state: "published",
+        category: str(v.category),
+      });
     },
   },
   {

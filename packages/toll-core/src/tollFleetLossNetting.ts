@@ -96,14 +96,47 @@ export function isTollChargedToDriverEvent(e: TollLedgerLikeEvent): boolean {
  * C-7: NO floor — a net-negative (more reversed than charged) is a real credit
  * to drivers and must survive as a signed recovery, not be clamped to $0.
  */
+function chargeVersionKey(e: TollLedgerLikeEvent): string | null {
+  const sourceId = String(e.sourceId || '').trim();
+  if (!sourceId) return null;
+  const meta = e.metadata;
+  const fromMeta =
+    meta && typeof meta === 'object' && !Array.isArray(meta)
+      ? (meta as { version?: unknown }).version
+      : undefined;
+  if (fromMeta != null && String(fromMeta) !== '') return `${sourceId}|v${String(fromMeta)}`;
+  const idem = String(e.idempotencyKey || e.idempotency_key || '');
+  const match = idem.match(/:v(\d+)$/);
+  return match ? `${sourceId}|v${match[1]}` : null;
+}
+
+/**
+ * One active charge per toll version. A dual-written copy of the same version
+ * counts once. A reversal of that version clears every copy, including a twin
+ * that has no reversal row of its own.
+ * Events with no toll id and version keep the plain charged-minus-reversed sum.
+ */
 export function sumTollChargedToDriversFromEvents(
   events: TollLedgerLikeEvent[] | undefined | null,
 ): number {
-  let total = 0;
+  let unkeyed = 0;
+  const chargedOnce = new Map<string, number>();
+  const reversed = new Set<string>();
   for (const e of events || []) {
     const t = String(e.eventType || '');
-    if (t === 'toll_charged_to_driver') total += tollEventAmount(e);
-    else if (t === 'toll_charge_reversed') total -= tollEventAmount(e);
+    if (t !== 'toll_charged_to_driver' && t !== 'toll_charge_reversed') continue;
+    const key = chargeVersionKey(e);
+    if (!key) {
+      if (t === 'toll_charged_to_driver') unkeyed += tollEventAmount(e);
+      else unkeyed -= tollEventAmount(e);
+      continue;
+    }
+    if (t === 'toll_charge_reversed') reversed.add(key);
+    else if (!chargedOnce.has(key)) chargedOnce.set(key, tollEventAmount(e));
+  }
+  let total = unkeyed;
+  for (const [key, amt] of chargedOnce) {
+    if (!reversed.has(key)) total += amt;
   }
   return round2(total);
 }

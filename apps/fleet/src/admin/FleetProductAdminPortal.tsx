@@ -24,6 +24,10 @@ import {
   BookOpen,
   Wrench,
   Calculator,
+  BarChart3,
+  ShieldCheck,
+  CreditCard,
+  Fuel,
   ChevronDown,
   ChevronRight,
 } from 'lucide-react';
@@ -41,6 +45,18 @@ import { StorageCenterPage } from './storage/StorageCenterPage';
 import { MaintenanceScheduleLedgerPage } from './ledger/MaintenanceScheduleLedgerPage';
 import { FleetAdminPartsDesk } from './FleetAdminPartsDesk';
 import { WeekCalculatorPage } from './WeekCalculatorPage';
+import { CustomerAccounts, PlatformStaffMfaStep, TeamMembers, usePlatformStaffMfa } from '@roam/admin-core';
+import { FleetBooks } from './FleetBooks';
+import {
+  EvidenceBridgeAnalytics,
+  FuelCostAnalyticsPage,
+  GasCardsPage,
+  PlatformSessionProvider,
+  StationAnalyticsPage,
+  UnifiedLedgerFeed,
+} from '@roam/platform-ops-ui';
+import { ProductLineSettingsPage } from '@roam/admin-core/settings';
+import { API_ENDPOINTS } from '@roam/api-client';
 import { Button } from '../components/ui/button';
 import {
   DropdownMenu,
@@ -55,7 +71,21 @@ import { useAdminConfirm } from './contexts/AdminConfirmContext';
 const DRIVER_ADMIN_URL = 'https://roamdriver.co/admin';
 const RIDES_ADMIN_URL = 'https://roam-s.co/admin';
 
-type AdminPage = 'dashboard' | 'customers' | 'storage' | 'ledger-maintenance' | 'parts' | 'week-calculator';
+type AdminPage =
+  | 'dashboard'
+  | 'customers'
+  | 'books'
+  | 'ledger'
+  | 'station-analytics'
+  | 'fuel-cost'
+  | 'evidence'
+  | 'gas-cards'
+  | 'team'
+  | 'settings'
+  | 'storage'
+  | 'ledger-maintenance'
+  | 'parts'
+  | 'week-calculator';
 
 function FleetAdminLogin({ onSession }: { onSession: (s: Session) => void }) {
   const [email, setEmail] = useState('');
@@ -163,6 +193,7 @@ export function FleetProductAdminPortal() {
   const [customers, setCustomers] = useState<FleetAdminCustomer[]>([]);
   const [customersLoading, setCustomersLoading] = useState(false);
   const [page, setPage] = useState<AdminPage>('dashboard');
+  const [settingsTab, setSettingsTab] = useState('general');
   const [ledgerNavOpen, setLedgerNavOpen] = useState(true);
   
   // Action state
@@ -296,6 +327,8 @@ export function FleetProductAdminPortal() {
     if (session && page === 'customers') void loadCustomers();
   }, [session, page, loadCustomers]);
 
+  const mfa = usePlatformStaffMfa(supabase, session?.user);
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-950 text-slate-400">
@@ -306,6 +339,24 @@ export function FleetProductAdminPortal() {
 
   if (!session) {
     return <FleetAdminLogin onSession={setSession} />;
+  }
+
+  if (mfa.status !== 'ready') {
+    if (mfa.status === 'required') {
+      return (
+        <PlatformStaffMfaStep
+          client={supabase}
+          issuer="Roam Fleet"
+          onCancel={() => void supabase.auth.signOut().then(() => setSession(null))}
+          onVerified={mfa.confirm}
+        />
+      );
+    }
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-950 text-slate-400">
+        <Loader2 className="h-8 w-8 animate-spin" />
+      </div>
+    );
   }
 
   const pending = customers.filter((c) => c.accountStatus === 'pending_approval');
@@ -328,6 +379,62 @@ export function FleetProductAdminPortal() {
           className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm ${page === 'customers' ? 'bg-slate-800' : 'hover:bg-slate-900'}`}
         >
           <Users className="h-4 w-4" /> Fleet customers
+        </button>
+        <button
+          type="button"
+          onClick={() => setPage('station-analytics')}
+          className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm ${page === 'station-analytics' ? 'bg-slate-800' : 'hover:bg-slate-900'}`}
+        >
+          <Fuel className="h-4 w-4" /> Station analytics
+        </button>
+        <button
+          type="button"
+          onClick={() => setPage('fuel-cost')}
+          className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm ${page === 'fuel-cost' ? 'bg-slate-800' : 'hover:bg-slate-900'}`}
+        >
+          <BarChart3 className="h-4 w-4" /> Fuel cost
+        </button>
+        <button
+          type="button"
+          onClick={() => setPage('evidence')}
+          className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm ${page === 'evidence' ? 'bg-slate-800' : 'hover:bg-slate-900'}`}
+        >
+          <ShieldCheck className="h-4 w-4" /> Evidence
+        </button>
+        <button
+          type="button"
+          onClick={() => setPage('gas-cards')}
+          className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm ${page === 'gas-cards' ? 'bg-slate-800' : 'hover:bg-slate-900'}`}
+        >
+          <CreditCard className="h-4 w-4" /> Gas cards
+        </button>
+        <button
+          type="button"
+          onClick={() => setPage('books')}
+          className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm ${page === 'books' ? 'bg-slate-800' : 'hover:bg-slate-900'}`}
+        >
+          <BookOpen className="h-4 w-4" /> Customer books
+        </button>
+        <button
+          type="button"
+          onClick={() => setPage('ledger')}
+          className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm ${page === 'ledger' ? 'bg-slate-800' : 'hover:bg-slate-900'}`}
+        >
+          <BookOpen className="h-4 w-4" /> Combined ledger
+        </button>
+        <button
+          type="button"
+          onClick={() => setPage('team')}
+          className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm ${page === 'team' ? 'bg-slate-800' : 'hover:bg-slate-900'}`}
+        >
+          <Users className="h-4 w-4" /> Team
+        </button>
+        <button
+          type="button"
+          onClick={() => setPage('settings')}
+          className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm ${page === 'settings' ? 'bg-slate-800' : 'hover:bg-slate-900'}`}
+        >
+          <Wrench className="h-4 w-4" /> Settings
         </button>
         <button
           type="button"
@@ -451,125 +558,66 @@ export function FleetProductAdminPortal() {
           <MaintenanceScheduleLedgerPage accessToken={token} />
         )}
 
-        {page === 'customers' && (
+        {page === 'team' && (
+          <TeamMembers
+            productLine="fleet"
+            apiBaseUrl={API_ENDPOINTS.admin}
+            accessToken={token}
+            callerRole={userRole}
+            apiNamespace="/fleet-admin"
+            pageTitle="Fleet team"
+            subtitle="People who run a fleet customer account."
+          />
+        )}
+        {page === 'settings' && (
           <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <h2 className="text-xl font-semibold">Fleet customers</h2>
-              <Button variant="outline" size="sm" onClick={() => void loadCustomers()} disabled={customersLoading}>
-                Refresh
-              </Button>
+            <div className="flex flex-wrap gap-2">
+              {['general', 'features', 'registration', 'security', 'announcements'].map((tab) => (
+                <button
+                  key={tab}
+                  type="button"
+                  onClick={() => setSettingsTab(tab)}
+                  className={`rounded-lg px-3 py-1.5 text-sm capitalize ${settingsTab === tab ? 'bg-slate-800 text-white' : 'text-slate-400 hover:bg-slate-900'}`}
+                >
+                  {tab}
+                </button>
+              ))}
             </div>
-            {customersLoading ? (
-              <Loader2 className="h-6 w-6 animate-spin text-slate-500" />
-            ) : (
-              <div className="rounded-xl border border-slate-800">
-                <table className="w-full text-sm">
-                  <thead className="bg-slate-900 text-slate-400">
-                    <tr>
-                      <th className="text-left p-3">Name</th>
-                      <th className="text-left p-3">Email</th>
-                      <th className="text-left p-3">Platforms</th>
-                      <th className="text-left p-3">Status</th>
-                      <th className="text-right p-3">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {customers.map((c) => (
-                      <tr key={c.id} className="border-t border-slate-800">
-                        <td className="p-3">{c.name}</td>
-                        <td className="p-3 text-slate-400">{c.email}</td>
-                        <td className="p-3">
-                          <div className="flex flex-wrap gap-1">
-                            {(c.serviceLines?.length ? c.serviceLines : ['rideshare']).map((line) => (
-                              <span
-                                key={line}
-                                className="rounded-full bg-slate-800 px-2 py-0.5 text-[10px] font-medium uppercase text-slate-300"
-                              >
-                                {line === 'rush_delivery' ? 'Delivery' : 'Rideshare'}
-                              </span>
-                            ))}
-                          </div>
-                        </td>
-                        <td className="p-3">
-                          {c.accountStatus === 'pending_approval' ? (
-                            <span className="text-amber-400">Pending</span>
-                          ) : c.isSuspended || c.accountStatus === 'suspended' ? (
-                            <span className="text-red-400">Suspended</span>
-                          ) : (
-                            <span className="text-emerald-400">{c.status || 'Active'}</span>
-                          )}
-                        </td>
-                        <td className="p-3 text-right">
-                          <div className="flex items-center justify-end gap-2">
-                            {c.accountStatus === 'pending_approval' && (
-                              <Button
-                                size="sm"
-                                variant="secondary"
-                                onClick={async () => {
-                                  await approveFleetCustomer(token, c.id);
-                                  await loadCustomers();
-                                }}
-                              >
-                                <CheckCircle2 className="mr-1 h-3.5 w-3.5" />
-                                Approve
-                              </Button>
-                            )}
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <Button size="sm" variant="ghost" aria-label={`Actions for ${c.email}`}>
-                                  <MoreHorizontal className="h-4 w-4" />
-                                </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end" className="w-52 border-slate-700 bg-slate-900 text-slate-100">
-                                <DropdownMenuItem
-                                  onClick={() => {
-                                    setSelectedCustomer(c);
-                                    setModal('service-lines');
-                                  }}
-                                >
-                                  Edit platforms
-                                </DropdownMenuItem>
-                                {c.isSuspended || c.accountStatus === 'suspended' ? (
-                                  <DropdownMenuItem onClick={() => void doReactivate(c)}>
-                                    Reactivate account
-                                  </DropdownMenuItem>
-                                ) : c.accountStatus !== 'pending_approval' ? (
-                                  <DropdownMenuItem
-                                    onClick={() => {
-                                      setSelectedCustomer(c);
-                                      setModal('suspend');
-                                    }}
-                                  >
-                                    Suspend account
-                                  </DropdownMenuItem>
-                                ) : null}
-                                <DropdownMenuItem onClick={() => void doSignOut(c)}>
-                                  <LogOut className="mr-2 h-3.5 w-3.5" />
-                                  Sign out all devices
-                                </DropdownMenuItem>
-                                {canDelete ? (
-                                  <>
-                                    <DropdownMenuSeparator className="bg-slate-800" />
-                                    <DropdownMenuItem
-                                      className="text-red-400 focus:text-red-300"
-                                      onClick={() => void doDelete(c)}
-                                    >
-                                      <Trash2 className="mr-2 h-3.5 w-3.5" />
-                                      Remove from Fleet
-                                    </DropdownMenuItem>
-                                  </>
-                                ) : null}
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
+            <ProductLineSettingsPage
+              segment="fleet"
+              apiBaseUrl={API_ENDPOINTS.admin}
+              accessToken={token}
+              userRole={userRole ?? ''}
+              activeTab={settingsTab}
+              showDangerZone={false}
+              platformLabel="Roam Fleet"
+              pageTitle="Fleet settings"
+              pageDescription="Name, features, registration, security, and announcements for Roam Fleet."
+            />
           </div>
+        )}
+        {page === 'books' && token && <FleetBooks token={token} />}
+        {token && (page === 'station-analytics' || page === 'fuel-cost' || page === 'evidence' || page === 'gas-cards' || page === 'ledger') && (
+          <PlatformSessionProvider accessToken={token}>
+            <div className="rounded-xl bg-white p-4 text-slate-900">
+              {page === 'station-analytics' && <StationAnalyticsPage />}
+              {page === 'fuel-cost' && <FuelCostAnalyticsPage />}
+              {page === 'evidence' && <EvidenceBridgeAnalytics />}
+              {page === 'gas-cards' && <GasCardsPage scope="org" />}
+              {page === 'ledger' && <UnifiedLedgerFeed onBack={() => setPage('books')} />}
+            </div>
+          </PlatformSessionProvider>
+        )}
+        {page === 'customers' && token && (
+          <CustomerAccounts
+            productLine="fleet"
+            apiBaseUrl={API_ENDPOINTS.admin}
+            accessToken={token}
+            callerRole={userRole}
+            apiNamespace="/fleet-admin"
+            pageTitle="Fleet customers"
+            subtitle="Organizations on the Fleet product line."
+          />
         )}
       </main>
 

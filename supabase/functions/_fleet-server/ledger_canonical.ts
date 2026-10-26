@@ -453,6 +453,12 @@ function validateOne(raw: unknown, index: number): { ok: true; value: Record<str
   if (e.metadata && typeof e.metadata === "object" && !Array.isArray(e.metadata)) {
     out.metadata = e.metadata;
   }
+  if (
+    typeof e.organizationId === "string" &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(e.organizationId.trim())
+  ) {
+    out.organizationId = e.organizationId.trim();
+  }
 
   return { ok: true, value: out };
 }

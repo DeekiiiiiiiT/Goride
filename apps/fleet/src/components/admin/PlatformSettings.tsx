@@ -9,9 +9,9 @@ type PlatformSettingsProps = {
 };
 
 export function PlatformSettings({ activeTab }: PlatformSettingsProps = {}) {
-  const { session, user } = useAuth();
+  const { session, user, role } = useAuth();
   const accessToken = session?.access_token;
-  const userRole = (user?.user_metadata?.role as string | undefined) ?? 'superadmin';
+  const userRole = role ?? '';
 
   return (
     <ProductLineSettingsPage

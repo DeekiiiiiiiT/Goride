@@ -3,7 +3,6 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '../../auth/AuthContext';
-import { resolveRole } from '../../../utils/permissions';
 import {
   deactivateDriver,
   deleteDriver,
@@ -30,7 +29,7 @@ interface DriverUserDetailPageProps {
 export function DriverUserDetailPage({ userId, onBack }: DriverUserDetailPageProps) {
   const { session, role } = useAuth();
   const token = session?.access_token;
-  const resolved = resolveRole(role || (session?.user as { user_metadata?: { role?: string } })?.user_metadata?.role);
+  const resolved = role;
   const canWriteProduct = resolved === 'platform_owner' || resolved === 'platform_support';
   const canLinkFleet = resolved === 'platform_owner';
 

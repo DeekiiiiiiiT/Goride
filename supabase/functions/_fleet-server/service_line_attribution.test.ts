@@ -142,6 +142,31 @@ Deno.test("resolveTollLedgerServiceLine top-up is org (not a line cost)", () => 
   assertEquals(r.source, "org");
 });
 
+Deno.test("resolveTollLedgerServiceLine single-line fleet files an otherwise blank toll", () => {
+  const r = resolveTollLedgerServiceLine({
+    orgServiceLines: ["rideshare"],
+  });
+  assertEquals(r.serviceLine, "rideshare");
+  assertEquals(r.source, "org_default");
+});
+
+Deno.test("resolveTollLedgerServiceLine two-line org still asks", () => {
+  const r = resolveTollLedgerServiceLine({
+    orgServiceLines: ["rideshare", "rush_delivery"],
+  });
+  assertEquals(r.serviceLine, null);
+  assertEquals(r.source, "unattributed");
+});
+
+Deno.test("resolveTollLedgerServiceLine keeps a known line after the trip link is gone", () => {
+  const r = resolveTollLedgerServiceLine({
+    existingLine: "rideshare",
+    existingSource: "trip",
+  });
+  assertEquals(r.serviceLine, "rideshare");
+  assertEquals(r.source, "trip");
+});
+
 Deno.test("resolveTollLedgerServiceLine usage follows trip before vehicle", () => {
   const r = resolveTollLedgerServiceLine({
     tripServiceLine: "rush_delivery",

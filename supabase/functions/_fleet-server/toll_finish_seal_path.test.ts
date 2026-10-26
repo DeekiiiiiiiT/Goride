@@ -16,6 +16,8 @@ import {
   TollPeriodSealedError,
 } from "./toll_period_writable.ts";
 import { tollsClearFromGate } from "./period_projector.ts";
+import { isTollIncludedInSpend } from "../../../packages/finance-core/src/tollLedgerIntegrity.ts";
+import { buildCanonicalTollEventFromTollLedger } from "./canonical_from_ops.ts";
 import type { StepId } from "../../../packages/toll-core/src/tollPeriodStepTypes.ts";
 
 function zeroSteps() {
@@ -126,6 +128,34 @@ Deno.test("TR-C1a: blockers empty ⟺ tollsClear when readiness present (informa
       readinessActionableTotal: readiness.actionableTotal,
     }),
   );
+});
+
+Deno.test("charged personal toll stays in spend; uncharged rejection does not", () => {
+  assertEquals(
+    isTollIncludedInSpend({ status: "rejected", resolution: "personal", amount: -275 }),
+    true,
+  );
+  assertEquals(
+    isTollIncludedInSpend({ status: "pending", resolution: "personal", amount: -275 }),
+    true,
+  );
+  assertEquals(
+    isTollIncludedInSpend({ status: "rejected", amount: -275 }),
+    false,
+  );
+});
+
+Deno.test("GPS usage writes a toll_charge event", () => {
+  const ev = buildCanonicalTollEventFromTollLedger({
+    id: "ea0380fb-bc98-47fd-b597-e1d1ca0a0027",
+    date: "2026-09-12",
+    driverId: "73e5b1dc-01b4-45ee-a34a-25a3256b9841",
+    amount: -275,
+    type: "usage",
+    description: "Toll crossing (fleet post-trip replay): Spanish Town",
+  });
+  assertEquals(ev?.eventType, "toll_charge");
+  assertEquals(ev?.idempotencyKey, "toll_ledger:ea0380fb-bc98-47fd-b597-e1d1ca0a0027|toll_charge");
 });
 
 Deno.test("Finish→readiness→seal: identity residual blocks Finish even with zero steps", () => {

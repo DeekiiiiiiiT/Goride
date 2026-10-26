@@ -84,12 +84,14 @@ async function requireOwner(c: { req: { header: (name: string) => string | undef
 async function ensureProfile(sb: SupabaseClient, user: User) {
   const meta = user.user_metadata || {};
   const googleName = typeof meta.full_name === "string" ? meta.full_name : typeof meta.name === "string" ? meta.name : null;
+  const seed = (typeof meta.display_name === "string" && meta.display_name.trim()) ? meta.display_name.trim() : googleName;
   await sb.schema("explorer").from("profile").upsert({
     user_id: user.id,
     phone: user.phone || null,
     email: user.email || null,
-    display_name: meta.display_name || googleName || null,
   }, { onConflict: "user_id" });
+  if (!seed) return;
+  await sb.schema("explorer").from("profile").update({ display_name: seed }).eq("user_id", user.id).is("display_name", null);
 }
 
 async function allow(sb: SupabaseClient, userId: string, flag: string): Promise<boolean> {

@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { Search, Loader2, LogOut, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '../../auth/AuthContext';
-import { resolveRole } from '../../../utils/permissions';
 import {
   lookupUserByEmail,
   forceLogout,
@@ -15,7 +14,7 @@ import { ConfirmationModal } from '../ConfirmationModal';
 export function GlobalIdentitySearch() {
   const { session, role } = useAuth();
   const token = session?.access_token;
-  const resolved = resolveRole(role || (session?.user as { user_metadata?: { role?: string } })?.user_metadata?.role);
+  const resolved = role;
   const isPlatformOwner = resolved === 'platform_owner';
 
   const [email, setEmail] = useState('');

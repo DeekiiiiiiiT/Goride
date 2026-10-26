@@ -22,7 +22,6 @@ import {
   ChevronUp,
 } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
-import { resolveRole } from '../../utils/permissions';
 import { API_ENDPOINTS } from '../../services/apiConfig';
 import { recoveryRedirectForSurface } from '@roam/auth-client';
 import type { CrossProductStatus } from '../../services/platform/identityService';
@@ -151,7 +150,7 @@ const BIZ_ICONS: Record<string, any> = {
 export function OrganizationDetail({ orgId, onBack }: Props) {
   const { session, role } = useAuth();
   const queryClient = useQueryClient();
-  const resolved = resolveRole(role || (session?.user as any)?.user_metadata?.role);
+  const resolved = role;
   const isPlatformOwner = resolved === 'platform_owner';
   const accessToken = session?.access_token;
 

@@ -26,9 +26,17 @@ import { api } from '../services/stationOpsApi';
 import { toast } from 'sonner';
 import { AddStationModal } from './AddStationModal';
 
+export type StationFillSummary = {
+  stationId: string;
+  fillCount: number;
+  lastFillAt: string | null;
+};
+
 interface StationDatabaseViewProps {
   /** Optional — when omitted (standalone Stations nav), this view loads fuel entries itself. */
   logs?: FuelEntry[];
+  /** Staff-only visit counts. When set, this screen does not download customer fuel rows. */
+  fillSummary?: StationFillSummary[];
   loading?: boolean;
   /** Top-level Station Database tab to open on load (e.g. resolution-queue for deep links). */
   defaultTab?: string;
@@ -40,6 +48,7 @@ interface StationDatabaseViewProps {
 
 export function StationDatabaseView({
   logs: logsFromParent,
+  fillSummary,
   loading = false,
   defaultTab = 'spatial-audit',
   defaultResolutionSubTab = 'unresolved-stops',
@@ -123,7 +132,7 @@ export function StationDatabaseView({
       // 1. Stations + (when standalone) fuel entries for visit/stats aggregation
       const [backendStations, fuelEntries] = await Promise.all([
         fuelService.getAllStations({ fields: 'list' }),
-        logsFromParent === undefined
+        logsFromParent === undefined && fillSummary === undefined
           ? fuelService.getFuelEntries({ limit: 1500 })
           : Promise.resolve(null),
       ]);
@@ -191,7 +200,7 @@ export function StationDatabaseView({
     } finally {
       setIsBackendLoading(false);
     }
-  }, [logsFromParent]);
+  }, [logsFromParent, fillSummary]);
 
   // Phase 9: Persistent Storage Migration
   useEffect(() => {
@@ -480,6 +489,19 @@ export function StationDatabaseView({
        isPreferred: preferredStationIds.has(s.id)
     }));
 
+    if (fillSummary) {
+      const byId = new Map(fillSummary.map((row) => [row.stationId, row]));
+      for (const station of stations) {
+        const row = byId.get(station.id);
+        if (!row) continue;
+        station.stats = {
+          ...station.stats,
+          totalVisits: row.fillCount,
+          lastUpdated: row.lastFillAt || station.stats.lastUpdated,
+        };
+      }
+    }
+
     const visibleStations = showPreferredOnly 
       ? stations.filter(s => s.isPreferred) 
       : stations;
@@ -493,7 +515,7 @@ export function StationDatabaseView({
       togglePreferred,
       updateStationDetails
     };
-  }, [loading, preferredStationIds, showPreferredOnly, stationOverrides]);
+  }, [loading, preferredStationIds, showPreferredOnly, stationOverrides, fillSummary]);
 
   const context = useMemo(() => buildContext(logs), [buildContext, logs]);
 

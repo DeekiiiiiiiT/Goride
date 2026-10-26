@@ -6,6 +6,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { jwtPrimaryRole } from "./authEdge.ts";
 import { dbIsPlatformUser } from "./rbacQuery.ts";
 import { ROLE_LEVELS } from "./platformPermissions.ts";
+import { jwtAssuranceLevel } from "./productAdmin.ts";
 
 export const PLATFORM_ADMIN_ROLES = new Set([
   "platform_owner",
@@ -47,7 +48,33 @@ export async function requirePlatformAdmin(
   }
 
   const rawRole = jwtPrimaryRole(user);
-  return { id: user.id, email: user.email || "", role: rawRole || "platform_owner" };
+  const role = rawRole && PLATFORM_ADMIN_ROLES.has(rawRole) ? rawRole : "platform_analyst";
+  if (jwtAssuranceLevel(authHeader) !== "aal2") {
+    return c.json(
+      {
+        error: "Forbidden",
+        message: "Two-step login required",
+        code: "mfa_required",
+      },
+      403,
+    );
+  }
+  return { id: user.id, email: user.email || "", role };
+}
+
+/** Owner-only Dominion routes (GCT books, identity search). Still requires aal2. */
+export async function requirePlatformOwner(
+  c: { req: { header: (n: string) => string | undefined }; json: (b: unknown, s?: number) => Response },
+): Promise<PlatformAdminUser | Response> {
+  const auth = await requirePlatformAdmin(c);
+  if (auth instanceof Response) return auth;
+  if (auth.role !== "platform_owner" && auth.role !== "superadmin") {
+    return c.json(
+      { error: "Forbidden", message: "Owner access required", currentRole: auth.role },
+      403,
+    );
+  }
+  return auth;
 }
 
 export function isPlatformAdminRole(role: string): boolean {

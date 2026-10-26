@@ -12,6 +12,7 @@ export type TollIntegrityLike = {
   paymentMethod?: string | null;
   referenceNumber?: string | null;
   status?: string | null;
+  resolution?: string | null;
   /** Ledger / API plaza name (may be missing on tx shape — use vendor). */
   plaza?: string | null;
   /** API tx shape: tollLedgerToTxShape puts ledger plaza here. */
@@ -323,10 +324,23 @@ export function quarantineReasonFor(t: TollIntegrityLike): string {
   return 'synthetic_cash_no_batch';
 }
 
-/** Spend / period counts must ignore quarantined + voided rows. */
+function isChargedPersonalToll(t: TollIntegrityLike): boolean {
+  const meta = t.metadata || {};
+  const res = String(t.resolution || meta.resolution || '').toLowerCase();
+  return res === 'personal';
+}
+
+/**
+ * Spend / period counts ignore quarantined and voided rows.
+ * A rejected toll stays in spend only after it was charged to the driver.
+ * An uncharged rejection is not spend.
+ */
 export function isTollIncludedInSpend(t: TollIntegrityLike): boolean {
   if (isTollLedgerVoided(t)) return false;
-  return !isTollQuarantined(t);
+  if (isTollQuarantined(t)) return false;
+  const status = String(t.status || '').toLowerCase();
+  if (status === 'rejected' && !isChargedPersonalToll(t)) return false;
+  return true;
 }
 
 /**

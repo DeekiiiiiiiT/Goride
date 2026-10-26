@@ -7,7 +7,7 @@ import type { Context, Next } from "npm:hono@4.3.11";
 import { streamText } from "npm:hono@4.3.11/streaming";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { registerTripAnalyticsRoutes } from "./trip_analytics_routes.ts";
-import { searchTripsFromFacts, tripStatsFromFacts } from "./trip_facts_read.ts";
+import { searchTripsFromFacts, tripCrossFleetMfaResponse, tripStatsFromFacts } from "./trip_facts_read.ts";
 import { fromKvStore } from "./fleet_sql_bridge.ts";
 import { fleetSelect } from "./fleet_select.ts";
 import { countBy, listByBatch, queryFleet, fleetDb, fleetTable, rowToKvValue } from "./repos/baseRepo.ts";
@@ -54,6 +54,8 @@ import {
   hasPlatformOwnerAccess,
   isPlatformStaffFromAuthUser,
   isPlatformOwnerFromAuthUser,
+  platformMfaRequiredResponse,
+  rbacUserFromSupabaseUser,
   type RbacUser,
 } from "./rbac_middleware.ts";
 import { logAdminAction, getAuditLogs, getAuditLogsByActor } from "./audit_log.ts";
@@ -221,6 +223,7 @@ import { registerFleetAdminStorageRoutes } from "./fleet_admin_storage_routes.ts
 import { registerFleetAdminMaintenanceLedgerRoutes } from "./fleet_admin_maintenance_ledger_routes.ts";
 import { registerReconWorkerSwitchRoutes } from "./recon_worker_switch_routes.ts";
 import { registerEnterpriseAdminRoutes } from "./enterprise_admin_routes.ts";
+import { registerFleetPortalRoutes } from "./fleet_portal_routes.ts";
 import { registerEnterpriseIntakeAdminRoutes } from "./enterprise_intake_admin_routes.ts";
 import { registerWorkforceInviteRoutes } from "./workforce_invite_routes.ts";
 import { registerCourierRoamTagRoutes } from "./courier_roam_tag_routes.ts";
@@ -953,6 +956,8 @@ export function registerResidualMonolithRoutes(app: Hono) {
     const t0 = Date.now();
     try {
       const body = await c.req.json();
+      const crossFleet = tripCrossFleetMfaResponse(c, body?.organizationId);
+      if (crossFleet) return crossFleet;
       const factsHit = await searchTripsFromFacts(c, body);
       if (factsHit) {
         return c.json({ ...factsHit, request_id: requestId });
@@ -1066,6 +1071,8 @@ export function registerResidualMonolithRoutes(app: Hono) {
     c.header("X-Request-Id", requestId);
     try {
       const body = await c.req.json();
+      const crossFleet = tripCrossFleetMfaResponse(c, body?.organizationId);
+      if (crossFleet) return crossFleet;
       const EXPORT_CAP = 10_000;
       const factsHit = await searchTripsFromFacts(c, { ...body, limit: EXPORT_CAP, offset: 0 });
       let trips: Record<string, unknown>[] = [];
@@ -1148,6 +1155,8 @@ export function registerResidualMonolithRoutes(app: Hono) {
   app.post("/make-server-37f42386/trips/stats", requireAuth({ requireOrg: true }), async (c) => {
     try {
       const filters = await c.req.json();
+      const crossFleet = tripCrossFleetMfaResponse(c, filters?.organizationId);
+      if (crossFleet) return crossFleet;
       let { 
           driverId, startDate, endDate, status,
           platform, tripType, vehicleId, anchorPeriodId, organizationId, serviceLine,
@@ -8487,6 +8496,8 @@ export function registerResidualMonolithRoutes(app: Hono) {
   app.get("/make-server-37f42386/admin/team-members", requireAuth(), async (c) => {
     try {
       const rbacUser = c.get('rbacUser') as RbacUser;
+      const mfaBlock = platformMfaRequiredResponse(c, rbacUser);
+      if (mfaBlock) return mfaBlock;
       if (!hasPlatformStaffAccess(rbacUser)) {
         return c.json({ error: "Only platform owner or support can view team members" }, 403);
       }
@@ -8800,6 +8811,8 @@ export function registerResidualMonolithRoutes(app: Hono) {
   app.patch("/make-server-37f42386/admin/organizations/:orgId/service-lines", requireAuth(), async (c) => {
     try {
       const rbacUser = c.get("rbacUser") as RbacUser;
+      const mfaBlock = platformMfaRequiredResponse(c, rbacUser);
+      if (mfaBlock) return mfaBlock;
       const { canEditOrgServiceLines, parseServiceLinesInput, applyOrgServiceLines } = await import("./rush_rollout_admin.ts");
       if (!canEditOrgServiceLines(rbacUser)) {
         return c.json({ error: "Forbidden — platform owner required" }, 403);
@@ -8833,6 +8846,8 @@ export function registerResidualMonolithRoutes(app: Hono) {
   app.get("/make-server-37f42386/admin/organizations/:orgId/rush-rollout", requireAuth(), async (c) => {
     try {
       const rbacUser = c.get("rbacUser") as RbacUser;
+      const mfaBlock = platformMfaRequiredResponse(c, rbacUser);
+      if (mfaBlock) return mfaBlock;
       const { canViewPlatformOrgAdmin, buildRushRolloutStatusWithOrg } = await import("./rush_rollout_admin.ts");
       if (!canViewPlatformOrgAdmin(rbacUser)) {
         return c.json({ error: "Forbidden — platform staff required" }, 403);
@@ -9163,6 +9178,10 @@ export function registerResidualMonolithRoutes(app: Hono) {
       if (!isSelf && !isPlatformOwner) {
         return c.json({ error: "Forbidden: can only change your own password" }, 403);
       }
+      if (!isSelf && isPlatformOwner) {
+        const mfaBlock = platformMfaRequiredResponse(c, rbacUser as RbacUser);
+        if (mfaBlock) return mfaBlock;
+      }
 
       const { error } = await supabase.auth.admin.updateUserById(userId, { password });
       if (error) throw error;
@@ -9179,6 +9198,8 @@ export function registerResidualMonolithRoutes(app: Hono) {
     try {
       const rbacUser = c.get("rbacUser") as RbacUser | undefined;
       if (!rbacUser) return c.json({ error: "Unauthorized" }, 401);
+      const mfaBlock = platformMfaRequiredResponse(c, rbacUser);
+      if (mfaBlock) return mfaBlock;
 
       const { userId, name, role, businessType } = await c.req.json();
       if (!userId) return c.json({ error: "User ID is required" }, 400);
@@ -10980,6 +11001,8 @@ export function registerResidualMonolithRoutes(app: Hono) {
   app.get("/make-server-37f42386/rate-limit-stats", requireAuth(), async (c) => {
     try {
       const rbacUser = c.get('rbacUser') as RbacUser | undefined;
+      const mfaBlock = platformMfaRequiredResponse(c, rbacUser);
+      if (mfaBlock) return mfaBlock;
       if (!rbacUser || !hasPlatformStaffAccess(rbacUser)) {
         return c.json({ error: "Superadmin access required" }, 403);
       }
@@ -11065,9 +11088,19 @@ export function registerResidualMonolithRoutes(app: Hono) {
       }
 
       let fuelStationCount = 0;
+      let stationVerified = 0;
       try {
-        const stations = await kv.getByPrefix("station:");
-        fuelStationCount = stations?.length || 0;
+        const fleetDb = createClient(
+          Deno.env.get("SUPABASE_URL") || "",
+          Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "",
+          { db: { schema: "fleet" } },
+        );
+        const [{ count: stationTotal }, { count: verifiedTotal }] = await Promise.all([
+          fleetDb.from("stations").select("id", { count: "exact", head: true }),
+          fleetDb.from("stations").select("id", { count: "exact", head: true }).eq("status", "verified"),
+        ]);
+        fuelStationCount = stationTotal ?? 0;
+        stationVerified = verifiedTotal ?? 0;
       } catch (e: any) {
         console.log(`admin-stats: failed to count fuel stations: ${e.message}`);
       }
@@ -11097,6 +11130,7 @@ export function registerResidualMonolithRoutes(app: Hono) {
         enterprise: { customerCount: enterpriseCustomerCount, teamMemberCount: enterpriseTeamMemberCount },
         fleet: { customerCount: fleetCustomerCount, teamMemberCount: fleetTeamMemberCount },
         fuelStationCount,
+        stationVerified,
         tollStationCount,
         driverCount,
         linkedDriverCount,
@@ -11124,6 +11158,26 @@ export function registerResidualMonolithRoutes(app: Hono) {
         merchantPending: 0,
         totalUserCount: 0,
       });
+    }
+  });
+
+  app.get("/make-server-37f42386/admin/station-fill-summary", requireAuth({ strict: true }), requirePlatformStaff(), async (c) => {
+    try {
+      const fleetDb = createClient(
+        Deno.env.get("SUPABASE_URL") || "",
+        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "",
+        { db: { schema: "fleet" } },
+      );
+      const { data, error } = await fleetDb.rpc("station_fill_summary");
+      if (error) return c.json({ error: error.message }, 500);
+      const stations = (data ?? []).map((row: { station_id?: string; fill_count?: number; last_fill_at?: string | null }) => ({
+        stationId: row.station_id,
+        fillCount: row.fill_count ?? 0,
+        lastFillAt: row.last_fill_at ?? null,
+      }));
+      return c.json({ stations });
+    } catch (e: any) {
+      return c.json({ error: e.message }, 500);
     }
   });
 
@@ -12102,6 +12156,12 @@ export function registerResidualMonolithRoutes(app: Hono) {
     FLEET_SUB_ROLES,
     canonicalizeRole,
   });
+  registerFleetPortalRoutes(app, {
+    logAdminAction,
+    FLEET_SUB_ROLES,
+    canonicalizeRole,
+    invalidateCustomerCache,
+  });
   registerEnterpriseIntakeAdminRoutes(app);
 
   registerWorkforceInviteRoutes(app, {
@@ -12344,6 +12404,8 @@ export function registerResidualMonolithRoutes(app: Hono) {
   app.get("/make-server-37f42386/admin/feature-flags", requireAuth(), async (c) => {
     try {
       const rbacUser = c.get('rbacUser') as RbacUser;
+      const mfaBlock = platformMfaRequiredResponse(c, rbacUser);
+      if (mfaBlock) return mfaBlock;
       if (!hasPlatformStaffAccess(rbacUser) && rbacUser.resolvedRole !== 'fleet_owner') {
         return c.json({ error: "Forbidden — platform or fleet owner role required" }, 403);
       }
@@ -12366,6 +12428,8 @@ export function registerResidualMonolithRoutes(app: Hono) {
   app.get("/make-server-37f42386/admin/feature-flags/:name", requireAuth(), async (c) => {
     try {
       const rbacUser = c.get('rbacUser') as RbacUser;
+      const mfaBlock = platformMfaRequiredResponse(c, rbacUser);
+      if (mfaBlock) return mfaBlock;
       if (!hasPlatformStaffAccess(rbacUser) && rbacUser.resolvedRole !== 'fleet_owner') {
         return c.json({ error: "Forbidden — platform or fleet owner role required" }, 403);
       }
@@ -12389,6 +12453,8 @@ export function registerResidualMonolithRoutes(app: Hono) {
   app.post("/make-server-37f42386/admin/feature-flags/:name", requireAuth(), async (c) => {
     try {
       const rbacUser = c.get('rbacUser') as RbacUser;
+      const mfaBlock = platformMfaRequiredResponse(c, rbacUser);
+      if (mfaBlock) return mfaBlock;
       const flagName = c.req.param("name");
       const { canMutateFeatureFlag } = await import("./rush_rollout_admin.ts");
       const auth = canMutateFeatureFlag(rbacUser, flagName);
@@ -12437,6 +12503,8 @@ export function registerResidualMonolithRoutes(app: Hono) {
   app.post("/make-server-37f42386/admin/feature-flags/:name/enable-for-org", requireAuth(), async (c) => {
     try {
       const rbacUser = c.get('rbacUser') as RbacUser;
+      const mfaBlock = platformMfaRequiredResponse(c, rbacUser);
+      if (mfaBlock) return mfaBlock;
       const flagName = c.req.param("name");
       const { orgId } = await c.req.json();
 
@@ -12476,6 +12544,8 @@ export function registerResidualMonolithRoutes(app: Hono) {
   app.post("/make-server-37f42386/admin/feature-flags/:name/disable-for-org", requireAuth(), async (c) => {
     try {
       const rbacUser = c.get('rbacUser') as RbacUser;
+      const mfaBlock = platformMfaRequiredResponse(c, rbacUser);
+      if (mfaBlock) return mfaBlock;
       const flagName = c.req.param("name");
       const { orgId } = await c.req.json();
 
@@ -12516,6 +12586,8 @@ export function registerResidualMonolithRoutes(app: Hono) {
       if (!rbacUser || (rbacUser.userId === '_anon_passthrough')) {
         return c.json({ error: "Unauthorized — valid user session required" }, 401);
       }
+      const mfaBlock = platformMfaRequiredResponse(c, rbacUser);
+      if (mfaBlock) return mfaBlock;
       if (!hasPlatformOwnerAccess(rbacUser) && rbacUser.resolvedRole !== 'fleet_owner') {
         return c.json({ error: "Forbidden — platform owner or fleet owner required" }, 403);
       }
@@ -12543,6 +12615,8 @@ export function registerResidualMonolithRoutes(app: Hono) {
   app.post("/make-server-37f42386/admin/feature-flags/emergency-disable", requireAuth(), async (c) => {
     try {
       const rbacUser = c.get('rbacUser') as RbacUser;
+      const mfaBlock = platformMfaRequiredResponse(c, rbacUser);
+      if (mfaBlock) return mfaBlock;
       if (!hasPlatformOwnerAccess(rbacUser) && rbacUser.resolvedRole !== 'fleet_owner') {
         return c.json({ error: "Forbidden — platform owner or fleet owner required" }, 403);
       }
@@ -12601,6 +12675,8 @@ export function registerResidualMonolithRoutes(app: Hono) {
   app.post("/make-server-37f42386/admin/organizations/backfill", requireAuth({ strict: false }), async (c) => {
     try {
       const rbacUser = c.get('rbacUser') as RbacUser;
+      const mfaBlock = platformMfaRequiredResponse(c, rbacUser);
+      if (mfaBlock) return mfaBlock;
       if (!hasPlatformOwnerAccess(rbacUser) && rbacUser.resolvedRole !== 'fleet_owner') {
         return c.json({ error: "Forbidden — platform owner or fleet owner required" }, 403);
       }
@@ -12767,6 +12843,8 @@ export function registerResidualMonolithRoutes(app: Hono) {
   app.post("/make-server-37f42386/admin/kv/backfill-org-ids", requireAuth({ strict: false }), async (c) => {
     try {
       const rbacUser = c.get('rbacUser') as RbacUser;
+      const mfaBlock = platformMfaRequiredResponse(c, rbacUser);
+      if (mfaBlock) return mfaBlock;
       if (!hasPlatformOwnerAccess(rbacUser) && rbacUser.resolvedRole !== 'fleet_owner') {
         return c.json({ error: "Forbidden — platform owner or fleet owner required" }, 403);
       }
@@ -12878,6 +12956,8 @@ export function registerResidualMonolithRoutes(app: Hono) {
   app.post("/make-server-37f42386/admin/kv/backfill-product-line", requireAuth({ strict: false }), async (c) => {
     try {
       const rbacUser = c.get('rbacUser') as RbacUser;
+      const mfaBlock = platformMfaRequiredResponse(c, rbacUser);
+      if (mfaBlock) return mfaBlock;
       if (!hasPlatformOwnerAccess(rbacUser) && rbacUser.resolvedRole !== 'fleet_owner') {
         return c.json({ error: "Forbidden — platform owner or fleet owner required" }, 403);
       }
@@ -12990,6 +13070,8 @@ export function registerResidualMonolithRoutes(app: Hono) {
   app.get("/make-server-37f42386/admin/customers", requireAuth(), async (c) => {
     try {
       const rbacUser = c.get('rbacUser') as RbacUser;
+      const mfaBlock = platformMfaRequiredResponse(c, rbacUser);
+      if (mfaBlock) return mfaBlock;
       if (!hasPlatformStaffAccess(rbacUser)) {
         return c.json({ error: "Forbidden — platform role required" }, 403);
       }
@@ -13401,6 +13483,8 @@ export function registerResidualMonolithRoutes(app: Hono) {
         console.log(`admin/reset-password forbidden: user ${reqUser.id} lacks platform staff access`);
         return c.json({ error: "Forbidden — platform role required" }, 403);
       }
+      const mfaBlock = platformMfaRequiredResponse(c, rbacUserFromSupabaseUser(reqUser));
+      if (mfaBlock) return mfaBlock;
 
       const { email, redirectTo } = await c.req.json();
       if (!email) {
@@ -13441,6 +13525,8 @@ export function registerResidualMonolithRoutes(app: Hono) {
         console.log(`admin/force-logout forbidden: user ${reqUser.id} lacks platform staff access`);
         return c.json({ error: "Forbidden — platform role required" }, 403);
       }
+      const mfaBlock = platformMfaRequiredResponse(c, rbacUserFromSupabaseUser(reqUser));
+      if (mfaBlock) return mfaBlock;
 
       const { userId } = await c.req.json();
       if (!userId) {
@@ -13472,6 +13558,8 @@ export function registerResidualMonolithRoutes(app: Hono) {
         console.log(`admin/toggle-suspend forbidden: user ${reqUser.id} lacks platform staff access`);
         return c.json({ error: "Forbidden — platform role required" }, 403);
       }
+      const mfaBlock = platformMfaRequiredResponse(c, rbacUserFromSupabaseUser(reqUser));
+      if (mfaBlock) return mfaBlock;
 
       const { userId, suspend } = await c.req.json();
       if (!userId || typeof suspend !== "boolean") {
@@ -13509,6 +13597,8 @@ export function registerResidualMonolithRoutes(app: Hono) {
         console.log(`admin/full-delete forbidden: user ${reqUser.id} lacks platform owner access`);
         return c.json({ error: "Forbidden — platform owner only" }, 403);
       }
+      const mfaBlock = platformMfaRequiredResponse(c, rbacUserFromSupabaseUser(reqUser));
+      if (mfaBlock) return mfaBlock;
 
       const userId = c.req.param("userId");
       if (!userId) {
@@ -13696,8 +13786,10 @@ export function registerResidualMonolithRoutes(app: Hono) {
   app.get("/make-server-37f42386/admin/users/lookup", requireAuth(), async (c) => {
     try {
       const rbacUser = c.get("rbacUser") as RbacUser;
-      if (!hasPlatformStaffAccess(rbacUser)) {
-        return c.json({ error: "Forbidden — platform role required" }, 403);
+      const mfaBlock = platformMfaRequiredResponse(c, rbacUser);
+      if (mfaBlock) return mfaBlock;
+      if (!hasPlatformOwnerAccess(rbacUser)) {
+        return c.json({ error: "Forbidden — owner access required" }, 403);
       }
 
       const email = c.req.query("email")?.trim().toLowerCase();
@@ -13713,6 +13805,15 @@ export function registerResidualMonolithRoutes(app: Hono) {
         return c.json({ error: "User not found" }, 404);
       }
 
+      await logAdminAction({
+        actorId: rbacUser.userId,
+        actorName: rbacUser.email || "owner",
+        action: "identity_search",
+        targetId: match.id,
+        targetEmail: email,
+        details: "Global identity search",
+      });
+
       const status = await buildCrossProductStatus(match.id, match);
       return c.json(status);
     } catch (e: any) {
@@ -13725,8 +13826,10 @@ export function registerResidualMonolithRoutes(app: Hono) {
   app.get("/make-server-37f42386/admin/users/:userId/cross-product-status", requireAuth(), async (c) => {
     try {
       const rbacUser = c.get("rbacUser") as RbacUser;
-      if (!hasPlatformStaffAccess(rbacUser)) {
-        return c.json({ error: "Forbidden — platform role required" }, 403);
+      const mfaBlock = platformMfaRequiredResponse(c, rbacUser);
+      if (mfaBlock) return mfaBlock;
+      if (!hasPlatformOwnerAccess(rbacUser)) {
+        return c.json({ error: "Forbidden — owner access required" }, 403);
       }
 
       const userId = c.req.param("userId");
@@ -13773,10 +13876,28 @@ export function registerResidualMonolithRoutes(app: Hono) {
     if (!isPlatformStaffFromAuthUser(reqUser)) {
       return c.json({ error: "Forbidden — platform role required" }, 403);
     }
+    const mfaBlock = platformMfaRequiredResponse(c, rbacUserFromSupabaseUser(reqUser));
+    if (mfaBlock) return mfaBlock;
     return {
       userId: reqUser.id,
       email: reqUser.email || '',
       name: reqUser.user_metadata?.name || reqUser.email || 'Unknown',
+    };
+  }
+
+  /** Platform staff (with the authenticator) or a Fleet product admin. Not every platform tool. */
+  async function verifyLedgerAccess(c: any): Promise<{ userId: string; email: string; name: string } | Response> {
+    const accessToken = c.req.header("Authorization")?.split(" ")[1];
+    if (!accessToken) return c.json({ error: "Unauthorized" }, 401);
+    const { data, error } = await supabase.auth.getUser(accessToken);
+    if (error || !data.user) return c.json({ error: "Unauthorized" }, 401);
+    if (isPlatformStaffFromAuthUser(data.user)) return verifySuperadmin(c);
+    const product = await requireProductAdmin(c, "fleet");
+    if (product instanceof Response) return product;
+    return {
+      userId: product.id,
+      email: product.email,
+      name: product.email || "Fleet admin",
     };
   }
 
@@ -13795,6 +13916,8 @@ export function registerResidualMonolithRoutes(app: Hono) {
       if (error || !user || !isPlatformStaffFromAuthUser(user)) {
         return c.json({ error: "Unauthorized" }, 401);
       }
+      const mfaBlock = platformMfaRequiredResponse(c, rbacUserFromSupabaseUser(user));
+      if (mfaBlock) return mfaBlock;
 
       return c.json({
         parentCompanies: memCache.parentCompanyCache.getStats(),
@@ -14231,7 +14354,7 @@ export function registerResidualMonolithRoutes(app: Hono) {
   // GET /admin/ledger-config/:businessType — Get ledger config for a business type
   app.get("/make-server-37f42386/admin/ledger-config/:businessType", async (c) => {
     try {
-      const auth = await verifySuperadmin(c);
+      const auth = await verifyLedgerAccess(c);
       if (auth instanceof Response) return auth;
 
       const businessType = c.req.param("businessType");
@@ -14343,7 +14466,7 @@ export function registerResidualMonolithRoutes(app: Hono) {
   // PUT /admin/ledger-config/:businessType — Save ledger config for a business type
   app.put("/make-server-37f42386/admin/ledger-config/:businessType", async (c) => {
     try {
-      const auth = await verifySuperadmin(c);
+      const auth = await verifyLedgerAccess(c);
       if (auth instanceof Response) return auth;
 
       const businessType = c.req.param("businessType");

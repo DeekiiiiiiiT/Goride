@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { supabaseRidesAdmin as supabase, hasProductAdminRole, jwtPrimaryRole, flashAdminLoginError } from '@roam/auth-client';
+import { PlatformStaffMfaStep, usePlatformStaffMfa } from '@roam/admin-core';
 import { Session } from '@supabase/supabase-js';
 import {
   LayoutDashboard,
@@ -9,6 +10,7 @@ import {
   Car,
   ScrollText,
   Users,
+  Radio,
   LogOut,
   Menu,
   X,
@@ -143,6 +145,7 @@ function NavSection({
 const TOP_NAV_ITEMS: NavItem[] = [
   { id: 'dashboard', path: '/admin', label: 'Dashboard', icon: LayoutDashboard },
   { id: 'users', path: '/admin/users', label: 'User Management', icon: Users },
+  { id: 'live-tolls', path: '/admin/live-tolls', label: 'Live tolls', icon: Radio },
   { id: 'ledger', path: '/admin/ledger', label: 'Trip Ledger', icon: ScrollText },
 ];
 
@@ -253,6 +256,7 @@ export function RidesAdminLayout() {
   };
 
   const hasAccess = !!session && hasProductAdminRole(session.user, 'rides');
+  const mfa = usePlatformStaffMfa(supabase, hasAccess ? session?.user : null);
 
   useEffect(() => {
     if (loading || !session || hasAccess) return;
@@ -270,6 +274,24 @@ export function RidesAdminLayout() {
 
   if (!session) {
     return <RidesAdminLoginForm />;
+  }
+
+  if (mfa.status !== 'ready') {
+    if (mfa.status === 'required') {
+      return (
+        <PlatformStaffMfaStep
+          client={supabase}
+          issuer="Roam Rides"
+          onCancel={() => void handleSignOut()}
+          onVerified={mfa.confirm}
+        />
+      );
+    }
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-950 text-slate-400">
+        <Loader2 className="w-8 h-8 animate-spin" />
+      </div>
+    );
   }
 
   const userRole = jwtPrimaryRole(session.user);

@@ -11,6 +11,7 @@ interface BusinessTypeCustomersProps {
   businessType: BusinessType;
   onNavigate: (page: string, data?: any) => void;
   onBack: () => void;
+  customersUrl?: string;
 }
 
 interface Customer {
@@ -23,13 +24,14 @@ interface Customer {
   lastSignIn: string | null;
 }
 
-export function BusinessTypeCustomers({ businessType, onNavigate, onBack }: BusinessTypeCustomersProps) {
+export function BusinessTypeCustomers({ businessType, onNavigate, onBack, customersUrl }: BusinessTypeCustomersProps) {
   const { accessToken } = usePlatformSession();
+  const listUrl = customersUrl ?? `${API_ENDPOINTS.admin}/admin/customers`;
 
   const { data: allCustomers = [], isLoading } = useQuery<Customer[]>({
-    queryKey: ['adminCustomers'],
+    queryKey: ['adminCustomers', listUrl],
     queryFn: async () => {
-      const res = await fetch(`${API_ENDPOINTS.admin}/admin/customers`, {
+      const res = await fetch(listUrl, {
         headers: { Authorization: `Bearer ${accessToken}` },
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
