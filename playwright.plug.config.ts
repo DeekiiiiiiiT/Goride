@@ -2,7 +2,7 @@ import { defineConfig, devices } from '@playwright/test';
 
 export default defineConfig({
   testDir: './e2e',
-  testMatch: /plug-empty\.spec\.ts/,
+  testMatch: /plug-(journeys|mobile-fit|empty)\.spec\.ts/,
   fullyParallel: false,
   workers: 1,
   timeout: 300_000,
@@ -13,7 +13,11 @@ export default defineConfig({
   webServer: {
     command: 'pnpm --filter @roam/plug dev --host 127.0.0.1 --port 3016',
     url: 'http://127.0.0.1:3016',
-    reuseExistingServer: true,
+    reuseExistingServer: false,
+    env: {
+      VITE_SUPABASE_URL: 'https://example.supabase.co',
+      VITE_SUPABASE_ANON_KEY: 'ci-placeholder-anon-key',
+    },
     timeout: 120_000,
   },
 });

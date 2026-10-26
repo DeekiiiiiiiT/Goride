@@ -328,24 +328,21 @@ export function PartDetailScreen() {
               </div>
             </div>
           </section>
-          <section className={"w-full bg-secondary-fixed/50 rounded-xl p-space-md flex items-start gap-space-sm"}>
-            <div className={"w-8 h-8 rounded-full bg-secondary text-on-secondary flex items-center justify-center shrink-0 mt-0.5"}>
+          <section className={"w-full bg-surface-container-lowest rounded-xl p-space-md shadow-sm flex flex-col gap-space-sm"}>
+            <h3 className={"font-headline-sm text-headline-sm text-on-surface"}>
+              No sellers listed yet
+            </h3>
+            <p className={"font-body-sm text-body-sm text-on-surface-variant"}>
+              A store shows here only after it is approved and lists this part.
+            </p>
+            <button onClick={onPlugClick} className={"w-full min-h-12 rounded-lg bg-primary text-on-primary font-label-lg text-label-lg flex items-center justify-center gap-space-sm active:scale-95 transition-transform"} data-act={"parts-stores"} data-way-out={"primary"}>
               <span className={"material-symbols-outlined text-[20px]"}>
-                info
+                storefront
               </span>
-            </div>
-            <div className={"flex flex-col space-y-1 min-w-0"}>
-              <span className={"font-label-lg text-label-lg text-on-secondary-fixed font-bold"}>
-                Online Checkout Coming Soon
+              <span>
+                Parts stores
               </span>
-              <p className={"font-body-sm text-body-sm text-on-secondary-fixed-variant leading-relaxed"}>
-                Prices and instant online reservation are arriving soon on Roam Plug. For now, simply tap "Call Store" and quote part number
-                <strong className={"text-primary font-bold"}>
-                  04465-B1170
-                </strong>
-                to lock in your pads today.
-              </p>
-            </div>
+            </button>
           </section>
           <section className={"w-full bg-surface-container-lowest rounded-xl p-space-md shadow-sm flex items-center justify-between gap-space-sm"}>
             <div className={"flex items-center gap-space-sm min-w-0"}>
