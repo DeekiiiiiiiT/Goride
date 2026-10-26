@@ -46,6 +46,7 @@ export * from './oauthRoleGuard';
 export * from './oauthProfile';
 export * from './jwtRole';
 export * from './productAdminRoles';
+export * from './dominionPermissions';
 export {
   ADMIN_INCORRECT_CREDENTIALS,
   DOMINION_ACCESS_DENIED_MESSAGE,

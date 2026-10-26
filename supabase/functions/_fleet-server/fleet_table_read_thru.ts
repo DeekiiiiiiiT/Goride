@@ -50,6 +50,15 @@ export class FleetReadThruError extends Error {
   }
 }
 
+/** Station master rows from the public table. Callers no longer scan the old key-value prefix. */
+export async function listStationRecords(): Promise<Record<string, unknown>[]> {
+  const out: Record<string, unknown>[] = [];
+  for await (const row of iterateFleet("stations", { order: { col: "id", ascending: true } })) {
+    out.push(row as Record<string, unknown>);
+  }
+  return out;
+}
+
 export async function readMappedKvPrefix(prefix: string): Promise<any[] | null> {
   const domainDef = FLEET_DOMAINS.find((d) =>
     d.prefixes.some((p) => prefix === p || prefix.startsWith(p) || p.startsWith(prefix)),

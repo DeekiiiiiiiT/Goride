@@ -15,6 +15,7 @@ import OpenAI from "npm:openai";
 import { dataUrlFromFile, odometerVisionBody, parseOdometerVision } from "../_shared/odometerVision.ts";
 import { GoogleGenerativeAI } from "npm:@google/generative-ai";
 import * as kv from "./kv_store.tsx";
+import { listStationRecords } from "./fleet_table_read_thru.ts";
 import { stampDriverHomePin } from "./fuel_shift_km.ts";
 import { splitCashAwaitingSaveBlocked } from "../../../packages/fuel-core/src/fuelSplitCashLifecycle.ts";
 import * as cache from "./cache.ts";
@@ -98,6 +99,7 @@ import {
   type SettingsSegment,
 } from "./platform_settings.ts";
 import { requireProductAdmin } from "./product_admin_guard.ts";
+import { registerProductAdminAccountRoutes } from "./product_admin_account_routes.ts";
 import {
   effectiveSectionAccess,
   parseSectionOverrides,
@@ -517,6 +519,7 @@ export function registerResidualMonolithRoutes(app: Hono) {
   registerTripAnalyticsRoutes(app);
   registerEvidenceRoutes(app, supabase, kv, requireAuth, requirePermission);
   registerFleetAdminStorageRoutes(app, supabase, kv);
+  registerProductAdminAccountRoutes(app, supabase);
   registerFleetAdminMaintenanceLedgerRoutes(app, supabase, kv);
   registerReconWorkerSwitchRoutes(app, supabase);
   registerPendingVehicleCatalogRoutes(app, supabase);
@@ -3044,7 +3047,7 @@ export function registerResidualMonolithRoutes(app: Hono) {
           if (locationMetadata?.lat && locationMetadata?.lng) {
               try {
                   // Fetch all stations from KV (single load, reused below)
-                  const stationsRaw = await kv.getByPrefix("station:");
+                  const stationsRaw = await listStationRecords();
                   const learntRaw = await kv.getByPrefix("learnt_location:");
                   allStationsCache = [...(stationsRaw || []), ...(learntRaw || [])].map((station: any) => (
                     station?.status === "learnt" ? { ...station, pinConfirmed: undefined } : station
@@ -11087,20 +11090,22 @@ export function registerResidualMonolithRoutes(app: Hono) {
         console.log(`admin-stats: failed to count riders: ${e.message}`);
       }
 
-      let fuelStationCount = 0;
-      let stationVerified = 0;
+      let fuelStationCount: number | null = null;
+      let stationVerified: number | null = null;
       try {
-        const fleetDb = createClient(
+        const counter = createClient(
           Deno.env.get("SUPABASE_URL") || "",
           Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "",
-          { db: { schema: "fleet" } },
+          { auth: { persistSession: false, autoRefreshToken: false } },
         );
-        const [{ count: stationTotal }, { count: verifiedTotal }] = await Promise.all([
-          fleetDb.from("stations").select("id", { count: "exact", head: true }),
-          fleetDb.from("stations").select("id", { count: "exact", head: true }).eq("status", "verified"),
-        ]);
-        fuelStationCount = stationTotal ?? 0;
-        stationVerified = verifiedTotal ?? 0;
+        const { data, error } = await counter.rpc("fleet_station_counts");
+        const row = Array.isArray(data) ? data[0] : data;
+        if (error || !row) {
+          console.log(`admin-stats: failed to count fuel stations: ${error?.message || "no count"}`);
+        } else {
+          fuelStationCount = Number(row.total);
+          stationVerified = Number(row.verified);
+        }
       } catch (e: any) {
         console.log(`admin-stats: failed to count fuel stations: ${e.message}`);
       }
@@ -11147,7 +11152,8 @@ export function registerResidualMonolithRoutes(app: Hono) {
         customerCount: 0,
         enterprise: { customerCount: 0, teamMemberCount: 0 },
         fleet: { customerCount: 0, teamMemberCount: 0 },
-        fuelStationCount: 0,
+        fuelStationCount: null,
+        stationVerified: null,
         tollStationCount: 0,
         driverCount: 0,
         linkedDriverCount: 0,
@@ -11163,12 +11169,7 @@ export function registerResidualMonolithRoutes(app: Hono) {
 
   app.get("/make-server-37f42386/admin/station-fill-summary", requireAuth({ strict: true }), requirePlatformStaff(), async (c) => {
     try {
-      const fleetDb = createClient(
-        Deno.env.get("SUPABASE_URL") || "",
-        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "",
-        { db: { schema: "fleet" } },
-      );
-      const { data, error } = await fleetDb.rpc("station_fill_summary");
+      const { data, error } = await supabase.rpc("fleet_station_fill_summary");
       if (error) return c.json({ error: error.message }, 500);
       const stations = (data ?? []).map((row: { station_id?: string; fill_count?: number; last_fill_at?: string | null }) => ({
         stationId: row.station_id,
@@ -13937,7 +13938,7 @@ export function registerResidualMonolithRoutes(app: Hono) {
       const auth = await verifySuperadmin(c);
       if (auth instanceof Response) return auth;
 
-      const stations = await kv.getByPrefix("station:");
+      const stations = await listStationRecords();
       return c.json({ stations: stations || [] });
     } catch (e: any) {
       console.log(`admin/fuel-stations GET error: ${e.message}`);
@@ -14843,7 +14844,7 @@ export function registerResidualMonolithRoutes(app: Hono) {
           });
           
           // Fetch all verified stations for matching
-          const allStations = await kv.getByPrefix('station:');
+          const allStations = await listStationRecords();
           const verifiedStations = allStations.filter((s: any) => s.status === 'verified');
           
           // Suggest matching stations
@@ -15495,7 +15496,7 @@ export function registerResidualMonolithRoutes(app: Hono) {
           console.log(`[Stations] Searching for: "${query}"`);
           
           // Fetch all stations with "verified" status
-          const allStations = await kv.getByPrefix('station:');
+          const allStations = await listStationRecords();
           
           const verifiedStations = allStations
               .filter((s: any) => s.status === 'verified')

@@ -5,6 +5,7 @@ import { PRIVATE_LIST_CACHE, STABLE_GET_CACHE } from "../_shared/cacheControl.ts
 import { registerGeoRoutes } from "./geoRoutes.ts";
 import { assertRateLimit } from "../_shared/rateLimit.ts";
 import { requirePlatformAdmin } from "../_shared/platformAdmin.ts";
+import { registerMasterRoutes } from "./masterRoutes.ts";
 
 const app = new Hono().basePath("/platform-catalog");
 
@@ -23,13 +24,13 @@ app.use("*", async (c, next) => {
   const appKey = (c.req.header("x-roam-app") || "").trim().toLowerCase();
   if (!CATALOG_APPS.has(appKey)) return;
   try {
-    await admin()
-      .schema("fleet")
-      .from("catalog_consumers")
+    const { error } = await admin()
+      .from("fleet_catalog_consumers")
       .update({ last_sync_at: new Date().toISOString(), last_error: null })
       .eq("app_key", appKey);
-  } catch {
-    /* A missed stamp must not fail the catalog read. */
+    if (error) console.error("catalog sync stamp failed", error.message);
+  } catch (err) {
+    console.error("catalog sync stamp failed", err instanceof Error ? err.message : err);
   }
 });
 
@@ -60,18 +61,59 @@ function cached(body: unknown) {
 
 app.get("/health", () => cached({ service: "platform-catalog", status: "ok" }));
 
+const PRIVATE_FIELDS = new Set([
+  "organization_id",
+  "organizationId",
+  "orgId",
+  "org_id",
+  "customer_id",
+  "customerId",
+  "customer_name",
+  "customerName",
+  "payload_json",
+]);
+
+function publicStation(row: { id: string; name: string | null; payload_json: unknown }) {
+  const payload = publicValue(row.payload_json || {}) as Record<string, unknown>;
+  const location = payload.location && typeof payload.location === "object"
+    ? payload.location as { lat?: unknown; lng?: unknown }
+    : null;
+  return {
+    ...payload,
+    id: row.id,
+    name: row.name ?? payload.name ?? null,
+    lat: payload.lat ?? location?.lat ?? null,
+    lng: payload.lng ?? location?.lng ?? null,
+    location,
+    prices: payload.prices ?? null,
+    price_updated_at: payload.priceUpdatedAt ?? payload.price_updated_at ?? null,
+    capabilities: payload.capabilities ?? null,
+  };
+}
+
+function publicValue(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map((item) => publicValue(item));
+  if (!value || typeof value !== "object") return value;
+  const out: Record<string, unknown> = {};
+  for (const [key, item] of Object.entries(value as Record<string, unknown>)) {
+    if (PRIVATE_FIELDS.has(key)) continue;
+    out[key] = publicValue(item);
+  }
+  return out;
+}
+
 async function listStations(c: { req: { query: (name: string) => string | undefined } }) {
   try {
     const sb = admin();
     const limit = Math.min(Math.max(Number(c.req.query("limit") ?? 100) || 100, 1), 500);
     const offset = Math.max(Number(c.req.query("offset") ?? 0) || 0, 0);
     const { data, error } = await sb
-      .schema("places")
-      .from("public_station")
-      .select("id,name,brand,address,lat,lng,pcode,prices,price_updated_at,capabilities")
+      .from("fleet_stations")
+      .select("id,name,payload_json")
       .range(offset, offset + limit - 1);
     if (error) throw error;
-    return cached({ stations: data || [], limit, offset });
+    const stations = (data || []).map((row) => publicStation(row));
+    return cached({ stations, limit, offset });
   } catch (err) {
     return fail(err, "Could not load stations");
   }
@@ -84,10 +126,10 @@ app.get("/v1/stations", listStations);
 app.get("/stations/:id", async (c) => {
   try {
     const sb = admin();
-    const { data, error } = await sb.schema("places").from("public_station").select("id,name,brand,address,lat,lng,pcode,prices,price_updated_at,capabilities").eq("id", c.req.param("id")).maybeSingle();
+    const { data, error } = await sb.from("fleet_stations").select("id,name,payload_json").eq("id", c.req.param("id")).maybeSingle();
     if (error) throw error;
     if (!data) return Response.json({ error: "Station not found" }, { status: 404 });
-    return cached({ station: data });
+    return cached({ station: publicStation(data) });
   } catch (err) {
     return fail(err, "Could not load station");
   }
@@ -137,16 +179,24 @@ app.get("/geo/parishes", async (c) => {
   }
 });
 
-app.get("/tolls", async () => {
+app.get("/tolls", async (c) => {
   try {
     const sb = admin();
-    const { data, error } = await sb.from("fleet_toll_plazas").select("id,name,highway,payload_json");
+    const limit = Math.min(Math.max(Number(c.req.query("limit") ?? 100) || 100, 1), 500);
+    const offset = Math.max(Number(c.req.query("offset") ?? 0) || 0, 0);
+    const { data, error } = await sb.from("fleet_toll_plazas").select("id,name,highway,payload_json").range(offset, offset + limit - 1);
     if (error) throw error;
     const plazas = (data || []).map((row) => {
-      const payload = (row.payload_json || {}) as Record<string, unknown>;
-      return { id: row.id, name: row.name, highway: row.highway, prices: payload.prices || payload.rates || null };
+      const payload = publicValue(row.payload_json || {}) as Record<string, unknown>;
+      return {
+        ...payload,
+        id: row.id,
+        name: row.name,
+        highway: row.highway,
+        prices: payload.prices || payload.rates || null,
+      };
     });
-    return cached({ plazas });
+    return cached({ plazas, limit, offset });
   } catch (err) {
     return fail(err, "Could not load tolls");
   }
@@ -200,24 +250,26 @@ app.get("/vehicle-catalog", async (c) => {
       return cached({ vehicles: data ? [data] : [] });
     }
     const q = (c.req.query("q") || "").replace(/[^a-zA-Z0-9 ]/g, "").trim();
-    let query = sb.from("vehicle_catalog").select(CATALOG_COLUMNS).order("make").limit(40);
+    const limit = Math.min(Math.max(Number(c.req.query("limit") ?? 40) || 40, 1), 500);
+    const offset = Math.max(Number(c.req.query("offset") ?? 0) || 0, 0);
+    let query = sb.from("vehicle_catalog").select(CATALOG_COLUMNS).order("make").range(offset, offset + limit - 1);
     if (q) query = query.or(`make.ilike.%${q}%,model.ilike.%${q}%`);
     const { data, error } = await query;
     if (error) throw error;
-    return cached({ vehicles: data || [] });
+    return cached({ vehicles: data || [], limit, offset });
   } catch (err) {
     return fail(err, "Could not load catalog");
   }
 });
 
 registerGeoRoutes(app);
+registerMasterRoutes(app);
 
 app.get("/v1/changes", async (c) => {
   try {
     const since = c.req.query("since");
     let query = admin()
-      .schema("fleet")
-      .from("master_change_log")
+      .from("fleet_master_changes")
       .select("id,dataset,record_id,action,created_at")
       .order("created_at", { ascending: false })
       .limit(100);
@@ -235,8 +287,7 @@ app.get("/admin/changes", async (c) => {
   if (auth instanceof Response) return auth;
   try {
     const { data, error } = await admin()
-      .schema("fleet")
-      .from("master_change_log")
+      .from("fleet_master_changes")
       .select("id,dataset,record_id,action,actor,reason,created_at")
       .order("created_at", { ascending: false })
       .limit(12);
@@ -254,8 +305,7 @@ app.get("/admin/consumers", async (c) => {
   if (auth instanceof Response) return auth;
   try {
     const { data, error } = await admin()
-      .schema("fleet")
-      .from("catalog_consumers")
+      .from("fleet_catalog_consumers")
       .select("app_key,name,site,admin_url,datasets,last_sync_at,last_error")
       .order("name");
     if (error) throw error;
@@ -270,8 +320,7 @@ app.get("/admin/quality", async (c) => {
   if (auth instanceof Response) return auth;
   try {
     const { data, error } = await admin()
-      .schema("fleet")
-      .from("dataset_quality")
+      .from("fleet_dataset_quality")
       .select("dataset,score,failing,checked_at,note");
     if (error) throw error;
     return cached({ scores: data || [] });
