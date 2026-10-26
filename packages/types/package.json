@@ -5,6 +5,7 @@
   "types": "src/index.ts",
   "exports": {
     ".": "./src/index.ts",
+    "./partsResolution": "./src/partsResolution.ts",
     "./*": "./src/*"
   },
   "dependencies": {

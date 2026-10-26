@@ -16,6 +16,7 @@
     "@roam/auth-client": "workspace:*",
     "@roam/design-tokens": "workspace:*",
     "@roam/plug-core": "workspace:*",
+    "@roam/types": "workspace:*",
     "@roam/ui": "workspace:*",
     "@sentry/react": "^10.69.0",
     "@supabase/supabase-js": "^2",

@@ -84,7 +84,7 @@ test('eight Plug journeys', async ({ page }) => {
   await wayOut(page);
   await page.getByRole('link', { name: /Brakes/ }).click();
   await wayOut(page);
-  await page.getByRole('link', { name: /Tier 1/ }).click();
+  await page.getByRole('link', { name: /Brake pads/ }).click();
   await wayOut(page);
   await page.getByRole('button', { name: /Parts stores/ }).click();
   await expect(page).toHaveURL(/#\/explore/);

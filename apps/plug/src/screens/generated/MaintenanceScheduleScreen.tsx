@@ -161,9 +161,6 @@ export function MaintenanceScheduleScreen() {
                   <span>
                     
                   </span>
-                  <span className={"text-secondary font-semibold"}>
-                    Current:  (92%)
-                  </span>
                   <span>
                     
                   </span>

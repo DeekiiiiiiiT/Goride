@@ -144,19 +144,19 @@ export function HelpMapParishScreen() {
                 <div className={"flex items-center gap-1.5"}>
                   <span className={"w-3 h-3 rounded-full bg-[#22c55e]"} />
                   <span className={"font-label-sm text-label-sm text-on-surface"}>
-                    {">70% Well Mapped"}
+                    Well mapped
                   </span>
                 </div>
                 <div className={"flex items-center gap-1.5"}>
                   <span className={"w-3 h-3 rounded-full bg-[#f7be1d]"} />
                   <span className={"font-label-sm text-label-sm text-on-surface"}>
-                    40-70% Moderate
+                    Moderate
                   </span>
                 </div>
                 <div className={"flex items-center gap-1.5"}>
                   <span className={"w-3 h-3 rounded-full bg-primary-container"} />
                   <span className={"font-label-sm text-label-sm text-on-surface"}>
-                    {"<40% Critical"}
+                    Critical
                   </span>
                 </div>
               </div>
@@ -177,7 +177,6 @@ export function HelpMapParishScreen() {
                   </span>
                 </div>
                 <span className={"font-label-sm text-label-sm text-on-surface-variant font-bold"}>
-                  34% Mapped
                 </span>
               </div>
               <h3 className={"font-headline-sm text-headline-sm text-on-surface tracking-tight mb-1"}>
@@ -312,12 +311,11 @@ export function HelpMapParishScreen() {
                       
                     </span>
                     <span className={"font-headline-sm text-headline-sm text-error font-bold"}>
-                      22%
                     </span>
                   </div>
                 </div>
                 <div className={"w-full bg-surface-container-highest rounded-full h-1.5 overflow-hidden"}>
-                  <div className={"bg-error h-full rounded-full"} style={{ width: "22%" }} />
+                  <div className={"bg-error h-full rounded-full"} style={{ width: "" }} />
                 </div>
                 <div className={"flex items-center justify-between text-on-surface-variant font-body-sm text-body-sm pt-0.5"}>
                   <span className={"truncate"}>
@@ -343,12 +341,11 @@ export function HelpMapParishScreen() {
                       
                     </span>
                     <span className={"font-headline-sm text-headline-sm text-primary font-bold"}>
-                      34%
                     </span>
                   </div>
                 </div>
                 <div className={"w-full bg-surface-container-highest rounded-full h-1.5 overflow-hidden"}>
-                  <div className={"bg-primary h-full rounded-full"} style={{ width: "34%" }} />
+                  <div className={"bg-primary h-full rounded-full"} style={{ width: "" }} />
                 </div>
                 <div className={"flex items-center justify-between text-on-surface-variant font-body-sm text-body-sm pt-0.5"}>
                   <span className={"truncate"}>
@@ -374,12 +371,11 @@ export function HelpMapParishScreen() {
                       
                     </span>
                     <span className={"font-headline-sm text-headline-sm text-primary font-bold"}>
-                      38%
                     </span>
                   </div>
                 </div>
                 <div className={"w-full bg-surface-container-highest rounded-full h-1.5 overflow-hidden"}>
-                  <div className={"bg-primary h-full rounded-full"} style={{ width: "38%" }} />
+                  <div className={"bg-primary h-full rounded-full"} style={{ width: "" }} />
                 </div>
                 <div className={"flex items-center justify-between text-on-surface-variant font-body-sm text-body-sm pt-0.5"}>
                   <span className={"truncate"}>
@@ -401,11 +397,10 @@ export function HelpMapParishScreen() {
                     </span>
                   </div>
                   <span className={"font-headline-sm text-headline-sm text-on-surface font-bold"}>
-                    44%
                   </span>
                 </div>
                 <div className={"w-full bg-surface-container-highest rounded-full h-1.5 overflow-hidden"}>
-                  <div className={"bg-secondary-container h-full rounded-full"} style={{ width: "44%" }} />
+                  <div className={"bg-secondary-container h-full rounded-full"} style={{ width: "" }} />
                 </div>
                 <div className={"flex items-center justify-between text-on-surface-variant font-body-sm text-body-sm pt-0.5"}>
                   <span className={"truncate"}>
@@ -427,11 +422,10 @@ export function HelpMapParishScreen() {
                     </span>
                   </div>
                   <span className={"font-headline-sm text-headline-sm text-on-surface font-bold"}>
-                    49%
                   </span>
                 </div>
                 <div className={"w-full bg-surface-container-highest rounded-full h-1.5 overflow-hidden"}>
-                  <div className={"bg-secondary-container h-full rounded-full"} style={{ width: "49%" }} />
+                  <div className={"bg-secondary-container h-full rounded-full"} style={{ width: "" }} />
                 </div>
                 <div className={"flex items-center justify-between text-on-surface-variant font-body-sm text-body-sm pt-0.5"}>
                   <span className={"truncate"}>
@@ -453,11 +447,10 @@ export function HelpMapParishScreen() {
                     </span>
                   </div>
                   <span className={"font-headline-sm text-headline-sm text-on-surface font-bold"}>
-                    51%
                   </span>
                 </div>
                 <div className={"w-full bg-surface-container-highest rounded-full h-1.5 overflow-hidden"}>
-                  <div className={"bg-tertiary h-full rounded-full"} style={{ width: "51%" }} />
+                  <div className={"bg-tertiary h-full rounded-full"} style={{ width: "" }} />
                 </div>
                 <div className={"flex items-center justify-between text-on-surface-variant font-body-sm text-body-sm pt-0.5"}>
                   <span className={"truncate"}>
@@ -479,11 +472,10 @@ export function HelpMapParishScreen() {
                     </span>
                   </div>
                   <span className={"font-headline-sm text-headline-sm text-on-surface font-bold"}>
-                    62%
                   </span>
                 </div>
                 <div className={"w-full bg-surface-container-highest rounded-full h-1.5 overflow-hidden"}>
-                  <div className={"bg-tertiary-fixed-dim h-full rounded-full"} style={{ width: "62%" }} />
+                  <div className={"bg-tertiary-fixed-dim h-full rounded-full"} style={{ width: "" }} />
                 </div>
                 <div className={"flex items-center justify-between text-on-surface-variant font-body-sm text-body-sm pt-0.5"}>
                   <span className={"truncate"}>
@@ -505,11 +497,10 @@ export function HelpMapParishScreen() {
                     </span>
                   </div>
                   <span className={"font-headline-sm text-headline-sm text-[#14532d] font-bold"}>
-                    88%
                   </span>
                 </div>
                 <div className={"w-full bg-surface-container-highest rounded-full h-1.5 overflow-hidden"}>
-                  <div className={"bg-[#22c55e] h-full rounded-full"} style={{ width: "88%" }} />
+                  <div className={"bg-[#22c55e] h-full rounded-full"} style={{ width: "" }} />
                 </div>
                 <div className={"flex items-center justify-between text-on-surface-variant font-body-sm text-body-sm pt-0.5"}>
                   <span className={"truncate"}>

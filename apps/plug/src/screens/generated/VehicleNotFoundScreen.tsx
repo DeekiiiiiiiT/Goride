@@ -221,7 +221,7 @@ export function VehicleNotFoundScreen() {
                     Snap Door Jamb or Chassis Plate
                   </p>
                   <p className={"font-body-sm text-body-sm text-on-surface-variant max-w-[240px] mt-0.5"}>
-                    Gives us your Japanese chassis code (e.g. NCP160, DBA-ZVW52) for 100% correct part specs.
+                    Gives us your Japanese chassis code (e.g. NCP160, DBA-ZVW52) so the catalog can match your car.
                   </p>
                 </div>
               </div>

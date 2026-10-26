@@ -106,7 +106,7 @@ export function ConfirmOdometerScreen() {
                     check_circle
                   </span>
                   <span className={"font-semibold text-primary"}>
-                    High Confidence (98.4%)
+                    Check this reading
                   </span>
                 </div>
               </div>

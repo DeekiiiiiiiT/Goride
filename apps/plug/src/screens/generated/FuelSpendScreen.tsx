@@ -213,9 +213,6 @@ export function FuelSpendScreen() {
                     <p className={"font-headline-sm text-headline-sm text-on-surface"}>
                       
                     </p>
-                    <p className={"font-body-sm text-body-sm text-primary font-semibold mt-0.5"}>
-                      Top 15% island-wide
-                    </p>
                   </div>
                 </div>
               </div>

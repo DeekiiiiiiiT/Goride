@@ -511,13 +511,25 @@ export async function handlePlugClick(el: HTMLElement) {
     return;
   }
 
-  if (path === '/parts' && /brakes/i.test(blob)) return rt.go('/parts/results?cat=Brakes');
-  if (path === '/parts' && label && !/back|search/i.test(blob)) return rt.go(`/parts/results?cat=${encodeURIComponent(label)}`);
-  if (path.startsWith('/parts') && /find store|find nearby|parts map|nearby parts/i.test(blob)) {
+  if (path.startsWith('/parts') && /add a car/i.test(blob)) return rt.go('/garage/add');
+  if (act === 'copy') {
+    const number = (el.closest('[data-plug-screen]')?.querySelector('[data-slot="part-number"]')?.textContent || '').trim();
+    if (!number) return;
+    try {
+      await navigator.clipboard.writeText(number);
+      rt.toast('Part number copied');
+    } catch {
+      rt.toast(number);
+    }
+    return;
+  }
+  if (path.startsWith('/parts') && /find store|find nearby|parts map|nearby parts|parts stores/i.test(blob)) {
     sessionStorage.setItem('plug-chip', 'parts_store');
     rt.go('/explore');
     return;
   }
+  if (path === '/parts' && /brakes/i.test(blob)) return rt.go('/parts/results?cat=Brakes');
+  if (path === '/parts' && label && !/back|search/i.test(blob)) return rt.go(`/parts/results?cat=${encodeURIComponent(label)}`);
   if (path.startsWith('/parts/results')) {
     const screen = el.closest('[data-plug-screen]') as HTMLElement | null;
     const partId = el.dataset.partId || (el.dataset.act?.startsWith('tier-') ? screen?.dataset.firstPart : '');

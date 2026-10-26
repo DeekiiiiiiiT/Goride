@@ -1,6 +1,7 @@
+import { buildFitMessage } from '@roam/types/partsResolution';
 import { plugSend, publicGet } from '../api';
 import { readQueue, readStationCache, writeStationCache } from '../offline';
-import { onPlugClick } from '../shell/actions';
+import { handlePlugClick, onPlugClick } from '../shell/actions';
 import { catalogVariant, deviceFix, rememberVehicle, vehicleId } from './facts';
 import { getPlugRuntime } from './click';
 
@@ -768,26 +769,168 @@ async function fillSchedule(root: HTMLElement) {
   });
 }
 
-async function fillParts(root: HTMLElement) {
-  const variant = catalogVariant();
-  if (!variant) return;
-  const body = await publicGet<{ parts: { part_id?: string; id?: string; part_name?: string; name?: string; category?: string; tier?: number }[] }>(
-    `/parts?variant=${encodeURIComponent(variant)}`,
-  );
-  const parts = body.parts || [];
-  const first = parts[0];
-  const firstId = String(first?.part_id || first?.id || '');
-  if (firstId) root.dataset.firstPart = firstId;
-  const cards = [...root.querySelectorAll('h4')].map((heading) => heading.closest('div')).filter((card): card is HTMLDivElement => Boolean(card));
-  parts.forEach((part, index) => {
-    const card = cards[index];
-    if (!card) return;
-    const id = String(part.part_id || part.id || '');
-    if (id) card.querySelectorAll('button, a').forEach((node) => node.setAttribute('data-part-id', id));
-    const name = part.part_name || part.name;
-    const heading = card.querySelector('h4');
-    if (heading && name) heading.textContent = name;
+type CatalogPart = {
+  part_id?: string;
+  id?: string;
+  part_name?: string;
+  name?: string;
+  category?: string;
+  tier?: number;
+  oem_part_number?: string | null;
+  manufacturer?: string | null;
+  fit_scope?: string | null;
+  sister_names?: string | null;
+  source_make?: string | null;
+  reference_oem?: string | null;
+  also_known_as?: string[] | null;
+  confirmed_installs?: number | null;
+  position?: string | null;
+  description?: string | null;
+};
+
+function partIdOf(part: CatalogPart): string {
+  return String(part.part_id || part.id || '');
+}
+
+function partNameOf(part: CatalogPart): string {
+  return String(part.part_name || part.name || '').trim();
+}
+
+function fitFor(part: CatalogPart) {
+  return buildFitMessage({
+    tier: Number(part.tier) || 4,
+    fitScope: part.fit_scope || null,
+    sisterNames: part.sister_names || null,
+    sourceMake: part.source_make || null,
+    manufacturer: part.manufacturer || null,
+    referenceOem: part.reference_oem || null,
+    confirmedInstalls: Number(part.confirmed_installs) || 0,
   });
+}
+
+function fitClaim(part: CatalogPart): string {
+  const fit = fitFor(part);
+  if (fit.confirmedFit && Number(part.tier) === 1) return 'Exact factory part';
+  if (fit.confirmedFit) return '100% fit';
+  return fit.tierLabel;
+}
+
+function resultsCategory(): string {
+  const query = window.location.hash.split('?')[1] || '';
+  return new URLSearchParams(query).get('cat') || '';
+}
+
+function inCategory(part: CatalogPart, cat: string): boolean {
+  if (!cat) return true;
+  const name = String(part.category || '').trim();
+  if (!name) return true;
+  return name.toLowerCase() === cat.toLowerCase();
+}
+
+function detailPartId(): string {
+  const match = window.location.hash.replace(/^#/, '').split('?')[0].match(/^\/parts\/([^/]+)$/);
+  if (!match || match[1] === 'results' || match[1] === 'soon') return '';
+  return decodeURIComponent(match[1]);
+}
+
+async function loadParts(): Promise<CatalogPart[]> {
+  const variant = catalogVariant();
+  if (!variant) return [];
+  const body = await publicGet<{ parts?: CatalogPart[] }>(`/parts?variant=${encodeURIComponent(variant)}`);
+  return body.parts || [];
+}
+
+function showRow(root: ParentNode, slot: string, text: string | null) {
+  setSlot(root, slot, text);
+}
+
+function fillResults(root: HTMLElement, parts: CatalogPart[]) {
+  const rows = parts.filter((part) => inCategory(part, resultsCategory()) && partNameOf(part));
+  const empty = root.querySelector<HTMLElement>('[data-parts-empty]');
+  const list = root.querySelector<HTMLElement>('[data-parts-list]');
+  const template = root.querySelector<HTMLElement>('[data-part-template]');
+  if (empty) empty.style.display = rows.length ? 'none' : '';
+  showRow(root, 'parts-count', rows.length ? `${rows.length} part${rows.length === 1 ? '' : 's'} for your car` : null);
+  if (!list || !template) return;
+  list.replaceChildren();
+  const groups = new Map<number, CatalogPart[]>();
+  rows.forEach((part) => {
+    const tier = Number(part.tier) || 4;
+    const bucket = groups.get(tier) || [];
+    bucket.push(part);
+    groups.set(tier, bucket);
+  });
+  [...groups.keys()].sort((a, b) => a - b).forEach((tier) => {
+    const group = document.createElement('section');
+    group.className = 'space-y-space-sm';
+    const title = document.createElement('h3');
+    title.className = 'font-headline-sm text-headline-sm text-on-surface';
+    title.textContent = fitFor(groups.get(tier)![0]).tierLabel;
+    group.appendChild(title);
+    groups.get(tier)!.forEach((part) => {
+      const card = template.cloneNode(true) as HTMLElement;
+      card.classList.remove('hidden');
+      card.style.display = 'flex';
+      card.removeAttribute('data-part-template');
+      const id = partIdOf(part);
+      const name = partNameOf(part);
+      if (id) card.setAttribute('data-part-id', id);
+      card.dataset.liveRow = 'part';
+      card.addEventListener('click', (event) => {
+        event.preventDefault();
+        void handlePlugClick(card);
+      });
+      showRow(card, 'part-name', name);
+      showRow(card, 'part-number', part.oem_part_number?.trim() || null);
+      showRow(card, 'fit-reason', fitFor(part).matchReason);
+      group.appendChild(card);
+    });
+    list.appendChild(group);
+  });
+}
+
+function fillDetail(root: HTMLElement, parts: CatalogPart[]) {
+  const id = detailPartId();
+  const part = parts.find((row) => partIdOf(row) === id);
+  const missing = root.querySelector<HTMLElement>('[data-part-missing]');
+  const facts = root.querySelector<HTMLElement>('[data-part-facts]');
+  if (!part) {
+    if (missing) missing.style.display = '';
+    if (facts) facts.style.display = 'none';
+    return;
+  }
+  if (missing) missing.style.display = 'none';
+  if (facts) facts.style.display = '';
+  const fit = fitFor(part);
+  showRow(root, 'part-name', partNameOf(part) || null);
+  showRow(root, 'part-description', part.description?.trim() || null);
+  showRow(root, 'manufacturer', part.manufacturer?.trim() || null);
+  showRow(root, 'part-number', part.oem_part_number?.trim() || null);
+  showRow(root, 'fit-claim', fitClaim(part));
+  showRow(root, 'fit-reason', fit.matchReason);
+  showRow(root, 'position', part.position?.trim() || null);
+  const also = (part.also_known_as || []).map((value) => String(value).trim()).filter(Boolean);
+  const slot = root.querySelector<HTMLElement>('[data-slot="also-known"]');
+  if (slot) {
+    slot.replaceChildren();
+    also.forEach((number) => {
+      const line = document.createElement('p');
+      line.className = 'font-label-lg text-label-lg text-on-surface';
+      line.textContent = number;
+      slot.appendChild(line);
+    });
+    const row = (slot.closest('[data-slot-row]') as HTMLElement | null) || slot;
+    row.style.display = also.length ? '' : 'none';
+  }
+}
+
+async function fillParts(root: HTMLElement) {
+  const screen = root.getAttribute('data-plug-screen') || '';
+  const parts = await loadParts();
+  const firstId = partIdOf(parts[0] || {});
+  if (firstId) root.dataset.firstPart = firstId;
+  if (screen === '39-parts-results.html') fillResults(root, parts);
+  else if (screen === '40-part-detail.html') fillDetail(root, parts);
 }
 
 async function fillInbox(root: HTMLElement) {
@@ -885,6 +1028,9 @@ async function paintCarName(root: HTMLElement) {
   }
   const car = cars.find((row) => row.id === vehicleId()) || cars[0];
   slotText(root, 'car', car ? carLabel(car) : 'Add a car');
+  root.querySelectorAll<HTMLElement>('[data-add-car]').forEach((node) => {
+    node.style.display = car ? 'none' : '';
+  });
 }
 
 export async function fillScreen(file: string, root: HTMLElement) {
@@ -921,8 +1067,10 @@ export async function fillScreen(file: string, root: HTMLElement) {
     else if (file === '09-add-vehicle-make.html') await fillCatalog(root, '');
     else if (file === '10-model-year.html') await fillCatalog(root, sessionStorage.getItem('plug-make') || '');
     await paintCarName(root);
+    root.dataset.filled = '1';
   } catch {
     slotText(root, 'car', 'Add a car');
     note(root, 'Could not load this. Go back and try again.', 'alert');
+    root.dataset.filled = '1';
   }
 }
