@@ -81,17 +81,25 @@ async function requireOwner(c: { req: { header: (name: string) => string | undef
   return user;
 }
 
-async function ensureProfile(sb: SupabaseClient, user: User) {
+async function ensureProfile(sb: SupabaseClient, user: User): Promise<string | null> {
   const meta = user.user_metadata || {};
-  const googleName = typeof meta.full_name === "string" ? meta.full_name : typeof meta.name === "string" ? meta.name : null;
-  const seed = (typeof meta.display_name === "string" && meta.display_name.trim()) ? meta.display_name.trim() : googleName;
-  await sb.schema("explorer").from("profile").upsert({
+  const googleName = typeof meta.full_name === "string" ? meta.full_name.trim() : typeof meta.name === "string" ? meta.name.trim() : "";
+  const metaName = typeof meta.display_name === "string" ? meta.display_name.trim() : "";
+  const seed = metaName || googleName || null;
+  const { error: upsertError } = await sb.schema("explorer").from("profile").upsert({
     user_id: user.id,
     phone: user.phone || null,
     email: user.email || null,
   }, { onConflict: "user_id" });
-  if (!seed) return;
-  await sb.schema("explorer").from("profile").update({ display_name: seed }).eq("user_id", user.id).is("display_name", null);
+  if (upsertError) throw upsertError;
+  if (seed) {
+    const { error: seedError } = await sb.schema("explorer").from("profile").update({ display_name: seed }).eq("user_id", user.id).is("display_name", null);
+    if (seedError) throw seedError;
+  }
+  const { data, error } = await sb.schema("explorer").from("profile").select("display_name").eq("user_id", user.id).maybeSingle();
+  if (error) throw error;
+  const saved = typeof data?.display_name === "string" ? data.display_name.trim() : "";
+  return saved || null;
 }
 
 async function allow(sb: SupabaseClient, userId: string, flag: string): Promise<boolean> {
@@ -185,8 +193,8 @@ app.post("/join", async (c) => {
     const user = await userFrom(c);
     if (!mayJoinPlug(roleOf(user))) return c.json({ error: PLUG_REFUSAL }, 403);
     const sb = admin();
-    await ensureProfile(sb, user);
-    return c.json({ ok: true });
+    const displayName = await ensureProfile(sb, user);
+    return c.json({ ok: true, displayName });
   } catch (err) {
     return c.json({ error: err instanceof Error ? err.message : "Could not open Roam Plug" }, 400);
   }

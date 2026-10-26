@@ -78,6 +78,7 @@ async function listStations(c: { req: { query: (name: string) => string | undefi
 }
 
 app.get("/stations", listStations);
+// Plug reads /v1/stations. This alias has to ship with the function or the map comes back empty.
 app.get("/v1/stations", listStations);
 
 app.get("/stations/:id", async (c) => {
