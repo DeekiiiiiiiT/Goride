@@ -107,6 +107,7 @@ function fakeContext(path: string) {
   return {
     req: {
       path,
+      header: () => null,
       param: () => id,
       query: (key: string) => {
         if (key === "q") return "toyota";
