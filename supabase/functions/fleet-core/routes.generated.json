@@ -1,7 +1,7 @@
 {
   "slug": "fleet-core",
-  "generatedAt": "2026-10-25T01:37:54.509Z",
-  "routeCount": 690,
+  "generatedAt": "2026-10-26T13:53:28.383Z",
+  "routeCount": 689,
   "routes": [
     "ALL /make-server-37f42386/webhooks/wipay-fleet-modules",
     "DELETE ${ADMIN_CAT}/:id",
@@ -209,6 +209,7 @@
     "GET /make-server-37f42386/admin/scan-anomaly-flags",
     "GET /make-server-37f42386/admin/scan-corrupted-types",
     "GET /make-server-37f42386/admin/service-components",
+    "GET /make-server-37f42386/admin/station-fill-summary",
     "GET /make-server-37f42386/admin/station-gate-evidence",
     "GET /make-server-37f42386/admin/system-health",
     "GET /make-server-37f42386/admin/team-members",
@@ -459,7 +460,6 @@
     "POST ${root}/orphans/relink",
     "POST ${root}/quotes/:id/reply",
     "POST /make-server-37f42386/admin-login",
-    "POST /make-server-37f42386/admin-seed",
     "POST /make-server-37f42386/admin/backfill-app-metadata-roles",
     "POST /make-server-37f42386/admin/backfill-fuel-vehicle-assignments",
     "POST /make-server-37f42386/admin/catalog/applicability",
@@ -617,7 +617,6 @@
     "POST /make-server-37f42386/recon/imports/:id/parse",
     "POST /make-server-37f42386/recon/imports/:id/register",
     "POST /make-server-37f42386/recon/imports/:id/rollback",
-    "POST /make-server-37f42386/recover-platform-owner",
     "POST /make-server-37f42386/reset-by-date",
     "POST /make-server-37f42386/rush/backfill-trips",
     "POST /make-server-37f42386/rush/trip-recon/cron",
