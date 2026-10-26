@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { signInOrder, signInProviderLabel } from './signInOrder';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { appleSignInEnabled, signInOrder, signInProviderLabel } from './signInOrder';
 
 const android = { userAgent: 'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/120.0.0.0 Mobile', platform: 'Android', maxTouchPoints: 5 };
 const iphone = { userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)', platform: 'iPhone', maxTouchPoints: 5 };
@@ -18,4 +18,18 @@ describe('sign-in order', () => {
     expect(signInProviderLabel('google')).toBe('Signed in with Google');
     expect(signInProviderLabel('email')).toBe('Signed in with email');
   });
+
+  it('does not turn Apple on from local storage', () => {
+    const store = new Map<string, string>();
+    vi.stubGlobal('localStorage', {
+      getItem: (key: string) => store.get(key) ?? null,
+      setItem: (key: string, value: string) => { store.set(key, value); },
+    });
+    localStorage.setItem('plug-apple', '1');
+    expect(appleSignInEnabled()).toBe(false);
+  });
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
 });

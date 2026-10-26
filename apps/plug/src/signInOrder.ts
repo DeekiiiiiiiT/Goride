@@ -40,10 +40,5 @@ export function thisSignInDevice(): { userAgent: string; platform: string; maxTo
 }
 
 export function appleSignInEnabled(): boolean {
-  if (import.meta.env.VITE_PLUG_APPLE === '1') return true;
-  try {
-    return localStorage.getItem('plug-apple') === '1';
-  } catch {
-    return false;
-  }
+  return import.meta.env.VITE_PLUG_APPLE === '1';
 }
